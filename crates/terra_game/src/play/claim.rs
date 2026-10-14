@@ -52,7 +52,7 @@ pub fn too_near(
 
 /// A player's claim, if they have placed one: its stone, how many times it has grown, and
 /// how far across that makes it (`ClaimRule`, in `assets/data/builds.ron`).
-#[derive(Component, Default)]
+#[derive(Component, Default, Clone)]
 pub struct Claim {
     /// The claim stone, and where it stands.
     pub stone: Option<(Entity, Vec3)>,

@@ -10,6 +10,7 @@ use super::catalogue::{Builds, Item, Light};
 use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
 use super::models::{Part, read_model};
+use super::storage::Storage;
 use crate::build::Site;
 use crate::planet::Planet;
 use bevy::{
@@ -68,6 +69,7 @@ impl Prop {
             claims: false,
             rest: None,
             seat: None,
+            holds: None,
         };
         Prop {
             item: Arc::new(item),
@@ -309,6 +311,11 @@ pub fn place(
         prop.insert(CanInteract(Interactable::Station(station)));
     } else if item.claims {
         prop.insert(CanInteract(Interactable::ClaimStone));
+    } else if let Some((w, h)) = item.holds {
+        prop.insert((
+            CanInteract(Interactable::Storage),
+            Storage(terra_items::Grid::new(w, h)),
+        ));
     }
     if let Some(mesh) = &model.solid {
         prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(models.lit.clone())));

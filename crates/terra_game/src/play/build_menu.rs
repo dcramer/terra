@@ -11,9 +11,11 @@ use super::IsLocalPlayer;
 use super::button::{left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::catalogue::{Builds, Kind, Tab};
+use super::claim::Claim;
 use super::controls::{Action, Settings};
 use super::inventory::{Belongings, InventoryScreen, Items, describe};
 use super::options::OptionsMenu;
+use super::storage::Stores;
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
 use bevy::{
@@ -352,6 +354,8 @@ fn draw(
     builds: Res<Builds>,
     builder: Single<&Builder, IsLocalPlayer>,
     mut belongings: Belongings,
+    stores: Stores,
+    claim: Single<&Claim, IsLocalPlayer>,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), Without<Tile>>,
     mut tiles: Query<
@@ -387,7 +391,9 @@ fn draw(
         let short = match &builds.part(tile.part).kind {
             Kind::Items(items) => {
                 let item = &items[builder.variant_of(tile.part).min(items.len() - 1)];
-                belongings.missing(&item.cost, 1).is_some()
+                stores
+                    .short(Some(*claim), &belongings, &item.cost, 1)
+                    .is_some()
             }
             _ => false,
         };

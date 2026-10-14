@@ -15,9 +15,10 @@
 // deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
 // and walked up onto; stone picked in the hammer, a wall laid and built in it, a cube in
 // its middle changed to logs in place and an outer corner slope laid on its end (D231,
-// D232); a shed whose roof is built by hand, a cube at a time cut to slopes, over half of
+// D232); a chest set down and a wall of logs built from the wood stored in it, none carried
+// (D141); a shed whose roof is built by hand, a cube at a time cut to slopes, over half of
 // it, a storey added over its other half and "add a roof" laying a hip over that (D226,
-// D241); and the game saved and loaded again, the base the same.
+// D241); and the game saved and loaded again, the base and what the chest holds the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
 // methods in crates/terra_game/src/build/remote.rs). Screenshots of the plan, the cabin
@@ -468,6 +469,46 @@ async function build() {
     return `a wall laid in stone, its middle changed to logs in ${steps.length} steps (${steps.map((each) => each.what).join("; ")}), offcuts ${now.offcuts}; a stone outer corner on its end`;
   });
 
+  await step("storage", async () => {
+    // A chest set down south of the cabin, paid for from the pack; the wood and stone for a
+    // wall of logs on its stone footing stored in it and none carried: the wall is built from
+    // the chest (D141), everything it takes the chest's, until the chest runs out, which is
+    // refused and said.
+    const stand = await point([2, 0, 13.5]);
+    await game.warp(eastSouth(stand.from_start), eastSouth((await point([2, 0, 10])).from_start));
+    await emptyPack();
+    await game.give("wood:6");
+    const placed = (await game.call("storage.place", { item: "Chest", at: [2.5, 0, 12.5] })) as { done: boolean; refused?: string };
+    check(placed.done, `the chest was refused: ${placed.refused}`);
+    check((await carried("Wood")) === 0, "the chest was not paid for from the pack");
+    // One at a time, as the pack holds only so much.
+    for (const [item, count] of [["wood", 12], ["stone", 10]] as const) {
+      await game.give(`${item}:${count}`);
+      const put = (await game.call("storage.put", { item })) as { put: number };
+      check(put.put === count, `stored ${put.put} ${item}, not all ${count} carried`);
+    }
+    check((await carried("Wood")) + (await carried("Stone")) === 0, "something stored is still carried");
+    const stored = async () => {
+      const { stores } = (await game.call("storage.state")) as { stores: { item: string; holds: Record<string, number> }[] };
+      check(stores.length === 1 && stores[0].item === "Chest", `the claim's storage is ${JSON.stringify(stores)}, not one chest`);
+      return [stores[0].holds.Wood ?? 0, stores[0].holds.Stone ?? 0];
+    };
+    const [wood, stone] = await stored();
+    check(wood === 12 && stone === 10, `the chest holds ${wood} Wood and ${stone} Stone, not what was put in it`);
+    const before = (await base()).parts.length;
+    const wall = await act("build.lay", { what: "wall", kind: "logs", min: [0, 0, 20], max: [7, 0, 20] });
+    check(wall.done, `the wall was refused: ${wall.refused}`);
+    const done = await acts("build.fill", { steps: 400 });
+    const short = done.find((each) => !each.done);
+    const built = (await base()).parts.slice(before).reduce((sum, part) => sum + part.built, 0);
+    const [woodLeft, stoneLeft] = await stored();
+    check(woodLeft < 12 && stoneLeft < 10, `the wall did not take from the chest: ${built} cubes built, ${woodLeft} Wood and ${stoneLeft} Stone left in it`);
+    check((await carried("Wood")) + (await carried("Stone")) === 0, "something came into the pack while building from the chest");
+    check(short === undefined || short.refused?.startsWith("You need") === true, `stopped for ${short?.refused}, not for want of what the chest held`);
+    await picture("storage");
+    return `a chest paid from the pack, 12 Wood and 10 Stone stored in it; a wall of logs on its footing ${built} cubes in from the chest alone, ${12 - woodLeft} Wood and ${10 - stoneLeft} Stone out of it, ${short ? `then "${short.refused}"` : "all of it built"}`;
+  });
+
   await step("by-hand", async () => {
     // A shed of logs on a stone floor, five metres by three, west of the stone wall; over
     // its west half a gable of shakes built by hand, a cube at a time cut to slopes, its
@@ -537,12 +578,15 @@ async function build() {
 
   await step("reload", async () => {
     const before = await base();
+    const storedBefore = JSON.stringify(await game.call("storage.state"));
     await game.stop();
     await game.start(["--experiment", "play", "--save", SAVE, "--time", "10"], { windows, copy: "cabin" });
     const after = await base();
     const same = (base: Base) => JSON.stringify({ parts: base.parts, roofs: base.roofs, props: base.props.map(({ at: _, ...prop }) => prop), cubes: base.cubes });
     check(same(after) === same(before), `the base loaded is not the base saved:\n${same(before)}\n${same(after)}`);
-    return `saved as a snapshot and ${before.since} operations, loaded the same`;
+    const storedAfter = JSON.stringify(await game.call("storage.state"));
+    check(storedAfter === storedBefore, `the storage loaded is not the storage saved:\n${storedBefore}\n${storedAfter}`);
+    return `saved as a snapshot and ${before.since} operations, loaded the same, the chest holding what it held`;
   });
 }
 

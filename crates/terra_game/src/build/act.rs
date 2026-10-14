@@ -20,13 +20,16 @@ use crate::play::Player;
 use crate::play::bodies::Body;
 use crate::play::claim::Claim;
 use crate::play::inventory::Belongings;
+use crate::play::inventory::Cost;
 use crate::play::props::Prop as Item;
+use crate::play::storage::Stores;
 use crate::play::told::Told;
 use crate::shell::Options;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use std::collections::{BTreeMap, BTreeSet};
 use terra_build::ops::{self, Context, Done, Op, Refusal};
 use terra_build::{Amount, Bill, CELL_M, Kind, PartId, Rules, Sample, Walker};
+use terra_items::ItemKind;
 
 /// How long after doing something to the base it can be undone, in seconds (D144).
 pub const UNDO_S: f32 = 60.0;
@@ -133,6 +136,8 @@ pub struct Building<'w, 's> {
     pub offcuts: ResMut<'w, Offcuts>,
     pub planet: ResMut<'w, Planet>,
     pub belongings: Belongings<'w, 's>,
+    /// The storage in each claim, which building draws on after the pack (D141).
+    pub stores: Stores<'w, 's>,
     options: Res<'w, Options>,
     time: Res<'w, Time>,
     claims: Query<'w, 's, &'static Claim>,
@@ -289,16 +294,17 @@ impl Building<'_, '_> {
                     .cloned()
                     .collect();
                 let offcuts = self.offcuts.0.clone();
+                let claim = self.claims.get(by).ok();
                 let inventory = self.belongings.of(by);
                 Some(
                     names
                         .into_iter()
                         .map(|name| {
+                            // What is carried, and what is stored in the claim (D141).
                             let carried = inventory.as_ref().map_or(0, |inventory| {
-                                inventory
-                                    .items()
-                                    .find(&name)
-                                    .map_or(0, |kind| inventory.count(kind))
+                                inventory.items().find(&name).map_or(0, |kind| {
+                                    inventory.count(kind) + self.stores.count(claim, kind)
+                                })
                             });
                             let cut = offcuts.0.get(&name).copied().unwrap_or(Amount::ZERO);
                             (name, Amount::whole(u64::from(carried)) + cut)
@@ -421,9 +427,12 @@ impl Building<'_, '_> {
         Ok(done)
     }
 
-    /// Takes what an act took from the offcuts and the pack, cutting into whole items only
-    /// as far as it must, and gives back what it gave, whole items to the pack.
+    /// Takes what an act took from the offcuts, then the pack, then the storage in the
+    /// claim (D141), cutting into whole items only as far as it must, and gives back what
+    /// it gave, whole items to the pack.
     fn settle(&mut self, by: Entity, done: &Done) {
+        let claim = self.claims.get(by).ok();
+        let near = self.player_at(by).unwrap_or_default();
         let Some(mut inventory) = self.belongings.of(by) else {
             return;
         };
@@ -438,8 +447,11 @@ impl Building<'_, '_> {
                 None => {
                     let short = amount.minus(have).unwrap_or(Amount::ZERO);
                     let (num, den) = short.parts();
-                    let whole = num.div_ceil(den);
-                    inventory.spend(kind, whole as u32);
+                    let whole = num.div_ceil(den) as u32;
+                    let from_pack = inventory.count(kind).min(whole);
+                    inventory.spend(kind, from_pack);
+                    self.stores.take(claim, near, kind, whole - from_pack);
+                    let whole = u64::from(whole);
                     (Amount::whole(whole) + have)
                         .minus(amount)
                         .unwrap_or(Amount::ZERO)
@@ -463,6 +475,33 @@ impl Building<'_, '_> {
                 have.minus(Amount::whole(whole)).unwrap_or(Amount::ZERO),
             );
         }
+    }
+
+    /// The first kind of item a cost so many times over is short of, and by how many, for
+    /// a builder: what they carry and what is stored in their claim counts (D141). None on
+    /// the yard, where building is free.
+    pub fn short(&mut self, by: Entity, cost: &Cost, times: u32) -> Option<(ItemKind, u32)> {
+        if self.free() {
+            return None;
+        }
+        let claim = self.claims.get(by).ok();
+        let carried = self.belongings.of(by)?;
+        self.stores.short(claim, &carried, cost, times)
+    }
+
+    /// Pays a cost so many times over for a builder, if it can be paid in full: from what
+    /// they carry, then from the storage in their claim, nearest them first (D141).
+    /// Returns whether it was; on the yard it always is, for nothing.
+    pub fn pay(&mut self, by: Entity, cost: &Cost, times: u32) -> bool {
+        if self.free() {
+            return true;
+        }
+        let claim = self.claims.get(by).ok();
+        let near = self.player_at(by).unwrap_or_default();
+        let Some(mut carried) = self.belongings.of(by) else {
+            return false;
+        };
+        self.stores.pay(claim, near, &mut carried, cost, times)
     }
 
     /// The ground's height under columns of the base, sampled from the planet.

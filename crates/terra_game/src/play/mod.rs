@@ -57,6 +57,8 @@ mod sounds;
 mod soundscape;
 mod species;
 mod station_screen;
+pub(crate) mod storage;
+mod storage_screen;
 mod tiles;
 pub(crate) mod told;
 mod tool;
@@ -131,6 +133,8 @@ impl Plugin for GameplayPlugin {
         build_menu::plugin(app);
         crafting::plugin(app);
         station_screen::plugin(app);
+        storage::plugin(app);
+        storage_screen::plugin(app);
         interact::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);

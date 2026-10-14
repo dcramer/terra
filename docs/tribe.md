@@ -78,7 +78,7 @@ Proposed:
 
 ## Building
 
-From the developers (D161): help is useful for carrying things to a building, and no one starts on a plan you are still designing. Recruits should potentially help build, too (Leaning). How a plan passes from you to the tribe: Plan and Build modes, agreed for now and perhaps to be revisited (D170, Leaning).
+From the developers (D161): help is useful for carrying things to a building, and no one starts on a plan you are still designing. Recruits should potentially help build, too (Leaning). How a plan passes from you to the tribe: Plan and Build modes, agreed for now and perhaps to be revisited (D170, Leaning). Not built: no recruit takes work yet. Since building draws on the outpost's storage directly (D141, D295), what recruits carry to a build is recommended to be only big materials (D296), and putting parts in to wait until that has been played (D297, Open).
 
 ### Plan and Build: handing work to the tribe
 

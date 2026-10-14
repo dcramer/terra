@@ -577,6 +577,7 @@ mod tests {
             world.insert_resource(InventoryScreen {
                 open: true,
                 at: Some((at, station)),
+                storage: None,
             });
             world.run_system_once(lay_out).unwrap();
             let tabs = world.query::<&TabButton>().iter(&world).count();

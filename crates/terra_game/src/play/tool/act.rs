@@ -16,6 +16,9 @@ use crate::play::{IsLocalPlayer, Stance};
 use crate::start::Start;
 use terra_build::Bill;
 
+/// Why storage with anything in it is not moved or taken apart (D193).
+const EMPTY_FIRST: &str = "Empty it first: nothing is taken apart or moved while it holds anything";
+
 /// How long a piece of work on the base takes: a moment, and a little more for every item
 /// it takes or gives back, up to a few seconds. A stand-in, like the costs.
 fn seconds(doing: Doing, done: &terra_build::ops::Done) -> f32 {
@@ -195,14 +198,10 @@ pub(super) fn act(
                     turn,
                     indoors,
                 } => {
-                    // Paid for on finishing. If what it costs has gone since the button
-                    // went down, nothing is built. On the yard, building costs nothing.
-                    let free = building.free();
-                    let paid = free
-                        || building
-                            .belongings
-                            .of(player)
-                            .is_some_and(|mut belongings| belongings.pay(&item.cost, 1));
+                    // Paid for on finishing, from the pack and then the claim's storage
+                    // (D141). If what it costs has gone since the button went down,
+                    // nothing is built. On the yard, building costs nothing.
+                    let paid = building.pay(player, &item.cost, 1);
                     if paid {
                         if let Some(placed) = props::place(
                             &mut commands,
@@ -352,6 +351,10 @@ pub(super) fn act(
 
         // Moving is neither building nor taking apart, and happens at once.
         match (&builder.picked(&builds).kind, builder.target) {
+            (Kind::Move, Target::Prop(entity)) if building.stores.holding(entity) => {
+                building.tell(player, EMPTY_FIRST);
+                continue;
+            }
             (Kind::Move, Target::Prop(entity)) => {
                 if let Ok(prop) = props.get(entity) {
                     info!("Picked up a {}.", prop.item.name);
@@ -484,6 +487,10 @@ pub(super) fn act(
                 },
                 false,
             ),
+            (Kind::Remove, Target::Prop(entity)) if building.stores.holding(entity) => {
+                building.tell(player, EMPTY_FIRST);
+                continue;
+            }
             (Kind::Remove, Target::Prop(entity)) => (Job::TakeAway(entity), true),
             _ => continue,
         };
@@ -567,10 +574,7 @@ fn undo_item(
                 Err(_) => "It is gone already",
             },
             Undoable::TakenAway(was) => {
-                let paid = building
-                    .belongings
-                    .of(player)
-                    .is_some_and(|mut belongings| belongings.pay(&was.item.cost, 1));
+                let paid = building.pay(player, &was.item.cost, 1);
                 if paid {
                     if let Some(placed) = props::place(
                         commands,

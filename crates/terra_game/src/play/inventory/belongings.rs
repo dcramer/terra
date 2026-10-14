@@ -235,6 +235,23 @@ impl Inventory<'_, '_> {
         taken.len()
     }
 
+    /// Moves an item from the backpack into another grid, such as a chest's, wherever it
+    /// first fits; the bar lets go of it.
+    pub fn put_into(&mut self, into: &mut Grid, id: ItemId) -> Result<(), Refused> {
+        terra_items::transfer(&self.items.catalogue, &mut self.backpack.0, into, id, None)?;
+        self.bar.0.tidy(&self.backpack.0);
+        Ok(())
+    }
+
+    /// Moves an item from another grid, such as a chest's, into the backpack, wherever it
+    /// first fits.
+    pub fn take_out_of(&mut self, from: &mut Grid, id: ItemId) -> Result<(), Refused> {
+        let kind = from.get(id).ok_or(Refused::NotFound)?.item.kind;
+        terra_items::transfer(&self.items.catalogue, from, &mut self.backpack.0, id, None)?;
+        self.tell(kind, 1);
+        Ok(())
+    }
+
     /// Puts what a station made where it goes, all or nothing: into what is worn that holds
     /// it, such as arrows into a belt quiver, then the backpack.
     pub fn receive(&mut self, made: Made) -> bool {

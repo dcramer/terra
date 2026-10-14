@@ -33,7 +33,7 @@ Subnautica's rules, with our backpack added:
 | Backpack | A grid. Each item fills a rectangle of cells, most of them one. Nothing stacks. Its size is set by the backpack worn. |
 | Equipment | One slot per kind of gear (D64): head, chest, gloves, legs, feet, back and belt. A slot takes only gear of its kind. |
 | Action bar | A few slots that point at items in the backpack. The item stays in the backpack; if it leaves, the slot empties. |
-| Storage | More grids, built in a base. Anyone may use them. |
+| Storage | More grids, built in a base: a chest, 8 by 6, opened beside the backpack. Building in the claim draws on it after the pack (D141, D295). Anyone may use them. |
 | Limits | Room in the grid only. No weight. |
 | Going down | What you carry drops where you fell, as something you can go back for, until it decays and disappears after a while (D84). Equipment stays on you. |
 

@@ -55,8 +55,8 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
 | Change a piece's material in place | Rust, 7 Days to Die | Built: Change material, a brush's box of built cubes, the old out from under what stays and given back, the new built (D232) |
 | Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Built (D139, D201) |
-| Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
-| Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140) |
+| Building from storage nearby, not only the pack | Enshrouded | Built: chests, and what is built in a claim draws on them after the pack (D141, D295) |
+| Carrying big materials by hand, better transport later | The Forest | Missing; decided (D140), how is open (D296) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: what is built cuts into the ground (D131) and stands on a footing below |
 | Floors above and below, and stairs | All | Storeys above and below the base's floor built; stairs and ramps up a storey built (D220) |
@@ -250,22 +250,33 @@ Because each piece is chosen by its role from the cubes round its edge, any arra
 
 **Taking down.** A constructed part comes down cube by cube, each going with its plan, nothing left behind (D193: "it should deconstruct and return materials"), giving back its materials (or dropping them at your feet if they do not fit). A plan with nothing built is removed for free. Undo works on both.
 
-**Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints, but never a draft still being designed (D170, Leaning; [tribe.md](tribe.md#plan-and-build-handing-work-to-the-tribe)). A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
+**Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90; not built, D297), as Sons of the Forest's companion finishes blueprints, but never a draft still being designed (D170, Leaning; [tribe.md](tribe.md#plan-and-build-handing-work-to-the-tribe)). A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
 
 **On the voxel grid** (D48, D181): constructing a part fills its cubes; a plan is cubes not yet filled. Carving an opening empties cubes.
 
 ## Large materials and carrying
 
-The developers' direction (D140; D141):
+Decided (D140, D141): big structures take big materials, such as logs, carried to the plan; building takes what it needs from storage nearby, not only the pack. Leaning: better ways to move big materials come later (D68: a sled, a cart, perhaps D100's mounts), and they need a storage of their own, a log pile or a stone yard, unlocked later.
 
-- **Big structures take big materials.** Logs for walls and posts, cut stone blocks for stone walls, beams for roofs. Small materials (fibre, nails, hide) still go in the pack.
-- **Big materials are carried, not packed.** A felled tree gives logs that lie where it fell. You carry one on your shoulder, slowly, or two with effort, with nothing else in your hands, as The Forest does. A big building becomes a project you can see: trees down, logs dragged home, walls rising. A second player has a job.
-- **Later, better ways to move them** are unlocked (D68): a sled, then a cart, then perhaps a beast of burden (D100's mounts), each carrying more.
-- **Building draws on storage** (D141, decided): within the claim, constructing a part takes what it needs from storage nearby, not only from the pack.
-- **Big materials need their own storage**, unlocked later (D141, Leaning): a log pile or a stone yard, which holds what a chest cannot. Before it, big materials lie on the ground where you drop them, near the build, and building takes from what lies within reach.
+**Building from storage** (D141, built, D295). Storage is chests set down from the build menu's Storage tab, each a grid as the backpack is (D84). Whatever is built in a claim, a plan's parts or an item set down, takes from the builder's pack first, then from the storage standing in that claim, nearest first, as Enshrouded's base storage serves its crafting. A chest is opened with F beside the backpack; a click moves a thing across, Shift and a click every one of its kind. A chest holding anything is not taken apart or moved, as nothing is taken away while something rests on it (D193).
 
-Open: which materials are big; how many a player carries; whether a log is cut into planks or beams first (Sons of the Forest cuts them with the axe; a sawpit or sawbench is the station version).
+**Carrying big materials** (D140) is not built: how it plays is open (D296). What shipped games do:
 
+| Game | Big materials |
+|---|---|
+| The Forest, Sons of the Forest | A felled tree's logs lie where it falls; you carry two on the shoulder with nothing else in hand, and add each to the blueprint you look at; a sled carries more. Sons of the Forest cuts logs into halves and planks with the axe, and its companion fetches logs and finishes blueprints |
+| Valheim | Nothing carried by hand: everything is in the pack, which slows you past its weight; a cart carries a load for ore |
+| Enshrouded, V Rising | Nothing carried by hand: everything is in the pack; Enshrouded's base storage serves crafting |
+| RimWorld | Colonists haul materials from stockpiles to a blueprint, which becomes a frame when they arrive; a builder then builds it |
+
+What the developers would decide, each with a recommendation:
+
+1. **Which materials are big.** Recommend logs first, with cut stone blocks the same way once stone is cut at a station; planks, shingles, thatch, wattle, fibre and nails stay in the pack.
+2. **Where logs come from.** Recommend a felled tree gives its logs on the ground where it falls, as many as its trunk's length allows, and its branches as Wood in the pack, as The Forest's do.
+3. **How many, how slowly.** Recommend one log on the shoulder at a walk, no sprinting, or two at a slower walk, nothing else in hand, dropped with a key, as The Forest carries two.
+4. **How a log goes in.** Recommend carried to a plan, use at it sets the log in as the next course's log of that wall, the outline filling, as The Forest adds a log to the blueprint you look at; a log wall takes logs, not Wood. Whether a few swings of the hammer then fix it (D139's carried, set, hammered) waits until setting has been played.
+5. **Where logs wait.** Recommend logs dropped near a plan, within a few metres, count for building it, as building draws on storage; a log pile, unlocked later (D141, Leaning), holds them tidily.
+6. **Is a log cut first** (open question 6 below). Recommend logs go into log walls whole; a sawbench cuts them into beams and planks for framed kinds and floors.
 ## Placing
 
 - **The grid** is half a metre (D57; see [The grid](#the-grid)). Things snap to it and turn in eighths; off it, they turn freely.
@@ -426,8 +437,8 @@ The MVP's village is laid out from its seed by rules (`terra_build::village`, D2
 For the developers to reorder. Each step is small enough to play and judge.
 
 1. **The controls, locked, and placing finished**: the keys above, drawing, what blocks a ghost shown through walls, and snapping as [Snapping and feel](#snapping-and-feel) says. These hold whatever comes after.
-2. **Plans, then constructing** (D139, built from the pack): walls, floors and roofs laid as plans, built part by part; from storage in the claim (D141) and fitting doors and windows still to come.
-3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
+2. **Plans, then constructing** (D139, built): walls, floors and roofs laid as plans, built part by part, from the pack and the claim's storage (D141, D295); fitting doors and windows still to come.
+3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked. How is open (D296).
 4. **Up and down**: floors drawn on their own, posts, stairs and ramps (built, D220); ladders.
 5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
 6. **Damage and repair**, with the first attacks on a base (D90).
@@ -451,7 +462,7 @@ For the developers. Each has a recommendation.
 2. **Must parts go up in order**, what rests on something after it? Recommend yes.
 3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
 4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.
-5. **Which materials are big**, and how many does a player carry? Recommend logs and cut stone; one comfortably, two at a walk.
+5. **Which materials are big**, and how many does a player carry? D296, with its recommendations in [Large materials and carrying](#large-materials-and-carrying).
 6. **Is a log cut into beams or planks first**, by the axe or at a station? Recommend at a sawbench, so a wall panel takes planks and a post takes a log.
 7. **Taking apart**: always a full refund? Recommend yes, as now; Rust's window exists because of raiding, which we do not have (D2).
 8. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill? The developers named Terraria: going to other zones, finding new materials, which unlock new things to craft and build, many of them only for their look. Realms (D87) would be our zones: each realm's materials open its own kinds of construction and decoration.

@@ -104,6 +104,8 @@ pub struct InventoryScreen {
     pub open: bool,
     /// The station being used, if the screen was opened at one.
     pub at: Option<(Entity, super::crafting::Station)>,
+    /// The storage open beside the backpack, if it was opened at some (`storage`).
+    pub storage: Option<Entity>,
 }
 
 /// Something the player carries wore out (D99): what kind it is.

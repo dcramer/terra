@@ -31,7 +31,7 @@ use terra_items::{GearSlot, ItemId, ItemKind};
 
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
-const POINTED: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
+pub(super) const POINTED: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
 const EMPTY_CELL: Color = Color::srgba(1.0, 1.0, 1.0, 0.06);
 /// Behind an item shown by its icon.
 const FULL_CELL: Color = Color::srgba(1.0, 1.0, 1.0, 0.11);
@@ -66,10 +66,15 @@ struct Panel;
 #[derive(Component)]
 struct GridArea;
 
+/// A column of the inventory beside the backpack, for what was opened with it, such as a
+/// chest: another screen fills it and shows it.
+#[derive(Component)]
+pub(super) struct Beside;
+
 /// An item drawn in the backpack's grid. Other screens read it to know when the pointer
 /// is on the backpack.
 #[derive(Component)]
-pub struct Shown(ItemId, ItemKind);
+pub struct Shown(pub(super) ItemId, pub(super) ItemKind);
 
 #[derive(Component)]
 struct About;
@@ -386,6 +391,17 @@ fn setup(mut commands: Commands) {
                                     },
                                 ));
                             });
+                            // Beside the backpack, what was opened with it, such as a
+                            // chest (`storage_screen`); hidden otherwise.
+                            row.spawn((
+                                Beside,
+                                Node {
+                                    display: Display::None,
+                                    flex_direction: FlexDirection::Column,
+                                    row_gap: px(8),
+                                    ..default()
+                                },
+                            ));
                         });
                     panel.spawn((About, Text::new(" "), small.clone(), dim));
                     panel.spawn((
@@ -470,7 +486,8 @@ fn click(
     let Some(mut belongings) = belongings.mine() else {
         return;
     };
-    if !screen.open || !left_click(&mouse) {
+    // With storage open, a click moves things to it instead (`storage_screen`).
+    if !screen.open || screen.storage.is_some() || !left_click(&mouse) {
         return;
     }
     let mut result = None;
@@ -514,7 +531,7 @@ fn colour(items: &Items, kind: ItemKind) -> Color {
 /// Each kind's baked icon (D129), loaded the first time it is shown, or none if it has
 /// not been baked: an item without a look yet.
 #[derive(Resource, Default)]
-struct ItemIcons(HashMap<ItemKind, Option<(Handle<Image>, (u8, u8))>>);
+pub(super) struct ItemIcons(HashMap<ItemKind, Option<(Handle<Image>, (u8, u8))>>);
 
 impl ItemIcons {
     /// The icon and the cells it was baked for.
@@ -560,8 +577,27 @@ fn lay_out(
         return;
     }
     *drawn = true;
-    let grid = &backpack.0;
     let (area, mut node) = area.into_inner();
+    lay_grid(
+        &mut commands,
+        (area, &mut node),
+        &backpack.0,
+        &items,
+        (&mut icons, &assets),
+        |placed| Shown(placed.item.id, placed.item.kind),
+    );
+}
+
+/// Lays a grid of items out in an area of the screen, each item a button marked by `mark`:
+/// the backpack's here, a chest's in `storage_screen`.
+pub(super) fn lay_grid<B: Bundle>(
+    commands: &mut Commands,
+    (area, node): (Entity, &mut Node),
+    grid: &terra_items::Grid,
+    items: &Items,
+    (icons, assets): (&mut ItemIcons, &AssetServer),
+    mark: impl Fn(&terra_items::Placed) -> B,
+) {
     node.width = px(grid.size().w as f32 * CELL_PX);
     node.height = px(grid.size().h as f32 * CELL_PX);
     let cell = |x: f32, y: f32, w: f32, h: f32| Node {
@@ -588,7 +624,7 @@ fn lay_out(
         }
         for placed in grid.iter() {
             let kind = placed.item.kind;
-            let image = icons.get(&items, &assets, kind).map(|(image, _)| image);
+            let image = icons.get(items, assets, kind).map(|(image, _)| image);
             let name = items.name(kind);
             // A container says how full it is; an item without an icon says what it is.
             let label = match (placed.stack, image.is_some()) {
@@ -600,10 +636,10 @@ fn lay_out(
             let background = if image.is_some() {
                 FULL_CELL
             } else {
-                colour(&items, kind)
+                colour(items, kind)
             };
             area.spawn((
-                Shown(placed.item.id, kind),
+                mark(placed),
                 button(),
                 cell(
                     placed.at.x as f32,
@@ -633,7 +669,7 @@ fn lay_out(
                     TextFont::from_font_size(9.0),
                     TextColor(Color::WHITE),
                 ));
-                if let Some(condition) = worn(&items, placed.item) {
+                if let Some(condition) = worn(items, placed.item) {
                     tile.spawn((
                         wear_node(condition),
                         BackgroundColor(wear_colour(condition)),

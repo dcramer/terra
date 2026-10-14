@@ -582,9 +582,10 @@ pub(super) fn afford(
         };
         // On the yard, building costs nothing.
         let price = price.filter(|_| !free);
-        builder.short = match (&price, building.belongings.of(player)) {
-            (Some((cost, times)), Some(belongings)) => belongings.missing(cost, *times),
-            _ => None,
+        // What is carried and what is stored in the claim pay for it (D141).
+        builder.short = match &price {
+            Some((cost, times)) => building.short(player, cost, *times),
+            None => None,
         };
         builder.price = price;
     }

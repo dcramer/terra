@@ -23,7 +23,8 @@
 //                       claim the land around them (claims, D94), or are to rest on
 //                       (rest: Sit, or Sleep to wake in after going down). A seat
 //                       lower than the top, as a chair's below its back, says how high
-//                       (seat, metres).
+//                       (seat, metres). Storage says how many cells it holds (holds,
+//                       wide by high, D84), which building in its claim draws on (D141).
 //              Room     rooms, by footprint in metres east by south, outside their
 //                       walls, which are half a metre thick (D181)
 //              Roof     "add a roof with this material" (D226, D241): roof cubes laid
@@ -141,6 +142,7 @@
             (name: "Single bed", file: "Bed", size: 2.1, height: (0.5, 1.5), cost: [("Wood", 3), ("Fibre", 3)], rest: Sleep),
         ])),
         (name: "Storage", tab: Storage, kind: Items([
+            (name: "Chest", file: "Chest", size: 1.0, height: (0.45, 0.8), cost: [("Wood", 6)], holds: (8, 6)),
             (name: "Bookshelf", file: "Bookshelf", size: 2.0, height: (1.6, 2.2), cost: [("Wood", 4)]),
         ])),
         (name: "Decor", tab: Furniture, kind: Items([

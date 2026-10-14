@@ -105,6 +105,8 @@ struct ItemFile {
     rest: Option<Rest>,
     #[serde(default)]
     seat: Option<f32>,
+    #[serde(default)]
+    holds: Option<(u8, u8)>,
 }
 
 impl Builds {
@@ -127,6 +129,7 @@ impl Builds {
             claims: item.claims,
             rest: item.rest,
             seat: item.seat,
+            holds: item.holds,
         };
         let parts = file
             .parts
@@ -272,6 +275,9 @@ pub struct Item {
     /// How high its seat is, in metres, where that is below its top, as a chair's is
     /// below its back; someone sits on its top otherwise.
     pub seat: Option<f32>,
+    /// The cells it stores, wide by high, if it is storage (D84, D141): a grid as the
+    /// backpack is, which building in its claim draws on (`storage`).
+    pub holds: Option<(u8, u8)>,
 }
 
 /// What something is to rest on.

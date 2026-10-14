@@ -16,6 +16,7 @@ use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
 use super::props::{self, Models, Prop, Theirs};
 use super::skills::{Skill, Skills};
+use super::storage::Storage;
 use super::told::Notice;
 use super::vitals::Vitals;
 use super::{IsLocalPlayer, Player, View};
@@ -137,6 +138,9 @@ struct SavedProp {
     progress: f32,
     #[serde(default)]
     done: Vec<String>,
+    /// What storage holds (D84), as a backpack's items are kept.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    stored: Vec<SavedItem>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -308,20 +312,27 @@ fn load(
                 prop.item
             );
         }
-        if let Some(item) = item
-            && let Some(entity) = props::place(
-                &mut commands,
-                &models,
-                &site,
-                &planet,
-                &item,
-                Vec3::from(prop.at),
-                prop.lift,
-                prop.turn,
-                prop.indoors,
-            )
-            && let Some(station) = item.station
-        {
+        let Some(item) = item else { continue };
+        let Some(entity) = props::place(
+            &mut commands,
+            &models,
+            &site,
+            &planet,
+            &item,
+            Vec3::from(prop.at),
+            prop.lift,
+            prop.turn,
+            prop.indoors,
+        ) else {
+            continue;
+        };
+        // Storage takes back what it held.
+        if let Some((w, h)) = item.holds {
+            let mut grid = terra_items::Grid::new(w, h);
+            restore_items(&mut items, &mut grid, &prop.stored);
+            commands.entity(entity).insert(Storage(grid));
+        }
+        if let Some(station) = item.station {
             // A station takes up its queue where it left off.
             let named = |names: &[String]| -> Vec<usize> {
                 names
@@ -373,30 +384,7 @@ fn load(
             let _ = equipment.set_wear(slot, wear);
         }
     }
-    let mut ids: Vec<Option<ItemId>> = Vec::new();
-    for saved in &player.backpack {
-        let id = items.make_named(&saved.kind).and_then(|item| {
-            let cell = Cell {
-                x: saved.x,
-                y: saved.y,
-            };
-            grid.insert(&items.catalogue, item, Some(cell))
-                .or_else(|_| grid.insert(&items.catalogue, item, None))
-                .ok()
-                .map(|_| item.id)
-        });
-        if let Some(id) = id
-            && saved.held > 0
-        {
-            let _ = grid.set_held(id, saved.held);
-        }
-        if let Some(id) = id
-            && saved.wear > 0
-        {
-            let _ = grid.set_wear(id, saved.wear);
-        }
-        ids.push(id);
-    }
+    let ids = restore_items(&mut items, &mut grid, &player.backpack);
     let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
     for (slot, index) in player.bar.iter().enumerate() {
         action_bar.set(
@@ -482,7 +470,7 @@ fn autosave(
     items: Res<Items>,
     recipes: Res<Recipes>,
     view: Single<&View, IsLocalPlayer>,
-    props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
+    props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
     mut since: Local<f32>,
@@ -522,7 +510,7 @@ fn save_on_exit(
     items: Res<Items>,
     recipes: Res<Recipes>,
     view: Single<&View, IsLocalPlayer>,
-    props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
+    props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
 ) {
@@ -551,21 +539,44 @@ type PlayerParts<'a> = (
     &'a Bar,
 );
 
-fn gather(
-    clock: &Clock,
-    planet: &Planet,
-    (site, offcuts): (&Site, &Offcuts),
-    claim: &Claim,
-    (items, recipes): (&Items, &Recipes),
-    view: &View,
-    props: &Query<(&Prop, Option<&Works>), Without<Theirs>>,
-    people: &Query<(&Person, &Transform), Without<Player>>,
-    player: &PlayerParts,
-) -> SaveFile {
-    let (at, vitals, skills, backpack, gear, bar) = *player;
-    let placed: Vec<_> = backpack.0.iter().collect();
-    let kept: Vec<SavedItem> = placed
-        .iter()
+/// Puts saved items into a grid, each at its cell or, if that is taken, wherever it fits,
+/// with what it holds and how worn it is. Returns each one's identity, or none where it
+/// could not be put back.
+fn restore_items(
+    items: &mut Items,
+    grid: &mut terra_items::Grid,
+    saved: &[SavedItem],
+) -> Vec<Option<ItemId>> {
+    let mut ids = Vec::new();
+    for saved in saved {
+        let id = items.make_named(&saved.kind).and_then(|item| {
+            let cell = Cell {
+                x: saved.x,
+                y: saved.y,
+            };
+            grid.insert(&items.catalogue, item, Some(cell))
+                .or_else(|_| grid.insert(&items.catalogue, item, None))
+                .ok()
+                .map(|_| item.id)
+        });
+        if let Some(id) = id
+            && saved.held > 0
+        {
+            let _ = grid.set_held(id, saved.held);
+        }
+        if let Some(id) = id
+            && saved.wear > 0
+        {
+            let _ = grid.set_wear(id, saved.wear);
+        }
+        ids.push(id);
+    }
+    ids
+}
+
+/// What is in a grid, to save.
+fn kept_items(items: &Items, grid: &terra_items::Grid) -> Vec<SavedItem> {
+    grid.iter()
         .map(|placed| SavedItem {
             kind: items.name(placed.item.kind).to_string(),
             x: placed.at.x,
@@ -573,7 +584,23 @@ fn gather(
             held: placed.stack.map_or(0, |stack| stack.held),
             wear: placed.item.wear,
         })
-        .collect();
+        .collect()
+}
+
+fn gather(
+    clock: &Clock,
+    planet: &Planet,
+    (site, offcuts): (&Site, &Offcuts),
+    claim: &Claim,
+    (items, recipes): (&Items, &Recipes),
+    view: &View,
+    props: &Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
+    people: &Query<(&Person, &Transform), Without<Player>>,
+    player: &PlayerParts,
+) -> SaveFile {
+    let (at, vitals, skills, backpack, gear, bar) = *player;
+    let placed: Vec<_> = backpack.0.iter().collect();
+    let kept = kept_items(items, &backpack.0);
     let bar_slots = (0..bar.0.len())
         .map(|slot| {
             let id = bar.0.get(slot)?;
@@ -628,7 +655,7 @@ fn gather(
         )),
         props: props
             .iter()
-            .map(|(prop, works)| {
+            .map(|(prop, works, storage)| {
                 let names = |indices: &mut dyn Iterator<Item = &usize>| {
                     indices
                         .map(|&index| recipes[index].makes.name(items))
@@ -643,6 +670,7 @@ fn gather(
                     queue: works.map_or(Vec::new(), |works| names(&mut works.queue.iter())),
                     progress: works.map_or(0.0, |works| works.progress),
                     done: works.map_or(Vec::new(), |works| names(&mut works.done.iter())),
+                    stored: storage.map_or(Vec::new(), |storage| kept_items(items, &storage.0)),
                 }
             })
             .collect(),
@@ -932,6 +960,46 @@ mod tests {
             )
             .unwrap();
 
+        // A chest beside it, with a few things stored in it.
+        world
+            .run_system_once(
+                |mut commands: Commands,
+                 builds: Res<Builds>,
+                 mut items: ResMut<Items>,
+                 models: Res<Models>,
+                 site: Res<Site>,
+                 planet: Res<Planet>| {
+                    let item = builds
+                        .items()
+                        .find(|item| item.holds.is_some())
+                        .expect("something placed is storage");
+                    let (w, h) = item.holds.unwrap();
+                    let chest = props::place(
+                        &mut commands,
+                        &models,
+                        &site,
+                        &planet,
+                        item,
+                        Vec3::new(3.0, 0.0, -2.0),
+                        0.0,
+                        90.0,
+                        false,
+                    )
+                    .expect("the chest's model is there");
+                    let mut grid = terra_items::Grid::new(w, h);
+                    for (name, cell) in [("Wood", (2, 1)), ("Wood", (0, 0)), ("Stone", (5, 3))] {
+                        let made = items.make_named(name).unwrap();
+                        let cell = Cell {
+                            x: cell.0,
+                            y: cell.1,
+                        };
+                        grid.insert(&items.catalogue, made, Some(cell)).unwrap();
+                    }
+                    commands.entity(chest).insert(Storage(grid));
+                },
+            )
+            .unwrap();
+
         // The claim, its stone set and grown to its largest.
         world.resource_scope(|world, builds: Mut<Builds>| {
             let mut claim = world.get_mut::<Claim>(player).unwrap();
@@ -993,6 +1061,8 @@ mod tests {
             bool,
             Option<(Vec<usize>, f32, Vec<usize>)>,
         )>,
+        /// What each piece of storage holds: each item's kind and where.
+        stored: Vec<Vec<(String, (u8, u8))>>,
         claim: usize,
         hour: f32,
         ground: Vec<Operation>,
@@ -1042,6 +1112,7 @@ mod tests {
             base: site.base.snapshot(),
             frame: site.frame,
             props: Vec::new(),
+            stored: Vec::new(),
             claim: entity.get::<Claim>().unwrap().step(),
             hour: world.resource::<Clock>().hour,
             ground: world.resource::<Planet>().operations(),
@@ -1065,6 +1136,24 @@ mod tests {
             })
             .collect();
         kept.props.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut stores = world.query::<&Storage>();
+        let items = world.resource::<Items>();
+        kept.stored = stores
+            .iter(world)
+            .map(|storage| {
+                let mut held: Vec<(String, (u8, u8))> = storage
+                    .0
+                    .iter()
+                    .map(|placed| {
+                        let kind = items.name(placed.item.kind).to_string();
+                        (kind, (placed.at.x, placed.at.y))
+                    })
+                    .collect();
+                held.sort();
+                held
+            })
+            .collect();
+        kept.stored.sort();
         let mut people = world.query::<(&Person, &Transform)>();
         kept.people = people
             .iter(world)
@@ -1093,7 +1182,7 @@ mod tests {
                  items: Res<Items>,
                  recipes: Res<Recipes>,
                  view: Single<&View, IsLocalPlayer>,
-                 props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
+                 props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
                  people: Query<(&Person, &Transform), Without<Player>>,
                  player: Single<
                     (&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar),
@@ -1151,6 +1240,7 @@ mod tests {
         assert!(before.carried.iter().any(|(_, _, _, held)| *held > Some(0)));
         assert_eq!(before.bar[0], None);
         assert!(before.props.iter().any(|(.., works)| works.is_some()));
+        assert!(before.stored.iter().any(|held| held.len() == 3));
         assert_eq!(before.ground.len(), 3);
         assert_eq!(before.people.len(), 3);
         let path = save(world, "round-trip");
