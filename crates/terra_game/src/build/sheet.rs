@@ -829,11 +829,15 @@ pub(super) fn lay(
         .enumerate()
         .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
         .collect();
-    // The further kits' rows (D236), each by its file's name, after the rest.
+    // Every further wall kit's rows (D236), each by its file's name, after the rest: a kit
+    // added as a file is on the sheet with nothing else to do (D136).
     if let Some(stone) = stone {
         let names = super::kit_names();
-        for name in ["earth", "limewash", "wattle"] {
-            let Some((&kind, _)) = names.iter().find(|(_, n)| n.as_str() == name) else {
+        let further = kits.0.iter().map(|kit| kit.kind()).filter(|&kind| {
+            !kind.is_roof() && kind != laying && kind != stone && Some(kind) != hewn
+        });
+        for kind in further {
+            let Some(name) = names.get(&kind) else {
                 continue;
             };
             for (row_name, ops) in kit_rows(name, kind, stone, laying, roof(kind)) {

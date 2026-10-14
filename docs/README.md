@@ -55,6 +55,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [building-tech.md](building-tech.md) | The technical design for building: cubes as shared state (D160, D181), walls laid from kits by rule, roofs as a height field, buildings and indoors, drawing many buildings, and the order of work. |
 | [building-plan.md](building-plan.md) | The technology plan for building (D195): where each part lives, what is stored, operations, drawing, collision, the art pipeline, how it is checked and measured, and the order of work. |
 | [building-kits.md](building-kits.md) | How each kind of construction looks and is drawn, planned, going up and built, logs first: corners, joins and openings (D177 to D179). |
+| [building-drawing.md](building-drawing.md) | How building is drawn, from cubes to the screen, where each kind of junk on screen comes from and what keeps it out (`cargo xtask artifacts`), and adding a material as data. |
 | [progression.md](progression.md) | Three ways to grow (skills, studied techniques, essences), skills on the rank ladder, crossing a rank, and how things are unlocked. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [art-style.md](art-style.md) | **The style guide and art direction for anything the game draws**, the same in every realm and setting: textured, lightly stylised realism, what a realm brings, life size, shape, colour, light, budgets, the concept prompt, a checklist, how the renderer makes the look and open questions. |

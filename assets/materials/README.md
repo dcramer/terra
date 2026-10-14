@@ -13,6 +13,7 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `log_bark`: `pine_bark` (Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across) at 1 m lying in patches over `rough_wood` (Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across) at 0.5 m, 50% covered, its colour 70% saturated and the wood's 130% as light, by `textures.ts blend`. 1.00 m round by 2.00 m along.
 - `log_end`: made from a generated image (art/textures/log-end.png) by `textures.ts material`.
 - `log_ends`: ambientCG [TreeEnd002](https://ambientcg.com/a/TreeEnd002), [TreeEnd003](https://ambientcg.com/a/TreeEnd003), [TreeEnd004](https://ambientcg.com/a/TreeEnd004), [TreeEnd005](https://ambientcg.com/a/TreeEnd005), CC0, each cut out and drawn round in a cell of 2 by 2, greyed 45% by `textures.ts ends`.
+- `medieval_red_brick`: Poly Haven [Medieval Red Brick](https://polyhaven.com/a/medieval_red_brick), CC0, 2k. 2.00 m across.
 - `medieval_wall_01`: Poly Haven [Medieval Wall 01](https://polyhaven.com/a/medieval_wall_01), CC0, 2k. 2.00 m across.
 - `oak_bark`: Poly Haven [Bark Willow 02](https://polyhaven.com/a/bark_willow_02), CC0, 2k. 2.15 m across. Furrowed as an old oak's bark is; the lush forest's trunks. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping; maps recompressed.
 - `packed_earth`: ambientCG [Ground 104](https://ambientcg.com/a/Ground104), CC0, 2k.
