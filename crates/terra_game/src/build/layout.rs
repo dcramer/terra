@@ -342,6 +342,7 @@ fn launch(
             let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
             let progress = build.progress();
             let maps = look.maps.clone();
+            let layers = look.layers.clone();
             let drawn_before = build.sections.drawn.get(&at);
             let previous = drawn_before.map(|drawn| (drawn.key, drawn.reach));
             // What each part on screen was drawn from, while it is on screen.
@@ -398,7 +399,7 @@ fn launch(
                         .then_some(only.as_slice())
                         .filter(|only| !only.is_empty()),
                 );
-                let parts = draw::parts(drawn, store::centre(section.at), &only, keys);
+                let parts = draw::parts(drawn, store::centre(section.at), &only, keys, &layers);
                 Outcome::Drawn {
                     key,
                     reach: wanted,

@@ -117,14 +117,17 @@ pub(super) fn load(
 ) {
     let paths = look.kits.as_deref().map(wanted).unwrap_or_default();
     if loading.wanted.as_ref() != Some(&paths) {
-        let linear = |path: String| -> Handle<Image> {
+        // Read on the CPU only, as the texture arrays read them (D290): never sent to the GPU.
+        let read = |path: String, srgb: bool| -> Handle<Image> {
             assets
                 .load_builder()
-                .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
-                    settings.is_srgb = false;
+                .with_settings(move |settings: &mut bevy::image::ImageLoaderSettings| {
+                    settings.is_srgb = srgb;
+                    settings.asset_usage = bevy::asset::RenderAssetUsages::MAIN_WORLD;
                 })
                 .load(path)
         };
+        let linear = |path: String| read(path, false);
         loading.heights = paths
             .0
             .iter()
@@ -134,7 +137,7 @@ pub(super) fn load(
         loading.colours = paths
             .1
             .iter()
-            .map(|path| (path.clone(), assets.load(format!("{path}/color.jpg"))))
+            .map(|path| (path.clone(), read(format!("{path}/color.jpg"), true)))
             .collect();
         loading.occlusion = paths
             .1
@@ -208,6 +211,10 @@ pub(super) fn load(
         maps.colours.insert(path.clone(), Arc::new(swatch));
     }
     loading.done = true;
+    // Their pictures are let go: what was needed of them is in the maps.
+    loading.heights.clear();
+    loading.colours.clear();
+    loading.occlusion.clear();
     look.maps = Arc::new(maps);
     for build in super::store::each(&mut site, &mut builds) {
         if build.kits.is_some() {

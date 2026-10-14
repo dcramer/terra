@@ -547,7 +547,15 @@ fn replace(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     as_player(world, |building, player| {
         let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
-        let ops = plans::replace(&building.site.base, &cubes, kind);
+        let blocks = building.rules.blocks.clone();
+        let ops = plans::change(
+            &building.site.base,
+            &cubes,
+            kind,
+            &building.rules.rules,
+            &building.rules.families,
+            |kind| blocks.contains(&kind),
+        );
         if ops.is_empty() {
             return Err(refused("there is nothing there to change"));
         }

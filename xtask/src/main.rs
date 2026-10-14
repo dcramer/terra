@@ -203,6 +203,13 @@ const TASKS: &[Task] = &[
         run: |args| node("tools/textures/textures.ts", args),
     },
     Task {
+        name: "pack",
+        takes: "<name> --from <source> [--pattern block|frame|coursed|roof]",
+        does: "make a construction material in one command: its pack from a CC0 scan, an image or a reference model, checked and credited, and its file (tools/kits, D290)",
+        group: "Make art",
+        run: |args| node("tools/kits/pack.ts", args),
+    },
+    Task {
         name: "tripo",
         takes: "<command> [args]",
         does: "Tripo on our Studio subscription: image, model, rig, animate, balance… (tools/tripo)",
@@ -659,6 +666,7 @@ fn worth_saying(line: &str) -> Option<&str> {
         "Scale: ",
         "Builds hold: ",
         "Builds drawn in view: ",
+        "Builds' texture arrays: ",
         "frame parts, ",
         "GPU passes, ",
         "triangles a frame, ",

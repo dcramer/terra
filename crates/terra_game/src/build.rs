@@ -26,6 +26,7 @@ use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, Rules, STOREY_M, Walker, e
 use terra_core::Operation;
 
 pub(crate) mod act;
+mod arrays;
 mod draw;
 mod going_up;
 mod hlod;
@@ -160,6 +161,8 @@ pub(super) struct BuildLook {
     maps: Arc<Maps>,
     /// The kits' materials, textured (D14).
     materials: Arc<KitMaterials>,
+    /// The kits' texture sets as layers of the texture arrays (D290).
+    layers: Arc<arrays::Layers>,
 }
 
 /// The kits' files, `assets/data/kits/`, read again when one is saved so a wall's look can
@@ -261,6 +264,41 @@ fn read_kit(path: &std::path::Path) -> Option<Kit> {
     }
 }
 
+/// The cubes an operation names, if it names any.
+fn op_cubes(op: &Op) -> Vec<[i32; 3]> {
+    match op {
+        Op::LayPlan { cubes, .. } => cubes.iter().map(|planned| planned.at).collect(),
+        Op::Unplan { cubes }
+        | Op::Fill { cubes }
+        | Op::Empty { cubes }
+        | Op::SetShape { cubes, .. }
+        | Op::Replace { cubes, .. }
+        | Op::Swap { cubes }
+        | Op::Changed { cubes, .. }
+        | Op::Carve { cubes }
+        | Op::Cancel { cubes }
+        | Op::Open { cubes }
+        | Op::Close { cubes }
+        | Op::Regroup { cubes, .. } => cubes.clone(),
+        _ => Vec::new(),
+    }
+}
+
+/// Makes the texture arrays the kits' surfaces are drawn from, where things are drawn (D290).
+fn make_arrays(world: &mut World) {
+    let Some(layers) = world
+        .get_resource::<BuildLook>()
+        .map(|look| look.layers.clone())
+    else {
+        return;
+    };
+    let assets = kit_assets();
+    let exists = Arc::new(move |path: &str| assets.join(path).is_file());
+    if let Some(arrays) = arrays::setup(world, layers, exists) {
+        world.insert_resource(arrays);
+    }
+}
+
 #[derive(Component)]
 struct Readout;
 
@@ -276,7 +314,7 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(Added)
         .init_resource::<act::BuildRules>()
         .init_resource::<act::Offcuts>()
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, make_arrays).chain())
         .add_systems(
             PostStartup,
             keep_footprint.before(crate::play::FloraSystems::Plant),
@@ -294,8 +332,10 @@ pub fn plugin(app: &mut App) {
                 village::lay,
                 village::lay_scale,
                 maps::load,
+                arrays::stream.run_if(resource_exists::<arrays::Arrays>),
             ),
         );
+    arrays::plugin(app);
     store::plugin(app);
     layout::plugin(app);
     draw::plugin(app);
@@ -535,7 +575,34 @@ impl Build {
     /// Does operations to the base as one act, checked against it as it is (D21): all of
     /// them or, if one is refused, none. It is drawn again on the next frame.
     pub(super) fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
+        let named: BTreeSet<[i32; 3]> = ops.iter().flat_map(op_cubes).collect();
+        let before: Vec<([i32; 3], Option<terra_build::Cube>)> = named
+            .iter()
+            .map(|&at| (at, self.base.cube(IVec3::from_array(at))))
+            .collect();
         let done = self.base.act_all(ops, cx)?;
+        // A change of material and nothing else: the drawing looks it up at once (D298).
+        let mut repainted = Vec::new();
+        let mut only_kind = true;
+        for (at, was) in before {
+            let now = self.base.cube(IVec3::from_array(at));
+            match (was, now) {
+                (Some(was), Some(now))
+                    if (was.fill, was.shape, was.state) == (now.fill, now.shape, now.state) =>
+                {
+                    if was.kind != now.kind {
+                        repainted.push((at, was.kind, now.kind));
+                    }
+                }
+                _ => only_kind = false,
+            }
+        }
+        if only_kind && !repainted.is_empty() {
+            self.sections.repaints.push(store::Repaint {
+                cubes: repainted,
+                since: std::time::Instant::now(),
+            });
+        }
         self.since.extend(ops.iter().cloned());
         // Now and then what has been done is folded into a snapshot.
         if self.since.len() > FOLD_AFTER {
@@ -775,14 +842,22 @@ fn setup(
         laying: Kind::PLAIN,
         maps: Arc::default(),
         materials: Arc::default(),
+        layers: Arc::default(),
     };
     let materials_of_kit = look
         .kits
         .as_deref()
         .map(|kits| kit_materials(kits, &assets, &mut materials))
         .unwrap_or_default();
+    let layers = Arc::new(
+        look.kits
+            .as_deref()
+            .map(arrays::Layers::of)
+            .unwrap_or_default(),
+    );
     let look = BuildLook {
         materials: materials_of_kit,
+        layers,
         laying: match (
             options.walls.as_deref(),
             look.kits.as_deref().and_then(|k| k.0.first()),
@@ -818,6 +893,11 @@ fn setup(
             names: kit_names(),
             budgets: Vec::new(),
             footing: footing_kind(kits),
+            families: kits
+                .0
+                .iter()
+                .map(|kit| (kit.kind(), plans::family(kit)))
+                .collect(),
         });
     }
     let operations = if driven.is_some() {
@@ -876,6 +956,7 @@ fn reload_kit(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
     (assets, mut materials): (Res<AssetServer>, ResMut<Assets<StandardMaterial>>),
+    mut arrays: Option<ResMut<arrays::Arrays>>,
 ) {
     if !file.timer.tick(time.delta()).just_finished() {
         return;
@@ -890,6 +971,10 @@ fn reload_kit(
     };
     info!("Read the kits in {KITS} again.");
     look.materials = kit_materials(&kits, &assets, &mut materials);
+    look.layers = Arc::new(arrays::Layers::of(&kits));
+    if let Some(arrays) = arrays.as_mut() {
+        arrays.relayer(look.layers.clone());
+    }
     if look.kits.is_some() {
         look.kits = Some(kits.clone());
     }

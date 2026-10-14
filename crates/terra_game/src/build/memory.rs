@@ -6,7 +6,7 @@
 use super::store::{Section, each};
 use super::{Build, BuildLook, Built, Site};
 use crate::remote::method;
-use bevy::{prelude::*, remote::BrpResult};
+use bevy::{asset::UntypedAssetId, prelude::*, remote::BrpResult};
 use serde_json::{Value, json};
 
 /// What a base holds.
@@ -116,12 +116,18 @@ fn drawing(world: &mut World) -> (usize, usize, f32) {
         &ViewVisibility,
         &ChildOf,
         Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<super::arrays::BuildMaterial>>,
     )>();
     let mut drawn = 0;
     let mut materials = std::collections::BTreeSet::new();
-    let found: Vec<(Entity, bool, Option<AssetId<StandardMaterial>>)> = meshes
+    let found: Vec<(Entity, bool, Option<UntypedAssetId>)> = meshes
         .iter(world)
-        .map(|(seen, parent, material)| (parent.parent(), seen.get(), material.map(|m| m.id())))
+        .map(|(seen, parent, standard, arrays)| {
+            let material = standard
+                .map(|m| m.id().untyped())
+                .or(arrays.map(|m| m.id().untyped()));
+            (parent.parent(), seen.get(), material)
+        })
         .collect();
     for (parent, seen, material) in found {
         if seen && sections.get(world, parent).is_ok() {
@@ -160,6 +166,22 @@ fn drawing(world: &mut World) -> (usize, usize, f32) {
             }
         }
     }
+    let mut sets = 0;
+    if let (Some(arrays), Some(images)) = (
+        world.get_resource::<super::arrays::Arrays>(),
+        world.get_resource::<Assets<Image>>(),
+    ) {
+        let (held, resident) = arrays.bytes(images);
+        bytes += held;
+        sets = resident;
+        info!(
+            "Builds' texture arrays: {resident} texture sets resident of their room for more, {:.1} MiB a set, {} made resident and {} let go in the run.",
+            arrays.set_bytes() as f32 / (1024.0 * 1024.0),
+            arrays.made,
+            arrays.dropped
+        );
+    }
+    let _ = sets;
     (drawn, materials.len(), bytes as f32 / (1024.0 * 1024.0))
 }
 

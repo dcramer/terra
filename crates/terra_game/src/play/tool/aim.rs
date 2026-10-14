@@ -720,9 +720,12 @@ fn plan_work(
         (Kind::Replace, Target::Structure { cube }) => {
             let cubes = plans::brush(cube, builder.brush);
             let name = building.rules.name(kind).to_string();
+            let rules = &building.rules;
             Some((
                 format!("change to {name}"),
-                plans::replace(base, &cubes, kind),
+                plans::change(base, &cubes, kind, &rules.rules, &rules.families, |kind| {
+                    rules.blocks.contains(&kind)
+                }),
             ))
         }
         // Built cubes marked to be carved out, the brush's box of them (D226).

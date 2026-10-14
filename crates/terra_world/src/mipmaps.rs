@@ -38,7 +38,12 @@ fn mipmaps(
         let Some(mut image) = images.get_mut(*id) else {
             continue;
         };
-        if image.texture_descriptor.mip_level_count > 1 {
+        // A picture read on the CPU only is never sampled, so needs none.
+        if image.texture_descriptor.mip_level_count > 1
+            || !image
+                .asset_usage
+                .contains(bevy::asset::RenderAssetUsages::RENDER_WORLD)
+        {
             continue;
         }
         let format = image.texture_descriptor.format;

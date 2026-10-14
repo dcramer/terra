@@ -54,6 +54,9 @@ pub struct BuildRules {
     pub budgets: Vec<usize>,
     /// The kind footings are laid in under what is built on the ground (D194), if any.
     pub footing: Option<Kind>,
+    /// Each kind's pattern, as a number, and whether it is framed: a change of material
+    /// between two kinds of one family is a repaint at once (D298).
+    pub families: BTreeMap<Kind, u8>,
 }
 
 impl BuildRules {

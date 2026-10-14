@@ -8,6 +8,7 @@
 //! with `VisibilityRange`, as Unreal's HLOD does. Near detail is made only for sections
 //! near the camera and dropped when the camera leaves them.
 
+use super::arrays::{Arrays, BuildMaterial, Layers};
 use super::layout::{Done, Drawing, Jobs, Outcome, reach};
 use super::store::{self, Drawn, Section, each};
 use super::{Build, BuildLook, Built, Site};
@@ -202,7 +203,8 @@ impl Looks {
     }
 }
 
-/// Each kit's materials, from its textures (D14), so two timber kinds can differ in bark:
+/// Each kit's pieces' atlas as a material, from its textures (D14); the rest of its texture
+/// sets are layers of the texture arrays (`arrays`, D290). So two timber kinds can differ:
 /// by kind, and for what is drawn for no one kind (a roof, a floor, a gable's boards) the
 /// first kit's to name the material. Kits naming the same textures share one material,
 /// so their pieces draw together.
@@ -249,6 +251,11 @@ pub(super) fn kit_materials(
     let mut out = KitMaterials::default();
     for kit in &kits.0 {
         for (material, texture) in &kit.textures {
+            // Every other texture set is a layer of the texture arrays (D290); only a pack's
+            // own pieces' atlas, read by their own UVs, is a material of its own.
+            if *material != Material::Piece {
+                continue;
+            }
             let path = &texture.path;
             let depth = kit.depth(*material);
             let handle = made
@@ -286,6 +293,8 @@ pub(super) fn kit_materials(
 /// A section ready to put on screen, made on a worker: its meshes, about its middle; its
 /// near and middle detail a part at a time, `None` for a part left as it is on screen.
 pub(super) struct Parts {
+    /// Every layer of the texture arrays its parts drawn again wear (D290).
+    pub layers: Vec<u16>,
     parts: Vec<Option<Part>>,
     /// What each part was drawn from (`sections::cluster_keys`).
     keys: Vec<u64>,
@@ -299,15 +308,64 @@ pub(super) struct Parts {
     centre: Vec3,
 }
 
-/// A part of a section's near and middle detail as meshes.
+/// A part of a section's near and middle detail as meshes: its surfaces in the texture
+/// arrays one mesh a detail, each corner carrying its layer, and the layers they wear (D290);
+/// what the arrays do not hold, a pack's pieces' atlas, by kind and material.
 struct Part {
+    arrays: [Option<Mesh>; 2],
+    layers: Vec<u16>,
     near: Vec<(Kind, Material, Mesh)>,
     mid: Vec<(Kind, Material, Mesh)>,
 }
 
+/// A detail's surfaces as one mesh in the texture arrays, each corner carrying its layer
+/// (`uv_b`'s first), with the rest left to draw in their own materials.
+#[allow(clippy::type_complexity)]
+fn in_arrays(
+    surfaces: &BTreeMap<(Kind, Material), Surface>,
+    layers: &Layers,
+    centre: Vec3,
+    used: &mut BTreeSet<u16>,
+) -> (Option<Mesh>, Vec<(Kind, Material, Mesh)>) {
+    let mut rest = Vec::new();
+    let mut all = terra_build::Indexed::default();
+    let mut tangents: Vec<[f32; 4]> = Vec::new();
+    let mut ids: Vec<[f32; 2]> = Vec::new();
+    for (&(kind, material), surface) in surfaces {
+        let Some(id) = layers.get(kind, material) else {
+            if let Some(mesh) = mesh(surface, centre, Uvs::Mapped) {
+                rest.push((kind, material, mesh));
+            }
+            continue;
+        };
+        let part = surface.indexed();
+        if part.indices.is_empty() {
+            continue;
+        }
+        used.insert(id);
+        tangents.extend(part.tangents());
+        ids.extend(std::iter::repeat_n(
+            [f32::from(id), 0.0],
+            part.positions.len(),
+        ));
+        all.append(part);
+    }
+    let mesh = mesh_of(all, centre, Uvs::Mapped).map(|mesh| {
+        mesh.with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, tangents)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
+    });
+    (mesh, rest)
+}
+
 /// Turns a section drawn into meshes, about its middle: of its parts, only those `only`
-/// says, which were drawn.
-pub(super) fn parts(drawn: Merged, centre: Vec3, only: &[bool], keys: Vec<u64>) -> Parts {
+/// says, which were drawn; its surfaces in the texture arrays by `layers`.
+pub(super) fn parts(
+    drawn: Merged,
+    centre: Vec3,
+    only: &[bool],
+    keys: Vec<u64>,
+    layers: &Layers,
+) -> Parts {
     // A surface whose colours came out near black, as a mask reading the real maps can make
     // it, is drawn black in any light: said once a run (`terra_build::inspect`).
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -321,26 +379,42 @@ pub(super) fn parts(drawn: Merged, centre: Vec3, only: &[bool], keys: Vec<u64>) 
             );
         }
     }
-    let textured = |surface: &Surface| mesh(surface, centre, Uvs::Mapped);
     let plain = |surface: &Surface| mesh(surface, centre, Uvs::None);
-    let meshes = |by: Option<&BTreeMap<(Kind, Material), Surface>>| -> Vec<(Kind, Material, Mesh)> {
-        by.into_iter()
-            .flatten()
-            .filter_map(|(&(kind, material), surface)| {
-                textured(surface).map(|mesh| (kind, material, mesh))
-            })
-            .collect()
-    };
+    let none = BTreeMap::new();
     let count = drawn.near_by.len().max(drawn.mid_by.len());
-    Parts {
-        parts: (0..count)
-            .map(|c| {
-                only.get(c).copied().unwrap_or(true).then(|| Part {
-                    near: meshes(drawn.near_by.get(c)),
-                    mid: meshes(drawn.mid_by.get(c)),
-                })
+    let parts: Vec<Option<Part>> = (0..count)
+        .map(|c| {
+            only.get(c).copied().unwrap_or(true).then(|| {
+                let mut used = BTreeSet::new();
+                let (near_arrays, near) = in_arrays(
+                    drawn.near_by.get(c).unwrap_or(&none),
+                    layers,
+                    centre,
+                    &mut used,
+                );
+                let (mid_arrays, mid) = in_arrays(
+                    drawn.mid_by.get(c).unwrap_or(&none),
+                    layers,
+                    centre,
+                    &mut used,
+                );
+                Part {
+                    arrays: [near_arrays, mid_arrays],
+                    layers: used.into_iter().collect(),
+                    near,
+                    mid,
+                }
             })
-            .collect(),
+        })
+        .collect();
+    let layers: BTreeSet<u16> = parts
+        .iter()
+        .flatten()
+        .flat_map(|part| part.layers.iter().copied())
+        .collect();
+    Parts {
+        parts,
+        layers: layers.into_iter().collect(),
         keys,
         plain: plain(&drawn.plain),
         next: drawn.next.0.values().filter_map(plain).collect(),
@@ -434,6 +508,17 @@ pub(super) enum Uvs {
 /// A surface as a mesh about a point, its corners shared, its colours linear.
 pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     let all = surface.indexed();
+    let tangents = (uvs == Uvs::Mapped).then(|| all.tangents());
+    let mesh = mesh_of(all, centre, uvs)?;
+    Some(match tangents {
+        Some(tangents) => mesh.with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, tangents),
+        None => mesh,
+    })
+}
+
+/// Triangles with shared corners as a mesh about a point, its colours linear; its tangents
+/// are the caller's.
+fn mesh_of(all: terra_build::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     if all.indices.is_empty() {
         return None;
     }
@@ -460,9 +545,6 @@ pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, all.normals.clone())
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours);
-    if uvs == Uvs::Mapped {
-        mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, all.tangents());
-    }
     if uvs != Uvs::None {
         mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, all.uvs);
     }
@@ -476,11 +558,141 @@ pub fn plugin(app: &mut App) {
     }
     app.add_systems(
         Update,
-        (follow_quality, upload, stream)
+        (follow_quality, repaint, upload, stream)
             .chain()
             .in_set(Drawing::Upload),
     );
 }
+
+/// How many frames a repaint waits for its new texture sets to be resident before it is
+/// left to the sections laid again.
+const REPAINT_WAIT_FRAMES: u32 = 30;
+
+/// A change of material and nothing else, looked up in what is drawn (D298): each corner of
+/// the changed cubes in the texture arrays' meshes takes the new kind's layer for the
+/// material it wore, so the change is on screen the next frame, as a texture set swapped on
+/// geometry that stays (Space Engineers' skins, Teardown's palettes). The sections are laid
+/// again behind it, as for any change, and replace it when they come back, with the new
+/// kind's weathering and how it meets its neighbours. A corner's cube is the one it lies in,
+/// a little in from its face.
+fn repaint(
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+    look: Res<BuildLook>,
+    arrays: Option<ResMut<Arrays>>,
+    assets: Res<AssetServer>,
+    time: Res<Time<Real>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut waited: Local<u32>,
+) {
+    let Some(mut arrays) = arrays else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let layers = look.layers.clone();
+    for build in each(&mut site, &mut builds) {
+        if build.sections.repaints.is_empty() {
+            continue;
+        }
+        let repaints = std::mem::take(&mut build.sections.repaints);
+        for repaint in repaints {
+            // Each kind's layer for a material, old to new.
+            let mut map: BTreeMap<(Kind, u16), u16> = BTreeMap::new();
+            let mut wanted = Vec::new();
+            for &(_, from, to) in &repaint.cubes {
+                for material in MATERIALS {
+                    if let (Some(old), Some(new)) =
+                        (layers.own(from, material), layers.own(to, material))
+                    {
+                        map.entry((to, old)).or_insert(new);
+                        wanted.push(new);
+                    }
+                }
+            }
+            if !arrays.ready(&wanted) {
+                arrays.want(&wanted, &assets, now);
+                *waited += 1;
+                if *waited < REPAINT_WAIT_FRAMES {
+                    build.sections.repaints.push(repaint);
+                }
+                continue;
+            }
+            *waited = 0;
+            let started = std::time::Instant::now();
+            let to: BTreeMap<[i32; 3], Kind> =
+                repaint.cubes.iter().map(|&(at, _, to)| (at, to)).collect();
+            let (mut rewritten, mut touched) = (0usize, 0usize);
+            for (&at, drawn) in &build.sections.drawn {
+                let centre = store::centre(IVec3::from_array(at));
+                for handle in drawn.parts.iter().flat_map(|part| &part.arrays) {
+                    let Some(mut mesh) = meshes.get_mut(handle) else {
+                        continue;
+                    };
+                    let (
+                        Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)),
+                        Some(bevy::mesh::VertexAttributeValues::Float32x3(normals)),
+                    ) = (
+                        mesh.attribute(Mesh::ATTRIBUTE_POSITION),
+                        mesh.attribute(Mesh::ATTRIBUTE_NORMAL),
+                    )
+                    else {
+                        continue;
+                    };
+                    let cubes: Vec<Option<Kind>> = positions
+                        .iter()
+                        .zip(normals)
+                        .map(|(p, n)| {
+                            let inside = centre + Vec3::from_array(*p)
+                                - Vec3::from_array(*n) * (0.04 * terra_build::CELL_M);
+                            let cube = (inside / terra_build::CELL_M).floor().as_ivec3();
+                            to.get(&cube.to_array()).copied()
+                        })
+                        .collect();
+                    if cubes.iter().all(Option::is_none) {
+                        continue;
+                    }
+                    let Some(bevy::mesh::VertexAttributeValues::Float32x2(ids)) =
+                        mesh.attribute_mut(Mesh::ATTRIBUTE_UV_1)
+                    else {
+                        continue;
+                    };
+                    for (id, kind) in ids.iter_mut().zip(&cubes) {
+                        if let Some(kind) = kind
+                            && let Some(&new) = map.get(&(*kind, id[0] as u16))
+                        {
+                            id[0] = f32::from(new);
+                            rewritten += 1;
+                        }
+                    }
+                    touched += 1;
+                }
+            }
+            info!(
+                "Build: repaint of {} cubes looked up in {:.2} ms, {:.1} ms after the change: {rewritten} corners in {touched} meshes take their new layers, on screen this frame; the sections laid again behind it.",
+                repaint.cubes.len(),
+                started.elapsed().as_secs_f32() * 1000.0,
+                repaint.since.elapsed().as_secs_f32() * 1000.0,
+            );
+        }
+    }
+}
+
+/// Every material a kit's surface can be drawn in, for looking up a repaint's layers.
+const MATERIALS: [Material; 13] = [
+    Material::Log,
+    Material::LogEnd,
+    Material::Daub,
+    Material::Board,
+    Material::Covering,
+    Material::Stone,
+    Material::Floor,
+    Material::Masonry,
+    Material::Flashing,
+    Material::Dressed,
+    Material::Hewn,
+    Material::Wattle,
+    Material::Plain,
+];
 
 /// How many corners are put on screen a frame, at most, beyond the first section: a
 /// section near is a few hundred thousand, far a few thousand.
@@ -506,8 +718,47 @@ fn upload(
     mut meshes: ResMut<Assets<Mesh>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
+    (mut arrays, assets, time, mut last_kept, builders): (
+        Option<ResMut<Arrays>>,
+        Res<AssetServer>,
+        Res<Time<Real>>,
+        Local<u64>,
+        Query<&crate::play::Builder>,
+    ),
 ) {
     let all = options.scripted() && !options.bench;
+    let now = time.elapsed_secs();
+    // A build whose sections wear a texture set not yet resident waits for it, so nothing is
+    // drawn in a slot not yet written (D290).
+    let mut waiting_for_textures: BTreeSet<Entity> = BTreeSet::new();
+    if let Some(arrays) = arrays.as_mut() {
+        for done in &jobs.ready {
+            if let Outcome::Drawn { parts, .. } = &done.outcome
+                && !arrays.ready(&parts.layers)
+            {
+                arrays.want(&parts.layers, &assets, now);
+                waiting_for_textures.insert(done.root);
+            }
+        }
+        // What is drawn keeps its texture sets resident, looked at every half second.
+        let tick = (now * 2.0) as u64;
+        for build in each(&mut site, &mut builds).filter(|_| tick != *last_kept) {
+            for drawn in build.sections.drawn.values() {
+                for part in &drawn.parts {
+                    arrays.want(&part.layers, &assets, now);
+                }
+            }
+        }
+        // And the material in each hammer, so a change to it is a lookup at once (D298).
+        if tick != *last_kept {
+            for builder in &builders {
+                if let Some(kind) = builder.material {
+                    arrays.want(&look.layers.of_kind(kind), &assets, now);
+                }
+            }
+        }
+        *last_kept = tick;
+    }
     // The builds whose changes are all laid, and those held back too long.
     let roots: BTreeSet<Entity> = jobs.ready.iter().map(|done| done.root).collect();
     let (mut complete, mut partial) = (BTreeSet::new(), BTreeSet::new());
@@ -569,7 +820,16 @@ fn upload(
             }
             change.back_ms = change.since.elapsed().as_secs_f32() * 1000.0;
         }
-        show(&mut commands, &mut meshes, &look, build, done, *quality);
+        let material = arrays.as_ref().map(|arrays| &arrays.material);
+        show(
+            &mut commands,
+            &mut meshes,
+            &look,
+            material,
+            build,
+            done,
+            *quality,
+        );
     }
     jobs.ready = rest;
     for root in shown {
@@ -633,6 +893,13 @@ impl Parts {
             .flat_map(|part| part.near.iter().chain(&part.mid))
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
+            + self
+                .parts
+                .iter()
+                .flatten()
+                .flat_map(|part| part.arrays.iter().flatten())
+                .map(&count)
+                .sum::<usize>()
             + self.rest(&count)
     }
 
@@ -659,12 +926,19 @@ pub(super) fn gpu_bytes(mesh: &Mesh) -> usize {
     mesh.get_vertex_buffer_size() + mesh.get_index_buffer_bytes().map_or(0, <[u8]>::len)
 }
 
+/// What a section's mesh is drawn in: a kit's own material, or the texture arrays (D290).
+enum Shade {
+    Standard(Handle<StandardMaterial>),
+    Arrays(Handle<BuildMaterial>),
+}
+
 /// Puts a section laid on screen, in place of what was drawn of it: its parts whose key
 /// is as it was left as they are, as a voxel game remeshes only the chunks an edit reaches.
 fn show(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     look: &BuildLook,
+    arrays: Option<&Handle<BuildMaterial>>,
     build: &mut Build,
     done: Done,
     quality: Quality,
@@ -760,18 +1034,19 @@ fn show(
     let near = reach == Reach::Near;
     let mid_from = near.then_some(NEAR_M);
     let far_from = (reach >= Reach::Mid).then_some(MID_M);
-    let mut add = |mesh: Mesh, material: Handle<StandardMaterial>, range: VisibilityRange| {
+    let mut add = |mesh: Mesh, material: Shade, range: VisibilityRange| {
         let mesh = meshes.add(mesh);
-        let id = commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material),
-                range,
-                Transform::IDENTITY,
-                ChildOf(entity),
-            ))
-            .id();
-        (id, mesh)
+        let mut spawned = commands.spawn((
+            Mesh3d(mesh.clone()),
+            range,
+            Transform::IDENTITY,
+            ChildOf(entity),
+        ));
+        match material {
+            Shade::Standard(material) => spawned.insert(MeshMaterial3d(material)),
+            Shade::Arrays(material) => spawned.insert(MeshMaterial3d(material)),
+        };
+        (spawned.id(), mesh)
     };
     let material = |kind: Kind, material: Material| {
         look.materials
@@ -794,16 +1069,53 @@ fn show(
         };
         let mut shown = store::OnScreen {
             key: parts.keys.get(c).copied(),
+            layers: new.layers.clone(),
             ..Default::default()
         };
+        // Its surfaces in the texture arrays, a mesh a detail (D290); a base built by its
+        // cubes keeps them on the CPU too, to repaint them in place (D298).
+        if let Some(arrays) = arrays {
+            let keep = build.by_cubes;
+            let [near_arrays, mid_arrays] = new.arrays;
+            for (mesh, mid) in [(near_arrays, false), (mid_arrays, true)] {
+                let Some(mut mesh) = mesh else {
+                    continue;
+                };
+                if keep {
+                    mesh.asset_usage |= RenderAssetUsages::MAIN_WORLD;
+                }
+                shown.gpu_bytes += gpu_bytes(&mesh);
+                let visible = if mid {
+                    range(mid_from, MID_M)
+                } else {
+                    range(None, NEAR_M)
+                };
+                let (id, handle) = add(mesh, Shade::Arrays(arrays.clone()), visible);
+                shown.entities.push(id);
+                if mid {
+                    casters.push((drawn.parts.len(), handle.clone()));
+                }
+                if keep {
+                    shown.arrays.push(handle);
+                }
+            }
+        }
         for (kind, which, mesh) in new.near {
             shown.gpu_bytes += gpu_bytes(&mesh);
-            let (id, _) = add(mesh, material(kind, which), range(None, NEAR_M));
+            let (id, _) = add(
+                mesh,
+                Shade::Standard(material(kind, which)),
+                range(None, NEAR_M),
+            );
             shown.entities.push(id);
         }
         for (kind, which, mesh) in new.mid {
             shown.gpu_bytes += gpu_bytes(&mesh);
-            let (id, mesh) = add(mesh, material(kind, which), range(mid_from, MID_M));
+            let (id, mesh) = add(
+                mesh,
+                Shade::Standard(material(kind, which)),
+                range(mid_from, MID_M),
+            );
             shown.entities.push(id);
             casters.push((drawn.parts.len(), mesh));
         }
@@ -814,16 +1126,44 @@ fn show(
     // What goes in next, as long as the finest detail drawn is seen.
     let next_to = if near { NEAR_M } else { MID_M };
     for mesh in parts.next {
-        rest.push(add(mesh, looks.next.clone(), range(None, next_to)).0);
+        rest.push(
+            add(
+                mesh,
+                Shade::Standard(looks.next.clone()),
+                range(None, next_to),
+            )
+            .0,
+        );
     }
     if let Some(mesh) = parts.plain {
-        rest.push(add(mesh, looks.structure.clone(), range(None, far_end(quality))).0);
+        rest.push(
+            add(
+                mesh,
+                Shade::Standard(looks.structure.clone()),
+                range(None, far_end(quality)),
+            )
+            .0,
+        );
     }
     if let Some(mesh) = parts.far {
-        rest.push(add(mesh, looks.far.clone(), range(far_from, far_end(quality))).0);
+        rest.push(
+            add(
+                mesh,
+                Shade::Standard(looks.far.clone()),
+                range(far_from, far_end(quality)),
+            )
+            .0,
+        );
     }
     if let Some(mesh) = parts.proxy {
-        rest.push(add(mesh, looks.far.clone(), proxy_range(far_end(quality))).0);
+        rest.push(
+            add(
+                mesh,
+                Shade::Standard(looks.far.clone()),
+                proxy_range(far_end(quality)),
+            )
+            .0,
+        );
     }
     if let Some(mesh) = parts.shell {
         rest.push(

@@ -55,6 +55,20 @@ pub(super) struct OnScreen {
     pub key: Option<u64>,
     pub entities: Vec<Entity>,
     pub gpu_bytes: usize,
+    /// The texture arrays' layers its meshes wear, kept resident while it is drawn (D290).
+    pub layers: Vec<u16>,
+    /// Its meshes in the texture arrays, kept on the CPU too for a base built by its cubes,
+    /// so a repaint looks their layers up in place (D298).
+    pub arrays: Vec<Handle<Mesh>>,
+}
+
+/// A change of material and of nothing else (D298): each cube, from one kind to another,
+/// and when it was done, for the drawing to look up its layers at once while the section is
+/// laid again behind it.
+#[derive(Clone, Debug)]
+pub(super) struct Repaint {
+    pub cubes: Vec<([i32; 3], terra_build::Kind, terra_build::Kind)>,
+    pub since: std::time::Instant,
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
@@ -69,6 +83,8 @@ pub(super) struct Waiting {
 #[derive(Default)]
 pub(super) struct Sections {
     pub drawn: BTreeMap<[i32; 3], Drawn>,
+    /// Changes of material alone, waiting to be looked up in what is drawn (D298).
+    pub repaints: Vec<Repaint>,
     pub waiting: BTreeMap<[i32; 3], Waiting>,
     /// The job each section was last sent out in: an answer to an older one is dropped.
     pub tickets: BTreeMap<[i32; 3], u64>,

@@ -431,6 +431,62 @@ pub fn replace(base: &Base, cubes: &[IVec3], kind: Kind) -> Vec<Op> {
     }]
 }
 
+/// A kind's family: its pattern, and whether it is framed. Two kinds of one family lay the
+/// same shapes from the same cubes, so one changes into the other in place (D298).
+pub fn family(kit: &terra_build::kit::Kit) -> u8 {
+    let pattern = match kit.pattern {
+        terra_build::kit::Pattern::Logs => 0,
+        terra_build::kit::Pattern::Masonry => 1,
+        terra_build::kit::Pattern::Roof => 2,
+    };
+    pattern * 2 + u8::from(kit.framing.is_some())
+}
+
+/// Built cubes changed to another kind (D232, D298). Between two kinds of one family, a
+/// repaint at once: the change's every step, the old taken out and given back, the swap and
+/// the new put in, done as one act, so what stands changes its material where it is and
+/// nothing else, as Satisfactory's Customizer and V Rising's wallpaper repaint. Across
+/// families, where the structure itself changes, the cubes are marked and built anew a step
+/// at a time (`replace`).
+pub fn change(
+    base: &Base,
+    cubes: &[IVec3],
+    kind: Kind,
+    rules: &Rules,
+    families: &BTreeMap<Kind, u8>,
+    one_at_a_time: impl Fn(Kind) -> bool,
+) -> Vec<Op> {
+    let marked = replace(base, cubes, kind);
+    let Some(Op::Replace { cubes: changed, .. }) = marked.first() else {
+        return marked;
+    };
+    let family = |kind: Kind| families.get(&kind).copied();
+    let repaint = changed.iter().all(|&at| {
+        base.cube(IVec3::from_array(at)).is_some_and(|cube| {
+            family(cube.kind).is_some() && family(cube.kind) == family(kind) && cube.is_built()
+        })
+    });
+    if !repaint {
+        return marked;
+    }
+    // The job done through on a copy, step by step, with everything to hand: the act checks
+    // the steps again, with what the builder has, all or none.
+    let mut copy = base.clone();
+    let cx = terra_build::ops::Context::free(rules);
+    let mut ops = marked.clone();
+    if copy.act_all(&marked, &cx).is_err() {
+        return marked;
+    }
+    let near = bevy::math::Vec3::ZERO;
+    while let Some(op) = copy.next_change(near, &one_at_a_time) {
+        if copy.act(&op, &cx).is_err() {
+            return marked;
+        }
+        ops.push(op);
+    }
+    ops
+}
+
 /// The cubes of a box with anything in them marked to be carved out (D226); with footings,
 /// steps planned from any doorway that makes (D261).
 pub fn carve(base: &Base, cubes: &[IVec3], footings: Option<Footings>) -> Vec<Op> {
@@ -1135,6 +1191,26 @@ mod tests {
         let change = replace(&base, &two, LOGS);
         assert!(matches!(&change[..], [Op::Replace { cubes, kind: LOGS, .. }] if cubes.len() == 8));
         assert!(replace(&base, &two, STONE).is_empty());
+        // Within a pattern, a change is a repaint at once: every step in one act, after which
+        // the cubes are the new kind, built as they were, nothing pending (D298); across
+        // patterns, marked to be built anew.
+        const BRICK: Kind = Kind(7);
+        let families = BTreeMap::from([(LOGS, 0), (STONE, 2), (BRICK, 2)]);
+        let blocky = |kind: Kind| kind != LOGS;
+        let marked = super::change(&base, &two, LOGS, &rules, &families, blocky);
+        assert!(matches!(&marked[..], [Op::Replace { .. }]));
+        let repaint = super::change(&base, &two, BRICK, &rules, &families, blocky);
+        assert!(repaint.len() > 2, "{repaint:?}");
+        let mut repainted = base.clone();
+        repainted.act_all(&repaint, &cx).unwrap();
+        for at in &two {
+            let (was, now) = (base.cube(*at).unwrap(), repainted.cube(*at).unwrap());
+            assert_eq!(now.kind, BRICK);
+            assert_eq!(
+                (now.shape, now.state, now.pending),
+                (was.shape, was.state, terra_build::Pending::None)
+            );
+        }
         let carving = carve(&base, &two, None);
         assert!(matches!(&carving[..], [Op::Carve { cubes }] if cubes.len() == 8));
         let out = take_out(&base, &brush(IVec3::new(4, 3, -4), 2));
