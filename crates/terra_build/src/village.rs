@@ -504,6 +504,161 @@ fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<Bui
     draft.ops
 }
 
+/// A cube at a time, as a player builds by hand (D226): each cube its own, of a kind and
+/// a shape.
+struct ByHand(Vec<BuildOp>);
+
+impl ByHand {
+    fn put(&mut self, at: [i32; 3], kind: Kind, shape: Shape) {
+        self.0.push(BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: Some(Cube {
+                shape,
+                ..Cube::new(kind, Fill::Solid)
+            }),
+        });
+    }
+
+    fn open(&mut self, at: [i32; 3], kind: Kind) {
+        self.0.push(BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: Some(Cube::new(kind, Fill::Open)),
+        });
+    }
+
+    fn take(&mut self, at: [i32; 3]) {
+        self.0.push(BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: None,
+        });
+    }
+
+    /// Walls round a box of columns from one layer to another, its doorway a metre wide in
+    /// the front (+Z) wall at the origin, `door` cubes high, the rest whole.
+    fn walls(&mut self, x: [i32; 2], z: [i32; 2], y: [i32; 2], kind: Kind, door: i32) {
+        for layer in y[0]..=y[1] {
+            for cx in x[0]..=x[1] {
+                for cz in z[0]..=z[1] {
+                    if cx != x[0] && cx != x[1] && cz != z[0] && cz != z[1] {
+                        continue;
+                    }
+                    if cz == z[1] && (cx == -1 || cx == 0) && layer < y[0] + door {
+                        self.open([cx, layer, cz], kind);
+                    } else {
+                        self.put([cx, layer, cz], kind, Shape::Whole);
+                    }
+                }
+            }
+        }
+    }
+
+    /// A layer of whole cubes over a box of columns.
+    fn layer(&mut self, x: [i32; 2], z: [i32; 2], y: i32, kind: Kind) {
+        for cx in x[0]..=x[1] {
+            for cz in z[0]..=z[1] {
+                self.put([cx, y, cz], kind, Shape::Whole);
+            }
+        }
+    }
+
+    /// A gable over a box of columns, its ridge east and west, a row of slopes a layer up
+    /// from each long side in turn from `y`, the gable ends of `ends` carried up under it.
+    fn gable(&mut self, x: [i32; 2], z: [i32; 2], y: i32, roof: Kind, ends: Kind) {
+        let deep = z[1] - z[0] + 1;
+        for k in 0..(deep + 1) / 2 {
+            let layer = y + k;
+            for cx in x[0]..=x[1] {
+                self.put([cx, layer, z[0] + k], roof, Shape::Slope(Facing::South));
+                self.put([cx, layer, z[1] - k], roof, Shape::Slope(Facing::North));
+            }
+            for cz in z[0] + k + 1..z[1] - k {
+                for cx in [x[0], x[1]] {
+                    self.put([cx, layer, cz], ends, Shape::Whole);
+                }
+            }
+        }
+    }
+}
+
+/// A log cabin built by hand (D226): walls, floor and a gable of shakes laid a cube at a
+/// time, and a dormer let into the front of its roof, its window looking out over the
+/// street: what the shortcuts cannot make, and the demo shows (the goals reviews' finding).
+fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
+    let mut hand = ByHand(Vec::new());
+    let (x, z) = ([-6, 5], [-10, -1]);
+    hand.layer(x, z, -1, kinds.stone);
+    hand.walls(x, z, [0, 5], kinds.logs, 4);
+    hand.gable(x, z, 6, kinds.shakes, kinds.logs);
+    // The dormer, four cubes across the front slope: the slopes it stands in taken out,
+    // a face of logs with a window two cubes wide on the slope below, its cheeks back to
+    // the ridge's foot, and a flat roof of shakes over it.
+    let dormer = [-2, 1];
+    for cx in dormer[0]..=dormer[1] {
+        hand.take([cx, 8, -3]);
+        hand.take([cx, 9, -4]);
+    }
+    for cx in dormer[0]..=dormer[1] {
+        if cx == dormer[0] || cx == dormer[1] {
+            hand.put([cx, 8, -2], kinds.logs, Shape::Whole);
+        } else {
+            hand.open([cx, 8, -2], kinds.logs);
+        }
+    }
+    for cz in [-3, -4] {
+        for cx in dormer {
+            hand.put([cx, 8, cz], kinds.logs, Shape::Whole);
+        }
+    }
+    for cz in -4..=-2 {
+        for cx in dormer[0]..=dormer[1] {
+            hand.put([cx, 9, cz], kinds.shakes, Shape::Half);
+        }
+    }
+    hand.0
+}
+
+/// A stone house built by hand with a storey built over its roof (D226): a stone ground
+/// floor under a low roof of slate, its edge sloped and its top flat, and on that roof a
+/// storey of hewn timber under a gable of thatch, laid a cube at a time.
+fn storey_over_roof(kinds: Kinds) -> Vec<BuildOp> {
+    let mut hand = ByHand(Vec::new());
+    let (x, z) = ([-6, 5], [-8, -1]);
+    hand.layer(x, z, -1, kinds.stone);
+    hand.walls(x, z, [0, 5], kinds.stone, 4);
+    // The roof: slopes round its edge rising inward, corners where two meet, flat inside.
+    for cx in x[0]..=x[1] {
+        for cz in z[0]..=z[1] {
+            let (west, east) = (cx == x[0], cx == x[1]);
+            let (north, south) = (cz == z[0], cz == z[1]);
+            let shape = match (west, east, north, south) {
+                (true, _, true, _) => Shape::OuterCorner(Facing::East),
+                (_, true, true, _) => Shape::OuterCorner(Facing::South),
+                (_, true, _, true) => Shape::OuterCorner(Facing::West),
+                (true, _, _, true) => Shape::OuterCorner(Facing::North),
+                (true, ..) => Shape::Slope(Facing::East),
+                (_, true, ..) => Shape::Slope(Facing::West),
+                (_, _, true, _) => Shape::Slope(Facing::South),
+                (_, _, _, true) => Shape::Slope(Facing::North),
+                _ => Shape::Whole,
+            };
+            hand.put([cx, 6, cz], kinds.slate, shape);
+        }
+    }
+    // The storey over it, on the roof's flat top, a window in its front.
+    let (ux, uz) = ([-5, 4], [-7, -2]);
+    hand.walls(ux, uz, [7, 11], kinds.hewn, 0);
+    for cx in [-1, 0] {
+        for layer in [8, 9] {
+            hand.open([cx, layer, uz[1]], kinds.hewn);
+        }
+    }
+    hand.gable(ux, uz, 12, kinds.thatch, kinds.hewn);
+    hand.0
+}
+
 /// A woodshed of logs, three metres by two, open at the front under a lean-to rising over
 /// it.
 fn shed(seed: u32, kinds: Kinds) -> Vec<BuildOp> {
@@ -723,6 +878,24 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         at: [38.0, 2.0],
         facing: -std::f32::consts::FRAC_PI_2,
         ops: deck(kinds),
+    });
+    // At the street's ends, two built by hand a cube at a time (D226): a log cabin with a
+    // dormer, and a stone house with a storey of timber built over its roof.
+    buildings.push(Building {
+        name: "log cabin with a dormer, built by hand".to_string(),
+        plan: Plan::Rectangle,
+        scheme: Scheme::Logs,
+        at: [-56.0, -5.5],
+        facing: SOUTH,
+        ops: dormer_house(kinds),
+    });
+    buildings.push(Building {
+        name: "stone house with a storey over its roof, built by hand".to_string(),
+        plan: Plan::Rectangle,
+        scheme: Scheme::StoneUnderTimber,
+        at: [54.0, -5.5],
+        facing: SOUTH,
+        ops: storey_over_roof(kinds),
     });
     // Gardens walled in stone behind two houses of the southern row, a gap in each back
     // wall for a gate; each length its own, standing on the ground where it is.

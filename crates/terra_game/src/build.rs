@@ -502,6 +502,31 @@ impl Build {
         self.refresh(planet);
     }
 
+    /// Puts a building up from what the shortcuts say it is, by the same checked operations
+    /// a player's are (D108, D280): laid as the shortcuts lay it, its footings and door
+    /// steps from the planet, then laid again as plans and built a layer at a time, every
+    /// step checked, in its kits' terms. Returns the operation refused and why, if one is,
+    /// and keeps the shortcuts' base then.
+    pub(super) fn put_up(
+        &mut self,
+        ops: &[BuildOp],
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) -> Result<(), String> {
+        self.replace_with(ops, commands, planet, meshes);
+        let rules = self.kits.as_deref().map(Kits::rules).unwrap_or_default();
+        match self.base.put_up(&rules) {
+            Ok(base) => {
+                self.base = base;
+                self.redraw_all();
+                self.refresh(planet);
+                Ok(())
+            }
+            Err((op, why)) => Err(format!("{} ({op:?})", why.message())),
+        }
+    }
+
     /// Does operations to the base as one act, checked against it as it is (D21): all of
     /// them or, if one is refused, none. It is drawn again on the next frame.
     pub(super) fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {

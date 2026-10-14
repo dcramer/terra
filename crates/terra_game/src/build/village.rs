@@ -103,7 +103,9 @@ pub(super) fn lay(
         let label = format!("Village: {name}");
         let mut build = Build::new(&mut commands, &look, frame, &label);
         build.kits = Some(kits.clone());
-        build.replace_with(&ops, &mut commands, &planet, &mut meshes);
+        if let Err(why) = build.put_up(&ops, &mut commands, &planet, &mut meshes) {
+            warn!("Village: {name}: not put up by the operations: {why}");
+        }
         took.extend(time_operations(&build.base, &rules));
         commands.spawn((Name::new(label), Built(build)));
     }
@@ -225,7 +227,12 @@ pub(super) fn lay_scale(
         let label = format!("Scale: {}", building.name);
         let mut build = Build::new(&mut commands, &look, frame, &label);
         build.kits = Some(kits.clone());
-        build.replace_with(&building.ops, &mut commands, &planet, &mut meshes);
+        if let Err(why) = build.put_up(&building.ops, &mut commands, &planet, &mut meshes) {
+            warn!(
+                "Scale: {}: not put up by the operations: {why}",
+                building.name
+            );
+        }
         commands.spawn((Name::new(label), Built(build)));
     }
     info!(

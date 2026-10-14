@@ -205,7 +205,12 @@ fn found(
         );
         let label = format!("Settlement: {}", building.name);
         let mut built = Build::new(&mut commands, &look, frame, &label);
-        built.replace_with(&building.ops, &mut commands, &planet, &mut meshes);
+        if let Err(why) = built.put_up(&building.ops, &mut commands, &planet, &mut meshes) {
+            warn!(
+                "Settlement: {}: not put up by the operations: {why}",
+                building.name
+            );
+        }
         // Its own name the base's, which stands where it does; this one holds the build.
         commands.spawn((Name::new(format!("{label}, as built")), Built(built)));
         let local = start.local(door);

@@ -50,6 +50,7 @@ pub mod modules;
 pub mod ops;
 pub mod order;
 pub mod parts;
+pub mod put_up;
 pub mod relief;
 pub mod roofer;
 pub mod roofing;
