@@ -32,7 +32,7 @@
     ),
     textures: {
         Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
+        LogEnd: (path: "materials/log_ends", metres: (1.0, 1.0), cells: 2),
         Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),

@@ -1,5 +1,5 @@
-// A log wall's kit (docs/building-kits.md, D178, D200): pine logs in their bark, saddle
-// notched, with daub between the courses. Every log is made from these numbers and its own
+// A log wall's kit (docs/building-kits.md, D178, D200, D262): weathered pine logs keeping
+// their bark in patches, saddle notched, with mud daub between the courses. Every log is made from these numbers and its own
 // seed (crates/terra_build/src/timber.rs), so no two are alike. The game reads it again
 // when it is saved, so the look can be tuned while it runs. Sizes are in metres; colours
 // as they appear on screen (sRGB).
@@ -26,11 +26,17 @@
 //   daub        the daub under it: how far out its face is, as a fraction of the log's
 //               radius, and how tall it is
 //   tint        what its face's colour is multiplied by; end_tint, its sawn ends'
+//   groove      how much darker a wall's log is toward the grooves where it meets the
+//               logs above and below, most under it, and lighter on top (D262)
+//   knots       how many knots a metre, on average, where branches were trimmed
 //   variation   how much each log differs by its seed: thickness (either way, as a
-//               fraction), shade (how much darker at most), warmth (redder or cooler)
+//               fraction), shade (how much darker at most), warmth (redder or cooler),
+//               mottle (lighter and darker in long patches along it)
 // textures    each material's textures (D14; assets/materials): where, how many metres
-//             one copy covers, and how deep its parallax reads. Log is the bark, LogEnd
-//             the sawn end's grain, Daub what fills the groove between courses, Board
+//             one copy covers, and how deep its parallax reads. Log is the face, bark over
+//             weathered wood, a metre round by two along; LogEnd the sawn ends' grain, an
+//             atlas of cells by cells pictures each end picks one of; Daub what fills the
+//             groove between courses, Board
 //             trims, Floor a deck's boards, each drawn from one of the planks side by side
 //             across its texture (strips: the first's edge and how far apart, as fractions
 //             of it)
@@ -70,14 +76,16 @@
         swell: 0.02,
         relief: 0.022,
         daub: (0.7, 0.05),
-        tint: (1.0, 0.95, 0.89),
+        tint: (1.0, 0.92, 0.8),
         end_tint: (0.86, 0.82, 0.78),
-        variation: (thickness: 0.06, shade: 0.16, warmth: 0.05),
+        groove: 0.4,
+        knots: 0.8,
+        variation: (thickness: 0.06, shade: 0.16, warmth: 0.05, mottle: 0.1),
     ),
     textures: {
-        Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-        Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
+        Log: (path: "materials/log_bark", metres: (1.0, 2.0)),
+        LogEnd: (path: "materials/log_ends", metres: (1.0, 1.0), cells: 2),
+        Daub: (path: "materials/clay_floor_001", metres: (0.5, 0.5)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
         Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
@@ -98,6 +106,6 @@
         light: (0.74, 0.56, 0.37),     // WoodLight: floors
         dark: (0.5, 0.34, 0.22),       // a floor's sides
         roof: (0.47, 0.42, 0.37),      // a flat roof
-        chinking: (0.8, 0.75, 0.66),   // the lime daub's tint
+        chinking: (0.92, 0.9, 0.86),   // the daub's tint
     ),
 )

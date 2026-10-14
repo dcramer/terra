@@ -269,6 +269,7 @@ mod tests {
                     depth: 0.0,
                     reflectance: terra_build::kit::matte(),
                     strips: None,
+                    cells: 1,
                 },
             )]),
             ..Kit::default()

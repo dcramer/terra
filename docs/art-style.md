@@ -126,7 +126,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Ingredient | Where it comes from | State |
 |---|---|---|
 | Models | Concept, Tripo, clean-up keeping its textures (`tools/props`) | Working for doors and windows; most props still flat colour |
-| Long members | Logs and beams generated from their kit's numbers and each one's seed, a real bark or wood material displacing and texturing them (`terra_build::timber`, D200) | Working: round logs (`logs.ron`) and hewn timber (`hewn.ron`) |
+| Long members | Logs and beams generated from their kit's numbers and each one's seed, a real bark or wood material displacing and texturing them (`terra_build::timber`, D200), bark in patches over weathered wood and shade baked into the grooves (D262) | Working: round logs (`logs.ron`) and hewn timber (`hewn.ron`) |
 | Block kinds | Stone and the like drawn as their cubes' surface, rounded and displaced by a real material (`terra_build::surface`, D197) | Working: fieldstone |
 | Tileable materials | CC0 libraries first, generated where they lack one (`tools/textures`, D191) | Working for building kits and the ground |
 | Crease-aware normals | Normals smooth across curves, split at creases over about 50 degrees | Working: the clean-up shades them so |

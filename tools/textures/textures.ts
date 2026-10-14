@@ -7,6 +7,9 @@
 //                                            [--strength s] [--roughness r]
 //   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
 //   node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n]
+//   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m]
+//                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
+//   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f]
 //
 // Each writes assets/materials/<name>/, and adds or updates its line in that folder's
 // README.md, which says where every material came from.
@@ -499,6 +502,268 @@ export function meanColour(data: Buffer, cut: number): [number, number, number] 
   return sum.map((v) => encoded(v / Math.max(1, count))) as [number, number, number];
 }
 
+/** A map's pixels, `channels` bytes each (1 or 3), scaled to a size, or tiled across it from
+ * copies `tile` pixels big when given. */
+function pixels(image: string, channels: 1 | 3, width: number, height: number, tile?: [number, number]): Buffer {
+  const format = channels === 1 ? "gray:-" : "rgb:-";
+  const grey = channels === 1 ? ["-colorspace", "gray"] : [];
+  const args = tile
+    ? ["(", image, "-resize", `${tile[0]}x${tile[1]}!`, "-write", "mpr:copy", "+delete", ")",
+       "-size", `${width}x${height}`, "tile:mpr:copy"]
+    : [image, "-resize", `${width}x${height}!`];
+  return execFileSync("convert", [...args, ...grey, "-depth", "8", format], { maxBuffer: 1 << 28 });
+}
+
+function save(data: Buffer, channels: 1 | 3, width: number, height: number, to: string) {
+  execFileSync("convert", ["-size", `${width}x${height}`, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-", "-quality", "92", to], {
+    input: data,
+  });
+}
+
+/** Smooth noise from 0 to 1 that repeats across a `width` by `height` image, `cells` lattice
+ * cells across and down it, summed over `octaves`, each twice as fine and half as strong:
+ * a mask that tiles as the texture it shapes does. */
+export function tileNoise(width: number, height: number, cells: [number, number], seed: number, octaves = 3): Float32Array {
+  const out = new Float32Array(width * height);
+  const hash = (x: number, y: number, o: number) => {
+    let h = (x * 374761393 + y * 668265263 + o * 2147483647 + seed * 974711) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  let total = 0;
+  for (let o = 0; o < octaves; o++) {
+    const [cx, cy] = [cells[0] << o, cells[1] << o];
+    const weight = 1 / (1 << o);
+    total += weight;
+    for (let y = 0; y < height; y++) {
+      const fy = (y / height) * cy;
+      const y0 = Math.floor(fy);
+      const ty = fy - y0;
+      const sy = ty * ty * (3 - 2 * ty);
+      for (let x = 0; x < width; x++) {
+        const fx = (x / width) * cx;
+        const x0 = Math.floor(fx);
+        const tx = fx - x0;
+        const sx = tx * tx * (3 - 2 * tx);
+        const at = (i: number, j: number) => hash(i % cx, j % cy, o);
+        const top = at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx;
+        const bottom = at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx;
+        out[y * width + x] += weight * (top * (1 - sy) + bottom * sy);
+      }
+    }
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= total;
+  return out;
+}
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** **blend**: a log's face, one material lying over another in patches, as bark stays on a
+ * log in places where the rest has weathered off: `over` (the bark) on `base` (the bare,
+ * weathered wood), each tiled at its own size in metres, over a texture `around` metres
+ * round the log by `along` metres along it, the grain and the patches running along it.
+ * Where the bark lies is tileable noise drawn out along the log, its edge ragged by the
+ * bark's own height; the bark stands proud of the wood in height and normal, with a dark
+ * lip where it ends. The texture is square, so a long one is squeezed along its length and
+ * the kit's `metres` stretches it back. */
+function blend(
+  name: string,
+  base: string,
+  over: string,
+  {
+    around,
+    along,
+    cover,
+    size,
+    seed,
+    saturation,
+    lighten,
+  }: { around: number; along: number; cover: number; size: number; seed: number; saturation: number; lighten: number },
+) {
+  const out = join(ROOT, "assets", "materials", name);
+  mkdirSync(out, { recursive: true });
+  const dir = (m: string) => join(ROOT, "assets", "materials", m);
+  const parse = (entry: string): [string, number] => {
+    const [material, metres] = entry.split("=");
+    if (!material || !Number(metres)) throw new Error(`a layer is material=metres, not ${entry}`);
+    return [material, Number(metres)];
+  };
+  const [[baseName, baseM], [overName, overM]] = [parse(base), parse(over)];
+  const [w, h] = [size, size];
+  const tile = (metres: number): [number, number] => [Math.round((w * metres) / around), Math.round((h * metres) / along)];
+  const layer = (material: string, metres: number) => ({
+    colour: pixels(join(dir(material), "color.jpg"), 3, w, h, tile(metres)),
+    normal: pixels(join(dir(material), "normal.jpg"), 3, w, h, tile(metres)),
+    arm: pixels(join(dir(material), "arm.jpg"), 3, w, h, tile(metres)),
+    height: existsSync(join(dir(material), "height.jpg"))
+      ? pixels(join(dir(material), "height.jpg"), 1, w, h, tile(metres))
+      : Buffer.alloc(w * h, 128),
+  });
+  const [wood, bark] = [layer(baseName, baseM), layer(overName, overM)];
+  // The bark's colour toward its grey by `saturation`, as bark on a felled log fades; the
+  // bare wood lighter by `lighten`, as wood left in the sun goes silver.
+  for (let i = 0; i < w * h * 3; i++) wood.colour[i] = Math.min(255, Math.round(wood.colour[i] * lighten));
+  for (let i = 0; i < w * h; i++) {
+    const [r, g, b] = [bark.colour[i * 3], bark.colour[i * 3 + 1], bark.colour[i * 3 + 2]];
+    const luma = 0.3 * r + 0.55 * g + 0.15 * b;
+    for (let c = 0; c < 3; c++) bark.colour[i * 3 + c] = Math.round(luma + (bark.colour[i * 3 + c] - luma) * saturation);
+  }
+  // Patches about a sixth of the way round and two thirds of a metre along, finer
+  // octaves breaking their edges.
+  const cells: [number, number] = [Math.max(1, Math.round(around * 6)), Math.max(1, Math.round(along * 1.5))];
+  const noise = tileNoise(w, h, cells, seed, 4);
+  // The noise's level that leaves `cover` of the texture in bark.
+  const sorted = Float32Array.from(noise).sort();
+  const level = sorted[Math.min(sorted.length - 1, Math.floor((1 - cover) * sorted.length))];
+  const mask = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const ragged = (bark.height[i] / 255 - 0.5) * 0.12;
+    mask[i] = smoothstep(level - 0.01, level + 0.01, noise[i] + ragged);
+  }
+  const colour = Buffer.alloc(w * h * 3);
+  const normal = Buffer.alloc(w * h * 3);
+  const arm = Buffer.alloc(w * h * 3);
+  const height = Buffer.alloc(w * h);
+  // How thick the bark reads in the normal map where it ends, in texels of height.
+  const lip = 6;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const m = mask[i];
+      // The bark's edge: how fast the mask changes across and along, for its lip.
+      const at = (dx: number, dy: number) => mask[((y + dy + h) % h) * w + ((x + dx + w) % w)];
+      const [gx, gy] = [(at(2, 0) - at(-2, 0)) / 4, (at(0, 2) - at(0, -2)) / 4];
+      const edge = Math.min(1, Math.hypot(gx, gy) * 8);
+      // In the wood just off the bark's edge, a shadow under its lip.
+      const shadow = 1 - 0.35 * edge * (1 - m);
+      for (let c = 0; c < 3; c++) {
+        const k = i * 3 + c;
+        colour[k] = Math.round((wood.colour[k] * (1 - m) + bark.colour[k] * m) * shadow);
+        arm[k] = Math.round(wood.arm[k] * (1 - m) + bark.arm[k] * m);
+      }
+      arm[i * 3] = Math.round(arm[i * 3] * shadow);
+      // The wood lies low, the bark stands on it.
+      const hw = wood.height[i] / 255;
+      const hb = bark.height[i] / 255;
+      height[i] = Math.round(255 * (hw * 0.4 * (1 - m) + (0.45 + 0.55 * hb) * m));
+      // Normals blended, then tilted by the bark's lip, OpenGL's way up (green up the image).
+      const n = [0, 1, 2].map((c) => ((wood.normal[i * 3 + c] * (1 - m) + bark.normal[i * 3 + c] * m) / 255) * 2 - 1);
+      n[0] -= gx * lip;
+      n[1] += gy * lip;
+      const length = Math.hypot(n[0], n[1], n[2]) || 1;
+      for (let c = 0; c < 3; c++) normal[i * 3 + c] = Math.round(((n[c] / length) * 0.5 + 0.5) * 255);
+    }
+  }
+  save(colour, 3, w, h, join(out, "color.jpg"));
+  save(normal, 3, w, h, join(out, "normal.jpg"));
+  save(arm, 3, w, h, join(out, "arm.jpg"));
+  save(height, 1, w, h, join(out, "height.jpg"));
+  const credit = (m: string) => `\`${m}\` (${credited(m)?.replace(/\.$/, "") ?? "uncredited"})`;
+  record(
+    name,
+    `${credit(overName)} at ${overM} m lying in patches over ${credit(baseName)} at ${baseM} m, ` +
+      `${Math.round(cover * 100)}% covered, its colour ${Math.round(saturation * 100)}% saturated and the wood's ${Math.round(lighten * 100)}% as light, by \`textures.ts blend\`. ${around.toFixed(2)} m round by ${along.toFixed(2)} m along.`,
+  );
+  console.log(`${name}: ${out}, ${around} m round by ${along} m along, ${Math.round(cover * 100)}% ${overName}`);
+}
+
+/** Where a cut-out's edge is from a centre, every degree round, from its opacity: how far
+ * out the last covered pixel along each ray lies, smoothed over its neighbours. */
+export function rim(alpha: Buffer, width: number, height: number, centre: [number, number]): number[] {
+  const reach = Math.hypot(width, height) / 2;
+  const raw = Array.from({ length: 360 }, (_, d) => {
+    const a = (d * Math.PI) / 180;
+    let last = 0;
+    for (let r = 0; r < reach; r += 0.5) {
+      const [x, y] = [Math.round(centre[0] + Math.cos(a) * r), Math.round(centre[1] + Math.sin(a) * r)];
+      if (x < 0 || y < 0 || x >= width || y >= height) break;
+      if (alpha[y * width + x] > 127) last = r;
+    }
+    return last;
+  });
+  return raw.map((_, d) => {
+    let sum = 0;
+    for (let k = -3; k <= 3; k++) sum += raw[(d + k + 360) % 360];
+    return sum / 7;
+  });
+}
+
+/** **ends**: a log's sawn ends, an atlas of real tree ends scanned by ambientCG (CC0), each
+ * cut out by its opacity and drawn out round so its bark's edge falls on a circle 0.47 of its
+ * cell from the middle, as a log's cap maps its rim; greyed by `weather` as an end left in the
+ * weather goes. Cells side by side, `columns` across; a log draws one by its seed. */
+async function ends(name: string, ids: string[], size: number, weather: number) {
+  const out = join(ROOT, "assets", "materials", name);
+  const tmp = join(out, ".scans");
+  mkdirSync(tmp, { recursive: true });
+  const columns = Math.ceil(Math.sqrt(ids.length));
+  const cell = Math.floor(size / columns);
+  const maps = { colour: Buffer.alloc(size * size * 3), normal: Buffer.alloc(size * size * 3), arm: Buffer.alloc(size * size * 3) };
+  for (const [index, id] of ids.entries()) {
+    const zip = join(tmp, `${id}.zip`);
+    if (!existsSync(zip)) await download(`https://ambientcg.com/get?file=${ambientCgFile(id, "2k")}.zip`, zip);
+    execFileSync("unzip", ["-o", "-q", zip, "-d", join(tmp, id)]);
+    const file = (map: string) => join(tmp, id, `${ambientCgFile(id, "2k")}_${map}.jpg`);
+    const n = 1024;
+    const alpha = pixels(file("Opacity"), 1, n, n);
+    let [sx, sy, count] = [0, 0, 0];
+    for (let i = 0; i < n * n; i++) {
+      if (alpha[i] > 127) {
+        sx += i % n;
+        sy += Math.floor(i / n);
+        count++;
+      }
+    }
+    if (!count) throw new Error(`${id} has nothing in its opacity`);
+    const centre: [number, number] = [sx / count, sy / count];
+    const edge = rim(alpha, n, n, centre);
+    const colour = pixels(file("Color"), 3, n, n);
+    const normal = pixels(file("NormalGL"), 3, n, n);
+    const rough = pixels(file("Roughness"), 1, n, n);
+    const occlusion = existsSync(file("AmbientOcclusion")) ? pixels(file("AmbientOcclusion"), 1, n, n) : Buffer.alloc(n * n, 255);
+    const [col, row] = [index % columns, Math.floor(index / columns)];
+    for (let y = 0; y < cell; y++) {
+      for (let x = 0; x < cell; x++) {
+        const [dx, dy] = [(x + 0.5) / cell - 0.5, (y + 0.5) / cell - 0.5];
+        const rho = Math.min(0.985, Math.hypot(dx, dy) / 0.47);
+        const angle = Math.atan2(dy, dx);
+        const degree = ((angle * 180) / Math.PI + 360) % 360;
+        const d0 = Math.floor(degree);
+        const t = degree - d0;
+        const reach = edge[d0 % 360] * (1 - t) + edge[(d0 + 1) % 360] * t;
+        const [u, v] = [centre[0] + Math.cos(angle) * rho * reach, centre[1] + Math.sin(angle) * rho * reach];
+        const [i0, j0] = [Math.min(n - 1, Math.max(0, Math.round(u))), Math.min(n - 1, Math.max(0, Math.round(v)))];
+        const from = j0 * n + i0;
+        const to = (row * cell + y) * size + col * cell + x;
+        const luma = (colour[from * 3] * 0.3 + colour[from * 3 + 1] * 0.55 + colour[from * 3 + 2] * 0.15) / 255;
+        // Weathered: towards a grey a little warm, a little darker.
+        const grey = [luma * 0.86, luma * 0.82, luma * 0.76];
+        for (let c = 0; c < 3; c++) {
+          const fresh = colour[from * 3 + c] / 255;
+          maps.colour[to * 3 + c] = Math.round(255 * (fresh * (1 - weather) + grey[c] * weather));
+          maps.normal[to * 3 + c] = normal[from * 3 + c];
+        }
+        maps.arm[to * 3] = occlusion[from];
+        maps.arm[to * 3 + 1] = rough[from];
+        maps.arm[to * 3 + 2] = 0;
+      }
+    }
+    console.log(`${id}: cell ${col},${row}`);
+  }
+  save(maps.colour, 3, size, size, join(out, "color.jpg"));
+  save(maps.normal, 3, size, size, join(out, "normal.jpg"));
+  save(maps.arm, 3, size, size, join(out, "arm.jpg"));
+  execFileSync("rm", ["-r", tmp]);
+  const links = ids.map((id) => `[${id}](https://ambientcg.com/a/${id})`).join(", ");
+  record(
+    name,
+    `ambientCG ${links}, CC0, each cut out and drawn round in a cell of ${columns} by ${columns}, greyed ${Math.round(weather * 100)}% by \`textures.ts ends\`.`,
+  );
+}
+
 /** How much of the unit square a polygon covers. */
 function area(points: [number, number][]): number {
   let sum = 0;
@@ -521,6 +786,13 @@ async function main() {
       occlusion: { type: "string", default: "0.6" },
       columns: { type: "string", default: "4" },
       cut: { type: "string", default: "0.45" },
+      around: { type: "string", default: "1" },
+      along: { type: "string", default: "2" },
+      cover: { type: "string", default: "0.5" },
+      seed: { type: "string", default: "1" },
+      weather: { type: "string", default: "0.4" },
+      saturation: { type: "string", default: "1" },
+      lighten: { type: "string", default: "1" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -534,6 +806,18 @@ async function main() {
     stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion));
   } else if (step === "cards" && name && rest.length) {
     cards(name, rest, Number(values.size), Number(values.columns), Number(values.cut));
+  } else if (step === "blend" && name && rest.length === 2) {
+    blend(name, rest[0], rest[1], {
+      around: Number(values.around),
+      along: Number(values.along),
+      cover: Number(values.cover),
+      size: Number(values.size),
+      seed: Number(values.seed),
+      saturation: Number(values.saturation),
+      lighten: Number(values.lighten),
+    });
+  } else if (step === "ends" && name && rest.length) {
+    await ends(name, rest, Number(values.size), Number(values.weather));
   } else if (step === "material" && name && rest.length === 1) {
     material(name, resolve(rest[0]), values.tile!, Number(values.size), Number(values.strength), Number(values.roughness));
     record(name, `made from a generated image by \`textures.ts material\`.`);
@@ -542,7 +826,9 @@ async function main() {
   node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
-  node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n] [--cut a]`);
+  node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n] [--cut a]
+  node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
+  node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f]`);
     process.exit(values.help ? 0 : 2);
   }
 }

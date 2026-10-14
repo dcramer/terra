@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ambientCgFile, credit, keyOut, meanColour, outline, period } from "./textures.ts";
+import { ambientCgFile, credit, keyOut, meanColour, outline, period, rim, tileNoise } from "./textures.ts";
 
 test("an ambientCG material's zip is named by its id and size as ambientCG names it", () => {
   assert.equal(ambientCgFile("Ground104", "2k"), "Ground104_2K-JPG");
@@ -58,6 +58,29 @@ test("a material's credit goes in name order and replaces what it said before", 
   assert.equal(added, "# Materials\n\n- `a`: one.\n- `b`: two.\n- `c`: three.\n");
   assert.equal(credit(added, "b", "again."), "# Materials\n\n- `a`: one.\n- `b`: again.\n- `c`: three.\n");
   assert.equal(credit(readme, "d", "four."), "# Materials\n\n- `a`: one.\n- `c`: three.\n- `d`: four.\n");
+});
+
+test("a blend's mask repeats as the texture does, varies within it and stays in 0 to 1", () => {
+  const [width, height] = [64, 32];
+  const noise = tileNoise(width, height, [4, 2], 7);
+  // Smooth across its own seams: each edge's pixels close to the far edge's, as to their
+  // neighbours inside.
+  const at = (x: number, y: number) => noise[((y + height) % height) * width + ((x + width) % width)];
+  for (let y = 0; y < height; y++) assert.ok(Math.abs(at(0, y) - at(-1, y)) < 0.08, `seam across at ${y}`);
+  for (let x = 0; x < width; x++) assert.ok(Math.abs(at(x, 0) - at(x, -1)) < 0.08, `seam down at ${x}`);
+  const [low, high] = [Math.min(...noise), Math.max(...noise)];
+  assert.ok(low >= 0 && high <= 1 && high - low > 0.3, `${low} to ${high}`);
+  assert.notDeepEqual(noise, tileNoise(width, height, [4, 2], 8));
+});
+
+test("a cut-out's rim is found round it, every degree", () => {
+  // A disc of radius 20 in a 64 by 64 picture, off its middle.
+  const size = 64;
+  const alpha = Buffer.alloc(size * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (Math.hypot(x - 30, y - 34) <= 20) alpha[y * size + x] = 255;
+  const edge = rim(alpha, size, size, [30, 34]);
+  assert.equal(edge.length, 360);
+  for (const r of edge) assert.ok(Math.abs(r - 20) < 1.2, `rim at ${r}`);
 });
 
 test("the first credit is set apart from the README's introduction", () => {

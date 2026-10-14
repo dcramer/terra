@@ -928,6 +928,7 @@ pub(crate) mod tests {
             depth: 0.0,
             reflectance: crate::kit::matte(),
             strips: None,
+            cells: 1,
         };
         Kit {
             textures: BTreeMap::from([(Material::Floor, texture("floor"))]),

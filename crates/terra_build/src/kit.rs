@@ -392,6 +392,12 @@ pub struct Timber {
     /// What its face's and its ends' colours are multiplied by (sRGB).
     pub tint: [f32; 3],
     pub end_tint: [f32; 3],
+    /// How much darker a wall's log is toward the grooves where it meets the logs above
+    /// and below, as the shade there is baked into a model's colour: the most, under it.
+    pub groove: f32,
+    /// How many knots a metre of a round log has, on average, where its branches were
+    /// trimmed: each a low swell a few centimetres across, dark at its heart.
+    pub knots: f32,
     /// How much each member differs from the next.
     pub variation: Variation,
 }
@@ -475,13 +481,17 @@ impl Roofing {
 }
 
 /// How much one member differs from the next, each by its seed: its thickness as a
-/// fraction either way, how much lighter or darker it is, and how much warmer or cooler.
+/// fraction either way, how much lighter or darker it is, how much warmer or cooler, and
+/// how much it is mottled along its length.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Variation {
     pub thickness: f32,
     pub shade: f32,
     pub warmth: f32,
+    /// How much lighter and darker it is in long patches along it, so no member is one
+    /// flat colour and its texture's repeat is broken up.
+    pub mottle: f32,
 }
 
 /// A long member's section.
@@ -671,6 +681,14 @@ pub struct Texture {
     /// made on its own is drawn from one board of it, not across a seam.
     #[serde(default)]
     pub strips: Option<[f32; 2]>,
+    /// For an atlas of pictures in a grid, such as a log's sawn ends, how many cells across
+    /// and down it: each piece draws one, by its seed. One, the whole texture, if not given.
+    #[serde(default = "one")]
+    pub cells: u32,
+}
+
+fn one() -> u32 {
+    1
 }
 
 /// A rough natural material's reflectance (see [`Texture::reflectance`]).
@@ -703,8 +721,10 @@ impl Default for Timber {
             swell: 0.02,
             relief: 0.022,
             daub: (0.7, 0.05),
-            tint: [1.0, 0.95, 0.89],
+            tint: [1.0, 0.92, 0.8],
             end_tint: [0.86, 0.82, 0.78],
+            groove: 0.4,
+            knots: 0.8,
             variation: Variation::default(),
         }
     }
@@ -716,6 +736,7 @@ impl Default for Variation {
             thickness: 0.06,
             shade: 0.16,
             warmth: 0.05,
+            mottle: 0.1,
         }
     }
 }
@@ -746,7 +767,7 @@ impl Default for Kit {
                 light: [0.74, 0.56, 0.37],
                 dark: [0.5, 0.34, 0.22],
                 roof: [0.47, 0.42, 0.37],
-                chinking: [0.8, 0.75, 0.66],
+                chinking: [0.92, 0.9, 0.86],
             },
             meets: None,
             framing: None,

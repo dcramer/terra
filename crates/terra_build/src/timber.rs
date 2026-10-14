@@ -130,7 +130,7 @@ pub(crate) fn member(
     let frame = Frame::new(from, to);
     let mut random = Random(seed);
     let mut made = match kit.timber.profile {
-        Profile::Round => round(&frame, kit, split, face, &mut random),
+        Profile::Round => round(&frame, kit, split, face, chinking.is_some(), &mut random),
         Profile::Hewn => hewn(&frame, kit, split, &mut random),
     };
     // A gable's log cut to the roof over it: nothing of it above the slope rising from its
@@ -158,12 +158,19 @@ pub(crate) fn member(
         (t.tint[2] * shade * (1.0 - warmth)).clamp(0.0, 1.0),
     ];
     sweep(surfaces.of(Material::Log), &made, colour);
-    // Its ends, the cut face's picture across each, turned by the seed.
+    // Its ends, the cut face's picture across each, turned by the seed, each end a picture
+    // of its own where the kit has several.
     let spin = random.unit() * TAU;
     let last = made.grid.len() - 1;
     let ends = surfaces.of(Material::LogEnd);
-    for (ring, outward) in [(&made.grid[0], -frame.axis), (&made.grid[last], frame.axis)] {
-        cap(ends, ring, outward, &frame, spin, made.grain, t.end_tint);
+    for (n, (ring, outward)) in [(&made.grid[0], -frame.axis), (&made.grid[last], frame.axis)]
+        .into_iter()
+        .enumerate()
+    {
+        let cell = end_cell(kit, seed.wrapping_add(n as u32));
+        cap(
+            ends, ring, outward, &frame, spin, made.grain, t.end_tint, cell,
+        );
     }
     if let Some((near, far)) = chinking {
         let (depth, high) = made.daub;
@@ -226,6 +233,9 @@ struct Member {
     /// for a round log with its bark ring, the heart for a squared beam.
     grain: [f32; 2],
     daub: (f32, f32),
+    /// What each point's colour is multiplied by, ring by ring, where it differs from one:
+    /// the shade of the grooves and the mottling along it. Empty for none.
+    tone: Vec<Vec<f32>>,
 }
 
 /// Rings this far apart, or further, are a member drawn far off, with no more than its ends.
@@ -267,6 +277,7 @@ fn round(
     kit: &Kit,
     split: Split,
     face: Option<&Relief>,
+    walled: bool,
     random: &mut Random,
 ) -> Member {
     let t = &kit.timber;
@@ -312,8 +323,62 @@ fn round(
         .collect();
     let mut grid = Vec::with_capacity(at.len());
     let mut uvs = Vec::with_capacity(at.len());
+    // Its shade: drawn from a seed of its own, so its shape is as it was without it.
+    let mut own = Random(random.0 ^ 0x5bd1_e995);
+    let mottle_phase = [own.unit() * TAU, own.unit() * TAU, own.unit() * TAU];
+    let level = frame.axis.y.abs() < 0.5;
+    // Knots where branches were trimmed off: each a low swell, dark at its heart, along it
+    // and round it where its seed says, none in the sawn ends.
+    let count = (frame.length * t.knots + own.unit()).floor() as usize;
+    let knots: Vec<[f32; 4]> = (0..count)
+        .map(|_| {
+            let size = 0.03 + 0.025 * own.unit();
+            // Clear of the sawn ends and their chamfer by three times its size.
+            let clear = (3.0 * size).min(frame.length * 0.5);
+            let along = clear + (frame.length - 2.0 * clear) * own.unit();
+            let angle = own.unit() * TAU;
+            let high = 0.006 + 0.008 * own.unit();
+            [along, angle, size, high]
+        })
+        .collect();
+    // What its shade round it is, the same all along it: toward the grooves, where it meets
+    // the logs above and below, in shade, most under it, where the sky does not reach; its
+    // top bleached by the sun a little, as its underside is not.
+    let shade: Vec<[f32; 3]> = round
+        .iter()
+        .map(|&[sin, cos, ..]| {
+            let mut k = 1.0;
+            if level {
+                if walled {
+                    let under = smoothstep(0.3, 0.92, -sin);
+                    let over = smoothstep(0.5, 0.95, sin);
+                    k *= 1.0 - t.groove * (under + 0.6 * over);
+                }
+                k *= 1.0 + 0.5 * t.groove * sin;
+            }
+            [k, libm::sinf(2.0 * cos), libm::cosf(2.0 * cos)]
+        })
+        .collect();
+    let mut tone = Vec::with_capacity(at.len());
     for (i, &along) in at.iter().enumerate() {
         let (shift_sin, shift_cos) = (libm::sinf(along * 1.3), libm::cosf(along * 1.3));
+        // Lighter and darker in long patches along it, and round it a little.
+        let metres = along * frame.length;
+        let patch = t.variation.mottle
+            * (0.6 * libm::sinf(metres * 1.9 + mottle_phase[0])
+                + 0.4 * libm::sinf(metres * 4.7 + mottle_phase[1]));
+        // sin(2 cos a + x), by the sum of angles, a little lighter or darker round it too.
+        let (x_sin, x_cos) = (
+            libm::sinf(metres * 3.1 + mottle_phase[2]),
+            libm::cosf(metres * 3.1 + mottle_phase[2]),
+        );
+        let mut ring_tone: Vec<f32> = shade
+            .iter()
+            .map(|&[k, turn_sin, turn_cos]| {
+                let round = 0.3 * t.variation.mottle * (turn_sin * x_cos + turn_cos * x_sin);
+                ((1.0 + patch + round) * k).max(0.0)
+            })
+            .collect();
         let arc = libm::sinf(PI * along);
         let centre = frame.from
             + frame.axis * (frame.length * along)
@@ -341,7 +406,20 @@ fn round(
             let wave = sin2 * shift_cos + cos2 * shift_sin;
             let uneven = 1.0 + t.uneven * wave + t.uneven * 0.6 * sin3;
             let relief = face.map_or(0.0, |face| (face.at(uv(along, j)) - 0.5) * t.relief * fade);
-            let r = radius * (1.0 + taper * butt) * swell * uneven * end + relief;
+            let angle = -PI * 0.5 + TAU * j as f32 / columns as f32;
+            let mut knot = 0.0;
+            for &[at_m, at_angle, size, high] in &knots {
+                let dx = metres - at_m;
+                if dx.abs() > 3.0 * size {
+                    continue;
+                }
+                let turn = (angle - at_angle + PI).rem_euclid(TAU) - PI;
+                let da = turn * radius;
+                let w = libm::expf(-(dx * dx + da * da) / (size * size));
+                knot += high * w * fade;
+                ring_tone[j] *= 1.0 - 0.5 * w * w;
+            }
+            let r = radius * (1.0 + taper * butt) * swell * uneven * end + relief + knot;
             // Scribed a little flatter top and bottom, to sit on the log below.
             let height = sin * r * 0.94;
             let (across, height) = if on_cut(height, split) {
@@ -354,6 +432,7 @@ fn round(
         }
         // The seam's last column, where the texture comes round to its start.
         ring_uv.push(uv(along, columns));
+        tone.push(ring_tone);
         grid.push(ring);
         uvs.push(ring_uv);
     }
@@ -362,6 +441,7 @@ fn round(
         uvs,
         grain: [0.47, 0.47],
         daub: (kit.radius() * t.daub.0, t.daub.1),
+        tone,
     }
 }
 
@@ -515,6 +595,7 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
         uvs,
         grain: [0.3, 0.24],
         daub: (0.0, 0.0),
+        tone: Vec::new(),
     }
 }
 
@@ -572,11 +653,21 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let spin = random.unit() * TAU;
     let last = member.grid.len() - 1;
     let ends = surfaces.of(Material::LogEnd);
+    let cell = end_cell(kit, seed);
     for (ring, outward) in [
         (&member.grid[0], -frame.axis),
         (&member.grid[last], frame.axis),
     ] {
-        cap(ends, ring, outward, &frame, spin, member.grain, t.end_tint);
+        cap(
+            ends,
+            ring,
+            outward,
+            &frame,
+            spin,
+            member.grain,
+            t.end_tint,
+            cell,
+        );
     }
 }
 
@@ -648,11 +739,21 @@ pub fn beam(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let spin = random.unit() * TAU;
     let last = member.grid.len() - 1;
     let ends = surfaces.of(Material::LogEnd);
+    let cell = end_cell(kit, seed);
     for (ring, outward) in [
         (&member.grid[0], -frame.axis),
         (&member.grid[last], frame.axis),
     ] {
-        cap(ends, ring, outward, &frame, spin, member.grain, t.end_tint);
+        cap(
+            ends,
+            ring,
+            outward,
+            &frame,
+            spin,
+            member.grain,
+            t.end_tint,
+            cell,
+        );
     }
 }
 
@@ -662,6 +763,10 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
     let grid = &member.grid;
     let rows = grid.len();
     let columns = grid[0].len();
+    let colour_at = |r: usize, c: usize| match member.tone.get(r).and_then(|ring| ring.get(c)) {
+        Some(&k) => colour.map(|v| (v * k).clamp(0.0, 1.0)),
+        None => colour,
+    };
     // Each point's normal: the sum of the faces round it. The rings go round the way that
     // makes each quad's first triangle face out, as `round` and `hewn` lay them.
     let face = |a: Vec3, b: Vec3, c: Vec3| (b - a).cross(c - a);
@@ -701,11 +806,11 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
                         let normal = normals[r][c].normalize_or_zero();
                         let uv = member.uvs[r][column];
                         if normal.dot(own) < CREASE {
-                            return out.shared.corner(grid[r][c], own, uv, colour);
+                            return out.shared.corner(grid[r][c], own, uv, colour_at(r, c));
                         }
                         let slot = &mut smooth[r * (columns + 1) + column];
                         if *slot == u32::MAX {
-                            *slot = out.shared.corner(grid[r][c], normal, uv, colour);
+                            *slot = out.shared.corner(grid[r][c], normal, uv, colour_at(r, c));
                         }
                         *slot
                     });
@@ -738,15 +843,39 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
                     // The seam's last column takes its own place on the texture.
                     let column = if index >= 2 && k == 0 { columns } else { c };
                     out.uvs.push(member.uvs[r][column]);
-                    out.colours.push(colour);
+                    out.colours.push(colour_at(r, c));
                 }
             }
         }
     }
 }
 
+/// Which picture of the kit's sawn ends an end draws, by a seed, where its `LogEnd` texture
+/// is an atlas of several: the corner of its cell on the texture, and the cell's size.
+fn end_cell(kit: &Kit, seed: u32) -> ([f32; 2], f32) {
+    let cells = kit
+        .textures
+        .get(&Material::LogEnd)
+        .map_or(1, |texture| texture.cells.max(1));
+    if cells == 1 {
+        return ([0.0, 0.0], 1.0);
+    }
+    let which = crate::layout::hash(&[seed, 0x0e4d]) % (cells * cells);
+    let size = 1.0 / cells as f32;
+    (
+        [(which % cells) as f32 * size, (which / cells) as f32 * size],
+        size,
+    )
+}
+
+fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
+    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// A flat cap over a ring, facing `outward`, the end grain's picture across it, turned by
-/// `spin`, as much of it as `grain` says.
+/// `spin`, as much of it as `grain` says, from the atlas's cell `cell` gives.
+#[allow(clippy::too_many_arguments)]
 fn cap(
     out: &mut Surface,
     ring: &[Vec3],
@@ -755,6 +884,7 @@ fn cap(
     spin: f32,
     grain: [f32; 2],
     colour: [f32; 3],
+    cell: ([f32; 2], f32),
 ) {
     let centre = ring.iter().copied().sum::<Vec3>() / ring.len() as f32;
     let reach = ring
@@ -772,7 +902,8 @@ fn cap(
             d.dot(frame.up) / reach * grain[1],
         );
         let (x, y) = (x * c - y * s, x * s + y * c);
-        [0.5 + x, 0.5 - y]
+        let (corner, size) = cell;
+        [corner[0] + size * (0.5 + x), corner[1] + size * (0.5 - y)]
     };
     for j in 0..ring.len() {
         let k = (j + 1) % ring.len();
@@ -863,8 +994,8 @@ mod tests {
         assert_eq!(
             sums,
             [
-                0xa939_fdd9_58fe_fd8f,
-                0xcc2a_4462_31ac_4122,
+                0x2808_fe13_b995_60af,
+                0x00da_042e_394e_6b6a,
                 0xae55_c81f_31d4_b99f
             ],
             "drawn differently from the machine these were taken on (D30)"
@@ -916,6 +1047,64 @@ mod tests {
             .iter()
             .fold((0.0f32, 1.0f32), |(l, d), s| (l.max(*s), d.min(*s)));
         assert!(light - dark > v.shade * 0.5 && light - dark <= v.shade + 1e-3);
+    }
+
+    #[test]
+    fn a_wall_log_is_shaded_toward_its_grooves_and_its_ends_draw_their_own_pictures() {
+        let mut kit = pinned(Profile::Round);
+        kit.timber.groove = 0.4;
+        kit.timber.knots = 0.0;
+        kit.timber.variation.mottle = 0.0;
+        kit.textures.insert(
+            Material::LogEnd,
+            crate::kit::Texture {
+                path: "ends".into(),
+                metres: [1.0, 1.0],
+                depth: 0.0,
+                reflectance: crate::kit::matte(),
+                strips: None,
+                cells: 2,
+            },
+        );
+        let mut surfaces = Surfaces::default();
+        draw(&log(5, Split::Whole), &kit, None, &mut surfaces);
+        let face = &surfaces.0[&Material::Log];
+        // Its middle's corners, by how high on it they are: under it darkest, its side
+        // lightest, its top between.
+        let lightness = |from: f32, to: f32| {
+            let picked: Vec<f32> = face
+                .positions
+                .iter()
+                .zip(&face.colours)
+                .filter(|(p, _)| (p.x - 1.5).abs() < 0.3 && (from..to).contains(&(p.y - 0.125)))
+                .map(|(_, c)| c[1])
+                .collect();
+            picked.iter().sum::<f32>() / picked.len().max(1) as f32
+        };
+        let (under, side, top) = (
+            lightness(-1.0, -0.12),
+            lightness(-0.03, 0.03),
+            lightness(0.12, 1.0),
+        );
+        assert!(under < top && top < side, "{under} {top} {side}");
+        assert!(under < side * 0.75, "{under} {side}");
+        // Each end within one cell of the atlas, and across seeds every cell drawn.
+        let mut cells = std::collections::BTreeSet::new();
+        for seed in 0..16 {
+            let mut surfaces = Surfaces::default();
+            draw(&log(seed, Split::Whole), &kit, None, &mut surfaces);
+            let ends = &surfaces.0[&Material::LogEnd];
+            for corner in ends.uvs.chunks(3 * 18) {
+                let cell = |uv: &[f32; 2]| ((uv[0] * 2.0) as i32, (uv[1] * 2.0) as i32);
+                let first = cell(&corner[0]);
+                assert!(
+                    corner.iter().all(|uv| cell(uv) == first),
+                    "an end across cells"
+                );
+                cells.insert(first);
+            }
+        }
+        assert_eq!(cells.len(), 4, "{cells:?}");
     }
 
     #[test]

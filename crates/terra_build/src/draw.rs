@@ -204,11 +204,28 @@ pub(crate) mod tests {
 
     /// Each triangle of a shape with no hollows in it faces away from its middle, and its
     /// corners wind the way its normals point; how many there were.
+    /// A long shape, such as a log, is judged from its axis level with each triangle, short
+    /// of its ends by its thickness, so a knot's swell far from its middle is not taken for
+    /// a hollow.
     pub(crate) fn facing_out(surface: &Surface, what: &str) -> usize {
         let middle = surface.positions.iter().sum::<Vec3>() / surface.positions.len() as f32;
+        let (low, high) = surface.positions.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(low, high), p| (low.min(*p), high.max(*p)),
+        );
+        let extent = high - low;
+        let long = extent.max_position();
+        let thick = (0..3)
+            .filter(|&k| k != long)
+            .map(|k| extent[k])
+            .fold(0.0, f32::max);
         for (corners, normals) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
             let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
             let centre = (corners[0] + corners[1] + corners[2]) / 3.0;
+            let mut middle = middle;
+            if extent[long] > 2.0 * thick {
+                middle[long] = centre[long].clamp(low[long] + thick, high[long] - thick);
+            }
             assert!(
                 own.dot(centre - middle) > 0.0,
                 "{what}: {corners:?} faces in"
