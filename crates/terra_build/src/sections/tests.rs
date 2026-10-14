@@ -993,3 +993,64 @@ fn a_lintel_is_set_into_an_earth_wall_its_face_built_up_round_it() {
         "{behind} behind, {over} over its edges"
     );
 }
+
+/// Maps of rough height for every kit, as a real stone's or earth's: what pushes a block
+/// surface's points about, so faults that only show with relief show.
+fn rough(kits: &Kits) -> Maps {
+    use crate::relief::{Relief, cored_by, shaped_by, topped_by};
+    const SIDE: usize = 64;
+    let heights = (0..SIDE * SIDE)
+        .map(|i| (crate::layout::hash(&[i as u32, 7]) >> 24) as u8)
+        .collect();
+    let relief = std::sync::Arc::new(Relief::new(SIDE, SIDE, heights).unwrap());
+    let mut maps = Maps::default();
+    for kit in &kits.0 {
+        for path in [shaped_by(kit), topped_by(kit), cored_by(kit)]
+            .into_iter()
+            .flatten()
+        {
+            maps.heights.insert(path.to_string(), relief.clone());
+        }
+    }
+    maps
+}
+
+#[test]
+fn no_stone_wall_or_its_dress_fights_itself_in_one_plane() {
+    // A stone house under a gable, its walls cut at the roof's underside up its gables and
+    // under its eaves, on footings; and a free wall a cube thick, quoined up both faces at
+    // each end, so its end faces carry two corners' stones.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    house(&mut base, &kits, [0, 0], [9, 7], stone, Style::Gable);
+    base.apply(BuildOp::Fill {
+        min: [16, 0, 2],
+        max: [21, 3, 2],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    base.lay_footings(stone, |[x, z]| (-x * 4 - z * 2) as i16);
+    let maps = rough(&kits);
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        for material in [Material::Masonry, Material::Dressed, Material::Floor] {
+            let Some(surface) = drawn.near.get(&(stone, material)) else {
+                continue;
+            };
+            // Under a square centimetre, in all: no more than rounding where faces meet.
+            let fighting = crate::inspect::self_overlap(surface);
+            assert!(
+                fighting < 1e-4,
+                "section {at:?}, {material:?}: {:.0} cm² in one plane, overlapping",
+                fighting * 1e4
+            );
+        }
+    }
+}

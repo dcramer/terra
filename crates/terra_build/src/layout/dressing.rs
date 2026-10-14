@@ -473,11 +473,26 @@ fn piece(roles: &Roles, kit: &Kit, dressed: &Dressed) -> Option<Piece> {
             let courses = [0, 1].map(|course| {
                 cube.y * TICKS + course * TICKS / 2 >= plinth.saturating_sub(TICKS / 8)
             });
+            // Each face it shares with the cube's other upright edge on it, if that has corner
+            // stones too: a pier a cube wide, a wall's end a cube thick.
+            let others = roles.edges(cube);
+            let shared = faces.map(|face| {
+                others.iter().any(|other| {
+                    *other != edge
+                        && other.role.upright()
+                        && matches!(
+                            kit.dress.roles.get(&other.role),
+                            Some(Dress::Corners { .. })
+                        )
+                        && (other.side == face || other.other == face)
+                })
+            });
             courses.contains(&true).then_some(Piece::Corner {
                 cube,
                 role: edge.role,
                 faces,
                 courses,
+                shared,
                 seed,
             })
         }

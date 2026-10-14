@@ -105,6 +105,9 @@ pub const COURSE_M: f32 = CELL_M * 0.5;
 /// How wide and deep the chamfered joint between two stones of a band is.
 const JOINT_M: f32 = 0.012;
 const JOINT_DEPTH_M: f32 = 0.009;
+/// How far a corner stone may run along a face it shares with the cube's other edge's
+/// stones: to half the cube, short of a joint, so the two meet and never pass.
+const SHARED_REACH_M: f32 = CELL_M * 0.5 - JOINT_M * 0.5;
 
 /// Faces meeting at more than about 50 degrees are shaded apart (docs/art-style.md).
 const CREASE: f32 = 0.64;
@@ -217,6 +220,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             role,
             faces,
             courses,
+            shared,
             seed,
         } => {
             let Some(Dress::Corners { set }) = kit.dress.roles.get(&role) else {
@@ -227,7 +231,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             };
             corner(
                 cube,
-                faces,
+                (faces, shared),
                 courses,
                 set,
                 (metres, kit.dress.tint),
@@ -654,7 +658,7 @@ fn ears(points: &[[f32; 2]]) -> Vec<[usize; 3]> {
 /// Corner stones up an upright edge of a cube, one a course in the courses it shows.
 fn corner(
     cube: IVec3,
-    faces: [Dir; 2],
+    (faces, shared): ([Dir; 2], [bool; 2]),
     courses: [bool; 2],
     set: &Corners,
     (metres, tint): ([f32; 2], [f32; 3]),
@@ -699,10 +703,33 @@ fn corner(
         let mirrored = turned.determinant() < 0.0;
         let at = base + Vec3::Y * (course as f32 * COURSE_M);
         let (colour, shift) = stone_look(stone_seed, tint);
+        // On a face it shares with the cube's other edge's stones, squeezed to stop a joint
+        // short of the face's middle, where the other's stop. It runs along the first face
+        // as far back as its -X goes, along the second as its -Z.
+        let shares = |face: Dir| faces.iter().zip(shared).any(|(f, s)| *f == face && s);
+        let squeeze = |shares: bool, reach: f32| {
+            if shares && reach > SHARED_REACH_M {
+                SHARED_REACH_M / reach
+            } else {
+                1.0
+            }
+        };
+        let back = |axis: usize| stone.positions.iter().map(|p| -p[axis]).fold(0.0, f32::max);
+        let (sx, sz) = (squeeze(shares(a), back(0)), squeeze(shares(b), back(2)));
         let first = out.positions.len() as u32;
         for (p, n) in stone.positions.iter().zip(&stone.normals) {
-            let p = at + turned * Vec3::from_array(*p);
-            let n = (turned * Vec3::from_array(*n)).normalize_or(Vec3::Y);
+            let [mut x, y, mut z] = *p;
+            let [mut nx, ny, mut nz] = *n;
+            if x < 0.0 {
+                x *= sx;
+                nx /= sx;
+            }
+            if z < 0.0 {
+                z *= sz;
+                nz /= sz;
+            }
+            let p = at + turned * Vec3::new(x, y, z);
+            let n = (turned * Vec3::new(nx, ny, nz)).normalize_or(Vec3::Y);
             let t = planar(p, n, metres);
             out.corner(p, n, [t[0] + shift[0], t[1] + shift[1]], colour);
         }

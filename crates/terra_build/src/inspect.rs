@@ -253,8 +253,41 @@ fn label(kits: &Kits, kind: Kind, material: Material) -> String {
     format!("{pattern} {material:?}")
 }
 
+/// How much a surface's triangles overlap one another facing the same way in one plane, in
+/// square metres: z-fighting within one mesh, as [`Fault::Coplanar`] finds it between meshes.
+pub fn self_overlap(surface: &Surface) -> f32 {
+    let mut drawn = Drawn::default();
+    drawn.add(String::new(), None, surface, &mut Vec::new(), Detail::Near);
+    overlaps(&drawn).values().map(|(_, area, _)| area).sum()
+}
+
 /// Pairs of triangles in one plane, facing the same way, that overlap.
 fn coplanar(drawn: &Drawn, detail: Detail, findings: &mut Vec<Finding>) {
+    for ((m, n, same), (at, area, count)) in overlaps(drawn) {
+        let (a, b) = (&drawn.meshes[m as usize], &drawn.meshes[n as usize]);
+        findings.push(Finding {
+            fault: if same {
+                Fault::Doubled
+            } else {
+                Fault::Coplanar
+            },
+            detail,
+            at,
+            what: if m == n {
+                format!(
+                    "{a}: {count} pairs of its own triangles, {:.0} cm²",
+                    area * 1e4
+                )
+            } else {
+                format!("{a} and {b}: {count} pairs, {:.0} cm²", area * 1e4)
+            },
+        });
+    }
+}
+
+/// The overlaps of triangles in one plane facing the same way, for each pair of meshes and
+/// whether they are the same triangle twice: where they first fight, how much, how many.
+fn overlaps(drawn: &Drawn) -> BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> {
     // Filed by their plane, coarsely: the normal to a twentieth, the distance to a
     // centimetre; each is looked for in the bins round its own.
     let key = |t: &Tri| {
@@ -306,26 +339,7 @@ fn coplanar(drawn: &Drawn, detail: Detail, findings: &mut Vec<Finding>) {
             entry.2 += 1;
         }
     }
-    for ((m, n, same), (at, area, count)) in pairs {
-        let (a, b) = (&drawn.meshes[m as usize], &drawn.meshes[n as usize]);
-        findings.push(Finding {
-            fault: if same {
-                Fault::Doubled
-            } else {
-                Fault::Coplanar
-            },
-            detail,
-            at,
-            what: if m == n {
-                format!(
-                    "{a}: {count} pairs of its own triangles, {:.0} cm²",
-                    area * 1e4
-                )
-            } else {
-                format!("{a} and {b}: {count} pairs, {:.0} cm²", area * 1e4)
-            },
-        });
-    }
+    pairs
 }
 
 /// How much two triangles in one plane overlap, in square metres: the one clipped by the

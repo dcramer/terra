@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
 import * as game from "./client.ts";
-import { ROOT } from "./client.ts";
+import { ROOT, imageMagick } from "./client.ts";
 
 /// Each view: a name, where the camera stands and what it looks at, in metres east, up and
 /// south of the start. The forest is 220 m round the start, with a clearing of 14 m.
@@ -121,8 +121,7 @@ function canopy(hour: string): string[] {
     // The sheet keeps each view's mask beside it, to check what counted.
     const sky = "(u.b>u.g && u.b>u.r*1.08 && u.b-u.r>0.09 && (u.r+u.g+u.b)>0.9 && v.r<0.012) || (u.r>0.75 && u.g>0.75 && u.b>0.75)";
     const measured = spawnSync(
-      "magick",
-      [file, "-resize", "480x270!", "(", "+clone", "-colorspace", "gray", "-statistic", "StandardDeviation", "3x3", ")", "-fx", `${sky} ? 1 : 0`, "-write", file.replace(/\.png$/, "-mask.png"), "-format", "%[fx:mean]", "info:"],
+      ...imageMagick([file, "-resize", "480x270!", "(", "+clone", "-colorspace", "gray", "-statistic", "StandardDeviation", "3x3", ")", "-fx", `${sky} ? 1 : 0`, "-write", file.replace(/\.png$/, "-mask.png"), "-format", "%[fx:mean]", "info:"]),
       { encoding: "utf8" },
     );
     return Number(measured.stdout) * 100;
@@ -162,12 +161,12 @@ async function blocking(hour: string): Promise<string[]> {
   );
   await game.waitFor("undergrowth:", { since: 0, timeout: 120 });
   const share = (mask: string, band: boolean) =>
-    Number(spawnSync("magick", [mask, ...(band ? ["-gravity", "center", "-crop", "100%x20%+0+0", "+repage"] : []), "-format", "%[fx:mean]", "info:"], { encoding: "utf8" }).stdout) * 100;
+    Number(spawnSync(...imageMagick([mask, ...(band ? ["-gravity", "center", "-crop", "100%x20%+0+0", "+repage"] : []), "-format", "%[fx:mean]", "info:"]), { encoding: "utf8" }).stdout) * 100;
   // A pixel counts where any channel changed by more than 4% of white, and only in patches:
   // the opening takes out the scattered pixels TAA and the haze's jitter change, and the
   // closing fills the speckle where leaves gave way to leaves of a like colour behind them.
   const differ = (a: string, b: string, mask: string) => {
-    const done = spawnSync("magick", [a, b, "-resize", "480x270!", "-compose", "difference", "-composite", "-separate", "-evaluate-sequence", "max", "-threshold", "4%", "-morphology", "Open", "Disk:1", "-morphology", "Close", "Disk:2", mask], { encoding: "utf8" });
+    const done = spawnSync(...imageMagick([a, b, "-resize", "480x270!", "-compose", "difference", "-composite", "-separate", "-evaluate-sequence", "max", "-threshold", "4%", "-morphology", "Open", "Disk:1", "-morphology", "Close", "Disk:2", mask]), { encoding: "utf8" });
     if (done.status !== 0) throw new Error(done.stderr);
     return [share(mask, true), share(mask, false)];
   };
@@ -206,8 +205,7 @@ async function blocking(hour: string): Promise<string[]> {
 
 const sheet = resolve(out, "sheet.jpg");
 const montage = spawnSync(
-  "magick",
-  ["montage", ...tiles, "-tile", `${VIEWS.length + 1}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet],
+  ...imageMagick(["montage", ...tiles, "-tile", `${VIEWS.length + 1}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet]),
   { encoding: "utf8" },
 );
 if (montage.status !== 0 || !existsSync(sheet)) {

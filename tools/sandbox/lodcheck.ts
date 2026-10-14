@@ -7,27 +7,37 @@
 // few scattered pixels a frame, which a morphological opening removes; a pop is a patch that
 // appears or goes at once, which survives it.
 //
-//   node tools/sandbox/lodcheck.ts [--views floor,path,clearing] [--time 17] [--limit 0.5]
+//   node tools/sandbox/lodcheck.ts [--views floor,path,clearing,village] [--time 17] [--limit 0.5]
 //
 // Prints each view's worst frames, with the share of the picture that popped and the detail
 // scale it popped at (1 is as played: a pop at 1.3 happens 1.3 times as far off as the
 // switch's own distance, when the player walks through it), and puts them side by side,
 // marked red, in shots/lodcheck/sheet.jpg. Fails if any frame pops more than --limit percent.
-// About forty seconds for three views: they are drawn at once and compared on every core. Needs ImageMagick. Node 22.18 or later; no dependencies.
+// About forty seconds for three views: they are drawn at once and compared on every core.
+// Under WSL each view runs on the Windows build, on the real GPU (`offscreenRun`): WSL's own
+// draws on the CPU, too slowly to finish. Needs ImageMagick. Node 22.18 or later; no dependencies.
 
 import { spawn, spawnSync } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT } from "./client.ts";
+import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "./client.ts";
 
 /// Each view: where the camera stands and what it looks at, east, up and south of the start.
+/// The forest's are in the lush forest; `village` is the bench's fifty buildings on the yard
+/// from its corner (D213), whose sections change detail as the sweep crosses their distances.
 const VIEWS: Record<string, string> = {
   floor: "-56,1.7,-43,-72,1.0,-55",
   path: "-6,1.7,-80,40,2.0,-74",
   clearing: "7,1.8,9,-8,1.2,-7",
   edge: "0,1.8,250,0,5,200",
+  village: "-85,16,10,-5,0,-50",
 };
+/// What each view's run is: the forest walked, or the village built on the yard.
+const SCENE = (view: string) =>
+  view === "village"
+    ? ["--experiment", "play", "--level", "yard", "--village"]
+    : ["--experiment", "walk", "--experiment", "lush", "--level", "yard"];
 const SWEEP = { from: 0.5, to: 2.0, first: 300, last: 480 };
 /// Frames after the clock stops before comparing, for the wind and anything easing to settle.
 const SETTLE = 6;
@@ -41,7 +51,7 @@ const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : fallback;
 };
-const views = arg("--views", "floor,path,clearing").split(",");
+const views = arg("--views", "floor,path,clearing,village").split(",");
 const hour = arg("--time", "17");
 const limit = Number(arg("--limit", "0.5"));
 const out = resolve(ROOT, "shots/lodcheck");
@@ -49,7 +59,7 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 const magick = (...words: string[]) => {
-  const done = spawnSync("magick", words, { encoding: "utf8" });
+  const done = spawnSync(...imageMagick(words), { encoding: "utf8" });
   if (done.status !== 0) throw new Error(`magick ${words.join(" ")}: ${done.stderr}`);
   return done.stdout.trim();
 };
@@ -81,8 +91,7 @@ const scaleAt = (frame: number) => {
   return Math.exp(Math.log(SWEEP.from) * (1 - t) + Math.log(SWEEP.to) * t);
 };
 
-const build = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" });
-if (build.status !== 0) process.exit(1);
+if (!buildOffscreen()) process.exit(1);
 
 type Pop = { view: string; frame: number; share: number; scale: number };
 const worst: Pop[] = [];
@@ -93,15 +102,12 @@ const runs = await Promise.all(
   views.map((view) => {
     const dir = resolve(out, view);
     mkdirSync(dir);
-    return run(
-      resolve(ROOT, "target/release/terra_sandbox"),
-      [
-        "--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour,
-        "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
-        "--shots", `${dir}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
-      ],
-      { ...process.env, BEVY_ASSET_ROOT: ROOT },
-    );
+    const [command, words] = offscreenRun(`lodcheck-${view}`, [
+      "--clean", ...SCENE(view), "--time", hour,
+      "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
+      "--shots", `${offscreenPath(dir)}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
+    ]);
+    return run(command, words, { ...process.env, BEVY_ASSET_ROOT: ROOT });
   }),
 );
 views.forEach((view, i) => {
@@ -121,7 +127,7 @@ const pairs = views.flatMap((view) =>
 );
 const shares = await pool(
   pairs.map(({ view, frame }) => async () => {
-    const { said } = await run("magick", [file(view, frame - 1), file(view, frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-format", "%[fx:mean*100]", "info:"]);
+    const { said } = await run(...imageMagick([file(view, frame - 1), file(view, frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-format", "%[fx:mean*100]", "info:"]));
     return Number(said.trim());
   }),
   availableParallelism(),

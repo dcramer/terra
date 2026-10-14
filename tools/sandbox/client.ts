@@ -24,6 +24,32 @@ export const onWsl = (() => {
   }
 })();
 
+/// A scripted run of the sandbox to its end, offscreen, for a check that compares its
+/// frames (lodcheck, pops): the command and its words. Under WSL it is the Windows build, on
+/// the real GPU, in a copy of its own named `copy`, since WSL's own build draws on the CPU,
+/// far too slowly for a forest (a frame every few seconds); elsewhere the release build.
+/// `buildOffscreen` builds it first, and paths given to it go through `offscreenPath`.
+export const offscreenRun = (copy: string, args: string[]): [string, string[]] =>
+  onWsl
+    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--release", "--copy", copy, "--", "--offscreen", ...args]]
+    : [resolve(ROOT, "target/release/terra_sandbox"), ["--offscreen", ...args]];
+
+/// Builds what `offscreenRun` runs, once, before runs that may start at once.
+export function buildOffscreen(): boolean {
+  const target = onWsl ? ["--target", "x86_64-pc-windows-gnu"] : [];
+  return spawnSync("cargo", ["build", "-q", "--release", ...target, "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" }).status === 0;
+}
+
+/// A path a run started by `offscreenRun` can write to: through WSL's share for Windows.
+export const offscreenPath = (path: string) => (onWsl ? spawnSync("wslpath", ["-w", path], { encoding: "utf8" }).stdout.trim() : path);
+
+/// ImageMagick's command for `words` as version 7 takes them after `magick` (`montage …`
+/// for a montage): version 6, which Ubuntu ships and `cargo xtask doctor` asks for, has no
+/// `magick`, only `convert` and `montage`, which take the same words.
+export const imageMagick = (words: string[]): [string, string[]] =>
+  hasMagick ? ["magick", words] : words[0] === "montage" ? ["montage", words.slice(1)] : ["convert", words];
+const hasMagick = spawnSync("magick", ["-version"]).status === 0;
+
 type Reply = { result?: unknown; error?: { code: number; message: string } };
 
 // Under WSL a sandbox running on Windows listens on Windows' own localhost, which WSL

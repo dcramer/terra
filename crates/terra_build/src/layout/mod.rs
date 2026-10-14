@@ -113,12 +113,15 @@ pub enum Piece {
     /// Corner stones of the kit's up one upright edge of one cube, a stone a course, in the
     /// courses it shows: quoins up an outside corner, jamb stones up an opening's side.
     /// `faces` are the two it stands out of, the first the face of its first course's
-    /// longer side.
+    /// longer side. `shared` says, for each face, whether the cube's other edge on it has
+    /// corner stones too, as a pier a cube wide has: then the stones on that face stop
+    /// short of its middle and meet the other edge's at a joint, rather than through them.
     Corner {
         cube: IVec3,
         role: Role,
         faces: [Dir; 2],
         courses: [bool; 2],
+        shared: [bool; 2],
         seed: u32,
     },
     /// A profile of the kit's pieces swept along a line of a cube cut to a shape (D193,

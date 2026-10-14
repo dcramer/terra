@@ -14,12 +14,14 @@
 //
 // Without sandbox options it walks the bench's route through the lush forest at 17:00. A
 // planted grey patch 20 pixels square in one frame scores about 1%; a smooth walk scores
-// under 0.2%. Needs ImageMagick (cargo xtask doctor). Node 22.18 or later; no dependencies.
+// under 0.2%. Under WSL it runs on the Windows build, on the real GPU (`offscreenRun`): WSL's
+// own draws on the CPU, too slowly to finish. Needs ImageMagick (cargo xtask doctor). Node
+// 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT } from "./client.ts";
+import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "./client.ts";
 
 const WALK = ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", "17", "--route", "-58,-39", "--route", "-40,-69", "--route", "-6,-80", "--route", "30,-74", "--route", "59,-54"];
 /// Frames are compared this small, blurred this much, and a pixel counts as changed past
@@ -44,17 +46,18 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(resolve(out, "small"), { recursive: true });
 
 const magick = (...words: string[]) => {
-  const done = spawnSync("magick", words, { encoding: "utf8" });
+  const done = spawnSync(...imageMagick(words), { encoding: "utf8" });
   if (done.status !== 0) throw new Error(`magick ${words.join(" ")}: ${done.stderr}`);
   return done.stdout.trim();
 };
 
-const build = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" });
-if (build.status !== 0) process.exit(1);
-const run = spawnSync(resolve(ROOT, "target/release/terra_sandbox"), ["--offscreen", "--clean", ...sandbox, "--shots", `${out}/frame@${first}-${last}`], {
+if (!buildOffscreen()) process.exit(1);
+const [command, words] = offscreenRun("pops", ["--clean", ...sandbox, "--shots", `${offscreenPath(out)}/frame@${first}-${last}`]);
+const run = spawnSync(command, words, {
   cwd: ROOT,
   encoding: "utf8",
   env: { ...process.env, BEVY_ASSET_ROOT: ROOT },
+  maxBuffer: 1 << 28,
 });
 if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
   console.error(`${run.stdout}${run.stderr}`.split("\n").slice(-20).join("\n"));
