@@ -136,11 +136,13 @@ impl Looks {
                 reflectance: 0.3,
                 ..default()
             }),
+            // Old glass, a little green, dark against a dim room as a window is seen from
+            // outside, catching the sky without turning into a sky-blue panel.
             glass: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
+                base_color: Color::srgba(0.16, 0.2, 0.19, 0.62),
                 alpha_mode: AlphaMode::Blend,
-                perceptual_roughness: 0.06,
-                reflectance: 0.7,
+                perceptual_roughness: 0.12,
+                reflectance: 0.4,
                 cull_mode: None,
                 double_sided: true,
                 ..default()

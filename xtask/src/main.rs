@@ -52,6 +52,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "demo",
+        takes: "[--skip-cabin] [--hour 15] [--out shots/demo]",
+        does: "the construction demo's pictures: the cabin built by script, then the village and the cabin from fixed views (tools/sandbox)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/demo.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "vantage",
         takes: "[--time 13,17]",
         does: "the vantage sheet: the lush forest from fixed views, side by side, to judge how the world looks (tools/sandbox)",

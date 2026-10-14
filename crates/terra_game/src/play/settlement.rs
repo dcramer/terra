@@ -137,20 +137,19 @@ fn found(
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
-    let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.0;
-    let Some(middle) = [(-70.0, 55.0), (75.0, 60.0), (-60.0, -75.0), (60.0, -80.0)]
-        .into_iter()
-        .map(|(east, south)| on_ground(east, south))
-        .filter(|&point| dry(point) && point.distance(lair.0) > 60.0)
-        .max_by(|a, b| a.distance(lair.0).total_cmp(&b.distance(lair.0)))
-    else {
+    let kinds = look.kits.as_deref().and_then(build::village_kinds);
+    let Some(kinds) = kinds else {
+        warn!("The village needs a log, a stone and a hewn timber kit.");
+        return;
+    };
+    let seed = planet.seed().derive("village").0 as u32;
+    let buildings = terra_build::village::village(seed, kinds);
+    let Some((middle, east)) = site_for(&planet, &start, lair.0, &buildings) else {
         warn!("No dry ground for the village.");
         return;
     };
     commands.insert_resource(Village(middle));
     let up = middle.normalize();
-    let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
     let south = east.cross(up);
     let at = |e: f32, s: f32| planet.ground_at(middle + east * e + south * s);
     // The street, its plants cleared and trodden bare.
@@ -180,17 +179,13 @@ fn found(
     ));
 
     let to_site = site.frame.compute_affine().inverse();
-    let kinds = look.kits.as_deref().and_then(build::village_kinds);
-    let Some(kinds) = kinds else {
-        warn!("The village needs a log, a stone and a hewn timber kit.");
-        return;
-    };
-    let seed = planet.seed().derive("village").0 as u32;
-    for building in terra_build::village::village(seed, kinds) {
+    for building in buildings {
         let [e, s] = building.at;
         let door = at(e, s);
         let up = door.normalize();
-        let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
+        let east = east
+            .reject_from(up)
+            .normalize_or(up.any_orthonormal_vector());
         let south = east.cross(up);
         // Its own +Z turned to look the way its door does, its X along the street.
         let rotation = Quat::from_mat3(&Mat3::from_cols(east, up, south))
@@ -207,8 +202,9 @@ fn found(
         let label = format!("Settlement: {}", building.name);
         let mut built = Build::new(&mut commands, &look, frame, &label);
         built.replace_with(&building.ops, &mut commands, &planet, &mut meshes);
-        commands.spawn((Name::new(label), Built(built)));
-        let local = to_site.transform_point3(door);
+        // Its own name the base's, which stands where it does; this one holds the build.
+        commands.spawn((Name::new(format!("{label}, as built")), Built(built)));
+        let local = start.local(door);
         info!(
             "Settlement: {}: its door {:.1} m east and {:.1} m south of the start, looking {:.0} degrees from south.",
             building.name,
@@ -217,6 +213,26 @@ fn found(
             building.facing.to_degrees()
         );
     }
+
+    // Where to stand to see it, as the kit sheet gives its rows' (D69): an eye and what it
+    // looks at, in metres east, up and south of the start, from places in the village's own
+    // east and south and heights over its ground there.
+    let vantage = |name: &str, eye: [f32; 3], look: [f32; 3]| {
+        let point = |[e, s, up]: [f32; 3]| {
+            let ground = at(e, s);
+            start.local(ground + ground.normalize() * up)
+        };
+        let (eye, look) = (point(eye), point(look));
+        info!(
+            "Settlement vantage: {name}: --vantage {:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
+            eye.x, eye.y, eye.z, look.x, look.y, look.z
+        );
+    };
+    vantage("street", [-34.0, 0.5, 1.7], [6.0, -0.5, 2.2]);
+    vantage("green", [-7.0, 4.0, 1.7], [0.0, -11.0, 3.0]);
+    vantage("street east", [33.0, -1.0, 1.8], [0.0, 1.0, 2.5]);
+    vantage("rise", [-44.0, 1.0, 12.0], [2.0, 0.0, 0.0]);
+    vantage("above", [22.0, -22.0, 22.0], [0.0, 1.0, 0.0]);
 
     // The well and the stall, placed as a player places an item, but the villagers'.
     for (file, item_east, item_south, turn) in ITEMS {
@@ -255,15 +271,79 @@ fn found(
             says: villager.says,
         });
     }
-    let local = site
-        .frame
-        .compute_affine()
-        .inverse()
-        .transform_point3(middle);
+    let local = start.local(middle);
     info!(
         "The village stands {:.0} m east and {:.0} m south of the start.",
         local.x, local.z
     );
+}
+
+/// Where the village goes, and which way its street runs east: of places 75 to 115 m from
+/// the start round it, and a street turned every way there, the one whose buildings and
+/// street stand on the most level ground, all of it dry and well away from the lair, so
+/// it sits on the land rather than on tall footings down a hillside. The same on every
+/// machine: the planet and the village's plan decide it.
+fn site_for(
+    planet: &Planet,
+    start: &Start,
+    lair: Vec3,
+    buildings: &[terra_build::village::Building],
+) -> Option<(Vec3, Vec3)> {
+    let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.5;
+    // Where to sample, in the village's own metres east and south: along the street, and
+    // at each building's door and a few metres behind it.
+    let mut samples: Vec<[f32; 2]> = (-5..=5).map(|i| [i as f32 * 8.0, 0.0]).collect();
+    for building in buildings {
+        let [e, s] = building.at;
+        let (sin, cos) = (libm::sinf(building.facing), libm::cosf(building.facing));
+        // Its door, its back and its corners, as far as a house reaches.
+        for (back, aside) in [
+            (0.0, 0.0),
+            (5.0, 0.0),
+            (0.0, 4.5),
+            (0.0, -4.5),
+            (6.0, 4.5),
+            (6.0, -4.5),
+        ] {
+            samples.push([e - sin * back + cos * aside, s - cos * back - sin * aside]);
+        }
+    }
+    let mut best: Option<(f32, Vec3, Vec3)> = None;
+    for radius in [75.0_f32, 95.0, 115.0] {
+        for step in 0..16 {
+            let angle = step as f32 / 16.0 * std::f32::consts::TAU;
+            let middle =
+                planet.ground_at(start.at(radius * libm::cosf(angle), radius * libm::sinf(angle)));
+            if !dry(middle) || middle.distance(lair) < 80.0 {
+                continue;
+            }
+            let up = middle.normalize();
+            let north = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
+            for turn in 0..8 {
+                let east =
+                    Quat::from_axis_angle(up, turn as f32 / 8.0 * std::f32::consts::PI) * north;
+                let south = east.cross(up);
+                let mut heights = Vec::with_capacity(samples.len());
+                let mut wet = false;
+                for &[e, s] in &samples {
+                    let ground = planet.ground_at(middle + east * e + south * s);
+                    wet |= !dry(ground);
+                    heights.push(ground.length());
+                }
+                if wet {
+                    continue;
+                }
+                let (low, high) = heights
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(l, h), &x| (l.min(x), h.max(x)));
+                let score = high - low;
+                if best.as_ref().is_none_or(|(least, _, _)| score < *least) {
+                    best = Some((score, middle, east));
+                }
+            }
+        }
+    }
+    best.map(|(_, middle, east)| (middle, east))
 }
 
 /// Which way a place lies from another, as someone there would say it: by the sun, or at
