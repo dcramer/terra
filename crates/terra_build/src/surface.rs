@@ -900,15 +900,17 @@ pub fn draw_part(
                 let placed = q;
                 if cut_here {
                     q.y = q.y.max(low).min(high);
-                    // And a side's, or a packed top's, where it ends up, so nothing a lump or
-                    // the rounding moves along stands over the cut. Not a smooth top's: its
-                    // rounding, brought onto a sloping cut where it ends up, folds over
-                    // itself in the cut.
+                    // And a side's where it ends up, so nothing a lump or the rounding moves
+                    // along stands over the cut. Not a top's: its rounding and lumps, brought
+                    // onto a sloping cut where they end up, fold over themselves in the cut;
+                    // a top's point they would carry over the cut stays on it, as it was.
                     let [under, over] = cut(cube, q);
-                    if axis != 1 || look.packed.is_some() {
+                    if axis != 1 {
                         q.y = q.y.max(under).min(over);
                     } else if q.y > over {
                         q = s.with_y(s.y.max(low).min(high));
+                    } else if look.packed.is_some() {
+                        q.y = q.y.max(under);
                     }
                 }
                 if against_cut {
@@ -981,11 +983,14 @@ pub fn draw_part(
                         let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
                         let cross = (pb - pa).cross(pc - pa);
                         // Cut away to nothing, or folded back on itself where a cut or the
-                        // rounding pinches a cell: drawn from inside, it would show dark.
+                        // rounding pinches a cell: drawn from inside, it would show dark. A
+                        // smooth face's triangle turned more than 84° from its face is folded
+                        // too, edge on in another face's plane (a foot's rounding pinched at
+                        // an inner corner); its rounding's own steps turn no more than 75°.
                         let folded = if look.packed.is_some() {
                             -0.5 * cross.length()
                         } else {
-                            0.0
+                            0.1 * cross.length()
                         };
                         if cross.length_squared() < 1e-12 || cross.dot(normal) < folded {
                             return;
