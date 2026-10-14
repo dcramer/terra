@@ -623,32 +623,54 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         }
     }
 
-    // A spruce's dead lower branches: whorls of bare twigs, short and broken, drooping.
+    // A spruce's dead lower branches: whorls of thin bare twigs, short and broken, drooping,
+    // each with a few twigs of its own off it, a tangle rather than spokes (D247).
     if !pine && !young {
         let mut y = dice.range(1.2, 2.0);
         while y < base - 0.3 {
             let (at, r, _) = trunk_at(y);
             let turn = dice.range(0.0, TAU);
-            for k in 0..3 + dice.below(3) {
-                let out = round(turn + k as f32 * TAU / 4.0 + dice.range(-0.5, 0.5));
-                let heading = (out + Vec3::Y * dice.range(-0.35, 0.05)).normalize();
-                let length = dice.range(0.4, 1.0) * (0.6 + 0.4 * y / base) * reach * 0.5;
+            let count = 4 + dice.below(4);
+            for k in 0..count {
+                let out = round(turn + k as f32 * TAU / count as f32 + dice.range(-0.4, 0.4));
+                let heading = (out + Vec3::Y * dice.range(-0.45, 0.0)).normalize();
+                let length = dice.range(0.3, 1.0) * (0.6 + 0.4 * y / base) * reach * 0.5;
                 let (p, rr, _) = line(
                     dice,
-                    at + out * r * 0.6,
+                    at + out * r * 0.8,
                     heading,
                     length.max(0.3),
-                    (r * 0.12).max(0.02),
-                    0.7,
+                    (r * 0.05).max(0.012),
+                    0.8,
                     3,
-                    0.2,
+                    0.25,
                     0.3,
                     0.0,
                     0.05,
                 );
+                for _ in 0..1 + dice.below(3) {
+                    let (from, rf, direction) = along(&p, &rr, dice.range(0.3, 0.8));
+                    let side = direction.cross(Vec3::Y).normalize_or(Vec3::X)
+                        * if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+                    let twig = length * dice.range(0.2, 0.4);
+                    let (q, qr, _) = line(
+                        dice,
+                        from,
+                        (direction + side * 0.9 - Vec3::Y * 0.2).normalize(),
+                        twig,
+                        rf * 0.6,
+                        0.8,
+                        2,
+                        0.3,
+                        0.0,
+                        0.0,
+                        0.0,
+                    );
+                    tree.limb(q, qr, 2);
+                }
                 tree.limb(p, rr, 2);
             }
-            y += spacing * dice.range(0.7, 1.3);
+            y += spacing * dice.range(0.5, 1.0);
         }
     }
 

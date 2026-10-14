@@ -103,8 +103,8 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     let crevice = 1.0 - (*input).diffuse_occlusion.r;
     let streaked = world - up * dot(world, up) * 0.7;
     let fine = wander(streaked * 4.1 + 13.0) * 0.6 + wander(world * 11.0 + 7.0) * 0.4;
-    let wet = 0.85 * facing_up * facing_up + 0.55 * low * (0.35 + 0.65 * damp_side) + 0.6 * crevice;
-    let moss = smoothstep(0.5, 0.85, wet + 0.35 * (fine - 0.5) - 0.05) * share;
+    let wet = 0.85 * facing_up * facing_up + 0.8 * low * (0.3 + 0.7 * damp_side) + 0.6 * crevice;
+    let moss = smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share;
     colour = mix(colour, vec3<f32>(0.1, 0.13, 0.04) * (0.75 + 0.5 * wander(world * 6.0)), moss * 0.85);
     colour *= mix(1.0, 0.72, low * (1.0 - moss));
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
