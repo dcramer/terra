@@ -24,6 +24,10 @@
 //! - `build.fill {part?, steps?}`: builds what goes in next, as holding the hammer does, so
 //!   many times (one if not given), stopping at the first refusal.
 //! - `build.take_apart {at, steps?}`: takes out what came last of the part a cube is in.
+//! - `build.fit {at, kind?}`: fits a door or shutters, by the catalogue's name (the first
+//!   door, or for a window the first shutters, if not given), into the hole a cube is
+//!   part of, as the hammer fits them, if the hole fits it.
+//! - `build.door {at, open}`: opens or shuts the door or shutters fitted at a cube.
 //! - `build.undo`: undoes the player's last change to the base.
 //! - `build.op {ops}`: any operations, as `terra_build::ops::Op` serialises them, as one act.
 //! - `build.point {at}`: where a place in the base, in metres, is in the world and from the
@@ -63,6 +67,8 @@ pub fn plugin(app: &mut App) {
     method(app, "build.opening", opening);
     method(app, "build.fill", fill);
     method(app, "build.take_apart", take_apart);
+    method(app, "build.fit", fit);
+    method(app, "build.door", door);
     method(app, "build.undo", undo);
     method(app, "build.op", ops);
     method(app, "build.point", point);
@@ -399,6 +405,71 @@ fn take_apart(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     })
 }
 
+#[derive(Deserialize)]
+struct Fit {
+    at: [i32; 3],
+    kind: Option<String>,
+}
+
+fn fit(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let fit: Fit = parse_some(params)?;
+    let at = IVec3::from_array(fit.at);
+    // A doorway, from its storey's floor, takes a door; a window, over a sill, shutters.
+    let base = &world.resource::<Site>().base;
+    let (low, _) = plans::hole(base, at).ok_or_else(|| refused("that is not an opening"))?;
+    let hang = plans::hang_for(base, low);
+    let builds = world.resource::<crate::play::catalogue::Builds>();
+    let fitting = match &fit.kind {
+        Some(name) => builds.fittings().iter().find(|each| &each.name == name),
+        None => builds.fittings().iter().find(|each| each.hang == hang),
+    }
+    .cloned()
+    .ok_or_else(|| refused("there is no such door or shutters"))?;
+    as_player(world, |building, player| {
+        let prop = plans::prop_for(&building.site.base, at, fitting.kind, fitting.hang)
+            .ok_or_else(|| refused("that is not an opening"))?;
+        let (wide, high) = plans::hole_size(&prop);
+        if !fitting.fits(wide, high) {
+            return Err(refused(format!(
+                "{} fit holes {}",
+                fitting.name,
+                fitting.sizes()
+            )));
+        }
+        let what = format!("fit {}", fitting.name.to_lowercase());
+        let result = building.act(Some(player), &what, &[Op::FitProp(prop)]);
+        Ok(answer(&what, result))
+    })
+}
+
+#[derive(Deserialize)]
+struct Door {
+    at: [i32; 3],
+    open: bool,
+}
+
+fn door(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let door: Door = parse_some(params)?;
+    as_player(world, |building, player| {
+        let at = building
+            .site
+            .base
+            .prop_in(IVec3::from_array(door.at))
+            .map(|prop| prop.min)
+            .ok_or_else(|| refused("nothing is fitted there"))?;
+        let what = if door.open { "open it" } else { "shut it" };
+        let result = building.act(
+            Some(player),
+            what,
+            &[Op::SetOpen {
+                at,
+                open: door.open,
+            }],
+        );
+        Ok(answer(what, result))
+    })
+}
+
 fn undo(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     as_player(world, |building, player| {
         Ok(match building.undo(player) {
@@ -610,7 +681,9 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             let (low, high) = (IVec3::from_array(prop.min), IVec3::from_array(prop.max));
             let middle = (low.as_vec3() + (high + IVec3::ONE).as_vec3()) * 0.5 * CELL_M;
             json!({
-                "kind": super::props::name(prop.kind),
+                "kind": prop.kind.0,
+                "hang": format!("{:?}", prop.hang),
+                "leaves": prop.leaves().len(),
                 "min": prop.min,
                 "max": prop.max,
                 "open": prop.open,

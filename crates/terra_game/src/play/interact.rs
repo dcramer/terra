@@ -31,6 +31,10 @@ pub enum Interactable {
     Talk,
     /// A chest or other storage, to open (`storage`).
     Storage,
+    /// A door fitted in a wall, to open or shut.
+    Door,
+    /// Shutters fitted over a window, to open or shut.
+    Shutters,
 }
 
 impl Interactable {
@@ -45,6 +49,8 @@ impl Interactable {
             Interactable::Prisoner => (0.6, 0.7),
             Interactable::Talk => (1.0, 0.6),
             Interactable::Storage => (0.4, 0.6),
+            Interactable::Door => (1.1, 0.7),
+            Interactable::Shutters => (0.5, 0.6),
         }
     }
 
@@ -60,6 +66,8 @@ impl Interactable {
             Interactable::Prisoner => "free them".to_string(),
             Interactable::Talk => "talk".to_string(),
             Interactable::Storage => "open it".to_string(),
+            Interactable::Door => "open or shut the door".to_string(),
+            Interactable::Shutters => "open or shut the shutters".to_string(),
         }
     }
 }

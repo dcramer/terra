@@ -17,7 +17,8 @@
 //! - **A roof is cubes too** (D241): cubes of a roof kind ([`Kind::is_roof`]) cut to
 //!   slopes and corners, laid by hand or by the roofer ([`roofer`]) and drawn as a roof
 //!   from their neighbours (`layout::roofs`): no wall tile, floor or room of their own.
-//! - **Doors and windows are props** ([`Prop`]) fitted into holes in built walls.
+//! - **Doors and shutters are props** ([`Prop`]) fitted into holes in built walls, their
+//!   leaves hung on the hole's sides ([`fitting`]).
 //! - **Everything a player does is an operation** ([`ops::Op`]), checked by one pure
 //!   function against the state when it arrives, and undone by its inverse: nothing
 //!   floats, and nothing is taken while something rests on it ([`support`], D193).
@@ -40,6 +41,7 @@ pub mod cubes;
 pub mod draw;
 pub mod dress;
 mod example;
+pub mod fitting;
 pub mod ground;
 pub mod hull;
 pub mod inspect;
@@ -256,14 +258,21 @@ impl Part {
     }
 }
 
-/// A door, window or shutters fitted into a hole in a wall (construction-001, gap 15),
-/// filling the cubes from `min` to `max`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// A door or shutters fitted into a hole in a wall (construction-001, gap 15), filling
+/// the cubes from `min` to `max`, and how it hangs there ([`fitting`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Prop {
     pub kind: PropKind,
     pub min: [i32; 3],
     pub max: [i32; 3],
     pub open: bool,
+    /// The way its leaves swing open, across the wall, as it was hung: into the room for
+    /// a door, out for shutters. None given, they open south or east.
+    #[serde(default)]
+    pub opens: [i32; 3],
+    /// Whether it hangs as a door or as shutters.
+    #[serde(default)]
+    pub hang: fitting::Hang,
 }
 
 impl Prop {

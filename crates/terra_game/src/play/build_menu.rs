@@ -290,8 +290,11 @@ fn cost_of(builds: &Builds, items: &Items, part: usize, variant: usize) -> Strin
         | Kind::Flight(_)
         | Kind::Post
         | Kind::Block(_) => "Plan free, built piece by piece".into(),
-        Kind::Window(_) => format!("{} each, fitted", wall(builds.window())),
-        Kind::Door => format!("{} each, fitted", wall(builds.door())),
+        Kind::Window(_) | Kind::Door => "Cut free into a plan, piece by piece from a wall".into(),
+        Kind::Fit(each) => format!(
+            "{} a leaf, a pair two",
+            wall(&each[variant.min(each.len() - 1)].cost)
+        ),
         Kind::Replace => "The old given back, the new built piece by piece".into(),
         Kind::Carve => "Carved out piece by piece, given back".into(),
         Kind::Remove | Kind::Move => String::new(),

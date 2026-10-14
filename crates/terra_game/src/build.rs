@@ -313,11 +313,12 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, and
-/// drawing it again as it changes. Only where a player
+/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, its
+/// doors and shutters and every village house's, and drawing it again as it changes. Only where a player
 /// builds, so a run of the build keys alone needs nothing of the player.
 pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
+    props::plugin(app);
     remote::plugin(app);
     memory::remote(app);
     going_up::plugin(app);

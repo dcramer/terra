@@ -1,0 +1,11 @@
+{
+  "subject": "ledged and braced door leaf on its own, without a frame or wall, standing upright, seen from the front a little to one side so its edge shows, one metre wide and two metres tall: narrow vertical boards of aged oak in a mid warm brown, crossed on its face by three thick horizontal ledges and two diagonal braces between them in a Z, fixed with square iron nail heads, a forged iron thumb latch with a curled handle, and two short iron hinge straps at one edge",
+  "file": "LedgedDoor",
+  "into": "openings",
+  "size": 2.0,
+  "budget": 1500,
+  "textured": true,
+  "block": true,
+  "generator": "h3.1",
+  "faces": 20000
+}

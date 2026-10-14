@@ -102,6 +102,17 @@ pub fn prompt(
         }
         (Kind::Door, Target::Wall { .. }) => format!("{tap}  cut a doorway into the plan"),
         (Kind::Window(_) | Kind::Door, _) => "Aim at a wall".to_string(),
+        (Kind::Fit(fittings), Target::Wall { open: true, .. }) => {
+            let fitting = &fittings[builder.variant().min(fittings.len() - 1)];
+            format!(
+                "{} fit holes {}, their walls built round them      {next}  kind",
+                fitting.name,
+                fitting.sizes()
+            )
+        }
+        (Kind::Fit(_), _) => {
+            format!("Aim at a doorway or window in a built wall      {next}  kind")
+        }
         (Kind::Wall(_), Target::Wall { .. }) => drawn(
             "wall",
             format!(

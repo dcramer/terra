@@ -685,6 +685,76 @@ pub fn hole(base: &Base, cube: IVec3) -> Option<(IVec3, IVec3)> {
     Some((low, high))
 }
 
+/// A door or shutters of a kind to fit the hole a cube is part of, hung as it would be: a
+/// door to swing into the room, shutters to fold back outside. Which side is the room's
+/// is what the rooms say, or, before the building is closed in, the side toward its
+/// middle. `None` if the cube is in no hole.
+pub fn prop_for(
+    base: &Base,
+    cube: IVec3,
+    kind: terra_build::PropKind,
+    hang: terra_build::fitting::Hang,
+) -> Option<terra_build::Prop> {
+    let (min, max) = hole(base, cube)?;
+    let size = max - min;
+    // Across the wall: the hole's thin way, or across the wall's own run for a hole a
+    // cube square.
+    let across = if size.x > size.z {
+        IVec3::Z
+    } else if size.z > size.x {
+        IVec3::X
+    } else if base.along(IVec3::new(min.x, storey_of(min.y), min.z)) == IVec3::X {
+        IVec3::Z
+    } else {
+        IVec3::X
+    };
+    let roomward = |step: IVec3| (min.y..=max.y).any(|y| base.contains(min.with_y(y) + step));
+    let inward = if roomward(across) {
+        across
+    } else if roomward(-across) {
+        -across
+    } else {
+        // Toward the middle of what is built.
+        let (mut sum, mut count) = (IVec3::ZERO, 0);
+        for (at, _) in base.cubes() {
+            sum += at;
+            count += 1;
+        }
+        let middle = sum.as_vec3() / count.max(1) as f32;
+        let off = (middle - (min + max).as_vec3() * 0.5).dot(across.as_vec3());
+        if off >= 0.0 { across } else { -across }
+    };
+    let opens = match hang {
+        terra_build::fitting::Hang::Door => inward,
+        terra_build::fitting::Hang::Shutters => -inward,
+    };
+    Some(terra_build::Prop {
+        kind,
+        min: min.to_array(),
+        max: max.to_array(),
+        open: false,
+        opens: opens.to_array(),
+        hang,
+    })
+}
+
+/// How a hole whose lowest cube is `low` takes a prop: a doorway, from its storey's floor
+/// or over no wall, a door; a window, over a sill, shutters.
+pub fn hang_for(base: &Base, low: IVec3) -> terra_build::fitting::Hang {
+    use terra_build::fitting::Hang;
+    if low.y == wall_layer(storey_of(low.y)) || !base.in_wall(low - IVec3::Y) {
+        Hang::Door
+    } else {
+        Hang::Shutters
+    }
+}
+
+/// How wide and high a hole is, in cubes, along its wall.
+pub fn hole_size(prop: &terra_build::Prop) -> (i32, i32) {
+    let size = IVec3::from_array(prop.max) - IVec3::from_array(prop.min) + IVec3::ONE;
+    (size.x.max(size.z), size.y)
+}
+
 /// The tiles along a wall from one to another, in the grid's four directions only (D146):
 /// east and west, or north and south, whichever is further. Both ends included.
 pub fn wall_tiles(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
@@ -883,6 +953,22 @@ mod tests {
             hole(&base, IVec3::new(0, 2, 3)),
             Some((IVec3::new(0, 2, 3), IVec3::new(0, 3, 3)))
         );
+        // The doorway takes a door, hung to swing into the room, north of its south wall;
+        // the window a cube wide in the west wall, shutters to fold out to the west.
+        use terra_build::fitting::Hang;
+        let at = IVec3::new(5, 2, 7);
+        assert_eq!(hang_for(&base, IVec3::new(4, 0, 7)), Hang::Door);
+        let door = prop_for(&base, at, terra_build::PropKind(0), Hang::Door).unwrap();
+        assert_eq!((door.opens, hole_size(&door)), ([0, 0, -1], (2, 4)));
+        assert_eq!(hang_for(&base, IVec3::new(0, 2, 3)), Hang::Shutters);
+        let shutters = prop_for(
+            &base,
+            IVec3::new(0, 2, 3),
+            terra_build::PropKind(1),
+            Hang::Shutters,
+        )
+        .unwrap();
+        assert_eq!((shutters.opens, hole_size(&shutters)), ([-1, 0, 0], (1, 2)));
     }
 
     #[test]

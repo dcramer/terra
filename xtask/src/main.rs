@@ -44,7 +44,7 @@ const TASKS: &[Task] = &[
     Task {
         name: "cabin",
         takes: "[--here] [--until STEP]",
-        does: "build a cabin from plan to doorway by script, walk in, and check every step by state (D69, D139)",
+        does: "build a cabin from plan to door by script, fit a door and shutters, open and shut them, walk in, and check every step by state (D69, D139, D201)",
         group: "Play and check",
         run: |args| {
             let mut all = vec!["tools/sandbox/cabin.ts"];

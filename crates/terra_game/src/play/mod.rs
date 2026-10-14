@@ -16,7 +16,7 @@ pub(crate) mod bodies;
 mod build_menu;
 mod button;
 mod camera;
-mod catalogue;
+pub(crate) mod catalogue;
 pub(crate) mod claim;
 mod combat;
 mod controls;

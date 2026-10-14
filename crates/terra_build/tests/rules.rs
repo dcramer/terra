@@ -220,6 +220,7 @@ fn nothing_is_taken_from_under_a_cube_an_eave_an_item_or_a_prop() {
             min: [2, 0, 0],
             max: [2, 3, 0],
             open: false,
+            ..Prop::default()
         };
         base.act(&Op::FitProp(door), &cx).unwrap();
         // The eave over the lintel comes off first; then the lintel still holds the door.
@@ -450,6 +451,7 @@ fn building_where_someone_stands_or_shutting_a_door_on_them_is_refused() {
                 min: [2, 0, 0],
                 max: [2, 3, 0],
                 open: true,
+                ..Prop::default()
             }),
             &cx,
         )

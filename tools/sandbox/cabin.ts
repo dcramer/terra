@@ -9,9 +9,10 @@
 // stair cubes of stone (D261), built; then the walls course by course, the roof a layer at a
 // time a stage at a time, taking exactly what the kits say from the pack; a cube taken out
 // and the taking undone; a refusal where the roof rests on a wall; a second window cut into the
-// built wall, a course at a time from under the logs over it, giving the logs back; the
-// player walking in through the open doorway, as no door or window is fitted for now (the
-// developers, 2026-10-13); the ground outside the cabin as it was before it was planned; a
+// built wall, a course at a time from under the logs over it, giving the logs back; a
+// plank door and shutters fitted into the holes that fit them (D201, D225); the shut door
+// keeping the player out, opened with the interact key, letting them in, and shut again
+// behind them, the room dim (D155); the ground outside the cabin as it was before it was planned; a
 // deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
 // and walked up onto; stone picked in the hammer, a wall laid and built in it, a cube in
 // its middle changed to logs in place and an outer corner slope laid on its end (D231,
@@ -40,7 +41,7 @@ let failed = false;
 
 type Part = { id: number; kind: string; cubes: number; shaped: number; built: number; started: number; openings: number; done: boolean; min: number[]; max: number[] };
 type Roof = { cubes: number; built: number; stages: number[]; shapes: Record<string, number> };
-type Fitted = { kind: string; min: number[]; max: number[]; open: boolean; at: number[] };
+type Fitted = { kind: number; hang: string; leaves: number; min: number[]; max: number[]; open: boolean; at: number[] };
 type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_cubes: number; rooms: number; parts: Part[]; roofs: Roof; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 
@@ -314,9 +315,59 @@ async function build() {
     return `${done.length} steps: ${done.map((each) => each.what).join("; ")}; ${now.offcuts || "no"} offcuts`;
   });
 
+  await step("fit", async () => {
+    // A plank door into the doorway, and shutters over both windows, as the hammer fits
+    // them, each paid for from the pack, a pair of shutters costing two leaves.
+    await game.give("wood:6", "fibre:4");
+    const door = await act("build.fit", { at: DOOR[0], kind: "Plank door" });
+    check(door.done, `the door was refused: ${door.refused}`);
+    const shutters = await act("build.fit", { at: [WINDOW[0][0], 2, WINDOW[0][2]], kind: "Board shutters" });
+    check(shutters.done, `the shutters were refused: ${shutters.refused}`);
+    const louvred = await act("build.fit", { at: [CUT[0][0], 2, CUT[0][2]], kind: "Louvred shutters" });
+    check(louvred.done, `the shutters in the cut were refused: ${louvred.refused}`);
+    const now = await base();
+    check(now.props.length === 3 && now.props.every((prop) => !prop.open), "not a shut door and two shutters");
+    check(now.props.filter((prop) => prop.hang === "Door").length === 1, "not one door");
+    check(now.props.filter((prop) => prop.hang === "Shutters").every((prop) => prop.leaves === 2), "shutters not in pairs");
+    return `a door (${door.took}), shutters (${shutters.took}) and louvred shutters (${louvred.took})`;
+  });
+
+  await step("shut", async () => {
+    // Outside the door, facing it, walking north: the shut door stops the player.
+    const outside = await point([4.5, 0, 7.6]);
+    const inside = await point([4.5, 0, 3.5]);
+    await game.warp(eastSouth(outside.from_start), eastSouth(inside.from_start));
+    await game.press("w:90");
+    await game.waitSeconds(2);
+    const at = (await game.state()).at;
+    const doorway = (await point([4.5, 0, 5.75])).from_start[2];
+    check(at[1] > doorway + 0.2, `the player went through the shut door to ${at}`);
+    return `stopped at ${at.map((n) => n.toFixed(2))}`;
+  });
+
+  await step("open", async () => {
+    // A step back from the door, out from under the eaves, to look at it and use it.
+    const door = (await base()).props.find((prop) => prop.hang === "Door")!;
+    const back = await point([4.5, 0, 8.3]);
+    await game.warp(eastSouth(back.from_start), eastSouth(door.at));
+    await game.aim(eastSouth(door.at), 1.1);
+    await game.markNow();
+    await game.press("f");
+    const line = await game.waitFor("Build: open the door: done", { timeout: 20 });
+    check((await base()).props.find((prop) => prop.hang === "Door")!.open, "the door is not open");
+    await game.waitSeconds(1.5);
+    const look = await point([4.5, 1.2, 5.5]);
+    const eye = await point([6.5, 1.9, 8.8]);
+    await game.call("sandbox.look", { at: look.world, from: eye.world });
+    await game.waitSeconds(1);
+    await game.shot("shots/cabin-door-open.png");
+    await game.call("sandbox.release");
+    return line.text;
+  });
+
   await step("in", async () => {
-    // Outside the doorway, facing it, walking north, and in: no door is fitted (the
-    // developers, 2026-10-13), so the doorway stands open.
+    // Outside the doorway, facing it, walking north, and in: the door stands open, so
+    // the player goes in past it.
     const outside = await point([4.5, 0, 7.6]);
     const inside = await point([4.5, 0, 3.5]);
     await game.warp(eastSouth(outside.from_start), eastSouth(inside.from_start));
@@ -336,6 +387,25 @@ async function build() {
     await game.shot("shots/cabin-finished.png");
     await game.call("sandbox.release");
     return `inside at ${now.at.map((n) => n.toFixed(2))}, indoors`;
+  });
+
+  await step("shut-in", async () => {
+    // Turned round, the door shut behind them with the interact key: inside, dim (D155).
+    const door = (await base()).props.find((prop) => prop.hang === "Door")!;
+    await game.aim(eastSouth(door.at), 1.1);
+    await game.markNow();
+    await game.press("f");
+    const line = await game.waitFor("Build: shut the door: done", { timeout: 20 });
+    check(!(await base()).props.find((prop) => prop.hang === "Door")!.open, "the door is not shut");
+    check((await game.state()).indoors, "the game does not count the player indoors");
+    await game.waitSeconds(1.5);
+    const look = await point([4.5, 1.1, 5.6]);
+    const eye = await point([4.0, 1.7, 2.6]);
+    await game.call("sandbox.look", { at: look.world, from: eye.world });
+    await game.waitSeconds(1);
+    await game.shot("shots/cabin-inside.png");
+    await game.call("sandbox.release");
+    return line.text;
   });
 
   await step("ground", async () => {

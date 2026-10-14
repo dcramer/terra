@@ -99,39 +99,23 @@ impl Base {
             (at.x / CELL_M - column.x as f32).clamp(0.0, 1.0),
             (at.z / CELL_M - column.y as f32).clamp(0.0, 1.0),
         );
-        // A door or shutters fitted and shut stops a walker; open, it lets them by.
-        let shut = self
-            .props()
-            .filter(move |prop| {
-                !prop.open
-                    && (prop.min[0]..=prop.max[0]).contains(&column.x)
-                    && (prop.min[2]..=prop.max[2]).contains(&column.y)
-            })
-            .map(|prop| {
-                (
-                    prop.min[1] as f32 * CELL_M,
-                    (prop.max[1] + 1) as f32 * CELL_M,
-                )
-            });
         // Within a post's box, or outside it.
         let off_post = (u - 0.5).abs().max((v - 0.5).abs()) * CELL_M > POST_M * 0.5;
-        self.column(column.x, column.y)
-            .filter_map(move |layer| {
-                let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
-                if !cube.is_in() || (cube.shape == crate::Shape::Post && off_post) {
-                    return None;
-                }
-                let foot = layer as f32 * CELL_M;
-                let fill = f32::from(cube.level()) / f32::from(FULL);
-                // From its underside, an upper half's or an inverted slope's (D231), up
-                // to its top or as far as it is filled.
-                let (mut bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
-                if cube.kind.is_roof() {
-                    bottom = bottom.max(cube.shape.top(u, v) - ROOF_SHELL);
-                }
-                (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
-            })
-            .chain(shut)
+        self.column(column.x, column.y).filter_map(move |layer| {
+            let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
+            if !cube.is_in() || (cube.shape == crate::Shape::Post && off_post) {
+                return None;
+            }
+            let foot = layer as f32 * CELL_M;
+            let fill = f32::from(cube.level()) / f32::from(FULL);
+            // From its underside, an upper half's or an inverted slope's (D231), up
+            // to its top or as far as it is filled.
+            let (mut bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
+            if cube.kind.is_roof() {
+                bottom = bottom.max(cube.shape.top(u, v) - ROOF_SHELL);
+            }
+            (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
+        })
     }
 
     /// The height of whatever would hold up feet at `point`: the highest top of a cube in
@@ -169,6 +153,9 @@ impl Base {
     /// windows and passing through openings. Returns where they end up. Height is taken
     /// from `to` unchanged; use [`Base::support`] for that.
     pub fn walk(&self, from: Vec3, to: Vec3, walker: &Walker) -> Vec3 {
+        // A door's or shutters' leaves stop them where they stand, shut or open (D207);
+        // the cubes have the last word.
+        let to = self.off_leaves(from, to, walker);
         let mut at = from;
         // One axis at a time, so that walking into a wall at an angle slides along it.
         for axis in [0, 2] {
@@ -229,6 +216,23 @@ impl Base {
         }
         at.y = to.y;
         at
+    }
+
+    /// Where a walker going from one place to another ends up, kept out of the leaves of
+    /// every door and shutters near, as they stand (`fitting::push_off`).
+    fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker) -> Vec3 {
+        let reach = walker.radius + 2.5;
+        let near = |prop: &&crate::Prop| {
+            let low = IVec3::from_array(prop.min).as_vec3() * CELL_M - reach;
+            let high = (IVec3::from_array(prop.max) + IVec3::ONE).as_vec3() * CELL_M + reach;
+            to.x > low.x && to.x < high.x && to.z > low.z && to.z < high.z
+        };
+        let leaves = self.props().filter(near).flat_map(|prop| {
+            let open = if prop.open { 1.0 } else { 0.0 };
+            prop.leaves().into_iter().map(move |leaf| (leaf, open))
+        });
+        let body = (from.y + walker.step_up, from.y + walker.height);
+        crate::fitting::push_off(from, to, walker.radius, body, leaves)
     }
 
     /// A walker's place along an axis, having moved there from `start`, stopped at the

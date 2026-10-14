@@ -62,7 +62,7 @@ mod show;
 use act::{act, animate};
 use aim::{afford, aim};
 pub use prompt::{legend, prompt, waiting};
-use show::highlight;
+use show::{highlight, preview_fit};
 
 /// How far from the player walls and rooms can be worked on, and items placed.
 const STRUCTURE_REACH_M: f32 = 18.0;
@@ -208,12 +208,14 @@ fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
 }
 
 /// What the hammer does to the base (D139, D144): lays a plan, for nothing, at a click;
-/// builds what goes in next, or takes apart what came last, each held for a moment.
+/// builds what goes in next, takes apart what came last, or fits a door or shutters,
+/// each held for a moment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Doing {
     Lay,
     Build,
     TakeApart,
+    Fit,
 }
 
 /// What the hammer would do to the base now, worked out as it is aimed, and whether the
@@ -584,7 +586,10 @@ pub fn plugin(app: &mut App) {
             FixedUpdate,
             (choose, aim, afford, act).chain().in_set(Sim::Act),
         )
-        .add_systems(Update, (animate, highlight).chain().in_set(Acting));
+        .add_systems(
+            Update,
+            (animate, highlight, preview_fit).chain().in_set(Acting),
+        );
 }
 
 fn setup(
@@ -652,13 +657,28 @@ fn setup(
     });
 }
 
-/// Tells the base what the catalogue says: what fitting a door or window costs, and each
+/// Tells the base what the catalogue says: what fitting a door or shutters costs, and each
 /// claim's budget of planned cubes (D193).
 fn price(
     builds: Res<Builds>,
     items: Res<crate::play::inventory::Items>,
     mut rules: ResMut<crate::build::act::BuildRules>,
+    mut looks: ResMut<crate::build::props::FittingLooks>,
 ) {
+    // What each door and shutters is drawn with.
+    looks.0 = builds
+        .fittings()
+        .iter()
+        .map(|fitting| {
+            (
+                fitting.kind,
+                crate::build::props::FittingLook {
+                    path: format!("models/openings/{}.glb", fitting.model),
+                    hinge_left: fitting.hinge == crate::play::catalogue::Hinge::Left,
+                },
+            )
+        })
+        .collect();
     let bill = |cost: &crate::play::inventory::Cost| {
         let mut bill = terra_build::Bill::default();
         for &(kind, count) in cost {
@@ -669,12 +689,10 @@ fn price(
         }
         bill
     };
-    let (door, window) = (bill(builds.door()), bill(builds.window()));
-    rules.rules.props.insert(crate::build::props::DOOR, door);
-    rules
-        .rules
-        .props
-        .insert(crate::build::props::WINDOW, window);
+    // A leaf of each door and shutters (a pair costs two, terra_build::fitting).
+    for fitting in builds.fittings() {
+        rules.rules.props.insert(fitting.kind, bill(&fitting.cost));
+    }
     rules.budgets = builds.claim.planned.clone();
 }
 

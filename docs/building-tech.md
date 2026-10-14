@@ -25,7 +25,7 @@ Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 | | As cubes |
 |---|---|
 | Walls | A row of cubes one thick, as high as drawn: three metres, six cubes, unless dragged taller or shorter (D176) |
-| Openings | Cubes made open in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A window is the hole, framed by its role pieces, with no glass (D225); a door is a prop fitted into a hole it fits |
+| Openings | Cubes made open in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A window is the hole, framed by its role pieces, with no glass (D225); a door or shutters are a prop fitted into a hole they fit, hung by `terra_build::fitting` |
 | Posts | A column of cubes, alone or in a wall (D179) |
 | Floors | A layer of cubes, so a 3 m storey is a floor cube and 2.5 m clear above it |
 | Roofs | Cubes of a roof kind cut to slopes and corners (D241), by hand or laid by "add a roof"; drawn as a roof from their neighbours, no wall or floor, and what is under them is covered |

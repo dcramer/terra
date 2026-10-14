@@ -111,6 +111,26 @@ impl Shapes<'_, '_> {
 
 /// Shows what the tool would act on.
 #[allow(clippy::too_many_arguments)]
+/// Shows the door or shutters the hammer would fit as a ghost in the hole aimed at, while
+/// it can be fitted there.
+pub(super) fn preview_fit(
+    builder: Single<&Builder, IsLocalPlayer>,
+    mut preview: ResMut<crate::build::props::FitPreview>,
+) {
+    let wanted = builder
+        .planned
+        .as_ref()
+        .filter(|planned| planned.doing == Doing::Fit && planned.work.check.is_ok())
+        .and_then(|planned| match planned.work.ops.first() {
+            Some(terra_build::ops::Op::FitProp(prop)) => Some(*prop),
+            _ => None,
+        })
+        .filter(|_| builder.progress().is_none() && !builder.stowed);
+    if preview.0 != wanted {
+        preview.0 = wanted;
+    }
+}
+
 pub(super) fn highlight(
     mut commands: Commands,
     mut shapes: Shapes,
@@ -298,6 +318,7 @@ pub(super) fn highlight(
     if let Some(planned) = builder.planned.as_ref() {
         let colour = match (&planned.work.check, planned.doing) {
             (Err(_), _) | (_, Doing::TakeApart) => REFUSED_COLOUR,
+            (_, Doing::Fit) => OPENING_COLOUR,
             _ => BUILD_COLOUR,
         };
         let placed = matches!(builder.target, Target::Place { .. });

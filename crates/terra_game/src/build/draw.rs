@@ -154,6 +154,11 @@ pub(super) struct Looks {
 const GHOST: [f32; 3] = [0.5, 0.75, 1.0];
 
 impl Looks {
+    /// The ghost a plan's pieces are drawn in, for anything else drawn as one.
+    pub(super) fn ghost(&self) -> Handle<GhostMaterial> {
+        self.ghost[0].clone()
+    }
+
     pub fn new(
         materials: &mut Assets<StandardMaterial>,
         ghosts: Option<&mut Assets<GhostMaterial>>,

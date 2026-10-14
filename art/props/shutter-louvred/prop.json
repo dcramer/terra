@@ -1,0 +1,11 @@
+{
+  "subject": "louvred window shutter leaf on its own, without a window, frame or wall, standing upright, seen from the front a little to one side so its edge shows, half a metre wide and one metre tall: a frame of two stiles and three rails of wood painted a faded sage green, worn back to bare grey wood on its edges, a narrow leaf, exactly twice as tall as it is wide, holding one column of two panels of angled horizontal slats, and two short black iron hinge straps at one edge",
+  "file": "LouvredShutter",
+  "into": "openings",
+  "size": 1.0,
+  "budget": 3000,
+  "textured": true,
+  "block": true,
+  "generator": "h3.1",
+  "faces": 12000
+}

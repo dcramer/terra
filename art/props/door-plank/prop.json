@@ -1,0 +1,11 @@
+{
+  "subject": "plank door leaf on its own, without a frame or wall, standing upright, seen from the front a little to one side so its 5 cm edge shows, one metre wide and two metres tall: five vertical boards of weathered pine of slightly uneven widths, their edges softly worn, held by two black wrought-iron strap hinges that run most of the way across and end in curled leaf-shaped tips, and a forged iron ring pull on a round plate near its other edge",
+  "file": "PlankDoor",
+  "into": "openings",
+  "size": 2.0,
+  "budget": 1500,
+  "textured": true,
+  "block": true,
+  "generator": "h3.1",
+  "faces": 20000
+}

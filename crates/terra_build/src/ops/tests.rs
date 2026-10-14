@@ -357,6 +357,7 @@ fn a_door_fits_a_hole_in_a_built_wall_and_holds_its_frame() {
             min: [2, 0, 0],
             max: [2, 3, 0],
             open: false,
+            ..Prop::default()
         };
         assert_eq!(base.act(&Op::FitProp(door), &cx), Err(Refusal::NoHole));
         for y in 0..5 {
@@ -415,6 +416,7 @@ fn a_door_fits_a_hole_in_a_built_wall_and_holds_its_frame() {
         min: [2, 0, 0],
         max: [2, 3, 0],
         open: false,
+        ..Prop::default()
     };
     assert_eq!(
         base.act(&Op::FitProp(door), &cx),
@@ -778,6 +780,7 @@ fn a_window_is_cut_into_a_built_wall_under_the_logs_that_span_it() {
         min: [3, 2, 0],
         max: [4, 3, 0],
         open: false,
+        ..Prop::default()
     };
     base.act(&Op::FitProp(prop), &cx).unwrap();
 }
@@ -1254,6 +1257,7 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
                                 min: [x, y, z],
                                 max: [x, high, z],
                                 open: false,
+                                ..Prop::default()
                             };
                             let free = prop.cubes().all(|at| base.cube(at).is_none());
                             if free && base.hole_for(&prop).is_some() {
@@ -1270,6 +1274,7 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
                     min: somewhere(rng).to_array(),
                     max: somewhere(rng).to_array(),
                     open: false,
+                    ..Prop::default()
                 }),
             }
         }
@@ -1645,15 +1650,18 @@ fn an_opening_is_planned_into_a_wall_and_a_door_fits_it_once_built() {
         min: [2, 0, 0],
         max: [2, 3, 0],
         open: false,
+        opens: [0, 0, 1],
+        ..Prop::default()
     };
     base.act(&Op::FitProp(door), &cx).unwrap();
-    // Shut, it stops a walker; open, it lets them through.
+    // Shut, it stops a walker in the doorway; open, it lets them in as far as where it
+    // stands open.
     let walker = Walker {
         radius: 0.2,
         ..Walker::default()
     };
-    let (from, to) = (Vec3::new(1.25, 0.0, -0.3), Vec3::new(1.25, 0.0, 0.3));
-    assert!(base.walk(from, to, &walker).z < 0.0);
+    let (from, to) = (Vec3::new(1.25, 0.0, -0.3), Vec3::new(1.25, 0.0, 0.05));
+    assert!(base.walk(from, to, &walker).z < 0.04);
     base.act(
         &Op::SetOpen {
             at: [2, 0, 0],
@@ -1698,6 +1706,7 @@ fn a_prop_gives_back_what_was_paid_for_it_whatever_it_costs_now() {
         min: [2, 0, 0],
         max: [2, 3, 0],
         open: false,
+        ..Prop::default()
     };
     let fitted = base.act(&Op::FitProp(door), &cx).unwrap();
     // Doors cost more now; taking this one out gives back what went in.

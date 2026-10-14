@@ -11,7 +11,8 @@ use super::inventory::{Cost, Items};
 use bevy::prelude::Resource;
 use serde::Deserialize;
 use std::sync::Arc;
-use terra_build::Panel;
+use terra_build::fitting::Hang;
+use terra_build::{Panel, PropKind};
 use terra_items::ItemKind;
 
 const FILE: &str = "builds.ron";
@@ -22,8 +23,7 @@ const FILE: &str = "builds.ron";
 #[derive(Resource)]
 pub struct Builds {
     parts: Vec<Part>,
-    window: Vec<(ItemKind, u32)>,
-    door: Vec<(ItemKind, u32)>,
+    fittings: Vec<Arc<Fitting>>,
     pub claim: ClaimRule,
 }
 
@@ -39,16 +39,20 @@ pub struct ClaimRule {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BuildsFile {
-    structure: StructureFile,
+    fittings: Vec<FittingFile>,
     claim: ClaimFile,
     parts: Vec<PartFile>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct StructureFile {
-    window: Vec<(String, u32)>,
-    door: Vec<(String, u32)>,
+struct FittingFile {
+    name: String,
+    model: String,
+    hang: Hang,
+    hinge: Hinge,
+    fits: Vec<(i32, i32)>,
+    cost: Vec<(String, u32)>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +78,7 @@ enum KindFile {
     Wall(Vec<(String, f32)>),
     Window(Vec<(String, f32, (f32, f32))>),
     Door,
+    Fit(Hang),
     Items(Vec<ItemFile>),
     Remove,
     Move,
@@ -131,6 +136,22 @@ impl Builds {
             seat: item.seat,
             holds: item.holds,
         };
+        let fittings: Vec<Arc<Fitting>> = file
+            .fittings
+            .into_iter()
+            .enumerate()
+            .map(|(index, each)| {
+                Arc::new(Fitting {
+                    kind: PropKind(index as u16),
+                    cost: cost(&each.cost),
+                    name: each.name,
+                    model: each.model,
+                    hang: each.hang,
+                    hinge: each.hinge,
+                    fits: each.fits,
+                })
+            })
+            .collect();
         let parts = file
             .parts
             .into_iter()
@@ -150,6 +171,13 @@ impl Builds {
                             .collect(),
                     ),
                     KindFile::Door => Kind::Door,
+                    KindFile::Fit(hang) => Kind::Fit(
+                        fittings
+                            .iter()
+                            .filter(|fitting| fitting.hang == hang)
+                            .cloned()
+                            .collect(),
+                    ),
                     KindFile::Items(items) => {
                         Kind::Items(items.into_iter().map(|each| Arc::new(item(each))).collect())
                     }
@@ -166,8 +194,7 @@ impl Builds {
             .collect();
         Self {
             parts,
-            window: cost(&file.structure.window),
-            door: cost(&file.structure.door),
+            fittings,
             claim: ClaimRule {
                 across_m: file.claim.across_m,
                 grow: file.claim.grow.iter().map(|each| cost(each)).collect(),
@@ -185,14 +212,14 @@ impl Builds {
         &self.parts[index]
     }
 
-    /// What a window costs, paid by `window_units`.
-    pub fn window(&self) -> &Cost {
-        &self.window
+    /// The doors and shutters fitted into openings, each a kind of prop by its place.
+    pub fn fittings(&self) -> &[Arc<Fitting>] {
+        &self.fittings
     }
 
-    /// What a door costs.
-    pub fn door(&self) -> &Cost {
-        &self.door
+    /// A kind of door or shutters.
+    pub fn fitting(&self, kind: PropKind) -> Option<&Arc<Fitting>> {
+        self.fittings.get(usize::from(kind.0))
     }
 
     /// Every item any part offers.
@@ -278,6 +305,48 @@ pub struct Item {
     /// The cells it stores, wide by high, if it is storage (D84, D141): a grid as the
     /// backpack is, which building in its claim draws on (`storage`).
     pub holds: Option<(u8, u8)>,
+}
+
+/// A door or shutters fitted into a hole in a wall (D192, D207): a kind of prop, its
+/// model in `assets/models/openings`, the holes it fits, and what a leaf of it costs, a
+/// pair costing two.
+#[derive(Debug, PartialEq)]
+pub struct Fitting {
+    pub name: String,
+    pub model: String,
+    pub hang: Hang,
+    /// The side its model's hinges are on, seen from its front.
+    pub hinge: Hinge,
+    /// The holes it fits, wide by high, in cubes.
+    pub fits: Vec<(i32, i32)>,
+    /// What a leaf of it costs.
+    pub cost: Vec<(ItemKind, u32)>,
+    /// The kind of prop it is, as the base keeps it.
+    pub kind: PropKind,
+}
+
+impl Fitting {
+    /// Whether it fits a hole of so many cubes wide and high.
+    pub fn fits(&self, wide: i32, high: i32) -> bool {
+        self.fits.contains(&(wide, high))
+    }
+
+    /// The holes it fits, in metres, for saying so.
+    pub fn sizes(&self) -> String {
+        let metres = |cubes: i32| cubes as f32 * terra_build::CELL_M;
+        self.fits
+            .iter()
+            .map(|&(wide, high)| format!("{} by {} m", metres(wide), metres(high)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// Which side of its model a door's or shutter's hinges are on, seen from its front.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub enum Hinge {
+    Left,
+    Right,
 }
 
 /// What something is to rest on.
@@ -367,9 +436,12 @@ pub enum Kind {
     /// A stretch of plain wall, so many metres long unless drawn, on the grid between
     /// cells. Windows and doors are cut in it with their own parts.
     Wall(Vec<(String, f32)>),
-    /// A window so many metres wide.
+    /// A window so many metres wide, cut into a wall.
     Window(Vec<(String, f32, Panel)>),
+    /// A doorway, cut into a wall.
     Door,
+    /// Doors or shutters, fitted into a hole that fits them once its wall is built.
+    Fit(Vec<Arc<Fitting>>),
     Items(Vec<Arc<Item>>),
     /// Take away an item, or close up a window or door.
     Remove,
@@ -444,6 +516,7 @@ impl Part {
             Kind::Room(shapes) => shapes.len(),
             Kind::Roof(shapes) => shapes.len(),
             Kind::Window(shapes) => shapes.len(),
+            Kind::Fit(fittings) => fittings.len(),
             Kind::Wall(lengths) => lengths.len(),
             Kind::Items(items) => items.len(),
             Kind::Flight(shapes) => shapes.len(),
@@ -464,6 +537,7 @@ impl Part {
             Kind::Room(shapes) => Some(&shapes[variant].name),
             Kind::Roof(shapes) => Some(&shapes[variant].name),
             Kind::Window(shapes) => Some(&shapes[variant].0),
+            Kind::Fit(fittings) => Some(&fittings[variant].name),
             Kind::Wall(lengths) => Some(&lengths[variant].0),
             Kind::Items(items) => Some(&items[variant].name),
             Kind::Flight(shapes) => Some(&shapes[variant].name),

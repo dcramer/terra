@@ -280,6 +280,8 @@ pub(super) fn aim(
             // A window or a door goes in an outside wall or an interior one alike.
             Kind::Window(shapes) => opening_on(shapes[builder.variant()].1, &mut run),
             Kind::Door => opening_on(DOOR_WIDTH_M, &mut run),
+            // A door or shutters go into a hole in any wall.
+            Kind::Fit(_) => opening_on(terra_build::CELL_M, &mut run),
             Kind::Wall(lengths) => {
                 // On the grid line nearest the floor the view is on, on its storey; else
                 // on the level of the storey chosen, through a roof seen from above
@@ -758,10 +760,33 @@ fn plan_work(
                 work(building, Doing::Lay, what.to_string(), opened)
             }
         }
+        // A door or shutters fitted into the hole aimed at, once its wall is built round it,
+        // if it is a size they fit (D201).
+        (Kind::Fit(fittings), Target::Wall { tile, .. }) => {
+            let fitting = &fittings[builder.variant().min(fittings.len() - 1)];
+            let layer = terra_build::wall_layer(tile.y);
+            let cube = (layer..layer + terra_build::STOREY_CUBES)
+                .map(|y| IVec3::new(tile.x, y, tile.z))
+                .find(|&at| {
+                    base.cube(at)
+                        .is_some_and(|cube| cube.fill == terra_build::Fill::Open)
+                })?;
+            if base.prop_in(cube).is_some() {
+                return None;
+            }
+            let prop = plans::prop_for(base, cube, fitting.kind, fitting.hang)?;
+            let (wide, high) = plans::hole_size(&prop);
+            if !fitting.fits(wide, high) {
+                return None;
+            }
+            let what = format!("fit {}", fitting.name.to_lowercase());
+            work(building, Doing::Fit, what, vec![Op::FitProp(prop)])
+        }
         (Kind::Remove, Target::Fitted { at }) => {
             let what = base
                 .prop(IVec3::from_array(at))
-                .map_or("door", |prop| crate::build::props::name(prop.kind));
+                .and_then(|prop| builds.fitting(prop.kind))
+                .map_or("door".to_string(), |fitting| fitting.name.to_lowercase());
             work(
                 building,
                 Doing::TakeApart,

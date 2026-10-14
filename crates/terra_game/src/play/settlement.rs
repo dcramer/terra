@@ -25,6 +25,7 @@ use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::prelude::*;
+use terra_build::fitting::Hang;
 use terra_build::{Base, CELL_M};
 
 /// An item from the catalogue the village has: what it is, where it stands from the
@@ -211,6 +212,39 @@ fn found(
                 building.name
             );
         }
+        // Its doors and shutters, of one kind each a house, by the village's seed: the
+        // doors mostly shut, the shutters mostly open.
+        let pick = |hang, size: (i32, i32), salt: u32| {
+            let kinds: Vec<_> = builds
+                .fittings()
+                .iter()
+                .filter(|fitting| fitting.hang == hang && fitting.fits(size.0, size.1))
+                .collect();
+            let roll = |extra: u32| {
+                let mut x = seed
+                    ^ building.name.len() as u32
+                    ^ (building.at[0].to_bits())
+                    ^ extra.wrapping_mul(0x9e37_79b9);
+                x ^= x >> 16;
+                x = x.wrapping_mul(0x7feb_352d);
+                x ^= x >> 15;
+                x
+            };
+            let fitting =
+                kinds.get(roll(u32::from(hang == Hang::Door)) as usize % kinds.len().max(1))?;
+            let open = match hang {
+                Hang::Door => roll(salt + 7) % 3 == 0,
+                Hang::Shutters => roll(salt + 11) % 4 != 0,
+            };
+            Some((fitting.kind, open))
+        };
+        let fitted = build::props::fit_all(&mut built, |hang, size, index| {
+            pick(hang, size, index as u32)
+        });
+        info!(
+            "Settlement: {}: {fitted} doors and shutters fitted.",
+            building.name
+        );
         // Its own name the base's, which stands where it does; this one holds the build.
         commands.spawn((Name::new(format!("{label}, as built")), Built(built)));
         let local = start.local(door);

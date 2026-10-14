@@ -5,9 +5,14 @@
 // stool. The list is a stand-in. What can be built, what it costs and how it is unlocked
 // are design questions nobody has answered (docs/building.md).
 //
-// structure  what fitting a window or a door into an opening costs, by items.ron's
-//            names, each. What walls, floors and roofs take is their kits' to say
-//            (assets/data/kits); floor and wall are no longer read.
+// fittings  the doors and shutters fitted into openings (D192, D207, D225), each a kind
+//            of prop by its place in the list: its name, its model in
+//            assets/models/openings, how it hangs (Door, a leaf or a pair swinging into
+//            the room; Shutters, folding back against the wall outside), the side its
+//            model's hinges are on seen from its front (Left, Right), the holes it fits,
+//            wide by high in cubes, and what a leaf costs, by items.ron's names, a pair
+//            costing two. What walls, floors and roofs take is their kits' to say
+//            (assets/data/kits).
 // claim      how far across a claim is at each step, what growing it to the next step
 //            costs (D94, D104), and how many cubes it may have planned and not yet built
 //            at each step (D193), a cabin's plan being about three hundred
@@ -46,12 +51,22 @@
 //                       to a part, as the dial shows
 //              Replace  the built cubes aimed at changed to the material in hand (D232)
 //              Carve    the built cubes aimed at carved out (D226)
-//              Door, Remove, Move   the hammer's other work
+//              Fit      doors or shutters (Door, Shutters) fitted into a hole that fits
+//                       them, its walls built round it: the fittings that hang so
+//              Door, Remove, Move   the hammer's other work: Door cuts a doorway
 (
-    structure: (
-        window: [("Wood", 1), ("Fibre", 1)],
-        door: [("Wood", 2)],
-    ),
+    fittings: [
+        (name: "Plank door", model: "PlankDoor", hang: Door, hinge: Left,
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 2)]),
+        (name: "Ledged and braced door", model: "LedgedDoor", hang: Door, hinge: Right,
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3)]),
+        (name: "Studded door", model: "StuddedDoor", hang: Door, hinge: Left,
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3), ("Iron", 1)]),
+        (name: "Board shutters", model: "BoardShutter", hang: Shutters, hinge: Right,
+            fits: [(1, 2), (2, 2), (3, 2), (1, 3), (2, 3), (3, 3)], cost: [("Wood", 1)]),
+        (name: "Louvred shutters", model: "LouvredShutter", hang: Shutters, hinge: Right,
+            fits: [(1, 2), (2, 2), (3, 2), (1, 3), (2, 3), (3, 3)], cost: [("Wood", 1), ("Fibre", 1)]),
+    ],
     claim: (
         across_m: [40.0, 80.0, 160.0],
         grow: [
@@ -116,7 +131,9 @@
             ("0.5 m", 0.5, (1.0, 1.0)),
             ("Tall, 1.5 m", 1.5, (0.5, 0.5)),
         ])),
-        (name: "Door", tab: Openings, kind: Door),
+        (name: "Doorway", tab: Openings, kind: Door),
+        (name: "Door", tab: Openings, kind: Fit(Door)),
+        (name: "Shutters", tab: Openings, kind: Fit(Shutters)),
         // Seen in the world but not yet buildable: a village's well and stall. How they
         // are learned is open (D68, D108).
         (name: "Well", tab: Hidden, kind: Items([
