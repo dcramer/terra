@@ -91,6 +91,9 @@ fn dress_mossy(
     });
 }
 
+/// The floor runs on past the forest's edge this far, as meadow with scrub, bracken and
+/// flowers at its edge, so the forest grades into the open rather than ending.
+pub(super) const MEADOW_M: f32 = 70.0;
 /// Trees, logs and rocks are filed for the floor in squares this wide.
 const FLOOR_SQUARE_M: f32 = 8.0;
 /// How far round a place the canopy over it is looked for: the widest crown.
@@ -249,8 +252,8 @@ impl Map {
     /// How far outside a path's edge a place is, the edge wandering and fraying.
     fn path_edge(&self, at: Vec2) -> f32 {
         self.path.edge_distance(at)
-            + (self.noise(at, 71.0, 1.9) - 0.5) * 0.8
-            + (self.noise(at, 73.0, 0.5) - 0.5) * 0.3
+            + (self.noise(at, 71.0, 2.6) - 0.5) * 1.3
+            + (self.noise(at, 73.0, 0.6) - 0.5) * 0.4
     }
 
     fn here(&self, at: Vec2) -> Here {
@@ -280,8 +283,8 @@ impl Map {
         let path = here.path;
         // The path's edge: no grass on it, short and broken grass in a fraying band beside
         // it, dirt, roots and leaves in that band.
-        let off_path = smoothstep(0.05, 1.1, path);
-        let fray = (1.0 - smoothstep(0.0, 1.0, path)) * smoothstep(-0.25, 0.1, path);
+        let off_path = smoothstep(0.05, 1.5, path);
+        let fray = (1.0 - smoothstep(0.0, 1.5, path)) * smoothstep(-0.35, 0.1, path);
         let patch = 0.6
             + 0.4
                 * self
@@ -294,13 +297,15 @@ impl Map {
         let wander = (self.noise(at, 53.0, 1.3) - 0.5) * 1.2;
         let foot = smoothstep(0.2, 0.85, here.bark + wander * 0.4);
         let beside = smoothstep(0.0, 0.55, here.lying + wander * 0.3);
-        let grass = off_path
-            * foot
-            * beside
-            * patch
-            // Thinner and drier on the needles under pines.
-            * (1.0 - 0.55 * smoothstep(0.2, 0.7, here.needles))
-            * (lit + (1.0 - lit) * 0.3 * tufts);
+        // How thick the light lets it grow, thinner and drier on the needles under pines.
+        let light_grows =
+            (1.0 - 0.55 * smoothstep(0.2, 0.7, here.needles)) * (lit + (1.0 - lit) * 0.3 * tufts);
+        // Thin grass grows in clumps, not as a stubble of lone blades spread evenly.
+        let clumps = smoothstep(0.35, 0.65, self.noise(at, 89.0, 1.6));
+        let clumped = clumps + (1.0 - clumps) * smoothstep(0.3, 0.75, light_grows);
+        let grass = off_path * foot * beside * patch * light_grows * clumped;
+        // Faint grass is none.
+        let grass = grass * smoothstep(0.04, 0.2, grass);
         let floor = 1.0 - lit;
         let needles = smoothstep(0.15, 0.6, here.needles) * off_path.max(0.5);
         let mossy = self.noise(at, 31.0, 3.5);
@@ -312,7 +317,7 @@ impl Map {
             .max(fray * (0.35 + 0.5 * self.noise(at, 79.0, 0.9)));
         let moss = (ring * (0.25 + 0.6 * mossy))
             .max(along * 0.5)
-            .max(floor * smoothstep(0.55, 0.85, mossy * 0.7 + here.wet * 0.4) * 0.85)
+            .max(floor * smoothstep(0.5, 0.8, mossy * 0.7 + here.wet * 0.4) * 0.9)
             * off_path.max(0.3);
         Growing {
             grass,
@@ -483,7 +488,7 @@ const PLACEMENTS: [Placement; 10] = [
         tries: 7000,
         clump: (5, 11),
         spread_m: 0.8,
-        scale: (0.3, 0.55),
+        scale: (0.45, 0.8),
         seen_m: 40.0,
         shadow_m: 0.0,
         drift_m: 11.0,
@@ -513,10 +518,10 @@ const PLACEMENTS: [Placement; 10] = [
     Placement {
         kind: Under::Branches,
         name: "Branches",
-        tries: 3000,
+        tries: 6000,
         clump: (1, 2),
         spread_m: 1.2,
-        scale: (0.7, 1.3),
+        scale: (0.5, 1.2),
         seen_m: 45.0,
         shadow_m: 0.0,
         drift_m: 10.0,
@@ -547,7 +552,7 @@ impl Under {
         let broadleaf = 1.0 - smoothstep(0.2, 0.6, here.needles);
         match self {
             // Half shade: the edges of clearings, gaps, the paths' sides.
-            Under::Bracken => between(0.2, 1.0, here.light) * (0.4 + 0.6 * broadleaf),
+            Under::Bracken => between(0.2, 1.2, here.light) * (0.4 + 0.6 * broadleaf),
             // The shade, the damp, round the trunks and along the logs.
             Under::Fern | Under::Frond => {
                 (1.0 - smoothstep(0.35, 0.8, here.light))
@@ -570,7 +575,7 @@ impl Under {
             // Fallen from the trees, round their feet and by the logs.
             Under::Branches => {
                 (1.0 - smoothstep(0.4, 0.8, here.light))
-                    * near(here.bark, 2.0, 6.0).max(near(here.lying, 1.0, 3.0))
+                    * (0.4 + 0.6 * near(here.bark, 2.0, 6.0).max(near(here.lying, 1.0, 3.0)))
             }
             // In the sun, and along the paths most.
             Under::Flowers => {
@@ -776,7 +781,7 @@ impl Lay<'_, '_, '_> {
                     Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
                 }
                 Under::Hazel => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.6, 0.45));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.52, 0.32));
                     let def = terra_world::grown::BushDef {
                         leaves: "hazel".into(),
                         tint: (1.0, 1.0, 1.0),
@@ -803,12 +808,12 @@ impl Lay<'_, '_, '_> {
                     }
                     // Young oak scrub, darker than the oak spray's own lime.
                     let mut build = grow_bush(&mut dice);
-                    let tint = variant_tint(&mut dice, Vec3::new(0.62, 0.7, 0.55));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.58, 0.4));
                     tint_build(&mut build.colours, tint);
                     Drawn::One(self.meshes.add(build.mesh()), self.leaves.clone())
                 }
                 Under::Sapling => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.85, 0.92, 0.8));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.6, 0.68, 0.48));
                     let (wood, crown) = sapling(&mut dice, cards, n, tint);
                     let wood = self.meshes.add(wood.mesh(true));
                     Drawn::Two([
@@ -1144,8 +1149,9 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         let drift = Noise::new(lay.seed.derive(placement.name).index(placement.kind as u64));
         let (bark_m, lying_m, path_m) = placement.kind.clear_of();
         let mut count = 0;
+        let mut closest = Vec2::splat(f32::MAX);
         for _ in 0..placement.tries {
-            let at = disc(&mut dice, 3.0, FOREST_M + 10.0);
+            let at = disc(&mut dice, 3.0, FOREST_M + MEADOW_M * 0.6);
             let drifts = smoothstep(
                 0.38,
                 0.62,
@@ -1177,9 +1183,15 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 let drawn = variants[dice.below(variants.len() as u32) as usize].clone();
                 lay.plant(placement, &drawn, place);
                 count += 1;
+                if p.length() < closest.length() {
+                    closest = p;
+                }
             }
         }
-        counts.push(format!("{count} {:?}", placement.kind));
+        counts.push(format!(
+            "{count} {:?} (the nearest at {:.1},{:.1})",
+            placement.kind, closest.x, closest.y
+        ));
     }
     info!("lush: undergrowth: {}.", counts.join(", "));
     map

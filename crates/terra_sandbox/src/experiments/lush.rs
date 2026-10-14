@@ -506,7 +506,7 @@ impl CoverSource for LushCover {
     }
 
     fn reaches(&self, middle: Vec2, half: f32) -> bool {
-        middle.length() < FOREST_M + 30.0 + half
+        middle.length() < FOREST_M + floor::MEADOW_M + half
     }
 }
 
