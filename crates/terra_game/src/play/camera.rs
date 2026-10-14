@@ -187,13 +187,37 @@ pub(super) fn follow(
     builds: Query<&build::Built>,
     planet: Res<Planet>,
     options: Res<Options>,
+    obstacles: Option<Res<super::Obstacles>>,
     mut camera: Single<&mut Transform, With<MainCamera>>,
 ) {
     // A fixed camera, for taking pictures.
     if let Some((from, toward)) = options.vantage {
-        let from = start.transform_point(from);
-        **camera = Transform::from_translation(from)
-            .looking_at(start.transform_point(toward), from.normalize());
+        // Heights above the start, or with --vantage-ground above the ground there.
+        let place = |at: Vec3| {
+            if options.vantage_ground {
+                let ground = planet.ground_at(start.transform_point(Vec3::new(at.x, 0.0, at.z)));
+                ground + ground.normalize() * at.y
+            } else {
+                start.transform_point(at)
+            }
+        };
+        let toward = place(toward);
+        let mut from = place(from);
+        // Standing where a walker could, out of any trunk or rock.
+        if options.vantage_ground
+            && let Some(obstacles) = &obstacles
+        {
+            let up = from.normalize();
+            for (at, radius) in obstacles.near(from, 0.0) {
+                let off = from - at;
+                let level = off - up * off.dot(up);
+                let gap = radius + 0.3 - level.length();
+                if gap > 0.0 {
+                    from += level.normalize_or(up.any_orthonormal_vector()) * gap;
+                }
+            }
+        }
+        **camera = Transform::from_translation(from).looking_at(toward, from.normalize());
         return;
     }
     let (player, view) = *player;

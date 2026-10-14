@@ -26,6 +26,9 @@ const VIEWS: [string, string][] = [
 /// Frames each view is held for before it is pictured: grass is built round the camera as
 /// it arrives, and levels of detail fade in.
 const HOLD = 200;
+/// How many places the canopy is looked up through, and the frames each is held.
+const SKY_PLACES = 12;
+const SKY_HOLD = 60;
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
@@ -68,12 +71,55 @@ for (const hour of hours) {
     tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
   });
   console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  if (hour === hours[0]) tiles.push(...canopy(hour));
+}
+
+/// How closed the canopy is: from eye height, 1.7 m over the ground, looking straight up at
+/// places spread through the forest, the share of the picture that is sky, told by its
+/// colour. Under a closed canopy little sky shows; the forest's aim is under 15% (D244).
+/// Places on a spiral from 40 to 170 m out, the same every run; some fall on paths and in
+/// glades, as a walker's would.
+function canopy(hour: string): string[] {
+  const places = Array.from({ length: SKY_PLACES }, (_, k) => {
+    const distance = 40 + (130 * k) / (SKY_PLACES - 1);
+    const angle = k * 2.39996;
+    return [Math.round(Math.cos(angle) * distance), Math.round(Math.sin(angle) * distance)];
+  });
+  const vantages = places.flatMap(([x, z], index) => ["--vantage", `${x},1.7,${z},${x + 0.02},40,${z}@${index * SKY_HOLD}`]);
+  const frames = places.map((_, index) => index * SKY_HOLD + SKY_HOLD - 10);
+  const prefix = resolve(out, `sky-${hour}`);
+  const run = spawnSync(
+    resolve(ROOT, "target/release/terra_sandbox"),
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, "--vantage-ground", ...vantages, "--shots", `${prefix}@${frames.join(",")}`],
+    { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
+  );
+  if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
+    console.error(`${run.stdout}${run.stderr}`.split("\n").slice(-20).join("\n"));
+    console.error("vantage: the canopy run failed");
+    process.exit(1);
+  }
+  const shares = frames.map((frame, index) => {
+    const file = resolve(out, `sky-${index}.png`);
+    renameSync(`${prefix}-${String(frame).padStart(5, "0")}.png`, file);
+    // Sky is bright and blue, or a white cloud; leaves lit through are green over blue, bark
+    // and shade dark.
+    const sky = "(b>g && b>r*1.1 && (r+g+b)>0.75) || (r>0.75 && g>0.75 && b>0.75)";
+    const measured = spawnSync("magick", [file, "-resize", "480x270!", "-fx", `${sky} ? 1 : 0`, "-write", file.replace(/\.png$/, "-mask.png"), "-format", "%[fx:mean]", "info:"], { encoding: "utf8" });
+    return Number(measured.stdout) * 100;
+  });
+  const sorted = [...shares].sort((a, b) => a - b);
+  const mean = shares.reduce((sum, s) => sum + s, 0) / shares.length;
+  const median = sorted[Math.floor(sorted.length / 2)];
+  console.log(`vantage: sky looking up at ${hour}:00, at ${places.map(([x, z], k) => `${x},${z} ${shares[k].toFixed(0)}%`).join(", ")}`);
+  console.log(`vantage: sky looking up from eye height: mean ${mean.toFixed(1)}%, median ${median.toFixed(1)}%`);
+  // The view up from the middle place, on the sheet.
+  return ["-label", `up, ${hour}:00, sky ${mean.toFixed(0)}% (median ${median.toFixed(0)}%)`, resolve(out, `sky-${Math.floor(SKY_PLACES / 2)}.png`)];
 }
 
 const sheet = resolve(out, "sheet.jpg");
 const montage = spawnSync(
   "magick",
-  ["montage", ...tiles, "-tile", `${VIEWS.length}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet],
+  ["montage", ...tiles, "-tile", `${VIEWS.length + 1}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet],
   { encoding: "utf8" },
 );
 if (montage.status !== 0 || !existsSync(sheet)) {

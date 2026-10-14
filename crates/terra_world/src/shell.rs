@@ -154,7 +154,9 @@ usage: terra_sandbox [options]
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
                         one; repeatable, each from its frame on, counted as --press
-                        counts them, to picture several views in one run";
+                        counts them, to picture several views in one run
+  --vantage-ground      every --vantage's heights are above the ground under each
+                        point, not above the start, as on rolling ground";
 
 /// Engine messages that say what is normal, kept out of the log so what is left is worth
 /// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.
@@ -232,6 +234,9 @@ pub struct Options {
     /// Every fixed camera a scripted run was given, with the frame it moves there on,
     /// counted as `--press` counts them; one for frame 0 is where it starts.
     pub vantages: Vec<(u32, (Vec3, Vec3))>,
+    /// The fixed cameras' heights are above the ground under each point rather than above
+    /// the start, so a view at eye height stays at eye height on rolling ground.
+    pub vantage_ground: bool,
     /// Things to start carrying, by name, for testing.
     pub gives: Vec<(String, u32)>,
     /// Where the play experiment keeps its saved game, if not the usual place.
@@ -377,6 +382,7 @@ impl Options {
             presses: Vec::new(),
             vantage: None,
             vantages: Vec::new(),
+            vantage_ground: false,
             gives: Vec::new(),
             save: None,
             trace: None,
@@ -503,6 +509,7 @@ impl Options {
                 "--kit-sheet" => options.kit_sheet = true,
                 "--sheet-rows" => options.sheet_rows.push(value("--sheet-rows")?),
                 "--village" => options.village = true,
+                "--vantage-ground" => options.vantage_ground = true,
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),
