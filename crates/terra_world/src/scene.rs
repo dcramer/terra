@@ -287,7 +287,7 @@ fn style_camera(
             global: ColorGradingGlobal {
                 // Neutral keeps saturation where AgX drained it; a little less, toward the
                 // muted greens of the forests we look to.
-                post_saturation: 0.9,
+                post_saturation: 0.82,
                 ..default()
             },
             // No extra contrast in the shadows, which crushed the shade under a canopy to
