@@ -32,6 +32,15 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 A small set of body plans (a four-legged runner, a flier, a crawler, a big lumbering thing, a swarm), each varied by size, look, behaviour and rank by the world's theme (D59). A new world brings new kinds without new code. Players learn each kind by meeting it, as with factions (D95): no bestiary is filled in for you (D92).
 
+## Designed kinds
+
+Monsters the developers have designed, each its own kind (D250). Their models are in `assets/models/creatures`, made from concepts in `art/props`; none is rigged, animated or in play yet.
+
+| Kind | What it is | Where |
+|---|---|---|
+| Worman | A giant earthworm standing as tall as a person, disguised as a traveller: a blue cap, round dark glasses, red lips, two thin arms and a knife. It attacks anyone who comes close | Wherever travellers go |
+| Drillhog | A groundhog the size of a boar, with drills growing from its back and head, which it digs and attacks with | Dungeons and places underground |
+
 ## What it asks of the engine
 
 Technical, mine. Creatures are the most expensive thing in the design: they walk round, diggable ground, find their way, animate and act. So creatures are simulated by how near the nearest player is (D145): every tick close by, thinking less often further out, and waiting where they are beyond; a region's animals and a pooling place's strength are a few numbers when nobody is near; and small behaviours combine, rather than one large brain per creature.
