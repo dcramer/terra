@@ -226,8 +226,14 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     let streaked = world - up * dot(world, up) * 0.7;
     let fine = wander(streaked * 4.1 + 13.0) * 0.6 + wander(world * 11.0 + 7.0) * 0.4;
     let wet = 0.85 * facing_up * facing_up + 0.8 * low * (0.3 + 0.7 * damp_side) + 0.6 * crevice;
-    let moss = smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share;
+    // On what faces up, a root flare's broad top, in cushions with bark between, not a coat.
+    let cushions = mix(1.0, smoothstep(0.35, 0.65, wander(world * 1.6 + 3.0) + 0.4 * (fine - 0.5)), facing_up);
+    let moss = smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share * cushions;
     colour = mix(colour, vec3<f32>(0.1, 0.13, 0.04) * (0.75 + 0.5 * wander(world * 6.0)), moss * 0.85);
+    // Where the foot meets the floor, soil and leaf mould over the bark between the moss, so
+    // the tree goes down into the ground rather than standing on it.
+    let soiled = low * facing_up * (1.0 - moss) * smoothstep(0.3, 0.7, wander(world * 2.3 + 5.0) + 0.3 * (fine - 0.5) + 0.2);
+    colour = mix(colour, vec3<f32>(0.075, 0.052, 0.033), soiled * 0.75);
     colour *= mix(1.0, 0.72, low * (1.0 - moss));
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 1.0, moss);

@@ -274,6 +274,8 @@ impl Crowns {
     fn over(&self, at: Vec2) -> Over {
         let (i, j) = square(at, FLOOR_SQUARE_M);
         let (mut light, mut needles_miss, mut bark) = (1.0f32, 1.0f32, 8.0f32);
+        // Under a broadleaf crown its own leaves fall over the needles.
+        let mut leaves_miss = 1.0f32;
         for di in -CROWN_REACH..=CROWN_REACH {
             for dj in -CROWN_REACH..=CROWN_REACH {
                 for stand in self.filed.get(&(i + di, j + dj)).into_iter().flatten() {
@@ -282,15 +284,17 @@ impl Crowns {
                     if stand.conifer {
                         // Needles fall a little past the crown.
                         let d = stand.crown_at.distance(at);
-                        let fall = 1.0 - smoothstep(0.6 * stand.crown_m, 1.5 * stand.crown_m, d);
-                        needles_miss *= 1.0 - fall * 0.9;
+                        let fall = 1.0 - smoothstep(0.8 * stand.crown_m, 2.4 * stand.crown_m, d);
+                        needles_miss *= 1.0 - fall * 0.95;
+                    } else {
+                        leaves_miss *= 1.0 - stand.under(at) * 0.9;
                     }
                 }
             }
         }
         Over {
             shade: 1.0 - light,
-            needles: 1.0 - needles_miss,
+            needles: (1.0 - needles_miss) * (0.25 + 0.75 * leaves_miss),
             bark,
         }
     }
@@ -395,16 +399,17 @@ impl Map {
                 * self
                     .noise
                     .fbm(Vec3::new(at.x, 0.0, at.y) / 9.0, 2, 2.0, 0.5);
-        // In the shade grass grows only where a fleck of light falls, in tufts.
-        let tufts = smoothstep(0.55, 0.8, self.noise(at, 23.0, 2.6));
+        // In the shade grass grows mostly where a fleck of light falls, in tufts, thinning out
+        // gradually into the litter rather than ending.
+        let tufts = smoothstep(0.45, 0.85, self.noise(at, 23.0, 2.6));
         let lit = smoothstep(0.22, 0.72, here.light);
         // Pushed back from the bark, the logs and the rocks.
         let wander = (self.noise(at, 53.0, 1.3) - 0.5) * 1.2;
         let foot = smoothstep(0.2, 0.85, here.bark + wander * 0.4);
         let beside = smoothstep(0.0, 0.55, here.lying + wander * 0.3);
         // How thick the light lets it grow, thinner and drier on the needles under pines.
-        let light_grows =
-            (1.0 - 0.55 * smoothstep(0.2, 0.7, here.needles)) * (lit + (1.0 - lit) * 0.3 * tufts);
+        let light_grows = (1.0 - 0.55 * smoothstep(0.2, 0.7, here.needles))
+            * (lit + (1.0 - lit) * (0.06 + 0.3 * tufts));
         // Thin grass grows in clumps, not as a stubble of lone blades spread evenly.
         let clumps = smoothstep(0.35, 0.65, self.noise(at, 89.0, 1.6));
         let clumped = clumps + (1.0 - clumps) * smoothstep(0.3, 0.75, light_grows);
@@ -412,7 +417,10 @@ impl Map {
         // Faint grass is none.
         let grass = grass * smoothstep(0.04, 0.2, grass);
         let floor = 1.0 - lit;
-        let needles = smoothstep(0.15, 0.6, here.needles) * off_path.max(0.5);
+        let canopied = floor.max(0.75 * smoothstep(0.04, 0.3, 1.0 - here.light));
+        let on_floor = smoothstep(-0.3, 0.3, path);
+        // Needles carpet a conifer stand, between its trees as well as under them.
+        let needles = smoothstep(0.1, 0.5, here.needles) * off_path.max(0.4);
         let mossy = self.noise(at, 31.0, 3.5);
         // Duff and roots round a tree's foot, its edge wandering; along logs and rocks.
         let ring = 1.0 - smoothstep(0.0, 1.5, here.bark + wander);
@@ -428,14 +436,17 @@ impl Map {
         let broken = smoothstep(0.4, 0.7, self.noise(at, 37.0, 0.9));
         let moss = (ring * broken * (0.2 + 0.6 * mossy))
             .max(along * 0.5)
-            .max(floor * smoothstep(0.66, 0.9, mossy * 0.7 + here.wet * 0.4) * 0.7)
+            .max(floor * smoothstep(0.6, 0.88, mossy * 0.7 + here.wet * 0.4) * 0.75)
             * off_path.max(0.3);
         Growing {
             grass,
             // Grass in the shade is a deeper green; in the open it dries in patches.
             lush: self.noise(at, 7.0, 20.0).max(floor * 0.8),
             path: path < 0.0,
-            litter: (floor * (1.0 - needles)).max(fray * 0.7) * smoothstep(-0.3, 0.3, path),
+            // Fallen leaves cover the floor wherever trees stand near, not only in their deep shade:
+            // off the paths no forest floor is bare; on them a few drift into the hollows.
+            litter: (canopied * (1.0 - needles)).max(fray * 0.7) * on_floor
+                + (1.0 - on_floor) * 0.45 * smoothstep(0.45, 0.8, self.noise(at, 97.0, 1.7)),
             moss,
             needles,
             roots,
@@ -2032,80 +2043,96 @@ fn stump(dice: &mut Rng, sawn: bool) -> Wood {
     Wood { bark, end, radius }
 }
 
-/// A few dead branches fallen together: crooked sticks lying across each other, forked
-/// some of them, grey with weather.
+/// Dead branches fallen from the canopy: one to three limbs, each lying along the floor sunk a
+/// little into the litter and bending as it lies, thinning to its broken tip, forked into side
+/// branches, some reaching down to the ground and propping the limb's far end up off it,
+/// others sticking up and broken short; in damp brown bark, darker below.
 fn branches(dice: &mut Rng) -> Build {
     let mut build = Build::default();
-    let heap = dice.range(0.3, 0.8);
-    for k in 0..5 + dice.below(7) {
+    for _ in 0..1 + dice.below(3) {
         let angle = dice.range(0.0, TAU);
         let along = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
         let across = along.cross(Vec3::Y);
-        let length = dice.range(0.8, 2.6);
-        let radius = dice.range(0.03, 0.08);
-        let middle = Vec3::new(
-            dice.range(-heap, heap),
-            radius + k as f32 * 0.025,
-            dice.range(-heap, heap),
-        );
-        let lift = dice.range(-0.05, 0.2);
-        let points: Vec<Vec3> = (0..=4)
-            .map(|i| {
-                let t = i as f32 / 4.0;
-                middle
-                    + along * (t - 0.5) * length
-                    + Vec3::Y * lift * t
-                    + across * dice.range(-0.06, 0.06)
-            })
-            .collect();
-        let radii: Vec<f32> = (0..=4)
-            .map(|i| radius * (1.0 - 0.6 * i as f32 / 4.0))
-            .collect();
+        let length = dice.range(1.2, 3.2);
+        let radius = dice.range(0.035, 0.09);
+        let start =
+            Vec3::new(dice.range(-0.4, 0.4), 0.0, dice.range(-0.4, 0.4)) - along * length * 0.5;
+        // Where the forks prop it, its thin end stands off the ground.
+        let propped = if dice.unit() < 0.6 {
+            dice.range(0.05, 0.3)
+        } else {
+            0.0
+        };
+        let bend = dice.range(-0.25, 0.25);
+        let kink = dice.range(-0.08, 0.08);
+        let radius_at = |t: f32| radius * (1.0 - 0.65 * t);
+        let at = |t: f32| {
+            start
+                + along * t * length
+                + across * (bend * libm::sinf(t * PI) + kink * libm::sinf(t * 3.0 * PI))
+                // Sunk a third of its thickness into the litter where it lies on it.
+                + Vec3::Y * (radius_at(t) * 0.65 + propped * t * t)
+        };
+        let points: Vec<Vec3> = (0..=6).map(|i| at(i as f32 / 6.0)).collect();
+        let radii: Vec<f32> = (0..=6).map(|i| radius_at(i as f32 / 6.0)).collect();
         tube(
             &mut build,
             &Limb {
-                points: points.clone(),
+                points,
                 radii,
                 depth: 1,
                 pointed: false,
             },
-            5,
+            7,
             1.0e4,
             BARK_M * 0.5,
         );
-        if dice.unit() < 0.6 {
-            let from = points[1 + dice.below(2) as usize];
-            let way = (along * dice.range(0.4, 0.9) + across * dice.range(-0.8, 0.8)).normalize();
-            let twig = dice.range(0.3, 0.8);
+        for _ in 0..2 + dice.below(4) {
+            let t = dice.range(0.25, 0.9);
+            let from = at(t);
+            let side = if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+            let turn = dice.range(0.45, 1.1);
+            let way = along * libm::cosf(turn) + across * side * libm::sinf(turn);
+            let fork = length * dice.range(0.15, 0.4);
+            let r = radius_at(t) * dice.range(0.45, 0.65);
+            // Down to the ground where it props the limb up, else up off it, broken short.
+            let reaching = from.y > 0.12 && dice.unit() < 0.7;
+            let end_y = if reaching {
+                r * 0.6
+            } else {
+                from.y + fork * dice.range(0.05, 0.35)
+            };
+            let end = from + way * fork;
+            let end = Vec3::new(end.x, end_y, end.z);
+            let middle = from.lerp(end, 0.5)
+                + Vec3::Y * dice.range(0.0, 0.06)
+                + across * dice.range(-0.04, 0.04);
             tube(
                 &mut build,
                 &Limb {
-                    points: vec![
-                        from,
-                        from + way * twig * 0.5 + Vec3::Y * 0.02,
-                        from + way * twig,
-                    ],
-                    radii: vec![radius * 0.5, radius * 0.35, radius * 0.2],
+                    points: vec![from, middle, end],
+                    radii: vec![r, r * 0.75, r * 0.45],
                     depth: 1,
                     pointed: false,
                 },
-                4,
+                5,
                 1.0e4,
                 BARK_M * 0.5,
             );
         }
     }
+    // Brown, as damp dead bark is, rather than the living trunks' grey.
     for colour in &mut build.colours {
-        colour[0] *= 0.82;
-        colour[1] *= 0.78;
-        colour[2] *= 0.72;
-        colour[3] = 0.45;
+        colour[0] *= 0.78;
+        colour[1] *= 0.64;
+        colour[2] *= 0.5;
+        colour[3] = 0.4;
     }
     build
 }
 
 /// Twig litter: a dozen to thirty thin dead twigs scattered over a couple of metres, lying
-/// every way, some crooked, as the canopy drops them in every wind; grey with weather.
+/// every way, some crooked, as the canopy drops them in every wind; brown with damp.
 fn twigs(dice: &mut Rng) -> Build {
     let mut build = Build::default();
     for _ in 0..12 + dice.below(19) {
@@ -2138,9 +2165,9 @@ fn twigs(dice: &mut Rng) -> Build {
         );
     }
     for colour in &mut build.colours {
-        colour[0] *= 0.8;
-        colour[1] *= 0.76;
-        colour[2] *= 0.7;
+        colour[0] *= 0.76;
+        colour[1] *= 0.64;
+        colour[2] *= 0.52;
         colour[3] = 0.45;
     }
     build

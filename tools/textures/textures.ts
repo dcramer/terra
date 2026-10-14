@@ -5,7 +5,7 @@
 //   node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
 //   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px]
 //                                            [--strength s] [--roughness r]
-//   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
+//   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k] [--height]
 //   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n]
 //   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m]
 //                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
@@ -224,7 +224,7 @@ async function fetchAmbientCg(id: string, name: string, size: string) {
   }
 }
 
-function stack(name: string, materials: string[], size: number, occlusion: number) {
+function stack(name: string, materials: string[], size: number, occlusion: number, height: boolean) {
   const out = join(ROOT, "assets", "materials", name);
   mkdirSync(out, { recursive: true });
   const dir = (m: string) => join(ROOT, "assets", "materials", m);
@@ -237,8 +237,23 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
     "-compose", "Multiply", "-composite", ")",
   ]);
   execFileSync("convert", [...colours, "-append", "-quality", "92", join(out, "color.jpg")]);
-  const normals = materials.flatMap((m) => ["(", join(dir(m), "normal.jpg"), ...square, ")"]);
-  execFileSync("convert", [...normals, "-append", "-quality", "92", join(out, "normal.jpg")]);
+  // With --height, each layer's height, stretched to the full range, in place of its normal's
+  // blue: the shader works the normal's z out from its x and y, as a two-channel normal map
+  // leaves room for, and blends the layers by height. A layer with no height map takes one
+  // from its colour's light and dark. Its broad swells are taken out (the height less a blur
+  // of it), so one layer gives way to another by its leaves, stones and clods, not in blobs.
+  const highPass = ["(", "+clone", "-blur", "0x40", ")", "-compose", "Mathematics", "-define", "compose:args=0,-1,1,0.5", "-composite", "-auto-level"];
+  const heightOf = (m: string) =>
+    existsSync(join(dir(m), "height.jpg"))
+      ? ["(", join(dir(m), "height.jpg"), ...square, "-colorspace", "gray", ...highPass, ")"]
+      : ["(", join(dir(m), "color.jpg"), ...square, "-colorspace", "gray", "-blur", "0x2", ...highPass, ")"];
+  const normals = materials.flatMap((m) =>
+    height
+      ? ["(", "(", join(dir(m), "normal.jpg"), ...square, "-separate", "-delete", "2", ")", ...heightOf(m), "-combine", ")"]
+      : ["(", join(dir(m), "normal.jpg"), ...square, ")"],
+  );
+  // No chroma subsampling, so the channels stay apart.
+  execFileSync("convert", [...normals, "-append", "-quality", "92", "-sampling-factor", "1x1", join(out, "normal.jpg")]);
   const layers = materials.map((m) => `\`${m}\` (${credited(m)?.replace(/\.$/, "") ?? "uncredited"})`);
   record(name, `a stack, in this order, ${size} pixels each, of ${layers.join("; ")}.`);
   console.log(`${name}: ${materials.length} layers in ${out}`);
@@ -864,6 +879,7 @@ async function main() {
       roughness: { type: "string", default: "0.85" },
       name: { type: "string" },
       occlusion: { type: "string", default: "0.6" },
+      height: { type: "boolean", default: false },
       columns: { type: "string", default: "4" },
       cut: { type: "string", default: "0.45" },
       around: { type: "string", default: "1" },
@@ -883,7 +899,7 @@ async function main() {
   } else if (step === "fetch" && name) {
     await fetchMaterial(name, values.name ?? name, values.size === "2048" ? "2k" : values.size!);
   } else if (step === "stack" && name && rest.length) {
-    stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion));
+    stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion), values.height!);
   } else if (step === "cards" && name && rest.length) {
     await cards(name, rest, Number(values.size), Number(values.columns), Number(values.cut));
   } else if (step === "blend" && name && rest.length === 2) {
@@ -905,7 +921,7 @@ async function main() {
     console.log(`usage:
   node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
-  node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
+  node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k] [--height]
   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n] [--cut a]
   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
   node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f]`);
