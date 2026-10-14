@@ -1,0 +1,44 @@
+{
+  "scan": "LeafSet012",
+  "form": "litter",
+  "leaves": 1,
+  "length": [
+    0.26,
+    0.36
+  ],
+  "shoots": 1,
+  "twig": [
+    0.32,
+    0.24,
+    0.17
+  ],
+  "thickness": 0.01,
+  "tone": 0.3,
+  "young": 0.15,
+  "old": 0.4,
+  "underside": 0.05,
+  "saturation": 0.85,
+  "value": 0.8,
+  "needles": {
+    "count": 220,
+    "colour": [
+      0.48,
+      0.31,
+      0.19
+    ],
+    "length": [
+      0.12,
+      0.2
+    ]
+  },
+  "cones": {
+    "count": 1,
+    "colour": [
+      0.42,
+      0.28,
+      0.17
+    ],
+    "length": 0.24
+  },
+  "seed": 61
+}

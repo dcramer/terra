@@ -24,8 +24,10 @@ export type Recipe = {
   /** ambientCG's id of the scan the leaves come from, such as LeafSet024. */
   scan: string;
   /** `spray`: leaves one by one along a twig and its shoots, as hazel and oak bear them;
-   * `compound`: leaf stalks along a cane, each ending in three or five leaflets, as bramble. */
-  form: "spray" | "compound";
+   * `compound`: leaf stalks along a cane, each ending in three or five leaflets, as bramble;
+   * `litter`: fallen leaves lying flat in a loose heap, with fallen needles, twigs (`shoots`
+   * of them) and cones among them, for the forest floor. */
+  form: "spray" | "compound" | "litter";
   /** How many leaves, or for `compound`, leaf stalks. */
   leaves: number;
   /** A leaf's length, stalk to tip, as a share of the card: least and most. */
@@ -49,6 +51,9 @@ export type Recipe = {
   hue?: [number, number, number];
   /** Berries in bunches along the twig, if it bears them. */
   berries?: { count: number; colour: [number, number, number]; radius: number };
+  /** For `litter`: fallen needles, how many and their colour, and pine cones. */
+  needles?: { count: number; colour: [number, number, number]; length: [number, number] };
+  cones?: { count: number; colour: [number, number, number]; length: number };
   seed: number;
 };
 
@@ -418,6 +423,10 @@ export function compose(scan: Scan, recipe: Recipe, size: number): Composed {
   const room = Math.round(big * 0.2);
   const canvas = new Canvas(big + 2 * room);
   const roll = dice(recipe.seed);
+  if (recipe.form === "litter") {
+    floor(canvas, scan, label, leaves, recipe, roll, big, room);
+    return halve(fit(canvas, big), size);
+  }
   // The twig enters at one side low down and runs up across the card, its shoots off it.
   const start: [number, number] = [room + big * 0.06, room + big * roll.range(0.6, 0.78)];
   const heading = -roll.range(0.2, 0.45);
@@ -569,4 +578,126 @@ function halve(canvas: Canvas, size: number): Composed {
     }
   }
   return { size, rgba, normal };
+}
+
+/** A forest floor's litter, `litter` recipes: fallen leaves lying flat in a loose heap, each
+ * at a turn of its own, a little curled (turned about its midrib) and tilted, browned from the
+ * scan's green by the recipe's grading, some paler and yellower, some dark and wet; fallen
+ * needles strewn under and over them; small twigs; and pine cones. All within the middle of
+ * the card, thinning out toward its edge, so a card laid on the ground has no edge. */
+function floor(canvas: Canvas, scan: Scan, label: Int32Array, leaves: ScanLeaf[], recipe: Recipe, roll: ReturnType<typeof dice>, big: number, room: number) {
+  const middle: [number, number] = [room + big / 2, room + big / 2];
+  // A place in the heap: Gaussian round its middle, kept within the card.
+  const place = (spread: number): [number, number] => {
+    for (;;) {
+      const r = Math.sqrt(-2 * Math.log(Math.max(1e-4, roll.unit()))) * spread * big;
+      const a = roll.range(0, Math.PI * 2);
+      if (r < big * 0.42) return [middle[0] + Math.cos(a) * r, middle[1] + Math.sin(a) * r];
+    }
+  };
+  const strew = (count: number) => {
+    const needles = recipe.needles;
+    if (!needles) return;
+    for (let k = 0; k < count; k++) {
+      const at = place(0.2);
+      const angle = roll.range(0, Math.PI * 2);
+      const length = big * roll.range(needles.length[0], needles.length[1]);
+      const tone = roll.range(0.7, 1.2);
+      const colour = needles.colour.map((c) => Math.min(1, c * tone)) as [number, number, number];
+      drawTwig(canvas, curve(at, angle, length, roll.range(-0.25, 0.25), 3), [big * 0.0028, big * 0.0018], colour);
+    }
+  };
+  strew(Math.round((recipe.needles?.count ?? 0) * 0.6));
+  for (let k = 0; k < recipe.shoots; k++) {
+    const at = place(0.16);
+    const angle = roll.range(0, Math.PI * 2);
+    const length = big * roll.range(0.3, 0.6);
+    const thick = recipe.thickness * big * roll.range(0.6, 1.2);
+    const stick = curve([at[0] - (Math.cos(angle) * length) / 2, at[1] - (Math.sin(angle) * length) / 2], angle, length, roll.range(-0.5, 0.5), 8);
+    drawTwig(canvas, stick, [thick, thick * 0.6], recipe.twig.map((c) => c * roll.range(0.8, 1.15)) as [number, number, number]);
+    // A side twig or two off it.
+    for (let s = 0; s < 2; s++) {
+      if (roll.unit() < 0.4) continue;
+      const from = along(stick, roll.range(0.25, 0.75));
+      drawTwig(canvas, curve(from.at, from.heading + roll.sign() * roll.range(0.4, 0.9), length * roll.range(0.15, 0.3), roll.range(-0.3, 0.3), 4), [thick * 0.6, thick * 0.4], recipe.twig);
+    }
+  }
+  const laid: Laid[] = [];
+  for (let k = 0; k < recipe.leaves; k++) {
+    const roll2 = roll.unit();
+    const young = roll2 < recipe.young;
+    const old = !young && roll.unit() < recipe.old;
+    const v = 1 + roll.range(-recipe.tone, recipe.tone * 0.6);
+    const tint: [number, number, number] = young ? [v * 1.2, v * 1.08, v * 0.7] : old ? [v * 0.55, v * 0.5, v * 0.45] : [v, v * roll.range(0.92, 1.04), v * roll.range(0.85, 1.05)];
+    laid.push({
+      leaf: leaves[Math.floor(roll.unit() * leaves.length)].id,
+      at: place(0.17),
+      angle: roll.range(0, Math.PI * 2),
+      length: big * roll.range(recipe.length[0], recipe.length[1]),
+      // Fallen leaves curl as they dry: turned about their midribs, a little tilted.
+      turn: roll.sign() * roll.range(0.1, 0.75),
+      tilt: roll.sign() * roll.range(0.0, 0.35),
+      mirror: roll.sign(),
+      underside: roll.unit() < recipe.underside,
+      tint,
+    });
+  }
+  laid.forEach((leaf) => {
+    const drawn = drawLeaf(scan, label, leaves.find((l) => l.id === leaf.leaf)!, leaf, recipe);
+    canvas.lay(drawn.box, drawn.patch, 0.45);
+  });
+  if (recipe.cones) {
+    for (let k = 0; k < recipe.cones.count; k++) {
+      drawCone(canvas, place(0.12), roll.range(0, Math.PI * 2), recipe.cones.length * big * roll.range(0.85, 1.15), recipe.cones.colour.map((c) => c * roll.range(0.85, 1.1)) as [number, number, number]);
+    }
+  }
+  strew(Math.round((recipe.needles?.count ?? 0) * 0.4));
+}
+
+/** A pine cone lying on its side, seen from above: an egg pointed at its tip, in rows of
+ * woody scales, each lighter at its rim and dark in the gap under the next, shaded round. */
+function drawCone(canvas: Canvas, at: [number, number], angle: number, length: number, colour: [number, number, number]) {
+  const reach = length * 0.6;
+  const box: [number, number, number, number] = [Math.floor(at[0] - reach), Math.floor(at[1] - reach), Math.ceil(at[0] + reach), Math.ceil(at[1] + reach)];
+  const [w, h] = [box[2] - box[0], box[3] - box[1]];
+  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3) };
+  const tone = colour.map(linear);
+  const [dx, dy] = [Math.cos(angle), Math.sin(angle)];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [px, py] = [box[0] + x + 0.5 - at[0], box[1] + y + 0.5 - at[1]];
+      // Along the cone from its foot (-0.5) to its tip (0.5), and across it.
+      const u = (px * dx + py * dy) / length;
+      const v = (-px * dy + py * dx) / length;
+      // Widest a third of the way from its foot, narrowing to a point.
+      const t = u + 0.5;
+      const half = 0.22 * Math.sin(Math.PI * Math.min(1, Math.max(0, t)) ** 0.8);
+      if (t <= 0 || t >= 1 || half <= 0) continue;
+      const s = v / half;
+      const edge = (1 - Math.abs(s)) * half * length;
+      const cover = Math.min(1, Math.max(0, edge + 0.5));
+      if (cover <= 0) continue;
+      const round = Math.sqrt(Math.max(0, 1 - s * s));
+      // Woody scales in staggered rows, each a rounded plate whose rim, toward the foot,
+      // stands out pale over the dark gap under the next row.
+      const around = Math.asin(Math.max(-1, Math.min(1, s))) / Math.PI + 0.5;
+      const row = t * 8;
+      const across0 = around * 3.5 + 0.5 * Math.floor(row);
+      const [fr, fc] = [row - Math.floor(row), across0 - Math.floor(across0)];
+      const plate = Math.hypot((fc - 0.5) * 1.6, fr - 0.35);
+      const scale = Math.min(1, plate);
+      const lip = (0.4 + 0.6 * (1 - Math.min(1, plate * 1.4)) ** 0.6) * (fr < 0.12 ? 0.55 + fr * 3.5 : 1) * (0.85 + 0.3 * (1 - fr));
+      const j = y * w + x;
+      patch.cover[j] = cover;
+      for (let c = 0; c < 3; c++) patch.colour[j * 3 + c] = tone[c] * (0.35 + 0.65 * round) * lip;
+      // Round across it, and each scale tipped toward the cone's foot.
+      const across = s * 0.8;
+      const tip = (0.35 - fr) * 0.8 * (1 - scale * 0.5);
+      const nx = -dy * across + dx * tip;
+      const ny = dx * across + dy * tip;
+      const len = Math.hypot(nx, ny, round) || 1;
+      patch.normal.set([nx / len, -ny / len, round / len], j * 3);
+    }
+  }
+  canvas.lay(box, patch, 0.6);
 }

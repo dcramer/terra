@@ -112,6 +112,8 @@ pub const RINGS: [(Ring, f32); 3] = [
 /// cells anything grows in or a path crosses, for the bare-ground measure.
 pub struct Built {
     pub mesh: Option<(Transform, Mesh)>,
+    /// Its litter, in the same frame as its blades, in the nearest ring only.
+    pub litter: Option<(Transform, Mesh)>,
     pub covered: Vec<bool>,
     pub path: Vec<bool>,
 }
@@ -132,7 +134,7 @@ struct Clump {
 /// A cheap, well-mixed hash of a grid cell and a stream, as a number in [0, 1); seeded so
 /// two worlds differ. Cover is only seen, so it need not be the same on every machine
 /// (docs/biomes.md, three tiers), but it is anyway.
-fn hash(seed: u64, i: i32, j: i32, stream: u64) -> f32 {
+pub(super) fn hash(seed: u64, i: i32, j: i32, stream: u64) -> f32 {
     let mut x = seed
         ^ (i as u32 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (j as u32 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
@@ -180,18 +182,18 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
 
 /// What grows on the sample grid: the ground's rise above the square's middle, how much
 /// grass, how lush, how much path, litter and moss, blended between the samples.
-struct Samples {
-    corner: Vec2,
-    side: usize,
-    values: Vec<[f32; SAMPLED]>,
+pub(super) struct Samples {
+    pub(super) corner: Vec2,
+    pub(super) side: usize,
+    pub(super) values: Vec<[f32; SAMPLED]>,
 }
 
 /// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
 /// needles, roots and tall.
-const SAMPLED: usize = 9;
+pub(super) const SAMPLED: usize = 9;
 
 impl Samples {
-    fn at(&self, at: Vec2) -> [f32; SAMPLED] {
+    pub(super) fn at(&self, at: Vec2) -> [f32; SAMPLED] {
         let cell = ((at - self.corner) / SAMPLE_M)
             .clamp(Vec2::ZERO, Vec2::splat((self.side - 1) as f32 - 0.001));
         let (i, j) = (cell.x as usize, cell.y as usize);
@@ -221,11 +223,13 @@ pub fn square(
     key: (i32, i32),
     ring: Ring,
     clear: &[Footprint],
+    litter: Option<&super::litter::LitterCards>,
 ) -> Built {
     let middle = (Vec2::new(key.0 as f32, key.1 as f32) + 0.5) * SQUARE_M;
     let half = SQUARE_M / 2.0;
     let mut built = Built {
         mesh: None,
+        litter: None,
         covered: vec![false; CELLS * CELLS],
         path: vec![false; CELLS * CELLS],
     };
@@ -389,12 +393,19 @@ pub fn square(
             );
         }
     }
+    let place = Transform {
+        translation: centre,
+        rotation: Quat::from_mat3(&Mat3::from_cols(east, up, south)),
+        scale: Vec3::ONE,
+    };
+    // Fallen leaves, needles and twigs over the ground, in the nearest ring only.
+    if let Some(cards) = litter.filter(|_| ring.segments == RINGS[0].0.segments) {
+        let to_world = |local: Vec3| place.transform_point(local);
+        built.litter =
+            super::litter::lay(&samples, cards, seed ^ 0x0011_77E3, corner, clear, to_world)
+                .map(|litter| (place, litter));
+    }
     if !mesh.indices.is_empty() {
-        let place = Transform {
-            translation: centre,
-            rotation: Quat::from_mat3(&Mat3::from_cols(east, up, south)),
-            scale: Vec3::ONE,
-        };
         built.mesh = Some((place, mesh.mesh()));
     }
     built

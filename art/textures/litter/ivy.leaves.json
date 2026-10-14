@@ -1,0 +1,28 @@
+{
+  "scan": "LeafSet017",
+  "form": "litter",
+  "leaves": 14,
+  "length": [
+    0.22,
+    0.32
+  ],
+  "shoots": 2,
+  "twig": [
+    0.3,
+    0.27,
+    0.2
+  ],
+  "thickness": 0.006,
+  "tone": 0.3,
+  "young": 0.2,
+  "old": 0.3,
+  "underside": 0.05,
+  "saturation": 0.85,
+  "value": 0.6,
+  "hue": [
+    0.92,
+    1,
+    0.85
+  ],
+  "seed": 101
+}

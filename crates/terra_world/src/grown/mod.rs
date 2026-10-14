@@ -186,13 +186,20 @@ pub struct Cards {
     pub normals: String,
     pub cut: f32,
     cards: HashMap<String, Card>,
+    file: &'static str,
 }
 
 impl Cards {
     pub const FILE: &str = "foliage.ron";
 
     pub fn read() -> Self {
-        let file: CardFile = data::read(Self::FILE);
+        Self::read_file(Self::FILE)
+    }
+
+    /// The cards of another atlas made the same way, such as the forest floor's litter
+    /// (`litter.ron`).
+    pub fn read_file(name: &'static str) -> Self {
+        let file: CardFile = data::read(name);
         let cards = file
             .cards
             .into_iter()
@@ -216,6 +223,7 @@ impl Cards {
             normals: file.normals,
             cut: file.cut,
             cards,
+            file: name,
         }
     }
 
@@ -223,7 +231,7 @@ impl Cards {
     pub fn get(&self, name: &str) -> &Card {
         self.cards
             .get(name)
-            .unwrap_or_else(|| panic!("no card {name} in {}", Self::FILE))
+            .unwrap_or_else(|| panic!("no card {name} in {}", self.file))
     }
 
     pub fn has(&self, name: &str) -> bool {

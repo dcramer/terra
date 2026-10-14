@@ -16,6 +16,7 @@
 
 pub mod blades;
 mod floor;
+pub mod litter;
 
 use crate::detail::DetailScale;
 use crate::footprint::Footprint;
@@ -150,6 +151,7 @@ pub type GrassMaterial = ExtendedMaterial<StandardMaterial, GrassExtension>;
 struct Square {
     ring: usize,
     entity: Option<Entity>,
+    litter: Option<Entity>,
     covered: Vec<bool>,
     path: Vec<bool>,
     built: bool,
@@ -159,6 +161,9 @@ struct Square {
 #[derive(Resource)]
 struct Meadow {
     material: Handle<GrassMaterial>,
+    /// What fallen leaves, needles and twigs are drawn with, and the cards they are cut from.
+    litter: Handle<litter::LitterMaterial>,
+    cards: Arc<litter::LitterCards>,
     squares: HashMap<(i32, i32), Square>,
     /// What is built or planned, which the squares are kept clear of.
     clear: Arc<Vec<Footprint>>,
@@ -169,6 +174,7 @@ struct Meadow {
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<GrassMaterial>::default())
+        .add_plugins(MaterialPlugin::<litter::LitterMaterial>::default())
         .init_resource::<BareGround>()
         .add_systems(
             Update,
@@ -227,6 +233,8 @@ fn grow(
     footprints: Query<(Entity, Ref<Footprint>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
+    mut litter_materials: ResMut<Assets<litter::LitterMaterial>>,
+    assets: Res<AssetServer>,
     detail: Res<DetailScale>,
     quality: Res<crate::quality::Quality>,
     parting: Option<Res<crate::parting::Parting>>,
@@ -244,6 +252,13 @@ fn grow(
         material.extension.fade = Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail.0;
         material.extension.thinning =
             blades::thinning(density) * Vec4::new(1.0, detail.0, 1.0, detail.0);
+    }
+    if detail.is_changed()
+        && let Some(meadow) = &meadow
+        && let Some(mut material) = litter_materials.get_mut(&meadow.litter)
+    {
+        material.extension.fade =
+            Vec4::new(litter::FADE_M[0], litter::FADE_M[1], 0.0, 0.0) * detail.0;
     }
     let Some(mut meadow) = meadow else {
         let material = materials.add(GrassMaterial {
@@ -267,8 +282,28 @@ fn grow(
                 parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
             },
         });
+        let cards = crate::grown::Cards::read_file(litter::FILE);
+        let litter = litter_materials.add(litter::LitterMaterial {
+            base: StandardMaterial {
+                base_color_texture: Some(assets.load(cards.atlas.clone())),
+                normal_map_texture: Some(crate::grown::leaf_normals(&cards, &assets)),
+                alpha_mode: AlphaMode::Mask(cards.cut),
+                perceptual_roughness: 0.85,
+                // No sheen: under a canopy the sky it would reflect is mostly hidden, which
+                // the sky occlusion volume (D270) tells the diffuse light but not this.
+                reflectance: 0.0,
+                cull_mode: None::<Face>,
+                double_sided: true,
+                ..default()
+            },
+            extension: litter::LitterExtension {
+                fade: Vec4::new(litter::FADE_M[0], litter::FADE_M[1], 0.0, 0.0) * detail.0,
+            },
+        });
         commands.insert_resource(Meadow {
             material,
+            litter,
+            cards: Arc::new(litter::LitterCards::from(&cards)),
             squares: HashMap::default(),
             clear: Arc::new(
                 footprints
@@ -285,6 +320,8 @@ fn grow(
     };
     let Meadow {
         material,
+        litter,
+        cards,
         squares,
         clear,
         seen,
@@ -352,8 +389,10 @@ fn grow(
 
     squares.retain(|&key, square| {
         let keep = square_middle(key).distance(here) < REACH_M * detail.0 + SQUARE_M;
-        if !keep && let Some(entity) = square.entity {
-            commands.entity(entity).despawn();
+        if !keep {
+            for entity in [square.entity, square.litter].into_iter().flatten() {
+                commands.entity(entity).despawn();
+            }
         }
         keep
     });
@@ -378,9 +417,23 @@ fn grow(
         square.built = true;
         square.covered = built.covered;
         square.path = built.path;
-        if let Some(old) = square.entity.take() {
+        for old in [square.entity.take(), square.litter.take()]
+            .into_iter()
+            .flatten()
+        {
             commands.entity(old).despawn();
         }
+        square.litter = built.litter.map(|(place, mesh)| {
+            commands
+                .spawn((
+                    Name::new("Litter"),
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(litter.clone()),
+                    place,
+                    NotShadowCaster,
+                ))
+                .id()
+        });
         square.entity = built.mesh.map(|(place, mesh)| {
             commands
                 .spawn((
@@ -419,20 +472,31 @@ fn grow(
     wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
     let threads = AsyncComputeTaskPool::get();
     for (_, key, ring) in wanted.into_iter().take(BUILDING.saturating_sub(building)) {
-        let (source, planet, start, seed, clear) = (
+        let (source, planet, start, seed, clear, cards) = (
             rules.source.clone(),
             planet.clone(),
             *start,
             rules.seed,
             clear.clone(),
+            cards.clone(),
         );
         let shape: Ring = RINGS[ring].0.with_density(density);
         let task = threads.spawn(async move {
-            blades::square(source.as_ref(), &planet, &start, seed, key, shape, &clear)
+            blades::square(
+                source.as_ref(),
+                &planet,
+                &start,
+                seed,
+                key,
+                shape,
+                &clear,
+                Some(&cards),
+            )
         });
         let square = squares.entry(key).or_insert_with(|| Square {
             ring,
             entity: None,
+            litter: None,
             covered: Vec::new(),
             path: Vec::new(),
             built: false,
@@ -546,6 +610,7 @@ mod tests {
                     Square {
                         ring: 0,
                         entity: None,
+                        litter: None,
                         covered,
                         path,
                         built: true,
