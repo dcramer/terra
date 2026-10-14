@@ -22,7 +22,6 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--list` | List the experiments |
 | `--radius <metres>` | Planet radius, 2000 by default |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
-| `--rolling` | With `--level yard`, the ground rolls gently (swells of 6 m, bumps of 1.1 m) rather than flat, for the lush forest |
 | `--shots <prefix>@<frames>` | Save a screenshot on each of those frames, counted as `--press` counts them, as `<prefix>-<frame>.png`, then exit: a list and ranges, like `out/walk@300-320,600`, so what pops in or out shows from one frame to the next |
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |

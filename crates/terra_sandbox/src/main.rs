@@ -18,13 +18,15 @@ use terra_game::{appearance, character};
 use terra_world::{planet, shell, terrain};
 
 fn main() -> AppExit {
-    let options = match shell::Options::from_args(std::env::args().skip(1)) {
+    let mut options = match shell::Options::from_args(std::env::args().skip(1)) {
         Ok(options) => options,
         Err(problem) => {
             eprintln!("{problem}\n\n{}", shell::USAGE);
             return AppExit::error();
         }
     };
+    // The lush forest stands on gently rolling ground rather than the yard's flat (D242).
+    options.rolling = options.experiments.iter().any(|name| name == "lush");
     if options.list {
         for experiment in experiments::ALL {
             println!("{:10} {}", experiment.name, experiment.about);

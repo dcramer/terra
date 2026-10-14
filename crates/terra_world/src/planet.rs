@@ -96,7 +96,7 @@ impl Planet {
     }
 
     /// The yard's ground rolling gently, for a forest to stand on: swells a few metres high
-    /// and smaller bumps on them, no sea (`--rolling`).
+    /// and smaller bumps on them, no sea, as the lush forest stands on.
     pub fn rolling(spec: PlanetSpec) -> Self {
         Planet {
             ground: Arc::new(VoxelPlanet::new(

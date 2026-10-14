@@ -24,7 +24,7 @@ const arg = (name: string, fallback: string) => {
   return at >= 0 ? own[at + 1] : fallback;
 };
 const hour = arg("--time", "15");
-const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--rolling", "--time", hour, ...ROUTE] : args.slice(dash + 1);
+const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...ROUTE] : args.slice(dash + 1);
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
 const frames = resolve(dirname(out), "film-frames");
