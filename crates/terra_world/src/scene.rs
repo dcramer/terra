@@ -19,6 +19,11 @@ use bevy::{
     render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
 };
 use bevy::{
+    asset::RenderAssetUsages,
+    image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+};
+use bevy::{
     curve::cubic_splines::LinearSpline,
     post_process::auto_exposure::{
         AutoExposure, AutoExposureCompensationCurve, AutoExposurePlugin,
@@ -72,13 +77,84 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
 struct Haze;
 const HAZE_M: Vec3 = Vec3::new(240.0, 60.0, 240.0);
 
-fn haze(mut commands: Commands) {
+/// The haze's density through its box, as a picture 64 by 48 by 64 (D244): a thin haze all
+/// through it, and in its lowest dozen metres, round the ground, a mist up to seven times as
+/// thick, in drifts that wander, so hollows fill and the light shafts have something to
+/// cross. Tiling, so it can be laid fixed to the world as the box follows the camera.
+fn haze_density() -> Image {
+    const W: u32 = 64;
+    const H: u32 = 48;
+    const D: u32 = 64;
+    const HAZE: f32 = 1.0 / 7.0;
+    // A noise that repeats every `period` texels: values on a lattice, smoothly blended.
+    let lattice = |i: i32, k: i32, period: i32, salt: u32| -> f32 {
+        let (i, k) = (i.rem_euclid(period) as u32, k.rem_euclid(period) as u32);
+        let mut x = i.wrapping_mul(0x9E37_79B9)
+            ^ k.wrapping_mul(0x85EB_CA6B)
+            ^ salt.wrapping_mul(0xC2B2_AE35);
+        x ^= x >> 16;
+        x = x.wrapping_mul(0x7FEB_352D);
+        x ^= x >> 15;
+        (x & 0xFFFF) as f32 / 65_535.0
+    };
+    let noise = |a: f32, c: f32, cells: i32, salt: u32| {
+        let (i, k) = (a.floor() as i32, c.floor() as i32);
+        let (u, v) = (a.fract(), c.fract());
+        let (u, v) = (u * u * (3.0 - 2.0 * u), v * v * (3.0 - 2.0 * v));
+        let at = |di, dk| lattice(i + di, k + dk, cells, salt);
+        let top = at(0, 0) * (1.0 - u) + at(1, 0) * u;
+        let bottom = at(0, 1) * (1.0 - u) + at(1, 1) * u;
+        top * (1.0 - v) + bottom * v
+    };
+    let mut data = Vec::with_capacity((W * H * D) as usize);
+    for z in 0..D {
+        for y in 0..H {
+            // Metres above the box's foot, which stands 10 m below the camera.
+            let up = (y as f32 + 0.5) / H as f32 * HAZE_M.y;
+            let low = 1.0 - smoothstep(9.0, 15.0, up);
+            for x in 0..W {
+                let (a, c) = (x as f32 / W as f32, z as f32 / D as f32);
+                let drift =
+                    0.6 * noise(a * 6.0, c * 6.0, 6, 1) + 0.4 * noise(a * 16.0, c * 16.0, 16, 2);
+                let mist = low * smoothstep(0.3, 0.75, drift);
+                data.push(((HAZE + (1.0 - HAZE) * mist).clamp(0.0, 1.0) * 255.0).round() as u8);
+            }
+        }
+    }
+    let mut image = Image::new(
+        Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: D,
+        },
+        TextureDimension::D3,
+        data,
+        TextureFormat::R8Unorm,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    let mut sampler = ImageSamplerDescriptor::linear();
+    sampler.set_address_mode(ImageAddressMode::Repeat);
+    image.sampler = ImageSampler::Descriptor(sampler);
+    image
+}
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// How thick the haze is at its thinnest; the mist is seven times this (D244). The day
+/// thickens it in the morning (`daylight`).
+pub const HAZE_DENSITY: f32 = 0.028;
+
+fn haze(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
         Name::new("Haze"),
         Haze,
         FogVolume {
             fog_color: Color::srgb(0.92, 0.95, 1.0),
-            density_factor: 0.004,
+            density_factor: HAZE_DENSITY,
+            density_texture: Some(images.add(haze_density())),
             absorption: 0.05,
             scattering: 0.5,
             // Light scattered on forward, so a shaft shows best looking toward the sun.
@@ -92,15 +168,21 @@ fn haze(mut commands: Commands) {
 /// The haze stands round the camera, upright on the planet, its foot below the ground.
 fn haze_follows(
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut haze: Query<&mut Transform, With<Haze>>,
+    mut haze: Query<(&mut Transform, &mut FogVolume), With<Haze>>,
+    time: Res<Time>,
 ) {
-    let (Some(camera), Ok(mut haze)) = (camera.iter().next(), haze.single_mut()) else {
+    let (Some(camera), Ok((mut haze, mut fog))) = (camera.iter().next(), haze.single_mut()) else {
         return;
     };
     let at = camera.translation();
     let up = at.normalize_or(Vec3::Y);
     haze.translation = at + up * (HAZE_M.y * 0.5 - 10.0);
     haze.rotation = Quat::from_rotation_arc(Vec3::Y, up);
+    // The mist's drifts stay where they are in the world as the box follows the camera, and
+    // creep slowly downwind.
+    let local = haze.rotation.inverse() * at / HAZE_M;
+    let drift = Vec3::new(0.0006, 0.0, 0.0002) * time.elapsed_secs();
+    fog.density_texture_offset = Vec3::new(local.x, 0.0, local.z) + drift;
 }
 
 fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)>) {

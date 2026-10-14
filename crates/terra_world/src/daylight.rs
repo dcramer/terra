@@ -25,7 +25,7 @@ pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// The sky lights the shade this many times as brightly as the keys below say. Open sky
 /// gives level ground something like a sixth of what the sun does; the keys gave it about a
 /// sixteenth, so every shadow was near black (D216).
-const SKY_LIGHT_GAIN: f32 = 1.4;
+const SKY_LIGHT_GAIN: f32 = 1.6;
 
 /// The sun's direction moves on in this many steps an hour: a twentieth of a degree each,
 /// a few times a second at the game's pace.
@@ -314,6 +314,8 @@ fn shine(
     mut skylight: ResMut<SkyLight>,
     mut exposure: Query<&mut Exposure, With<MainCamera>>,
     mut haze: Query<&mut DistanceFog, With<MainCamera>>,
+    mut mist: Query<&mut bevy::light::FogVolume>,
+    mut grading: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -334,6 +336,26 @@ fn shine(
     // The haze between the trees (D224): the horizon's colour, greyed toward the green the
     // canopy lets through and dimmed by the shade it hangs in, so trees fade into it with
     // distance as they do in a real forest, before any of their levels of detail change.
+    // The hour in the air (D244): the mist thickest at dawn, burning off by midday and
+    // gathering a little toward evening; and the grade warm while the sun is low, cooler at
+    // noon, so a morning and an evening do not look alike.
+    let hour = clock.hour;
+    let morning = 1.0 - smoothstep(7.0, 11.5, hour);
+    let evening = smoothstep(16.0, 19.5, hour);
+    let thick = 1.0 + 1.2 * morning * smoothstep(4.5, 6.5, hour) + 0.35 * evening;
+    for mut fog in &mut mist {
+        let wanted = super::scene::HAZE_DENSITY * thick;
+        if (fog.density_factor - wanted).abs() > 1e-5 {
+            fog.density_factor = wanted;
+        }
+    }
+    let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
+    for mut grade in &mut grading {
+        let warm = 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 };
+        if (grade.global.temperature - warm).abs() > 1e-4 {
+            grade.global.temperature = warm;
+        }
+    }
     for mut fog in &mut haze {
         let air = light.horizon.lerp(Vec3::new(0.42, 0.5, 0.42), 0.35) * 0.62;
         fog.color = colour(air);
