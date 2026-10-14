@@ -1473,6 +1473,10 @@ fn random_operations_keep_every_rule() {
                     yard.stock.add(&done.gave);
                     paid.add(&done.took);
                     refunded.add(&done.gave);
+                    // The columns, kept cube by cube, are those of every cube counted afresh.
+                    let mut counted = base.clone();
+                    counted.count_columns();
+                    assert!(counted == base, "{at}: {ops:?} left the columns wrong");
                     // Nothing was taken from under anything, but a cube carved out or changed from
                     // under what stays joined, or from under an item.
                     for op in &ops {

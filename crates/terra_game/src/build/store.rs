@@ -67,7 +67,7 @@ pub(super) struct Sections {
     /// The snapshot laid whole, which its sections are cut from, once a worker has laid it;
     /// and the worker laying it.
     pub whole: Option<Arc<terra_build::sections::Whole>>,
-    pub laying: Option<bevy::tasks::Task<(terra_build::sections::Whole, f32)>>,
+    pub laying: Option<bevy::tasks::Task<super::layout::Laying>>,
     /// The base as last laid and how, and the sections marked since: a change lays again
     /// only the buildings it marked (`Whole::lay_again`), not every one in the claim.
     pub last_laid: Option<(Arc<Base>, Arc<terra_build::sections::Whole>)>,
@@ -189,7 +189,18 @@ fn noticed(build: &mut Build) {
     for &at in &marked {
         wait(at, true);
     }
-    for at in affected(&build.base, &marked) {
+    // As far as the change reaches, from the base as last laid (`sections::reach`); with
+    // nothing laid to go by, the whole of every building it marked.
+    let reached: BTreeSet<[i32; 3]> = match (&sections.last_laid, &build.kits) {
+        (Some((before, _)), Some(kits)) => {
+            terra_build::sections::reach(before, &build.base, kits, &marked)
+                .into_iter()
+                .flatten()
+                .collect()
+        }
+        _ => affected(&build.base, &marked),
+    };
+    for at in reached {
         wait(at, false);
     }
     let relit: BTreeSet<[i32; 3]> = std::mem::take(&mut sections.relight)

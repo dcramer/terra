@@ -562,6 +562,7 @@ impl Base {
             cubes,
             ..Base::default()
         };
+        base.count_columns();
         base.settle();
         base
     }
@@ -683,6 +684,22 @@ impl Base {
         if old == cube {
             return false;
         }
+        // The column's layers kept as cubes come and go, so an edit never walks them all.
+        let column = [at.x, at.z];
+        match (old.is_some(), cube.is_some()) {
+            (false, true) => {
+                self.columns.entry(column).or_default().insert(at.y);
+            }
+            (true, false) => {
+                if let Some(layers) = self.columns.get_mut(&column) {
+                    layers.remove(&at.y);
+                    if layers.is_empty() {
+                        self.columns.remove(&column);
+                    }
+                }
+            }
+            _ => {}
+        }
         if let Some(part) = old.and_then(|old| old.part) {
             self.parts.entry(part).and_modify(|part| part.uses -= 1);
         }
@@ -803,14 +820,19 @@ impl Base {
         changed
     }
 
-    /// Works out the columns from the cubes, and forgets the rooms, to be worked out again
-    /// when asked.
+    /// Forgets the rooms, to be worked out again when asked. The columns are kept up to
+    /// date cube by cube as cubes are put ([`Base::put`]).
     fn work_out(&mut self) {
+        self.rooms = rooms::Rooms::default();
+    }
+
+    /// Works out the columns from every cube, for cubes come by other than being put, as
+    /// from a save.
+    pub(crate) fn count_columns(&mut self) {
         self.columns.clear();
         for (at, _) in self.cubes.iter() {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
         }
-        self.rooms = rooms::Rooms::default();
     }
 
     /// What fills a wall tile, read from its cubes: the quick tools' view of a storey's

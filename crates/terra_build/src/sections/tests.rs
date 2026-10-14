@@ -1054,3 +1054,119 @@ fn no_stone_wall_or_its_dress_fights_itself_in_one_plane() {
         }
     }
 }
+
+#[test]
+fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
+    // Town buildings of every kit and plan, two storeys and decks among them, each edited
+    // a cube at a time: one taken out of it, one put on its top, one beside it on the
+    // ground. Laid again only as far as `reach` says, every section is as laid whole.
+    let kits = shipped();
+    let maps = Maps::default();
+    let named = |name: &str| {
+        let index = [
+            "logs", "hewn", "stone", "earth", "wattle", "shakes", "slate", "thatch",
+        ]
+        .iter()
+        .position(|n| *n == name)
+        .unwrap();
+        kits.0[index].kind()
+    };
+    let kinds = crate::village::Kinds {
+        logs: named("logs"),
+        stone: named("stone"),
+        hewn: named("hewn"),
+        earth: named("earth"),
+        wattle: named("wattle"),
+        shakes: named("shakes"),
+        slate: named("slate"),
+        thatch: named("thatch"),
+    };
+    // And a long hall of each kind of wall, five sections long, a cube taken out at its
+    // end and one added there.
+    let mut bases: Vec<(String, Base)> = crate::village::town(3, 14, kinds)
+        .into_iter()
+        .map(|building| {
+            let mut base = Base::default();
+            base.apply_shortcuts(&building.ops);
+            (building.name, base)
+        })
+        .collect();
+    for walls in ["logs", "hewn", "stone", "earth", "wattle"] {
+        let mut base = Base::default();
+        house(
+            &mut base,
+            &kits,
+            [-3, 2],
+            [72, 9],
+            named(walls),
+            Style::Gable,
+        );
+        bases.push((format!("a long hall of {walls}"), base));
+    }
+    // And a walled yard of stone five sections a side, edited at a corner: the far corner
+    // is on neither of the rows through it.
+    let mut yard = Base::default();
+    yard.apply(BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [70, 0, 70],
+        kind: named("stone"),
+    });
+    bases.push(("a walled yard".to_string(), yard));
+    let mut random = crate::layout::Random(7);
+    let (mut edits, mut kept) = (0, 0);
+    for (name, mut before) in bases {
+        before.take_dirty();
+        let mut whole = Whole::lay(&before, &kits);
+        let cubes: Vec<IVec3> = before.cubes().map(|(at, _)| at).collect();
+        let top = cubes.iter().copied().max_by_key(|at| at.y).unwrap();
+        let low = cubes.iter().copied().reduce(IVec3::min).unwrap();
+        let wall = cubes[(random.unit() * cubes.len() as f32) as usize % cubes.len()];
+        let kind = before.cube(wall).unwrap().kind;
+        for (at, cube) in [
+            (wall, None),
+            (top + IVec3::Y, Some(Cube::new(kind, Fill::Solid))),
+            (
+                low - IVec3::new(2, 0, 0),
+                Some(Cube::new(kind, Fill::Solid)),
+            ),
+        ] {
+            let mut after = before.clone();
+            after.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube,
+            });
+            let marked = after.take_dirty();
+            let again = whole.lay_again(&before, &after, &kits, &marked);
+            let afresh = Whole::lay(&after, &kits);
+            let reached: usize = reach(&before, &after, &kits, &marked)
+                .iter()
+                .map(BTreeSet::len)
+                .sum();
+            let all: BTreeSet<[i32; 3]> = drawable(&after)
+                .union(&drawable(&before))
+                .copied()
+                .collect();
+            for at_section in &all {
+                let section = Section {
+                    base: &after,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(*at_section),
+                    progress: &Progress::Whole,
+                };
+                let (x, y) = (lay(&section, &again), lay(&section, &afresh));
+                assert!(
+                    x == y,
+                    "{name}: {at} set to {cube:?}: section {at_section:?} is not as laid whole"
+                );
+            }
+            edits += 1;
+            kept += all.len() - reached.min(all.len());
+            (before, whole) = (after, again);
+        }
+    }
+    assert_eq!(edits, 60);
+    // Not every edit lays the whole building again.
+    assert!(kept > 0, "every edit reached every section");
+}

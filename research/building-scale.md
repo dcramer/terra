@@ -113,3 +113,35 @@ Then, from the same runs' counts: the hull's roof courses merged into one plane 
 The town from the rise is within 3 ms of D239's 33.3 ms, its GPU at 30.9 ms; the castle walked through is its near and middle detail, the stone's surface displaced a few centimetres a step, which D278 does not change.
 
 A `town` view in `cargo xtask lodcheck` (forty buildings down a street from 25 m up, the detail scale swept from half to twice) finds nothing popping as the far detail hands over to the hull: no frame changes by a patch, worst 0.00%. The town and the castle near do not: their frames are the main pass and depth prepass over the far and middle detail of the houses within 90 m (its preset halves distances), 20,000 and 96,000 triangles a house, and the street walk's worst frames are sections put on screen as it reaches them.
+The town's street walk is still over the budget in its 99th percentile and hitches: its near detail, 300,000 triangles a stone house, is put on screen a section at a time as the walk reaches it (2.8 GiB of meshes, the slowest burst 3.5 s), which D278 does not touch. Numbers on the integrated GPU follow.
+
+## An edit, and the game's CPU time a frame (D281)
+
+The second goals review's findings 4 and 5: what one edit costs, and where the game's CPU time goes among buildings.
+
+**One cube taken out of the castle** (`terra_build`, release, one thread; a throwaway driver, not kept):
+
+| | Before | After (D281) |
+|---|---|---|
+| The operation applied and checked (`Base::act`) | 0.14 to 0.16 ms | 0.13 to 0.19 ms: the columns are kept cube by cube now, which was not where the time went |
+| Sections the edit sets waiting | 342, every one of the castle's | 198: those round it and the rows through it |
+| The base laid again, on a worker | 337 ms (laid whole: 343 to 418) | 270 ms |
+| The sections waiting cut to see which lay the same | 55 ms on the main thread | on the worker, after laying |
+
+A castle edit still waits about 300 ms on a worker before it is drawn: a row of logs and a band of dress are laid from the whole row, and laying a row's sections takes in every row crossing them, so the castle's rows through the edit look at most of it. Laying only the pieces of the rows an edit is on, kept by row, is what would take it further.
+
+**A stone house going up** (`going-up`, the 5090, load 10): 122 changes, each on screen a median 17.3 ms after it was made, 21.4 ms at the 90th percentile and 240 ms at worst; the slowest section a median 11.1 ms on its worker. Frames 4.13 / 9.03 / 12.12 ms, no hitch, the game's own work 3.4 ms.
+
+**The street walk, system by system** (`town300`, Bevy's Chrome trace, the 5090, load 27 to 42): the game's update 14.4 ms a frame, the render thread's 12.9 ms, pipelined. What the main schedule spends a frame, the costliest first:
+
+| System | ms a frame | Worst |
+|---|---|---|
+| `bevy_time::fixed::run_fixed_main_schedule` (the walker's `movement::walk` 0.7 of it) | 1.96 | 13.6 |
+| `bevy_ui::layout::ui_layout_system` | 0.95 | 6.0 |
+| `bevy_render::mesh::allocator::allocate_and_free_meshes` | 0.78 | 10.4 |
+| `bevy_render::view::visibility::collect_visible_cpu_culled_entities` | 0.46 | 3.8 |
+| `bevy_camera::visibility::calculate_bounds` | 0.41 | 5.1 |
+| `terra_world::terrain::choose` | 0.33 | 17.6 |
+| `bevy_transform` (dirty trees and propagation) | 0.52 | 9.3 |
+
+and on the render thread `render_system` 4.7 ms, 2.8 of it submitting command buffers. No one system of the game's is the frame: the update is many engine systems over many entities (some 4,700 meshes drawn), on a machine whose load stretched every one of them, so the frames' worst moments were systems of a few hundredths of a millisecond taking 20 to 50 ms when their threads were not run. The one that was ours, `terrain::choose`, worked out which chunks of ground are wanted on the main thread every 4 m walked, 17 ms each time; it is done on a worker now (76a68a3), and the next run, at load 20, had the game's update at 9.8 ms, frames 11.9 / 29.3 / 132 ms, with `choose` gone from the costly systems. The rest is entities and draws, for D278's merging and the render thread's encoding to bring down.

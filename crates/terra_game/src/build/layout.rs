@@ -80,6 +80,14 @@ pub(super) struct Done {
     pub outcome: Outcome,
 }
 
+/// A base laid again on a worker: how, how long it took, and the sections waiting that
+/// lay as they were.
+pub(super) struct Laying {
+    pub whole: sections::Whole,
+    pub took_ms: f32,
+    pub same: Vec<[i32; 3]>,
+}
+
 /// What laying a section came to.
 pub(super) enum Outcome {
     /// Its pieces as they were: left as it is drawn.
@@ -180,10 +188,10 @@ fn launch(
     let wait = options.scripted() && !options.bench;
     let no_kits: Arc<Kits> = Arc::new(Kits(Vec::new()));
     for build in each(&mut site, &mut builds) {
-        let in_order = matches!(
-            build.progress(),
-            terra_build::sections::Progress::Fraction(_)
-        );
+        let progress = build.progress();
+        let frame = build.frame;
+        let root = build.root;
+        let in_order = matches!(progress, terra_build::sections::Progress::Fraction(_));
         let sections = &mut build.sections;
         if sections.waiting.is_empty() || sections.whole.is_some() {
             continue;
@@ -198,13 +206,50 @@ fn launch(
             // the whole base goes in is wanted.
             let last = sections.last_laid.clone().filter(|_| !in_order);
             let marked = sections.marked_since.clone();
+            // The sections waiting only because their building changed, drawn already as
+            // finely as they would be: the worker cuts each from the base laid again, a
+            // few hundredths of a millisecond, and says which lay as they were, to be left
+            // as drawn rather than merged again, so an edit waits only for the sections it
+            // changed and the main thread cuts none of them.
+            let candidates: Vec<([i32; 3], u64)> = sections
+                .waiting
+                .iter()
+                .filter(|(_, waiting)| !waiting.force && waiting.reach.is_none())
+                .filter_map(|(&at, _)| {
+                    let drawn = sections.drawn.get(&at)?;
+                    let middle = frame.transform_point(store::centre(IVec3::from_array(at)));
+                    let wanted = reach(middle.distance(eye) / scale.0, Some(drawn.reach));
+                    (wanted == drawn.reach).then_some((at, drawn.key))
+                })
+                .collect();
+            let progress = progress.clone();
+            let maps = look.maps.clone();
             sections.laying = Some(pool.spawn(async move {
                 let started = Instant::now();
                 let whole = match last {
                     Some((before, whole)) => whole.lay_again(&before, &snapshot, &kits, &marked),
                     None => sections::Whole::lay(&snapshot, &kits),
                 };
-                (whole, started.elapsed().as_secs_f32() * 1000.0)
+                let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+                let same = candidates
+                    .into_iter()
+                    .filter(|&(at, key)| {
+                        let section = Section {
+                            base: &snapshot,
+                            kits: &kits,
+                            maps: &maps,
+                            at: IVec3::from_array(at),
+                            progress: &progress,
+                        };
+                        sections::lay(&section, &whole).key() == key
+                    })
+                    .map(|(at, _)| at)
+                    .collect();
+                Laying {
+                    whole,
+                    took_ms,
+                    same,
+                }
             }));
         }
         let Some(task) = sections.laying.as_mut() else {
@@ -215,77 +260,37 @@ fn launch(
         } else {
             block_on(poll_once(task))
         };
-        if let Some((whole, took_ms)) = laid {
+        if let Some(Laying {
+            whole,
+            took_ms,
+            same,
+        }) = laid
+        {
             if let Some(change) = sections.change.as_mut() {
                 change.laid_ms = change.since.elapsed().as_secs_f32() * 1000.0;
             }
             sections.whole = Some(Arc::new(whole));
             sections.laying = None;
             jobs.timings.whole.push(took_ms);
-        }
-    }
-    // A section waiting only because it is in a building that changed, drawn already as
-    // finely as it would be, is cut here and now, which takes a few hundredths of a
-    // millisecond: if its pieces are as they were, it is left as it is drawn without a
-    // worker, so an edit waits only for the sections it changed.
-    let maps = look.maps.clone();
-    for build in each(&mut site, &mut builds) {
-        let Some(whole) = build.sections.whole.clone() else {
-            continue;
-        };
-        if !build
-            .sections
-            .waiting
-            .values()
-            .any(|waiting| !waiting.force && waiting.reach.is_none())
-        {
-            continue;
-        }
-        let snapshot = build
-            .sections
-            .snapshot
-            .get_or_insert_with(|| Arc::new(build.base.clone()))
-            .clone();
-        let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
-        let progress = build.progress();
-        let same: Vec<[i32; 3]> = build
-            .sections
-            .waiting
-            .iter()
-            .filter(|(_, waiting)| !waiting.force && waiting.reach.is_none())
-            .filter_map(|(&at, _)| {
-                let drawn = build.sections.drawn.get(&at)?;
-                let middle = build
-                    .frame
-                    .transform_point(store::centre(IVec3::from_array(at)));
-                let wanted = reach(middle.distance(eye) / scale.0, Some(drawn.reach));
-                (wanted == drawn.reach).then_some((at, drawn.key))
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-            .filter(|&(at, key)| {
-                let section = Section {
-                    base: &snapshot,
-                    kits: &kits,
-                    maps: &maps,
-                    at: IVec3::from_array(at),
-                    progress: &progress,
-                };
-                sections::lay(&section, &whole).key() == key
-            })
-            .map(|(at, _)| at)
-            .collect();
-        for at in same {
-            build.sections.waiting.remove(&at);
-            jobs.tickets += 1;
-            let ticket = jobs.tickets;
-            build.sections.tickets.insert(at, ticket);
-            jobs.ready.push_back(Done {
-                root: build.root,
-                section: at,
-                ticket,
-                outcome: Outcome::Same,
-            });
+            for at in same {
+                if sections
+                    .waiting
+                    .get(&at)
+                    .is_none_or(|waiting| waiting.force || waiting.reach.is_some())
+                {
+                    continue;
+                }
+                sections.waiting.remove(&at);
+                jobs.tickets += 1;
+                let ticket = jobs.tickets;
+                sections.tickets.insert(at, ticket);
+                jobs.ready.push_back(Done {
+                    root,
+                    section: at,
+                    ticket,
+                    outcome: Outcome::Same,
+                });
+            }
         }
     }
     if room == 0 {
@@ -336,7 +341,7 @@ fn launch(
                 .clone();
             let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
             let progress = build.progress();
-            let maps = maps.clone();
+            let maps = look.maps.clone();
             let drawn_before = build.sections.drawn.get(&at);
             let previous = drawn_before.map(|drawn| (drawn.key, drawn.reach));
             let last = drawn_before

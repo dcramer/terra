@@ -210,8 +210,8 @@ impl Whole {
         kits: &Kits,
         marked: &BTreeSet<[i32; 3]>,
     ) -> Whole {
-        let mut again = affected(before, marked);
-        again.extend(affected(base, marked));
+        let groups = reach(before, base, kits, marked);
+        let again: BTreeSet<[i32; 3]> = groups.iter().flatten().copied().collect();
         let mut whole = Whole {
             by_section: self
                 .by_section
@@ -221,6 +221,9 @@ impl Whole {
                 .collect(),
             counts: self.counts.clone(),
         };
+        // Laid together, once a kit: a layout takes in whole every row crossing what it
+        // lays, so laying a row's sections apart would look at most of the base again
+        // for each.
         for (index, kit) in kits.0.iter().enumerate() {
             let pieces = layout::lay_sections(base, kit, kits, &again).pieces;
             for (order, piece) in pieces.into_iter().enumerate() {
@@ -233,6 +236,82 @@ impl Whole {
         }
         whole
     }
+}
+
+/// The sections whose pieces an edit that marked these may change, before it and after,
+/// in groups each laid together as a box: those round the marks, as far as any piece
+/// reaches from the cubes it is laid from (an opening's dress, a frame's members: under a
+/// section); and the whole of what a layout lays from all of one line or region, through
+/// the marks: a row of logs along either way, a deck over every cube joined to it on its
+/// layer. Never the rest of the building, nor another building.
+pub fn reach(
+    before: &Base,
+    after: &Base,
+    kits: &Kits,
+    marked: &BTreeSet<[i32; 3]>,
+) -> Vec<BTreeSet<[i32; 3]>> {
+    let mut drawn: BTreeSet<[i32; 3]> = drawable(before);
+    drawn.extend(drawable(after));
+    let near: BTreeSet<[i32; 3]> = round(marked.iter().copied().map(IVec3::from_array))
+        .intersection(&drawn)
+        .copied()
+        .collect();
+    // The kits whose cubes are round the marks, before the edit or after.
+    let here = |kit: &Kit| {
+        [before, after].iter().any(|base| {
+            near.iter().any(|&at| {
+                let low = IVec3::from_array(at) * crate::cubes::SECTION;
+                base.store()
+                    .within(low, low + IVec3::splat(crate::cubes::SECTION - 1))
+                    .iter()
+                    .any(|(_, cube)| cube.kind == kit.kind())
+            })
+        })
+    };
+    // A frame's members run the length of their wall, and are laid only as far round a
+    // box as a member reaches from a post, so a framed building is laid again whole.
+    if kits.0.iter().any(|kit| kit.framing.is_some() && here(kit)) {
+        let mut whole = affected(before, marked);
+        whole.extend(affected(after, marked));
+        return vec![whole];
+    }
+    let mut groups = vec![near.clone()];
+    let mut taken = near.clone();
+    // Rows of logs and bands of dress are laid a row at a time, every row whole, either
+    // way along the floor.
+    if kits
+        .0
+        .iter()
+        .any(|kit| kit.pattern != Pattern::Roof && here(kit))
+    {
+        let lines = |pick: fn(IVec3) -> (i32, i32)| {
+            let wanted: BTreeSet<(i32, i32)> =
+                near.iter().map(|&at| pick(IVec3::from_array(at))).collect();
+            wanted
+                .into_iter()
+                .map(|line| {
+                    drawn
+                        .iter()
+                        .copied()
+                        .filter(|&at| pick(IVec3::from_array(at)) == line)
+                        .collect::<BTreeSet<[i32; 3]>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        // Along X a row is all the sections at its z, of every height, as a wall's courses
+        // are laid from its lowest to its highest; and along Z at its x.
+        for line in lines(|at| (0, at.z))
+            .into_iter()
+            .chain(lines(|at| (0, at.x)))
+        {
+            let line: BTreeSet<[i32; 3]> = line.difference(&taken).copied().collect();
+            if !line.is_empty() {
+                taken.extend(line.iter().copied());
+                groups.push(line);
+            }
+        }
+    }
+    groups
 }
 
 /// How far a section's cubes are searched for the kinds whose kits may lay pieces in it.
@@ -314,9 +393,22 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
             }
         }
     }
-    // Kit by kit, each in the order its pieces go in.
-    own.sort_by_key(|(index, order, _)| (*index, *order));
-    edge.sort_by_key(|(index, order, _)| (*index, *order));
+    // Kit by kit: shown so far through, each in the order its pieces go in; otherwise in
+    // an order of the pieces themselves, so a section is laid the same whether its base
+    // was laid whole or only as far as an edit reached (`Whole::lay_again`), whose
+    // pieces come in another order.
+    if fraction {
+        own.sort_by_key(|(index, order, _)| (*index, *order));
+        edge.sort_by_key(|(index, order, _)| (*index, *order));
+    } else {
+        let key = |(index, _, placed): &(usize, usize, Placed)| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            placed.1.hash(&mut hasher);
+            (*index, hasher.finish())
+        };
+        own.sort_by_cached_key(key);
+        edge.sort_by_cached_key(key);
+    }
     Laid {
         pieces: own.into_iter().map(|(_, _, placed)| placed).collect(),
         edge: edge.into_iter().map(|(_, _, placed)| placed).collect(),

@@ -679,6 +679,21 @@ pub fn lay_sections(base: &Base, kit: &Kit, kits: &Kits, sections: &BTreeSet<[i3
         low: low * side - IVec3::splat(Scope::MARGIN),
         high: (high + IVec3::ONE) * side - IVec3::ONE + IVec3::splat(Scope::MARGIN),
     };
+    // A kit with no cubes of its kind within a section of the scope lays nothing there:
+    // no piece reaches further from the cubes it is laid from. Its walls are not looked
+    // for over the whole base.
+    let round = Scope {
+        low: scope.low - IVec3::splat(side),
+        high: scope.high + IVec3::splat(side),
+    };
+    if kit.pattern != Pattern::Roof
+        && !round
+            .cubes(base, None)
+            .iter()
+            .any(|(_, cube)| cube.kind == kit.kind())
+    {
+        return Layout::default();
+    }
     let mut layout = lay_scoped(base, kit, kits, scope);
     layout
         .pieces

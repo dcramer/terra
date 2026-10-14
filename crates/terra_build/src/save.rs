@@ -193,6 +193,7 @@ impl Base {
             let part = base.parts.get_mut(&id).ok_or(BadSnapshot::Part(id))?;
             part.uses = count;
         }
+        base.count_columns();
         base.settle();
         let roofs: Vec<Roof> = snapshot
             .roofs
