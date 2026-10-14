@@ -8,8 +8,8 @@
 //! Only worktrees under `.claude/worktrees/` are touched, never the one this runs in, never one
 //! locked (Claude Code locks a subagent's while it runs) and never one used recently:
 //! - a subagent's (`agent-…`) whose commits are all on `main` and that has no changes, untracked
-//!   files included, is removed with its branch once it has been idle a day;
-//! - any other subagent's build folder is deleted once it has been idle a day, and any other
+//!   files included, is removed with its branch once it has been idle two days;
+//! - any other subagent's build folder is deleted once it has been idle two days, and any other
 //!   worktree's once it has been idle three days, since a build can be made again (`cargo xtask
 //!   seed` makes that quick). Their code is never touched.
 //!
@@ -26,8 +26,9 @@ use std::time::{Duration, SystemTime};
 use super::{output, root, seed};
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
-/// How long an idle subagent's worktree is kept, in case its agent is sent another message.
-const AGENT_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
+/// How long an idle subagent's worktree is kept, in case its agent is sent another message: a
+/// lead session may resume its agents many hours later.
+const AGENT_IDLE: Duration = Duration::from_secs(2 * 24 * 60 * 60);
 /// How long any other idle worktree keeps its build folder.
 const OTHER_IDLE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
@@ -160,7 +161,7 @@ pub fn worktrees(args: &[String]) -> bool {
     } else {
         println!(
             "\n`cargo xtask worktrees --prune` removes a subagent's worktree once it is on main, \
-             clean and idle a day, and deletes any other's build after a day idle if it is a \
+             clean and idle two days, and deletes any other's build after two idle days if it is a \
              subagent's, three if not. `--done` deletes this worktree's build now."
         );
     }
