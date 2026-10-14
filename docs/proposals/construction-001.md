@@ -53,7 +53,7 @@ A building can mix both: logs over a stone plinth is a run kind over a block kin
 | Encloses a room | No | No | Yes |
 | Doors and windows | Openings only | Openings only | Fitted when made |
 
-**What goes in** is a piece (D160), as now: a log, a stone section, a step. The cubes it fills become built when it goes in, which is what collision reads. A block kit's dual-grid modules straddle cubes, so for them the unit of building is the cube, or a run of a metre: the modules round it redraw as it goes from ghost to solid. Taking apart runs the same in reverse, last in first out.
+**What goes in** is a piece (D160), as now: a log, a stone section, a step. The cubes it fills become built when it goes in, which is what collision reads. A block kit's dual-grid modules straddle cubes, so for them the unit of building is the cube, or a run of a metre: the modules round it redraw as it goes from ghost to solid. Taking apart runs the same in reverse, last in first out, and a cube taken out to nothing goes with its plan (D193, 2026-10-15).
 
 ## The cases
 

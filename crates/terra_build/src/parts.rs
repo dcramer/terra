@@ -54,6 +54,41 @@ impl Base {
         Some((into, merges))
     }
 
+    /// The cubes of these that taking a step out of would take out to nothing, and so out
+    /// of the plan with them (D193): those with one step left in, not being carved out or
+    /// changed.
+    pub fn emptying(&self, cubes: &[IVec3]) -> Vec<IVec3> {
+        cubes
+            .iter()
+            .copied()
+            .filter(|&at| {
+                self.cube(at).is_some_and(|cube| {
+                    cube.is_in()
+                        && cube.pending == crate::Pending::None
+                        && cube.level() <= self.terms(&cube).step()
+                })
+            })
+            .collect()
+    }
+
+    /// Taking a step out of cubes as a player takes apart (D193, the developers on
+    /// 2026-10-15: "it should deconstruct and return materials"): the step out, and those
+    /// taken out to nothing out of the plan with it, nothing left behind, their parts split
+    /// if that leaves them in pieces (D260). Undone, all of it comes back.
+    pub fn taking_apart(&self, cubes: &[IVec3]) -> Vec<Op> {
+        let mut ops = vec![Op::Empty {
+            cubes: cubes.iter().map(|at| at.to_array()).collect(),
+        }];
+        let last = self.emptying(cubes);
+        if !last.is_empty() {
+            ops.push(Op::Unplan {
+                cubes: last.iter().map(|at| at.to_array()).collect(),
+            });
+            ops.extend(self.splitting(&last));
+        }
+        ops
+    }
+
     /// The operations that split the parts taking cubes away leaves in pieces, to apply once
     /// they are gone: each piece of a part that no longer touches the rest, face to face,
     /// its own part from the base's next number on; the piece with the first cube in the

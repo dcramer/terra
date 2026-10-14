@@ -388,7 +388,6 @@ fn a_claim_bounds_what_is_planned_and_the_ground_is_kept_only_under_what_stands(
 }
 
 #[test]
-#[ignore = "known failure (research/building-audit.md): taking apart leaves its cubes planned, past the claim's budget"]
 fn the_plan_budget_holds_however_a_base_is_built_and_taken_apart() {
     let rules = rules();
     let claim = Claim {
@@ -409,12 +408,15 @@ fn the_plan_budget_holds_however_a_base_is_built_and_taken_apart() {
         build(&mut base, &cx, &row);
     }
     assert_eq!(base.store().planned(), 0);
-    // Taken apart, every cube stays planned, as a ghost to build again.
+    // Taken apart as the hammer takes apart, each cube goes with its plan (D193, the
+    // developers on 2026-10-15: "it should deconstruct and return materials").
     for x in 0..8 {
         for z in 0..2 {
-            let _ = base.act(&empty([x, 0, z]), &cx);
+            let ops = base.taking_apart(&[IVec3::new(x, 0, z)]);
+            let _ = base.act_all(&ops, &cx);
         }
     }
+    assert!(base.is_empty(), "something was left behind");
     assert!(
         base.store().planned() <= claim.budget,
         "{} cubes planned in a claim with a budget of {}",

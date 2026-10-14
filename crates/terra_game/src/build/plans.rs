@@ -452,7 +452,8 @@ pub fn carve(base: &Base, cubes: &[IVec3], footings: Option<Footings>) -> Vec<Op
 }
 
 /// Taking out what is in a box (D226): a step out of its highest layer with anything in,
-/// which the base refuses if anything rests on them; with nothing of it in, its planned
+/// those taken out to nothing out of the plan with it (D193), which the base refuses if
+/// anything rests on them; with nothing of it in, its planned
 /// cubes taken out of the plan, and any part that leaves in pieces split (D260); none if
 /// there is nothing in it to take.
 pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
@@ -476,13 +477,8 @@ pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
             .collect();
         return unplan(base, &bare);
     };
-    vec![Op::Empty {
-        cubes: ins
-            .into_iter()
-            .filter(|at| at.y == top)
-            .map(|at| at.to_array())
-            .collect(),
-    }]
+    let layer: Vec<IVec3> = ins.into_iter().filter(|at| at.y == top).collect();
+    base.taking_apart(&layer)
 }
 
 /// Planned cubes taken out of the plan, and the parts that leaves in pieces split (D260);
@@ -1056,8 +1052,13 @@ mod tests {
         let carving = carve(&base, &two, None);
         assert!(matches!(&carving[..], [Op::Carve { cubes }] if cubes.len() == 8));
         let out = take_out(&base, &brush(IVec3::new(4, 3, -4), 2));
-        assert!(matches!(&out[..], [Op::Empty { cubes }] if cubes.iter().all(|at| at[1] == 3)));
+        assert!(matches!(&out[0], Op::Empty { cubes } if cubes.iter().all(|at| at[1] == 3)));
+        // Stone comes out in one step, so the cubes go with their plan, nothing left behind
+        // (D193).
+        assert!(matches!(&out[1], Op::Unplan { cubes } if cubes.len() == 4));
+        let before = base.cubes().count();
         base.act_all(&out, &cx).unwrap();
+        assert_eq!(base.cubes().count(), before - 4);
     }
 
     /// The room tool's plans laid as built cubes at once.

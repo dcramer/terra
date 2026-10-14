@@ -100,15 +100,21 @@ fn thousands_of_cubes_built_by_hand_never_run_out_of_parts() {
         let at = format!("step {step}");
         let kind = if (step / 400) % 2 == 0 { LOGS } else { STONE };
         if step % 9 == 8 && !built.is_empty() {
-            // A cube built a while ago taken out, if nothing rests on it, then its plan.
+            // A cube built a while ago taken apart, if nothing rests on it: its last step
+            // takes it out with its plan (D193), and splits its part if that leaves it in
+            // pieces (D260).
             let i = rng.below(built.len() as u32) as usize;
             let cube = built[i];
             let mut out = true;
-            while base.is_in(cube) {
-                let empty = [Op::Empty {
-                    cubes: vec![cube.to_array()],
-                }];
-                if books.act(&mut base, &empty, &cx, &at, false).is_err() {
+            while base.cube(cube).is_some() {
+                let ops = base.taking_apart(&[cube]);
+                let last = !base.emptying(&[cube]).is_empty();
+                split += ops
+                    .iter()
+                    .filter(|op| matches!(op, Op::Regroup { .. }))
+                    .count();
+                let undo_too = last && rng.below(4) == 0;
+                if books.act(&mut base, &ops, &cx, &at, undo_too).is_err() {
                     out = false;
                     break;
                 }
@@ -123,15 +129,6 @@ fn thousands_of_cubes_built_by_hand_never_run_out_of_parts() {
                     .unwrap_or_else(|why| panic!("{at}: putting {cube} back refused: {why:?}"));
             }
             if out {
-                let mut ops = vec![Op::Unplan {
-                    cubes: vec![cube.to_array()],
-                }];
-                let splits = base.splitting(&[cube]);
-                split += splits.len();
-                ops.extend(splits);
-                books
-                    .act(&mut base, &ops, &cx, &at, rng.below(4) == 0)
-                    .unwrap_or_else(|why| panic!("{at}: unplanning refused: {why:?}"));
                 built.swap_remove(i);
             }
         } else {

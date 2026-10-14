@@ -248,7 +248,7 @@ Because each piece is chosen by its role from the cubes round its edge, any arra
 
 **Small things are not planned.** Furniture, storage, lights and stations are placed whole, as now: they are made, then set down. Open whether stations should be constructed too, being large.
 
-**Taking down.** A constructed part comes down to its plan, giving back its materials (or dropping them at your feet if they do not fit). A plan with nothing built is removed for free. Undo works on both.
+**Taking down.** A constructed part comes down cube by cube, each going with its plan, nothing left behind (D193: "it should deconstruct and return materials"), giving back its materials (or dropping them at your feet if they do not fit). A plan with nothing built is removed for free. Undo works on both.
 
 **Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints, but never a draft still being designed (D170, Leaning; [tribe.md](tribe.md#plan-and-build-handing-work-to-the-tribe)). A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
 

@@ -720,7 +720,10 @@ impl Building<'_, '_> {
                         cubes.len(),
                         if cubes.len() == 1 { "" } else { "s" }
                     );
-                    ops.push(Op::Empty { cubes });
+                    // A step out, and what that takes out to nothing out of the plan with
+                    // it (D193).
+                    let cubes: Vec<IVec3> = cubes.into_iter().map(IVec3::from_array).collect();
+                    ops.extend(base.taking_apart(&cubes));
                 }
                 None => {
                     what = format!("take away the plan of part {}", part.0);
@@ -736,9 +739,7 @@ impl Building<'_, '_> {
                 .filter(|&y| base.is_in(IVec3::new(cube.x, y, cube.z)))
                 .max()?;
             what = "take out a cube".to_string();
-            ops.push(Op::Empty {
-                cubes: vec![[cube.x, top, cube.z]],
-            });
+            ops.extend(base.taking_apart(&[IVec3::new(cube.x, top, cube.z)]));
         }
         let check = self.check(by, &ops);
         Some(Work { what, ops, check })
