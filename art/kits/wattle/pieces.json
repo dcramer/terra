@@ -1,0 +1,12 @@
+{
+  "about": "Wattle and daub's frame (D236, D258, tools/kits): one member of squared oak, adzed, laid by the frame's rule as each post, plate, rail, brace and stud and scaled across to its size; open along it so copies run on as one timber, closed where it stops by its sawn end.",
+  "profiles": {},
+  "corners": {},
+  "modules": {
+    "member": {
+      "kind": "timber", "length": 1.0, "step": 0.06, "variants": 3, "open": true,
+      "y": [-0.09, 0.09], "z": [-0.065, 0.065], "round": 0.014, "per_corner": 2, "adze": 0.003, "period": 0.18,
+      "cap": "flat"
+    }
+  }
+}

@@ -36,6 +36,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const STEP_M: f32 = CELL_M * 0.5;
 /// How far a roof of a kind with no kit is carried on past its edges.
 pub const EAVES_M: f32 = 0.5;
+/// How far short of the covering's edges a batten stops, in metres.
+const BATTEN_SHORT_M: f32 = 0.2;
 /// How many stages a roof cube goes up in: its frame, its battens, its covering and its
 /// trims, a step of its fill each (`kit.cost.steps`).
 pub const ROOF_STAGES: u8 = 4;
@@ -56,14 +58,16 @@ pub struct RoofCell {
 }
 
 /// What a long piece of roof is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum RoofPart {
     /// The frame: a rafter up a slope, or the beam under a ridge, hip or valley.
     Rafter,
     /// A batten across the rafters under the foot of a course.
     Batten,
-    /// The board along an eave, over the rafters' ends: the fascia.
-    Fascia,
+    /// Along an eave: a fascia, or thatch's cut butt.
+    Eave,
     /// The board along a verge, a gable's sloping edge: the bargeboard.
     Verge,
     /// The cap over a ridge.
@@ -628,7 +632,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                     continue;
                 }
                 Beside::Against => RoofPart::Flashing,
-                Beside::Open if (p.y - r.y).abs() < 1e-4 => RoofPart::Fascia,
+                Beside::Open if (p.y - r.y).abs() < 1e-4 => RoofPart::Eave,
                 Beside::Open => RoofPart::Verge,
             };
             let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32) * STEP_M;
@@ -643,7 +647,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     }
     let joined = ridges_a_cube_wide(join(segments));
     let r = &kit.roof;
-    let (rafter, batten) = (r.rafter.1 * 0.5, r.batten.1);
+    let (rafter, batten) = (r.rafter * 0.5, r.batten.1);
     // The beams under the creases, then every long piece in its own stage.
     for segment in &joined {
         let cell = roofs.cell(segment.square, segment.part.stage());
@@ -661,10 +665,14 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             let down = (planar_normal(from, to, a) + planar_normal(from, to, b))
                 .normalize_or(Vec3::Y)
                 * (batten + rafter);
+            // Stopped short of its ends by the eaves' reach, at the walls' faces, so its end
+            // never shows past the covering at a gable's apex.
+            let length = from.distance(to);
+            let trim = (to - from) / length.max(1e-3) * kit.eaves.min(length * 0.25);
             pieces.push(Piece::Roof {
                 part: RoofPart::Rafter,
-                from: Place::near(from - down),
-                to: Place::near(to - down),
+                from: Place::near(from - down + trim),
+                to: Place::near(to - down - trim),
                 sides: segment.sides,
                 seed: hash(&[seed, 1]),
                 cell: roofs.cell(segment.square, 1),
@@ -732,10 +740,14 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         }
     }
     for segment in join(battens) {
+        // Stopped a little short of its ends, inside the covering's edges.
+        let (from, to) = (segment.from.metres(), segment.to.metres());
+        let length = from.distance(to);
+        let short = (to - from) / length.max(1e-3) * BATTEN_SHORT_M.min(length * 0.25);
         pieces.push(Piece::Roof {
             part: RoofPart::Batten,
-            from: segment.from,
-            to: segment.to,
+            from: Place::near(from + short),
+            to: Place::near(to - short),
             sides: segment.sides,
             seed: 0,
             cell: roofs.cell(segment.square, 2),
@@ -1116,12 +1128,12 @@ mod tests {
             close(a, Vec3::new(-0.5, top, 2.0)) && close(b, Vec3::new(5.5, top, 2.0)),
             "{a} {b}"
         );
-        assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 2);
+        assert_eq!(parts(&pieces, RoofPart::Eave).len(), 2);
         assert_eq!(parts(&pieces, RoofPart::Verge).len(), 4);
         assert!(parts(&pieces, RoofPart::Hip).is_empty());
         assert!(parts(&pieces, RoofPart::Valley).is_empty());
         // The eaves overhang by half a metre, carried on down the slope.
-        for (a, b) in parts(&pieces, RoofPart::Fascia) {
+        for (a, b) in parts(&pieces, RoofPart::Eave) {
             assert!(
                 (a.y - (STOREY_M - 0.5)).abs() < 0.01 && a.y == b.y,
                 "{a} {b}"
@@ -1162,7 +1174,7 @@ mod tests {
         // A metre long: the five metres less two metres' run at each end.
         assert!((a.distance(b) - 1.0).abs() < 0.01, "{a} {b}");
         assert!(parts(&pieces, RoofPart::Verge).is_empty());
-        assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 4);
+        assert_eq!(parts(&pieces, RoofPart::Eave).len(), 4);
         // Hips run from the eaves' corners, past the walls, up to the ridge's ends.
         for (a, b) in hips {
             let (low, high) = if a.y < b.y { (a, b) } else { (b, a) };
@@ -1188,7 +1200,7 @@ mod tests {
         let low = if a.y < b.y { a } else { b };
         assert!(close(low, Vec3::new(4.5, STOREY_M - 0.5, 4.5)), "{low}");
         // Every eave is one board, the inside corner's two meeting in the valley.
-        assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 6);
+        assert_eq!(parts(&pieces, RoofPart::Eave).len(), 6);
     }
 
     #[test]

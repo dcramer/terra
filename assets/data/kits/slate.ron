@@ -1,6 +1,6 @@
-// A roof of grey slates on hewn rafters (docs/building-kits.md, D241), a ridge of rolled
-// slate: a roof kind, as shakes.ron says what each number is. The roof over stone walls
-// unless another is in hand.
+// A roof of grey slates on hewn rafters (docs/building-kits.md, D241, D258), a saddle-backed
+// stone ridge and bargeboards, its pieces from art/kits/slate: a roof kind, as shakes.ron says
+// what each number is. The roof over stone walls unless another is in hand.
 (
     id: 2049,
     pattern: Roof,
@@ -15,17 +15,21 @@
     roof: (
         rows: 11.0,
         phase: 0.0,
-        butt: 0.016,
-        thick: 0.02,
-        uneven: 0.25,
+        thick: 0.025,
+        relief: 0.02,
         tint: (0.6, 0.62, 0.66),
-        rafter: (Hewn, 0.13),
+        rafter: 0.13,
         batten: (0.05, 0.025),
-        board: (0.16, 0.035),
-        board_tint: (1.36, 1.34, 1.3),
-        ridge: Roll,
-        cap: 0.11,
-        fillet: 0.1,
+        parts: {
+            Ridge: (module: "ridge", material: Covering, tint: (0.66, 0.68, 0.72)),
+            Hip: (module: "ridge", material: Covering, tint: (0.66, 0.68, 0.72)),
+            Valley: (module: "valley", material: Covering, tint: (0.6, 0.62, 0.66)),
+            Eave: (module: "eave", material: Board, tint: (1.36, 1.34, 1.3)),
+            Verge: (module: "verge", material: Board, tint: (1.36, 1.34, 1.3)),
+            Flashing: (module: "flashing", material: Flashing),
+            Rafter: (module: "rafter", material: Log, ends: Some(LogEnd), tint: (0.9, 0.84, 0.76)),
+            Batten: (module: "batten", material: Board, tint: (0.9, 0.9, 0.9)),
+        },
     ),
     textures: {
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
@@ -34,8 +38,9 @@
         Covering: (path: "materials/grey_roof_tiles_02", metres: (1.5, 1.5)),
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
     },
-    cost: (steps: 4, step: [("Stone", 1, 32)]),
+    cost: (steps: 4, step: [("Stone", 1, 32), ("Wood", 1, 64)]),
     dress: (
+        pieces: Some("data/kits/pieces/slate.ron"),
         masks: (wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
     ),
 )

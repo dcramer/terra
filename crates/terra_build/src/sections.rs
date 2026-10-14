@@ -1284,7 +1284,7 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             let x = ((c[1] - c[0]) + (c[2] - c[3])) * 0.5;
             let z = ((c[3] - c[0]) + (c[2] - c[1])) * 0.5;
             let y = z.cross(x).normalize_or(Vec3::Y);
-            let thick = (kit.roof.thick + kit.roof.butt).max(0.03);
+            let thick = (kit.roof.thick + kit.roof.relief).max(0.03);
             let (width, depth) = (x.length(), (z - y * z.dot(y)).length());
             let mut tile = along(
                 Vec3::ZERO,
@@ -1307,15 +1307,14 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
         } => {
             let (from, to) = (from.metres(), to.metres());
             let up = layout::roofs::planar_normal(from, to, sides[0].metres());
-            let r = &kit.roof;
-            let (high, wide) = match part {
-                RoofPart::Rafter => (r.rafter.1, r.rafter.1 * 0.7),
-                RoofPart::Batten => (r.batten.1, r.batten.0),
-                RoofPart::Fascia | RoofPart::Verge => (r.board.0, r.board.1),
-                RoofPart::Ridge | RoofPart::Hip => (0.08, r.cap.max(0.1) * 2.0),
-                RoofPart::Valley => (0.03, 0.3),
-                RoofPart::Flashing => (r.fillet.max(0.04), r.fillet.max(0.04)),
-            };
+            // As big as the module laid for it, up and across.
+            let module = kit.roof.parts.get(&part).and_then(|p| {
+                kit.dress
+                    .made
+                    .as_deref()
+                    .and_then(|pieces| pieces.modules.get(&p.module))
+            });
+            let [high, wide] = module.map_or([0.08, 0.2], |m| m.size().map(|s| s.max(0.02)));
             along(from, to, up, high, wide, Shape::Box)
         }
         Piece::Block { .. } | Piece::Gable { .. } | Piece::Wattle { .. } => None,

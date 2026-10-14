@@ -6,6 +6,7 @@
 use crate::Kind;
 use crate::cost::{Amount, Bill, Rules, Terms};
 use crate::layout::roles::Role;
+use crate::layout::roofs::RoofPart;
 use crate::mesh::Material;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -47,8 +48,7 @@ pub struct Kit {
     /// its material's relief stands out (`surface.rs`).
     pub bevel: f32,
     pub relief: f32,
-    /// How each long member is shaped, and how much one differs from the next (D200); a
-    /// roof kind's rafters are of it.
+    /// How each long member is shaped, and how much one differs from the next (D200).
     pub timber: Timber,
     /// A roof kind's: how its roof is made, its frame, battens, covering and trims.
     pub roof: Roofing,
@@ -121,6 +121,8 @@ pub struct Framing {
     pub braces: Braces,
     /// Its members' material: squared timber.
     pub material: Material,
+    /// The module of the kit's pieces each member is (D258), scaled across to its size.
+    pub module: String,
     /// What the infill is made on before it is finished, and is shown while a cube is part
     /// built or being cut out (`Piece::Wattle`): wattle under daub. None, nothing.
     pub core: Option<Material>,
@@ -152,6 +154,7 @@ impl Default for Framing {
             rails: vec![2, 4],
             braces: Braces::Ends,
             material: Material::Hewn,
+            module: "member".into(),
             core: Some(Material::Wattle),
             core_relief: 0.03,
         }
@@ -428,12 +431,14 @@ pub struct Timber {
     pub knots: f32,
     /// How much each member differs from the next.
     pub variation: Variation,
+    /// A module of the kit's pieces (D251, D258) its wall's whole logs are drawn as in place
+    /// of generated ones, if the developers choose hand-made logs; none, generated (D200).
+    pub module: Option<String>,
 }
 
-/// How a roof kind's roofs are made (`layout::roofs`, docs/building-kits.md): a frame of
-/// rafters in its timber, battens across them, a covering of courses (shakes, slates) or a
-/// thick coat (thatch) in its `Covering` material, boards along its eaves and verges, caps
-/// over its ridges and hips, and a mortar fillet where it meets a wall.
+/// How a roof kind's roofs are made (`layout::roofs`, `roofing`, D258): its covering the roof
+/// cubes' surface in its `Covering` material, so thick and pushed out by its height, its rows
+/// on level lines; each line its neighbours make and its frame, a module of its pieces.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Roofing {
@@ -441,61 +446,54 @@ pub struct Roofing {
     /// size, how much of each course shows (its exposure).
     pub rows: f32,
     /// Where a course's lower edge falls on the texture, as a fraction of it down from its
-    /// top, so the texture's rows sit on the courses' steps.
+    /// top, so the texture's rows sit on the courses.
     pub phase: f32,
-    /// How far each course's lower edge stands out from the one under it, in metres.
-    pub butt: f32,
-    /// How thick the covering is over its battens, in metres: a few centimetres of shakes
-    /// or slate, a foot of thatch.
+    /// How thick the covering is over the roof, in metres: a few centimetres of shakes or
+    /// slate, a foot of thatch.
     pub thick: f32,
-    /// How much a course's butt varies along it, as a fraction, so no row is ruled.
-    pub uneven: f32,
+    /// How much further its texture's height pushes it out, from its lowest row to its
+    /// highest, in metres: each course's butt standing out as a step.
+    pub relief: f32,
     /// What the covering's colour is multiplied by (sRGB).
     pub tint: [f32; 3],
-    /// Its rafters: their section, and how thick they are, in metres.
-    pub rafter: (Profile, f32),
-    /// Its battens, one under each course: how wide and how thick.
+    /// How thick its rafters are, and its battens' width and thickness, in metres: how far
+    /// under the roof each is laid.
+    pub rafter: f32,
     pub batten: (f32, f32),
-    /// The boards along its eaves (fascia) and verges (bargeboards): how deep and thick.
-    pub board: (f32, f32),
-    /// What its boards' colour is multiplied by (linear): their wood weathered to a silver
-    /// grey-brown, lighter than the bare texture, so a roof's edges read against its
-    /// covering and the walls, not as black lines.
-    pub board_tint: [f32; 3],
-    /// What caps its ridges and hips, and how wide it is either side of them.
-    pub ridge: Ridge,
-    pub cap: f32,
-    /// How big the fillet of mortar is where it meets a wall standing above it.
-    pub fillet: f32,
+    /// What each line of the roof and its frame is: a module of the kit's pieces.
+    pub parts: BTreeMap<RoofPart, Part>,
 }
 
-/// What caps a roof's ridges and hips.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Ridge {
-    /// Two boards meeting over it, one on each slope.
-    #[default]
-    Boards,
-    /// A rounded roll of the covering itself: ridge tiles, or a thatch's ridge.
-    Roll,
+/// A part of a roof or a frame (D258): the module of the kit's pieces laid along its line,
+/// its material, its ends' material if they show another (a member's end grain), and what
+/// its colour is multiplied by.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Part {
+    pub module: String,
+    pub material: Material,
+    #[serde(default)]
+    pub ends: Option<Material>,
+    #[serde(default = "white")]
+    pub tint: [f32; 3],
+}
+
+fn white() -> [f32; 3] {
+    [1.0; 3]
 }
 
 impl Default for Roofing {
-    /// Split pine shakes over round poles, as `logs.ron` has it.
+    /// Shakes, with no pieces: a test's roof is its covering alone.
     fn default() -> Self {
         Roofing {
             rows: 6.0,
             phase: 0.145,
-            butt: 0.03,
-            thick: 0.025,
-            uneven: 0.35,
+            thick: 0.03,
+            relief: 0.0,
             tint: [1.0, 0.97, 0.93],
-            rafter: (Profile::Round, 0.14),
+            rafter: 0.14,
             batten: (0.06, 0.025),
-            board: (0.22, 0.035),
-            board_tint: [1.42, 1.36, 1.26],
-            ridge: Ridge::Boards,
-            cap: 0.16,
-            fillet: 0.1,
+            parts: BTreeMap::new(),
         }
     }
 }
@@ -754,6 +752,7 @@ impl Default for Timber {
             groove: 0.4,
             knots: 0.8,
             variation: Variation::default(),
+            module: None,
         }
     }
 }

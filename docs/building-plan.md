@@ -20,7 +20,7 @@ The developers' agenda, above everything below: building takes **an approach to 
 
 ## Where it lives
 
-**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); `kit`, `layout/runs`, `layout/trims`, `layout/ground`, `layout/floors`, `layout/blocks` and `layout/roofs`, `timber`, `surface` and `roofing` are built (step 2, under way); `roofer` is built (D241); `sections` is built (step 3, D213); `layout/roles`, `layout/dressing`, `layout/stairs` and `dress` are built (step 2a, D215); `layout/shapes` is built (step 5, D220):
+**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); `kit`, `layout/runs`, `layout/trims`, `layout/ground`, `layout/floors`, `layout/blocks` and `layout/roofs`, `timber`, `surface` and `roofing` are built (step 2, under way); `roofer` is built (D241); `sections` is built (step 3, D213); `layout/roles`, `layout/dressing`, `layout/stairs` and `dress` are built (step 2a, D215); `layout/shapes` is built (step 5, D220); `modules` is built (D258):
 
 | Module | Holds |
 |---|---|
@@ -40,8 +40,9 @@ The developers' agenda, above everything below: building takes **an approach to 
 | `layout/stairs` | A timber kind's flights laid as steps: logs across, a log along each nose, treads, stringers; a column topped by a stair two treads, by a slope a ramp of boards (D220) |
 | `layout/shapes` | A timber kind's halves as low decks, its posts as uprights on a pad under a bolster (D220), and its upper halves, inverted stairs and slopes and corner slopes as boxes of boards: decks, boards up each ramp cut at the crease, boarded undersides and clad sides (D231) |
 | `dress` | A kit's dress drawn: profiles swept, mitred, jointed and capped; corner stones placed; the masks of dirt and wear |
+| `modules` | A module of a kit's pieces laid along a line (D258): whole copies stretched to fit, on a plane or draped over a crease, capped where the line stops; roofs' lines and frames, and logs if a kit names one |
 | `layout/floors` | A timber kind's floors and flat roofs as decks: boards, rim beams, joists (D206) |
-| `layout/roofs` | A roof kind's cubes as a roof, from their neighbours (D241): covering, eave, verge, ridge, hip, valley, flashing, rafters and battens, each waiting on its cube's stage; walls under roof cubes cut at the roof's underside |
+| `layout/roofs` | A roof kind's cubes as a roof, from their neighbours (D241): covering, eave, verge, ridge, hip, valley, flashing, rafters and battens, each waiting on its cube's stage; walls under roof cubes cut at the roof's underside; drawn by `roofing`, the covering as the cubes' surface in its material and every line a module (D258) |
 | `roofer` | "Add a roof with this material" (D226, D241): roof cubes over a footprint, gable, hip or lean-to, and the walls under its gable ends; old saves' roof sections laid as roof cubes through it |
 | `layout/ground` | Door steps down to the ground (D206); footings are cubes, laid by `ground` |
 | `walk` | Walking: each cube to its fill, and to its shape's top under the walker's feet: a stair's steps, a slope's ramp, a half (D220) |

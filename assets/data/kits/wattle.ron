@@ -12,7 +12,8 @@
 // framing        its frame: members 18 cm wide standing 3 cm proud of the daub and 10 cm deep,
 //                corner posts 20 cm square, braces 14 cm, a post every one and a half metres
 //                along a wall, rails at one and two metres in each storey, braced at each end,
-//                over a core of woven hazel standing out 3 cm
+//                over a core of woven hazel standing out 3 cm; each member the hand-made
+//                module `member` of its pieces (art/kits/wattle, tools/kits, D258)
 // textures       its daub (Poly Haven's patterned_clay_plaster, CC0), its wattle (generated
 //                and made to tile, art/textures/wattle.png, D191), its oak (rough_wood), its
 //                floors' beaten earth (clay_floor_001)
@@ -47,6 +48,7 @@
         rails: [2, 4],
         braces: Ends,
         material: Hewn,
+        module: "member",
         core: Some(Wattle),
         core_relief: 0.03,
     )),
@@ -61,6 +63,7 @@
     },
     cost: (steps: 4, step: [("Wood", 1, 64), ("Fibre", 1, 64)]),
     dress: (
+        pieces: Some("data/kits/pieces/wattle.ron"),
         masks: (dirt: 0.7, dirt_tint: (0.66, 0.6, 0.5), wear: 0.06, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
     ),
     meets: Some((

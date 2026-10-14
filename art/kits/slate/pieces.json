@@ -1,0 +1,44 @@
+{
+  "about": "The slate roof's hand-made pieces (D251, D258, tools/kits): modules laid along the roof's lines, each modelled along +X, Y up from what it sits on, Z across, in metres. The covering is about 0.025 m of slate (slate.ron).",
+  "profiles": {},
+  "corners": {},
+  "modules": {
+    "ridge": {
+      "about": "A saddle-backed stone ridge over the ridge and hips, a roll along its top, laid in stones 40 cm long with a joint between; folded over the two slopes.",
+      "kind": "mound", "length": 0.4, "step": 0.1, "variants": 3, "joint": 0.004,
+      "base": 0.045, "height": 0.08, "half": 0.2, "power": 3.0, "drop": 0.04, "lumpy": 0.004,
+      "rods": [[0.14, 0.0]], "rod": 0.032,
+      "blend": 0.07, "cap": "flat"
+    },
+    "verge": {
+      "about": "A bargeboard down the verge, its top over the slates' edge.",
+      "kind": "timber", "length": 1.0, "step": 0.2, "variants": 2, "open": true,
+      "y": [-0.17, 0.06], "z": [0.0, 0.035], "round": 0.007, "per_corner": 2, "adze": 0.002, "period": 0.4, "cap": "flat"
+    },
+    "eave": {
+      "about": "A fascia board along the eave, plumb, under the slates' edge.",
+      "kind": "timber", "length": 1.0, "step": 0.2, "variants": 2, "open": true,
+      "y": [-0.2, -0.02], "z": [-0.035, 0.0], "round": 0.007, "per_corner": 2, "adze": 0.002, "period": 0.4, "cap": "flat"
+    },
+    "valley": {
+      "about": "A swept valley of slate round the crease.",
+      "kind": "mound", "length": 1.0, "step": 0.2, "variants": 1,
+      "base": 0.025, "height": 0.02, "half": 0.18, "power": 1.6, "drop": 0.015, "blend": 0.12
+    },
+    "flashing": {
+      "about": "A fillet of lime mortar where the roof meets a wall above it.",
+      "kind": "bundle", "length": 1.0, "step": 0.2, "variants": 1,
+      "y": 0.035, "z": -0.04, "radii": [0.06, 0.08], "pinch": 0.0, "sides": 8, "lumpy": 0.15
+    },
+    "rafter": {
+      "about": "A rafter or a ridge beam: squared oak, adzed.",
+      "kind": "timber", "length": 1.0, "step": 0.2, "variants": 2, "open": true,
+      "y": [-0.065, 0.065], "z": [-0.045, 0.045], "round": 0.01, "per_corner": 2, "adze": 0.004, "period": 0.2, "cap": "flat"
+    },
+    "batten": {
+      "about": "A sawn batten across the rafters, one under each course.",
+      "kind": "timber", "length": 1.0, "step": 1.0, "variants": 1, "open": true,
+      "y": [-0.025, 0.0], "z": [0.0, 0.05], "round": 0.004, "per_corner": 2, "cap": "flat"
+    }
+  }
+}

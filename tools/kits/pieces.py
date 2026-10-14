@@ -2,7 +2,9 @@
 
     tools/blender/run.sh tools/kits/pieces.py art/kits/stone/pieces.json assets/data/kits/pieces/stone.ron
 
-Reads the source, a JSON file under art/kits/<kit>/: its profiles, each a polyline in
+Reads the source, a JSON file under art/kits/<kit>/: its modules (D258), lengths of mesh
+swept from a section along +X and shaped as they go, each at a near and a far budget with
+a cap for where its line stops; its profiles, each a polyline in
 (out, up) metres from the edge it is swept along, the corners named rounded by Blender's
 vertex bevel; and its corner stones, each a block at an edge's corner, standing out of both
 faces, its two faces divided, pillowed and pitched as a mason dresses them, its arrises
@@ -203,19 +205,283 @@ def ron_mesh(positions, normals, indices):
     )
 
 
+# Modules (D258): lengths of mesh along +X, modelled here from their numbers, each a set of
+# rings of a section swept along it and shaped as it goes: an adze's scallops, a bundle
+# pinched where it is tied, a ridge's pointed edge. Built in game space (x along, y up,
+# z across) and turned into Blender's frame, Z up: game (x, y, z) is Blender (x, -z, y).
+
+
+def fade(x, length, reach=0.05):
+    """1 inside a module, falling to 0 at its two ends, so copies laid end to end meet in
+    one section and read as one member."""
+    return min(1.0, x / reach, (length - x) / reach) if reach > 0 else 1.0
+
+
+def lumps(x, y, z, seed, size=0.12):
+    """Smooth noise from -1 to 1, about `size` metres across."""
+    at = Vector((x / size + seed * 0.31, y / size, z / size + seed * 0.17))
+    return noise.noise(at)
+
+
+def rounded_rect(y0, y1, z0, z1, r, per_corner=3):
+    """A rectangle's corners rounded by r, as points (y, z) round it."""
+    r = max(0.001, min(r, (y1 - y0) / 2.01, (z1 - z0) / 2.01))
+    centres = [(y1 - r, z1 - r, 0.0), (y1 - r, z0 + r, 90.0), (y0 + r, z0 + r, 180.0), (y0 + r, z1 - r, 270.0)]
+    out = []
+    for cy, cz, start in centres:
+        for k in range(per_corner):
+            a = math.radians(start + 90.0 * k / (per_corner - 1))
+            out.append((cy + r * math.cos(a), cz + r * math.sin(a)))
+    return out
+
+
+def ring_mesh(name, rings, closed=True, caps=(False, False), smooth=40.0):
+    """A mesh of rings, each (x, [(y, z), ...]) with as many points, joined in order; a
+    closed section joins its last point to its first; `caps` fills its first and last ring."""
+    bm = bmesh.new()
+    vs = [[bm.verts.new((x, -z, y)) for (y, z) in points] for x, points in rings]
+    n = len(rings[0][1])
+    for a, b in zip(vs, vs[1:]):
+        for i in range(n if closed else n - 1):
+            j = (i + 1) % n
+            bm.faces.new((a[i], a[j], b[j], b[i]))
+    if caps[0]:
+        bm.faces.new(vs[0])
+    if caps[1]:
+        bm.faces.new(vs[-1])
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    # Outward, from the middle of its section where it is: an open tube's faces, which
+    # Blender cannot tell inside from out, turned round if they look in.
+    bm.normal_update()
+    middles = {round(x, 5): Vector((x, -sum(p[1] for p in pts) / len(pts), sum(p[0] for p in pts) / len(pts))) for x, pts in rings}
+    keys = sorted(middles)
+    out = 0.0
+    for f in bm.faces:
+        c = f.calc_center_median()
+        k = min(keys, key=lambda x: abs(x - c.x))
+        middle = middles[k].copy()
+        middle.x = c.x
+        out += f.normal.dot(c - middle) * f.calc_area()
+    if out < 0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    return finish(name, bm, smooth, recalc=False)
+
+
+def finish(name, bm, smooth, recalc=True):
+    if recalc:
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    ob = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(ob)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(smooth))
+    ob.select_set(False)
+    return ob
+
+
+def join(name, obs):
+    """Objects made one."""
+    for ob in bpy.context.view_layer.objects:
+        ob.select_set(False)
+    for ob in obs:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = obs[0]
+    bpy.ops.object.join()
+    obs[0].name = name
+    obs[0].select_set(False)
+    return obs[0]
+
+
+def xs(length, step):
+    count = max(1, int(round(length / step)))
+    return [length * i / count for i in range(count + 1)]
+
+
+def section(spec, x, seed, length, end=False):
+    """A module's section at a point along it, as points (y, z) round it, and whether it is
+    closed. `end`, the plain section its copies meet in."""
+    kind = spec["kind"]
+    f = 0.0 if end else fade(x, length, spec.get("fade", 0.05))
+    if kind == "timber":
+        # Squared timber: its corners rounded where the axe met the tree's round and wandering
+        # along it; its faces scalloped by the adze in shallow dishes.
+        y0, y1 = spec["y"]
+        z0, z1 = spec["z"]
+        r = spec["round"] * (1.0 + 0.5 * f * lumps(x, 0.0, 1.0, seed, 0.3))
+        points = rounded_rect(y0, y1, z0, z1, r, spec.get("per_corner", 3))
+        adze, period = spec.get("adze", 0.0), spec.get("period", 0.2)
+        out = []
+        cy, cz = (y0 + y1) / 2, (z0 + z1) / 2
+        for i, (y, z) in enumerate(points):
+            dy, dz = y - cy, z - cz
+            # In along the face it is on, by the scallop there, each face its own phase.
+            face = 0 if abs(dy) / (y1 - y0) > abs(dz) / (z1 - z0) else 1
+            phase = (seed * 0.37 + face * 0.5 + (1 if (dy if face == 0 else dz) > 0 else 0) * 0.25) % 1.0
+            scallop = 0.5 - 0.5 * math.cos(2 * math.pi * (x / period + phase))
+            dig = adze * f * (scallop + 0.4 * lumps(x, y, z, seed, 0.15))
+            if face == 0:
+                y -= math.copysign(dig, dy)
+            else:
+                z -= math.copysign(dig, dz)
+            out.append((y, z))
+        return out, True
+    if kind == "pole":
+        # A round pole in its bark, a little lumpy.
+        r, cy, cz = spec["radius"], spec.get("y", 0.0), spec.get("z", 0.0)
+        n = spec.get("sides", 10)
+        out = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            k = r * (1.0 + spec.get("lumps", 0.06) * f * lumps(x, math.cos(a), math.sin(a), seed, 0.25))
+            out.append((cy + k * math.cos(a), cz + k * math.sin(a)))
+        return out, True
+    if kind == "mound":
+        # A ridge or a fillet laid over what it sits on: crowned across, its foot cut down
+        # square at its edges, which may be cut in points along it; straw lumpy.
+        base, h, w = spec["base"], spec["height"], spec["half"]
+        p = spec.get("power", 2.2)
+        point = spec.get("points", 0.0)
+        period = spec.get("period", 0.25)
+        tri = 1.0 - abs(2.0 * ((x / period) % 1.0) - 1.0)
+        n = spec.get("across", 13)
+        out = []
+        sides = []
+        for side in (-1, 1):
+            ww = w + point * (tri - 0.5) * (0.0 if end else 1.0)
+            sides.append(ww)
+        top = []
+        for i in range(n):
+            t = -1.0 + 2.0 * i / (n - 1)
+            ww = sides[0] if t < 0 else sides[1]
+            z = t * ww
+            crown = (1.0 - abs(t) ** p) ** (1.0 / p)
+            y = base + h * crown + spec.get("lumpy", 0.0) * f * lumps(x, 0.0, z, seed, 0.18)
+            top.append((y, z))
+        drop = spec.get("drop", 0.03)
+        out = [(base - drop, -sides[0])] + top + [(base - drop, sides[1])]
+        return out, True
+    if kind == "bundle":
+        # A bundle bound round: an oval about its middle, pinched where it is tied.
+        cy, cz = spec["y"], spec["z"]
+        ry, rz = spec["radii"]
+        period = spec.get("period", 0.5)
+        pinch = spec.get("pinch", 0.1) * (0.5 + 0.5 * math.cos(2 * math.pi * x / period))
+        n = spec.get("sides", 12)
+        out = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            k = 1.0 - pinch + spec.get("lumpy", 0.0) * f * lumps(x, math.cos(a), math.sin(a), seed, 0.15)
+            out.append((cy + ry * k * math.cos(a), cz + rz * k * math.sin(a)))
+        return out, True
+    raise SystemExit(f"a module of kind {kind} is not known")
+
+
+def parts_of(spec):
+    """A module's parts, each a section swept along it with the module's numbers."""
+    base = {k: v for k, v in spec.items() if k != "parts"}
+    return [{**base, **part} for part in spec.get("parts", [spec])]
+
+
+def module_mesh(name, spec, seed):
+    """One copy of a module, its parts joined."""
+    obs = [part_mesh(f"{name}_{k}", part, seed) for k, part in enumerate(parts_of(spec))]
+    return join(name, obs) if len(obs) > 1 else obs[0]
+
+
+def part_mesh(name, spec, seed):
+    """One part of a module's copy, from its section swept along it; a timber module open
+    at its ends so copies run on as one member, others closed."""
+    length = spec["length"]
+    rings = [(x, section(spec, x, seed, length)[0]) for x in xs(length, spec.get("step", 0.08))]
+    closed = section(spec, 0.0, seed, length)[1]
+    # A gap pressed in where one tile, stone or board ends against the next.
+    joint = spec.get("joint", 0.0)
+    if joint > 0:
+        rings = [(rings[0][0], shrink(rings[0][1], joint))] + rings + [(rings[-1][0], shrink(rings[-1][1], joint))]
+        rings[1], rings[-2] = (rings[1][0] + joint, rings[1][1]), (rings[-2][0] - joint, rings[-2][1])
+        caps = (True, True)
+    else:
+        caps = (not spec.get("open", False), not spec.get("open", False))
+    parts = [ring_mesh(name, rings, closed, caps, spec.get("smooth", 40.0))]
+    # Rods laid along it, as a ridge's liggers are pegged over its straw.
+    for k, (ry, rz) in enumerate(spec.get("rods", [])):
+        rr = spec.get("rod", 0.012)
+        rod = []
+        for x in xs(length, 0.1):
+            ring = []
+            sides = spec.get("rod_sides", 5)
+            for i in range(sides):
+                a = 2 * math.pi * i / sides
+                ring.append((ry + rr * math.cos(a), rz + rr * math.sin(a)))
+            rod.append((x, ring))
+        parts.append(ring_mesh(f"{name}_rod{k}", rod, True, (False, False), 60.0))
+    return join(name, parts) if len(parts) > 1 else parts[0]
+
+
+def shrink(points, by):
+    """A section drawn in towards its middle."""
+    cy = sum(p[0] for p in points) / len(points)
+    cz = sum(p[1] for p in points) / len(points)
+    return [(cy + (y - cy) * (1 - by * 4), cz + (z - cz) * (1 - by * 4)) for y, z in points]
+
+
+def cap_mesh(name, spec, seed):
+    """What closes a module's line where it stops, its parts' caps joined."""
+    if not spec.get("cap"):
+        return None
+    obs = [part_cap(f"{name}_{k}", part, seed) for k, part in enumerate(parts_of(spec))]
+    return join(name, obs) if len(obs) > 1 else obs[0]
+
+
+def part_cap(name, spec, seed):
+    """A part's cap, past its +X end: its plain section filled flat, or drawn in to a
+    rounded end over `reach` metres."""
+    cap = spec["cap"]
+    points, _ = section(spec, 0.0, seed, spec["length"], end=True)
+    if cap == "flat":
+        return ring_mesh(name, [(0.0, points), (0.004, points)], True, (False, True), 30.0)
+    reach = spec.get("reach", 0.2)
+    cy = spec.get("pivot", [None, None])
+    py = cy[0] if cy[0] is not None else min(p[0] for p in points)
+    pz = cy[1] if cy[1] is not None else 0.0
+    rings = []
+    steps = 5
+    for i in range(steps + 1):
+        t = i / steps
+        k = math.sqrt(max(0.0, 1.0 - t * t)) if i < steps else 0.02
+        rings.append((reach * t, [(py + (y - py) * k, pz + (z - pz) * k) for y, z in points]))
+    return ring_mesh(name, rings, True, (False, True), 60.0)
+
+
+def far_copy(ob, ratio):
+    """A copy at a far budget, by Blender's decimate."""
+    far = ob.copy()
+    far.data = ob.data.copy()
+    bpy.context.collection.objects.link(far)
+    mod = far.modifiers.new("Far", "DECIMATE")
+    mod.ratio = ratio
+    return far
+
+
 def main():
     with open(SOURCE, encoding="utf-8") as f:
         source = json.load(f)
     clear()
     lines = ["// Made by tools/kits/pieces.py from " + SOURCE.replace("\\", "/") + "; do not edit.", "("]
     lines.append("    profiles: {")
-    for name, spec in source["profiles"].items():
+    for name, spec in source.get("profiles", {}).items():
         points = profile(spec)
         lines.append(f'        "{name}": [' + ", ".join(ron_floats(p) for p in points) + "],")
         print(f"profile {name}: {len(points)} points")
     lines.append("    },")
     lines.append("    corners: {")
-    for name, spec in source["corners"].items():
+    for name, spec in source.get("corners", {}).items():
         lines.append(f'        "{name}": (')
         for which in ("long", "short"):
             meshes = []
@@ -226,6 +492,25 @@ def main():
                 print(f"corner {name} {which} {variant}: {len(indices) // 3} triangles")
                 meshes.append(ron_mesh(positions, normals, indices))
             lines.append(f"            {which}: [" + ", ".join(meshes) + "],")
+        lines.append("        ),")
+    lines.append("    },")
+    lines.append("    modules: {")
+    for name, spec in source.get("modules", {}).items():
+        near, far = [], []
+        for variant in range(spec.get("variants", 1)):
+            seed = zlib.crc32(f"{name}{variant}".encode()) % 1000
+            ob = module_mesh(f"{name}_{variant}", spec, seed)
+            made = triangles(ob)
+            near.append(ron_mesh(*made))
+            print(f"module {name} {variant}: {len(made[2]) // 3} triangles")
+            far.append(ron_mesh(*triangles(far_copy(ob, spec.get("far", 0.35)))))
+        cap = cap_mesh(f"{name}_cap", spec, 7)
+        lines.append(f'        "{name}": (')
+        lines.append(f"            length: {spec['length']:g},")
+        lines.append(f"            blend: {spec.get('blend', 0.0):g},")
+        lines.append("            near: [" + ", ".join(near) + "],")
+        lines.append("            far: [" + ", ".join(far) + "],")
+        lines.append("            cap: " + (f"Some({ron_mesh(*triangles(cap))})" if cap else "None") + ",")
         lines.append("        ),")
     lines.append("    },")
     lines.append(")")

@@ -760,7 +760,7 @@ fn pokes_out(
         // roof's top; a wall's piece in a roof cube, or over one, not at all.
         if let Some(top) = roofs.top_over(middle.x, middle.z, middle.y - 0.6) {
             let allowed = if is_roof {
-                kit.roof.thick + kit.roof.butt + CAP_M
+                kit.roof.thick + kit.roof.relief + CAP_M
             } else {
                 0.02
             };

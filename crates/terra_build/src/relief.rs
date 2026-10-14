@@ -13,6 +13,9 @@ pub struct Relief {
     width: usize,
     height: usize,
     data: Vec<u8>,
+    /// Each row's height across it, from its lowest row's to its highest's as 0 to 1, once
+    /// asked for ([`Relief::row`]).
+    rows: std::sync::OnceLock<Vec<f32>>,
 }
 
 impl Relief {
@@ -23,7 +26,30 @@ impl Relief {
             width,
             height,
             data,
+            rows: std::sync::OnceLock::new(),
         })
+    }
+
+    /// The height across a row of the texture, at a point down it, repeating, between rows:
+    /// from 0 for its lowest row to 1 for its highest, so a covering's courses stand out by
+    /// the steps its texture shows between them (D258).
+    pub fn row(&self, v: f32) -> f32 {
+        let rows = self.rows.get_or_init(|| {
+            let means: Vec<f32> = self
+                .data
+                .chunks(self.width)
+                .map(|row| row.iter().map(|&b| f32::from(b)).sum::<f32>() / row.len() as f32)
+                .collect();
+            let low = means.iter().copied().fold(f32::MAX, f32::min);
+            let high = means.iter().copied().fold(f32::MIN, f32::max);
+            let span = (high - low).max(1e-3);
+            means.iter().map(|m| (m - low) / span).collect()
+        });
+        let y = v.rem_euclid(1.0) * self.height as f32 - 0.5;
+        let y0 = y.floor();
+        let f = y - y0;
+        let at = |j: f32| rows[(j as i64).rem_euclid(self.height as i64) as usize];
+        at(y0) * (1.0 - f) + at(y0 + 1.0) * f
     }
 
     /// The height, from 0 to 1, where the texture is at a point, repeating, between texels.
@@ -117,12 +143,12 @@ impl Maps {
 }
 
 /// The folder of the material whose height shapes a kit's pieces, if any does: a block
-/// kind's stone, or a timber kind's bark.
+/// kind's stone, a timber kind's bark, or a roof's covering.
 pub fn shaped_by(kit: &Kit) -> Option<&str> {
     let (material, depth) = match kit.pattern {
         Pattern::Masonry => (Material::Masonry, kit.relief),
         Pattern::Logs => (Material::Log, kit.timber.relief),
-        Pattern::Roof => return None,
+        Pattern::Roof => (Material::Covering, kit.roof.relief),
     };
     (depth > 0.0)
         .then(|| kit.textures.get(&material))

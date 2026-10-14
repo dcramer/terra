@@ -44,6 +44,7 @@ pub mod inspect;
 pub mod kit;
 pub mod layout;
 mod mesh;
+pub mod modules;
 pub mod ops;
 pub mod order;
 pub mod parts;

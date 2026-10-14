@@ -31,6 +31,49 @@ pub struct Pieces {
     pub profiles: BTreeMap<String, Vec<[f32; 2]>>,
     /// Corner stones by set.
     pub corners: BTreeMap<String, Corners>,
+    /// Modules by name (D258, `modules`): lengths of mesh repeated along a line.
+    pub modules: BTreeMap<String, Module>,
+}
+
+/// A module (D258): a length of mesh modelled along +X from 0 to `length`, Y up from what
+/// it sits on and Z across, laid along a line in whole copies (`modules::lay`); several
+/// variants, picked a copy at a time by its seed, each also at a far budget; and a cap,
+/// modelled past +X's end, closing an end where its line stops.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Module {
+    pub length: f32,
+    /// Over a crease, how far either side its up turns from one plane's to the other's
+    /// (`modules::Line::blend`).
+    pub blend: f32,
+    pub near: Vec<Stone>,
+    pub far: Vec<Stone>,
+    pub cap: Option<Stone>,
+}
+
+impl Module {
+    /// How big its section is, up (Y) and across (Z), as modelled: what a member scaled to
+    /// its frame's size is scaled from.
+    pub fn size(&self) -> [f32; 2] {
+        let mut low = [f32::MAX; 2];
+        let mut high = [f32::MIN; 2];
+        for p in self.near.iter().flat_map(|m| &m.positions) {
+            for (k, axis) in [1, 2].into_iter().enumerate() {
+                low[k] = low[k].min(p[axis]);
+                high[k] = high[k].max(p[axis]);
+            }
+        }
+        [0, 1].map(|k| (high[k] - low[k]).max(0.0))
+    }
+
+    /// The most triangles one copy has near, its cap's apart.
+    pub fn triangles(&self) -> usize {
+        self.near
+            .iter()
+            .map(|m| m.triangles.len())
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// A set of corner stones: each a variant. A set with `short` ones lays long and short by

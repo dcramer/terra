@@ -9,6 +9,7 @@
 //! items there are, so it runs as a test and as a tool alike.
 
 use crate::kit::{Kit, Pattern};
+use crate::layout::roofs::RoofPart;
 use crate::layout::{self, Piece};
 use crate::mesh::Material;
 use crate::{Base, BuildOp, CELL_M, Cube, Fill, Kind, Surfaces};
@@ -18,11 +19,14 @@ use std::collections::BTreeMap;
 /// a metre of a long member, and in a square metre of roof, its covering, battens, boards
 /// and caps together.
 pub const MEMBER_PER_METRE: usize = 700;
-pub const ROOF_PER_SQUARE_METRE: usize = 500;
+pub const ROOF_PER_SQUARE_METRE: usize = 800;
 /// A kit's dress (D215): triangles in a metre of a profile swept along an edge, its ends
 /// and joints included, and in one corner stone.
 pub const TRIM_PER_METRE: usize = 600;
 pub const CORNER_STONE: usize = 320;
+/// A module (D258): triangles in a metre of it near, and in its cap.
+pub const MODULE_PER_METRE: usize = 800;
+pub const MODULE_CAP: usize = 600;
 
 /// What a kit drew on the checker's cabin: triangles a metre of its long members, and a
 /// square metre of its roof.
@@ -129,7 +133,7 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
     // Life size, and numbers in range (D14: lightly stylised, true proportions).
     let t = &kit.timber;
     let r = &kit.roof;
-    let ranges: [(&str, f32, f32, f32); 14] = [
+    let ranges: [(&str, f32, f32, f32); 12] = [
         ("diameter", kit.diameter, 0.12, CELL_M),
         ("eaves", kit.eaves, 0.0, 1.0),
         ("frame", kit.frame, 0.0, 0.2),
@@ -138,11 +142,9 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         ("timber taper", t.taper, 0.0, 0.5),
         ("timber uneven", t.uneven, 0.0, 0.3),
         ("timber relief", t.relief, 0.0, 0.08),
-        ("roof butt", r.butt, 0.0, 0.1),
         ("roof thickness", r.thick, 0.005, 0.4),
-        ("rafters", r.rafter.1, 0.06, 0.3),
-        ("boards' depth", r.board.0, 0.05, 0.4),
-        ("cap", r.cap, 0.04, 0.5),
+        ("roof relief", r.relief, 0.0, 0.15),
+        ("rafters", r.rafter, 0.06, 0.3),
         ("courses a texture", r.rows, 1.0, 40.0),
     ];
     for (what, value, low, high) in ranges {
@@ -218,6 +220,7 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
             ));
         }
     }
+    parts(kit, &mut fail);
     if let Some(framing) = &kit.framing {
         if kit.pattern != Pattern::Masonry {
             fail("is framed, which only a block kind is".into());
@@ -295,6 +298,10 @@ fn dressed_in(kit: &Kit) -> Vec<(String, Material)> {
         if let Some(core) = framing.core {
             out.push(("its frame's core".into(), core));
         }
+    }
+    // A roof's lines and frame, each a module of its pieces in its own material (D258).
+    for (part, made) in &kit.roof.parts {
+        out.push((format!("{part:?}"), made.material));
     }
     out
 }
@@ -421,6 +428,116 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
             }
         }
     }
+}
+
+/// A kit's modules (D257): every part of its roof and its frame names a module it has, in a
+/// material it has a texture for, and each module keeps to its budget, near a metre and in
+/// its cap.
+fn parts(kit: &Kit, fail: &mut dyn FnMut(String)) {
+    let pieces = kit.dress.made.as_deref();
+    let mut named: Vec<(String, &str, Material, Option<Material>)> = kit
+        .roof
+        .parts
+        .iter()
+        .map(|(part, p)| (format!("{part:?}"), p.module.as_str(), p.material, p.ends))
+        .collect();
+    if let Some(framing) = &kit.framing {
+        named.push((
+            "its frame".into(),
+            framing.module.as_str(),
+            framing.material,
+            Some(Material::LogEnd),
+        ));
+    }
+    if let Some(module) = &kit.timber.module {
+        named.push((
+            "its logs".into(),
+            module.as_str(),
+            Material::Log,
+            Some(Material::LogEnd),
+        ));
+    }
+    if kit.pattern == Pattern::Roof {
+        for part in [
+            RoofPart::Ridge,
+            RoofPart::Hip,
+            RoofPart::Verge,
+            RoofPart::Rafter,
+            RoofPart::Batten,
+        ] {
+            if !kit.roof.parts.contains_key(&part) {
+                fail(format!("its roof has no piece for {part:?}"));
+            }
+        }
+    }
+    for (what, name, material, ends) in named {
+        for material in [Some(material), ends].into_iter().flatten() {
+            if !kit.textures.contains_key(&material) {
+                fail(format!(
+                    "draws {what} in {material:?}, which it has no texture for"
+                ));
+            }
+        }
+        let Some(module) = pieces.and_then(|p| p.modules.get(name)) else {
+            fail(format!("{what} is the module {name}, which it has not"));
+            continue;
+        };
+        if module.near.is_empty() || module.length <= 0.0 {
+            fail(format!("its module {name} has nothing in it"));
+            continue;
+        }
+        let per_metre = (module.triangles() as f32 / module.length).round() as usize;
+        if per_metre > MODULE_PER_METRE {
+            fail(format!(
+                "its module {name}: {per_metre} triangles a metre, over the {MODULE_PER_METRE} its budget allows"
+            ));
+        }
+        if let Some(cap) = &module.cap
+            && cap.triangles.len() > MODULE_CAP
+        {
+            fail(format!(
+                "its module {name}'s cap: {} triangles, over the {MODULE_CAP} its budget allows",
+                cap.triangles.len()
+            ));
+        }
+        if module.near.iter().any(|mesh| !faces_out(mesh)) {
+            fail(format!("its module {name} faces in"));
+        }
+        let far = module
+            .far
+            .iter()
+            .map(|m| m.triangles.len())
+            .max()
+            .unwrap_or(0);
+        if far * 2 > module.triangles() {
+            fail(format!("its module {name} is no lighter far off"));
+        }
+    }
+}
+
+/// Whether a module's mesh faces out, away from the middle of its section along it, as it
+/// is wound: what a module seen from outside needs, or its faces are culled.
+fn faces_out(mesh: &crate::dress::Stone) -> bool {
+    use glam::Vec3;
+    let at = |i: u32| Vec3::from_array(mesh.positions[i as usize]);
+    let count = mesh.positions.len().max(1) as f32;
+    let middle = mesh
+        .positions
+        .iter()
+        .map(|p| Vec3::from_array(*p))
+        .sum::<Vec3>()
+        / count;
+    let out: f32 = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(at);
+            let centre = (a + b + c) / 3.0;
+            let away = (centre - middle).with_x(0.0);
+            (b - a).cross(c - a).dot(away)
+        })
+        .sum();
+    out > 0.0
 }
 
 /// Checks every kit there is, by its file's name: each as [`check`], and no two laying the
