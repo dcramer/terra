@@ -73,9 +73,14 @@ const FADE: f32 = 0.2;
 /// second; beyond, none. For a 20 m tree; they grow with its height as its levels do. Card
 /// shadows farther out cost 4 ms a frame on the RTX 3080 (D221).
 const SHADOW_M: [f32; 2] = [30.0, 100.0];
+/// The lumps shrink away over the last of this share of SHADOW_M[1].
+const SHADOW_END: f32 = 0.3;
 /// A crown's cards drop out between these distances, from all of them to two a clump; past
 /// the second it is drawn as those two (D223).
 const CARDS_DROP_M: [f32; 2] = [18.0, 110.0];
+/// Crowns' shadows hand over from their cards to solid lumps between these distances, for
+/// every tree alike (D234).
+const SHADOW_HANDOVER_M: [f32; 2] = [14.0, 26.0];
 /// How many kinds of fallen log there are; each is drawn many times.
 const LOG_KINDS: u64 = 5;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
@@ -125,6 +130,10 @@ pub struct FoliageExtension {
     /// For a crown whose cards drop out: from where, to where, and 1 (D223).
     #[uniform(100)]
     cards: Vec3,
+    /// For a shadow stand-in: each card or lump shrinks to its middle between x and y, and
+    /// grows from it between z and w; zero where it does not (D234).
+    #[uniform(100)]
+    shrink: Vec4,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -175,6 +184,14 @@ fn follow_detail(
     }
     if let Some(mut material) = materials.get_mut(&forest.dropping) {
         material.extension.cards = (Vec2::from(CARDS_DROP_M) * detail.0).extend(1.0);
+    }
+    let [from, to] = SHADOW_HANDOVER_M;
+    let end = SHADOW_M[1];
+    if let Some(mut material) = materials.get_mut(&forest.stand_in) {
+        material.extension.shrink = Vec4::new(from, to, 0.0, 0.0) * detail.0;
+    }
+    if let Some(mut material) = materials.get_mut(&forest.lumps) {
+        material.extension.shrink = Vec4::new(end * (1.0 - SHADOW_END), end, from, to) * detail.0;
     }
 }
 
@@ -341,6 +358,9 @@ struct Forest {
     /// The near crowns' leaves, whose cards drop out between distances that follow how far
     /// detail reaches (D230).
     dropping: Handle<Foliage>,
+    /// The shadow stand-ins, whose handover follows how far detail reaches too.
+    stand_in: Handle<Foliage>,
+    lumps: Handle<Foliage>,
 }
 
 /// The forest's map, on a flat patch laid over the ground: east and south of the start, in
@@ -473,6 +493,7 @@ fn plant(
         strength: 1.0,
         bark: 0.0,
         cards: Vec3::ZERO,
+        shrink: Vec4::ZERO,
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).
@@ -542,7 +563,7 @@ fn plant(
     // The near crown's leaves, whose cards drop out with distance (D223).
     let dropping_leaves = materials.add(Foliage {
         base: StandardMaterial {
-            base_color_texture: Some(leaf_picture),
+            base_color_texture: Some(leaf_picture.clone()),
             alpha_mode: AlphaMode::Mask(LEAF_CUT),
             // Seen from both sides, but with the same normal on both, which leans out of
             // the crown, so a card does not flip from lit to dark as it turns.
@@ -558,8 +579,24 @@ fn plant(
             ..wind.clone()
         },
     });
-    // Only the sun sees it, so how it would look does not matter.
-    let solid = plain.add(StandardMaterial::default());
+    // The shadow stand-ins: their cards shrink away over the handover, and the lumps grow in
+    // then shrink away at the end of the shadows (D234).
+    let shrinking = |out: [f32; 2], grow: [f32; 2]| FoliageExtension {
+        shrink: Vec4::new(out[0], out[1], grow[0], grow[1]),
+        ..wind.clone()
+    };
+    let leaves_base = materials.get(&leaves).expect("just added").base.clone();
+    let stand_in_leaves = materials.add(Foliage {
+        base: leaves_base,
+        extension: shrinking(SHADOW_HANDOVER_M, [0.0, 0.0]),
+    });
+    let shadow_lumps = materials.add(Foliage {
+        base: StandardMaterial::default(),
+        extension: shrinking(
+            [SHADOW_M[1] * (1.0 - SHADOW_END), SHADOW_M[1]],
+            SHADOW_HANDOVER_M,
+        ),
+    });
     // A far crown: the leaves' average colour, rough, lit through from behind a little.
     let far_crown = plain.add(StandardMaterial {
         base_color: Color::srgb(0.26, 0.36, 0.13),
@@ -584,8 +621,8 @@ fn plant(
             let near = crown_near(&cards);
             let far = crown_far(&cards);
             let shadow = crown_stand_in(&cards);
-            let clumps = crown_clumps(&tree, 1.0);
-            let lumps = crown_clumps(&tree, SHADOW_LUMP);
+            let clumps = crown_clumps(&tree, 1.0, false);
+            let lumps = crown_clumps(&tree, SHADOW_LUMP, true);
             info!(
                 "lush: tree {kind}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
                 wood[0].triangles(),
@@ -648,6 +685,18 @@ fn plant(
         start_margin: from * (1.0 - FADE)..from,
         end_margin: to * (1.0 - FADE)..to,
         use_aabb: false,
+    };
+    // A crown's shadow handing over from cards to lumps (D234): the cards shrink away and the
+    // lumps grow in over SHADOW_HANDOVER_M, the same for every tree as Horizon Zero Dawn keeps
+    // one shadow detail a cascade, then the lumps shrink away toward SHADOW_M. Bevy's shadow
+    // passes do not dither, so a caster that simply ended would vanish at once.
+    let handover = |cards: bool, _size: f32| {
+        let [from, to] = SHADOW_HANDOVER_M;
+        if cards {
+            VisibilityRange::abrupt(0.0, to)
+        } else {
+            VisibilityRange::abrupt(from, SHADOW_M[1])
+        }
     };
     // Where a crown of two cards a clump gives way to lumps.
     let far_from = |size: f32| (DETAIL_M[2] * size).max(CARDS_DROP_M[1] * 1.4);
@@ -741,14 +790,14 @@ fn plant(
                     ));
                     tree.spawn((
                         Mesh3d(model.shadow.clone()),
-                        MeshMaterial3d(leaves.clone()),
-                        between(0.0, SHADOW_M[0] * size),
+                        MeshMaterial3d(stand_in_leaves.clone()),
+                        handover(true, size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                     tree.spawn((
                         Mesh3d(model.lumps.clone()),
-                        MeshMaterial3d(solid.clone()),
-                        between(SHADOW_M[0] * size, SHADOW_M[1] * size),
+                        MeshMaterial3d(shadow_lumps.clone()),
+                        handover(false, size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                 });
@@ -947,6 +996,8 @@ fn plant(
     });
     commands.insert_resource(Forest {
         dropping: dropping_leaves.clone(),
+        stand_in: stand_in_leaves.clone(),
+        lumps: shadow_lumps.clone(),
     });
 }
 
@@ -1041,6 +1092,10 @@ struct Build {
     /// card's middle, and in w the card's rank in its clump plus a hundredth of how many
     /// cards the clump has (D223). Carried as the tangent, which leaves have no other use for.
     dropping: Vec<[f32; 4]>,
+    /// For a shadow stand-in, which only the sun sees: each vertex's offset from its card's
+    /// or lump's middle in its colour, since Bevy's shadow passes are given no tangents
+    /// (D234).
+    offset_in_colour: bool,
 }
 
 impl Build {
@@ -1493,7 +1548,10 @@ fn crown_far(cards: &[Vec<Card>]) -> Build {
 /// the same as the crown's own, enlarged as the simpler levels are, so the light still
 /// comes through in flecks where it does through the crown.
 fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
-    let mut build = Build::default();
+    let mut build = Build {
+        offset_in_colour: true,
+        ..default()
+    };
     for tip in cards {
         let keep = 2.min(tip.len());
         let grow = libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6) * 0.8;
@@ -1507,8 +1565,11 @@ fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
 /// What a crown's shadow is cast from farther off: a rounded lump for each branch, as
 /// big as most of its leaves, solid so the GPU can skip what is hidden. The light no
 /// longer comes through in flecks, which nobody sees at that distance.
-fn crown_clumps(tree: &Tree, scale: f32) -> Build {
-    let mut build = Build::default();
+fn crown_clumps(tree: &Tree, scale: f32, shadow: bool) -> Build {
+    let mut build = Build {
+        offset_in_colour: shadow,
+        ..default()
+    };
     for branch in 0..tree.branches {
         let tips: Vec<(Vec3, f32)> = tree
             .tips
@@ -1545,13 +1606,18 @@ fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
                 libm::cosf(tilt),
                 libm::sinf(tilt) * libm::sinf(turn),
             );
-            build.vertex(
+            let index = build.vertex(
                 centre + normal * radii,
                 normal,
                 Vec2::ZERO,
                 Vec2::ZERO,
                 Vec3::ONE,
             );
+            // Its offset from the lump's middle, for the shader to grow it from (D234).
+            if build.offset_in_colour {
+                let offset = normal * radii;
+                build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
+            }
         }
     }
     for ring in 0..rings {
@@ -1628,7 +1694,11 @@ impl Card {
             let corner = self.middle
                 + self.right * (u * 2.0 - 1.0) * half * self.flip
                 + self.up * (1.0 - v * 2.0) * half;
-            build.vertex(corner, self.normal, Vec2::new(u, v), self.sway, self.tint);
+            let index = build.vertex(corner, self.normal, Vec2::new(u, v), self.sway, self.tint);
+            if build.offset_in_colour {
+                let offset = corner - self.middle;
+                build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
+            }
             if let Some((k, n)) = rank {
                 let offset = corner - self.middle;
                 build

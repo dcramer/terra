@@ -245,6 +245,9 @@ pub struct FoliageExtension {
     /// Off for grown plants until they draw their crowns that way.
     #[uniform(100)]
     pub cards: Vec3,
+    /// For a shadow stand-in that shrinks away rather than ending (D234); off here.
+    #[uniform(100)]
+    pub shrink: Vec4,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -293,6 +296,7 @@ impl Looks {
             strength: 1.0,
             bark: 0.0,
             cards: Vec3::ZERO,
+            shrink: Vec4::ZERO,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {

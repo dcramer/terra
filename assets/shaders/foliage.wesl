@@ -32,6 +32,9 @@ struct Wind {
     bark: f32,
     // For a crown whose cards drop out with distance: from where, to where, and 1 (D223).
     cards: vec3<f32>,
+    // A shadow stand-in shrinks to its middles between x and y and grows from them between
+    // z and w (D234).
+    shrink: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -81,10 +84,27 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
     let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var local = vertex.position;
-@if(VERTEX_TANGENTS)
+@if(VERTEX_TANGENTS) {
     if wind.cards.z > 0.5 {
         local = dropped(local, vertex.tangent, world_from_local[3].xyz);
     }
+}
+@if(VERTEX_COLORS) {
+    // A shadow stand-in shrinks into its middles rather than ending, since Bevy's shadow
+    // passes do not dither; the offset from its middle is in its colour, which only the sun
+    // sees and the shadow pass is given, unlike tangents (D234).
+    if wind.shrink.y > 0.0 || wind.shrink.w > 0.0 {
+        let far = distance(world_from_local[3].xyz, view.lod_view_world_position);
+        var keep = 1.0;
+        if wind.shrink.y > 0.0 {
+            keep *= 1.0 - smoothstep(wind.shrink.x, wind.shrink.y, far);
+        }
+        if wind.shrink.w > 0.0 {
+            keep *= smoothstep(wind.shrink.z, wind.shrink.w, far);
+        }
+        local = local - vertex.color.rgb * (1.0 - keep);
+    }
+}
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b, globals.time), 1.0);

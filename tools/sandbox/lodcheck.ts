@@ -13,9 +13,10 @@
 // scale it popped at (1 is as played: a pop at 1.3 happens 1.3 times as far off as the
 // switch's own distance, when the player walks through it), and puts them side by side,
 // marked red, in shots/lodcheck/sheet.jpg. Fails if any frame pops more than --limit percent.
-// About fifteen seconds a view. Needs ImageMagick. Node 22.18 or later; no dependencies.
+// About forty seconds for three views: they are drawn at once and compared on every core. Needs ImageMagick. Node 22.18 or later; no dependencies.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { availableParallelism } from "node:os";
 import { mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT } from "./client.ts";
@@ -27,14 +28,14 @@ const VIEWS: Record<string, string> = {
   clearing: "7,1.8,9,-8,1.2,-7",
   edge: "0,1.8,250,0,5,200",
 };
-const SWEEP = { from: 0.5, to: 2.0, first: 300, last: 540 };
+const SWEEP = { from: 0.5, to: 2.0, first: 300, last: 480 };
 /// Frames after the clock stops before comparing, for the wind and anything easing to settle.
 const SETTLE = 6;
 /// Frames are compared at half size; a pixel counts as changed past this much brightness,
 /// and a patch must be this wide to survive.
-const WIDTH = 960;
+const WIDTH = 720;
 const CHANGED = "4%";
-const SPECKLE = "Disk:2.5";
+const SPECKLE = "Disk:2";
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
@@ -52,6 +53,29 @@ const magick = (...words: string[]) => {
   if (done.status !== 0) throw new Error(`magick ${words.join(" ")}: ${done.stderr}`);
   return done.stdout.trim();
 };
+/// A command run in the background, its output when it ends.
+const run = (command: string, words: string[], env?: NodeJS.ProcessEnv) =>
+  new Promise<{ status: number; said: string }>((done) => {
+    const child = spawn(command, words, { cwd: ROOT, env: env ?? process.env });
+    let said = "";
+    child.stdout.on("data", (d) => (said += d));
+    child.stderr.on("data", (d) => (said += d));
+    child.on("close", (status) => done({ status: status ?? 1, said }));
+  });
+/// Runs jobs, so many at once.
+async function pool<T>(jobs: (() => Promise<T>)[], at_once: number): Promise<T[]> {
+  const results: T[] = new Array(jobs.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(at_once, jobs.length) }, async () => {
+      while (next < jobs.length) {
+        const mine = next++;
+        results[mine] = await jobs[mine]();
+      }
+    }),
+  );
+  return results;
+}
 const scaleAt = (frame: number) => {
   const t = Math.min(1, Math.max(0, (frame - SWEEP.first) / (SWEEP.last - SWEEP.first)));
   return Math.exp(Math.log(SWEEP.from) * (1 - t) + Math.log(SWEEP.to) * t);
@@ -63,37 +87,49 @@ if (build.status !== 0) process.exit(1);
 type Pop = { view: string; frame: number; share: number; scale: number };
 const worst: Pop[] = [];
 let failed = false;
-for (const view of views) {
-  const at = VIEWS[view];
-  if (!at) throw new Error(`no view ${view}; there are ${Object.keys(VIEWS).join(", ")}`);
-  const dir = resolve(out, view);
-  mkdirSync(dir);
-  const run = spawnSync(
-    resolve(ROOT, "target/release/terra_sandbox"),
-    [
-      "--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour,
-      "--vantage", at, "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
-      "--shots", `${dir}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
-    ],
-    { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
-  );
-  const said = `${run.stdout}${run.stderr}`;
-  if (run.status !== 0 || !said.includes("SANDBOX saved")) {
+for (const view of views) if (!VIEWS[view]) throw new Error(`no view ${view}; there are ${Object.keys(VIEWS).join(", ")}`);
+// Every view drawn at once, each its own run.
+const runs = await Promise.all(
+  views.map((view) => {
+    const dir = resolve(out, view);
+    mkdirSync(dir);
+    return run(
+      resolve(ROOT, "target/release/terra_sandbox"),
+      [
+        "--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour,
+        "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
+        "--shots", `${dir}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
+      ],
+      { ...process.env, BEVY_ASSET_ROOT: ROOT },
+    );
+  }),
+);
+views.forEach((view, i) => {
+  const { status, said } = runs[i];
+  if (status !== 0 || !said.includes("SANDBOX saved")) {
     console.error(said.split("\n").slice(-20).join("\n"));
     process.exit(1);
   }
-  if (said.includes("distinct `VisibilityRange`s")) {
-    console.log(`lodcheck: ${view}: more distinct detail ranges than Bevy can draw; some are culled wrongly`);
+  if (said.includes("distinct `VisibilityRange`s") || said.includes("distinct detail ranges are in use")) {
+    console.log(`lodcheck: ${view}: too many distinct detail ranges; past Bevy's 65,535 they are culled wrongly`);
     failed = true;
   }
-  const file = (frame: number) => resolve(dir, `f-${String(frame).padStart(5, "0")}.png`);
-  const pops: Pop[] = [];
-  for (let frame = SWEEP.first + SETTLE; frame <= SWEEP.last; frame++) {
-    const share = Number(
-      magick(file(frame - 1), file(frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-format", "%[fx:mean*100]", "info:"),
-    );
-    pops.push({ view, frame, share, scale: scaleAt(frame) });
-  }
+});
+const file = (view: string, frame: number) => resolve(out, view, `f-${String(frame).padStart(5, "0")}.png`);
+const pairs = views.flatMap((view) =>
+  Array.from({ length: SWEEP.last - SWEEP.first - SETTLE + 1 }, (_, k) => ({ view, frame: SWEEP.first + SETTLE + k })),
+);
+const shares = await pool(
+  pairs.map(({ view, frame }) => async () => {
+    const { said } = await run("magick", [file(view, frame - 1), file(view, frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-format", "%[fx:mean*100]", "info:"]);
+    return Number(said.trim());
+  }),
+  availableParallelism(),
+);
+for (const view of views) {
+  const pops: Pop[] = pairs
+    .map((pair, i) => ({ ...pair, share: shares[i], scale: scaleAt(pair.frame) }))
+    .filter((pop) => pop.view === view);
   pops.sort((a, b) => b.share - a.share);
   const over = pops.filter((p) => p.share > limit);
   const mean = pops.reduce((sum, p) => sum + p.share, 0) / pops.length;
@@ -106,12 +142,11 @@ for (const view of views) {
 // The worst frames, each with what popped marked red over it.
 const tiles: string[] = [];
 for (const pop of worst) {
-  const dir = resolve(out, pop.view);
-  const file = (frame: number) => resolve(dir, `f-${String(frame).padStart(5, "0")}.png`);
+  const at = (frame: number) => file(pop.view, frame);
   const mask = resolve(out, `mask-${pop.view}-${pop.frame}.png`);
   const mark = resolve(out, `mark-${pop.view}-${pop.frame}.jpg`);
-  magick(file(pop.frame - 1), file(pop.frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-morphology", "Dilate", "Disk:3", "-colorspace", "sRGB", "-fill", "red", "-opaque", "white", "-transparent", "black", mask);
-  magick(file(pop.frame), "-resize", `${WIDTH}x`, mask, "-composite", mark);
+  magick(at(pop.frame - 1), at(pop.frame), "-resize", `${WIDTH}x`, "-compose", "difference", "-composite", "-colorspace", "gray", "-threshold", CHANGED, "-morphology", "Open", SPECKLE, "-morphology", "Dilate", "Disk:3", "-colorspace", "sRGB", "-fill", "red", "-opaque", "white", "-transparent", "black", mask);
+  magick(at(pop.frame), "-resize", `${WIDTH}x`, mask, "-composite", mark);
   tiles.push("-label", `${pop.view}, frame ${pop.frame}: ${pop.share.toFixed(2)}% at scale ${pop.scale.toFixed(2)}`, mark);
 }
 const sheet = resolve(out, "sheet.jpg");

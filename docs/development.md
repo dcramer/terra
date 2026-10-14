@@ -97,6 +97,8 @@ It builds the sandbox for release and runs each **scene**, a scripted run that c
 
 Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has; skips 240 frames for shaders and streaming to settle; and times the scene's frames against the real clock (600, 2,400 for `walk`; `--bench-frames`). A scene's result is the middle run's median and 99th percentile and the worst frame of any.
 
+**Nothing popping.** `cargo xtask bench` with every scene also runs `cargo xtask lodcheck` (D230), under a minute: a frame rate is only worth having if what it draws does not pop.
+
 **Holding to the budget.** Each scene must sustain 60 frames a second (D25) on the machine it runs on, or the task fails:
 
 - its 99th percentile under 16.7 ms, and at most 1% of frames over it;

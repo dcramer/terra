@@ -109,7 +109,7 @@ const TASKS: &[Task] = &[
     Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug]",
-        does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",
+        does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded; with every scene, also lodcheck",
         group: "Play and check",
         run: bench,
     },
@@ -536,7 +536,8 @@ fn bench(args: &[String]) -> bool {
             },
         }
     }
-    if chosen.is_empty() {
+    let all_scenes = chosen.is_empty();
+    if all_scenes {
         chosen = SCENES.iter().collect();
     }
     let build = if debug { "debug" } else { "release" };
@@ -643,6 +644,12 @@ fn bench(args: &[String]) -> bool {
         if record {
             println!("  Recorded in {BENCHMARKS}.");
         }
+    }
+    // A full benchmark also checks that nothing pops as detail changes (D230): what is
+    // measured is only worth having if it looks right.
+    if all_scenes && !debug {
+        println!("\n> lodcheck");
+        ok &= run("node", &["tools/sandbox/lodcheck.ts"]);
     }
     ok
 }

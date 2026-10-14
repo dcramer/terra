@@ -25,6 +25,9 @@ struct Wind {
     strength: f32,
     bark: f32,
     cards: vec3<f32>,
+    // A shadow stand-in shrinks to its middles between x and y and grows from them between
+    // z and w (D234).
+    shrink: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

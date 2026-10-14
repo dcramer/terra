@@ -29,7 +29,7 @@ struct Authored(VisibilityRange);
 pub fn plugin(app: &mut App) {
     app.init_resource::<DetailScale>().add_systems(
         PostUpdate,
-        (sweep, remember, rescale)
+        (sweep, remember, rescale, guard)
             .chain()
             .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
     );
@@ -43,9 +43,7 @@ fn remember(
 ) {
     for (entity, mut range) in &mut new {
         commands.entity(entity).insert(Authored(range.clone()));
-        if scale.0 != 1.0 {
-            *range = scaled(&range, scale.0);
-        }
+        *range = scaled(&range, scale.0);
     }
 }
 
@@ -59,12 +57,59 @@ fn rescale(scale: Res<DetailScale>, mut ranged: Query<(&Authored, &mut Visibilit
     }
 }
 
+/// Distances are kept to a grid this fine, so however many things are placed, and however
+/// their own distances vary, few distinct ranges are in use: Bevy draws at most 65,535,
+/// and past that shares a slot among the rest and culls them wrongly (D230).
+const GRID_M: f32 = 0.25;
+/// Past this many distinct ranges, well short of Bevy's limit, the world says so.
+pub const TOO_MANY_RANGES: usize = 20_000;
+
+fn on_grid(m: f32) -> f32 {
+    (m / GRID_M).round() * GRID_M
+}
+
 fn scaled(range: &VisibilityRange, by: f32) -> VisibilityRange {
+    let at = |m: f32| on_grid(m * by);
     VisibilityRange {
-        start_margin: range.start_margin.start * by..range.start_margin.end * by,
-        end_margin: range.end_margin.start * by..range.end_margin.end * by,
+        start_margin: at(range.start_margin.start)..at(range.start_margin.end),
+        end_margin: at(range.end_margin.start)..at(range.end_margin.end),
         use_aabb: range.use_aabb,
     }
+}
+
+/// Counts the distinct ranges in use when they change, and says so, as an error a check
+/// fails on, if they are past [`TOO_MANY_RANGES`].
+fn guard(
+    ranged: Query<&VisibilityRange>,
+    changed: Query<(), Changed<VisibilityRange>>,
+    mut said: Local<bool>,
+) {
+    if changed.is_empty() {
+        return;
+    }
+    let distinct = distinct(ranged.iter());
+    if distinct > TOO_MANY_RANGES && !*said {
+        error!(
+            "{distinct} distinct detail ranges are in use, past {TOO_MANY_RANGES}: Bevy draws at most 65,535 and culls the rest wrongly (D230)"
+        );
+        *said = true;
+    }
+}
+
+fn distinct<'a>(ranges: impl Iterator<Item = &'a VisibilityRange>) -> usize {
+    let key = |r: &VisibilityRange| {
+        [
+            r.start_margin.start,
+            r.start_margin.end,
+            r.end_margin.start,
+            r.end_margin.end,
+        ]
+        .map(f32::to_bits)
+    };
+    ranges
+        .map(key)
+        .collect::<std::collections::HashSet<_>>()
+        .len()
 }
 
 /// Over a scripted run\'s sweep, sets the scale for its frame, the clock held still so
@@ -151,6 +196,28 @@ mod tests {
         assert!((sweep.at(200).unwrap() - 2.0).abs() < 1e-4);
         assert!((sweep.at(900).unwrap() - 2.0).abs() < 1e-4);
         assert!(Sweep::parse("2@1-2").is_err() && Sweep::parse("1-2@5-5").is_err());
+    }
+
+    #[test]
+    fn a_forest_of_trees_each_its_own_size_shares_few_ranges() {
+        // Ten thousand trees, each scaled by its own height, as the lush forest grows them:
+        // on the grid, their ranges are a few thousand at most, far from Bevy's limit.
+        let ranges: Vec<VisibilityRange> = (0..10_000)
+            .flat_map(|i| {
+                let size = 0.45 + 0.95 * ((i as f32 * 0.618_034).fract());
+                [30.0, 75.0, 180.0, 420.0].map(|m: f32| {
+                    let range = VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: m * size * 0.8..m * size,
+                        use_aabb: false,
+                    };
+                    scaled(&range, 1.0)
+                })
+            })
+            .collect();
+        let count = distinct(ranges.iter());
+        assert!(count < 6_000, "{count} distinct ranges");
+        assert!(count < TOO_MANY_RANGES);
     }
 
     #[test]
