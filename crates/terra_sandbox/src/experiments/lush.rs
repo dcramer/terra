@@ -245,6 +245,16 @@ impl MaterialExtension for FoliageExtension {
     fn prepass_fragment_shader() -> ShaderRef {
         "shaders/foliage_prepass.wesl".into()
     }
+
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        terra_world::grown::test_depth_early(descriptor, key.mesh_key);
+        Ok(())
+    }
 }
 
 pub fn plugin(app: &mut App) {

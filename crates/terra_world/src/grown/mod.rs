@@ -316,6 +316,38 @@ impl MaterialExtension for FoliageExtension {
     fn prepass_fragment_shader() -> ShaderRef {
         "shaders/foliage_prepass.wesl".into()
     }
+
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        test_depth_early(descriptor, key.mesh_key);
+        Ok(())
+    }
+}
+
+/// A leaf card's main pass, after a depth prepass has written the depth of every leaf
+/// left after its picture's cut, writes none of its own: the depth is there already, and a
+/// fragment shader that discards, as an alpha-tested leaf's must, keeps the GPU from
+/// testing depth before it runs unless the pass leaves depth alone. So only the leaves in
+/// front are shaded, not every card behind them, as Unreal's masked materials are after
+/// its early depth pass. Foliage is most of a forest's frame on an integrated GPU.
+pub fn test_depth_early(
+    descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+    key: bevy::pbr::MeshPipelineKey,
+) {
+    let prepass = descriptor
+        .label
+        .as_ref()
+        .is_some_and(|label| label.contains("prepass") || label.contains("shadow"));
+    if prepass || !key.contains(bevy::pbr::MeshPipelineKey::DEPTH_PREPASS) {
+        return;
+    }
+    if let Some(depth) = descriptor.depth_stencil.as_mut() {
+        depth.depth_write_enabled = Some(false);
+    }
 }
 
 /// The materials grown plants are drawn in: the leaf cards, each bark by name and tint,

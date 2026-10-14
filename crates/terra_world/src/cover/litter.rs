@@ -55,6 +55,17 @@ impl MaterialExtension for LitterExtension {
     fn prepass_vertex_shader() -> ShaderRef {
         "shaders/litter.wesl".into()
     }
+
+    // Shaded only where in front, after the prepass (`grown::test_depth_early`).
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        crate::grown::test_depth_early(descriptor, key.mesh_key);
+        Ok(())
+    }
 }
 
 pub type LitterMaterial = ExtendedMaterial<StandardMaterial, LitterExtension>;
