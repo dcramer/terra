@@ -87,7 +87,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "lodcheck",
-        takes: "[--views floor,path,clearing,village] [--time 17] [--limit 0.5]",
+        takes: "[--views floor,path,clearing,village,town] [--time 17] [--limit 0.5]",
         does: "find what pops as detail changes: still views while every switch distance is swept; fails past the limit (tools/sandbox)",
         group: "Play and check",
         run: |args| {
