@@ -9,3 +9,4 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-13,be6d22f+,NVIDIA GeForce RTX 5090,1920x1080 offscreen,release,village-bare,4.62,8.66,11.10,3,0.00,0,-2.6
 2026-10-13,be6d22f+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,village,152.43,200.96,235.90,3,100.00,600,-3.5
 2026-10-13,be6d22f+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,village-bare,90.82,97.55,122.15,3,100.00,600,-1.9
+2026-10-13,f109249+,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,walk,11.73,13.33,15.94,3,0.00,0,-0.3

@@ -15,6 +15,8 @@ import { dirname, resolve } from "node:path";
 import { ROOT } from "./client.ts";
 
 const ROUTE = ["-58,-39", "-40,-69", "-6,-80", "30,-74", "59,-54", "77,-22", "79,14"].flatMap((at) => ["--route", at]);
+// Halfway, a look up into the canopy and back down, as the walk bench does (D185).
+const LOOK = ["--press", "up@1500-1545", "--press", "down@1650-1695"];
 
 const args = process.argv.slice(2);
 const dash = args.indexOf("--");
@@ -24,7 +26,7 @@ const arg = (name: string, fallback: string) => {
   return at >= 0 ? own[at + 1] : fallback;
 };
 const hour = arg("--time", "15");
-const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...ROUTE] : args.slice(dash + 1);
+const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...ROUTE, ...LOOK] : args.slice(dash + 1);
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
 const frames = resolve(dirname(out), "film-frames");

@@ -351,7 +351,7 @@ const SCENES: &[Scene] = &[
     },
     Scene {
         name: "walk",
-        about: "40 seconds' walk through the lush forest and its grass, out from the clearing and round, turning as a player would; the world and the walker alone",
+        about: "40 seconds' walk through the lush forest and its grass, out from the clearing and round, turning as a player would, looking up into the canopy once; the world and the walker alone",
         args: &[
             "--experiment",
             "walk",
@@ -375,6 +375,11 @@ const SCENES: &[Scene] = &[
             "77,-22",
             "--route",
             "79,14",
+            // Halfway, a look up into the canopy and back down, the heaviest view (D185).
+            "--press",
+            "up@1500-1545",
+            "--press",
+            "down@1650-1695",
         ],
         frames: "2400",
     },
