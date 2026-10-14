@@ -154,6 +154,13 @@ const TASKS: &[Task] = &[
         run: sections,
     },
     Task {
+        name: "artifacts",
+        takes: "[building] [--all]",
+        does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out",
+        group: "Play and check",
+        run: artifacts,
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
@@ -1059,6 +1066,24 @@ fn rules(args: &[String]) -> bool {
         println!("{}  {what}", if *passed { "ok  " } else { "FAIL" });
     }
     results.iter().all(|(_, passed)| *passed)
+}
+
+/// What a renderer would show as junk in the meshes building draws, every roof over every
+/// plan in each kind and every two kinds mixed, at every detail (`terra_build::inspect`); a
+/// name keeps only the bases whose names hold it, and `--all` lists every fault found.
+fn artifacts(args: &[String]) -> bool {
+    let mut cargo = vec![
+        "run",
+        "-q",
+        "--release",
+        "-p",
+        "terra_build",
+        "--example",
+        "artifacts",
+        "--",
+    ];
+    cargo.extend(args.iter().map(String::as_str));
+    run("cargo", &cargo)
 }
 
 /// The tests of the TypeScript tools (D121), which Node runs as they are.

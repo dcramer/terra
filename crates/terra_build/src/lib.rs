@@ -40,6 +40,7 @@ pub mod draw;
 pub mod dress;
 mod example;
 pub mod ground;
+pub mod inspect;
 pub mod kit;
 pub mod layout;
 mod mesh;
