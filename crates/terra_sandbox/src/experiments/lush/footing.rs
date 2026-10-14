@@ -13,9 +13,10 @@
 //!   the start, with their names, where they are and how high they stand.
 //! - `lush.footprint {points, thing?}`: for each spot, how far it is from the nearest part of
 //!   any solid mesh taller than a step, between a step and a body's height over the ground
-//!   (nothing inside), and from `thing`'s whole drawn footprint up to a body's height; where
-//!   the player is and how high their feet are over the ground; and the same of every frame
-//!   since it was last asked, as `track`: east, south and that height.
+//!   (nothing inside), and from any but `thing`'s (`other`), and from `thing`'s whole drawn
+//!   footprint up to a body's height; where the player is and how high their feet are over
+//!   the ground; and the same of every frame since it was last asked, as `track`: east,
+//!   south and that height.
 
 use super::floor::Sink;
 use bevy::platform::collections::HashMap;
@@ -484,8 +485,8 @@ struct Spots {
     thing: Option<u64>,
 }
 
-/// How far each spot is from the nearest solid mesh taller than a step, and from one thing's
-/// drawn footprint; and where the player is.
+/// How far each spot is from the nearest solid mesh taller than a step, of anything and of
+/// anything but one thing, and from that thing's drawn footprint; and where the player is.
 fn footprint(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Spots { points, thing } = parse_some(params)?;
     let start = *world.resource::<Start>();
@@ -543,20 +544,29 @@ fn footprint(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let answers: Vec<Value> = spots
         .iter()
         .map(|spot| {
-            let solid = prints
+            let gaps: Vec<(f32, &String, bool)> = prints
                 .iter()
-                .filter_map(|(_, print)| {
+                .filter_map(|(entity, print)| {
                     let d = gap(print, &print.solid, *spot, |h| h > STEP_M + 0.05)?;
-                    Some((d, print.name.clone()))
+                    Some((d, &print.name, Some(entity.to_bits()) == thing))
                 })
-                .min_by(|a, b| a.0.total_cmp(&b.0));
+                .collect();
+            let nearest = |of: &dyn Fn(bool) -> bool| {
+                gaps.iter()
+                    .filter(|(_, _, own)| of(*own))
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
+            };
+            let solid = nearest(&|_| true);
+            let other = nearest(&|own| !own);
             let seen = prints
                 .iter()
                 .find(|(entity, _)| Some(entity.to_bits()) == thing)
                 .and_then(|(_, print)| gap(print, &print.seen, *spot, |h| h > 0.03));
             json!({
-                "solid": solid.as_ref().map(|(d, _)| *d),
-                "solid_of": solid.map(|(_, name)| name),
+                "solid": solid.map(|(d, _, _)| *d),
+                "solid_of": solid.map(|(_, name, _)| name),
+                "other": other.map(|(d, _, _)| *d),
+                "other_of": other.map(|(_, name, _)| name),
                 "seen": seen,
             })
         })
