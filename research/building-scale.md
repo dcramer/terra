@@ -55,4 +55,37 @@ Laying from cold (the bases put up on the main thread, then laid whole and cut i
 - **Near detail is heavy.** A street of houses near makes 2.9 GiB of mesh and 11 M triangles a frame, half of it the depth prepass.
 - **The integrated GPU is GPU-bound**: 28 ms bare, 80 ms with the town in view at the low preset.
 
-What was changed for it, and the numbers after, follow in this note as the work lands.
+Profiled with Bevy's Chrome trace on the street walk (5090): the main thread's update was 17.5 ms a frame and the render thread's 14 ms, both pipelined, the render thread's in graph encoding and submission (5.5 and 3.2 ms), which grow with the meshes drawn; the build systems themselves under 1 ms. The integrated GPU's frame at the rise was its main pass (48.7 ms) and depth prepass (20 ms) over 2.9 M triangles: past 90 m (its preset halves distances) every house was its proxy of 5,400 triangles on a few dozen pixels, as `cargo xtask sections` counts (near 307,000 a house, middle 96,000, far 20,000, proxy 5,400).
+
+## What was changed (D278)
+
+- **A hull past the far detail**: from 180 m a section is the hull of its cubes (`terra_build::hull`, Unreal's approximated mesh), coplanar faces merged, roofs at their pitch, its kits' mean colours: a few hundred triangles a house.
+- **Merged cells to the horizon**: from 600 m each cell of a base, four sections a side, is one hull, to 3 km. Bases are seen as silhouettes out to where the haze takes them, where before nothing was drawn past 600 m.
+- **Streaming**: sections past 740 m are let go and not laid, and laid again inside 690 m; a base with nothing laid lets go of its copy and its pieces.
+- **A memory count** per base, CPU and GPU (`build.memory`, and `Builds hold:` at the end of a benchmark).
+
+## After (D278), one run each, the RTX 5090 at high (load about 20)
+
+| Scene | Before | After |
+|---|---|---|
+| `town300` (street) | 16.3 / 32.7 / 39.8, 11 hitches | 12.9 / 33.6 / 45.1, 13 hitches |
+| `town300-rise` | 8.7 / 20.7 / 22.1 | 8.4 / 19.4 / 21.3 |
+| `town300-fly` | 6.6 / 17.9 / 19.2 | 11.1 / 34.3 / 43.1 |
+| `town300-bare` | 17.8 / 44.1 / 49.4 (load 46) | 8.1 / 19.6 / 26.7 |
+| `castle` | 5.8 / 15.3 / 18.5 | 10.1 / 26.2 / 35.1 |
+| `castle-field` | 14.7 / 34.2 / 66.2 | 9.8 / 21.8 / 32.8 |
+| `far` | 13.4 / 28.2 / 30.8 | 8.5 / 19.2 / 30.9 |
+
+The bare view, nothing built, measured 8.1 ms median with the game's own work 6.1 ms: on this shared machine the world alone is over the 99th-percentile budget, and single runs on it move by tens of percent either way (the fly-over and the castle's walk, which D278 does not change near, came out slower), so the frame times above are indications. What changed for certain, as the runs count it:
+
+| | Before | After |
+|---|---|---|
+| `far`: meshes on the GPU | 859 MiB | 253 MiB, the bases' 106 MiB of it: 0.2 MiB a base far off, 3.2 MiB the most |
+| `far`: from the first section laid to the last on screen | 20.9 s | 1.8 s, 2,584 of 2,872 sections set aside |
+| `far`: CPU held by the bases | | 53 MiB, 0.15 MiB a base far off |
+| `town300-rise`: triangles a frame | 9.2 M | 5.8 M |
+| `town300-rise`: meshes on the GPU | 1,050 MiB | 829 MiB |
+| `town300`: first laid to last on screen, cold | 27.4 s | 23.8 s |
+| `castle`: what the base holds | | 1,088 MiB on the GPU walking in, 63 MiB from the field; 41 MiB on the CPU |
+
+The town's street walk is still over the budget in its 99th percentile and hitches: its near detail, 300,000 triangles a stone house, is put on screen a section at a time as the walk reaches it (2.8 GiB of meshes, the slowest burst 3.5 s), which D278 does not touch. Numbers on the integrated GPU follow.

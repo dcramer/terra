@@ -119,7 +119,10 @@ pub fn plugin(app: &mut App) {
             )
                 .chain(),
         )
-        .add_systems(Update, launch.in_set(Drawing::Launch))
+        .add_systems(
+            Update,
+            (super::draw::aside, launch).chain().in_set(Drawing::Launch),
+        )
         .add_systems(Update, collect.in_set(Drawing::Collect))
         .add_systems(Update, track.in_set(crate::loading::Track));
 }

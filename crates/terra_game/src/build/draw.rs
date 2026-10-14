@@ -57,6 +57,39 @@ fn range(after: Option<f32>, end: f32) -> VisibilityRange {
     }
 }
 
+/// Half the margin a section's proxy hands over to its base's cell over (`hlod`), wider than
+/// the rest: each is measured from its own middle, a section's and its cell's up to 21 m
+/// apart, and over this margin they cross with little of either missing.
+const PROXY_FADE: f32 = 0.1;
+
+fn proxy_fade() -> std::ops::Range<f32> {
+    PROXY_M * (1.0 - PROXY_FADE)..PROXY_M * (1.0 + PROXY_FADE)
+}
+
+/// A section's proxy: from where its far detail ends to where its base's cell takes over.
+fn proxy_range() -> VisibilityRange {
+    VisibilityRange {
+        start_margin: fade(FAR_M),
+        end_margin: proxy_fade(),
+        use_aabb: false,
+    }
+}
+
+/// A base's cell far off (`hlod`): from where its sections' proxies end to the horizon.
+pub(super) fn cell_range() -> VisibilityRange {
+    VisibilityRange {
+        start_margin: proxy_fade(),
+        end_margin: fade(super::hlod::HORIZON_M),
+        use_aabb: false,
+    }
+}
+
+/// How far past where it is last seen a section is laid at all, and kept laid, as
+/// authored: beyond, its base's cells are all that is drawn of it, and its meshes and
+/// pieces are let go (`stream`).
+const LAY_M: f32 = 690.0;
+const DROP_M: f32 = 740.0;
+
 fn ghost_range() -> VisibilityRange {
     VisibilityRange::abrupt(0.0, GHOST_M)
 }
@@ -101,7 +134,7 @@ pub(super) struct Looks {
     ghost: [Handle<GhostMaterial>; 2],
     shell: Handle<GhostMaterial>,
     pub next: Handle<StandardMaterial>,
-    far: Handle<StandardMaterial>,
+    pub far: Handle<StandardMaterial>,
 }
 
 /// A plan's ghosts' colour: a pale blue, clear enough to see what is built through it.
@@ -337,7 +370,7 @@ fn ghost_mesh(ghosts: &[Ghost], shade: bool, centre: Vec3) -> Option<Mesh> {
 
 /// What a mesh is given of where its corners fall on a texture.
 #[derive(Clone, Copy, PartialEq)]
-enum Uvs {
+pub(super) enum Uvs {
     None,
     /// Where, for a ghost's lines.
     Only,
@@ -346,7 +379,7 @@ enum Uvs {
 }
 
 /// A surface as a mesh about a point, its corners shared, its colours linear.
-fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
+pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     let all = surface.indexed();
     if all.indices.is_empty() {
         return None;
@@ -483,13 +516,22 @@ impl Parts {
 
     /// How many corners its meshes have.
     fn corners(&self) -> usize {
-        let count = |mesh: &Mesh| mesh.count_vertices();
+        self.sum(Mesh::count_vertices)
+    }
+
+    /// How many bytes its meshes take on the GPU: their corners and indices.
+    pub(super) fn bytes(&self) -> usize {
+        self.sum(gpu_bytes)
+    }
+
+    /// Something of each of its meshes, summed.
+    fn sum(&self, count: impl Fn(&Mesh) -> usize) -> usize {
         self.near
             .iter()
             .chain(&self.mid)
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
-            + self.next.iter().map(count).sum::<usize>()
+            + self.next.iter().map(&count).sum::<usize>()
             + [
                 &self.plain,
                 &self.shell,
@@ -503,6 +545,11 @@ impl Parts {
             .map(count)
             .sum::<usize>()
     }
+}
+
+/// How many bytes a mesh takes on the GPU: its corners and its indices.
+pub(super) fn gpu_bytes(mesh: &Mesh) -> usize {
+    mesh.get_vertex_buffer_size() + mesh.get_index_buffer_bytes().map_or(0, <[u8]>::len)
 }
 
 /// Puts a section laid on screen, in place of what was drawn of it.
@@ -548,6 +595,7 @@ fn show(
         key,
         reach,
         drawing,
+        gpu_bytes: parts.bytes(),
     };
     // Nothing in it: nothing drawn, but what it was laid as kept.
     if parts.is_empty() {
@@ -615,7 +663,7 @@ fn show(
         add(mesh, looks.far.clone(), range(far_from, FAR_M));
     }
     if let Some(mesh) = parts.proxy {
-        add(mesh, looks.far.clone(), range(Some(FAR_M), PROXY_M));
+        add(mesh, looks.far.clone(), proxy_range());
     }
     if coarse_shadows {
         for id in quiet {
@@ -689,6 +737,68 @@ fn stream(
                     },
                 );
             }
+        }
+    }
+}
+
+/// Streams sections by distance, as open worlds stream their cells: one further off than
+/// it is seen at all, past [`DROP_M`], is let go, its entity and meshes despawned and its
+/// base's cells (`hlod`) all that is drawn of it; one waiting to be laid there is set aside
+/// rather than laid; and one set aside that the camera comes back within [`LAY_M`] of waits
+/// to be laid again. A base with nothing laid or waiting lets go of what it was laid from.
+pub(super) fn aside(
+    mut commands: Commands,
+    scale: Res<DetailScale>,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+) {
+    let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
+        return;
+    };
+    for build in each(&mut site, &mut builds) {
+        let frame = build.frame;
+        let distance = |at: [i32; 3]| {
+            frame
+                .transform_point(store::centre(IVec3::from_array(at)))
+                .distance(eye)
+                / scale.0
+        };
+        let sections = &mut build.sections;
+        let far: Vec<[i32; 3]> = sections
+            .waiting
+            .keys()
+            .chain(sections.drawn.keys())
+            .copied()
+            .filter(|&at| distance(at) > DROP_M)
+            .collect();
+        for at in far {
+            sections.waiting.remove(&at);
+            sections.tickets.remove(&at);
+            if let Some(entity) = sections.drawn.remove(&at).and_then(|drawn| drawn.entity) {
+                commands.entity(entity).try_despawn();
+            }
+            sections.far_off.insert(at);
+        }
+        let back: Vec<[i32; 3]> = sections
+            .far_off
+            .iter()
+            .copied()
+            .filter(|&at| distance(at) < LAY_M)
+            .collect();
+        for at in back {
+            sections.far_off.remove(&at);
+            sections.waiting.insert(
+                at,
+                store::Waiting {
+                    force: true,
+                    reach: None,
+                },
+            );
+        }
+        if sections.drawn.is_empty() && sections.waiting.is_empty() && sections.laying.is_none() {
+            sections.whole = None;
+            sections.snapshot = None;
         }
     }
 }

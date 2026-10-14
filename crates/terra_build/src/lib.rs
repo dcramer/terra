@@ -41,6 +41,7 @@ pub mod draw;
 pub mod dress;
 mod example;
 pub mod ground;
+pub mod hull;
 pub mod inspect;
 pub mod kit;
 pub mod layout;
@@ -360,6 +361,21 @@ pub struct BuildHit {
 const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
 
 impl Base {
+    /// About how many bytes it takes in memory: its cubes, and what is worked out from them
+    /// a node of a map each (its columns and their layers, parts, props). Rooms are
+    /// worked out when asked and not counted.
+    pub fn bytes(&self) -> usize {
+        const NODE: usize = 48;
+        let layers: usize = self.columns.values().map(BTreeSet::len).sum();
+        self.cubes.bytes()
+            + (self.columns.len()
+                + layers
+                + self.parts.len()
+                + self.replacing.len()
+                + self.props.len())
+                * NODE
+    }
+
     pub fn is_empty(&self) -> bool {
         self.cubes.is_empty() && self.props.is_empty()
     }

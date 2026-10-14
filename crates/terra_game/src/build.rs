@@ -28,9 +28,11 @@ use terra_core::Operation;
 pub(crate) mod act;
 mod draw;
 mod going_up;
+mod hlod;
 mod layout;
 mod light;
 mod maps;
+mod memory;
 pub(crate) mod plans;
 pub(crate) mod props;
 mod remote;
@@ -293,6 +295,8 @@ pub fn plugin(app: &mut App) {
     store::plugin(app);
     layout::plugin(app);
     draw::plugin(app);
+    hlod::plugin(app);
+    memory::plugin(app);
     light::plugin(app);
     app.add_systems(
         Update,
@@ -311,6 +315,7 @@ pub fn plugin(app: &mut App) {
 pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
     remote::plugin(app);
+    memory::remote(app);
     going_up::plugin(app);
 }
 

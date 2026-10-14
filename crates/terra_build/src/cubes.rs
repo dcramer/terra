@@ -731,6 +731,17 @@ impl Cubes {
         self.count == 0
     }
 
+    /// About how many bytes its cubes take in memory: each section a block of words, its
+    /// palette and the map's node for it.
+    pub fn bytes(&self) -> usize {
+        self.sections
+            .values()
+            .map(|section| {
+                section.cubes.len() * 4 + section.palette.len() * size_of::<(PartId, u32)>() + 64
+            })
+            .sum()
+    }
+
     /// How many cubes are planned and not yet built.
     pub fn planned(&self) -> usize {
         self.planned

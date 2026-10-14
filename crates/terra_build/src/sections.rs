@@ -173,6 +173,12 @@ pub struct Whole {
 }
 
 impl Whole {
+    /// About how many bytes its pieces take in memory.
+    pub fn bytes(&self) -> usize {
+        let pieces: usize = self.by_section.values().map(Vec::len).sum();
+        pieces * size_of::<(usize, usize, Piece)>() + self.by_section.len() * 64
+    }
+
     /// Lays every kit's pieces of a base.
     pub fn lay(base: &Base, kits: &Kits) -> Whole {
         let mut whole = Whole::default();
@@ -445,7 +451,7 @@ pub enum Detail {
     /// Coarser members, the stone's surface in fewer steps, roofs as a plain covering, no
     /// battens or rafters under it; its textures baked into its corners' colours.
     Far,
-    /// Coarser again, only what shows from far off: walls, floors and roofs.
+    /// Past the far detail: the hull of its cubes ([`crate::hull`]), not its pieces.
     Proxy,
 }
 
@@ -454,7 +460,7 @@ impl Detail {
     fn kit(self, kit: &Kit) -> Kit {
         let mut kit = kit.clone();
         match self {
-            Detail::Near => {}
+            Detail::Near | Detail::Proxy => {}
             Detail::Mid => {
                 kit.timber.sides = kit.timber.sides.min(8);
                 kit.timber.step = kit.timber.step.max(0.4);
@@ -473,11 +479,6 @@ impl Detail {
                     }
                     kit.dress.made = Some(std::sync::Arc::new(coarse));
                 }
-            }
-            Detail::Proxy => {
-                kit.dress.far = true;
-                kit.timber.sides = kit.timber.sides.min(4);
-                kit.timber.step = kit.timber.step.max(8.0);
             }
         }
         kit
@@ -516,16 +517,7 @@ impl Detail {
             // its corner stones (D215).
             (Detail::Far, Piece::Corner { .. }) => false,
             (Detail::Far, _) => true,
-            (Detail::Proxy, piece) => matches!(
-                piece,
-                Piece::Log { .. }
-                    | Piece::Block { .. }
-                    | Piece::Wattle { .. }
-                    | Piece::Beam { .. }
-                    | Piece::Gable { .. }
-                    | Piece::Covering { .. }
-                    | Piece::Plank { .. }
-            ),
+            (Detail::Proxy, _) => false,
         }
     }
 }
@@ -674,6 +666,45 @@ pub fn draw_again(
     last: Option<&Drawing>,
     keep: Option<&mut Drawing>,
 ) -> Drawn {
+    // Only the details that can be seen while it is drawn for this reach: what it fades
+    // into further off is made when the camera has gone far enough for it to be laid
+    // again coarser, before that detail is seen. Past the far detail the game draws a
+    // base's sections' proxies merged a cell at a time ([`proxy`]).
+    let details: &[Detail] = match reach {
+        Reach::Near => &[Detail::Near, Detail::Mid],
+        Reach::Mid => &[Detail::Mid, Detail::Far],
+        Reach::Far => &[Detail::Far],
+    };
+    let mut drawn = draw_details(section, laid, details, last, keep);
+    if reach == Reach::Far {
+        drawn.proxy = proxy(section);
+    }
+    drawn
+}
+
+/// A section far off: the hull of its cubes ([`crate::hull`]), a few hundred triangles of
+/// its materials' colours, what its pieces fade into past the far detail, and what the game
+/// merges with its neighbours' into one mesh a cell of its base further off still, as
+/// Unreal's HLOD merges a cell's meshes into an approximated one.
+pub fn proxy(section: &Section) -> Surface {
+    let origin = section.at * crate::cubes::SECTION;
+    crate::hull::hull(
+        section.base,
+        section.kits,
+        section.maps,
+        origin,
+        origin + IVec3::splat(crate::cubes::SECTION - 1),
+    )
+}
+
+/// Draws a laid section at these details, finest first, as [`draw_again`] says.
+fn draw_details(
+    section: &Section,
+    laid: &Laid,
+    details: &[Detail],
+    last: Option<&Drawing>,
+    keep: Option<&mut Drawing>,
+) -> Drawn {
     let mut keep = keep;
     if let Some(keep) = keep.as_deref_mut() {
         keep.ground = Some(section.base.ground().clone());
@@ -685,14 +716,6 @@ pub fn draw_again(
     let pieces_kept = last
         .filter(|last| last.ground.as_ref() == Some(section.base.ground()))
         .map(|last| &last.pieces);
-    // Only the details that can be seen while it is drawn for this reach: what it fades
-    // into further off is made when the camera has gone far enough for it to be laid
-    // again coarser, before that detail is seen.
-    let details: &[Detail] = match reach {
-        Reach::Near => &[Detail::Near, Detail::Mid],
-        Reach::Mid => &[Detail::Mid, Detail::Far],
-        Reach::Far => &[Detail::Far, Detail::Proxy],
-    };
     let finest = details[0];
     // Where each point of its roofs is on them, for their masks, worked out once.
     let roofs = std::cell::OnceCell::new();
@@ -764,7 +787,7 @@ pub fn draw_again(
                         piece,
                         &coarse,
                         face,
-                        matches!(detail, Detail::Far | Detail::Proxy),
+                        detail == Detail::Far,
                         &mut fresh,
                     ),
                     Stage::Next if first => {
@@ -833,7 +856,7 @@ pub fn draw_again(
             Detail::Near => drawn.near = built,
             Detail::Mid => drawn.mid = built,
             Detail::Far => drawn.far = bake(section, built),
-            Detail::Proxy => drawn.proxy = bake(section, built),
+            Detail::Proxy => drawn.proxy = proxy(section),
         }
     }
     plain(section, laid, &mut drawn);
@@ -852,7 +875,7 @@ fn far_box(piece: &Piece, kit: &Kit, detail: Detail, surfaces: &mut Surfaces) ->
     let metres = |material: Material| kit.textures.get(&material).map_or([2.0, 2.0], |t| t.metres);
     match (detail, piece) {
         (
-            Detail::Far | Detail::Proxy,
+            Detail::Far,
             Piece::Plank {
                 from,
                 to,
@@ -873,7 +896,7 @@ fn far_box(piece: &Piece, kit: &Kit, detail: Detail, surfaces: &mut Surfaces) ->
             true
         }
         (
-            Detail::Far | Detail::Proxy,
+            Detail::Far,
             Piece::Beam {
                 from,
                 to,
@@ -893,27 +916,6 @@ fn far_box(piece: &Piece, kit: &Kit, detail: Detail, surfaces: &mut Surfaces) ->
                 to.metres(),
                 half,
                 metres(material),
-                shade(*seed),
-            );
-            true
-        }
-        (
-            Detail::Proxy,
-            Piece::Log {
-                from,
-                to,
-                seed,
-                role: None,
-                ..
-            },
-        ) => {
-            let half = kit.diameter * 0.5;
-            crate::draw::member_box(
-                surfaces.of(Material::Log),
-                from.metres(),
-                to.metres(),
-                [half, half],
-                metres(Material::Log),
                 shade(*seed),
             );
             true

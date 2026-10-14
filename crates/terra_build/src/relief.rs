@@ -103,6 +103,14 @@ impl Swatch {
     }
 
     /// The colour where the texture is at a point, repeating: the texel it falls in.
+    /// Its colours' mean, as a building far off is seen in them.
+    pub fn mean(&self) -> [f32; 3] {
+        let sum = self.data.iter().fold([0.0f32; 3], |sum, c| {
+            [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2]]
+        });
+        sum.map(|s| s / self.data.len() as f32)
+    }
+
     pub fn at(&self, uv: [f32; 2]) -> [f32; 3] {
         let x = (uv[0].rem_euclid(1.0) * self.width as f32) as usize;
         let y = (uv[1].rem_euclid(1.0) * self.height as f32) as usize;

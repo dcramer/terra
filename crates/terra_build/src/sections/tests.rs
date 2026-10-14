@@ -439,7 +439,8 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
     let (far, proxy) = (far_off.far.triangle_count(), far_off.proxy.triangle_count());
     assert!(near > 0 && far > 0 && proxy > 0);
     assert!(far * 5 < near, "far {far} against near {near}");
-    assert!(proxy < far, "proxy {proxy} against far {far}");
+    // Past the far detail its hull, a fraction of the far detail's triangles.
+    assert!(proxy * 5 < far, "proxy {proxy} against far {far}");
     // Far off, nothing finer is drawn; near, nothing coarser than it fades into.
     assert!(far_off.near.is_empty() && far_off.mid.is_empty());
     assert!(drawn.far.triangle_count() == 0 && drawn.proxy.triangle_count() == 0);

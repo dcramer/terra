@@ -657,6 +657,7 @@ fn worth_saying(line: &str) -> Option<&str> {
         "Going up: ",
         "SANDBOX slowest frames",
         "Scale: ",
+        "Builds hold: ",
         "frame parts, ",
         "GPU passes, ",
         "triangles a frame, ",

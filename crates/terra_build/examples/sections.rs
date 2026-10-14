@@ -101,7 +101,7 @@ fn main() -> ExitCode {
                 };
                 triangles[slot] += finest;
                 if reach == Reach::Far {
-                    triangles[3] += drawn.proxy.triangle_count();
+                    triangles[3] += sections::proxy(&section).triangle_count();
                     if std::env::var_os("BY_KIND").is_some() {
                         let mut kinds: std::collections::BTreeSet<String> = Default::default();
                         for p in &laid.pieces {
@@ -120,7 +120,7 @@ fn main() -> ExitCode {
                             let d = sections::draw(&section, &only, Reach::Far);
                             let e = by_kind.entry(kind).or_insert((0, 0));
                             e.0 += d.far.triangle_count();
-                            e.1 += d.proxy.triangle_count();
+                            e.1 += sections::proxy(&section).triangle_count();
                         }
                     }
                 }

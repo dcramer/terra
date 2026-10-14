@@ -38,6 +38,8 @@ pub(super) struct Drawn {
     /// How it was drawn, piece by piece and face by face, for the player's own base, so an
     /// edit draws again only what it reached (`sections::draw_again`).
     pub drawing: Option<Arc<terra_build::sections::Drawing>>,
+    /// How many bytes its meshes take on the GPU.
+    pub gpu_bytes: usize,
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
@@ -75,6 +77,10 @@ pub(super) struct Sections {
     pub changed_at: Option<std::time::Instant>,
     /// What a walker meets of a plan shown so far through, being worked out.
     pub standing: Option<bevy::tasks::Task<Base>>,
+    /// Sections further off than they are seen, let go and not laid (`draw::aside`).
+    pub far_off: BTreeSet<[i32; 3]>,
+    /// The base's far meshes, a cell of it each (`hlod`).
+    pub cells: super::hlod::Cells,
     /// The last change since it was noticed, until all it set waiting is on screen: when,
     /// how many sections it set waiting, and how many came back merged anew or the same,
     /// for `Build: change on screen` (research/building-audit.md).
