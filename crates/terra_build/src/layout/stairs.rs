@@ -1,8 +1,9 @@
 //! Flights of steps in a timber kind (D215, D220, research/role-pieces.md): a stack of
 //! the kind's cubes stepping up is laid as open stairs, as a carpenter builds them, not as
 //! a stepped wall: a thick tread on each step, its nose standing a little out, housed
-//! between two stringers, one up each side of the flight from the floor to the back of its
-//! top step, and posts from the floor under the stringers where the flight stands high;
+//! between two stringers, one up each side of the flight seated on the floor and bearing at
+//! its head on what stands behind its top step, a deck's rim (D306), and posts from the floor
+//! under the stringers only where their span needs one;
 //! nothing under the treads. A step is a column of the kind's cubes topped by a cube cut as
 //! a stair (two treads) or a slope (boards up the ramp, a cleat across them) (D193), or,
 //! where the kit dresses a step's nose with a member, a whole cube whose top edge is a
@@ -58,10 +59,11 @@ const STRINGER_PROUD_M: f32 = 0.03;
 /// line of the treads' noses.
 const STRINGER_M: (f32, f32) = (0.07, 0.32);
 const STRINGER_ABOVE_M: f32 = 0.06;
-/// How high a stringer's underside stands over the floor before posts carry it, and how far
-/// apart they are along its run.
+/// How high a stringer's underside stands over the floor before a post under it is worth
+/// standing.
 const POSTS_FROM_M: f32 = 1.0;
-const POST_SPACING_M: f32 = 1.25;
+/// How far a stringer spans, level, between what it bears on, before a post carries it.
+const STRINGER_SPAN_M: f32 = 1.8;
 /// A ramp's boards: how wide and thick; the cleat across them, how wide and thick.
 const RAMP_BOARD_M: f32 = 0.125;
 const RAMP_THICK_M: f32 = 0.035;
@@ -169,9 +171,9 @@ pub(super) fn cubes(steps: &BTreeMap<[i32; 2], Step>) -> BTreeSet<[i32; 3]> {
 
 /// Lays every flight as open stairs, as a carpenter builds them: a tread of thick boards on
 /// each step, a ramp of boards up a slope, between stringers up each side of the flight,
-/// and posts under the stringers where a flight is long and high; nothing under the treads,
+/// and posts under the stringers where their span needs one; nothing under the treads,
 /// so the flight reads as a stair and not a stepped wall.
-pub(super) fn lay(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
+pub(super) fn lay(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
     // Steps side by side across a flight, at the same height, laid as one.
     let mut done = BTreeSet::new();
     for (&[x, z], step) in steps {
@@ -243,7 +245,7 @@ pub(super) fn lay(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layo
             ),
         }
     }
-    stringers(kit, steps, layout);
+    stringers(base, kit, steps, layout);
 }
 
 /// A slope's ramp: boards up it side by side across the flight, from its foot at the front
@@ -283,10 +285,13 @@ fn ramp(
     });
 }
 
-/// A stringer up each side of each flight, the treads housed between them, from the floor
-/// at the flight's foot to the back of its top step; and, where a flight stands high, posts
-/// from the floor up under each stringer, one a post's spacing apart and one under its top.
-fn stringers(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
+/// A stringer up each side of each flight, the treads housed between them, seated on the
+/// floor at the flight's foot and its head against the back of its top step, where it
+/// bears on the rim of a deck or anything else standing there, as a carpenter hangs a
+/// stringer from a deck's rim joist; and posts from the floor under each stringer only where
+/// its span between what it bears on is longer than a stringer spans alone, evenly along it,
+/// and under its head where nothing stands behind its top step.
+fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
     let width = runs::post_width(kit).unwrap_or(kit.diameter * 0.6);
     // Each side line: the steps whose neighbour across that way is no step of the flight,
     // gathered by the line they are on and the way they look.
@@ -352,12 +357,9 @@ fn stringers(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
         } else {
             0.0
         };
-        let back = match high.cap {
-            Cap::Whole => CELL_M,
-            Cap::Stair => CELL_M * 0.5,
-            Cap::Slope => CELL_M,
-        };
-        let up = back / level;
+        // Up past the top nose until the stringer's lower corner meets the plane of the
+        // top step's back, where a deck's rim stands: its square-cut end bears on it.
+        let up = ((CELL_M - rise.y * STRINGER_M.1 * 0.5) / level).max(0.0);
         let (foot, head) = (a - rise * down, b + rise * up);
         let seed = hash(&[line as u32, sign as u32, out as u32, 23]);
         layout.pieces.push(Piece::Plank {
@@ -367,31 +369,46 @@ fn stringers(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
             high: ticks(STRINGER_M.1),
             seed,
         });
-        // Posts under it where it stands high: along its run a spacing apart from its top
-        // down, wherever its underside is more than so high over the floor.
         let run = Vec3::new(head.x - foot.x, 0.0, head.z - foot.z).length();
         if run < 1e-3 {
             continue;
         }
-        let mut along = run - width * 0.5;
-        let mut n = 0;
-        while along > 0.0 {
-            let at = foot + (head - foot) * (along / run);
-            let under = at.y - STRINGER_M.1 * 0.5 / level;
+        // Whether anything stands behind the top step at its top, for the head to bear on.
+        let top_column = {
+            let mut at = IVec3::ZERO;
+            at[out.axis()] = high_at;
+            at[side_axis] = line;
+            at.with_y(high.top)
+        };
+        let bears = base
+            .cube(top_column - out.step())
+            .is_some_and(|cube| cube.fill == Fill::Solid);
+        // Where posts stand along its run from its foot: evenly between its bearings, as
+        // many as keep each span within a stringer's; and under its head if it bears on
+        // nothing there.
+        let spans = (run / STRINGER_SPAN_M).ceil().max(1.0) as i32;
+        let mut along: Vec<f32> = (1..spans).map(|k| run * k as f32 / spans as f32).collect();
+        if !bears {
+            along.push(run - width * 0.5);
+        }
+        for (n, at_run) in along.into_iter().enumerate() {
+            let at = foot + (head - foot) * (at_run / run);
+            // The underside over the post's upper face, so its top meets the stringer with
+            // no gap; the stringer, thinner than the post, hides the rest of its top.
+            let rising = rise.y / level;
+            let under = at.y - STRINGER_M.1 * 0.5 / level + rising * width * 0.5;
             if under - floor < POSTS_FROM_M {
-                break;
+                continue;
             }
             let mut post = runs::log(
                 Vec3::new(at.x, floor, at.z),
                 Vec3::new(at.x, under, at.z),
                 Split::Whole,
-                hash(&[seed, n, 0x9057]),
+                hash(&[seed, n as u32, 0x9057]),
                 None,
             );
             runs::set_role(&mut post, Some(Role::Jamb));
             layout.pieces.push(post);
-            along -= POST_SPACING_M;
-            n += 1;
         }
     }
 }

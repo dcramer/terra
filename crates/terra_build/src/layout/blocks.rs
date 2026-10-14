@@ -34,7 +34,8 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Vec<Piec
     let mut pieces: Vec<Piece> = cubes
         .iter()
         .map(|&(at, _)| at)
-        .filter(|&at| solid(at))
+        // A post's top laid into a timber deck is the deck's (`floors::post_in_deck`).
+        .filter(|&at| solid(at) && super::floors::post_in_deck(base, kits, at).is_none())
         .map(|cube| Piece::Block { cube })
         .collect();
     // A framed kind (D236): a core under each whole cube of its walls' infill, in before it,

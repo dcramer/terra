@@ -1,14 +1,24 @@
-//! Decks (docs/building-kits.md, construction-001's floor cases): a timber kind's floors and
-//! flat roofs, every cube of its kind not in a wall, laid as a real deck is: sawn boards
-//! side by side across the top, two to a cube's width and as long as a tree gives, their
-//! joints staggered and over a joist; a rim beam along every side left open, so a floor's
-//! edge reads as timber; and joists under it, one down the middle of each row of cubes,
-//! where its underside is in the air. Where a floor meets a wall or a footing, its boards
-//! stop at the cube between them and the rim is left out, as the wall or footing covers it.
+//! Decks (docs/building-kits.md, construction-001's floor cases, D306): a timber kind's
+//! floors and flat roofs, every cube of its kind not in a wall, laid as a carpenter frames a
+//! deck, within the deck's layer of cubes: sawn boards side by side across the top, two to a
+//! cube's width and as long as a tree gives, their joints staggered and over a joist; under
+//! them joists across the boards, one on every line between cubes, so the outermost are the
+//! deck's edge, where its underside is in the air; a rim joist across their ends along every
+//! side left open, and a ledger where they meet a wall; and under the joists, at the
+//! layer's foot, a bearer of the kit's heavy timber (dressed as `Role::Crest`) along every
+//! line of posts under the deck, each post ending under it. A deck on posts overhangs its
+//! bearers by the rest of the cube they stand in. Where a floor meets a wall or a footing,
+//! its boards stop at the cube between them and the rim is left out, as the wall or footing
+//! covers it; on the ground its rim goes the whole depth of the layer.
+//!
+//! A post's top cube with a deck beside it on its layer and nothing on it, as the hammer's
+//! post a storey high under a floor laid over it leaves, is the deck's: boarded over, the
+//! post ending under it ([`post_in_deck`]).
 
-use super::{Layout, Piece, Place, Random, hash, ticks};
-use crate::kit::Kit;
-use crate::{Base, CELL_M, Fill};
+use super::roles::Role;
+use super::{Layout, Piece, Place, Random, Walls, hash, ticks};
+use crate::kit::{Kit, Kits, Pattern};
+use crate::{Base, CELL_M, Fill, Kind, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
 
@@ -18,12 +28,15 @@ const BOARD_THICK_M: f32 = 0.04;
 const BOARD_PROUD_M: f32 = 0.008;
 /// The gap between boards side by side and end to end.
 const GAP_M: f32 = 0.006;
-/// How wide a rim beam is, and a joist and how deep.
-const RIM_WIDE_M: f32 = 0.08;
-/// How deep each beam of a rim is at most: a deeper rim is built up of beams stacked.
+/// How thick a joist is, a rim joist and a ledger.
+const JOIST_WIDE_M: f32 = 0.07;
+/// How deep a joist is at least, where the layer leaves little room under the boards.
+const JOIST_LEAST_M: f32 = 0.1;
+/// How deep each beam of a rim on the ground is at most: a deeper rim is built up of beams
+/// stacked.
 const RIM_COURSE_M: f32 = 0.24;
-const JOIST_WIDE_M: f32 = 0.1;
-const JOIST_DEEP_M: f32 = 0.2;
+/// How far short of the end of its run of cubes a bearer stops.
+const BEARER_SHORT_M: f32 = 0.02;
 /// How far either way of the middle of a cube the line between its two boards falls, as a
 /// fraction of the cube.
 const SPLIT: f32 = 0.08;
@@ -32,19 +45,20 @@ const SPLIT: f32 = 0.08;
 const SIDES: [IVec3; 4] = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
 
 /// Lays a deck over every cube of the kit's kind laid as one (`Walls::cell`): its floors and
-/// flat roofs, and the tops of its solid masses.
-pub(super) fn decks(walls: &super::Walls, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
+/// flat roofs, and the tops of its solid masses; and over the tops of posts standing in them.
+pub(super) fn decks(walls: &Walls, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
     let (base, kind) = (walls.base, kit.kind());
     let is_deck = |at: IVec3| {
-        base.cube(at).is_some_and(|cube| cube.kind == kind)
-            && walls.cell(at) == Some(super::Cell::Deck)
+        (base.cube(at).is_some_and(|cube| cube.kind == kind)
+            && walls.cell(at) == Some(super::Cell::Deck))
+            || post_in_deck(base, walls.kits, at) == Some(kind)
     };
     // Every region with a cube in the scope, whole: found from those, not from every cube.
     let mut deck: BTreeSet<[i32; 3]> = BTreeSet::new();
     let mut next: Vec<IVec3> = scope
         .cubes(base, None)
         .into_iter()
-        .filter(|&(at, cube)| cube.kind == kind && is_deck(at))
+        .filter(|&(at, _)| is_deck(at))
         .map(|(at, _)| at)
         .collect();
     deck.extend(next.iter().map(|at| at.to_array()));
@@ -57,13 +71,60 @@ pub(super) fn decks(walls: &super::Walls, kit: &Kit, scope: super::Scope, layout
             }
         }
     }
-    regions(base, kit, &deck, CELL_M, scope, layout);
+    regions(walls, kit, &deck, CELL_M, scope, layout);
+}
+
+/// The kind a cube is laid as a deck in, if it is: a whole, solid cube of a timber kind
+/// whose kit lays decks, not in a wall (`Walls::walled`), with no cube cut to a shape on it.
+pub(crate) fn decked(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
+    let cube = base.cube(at)?;
+    if cube.shape != Shape::Whole || super::drawn_fill(&cube) != Fill::Solid {
+        return None;
+    }
+    let kit = kits.of(cube.kind)?;
+    if kit.pattern != Pattern::Logs || !kit.textures.contains_key(&crate::mesh::Material::Floor) {
+        return None;
+    }
+    if base
+        .cube(at + IVec3::Y)
+        .is_some_and(|over| over.fill == Fill::Solid && over.shape.is_cut())
+    {
+        return None;
+    }
+    let top = !base.in_wall(at + IVec3::Y);
+    let over_cut = base
+        .cube(at - IVec3::Y)
+        .is_some_and(|under| under.fill == Fill::Solid && under.shape.is_cut());
+    let walled = base.in_wall(at) && !(top && over_cut);
+    (!walled).then_some(cube.kind)
+}
+
+/// The kind of the deck a cube is the top of a post in, if it is: a post's cube, of any kind,
+/// with nothing on it, beside a cube on its layer laid as a deck ([`decked`]). That deck is
+/// laid over it and the post ends under it, carrying the deck's bearer, as a builder sets a
+/// deck on its posts: so a post a storey high, as the hammer lays one, with a floor laid at
+/// its top, stands under the floor and not up through its corner.
+pub(crate) fn post_in_deck(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
+    let cube = base.cube(at)?;
+    if cube.shape != Shape::Post || cube.fill != Fill::Solid {
+        return None;
+    }
+    if base
+        .cube(at + IVec3::Y)
+        .is_some_and(|over| over.fill != Fill::Open)
+    {
+        return None;
+    }
+    SIDES
+        .iter()
+        .filter_map(|&side| decked(base, kits, at + side))
+        .min()
 }
 
 /// Lays a deck over each region of cubes joined side by side on a layer, its top so high
 /// over the layer's foot: a cube's height, or half for halves.
 pub(super) fn regions(
-    base: &Base,
+    walls: &Walls,
     kit: &Kit,
     deck: &BTreeSet<[i32; 3]>,
     height: f32,
@@ -96,179 +157,422 @@ pub(super) fn regions(
         if !scope.reaches(low, high) {
             continue;
         }
-        // Boards run on under a wall as far as its members' faces, where it stands on
-        // something else beside the deck, as a footing.
-        let under_wall = ((CELL_M - kit.diameter) * 0.5).max(0.0);
-        lay_deck(base, &region, longest, under_wall, height, layout);
+        let deck = Deck {
+            walls,
+            kit,
+            region: &region,
+            longest,
+            height,
+        };
+        deck.lay(layout);
     }
 }
 
-/// A deck's boards, rims and joists over one region of cubes on a layer.
-fn lay_deck(
-    base: &Base,
-    region: &BTreeSet<[i32; 3]>,
+/// What holds a cube of a deck up from underneath.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Under {
+    /// Nothing: it is framed, joists under its boards.
+    Air,
+    /// A post, or it is a post's top: framed, and a bearer over the post.
+    Post,
+    /// A cube or the ground: it rests on that, unframed.
+    Solid,
+}
+
+/// How one side of a deck's cube is finished.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edge {
+    /// Closed by what is beyond: nothing.
+    Closed,
+    /// Open: a rim, or the edge joist where the joists run along it.
+    Open,
+    /// A wall beyond, framed into: a ledger on it under the joists' ends.
+    Wall,
+}
+
+/// One deck's region of cubes on a layer, and what it is laid by.
+struct Deck<'a> {
+    walls: &'a Walls<'a>,
+    kit: &'a Kit,
+    region: &'a BTreeSet<[i32; 3]>,
     longest: f32,
-    under_wall: f32,
     height: f32,
-    layout: &mut Layout,
-) {
-    let cells: Vec<IVec3> = region.iter().map(|&at| IVec3::from_array(at)).collect();
-    let low = cells.iter().copied().reduce(IVec3::min).unwrap_or_default();
-    let high = cells.iter().copied().reduce(IVec3::max).unwrap_or_default();
-    let y = low.y;
-    let top = y as f32 * CELL_M + height;
-    // Boards along the longer way, joists across them.
-    let along_x = high.x - low.x >= high.z - low.z;
-    let (along, across) = if along_x {
-        (IVec3::X, IVec3::Z)
-    } else {
-        (IVec3::Z, IVec3::X)
-    };
-    let cell = |a: i32, b: i32| along * a + across * b + IVec3::Y * y;
-    let (a_low, b_low) = (low.dot(along), low.dot(across));
-    let (a_high, b_high) = (high.dot(along), high.dot(across));
-    let covered = |at: IVec3| {
-        base.cube(at + IVec3::Y)
-            .is_some_and(|c| c.fill != Fill::Open)
-    };
-    // A cube beside the deck under a wall: the boards run on over it, under the wall.
-    let wall_foot = |at: IVec3| {
-        !region.contains(&at.to_array())
-            && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
-            && base.in_wall(at + IVec3::Y)
-    };
-    let board_y = top + BOARD_PROUD_M - BOARD_THICK_M * 0.5;
-    let point =
-        |a: f32, b: f32, height: f32| along.as_vec3() * a + across.as_vec3() * b + Vec3::Y * height;
-    // Boards: two across each row of cubes, along every run of it whose top is open.
-    for b in b_low..=b_high {
-        let mut row = Random(hash(&[0xdec, b as u32, y as u32, along_x as u32]));
-        let split = 0.5 + SPLIT * row.signed();
-        let runs = runs(a_low..=a_high, |a| {
-            region.contains(&cell(a, b).to_array()) && !covered(cell(a, b))
-        });
-        for (board, (from, to)) in [(0.0, split), (split, 1.0)].into_iter().enumerate() {
-            for &(first, last) in &runs {
-                // The outer board of a row along a wall runs on under it.
-                let beside = if board == 0 { b - 1 } else { b + 1 };
-                let wider = if (first..=last).all(|a| wall_foot(cell(a, beside))) {
-                    under_wall
-                } else {
-                    0.0
-                };
-                let (from_m, to_m) = if board == 0 {
-                    (
-                        b as f32 * CELL_M + from * CELL_M - wider,
-                        (b as f32 + to) * CELL_M,
-                    )
-                } else {
-                    ((b as f32 + from) * CELL_M, (b as f32 + to) * CELL_M + wider)
-                };
-                let middle = (from_m + to_m) * 0.5;
-                let wide = to_m - from_m - GAP_M;
-                let (start_out, end_out) = (
-                    if wall_foot(cell(first - 1, b)) {
-                        under_wall
-                    } else {
-                        0.0
-                    },
-                    if wall_foot(cell(last + 1, b)) {
-                        under_wall
-                    } else {
-                        0.0
-                    },
-                );
-                // Joints over a joist, staggered from the boards beside it.
-                let seed = hash(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
-                let mut lengths = Random(seed);
-                let mut at = first;
-                let mut piece = 0u32;
-                while at <= last {
-                    let most = ((longest / CELL_M) as i32).max(1);
-                    let span = if piece == 0 {
-                        1 + (lengths.unit() * most as f32) as i32
-                    } else {
-                        most - (lengths.unit() * 2.0) as i32
-                    }
-                    .clamp(1, most);
-                    let end = (at + span - 1).min(last);
-                    let start_m = at as f32 * CELL_M + GAP_M * 0.5
-                        - if at == first { start_out } else { 0.0 };
-                    let end_m = (end + 1) as f32 * CELL_M - GAP_M * 0.5
-                        + if end == last { end_out } else { 0.0 };
-                    layout.pieces.push(Piece::Plank {
-                        from: Place::near(point(start_m, middle, board_y)),
-                        to: Place::near(point(end_m, middle, board_y)),
-                        wide: ticks(wide),
-                        high: ticks(BOARD_THICK_M),
-                        seed: hash(&[seed, piece]),
-                    });
-                    at = end + 1;
-                    piece += 1;
-                }
-            }
+}
+
+impl Deck<'_> {
+    fn has(&self, at: IVec3) -> bool {
+        self.region.contains(&at.to_array())
+    }
+
+    fn under(&self, at: IVec3) -> Under {
+        let base = self.walls.base;
+        let post = |at: IVec3| {
+            base.cube(at)
+                .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape == Shape::Post)
+        };
+        if post(at) || post(at - IVec3::Y) {
+            Under::Post
+        } else if base.cube(at - IVec3::Y).is_none() && !base.grounded(at) {
+            Under::Air
+        } else {
+            Under::Solid
         }
     }
-    // Rims along every side of it left open, the length of each run of that side.
-    let beam_high = height - BOARD_THICK_M;
-    for side in SIDES {
-        let runs_along = if side.dot(along) != 0 { across } else { along };
-        let open = |at: IVec3| {
-            region.contains(&at.to_array())
-                && base
-                    .cube(at + side)
-                    .is_none_or(|cube| cube.fill == Fill::Open)
+
+    fn framed(&self, at: IVec3) -> bool {
+        self.has(at) && self.under(at) != Under::Solid
+    }
+
+    /// How a cube's side is finished.
+    fn edge(&self, at: IVec3, side: IVec3) -> Edge {
+        let beyond = at + side;
+        if self.has(beyond) {
+            return Edge::Closed;
+        }
+        let base = self.walls.base;
+        match base.cube(beyond) {
+            None => Edge::Open,
+            Some(cube) if cube.fill == Fill::Open => Edge::Open,
+            // A flight's cubes are drawn open, its stringers bearing on the rim.
+            Some(_) if self.walls.stair(beyond) => Edge::Open,
+            Some(cube) if cube.shape == Shape::Post => Edge::Closed,
+            Some(cube)
+                if cube.fill == Fill::Solid && !cube.kind.is_roof() && base.in_wall(beyond) =>
+            {
+                Edge::Wall
+            }
+            Some(_) => Edge::Closed,
+        }
+    }
+
+    /// How far into a wall's cube beside it its face is, where the deck meets it: a wall of
+    /// the deck's own logs is set in from its cube's face by the logs' round.
+    fn wall_face(&self, beyond: IVec3) -> f32 {
+        let ours = self
+            .walls
+            .base
+            .cube(beyond)
+            .is_some_and(|cube| cube.kind == self.kit.kind());
+        if ours {
+            ((CELL_M - self.kit.diameter) * 0.5).max(0.0)
+        } else {
+            0.0
+        }
+    }
+
+    fn lay(&self, layout: &mut Layout) {
+        let cells: Vec<IVec3> = self
+            .region
+            .iter()
+            .map(|&at| IVec3::from_array(at))
+            .collect();
+        let low = cells.iter().copied().reduce(IVec3::min).unwrap_or_default();
+        let high = cells.iter().copied().reduce(IVec3::max).unwrap_or_default();
+        let y = low.y;
+        let foot = y as f32 * CELL_M;
+        let top = foot + self.height;
+        // Bearers only in a deck a cube deep: a half's is too low to frame.
+        let whole = self.height >= CELL_M - 1e-3;
+        let posts: Vec<IVec3> = if whole {
+            cells
+                .iter()
+                .copied()
+                .filter(|&at| self.under(at) == Under::Post)
+                .collect()
+        } else {
+            Vec::new()
         };
-        let lines: BTreeSet<i32> = cells.iter().map(|at| at.dot(side.abs())).collect();
-        for line in lines {
+        // Boards and bearers along one way, joists across them: the bearers along the lines
+        // of posts, the fewer of the two ways; else the joists square to the walls they
+        // meet; else the boards along the longer way.
+        let lines = |axis: IVec3| -> BTreeSet<i32> {
+            posts
+                .iter()
+                .map(|at| at.dot(IVec3::ONE - axis - IVec3::Y))
+                .collect()
+        };
+        let walled = |normal: IVec3| {
+            cells
+                .iter()
+                .flat_map(|&at| [normal, -normal].map(move |side| (at, side)))
+                .filter(|&(at, side)| self.edge(at, side) == Edge::Wall)
+                .count()
+        };
+        let along_x = match lines(IVec3::X).len().cmp(&lines(IVec3::Z).len()) {
+            std::cmp::Ordering::Less => true,
+            std::cmp::Ordering::Greater => false,
+            std::cmp::Ordering::Equal => match walled(IVec3::X).cmp(&walled(IVec3::Z)) {
+                std::cmp::Ordering::Greater => false,
+                std::cmp::Ordering::Less => true,
+                std::cmp::Ordering::Equal => high.x - low.x >= high.z - low.z,
+            },
+        };
+        let (along, across) = if along_x {
+            (IVec3::X, IVec3::Z)
+        } else {
+            (IVec3::Z, IVec3::X)
+        };
+        let cell = |a: i32, b: i32| along * a + across * b + IVec3::Y * y;
+        let (a_low, b_low) = (low.dot(along), low.dot(across));
+        let (a_high, b_high) = (high.dot(along), high.dot(across));
+        let point = |a: f32, b: f32, height: f32| {
+            along.as_vec3() * a + across.as_vec3() * b + Vec3::Y * height
+        };
+        self.boards(along, across, (low, high), top, layout);
+        // The bearers' depth, and the joists' over them up to the boards.
+        let (_, bearer_high) = crate::timber::section(self.kit, Some(Role::Crest));
+        let joist_foot = if whole { foot + bearer_high } else { foot };
+        let joist_deep = (top - BOARD_THICK_M - joist_foot).max(JOIST_LEAST_M);
+        let joist_foot = top - BOARD_THICK_M - joist_deep;
+        // Bearers: along each line of posts, the length of each run of the deck over one.
+        for line in lines(along) {
+            for (first, last) in runs(a_low..=a_high, |a| self.has(cell(a, line))) {
+                if !(first..=last).any(|a| self.under(cell(a, line)) == Under::Post) {
+                    continue;
+                }
+                let middle = (line as f32 + 0.5) * CELL_M;
+                let height = foot + bearer_high * 0.5;
+                let mut bearer = super::runs::log(
+                    point(first as f32 * CELL_M + BEARER_SHORT_M, middle, height),
+                    point((last + 1) as f32 * CELL_M - BEARER_SHORT_M, middle, height),
+                    super::Split::Whole,
+                    hash(&[0xbea2, line as u32, first as u32, y as u32, along_x as u32]),
+                    None,
+                );
+                super::runs::set_role(&mut bearer, Some(Role::Crest));
+                layout.pieces.push(bearer);
+            }
+        }
+        // Joists on every line between cubes across the boards, under the framed cubes
+        // either side of it: the outermost flush with the deck's edge, the rest centred on
+        // the line; each from end to end of its run, stopping inside a rim and running on
+        // onto a ledger.
+        let joist_middle = joist_foot + joist_deep * 0.5;
+        for k in a_low..=a_high + 1 {
+            let state = |b: i32| (self.framed(cell(k - 1, b)), self.framed(cell(k, b)));
+            let mut found: Vec<(i32, i32, (bool, bool))> = Vec::new();
+            for b in b_low..=b_high {
+                let here = state(b);
+                if here == (false, false) {
+                    continue;
+                }
+                match found.last_mut() {
+                    Some((_, last, was)) if *last + 1 == b && *was == here => *last = b,
+                    _ => found.push((b, b, here)),
+                }
+            }
+            for (first, last, (before, after)) in found {
+                let shift = match (before, after) {
+                    (true, true) => 0.0,
+                    (false, true) => JOIST_WIDE_M * 0.5,
+                    _ => -JOIST_WIDE_M * 0.5,
+                };
+                let a = k as f32 * CELL_M + shift;
+                let owner = |b: i32| if after { cell(k, b) } else { cell(k - 1, b) };
+                let reach = |b: i32, side: IVec3| match self.edge(owner(b), side) {
+                    Edge::Open => -JOIST_WIDE_M,
+                    Edge::Wall => self.wall_face(owner(b) + side) - JOIST_WIDE_M,
+                    Edge::Closed => 0.0,
+                };
+                let from = first as f32 * CELL_M - reach(first, -across);
+                let to = (last + 1) as f32 * CELL_M + reach(last, across);
+                layout.pieces.push(Piece::Plank {
+                    from: Place::near(point(a, from, joist_middle)),
+                    to: Place::near(point(a, to, joist_middle)),
+                    wide: ticks(JOIST_WIDE_M),
+                    high: ticks(joist_deep),
+                    seed: hash(&[0x1015, k as u32, first as u32, y as u32]),
+                });
+            }
+        }
+        // Rims along its open sides: across the joists' ends a rim joist as deep as they
+        // are, and where it rests on something the whole depth of the layer, in beams a
+        // course deep, stacked; ledgers on the walls the joists run into.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Rim {
+            Joist,
+            Ledger,
+            Full,
+        }
+        for side in SIDES {
+            let runs_along = if side.dot(along) != 0 { across } else { along };
+            let joist_ends = side.dot(across) != 0;
+            let rim = |at: IVec3| -> Option<Rim> {
+                if !self.has(at) {
+                    return None;
+                }
+                match (self.edge(at, side), self.framed(at)) {
+                    (Edge::Open, false) => Some(Rim::Full),
+                    (Edge::Open, true) if joist_ends => Some(Rim::Joist),
+                    (Edge::Wall, true) if joist_ends => Some(Rim::Ledger),
+                    _ => None,
+                }
+            };
+            let lines: BTreeSet<i32> = cells.iter().map(|at| at.dot(side.abs())).collect();
             let first = cells.iter().map(|at| at.dot(runs_along)).min().unwrap_or(0);
             let last = cells.iter().map(|at| at.dot(runs_along)).max().unwrap_or(0);
-            let at_of = |k: i32| side.abs() * line + runs_along * k + IVec3::Y * y;
-            for (from, to) in runs(first..=last, |k| open(at_of(k))) {
-                let face = (line as f32 + 0.5 + side.dot(side.abs()) as f32 * 0.5) * CELL_M
-                    - side.dot(side.abs()) as f32 * RIM_WIDE_M * 0.5;
-                // In beams a course deep, stacked, as a deep rim is built up.
-                let beams = ((beam_high / RIM_COURSE_M).round() as i32).max(1);
-                let deep = beam_high / beams as f32;
-                for beam in 0..beams {
-                    let height = y as f32 * CELL_M + deep * (beam as f32 + 0.5);
-                    let on = |k: f32| {
-                        side.abs().as_vec3() * face + runs_along.as_vec3() * k + Vec3::Y * height
+            let outward = side.dot(side.abs()) as f32;
+            for line in lines {
+                let at_of = |k: i32| side.abs() * line + runs_along * k + IVec3::Y * y;
+                let mut found: Vec<(i32, i32, Rim)> = Vec::new();
+                for k in first..=last {
+                    let Some(here) = rim(at_of(k)) else {
+                        continue;
                     };
-                    layout.pieces.push(Piece::Plank {
-                        from: Place::near(on(from as f32 * CELL_M)),
-                        to: Place::near(on((to + 1) as f32 * CELL_M)),
-                        wide: ticks(RIM_WIDE_M),
-                        high: ticks(deep - GAP_M),
-                        seed: hash(&[
-                            0x41b,
-                            line as u32,
-                            from as u32,
-                            side.x as u32,
-                            side.z as u32,
-                            beam as u32,
-                        ]),
-                    });
+                    match found.last_mut() {
+                        Some((_, end, was)) if *end + 1 == k && *was == here => *end = k,
+                        _ => found.push((k, k, here)),
+                    }
+                }
+                for (from, to, kind) in found {
+                    // The cube's face on that side, and the rim's middle set in from it, or
+                    // out from it onto the wall's face for a ledger.
+                    let face = (line as f32 + 0.5 + outward * 0.5) * CELL_M;
+                    let set = match kind {
+                        Rim::Ledger => self.wall_face(at_of(from) + side) - JOIST_WIDE_M * 0.5,
+                        _ => -JOIST_WIDE_M * 0.5,
+                    };
+                    let across_at = face + outward * set;
+                    // A rim joist as deep as the joists, flush with them; a rim on the
+                    // ground in beams with a gap between.
+                    let courses: Vec<(f32, f32)> = match kind {
+                        Rim::Joist | Rim::Ledger => vec![(joist_middle, joist_deep + GAP_M)],
+                        Rim::Full => {
+                            let beam_high = self.height - BOARD_THICK_M;
+                            let beams = ((beam_high / RIM_COURSE_M).round() as i32).max(1);
+                            let deep = beam_high / beams as f32;
+                            (0..beams)
+                                .map(|beam| (foot + deep * (beam as f32 + 0.5), deep))
+                                .collect()
+                        }
+                    };
+                    for (beam, (height, deep)) in courses.into_iter().enumerate() {
+                        let on = |k: f32| {
+                            side.abs().as_vec3() * across_at
+                                + runs_along.as_vec3() * k
+                                + Vec3::Y * height
+                        };
+                        layout.pieces.push(Piece::Plank {
+                            from: Place::near(on(from as f32 * CELL_M)),
+                            to: Place::near(on((to + 1) as f32 * CELL_M)),
+                            wide: ticks(JOIST_WIDE_M),
+                            high: ticks(deep - GAP_M),
+                            seed: hash(&[
+                                0x41b,
+                                line as u32,
+                                from as u32,
+                                side.x as u32,
+                                side.z as u32,
+                                beam as u32,
+                            ]),
+                        });
+                    }
                 }
             }
         }
     }
-    // Joists down the middle of each row of cubes across the boards, under the cubes whose
-    // underside is in the air.
-    let hangs = |at: IVec3| {
-        region.contains(&at.to_array()) && base.cube(at - IVec3::Y).is_none() && !base.grounded(at)
-    };
-    for a in a_low..=a_high {
-        for (first, last) in runs(b_low..=b_high, |b| hangs(cell(a, b))) {
-            let middle = (a as f32 + 0.5) * CELL_M;
-            let height = top - BOARD_THICK_M - JOIST_DEEP_M * 0.5;
-            layout.pieces.push(Piece::Plank {
-                from: Place::near(point(middle, first as f32 * CELL_M, height)),
-                to: Place::near(point(middle, (last + 1) as f32 * CELL_M, height)),
-                wide: ticks(JOIST_WIDE_M),
-                high: ticks(JOIST_DEEP_M),
-                seed: hash(&[0x1015, a as u32, first as u32, y as u32]),
+
+    /// Its boards: two across each row of cubes along `along`, along every run of it whose
+    /// top is open, running on under a wall beside it as far as the wall's members' faces.
+    fn boards(
+        &self,
+        along: IVec3,
+        across: IVec3,
+        (low, high): (IVec3, IVec3),
+        top: f32,
+        layout: &mut Layout,
+    ) {
+        let base = self.walls.base;
+        let region = self.region;
+        let y = low.y;
+        let along_x = along == IVec3::X;
+        let cell = |a: i32, b: i32| along * a + across * b + IVec3::Y * y;
+        let (a_low, b_low) = (low.dot(along), low.dot(across));
+        let (a_high, b_high) = (high.dot(along), high.dot(across));
+        // Boards run on under a wall as far as its members' faces, where it stands on
+        // something else beside the deck, as a footing.
+        let under_wall = ((CELL_M - self.kit.diameter) * 0.5).max(0.0);
+        let covered = |at: IVec3| {
+            base.cube(at + IVec3::Y)
+                .is_some_and(|c| c.fill != Fill::Open)
+        };
+        // A cube beside the deck under a wall: the boards run on over it, under the wall.
+        let wall_foot = |at: IVec3| {
+            !region.contains(&at.to_array())
+                && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
+                && base.in_wall(at + IVec3::Y)
+        };
+        let board_y = top + BOARD_PROUD_M - BOARD_THICK_M * 0.5;
+        let point = |a: f32, b: f32, height: f32| {
+            along.as_vec3() * a + across.as_vec3() * b + Vec3::Y * height
+        };
+        for b in b_low..=b_high {
+            let mut row = Random(hash(&[0xdec, b as u32, y as u32, along_x as u32]));
+            let split = 0.5 + SPLIT * row.signed();
+            let runs = runs(a_low..=a_high, |a| {
+                region.contains(&cell(a, b).to_array()) && !covered(cell(a, b))
             });
+            for (board, (from, to)) in [(0.0, split), (split, 1.0)].into_iter().enumerate() {
+                for &(first, last) in &runs {
+                    // The outer board of a row along a wall runs on under it.
+                    let beside = if board == 0 { b - 1 } else { b + 1 };
+                    let wider = if (first..=last).all(|a| wall_foot(cell(a, beside))) {
+                        under_wall
+                    } else {
+                        0.0
+                    };
+                    let (from_m, to_m) = if board == 0 {
+                        (
+                            b as f32 * CELL_M + from * CELL_M - wider,
+                            (b as f32 + to) * CELL_M,
+                        )
+                    } else {
+                        ((b as f32 + from) * CELL_M, (b as f32 + to) * CELL_M + wider)
+                    };
+                    let middle = (from_m + to_m) * 0.5;
+                    let wide = to_m - from_m - GAP_M;
+                    let (start_out, end_out) = (
+                        if wall_foot(cell(first - 1, b)) {
+                            under_wall
+                        } else {
+                            0.0
+                        },
+                        if wall_foot(cell(last + 1, b)) {
+                            under_wall
+                        } else {
+                            0.0
+                        },
+                    );
+                    // Joints over a joist, staggered from the boards beside it.
+                    let seed = hash(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
+                    let mut lengths = Random(seed);
+                    let mut at = first;
+                    let mut piece = 0u32;
+                    while at <= last {
+                        let most = ((self.longest / CELL_M) as i32).max(1);
+                        let span = if piece == 0 {
+                            1 + (lengths.unit() * most as f32) as i32
+                        } else {
+                            most - (lengths.unit() * 2.0) as i32
+                        }
+                        .clamp(1, most);
+                        let end = (at + span - 1).min(last);
+                        let start_m = at as f32 * CELL_M + GAP_M * 0.5
+                            - if at == first { start_out } else { 0.0 };
+                        let end_m = (end + 1) as f32 * CELL_M - GAP_M * 0.5
+                            + if end == last { end_out } else { 0.0 };
+                        layout.pieces.push(Piece::Plank {
+                            from: Place::near(point(start_m, middle, board_y)),
+                            to: Place::near(point(end_m, middle, board_y)),
+                            wide: ticks(wide),
+                            high: ticks(BOARD_THICK_M),
+                            seed: hash(&[seed, piece]),
+                        });
+                        at = end + 1;
+                        piece += 1;
+                    }
+                }
+            }
         }
     }
 }
@@ -405,14 +709,25 @@ mod tests {
         });
         let layout = lay(&base, &textured());
         let all = planks(&layout);
-        let rims: Vec<_> = all.iter().filter(|p| p.2 == ticks(RIM_WIDE_M)).collect();
-        let joists: Vec<_> = all.iter().filter(|p| p.2 == ticks(JOIST_WIDE_M)).collect();
-        // A rim along each of its four sides, their outer faces on its edges, two beams deep.
-        assert_eq!(rims.len(), 4 * 2, "{rims:?}");
-        let rim_length: f32 = rims.iter().map(|(f, t, ..)| f.distance(*t)).sum();
-        assert!((rim_length - 2.0 * 2.0 * (3.0 + 2.0)).abs() < 1e-4);
-        // A joist under each row of cubes along the boards, across the deck.
-        assert_eq!(joists.len(), 6);
+        let framing: Vec<_> = all.iter().filter(|p| p.2 == ticks(JOIST_WIDE_M)).collect();
+        // Boards along its length, so joists across it on every line between cubes, the
+        // outermost its east and west edges: seven, each the deck's width less a rim at
+        // either end; and a rim joist across their ends along its north and south sides.
+        let (joists, rims): (Vec<&&(Vec3, Vec3, i32, i32)>, Vec<_>) = framing
+            .iter()
+            .partition(|&&&(from, to, ..)| (from.x - to.x).abs() < 1e-3);
+        assert_eq!(joists.len(), 7, "{joists:?}");
+        for (from, to, ..) in &joists {
+            assert!((from.distance(*to) - (2.0 - 2.0 * JOIST_WIDE_M)).abs() < 3e-3);
+        }
+        assert_eq!(rims.len(), 2, "{rims:?}");
+        assert!(
+            rims.iter()
+                .all(|(from, to, ..)| (from.distance(*to) - 3.0).abs() < 1e-3)
+        );
+        // Rims and joists as deep, together, with the boards on them; the same at the
+        // edges as in the middle.
+        assert!(framing.iter().all(|p| p.3 == framing[0].3));
         // Everything within its cubes.
         for (from, to, wide, high) in &all {
             let piece = Piece::Plank {

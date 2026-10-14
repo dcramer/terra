@@ -29,7 +29,7 @@ pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: 
     };
     let halves = shaped(Shape::Half);
     if !halves.is_empty() && kit.textures.contains_key(&crate::mesh::Material::Floor) {
-        super::floors::regions(base, kit, &halves, CELL_M * 0.5, scope, layout);
+        super::floors::regions(walls, kit, &halves, CELL_M * 0.5, scope, layout);
     }
     let posts = shaped(Shape::Post);
     for &at in &posts {
@@ -241,9 +241,18 @@ fn uv(first: Facing, a: f32, second: Facing, b: f32) -> (f32, f32) {
     (u, v)
 }
 
-/// One post up a column of post cubes from `foot` to `top`.
+/// One post up a column of post cubes from `foot` to `top`: on a pad where it stands on
+/// something; up to the deck its top cube is laid into, or the deck on it, ending under the
+/// deck's bearer (`floors`); else under a bolster across its top where something rests on
+/// it, set to the bolster's real depth so the two meet.
 fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) {
     let base = walls.base;
+    // A top cube laid into a deck beside it is the deck's: the post ends under it.
+    let in_deck = super::floors::post_in_deck(base, walls.kits, top).is_some();
+    if in_deck && top == foot {
+        return;
+    }
+    let top = if in_deck { top - IVec3::Y } else { top };
     let middle = (foot.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CELL_M;
     let (bottom, height) = (foot.y as f32 * CELL_M, (top.y + 1) as f32 * CELL_M);
     // A pad under it where it stands on anything, and the post on the pad.
@@ -264,16 +273,16 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
             seed: hash(&[foot.x as u32, foot.y as u32, foot.z as u32, 0x9ad]),
         });
     }
-    // A bolster across its top, under what rests on it, the way that rests along.
+    // A bolster across its top, under what rests on it, the way that rests along; none
+    // under a deck, whose bearer it carries.
     let above = top + IVec3::Y;
-    let carries = base
-        .cube(above)
-        .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape != Shape::Post);
-    let bolster = kit
-        .dress
-        .member(Role::Crest)
-        .map_or(kit.diameter, |(_, scale, _)| kit.diameter * scale)
-        .min(CELL_M * 0.7);
+    let decked = in_deck || super::floors::decked(base, walls.kits, above).is_some();
+    let carries = !decked
+        && base
+            .cube(above)
+            .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape != Shape::Post);
+    let (_, bolster) = crate::timber::section(kit, Some(Role::Crest));
+    let bolster = bolster.min(CELL_M * 0.7);
     let shaft_top = if carries { height - bolster } else { height };
     let mut shaft = runs::log(
         middle.with_y(bottom + pad),

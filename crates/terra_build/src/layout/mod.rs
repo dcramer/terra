@@ -879,7 +879,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     ours.sort_by_key(|at| at.to_array());
     ours.dedup();
     let mut layout = Layout::default();
-    stairs::lay(kit, &steps, &mut layout);
+    stairs::lay(base, kit, &steps, &mut layout);
     if ours.is_empty() {
         if kit.textures.contains_key(&Material::Floor) {
             floors::decks(&walls, kit, scope, &mut layout);

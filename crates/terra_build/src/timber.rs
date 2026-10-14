@@ -38,6 +38,28 @@ const SHAPE_RING_M: f32 = 0.25;
 /// How far apart a plank's rings are: its face waves only gently, and a floor has many.
 const PLANK_STEP_M: f32 = 0.4;
 
+/// A hewn member's half width, as a fraction of its kit's log, and half height, of a course.
+const HEWN_WIDE: f32 = 0.45;
+const HEWN_HIGH: f32 = 0.39;
+
+/// How wide and how high a member laid for a role is as this code draws it, before its seed
+/// varies it a little, in metres: what a layout needs to set what rests on it, or what it
+/// rests on, against its faces (the asset contract: a piece's real size, from its kit's data,
+/// with no offsets kept for a kit in code). A role the kit does not dress as a member is
+/// drawn as a log of the kit's own.
+pub fn section(kit: &Kit, role: Option<crate::layout::Role>) -> (f32, f32) {
+    let (profile, scale) = role
+        .and_then(|role| kit.dress.member(role))
+        .map_or((kit.timber.profile, 1.0), |(profile, scale, _)| {
+            (profile, scale)
+        });
+    let diameter = kit.diameter * scale;
+    match profile {
+        Profile::Round => (diameter * 1.03, diameter * 1.03),
+        Profile::Hewn => (diameter * HEWN_WIDE * 2.0, kit.course * HEWN_HIGH * 2.0),
+    }
+}
+
 /// Draws a log, a beam or a post, and the daub under it, into the kit's materials: its face
 /// in `Log`, its cut ends in `LogEnd`, its daub in `Daub`.
 pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
@@ -520,8 +542,8 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         .get(&Material::Log)
         .map_or([1.0, 1.0], |texture| texture.metres);
     let thickness = 1.0 + t.variation.thickness * random.signed();
-    let half_wide = kit.diameter * 0.45 * thickness;
-    let half_high = kit.course * 0.39 * (1.0 + t.variation.thickness * 0.3 * random.signed());
+    let half_wide = kit.diameter * HEWN_WIDE * thickness;
+    let half_high = kit.course * HEWN_HIGH * (1.0 + t.variation.thickness * 0.3 * random.signed());
     let chamfer = match t.notch {
         Notch::Saddle => 0.02,
         Notch::Flush => 0.008,

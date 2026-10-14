@@ -399,7 +399,152 @@ fn rows(
     if let Some(hewn) = hewn {
         rows.push(("more shapes in hewn timber", more_shapes(hewn)));
     }
+    // Decks on posts and their stairs (D306), in each timber kind and on stone piers.
+    if let Some(stone) = stone {
+        let [on_posts, nine_and_l, against_and_high] = decks(kind, kind, stone);
+        rows.push(("decks on posts in logs", on_posts));
+        rows.push(("decks: nine posts and an L in logs", nine_and_l));
+        rows.push((
+            "decks: against a wall, two storeys up in logs",
+            against_and_high,
+        ));
+        if let Some(hewn) = hewn {
+            let [on_posts, nine_and_l, against_and_high] = decks(hewn, hewn, stone);
+            rows.push(("decks on posts in hewn timber", on_posts));
+            rows.push(("decks: nine posts and an L in hewn timber", nine_and_l));
+            rows.push((
+                "decks: against a wall, two storeys up in hewn timber",
+                against_and_high,
+            ));
+            let [piers, ..] = decks(hewn, stone, stone);
+            let [logs_piers, ..] = decks(kind, stone, stone);
+            let mut on_piers = logs_piers;
+            // The hewn decks beside the log ones, a row's width east.
+            on_piers.extend(piers.into_iter().map(|op| match op {
+                BuildOp::Fill { min, max, cube } => BuildOp::Fill {
+                    min: [min[0], min[1], min[2] + 14],
+                    max: [max[0], max[1], max[2] + 14],
+                    cube,
+                },
+                other => other,
+            }));
+            rows.push(("decks on stone piers", on_piers));
+        }
+    }
     rows
+}
+
+/// Decks on posts as a player lays them (D306), each on a stone footing a cube into the
+/// ground under every post, in three rows: on four posts and on six, a storey up, posts the
+/// hammer's height into the deck's layer, stairs up the south side of one and the east of
+/// the other; on nine posts and an L, posts laid by hand under the deck, stairs from the
+/// north and the south; against a wall two storeys high, posts only on its open side, and
+/// a deck two storeys up, stairs up each from the south.
+fn decks(deck: Kind, posts: Kind, footing: Kind) -> [Vec<BuildOp>; 3] {
+    let put = |min: [i32; 3], max: [i32; 3], kind: Kind, shape: Shape| BuildOp::Fill {
+        min,
+        max,
+        cube: Some(Cube {
+            shape,
+            ..Cube::new(kind, Fill::Solid)
+        }),
+    };
+    // Posts at columns, up to the layer `top`, each on a footing.
+    let posted = |ops: &mut Vec<BuildOp>, at: &[[i32; 2]], top: i32| {
+        for &[x, z] in at {
+            ops.push(put([x, -1, z], [x, -1, z], footing, Shape::Whole));
+            ops.push(put([x, 0, z], [x, top, z], posts, Shape::Post));
+        }
+    };
+    // A deck over a box of columns on a layer, around posts already in it.
+    let floor = |ops: &mut Vec<BuildOp>, min: [i32; 2], max: [i32; 2], layer: i32| {
+        for x in min[0]..=max[0] {
+            for z in min[1]..=max[1] {
+                if !ops.iter().any(|op| {
+                    matches!(op, BuildOp::Fill { min: m, max: n, .. }
+                        if m[0] == x && m[2] == z && n[1] >= layer && m[1] <= layer)
+                }) {
+                    ops.push(put([x, layer, z], [x, layer, z], deck, Shape::Whole));
+                }
+            }
+        }
+    };
+    // A flight two columns wide from `foot` rising toward `facing` to the layer `top`, on a
+    // footing.
+    let flight = |ops: &mut Vec<BuildOp>, foot: [i32; 2], facing: Facing, top: i32| {
+        let (forward, across) = (facing.step(), facing.turned(1).step());
+        for i in 0..=top {
+            for w in 0..2 {
+                let at = IVec3::new(foot[0], 0, foot[1]) + forward * i + across * w;
+                ops.push(put(
+                    [at.x, -1, at.z],
+                    [at.x, -1, at.z],
+                    footing,
+                    Shape::Whole,
+                ));
+                if i > 0 {
+                    ops.push(put(
+                        [at.x, 0, at.z],
+                        [at.x, i - 1, at.z],
+                        deck,
+                        Shape::Whole,
+                    ));
+                }
+                ops.push(put(
+                    [at.x, i, at.z],
+                    [at.x, i, at.z],
+                    deck,
+                    Shape::Stair(facing),
+                ));
+            }
+        }
+    };
+    let up = STOREY_CUBES - 1;
+    let mut on_posts = Vec::new();
+    posted(&mut on_posts, &[[0, 0], [4, 0], [0, 3], [4, 3]], up);
+    floor(&mut on_posts, [0, 0], [4, 3], up);
+    flight(&mut on_posts, [1, 4 + STOREY_CUBES], Facing::North, up);
+    posted(
+        &mut on_posts,
+        &[[8, 0], [13, 0], [8, 5], [13, 5], [8, 9], [13, 9]],
+        up,
+    );
+    floor(&mut on_posts, [8, 0], [13, 9], up);
+    flight(&mut on_posts, [14 + up, 2], Facing::West, up);
+    let mut nine_and_l = Vec::new();
+    let nine: Vec<[i32; 2]> = [0, 4, 7]
+        .into_iter()
+        .flat_map(|x| [0, 4, 7].map(|z| [x, z]))
+        .collect();
+    posted(&mut nine_and_l, &nine, up - 1);
+    floor(&mut nine_and_l, [0, 0], [7, 7], up);
+    flight(&mut nine_and_l, [3, -1 - up], Facing::South, up);
+    posted(
+        &mut nine_and_l,
+        &[[10, 0], [19, 0], [19, 3], [13, 3], [13, 9], [10, 9]],
+        up - 1,
+    );
+    floor(&mut nine_and_l, [10, 0], [19, 3], up);
+    floor(&mut nine_and_l, [10, 4], [13, 9], up);
+    flight(&mut nine_and_l, [11, 10 + up], Facing::North, up);
+    let mut against_and_high = vec![BuildOp::Fill {
+        min: [0, 0, 0],
+        max: [7, 2 * STOREY_CUBES - 1, 0],
+        cube: Some(Cube::new(deck, Fill::Solid)),
+    }];
+    against_and_high.push(put([0, -1, 0], [7, -1, 0], footing, Shape::Whole));
+    posted(&mut against_and_high, &[[0, 4], [7, 4]], up);
+    floor(&mut against_and_high, [0, 1], [7, 4], up);
+    flight(&mut against_and_high, [3, 5 + up], Facing::North, up);
+    let high = 2 * STOREY_CUBES - 1;
+    posted(
+        &mut against_and_high,
+        &[[10, 0], [15, 0], [10, 4], [15, 4]],
+        high,
+    );
+    floor(&mut against_and_high, [10, 0], [15, 4], high);
+    flight(&mut against_and_high, [12, 5 + high], Facing::North, high);
+    [on_posts, nine_and_l, against_and_high]
 }
 
 /// A room five metres by four in a kind under a gable of cubes in `roof`, with a doorway

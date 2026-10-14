@@ -59,7 +59,7 @@ pub(super) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 pieces.push(piece);
             }
         }
-        shaped(base, &roles, kit, cube, pieces);
+        shaped(base, &roles, kit, kits, cube, pieces);
     }
     for role in [Role::Head, Role::Sill] {
         if merged(role) {
@@ -199,7 +199,19 @@ fn across_openings(
 }
 
 /// The bands a cube cut to a shape is dressed with, as the kit dresses their roles.
-fn shaped(base: &Base, roles: &Roles, kit: &Kit, cube: IVec3, pieces: &mut Vec<Piece>) {
+fn shaped(
+    base: &Base,
+    roles: &Roles,
+    kit: &Kit,
+    kits: &Kits,
+    cube: IVec3,
+    pieces: &mut Vec<Piece>,
+) {
+    // A post's top laid into a timber deck is the deck's, and the post's cap is under it.
+    let in_deck = |at: IVec3| super::floors::post_in_deck(base, kits, at).is_some();
+    if in_deck(cube) {
+        return;
+    }
     let Some(this) = base
         .cube(cube)
         .filter(|c| c.kind == kit.kind() && c.fill == Fill::Solid && c.shape.is_cut())
@@ -402,7 +414,8 @@ fn shaped(base: &Base, roles: &Roles, kit: &Kit, cube: IVec3, pieces: &mut Vec<P
             };
             let inset = (TICKS - super::ticks(*width)) / 2;
             for (role, other, end) in [(Role::Foot, Dir::Down, -1), (Role::Crest, Dir::Up, 1)] {
-                if shape_at(cube + IVec3::Y * end) == Some(Shape::Post) {
+                let next = cube + IVec3::Y * end;
+                if shape_at(next) == Some(Shape::Post) && !in_deck(next) {
                     continue;
                 }
                 for side in Dir::LEVEL {
