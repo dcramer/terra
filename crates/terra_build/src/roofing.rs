@@ -96,7 +96,13 @@ pub fn draw_as(
                 seed,
                 blend: module.blend,
             };
-            modules::lay(module, &line, &look(kit, spec), plain, surfaces);
+            modules::lay(
+                module,
+                &line,
+                &look(kit, spec),
+                plain || kit.dress.far,
+                surfaces,
+            );
         }
         _ => {}
     }

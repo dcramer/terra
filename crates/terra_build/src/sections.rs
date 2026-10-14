@@ -448,10 +448,12 @@ impl Detail {
             Detail::Mid => {
                 kit.timber.sides = kit.timber.sides.min(8);
                 kit.timber.step = kit.timber.step.max(0.4);
+                kit.dress.far = true;
             }
             // A log far off a few pixels across: six sides, a ring at each end; a band of
             // dress its outline's three furthest corners, which keep its silhouette.
             Detail::Far => {
+                kit.dress.far = true;
                 kit.timber.sides = kit.timber.sides.min(6);
                 kit.timber.step = kit.timber.step.max(8.0);
                 if let Some(made) = &kit.dress.made {
@@ -463,6 +465,7 @@ impl Detail {
                 }
             }
             Detail::Proxy => {
+                kit.dress.far = true;
                 kit.timber.sides = kit.timber.sides.min(4);
                 kit.timber.step = kit.timber.step.max(8.0);
             }
@@ -822,6 +825,31 @@ fn far_box(piece: &Piece, kit: &Kit, detail: Detail, surfaces: &mut Surfaces) ->
                 to.metres(),
                 half,
                 metres(Material::Floor),
+                shade(*seed),
+            );
+            true
+        }
+        (
+            Detail::Far | Detail::Proxy,
+            Piece::Beam {
+                from,
+                to,
+                wide,
+                deep,
+                seed,
+                ..
+            },
+        ) => {
+            // A box its depth across and its width up, a few pixels across, which way it
+            // turns unseen.
+            let half = [layout::metres(*deep) * 0.5, layout::metres(*wide) * 0.5];
+            let material = kit.framing.as_ref().map_or(Material::Hewn, |f| f.material);
+            crate::draw::member_box(
+                surfaces.of(material),
+                from.metres(),
+                to.metres(),
+                half,
+                metres(material),
                 shade(*seed),
             );
             true

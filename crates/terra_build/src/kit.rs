@@ -254,6 +254,10 @@ pub struct Dressing {
     /// Its pieces, once read ([`Dressing::read`]).
     #[serde(skip)]
     pub made: Option<Arc<crate::dress::Pieces>>,
+    /// Whether its modules are drawn at their far budget (D258): set for a section drawn a
+    /// few metres off and further, never read from a file.
+    #[serde(skip)]
+    pub far: bool,
 }
 
 /// What a role is dressed with.
@@ -359,6 +363,7 @@ impl Default for Dressing {
             tint: [1.0; 3],
             masks: Masks::default(),
             made: None,
+            far: false,
         }
     }
 }

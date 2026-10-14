@@ -101,7 +101,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
         tint: kit.timber.tint,
         shade: kit.timber.variation.shade,
     };
-    crate::modules::lay(module, &line, &look, plain, surfaces);
+    crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
     true
 }
 
@@ -157,7 +157,7 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
         tint: t.tint,
         shade: t.variation.shade,
     };
-    crate::modules::lay(module, &line, &look, plain, surfaces);
+    crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
 }
 
 /// A box from one corner to the other, each face's texture mapped from its plane.
