@@ -48,7 +48,8 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask models` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
 | `cargo xtask doctor` | Check this machine |
 | `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
-| `cargo xtask seed` | In a new worktree, copy the main checkout's compiled dependencies in ([Worktrees](#worktrees)) |
+| `cargo xtask seed` | In a new worktree, link the main checkout's compiled dependencies in ([Worktrees](#worktrees)) |
+| `cargo xtask worktrees` | What each worktree holds; `--prune` clears away finished ones ([Worktrees](#worktrees)) |
 
 The tasks that make art, `props`, `tripo`, `bodies`, `blender`, `icons` and `paint-icons`, are under [Developer tools](#developer-tools).
 
@@ -56,7 +57,9 @@ A clean build of a Bevy application takes about two and a half minutes; a rebuil
 
 ## Worktrees
 
-Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D183). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
+Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` puts the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D183). The libraries are hard links, so the seed costs about 0.2 GB of disk rather than 10 GB; what the worktree then builds of our own crates is its own. A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it links rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
+
+Worktrees are cleared away by themselves (D259). The same hook runs `cargo xtask worktrees --prune` in the background at most once an hour, logging to the main checkout's `target/worktrees.log`. It removes a subagent's worktree once its commits are all on `main`, it has no changes and it has been idle a day, and deletes any other worktree's build after three idle days, never its code. `cargo xtask worktrees` shows every worktree, its state and size, and what a prune would do to it.
 
 ## Seeing and measuring
 

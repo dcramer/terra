@@ -8,6 +8,12 @@
 //! one's. It follows Cargo's own locking: the main checkout's build lock is held shared, so a
 //! build there finishes first, and this checkout's locks are held for the whole copy, so a
 //! `cargo` command started meanwhile waits for it rather than building from nothing.
+//!
+//! The compiled libraries, most of the size, are hard links to the main checkout's rather than
+//! copies, so a worktree costs a few hundred megabytes instead of ten gigabytes: rustc and the
+//! linker replace an `.rlib`, `.rmeta` or `.so` with a new file when they build it again, so a
+//! rebuild on either side leaves the other's alone. Everything else is copied, since Cargo and
+//! rustc rewrite fingerprints, dep-info and build-script output in place.
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -20,7 +26,7 @@ use super::{output, root};
 
 /// The locks Cargo 1.97 takes in a profile directory: `.cargo-lock` shared, the other two
 /// exclusive, for the length of a build. `cargo run` lets them go before the program starts.
-const LOCKS: [&str; 3] = [".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"];
+pub(super) const LOCKS: [&str; 3] = [".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"];
 
 /// What a background seed prints to its parent once it holds this checkout's locks.
 const LOCKED: &str = "locked";
@@ -164,12 +170,13 @@ fn run(child: bool) -> bool {
     let mut ok = true;
     for profile in &profiles {
         let (from, to) = (from_target.join(profile), to_target.join(profile));
-        let (files, bytes) = copy_profile(&from, &to, &ours);
+        let (files, size) = copy_profile(&from, &to, &ours);
         match files {
             Ok(count) => say(format!(
-                "seed: {}: {count} files, {:.1} GB",
+                "seed: {}: {count} files, {:.1} GB linked, {:.2} GB copied",
                 profile.display(),
-                bytes as f64 / 1e9
+                size.linked as f64 / 1e9,
+                size.copied as f64 / 1e9
             )),
             Err(error) => {
                 say(format!("seed: {}: {error}", profile.display()));
@@ -243,7 +250,7 @@ fn workspace_packages(root: &Path) -> Result<Vec<String>, String> {
 
 /// Profile folders in a target folder, such as `debug` or `x86_64-pc-windows-gnu/debug`:
 /// those with fingerprints, relative to it.
-fn profile_dirs(target: &Path) -> Vec<PathBuf> {
+pub(super) fn profile_dirs(target: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let children = |dir: &Path| -> Vec<PathBuf> {
         std::fs::read_dir(dir)
@@ -304,8 +311,8 @@ fn is_ours(file_name: &str, ours: &[String]) -> bool {
 /// only once they are all in place, the fingerprints that tell Cargo they are fresh. A copy cut
 /// short leaves units with no fingerprint, which Cargo builds again. Returns the files copied
 /// and their size.
-fn copy_profile(from: &Path, to: &Path, ours: &[String]) -> (Result<usize, String>, u64) {
-    let mut bytes = 0;
+fn copy_profile(from: &Path, to: &Path, ours: &[String]) -> (Result<usize, String>, Size) {
+    let mut total = Size::default();
     let mut count = 0;
     for part in [&["deps", "build"][..], &[".fingerprint"][..]] {
         let mut pairs = Vec::new();
@@ -323,13 +330,21 @@ fn copy_profile(from: &Path, to: &Path, ours: &[String]) -> (Result<usize, Strin
         }
         match copy_all(&pairs) {
             Ok(size) => {
-                bytes += size;
+                total.linked += size.linked;
+                total.copied += size.copied;
                 count += pairs.len();
             }
-            Err(error) => return (Err(error), bytes),
+            Err(error) => return (Err(error), total),
         }
     }
-    (Ok(count), bytes)
+    (Ok(count), total)
+}
+
+/// Bytes seeded, as hard links to the main checkout's files and as copies.
+#[derive(Default)]
+struct Size {
+    linked: u64,
+    copied: u64,
 }
 
 /// Every file under a path, with where it goes, skipping any already there.
@@ -346,11 +361,12 @@ fn list(from: &Path, to: &Path, pairs: &mut Vec<(PathBuf, PathBuf)>) {
     }
 }
 
-/// Copies files on every core, keeping their modification times, which Cargo compares.
-/// `std::fs::copy` clones the file where the file system can (APFS, Btrfs, XFS).
-fn copy_all(pairs: &[(PathBuf, PathBuf)]) -> Result<u64, String> {
+/// Links or copies files on every core, keeping their modification times, which Cargo
+/// compares. `std::fs::copy` clones the file where the file system can (APFS, Btrfs, XFS).
+fn copy_all(pairs: &[(PathBuf, PathBuf)]) -> Result<Size, String> {
     let next = AtomicUsize::new(0);
-    let bytes = AtomicUsize::new(0);
+    let linked = AtomicUsize::new(0);
+    let copied = AtomicUsize::new(0);
     let failed = std::sync::Mutex::new(None);
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(16));
     std::thread::scope(|scope| {
@@ -358,8 +374,11 @@ fn copy_all(pairs: &[(PathBuf, PathBuf)]) -> Result<u64, String> {
             scope.spawn(|| {
                 while let Some((from, to)) = pairs.get(next.fetch_add(1, Ordering::Relaxed)) {
                     match copy_one(from, to) {
-                        Ok(size) => {
-                            bytes.fetch_add(size as usize, Ordering::Relaxed);
+                        Ok((size, true)) => {
+                            linked.fetch_add(size as usize, Ordering::Relaxed);
+                        }
+                        Ok((size, false)) => {
+                            copied.fetch_add(size as usize, Ordering::Relaxed);
                         }
                         Err(error) => {
                             *failed.lock().unwrap() = Some(format!("{}: {error}", from.display()));
@@ -372,13 +391,30 @@ fn copy_all(pairs: &[(PathBuf, PathBuf)]) -> Result<u64, String> {
     });
     match failed.into_inner().unwrap() {
         Some(error) => Err(error),
-        None => Ok(bytes.into_inner() as u64),
+        None => Ok(Size {
+            linked: linked.into_inner() as u64,
+            copied: copied.into_inner() as u64,
+        }),
     }
 }
 
-fn copy_one(from: &Path, to: &Path) -> std::io::Result<u64> {
+/// Whether a file is one rustc or the linker only ever replaces, never rewrites in place, so a
+/// hard link to it is safe. Checked on Linux with Rust 1.97 and LLD: an `.rlib`, `.rmeta` and
+/// proc-macro `.so` rebuilt under the same name came out as new files, while the `.d` beside
+/// them was rewritten in place.
+fn linkable(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e == "rlib" || e == "rmeta" || e == "so")
+}
+
+/// Links or copies one file; says whether it was linked. A link that fails, as it does across
+/// file systems, falls back to a copy.
+fn copy_one(from: &Path, to: &Path) -> std::io::Result<(u64, bool)> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent)?;
+    }
+    if linkable(from) && std::fs::hard_link(from, to).is_ok() {
+        return Ok((std::fs::metadata(from)?.len(), true));
     }
     let size = std::fs::copy(from, to)?;
     let modified = std::fs::metadata(from)?.modified()?;
@@ -386,7 +422,7 @@ fn copy_one(from: &Path, to: &Path) -> std::io::Result<u64> {
         .write(true)
         .open(to)?
         .set_modified(modified)?;
-    Ok(size)
+    Ok((size, false))
 }
 
 fn lock(path: &Path) -> std::io::Result<File> {
@@ -414,6 +450,24 @@ mod tests {
         assert!(!is_ours("libbevy_ecs-c6abf7f208cd6fe1.rlib", &ours));
         assert!(!is_ours("wayland-client-1a2b3c4d5e6f7a8b", &ours));
         assert!(!is_ours("libterra_core_extra-29bd634e92f54282.rlib", &ours));
+    }
+
+    #[test]
+    fn only_outputs_replaced_whole_are_linked() {
+        assert!(linkable(Path::new(
+            "deps/libbevy_ecs-c6abf7f208cd6fe1.rlib"
+        )));
+        assert!(linkable(Path::new(
+            "deps/libbevy_ecs-c6abf7f208cd6fe1.rmeta"
+        )));
+        assert!(linkable(Path::new(
+            "deps/libserde_derive-5dfc8b2696cad4ae.so"
+        )));
+        assert!(!linkable(Path::new("deps/bevy_ecs-c6abf7f208cd6fe1.d")));
+        assert!(!linkable(Path::new(
+            ".fingerprint/bevy_ecs-c6abf7f208cd6fe1/lib-bevy_ecs"
+        )));
+        assert!(!linkable(Path::new("build/blake3-729e203be1ad83f9/output")));
     }
 
     #[test]

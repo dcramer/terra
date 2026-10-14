@@ -4,13 +4,14 @@
 
 ## Answer
 
-Copy the main checkout's compiled dependencies into the new worktree's `target/` before it builds, and leave out our own crates (D183). A fresh worktree then compiles only Terra's seven crates. A compiler cache (sccache) saved nothing, and a build folder shared between checkouts is unsafe.
+Put the main checkout's compiled dependencies into the new worktree's `target/` before it builds, hard-linking the libraries and copying the rest, and leave out our own crates (D183). A fresh worktree then compiles only Terra's seven crates. A compiler cache (sccache) saved nothing, and a build folder shared between checkouts is unsafe.
 
 | Measured on the WSL machine (32 threads), `cargo build -p terra_sandbox`, Rust 1.97.1 | Time |
 |---|---|
 | A new worktree building from nothing | 5 min 15 s to 6 min 42 s |
 | The same with sccache, cache filled by another worktree (65% hits) | 5 min 50 s |
 | Seeding from the main checkout: the copy, 10.5 GB of Linux and Windows dependencies | 4 s |
+| The same with the libraries hard-linked (2026-10-13): 12.2 GB linked, 0.17 GB copied | 3 s |
 | Then the first build, which compiles only our crates | 60 s |
 | Then the first Windows build (`--target x86_64-pc-windows-gnu`) | 63 s |
 | Then `cargo xtask check` | 120 s |
@@ -25,7 +26,7 @@ Copy the main checkout's compiled dependencies into the new worktree's `target/`
 
 The seed follows Cargo's locking. Cargo 1.97 holds `.cargo-lock` shared and `.cargo-build-lock` and `.cargo-artifact-lock` exclusive in a profile folder while it builds, and lets them go before `cargo run` starts the program. Both were checked. The seed holds main's build lock shared, so a build there finishes before the copy, and holds the worktree's locks exclusive while it copies. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits for it.
 
-Hard links would take no time and no space, but Cargo and rustc rewrite fingerprint and dep-info files in place. A worktree's rebuild would then change the main checkout's state.
+**Hard links** (added 2026-10-13). On ext4, which cannot clone a file, each seed was 10.5 GB of real disk, and ten subagents working at once held over 130 GB. Hard-linking everything would be wrong: Cargo and rustc rewrite fingerprint and dep-info files in place, so a worktree's rebuild would change the main checkout's state. But rustc writes an `.rlib` or `.rmeta` to a temporary file and renames it into place, and LLD does the same for a proc-macro `.so`. Tested with Rust 1.97.1 by deleting a seeded dependency's fingerprint so it rebuilt under the same name: the `.rlib`, `.rmeta` and `.so` came out as new files and the main checkout's were unchanged, while the `.d` beside them was rewritten through the link. So the seed links those three kinds, about 98% of the size, and copies the rest. A link that fails, as across file systems, falls back to a copy. Even if a later rustc wrote one in place, it would be a rebuild of the same crate, version, features and compiler.
 
 ## Claude Code's side
 

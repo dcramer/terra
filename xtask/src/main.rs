@@ -2,6 +2,7 @@
 //! `cargo xtask tools` lists them all, from `TASKS` below. A new tool gets a line there.
 
 mod seed;
+mod worktrees;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -249,6 +250,13 @@ const TASKS: &[Task] = &[
         does: "in a new worktree, copy the main checkout's compiled dependencies in, so the first build is quick",
         group: "This machine",
         run: seed::seed,
+    },
+    Task {
+        name: "worktrees",
+        takes: "[--prune]",
+        does: "what each worktree holds; --prune clears away the ones agents are done with (a hook does it hourly)",
+        group: "This machine",
+        run: worktrees::worktrees,
     },
     Task {
         name: "tools",
