@@ -13,7 +13,9 @@ import bevy_pbr::render::{
     pbr_types::{PbrInput, STANDARD_MATERIAL_FLAGS_UNLIT_BIT},
     mesh_view_bindings::{globals, view, lights},
     shadows::fetch_directional_shadow,
+    clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
 };
+@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
 
 // What colour a leaf passes light on in, lit through: yellower than it reflects, as
 // chlorophyll passes green and yellow and keeps the red and blue (D247).
@@ -54,6 +56,39 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
     return colour * THROUGH * (*sun).color.rgb * view.exposure
         * reached * deep * wind.leaf.z * (0.8 * forward + 0.2 * behind);
 }
+
+// The sky's light through a leaf (D272): what falls on its upper face, as the sky occlusion
+// volume holds it there (D270), little deep under the canopy and most at its top, passed on
+// in the leaf's own colour, yellower. Green light passes through a leaf as readily as it is
+// reflected (a third to a half of it), so seen from below, a crown out of the sun glows a deep
+// green from the sky above it rather than going black, and the leaves in the sun glow brightly
+// (`lit_through`). Bevy's own diffuse transmission took the open sky, unshaded by the crowns,
+// and the colour after its underside was darkened, so it gave almost nothing.
+fn sky_through(input: PbrInput, colour: vec3<f32>, frag_coord: vec4<f32>) -> vec3<f32> {
+    var light = vec3<f32>(0.0);
+@if(IRRADIANCE_VOLUME) {
+    let world = input.world_position.xyz;
+    let up = normalize(world);
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), input.world_position);
+    let orthographic = view.clip_from_view[3].w == 1.0;
+    var ranges = unpack_clusterable_object_index_ranges(
+        view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
+    );
+    let above = irradiance_volume_light(world, up, &ranges);
+    // Seen from below, a leaf shows the light it passes on; from above, what it reflects.
+    let seen = 0.25 + 0.75 * smoothstep(0.1, -0.6, dot(input.V, up));
+    light = colour * THROUGH * above * view.exposure * SKY_THROUGH * wind.leaf.z * seen;
+}
+    return light;
+}
+
+// How much of the light on a leaf's upper face it passes on, for its colour (D272).
+const SKY_THROUGH: f32 = 1.2;
 
 // How much of the sun reaches the inside of a crown through the leaves above (D264).
 const LAYERS: f32 = 0.06;
@@ -130,7 +165,13 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>) 
     let dp2 = dpdy(world);
     let duv1 = dpdx(uv);
     let duv2 = dpdy(uv);
-    let face = normalize(cross(dp1, dp2));
+    // Where a card is seen edge-on, or so far off that a pixel spans next to none of it, the
+    // frame is lost: no relief there, rather than a normal of nothing, which shaded black.
+    let across = cross(dp1, dp2);
+    if dot(across, across) < 1.0e-24 {
+        return;
+    }
+    let face = across * inverseSqrt(dot(across, across));
     let dp2perp = cross(dp2, face);
     let dp1perp = cross(face, dp1);
     let t = dp2perp * duv1.x + dp1perp * duv2.x;
@@ -139,7 +180,12 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>) 
     let n = textureSampleBias(leaf_normals, leaf_normals_sampler, uv, view.mip_bias).rgb * 2.0 - 1.0;
     // Green is up the picture, toward a smaller v.
     let lean = (n.x * t - n.y * b) * scale;
-    (*input).N = normalize((*input).N + lean * wind.relief);
+    let leant = (*input).N + lean * wind.relief;
+    // Kept only if it is a direction: a frame of nothing gives no number at all.
+    let length2 = dot(leant, leant);
+    if length2 > 1.0e-8 && length2 < 1.0e8 {
+        (*input).N = leant * inverseSqrt(length2);
+    }
 }
 
 fn hash3(p: vec3<f32>) -> f32 {
@@ -393,6 +439,14 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 @if(VERTEX_COLORS) {
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
+    // Bevy takes a vertex's colour, alpha too, into its base colour, which the alpha test
+    // then cuts by; the prepass does not, so where a leaf sees little sky it was cut here and
+    // kept there, and stood black against the sky in its own shape (D272). Its alpha is the
+    // picture's again, so both passes cut the same leaf.
+    if wind.bark < 0.5 {
+        let a = pbr_input.material.base_color.a;
+        pbr_input.material.base_color.a = min(a / max(sky, 0.05), 1.0);
+    }
     if wind.bark > 0.5 {
         // 1 is bark with all its moss; up to 2, bark with less (D235).
         weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0));
@@ -429,7 +483,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         out.color = apply_pbr_lighting(pbr_input);
 @if(VERTEX_COLORS) {
         if wind.bark < 0.5 {
-            out.color = vec4<f32>(out.color.rgb + lit_through(pbr_input, leaf_colour, in.color.a, in.position), out.color.a);
+            let through = lit_through(pbr_input, leaf_colour, in.color.a, in.position)
+                + sky_through(pbr_input, leaf_colour, in.position);
+            out.color = vec4<f32>(out.color.rgb + through, out.color.a);
         }
 }
     } else {
