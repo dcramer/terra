@@ -86,6 +86,7 @@ pub(super) enum Outcome {
         key: u64,
         reach: Reach,
         parts: Box<Parts>,
+        drawing: Option<Arc<sections::Drawing>>,
         took_ms: f32,
     },
 }
@@ -164,9 +165,6 @@ fn launch(
     } else {
         pool.thread_num().max(2).saturating_sub(jobs.running.len())
     };
-    if room == 0 {
-        return;
-    }
     let eye = camera
         .iter()
         .next()
@@ -212,10 +210,80 @@ fn launch(
             block_on(poll_once(task))
         };
         if let Some((whole, took_ms)) = laid {
+            if let Some(change) = sections.change.as_mut() {
+                change.laid_ms = change.since.elapsed().as_secs_f32() * 1000.0;
+            }
             sections.whole = Some(Arc::new(whole));
             sections.laying = None;
             jobs.timings.whole.push(took_ms);
         }
+    }
+    // A section waiting only because it is in a building that changed, drawn already as
+    // finely as it would be, is cut here and now, which takes a few hundredths of a
+    // millisecond: if its pieces are as they were, it is left as it is drawn without a
+    // worker, so an edit waits only for the sections it changed.
+    let maps = look.maps.clone();
+    for build in each(&mut site, &mut builds) {
+        let Some(whole) = build.sections.whole.clone() else {
+            continue;
+        };
+        if !build
+            .sections
+            .waiting
+            .values()
+            .any(|waiting| !waiting.force && waiting.reach.is_none())
+        {
+            continue;
+        }
+        let snapshot = build
+            .sections
+            .snapshot
+            .get_or_insert_with(|| Arc::new(build.base.clone()))
+            .clone();
+        let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
+        let progress = build.progress();
+        let same: Vec<[i32; 3]> = build
+            .sections
+            .waiting
+            .iter()
+            .filter(|(_, waiting)| !waiting.force && waiting.reach.is_none())
+            .filter_map(|(&at, _)| {
+                let drawn = build.sections.drawn.get(&at)?;
+                let middle = build
+                    .frame
+                    .transform_point(store::centre(IVec3::from_array(at)));
+                let wanted = reach(middle.distance(eye) / scale.0, Some(drawn.reach));
+                (wanted == drawn.reach).then_some((at, drawn.key))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter(|&(at, key)| {
+                let section = Section {
+                    base: &snapshot,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(at),
+                    progress: &progress,
+                };
+                sections::lay(&section, &whole).key() == key
+            })
+            .map(|(at, _)| at)
+            .collect();
+        for at in same {
+            build.sections.waiting.remove(&at);
+            jobs.tickets += 1;
+            let ticket = jobs.tickets;
+            build.sections.tickets.insert(at, ticket);
+            jobs.ready.push_back(Done {
+                root: build.root,
+                section: at,
+                ticket,
+                outcome: Outcome::Same,
+            });
+        }
+    }
+    if room == 0 {
+        return;
     }
     // The nearest waiting sections of every build laid whole.
     let mut nearest: Vec<(f32, Entity, [i32; 3])> = Vec::new();
@@ -237,8 +305,10 @@ fn launch(
     }
     nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
     nearest.truncate(room);
-    let maps = look.maps.clone();
-    for build in each(&mut site, &mut builds) {
+    // The player's own base, the first, which is the one edited, keeps how each section
+    // was drawn, so an edit draws again only what it reached; the rest are drawn whole.
+    for (index, build) in each(&mut site, &mut builds).enumerate() {
+        let keeps = index == 0;
         let Some(whole) = build.sections.whole.clone() else {
             continue;
         };
@@ -261,11 +331,11 @@ fn launch(
             let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
             let progress = build.progress();
             let maps = maps.clone();
-            let previous = build
-                .sections
-                .drawn
-                .get(&at)
-                .map(|drawn| (drawn.key, drawn.reach));
+            let drawn_before = build.sections.drawn.get(&at);
+            let previous = drawn_before.map(|drawn| (drawn.key, drawn.reach));
+            let last = drawn_before
+                .and_then(|drawn| drawn.drawing.clone())
+                .filter(|_| keeps);
             let wanted = waiting
                 .reach
                 .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
@@ -285,12 +355,20 @@ fn launch(
                 if !force && previous == Some((key, wanted)) {
                     return Outcome::Same;
                 }
-                let drawn = sections::draw(&section, &laid, wanted);
+                let mut drawing = keeps.then(sections::Drawing::default);
+                let drawn = sections::draw_again(
+                    &section,
+                    &laid,
+                    wanted,
+                    last.as_deref(),
+                    drawing.as_mut(),
+                );
                 let parts = draw::parts(drawn, store::centre(section.at));
                 Outcome::Drawn {
                     key,
                     reach: wanted,
                     parts: Box::new(parts),
+                    drawing: drawing.map(Arc::new),
                     took_ms: started.elapsed().as_secs_f32() * 1000.0,
                 }
             });

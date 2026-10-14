@@ -428,9 +428,13 @@ fn upload(
         };
         if let Some(change) = build.sections.change.as_mut() {
             match &done.outcome {
-                Outcome::Drawn { .. } => change.merged += 1,
+                Outcome::Drawn { took_ms, .. } => {
+                    change.merged += 1;
+                    change.slowest_ms = change.slowest_ms.max(*took_ms);
+                }
                 Outcome::Same => change.same += 1,
             }
+            change.back_ms = change.since.elapsed().as_secs_f32() * 1000.0;
         }
         show(&mut commands, &mut meshes, &look, build, done, *quality);
     }
@@ -456,11 +460,14 @@ fn upload(
             }
             if let Some(change) = build.sections.change.take() {
                 info!(
-                    "Build: change on screen in {:.1} ms: {} sections set waiting, {} merged anew, {} laid the same.",
+                    "Build: change on screen in {:.1} ms: {} sections set waiting, {} merged anew, {} laid the same; the base laid again by {:.1} ms, the slowest section {:.1} ms on its worker, the last back at {:.1} ms.",
                     change.since.elapsed().as_secs_f32() * 1000.0,
                     change.waiting,
                     change.merged,
                     change.same,
+                    change.laid_ms,
+                    change.slowest_ms,
+                    change.back_ms,
                 );
             }
         }
@@ -513,7 +520,11 @@ fn show(
         return;
     }
     let Outcome::Drawn {
-        key, reach, parts, ..
+        key,
+        reach,
+        parts,
+        drawing,
+        ..
     } = done.outcome
     else {
         // Laid as it was: drawn as it is, and no longer being laid.
@@ -536,6 +547,7 @@ fn show(
         ticket: done.ticket,
         key,
         reach,
+        drawing,
     };
     // Nothing in it: nothing drawn, but what it was laid as kept.
     if parts.is_empty() {

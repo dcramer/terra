@@ -35,6 +35,9 @@ pub(super) struct Drawn {
     pub key: u64,
     /// How finely it is drawn.
     pub reach: Reach,
+    /// How it was drawn, piece by piece and face by face, for the player's own base, so an
+    /// edit draws again only what it reached (`sections::draw_again`).
+    pub drawing: Option<Arc<terra_build::sections::Drawing>>,
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
@@ -85,6 +88,11 @@ pub(super) struct Change {
     pub waiting: usize,
     pub merged: usize,
     pub same: usize,
+    /// How long after it the base was laid again, the slowest section took on its worker,
+    /// and the last of them came back, in ms: where the time to the screen went.
+    pub laid_ms: f32,
+    pub slowest_ms: f32,
+    pub back_ms: f32,
 }
 
 pub fn plugin(app: &mut App) {
@@ -190,6 +198,9 @@ fn noticed(build: &mut Build) {
         waiting: sections.waiting.len(),
         merged: 0,
         same: 0,
+        laid_ms: 0.0,
+        slowest_ms: 0.0,
+        back_ms: 0.0,
     });
 }
 

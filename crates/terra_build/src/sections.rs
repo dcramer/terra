@@ -639,6 +639,8 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
 pub struct Drawing {
     faces: crate::surface::FaceCache,
     pieces: crate::mesh::QuickMap<(usize, Detail, Piece), std::sync::Arc<Surfaces>>,
+    /// The ground under the base when it was drawn, which the pieces' masks were made on.
+    ground: Option<crate::ground::Ground>,
 }
 
 impl Drawing {
@@ -673,8 +675,16 @@ pub fn draw_again(
     keep: Option<&mut Drawing>,
 ) -> Drawn {
     let mut keep = keep;
+    if let Some(keep) = keep.as_deref_mut() {
+        keep.ground = Some(section.base.ground().clone());
+    }
     let mut drawn = Drawn::default();
     let kits = section.kits;
+    // The pieces drawn last time, kept masked, so to be taken only while the ground their
+    // dirt rises from is as it was.
+    let pieces_kept = last
+        .filter(|last| last.ground.as_ref() == Some(section.base.ground()))
+        .map(|last| &last.pieces);
     // Only the details that can be seen while it is drawn for this reach: what it fades
     // into further off is made when the camera has gone far enough for it to be laid
     // again coarser, before that detail is seen.
@@ -703,26 +713,49 @@ pub fn draw_again(
             } else {
                 None
             };
+            // What is drawn in, masked (dirt from the ground, worn edges; D215) as it is
+            // drawn, so a piece kept is kept masked; and what is drawn afresh, masked
+            // together once all of it is.
             let mut mine = Surfaces::sharing();
-            // Pieces are kept piece by piece only where they are made finely.
-            let kept = keep.is_some() && matches!(detail, Detail::Near | Detail::Mid);
+            let mut fresh = Surfaces::sharing();
+            let masked = |mut surfaces: Surfaces, stone: bool| {
+                for (material, surface) in surfaces.0.iter_mut() {
+                    if stone || *material != Material::Masonry {
+                        crate::dress::mask(surface, kit, *material, section.base);
+                    }
+                }
+                surfaces
+            };
+            // Where pieces are made finely each is drawn and masked on its own, to be kept
+            // if asked: the same whether kept or not, so drawing again draws the same.
+            let kept = matches!(detail, Detail::Near | Detail::Mid);
             for (count, (_, piece, stage)) in own.iter().enumerate() {
                 if !detail.shows(piece) {
                     continue;
                 }
                 match stage {
-                    Stage::In if far_box(piece, &coarse, detail, &mut mine) => {}
+                    Stage::In if far_box(piece, &coarse, detail, &mut fresh) => {}
                     Stage::In if kept => {
                         let key = (index, detail, piece.clone());
-                        let made = match last.and_then(|last| last.pieces.get(&key)) {
+                        // Kept masked, so only while the ground its dirt rises from is as
+                        // it was; but for stone, whose rain streaks hang from whatever is
+                        // built above, which is masked afresh each time.
+                        let made = match pieces_kept.and_then(|pieces| pieces.get(&key)) {
                             Some(made) => made.clone(),
                             None => {
                                 let mut made = Surfaces::sharing();
                                 crate::draw::draw_as(piece, &coarse, face, false, &mut made);
-                                std::sync::Arc::new(made)
+                                std::sync::Arc::new(masked(made, false))
                             }
                         };
-                        join(&mut mine, (*made).clone());
+                        for (&material, surface) in &made.0 {
+                            let into = if material == Material::Masonry {
+                                &mut fresh
+                            } else {
+                                &mut mine
+                            };
+                            into.of(material).extend_from(surface);
+                        }
                         if let Some(keep) = keep.as_deref_mut() {
                             keep.pieces.insert(key, made);
                         }
@@ -732,13 +765,13 @@ pub fn draw_again(
                         &coarse,
                         face,
                         matches!(detail, Detail::Far | Detail::Proxy),
-                        &mut mine,
+                        &mut fresh,
                     ),
                     Stage::Next if first => {
                         crate::draw::draw_as(piece, &coarse, face, false, &mut next)
                     }
                     // Far off, what goes in next is drawn as though it were in.
-                    Stage::Next => crate::draw::draw_as(piece, &coarse, None, true, &mut mine),
+                    Stage::Next => crate::draw::draw_as(piece, &coarse, None, true, &mut fresh),
                     Stage::Ghost if first => {
                         drawn.ghosts.extend(ghost(piece, kit, count % 2 == 1));
                     }
@@ -754,18 +787,20 @@ pub fn draw_again(
                 let blocks = draw_blocks(section, kit, &own, &edge, detail, first, caching);
                 for (set, surfaces) in blocks.into_iter().enumerate() {
                     match set {
-                        0 => join(&mut mine, surfaces),
+                        0 => join(&mut fresh, surfaces),
                         1 if first => {
                             for (_, surface) in surfaces.0 {
                                 drawn.shell.append(surface);
                             }
                         }
                         2 if first => join(&mut next, surfaces),
-                        2 => join(&mut mine, surfaces),
+                        2 => join(&mut fresh, surfaces),
                         _ => {}
                     }
                 }
             }
+            let fresh = masked(fresh, true);
+            join(&mut mine, fresh);
             for (material, surface) in mine.0 {
                 built
                     .entry((kit.kind(), material))
@@ -776,24 +811,22 @@ pub fn draw_again(
         if first {
             drawn.next = next;
         }
-        // Each kit's masks over what it drew: dirt from the ground, worn edges (D215).
+        // A roof's own masks, by where on the roof each point is, over all of it at once.
         for ((kind, material), surface) in built.iter_mut() {
-            if let Some(kit) = kits.of(*kind) {
-                crate::dress::mask(surface, kit, *material, section.base);
-                // A roof's own, by where on the roof each point is.
-                if matches!(material, Material::Covering | Material::Flashing) {
-                    let roofs = roofs.get_or_init(|| {
-                        layout::roofs::Roofs::whole(
-                            section.base,
-                            kits,
-                            layout::Scope {
-                                low: origin - IVec3::ONE,
-                                high: origin + IVec3::splat(crate::cubes::SECTION),
-                            },
-                        )
-                    });
-                    crate::dress::roof_mask(surface, kit, roofs);
-                }
+            if let Some(kit) = kits.of(*kind)
+                && matches!(material, Material::Covering | Material::Flashing)
+            {
+                let roofs = roofs.get_or_init(|| {
+                    layout::roofs::Roofs::whole(
+                        section.base,
+                        kits,
+                        layout::Scope {
+                            low: origin - IVec3::ONE,
+                            high: origin + IVec3::splat(crate::cubes::SECTION),
+                        },
+                    )
+                });
+                crate::dress::roof_mask(surface, kit, roofs);
             }
         }
         match detail {

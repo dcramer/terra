@@ -155,6 +155,15 @@ impl Surface {
         self.shared.append(other.shared);
     }
 
+    /// Another's triangles added to its own, copied from where they are.
+    pub fn extend_from(&mut self, other: &Surface) {
+        self.positions.extend_from_slice(&other.positions);
+        self.normals.extend_from_slice(&other.normals);
+        self.colours.extend_from_slice(&other.colours);
+        self.uvs.extend_from_slice(&other.uvs);
+        self.shared.extend_from(&other.shared);
+    }
+
     /// Each corner's tangent for its normal map: the way its texture's U runs across its
     /// triangle, square to its normal, and in the fourth the side V runs to, as glTF and
     /// Bevy take them. Worked out a triangle at a time from its corners and their places
@@ -264,6 +273,16 @@ impl Indexed {
         self.uvs.extend(other.uvs);
         self.indices
             .extend(other.indices.into_iter().map(|i| first + i));
+    }
+
+    /// Another's corners and triangles added to its own, copied from where they are.
+    pub fn extend_from(&mut self, other: &Indexed) {
+        let first = self.positions.len() as u32;
+        self.positions.extend_from_slice(&other.positions);
+        self.normals.extend_from_slice(&other.normals);
+        self.colours.extend_from_slice(&other.colours);
+        self.uvs.extend_from_slice(&other.uvs);
+        self.indices.extend(other.indices.iter().map(|i| first + i));
     }
 
     /// Room for so many more corners, and indices of them.

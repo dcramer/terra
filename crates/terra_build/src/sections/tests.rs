@@ -709,19 +709,33 @@ fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
     let bases = bases(&kits);
     let stone = kind(&kits, Pattern::Masonry, Profile::Round);
     let (mut taken, mut faces) = (0, 0);
-    for base in [&bases[1], &bases[4]] {
-        // A wall's cube a metre up taken out.
+    for (base, ground) in [
+        (&bases[1], false),
+        (&bases[4], false),
+        (&bases[1], true),
+        (&bases[4], true),
+    ] {
+        // A wall's cube a metre up taken out; or the ground under the base changed, which
+        // every piece's dirt rises from.
         let wall = base
             .cubes()
             .map(|(at, _)| at)
             .find(|&at| at.y == 2 && base.in_wall(at) && base.cube(at).unwrap().kind == stone)
             .unwrap();
         let mut edited = base.clone();
-        edited.apply(BuildOp::Fill {
-            min: wall.to_array(),
-            max: wall.to_array(),
-            cube: None,
-        });
+        if ground {
+            let ring = edited.ground_ring();
+            edited.sample_ground(ring.into_iter().map(|column| crate::ground::Sample {
+                column,
+                height_cm: 30,
+            }));
+        } else {
+            edited.apply(BuildOp::Fill {
+                min: wall.to_array(),
+                max: wall.to_array(),
+                cube: None,
+            });
+        }
         let sections: BTreeSet<[i32; 3]> =
             drawable(base).union(&drawable(&edited)).copied().collect();
         for at in sections {
@@ -743,8 +757,10 @@ fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
                 let fresh = draw(&after, &laid_after, reach);
                 assert!(again.near == fresh.near, "{at:?} {reach:?}: near differs");
                 assert!(again.mid == fresh.mid, "{at:?} {reach:?}: mid differs");
-                taken += now.faces_taken();
-                faces += now.faces.len();
+                if !ground {
+                    taken += now.faces_taken();
+                    faces += now.faces.len();
+                }
             }
         }
     }
