@@ -409,6 +409,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     sides: &flat,
                     top: &flat,
                     bed: (!beds.is_empty()).then_some(&bed as &dyn Fn(Vec3) -> Option<(f32, f32)>),
+                    bed_key: None,
                 };
                 let (mut faces, mut tops) = (Surface::default(), Surface::default());
                 crate::surface::draw_cut(
@@ -790,14 +791,38 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                     let keys_before = cluster_keys(&before, &laid_before, reach);
                     let keys_after = cluster_keys(&after, &laid_after, reach);
                     let all = [true; CLUSTERS];
-                    let was = draw_parts(&before, &laid_before, reach, None, None, Some(&all));
+                    let mut drawing = Drawing::default();
+                    let was = draw_parts(
+                        &before,
+                        &laid_before,
+                        reach,
+                        None,
+                        Some(&mut drawing),
+                        Some(&all),
+                    );
                     let now = draw_parts(&after, &laid_after, reach, None, None, Some(&all));
                     let only: Vec<bool> = keys_before
                         .iter()
                         .zip(&keys_after)
                         .map(|(a, b)| a != b)
                         .collect();
-                    let some = draw_parts(&after, &laid_after, reach, None, None, Some(&only));
+                    // Drawn again from how it was drawn, as the game does, keeping how the
+                    // parts not drawn again were drawn for the next time.
+                    let mut kept_on = Drawing::default();
+                    let some = draw_parts(
+                        &after,
+                        &laid_after,
+                        reach,
+                        Some(&drawing),
+                        Some(&mut kept_on),
+                        Some(&only),
+                    );
+                    let again =
+                        draw_parts(&after, &laid_after, reach, Some(&kept_on), None, Some(&all));
+                    assert!(
+                        again.near_by == now.near_by && again.mid_by == now.mid_by,
+                        "base {index} section {at:?}: drawn from what was kept on, it differs"
+                    );
                     #[allow(clippy::needless_range_loop)]
                     for c in 0..CLUSTERS {
                         let pick = |drawn: &Drawn| {

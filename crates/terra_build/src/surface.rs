@@ -105,6 +105,9 @@ pub struct Heights<'a> {
     /// is sunk behind its deepest relief, so the piece can sit all but flush; round the
     /// outline it is built up a little over the piece's edge, so the piece is set in it.
     pub bed: Option<&'a dyn Fn(Vec3) -> Option<(f32, f32)>>,
+    /// A number for the pieces bedded near a cube, two cubes round it, that `bed` reads:
+    /// what a face kept from one drawing to the next ([`FaceCache`]) must have the same.
+    pub bed_key: Option<&'a dyn Fn(IVec3) -> u64>,
 }
 
 /// How far behind its deepest relief a wall's face is sunk where a piece is bedded in it.
@@ -160,6 +163,7 @@ pub fn draw(
     let cuts = Cuts {
         of: &|_| false,
         at: &|_, _| [f32::MIN, f32::MAX],
+        key: &|_| None,
     };
     draw_part(
         cubes,
@@ -195,6 +199,7 @@ pub fn draw_cut(
     let cuts = Cuts {
         of: &|_| true,
         at: cut,
+        key: &|_| None,
     };
     draw_part(
         cubes,
@@ -249,10 +254,14 @@ pub struct Caching<'a> {
 
 /// How cubes are cut (D231): `of` says whether a cube may be cut at all, so one that is
 /// not, as most are, is drawn whole without asking where; `at` gives the heights a cube is
-/// cut to over a point of its face, lowest and highest, as [`draw_cut`] takes them.
+/// cut to over a point of its face, lowest and highest, as [`draw_cut`] takes them; and
+/// `key` a number for everything a cube's cut is worked out from, if there is one, so the
+/// faces round a cut cube are kept from one drawing to the next ([`FaceCache`]) while it is
+/// cut the same.
 pub struct Cuts<'a> {
     pub of: &'a dyn Fn(IVec3) -> bool,
     pub at: &'a dyn Fn(IVec3, Vec3) -> [f32; 2],
+    pub key: &'a dyn Fn(IVec3) -> Option<u64>,
 }
 
 /// The cubes drawn and those round them, a few deep, in one box looked up by place rather
@@ -386,6 +395,23 @@ pub fn draw_slots(
             }
         }
     }
+    // Whether each cube drawn is cut, and what its cut is from, asked of each once: `cuts`
+    // reads the base.
+    let mut cut_of = vec![false; grid.len()];
+    let mut cut_keys: Vec<Option<u64>> = vec![None; grid.len()];
+    for &cube in cubes {
+        let cube = IVec3::from_array(cube);
+        if let Some(i) = grid.index(cube)
+            && (cuts.of)(cube)
+        {
+            cut_of[i] = true;
+            cut_keys[i] = (cuts.key)(cube);
+        }
+    }
+    let is_cut = |at: IVec3| match grid.index(at) {
+        Some(i) => cut_of[i],
+        None => (cuts.of)(at),
+    };
     let is_member = |at: IVec3| grid.index(at).is_some_and(|i| member[i]);
     let full = |at: IVec3| match grid.index(at) {
         Some(i) if fill[i] != UNKNOWN => fill[i] == FULL,
@@ -401,7 +427,7 @@ pub fn draw_slots(
         let cube = IVec3::from_array(cube);
         let mut low = cube.as_vec3() * CELL_M;
         let mut high = low + Vec3::splat(CELL_M);
-        let cut_top = (cuts.of)(cube)
+        let cut_top = is_cut(cube)
             && cut(cube, low + Vec3::new(CELL_M * 0.5, CELL_M, CELL_M * 0.5))[1] < high.y - 1e-4;
         for axis in 0..3 {
             if !full(cube - step(axis, 1)) {
@@ -487,36 +513,62 @@ pub fn draw_slots(
             })
             .fold(1.0_f32, f32::min)
     };
-    // What a cube's faces are worked out from, as a number: which cubes are drawn two round
-    // it and which are full three round it. A cube that is cut, or has one cut beside it,
-    // is not kept, being rare.
-    let signature = |cube: IVec3| -> Option<u64> {
-        let mut hash = crate::mesh::Corners::default();
-        let mut word = 0u64;
-        let mut bits = 0;
+    // What a cube's faces are worked out from, as two numbers: where their points are, from
+    // which cubes are drawn and full two round it; and their normals along their rims,
+    // which take the faces beside them, from those three round it. A cube that is cut, or
+    // has one cut beside it, is not kept, being rare.
+    let signature = |cube: IVec3| -> Option<Signature> {
+        let (mut shape, mut whole) = (
+            crate::mesh::Corners::default(),
+            crate::mesh::Corners::default(),
+        );
+        let (mut near_word, mut word) = (0u64, 0u64);
+        let (mut near_bits, mut bits) = (0, 0);
         for z in -3..=3 {
             for y in -3..=3 {
                 for x in -3..=3 {
                     let at = cube + IVec3::new(x, y, z);
                     let near = x.abs().max(y.abs()).max(z.abs()) <= 2;
                     let (drawn, solid) = match grid.index(at) {
-                        Some(i) => (member[i], fill[i] == FULL),
+                        Some(i) => {
+                            if near && member[i] && cut_of[i] {
+                                let cut = cut_keys[i]?;
+                                shape.write_u64(cut);
+                                whole.write_u64(cut);
+                            }
+                            (member[i], fill[i] == FULL)
+                        }
                         None => (false, hides(at)),
                     };
-                    if near && drawn && (cuts.of)(at) {
-                        return None;
-                    }
-                    word = word << 2 | u64::from(drawn) << 1 | u64::from(solid);
+                    let state = u64::from(drawn) << 1 | u64::from(solid);
+                    word = word << 2 | state;
                     bits += 2;
                     if bits == 64 {
-                        hash.write_u64(word);
+                        whole.write_u64(word);
                         (word, bits) = (0, 0);
+                    }
+                    if near {
+                        near_word = near_word << 2 | state;
+                        near_bits += 2;
+                        if near_bits == 64 {
+                            shape.write_u64(near_word);
+                            (near_word, near_bits) = (0, 0);
+                        }
                     }
                 }
             }
         }
-        hash.write_u64(word);
-        Some(hash.finish())
+        whole.write_u64(word);
+        shape.write_u64(near_word);
+        if let Some(bed_key) = heights.bed_key {
+            let beds = bed_key(cube);
+            whole.write_u64(beds);
+            shape.write_u64(beds);
+        }
+        Some(Signature {
+            shape: shape.finish(),
+            whole: whole.finish(),
+        })
     };
     // Where a cube's faces' points fall across it along an axis, as fractions of a cube: a
     // cube cut, or with a piece bedded near it, evenly at its steps, as its
@@ -602,7 +654,7 @@ pub fn draw_slots(
     // Whether a cube that may be cut is: its cut passes through it somewhere over its top's
     // corners or middle.
     let really_cut = |c: IVec3| {
-        (cuts.of)(c) && {
+        is_cut(c) && {
             let low = c.as_vec3() * CELL_M;
             [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
                 .iter()
@@ -676,9 +728,10 @@ pub fn draw_slots(
             continue;
         }
         let low = cube.as_vec3() * CELL_M;
-        near_inside(cube, &mut cube_edges);
+        // The inside edges round it, looked for once a face of it is worked out anew.
+        let mut edges_found = false;
         let own_box = shrunk_at(cube).unwrap_or((low, low + Vec3::splat(CELL_M)));
-        let cut_here = (cuts.of)(cube);
+        let cut_here = is_cut(cube);
         let signed = if caching.is_some() {
             signature(cube)
         } else {
@@ -707,7 +760,7 @@ pub fn draw_slots(
             // a cube not cut at all, which is never lower.
             let against_cut = axis != 1
                 && is_member(beyond)
-                && (cuts.of)(beyond)
+                && is_cut(beyond)
                 && (0..=n).any(|i| {
                     (0..=n).any(|j| {
                         let p = point(i, j);
@@ -717,14 +770,42 @@ pub fn draw_slots(
             if full(beyond) && !against_cut {
                 continue;
             }
-            // A face a piece is bedded in is not kept: what is round it does not say where
-            // the piece is.
-            let bedded = heights.bed.is_some_and(|bed| {
-                [(0, 0), (n, 0), (0, n), (n, n), (n / 2, n / 2)]
-                    .iter()
-                    .any(|&(i, j)| bed(point(i, j)).is_some_and(|(inside, _)| inside > -CELL_M))
-            });
-            let signed = if bedded { None } else { signed };
+            // Its points as they were last time, if nothing two round it has changed, but its
+            // rims' normals to be worked out again from the faces beside it.
+            if let (Some(signed), Some(old)) = (signed, old)
+                && let Some(data) = old.faces.get(&(call, cube, index as u8))
+                && data.signature.is_some_and(|was| was.shape == signed.shape)
+                && data.signature.is_some_and(|was| was.whole != signed.whole)
+            {
+                let mut data = FaceData::clone(data);
+                data.signature = Some(signed);
+                faces.push(Face {
+                    data: Arc::new(data),
+                    keeping,
+                    slot,
+                    cube,
+                    index: index as u8,
+                    fresh: true,
+                    rims_only: true,
+                });
+                continue;
+            }
+            // As it was drawn last time, if nothing round it has changed since.
+            if let (Some(signed), Some(old)) = (signed, old)
+                && let Some(data) = old.faces.get(&(call, cube, index as u8))
+                && data.signature == Some(signed)
+            {
+                faces.push(Face {
+                    data: data.clone(),
+                    keeping,
+                    slot,
+                    cube,
+                    index: index as u8,
+                    fresh: false,
+                    rims_only: false,
+                });
+                continue;
+            }
             // Where its points are across it, as fractions of a cube each way (`grid_of`),
             // and along each of its sides every point any face on that side's line has, so
             // faces meet point for point with no crack: each side's line is shared by the
@@ -769,21 +850,6 @@ pub fn draw_slots(
                 p
             };
             let point = |i: usize, j: usize| param(along_a[i], along_b[j]);
-            // As it was drawn last time, if nothing round it has changed since.
-            if let (Some(signed), Some(old)) = (signed, old)
-                && let Some(data) = old.faces.get(&(call, cube, index as u8))
-                && data.signature == Some(signed)
-            {
-                faces.push(Face {
-                    data: data.clone(),
-                    keeping,
-                    slot,
-                    cube,
-                    index: index as u8,
-                    fresh: false,
-                });
-                continue;
-            }
             // Only the boxes that may be nearest a point of this face: none further from
             // the face than its own cube's box can be, at most the bevel along every axis.
             let (face_low, face_high) = {
@@ -806,6 +872,10 @@ pub fn draw_slots(
                         }
                     }
                 }
+            }
+            if !edges_found {
+                near_inside(cube, &mut cube_edges);
+                edges_found = true;
             }
             // Only the inside edges that come within the fade of this face: the rest fade
             // nothing anywhere on it.
@@ -1100,6 +1170,7 @@ pub fn draw_slots(
                 cube,
                 index: index as u8,
                 fresh: true,
+                rims_only: false,
             });
         }
     }
@@ -1111,7 +1182,10 @@ pub fn draw_slots(
     // of faces worked out anew are summed, from the faces beside them.
     let edge = |rim: &[bool], index: usize| rim[index];
     let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3();
-    for face in faces.iter_mut().filter(|face| face.fresh) {
+    for face in faces
+        .iter_mut()
+        .filter(|face| face.fresh && !face.rims_only)
+    {
         let data = Arc::get_mut(&mut face.data).expect("a face worked out anew is its own");
         let mut local = vec![Vec3::ZERO; data.points.len()];
         for t in &data.triangles {
@@ -1303,6 +1377,14 @@ const NEIGHBOURHOOD: [IVec3; 27] = {
     out
 };
 
+/// What a face was worked out from ([`FaceCache`]): where its points are, from the cubes
+/// two round its cube; and all of it, its rims' normals too, from those three round.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Signature {
+    shape: u64,
+    whole: u64,
+}
+
 /// A cube's face as it is drawn, whether it is kept, its cube and which of its faces it is,
 /// and whether it was worked out anew rather than kept from last time.
 struct Face {
@@ -1313,6 +1395,8 @@ struct Face {
     cube: IVec3,
     index: u8,
     fresh: bool,
+    /// Worked out anew only along its rims: its points kept from last time.
+    rims_only: bool,
 }
 
 /// A face worked out: what it was worked out from ([`FaceCache`]), its grid of points,
@@ -1320,9 +1404,9 @@ struct Face {
 /// whether it is a top in a material of its own; each point's own triangles' normals
 /// summed and its normal; and its points in the order its triangles come to them, with its
 /// triangles' corners among them.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FaceData {
-    signature: Option<u64>,
+    signature: Option<Signature>,
     points: Vec<Vec3>,
     uvs: Vec<[f32; 2]>,
     triangles: Vec<[u32; 3]>,
@@ -1475,6 +1559,7 @@ mod tests {
             sides: height,
             top: &flat,
             bed: None,
+            bed_key: None,
         };
         draw(
             &set,
@@ -1523,6 +1608,7 @@ mod tests {
             sides: &bumpy,
             top: &flat,
             bed: None,
+            bed_key: None,
         };
         let (min, max) = (Vec3::new(0.0, -0.3, 0.0), Vec3::new(1.5, 0.12, 0.32));
         slab(min, max, &look(), &heights, [1.0; 3], &mut out, &mut tops);
@@ -1583,6 +1669,7 @@ mod tests {
             sides: &flat,
             top: &flat,
             bed: None,
+            bed_key: None,
         };
         draw_cut(
             &set,

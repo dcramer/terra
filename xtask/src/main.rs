@@ -659,6 +659,7 @@ fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
 fn worth_saying(line: &str) -> Option<&str> {
     [
         "Builds drawn: ",
+        "Builds changed: ",
         "Builds streamed in: ",
         "Village: ",
         "Going up: ",
