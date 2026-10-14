@@ -14,6 +14,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [aaa-forest-look.md](aaa-forest-look.md) | What makes a forest read as AAA (no pops, bark that is not black, light under the canopy), and what Bevy 0.20 has for it? |
 | [forest-lod-and-mood.md](forest-lod-and-mood.md) | How does the Witcher 3 change distant trees' detail without pops, what makes a forest feel like being inside one, and how do The Forest and ARK make their trees? |
 | [far-forest.md](far-forest.md) | How do shipped open worlds carry a forest past the trees they draw to the horizon, and what made the lush forest's horizon a dark slab? |
+| [2026-10-14-sotf-forest-look.md](2026-10-14-sotf-forest-look.md) | Measured against Sons of the Forest's own daytime forest frames, how do the lush forest's light, colour, ground, leaves and trees differ, and what closes each gap? |
 | [foliage-near-camera.md](foliage-near-camera.md) | How do shipped games keep foliage from filling a third-person camera and from clipping through the player, and its boom from pumping among trunks, and what does doing the same measure on the lush forest's films? |
 | [integrated-gpu.md](integrated-gpu.md) | What do the village, yard, world and forest cost on the integrated GPU at the low preset and on the fast GPU at high, and is a section laid and merged in under 2 ms? |
 | [building-audit.md](building-audit.md) | Does every rule of building hold in the game as built (structure, physics, drawing), and does it meet its bars for cost and looks? `cargo xtask rules` |
