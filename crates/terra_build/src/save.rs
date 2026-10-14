@@ -206,9 +206,7 @@ impl Base {
     /// The base the shortcuts of a save make, laid in order.
     pub fn from_shortcuts(ops: &[BuildOp]) -> Base {
         let mut base = Base::default();
-        for &op in ops {
-            base.apply(op);
-        }
+        base.apply_shortcuts(ops);
         base
     }
 }

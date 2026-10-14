@@ -16,6 +16,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [integrated-gpu.md](integrated-gpu.md) | What do the village, yard, world and forest cost on the integrated GPU at the low preset and on the fast GPU at high, and is a section laid and merged in under 2 ms? |
 | [building-audit.md](building-audit.md) | Does every rule of building hold in the game as built (structure, physics, drawing), and does it meet its bars for cost and looks? `cargo xtask rules` |
 | [building-drawing.md](building-drawing.md) | What do fifty buildings cost to draw, laid and merged a section at a time on the workers, against drawn whole on the main thread, and do they meet the building plan's bars? |
+| [building-scale.md](building-scale.md) | What do three hundred buildings, a castle of 140,000 cubes and bases out to 2 km cost to draw on the fast and the integrated GPU, and where does the time go? |
 | [benchmarks.csv](benchmarks.csv) | Frame times of the benchmark scenes, recorded by `cargo xtask bench --record` (D185) |
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [subnautica-inventory.md](subnautica-inventory.md) | How do items and containers work in Subnautica? |

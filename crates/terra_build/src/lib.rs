@@ -33,6 +33,7 @@
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
+pub mod castle;
 pub mod checker;
 pub mod cost;
 pub mod cubes;
@@ -567,6 +568,36 @@ impl Base {
             self.settle();
         }
         changed
+    }
+
+    /// Applies shortcuts in order, as [`Base::apply`] does each, but works out the walls and
+    /// rooms once after a run of fills rather than after every one: what a fill lays does
+    /// not depend on them, and the roofer lays a roof a cube a fill, which made a castle's
+    /// roofs cost the square of its cubes. Says which of them changed anything.
+    pub fn apply_shortcuts(&mut self, ops: &[BuildOp]) -> Vec<bool> {
+        let mut unsettled = false;
+        let mut out = Vec::with_capacity(ops.len());
+        for &op in ops {
+            let changed = match op {
+                BuildOp::Fill { min, max, cube } => {
+                    let mut changed = false;
+                    for_block(min, max, |at| changed |= self.set(at, cube));
+                    unsettled |= changed;
+                    changed
+                }
+                op => {
+                    if std::mem::take(&mut unsettled) {
+                        self.settle();
+                    }
+                    self.apply(op)
+                }
+            };
+            out.push(changed);
+        }
+        if unsettled {
+            self.settle();
+        }
+        out
     }
 
     /// A shortcut's cube: built, whole and in no part, whatever it was given.

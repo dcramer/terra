@@ -120,7 +120,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "bench",
-        takes: "[scene…] [--runs N] [--record] [--debug]",
+        takes: "[scene…] [--runs N] [--record] [--debug] [--copy NAME]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded; with every scene, also lodcheck",
         group: "Play and check",
         run: bench,
@@ -290,6 +290,10 @@ struct Scene {
 /// Where the village scenes look from and at, east, up and south of the start.
 const VILLAGE_VIEW: &str = "-85,16,10,-5,0,-50";
 
+/// The scale scenes' world, as large as D13 leans toward, so the ground curves away as it
+/// will and a view from a rise reaches as far as it will.
+const SCALE_RADIUS: &str = "30000";
+
 /// The scenes, at the hour whose long shadows cost the most.
 const SCENES: &[Scene] = &[
     Scene {
@@ -384,6 +388,157 @@ const SCENES: &[Scene] = &[
             "--going-up",
         ],
         frames: "1800",
+    },
+    Scene {
+        name: "town300",
+        about: "three hundred buildings of every kit, plan and roof on a grid of streets, walked down a street through its middle at a run (docs/building-plan.md)",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--town",
+            "300",
+            "--glide",
+            "--vantage",
+            "-130,1.7,-152,-110,2.5,-152",
+            "--vantage",
+            "-130,1.7,-152,-110,2.5,-152@240",
+            "--vantage",
+            "-10,1.7,-152,10,2.5,-152@1440",
+        ],
+        frames: "1200",
+    },
+    Scene {
+        name: "town300-rise",
+        about: "the same town seen across from a rise at its corner",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--town",
+            "300",
+            "--vantage",
+            "-170,30,-15,0,0,-170",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "town300-bare",
+        about: "the same view from the rise with nothing built: what the town is measured against",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--vantage",
+            "-170,30,-15,0,0,-170",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "town300-fly",
+        about: "the same town flown over sixty metres up, from one corner to the other",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--town",
+            "300",
+            "--glide",
+            "--vantage",
+            "-200,60,-20,-130,0,-90",
+            "--vantage",
+            "-200,60,-20,-130,0,-90@240",
+            "--vantage",
+            "150,60,-320,220,0,-390@840",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "castle",
+        about: "one base of a castle, some 140,000 cubes of thick stone walls, towers and roofs, walked through its gate toward its keep",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--castle",
+            "--glide",
+            "--vantage",
+            "0,1.7,-35,0,8,-140",
+            "--vantage",
+            "0,1.7,-35,0,8,-140@240",
+            "--vantage",
+            "0,1.7,-85,0,8,-140@840",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "castle-field",
+        about: "the castle seen from across a field, 270 m off",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--castle",
+            "--vantage",
+            "120,3,140,0,10,-100",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "far",
+        about: "three hundred buildings in hamlets spread out to 2 km, looked round from sixty metres up",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--radius",
+            SCALE_RADIUS,
+            "--far",
+            "300",
+            "--glide",
+            "--vantage",
+            "0,60,0,1500,0,0",
+            "--vantage",
+            "0,60,0,1500,0,0@240",
+            "--vantage",
+            "0,60,0,0,0,-1500@540",
+            "--vantage",
+            "0,60,0,-1500,0,0@840",
+        ],
+        frames: "600",
     },
     Scene {
         name: "walk",
@@ -497,11 +652,15 @@ fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
 fn worth_saying(line: &str) -> Option<&str> {
     [
         "Builds drawn: ",
+        "Builds streamed in: ",
         "Village: ",
         "Going up: ",
         "SANDBOX slowest frames",
+        "Scale: ",
         "frame parts, ",
         "GPU passes, ",
+        "triangles a frame, ",
+        "drawn, medians: ",
     ]
     .iter()
     .find_map(|key| line.find(key))
@@ -579,11 +738,20 @@ fn bench(args: &[String]) -> bool {
     let mut runs = 3usize;
     let mut record = false;
     let mut debug = false;
+    // A copy of its own, so two agents' benchmarks do not overwrite one another's program.
+    let mut copy = "bench".to_string();
     let mut chosen: Vec<&Scene> = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--record" => record = true,
+            "--copy" => match args.next() {
+                Some(name) => copy = format!("bench-{name}"),
+                None => {
+                    eprintln!("--copy needs a name");
+                    return false;
+                }
+            },
             "--debug" => debug = true,
             "--runs" => match args.next().and_then(|n| n.parse().ok()) {
                 Some(n) if n > 0 => runs = n,
@@ -609,7 +777,7 @@ fn bench(args: &[String]) -> bool {
         chosen = SCENES.iter().collect();
     }
     let build = if debug { "debug" } else { "release" };
-    let Some((program, folder)) = sandbox_program(!debug) else {
+    let Some((program, folder)) = sandbox_program(!debug, &copy) else {
         return false;
     };
     let commit = output("git", &["rev-parse", "--short", "HEAD"]).unwrap_or_default();
@@ -741,9 +909,9 @@ fn append_line(path: &Path, header: &str, line: &str) -> bool {
 
 /// Builds the sandbox and says where its program is and the folder to run it from. Under
 /// WSL that is the Windows build, the only one with a real GPU.
-fn sandbox_program(release: bool) -> Option<(PathBuf, PathBuf)> {
+fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     if on_wsl() {
-        return windows_program("terra_sandbox", release, Some("bench"));
+        return windows_program("terra_sandbox", release, Some(copy));
     }
     let mut build = vec!["build", "-p", "terra_sandbox"];
     if release {
@@ -827,8 +995,26 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
             Err(_) => break,
         }
     }
+    // Each time sections were laid again as the camera moved, said as one line: how many
+    // times, and how long they took to be on screen.
+    let mut streamed: Vec<f32> = Vec::new();
     for line in said.join().unwrap_or_default() {
-        println!("  {line}");
+        match line
+            .strip_prefix("Builds streamed in: ")
+            .and_then(|ms| ms.trim_end_matches(" ms").parse().ok())
+        {
+            Some(ms) => streamed.push(ms),
+            None => println!("  {line}"),
+        }
+    }
+    if !streamed.is_empty() {
+        streamed.sort_by(f32::total_cmp);
+        println!(
+            "  Builds streamed in {} times as the camera moved, in a median {:.0} ms, the slowest {:.0} ms",
+            streamed.len(),
+            streamed[streamed.len() / 2],
+            streamed[streamed.len() - 1]
+        );
     }
     let timing = reader.join().ok()??;
     println!(

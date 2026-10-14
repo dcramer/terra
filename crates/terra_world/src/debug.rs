@@ -21,7 +21,7 @@ use bevy::{
     image::ImageSampler,
     prelude::*,
     render::{
-        diagnostic::RenderDiagnosticsPlugin,
+        diagnostic::{MeshAllocatorDiagnosticPlugin, RenderDiagnosticsPlugin},
         render_resource::{Extent3d, TextureDimension, TextureFormat},
         renderer::RenderAdapterInfo,
     },
@@ -254,6 +254,8 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
         app.add_plugins((
             EntityCountDiagnosticsPlugin::default(),
             SystemInformationDiagnosticsPlugin,
+            // How much the GPU holds of meshes, which a benchmark reports.
+            MeshAllocatorDiagnosticPlugin,
         ))
         .insert_resource(Frames {
             samples: VecDeque::new(),

@@ -280,7 +280,16 @@ pub fn plugin(app: &mut App) {
             (keep_footprint, give_footprints).before(crate::play::FloraSystems::Clear),
         )
         .init_resource::<maps::Loading>()
-        .add_systems(Update, (reload_kit, sheet::lay, village::lay, maps::load));
+        .add_systems(
+            Update,
+            (
+                reload_kit,
+                sheet::lay,
+                village::lay,
+                village::lay_scale,
+                maps::load,
+            ),
+        );
     store::plugin(app);
     layout::plugin(app);
     draw::plugin(app);
@@ -458,8 +467,8 @@ impl Build {
         _meshes: &mut Assets<Mesh>,
     ) -> bool {
         let mut changed = false;
-        for &op in ops {
-            if self.base.apply(op) {
+        for (&op, applied) in ops.iter().zip(self.base.apply_shortcuts(ops)) {
+            if applied {
                 self.operations.push(op);
                 changed = true;
             }

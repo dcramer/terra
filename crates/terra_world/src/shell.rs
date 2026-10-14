@@ -261,6 +261,15 @@ pub struct Options {
     pub village: bool,
     /// On the yard: build a stone house a step at a time, the camera on it (`--going-up`).
     pub going_up: bool,
+    /// On the yard: lay a town of so many buildings on a grid of streets, one base of a
+    /// castle, or so many buildings in hamlets spread out to two kilometres, to measure
+    /// building's drawing at scale (docs/development.md, measuring performance).
+    pub town: Option<usize>,
+    pub castle: bool,
+    pub far: Option<usize>,
+    /// A scripted run's fixed cameras glide from each to the next over the frames between,
+    /// rather than jumping on its frame: a walk or a flight for a benchmark.
+    pub glide: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -398,6 +407,10 @@ impl Options {
             sheet_rows: Vec::new(),
             village: false,
             going_up: false,
+            town: None,
+            castle: false,
+            far: None,
+            glide: false,
             start_at: None,
             time: None,
             start_facing: None,
@@ -517,6 +530,22 @@ impl Options {
                 "--village" => options.village = true,
                 "--vantage-ground" => options.vantage_ground = true,
                 "--going-up" => options.going_up = true,
+                "--town" => {
+                    options.town = Some(
+                        value("--town")?
+                            .parse()
+                            .map_err(|_| "--town wants a number of buildings".to_string())?,
+                    )
+                }
+                "--castle" => options.castle = true,
+                "--far" => {
+                    options.far = Some(
+                        value("--far")?
+                            .parse()
+                            .map_err(|_| "--far wants a number of buildings".to_string())?,
+                    )
+                }
+                "--glide" => options.glide = true,
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),
@@ -942,6 +971,12 @@ fn move_the_vantage(frame: Res<ScriptFrame>, mut options: ResMut<Options>) {
     if !frame.is_changed() {
         return;
     }
+    if options.glide {
+        if let Some(view) = glided(&options.vantages, frame.0) {
+            options.vantage = Some(view);
+        }
+        return;
+    }
     let next = options
         .vantages
         .iter()
@@ -949,6 +984,24 @@ fn move_the_vantage(frame: Res<ScriptFrame>, mut options: ResMut<Options>) {
         .map(|(_, view)| *view);
     if let Some(view) = next {
         options.vantage = Some(view);
+    }
+}
+
+/// Where a camera gliding through fixed cameras is on a frame: on the line between the
+/// last it has passed and the next, or at the first before it and the last after.
+fn glided(vantages: &[(u32, (Vec3, Vec3))], frame: u32) -> Option<(Vec3, Vec3)> {
+    let mut keys: Vec<&(u32, (Vec3, Vec3))> = vantages.iter().collect();
+    keys.sort_by_key(|(at, _)| *at);
+    let after = keys.iter().position(|(at, _)| *at > frame);
+    match after {
+        None => keys.last().map(|(_, view)| *view),
+        Some(0) => keys.first().map(|(_, view)| *view),
+        Some(next) => {
+            let (a, (from_a, to_a)) = *keys[next - 1];
+            let (b, (from_b, to_b)) = *keys[next];
+            let t = (frame - a) as f32 / (b - a) as f32;
+            Some((from_a.lerp(from_b, t), to_a.lerp(to_b, t)))
+        }
     }
 }
 
@@ -982,10 +1035,12 @@ fn scripted_run(
         Local<Option<[usize; 3]>>,
         Option<Res<crate::cover::BareGround>>,
     ),
-    (store, mut pass_ms): (
+    (store, mut pass_ms, mut pass_triangles): (
         Res<bevy::diagnostic::DiagnosticsStore>,
         Local<std::collections::BTreeMap<String, Vec<f32>>>,
+        Local<std::collections::BTreeMap<String, Vec<f32>>>,
     ),
+    (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.scripted() {
@@ -1059,6 +1114,30 @@ fn scripted_run(
             ) {
                 pass_ms.entry(pass.to_string()).or_default().push(ms as f32);
             }
+            // The triangles each pass sent to be drawn, where the GPU counts them.
+            if let (Some(pass), Some(count)) = (
+                path.strip_prefix("render/")
+                    .and_then(|p| p.strip_suffix("/clipper_invocations")),
+                diagnostic.value(),
+            ) {
+                pass_triangles
+                    .entry(pass.to_string())
+                    .or_default()
+                    .push(count as f32);
+            }
+        }
+        // How many meshes are drawn, and how many distinct ones (each an indirect draw),
+        // now and then: in any view, the sun's included, after culling by distance.
+        if frame.is_multiple_of(30) {
+            let mut distinct = std::collections::HashSet::new();
+            let mut instances = 0;
+            for (visibility, mesh) in &drawn {
+                if visibility.get() {
+                    instances += 1;
+                    distinct.insert(mesh.id());
+                }
+            }
+            drawn_counts.push([instances, distinct.len()]);
         }
         let frames = options.bench_frames;
         if frame_ms.len() == frames {
@@ -1139,6 +1218,49 @@ fn scripted_run(
                     costliest.join(", ")
                 );
             }
+            // What is drawn: triangles a frame by pass, meshes, and memory.
+            let mut triangles: Vec<(f32, &str)> = pass_triangles
+                .iter_mut()
+                .map(|(pass, counts)| {
+                    counts.sort_by(f32::total_cmp);
+                    (counts[counts.len() / 2], pass.as_str())
+                })
+                .filter(|(count, _)| *count > 0.0)
+                .collect();
+            triangles.sort_by(|a, b| b.0.total_cmp(&a.0));
+            if !triangles.is_empty() {
+                let all: f32 = triangles.iter().map(|(count, _)| count).sum();
+                let costliest: Vec<String> = triangles
+                    .iter()
+                    .take(8)
+                    .map(|(count, pass)| format!("{pass} {:.2}", count / 1e6))
+                    .collect();
+                println!(
+                    "SANDBOX triangles a frame, medians in millions: {:.2} in all; {}",
+                    all / 1e6,
+                    costliest.join(", ")
+                );
+            }
+            let middle = |pick: usize| {
+                let mut values: Vec<usize> = drawn_counts.iter().map(|c| c[pick]).collect();
+                values.sort_unstable();
+                values.get(values.len() / 2).copied().unwrap_or(0)
+            };
+            let value = |path: &str| {
+                store
+                    .iter()
+                    .find(|d| d.path().as_str() == path)
+                    .and_then(|d| d.value())
+                    .unwrap_or(0.0)
+            };
+            println!(
+                "SANDBOX drawn, medians: {} meshes, {} distinct; memory: process {:.0} MiB, meshes on the GPU {:.0} MiB in {:.0}",
+                middle(0),
+                middle(1),
+                value("process/mem_usage") * 1024.0,
+                value("mesh_allocator_slabs_size") / (1024.0 * 1024.0),
+                value("mesh_allocator_allocations"),
+            );
             // When the slowest frames came, counted as --press counts, to find what they
             // have in common.
             let slowest: Vec<String> = frame_ms
@@ -1431,6 +1553,11 @@ mod tests {
         );
         assert_eq!(moving.vantages.len(), 2);
         assert_eq!(moving.vantages[1].0, 300);
+        // Gliding, halfway between them halfway through, held at either end.
+        let at = |frame| glided(&moving.vantages, frame).unwrap().0;
+        assert_eq!(at(150), Vec3::new(4.0, 5.0, 6.0));
+        assert_eq!(at(400), Vec3::new(7.0, 8.0, 9.0));
+        assert!(parse(&["--glide", "--town", "300"]).unwrap().glide);
         assert!(
             parse(&["--vantage", "1,2,3,4,5,6@x"])
                 .unwrap_err()

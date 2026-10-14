@@ -45,6 +45,10 @@ pub(super) struct Jobs {
     pub timings: Timings,
     /// Whether everything waiting was drawn when last looked.
     idle: bool,
+    /// When work began after everything was last drawn: how long bases take to stream in.
+    busy_since: Option<Instant>,
+    /// Whether everything has been drawn once, after which work is streaming.
+    drawn_once: bool,
 }
 
 /// How long bases took to lay whole, and sections with anything in them to cut from them
@@ -246,6 +250,7 @@ fn launch(
                 continue;
             };
             jobs.tickets += 1;
+            jobs.busy_since.get_or_insert_with(Instant::now);
             let ticket = jobs.tickets;
             build.sections.tickets.insert(at, ticket);
             let snapshot = build
@@ -352,6 +357,10 @@ impl Jobs {
         let idle = nothing_waiting && self.quiet();
         let any = !self.timings.near.is_empty() || !self.timings.far.is_empty();
         if idle && !self.idle && any {
+            let took_ms = self
+                .busy_since
+                .take()
+                .map_or(0.0, |since| since.elapsed().as_secs_f32() * 1000.0);
             let median = |list: &Vec<f32>| {
                 let mut sorted = list.clone();
                 sorted.sort_by(f32::total_cmp);
@@ -365,14 +374,21 @@ impl Jobs {
                     self.timings.edits.iter().copied().fold(0.0, f32::max),
                 );
             }
-            info!(
-                "Builds drawn: {} bases laid whole in a median {:.2} ms, then {} sections cut from them and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker.",
-                self.timings.whole.len(),
-                median(&self.timings.whole),
-                self.timings.near.len() + self.timings.far.len(),
-                median(&self.timings.near),
-                median(&self.timings.far),
-            );
+            if !self.drawn_once {
+                info!(
+                    "Builds drawn: {} bases laid whole in a median {:.2} ms, then {} sections cut from them and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker; {:.0} ms from the first to the last on screen.",
+                    self.timings.whole.len(),
+                    median(&self.timings.whole),
+                    self.timings.near.len() + self.timings.far.len(),
+                    median(&self.timings.near),
+                    median(&self.timings.far),
+                    took_ms,
+                );
+            } else {
+                // Sections laid again as the camera came nearer or went further.
+                info!("Builds streamed in: {took_ms:.0} ms");
+            }
+            self.drawn_once = true;
         }
         self.idle = idle;
     }

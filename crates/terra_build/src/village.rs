@@ -774,6 +774,182 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     buildings
 }
 
+/// Every building the rules make, as its plan, scheme, roof and front's width (D182): a
+/// rectangle under each roof, an L, a T or a U under a gable or a hip (a U only wide enough
+/// for a yard between its wings), two storeys in each scheme that has them, a shed and a
+/// deck. What a town to measure picks from ([`town`]).
+pub fn every_building() -> Vec<(Plan, Scheme, Roof, i32)> {
+    use Scheme::*;
+    const SCHEMES: [Scheme; 9] = [
+        Logs,
+        Stone,
+        Hewn,
+        LogsOnPlinth,
+        StoneUnderTimber,
+        StoneEnds,
+        Earth,
+        Wattle,
+        StoneUnderWattle,
+    ];
+    let mut all = Vec::new();
+    for scheme in SCHEMES {
+        for wide in WIDTHS {
+            for roofed in [Roof::Gable, Roof::Hip, Roof::LeanTo] {
+                all.push((Plan::Rectangle, scheme, roofed, wide));
+            }
+            for plan in [Plan::L, Plan::T, Plan::U] {
+                if plan == Plan::U && wide < 14 {
+                    continue;
+                }
+                for roofed in [Roof::Gable, Roof::Hip] {
+                    all.push((plan, scheme, roofed, wide));
+                }
+            }
+        }
+        if !matches!(scheme, LogsOnPlinth | StoneEnds) {
+            for roofed in [Roof::Gable, Roof::Hip] {
+                all.push((Plan::TwoStoreys, scheme, roofed, 12));
+            }
+        }
+    }
+    all.push((Plan::Shed, Logs, Roof::LeanTo, 6));
+    all.push((Plan::Deck, Hewn, Roof::Gable, 6));
+    all
+}
+
+/// A building of [`every_building`]'s, from its seed, its door at a place looking a way.
+fn put_up(
+    seed: u32,
+    (plan, scheme, roofed, wide): (Plan, Scheme, Roof, i32),
+    at: [f32; 2],
+    facing: f32,
+    kinds: Kinds,
+) -> Building {
+    let ops = match plan {
+        Plan::TwoStoreys => two_storeys(seed, scheme, roofed, kinds),
+        Plan::Shed => shed(seed, kinds),
+        Plan::Deck => deck(kinds),
+        Plan::Wall => low_wall(wide, kinds),
+        _ => one_storey(seed, plan, scheme, roofed, wide, kinds),
+    };
+    Building {
+        name: name(plan, scheme, roofed),
+        plan,
+        scheme,
+        at,
+        facing,
+        ops,
+    }
+}
+
+/// How far a building's door stands back from its street's middle: further where its
+/// wings come forward, or its stair beside it.
+fn set_back(plan: Plan) -> f32 {
+    match plan {
+        Plan::L | Plan::U | Plan::TwoStoreys => 9.5,
+        _ => 5.5,
+    }
+}
+
+/// [`every_building`] in an order its seed shuffles, so a town of any size mixes them.
+fn shuffled(seed: u32) -> Vec<(Plan, Scheme, Roof, i32)> {
+    let mut all = every_building();
+    for i in (1..all.len()).rev() {
+        let j = hash(&[seed, 100, i as u32]) as usize % (i + 1);
+        all.swap(i, j);
+    }
+    all
+}
+
+/// A town's plots: this far apart along a street, so many a side of each, and its streets
+/// this far apart, so two rows of houses stand back to back between them with a gap.
+const PLOT_M: f32 = 14.0;
+const PLOTS_A_SIDE: usize = 20;
+const STREETS_APART_M: f32 = 36.0;
+
+/// A town of `count` buildings to measure building's drawing at scale (D185's `town300`):
+/// streets running east and west, houses along both sides of each with their doors to it,
+/// every plan, scheme, roof and width the rules make in an order the seed shuffles, so
+/// three hundred are nearly every one of them once. Places in metres east and south of
+/// the town's middle, as [`village`] gives them.
+pub fn town(seed: u32, count: usize, kinds: Kinds) -> Vec<Building> {
+    let choices = shuffled(seed);
+    let per_street = PLOTS_A_SIDE * 2;
+    let streets = count.div_ceil(per_street).max(1);
+    (0..count)
+        .map(|index| {
+            let choice = choices[index % choices.len()];
+            let (street, along) = (index / per_street, index % per_street);
+            let (plot, north) = (along / 2, along % 2 == 0);
+            let seed = hash(&[seed, index as u32]);
+            // A little out of line, as a village's are.
+            let lean = (unit(hash(&[seed, 1])) - 0.5) * 0.1;
+            let shift = (unit(hash(&[seed, 2])) - 0.5) * 1.2;
+            let east = (plot as f32 - (PLOTS_A_SIDE as f32 - 1.0) * 0.5) * PLOT_M + shift;
+            let middle = (street as f32 - (streets as f32 - 1.0) * 0.5) * STREETS_APART_M;
+            let back = set_back(choice.0);
+            let (south, facing) = if north {
+                (middle - back, 0.0)
+            } else {
+                (middle + back, std::f32::consts::PI)
+            };
+            put_up(seed, choice, [east, south], facing + lean, kinds)
+        })
+        .collect()
+}
+
+/// The middles of a town's streets, in metres south of its middle, and how far each runs
+/// either side of it east and west: where a walk down one goes.
+pub fn town_streets(count: usize) -> (Vec<f32>, f32) {
+    let streets = count.div_ceil(PLOTS_A_SIDE * 2).max(1);
+    let middles = (0..streets)
+        .map(|street| (street as f32 - (streets as f32 - 1.0) * 0.5) * STREETS_APART_M)
+        .collect();
+    (middles, PLOTS_A_SIDE as f32 * PLOT_M * 0.5)
+}
+
+/// Hamlets of houses spread over the land round a middle, out to `radius_m` and no nearer
+/// than a tenth of it, to measure bases seen far off (D185's `far`): `count` buildings, five
+/// to a hamlet along a lane of its own, each hamlet turned its own way.
+pub fn hamlets(seed: u32, count: usize, radius_m: f32, kinds: Kinds) -> Vec<Building> {
+    const PER_HAMLET: usize = 5;
+    let choices = shuffled(seed ^ 0x5eed);
+    let mut out = Vec::with_capacity(count);
+    for index in 0..count {
+        let hamlet = (index / PER_HAMLET) as u32;
+        let (plot, north) = ((index % PER_HAMLET) / 2, index % 2 == 0);
+        // Spread evenly over the area between a tenth of the radius and all of it.
+        let near = radius_m * 0.1;
+        let share = unit(hash(&[seed, hamlet, 1]));
+        let distance = libm::sqrtf(near * near + share * (radius_m * radius_m - near * near));
+        let angle = unit(hash(&[seed, hamlet, 2])) * std::f32::consts::TAU;
+        let turn = unit(hash(&[seed, hamlet, 3])) * std::f32::consts::TAU;
+        let middle = [distance * libm::cosf(angle), distance * libm::sinf(angle)];
+        let choice = choices[index % choices.len()];
+        let back = set_back(choice.0);
+        // Along its lane, then turned with the hamlet about its middle.
+        let east = (plot as f32 - 1.0) * PLOT_M;
+        let (south, facing) = if north {
+            (-back, 0.0)
+        } else {
+            (back, std::f32::consts::PI)
+        };
+        let (s, c) = (libm::sinf(turn), libm::cosf(turn));
+        let at = [
+            middle[0] + east * c + south * s,
+            middle[1] - east * s + south * c,
+        ];
+        out.push(put_up(
+            hash(&[seed, index as u32]),
+            choice,
+            at,
+            facing + turn,
+            kinds,
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -878,6 +1054,71 @@ mod tests {
                 building.name
             );
         }
+    }
+
+    /// Whether any two buildings stand within a metre of one another, by the half-metre
+    /// cells their columns are in.
+    fn crowded(all: &[Building]) -> Option<(String, String)> {
+        let mut taken: std::collections::HashMap<[i32; 2], usize> = Default::default();
+        for (index, building) in all.iter().enumerate() {
+            for p in columns(building) {
+                let cell = [(p[0] / 0.5).floor() as i32, (p[1] / 0.5).floor() as i32];
+                for dx in -2..=2 {
+                    for dz in -2..=2 {
+                        if let Some(&other) = taken.get(&[cell[0] + dx, cell[1] + dz])
+                            && other != index
+                        {
+                            return Some((building.name.clone(), all[other].name.clone()));
+                        }
+                    }
+                }
+            }
+            for p in columns(building) {
+                taken.insert(
+                    [(p[0] / 0.5).floor() as i32, (p[1] / 0.5).floor() as i32],
+                    index,
+                );
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn a_town_mixes_every_scheme_and_plan_and_no_two_buildings_stand_in_one_another() {
+        let all = town(7, 90, KINDS);
+        assert_eq!(all.len(), 90);
+        let schemes: BTreeSet<Scheme> = all.iter().map(|b| b.scheme).collect();
+        let plans: BTreeSet<Plan> = all.iter().map(|b| b.plan).collect();
+        assert_eq!(schemes.len(), 9, "{schemes:?}");
+        assert!(plans.len() >= 5, "{plans:?}");
+        assert_eq!(crowded(&all), None);
+        assert!(every_building().len() >= 200, "{}", every_building().len());
+    }
+
+    #[test]
+    fn shortcuts_applied_together_lay_what_they_do_one_by_one() {
+        for building in village(7, KINDS) {
+            let mut one_by_one = Base::default();
+            for &op in &building.ops {
+                one_by_one.apply(op);
+            }
+            assert!(
+                Base::from_shortcuts(&building.ops) == one_by_one,
+                "{}",
+                building.name
+            );
+        }
+    }
+
+    #[test]
+    fn hamlets_spread_out_to_their_radius() {
+        let all = hamlets(7, 60, 2000.0, KINDS);
+        assert_eq!(all.len(), 60);
+        let furthest = all
+            .iter()
+            .map(|b| libm::hypotf(b.at[0], b.at[1]))
+            .fold(0.0, f32::max);
+        assert!((1200.0..2050.0).contains(&furthest), "{furthest}");
     }
 
     #[test]
