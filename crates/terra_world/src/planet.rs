@@ -368,8 +368,8 @@ pub struct GroundTextures {
 const GROUND_LAYERS: u32 = 8;
 const GROUND_LAYER_METRES: Vec4 = Vec4::new(1.3, 2.0, 2.7, 1.5);
 /// The fifth layer on, for the forest floor: fallen leaves, fallen needles, duff with roots
-/// in it, and moss. The leaves are drawn half as large again as scanned, as an oak's are.
-const GROUND_MORE_METRES: Vec4 = Vec4::new(1.9, 1.5, 1.67, 0.7);
+/// in it, and moss.
+const GROUND_MORE_METRES: Vec4 = Vec4::new(2.0, 1.5, 1.67, 0.7);
 
 impl GroundTextures {
     fn load(assets: &AssetServer) -> Self {

@@ -182,7 +182,12 @@ pub(super) fn lay(
                 at,
                 h(12) * TAU,
                 size,
-                0.012 + 0.03 * size * h(13),
+                // Ivy stands off the leaves on its stalks.
+                if std::ptr::eq(kind, &cards.ivy) {
+                    0.035 + 0.04 * h(13)
+                } else {
+                    0.012 + 0.03 * size * h(13)
+                },
                 cell,
                 cards.across,
                 tint,

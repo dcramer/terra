@@ -387,7 +387,7 @@ fn fragment(
         let rooty = smoothstep(0.3, 0.75, roots + (fleck - 0.5) * 0.35 + (blotch - 0.5) * 0.3) * flat_ground;
         if rooty > 0.0 {
             let duff = vec3<f32>(0.08, 0.058, 0.04) * (0.8 + 0.4 * blotch);
-            ground_is = settle(ground_is, layer(ROOTS, 1.0, duff, world + 3.0, gx, gy, n, PLAIN), rooty);
+            ground_is = over(ground_is, layer(ROOTS, 1.0, duff, world + 3.0, gx, gy, n, PLAIN), rooty);
         }
 
         // Grass sits in the hollows first, and gives out where the floor stands higher.

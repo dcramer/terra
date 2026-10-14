@@ -746,7 +746,8 @@ const PLACEMENTS: [Placement; 16] = [
     Placement {
         kind: Under::Twigs,
         name: "Twigs",
-        tries: 9000,
+        // Fewer than the litter's twigs (D275), longer and lying loose.
+        tries: 3000,
         clump: (1, 3),
         spread_m: 1.6,
         scale: (0.8, 1.2),
@@ -2106,16 +2107,16 @@ fn branches(dice: &mut Rng) -> Build {
     }
     // Brown, as damp dead bark is, rather than the living trunks' grey.
     for colour in &mut build.colours {
-        colour[0] *= 0.78;
-        colour[1] *= 0.64;
-        colour[2] *= 0.5;
-        colour[3] = 0.4;
+        colour[0] *= 0.95;
+        colour[1] *= 0.8;
+        colour[2] *= 0.62;
+        colour[3] = 0.5;
     }
     build
 }
 
 /// Twig litter: a dozen to thirty thin dead twigs scattered over a couple of metres, lying
-/// every way, some crooked, as the canopy drops them in every wind; brown with damp.
+/// every way, some crooked, as the canopy drops them in every wind; paler than living bark.
 fn twigs(dice: &mut Rng) -> Build {
     let mut build = Build::default();
     for _ in 0..12 + dice.below(19) {
@@ -2148,9 +2149,9 @@ fn twigs(dice: &mut Rng) -> Build {
         );
     }
     for colour in &mut build.colours {
-        colour[0] *= 0.76;
-        colour[1] *= 0.64;
-        colour[2] *= 0.52;
+        colour[0] *= 0.95;
+        colour[1] *= 0.84;
+        colour[2] *= 0.7;
         colour[3] = 0.45;
     }
     build
