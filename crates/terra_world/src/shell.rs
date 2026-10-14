@@ -196,7 +196,7 @@ pub struct Options {
     pub shot: Option<PathBuf>,
     /// Screenshots on chosen frames of one run (`--shots`).
     pub shots: Option<Shots>,
-    /// Detail swept over frames, the clock held still (`--detail-sweep`, D225).
+    /// Detail swept over frames, the clock held still (`--detail-sweep`, D230).
     pub detail_sweep: Option<crate::detail::Sweep>,
     pub settle_frames: u32,
     pub bench: bool,

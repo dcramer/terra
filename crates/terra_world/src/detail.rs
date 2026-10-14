@@ -3,7 +3,7 @@
 //! [`DetailScale`]. The Witcher 3 does the same (`FoliageDistanceScale` over each asset's own
 //! distances); it doubles as a quality setting.
 //!
-//! It also makes popping checkable without a person (D69, D225). A scripted run given
+//! It also makes popping checkable without a person (D69, D230). A scripted run given
 //! `--detail-sweep` holds the camera, the clock and the wind still and sweeps the scale over
 //! frames, so every crown, trunk, shadow and ring of grass crosses its switch in front of a
 //! still camera, and anything that changes between two frames is a level of detail changing

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Finds what pops as levels of detail change (D69, D225): a crown clipping out, a shadow
+// Finds what pops as levels of detail change (D69, D230): a crown clipping out, a shadow
 // clipping in, a ring of grass, a bush appearing. Each view is held still, with the clock and
 // the wind stopped, while every distance at which detail changes is swept from half its own
 // to twice it (--detail-sweep), so every switch is crossed in front of a still camera and

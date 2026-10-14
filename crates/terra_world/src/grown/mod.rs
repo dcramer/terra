@@ -503,6 +503,9 @@ pub fn grow(
 
 /// Levels `first` to `last` of a tree `size` times the height the distances are for.
 pub fn detail(first: usize, last: usize, size: f32) -> VisibilityRange {
+    // In steps of a twentieth, so plants share their distances: Bevy draws at most 65,535
+    // distinct ranges and past that culls wrongly (D230).
+    let size = (size * 20.0).round() / 20.0;
     let at = |level: usize| DETAIL_M[level] * size;
     let from = if first == 0 { 0.0 } else { at(first - 1) };
     VisibilityRange {
