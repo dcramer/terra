@@ -88,7 +88,15 @@ pub fn draw_as(
                 return;
             };
             let (from, to) = (from.metres(), to.metres());
-            let seat = seat(part, spec.on_roof, from, to, sides.map(Place::metres));
+            let sides = sides.map(Place::metres);
+            // A crease's end that meets the eaves, which it is not capped at
+            // (`layout::roofs`), mitred to them: each half kept to its own plane's eave.
+            let crease = matches!(part, RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley);
+            let out = sides.map(|side| {
+                let n = planar_normal(from, to, side);
+                Vec3::new(n.x, 0.0, n.z).normalize_or(Vec3::X)
+            });
+            let seat = seat(part, spec.on_roof, from, to, sides);
             let line = Line {
                 from,
                 to,
@@ -100,6 +108,7 @@ pub fn draw_as(
                 // Its anchor seated where its part sits (D290): on the covering for what
                 // lies on it, so one piece fits any covering's thickness.
                 lift: seated(kit, part),
+                mitre: capped.map(|capped| (crease && !capped).then_some(out)),
             };
             // An eave's butts and a verge's boards are as long as modelled far off too: they
             // are the roof's edge, against the wall below and the sky, which the caps along
@@ -598,6 +607,36 @@ mod tests {
                 crest > top + r.thick * std::f32::consts::SQRT_2,
                 "{name}: {crest}"
             );
+        }
+    }
+
+    #[test]
+    fn a_hips_capping_is_mitred_to_the_eaves_at_its_foot() {
+        // Five metres by four under a hip, its eaves half a metre out: each hip's capping
+        // runs down to a corner of them and stops at both, never out past them.
+        for name in ["shakes.ron", "slate.ron", "thatch.ron"] {
+            let kit = shipped(name);
+            let hip = |p: &Piece| {
+                matches!(
+                    p,
+                    Piece::Roof {
+                        part: RoofPart::Hip,
+                        ..
+                    }
+                )
+            };
+            let surfaces = drawn(&kit, &cabin(Style::Hip), hip);
+            let mut corners = 0;
+            for surface in surfaces.0.values() {
+                for p in surface.positions.iter().chain(&surface.shared.positions) {
+                    corners += 1;
+                    assert!(
+                        (-0.5..=5.5).contains(&p.x) && (-0.5..=4.5).contains(&p.z),
+                        "{name}: {p}"
+                    );
+                }
+            }
+            assert!(corners > 0, "{name}");
         }
     }
 

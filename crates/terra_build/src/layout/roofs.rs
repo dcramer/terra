@@ -838,14 +838,21 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     }
 }
 
-/// Whether an edge's end meets another line of the roof there, a crease's or another edge's,
-/// whose own module covers the joint: a verge's top under its ridge's cap, two verges at an
-/// apex. Creases keep their caps; an eave meets nothing it should stop at.
+/// Whether a line's end meets another line of the roof there, and so takes no cap: a verge's
+/// top under its ridge's cap, two verges at an apex, whose own module covers the joint; a
+/// hip's or a valley's foot at the eaves, where it is mitred to them (`roofing`) rather
+/// than capped square across the line and standing out past them. An eave meets nothing it
+/// should stop at.
 fn edge_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
+    let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
+    if matches!(segment.part, RoofPart::Hip | RoofPart::Valley) {
+        return all.iter().any(|other| {
+            other.part == RoofPart::Eave && (near(other.from, end) || near(other.to, end))
+        });
+    }
     if segment.part != RoofPart::Verge {
         return false;
     }
-    let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
     all.iter().any(|other| {
         !std::ptr::eq(other, segment)
             && matches!(

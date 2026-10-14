@@ -67,6 +67,12 @@ pub struct Line {
     /// How much further off what it lies on the module stands than modelled, square to it, in
     /// metres: where its anchor is seated (a roof's covering, D290).
     pub lift: f32,
+    /// Over a crease, at each end that meets the edges of the planes it lies on, as a hip
+    /// and a valley meet the eaves at a corner: the way out of each plane's edge, level, for
+    /// the module's half on that plane. Each half is cut along its plane's edge through the
+    /// line's end and closed there, mitred as a hip's capping is to the eaves, rather than
+    /// standing out past them square to the line.
+    pub mitre: [Option<[Vec3; 2]>; 2],
 }
 
 /// Lays a modelled module along a line as a modular kit's piece is laid: copies at the length
@@ -352,8 +358,9 @@ fn clipped(
     // of them reads in bands.
     let shade = 1.0 - look.shade * 0.3 * layout::unit(hash(&[seed, 3]));
     let colour = look.tint.map(|c| c * shade);
-    // Each corner: along the line, in the world, its normal and its place in the atlas.
-    type Corner = (f32, Vec3, Vec3, [f32; 2]);
+    // Each corner in the line's own frame (along it, up, across), its normal there and its
+    // place in the atlas: cut there, and only then seated, so a cut over a crease is cut
+    // where the module is, not across the bend.
     let corners: Vec<Corner> = mesh
         .positions
         .iter()
@@ -364,26 +371,16 @@ fn clipped(
             let q = Vec3::new(offset, 0.0, 0.0) + p * axes;
             let n = (n / axes).normalize_or(Vec3::Y);
             let (world, normal) = seat(line, axis, q, n);
-            (
-                q.x,
+            Corner {
+                q,
+                n,
+                uv: mesh.uvs.get(i).copied().unwrap_or([0.0; 2]),
                 world,
                 normal,
-                mesh.uvs.get(i).copied().unwrap_or([0.0; 2]),
-            )
+            }
         })
         .collect();
-    let lerp = |a: &Corner, b: &Corner, at: f32| -> Corner {
-        let t = ((at - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
-        (
-            at,
-            a.1.lerp(b.1, t),
-            a.2.lerp(b.2, t).normalize_or(a.2),
-            [
-                a.3[0] + (b.3[0] - a.3[0]) * t,
-                a.3[1] + (b.3[1] - a.3[1]) * t,
-            ],
-        )
-    };
+    let crease = valley(&line.seat);
     for t in &mesh.triangles {
         let [a, b, c] = t.map(|i| i as usize);
         if a >= corners.len() || b >= corners.len() || c >= corners.len() {
@@ -397,28 +394,9 @@ fn clipped(
         }
         let mut polygon: Vec<Corner> = vec![corners[a], corners[b], corners[c]];
         for (end, (plane, keep_above)) in [(lo, true), (hi, false)].into_iter().enumerate() {
-            let inside = |c: &Corner| {
-                if keep_above {
-                    c.0 >= plane
-                } else {
-                    c.0 <= plane
-                }
-            };
-            let mut kept: Vec<Corner> = Vec::new();
-            let mut on_plane: Vec<Corner> = Vec::new();
-            for i in 0..polygon.len() {
-                let (p, q) = (&polygon[i], &polygon[(i + 1) % polygon.len()]);
-                if inside(p) {
-                    kept.push(*p);
-                }
-                if inside(p) != inside(q) {
-                    let cut = lerp(p, q, plane);
-                    kept.push(cut);
-                    on_plane.push(cut);
-                }
-            }
+            let (kept, on_plane) = cut_frame(&polygon, 0, plane, keep_above);
             if on_plane.len() == 2 {
-                cuts[end].push((on_plane[0].1, on_plane[1].1, on_plane[0].3));
+                cuts[end].push((on_plane[0].world, on_plane[1].world, on_plane[0].uv));
             }
             polygon = kept;
             if polygon.len() < 3 {
@@ -428,22 +406,105 @@ fn clipped(
         if polygon.len() < 3 {
             continue;
         }
-        let indices: Vec<u32> = polygon
-            .iter()
-            .map(|c| out.corner(c.1, c.2, c.3, colour))
-            .collect();
-        for k in 1..indices.len() - 1 {
-            let [i, j, l] = [indices[0], indices[k], indices[k + 1]];
-            let (pa, pb, pc) = (polygon[0].1, polygon[k].1, polygon[k + 1].1);
-            let face = (pb - pa).cross(pc - pa);
-            let normal = polygon[0].2 + polygon[k].2 + polygon[k + 1].2;
-            if face.dot(normal) >= 0.0 {
-                out.indices.extend([i, j, l]);
-            } else {
-                out.indices.extend([i, l, j]);
+        // In a valley, each half on its own plane: a face across the crease is split along
+        // it, as each half is seated by its own plane.
+        let halves = if crease {
+            vec![
+                cut_frame(&polygon, 2, 0.0, false).0,
+                cut_frame(&polygon, 2, 0.0, true).0,
+            ]
+        } else {
+            vec![polygon]
+        };
+        for polygon in halves.into_iter().filter(|p| p.len() >= 3) {
+            // Seated again from the frame in a valley, whose halves bend at the crease; else
+            // as cut, along the seated faces.
+            let placed: Vec<(Vec3, Vec3, [f32; 2])> = polygon
+                .iter()
+                .map(|c| {
+                    let (p, n) = if crease {
+                        seat(line, axis, c.q, c.n)
+                    } else {
+                        (c.world, c.normal)
+                    };
+                    (p, n, c.uv)
+                })
+                .collect();
+            let indices: Vec<u32> = placed
+                .iter()
+                .map(|c| out.corner(c.0, c.1, c.2, colour))
+                .collect();
+            for k in 1..indices.len() - 1 {
+                let [i, j, l] = [indices[0], indices[k], indices[k + 1]];
+                let (pa, pb, pc) = (placed[0].0, placed[k].0, placed[k + 1].0);
+                let face = (pb - pa).cross(pc - pa);
+                if face.length_squared() < 1e-14 {
+                    continue;
+                }
+                let normal = placed[0].1 + placed[k].1 + placed[k + 1].1;
+                if face.dot(normal) >= 0.0 {
+                    out.indices.extend([i, j, l]);
+                } else {
+                    out.indices.extend([i, l, j]);
+                }
             }
         }
     }
+}
+
+/// A corner of a modelled piece as it is laid: in the line's own frame (along it, up,
+/// across) with its normal there, its place in the atlas, and where it is seated.
+#[derive(Clone, Copy, Debug)]
+struct Corner {
+    q: Vec3,
+    n: Vec3,
+    uv: [f32; 2],
+    world: Vec3,
+    normal: Vec3,
+}
+
+/// A polygon of corners cut by the plane where one of the frame's axes is `at`, keeping what
+/// is above it or below; and the corners made where it is cut, each between two corners in
+/// the frame and as seated.
+fn cut_frame(
+    polygon: &[Corner],
+    axis: usize,
+    at: f32,
+    keep_above: bool,
+) -> (Vec<Corner>, Vec<Corner>) {
+    let inside = |c: &Corner| {
+        if keep_above {
+            c.q[axis] >= at
+        } else {
+            c.q[axis] <= at
+        }
+    };
+    let mut kept = Vec::new();
+    let mut on_plane = Vec::new();
+    for i in 0..polygon.len() {
+        let (p, q) = (&polygon[i], &polygon[(i + 1) % polygon.len()]);
+        if inside(p) {
+            kept.push(*p);
+        }
+        if inside(p) != inside(q) {
+            let t = ((at - p.q[axis]) / (q.q[axis] - p.q[axis])).clamp(0.0, 1.0);
+            let mut place = p.q.lerp(q.q, t);
+            place[axis] = at;
+            let cut = Corner {
+                q: place,
+                n: p.n.lerp(q.n, t).normalize_or(p.n),
+                uv: [
+                    p.uv[0] + (q.uv[0] - p.uv[0]) * t,
+                    p.uv[1] + (q.uv[1] - p.uv[1]) * t,
+                ],
+                world: p.world.lerp(q.world, t),
+                normal: p.normal.lerp(q.normal, t).normalize_or(p.normal),
+            };
+            kept.push(cut);
+            on_plane.push(cut);
+        }
+    }
+    (kept, on_plane)
 }
 
 /// How many copies of a module so long fit a line so long, and how much each is stretched.
@@ -548,6 +609,32 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             );
         }
     }
+    if line.mitre.iter().any(Option::is_some) {
+        for (end, mitre) in line.mitre.into_iter().enumerate() {
+            if let Some(out) = mitre {
+                let at = if end == 0 { line.from } else { line.to };
+                mitred(&mut body, &mut ends, line, at, out, look.tint);
+            }
+        }
+        // Only the corners the faces left use.
+        for mesh in [&mut body, &mut ends] {
+            let mut keep: Vec<Option<u32>> = vec![None; mesh.positions.len()];
+            let mut kept = Indexed::default();
+            for k in 0..mesh.indices.len() {
+                let i = mesh.indices[k] as usize;
+                let at = *keep[i].get_or_insert_with(|| {
+                    kept.corner(
+                        mesh.positions[i],
+                        mesh.normals[i],
+                        mesh.uvs[i],
+                        mesh.colours[i],
+                    )
+                });
+                kept.indices.push(at);
+            }
+            *mesh = kept;
+        }
+    }
     // A modelled piece is in its kit's atlas, whatever it stands for; one made from
     // numbers in its material, its ends in theirs.
     if modelled(module) {
@@ -562,6 +649,140 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         put(surfaces, look.material, body);
         if let Some(material) = look.ends {
             put(surfaces, material, ends);
+        }
+    }
+}
+
+/// How far inside the edges a crease's module is mitred to it is cut, in metres: off the
+/// plane of the covering's own cut edge, which would fight its closing face.
+const MITRE_INSET_M: f32 = 0.01;
+
+/// A module laid over a crease cut at an end along the edges of its planes ([`Line::mitre`]):
+/// each triangle on a plane's half kept to the inside of that plane's edge through `at`,
+/// `out` the way out of each, and each cut closed.
+fn mitred(
+    body: &mut Indexed,
+    ends: &mut Indexed,
+    line: &Line,
+    at: Vec3,
+    out: [Vec3; 2],
+    colour: [f32; 3],
+) {
+    let Seat::Crease { into, .. } = line.seat else {
+        return;
+    };
+    // Which half a point is on: toward the second plane from the first.
+    let toward = into[1] - into[0];
+    let mut cuts: [Vec<(Vec3, Vec3)>; 2] = [Vec::new(), Vec::new()];
+    // Over a hip the roof is inside both edges, so all of it is cut by both; in a valley
+    // it is inside either, so each half by its own.
+    let passes: &[Option<usize>] = if valley(&line.seat) {
+        &[None]
+    } else {
+        &[Some(0), Some(1)]
+    };
+    for (pass, in_body) in passes
+        .iter()
+        .flat_map(|&pass| [(pass, true), (pass, false)])
+    {
+        let (mesh, keep_cuts): (&mut Indexed, bool) = if in_body {
+            (&mut *body, true)
+        } else {
+            (&mut *ends, false)
+        };
+        let old = std::mem::take(&mut mesh.indices);
+        for t in old.chunks_exact(3) {
+            let corners = [t[0], t[1], t[2]];
+            let middle = corners
+                .iter()
+                .map(|&i| mesh.positions[i as usize])
+                .sum::<Vec3>()
+                / 3.0;
+            let half = pass.unwrap_or(usize::from((middle - line.from).dot(toward) > 0.0));
+            let way = out[half];
+            let sides = corners.map(|i| (mesh.positions[i as usize] - at).dot(way) + MITRE_INSET_M);
+            if sides.iter().all(|&s| s <= 0.0) {
+                mesh.indices.extend(corners);
+                continue;
+            }
+            if sides.iter().all(|&s| s >= 0.0) {
+                continue;
+            }
+            // Cut along the edge: the corners inside kept, a new one where each side crosses.
+            let mut kept: Vec<u32> = Vec::new();
+            let mut on: Vec<Vec3> = Vec::new();
+            for k in 0..3 {
+                let (a, b) = (corners[k], corners[(k + 1) % 3]);
+                let (sa, sb) = (sides[k], sides[(k + 1) % 3]);
+                if sa <= 0.0 {
+                    kept.push(a);
+                }
+                if (sa <= 0.0) != (sb <= 0.0) {
+                    let f = sa / (sa - sb);
+                    let (a, b) = (a as usize, b as usize);
+                    let p = mesh.positions[a].lerp(mesh.positions[b], f);
+                    let n = mesh.normals[a]
+                        .lerp(mesh.normals[b], f)
+                        .normalize_or(mesh.normals[a]);
+                    let uv = [
+                        mesh.uvs[a][0] + (mesh.uvs[b][0] - mesh.uvs[a][0]) * f,
+                        mesh.uvs[a][1] + (mesh.uvs[b][1] - mesh.uvs[a][1]) * f,
+                    ];
+                    let c = mesh.colours[a];
+                    kept.push(mesh.corner(p, n, uv, c));
+                    on.push(p);
+                }
+            }
+            for k in 1..kept.len().saturating_sub(1) {
+                // Wound the way its corners' normals look, as every laid face is.
+                let t = [kept[0], kept[k], kept[k + 1]];
+                let [pa, pb, pc] = t.map(|i| mesh.positions[i as usize]);
+                let normal: Vec3 = t.iter().map(|&i| mesh.normals[i as usize]).sum();
+                if (pb - pa).cross(pc - pa).dot(normal) >= 0.0 {
+                    mesh.indices.extend(t);
+                } else {
+                    mesh.indices.extend([t[0], t[2], t[1]]);
+                }
+            }
+            if keep_cuts && on.len() == 2 {
+                cuts[half].push((on[0], on[1]));
+            }
+        }
+    }
+    for (half, segments) in cuts.iter().enumerate() {
+        let uv = [0.5, 0.5];
+        for face in close(segments, out[half]) {
+            // Over a hip, the face closing one cut kept inside the other edge too.
+            let mut polygon = face.to_vec();
+            if passes.len() > 1 {
+                let way = out[1 - half];
+                let side = |p: Vec3| (p - at).dot(way) + MITRE_INSET_M;
+                let mut kept = Vec::new();
+                for k in 0..polygon.len() {
+                    let (p, q) = (polygon[k], polygon[(k + 1) % polygon.len()]);
+                    if side(p) <= 0.0 {
+                        kept.push(p);
+                    }
+                    if (side(p) <= 0.0) != (side(q) <= 0.0) {
+                        kept.push(p.lerp(q, side(p) / (side(p) - side(q))));
+                    }
+                }
+                polygon = kept;
+            }
+            for k in 1..polygon.len().saturating_sub(1) {
+                let [a, b, c] = [polygon[0], polygon[k], polygon[k + 1]];
+                let face = (b - a).cross(c - a);
+                if face.length_squared() < 1e-12 {
+                    continue;
+                }
+                let (b, c) = if face.dot(out[half]) >= 0.0 {
+                    (b, c)
+                } else {
+                    (c, b)
+                };
+                let corners = [a, b, c].map(|p| ends.corner(p, out[half], uv, colour));
+                ends.indices.extend(corners);
+            }
         }
     }
 }
@@ -595,7 +816,9 @@ fn place(
         layout::unit(hash(&[seed, 1])),
         layout::unit(hash(&[seed, 2])),
     ];
-    // Each corner in the world, with its normal, and where it falls on its texture.
+    // Each corner in the world, with its normal, and where it falls on its texture; and in
+    // the line's frame, to split a face across a crease.
+    let mut frame: Vec<(Vec3, Vec3)> = Vec::with_capacity(mesh.positions.len());
     let corners: Vec<(Vec3, Vec3, [f32; 2], bool)> = mesh
         .positions
         .iter()
@@ -606,6 +829,7 @@ fn place(
             let q = Vec3::new(offset, 0.0, 0.0) + p * axes;
             // A normal scaled with its mesh leans the other way, and turns with a mirror.
             let n = (n / axes).normalize_or(Vec3::Y);
+            frame.push((q, n));
             let (world, normal) = seat(line, axis, q, n);
             let a = n.abs();
             let end = a.x >= a.y && a.x >= a.z;
@@ -644,6 +868,47 @@ fn place(
         } else {
             (&mut *body, &mut map_body)
         };
+        // In a valley, a face across it split along it, each half seated on its own plane.
+        let across = [a, b, c].map(|i| frame[i].0.z);
+        if valley(&line.seat)
+            && across.iter().any(|&z| z < -1e-5)
+            && across.iter().any(|&z| z > 1e-5)
+        {
+            let polygon: Vec<Corner> = [a, b, c]
+                .iter()
+                .map(|&i| Corner {
+                    q: frame[i].0,
+                    n: frame[i].1,
+                    uv: corners[i].2,
+                    world: corners[i].0,
+                    normal: corners[i].1,
+                })
+                .collect();
+            for keep_above in [false, true] {
+                let half = cut_frame(&polygon, 2, 0.0, keep_above).0;
+                let placed: Vec<(Vec3, Vec3)> =
+                    half.iter().map(|c| seat(line, axis, c.q, c.n)).collect();
+                for k in 1..half.len().saturating_sub(1) {
+                    let tri = [0, k, k + 1];
+                    let face = (placed[tri[1]].0 - placed[tri[0]].0)
+                        .cross(placed[tri[2]].0 - placed[tri[0]].0);
+                    if face.length_squared() < 1e-14 {
+                        continue;
+                    }
+                    let normal: Vec3 = tri.iter().map(|&i| placed[i].1).sum();
+                    let order = if face.dot(normal) >= 0.0 {
+                        tri
+                    } else {
+                        [tri[0], tri[2], tri[1]]
+                    };
+                    for i in order {
+                        let corner = out.corner(placed[i].0, placed[i].1, half[i].uv, colour);
+                        out.indices.push(corner);
+                    }
+                }
+            }
+            continue;
+        }
         let mut index = |i: usize| {
             *map[i].get_or_insert_with(|| {
                 let (p, n, uv, _) = corners[i];
@@ -992,6 +1257,12 @@ pub fn modelled(module: &Module) -> bool {
     module.near.first().is_some_and(|mesh| !mesh.uvs.is_empty())
 }
 
+/// Whether a module sits over a crease whose planes close over it, a valley: going into the
+/// one plane from the crease rises over the other.
+fn valley(seat: &Seat) -> bool {
+    matches!(seat, Seat::Crease { up, into } if into[0].dot(up[1]) > 1e-3)
+}
+
 /// A point and a normal in a line's frame (along it, up, across) in the world.
 fn seat(line: &Line, axis: Vec3, q: Vec3, n: Vec3) -> (Vec3, Vec3) {
     let along = line.from + axis * q.x;
@@ -1001,6 +1272,24 @@ fn seat(line: &Line, axis: Vec3, q: Vec3, n: Vec3) -> (Vec3, Vec3) {
             along + up * q.y + out * q.z,
             (axis * n.x + up * n.y + out * n.z).normalize_or(up),
         ),
+        Seat::Crease { up, into } if valley(&line.seat) => {
+            // In a valley, where the planes close over the crease: each half on its plane,
+            // lifted off it along the line between the two planes' ups, by as much as keeps
+            // it as far off its plane as modelled. Lifted along each plane's own up, as over a
+            // ridge, the halves would cross over the crease and fold the section on itself.
+            let rise = (up[0] + up[1]).normalize_or(Vec3::Y);
+            let half = usize::from(q.z >= 0.0);
+            let lift = rise / rise.dot(up[half]).max(0.2);
+            let across = if half == 0 { -into[0] } else { into[1] };
+            // A normal by the transform's cofactors: each axis's image crossed with the next.
+            let normal =
+                n.x * lift.cross(across) + n.y * across.cross(axis) + n.z * axis.cross(lift);
+            let det = axis.dot(lift.cross(across));
+            (
+                along + across * q.z + lift * q.y,
+                (normal * det.signum()).normalize_or(up[half]),
+            )
+        }
         Seat::Crease { up, into } => {
             // Its -Z half on the first plane, its +Z half on the second, its up turning
             // from one plane's to the other's within `blend` of the crease.
@@ -1101,6 +1390,7 @@ mod tests {
             seed: 5,
             blend: 0.0,
             lift: 0.0,
+            mitre: [None; 2],
         };
         lay(&bar(), &line, &look(), false, &mut surfaces);
         let made = &surfaces.0[&Material::Board].shared;
@@ -1133,6 +1423,7 @@ mod tests {
             seed: 3,
             blend: 0.0,
             lift: 0.0,
+            mitre: [None; 2],
         };
         let mut surfaces = Surfaces::sharing();
         lay(&module, &line, &look(), false, &mut surfaces);
@@ -1181,6 +1472,7 @@ mod tests {
             seed: 1,
             blend: 0.0,
             lift: 0.0,
+            mitre: [None; 2],
         };
         let mut surfaces = Surfaces::sharing();
         lay(&bar(), &line, &look(), false, &mut surfaces);
@@ -1195,6 +1487,110 @@ mod tests {
             };
             assert!((p.dot(plane) - 0.1).abs() < 1e-4, "{p}");
             assert!(n.dot(plane) > 0.99, "{n}");
+        }
+    }
+
+    #[test]
+    fn a_lining_in_a_valley_lies_on_both_planes_without_folding_over_the_crease() {
+        // A top 0.2 m across in strips, a tenth of a metre up, laid in a valley along X: the
+        // north slope falls to it from -Z, the south from +Z. Lifted along an up turning from
+        // one plane's to the other's over the crease, as over a ridge, it folded on itself.
+        let mut mesh = Stone::default();
+        let strips = 10;
+        for k in 0..=strips {
+            let z = -0.1 + 0.2 * k as f32 / strips as f32;
+            mesh.positions.extend([[0.0, 0.1, z], [1.0, 0.1, z]]);
+            mesh.normals.extend([[0.0, 1.0, 0.0]; 2]);
+        }
+        for k in 0..strips as u32 {
+            let (a, b) = (2 * k, 2 * k + 2);
+            mesh.triangles.extend([[a, b, b + 1], [a, b + 1, a + 1]]);
+        }
+        let module = Module {
+            length: 1.0,
+            near: vec![mesh],
+            ..Module::default()
+        };
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        let line = Line {
+            from: Vec3::ZERO,
+            to: Vec3::X * 2.0,
+            seat: Seat::Crease {
+                up: [Vec3::new(0.0, s, s), Vec3::new(0.0, s, -s)],
+                into: [Vec3::new(0.0, s, -s), Vec3::new(0.0, s, s)],
+            },
+            across: None,
+            capped: [false; 2],
+            seed: 1,
+            blend: 0.1,
+            lift: 0.0,
+            mitre: [None; 2],
+        };
+        let mut surfaces = Surfaces::sharing();
+        lay(&module, &line, &look(), false, &mut surfaces);
+        let made = &surfaces.0[&Material::Board].shared;
+        // Each corner a tenth of a metre off its own plane.
+        for p in &made.positions {
+            let plane = if p.z < -1e-5 {
+                Vec3::new(0.0, s, s)
+            } else if p.z > 1e-5 {
+                Vec3::new(0.0, s, -s)
+            } else {
+                continue;
+            };
+            assert!((p.dot(plane) - 0.1).abs() < 1e-4, "{p}");
+        }
+        // Seen from above, no part of it over another.
+        let faces: Vec<[Vec3; 3]> = made
+            .indices
+            .chunks(3)
+            .map(|t| [0, 1, 2].map(|k| made.positions[t[k] as usize]))
+            .collect();
+        let (twice, _) = twice_covered(&faces, Vec3::Y);
+        assert!(twice < 1e-6, "{twice}");
+    }
+
+    #[test]
+    fn a_crease_is_mitred_to_the_edges_of_its_planes_at_an_end() {
+        // A capping 0.2 m across down a hip, its planes falling to -Z and to +X, to the
+        // corner where their eaves, z = 0 and x = 0, meet: cut square across the line it
+        // stood out past both.
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        let (n0, n1) = (
+            Vec3::new(0.0, s, -s).normalize(),
+            Vec3::new(s, s, 0.0).normalize(),
+        );
+        let from = Vec3::new(-1.0, 1.0, 1.0);
+        let to = Vec3::ZERO;
+        let axis = (to - from).normalize();
+        // Into each plane square to the line, falling below the other plane, as over a hip.
+        let into = |n: Vec3, other: Vec3| {
+            let d = n.cross(axis).normalize();
+            if d.dot(other) < 0.0 { d } else { -d }
+        };
+        let (into0, into1) = (into(n0, n1), into(n1, n0));
+        let line = Line {
+            from,
+            to,
+            seat: Seat::Crease {
+                up: [n0, n1],
+                into: [into0, into1],
+            },
+            across: None,
+            capped: [true, false],
+            seed: 2,
+            blend: 0.0,
+            lift: 0.0,
+            mitre: [None, Some([Vec3::new(0.0, 0.0, -1.0), Vec3::X])],
+        };
+        let mut surfaces = Surfaces::sharing();
+        lay(&bar(), &line, &look(), false, &mut surfaces);
+        let made = &surfaces.0[&Material::Board].shared;
+        assert!(made.triangle_count() > 0);
+        // Nothing drawn past either eave.
+        for &i in &made.indices {
+            let p = made.positions[i as usize];
+            assert!(p.x <= 1e-4 && p.z >= -1e-4, "{p}");
         }
     }
 
@@ -1314,6 +1710,7 @@ mod tests {
                 seed: 7,
                 blend: 0.0,
                 lift: 0.0,
+                mitre: [None; 2],
             };
             let mut surfaces = Surfaces::sharing();
             lay(&module, &line, &look(), false, &mut surfaces);
