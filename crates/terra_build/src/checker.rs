@@ -207,6 +207,17 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         }
     }
     dress(kit, &mut fail);
+    // Its dress of the raw materials it is built from (D215): a piece of another material
+    // puts that material in its cost.
+    for (what, material) in dressed_in(kit) {
+        if let Some(item) = raw(material)
+            && !kit.cost.step.iter().any(|(thing, ..)| thing == item)
+        {
+            fail(format!(
+                "dresses {what} in {material:?}, of {item}, which it does not cost"
+            ));
+        }
+    }
     if let Some(framing) = &kit.framing {
         if kit.pattern != Pattern::Masonry {
             fail("is framed, which only a block kind is".into());
@@ -259,6 +270,52 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         ));
     }
     Report { problems, measured }
+}
+
+/// What a kit's dress is made of (D215): each role's piece's material, and its frame's
+/// members and core, by what it is.
+fn dressed_in(kit: &Kit) -> Vec<(String, Material)> {
+    use crate::kit::Dress;
+    let mut out: Vec<(String, Material)> = kit
+        .dress
+        .roles
+        .iter()
+        .map(|(role, dress)| {
+            let material = match dress {
+                Dress::Profile { material, .. } => material.unwrap_or(Material::Dressed),
+                Dress::Corners { .. } => Material::Dressed,
+                Dress::Member { material, .. } => *material,
+                Dress::Pillar { .. } => Material::Masonry,
+            };
+            (format!("{role:?}"), material)
+        })
+        .collect();
+    if let Some(framing) = &kit.framing {
+        out.push(("its frame".into(), framing.material));
+        if let Some(core) = framing.core {
+            out.push(("its frame's core".into(), core));
+        }
+    }
+    out
+}
+
+/// The raw material a piece drawn in a material is made of, as the items name it; none for
+/// the kind's own surface, which is what its cubes are.
+fn raw(material: Material) -> Option<&'static str> {
+    match material {
+        Material::Dressed | Material::Stone => Some("Stone"),
+        Material::Hewn
+        | Material::Log
+        | Material::LogEnd
+        | Material::Board
+        | Material::Floor
+        | Material::Wattle => Some("Wood"),
+        Material::Plain
+        | Material::Daub
+        | Material::Covering
+        | Material::Masonry
+        | Material::Flashing => None,
+    }
 }
 
 /// A kit's dress (D215): every role it dresses has its piece among the kit's pieces, or
@@ -545,6 +602,19 @@ mod tests {
         ] {
             assert!(said.contains(words), "{said}");
         }
+        // Earth with oak lintels, costing no wood.
+        let mut earth = kits
+            .iter()
+            .find(|(name, _)| name == "earth.ron")
+            .map(|(_, kit)| kit.clone())
+            .unwrap();
+        assert!(check(&earth, &|_| true, &items).problems.is_empty());
+        earth.cost.step.retain(|(thing, ..)| thing != "Wood");
+        let said = check(&earth, &|_| true, &items).problems.join("; ");
+        assert!(
+            said.contains("dresses Head in Hewn, of Wood, which it does not cost"),
+            "{said}"
+        );
         // A roof kind numbered as a wall's, in three steps, without its covering.
         let mut thatch = kits
             .iter()
