@@ -107,7 +107,7 @@ Targets are SotF's means, eased toward The Forest where copying SotF exactly wou
    - Fewer low, wide oak crowns in the first 20 m: D247's young-oak sub-canopy of wide, low crowns at 8 to 12 m is the main cause.
    - Longer clear boles (oak crown base from a third of its height to half; pines with 50–60% clear).
    - More, thinner, taller stems per view.
-   - **This is for the developers:** which forest the lush forest is (an oak wood with a closed low canopy, or a tall, open conifer stand as SotF's) is a design choice. Recommend a SotF-like conifer stand with oaks as the exception, and mark it Open until they choose. Grass then follows from D246's own rule, since a high, open canopy lets light reach the floor.
+   - **Decided by the developers (D301): a tall conifer stand.** Which forest the lush forest is (an oak wood with a closed low canopy, or a tall, open conifer stand as SotF's) is a design choice. Recommend a SotF-like conifer stand with oaks as the exception, and mark it Open until they choose. Grass then follows from D246's own rule, since a high, open canopy lets light reach the floor.
 6. **Leaves: smaller, darker, glinting** (`textures.ts cards` recipes, D269; `foliage_fragment.wesl`).
    - Twice the leaves per card at half the size.
    - Oak albedo about 20% darker and more olive.
