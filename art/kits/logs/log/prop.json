@@ -1,0 +1,12 @@
+{
+  "subject": "single long round pine log for a log cabin wall, very long and slender, three metres long and only thirty centimetres thick, ten times longer than it is thick, lying on its own: a straight trunk in its bark with gentle taper and a slight bow, rough grey brown bark lost in patches to show silvered weathered wood beneath, a couple of trimmed branch knots, sawn ends showing growth rings and radial checks",
+  "file": "kit_log",
+  "size": 3.0,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

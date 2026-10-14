@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of stone roof ridge, one and a half metres long, seen on its own as a building piece: a row of four grey sandstone ridge tiles, each a saddle shaped inverted V at ninety degrees with a rounded roll along its crest, butted end to end with thin lime mortar joints, grey stone with lichen spots",
+  "file": "kit_slate_ridge",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of wooden roof ridge cap, one and a half metres long, seen on its own as a building piece: two long weathered split pine boards meeting in an inverted V at ninety degrees, one board lapping over the other along the top, held with square iron nails, silver grey weathered wood with darker grain and a few cracks",
+  "file": "kit_shakes_ridge",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

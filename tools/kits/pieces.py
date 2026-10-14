@@ -578,45 +578,44 @@ def import_model(name, path):
 
 
 def lay_along(ob, how):
-    """Turned so it lies along game X, as it was modelled standing (Tripo models stand with
-    their up as Blender's Z): about its up so the way it runs, the line of its crest for a
-    capping, or its longest way in plan for the rest, lies along X. A `board` or a member,
-    modelled lying flat, is then stood on its edge, its width up (Y) and its thickness across
-    (Z); the rest keep their up, across Z. A capping's crest is up, a channel's hollow."""
-    vs = [v.co.copy() for v in ob.data.vertices]
-    zs = sorted(v.z for v in vs)
-    top = zs[int(len(zs) * 0.9)]
-    plan = [v for v in vs if v.z >= top] if how == "capping" else vs
-    mx = sum(v.x for v in plan) / len(plan)
-    my = sum(v.y for v in plan) / len(plan)
-    sxx = sum((v.x - mx) ** 2 for v in plan)
-    syy = sum((v.y - my) ** 2 for v in plan)
-    sxy = sum((v.x - mx) * (v.y - my) for v in plan)
-    angle = 0.5 * math.atan2(2 * sxy, sxx - syy)
-    c, s = math.cos(-angle), math.sin(-angle)
-    turned = [Vector((v.x * c - v.y * s, v.x * s + v.y * c, v.z)) for v in vs]
-    # In game space: along, up and across.
+    """Turned so it lies along game X by its principal axes, however Tripo set it down: its
+    longest way along X; for a `board` or a member its width up (Y) and its thickness across
+    (Z); for a `capping`, a `channel`, a `slab` or a `log` its width across and its depth up.
+    A capping is turned crest up, a channel hollow up, by a half turn about X, never a mirror,
+    so its faces stay out."""
+    import numpy
+
+    vs = numpy.array([tuple(v.co) for v in ob.data.vertices])
+    centre = vs.mean(axis=0)
+    values, vectors = numpy.linalg.eigh(numpy.cov((vs - centre).T))
+    order = numpy.argsort(values)[::-1]
+    e1, e2, e3 = (vectors[:, i] for i in order)
     if how == "board":
-        game = [Vector((v.x, v.y, v.z)) for v in turned]
+        up, across = e2, e3
     else:
-        game = [Vector((v.x, v.z, -v.y)) for v in turned]
-    mirrored = False
-    lo = Vector((min(p[i] for p in game) for i in range(3)))
-    hi = Vector((max(p[i] for p in game) for i in range(3)))
-    moved = [Vector((p.x - lo.x, p.y - (lo.y + hi.y) / 2, p.z - (lo.z + hi.z) / 2)) for p in game]
+        up, across = e3, e2
+    # Up as near Blender's up as it can be, as the model stood.
+    if up[2] < 0:
+        up = -up
+    rows = numpy.array([e1, up, across])
+    if numpy.linalg.det(rows) < 0:
+        rows[2] = -rows[2]
+    game = (vs - centre) @ rows.T
+    lo, hi = game.min(axis=0), game.max(axis=0)
+    game[:, 0] -= lo[0]
+    game[:, 1] -= (lo[1] + hi[1]) / 2
+    game[:, 2] -= (lo[2] + hi[2]) / 2
     if how in ("capping", "channel"):
         # Its crest up, or its hollow: the middle across stands higher than its sides on a
         # capping, lower on a channel.
-        w = max(abs(p.z) for p in moved)
-        middle = [p.y for p in moved if abs(p.z) < w * 0.15]
-        sides = [p.y for p in moved if abs(p.z) > w * 0.7]
-        if middle and sides and (max(middle) > max(sides)) != (how == "capping"):
-            moved = [Vector((p.x, -p.y, p.z)) for p in moved]
-            mirrored = not mirrored
-    for v, p in zip(ob.data.vertices, moved):
-        v.co = blender_of(p)
-    if mirrored:
-        ob.data.flip_normals()
+        w = numpy.abs(game[:, 2]).max()
+        middle = game[numpy.abs(game[:, 2]) < w * 0.15, 1]
+        sides = game[numpy.abs(game[:, 2]) > w * 0.7, 1]
+        if len(middle) and len(sides) and (middle.max() > sides.max()) != (how == "capping"):
+            game[:, 1] = -game[:, 1]
+            game[:, 2] = -game[:, 2]
+    for v, p in zip(ob.data.vertices, game):
+        v.co = blender_of(Vector((float(p[0]), float(p[1]), float(p[2]))))
     ob.data.update()
 
 
@@ -699,71 +698,88 @@ def trim(ob, fraction):
 
 
 def modelled_mesh(name, spec):
-    ob = import_model(name, spec["model"])
-    lay_along(ob, spec.get("lies", "board"))
-    trim(ob, spec.get("trim", 0.0))
+    """A modelled piece laid, trimmed, unfolded and fitted, at its model's full detail (the
+    high), and a copy cut to its budget (the low) the game draws, with the high to bake from."""
+    high = import_model(name + "_high", spec["model"])
+    lay_along(high, spec.get("lies", "board"))
+    trim(high, spec.get("trim", 0.0))
     if spec.get("lies") in ("capping", "channel"):
-        unfold(ob)
-    fit(ob, spec["length"], spec["y"], spec["z"])
-    cut_to(ob, spec.get("budget", 1200))
-    return ob
+        unfold(high)
+    fit(high, spec["length"], spec["y"], spec["z"])
+    low = high.copy()
+    low.data = high.data.copy()
+    low.name = name
+    bpy.context.collection.objects.link(low)
+    cut_to(low, spec.get("budget", 1200))
+    return low, high
 
 
-def bake_atlas(obs, out_dir, size=2048):
-    """Each object's own texture baked into one atlas for its kit, in a UV map of its own
-    packed with the others' (the industry's trim atlas): color.jpg, with a flat normal map and
-    a plain occlusion-roughness-metal map beside it, under assets/."""
-    for ob in obs:
-        source = ob.data.uv_layers.active.name
-        atlas = ob.data.uv_layers.new(name="atlas", do_init=True)
-        # The textures read from their own UVs, whichever is active.
-        for slot in ob.material_slots:
-            mat = slot.material
-            if mat is None or not mat.use_nodes:
-                continue
-            nodes, links = mat.node_tree.nodes, mat.node_tree.links
-            uv = nodes.new("ShaderNodeUVMap")
-            uv.uv_map = source
-            for node in [n for n in nodes if n.type == "TEX_IMAGE"]:
-                links.new(uv.outputs["UV"], node.inputs["Vector"])
-        ob.data.uv_layers.active = atlas
+def bake_atlas(pairs, out_dir, size=2048):
+    """The kit's modelled pieces baked, as games bake a low model from its high (Substance,
+    Marmoset, Blender): each low unwrapped afresh into one atlas with the others, and its
+    high's colour and the shape the low lost baked into it from the high (`color.jpg`,
+    `normal.jpg`, tangent space), with a plain occlusion-roughness-metal map beside them."""
+    lows = [low for low, _ in pairs]
     for o in bpy.context.view_layer.objects:
         o.select_set(False)
-    for ob in obs:
-        ob.select_set(True)
-    bpy.context.view_layer.objects.active = obs[0]
+    for low in lows:
+        while low.data.uv_layers:
+            low.data.uv_layers.remove(low.data.uv_layers[0])
+        low.data.uv_layers.new(name="atlas")
+        low.data.materials.clear()
+        low.select_set(True)
+    bpy.context.view_layer.objects.active = lows[0]
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004)
     bpy.ops.uv.select_all(action="SELECT")
-    bpy.ops.uv.pack_islands(rotate=True, margin=0.003)
+    bpy.ops.uv.pack_islands(rotate=True, margin=0.004)
     bpy.ops.object.mode_set(mode="OBJECT")
-    image = bpy.data.images.new("atlas", size, size)
-    for ob in obs:
-        for slot in ob.material_slots:
-            mat = slot.material
-            if mat is None or not mat.use_nodes:
-                continue
-            node = mat.node_tree.nodes.new("ShaderNodeTexImage")
-            node.image = image
-            mat.node_tree.nodes.active = node
+    images = {}
+    for kind in ("color", "normal"):
+        image = bpy.data.images.new(kind, size, size)
+        if kind == "normal":
+            image.colorspace_settings.name = "Non-Color"
+            image.pixels[:] = [0.5, 0.5, 1.0, 1.0] * (size * size)
+        images[kind] = image
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = 4
-    scene.render.bake.margin = 8
-    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_clear=True)
+    bake = scene.render.bake
+    bake.margin = 6
+    bake.use_selected_to_active = True
+    bake.cage_extrusion = 0.03
+    bake.max_ray_distance = 0.08
+    for kind, kwargs in (("color", {"type": "DIFFUSE", "pass_filter": {"COLOR"}}), ("normal", {"type": "NORMAL"})):
+        for low, high in pairs:
+            mat = bpy.data.materials.new(f"{low.name}_{kind}")
+            mat.use_nodes = True
+            node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+            node.image = images[kind]
+            mat.node_tree.nodes.active = node
+            low.data.materials.clear()
+            low.data.materials.append(mat)
+            for o in bpy.context.view_layer.objects:
+                o.select_set(False)
+            high.select_set(True)
+            low.select_set(True)
+            bpy.context.view_layer.objects.active = low
+            bpy.ops.object.bake(use_clear=False, **kwargs)
     os.makedirs(out_dir, exist_ok=True)
-    image.filepath_raw = os.path.join(out_dir, "color.jpg")
-    image.file_format = "JPEG"
-    image.save()
-    for file, colour in (("normal.jpg", (0.5, 0.5, 1.0, 1.0)), ("arm.jpg", (1.0, 0.82, 0.0, 1.0))):
-        flat = bpy.data.images.new(file, 64, 64)
-        flat.pixels[:] = list(colour) * (64 * 64)
-        flat.filepath_raw = os.path.join(out_dir, file)
-        flat.file_format = "JPEG"
-        flat.save()
-    for ob in obs:
-        ob.select_set(False)
-    print("baked", os.path.join(out_dir, "color.jpg"))
+    for kind, image in images.items():
+        image.filepath_raw = os.path.join(out_dir, f"{kind}.jpg")
+        image.file_format = "JPEG"
+        image.save()
+    arm = bpy.data.images.new("arm", 64, 64)
+    arm.pixels[:] = [1.0, 0.82, 0.0, 1.0] * (64 * 64)
+    arm.filepath_raw = os.path.join(out_dir, "arm.jpg")
+    arm.file_format = "JPEG"
+    arm.save()
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    for _, high in pairs:
+        bpy.data.objects.remove(high)
+    print("baked", out_dir)
 
 
 def main():
@@ -793,13 +809,14 @@ def main():
     lines.append("    },")
     lines.append("    modules: {")
     # The modelled ones first, so their textures go into one atlas together.
-    modelled = {
+    pairs = {
         name: modelled_mesh(f"{name}_model", spec)
         for name, spec in source.get("modules", {}).items()
         if "model" in spec
     }
-    if modelled:
-        bake_atlas(list(modelled.values()), os.path.join(ROOT, "assets", source["atlas"]))
+    if pairs:
+        bake_atlas(list(pairs.values()), os.path.join(ROOT, "assets", source["atlas"]))
+    modelled = {name: low for name, (low, _) in pairs.items()}
     for name, spec in source.get("modules", {}).items():
         near, far = [], []
         if name in modelled:

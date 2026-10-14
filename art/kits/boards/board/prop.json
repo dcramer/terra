@@ -1,0 +1,12 @@
+{
+  "subject": "straight weathered pine bargeboard plank, two metres long, twenty five centimetres wide and four centimetres thick, lying flat on its own: hand sawn, its edges softly worn, silver grey weathered wood with darker brown grain, a few splits and nail holes, square cut ends",
+  "file": "kit_board",
+  "size": 2.0,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

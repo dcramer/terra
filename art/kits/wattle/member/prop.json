@@ -1,0 +1,12 @@
+{
+  "subject": "straight squared oak timber beam for a half timbered frame, two metres long, eighteen centimetres wide and fourteen centimetres deep, lying on its own: hewn square by axe and adze, its faces shallowly scalloped by the adze, its arrises softly rounded and wandering, dark brown weathered oak with open grain and fine checks, square sawn ends",
+  "file": "kit_oak_beam",
+  "size": 2.0,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

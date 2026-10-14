@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of roof valley lining, one and a half metres long, seen on its own as a building piece: two weathered pine boards forming a shallow open V channel about forty centimetres wide, the inside of the channel stained darker by running water, silver grey weathered wood",
+  "file": "kit_valley",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

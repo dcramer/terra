@@ -86,6 +86,7 @@
         variation: (thickness: 0.06, shade: 0.16, warmth: 0.05, mottle: 0.1),
     ),
     textures: {
+        Piece: (path: "materials/logs_pieces", metres: (1.0, 1.0)),
         Log: (path: "materials/log_bark", metres: (1.0, 2.0)),
         LogEnd: (path: "materials/log_ends", metres: (1.0, 1.0), cells: 2),
         Daub: (path: "materials/clay_floor_001", metres: (0.5, 0.5)),
