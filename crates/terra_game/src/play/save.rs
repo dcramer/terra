@@ -1204,8 +1204,8 @@ mod tests {
         assert_eq!(save.snapshot, None);
         let converted = convert(&save.base, terra_build::Kind(1));
         assert_eq!(
-            terra_build::Base::from_shortcuts(&converted.ops).tile_count(),
-            4
+            terra_build::Base::from_shortcuts(&converted.ops).room_cubes(),
+            4 * 5
         );
     }
 }

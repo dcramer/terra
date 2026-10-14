@@ -95,6 +95,10 @@ pub enum Op {
     /// The ground under columns sampled again, after it was dug or filled
     /// (construction-001, gap 3): refused if it would leave anything built unjoined.
     Ground { samples: Vec<Sample> },
+    /// Move cubes into a part of their kind laid on the same terms, a new one taking their
+    /// terms: how parts that touch and agree are merged, and a part taken apart into pieces
+    /// split (`parts`), so refunds stay exact whatever the cubes are grouped in.
+    Regroup { cubes: Vec<[i32; 3]>, part: PartId },
 }
 
 /// A claim's ground and its budget of planned cubes (D193).
@@ -374,6 +378,7 @@ impl Base {
             Op::Open { cubes } => self.open(cubes, cx),
             Op::Close { cubes } => self.close(cubes, cx),
             Op::Ground { samples } => self.resample(samples, cx),
+            Op::Regroup { cubes, part } => self.regroup(cubes, *part, cx),
         }
     }
 
@@ -393,6 +398,57 @@ impl Base {
     /// The cube at a place, or a refusal that nothing is there.
     fn there(&self, at: IVec3) -> Result<Cube, Refusal> {
         self.cube(at).ok_or(Refusal::Nothing(at))
+    }
+
+    /// Cubes moved into a part: every one in a part of one kind and the same terms, the
+    /// part they go into of that kind and those terms, or new, taking them.
+    fn regroup(&self, cubes: &[[i32; 3]], part: PartId, cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        let mut agreed: Option<&Part> = None;
+        let mut was: BTreeMap<PartId, Vec<[i32; 3]>> = BTreeMap::new();
+        for &at in &named {
+            let cube = self.there(at)?;
+            let old = cube.part.ok_or(Refusal::WrongPart(part))?;
+            let found = self.parts.get(&old).ok_or(Refusal::WrongPart(old))?;
+            match agreed {
+                Some(first) if first.kind != found.kind || first.terms != found.terms => {
+                    return Err(Refusal::WrongPart(old));
+                }
+                Some(_) => {}
+                None => agreed = Some(found),
+            }
+            if old != part {
+                was.entry(old).or_default().push(at.to_array());
+                change.cubes.push((
+                    at,
+                    Some(Cube {
+                        part: Some(part),
+                        ..cube
+                    }),
+                ));
+            }
+        }
+        let Some(agreed) = agreed.filter(|_| !was.is_empty()) else {
+            return Err(Refusal::Unchanged);
+        };
+        match self.parts.get(&part) {
+            Some(into) if into.kind != agreed.kind || into.terms != agreed.terms => {
+                return Err(Refusal::WrongPart(part));
+            }
+            Some(_) => {}
+            None => change
+                .parts
+                .push((part, Part::new(agreed.kind, agreed.terms.clone()))),
+        }
+        let placed: Vec<(IVec3, Option<PartId>)> =
+            named.iter().map(|&at| (at, Some(part))).collect();
+        self.room_for_parts(&placed)?;
+        change.done.undo = was
+            .into_iter()
+            .map(|(part, cubes)| Op::Regroup { cubes, part })
+            .collect();
+        Ok(change)
     }
 
     /// The part a plan or change is laid in, if it is new: refused if it is of another

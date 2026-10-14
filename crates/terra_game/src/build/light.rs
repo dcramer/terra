@@ -1,5 +1,5 @@
-//! Indoor light (D155; docs/building-plan.md, drawing): a room closed all round and
-//! covered (`terra_build::Base::indoors`) is not lit by the open sky. The sky lights the
+//! Indoor light (D155; docs/building-plan.md, drawing): a room closed all round, roof and
+//! floor too (`terra_build::Base::indoors`, D261), is not lit by the open sky. The sky lights the
 //! world through the camera's environment map (`terra_world::skylight`); inside each such
 //! room stands a light probe holding the same sky, dimmed, which Bevy uses in place of the
 //! camera's for what is inside it, as shipped games place a probe per room. The sun still
@@ -12,7 +12,6 @@ use crate::planet::MainCamera;
 use bevy::light::{EnvironmentMapLight, GeneratedEnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
-use terra_build::{CELL_M, STOREY_CUBES, wall_layer};
 
 /// How much of the sky's light reaches inside a room.
 const INDOORS: f32 = 0.6;
@@ -66,19 +65,9 @@ fn place(
                 commands.entity(entity).try_despawn();
             }
         }
-        for (low, high) in rooms {
-            let floor = wall_layer(low.y) as f32 * CELL_M;
-            let ceiling = (wall_layer(low.y) + STOREY_CUBES) as f32 * CELL_M;
-            let min = Vec3::new(
-                low.x as f32 * CELL_M - INTO_WALLS_M,
-                floor - INTO_WALLS_M,
-                low.z as f32 * CELL_M - INTO_WALLS_M,
-            );
-            let max = Vec3::new(
-                (high.x + 1) as f32 * CELL_M + INTO_WALLS_M,
-                ceiling + INTO_WALLS_M,
-                (high.z + 1) as f32 * CELL_M + INTO_WALLS_M,
-            );
+        for (low, high) in build.base.indoors_m() {
+            let min = low - Vec3::splat(INTO_WALLS_M);
+            let max = high + Vec3::splat(INTO_WALLS_M);
             commands.spawn((
                 Name::new("Indoors"),
                 Indoors,

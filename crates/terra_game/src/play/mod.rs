@@ -28,7 +28,7 @@ mod dig;
 mod figure;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
-pub use footprint::{Footprint, Steps};
+pub use footprint::Footprint;
 mod gains;
 mod harvest;
 pub(crate) mod held;

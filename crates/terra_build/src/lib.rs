@@ -13,7 +13,7 @@
 //!   it, so a floor's top is the storey's height, and the layer at the top of its walls is
 //!   the next storey's floor, or a flat roof. A cell of a storey, a *tile*, is a column of
 //!   six cubes.
-//! - **Rooms are worked out**, storey by storey ([`rooms`]).
+//! - **Rooms are worked out** from the cubes, the space they close in all round ([`rooms`]).
 //! - **A roof is cubes too** (D241): cubes of a roof kind ([`Kind::is_roof`]) cut to
 //!   slopes and corners, laid by hand or by the roofer ([`roofer`]) and drawn as a roof
 //!   from their neighbours (`layout::roofs`): no wall tile, floor or room of their own.
@@ -46,6 +46,7 @@ pub mod layout;
 mod mesh;
 pub mod ops;
 pub mod order;
+pub mod parts;
 pub mod relief;
 pub mod roofer;
 pub mod roofing;
@@ -333,13 +334,10 @@ pub struct Base {
     ground: Ground,
     /// Worked out from the cubes: each wall tile and what fills it.
     walls: BTreeMap<[i32; 3], Panel>,
-    /// The wall tiles that close a room in: every cube of them built (construction-001:
-    /// a plan, or a wall going up, encloses nothing).
-    enclosing: BTreeSet<[i32; 3]>,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
-    /// Every tile the walls close in, and which room it is in.
-    rooms: BTreeMap<[i32; 3], u32>,
+    /// Every cube closed in, and which room it is in, worked out when asked (D261).
+    rooms: rooms::Rooms,
 }
 
 /// Where a ray met a base.
@@ -507,13 +505,13 @@ impl Base {
         self.columns.contains_key(&[x, z])
     }
 
-    /// Every place along the floor that is in a room, or has a floor, on the ground storey:
-    /// where `contains` or `has_floor` holds at storey 0. In no fixed order.
+    /// Every place along the floor that is in a room at the ground storey's foot, or has a
+    /// floor there. In no fixed order.
     pub fn ground_columns(&self) -> impl Iterator<Item = IVec2> + '_ {
         let rooms = self
-            .tiles()
-            .filter(|(tile, _)| tile.y == 0)
-            .map(|(tile, _)| IVec2::new(tile.x, tile.z));
+            .room_cells()
+            .filter(|(at, _)| at.y == wall_layer(0))
+            .map(|(at, _)| IVec2::new(at.x, at.z));
         let floors = self
             .cubes
             .iter()
@@ -656,8 +654,13 @@ impl Base {
     }
 
     fn add_room(&mut self, min: IVec3, max: IVec3, kind: Kind) -> bool {
-        let was = self.rooms.clone();
-        let was_room = |tile: IVec3| was.contains_key(&tile.to_array());
+        // The tiles whose foot is in a room.
+        let was: BTreeSet<[i32; 3]> = self
+            .room_cells()
+            .filter(|(at, _)| at.y == wall_layer(storey_of(at.y)))
+            .map(|(at, _)| [at.x, storey_of(at.y), at.z])
+            .collect();
+        let was_room = |tile: IVec3| was.contains(&tile.to_array());
         let edge =
             |tile: IVec3| tile.x == min.x || tile.x == max.x || tile.z == min.z || tile.z == max.z;
         let inside = |tile: IVec3| tile.cmpge(min).all() && tile.cmple(max).all() && !edge(tile);
@@ -692,6 +695,8 @@ impl Base {
                         });
                         if opens {
                             changed |= self.set_wall(tile, None, kind);
+                            // Roofed over, as the rooms either side are.
+                            changed |= self.set([x, floor_layer(y + 1), z], Some(solid));
                         }
                     } else {
                         changed |= self.set_wall(tile, Some(Panel::Solid), kind);
@@ -702,12 +707,12 @@ impl Base {
         changed
     }
 
-    /// Works out the wall tiles, the columns and the rooms from the cubes.
+    /// Works out the wall tiles and the columns from the cubes, and forgets the rooms, to be
+    /// worked out again when asked.
     fn work_out(&mut self) {
         self.columns.clear();
         // A wall tile has cubes below its top layer; a roof's are no wall (D241).
         let mut tiles: BTreeMap<[i32; 3], Vec<Option<Fill>>> = BTreeMap::new();
-        let mut unfinished: BTreeSet<[i32; 3]> = BTreeSet::new();
         for (at, cube) in self.cubes.iter() {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
             if cube.kind.is_roof() {
@@ -720,21 +725,13 @@ impl Base {
                     .entry([at.x, storey, at.z])
                     .or_insert_with(|| vec![None; STOREY_CUBES as usize])[step as usize] =
                     Some(cube.fill);
-                if !cube.is_built() {
-                    unfinished.insert([at.x, storey, at.z]);
-                }
             }
         }
-        self.enclosing = tiles
-            .keys()
-            .filter(|tile| !unfinished.contains(*tile))
-            .copied()
-            .collect();
         self.walls = tiles
             .into_iter()
             .map(|(tile, fills)| (tile, panel_of(&fills)))
             .collect();
-        self.find_rooms();
+        self.rooms = rooms::Rooms::default();
     }
 
     /// What fills a wall tile. `None` where there is no wall.
@@ -987,7 +984,7 @@ mod tests {
             max: [2, 0, 2],
             kind: LOGS,
         });
-        // A ring of walls on bare ground, closing in one tile with no floor.
+        // A ring of walls on bare ground, with no floor or roof: open to the sky, no room.
         for x in 20..23 {
             for z in 0..3 {
                 if (x, z) != (21, 1) {
@@ -1023,11 +1020,8 @@ mod tests {
             .flat_map(|x| (0..3).map(move |z| [x, z]))
             .filter(|&c| c != [21, 1])
             .collect();
-        let want_ground: BTreeSet<[i32; 2]> = room
-            .iter()
-            .copied()
-            .chain([[21, 1], [5, 0], [6, 0]])
-            .collect();
+        let want_ground: BTreeSet<[i32; 2]> =
+            room.iter().copied().chain([[5, 0], [6, 0]]).collect();
         let want_standing: BTreeSet<[i32; 2]> = room
             .iter()
             .chain(&ring)
@@ -1056,8 +1050,10 @@ mod tests {
     fn the_room_tool_lays_walls_round_a_floor_and_a_roof() {
         let base = room();
         assert_eq!(base.walls().count(), 10);
-        assert_eq!(base.tile_count(), 2);
-        assert!(base.contains(IVec3::new(1, 0, 1)) && base.contains(IVec3::new(2, 0, 1)));
+        // Two tiles inside, each five cubes from the floor to the roof, one room.
+        assert_eq!(base.room_cubes(), 10);
+        assert_eq!(base.room_count(), 1);
+        assert!(base.contains(IVec3::new(1, 0, 1)) && base.contains(IVec3::new(2, 4, 1)));
         // A floor under all twelve tiles, and the roof over the two inside, which would be
         // the floor of a storey over them.
         assert_eq!(base.floors().count(), 14);
@@ -1068,8 +1064,6 @@ mod tests {
             vec![-1, 0, 1, 2, 3, 4, 5]
         );
         assert_eq!(base.column(1, 1).collect::<Vec<_>>(), vec![-1, 5]);
-        assert!(base.exterior(IVec3::new(1, 0, 2)));
-        assert_eq!(base.outward(IVec3::new(1, 0, 2)), Some(IVec3::Z));
         assert_eq!(base.kind(IVec3::new(0, 0, 0)), Some(LOGS));
     }
 
@@ -1083,7 +1077,7 @@ mod tests {
             kind: LOGS,
         });
         assert_eq!(base.filling(door), Some(Panel::Door));
-        assert_eq!(base.tile_count(), 2);
+        assert_eq!(base.room_cubes(), 10);
         // Its cubes up to two metres are open, and the rest still wall.
         assert_eq!(base.cube(IVec3::new(1, 3, 2)).unwrap().fill, Fill::Open);
         assert_eq!(base.cube(IVec3::new(1, 4, 2)).unwrap().fill, Fill::Solid);
@@ -1092,7 +1086,7 @@ mod tests {
             panel: None,
             kind: LOGS,
         });
-        assert_eq!(base.tile_count(), 0);
+        assert_eq!(base.room_cubes(), 0);
     }
 
     #[test]
@@ -1145,7 +1139,7 @@ mod tests {
             max: [6, 0, 3],
             kind: LOGS,
         });
-        let rooms = |base: &Base| base.tiles().map(|(_, r)| r).collect::<BTreeSet<_>>().len();
+        let rooms = |base: &Base| base.room_count();
         assert_eq!(rooms(&base), 1);
         for z in 1..3 {
             base.apply(BuildOp::SetWall {
@@ -1246,6 +1240,7 @@ mod tests {
         assert_eq!(base.walls().count(), 10);
         assert!(base.walls().all(|(tile, _)| tile.y == 0));
         assert!(!base.has_floor(IVec3::new(1, 1, 1)));
-        assert_eq!(base.tile_count(), 2);
+        assert_eq!(base.room_count(), 1);
+        assert!(base.contains(IVec3::new(1, 0, 1)) && base.contains(IVec3::new(1, 5, 1)));
     }
 }

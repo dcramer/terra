@@ -270,6 +270,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                     &plans::brush(min, lay.brush.unwrap_or(1)),
                     lay.shape.unwrap_or_default(),
                     kind,
+                    &building.rules.rules.of(kind),
                 ),
                 None,
             ),
@@ -311,7 +312,14 @@ fn opening(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             Panel::WINDOW
         };
         let cubes = plans::opening_cubes(&tiles, panel);
-        let ops = plans::opening(&building.site.base, &cubes);
+        let ground = |column: [i32; 2]| building.ground_cm(column);
+        let blocks = building.rules.footed.clone();
+        let footings = building.rules.footing.map(|kind| plans::Footings {
+            kind,
+            ground_cm: &ground,
+            blocks: &blocks,
+        });
+        let ops = building.with_ground(plans::opening(&building.site.base, &cubes, footings));
         if ops.is_empty() {
             return Err(refused("it is open already"));
         }
@@ -482,7 +490,14 @@ fn carve(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Brushed = parse_some(params)?;
     as_player(world, |building, player| {
         let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
-        let ops = plans::carve(&building.site.base, &cubes);
+        let ground = |column: [i32; 2]| building.ground_cm(column);
+        let blocks = building.rules.footed.clone();
+        let footings = building.rules.footing.map(|kind| plans::Footings {
+            kind,
+            ground_cm: &ground,
+            blocks: &blocks,
+        });
+        let ops = building.with_ground(plans::carve(&building.site.base, &cubes, footings));
         if ops.is_empty() {
             return Err(refused("there is nothing there to carve"));
         }
@@ -611,7 +626,8 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "planned": base.store().planned(),
         "openings": openings,
         "floating": base.floating().len(),
-        "room_tiles": base.tile_count(),
+        "room_cubes": base.room_cubes(),
+        "rooms": base.room_count(),
         "parts": parts,
         "roofs": roofs,
         "props": props,

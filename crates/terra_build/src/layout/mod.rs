@@ -10,14 +10,12 @@
 //! - [`blocks`]: block kinds, a piece a cube, drawn as their surface (D197): walls,
 //!   floors and footings alike.
 //! - [`frames`]: a framed block kind's timber frame over its infill (D236).
-//! - [`ground`]: door steps down to the ground.
 //! - [`roofs`]: roof kinds' cubes as a roof, from their neighbours (D241).
 
 pub mod blocks;
 mod dressing;
 mod floors;
 pub mod frames;
-pub mod ground;
 pub mod roles;
 pub mod roofs;
 pub mod runs;

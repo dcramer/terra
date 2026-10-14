@@ -1712,21 +1712,21 @@ fn a_prop_gives_back_what_was_paid_for_it_whatever_it_costs_now() {
 }
 
 #[test]
-fn only_walls_built_whole_close_a_room_in() {
+fn only_what_is_built_closes_a_room_in() {
     let rules = rules();
     let cx = Context::free(&rules);
     let mut base = Base::default();
-    // A ring of wall tiles four by four, a storey high, planned.
-    let ring: Vec<[i32; 3]> = (0..4)
-        .flat_map(|x| (0..4).map(move |z| (x, z)))
-        .filter(|&(x, z)| x == 0 || x == 3 || z == 0 || z == 3)
-        .flat_map(|(x, z)| (0..6).map(move |y| [x, y, z]))
+    // A box of stone four by four, its floor at the ground's level and its roof six over
+    // it, planned.
+    let shell: Vec<[i32; 3]> = (0..4)
+        .flat_map(|x| (-1..7).flat_map(move |y| (0..4).map(move |z| [x, y, z])))
+        .filter(|&[x, y, z]| x == 0 || x == 3 || z == 0 || z == 3 || y == -1 || y == 6)
         .collect();
     base.act(
         &Op::LayPlan {
             part: Some(PartId(0)),
             kind: STONE,
-            cubes: ring
+            cubes: shell
                 .iter()
                 .map(|&at| Planned {
                     at,
@@ -1738,12 +1738,12 @@ fn only_walls_built_whole_close_a_room_in() {
         &cx,
     )
     .unwrap();
-    assert_eq!(base.tile_count(), 0, "a plan encloses nothing");
-    for y in 0..6 {
-        let course: Vec<[i32; 3]> = ring.iter().copied().filter(|at| at[1] == y).collect();
+    assert_eq!(base.room_cubes(), 0, "a plan encloses nothing");
+    for y in -1..7 {
+        let course: Vec<[i32; 3]> = shell.iter().copied().filter(|at| at[1] == y).collect();
         base.act(&Op::Fill { cubes: course }, &cx).unwrap();
-        let expected = if y < 4 { 0 } else { 4 };
-        assert_eq!(base.tile_count(), expected, "after layer {y}");
+        let expected = if y < 6 { 0 } else { 2 * 6 * 2 };
+        assert_eq!(base.room_cubes(), expected, "after layer {y}");
     }
 }
 
@@ -1783,3 +1783,5 @@ fn the_ground_is_sampled_again_unless_that_would_undermine_what_is_built() {
         Err(Refusal::Unchanged)
     );
 }
+
+mod by_hand;

@@ -685,7 +685,7 @@ fn plan_work(
                 } else {
                     "lay a block"
                 },
-                plans::blocks(base, &cubes, shape, kind),
+                plans::blocks(base, &cubes, shape, kind, &building.rules.rules.of(kind)),
             ))
         }
         // Built cubes changed to the material in hand, the brush's box of them (D232).
@@ -700,7 +700,7 @@ fn plan_work(
         // Built cubes marked to be carved out, the brush's box of them (D226).
         (Kind::Carve, Target::Structure { cube }) => Some(laying(
             "carve",
-            plans::carve(base, &plans::brush(cube, builder.brush)),
+            plans::carve(base, &plans::brush(cube, builder.brush), footings),
         )),
         _ => None,
     };
@@ -720,7 +720,7 @@ fn plan_work(
                 _ => (Panel::Door, true),
             };
             let cubes = plans::opening_cubes(&builder.run, panel);
-            let opened = plans::opening(base, &cubes);
+            let opened = plans::opening(base, &cubes, footings);
             if opened.is_empty() {
                 None
             } else {
@@ -763,24 +763,28 @@ fn plan_work(
         }
         // The cube aimed at, or the brush's box of them, taken out where nothing rests on
         // it (D226); else, as before, what came last of its part.
+        // A planned cube aimed at in a part partly built, as a mass built by hand is
+        // (D260), comes out of the plan, its part split if that leaves it in pieces.
         (Kind::Remove, Target::Structure { cube })
-            if base
-                .cube(cube)
-                .is_some_and(|found| found.part.is_some() && found.is_in())
-                && {
-                    let ops = plans::take_out(base, &plans::brush(cube, builder.brush));
-                    !ops.is_empty() && building.check(Some(player), &ops).is_ok()
-                } =>
+            if base.cube(cube).is_some_and(|found| {
+                found.part.is_some_and(|part| {
+                    found.is_in() || (found.level() == 0 && base.progress(part).built > 0)
+                })
+            }) && {
+                let ops = plans::take_out(base, &plans::brush(cube, builder.brush));
+                !ops.is_empty() && building.check(Some(player), &ops).is_ok()
+            } =>
         {
             let ops = plans::take_out(&building.site.base, &plans::brush(cube, builder.brush));
-            let count = match &ops[0] {
-                Op::Empty { cubes } => cubes.len(),
-                _ => 0,
+            let (count, what) = match &ops[0] {
+                Op::Empty { cubes } => (cubes.len(), "take out"),
+                Op::Unplan { cubes } => (cubes.len(), "take out of the plan"),
+                _ => (0, "take out"),
             };
             work(
                 building,
                 Doing::TakeApart,
-                format!("take out {count} cube{}", if count == 1 { "" } else { "s" }),
+                format!("{what} {count} cube{}", if count == 1 { "" } else { "s" }),
                 ops,
             )
         }

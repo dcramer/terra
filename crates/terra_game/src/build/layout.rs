@@ -242,7 +242,6 @@ fn launch(
                 .clone();
             let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
             let progress = build.progress();
-            let flights = build.flights.clone();
             let maps = maps.clone();
             let previous = build
                 .sections
@@ -262,7 +261,6 @@ fn launch(
                     maps: &maps,
                     at: IVec3::from_array(at),
                     progress: &progress,
-                    flights: &flights,
                 };
                 let laid = sections::lay(&section, &whole);
                 let key = laid.key();

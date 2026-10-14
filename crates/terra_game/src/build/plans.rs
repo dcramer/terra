@@ -12,8 +12,8 @@ use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
 use terra_build::roofer::{self, Style};
 use terra_build::{
-    Base, Facing, Fill, Kind, Panel, PartId, Pending, STOREY_CUBES, Shape, floor_layer, storey_of,
-    wall_layer,
+    Base, Facing, Fill, Kind, Panel, PartId, Pending, STOREY_CUBES, Shape, Terms, floor_layer,
+    storey_of, wall_layer,
 };
 
 use bevy::math::{IVec2, IVec3};
@@ -270,18 +270,29 @@ pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) ->
     ops
 }
 
-/// One cube of a shape, placed as Enshrouded's blocks are: in the part of a planned cube of
-/// its kind beside it, so a run of them is built as one; else a part of its own.
-pub fn block(base: &Base, at: IVec3, shape: Shape, kind: Kind) -> Vec<Op> {
-    let part = terra_build::support::FACES
+/// One cube of a shape, placed as Enshrouded's blocks are: in the part of the cubes of its
+/// kind beside it laid on the same terms, built or planned, every such part it touches
+/// merged into one (D260), so a mass built cube by cube is one part; else a part of its own.
+pub fn block(base: &Base, at: IVec3, shape: Shape, kind: Kind, terms: &Terms) -> Vec<Op> {
+    laid_by_hand(base, kind, terms, vec![(at, shape)])
+}
+
+/// Cubes laid by hand in a kind on its terms: the parts they touch that agree merged, and
+/// the cubes laid in the one they join, or a part of their own (D260).
+fn laid_by_hand(base: &Base, kind: Kind, terms: &Terms, cubes: Vec<(IVec3, Shape)>) -> Vec<Op> {
+    let at: Vec<IVec3> = cubes
         .iter()
-        .filter_map(|&step| base.cube(at + step))
-        .find(|cube| cube.kind == kind && !cube.is_built() && cube.part.is_some())
-        .and_then(|cube| cube.part)
-        .unwrap_or_else(|| Numbers::of(base).next());
-    shaped(base, part, kind, [(at, shape)])
-        .into_iter()
-        .collect()
+        .map(|&(at, _)| at)
+        .filter(|&at| base.cube(at).is_none() && base.prop_in(at).is_none())
+        .collect();
+    let (part, mut ops) = base
+        .joining(&at, kind, terms)
+        .unwrap_or_else(|| (Numbers::of(base).next(), Vec::new()));
+    match shaped(base, part, kind, cubes) {
+        Some(lay) => ops.push(lay),
+        None => return Vec::new(),
+    }
+    ops
 }
 
 /// The cubes of a brush `size` cubes across round a cube (D226): the box of that size on
@@ -303,12 +314,12 @@ pub fn brush(at: IVec3, size: i32) -> Vec<IVec3> {
 /// A box of cubes of a shape, a brush's (D226), laid as [`block`] lays one: whole cubes,
 /// a cut shape on the box's face it is cut on, its top layer, or its bottom for an upper
 /// half or a shape upside down, so a box of slopes is a ramp on a block, not a saw's teeth.
-pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind) -> Vec<Op> {
+pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind, terms: &Terms) -> Vec<Op> {
     let Some(first) = cubes.first() else {
         return Vec::new();
     };
     if cubes.len() == 1 {
-        return block(base, *first, shape, kind);
+        return block(base, *first, shape, kind, terms);
     }
     let (low, high) = cubes
         .iter()
@@ -321,14 +332,7 @@ pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind) -> Vec<Op>
             (at, if face { shape } else { Shape::Whole })
         })
         .collect();
-    let part = cubes
-        .iter()
-        .flat_map(|&at| terra_build::support::FACES.map(|step| at + step))
-        .filter_map(|at| base.cube(at))
-        .find(|cube| cube.kind == kind && !cube.is_built() && cube.part.is_some())
-        .and_then(|cube| cube.part)
-        .unwrap_or_else(|| Numbers::of(base).next());
-    shaped(base, part, kind, cut).into_iter().collect()
+    laid_by_hand(base, kind, terms, cut)
 }
 
 /// The built or part-built cubes of a box changed to a kind (D232): marked, the old taken
@@ -353,8 +357,9 @@ pub fn replace(base: &Base, cubes: &[IVec3], kind: Kind) -> Vec<Op> {
     }]
 }
 
-/// The cubes of a box with anything in them marked to be carved out (D226).
-pub fn carve(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
+/// The cubes of a box with anything in them marked to be carved out (D226); with footings,
+/// steps planned from any doorway that makes (D261).
+pub fn carve(base: &Base, cubes: &[IVec3], footings: Option<Footings>) -> Vec<Op> {
     let marked: Vec<[i32; 3]> = cubes
         .iter()
         .filter(|&&at| {
@@ -366,11 +371,16 @@ pub fn carve(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
     if marked.is_empty() {
         return Vec::new();
     }
-    vec![Op::Carve { cubes: marked }]
+    let opened: Vec<IVec3> = marked.iter().map(|&at| IVec3::from_array(at)).collect();
+    let mut ops = vec![Op::Carve { cubes: marked }];
+    ops.extend(steps(base, &opened, footings));
+    ops
 }
 
 /// Taking out what is in a box (D226): a step out of its highest layer with anything in,
-/// which the base refuses if anything rests on them; none if nothing of it is in.
+/// which the base refuses if anything rests on them; with nothing of it in, its planned
+/// cubes taken out of the plan, and any part that leaves in pieces split (D260); none if
+/// there is nothing in it to take.
 pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
     let ins: Vec<IVec3> = cubes
         .iter()
@@ -378,7 +388,19 @@ pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
         .filter(|&at| base.is_in(at) && base.cube(at).is_some_and(|c| c.pending == Pending::None))
         .collect();
     let Some(top) = ins.iter().map(|at| at.y).max() else {
-        return Vec::new();
+        let bare: Vec<IVec3> = cubes
+            .iter()
+            .copied()
+            .filter(|&at| {
+                base.cube(at).is_some_and(|cube| {
+                    cube.part.is_some()
+                        && cube.fill == Fill::Solid
+                        && cube.level() == 0
+                        && cube.pending == Pending::None
+                })
+            })
+            .collect();
+        return unplan(base, &bare);
     };
     vec![Op::Empty {
         cubes: ins
@@ -387,6 +409,19 @@ pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
             .map(|at| at.to_array())
             .collect(),
     }]
+}
+
+/// Planned cubes taken out of the plan, and the parts that leaves in pieces split (D260);
+/// none for no cubes.
+pub fn unplan(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
+    if cubes.is_empty() {
+        return Vec::new();
+    }
+    let mut ops = vec![Op::Unplan {
+        cubes: cubes.iter().map(|at| at.to_array()).collect(),
+    }];
+    ops.extend(base.splitting(cubes));
+    ops
 }
 
 /// A flat roof over a block of tiles on a storey, as one part.
@@ -524,7 +559,8 @@ pub fn opening_cubes(tiles: &[IVec3], panel: Panel) -> Vec<IVec3> {
 /// from under the wall over it and makes open (construction-001, experience 4). Cubes
 /// already open or marked are left as they are; what cannot be is refused by the
 /// operation, with its reason.
-pub fn opening(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
+/// With footings, the doorways it makes have steps planned down to the ground (D261).
+pub fn opening(base: &Base, cubes: &[IVec3], footings: Option<Footings>) -> Vec<Op> {
     let (mut open, mut carve) = (Vec::new(), Vec::new());
     for &at in cubes {
         match base.cube(at) {
@@ -540,7 +576,20 @@ pub fn opening(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
     if !carve.is_empty() {
         ops.push(Op::Carve { cubes: carve });
     }
+    if !ops.is_empty() {
+        ops.extend(steps(base, cubes, footings));
+    }
     ops
+}
+
+/// Door steps (D261): stair and half cubes of the footings' kind, a part of their own, from
+/// each doorway that opening these cubes makes, or that has none yet, down to the ground,
+/// as the footings take it; none without footings, or where none is wanted.
+pub fn steps(base: &Base, opening: &[IVec3], footings: Option<Footings>) -> Option<Op> {
+    let footings = footings?;
+    let opening: BTreeSet<[i32; 3]> = opening.iter().map(|at| at.to_array()).collect();
+    let cubes = base.door_steps(&opening, footings.ground_cm);
+    shaped(base, Numbers::of(base).next(), footings.kind, cubes)
 }
 
 /// The opening a cube is part of: every open cube joined to it, side by side and up and
@@ -616,7 +665,7 @@ mod tests {
         assert_eq!(base.progress(PartId(5)).cubes, 48);
         assert_eq!(base.part(PartId(0)).unwrap().kind, STONE);
         // Nothing of it is built, so it closes no room in.
-        assert_eq!(base.tile_count(), 0);
+        assert_eq!(base.room_cubes(), 0);
         assert!(
             base.cubes()
                 .all(|(_, cube)| cube.state == State::Planned { level: 0 })
@@ -729,15 +778,37 @@ mod tests {
         let tiles = [IVec3::new(4, 0, 7), IVec3::new(5, 0, 7)];
         let cubes = opening_cubes(&tiles, Panel::Door);
         assert_eq!(cubes.len(), 8);
-        base.act_all(&opening(&base, &cubes), &cx).unwrap();
+        // The ground outside falls away south of the wall, 30 cm a cube from 30 cm down.
+        let ground = |[_, z]: [i32; 2]| (-30 - 30 * (z - 7).max(0)) as i16;
+        let footings = Footings {
+            kind: STONE,
+            ground_cm: &ground,
+            blocks: &BTreeSet::from([STONE]),
+        };
+        let parts = base.parts().count();
+        base.act_all(&opening(&base, &cubes, Some(footings)), &cx)
+            .unwrap();
         assert_eq!(
             hole(&base, IVec3::new(5, 2, 7)),
             Some((IVec3::new(4, 0, 7), IVec3::new(5, 3, 7)))
         );
+        // Steps planned down from it, stairs of stone rising to the threshold, a part of
+        // their own.
+        assert_eq!(base.parts().count(), parts + 1);
+        for x in [4, 5] {
+            let step = base.cube(IVec3::new(x, -1, 8)).unwrap();
+            assert_eq!(
+                (step.kind, step.shape, step.is_built()),
+                (STONE, Shape::Stair(Facing::North), false)
+            );
+            assert!(base.cube(IVec3::new(x, -2, 9)).is_some());
+        }
         // A window is cut from its sill to its head.
         let window = opening_cubes(&[IVec3::new(0, 0, 3)], Panel::WINDOW);
         assert_eq!(window.iter().map(|at| at.y).collect::<Vec<_>>(), vec![2, 3]);
-        base.act_all(&opening(&base, &window), &cx).unwrap();
+        let cut = opening(&base, &window, Some(footings));
+        assert_eq!(cut.len(), 1, "no steps for a window");
+        base.act_all(&cut, &cx).unwrap();
         assert_eq!(
             hole(&base, IVec3::new(0, 2, 3)),
             Some((IVec3::new(0, 2, 3), IVec3::new(0, 3, 3)))
@@ -789,14 +860,36 @@ mod tests {
             .map(|(at, _)| at.y)
             .collect();
         assert_eq!(column, (0..=floor_layer(1)).collect::<Vec<_>>());
-        // A block beside a planned cube joins its part; one alone is a part of its own.
+        // A block beside a cube of its kind on the same terms joins its part; one alone is
+        // a part of its own (D260).
+        let terms = rules.of(LOGS);
         let parts = base.parts().count();
-        base.act_all(&block(&base, IVec3::new(5, 0, 0), Shape::Half, LOGS), &cx)
-            .unwrap();
+        base.act_all(
+            &block(&base, IVec3::new(5, 0, 0), Shape::Half, LOGS, &terms),
+            &cx,
+        )
+        .unwrap();
         assert_eq!(base.parts().count(), parts);
-        base.act_all(&block(&base, IVec3::new(9, 0, 0), Shape::Half, LOGS), &cx)
+        let (left, right) = (IVec3::new(9, 0, 0), IVec3::new(11, 0, 0));
+        for at in [left, right] {
+            base.act_all(&block(&base, at, Shape::Whole, LOGS, &terms), &cx)
+                .unwrap();
+        }
+        assert_eq!(base.parts().count(), parts + 2);
+        // One between them joins the two into one; taken out of the plan, they are two
+        // again, and its undo puts it back as one.
+        let between = IVec3::new(10, 0, 0);
+        base.act_all(&block(&base, between, Shape::Whole, LOGS, &terms), &cx)
             .unwrap();
         assert_eq!(base.parts().count(), parts + 1);
+        let part_of = |base: &Base, at: IVec3| base.cube(at).unwrap().part;
+        assert_eq!(part_of(&base, left), part_of(&base, right));
+        let joined = base.clone();
+        let done = base.act_all(&take_out(&base, &[between]), &cx).unwrap();
+        assert_eq!(base.parts().count(), parts + 2);
+        assert_ne!(part_of(&base, left), part_of(&base, right));
+        base.act_all(&done.undo, &cx).unwrap();
+        assert_eq!(base, joined);
     }
 
     #[test]
@@ -848,7 +941,7 @@ mod tests {
         assert_eq!(cubes.len(), 64);
         assert_eq!(cubes[0], IVec3::new(4, 0, -4));
         let slope = Shape::Slope(Facing::North);
-        base.act_all(&blocks(&base, &cubes, slope, STONE), &cx)
+        base.act_all(&blocks(&base, &cubes, slope, STONE, &rules.of(STONE)), &cx)
             .unwrap();
         let shapes = |y: i32| {
             base.cubes()
@@ -860,8 +953,11 @@ mod tests {
         assert_eq!(shapes(0), BTreeSet::from([Shape::Whole.code()]));
         // Upside down, the cut layer is the bottom one.
         let under = brush(IVec3::new(0, 4, 0), 2);
-        base.act_all(&blocks(&base, &under, Shape::UpperHalf, STONE), &cx)
-            .unwrap();
+        base.act_all(
+            &blocks(&base, &under, Shape::UpperHalf, STONE, &rules.of(STONE)),
+            &cx,
+        )
+        .unwrap();
         assert_eq!(
             base.cube(IVec3::new(0, 4, 0)).unwrap().shape,
             Shape::UpperHalf
@@ -881,7 +977,7 @@ mod tests {
         let change = replace(&base, &two, LOGS);
         assert!(matches!(&change[..], [Op::Replace { cubes, kind: LOGS, .. }] if cubes.len() == 8));
         assert!(replace(&base, &two, STONE).is_empty());
-        let carving = carve(&base, &two);
+        let carving = carve(&base, &two, None);
         assert!(matches!(&carving[..], [Op::Carve { cubes }] if cubes.len() == 8));
         let out = take_out(&base, &brush(IVec3::new(4, 3, -4), 2));
         assert!(matches!(&out[..], [Op::Empty { cubes }] if cubes.iter().all(|at| at[1] == 3)));

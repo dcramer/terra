@@ -73,7 +73,6 @@ fn main() -> ExitCode {
                 maps: &maps,
                 at: glam::IVec3::from_array(at),
                 progress: &progress,
-                flights: &[],
             };
             for (slot, reach) in [Reach::Near, Reach::Mid, Reach::Far]
                 .into_iter()

@@ -189,7 +189,6 @@ fn a_section_cut_from_its_base_laid_whole_is_the_section_laid_alone() {
                 maps: &maps,
                 at: IVec3::from_array(at),
                 progress: &Progress::Whole,
-                flights: &[],
             };
             let laid = lay(&section, &whole);
             // Laid alone, kit by kit, from only what reaches the section.
@@ -338,7 +337,6 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                 maps: &maps,
                 at: IVec3::from_array(*section),
                 progress: &Progress::Whole,
-                flights: &[],
             };
             let drawn = draw(&section, &laid(&section), Reach::Near);
             merged.extend(drawn.near.into_values());
@@ -422,7 +420,6 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
         maps: &maps,
         at: IVec3::new(0, 0, 0),
         progress: &Progress::Whole,
-        flights: &[],
     };
     let laid = laid(&section);
     let drawn = draw(&section, &laid, Reach::Near);
@@ -465,7 +462,6 @@ fn a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit() {
             maps: &maps,
             at: IVec3::from_array(at),
             progress: &Progress::Fraction(0.0),
-            flights: &[],
         };
         let drawn = draw(&section, &laid(&section), Reach::Near);
         assert!(drawn.near.values().all(|s| s.triangle_count() == 0) || drawn.near.is_empty());
@@ -520,7 +516,6 @@ fn whatever_changes_a_section_is_in_what_a_change_redraws() {
             maps: &maps,
             at,
             progress: &Progress::Whole,
-            flights: &[],
         };
         laid(&section).key()
     };
@@ -603,7 +598,6 @@ fn far_off_the_textures_are_baked_into_the_colours() {
         maps: &maps,
         at: IVec3::new(-1, 0, 0),
         progress: &Progress::Whole,
-        flights: &[],
     };
     let drawn = draw(&section, &laid(&section), Reach::Far);
     assert!(drawn.far.triangle_count() > 0);
@@ -654,7 +648,6 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
                 maps: &maps,
                 at: IVec3::ZERO,
                 progress: &Progress::Whole,
-                flights: &[],
             };
             let laid = laid(&section);
             let low = IVec3::new(3, 1, 3).as_vec3() * CELL_M;

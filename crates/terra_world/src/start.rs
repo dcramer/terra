@@ -55,7 +55,11 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     let north = east.cross(up);
     let sea = planet.sea_radius_m();
 
-    let ground_floor = || base.tiles().filter(|(tile, _)| tile.y == 0);
+    let ground_floor = || {
+        base.room_cells()
+            .filter(|(at, _)| at.y == 0)
+            .map(|(at, room)| (at.with_y(0), room))
+    };
     let low = ground_floor().fold(IVec3::MAX, |low, (tile, _)| low.min(tile));
     let high = ground_floor().fold(IVec3::MIN, |high, (tile, _)| high.max(tile));
     let (low, high) = (
@@ -138,9 +142,9 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
 /// the difference.
 pub fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Transform {
     let mut columns: Vec<IVec3> = base
-        .tiles()
-        .filter(|(tile, _)| tile.y == 0)
-        .map(|(tile, _)| tile)
+        .room_cells()
+        .filter(|(at, _)| at.y == 0)
+        .map(|(at, _)| at)
         .collect();
     if columns.is_empty() {
         let floor = terra_build::floor_layer(0);

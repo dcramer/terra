@@ -571,30 +571,43 @@ fn trims_standing_out_of_a_wall_never_stop_a_walker_short_of_its_cubes() {
 }
 
 // The goals review's defects (research/goals-review-2026-10-13.md, findings 3 to 5), as
-// rules; another agent is closing them.
+// rules (D260, D261).
 
 #[test]
-#[ignore = "known failure (goals review 3): a section's palette holds 255 parts, and each block laid by hand is a part"]
 fn a_section_can_be_built_by_hand_a_cube_at_a_time() {
     let rules = rules();
     let cx = Context::free(&rules);
     let mut base = Base::default();
-    // A floor of a section's 256 columns, each cube laid alone, as the hammer lays a block.
-    for x in 0..16 {
-        for z in 0..16 {
-            let op = Op::LayPlan {
-                part: Some(base.next_part()),
-                kind: STONE,
-                cubes: vec![Planned {
-                    at: [x, 0, z],
-                    shape: Shape::Whole,
-                }],
-                ground: Vec::new(),
-            };
-            let laid = base.act(&op, &cx);
-            assert!(laid.is_ok(), "the block at {x}, {z}: {laid:?}");
-        }
+    // A floor of a section's 256 columns, each cube laid alone, as the hammer lays a block:
+    // in the part of the cubes of its kind beside it laid on its terms, or one of its own.
+    // Every other column first, so most begin alone and are joined up later.
+    let terms = rules.of(STONE);
+    for (x, z) in (0..16)
+        .flat_map(|x| (0..16).map(move |z| (x, z)))
+        .filter(|(x, z)| (x + z) % 2 == 0)
+        .chain(
+            (0..16)
+                .flat_map(|x| (0..16).map(move |z| (x, z)))
+                .filter(|(x, z)| (x + z) % 2 == 1),
+        )
+    {
+        let at = IVec3::new(x, 0, z);
+        let (part, mut ops) = base
+            .joining(&[at], STONE, &terms)
+            .unwrap_or_else(|| (base.next_part(), Vec::new()));
+        ops.push(Op::LayPlan {
+            part: Some(part),
+            kind: STONE,
+            cubes: vec![Planned {
+                at: at.to_array(),
+                shape: Shape::Whole,
+            }],
+            ground: Vec::new(),
+        });
+        let laid = base.act_all(&ops, &cx);
+        assert!(laid.is_ok(), "the block at {x}, {z}: {laid:?}");
     }
+    assert_eq!(base.parts().count(), 1, "one floor, one part");
 }
 
 /// A ring of whole stone cubes round a room four by three tiles inside, from one layer
@@ -617,7 +630,6 @@ fn ring(base: &mut Base, from: i32, to: i32) {
 }
 
 #[test]
-#[ignore = "known failure (goals review 5): rooms are found per storey of six cubes, not by the air the cubes close in"]
 fn a_room_is_what_its_cubes_close_in_whatever_layer_its_walls_start_on() {
     // A storey's walls from its own layer close a room in.
     let mut on = Base::default();
@@ -633,10 +645,9 @@ fn a_room_is_what_its_cubes_close_in_whatever_layer_its_walls_start_on() {
 }
 
 #[test]
-#[ignore = "known failure (goals review 4): door steps are slabs outside the cubes, from the planet's ground at run time"]
 fn everything_a_walker_stands_on_is_a_cube() {
-    // A room with a doorway, by the room shortcut: its steps down to the ground are
-    // `layout::ground::flights`, which a walker stands on, not cubes of the base.
+    // A room with a doorway, by the room shortcut, a metre over the ground: its steps down
+    // to the ground are cubes of the base, which a walker stands on.
     let mut base = Base::default();
     base.apply(terra_build::BuildOp::AddRoom {
         min: [0, 0, 0],
@@ -650,10 +661,20 @@ fn everything_a_walker_stands_on_is_a_cube() {
             kind: STONE,
         });
     }
-    let flights = terra_build::layout::ground::flights(&base, |_| -1.0);
+    assert!(base.lay_door_steps(STONE, |_| -100));
+    let w = Walker::default();
+    for (at, cube) in base.cubes().filter(|(_, cube)| cube.shape != Shape::Whole) {
+        // Over each step, a walker stands on that cube's top.
+        let point = (at.as_vec3() + Vec3::new(0.5, 1.0, 0.5)) * CELL_M;
+        let top = (at.y as f32 + cube.shape.top(0.5, 0.5)) * CELL_M;
+        let stood = base.support(point.with_y(top + 0.05), &w);
+        assert!(
+            stood.is_some_and(|y| (y - top).abs() < 1e-3),
+            "{at}: {stood:?}"
+        );
+    }
     assert!(
-        flights.is_empty(),
-        "{} flights of steps outside the cubes",
-        flights.len()
+        base.cubes()
+            .any(|(_, cube)| matches!(cube.shape, Shape::Stair(_)))
     );
 }

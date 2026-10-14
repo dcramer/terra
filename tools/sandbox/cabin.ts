@@ -39,7 +39,7 @@ let failed = false;
 type Part = { id: number; kind: string; cubes: number; shaped: number; built: number; started: number; openings: number; done: boolean; min: number[]; max: number[] };
 type Roof = { cubes: number; built: number; stages: number[]; shapes: Record<string, number> };
 type Fitted = { kind: string; min: number[]; max: number[]; open: boolean; at: number[] };
-type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
+type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_cubes: number; rooms: number; parts: Part[]; roofs: Roof; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 
 const base = async () => (await game.call("build.state")) as Base;
@@ -159,7 +159,7 @@ async function build() {
     check(floor.kind === "stone" && floor.cubes === 48, `the floor is ${floor.cubes} cubes of ${floor.kind}, not 48 of stone`);
     check(now.parts.every((part) => part.built === 0 && part.started === 0), "something of the plan is in");
     check(now.openings === 12, `${now.openings} open cubes, not a doorway of 8 and a window of 4`);
-    check(now.room_tiles === 0, "a plan closes a room in");
+    check(now.room_cubes === 0, "a plan closes a room in");
     const shakes = now.parts.find((part) => part.kind === "shakes");
     const gables = now.parts.filter((part) => part.kind === "logs" && part.min[1] >= 6);
     check(shakes?.cubes === 80 && now.roofs.cubes === 80 && now.roofs.built === 0, `the roof is ${JSON.stringify(now.roofs)}, not 80 cubes of shakes planned`);
@@ -255,11 +255,11 @@ async function build() {
     const now = await base();
     check(now.parts.every((part) => part.done), `not all built: ${JSON.stringify(now.parts)}`);
     check(now.roofs.built === 80 && now.roofs.stages[4] === 80, `the roof is ${JSON.stringify(now.roofs)}, not 80 cubes with their trims on`);
-    check(now.room_tiles > 0, "the finished cabin closes no room in");
+    check(now.room_cubes > 0, "the finished cabin closes no room in");
     check(now.floating === 0, `${now.floating} cubes float`);
     const wood = 40 - (await carried("Wood"));
     check(wood === 36 && now.offcuts.includes("1/2 Wood"), `took ${wood} Wood, offcuts ${now.offcuts}, not 36 and half a Wood over`);
-    return `${first.length + done.length} more steps, one refused: "${short!.refused}"; ${now.room_tiles} tiles indoors; the walls and roof took exactly ${wood} Wood`;
+    return `${first.length + done.length} more steps, one refused: "${short!.refused}"; ${now.room_cubes} cubes indoors; the walls and roof took exactly ${wood} Wood`;
   });
 
   await step("refused", async () => {
@@ -285,7 +285,7 @@ async function build() {
     check(now.openings === before.openings + 4, `${now.openings - before.openings} cubes opened, not 4`);
     check(now.floating === 0, `${now.floating} cubes float`);
     check(now.parts.every((part) => part.done), "the cut left part of the cabin unbuilt");
-    check(now.room_tiles === before.room_tiles, "the cut opened the room to the weather");
+    check(now.room_cubes === before.room_cubes, "the cut opened the room to the weather");
     const back = (await carried("Wood")) - wood;
     check(back >= 0, `the cut took ${-back} Wood`);
     return `${done.length} steps: ${done.map((each) => each.what).join("; ")}; ${now.offcuts || "no"} offcuts`;

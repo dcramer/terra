@@ -809,7 +809,6 @@ mod tests {
             cell_m: CELL_M,
             ground: base.ground_columns().collect(),
             standing: base.occupied_columns().collect(),
-            steps: Vec::new(),
         };
         (base, footprint)
     }

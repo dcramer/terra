@@ -12,7 +12,7 @@
 
 use crate::planet::MainCamera;
 use crate::planet::Planet;
-use crate::play::{Footprint, Steps};
+use crate::play::Footprint;
 use crate::start::Start;
 pub(crate) use crate::start::lifted;
 use bevy::prelude::*;
@@ -38,7 +38,6 @@ mod store;
 mod village;
 
 use draw::{KitMaterials, kit_materials};
-use terra_build::layout::ground::Flight;
 use terra_build::relief::Maps;
 use terra_build::sections::Progress;
 
@@ -76,9 +75,6 @@ pub(super) struct Build {
     /// Whether it is built by plans, as the player's base is, rather than laid whole by the
     /// shortcuts: it lays its own footings as plans.
     pub by_plans: bool,
-    /// Stone steps from each ground-floor door down to the ground. A walker treats each
-    /// flight as a ramp.
-    flights: Arc<Vec<Flight>>,
     /// Where it stands on the ground, as the world sees it, remade as it changes.
     pub footprint: Footprint,
     /// With kits, walls of their kinds are laid as their pieces (docs/building-kits.md), drawn as
@@ -339,7 +335,6 @@ impl Build {
             by_plans: false,
             revision: 0,
             refreshed: u64::MAX,
-            flights: Arc::default(),
             footprint: Footprint {
                 frame,
                 cell_m: CELL_M,
@@ -364,29 +359,16 @@ impl Build {
         }
     }
 
-    /// Works out again what stands on the ground: its door steps and its footprint, now its
-    /// shape or place has changed. Its sections are laid again by `store`.
-    fn refresh(&mut self, planet: &Planet) {
+    /// Works out again where it stands on the ground, now its shape or place has changed:
+    /// its footprint, its door steps among what stands (D261). Its sections are laid again
+    /// by `store`.
+    fn refresh(&mut self, _planet: &Planet) {
         self.refreshed = self.revision;
-        let frame = self.frame;
-        self.flights = Arc::new(terra_build::layout::ground::flights(&self.base, |at| {
-            -planet.distance(frame.transform_point(at.with_y(0.0)))
-        }));
         self.footprint = Footprint {
             frame: self.frame,
             cell_m: CELL_M,
             ground: self.base.ground_columns().collect(),
             standing: self.base.occupied_columns().collect(),
-            steps: self
-                .flights
-                .iter()
-                .map(|flight| Steps {
-                    top: flight.top,
-                    outward: flight.outward,
-                    length: flight.length,
-                    width: flight.width,
-                })
-                .collect(),
         };
     }
 
@@ -396,32 +378,24 @@ impl Build {
         self.revision += 1;
     }
 
-    /// A point on the ground a little beyond the foot of the first door's steps, facing
-    /// which a walker would climb them into the base. Returns the point and the direction
-    /// to face, both in the base's own space.
+    /// A point on the ground a few metres out from the first doorway, facing which a walker
+    /// would climb its steps into the base. Returns the point and the direction to face,
+    /// both in the base's own space.
     pub(super) fn approach(&self) -> (Vec3, Vec3) {
-        match self.flights.first() {
-            Some(flight) => (
-                flight.top + flight.outward * (flight.length + 2.5),
-                -flight.outward,
-            ),
+        match self.base.doorways(&BTreeSet::new()).first() {
+            Some(door) => {
+                let out = door.outward.as_vec3();
+                let middle = (door.at.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CELL_M;
+                (middle + out * 4.0, -out)
+            }
             None => (OUTSIDE_DOOR, Vec3::NEG_Z),
         }
     }
 
     /// The height of whatever the base offers to stand on at a point in its own space: a
-    /// floor, a roof or a ramp, whichever is highest within a step of the feet.
+    /// floor, a roof, a stair or a slope, whichever is highest within a step of the feet.
     pub(super) fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
-        let ramp = self
-            .flights
-            .iter()
-            .filter_map(|flight| flight.height_at(point))
-            .filter(|&height| height <= point.y + walker.step_up)
-            .max_by(|a, b| a.total_cmp(b));
-        match (self.walkable().support(point, walker), ramp) {
-            (Some(floor), Some(ramp)) => Some(floor.max(ramp)),
-            (floor, ramp) => floor.or(ramp),
-        }
+        self.walkable().support(point, walker)
     }
 
     /// What a walker meets: what stands of the base so far.
@@ -620,6 +594,9 @@ impl Build {
         let frame = self.frame;
         self.base
             .lay_footings(kind, |column| ground_cm(&frame, planet, column));
+        // Steps from its doorways down to the ground, of the footings' kind (D261).
+        self.base
+            .lay_door_steps(kind, |column| ground_cm(&frame, planet, column));
         // The ground under every column, as a plan samples it, which the roles a building's
         // edges are dressed by are read from (D215): where its feet are, how its plinth steps.
         let samples: Vec<terra_build::Sample> = self
@@ -962,9 +939,9 @@ fn update_readout(site: Res<Site>, mut readout: Single<&mut Text, With<Readout>>
         .filter(|(_, panel)| matches!(panel, Panel::Window { .. }))
         .count();
     readout.0 = format!(
-        "Base: {} cells in rooms, {} wall cells, {} window cells, {} operations\n\
+        "Base: {} cubes in rooms, {} wall cells, {} window cells, {} operations\n\
          Aim with the + mark. V window or door, B new room on open ground.",
-        site.base.tile_count(),
+        site.base.room_cubes(),
         site.base.walls().count(),
         windows,
         site.operations.len()

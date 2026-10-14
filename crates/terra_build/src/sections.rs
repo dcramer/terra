@@ -9,7 +9,6 @@
 //! Pure data, so it runs on any thread: the game lays and merges sections on its workers.
 
 use crate::kit::{Kit, Kits, Pattern, Profile};
-use crate::layout::ground::Flight;
 use crate::layout::roofs::RoofPart;
 use crate::layout::{self, Piece};
 use crate::mesh::{Material, Surface, Surfaces};
@@ -50,20 +49,17 @@ pub struct Section<'a> {
     pub maps: &'a Maps,
     pub at: IVec3,
     pub progress: &'a Progress,
-    /// The base's door steps, worked out where the ground is known.
-    pub flights: &'a [Flight],
 }
 
 /// A piece laid, the kit it is of, by its place in the kits, and how far in it is.
 pub type Placed = (usize, Piece, Stage);
 
-/// A section's pieces as laid: its own, those a cube beyond its edge, which its block
-/// kinds' surface needs, and its door steps.
+/// A section's pieces as laid: its own, and those a cube beyond its edge, which its block
+/// kinds' surface needs.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Laid {
     pub pieces: Vec<Placed>,
     pub edge: Vec<Placed>,
-    pub steps: Vec<(Vec3, Vec3)>,
 }
 
 impl Laid {
@@ -73,11 +69,6 @@ impl Laid {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.pieces.hash(&mut hasher);
         self.edge.hash(&mut hasher);
-        for (a, b) in &self.steps {
-            for v in [a, b] {
-                v.to_array().map(f32::to_bits).hash(&mut hasher);
-            }
-        }
         hasher.finish()
     }
 }
@@ -272,20 +263,10 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
     // Kit by kit, each in the order its pieces go in.
     own.sort_by_key(|(index, order, _)| (*index, *order));
     edge.sort_by_key(|(index, order, _)| (*index, *order));
-    let mut out = Laid {
+    Laid {
         pieces: own.into_iter().map(|(_, _, placed)| placed).collect(),
         edge: edge.into_iter().map(|(_, _, placed)| placed).collect(),
-        steps: Vec::new(),
-    };
-    for flight in section.flights {
-        for &(min, max) in &flight.steps {
-            let middle = ((min + max) * 0.5 / CELL_M).floor().as_ivec3();
-            if crate::cubes::section_of(middle) == section.at {
-                out.steps.push((min, max));
-            }
-        }
     }
-    out
 }
 
 /// How many of so many pieces are in, so far through.
@@ -658,35 +639,6 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                     .or_default()
                     .append(surface);
             }
-        }
-        // Door steps, in the footings' stone.
-        if !laid.steps.is_empty()
-            && let Some(stone) = kits.footing()
-        {
-            let look = block_look(stone, detail.steps());
-            let (sides, top) = (section.maps.shape(stone), section.maps.top(stone));
-            let sides = |uv: [f32; 2]| sides.map_or(0.5, |relief| relief.at(uv));
-            let top = |uv: [f32; 2]| top.map_or(0.5, |relief| relief.at(uv));
-            let heights = Heights {
-                sides: &sides,
-                top: &top,
-            };
-            let shared = Surface {
-                sharing: true,
-                ..Surface::default()
-            };
-            let (mut faces, mut tops) = (shared.clone(), shared);
-            for &(min, max) in &laid.steps {
-                crate::surface::slab(min, max, &look, &heights, [1.0; 3], &mut faces, &mut tops);
-            }
-            built
-                .entry((stone.kind(), Material::Masonry))
-                .or_default()
-                .append(faces);
-            built
-                .entry((stone.kind(), Material::Floor))
-                .or_default()
-                .append(tops);
         }
         if first {
             drawn.next = next;

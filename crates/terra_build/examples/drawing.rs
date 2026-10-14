@@ -453,7 +453,6 @@ fn section_of<'a>(
         maps,
         at: IVec3::from_array(at),
         progress,
-        flights: &[],
     }
 }
 

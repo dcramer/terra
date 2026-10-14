@@ -12,7 +12,7 @@
 //! passes through, so they are set into the ground and no gap shows; they stop on anything
 //! already there. Footings are their own kind's cubes, a part of their own, built first.
 
-use crate::{Base, CELL_M, Cube, Fill, Kind, floor_layer};
+use crate::{Base, CELL_M, Cube, Facing, Fill, Kind, Shape, floor_layer};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -211,10 +211,146 @@ impl Base {
     }
 }
 
+/// How far the ground may be below a doorway's threshold, or a step's tread, with no step
+/// down to it: less than a step's rise, in centimetres.
+const NO_STEP_CM: i32 = 20;
+
+/// The most step cubes down from a doorway, however far the ground falls away; a doorway
+/// further over the ground than they reach gets none.
+const MOST_STEPS: i32 = 8;
+
+/// A doorway's cube (D261): an opening at a floor, whatever its height or how it was made,
+/// with something not open under it as its threshold, a floor on one side of it at the
+/// threshold's layer and none on the other, where the way out is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Doorway {
+    /// The opening's lowest cube.
+    pub at: IVec3,
+    /// Level, out of the doorway, toward where there is no floor.
+    pub outward: IVec3,
+}
+
+impl Base {
+    /// Every doorway's lowest cube, sorted, taking the cubes `opening` names as open too, as
+    /// a plan about to open them would leave them.
+    pub fn doorways(&self, opening: &BTreeSet<[i32; 3]>) -> Vec<Doorway> {
+        let open = |at: IVec3| {
+            opening.contains(&at.to_array())
+                || self.cube(at).is_some_and(|cube| cube.fill == Fill::Open)
+        };
+        let solid = |at: IVec3| !open(at) && self.cube(at).is_some();
+        let mut cubes: BTreeSet<[i32; 3]> = opening.clone();
+        cubes.extend(
+            self.cubes()
+                .filter(|(_, cube)| cube.fill == Fill::Open)
+                .map(|(at, _)| at.to_array()),
+        );
+        let mut found = Vec::new();
+        for at in cubes.into_iter().map(IVec3::from_array) {
+            if !solid(at - IVec3::Y) || !open(at + IVec3::Y) {
+                continue;
+            }
+            // A floor on one side at the threshold's layer, and nothing on the other.
+            let floored = |out: IVec3| solid(at - IVec3::Y + out);
+            let clear = |out: IVec3| self.cube(at + out).is_none() && !floored(out);
+            let outward = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
+                .into_iter()
+                .find(|&out| clear(out) && floored(-out));
+            if let Some(outward) = outward {
+                found.push(Doorway { at, outward });
+            }
+        }
+        found
+    }
+
+    /// Door steps (D194, D261): from every doorway down to the ground outside, as cubes of
+    /// their own (the caller lays them in the footings' kind), a stair a column rising to
+    /// the threshold, a riser of a quarter of a metre at a time, its first a half cube where
+    /// one riser is all the drop needs, each on a footing down to the ground, so they are
+    /// built, walked and saved as everything else is. The ground is `height_cm` under each
+    /// column, as footings take it. Stops at any column something is in. In order, a
+    /// doorway's from the door out, each column from the top down.
+    pub fn door_steps(
+        &self,
+        opening: &BTreeSet<[i32; 3]>,
+        height_cm: impl Fn([i32; 2]) -> i16,
+    ) -> Vec<(IVec3, Shape)> {
+        let quarter = cube_cm() / 2;
+        let mut out: Vec<(IVec3, Shape)> = Vec::new();
+        let mut taken: BTreeSet<[i32; 3]> = BTreeSet::new();
+        for Doorway { at, outward } in self.doorways(opening) {
+            let toward = Facing::ALL
+                .into_iter()
+                .find(|facing| facing.step() == -outward)
+                .unwrap_or_default();
+            // The tread a walker is on, coming out: the threshold first. A door further over
+            // the ground than steps go wants a stair, not steps.
+            let mut tread = at.y * cube_cm();
+            let first = at + outward;
+            if tread - i32::from(height_cm([first.x, first.z])) > MOST_STEPS * cube_cm() {
+                continue;
+            }
+            for k in 1..=MOST_STEPS {
+                let column = at + outward * k;
+                let ground = i32::from(height_cm([column.x, column.z]));
+                if tread - ground <= NO_STEP_CM {
+                    break;
+                }
+                let layer = at.y - k;
+                let top = column.with_y(layer);
+                let shape = if k == 1 && tread - quarter - ground <= NO_STEP_CM {
+                    Shape::Half
+                } else {
+                    Shape::Stair(toward)
+                };
+                let mut cubes = vec![(top, shape)];
+                if layer * cube_cm() > ground {
+                    cubes.extend(
+                        footing(self, [([column.x, column.z], layer - 1)], &height_cm)
+                            .into_iter()
+                            .map(|at| (at, Shape::Whole)),
+                    );
+                }
+                if cubes
+                    .iter()
+                    .any(|(at, _)| self.cube(*at).is_some() || taken.contains(&at.to_array()))
+                {
+                    break;
+                }
+                taken.extend(cubes.iter().map(|(at, _)| at.to_array()));
+                out.extend(cubes);
+                if shape == Shape::Half {
+                    break;
+                }
+                tread = layer * cube_cm() + quarter;
+            }
+        }
+        out
+    }
+
+    /// Lays door steps of a kind at once, as built cubes, for what the shortcuts built
+    /// ([`Base::door_steps`]). Returns whether it changed anything.
+    pub fn lay_door_steps(&mut self, kind: Kind, height_cm: impl Fn([i32; 2]) -> i16) -> bool {
+        let steps = self.door_steps(&BTreeSet::new(), height_cm);
+        let mut changed = false;
+        for (at, shape) in steps {
+            let cube = Cube {
+                shape,
+                ..Cube::new(kind, Fill::Solid)
+            };
+            changed |= self.set(at.to_array(), Some(cube));
+        }
+        if changed {
+            self.settle();
+        }
+        changed
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BuildOp;
+    use crate::{BuildOp, Panel};
 
     #[test]
     fn a_footing_goes_down_to_the_cube_the_ground_passes_through_and_stops_on_what_is_there() {
@@ -273,7 +409,7 @@ mod tests {
         assert!(!stone(IVec3::new(2, -1, 2)));
         assert!(base.cube(IVec3::new(2, -2, 2)).is_none());
         // Its crawl space is no room.
-        assert!(base.tiles().all(|(tile, _)| tile.y == 0));
+        assert!(base.room_cells().all(|(at, _)| at.y >= 0));
         // Laid again, nothing changes.
         assert!(!base.lay_footings(Kind(2), slope));
     }
@@ -289,5 +425,106 @@ mod tests {
         ground.set([3, 0], Some(Sample::metres([3, 0], -0.8).height_cm));
         assert!(ground.reaches(IVec3::new(3, -2, 0)));
         assert!(!ground.reaches(IVec3::new(3, -1, 0)));
+    }
+
+    /// A room, its floor the layer under the ground's level, with a doorway two cubes wide
+    /// in its south wall.
+    fn with_door() -> Base {
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [5, 0, 5],
+            kind: Kind(1),
+        });
+        for x in [2, 3] {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 5],
+                panel: Some(Panel::Door),
+                kind: Kind(1),
+            });
+        }
+        base
+    }
+
+    #[test]
+    fn a_doorway_is_an_opening_at_a_floor_and_opens_toward_no_floor() {
+        let base = with_door();
+        let doorways = base.doorways(&BTreeSet::new());
+        assert_eq!(
+            doorways,
+            [2, 3].map(|x| Doorway {
+                at: IVec3::new(x, 0, 5),
+                outward: IVec3::Z
+            })
+        );
+        // A window's opening is no doorway: no floor beside its sill.
+        let mut windowed = base.clone();
+        windowed.apply(BuildOp::SetWall {
+            tile: [0, 0, 2],
+            panel: Some(Panel::WINDOW),
+            kind: Kind(1),
+        });
+        assert_eq!(windowed.doorways(&BTreeSet::new()).len(), 2);
+        // An opening about to be cut at a floor by hand is one, wherever it is.
+        let cut: BTreeSet<[i32; 3]> = [[5, 0, 2], [5, 1, 2], [5, 2, 2], [5, 3, 2]].into();
+        assert!(base.doorways(&cut).contains(&Doorway {
+            at: IVec3::new(5, 0, 2),
+            outward: IVec3::X
+        }));
+    }
+
+    #[test]
+    fn door_steps_are_stairs_a_riser_apart_down_to_the_ground_on_footings() {
+        let base = with_door();
+        // The ground falls away south, 30 cm a cube from 30 cm down.
+        let ground = |[_, z]: [i32; 2]| (-30 - 30 * (z - 5).max(0)) as i16;
+        let steps = base.door_steps(&BTreeSet::new(), ground);
+        let in_column = |x: i32, z: i32| -> Vec<(i32, Shape)> {
+            steps
+                .iter()
+                .filter(|(at, _)| at.x == x && at.z == z)
+                .map(|(at, shape)| (at.y, *shape))
+                .collect()
+        };
+        // Out from the door: a stair rising to the threshold, each one a cube lower than
+        // the last, on a footing down to the cube the ground passes through.
+        let rise = Shape::Stair(Facing::North);
+        for x in [2, 3] {
+            for z in 6..10 {
+                let column = in_column(x, z);
+                assert_eq!(column[0], (5 - z, rise), "{x} {z}");
+                let ys: Vec<i32> = column.iter().map(|&(y, _)| y).collect();
+                assert!(ys.windows(2).all(|w| w[1] == w[0] - 1), "{ys:?}");
+                assert!(column[1..].iter().all(|&(_, shape)| shape == Shape::Whole));
+                assert!(ys[ys.len() - 1] * cube_cm() <= i32::from(ground([x, z])));
+            }
+        }
+        // The treads come down a quarter metre at a time, from the threshold to a step
+        // above the ground where they end.
+        let mut tread = 0;
+        for z in 6.. {
+            let Some(&(y, shape)) = in_column(2, z).first() else {
+                assert!(tread + 25 - i32::from(ground([2, z])) <= NO_STEP_CM, "{z}");
+                break;
+            };
+            // Near the door, then away from it.
+            let tops = [shape.top(0.5, 0.1), shape.top(0.5, 0.9)]
+                .map(|t| y * cube_cm() + (t * cube_cm() as f32) as i32);
+            assert_eq!(tops, [tread, tread - 25], "{z}");
+            tread -= 50;
+        }
+        // On level ground a step down is all it needs: a half cube.
+        let low = base.door_steps(&BTreeSet::new(), |_| -40);
+        assert_eq!(low.len(), 2);
+        assert!(
+            low.iter()
+                .all(|(at, shape)| at.y == -1 && *shape == Shape::Half)
+        );
+        assert!(base.door_steps(&BTreeSet::new(), |_| -10).is_empty());
+        // Laid, they are cubes, and laid again, nothing changes.
+        let mut laid = base.clone();
+        assert!(laid.lay_door_steps(Kind(2), ground));
+        assert!(!laid.lay_door_steps(Kind(2), ground));
+        assert_eq!(laid.cube(IVec3::new(2, -1, 6)).map(|c| c.shape), Some(rise));
     }
 }

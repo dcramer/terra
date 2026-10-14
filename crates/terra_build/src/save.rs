@@ -472,7 +472,11 @@ written_changes!(
     SetOpen { at: [i32; 3], open: bool },
     Open { cubes: Vec<[i32; 3]> },
     Close { cubes: Vec<[i32; 3]> },
-    Ground { samples: Vec<Sample> };
+    Ground { samples: Vec<Sample> },
+    Regroup {
+        cubes: Vec<[i32; 3]>,
+        part: PartId
+    };
     FitProp(Prop)
 );
 
@@ -853,7 +857,7 @@ mod tests {
         let base = Base::from_shortcuts(&converted.ops);
         // The room keeps its sixteen tiles inside, less the wall across it; its door is in
         // the tile outside the edge it was on.
-        assert_eq!(base.tile_count(), 15);
+        assert_eq!(base.room_cubes(), 15 * 5);
         assert_eq!(base.filling(IVec3::new(1, 0, 4)), Some(Panel::Door));
         assert_eq!(base.filling(IVec3::new(1, 0, 0)), Some(Panel::Solid));
         // What is written is the shortcuts of now.

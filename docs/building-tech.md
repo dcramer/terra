@@ -7,7 +7,7 @@ How walls, floors and roofs work in code. The design is [building.md](building.m
 | | |
 |---|---|
 | D152 | Blueprints are walls, floors and roofs, built up piece by piece; a room is what they enclose |
-| D154 | The player draws the shape; the game makes the details, as The Sims' build mode |
+| D226 | Players build by hand, cube by cube, roofs too, as in Enshrouded; laying a room, a wall and "add a roof" stay as conveniences (amends D154) |
 | D155 | The game knows its buildings and their rooms, and which rooms are indoors |
 | D139 | Laid as a plan, then constructed part by part |
 | D146 | Each kind of construction is a kit of pieces on the grid, laid by its rule; walls in four directions |
@@ -34,7 +34,7 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 
 **A kit draws cubes** ([building-kits.md](building-kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
-**What is planned is cubes too** (D192): each cube is air, planned, or built to a **fill level** (a log fills a cube in two courses, a block in one), with at most one change pending on it: replace, carve, take away. Fill is the unit of progress, cost and collision: a cube collides from its foot to its fill. A part, a wall or floor or roof the player lays, is only how the interface groups cubes. Ground heights under a plan are sampled when it is laid and kept with it, so every machine agrees on its footings and support.
+**What is planned is cubes too** (D192): each cube is air, planned, or built to a **fill level** (a log fills a cube in two courses, a block in one), with at most one change pending on it: replace, carve, take away. Fill is the unit of progress, cost and collision: a cube collides from its foot to its fill. A part, a wall or floor or roof the player lays, is only how the interface groups cubes. Cubes laid by hand join the part of the cubes of their kind beside them laid on the same terms, merging every such part they touch, and a part taken out of the plan in pieces is split, so a mass built cube by cube is one part (D260). Ground heights under a plan are sampled when it is laid and kept with it, so every machine agrees on its footings and support.
 
 **What is done is operations** (D21): fill a block of cubes with a kind or empty it; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, fill a cube, empty one. The server checks each against the state when it arrives, undo included as its inverse. A base is saved and sent as a snapshot of its cubes, and the operations since; roof sections in older saves become roof cubes as they are read (D241). Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
 
@@ -42,7 +42,8 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 
 - **The layout**: the pieces of each part, in the order they go in.
 - **Buildings**: parts that touch, grouped.
-- **Rooms and indoors**: the air cubes each building closes in, flood-filled.
+- **Rooms and indoors**: the space the built cubes close in all round, flood-filled in three dimensions (D261).
+- **Doorways and their steps**: any opening at a floor with a floor on one side and none on the other is a doorway, and its steps down to the ground are stair and half cubes in the plan, of the footings' kind (D261).
 - **The roof's shape**: its cubes' tops, sampled every half cube (D241).
 - **What stops a walker**: the built cubes, read directly, each to its fill: their tops hold a walker up, solid ones stop them, openings and plans let them through.
 - **Support**: every built cube joined, face to face, or a roof's slope along its ramp to the cube a layer below it, to the ground or a footing that reaches it (D194, D241). Nothing is taken away while anything rests on it (D193).
@@ -97,8 +98,8 @@ On the Bevy side, in `terra_game` (D213; [building-plan.md](building-plan.md#dra
 ## Buildings and indoors
 
 - **Buildings**: parts that touch, by a flood fill over parts, when one is laid, finished or removed. Each building is an entity in the game with its rooms, so stations (D151) and weather (D78) read it.
-- **Rooms**: air cubes flood-filled within the building's walls; open doorways and windows let weather through, a shut door does not. A cell is covered if a roof's cubes or a floor is over it.
-- **Indoors**: a room closed all round and covered. When it is not, the game knows which wall or roof is missing, to say so (D155).
+- **Rooms** (D261): the cubes not built that have something built over and under them in their column, flooded face to face in three dimensions; a flood that reaches the sky or the open ground is the outside, the rest each a room, of any height and shape, two storeys and a mezzanine in one. Only what is built closes a room in, and an opening is part of its wall; how weather comes in through one is D78's.
+- **Indoors**: every room, as it is closed all round, roof and floor too (D155). Saying which wall or roof is missing is later work.
 - **Natural shelter** under a cliff or in a cave is not a building, and is left to the weather's design.
 
 ## Where it is worked on
