@@ -283,10 +283,12 @@ pub(super) fn kit_materials(
     Arc::new(out)
 }
 
-/// A section ready to put on screen, made on a worker: its meshes, about its middle.
+/// A section ready to put on screen, made on a worker: its meshes, about its middle; its
+/// near and middle detail a part at a time, `None` for a part left as it is on screen.
 pub(super) struct Parts {
-    near: Vec<(Kind, Material, Mesh)>,
-    mid: Vec<(Kind, Material, Mesh)>,
+    parts: Vec<Option<Part>>,
+    /// What each part was drawn from (`sections::cluster_keys`).
+    keys: Vec<u64>,
     plain: Option<Mesh>,
     next: Vec<Mesh>,
     shell: Option<Mesh>,
@@ -297,12 +299,19 @@ pub(super) struct Parts {
     centre: Vec3,
 }
 
-/// Turns a section drawn into meshes, about its middle.
-pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
+/// A part of a section's near and middle detail as meshes.
+struct Part {
+    near: Vec<(Kind, Material, Mesh)>,
+    mid: Vec<(Kind, Material, Mesh)>,
+}
+
+/// Turns a section drawn into meshes, about its middle: of its parts, only those `only`
+/// says, which were drawn.
+pub(super) fn parts(drawn: Merged, centre: Vec3, only: &[bool], keys: Vec<u64>) -> Parts {
     // A surface whose colours came out near black, as a mask reading the real maps can make
     // it, is drawn black in any light: said once a run (`terra_build::inspect`).
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    for (&(kind, material), surface) in &drawn.near {
+    for (&(kind, material), surface) in drawn.near_by.iter().flatten() {
         if let Some(dark) = terra_build::inspect::black(surface)
             && !SAID.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
@@ -314,21 +323,25 @@ pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
     }
     let textured = |surface: &Surface| mesh(surface, centre, Uvs::Mapped);
     let plain = |surface: &Surface| mesh(surface, centre, Uvs::None);
+    let meshes = |by: Option<&BTreeMap<(Kind, Material), Surface>>| -> Vec<(Kind, Material, Mesh)> {
+        by.into_iter()
+            .flatten()
+            .filter_map(|(&(kind, material), surface)| {
+                textured(surface).map(|mesh| (kind, material, mesh))
+            })
+            .collect()
+    };
+    let count = drawn.near_by.len().max(drawn.mid_by.len());
     Parts {
-        near: drawn
-            .near
-            .iter()
-            .filter_map(|(&(kind, material), surface)| {
-                textured(surface).map(|mesh| (kind, material, mesh))
+        parts: (0..count)
+            .map(|c| {
+                only.get(c).copied().unwrap_or(true).then(|| Part {
+                    near: meshes(drawn.near_by.get(c)),
+                    mid: meshes(drawn.mid_by.get(c)),
+                })
             })
             .collect(),
-        mid: drawn
-            .mid
-            .iter()
-            .filter_map(|(&(kind, material), surface)| {
-                textured(surface).map(|mesh| (kind, material, mesh))
-            })
-            .collect(),
+        keys,
         plain: plain(&drawn.plain),
         next: drawn.next.0.values().filter_map(plain).collect(),
         shell: mesh(&drawn.shell, centre, Uvs::Only),
@@ -612,19 +625,20 @@ impl Parts {
         self.sum(Mesh::count_vertices)
     }
 
-    /// How many bytes its meshes take on the GPU: their corners and indices.
-    pub(super) fn bytes(&self) -> usize {
-        self.sum(gpu_bytes)
-    }
-
     /// Something of each of its meshes, summed.
     fn sum(&self, count: impl Fn(&Mesh) -> usize) -> usize {
-        self.near
+        self.parts
             .iter()
-            .chain(&self.mid)
+            .flatten()
+            .flat_map(|part| part.near.iter().chain(&part.mid))
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
-            + self.next.iter().map(&count).sum::<usize>()
+            + self.rest(&count)
+    }
+
+    /// Something of each of its meshes but its parts', summed.
+    fn rest(&self, count: &dyn Fn(&Mesh) -> usize) -> usize {
+        self.next.iter().map(count).sum::<usize>()
             + [
                 &self.plain,
                 &self.shell,
@@ -645,7 +659,8 @@ pub(super) fn gpu_bytes(mesh: &Mesh) -> usize {
     mesh.get_vertex_buffer_size() + mesh.get_index_buffer_bytes().map_or(0, <[u8]>::len)
 }
 
-/// Puts a section laid on screen, in place of what was drawn of it.
+/// Puts a section laid on screen, in place of what was drawn of it: its parts whose key
+/// is as it was left as they are, as a voxel game remeshes only the chunks an edit reaches.
 fn show(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -673,38 +688,73 @@ fn show(
         }
         return;
     };
-    if let Some(entity) = build
-        .sections
-        .drawn
-        .remove(&done.section)
-        .and_then(|old| old.entity)
-    {
-        commands.entity(entity).despawn();
+    let parts = *parts;
+    let old = build.sections.drawn.remove(&done.section);
+    // What is on screen is kept, its rest and its parts drawn again taken away, where every
+    // part not drawn again is there to keep; else all of it goes.
+    let keeps = old.as_ref().is_some_and(|old| {
+        old.entity.is_some()
+            && old.parts.len() == parts.parts.len()
+            && parts
+                .parts
+                .iter()
+                .zip(&old.parts)
+                .all(|(new, old)| new.is_some() || old.key.is_some())
+    });
+    let mut kept_parts: Vec<Option<store::OnScreen>> = Vec::new();
+    let mut entity = None;
+    if let Some(old) = old {
+        if keeps {
+            for id in old.rest {
+                commands.entity(id).try_despawn();
+            }
+            for (new, shown) in parts.parts.iter().zip(old.parts) {
+                if new.is_some() {
+                    for id in shown.entities {
+                        commands.entity(id).try_despawn();
+                    }
+                    kept_parts.push(None);
+                } else {
+                    kept_parts.push(Some(shown));
+                }
+            }
+            entity = old.entity;
+        } else if let Some(entity) = old.entity {
+            commands.entity(entity).despawn();
+        }
     }
     let at = IVec3::from_array(done.section);
+    let rest_bytes = parts.rest(&gpu_bytes);
     let mut drawn = Drawn {
         entity: None,
         ticket: done.ticket,
         key,
         reach,
         drawing,
-        gpu_bytes: parts.bytes(),
+        gpu_bytes: 0,
+        parts: Vec::new(),
+        rest: Vec::new(),
     };
     // Nothing in it: nothing drawn, but what it was laid as kept.
-    if parts.is_empty() {
+    if parts.is_empty() && kept_parts.iter().all(Option::is_none) {
+        if let Some(entity) = entity {
+            commands.entity(entity).despawn();
+        }
         build.sections.drawn.insert(done.section, drawn);
         return;
     }
     let looks = &look.looks;
-    let entity = commands
-        .spawn((
-            Name::new(format!("Section {at}")),
-            Section { at },
-            Transform::from_translation(parts.centre),
-            Visibility::default(),
-            ChildOf(build.root),
-        ))
-        .id();
+    let entity = entity.unwrap_or_else(|| {
+        commands
+            .spawn((
+                Name::new(format!("Section {at}")),
+                Section { at },
+                Transform::from_translation(parts.centre),
+                Visibility::default(),
+                ChildOf(build.root),
+            ))
+            .id()
+    });
     drawn.entity = Some(entity);
     // Each detail is seen from where the finer one drawn ends.
     let near = reach == Reach::Near;
@@ -729,73 +779,107 @@ fn show(
             .cloned()
             .unwrap_or_else(|| looks.structure.clone())
     };
-    // Below the high preset the sun sees each section at its middle detail from the
-    // camera out, as shipped games cast shadows from a coarser level of detail: the
-    // finest detail casts none, and the middle one's shadow is cast by a copy of it only
-    // the sun sees, in a plain material.
+    // Each part drawn again; those not, as they were.
     let mut quiet: Vec<Entity> = Vec::new();
-    let mut casters: Vec<Handle<Mesh>> = Vec::new();
-    for (kind, which, mesh) in parts.near {
-        let (id, _) = add(mesh, material(kind, which), range(None, NEAR_M));
-        quiet.push(id);
+    let mut casters: Vec<(usize, Handle<Mesh>)> = Vec::new();
+    for (c, new) in parts.parts.into_iter().enumerate() {
+        let Some(new) = new else {
+            drawn.parts.push(
+                kept_parts
+                    .get_mut(c)
+                    .and_then(Option::take)
+                    .unwrap_or_default(),
+            );
+            continue;
+        };
+        let mut shown = store::OnScreen {
+            key: parts.keys.get(c).copied(),
+            ..Default::default()
+        };
+        for (kind, which, mesh) in new.near {
+            shown.gpu_bytes += gpu_bytes(&mesh);
+            let (id, _) = add(mesh, material(kind, which), range(None, NEAR_M));
+            shown.entities.push(id);
+        }
+        for (kind, which, mesh) in new.mid {
+            shown.gpu_bytes += gpu_bytes(&mesh);
+            let (id, mesh) = add(mesh, material(kind, which), range(mid_from, MID_M));
+            shown.entities.push(id);
+            casters.push((drawn.parts.len(), mesh));
+        }
+        quiet.extend(shown.entities.iter().copied());
+        drawn.parts.push(shown);
     }
-    for (kind, which, mesh) in parts.mid {
-        let (id, mesh) = add(mesh, material(kind, which), range(mid_from, MID_M));
-        quiet.push(id);
-        casters.push(mesh);
-    }
+    let mut rest: Vec<Entity> = Vec::new();
     // What goes in next, as long as the finest detail drawn is seen.
     let next_to = if near { NEAR_M } else { MID_M };
     for mesh in parts.next {
-        add(mesh, looks.next.clone(), range(None, next_to));
+        rest.push(add(mesh, looks.next.clone(), range(None, next_to)).0);
     }
     if let Some(mesh) = parts.plain {
-        add(mesh, looks.structure.clone(), range(None, far_end(quality)));
+        rest.push(add(mesh, looks.structure.clone(), range(None, far_end(quality))).0);
     }
     if let Some(mesh) = parts.far {
-        add(mesh, looks.far.clone(), range(far_from, far_end(quality)));
+        rest.push(add(mesh, looks.far.clone(), range(far_from, far_end(quality))).0);
     }
     if let Some(mesh) = parts.proxy {
-        add(mesh, looks.far.clone(), proxy_range(far_end(quality)));
-    }
-    if coarse_shadows {
-        for id in quiet {
-            commands.entity(id).insert(NotShadowCaster);
-        }
-        for mesh in casters {
-            commands.spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(looks.far.clone()),
-                range(None, MID_M),
-                RenderLayers::layer(SUN_ONLY),
-                Transform::IDENTITY,
-                ChildOf(entity),
-            ));
-        }
+        rest.push(add(mesh, looks.far.clone(), proxy_range(far_end(quality))).0);
     }
     if let Some(mesh) = parts.shell {
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(looks.shell.clone()),
-            ghost_range(),
-            NotShadowCaster,
-            Transform::IDENTITY,
-            ChildOf(entity),
-        ));
+        rest.push(
+            commands
+                .spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(looks.shell.clone()),
+                    ghost_range(),
+                    NotShadowCaster,
+                    Transform::IDENTITY,
+                    ChildOf(entity),
+                ))
+                .id(),
+        );
     }
     // A plan's pieces, a mesh for each shade.
     for (shade, mesh) in parts.ghosts.into_iter().enumerate() {
         if let Some(mesh) = mesh {
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.ghost[shade].clone()),
-                Transform::IDENTITY,
-                ghost_range(),
-                NotShadowCaster,
-                ChildOf(entity),
-            ));
+            rest.push(
+                commands
+                    .spawn((
+                        Mesh3d(meshes.add(mesh)),
+                        MeshMaterial3d(looks.ghost[shade].clone()),
+                        Transform::IDENTITY,
+                        ghost_range(),
+                        NotShadowCaster,
+                        ChildOf(entity),
+                    ))
+                    .id(),
+            );
         }
     }
+    // Below the high preset the sun sees each section at its middle detail from the camera
+    // out, as shipped games cast shadows from a coarser level of detail: the finest detail
+    // casts none, and the middle one's shadow is cast by a copy of it only the sun sees, in
+    // a plain material.
+    if coarse_shadows {
+        for id in quiet {
+            commands.entity(id).insert(NotShadowCaster);
+        }
+        for (part, mesh) in casters {
+            let id = commands
+                .spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(looks.far.clone()),
+                    range(None, MID_M),
+                    RenderLayers::layer(SUN_ONLY),
+                    Transform::IDENTITY,
+                    ChildOf(entity),
+                ))
+                .id();
+            drawn.parts[part].entities.push(id);
+        }
+    }
+    drawn.rest = rest;
+    drawn.gpu_bytes = rest_bytes + drawn.parts.iter().map(|part| part.gpu_bytes).sum::<usize>();
     build.sections.drawn.insert(done.section, drawn);
 }
 

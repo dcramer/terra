@@ -731,6 +731,115 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
 }
 
 #[test]
+fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest() {
+    let kits = shipped();
+    let maps = Maps::default();
+    let bases = bases(&kits);
+    let (mut kept, mut changed) = (0, 0);
+    for (index, base) in bases.iter().enumerate() {
+        // A wall's cube a metre up taken out, a roof's lowest cube taken out, and the
+        // ground under it changed.
+        let mut edits: Vec<Base> = Vec::new();
+        if let Some(wall) = base
+            .cubes()
+            .map(|(at, _)| at)
+            .find(|&at| at.y == 2 && base.in_wall(at))
+        {
+            let mut edited = base.clone();
+            edited.apply(BuildOp::Fill {
+                min: wall.to_array(),
+                max: wall.to_array(),
+                cube: None,
+            });
+            edits.push(edited);
+        }
+        if let Some((roof, _)) = base
+            .cubes()
+            .filter(|(_, cube)| cube.kind.is_roof())
+            .min_by_key(|(at, _)| (at.y, at.x, at.z))
+        {
+            let mut edited = base.clone();
+            edited.apply(BuildOp::Fill {
+                min: roof.to_array(),
+                max: roof.to_array(),
+                cube: None,
+            });
+            edits.push(edited);
+        }
+        let mut edited = base.clone();
+        let ring = edited.ground_ring();
+        edited.sample_ground(ring.into_iter().map(|column| crate::ground::Sample {
+            column,
+            height_cm: 30,
+        }));
+        edits.push(edited);
+        for (which, edited) in edits.iter().enumerate() {
+            let sections: BTreeSet<[i32; 3]> =
+                drawable(base).union(&drawable(edited)).copied().collect();
+            for at in sections {
+                let section = |base| Section {
+                    base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(at),
+                    progress: &Progress::Whole,
+                };
+                for reach in [Reach::Near, Reach::Mid] {
+                    let (before, after) = (section(base), section(edited));
+                    let (laid_before, laid_after) = (laid(&before), laid(&after));
+                    let keys_before = cluster_keys(&before, &laid_before, reach);
+                    let keys_after = cluster_keys(&after, &laid_after, reach);
+                    let all = [true; CLUSTERS];
+                    let was = draw_parts(&before, &laid_before, reach, None, None, Some(&all));
+                    let now = draw_parts(&after, &laid_after, reach, None, None, Some(&all));
+                    let only: Vec<bool> = keys_before
+                        .iter()
+                        .zip(&keys_after)
+                        .map(|(a, b)| a != b)
+                        .collect();
+                    let some = draw_parts(&after, &laid_after, reach, None, None, Some(&only));
+                    #[allow(clippy::needless_range_loop)]
+                    for c in 0..CLUSTERS {
+                        let pick = |drawn: &Drawn| {
+                            let of = |by: &Vec<BTreeMap<(Kind, Material), Surface>>| {
+                                by.get(c).cloned().unwrap_or_default()
+                            };
+                            (of(&drawn.near_by), of(&drawn.mid_by))
+                        };
+                        // Counted for a wall's cube taken out.
+                        let counted = usize::from(which == 0);
+                        if only[c] {
+                            changed += counted;
+                            assert!(
+                                pick(&some) == pick(&now),
+                                "base {index} section {at:?} part {c}: drawn alone differs"
+                            );
+                        } else {
+                            kept += counted;
+                            assert!(
+                                pick(&was) == pick(&now),
+                                "base {index} section {at:?} part {c}: its key is as it was but it is not"
+                            );
+                            let (near, mid) = pick(&some);
+                            assert!(
+                                near.values()
+                                    .chain(mid.values())
+                                    .all(|s| s.triangle_count() == 0)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // A wall's cube taken out reaches a few parts round it, not every one.
+    assert!(
+        kept > 2 * changed && changed > 0,
+        "{kept} kept, {changed} drawn again"
+    );
+}
+
+#[test]
 fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
     let kits = shipped();
     let maps = Maps::default();

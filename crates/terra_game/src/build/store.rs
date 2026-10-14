@@ -40,6 +40,21 @@ pub(super) struct Drawn {
     pub drawing: Option<Arc<terra_build::sections::Drawing>>,
     /// How many bytes its meshes take on the GPU.
     pub gpu_bytes: usize,
+    /// Its near and middle detail a part at a time (`sections::CLUSTER`), each with what it
+    /// was drawn from (`sections::cluster_keys`), its entities and their bytes on the GPU:
+    /// an edit puts on screen again only the parts whose key changed.
+    pub parts: Vec<OnScreen>,
+    /// The entities of the rest of what is drawn of it, put on screen again each time.
+    pub rest: Vec<Entity>,
+}
+
+/// A part of a section on screen: what it was drawn from, if that may be compared (not
+/// once its look has changed), its entities, and their bytes on the GPU.
+#[derive(Debug, Default)]
+pub(super) struct OnScreen {
+    pub key: Option<u64>,
+    pub entities: Vec<Entity>,
+    pub gpu_bytes: usize,
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
@@ -167,6 +182,12 @@ fn noticed(build: &mut Build) {
         waiting.force |= force;
     };
     if std::mem::take(&mut sections.everything) {
+        // Drawn again whole: its look may have changed whatever its parts were drawn from.
+        for drawn in sections.drawn.values_mut() {
+            for part in &mut drawn.parts {
+                part.key = None;
+            }
+        }
         sections.last_laid = None;
         let all: BTreeSet<[i32; 3]> = drawable(&build.base)
             .into_iter()

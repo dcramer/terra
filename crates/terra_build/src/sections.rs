@@ -716,6 +716,10 @@ pub struct Drawn {
     pub near: BTreeMap<(Kind, Material), Surface>,
     /// What is in, a few metres off.
     pub mid: BTreeMap<(Kind, Material), Surface>,
+    /// The same a part of the section at a time ([`CLUSTER`]), as [`draw_parts`] leaves
+    /// them for the game, `near` and `mid` empty.
+    pub near_by: Vec<BTreeMap<(Kind, Material), Surface>>,
+    pub mid_by: Vec<BTreeMap<(Kind, Material), Surface>>,
     pub plain: Surface,
     pub next: Surfaces,
     pub ghosts: Vec<Ghost>,
@@ -777,6 +781,157 @@ pub fn draw_again(
     last: Option<&Drawing>,
     keep: Option<&mut Drawing>,
 ) -> Drawn {
+    let mut drawn = draw_parts(section, laid, reach, last, keep, None);
+    // Its parts as one.
+    for (by, into) in [
+        (std::mem::take(&mut drawn.near_by), &mut drawn.near),
+        (std::mem::take(&mut drawn.mid_by), &mut drawn.mid),
+    ] {
+        for part in by {
+            for (key, surface) in part {
+                into.entry(key).or_default().append(surface);
+            }
+        }
+    }
+    drawn
+}
+
+/// How far a section's parts are each way, in cubes: near and a few metres off, a section
+/// is drawn a part at a time, so an edit puts on screen again only the parts it reached,
+/// as a voxel game meshes small chunks.
+pub const CLUSTER: i32 = 8;
+/// How many parts a section has.
+pub const CLUSTERS: usize = ((crate::cubes::SECTION / CLUSTER) as usize).pow(3);
+
+/// Which part of its section a cube is in.
+pub fn cluster_of(at: IVec3) -> usize {
+    let local = (at - crate::cubes::section_of(at) * crate::cubes::SECTION) / CLUSTER;
+    let side = crate::cubes::SECTION / CLUSTER;
+    (local.x + side * (local.y + side * local.z)) as usize
+}
+
+/// A number for each part of a section ([`CLUSTER`]) near and a few metres off, for
+/// everything its surfaces there are drawn from: the pieces of the section and round it
+/// that reach within a few cubes of it, with how far in each is; every cube from a few
+/// below it up over it, with a few round it, whose faces, shading and rain it takes; the
+/// ground; and the roofs round, which a roof's masks follow. A part whose number is as it
+/// was is drawn as it was, so the game leaves it on screen (`draw_parts`). None far off.
+pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
+    if reach == Reach::Far {
+        return Vec::new();
+    }
+    let origin = section.at * crate::cubes::SECTION;
+    let roofs = std::cell::OnceCell::new();
+    let roofs_round = || {
+        *roofs.get_or_init(|| {
+            layout::roofs::Roofs::whole(
+                section.base,
+                section.kits,
+                layout::Scope {
+                    low: origin - IVec3::ONE,
+                    high: origin + IVec3::splat(crate::cubes::SECTION),
+                },
+            )
+            .fingerprint()
+        })
+    };
+    let roofing = |placed: &Placed| {
+        section
+            .kits
+            .0
+            .get(placed.0)
+            .is_some_and(|kit| kit.pattern == Pattern::Roof)
+    };
+    let ground = section.base.ground();
+    let side = crate::cubes::SECTION / CLUSTER;
+    // Each piece's box in cubes, worked out once.
+    let boxes: Vec<(IVec3, IVec3, &Placed)> = laid
+        .pieces
+        .iter()
+        .chain(&laid.edge)
+        .map(|placed| {
+            let (low, high) = placed.1.bounds().map_or_else(
+                || (placed.1.anchor(), placed.1.anchor()),
+                |(low, high)| {
+                    (
+                        (low / CELL_M).floor().as_ivec3(),
+                        (high / CELL_M).floor().as_ivec3(),
+                    )
+                },
+            );
+            (
+                low.min(placed.1.anchor()),
+                high.max(placed.1.anchor()),
+                placed,
+            )
+        })
+        .collect();
+    (0..CLUSTERS as i32)
+        .map(|c| {
+            let low = origin + IVec3::new(c % side, c / side % side, c / (side * side)) * CLUSTER;
+            let high = low + IVec3::splat(CLUSTER - 1);
+            let (near_low, near_high) = (
+                low - IVec3::splat(KEY_REACH),
+                high + IVec3::splat(KEY_REACH),
+            );
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            reach.hash(&mut hasher);
+            let (mut roofed, mut reach_low, mut reach_high) = (false, near_low, near_high);
+            for (piece_low, piece_high, placed) in &boxes {
+                if piece_low.cmple(near_high).all() && piece_high.cmpge(near_low).all() {
+                    placed.hash(&mut hasher);
+                    roofed |= roofing(placed);
+                    (reach_low, reach_high) =
+                        (reach_low.min(*piece_low), reach_high.max(*piece_high));
+                }
+            }
+            // A roof's masks follow where on the roofs round each point is.
+            if roofed {
+                roofs_round().hash(&mut hasher);
+            }
+            // The ground under it and its pieces, which their dirt rises from.
+            for x in reach_low.x..=reach_high.x {
+                for z in reach_low.z..=reach_high.z {
+                    ground.sample([x, z]).hash(&mut hasher);
+                }
+            }
+            for (at, cube) in section
+                .base
+                .store()
+                .within(near_low, near_high.with_y(i32::MAX / 4))
+            {
+                at.hash(&mut hasher);
+                cube.word().hash(&mut hasher);
+            }
+            hasher.finish()
+        })
+        .collect()
+}
+
+/// How far round a part drawn alone its block kind's cubes are worked on, in cubes: a face
+/// depends on the cubes three round it, and the faces a step beyond it, whose shading at
+/// its edges it shares, on theirs.
+const PARTS_REACH: i32 = 5;
+
+/// How many cubes round a part what its surfaces are drawn from reaches: a block's face's
+/// shading three, a lintel's bed and a piece's own bounds less.
+const KEY_REACH: i32 = 3;
+
+/// As [`draw_again`], its near and middle detail left a part at a time (`near_by`,
+/// `mid_by`), as the game puts them on screen.
+/// Its near and middle detail is drawn a part at a time if `only` is given, and only the
+/// parts it says, as the game draws again only the parts of a base being built whose
+/// [`cluster_keys`] changed; the rest are left empty, but what they were drawn from last
+/// time is kept on in `keep`. Without it, all in one part (`near_by` and `mid_by` of one),
+/// as a base not being built is drawn, with fewer meshes.
+pub fn draw_parts(
+    section: &Section,
+    laid: &Laid,
+    reach: Reach,
+    last: Option<&Drawing>,
+    keep: Option<&mut Drawing>,
+    only: Option<&[bool]>,
+) -> Drawn {
     // Only the details that can be seen while it is drawn for this reach: what it fades
     // into further off is made when the camera has gone far enough for it to be laid
     // again coarser, before that detail is seen. Past the far detail the game draws a
@@ -786,7 +941,7 @@ pub fn draw_again(
         Reach::Mid => &[Detail::Mid, Detail::Far],
         Reach::Far => &[Detail::Far],
     };
-    let mut drawn = draw_details(section, laid, details, last, keep);
+    let mut drawn = draw_details(section, laid, details, last, keep, only);
     if reach == Reach::Far {
         drawn.proxy = proxy(section);
     }
@@ -815,6 +970,7 @@ fn draw_details(
     details: &[Detail],
     last: Option<&Drawing>,
     keep: Option<&mut Drawing>,
+    only: Option<&[bool]>,
 ) -> Drawn {
     let mut keep = keep;
     if let Some(keep) = keep.as_deref_mut() {
@@ -853,7 +1009,19 @@ fn draw_details(
     let finest = details[0];
     for &detail in details {
         let first = detail == finest && detail != Detail::Far;
-        let mut built: BTreeMap<(Kind, Material), Surface> = BTreeMap::new();
+        // Near and a few metres off, each part of the section ([`CLUSTER`]) apart, so the
+        // game puts on screen again only the parts an edit reached; far off, one.
+        let slots = if only.is_some() && matches!(detail, Detail::Near | Detail::Mid) {
+            CLUSTERS
+        } else {
+            1
+        };
+        let slot_of = |at: IVec3| {
+            if slots == 1 { 0 } else { cluster_of(at) }
+        };
+        // Whether a part is drawn this time.
+        let wanted = |slot: usize| slots == 1 || only.is_none_or(|only| only[slot]);
+        let mut built: Vec<BTreeMap<(Kind, Material), Surface>> = vec![BTreeMap::new(); slots];
         let mut next = Surfaces::sharing();
         for (index, kit) in kits.0.iter().enumerate() {
             let own: Vec<&Placed> = laid.pieces.iter().filter(|p| p.0 == index).collect();
@@ -874,8 +1042,8 @@ fn draw_details(
             // What is drawn in, masked (dirt from the ground, worn edges; D215) as it is
             // drawn, so a piece kept is kept masked; and what is drawn afresh, masked
             // together once all of it is.
-            let mut mine = Surfaces::sharing();
-            let mut fresh = Surfaces::sharing();
+            let mut mine: Vec<Surfaces> = (0..slots).map(|_| Surfaces::sharing()).collect();
+            let mut fresh: Vec<Surfaces> = (0..slots).map(|_| Surfaces::sharing()).collect();
             let masked = |mut surfaces: Surfaces, stone: bool| {
                 for (material, surface) in surfaces.0.iter_mut() {
                     if stone || *material != Material::Masonry {
@@ -893,13 +1061,30 @@ fn draw_details(
             let kept = matches!(detail, Detail::Near | Detail::Mid);
             // The pieces drawn on their own, put together once all are, with room made at
             // once: a section's are many thousands.
-            let mut made_pieces: Vec<std::sync::Arc<Surfaces>> = Vec::new();
+            let mut made_pieces: Vec<(usize, std::sync::Arc<Surfaces>)> = Vec::new();
             for (count, (_, piece, stage)) in own.iter().enumerate() {
                 if !detail.shows(piece) {
                     continue;
                 }
+                let slot = slot_of(piece.anchor());
+                // What is drawn into the part, as against the plan's ghosts and the next
+                // piece, which the section has whole.
+                let in_part = *stage == Stage::In || (*stage == Stage::Next && !first);
+                if in_part && !wanted(slot) {
+                    // Left as it is drawn: what it was drawn from kept for next time.
+                    if let (Stage::In, true) = (stage, kept) {
+                        let key = (index, detail, piece.clone());
+                        if let (Some(keep), Some(made)) = (
+                            keep.as_deref_mut(),
+                            pieces_kept.and_then(|pieces| pieces.get(&key)),
+                        ) {
+                            keep.pieces.insert(key, made.clone());
+                        }
+                    }
+                    continue;
+                }
                 match stage {
-                    Stage::In if far_box(piece, &coarse, detail, &mut fresh) => {}
+                    Stage::In if far_box(piece, &coarse, detail, &mut fresh[slot]) => {}
                     Stage::In if kept => {
                         let key = (index, detail, piece.clone());
                         // Kept masked, so only while the ground its dirt rises from is as
@@ -913,7 +1098,7 @@ fn draw_details(
                                 std::sync::Arc::new(masked(made, false))
                             }
                         };
-                        made_pieces.push(made.clone());
+                        made_pieces.push((slot, made.clone()));
                         if let Some(keep) = keep.as_deref_mut() {
                             keep.pieces.insert(key, made);
                         }
@@ -923,43 +1108,45 @@ fn draw_details(
                         &coarse,
                         face,
                         detail == Detail::Far,
-                        &mut fresh,
+                        &mut fresh[slot],
                     ),
                     Stage::Next if first => {
                         crate::draw::draw_as(piece, &coarse, face, false, &mut next)
                     }
                     // Far off, what goes in next is drawn as though it were in.
-                    Stage::Next => crate::draw::draw_as(piece, &coarse, None, true, &mut fresh),
+                    Stage::Next => {
+                        crate::draw::draw_as(piece, &coarse, None, true, &mut fresh[slot])
+                    }
                     Stage::Ghost if first => {
                         drawn.ghosts.extend(ghost(piece, kit, count % 2 == 1));
                     }
                     Stage::Ghost => {}
                 }
             }
-            let mut room: BTreeMap<Material, [usize; 3]> = BTreeMap::new();
-            for made in &made_pieces {
+            let mut room: BTreeMap<(usize, Material), [usize; 3]> = BTreeMap::new();
+            for (slot, made) in &made_pieces {
                 for (&material, surface) in &made.0 {
-                    let room = room.entry(material).or_default();
+                    let room = room.entry((*slot, material)).or_default();
                     room[0] += surface.positions.len();
                     room[1] += surface.shared.positions.len();
                     room[2] += surface.shared.indices.len();
                 }
             }
-            for (material, [loose, shared, indices]) in room {
+            for ((slot, material), [loose, shared, indices]) in room {
                 let into = if material == Material::Masonry {
-                    fresh.of(material)
+                    fresh[slot].of(material)
                 } else {
-                    mine.of(material)
+                    mine[slot].of(material)
                 };
                 into.reserve(loose);
                 into.shared.reserve(shared, indices);
             }
-            for made in &made_pieces {
+            for (slot, made) in &made_pieces {
                 for (&material, surface) in &made.0 {
                     let into = if material == Material::Masonry {
-                        &mut fresh
+                        &mut fresh[*slot]
                     } else {
-                        &mut mine
+                        &mut mine[*slot]
                     };
                     into.of(material).extend_from(surface);
                 }
@@ -970,37 +1157,43 @@ fn draw_details(
                     old: last.map(|last| &last.faces),
                     new: &mut keep.faces,
                 });
-                let blocks = draw_blocks(section, kit, &own, &edge, detail, first, caching);
-                for (set, surfaces) in blocks.into_iter().enumerate() {
-                    match set {
-                        0 => join(&mut fresh, surfaces),
-                        1 if first => {
-                            for (_, surface) in surfaces.0 {
-                                drawn.shell.append(surface);
+                let blocks = draw_blocks(
+                    section, kit, &own, &edge, detail, first, caching, &slot_of, slots, &wanted,
+                );
+                for (set, by_slot) in blocks.into_iter().enumerate() {
+                    for (slot, surfaces) in by_slot.into_iter().enumerate() {
+                        match set {
+                            0 => join(&mut fresh[slot], surfaces),
+                            1 if first => {
+                                for (_, surface) in surfaces.0 {
+                                    drawn.shell.append(surface);
+                                }
                             }
+                            2 if first => join(&mut next, surfaces),
+                            2 => join(&mut fresh[slot], surfaces),
+                            _ => {}
                         }
-                        2 if first => join(&mut next, surfaces),
-                        2 => join(&mut fresh, surfaces),
-                        _ => {}
                     }
                 }
             }
-            let fresh = masked(fresh, true);
-            join(&mut mine, fresh);
-            for (material, surface) in mine.0 {
-                built
-                    .entry((kit.kind(), material))
-                    .or_default()
-                    .append(surface);
+            for (slot, (mut mine, fresh)) in mine.into_iter().zip(fresh).enumerate() {
+                let fresh = masked(fresh, true);
+                join(&mut mine, fresh);
+                for (material, surface) in mine.0 {
+                    built[slot]
+                        .entry((kit.kind(), material))
+                        .or_default()
+                        .append(surface);
+                }
             }
         }
         if first {
             drawn.next = next;
         }
         match detail {
-            Detail::Near => drawn.near = built,
-            Detail::Mid => drawn.mid = built,
-            Detail::Far => drawn.far = bake(section, built),
+            Detail::Near => drawn.near_by = built,
+            Detail::Mid => drawn.mid_by = built,
+            Detail::Far => drawn.far = bake(section, built.into_iter().next().unwrap_or_default()),
             Detail::Proxy => drawn.proxy = proxy(section),
         }
     }
@@ -1099,6 +1292,7 @@ fn cached<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_blocks(
     section: &Section,
     kit: &Kit,
@@ -1107,7 +1301,10 @@ fn draw_blocks(
     detail: Detail,
     first: bool,
     mut caching: Option<BlockCaching>,
-) -> [Surfaces; 3] {
+    slot_of: &dyn Fn(IVec3) -> usize,
+    slots: usize,
+    wanted: &dyn Fn(usize) -> bool,
+) -> [Vec<Surfaces>; 3] {
     let base = section.base;
     let mut sets: [BTreeSet<[i32; 3]>; 3] = Default::default();
     // Cubes cut to a shape (D193), drawn apart from the whole ones: halves and slopes as
@@ -1149,6 +1346,28 @@ fn draw_blocks(
             sets[set].insert(cube.to_array());
         }
     }
+    // The parts drawn this time, each as a box of cubes grown by as far as a face's shape
+    // depends on what is round it and its neighbours' do on theirs, if not all of them.
+    let section_low = section.at * crate::cubes::SECTION;
+    let wanted_boxes: Vec<(IVec3, IVec3)> = (0..slots)
+        .filter(|&slot| wanted(slot))
+        .map(|slot| {
+            let side = crate::cubes::SECTION / CLUSTER;
+            let s = slot as i32;
+            let low =
+                section_low + IVec3::new(s % side, s / side % side, s / (side * side)) * CLUSTER;
+            (
+                low - IVec3::splat(PARTS_REACH),
+                low + IVec3::splat(CLUSTER - 1 + PARTS_REACH),
+            )
+        })
+        .collect();
+    let parts_only = slots > 1 && wanted_boxes.len() < slots;
+    let near_wanted = |at: IVec3| {
+        wanted_boxes
+            .iter()
+            .any(|(low, high)| at.cmpge(*low).all() && at.cmple(*high).all())
+    };
     // A core shows where its infill is not in, nor lit as next: neither over it.
     cores.retain(|at| !sets[0].contains(at) && !sets[2].contains(at));
     sets[1].retain(|at| !cores.contains(at));
@@ -1222,6 +1441,25 @@ fn draw_blocks(
         })
     };
     let keep = |at: IVec3| crate::cubes::section_of(at) == section.at;
+    // A part's cubes drawn only if the part is wanted: what is in, but not the plan's
+    // shell or the next piece, which the section has whole.
+    let keep_in = |at: IVec3| {
+        let slot = slot_of(at);
+        (keep(at) && wanted(slot)).then_some(slot)
+    };
+    let keep_whole = |at: IVec3| keep(at).then(|| slot_of(at));
+    let keep_for = |set: usize| -> &dyn Fn(IVec3) -> Option<usize> {
+        if set == 0 || (set == 2 && !first) {
+            &keep_in
+        } else {
+            &keep_whole
+        }
+    };
+    let sharing = || Surface {
+        sharing: true,
+        ..Surface::default()
+    };
+    let by_slot = || -> Vec<Surface> { (0..slots).map(|_| sharing()).collect() };
     // A plan's blocks are a plain shell, a step to a face.
     // Its texture a cube across, so a ghost's lines fall on the cubes' edges.
     let plan_look = Look {
@@ -1238,11 +1476,8 @@ fn draw_blocks(
         top: &flat,
         bed: None,
     };
-    let mut out: [Surfaces; 3] = [
-        Surfaces::sharing(),
-        Surfaces::sharing(),
-        Surfaces::sharing(),
-    ];
+    let mut out: [Vec<Surfaces>; 3] =
+        [0, 1, 2].map(|_| (0..slots).map(|_| Surfaces::sharing()).collect());
     for set in 0..3 {
         if (sets[set].is_empty() && shaped[set].is_empty()) || (set == 1 && !first) {
             continue;
@@ -1260,20 +1495,30 @@ fn draw_blocks(
         };
         // A plan's shell plain; what is built in the kit's tint.
         let colour = if set == 1 { [1.0; 3] } else { kit.tint };
-        let mut tops = Surface {
-            sharing: true,
-            ..Surface::default()
+        let (mut masonry, mut tops) = (by_slot(), by_slot());
+        // Where only some parts are drawn, only the cubes near enough them to shape their
+        // faces are worked on.
+        let near_parts: BTreeSet<[i32; 3]>;
+        let cubes = if parts_only && (set == 0 || (set == 2 && !first)) {
+            near_parts = sets[set]
+                .iter()
+                .copied()
+                .filter(|&at| near_wanted(IVec3::from_array(at)))
+                .collect();
+            &near_parts
+        } else {
+            &sets[set]
         };
-        crate::surface::draw_part(
-            &sets[set],
-            &keep,
+        crate::surface::draw_slots(
+            cubes,
+            keep_for(set),
             &kin,
             &hides,
             look,
             heights,
             &cut,
             colour,
-            out[set].of(Material::Masonry),
+            &mut masonry,
             &mut tops,
             cached(&mut caching, set as u32),
         );
@@ -1298,16 +1543,16 @@ fn draw_blocks(
         };
         if !cut_down.is_empty() {
             let hides = |at: IVec3| hides(at) || (ours_whole(at) && !over_a_cut(at));
-            crate::surface::draw_part(
+            crate::surface::draw_slots(
                 &cut_down,
-                &keep,
+                keep_for(set),
                 &kin,
                 &hides,
                 look,
                 heights,
                 &cut,
                 colour,
-                out[set].of(Material::Masonry),
+                &mut masonry,
                 &mut tops,
                 None,
             );
@@ -1319,13 +1564,10 @@ fn draw_blocks(
             Some(crate::kit::Dress::Pillar { width }) => *width,
             _ => CELL_M,
         };
-        let mut faces = Surface {
-            sharing: true,
-            ..Surface::default()
-        };
+        let mut faces = by_slot();
         for &at in &shaped[set] {
             let cube = IVec3::from_array(at);
-            if !keep(cube) {
+            if keep_for(set)(cube).is_none() {
                 continue;
             }
             let low = cube.as_vec3() * CELL_M;
@@ -1349,12 +1591,26 @@ fn draw_blocks(
                 }
                 _ => Vec::new(),
             };
+            let slot = slot_of(cube);
             for (min, max) in boxes {
-                crate::surface::slab(min, max, look, heights, colour, &mut faces, &mut tops);
+                crate::surface::slab(
+                    min,
+                    max,
+                    look,
+                    heights,
+                    colour,
+                    &mut faces[slot],
+                    &mut tops[slot],
+                );
             }
         }
-        out[set].of(Material::Masonry).append(faces);
-        out[set].of(Material::Floor).append(tops);
+        for (slot, ((masonry, faces), tops)) in masonry.into_iter().zip(faces).zip(tops).enumerate()
+        {
+            let into = &mut out[set][slot];
+            into.of(Material::Masonry).append(masonry);
+            into.of(Material::Masonry).append(faces);
+            into.of(Material::Floor).append(tops);
+        }
     }
     // A framed kind's cores where its infill is not in: the wattle, drawn as the infill's
     // surface is, in its own material and relief, set back a little behind where the daub
@@ -1382,24 +1638,25 @@ fn draw_blocks(
         };
         let built = &sets[0];
         let hides = |at: IVec3| hides_always(at) || built.contains(&at.to_array());
-        let mut tops = Surface {
-            sharing: true,
-            ..Surface::default()
-        };
-        crate::surface::draw_part(
+        let (mut woven_by, mut tops) = (by_slot(), by_slot());
+        crate::surface::draw_slots(
             &cores,
-            &keep,
+            &keep_in,
             &|at| cores.contains(&at.to_array()),
             &hides,
             &core_look,
             &core_heights,
             &cut,
             [1.0; 3],
-            out[0].of(material),
+            &mut woven_by,
             &mut tops,
             cached(&mut caching, 3),
         );
-        out[0].of(material).append(tops);
+        for (slot, (woven, tops)) in woven_by.into_iter().zip(tops).enumerate() {
+            let into = out[0][slot].of(material);
+            into.append(woven);
+            into.append(tops);
+        }
     }
     out
 }

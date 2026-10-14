@@ -344,6 +344,11 @@ fn launch(
             let maps = look.maps.clone();
             let drawn_before = build.sections.drawn.get(&at);
             let previous = drawn_before.map(|drawn| (drawn.key, drawn.reach));
+            // What each part on screen was drawn from, while it is on screen.
+            let part_keys: Vec<Option<u64>> = drawn_before
+                .filter(|drawn| drawn.entity.is_some())
+                .map(|drawn| drawn.parts.iter().map(|part| part.key).collect())
+                .unwrap_or_default();
             let last = drawn_before
                 .and_then(|drawn| drawn.drawing.clone())
                 .filter(|_| keeps);
@@ -367,14 +372,33 @@ fn launch(
                     return Outcome::Same;
                 }
                 let mut drawing = keeps.then(sections::Drawing::default);
-                let drawn = sections::draw_again(
+                // The base being built a part at a time, and only the parts whose key
+                // changed, if it is drawn as finely as it was; any other in one part, fewer
+                // meshes.
+                let keys = if keeps {
+                    sections::cluster_keys(&section, &laid, wanted)
+                } else {
+                    Vec::new()
+                };
+                let same_reach = previous.is_some_and(|(_, reach)| reach == wanted);
+                let only: Vec<bool> = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(c, key)| {
+                        !same_reach || part_keys.get(c).copied().flatten() != Some(*key)
+                    })
+                    .collect();
+                let drawn = sections::draw_parts(
                     &section,
                     &laid,
                     wanted,
                     last.as_deref(),
                     drawing.as_mut(),
+                    keeps
+                        .then_some(only.as_slice())
+                        .filter(|only| !only.is_empty()),
                 );
-                let parts = draw::parts(drawn, store::centre(section.at));
+                let parts = draw::parts(drawn, store::centre(section.at), &only, keys);
                 Outcome::Drawn {
                     key,
                     reach: wanted,

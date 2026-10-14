@@ -324,6 +324,37 @@ pub fn draw_part(
     colour: [f32; 3],
     out: &mut Surface,
     tops: &mut Surface,
+    caching: Option<Caching>,
+) {
+    draw_slots(
+        cubes,
+        &|at| keep(at).then_some(0),
+        kin,
+        hides,
+        look,
+        heights,
+        cuts,
+        colour,
+        std::slice::from_mut(out),
+        std::slice::from_mut(tops),
+        caching,
+    );
+}
+
+/// As [`draw_part`], each kept cube's faces into the surface of the slot `keep` gives it,
+/// as a section's near detail is drawn a part of it at a time (`sections::CLUSTER`).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_slots(
+    cubes: &BTreeSet<[i32; 3]>,
+    keep: &dyn Fn(IVec3) -> Option<usize>,
+    kin: &dyn Fn(IVec3) -> bool,
+    hides: &dyn Fn(IVec3) -> bool,
+    look: &Look,
+    heights: &Heights,
+    cuts: &Cuts,
+    colour: [f32; 3],
+    outs: &mut [Surface],
+    tops: &mut [Surface],
     mut caching: Option<Caching>,
 ) {
     let cut = cuts.at;
@@ -633,9 +664,15 @@ pub fn draw_part(
     let mut flat: Vec<Vec3> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
-        let keeping = keep(cube);
+        let slot = keep(cube);
+        let keeping = slot.is_some();
+        let slot = slot.unwrap_or(0);
         // A cube left out matters only where it meets one kept, a step away.
-        if !keeping && !NEIGHBOURHOOD.iter().any(|&offset| keep(cube + offset)) {
+        if !keeping
+            && !NEIGHBOURHOOD
+                .iter()
+                .any(|&offset| keep(cube + offset).is_some())
+        {
             continue;
         }
         let low = cube.as_vec3() * CELL_M;
@@ -740,6 +777,7 @@ pub fn draw_part(
                 faces.push(Face {
                     data: data.clone(),
                     keeping,
+                    slot,
                     cube,
                     index: index as u8,
                     fresh: false,
@@ -1058,6 +1096,7 @@ pub fn draw_part(
             faces.push(Face {
                 data: Arc::new(face),
                 keeping,
+                slot,
                 cube,
                 index: index as u8,
                 fresh: true,
@@ -1154,24 +1193,28 @@ pub fn draw_part(
         (data.normals, data.order, data.indices) = (normals, order, indices);
     }
     // Room for what is kept, at once.
-    let (mut points, mut corners) = ([0usize; 2], [0usize; 2]);
+    let mut room = vec![[0usize; 2]; outs.len() * 2];
     for face in faces.iter().filter(|face| face.keeping) {
-        points[usize::from(face.data.top)] += face.data.order.len();
-        corners[usize::from(face.data.top)] += face.data.indices.len();
+        let room = &mut room[face.slot * 2 + usize::from(face.data.top)];
+        room[0] += face.data.order.len();
+        room[1] += face.data.indices.len();
     }
-    for (into, (points, corners)) in [&mut *out, &mut *tops]
-        .into_iter()
-        .zip(points.into_iter().zip(corners))
-    {
-        if into.sharing {
-            into.shared.reserve(points, corners);
-        } else {
-            into.reserve(corners);
+    for (slot, (out, top)) in outs.iter_mut().zip(tops.iter_mut()).enumerate() {
+        for (into, [points, corners]) in [(out, room[slot * 2]), (top, room[slot * 2 + 1])] {
+            if into.sharing {
+                into.shared.reserve(points, corners);
+            } else {
+                into.reserve(corners);
+            }
         }
     }
     for face in faces.iter().filter(|face| face.keeping) {
         let data = &face.data;
-        let into = if data.top { &mut *tops } else { &mut *out };
+        let into = if data.top {
+            &mut tops[face.slot]
+        } else {
+            &mut outs[face.slot]
+        };
         if into.sharing {
             // Each point of the grid once, with the triangles' corners shared.
             let first = into.shared.positions.len() as u32;
@@ -1265,6 +1308,8 @@ const NEIGHBOURHOOD: [IVec3; 27] = {
 struct Face {
     data: Arc<FaceData>,
     keeping: bool,
+    /// The surface it goes into, if it is kept.
+    slot: usize,
     cube: IVec3,
     index: u8,
     fresh: bool,

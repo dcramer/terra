@@ -469,6 +469,11 @@ impl Cube {
         self.level() > 0 && self.fill != Fill::Open
     }
 
+    /// Everything about the cube as one number: what it is, how far in, and its part.
+    pub fn word(&self) -> u64 {
+        u64::from(self.pack(0)) | u64::from(self.part.map_or(u32::MAX, |part| part.0)) << 32
+    }
+
     /// The cube as 32 bits, with its part as an index into its section's palette.
     fn pack(&self, part: u8) -> u32 {
         debug_assert!(
