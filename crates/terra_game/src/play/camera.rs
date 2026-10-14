@@ -207,15 +207,11 @@ pub(super) fn follow(
         if options.vantage_ground
             && let Some(obstacles) = &obstacles
         {
-            let up = from.normalize();
-            for (at, radius) in obstacles.near(from, 0.0) {
-                let off = from - at;
-                let level = off - up * off.dot(up);
-                let gap = radius + 0.3 - level.length();
-                if gap > 0.0 {
-                    from += level.normalize_or(up.any_orthonormal_vector()) * gap;
-                }
-            }
+            // As high as a walker's feet would be under it, so anything taller than a step
+            // counts, whatever the eye's height.
+            let feet = planet.ground_at(from);
+            let moved = obstacles.push_out(feet, 0.3, 0.4) - feet;
+            from += moved;
         }
         **camera = Transform::from_translation(from).looking_at(toward, from.normalize());
         return;

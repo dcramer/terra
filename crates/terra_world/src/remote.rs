@@ -692,8 +692,11 @@ struct Near {
     within: f32,
 }
 
-/// What stops a walker within so far of a spot, east and south of the start: each obstacle's
-/// middle, east and south, and how far round it is, nearest first (D243).
+/// What stops a walker or holds one up within so far of a spot, east and south of the start,
+/// nearest first (D243, D265): each thing's middle, east and south; how far round it reaches;
+/// how far the spot is from its middle, `apart`, and from the edge of its nearest piece too
+/// tall to step onto, `gap` (less than nothing inside it, none if it has no such piece);
+/// its tallest piece's top over the ground, if any, and how many pieces it has.
 fn obstacles(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Near { at, within } = parse_some(params)?;
     let start = *world.resource::<crate::start::Start>();
@@ -701,14 +704,27 @@ fn obstacles(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let centre = planet.ground_at(start.at(at[0], at[1]));
     let store = world.resource::<crate::flora::Obstacles>();
     let mut found: Vec<(f32, Value)> = store
-        .near(centre, within)
-        .filter_map(|(point, radius)| {
-            let local = start.local(point);
+        .solids_near(centre, within)
+        .filter_map(|solid| {
+            let local = start.local(solid.at);
             let apart = Vec2::new(local.x - at[0], local.z - at[1]).length();
-            (apart <= within).then(|| {
+            let (plan, _) = solid.plan(centre);
+            let gap = solid
+                .pieces
+                .iter()
+                .map(|piece| piece.distance(plan).0)
+                .reduce(f32::min);
+            (gap.unwrap_or(apart - solid.reach) <= within).then(|| {
                 (
-                    apart,
-                    json!({ "at": [local.x, local.z], "radius": radius, "apart": apart }),
+                    gap.unwrap_or(apart),
+                    json!({
+                        "at": [local.x, local.z],
+                        "radius": solid.reach,
+                        "apart": apart,
+                        "gap": gap,
+                        "top": solid.top().map(|top| top.min(99.0)),
+                        "pieces": solid.pieces.len(),
+                    }),
                 )
             })
         })

@@ -30,6 +30,8 @@ use bevy::{
     shader::ShaderRef,
     tasks::{AsyncComputeTaskPool, Task, TaskPool, block_on, poll_once},
 };
+use terra_build::Walker;
+use terra_core::{Piece, Solid};
 use terra_gen::{Noise, Rng, Seed};
 
 /// Grass is planted this far from the base, thinning out over the last stretch.
@@ -110,11 +112,11 @@ fn layer_metres() -> [Vec4; 2] {
     ]
 }
 
-/// Trees and rocks that stop a walker: where each stands and how far round it, filed by
-/// place so a walker asks only about those near it.
+/// Trees, rocks, stumps and logs that stop a walker or hold one up, each fitted to its model
+/// (`terra_core::Solid`, D265), filed by place so a walker asks only about those near it.
 #[derive(Resource)]
 pub struct Obstacles {
-    solid: SpatialHash<f32>,
+    solid: SpatialHash<Solid>,
     widest_m: f32,
 }
 
@@ -128,9 +130,20 @@ impl Default for Obstacles {
 }
 
 impl Obstacles {
+    /// A round thing standing at a point on the ground, taller than anyone steps, such as a
+    /// trunk.
     pub fn add(&mut self, at: Vec3, radius: f32) {
-        self.widest_m = self.widest_m.max(radius);
-        self.solid.insert(at, radius);
+        self.add_solid(
+            at,
+            Solid::of_pieces(at, vec![Piece::round(Vec2::ZERO, radius, f32::INFINITY)]),
+        );
+    }
+
+    /// A thing fitted to its model, filed at a point near it that `remove` takes it away by,
+    /// such as the foot of the tree it is.
+    pub fn add_solid(&mut self, at: Vec3, solid: Solid) {
+        self.widest_m = self.widest_m.max(solid.reach + solid.at.distance(at));
+        self.solid.insert(at, solid);
     }
 
     /// Takes away what stands at a point, as when a tree is felled.
@@ -138,15 +151,47 @@ impl Obstacles {
         self.solid.remove(at, |_| true);
     }
 
-    /// Those that a body reaching so far from a point might touch, and how far round each is.
+    /// The pieces too tall to step onto that a body reaching so far from a point might
+    /// touch: the middle of each and how far round it reaches.
     pub fn near(&self, at: Vec3, reach: f32) -> impl Iterator<Item = (Vec3, f32)> + '_ {
-        self.solid
-            .near(at, reach + self.widest_m)
-            .map(|&(point, radius)| (point, radius))
+        let step = Walker::default().step_up;
+        self.solids_near(at, reach).flat_map(move |solid| {
+            solid
+                .pieces
+                .iter()
+                .filter(move |piece| piece.top > step)
+                .map(|piece| {
+                    let (middle, radius) = piece.bounds();
+                    (solid.at + solid.world(middle), radius)
+                })
+        })
     }
 
-    pub(crate) fn len(&self) -> usize {
+    /// The things a body reaching so far from a point might touch.
+    pub fn solids_near(&self, at: Vec3, reach: f32) -> impl Iterator<Item = &Solid> + '_ {
+        self.solid
+            .near(at, reach + self.widest_m)
+            .map(|(_, solid)| solid)
+    }
+
+    /// Moves a round body standing at a point out of every piece it cannot step onto, along
+    /// the ground. Only what stands within three metres of its height counts.
+    pub fn push_out(&self, at: Vec3, radius: f32, step: f32) -> Vec3 {
+        let mut at = at;
+        for solid in self.solids_near(at, radius) {
+            if solid.plan(at).1.abs() < 3.0 {
+                at = solid.push_out(at, radius, step);
+            }
+        }
+        at
+    }
+
+    pub fn len(&self) -> usize {
         self.solid.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.solid.is_empty()
     }
 }
 

@@ -28,7 +28,6 @@
 //!
 //! Its cost is measured by `cargo xtask bench forest forest-walk`.
 
-use bevy::camera::primitives::Aabb;
 use bevy::gltf::GltfMaterial;
 use bevy::{
     asset::RenderAssetUsages,
@@ -47,15 +46,17 @@ use std::sync::Arc;
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::{CoverRules, CoverSource, Growing};
 use terra_world::detail::DetailScale;
-use terra_world::flora::{Growth, Obstacles};
+use terra_world::flora::Growth;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::planet::Planet;
 
 mod floor;
+mod footing;
 mod species;
 
-use floor::{Crowns, Sink, Stand};
+use floor::{Crowns, Stand};
+use footing::{Footing, Shapes, SolidShape, Trunk};
 use species::{Form, Species};
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
@@ -221,21 +222,24 @@ impl MaterialExtension for FoliageExtension {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((MaterialPlugin::<Foliage>::default(), floor::plugin))
-        .init_resource::<Unmipped>()
-        .init_resource::<Scanned>()
-        .add_systems(
-            Update,
-            (
-                plant.run_if(not(resource_exists::<Forest>)),
-                add_mipmaps,
-                dress_scans,
-                follow_detail,
-                footings,
-            ),
-        )
-        // The bark's relief at the quality preset's depth.
-        .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
+    app.add_plugins((
+        MaterialPlugin::<Foliage>::default(),
+        floor::plugin,
+        footing::plugin,
+    ))
+    .init_resource::<Unmipped>()
+    .init_resource::<Scanned>()
+    .add_systems(
+        Update,
+        (
+            plant.run_if(not(resource_exists::<Forest>)),
+            add_mipmaps,
+            dress_scans,
+            follow_detail,
+        ),
+    )
+    // The bark's relief at the quality preset's depth.
+    .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
 }
 
 /// The near crowns' cards drop out between distances scaled as every other level of
@@ -260,77 +264,6 @@ fn follow_detail(
     if let Some(mut material) = materials.get_mut(&forest.lumps) {
         material.extension.shrink = Vec4::new(end * (1.0 - SHADOW_END), end, from, to) * detail.0;
     }
-}
-
-/// Something on the forest floor that stops a walker, its footprint still to be worked out
-/// from its mesh.
-#[derive(Component)]
-struct Footing;
-
-/// Gives each rock, boulder, stump and log the footprint its mesh has (D243): circles along
-/// its longer side as wide as its shorter, so a fallen log blocks a walker along all its
-/// length and a boulder at its own width, not one small circle at its middle. A rock is
-/// first sunk its share of its height into the ground (D246).
-fn footings(
-    mut commands: Commands,
-    mut pending: Query<
-        (
-            Entity,
-            &Aabb,
-            &mut Transform,
-            &GlobalTransform,
-            Option<&Sink>,
-        ),
-        With<Footing>,
-    >,
-    mut obstacles: ResMut<Obstacles>,
-) {
-    // Bevy gives a drawn thing its bounds once its mesh has loaded.
-    for (entity, aabb, mut transform, place, sink) in &mut pending {
-        let mut place = *place;
-        if let Some(Sink(share)) = sink {
-            let height = (aabb.max().y - aabb.min().y) * transform.scale.y;
-            let down = transform.rotation * Vec3::NEG_Y * height * share;
-            transform.translation += down;
-            place = GlobalTransform::from(Transform {
-                translation: place.translation() + down,
-                ..place.compute_transform()
-            });
-            commands.entity(entity).remove::<Sink>();
-        }
-        for (at, radius) in footprint(&place, Vec3::from(aabb.min()), Vec3::from(aabb.max())) {
-            obstacles.add(at, radius);
-        }
-        commands.entity(entity).remove::<Footing>();
-    }
-}
-
-/// The circles a box on the ground, `min` to `max` in its own frame, stops a walker with:
-/// along the longer of its two level sides, overlapping, each as wide as the shorter side,
-/// at the box's foot.
-fn footprint(place: &GlobalTransform, min: Vec3, max: Vec3) -> Vec<(Vec3, f32)> {
-    let (scale, _, _) = place.to_scale_rotation_translation();
-    let size = (max - min) * scale;
-    let middle = (min + max) * 0.5;
-    let (long, long_axis, short) = if size.x >= size.z {
-        (size.x, Vec3::X, size.z)
-    } else {
-        (size.z, Vec3::Z, size.x)
-    };
-    let radius = (short * 0.5).max(0.15);
-    let count = ((long - short) / radius).ceil().max(0.0) as usize + 1;
-    (0..count)
-        .map(|k| {
-            let t = if count == 1 {
-                0.5
-            } else {
-                k as f32 / (count - 1) as f32
-            };
-            let along = (t - 0.5) * (long - short) / scale.max_element();
-            let local = Vec3::new(middle.x, min.y, middle.z) + long_axis * along;
-            (place.transform_point(local), radius)
-        })
-        .collect()
 }
 
 /// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
@@ -651,7 +584,7 @@ fn plant(
     flora: Option<Res<Flora>>,
     sun: Option<Single<Entity, With<DirectionalLight>>>,
     assets: Res<AssetServer>,
-    mut obstacles: ResMut<Obstacles>,
+    mut shapes: ResMut<Shapes>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
@@ -865,14 +798,21 @@ fn plant(
                 shadow.triangles(),
                 clumps.triangles()
             );
-            TreeModel {
+            // What stops a walker, from the finest wood and the nearest crown (D265).
+            let trunk = SolidShape::trunk(&wood[0].positions, &wood[0].indices, tree.trunk_m);
+            let seen = SolidShape::crown(&near.positions, &near.indices);
+            let wood = wood.map(|build| {
                 // Bark has a normal map, which needs the tubes' tangents.
-                wood: wood.map(|build| {
-                    let mut mesh = build.mesh();
-                    mesh.generate_tangents().expect("the tubes have normals and texture places");
-                    meshes.add(mesh)
-                }),
-                crown_near: meshes.add(near.mesh()),
+                let mut mesh = build.mesh();
+                mesh.generate_tangents().expect("the tubes have normals and texture places");
+                meshes.add(mesh)
+            });
+            let crown_near = meshes.add(near.mesh());
+            shapes.remember(&wood[0], trunk);
+            shapes.remember(&crown_near, seen);
+            TreeModel {
+                wood,
+                crown_near,
                 crown_far: meshes.add(far.mesh()),
                 shadow: meshes.add(shadow.mesh()),
                 clumps: meshes.add(clumps.mesh()),
@@ -940,7 +880,12 @@ fn plant(
         );
         trees.push(TreeModel {
             wood: [near_trunk, far_trunk.clone(), far_trunk],
-            crown_near: meshes.add(near.mesh()),
+            crown_near: {
+                let seen = SolidShape::crown(&near.positions, &near.indices);
+                let mesh = meshes.add(near.mesh());
+                shapes.remember(&mesh, seen);
+                mesh
+            },
             crown_far: meshes.add(crown_far(&cards).mesh()),
             shadow: meshes.add(crown_stand_in(&cards).mesh()),
             clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
@@ -1109,9 +1054,6 @@ fn plant(
             // Sunk a little, so the root flare meets uneven ground.
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
-            // A tree stops a walker at its trunk, or at its skirt where its branches reach the
-            // ground, so the camera is not walked in among a spruce's boughs (D248).
-            obstacles.add(foot, (model.trunk_m * 1.2).max(model.skirt_m * 0.7) * scale);
             let crown = place.rotation * model.crown.0 * scale;
             canopy.add(Stand::of(
                 at,
@@ -1127,6 +1069,15 @@ fn plant(
                     Name::new(format!("{:?}", model.species)),
                     place,
                     Visibility::default(),
+                    // It stops a walker at its trunk and roots as drawn, or at its skirt where
+                    // its branches reach the ground, so the camera is not walked in among a
+                    // spruce's boughs (D248, D265). Filed at its foot, where it is felled from.
+                    Trunk {
+                        wood: model.wood[0].clone(),
+                        crown: model.crown_near.clone(),
+                        reach_m: footing::trunk_reach(model.trunk_m),
+                        skirt_m: model.skirt_m,
+                    },
                     Growth::new(
                         cut_as(
                             if model.species == Species::Oak {

@@ -76,8 +76,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "collide",
-        takes: "[--count 30]",
-        does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check each stops them (tools/sandbox)",
+        takes: "[--count 20]",
+        does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check against their meshes that each stops them where it is drawn, or is stepped over if low (tools/sandbox)",
         group: "Play and check",
         run: |args| {
             let mut all = vec!["tools/sandbox/collide.ts"];

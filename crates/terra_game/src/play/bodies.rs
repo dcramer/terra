@@ -127,21 +127,15 @@ fn keep_apart(
         let up = start.normalize();
         // Off players, who do not give way here, and out of trees and rocks.
         let reach = body.radius + walker;
-        let solid = standing
-            .near(start, reach)
-            .map(|&(place, ())| (place, walker))
-            .chain(
-                obstacles
-                    .near(start, body.radius)
-                    .filter(|(place, _)| (start - *place).dot(up).abs() < 3.0),
-            );
-        for (place, radius) in solid {
+        for &(place, ()) in standing.near(start, reach) {
             let apart = (at - place).reject_from(up);
-            let reach = radius + body.radius;
+            let reach = walker + body.radius;
             if apart.length_squared() < reach * reach {
                 at += apart.normalize_or(up.any_orthonormal_vector()) * (reach - apart.length());
             }
         }
+        // What is lower than a step they walk over, as the player does (D265).
+        at = obstacles.push_out(at, body.radius, Walker::default().step_up);
         if at != transform.translation {
             transform.translation = planet.ground_at(at);
         }

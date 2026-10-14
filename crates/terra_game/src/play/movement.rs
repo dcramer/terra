@@ -44,6 +44,21 @@ fn walled(feet: Vec3, target: Vec3, ground: impl Fn(Vec3) -> f32) -> bool {
     steep && ground(beyond) - feet.length() > STEP_UP_M
 }
 
+/// How far from the planet's centre the highest of what lies on the ground under a walker's
+/// feet at `at`, within a step of them, holds it up: a rock, stump or log. Its foot is half
+/// as wide as its body, so it is held up by what is under it, not by an edge it brushes.
+fn lying_on(obstacles: &flora::Obstacles, at: Vec3, walker: &Walker) -> Option<f32> {
+    let foot = walker.radius * 0.5;
+    obstacles
+        .solids_near(at, foot)
+        .filter_map(|solid| {
+            let height = solid.surface(at, foot, walker.step_up)?;
+            let (plan, _) = solid.plan(at);
+            Some(solid.point(plan, height).length())
+        })
+        .reduce(f32::max)
+}
+
 /// Whether a body standing at a place has ground at its chest or head. `room` says how
 /// far a point is from the ground.
 fn cramped(stand: Vec3, walker: &Walker, room: impl Fn(Vec3) -> f32) -> bool {
@@ -159,14 +174,9 @@ fn walk(
             );
             target = from_base.transform_point3(walked);
         }
-        // Trees and boulders push the player round them.
-        for (at, radius) in obstacles.near(target, walker.radius) {
-            let apart = (target - at).reject_from(up);
-            let reach = radius + walker.radius;
-            if apart.length_squared() < reach * reach && (target - at).dot(up).abs() < 3.0 {
-                target += apart.normalize_or(view.forward) * (reach - apart.length());
-            }
-        }
+        // Trunks, rocks, stumps and logs taller than a step push the player round them; lower
+        // ones are stepped onto, below (D265).
+        target = obstacles.push_out(target, walker.radius, walker.step_up);
         // The sea is for looking at: wade in a little way and no further.
         let ground_ahead = planet.ground_at(target).length();
         if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
@@ -224,6 +234,9 @@ fn walk(
         // that is the true ground; further off the planet's mesh is coarser, and walking on
         // the true ground there sinks the player into the drawn one or lifts them off it.
         let ground = planet.ground_at(target).length();
+        // A rock, stump or log low enough to step onto holds the player up as the ground
+        // does, and so does a taller one they stand on already (D265).
+        let ground = lying_on(&obstacles, target, &walker).map_or(ground, |on| on.max(ground));
         let held_at = match offered {
             Some(floor) if site.is_some_and(|site| site.walkable().ceiling(before).is_some()) => {
                 floor
