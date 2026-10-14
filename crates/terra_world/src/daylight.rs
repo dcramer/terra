@@ -27,6 +27,9 @@ pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// sixteenth, so every shadow was near black (D216). Under trees the shade is darker than open
 /// ground's: 1.6 left it three stops brighter than Sons of the Forest's (D286).
 const SKY_LIGHT_GAIN: f32 = 1.2;
+/// By night, how much of the day's saturation is left, and how much cooler the grade is (D302).
+const NIGHT_SATURATION: f32 = 0.45;
+const NIGHT_COOL: f32 = 0.05;
 
 /// How far one sees in the open air, out of the trees, before the forest's haze swallows
 /// what is there, and how bright that haze is against the horizon's colour (D273).
@@ -372,9 +375,20 @@ fn shine(
     }
     let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
     for mut grade in &mut grading {
-        let warm = 0.02 + 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 };
+        // The day's warmth goes with the sun (D302): left on, it turned the moon's blue light
+        // to brown, and the night read as a dim dusk.
+        let day = smoothstep(-4.0, 2.0, height);
+        // By night colour fades and cools, as an eye sees by moonlight and as games draw it: the
+        // light under the moon is the leaves' green bounce, and it read green and murky.
+        let warm = (0.02 + 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 }) * day
+            - NIGHT_COOL * (1.0 - day);
         if (grade.global.temperature - warm).abs() > 1e-4 {
             grade.global.temperature = warm;
+        }
+        let saturation =
+            super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
+        if (grade.global.post_saturation - saturation).abs() > 1e-4 {
+            grade.global.post_saturation = saturation;
         }
     }
     // Out from under the trees, where the sky over the eye is open, the forest's haze gives

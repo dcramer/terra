@@ -37,6 +37,9 @@ const ZENITH: Color = Color::srgb(0.24, 0.46, 0.84);
 /// The camera's exposure, as a photographer's EV at ISO 100: set for sunlit ground, as a
 /// camera on a fine day is, so that a mid-grey surface in the sun comes out mid-grey.
 pub const EXPOSURE_EV100: f32 = 10.8;
+/// The day's saturation after tone mapping: Neutral keeps saturation where AgX drained it; a
+/// little less, toward the muted greens of the forests we look to. By night less (`daylight`).
+pub const SATURATION: f32 = 0.82;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((SkyPlugin, AutoExposurePlugin))
@@ -300,9 +303,7 @@ fn style_camera(
         // contrast through the middle and shadows, as a print's look adds.
         ColorGrading {
             global: ColorGradingGlobal {
-                // Neutral keeps saturation where AgX drained it; a little less, toward the
-                // muted greens of the forests we look to.
-                post_saturation: 0.82,
+                post_saturation: SATURATION,
                 ..default()
             },
             // No extra contrast in the shadows, which crushed the shade under a canopy to
