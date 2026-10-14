@@ -228,27 +228,50 @@ const ROUTE_TURN: f32 = 1.6;
 const ROUTE_REACHED_M: f32 = 1.5;
 
 /// How long a route walk may go without getting nearer its spot before it steps round
-/// what is in its way, in seconds; how long it heads off to one side; and how far it turns
-/// from its spot to do it, in radians.
+/// what is in its way, in seconds; how long it heads off to one side the first time; and how
+/// far it turns from its spot to do it, in radians.
 const DETOUR_AFTER_S: f32 = 0.5;
 const DETOUR_S: f32 = 2.0;
 const DETOUR_TURN: f32 = 1.4;
+/// Each try round the same thing heads off the other way, half as long again as the last,
+/// up to this long: always to the left and for as long, a walk met a boulder wider than its
+/// detour at the same face again and again, and stood there for the rest of the film.
+const DETOUR_LONGEST_S: f32 = 8.0;
+/// After this long at one spot without reaching it, the walk gives it up for the next.
+const GIVE_UP_S: f32 = 20.0;
+/// Getting this much nearer its spot means what was in the way is passed.
+const PASSED_M: f32 = 2.0;
 
-/// A route walk's way round something in its way: the nearest it has been to its spot,
-/// how long since it got nearer, and how long it has still to head off to its left.
+/// A route walk's way round something in its way: the nearest it has been to its spot, how
+/// long since it got nearer, which try round it this is and how long it has still to head
+/// off, and how long it has been making for this spot.
 #[derive(Default)]
 struct Detour {
     nearest: Option<f32>,
     since: f32,
-    left: f32,
+    tries: u32,
+    off: f32,
+    side: f32,
+    /// The nearest it was before its first try round, to know when it is past.
+    before: Option<f32>,
+    at_spot: f32,
 }
 
 impl Detour {
-    /// How far to turn from the way to the spot, `distance` away, `dt` seconds on.
+    /// How far to turn from the way to the spot, `distance` away, `dt` seconds on: to the
+    /// left positive.
     fn turn(&mut self, distance: f32, dt: f32) -> f32 {
-        if self.left > 0.0 {
-            self.left -= dt;
-            return DETOUR_TURN;
+        self.at_spot += dt;
+        if self.off > 0.0 {
+            self.off -= dt;
+            return DETOUR_TURN * self.side;
+        }
+        if self
+            .before
+            .is_some_and(|before| distance < before - PASSED_M)
+        {
+            self.tries = 0;
+            self.before = None;
         }
         if self.nearest.is_none_or(|nearest| distance < nearest - 0.05) {
             self.nearest = Some(distance);
@@ -256,19 +279,32 @@ impl Detour {
         } else {
             self.since += dt;
             if self.since > DETOUR_AFTER_S {
-                self.left = DETOUR_S;
+                self.before.get_or_insert(distance);
+                self.side = if self.tries.is_multiple_of(2) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                self.off = (DETOUR_S * 1.5f32.powi(self.tries as i32)).min(DETOUR_LONGEST_S);
+                self.tries += 1;
                 self.since = 0.0;
                 self.nearest = None;
             }
         }
         0.0
     }
+
+    /// Whether the walk has made for its spot so long it should give it up.
+    fn given_up(&self) -> bool {
+        self.at_spot > GIVE_UP_S
+    }
 }
 
 /// For scripted walks, such as benchmarks (`--route`): the player walks to each spot in
 /// turn, east and south of the start, turning toward it no faster than the arrow keys turn
 /// the view, as someone playing would. Once at the last, they stand. Stopped by a trunk or
-/// a rock in the way, they head off to their left for a moment and on again, so the walk
+/// a rock in the way, they head off to one side for a moment and on again, the other side
+/// and longer each try, and give a spot up for the next if it cannot be reached, so the walk
 /// keeps going however the world it crosses is laid out (D276).
 fn follow_route(
     time: Res<Time>,
@@ -285,10 +321,17 @@ fn follow_route(
     let feet = transform.translation;
     let up = feet.normalize();
     let to = (start.at(east, south) - feet).reject_from(up);
-    if to.length() < ROUTE_REACHED_M {
+    if to.length() < ROUTE_REACHED_M || detour.given_up() {
         *next += 1;
+        if detour.given_up() {
+            info!(
+                "Route: gave up {east:.0},{south:.0}, {:.0} m short.",
+                to.length()
+            );
+        } else {
+            info!("Route: reached {east:.0},{south:.0}.");
+        }
         *detour = Detour::default();
-        info!("Route: reached {east:.0},{south:.0}.");
         return;
     }
     let wanted =
@@ -364,5 +407,75 @@ mod tests {
             "turned off for {off} frames"
         );
         assert_eq!(turned[first + off], 0.0, "never turned back");
+    }
+
+    /// Stopped again and again at the same thing, a walk tries the other side each time,
+    /// longer each time, so it gets round something wider than one try; and once past, it
+    /// starts again from a short try to the left.
+    #[test]
+    fn a_walk_stopped_again_tries_the_other_side_for_longer() {
+        let mut detour = Detour::default();
+        let dt = 1.0 / 60.0;
+        let distance = 20.0;
+        // Never getting nearer: record each try's side and length.
+        let mut tries: Vec<(f32, f32)> = Vec::new();
+        let mut current: Option<(f32, f32)> = None;
+        for _ in 0..(60 * 18) {
+            let t = detour.turn(distance, dt);
+            match (current.as_mut(), t != 0.0) {
+                (Some(c), true) => c.1 += dt,
+                (Some(c), false) => {
+                    tries.push(*c);
+                    current = None;
+                }
+                (None, true) => current = Some((t.signum(), dt)),
+                (None, false) => {}
+            }
+        }
+        assert!(tries.len() >= 3, "{tries:?}");
+        for pair in tries.windows(2) {
+            assert_eq!(pair[0].0, -pair[1].0, "the same side twice: {tries:?}");
+            assert!(
+                pair[1].1 > pair[0].1 * 1.3 || pair[1].1 >= DETOUR_LONGEST_S - 0.05,
+                "not longer: {tries:?}"
+            );
+        }
+        // Let the try under way finish.
+        while detour.turn(distance, dt) != 0.0 {}
+        // Now past it: much nearer; the next stop starts over to the left, short.
+        let mut near = distance - PASSED_M - 1.0;
+        for _ in 0..60 {
+            near -= 0.08;
+            detour.turn(near, dt);
+        }
+        let turned: Vec<f32> = (0..300).map(|_| detour.turn(near, dt)).collect();
+        let off: Vec<&f32> = turned
+            .iter()
+            .skip_while(|t| **t == 0.0)
+            .take_while(|t| **t != 0.0)
+            .collect();
+        assert!(
+            off.first().is_some_and(|t| **t > 0.0),
+            "did not start again to the left"
+        );
+        assert!(
+            (off.len() as f32 * dt - DETOUR_S).abs() < 0.05,
+            "did not start again short"
+        );
+    }
+
+    /// A spot that cannot be reached is given up after a while, so the walk goes on.
+    #[test]
+    fn a_spot_that_cannot_be_reached_is_given_up() {
+        let mut detour = Detour::default();
+        let dt = 1.0 / 60.0;
+        for _ in 0..(60.0 * (GIVE_UP_S - 1.0)) as usize {
+            detour.turn(20.0, dt);
+        }
+        assert!(!detour.given_up());
+        for _ in 0..120 {
+            detour.turn(20.0, dt);
+        }
+        assert!(detour.given_up());
     }
 }
