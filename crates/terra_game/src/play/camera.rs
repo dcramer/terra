@@ -14,6 +14,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use terra_core::Solid;
 use terra_world::parting::CameraSubject;
 
 const LOOK_SPEED: f32 = 0.0025;
@@ -30,33 +31,47 @@ const ZOOM_KEY_M_S: f32 = 5.0;
 const HEAD_M: f32 = 1.62;
 /// The figure's middle, which the camera keeps clear of foliage.
 const CHEST_M: f32 = 1.2;
-/// How round the camera's boom is swept against trunks, rocks and logs: the lens comes no
-/// nearer them than this (the probe of Unreal's spring arm).
-/// The near plane's corners are 0.21 m from the lens (0.2 m off at 55 degrees).
+/// How round the lens is: it never comes nearer anything solid than this, a trunk included
+/// (the probe of Unreal's spring arm). The near plane's corners are 0.29 m from the lens (0.2 m
+/// off, 55 degrees high, 16:9).
 const PROBE_M: f32 = 0.3;
-/// A wider sweep, which the boom eases in to ahead of the hard one, so it slides in front of
-/// a trunk swinging into the way rather than jumping.
+/// A wider sweep, which the boom eases in to ahead of the hard one before what is broad, so
+/// it slides in front of a rock or wall swinging into the way rather than jumping.
 const SOFT_PROBE_M: f32 = 0.6;
+/// Trees, and anything else narrower than this across, do not pull the boom in when they
+/// cross the line to the figure: they hide it for a moment as they pass, and only the lens
+/// keeps out of them (as shipped games put trees on a collision channel the boom's sweep
+/// ignores). Walls, the ground and anything broader, as a boulder, pull it in.
+const THIN_M: f32 = 2.5;
+/// How fast the lens comes back to the boom's end once a trunk it slid round is past, as a
+/// rate a second.
+const LENS_BACK: f32 = 2.0;
+/// A lens further than this from the boom's end, as when the player is moved, starts afresh
+/// there.
+const MOST_ASIDE_M: f32 = 2.0;
+/// How long something thin may hide the figure before the boom comes in front of it, how long
+/// the figure must then be in sight from where the boom would be before it goes back out, and
+/// how fast it comes in, a rate a second: slowly, so it never punches in (Cinemachine's
+/// minimum occlusion time and occluded damping).
+const HIDDEN_S: f32 = 0.6;
+const SEEN_S: f32 = 0.5;
+const UNHIDE_IN: f32 = 2.5;
+/// The boom comes no shorter than this to come in front of something hiding the figure;
+/// nearer the figure than that, it is let hide it.
+const UNHIDE_NEAREST_M: f32 = 2.0;
 /// The boom shortens over the ground behind no shorter than this.
 const GROUND_BOOM_M: f32 = 3.0;
-/// How fast the boom comes in before what is in the way, and goes back out once it is clear,
-/// as rates a second: in quickly, out slowly, as shipped third-person cameras do.
+/// How fast the boom comes in before what is broad and in the way, and goes back out once it
+/// is clear, as rates a second: in quickly, out slowly, as shipped third-person cameras do.
 const BOOM_IN: f32 = 14.0;
 const BOOM_OUT: f32 = 2.5;
 /// How high over the ground the lens is kept.
 const OVER_GROUND_M: f32 = 0.35;
 /// How far the lens keeps from the line up the middle of the figure, feet to crown.
 const BODY_CLEAR_M: f32 = 0.55;
-/// The boom swings to the left shoulder when the right one's is pulled in shorter than this
-/// and the left's would be this much longer, and back once the right's reaches the other.
-const SWAP_M: f32 = 1.6;
-const SWAP_GAIN_M: f32 = 1.0;
-const SWAP_BACK_M: f32 = 2.6;
-/// How fast it swings across, in shoulders a second (2 is right to left).
-const SWING: f32 = 2.5;
 
-/// The camera's boom over one shoulder: where it hangs from, which way it goes and how long
-/// it would be, and where its narrow and wide sweeps stop.
+/// The camera's boom over the right shoulder: where it hangs from, which way it goes and how
+/// long it would be, and where its narrow and wide sweeps against what is broad stop.
 struct Arm {
     pivot: Vec3,
     along: Vec3,
@@ -164,16 +179,22 @@ fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
     (player.translation + up * HEAD_M, looking)
 }
 
-/// How far behind the player the camera is, where the wheel is taking it, how far in from
-/// that the boom is pulled by what is in the way, and over which shoulder it hangs (1 the
-/// right, -1 the left) and is swinging to.
+/// How far behind the player the camera is, where the wheel is taking it, and how far in
+/// from that the boom is pulled by what is broad and in the way; where the lens was last frame
+/// and how far it had slid aside from the boom's end round something thin; and how long the
+/// figure has been hidden from the boom's end, or in sight from it, how far in the boom has
+/// come to see past what hides it, and whether it is coming in.
 #[derive(Resource)]
 pub(super) struct Zoom {
     now: f32,
     wanted: f32,
     pulled: f32,
-    side: f32,
-    shoulder: f32,
+    lens: Option<Vec3>,
+    aside: Vec3,
+    hidden_s: f32,
+    seen_s: f32,
+    unhide: f32,
+    unhiding: bool,
 }
 
 impl Default for Zoom {
@@ -182,8 +203,12 @@ impl Default for Zoom {
             now: CAMERA_BACK_M,
             wanted: CAMERA_BACK_M,
             pulled: 0.0,
-            side: 1.0,
-            shoulder: 1.0,
+            lens: None,
+            aside: Vec3::ZERO,
+            hidden_s: 0.0,
+            seen_s: 0.0,
+            unhide: 0.0,
+            unhiding: false,
         }
     }
 }
@@ -222,15 +247,19 @@ pub(super) fn zoom(
     zoom.now += (zoom.wanted - zoom.now) * ease;
 }
 
-/// Third person: behind and a little to the side of the figure, on a boom, as Unreal's
-/// spring arm and most third-person games carry their camera (D274). The boom is swept as a
-/// sphere against what is solid, build walls, trunks, rocks, stumps and logs (`Obstacles`,
-/// D267), and pulls in before them: quickly, ahead of them, on a wider sweep, and never
-/// through them; then out again slowly once they are clear. Hemmed in behind one shoulder, it
-/// swings to the other. Shrubs, young trees and leaves are not solid; they fade instead
-/// (`terra_world::parting`). Where the boom would go into the ground behind, as looking up,
-/// the lens slides up over the ground rather than in toward the figure, and it keeps out of
-/// the figure itself.
+/// Third person: behind and a little to the right of the figure, on a boom, as Unreal's
+/// spring arm and most third-person games carry their camera (D274, D285). The boom is swept
+/// as a sphere against build walls, the ground and what is broad and solid, as a boulder
+/// (`Obstacles`, D267), and pulls in before them: quickly, ahead of them, on a wider sweep,
+/// and never through them; then out again slowly once they are clear. Trees and other thin
+/// things do not pull it in as they cross the line to the figure, as a forest's trunks do
+/// every second or so: they hide it for a moment. The lens itself never goes into any of them:
+/// it slides round a trunk in its way, turning to keep the figure where it was in the picture,
+/// and comes back to the boom's end as it passes. A trunk that hides the figure for more than
+/// a moment has the boom come slowly in front of it. Shrubs, young trees and leaves are not
+/// solid; they fade instead (`terra_world::parting`). Where the boom would go into the ground
+/// behind, as looking up, the lens slides up over the ground rather than in toward the
+/// figure, and it keeps out of the figure itself.
 pub(super) fn follow(
     time: Res<Time>,
     player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
@@ -275,9 +304,11 @@ pub(super) fn follow(
     let (head, looking) = eye(player, view);
     let up = head.normalize();
     let right = view.forward.cross(up);
+    let obstacles = obstacles.as_deref();
+    let broad = |solid: &Solid| !thin(solid);
     // How far a sphere of `radius` goes from `from` along `along` within `length` before
-    // something solid stops it: the ground, a trunk or rock, or a build's wall (theirs, or
-    // a house they are in). Walls and the ground are met by a ray, kept a little short.
+    // something solid and broad stops it: the ground, a boulder, or a build's wall (theirs,
+    // or a house they are in). Walls and the ground are met by a ray, kept a little short.
     let swept = |from: Vec3, along: Vec3, length: f32, radius: f32| {
         let walls = site
             .as_deref()
@@ -301,35 +332,32 @@ pub(super) fn follow(
                     .map(|hit| hit.distance - radius),
             );
         obstacles
-            .as_deref()
-            .and_then(|obstacles| obstacles.sweep(from, along, length, radius))
+            .and_then(|obstacles| obstacles.sweep_where(from, along, length, radius, broad))
             .into_iter()
             .chain(walls)
             .fold(length, f32::min)
             .max(0.0)
     };
     // A sphere that starts touching something would stop at once: one standing against a
-    // trunk sweeps a sphere as round as the room it has.
+    // boulder sweeps a sphere as round as the room it has.
     let room = |at: Vec3, radius: f32| {
-        obstacles.as_deref().map_or(radius, |obstacles| {
-            (obstacles.clearance(at, radius + 0.02) - 0.02).clamp(0.05, radius)
+        obstacles.map_or(radius, |obstacles| {
+            (obstacles.clearance_where(at, radius + 0.02, broad) - 0.02).clamp(0.05, radius)
         })
     };
-    // The boom over one shoulder, `side` 1 for the right and -1 for the left, and between
-    // them while it swings across.
+    // The boom over the right shoulder. Over the shoulder, unless something is in the way
+    // there, as a narrow pit's wall.
+    let shoulder = right * 0.6 + up * 0.25;
+    let pivot = head
+        + shoulder.normalize()
+            * swept(
+                head,
+                shoulder.normalize(),
+                shoulder.length(),
+                room(head, PROBE_M * 0.5),
+            );
     let zoomed_m = zoom.now;
-    let arm = |side: f32| {
-        // Over the shoulder, unless something is in the way there, as a trunk at the player's
-        // side or a narrow pit's wall.
-        let shoulder = right * (0.6 * side) + up * 0.25;
-        let pivot = head
-            + shoulder.normalize()
-                * swept(
-                    head,
-                    shoulder.normalize(),
-                    shoulder.length(),
-                    room(head, PROBE_M * 0.5),
-                );
+    let arm = {
         // Where the boom would put the lens. Where the ground behind is in the way, as
         // looking up, the boom shortens over it, down to GROUND_BOOM_M, and then the lens
         // slides up over the ground instead, so it stays back from the figure rather than
@@ -355,17 +383,6 @@ pub(super) fn follow(
         }
     };
     let dt = time.delta_secs();
-    // Hemmed in behind the right shoulder, as by a trunk at the player's back, the boom swings
-    // over to the left shoulder if that is clear, as shooters swap shoulders, and back once
-    // the right is clear again.
-    let (right_arm, left_arm) = (arm(1.0), arm(-1.0));
-    if right_arm.soft >= SWAP_BACK_M.min(right_arm.length - 0.1) {
-        zoom.shoulder = 1.0;
-    } else if right_arm.soft < SWAP_M && left_arm.soft > right_arm.soft + SWAP_GAIN_M {
-        zoom.shoulder = -1.0;
-    }
-    zoom.side += (zoom.shoulder - zoom.side).clamp(-SWING * dt, SWING * dt);
-    let arm = arm(zoom.side);
     // How far in it is pulled eases to where the wider sweep stops it, quickly in and slowly
     // out, but never lets the lens past where the narrow one does.
     let pull = arm.length - arm.soft;
@@ -377,19 +394,168 @@ pub(super) fn follow(
     zoom.pulled += (pull - zoom.pulled) * (1.0 - libm::expf(-dt * rate));
     zoom.pulled = zoom.pulled.clamp(0.0, arm.length);
     let boom = (arm.length - zoom.pulled).min(arm.hard);
-    let mut at = arm.pivot + arm.along * boom;
+    // Something thin that has hidden the figure from the boom's end for more than a moment,
+    // as a trunk right behind a player standing still, has the boom come slowly in front of
+    // it, and go out again once the figure would be in sight from the end (the hysteresis).
+    let chest = player.translation + up * CHEST_M;
+    let hidden_from = |at: Vec3| {
+        [chest, head].iter().all(|&to| {
+            let gap = to - at;
+            obstacles.is_some_and(|obstacles| {
+                obstacles
+                    .sweep(at, gap.normalize_or(up), gap.length(), 0.05)
+                    .is_some()
+            })
+        })
+    };
+    if hidden_from(arm.pivot + arm.along * boom) {
+        zoom.hidden_s += dt;
+        zoom.seen_s = 0.0;
+    } else {
+        zoom.seen_s += dt;
+        zoom.hidden_s = 0.0;
+    }
+    if zoom.hidden_s > HIDDEN_S {
+        zoom.unhiding = true;
+    } else if zoom.seen_s > SEEN_S {
+        zoom.unhiding = false;
+    }
+    let unhide = if zoom.unhiding {
+        obstacles
+            .and_then(|obstacles| obstacles.sweep_where(arm.pivot, arm.along, boom, PROBE_M, thin))
+            .filter(|&before| before >= UNHIDE_NEAREST_M)
+            .map_or(0.0, |before| boom - before)
+    } else {
+        0.0
+    };
+    let rate = if unhide > zoom.unhide {
+        UNHIDE_IN
+    } else {
+        BOOM_OUT
+    };
+    zoom.unhide += (unhide - zoom.unhide) * (1.0 - libm::expf(-dt * rate));
+    let mut end = arm.pivot + arm.along * (boom - zoom.unhide).max(0.0);
+    let ground = planet.ground_at(end).length() + OVER_GROUND_M;
+    if end.length() < ground {
+        end = end.normalize() * ground;
+    }
+    // The lens itself never goes into anything solid: from where it was, it moves toward the
+    // boom's end and slides round a trunk in the way, as a character controller slides along
+    // a wall, and having slid aside, comes back to the end over half a second or so. A lens
+    // that jumped, as the player was moved, starts afresh, pushed out of what it is in.
+    let gap = |at: Vec3| obstacles.map_or(f32::INFINITY, |o| o.clearance(at, PROBE_M + 0.5));
+    let toward = end + zoom.aside * libm::expf(-dt * LENS_BACK);
+    let from = zoom
+        .lens
+        .filter(|lens| lens.distance(end) < MOST_ASIDE_M)
+        .unwrap_or_else(|| push_clear(toward, PROBE_M, gap));
+    let lens = slide(from, toward, PROBE_M, up, gap, |from, along, length| {
+        obstacles.and_then(|obstacles| obstacles.sweep(from, along, length, PROBE_M))
+    });
+    zoom.lens = Some(lens);
+    zoom.aside = lens - end;
+    // Slid aside, it turns to keep the figure where it was in the picture, looking at the
+    // point it would have looked through from the boom's end.
+    let focus = end + looking * (end.distance(arm.pivot) + 2.0);
+    let looking = (focus - lens).normalize_or(looking);
     // Keep the camera out of the ground.
+    let mut at = lens;
     let ground = planet.ground_at(at).length() + OVER_GROUND_M;
     if at.length() < ground {
         at = at.normalize() * ground;
     }
     at = clear_of_body(at, player.translation, up, |from, to| {
         let gap = to - from;
-        swept(from, gap.normalize_or(up), gap.length(), PROBE_M) >= gap.length() - 1e-3
+        let along = gap.normalize_or(up);
+        swept(from, along, gap.length(), PROBE_M) >= gap.length() - 1e-3
+            && obstacles
+                .and_then(|obstacles| obstacles.sweep(from, along, gap.length(), PROBE_M))
+                .is_none()
     });
     *camera = Transform::from_translation(at).looking_to(looking, up);
     // Foliage between the camera and the figure fades (D271).
-    subject.0 = Some(player.translation + up * CHEST_M);
+    subject.0 = Some(chest);
+}
+
+/// Which way is out of what is solid at a point, by how its distance from it (`gap`) grows:
+/// none where it is the same all round.
+fn outward(at: Vec3, gap: &impl Fn(Vec3) -> f32) -> Vec3 {
+    const E: f32 = 0.01;
+    Vec3::new(
+        gap(at + Vec3::X * E) - gap(at - Vec3::X * E),
+        gap(at + Vec3::Y * E) - gap(at - Vec3::Y * E),
+        gap(at + Vec3::Z * E) - gap(at - Vec3::Z * E),
+    )
+    .normalize_or_zero()
+}
+
+/// A sphere of `radius` at a point moved out of whatever solid it is in or touching, `gap`
+/// saying how far a point is from anything solid.
+fn push_clear(at: Vec3, radius: f32, gap: impl Fn(Vec3) -> f32) -> Vec3 {
+    let mut at = at;
+    for _ in 0..4 {
+        let short = radius - gap(at);
+        if short <= 0.0 {
+            break;
+        }
+        let out = outward(at, &gap);
+        if out == Vec3::ZERO {
+            break;
+        }
+        at += out * (short + 0.005);
+    }
+    at
+}
+
+/// A sphere of `radius` moved from `from` toward `to`, stopping where it would touch something
+/// solid (`sweep`: how far it goes from a point along a direction, within a length, before it
+/// touches) and sliding on along it with what is left, a few times: a character controller's
+/// collide-and-slide. Met head on by something `to` is clear of, as a trunk the lens walks
+/// into, it goes round it in the level (`up` is up), toward the side `to` is on, rather than
+/// stopping against it.
+fn slide(
+    from: Vec3,
+    to: Vec3,
+    radius: f32,
+    up: Vec3,
+    gap: impl Fn(Vec3) -> f32,
+    sweep: impl Fn(Vec3, Vec3, f32) -> Option<f32>,
+) -> Vec3 {
+    // A sweep stops within a few millimetres of what it touches, and one starting there
+    // would stop at once whichever way it went: so the sphere is kept a skin further off.
+    const SKIN_M: f32 = 0.02;
+    let mut at = push_clear(from, radius + SKIN_M, &gap);
+    let mut left = to - at;
+    let past = gap(to) >= radius;
+    for _ in 0..4 {
+        let length = left.length();
+        if length < 1e-4 {
+            break;
+        }
+        let along = left / length;
+        let Some(went) = sweep(at, along, length) else {
+            return at + left;
+        };
+        at = push_clear(at + along * went, radius + SKIN_M, &gap);
+        let out = outward(at, &gap);
+        let rest = length - went;
+        // What is left, less what goes into it.
+        left = along * rest;
+        left -= out * left.dot(out).min(0.0);
+        if past && left.length() < rest * 0.5 {
+            let round = up.cross(out).normalize_or_zero();
+            let side = if round.dot(to - at) < 0.0 { -1.0 } else { 1.0 };
+            left = round * side * rest;
+        }
+    }
+    at
+}
+
+/// Whether the boom passes behind something, letting it hide the figure for a moment: a tree,
+/// whatever its girth, its trunk standing up through any height (nobody stands on a trunk, so
+/// it has no top), or anything narrower than THIN_M.
+fn thin(solid: &Solid) -> bool {
+    solid.top().is_some_and(f32::is_infinite) || solid.breadth() < THIN_M
 }
 
 /// The lens moved out of the figure standing at `feet`: away from the line up its middle in
@@ -419,12 +585,11 @@ mod tests {
     use super::*;
     use crate::play::{LocalPlayer, Obstacles, Player};
     use bevy::ecs::system::RunSystemOnce;
-    use terra_core::{PlanetSpec, Seed};
+    use terra_core::{Piece, PlanetSpec, Seed};
 
     /// A player standing on flat ground looking along x, up or down by `pitch`, with the
-    /// camera following, and a trunk 0.4 m round `trunk_m` behind them if any; and their
-    /// feet.
-    fn scene(pitch: f32, trunk_m: Option<f32>) -> (World, Vec3) {
+    /// camera following; and their feet.
+    fn scene(pitch: f32) -> (World, Vec3) {
         let planet = Planet::smooth(PlanetSpec {
             seed: Seed(1),
             radius_m: 2000.0,
@@ -436,11 +601,6 @@ mod tests {
         world.insert_resource(planet.clone());
         world.init_resource::<Zoom>();
         world.init_resource::<Time>();
-        if let Some(back) = trunk_m {
-            let mut obstacles = Obstacles::default();
-            obstacles.add(planet.ground_at(feet - Vec3::X * back), 0.4);
-            world.insert_resource(obstacles);
-        }
         world.spawn((
             Player,
             LocalPlayer,
@@ -469,7 +629,7 @@ mod tests {
     /// Where the camera follows a player standing on flat ground, looking up or down by
     /// `pitch`, and where the player's head is, and the ground.
     fn follow_one(pitch: f32) -> (Vec3, Vec3, Planet) {
-        let (mut world, feet) = scene(pitch, None);
+        let (mut world, feet) = scene(pitch);
         let camera = frame(&mut world, 0.0);
         let planet = world.resource::<Planet>().clone();
         let head = feet + feet.normalize() * HEAD_M;
@@ -514,44 +674,64 @@ mod tests {
             from_body(camera, feet)
         );
         // As far up as the view goes, it is still off the figure.
-        let (mut world, feet) = scene(1.2, None);
+        let (mut world, feet) = scene(1.2);
         let camera = frame(&mut world, 0.0).translation;
         assert!(from_body(camera, feet) > 1.0, "{}", from_body(camera, feet));
     }
 
+    /// Solid things round a player's feet, each as how far behind them and to their right its
+    /// middle stands, how round it is and how tall: a trunk has no top.
+    fn solids(world: &mut World, feet: Vec3, things: &[(f32, f32, f32, f32)]) {
+        let planet = world.resource::<Planet>().clone();
+        let mut obstacles = Obstacles::default();
+        for &(back, right, radius, top) in things {
+            let at = planet.ground_at(feet + Vec3::new(-back, 0.0, right));
+            let piece = Piece::round(Vec2::ZERO, radius, top);
+            obstacles.add_solid(at, Solid::of_pieces(at, vec![piece]));
+        }
+        world.insert_resource(obstacles);
+    }
+
+    /// How far the lens is from anything solid.
+    fn clearance(world: &World, at: Vec3) -> f32 {
+        world
+            .get_resource::<Obstacles>()
+            .map_or(f32::INFINITY, |obstacles| obstacles.clearance(at, 5.0))
+    }
+
+    /// Whether a point is in the camera's picture, 16:9 at the default field of view.
+    fn in_picture(camera: &Transform, at: Vec3) -> bool {
+        let to = at - camera.translation;
+        let ahead = to.dot(*camera.forward());
+        let high = libm::tanf(55f32.to_radians() * 0.5);
+        ahead > 0.0
+            && (to.dot(*camera.right()) / ahead).abs() <= high * 16.0 / 9.0
+            && (to.dot(*camera.up()) / ahead).abs() <= high
+    }
+
     #[test]
-    fn a_trunk_behind_pulls_the_camera_in_quickly_and_it_goes_out_slowly() {
-        // A trunk 0.4 m round, its middle 3 m behind the player.
-        let (mut world, feet) = scene(0.0, Some(3.0));
-        let trunk = world.resource::<Planet>().ground_at(feet - Vec3::X * 3.0);
-        let bark = |at: Vec3| {
-            let up = trunk.normalize();
-            let level = (at - trunk) - up * (at - trunk).dot(up);
-            level.length() - 0.4
-        };
+    fn a_boulder_behind_pulls_the_camera_in_quickly_and_it_goes_out_slowly() {
+        // A boulder 3 m across and 3 m high, its middle 4 m behind the player, on the boom.
+        let (mut world, feet) = scene(0.0);
+        solids(&mut world, feet, &[(4.0, 0.6, 1.5, 3.0)]);
         // Never inside it, from the first frame on, and settled in front of it within a
         // fifth of a second.
         let mut camera = frame(&mut world, 1.0 / 60.0);
-        assert!(
-            bark(camera.translation) >= PROBE_M - 0.01,
-            "{} at {:?}, trunk {:?}",
-            bark(camera.translation),
-            camera.translation - feet,
-            trunk - feet
-        );
+        let clear = clearance(&world, camera.translation);
+        assert!(clear >= PROBE_M - 0.01, "{clear}");
         for _ in 0..12 {
             camera = frame(&mut world, 1.0 / 60.0);
-            assert!(bark(camera.translation) >= PROBE_M - 0.01);
+            assert!(clearance(&world, camera.translation) >= PROBE_M - 0.01);
         }
+        let clear = clearance(&world, camera.translation);
         assert!(
-            bark(camera.translation) < SOFT_PROBE_M + 0.1,
-            "it stands {} m off the bark",
-            bark(camera.translation)
+            clear < SOFT_PROBE_M + 0.1,
+            "it stands {clear} m off the rock"
         );
         let head = feet + feet.normalize() * HEAD_M;
         let pulled = camera.translation.distance(head);
-        assert!(pulled < 3.0);
-        // The trunk felled, it eases back out, not at once.
+        assert!(pulled < 2.5, "{pulled}");
+        // The boulder gone, it eases back out, not at once.
         world.insert_resource(Obstacles::default());
         let next = frame(&mut world, 1.0 / 60.0).translation.distance(head);
         assert!(next > pulled && next < pulled + 0.2, "{pulled} then {next}");
@@ -563,29 +743,161 @@ mod tests {
     }
 
     #[test]
-    fn hemmed_in_behind_the_right_shoulder_the_camera_swings_to_the_left() {
-        // A trunk 0.4 m round just behind the right shoulder (right is +z, looking along x).
-        let (mut world, feet) = scene(0.0, None);
-        let planet = world.resource::<Planet>().clone();
-        let mut obstacles = Obstacles::default();
-        obstacles.add(planet.ground_at(feet + Vec3::new(-1.2, 0.0, 0.6)), 0.4);
-        world.insert_resource(obstacles);
-        let head = feet + feet.normalize() * HEAD_M;
-        let first = frame(&mut world, 1.0 / 60.0).translation;
-        assert!(
-            first.distance(head) < 1.5,
-            "the right shoulder is hemmed in"
+    fn a_trunk_between_the_camera_and_the_player_does_not_pull_the_boom_in() {
+        // A trunk 0.7 m thick 2 m behind, across the boom over the right shoulder (right is
+        // +z, looking along x), and one right behind that shoulder: the camera stays out
+        // behind them, over the same shoulder, and out of both.
+        let (mut world, feet) = scene(0.0);
+        let trunk = f32::INFINITY;
+        solids(
+            &mut world,
+            feet,
+            &[(2.0, 0.45, 0.35, trunk), (1.0, 0.7, 0.3, trunk)],
         );
+        let head = feet + feet.normalize() * HEAD_M;
         for _ in 0..90 {
+            let camera = frame(&mut world, 1.0 / 60.0).translation;
+            assert!(camera.distance(head) > CAMERA_BACK_M - 0.05);
+            assert!((camera - feet).z > 0.5, "over the right shoulder");
+            assert!(clearance(&world, camera) >= PROBE_M - 0.01);
+        }
+    }
+
+    #[test]
+    fn running_through_a_stand_of_trunks_the_camera_keeps_out_of_them_and_does_not_punch_in() {
+        // Trunks 0.5 to 0.9 m thick every 2 m along the way, either side of it and some across
+        // the boom over the right shoulder, the player running through them at 4.5 m a second.
+        let (mut world, feet) = scene(-0.15);
+        let sides = [0.75, -0.9, 1.2, 0.7, 2.0, -1.5, 0.9, 1.6];
+        let trunks: Vec<_> = (0..24)
+            .map(|i| {
+                let radius = 0.25 + 0.05 * (i % 5) as f32;
+                (
+                    -2.0 * i as f32,
+                    sides[i % sides.len()],
+                    radius,
+                    f32::INFINITY,
+                )
+            })
+            .collect();
+        solids(&mut world, feet, &trunks);
+        let planet = world.resource::<Planet>().clone();
+        let mut booms = Vec::new();
+        for step in 0..600 {
+            let at = planet.ground_at(feet + Vec3::X * (4.5 * step as f32 / 60.0));
+            let player = world
+                .query_filtered::<&mut Transform, With<Player>>()
+                .single_mut(&mut world);
+            *player.unwrap() = Transform::from_translation(at);
+            let camera = frame(&mut world, 1.0 / 60.0);
+            let up = at.normalize();
+            let clear = clearance(&world, camera.translation);
+            assert!(
+                clear >= PROBE_M - 0.01,
+                "the lens {clear} m off bark at {step}"
+            );
+            assert!(
+                in_picture(&camera, at + up * CHEST_M) && in_picture(&camera, at + up * HEAD_M),
+                "the player out of the picture at {step}"
+            );
+            booms.push(camera.translation.distance(at + up * HEAD_M));
+            // Never more than 30% shorter within 0.3 s.
+            let before = booms[booms.len().saturating_sub(18)..]
+                .iter()
+                .copied()
+                .fold(0.0, f32::max);
+            let now = booms[booms.len() - 1];
+            assert!(
+                now > before * 0.7,
+                "the boom punched in, {before} to {now}, at {step}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_trunk_hiding_the_player_for_long_brings_the_camera_slowly_in_front_of_it() {
+        // A trunk 0.7 m thick 3.2 m behind a player standing still, between them and the
+        // camera.
+        let (mut world, feet) = scene(0.0);
+        solids(&mut world, feet, &[(3.2, 0.42, 0.35, f32::INFINITY)]);
+        let up = feet.normalize();
+        let (head, chest) = (feet + up * HEAD_M, feet + up * CHEST_M);
+        let hidden = |world: &World, from: Vec3| {
+            let to = chest - from;
+            world
+                .resource::<Obstacles>()
+                .sweep(from, to.normalize(), to.length(), 0.05)
+                .is_some()
+        };
+        let mut booms = Vec::new();
+        for step in 0..240 {
+            let camera = frame(&mut world, 1.0 / 60.0).translation;
+            assert!(clearance(&world, camera) >= PROBE_M - 0.01);
+            booms.push(camera.distance(head));
+            // Hidden for a moment, it stays out behind the trunk.
+            if step < 30 {
+                assert!(hidden(&world, camera), "the trunk hides the player");
+                assert!(camera.distance(head) > CAMERA_BACK_M - 0.05);
+            }
+            let before = booms[booms.len().saturating_sub(18)..]
+                .iter()
+                .copied()
+                .fold(0.0, f32::max);
+            assert!(booms[step] > before * 0.7, "punched in at {step}");
+        }
+        // Then it comes in front of it, and the player is in sight.
+        let camera = frame(&mut world, 1.0 / 60.0).translation;
+        assert!(!hidden(&world, camera), "{}", camera.distance(head));
+        assert!(camera.distance(head) < 3.0, "{}", camera.distance(head));
+        // The trunk felled, it goes back out.
+        world.insert_resource(Obstacles::default());
+        for _ in 0..240 {
             frame(&mut world, 1.0 / 60.0);
         }
-        let camera = frame(&mut world, 1.0 / 60.0).translation;
-        assert!(
-            (camera - feet).z < -0.3,
-            "over the left shoulder: {:?}",
-            camera - feet
-        );
-        assert!(camera.distance(head) > 3.0, "{}", camera.distance(head));
+        let out = frame(&mut world, 1.0 / 60.0).translation.distance(head);
+        assert!(out > CAMERA_BACK_M - 0.05, "{out}");
+    }
+
+    #[test]
+    fn a_lens_slides_round_a_trunk_in_its_way_and_rests_against_one_it_is_sent_into() {
+        // A round trunk of radius 1 at the middle, and a lens 0.3 round.
+        let gap = |at: Vec3| Vec2::new(at.x, at.z).length() - 1.0;
+        let sweep = |from: Vec3, along: Vec3, length: f32| {
+            let mut t = 0.0;
+            while t < length {
+                let left = gap(from + along * t) - 0.3;
+                if left < 0.005 {
+                    return Some(t);
+                }
+                t += left;
+            }
+            None
+        };
+        // Sent past it, a tenth of a metre at a time, glancing or dead on: it goes round,
+        // never into it, and gets where it was sent.
+        for across in [0.5, 0.0] {
+            let mut at = Vec3::new(-3.0, 0.0, across);
+            for step in 1..=60 {
+                let to = Vec3::new(-3.0 + 0.1 * step as f32, 0.0, across);
+                at = slide(at, to, 0.3, Vec3::Y, gap, sweep);
+                assert!(gap(at) >= 0.3 - 1e-3, "{at}");
+            }
+            for _ in 0..20 {
+                at = slide(at, Vec3::new(3.0, 0.0, across), 0.3, Vec3::Y, gap, sweep);
+            }
+            assert!(at.distance(Vec3::new(3.0, 0.0, across)) < 0.05, "{at}");
+        }
+        // Sent into it, it rests against it and stays there.
+        let mut at = Vec3::new(-3.0, 0.0, 0.2);
+        for _ in 0..100 {
+            at = slide(at, Vec3::new(-0.5, 0.0, 0.2), 0.3, Vec3::Y, gap, sweep);
+        }
+        let rest = at;
+        for _ in 0..100 {
+            at = slide(at, Vec3::new(-0.5, 0.0, 0.2), 0.3, Vec3::Y, gap, sweep);
+        }
+        assert!(gap(at) >= 0.3 - 1e-3 && gap(at) < 0.35, "{at}");
+        assert!(at.distance(rest) < 0.01, "it crept from {rest} to {at}");
     }
 
     #[test]

@@ -193,9 +193,23 @@ impl Obstacles {
     /// within `length`, before it touches a trunk, rock, stump or log: a camera boom's sweep.
     /// None if nothing is in the way.
     pub fn sweep(&self, from: Vec3, direction: Vec3, length: f32, radius: f32) -> Option<f32> {
+        self.sweep_where(from, direction, length, radius, |_| true)
+    }
+
+    /// `sweep`, against only the things `keep` says, as a camera's boom ignores what is
+    /// thin (Unreal's collision channels).
+    pub fn sweep_where(
+        &self,
+        from: Vec3,
+        direction: Vec3,
+        length: f32,
+        radius: f32,
+        keep: impl Fn(&Solid) -> bool,
+    ) -> Option<f32> {
         let middle = from + direction * (length * 0.5);
         // Each is filed at its foot, which may be some way below a boom high over it.
         self.solids_near(middle, length * 0.5 + radius + SWEPT_BELOW_M)
+            .filter(|solid| keep(solid))
             .filter_map(|solid| solid.sweep(from, direction, length, radius))
             .reduce(f32::min)
     }
@@ -203,7 +217,13 @@ impl Obstacles {
     /// How far a point is from the nearest trunk, rock, stump or log, at least, looking no
     /// further than `reach`: `reach` when nothing is nearer.
     pub fn clearance(&self, at: Vec3, reach: f32) -> f32 {
+        self.clearance_where(at, reach, |_| true)
+    }
+
+    /// `clearance`, from only the things `keep` says.
+    pub fn clearance_where(&self, at: Vec3, reach: f32, keep: impl Fn(&Solid) -> bool) -> f32 {
         self.solids_near(at, reach + SWEPT_BELOW_M)
+            .filter(|solid| keep(solid))
             .map(|solid| solid.clearance(at))
             .fold(reach, f32::min)
     }

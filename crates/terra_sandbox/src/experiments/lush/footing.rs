@@ -399,8 +399,7 @@ fn trunks(
         } else {
             Vec::new()
         };
-        let ground = ground_under(&planet, &place, &wood.relief);
-        if let Some(mut solid) = Solid::fit(&wood.relief, place, ground, skirt) {
+        if let Some(mut solid) = trunk_solid(&planet, place, &wood.relief, skirt) {
             // Nobody stands on a trunk.
             for piece in &mut solid.pieces {
                 piece.top = f32::INFINITY;
@@ -415,6 +414,38 @@ fn trunks(
             low: None,
         });
     }
+}
+
+/// A tree's trunk fitted where it stands, with its skirt. Its bole, its wood taller than a
+/// body, is its own: what a camera's lens keeps out of (`Solid::clearance`), as wide as the
+/// trunk and any low bough are at a head's height. Its flared foot and roots, lower, stop a
+/// walker as its skirt does, but taken as its own would stand round the lens as wide as they
+/// spread, metres from the bark.
+fn trunk_solid(
+    planet: &Planet,
+    place: Placement,
+    wood: &Relief,
+    skirt: Vec<Piece>,
+) -> Option<Solid> {
+    let ground = ground_under(planet, &place, wood);
+    let s = place.scale;
+    let (bole, foot): (Vec<Vec3>, Vec<Vec3>) = wood
+        .cells
+        .iter()
+        .partition(|c| c.y * s + place.lift - ground(Vec2::new(c.x, c.z) * s) > BODY_M);
+    let (bole, foot) = if bole.is_empty() {
+        (foot, Vec::new())
+    } else {
+        (bole, foot)
+    };
+    let cells = |cells| Relief {
+        cells,
+        cell: wood.cell,
+    };
+    let foot = Solid::fit(&cells(foot), place, &ground, Vec::new())
+        .map(|foot| foot.pieces)
+        .unwrap_or_default();
+    Solid::fit(&cells(bole), place, &ground, [foot, skirt].concat())
 }
 
 #[derive(Deserialize)]
@@ -634,5 +665,67 @@ fn print_of(
             lay(&[shape, seen])
         },
         name,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_core::{PlanetSpec, Seed};
+
+    #[test]
+    fn a_trunks_own_solid_is_its_bole_not_its_roots() {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let ground = planet.ground_at(Vec3::Y * 2100.0);
+        let place = Placement {
+            ground,
+            x: Vec3::X,
+            z: Vec3::Z,
+            up: Vec3::Y,
+            scale: 1.0,
+            lift: 0.0,
+        };
+        // A trunk 0.6 m thick standing 3 m up, and roots 0.35 m high out to 1.4 m along four
+        // lines, and a little flare round its foot 0.8 m high.
+        let mut cells = Vec::new();
+        for i in -20..=20 {
+            for j in -20..=20 {
+                let plan = Vec2::new(i as f32, j as f32) * 0.1;
+                let root = plan.length() < 1.4 && (plan.x.abs() < 0.1 || plan.y.abs() < 0.1);
+                let height = if plan.length() < 0.3 {
+                    3.0
+                } else if plan.length() < 0.5 {
+                    0.8
+                } else if root {
+                    0.35
+                } else {
+                    continue;
+                };
+                cells.push(Vec3::new(plan.x, height, plan.y));
+            }
+        }
+        let wood = Relief { cells, cell: 0.1 };
+        let solid = trunk_solid(&planet, place, &wood, Vec::new()).unwrap();
+        assert!(solid.breadth() < 0.9, "{}", solid.breadth());
+        // A lens 2 m up, a metre out over a root, is clear of it; one by the bole is not.
+        let lens = |out: f32| ground + Vec3::new(out, 2.0, 0.0);
+        assert!(
+            solid.clearance(lens(1.0)) > 0.4,
+            "{}",
+            solid.clearance(lens(1.0))
+        );
+        assert!(solid.clearance(lens(0.45)) < 0.2);
+        // The flare and the roots are still there to stop a walker.
+        for out in [0.45, 0.8, 1.3] {
+            let (plan, _) = solid.plan(ground + Vec3::X * out);
+            let covered = solid
+                .pieces
+                .iter()
+                .any(|piece| piece.distance(plan).0 < 0.0);
+            assert!(covered, "nothing {out} m out");
+        }
     }
 }

@@ -64,3 +64,39 @@ Measured on the film (80 frames, every 0.5 s), this against main filmed at the s
 | Nearest the lens comes to the figure's middle line | 0.99 m | 0.55 m |
 
 The figure is nearer in metres but smaller in the picture: main's lens came in along the boom to hip height a metre behind and looked up past the whole torso, this one stays 3 m back along the boom and slides up, so at the top of the look-up only the head shows at the frame's foot. The frames left over 2% are bushes in their 0.3 s fade.
+
+## Third pass: a boom that does not pump among trunks (D285)
+
+2026-10-14. The next review (6.0/10) put the camera first: among pines and veteran oaks the boom collapsed to the player's skull in 0.2 s, sprang out and slammed in again, about eight times in twenty seconds, and once the player left the frame. The cause: D274 swept the boom against every fitted solid, so each trunk crossing the line from the shoulder to the lens, which in a dense stand is one a second, pulled it in at once; the shoulder swap threw the framing sideways as well; and a tree's fitted solid was a column as wide as its roots spread (D267 fits the wood up to 3 m, root flare and all, with no top), standing round the lens metres from the bark.
+
+What shipped cameras do:
+
+- **Collision and occlusion are separate.** Unity's Cinemachine Deoccluder keeps the camera out of colliders by a camera radius, and answers the line to the target being blocked only once it has been blocked for a minimum occlusion time, moving at its own "damping when occluded" and returning at another; raising the minimum occlusion time is the usual answer to the camera jumping forward for tree trunks (P, [Deoccluder manual](https://docs.unity3d.com/Packages/com.unity.cinemachine@3.0/manual/CinemachineDeoccluder.html); C, [Unity forum](https://discussions.unity.com/t/pull-camera-forward-and-player-occlusion/761274)).
+- **Thin things do not pull the boom.** Unreal's spring arm sweeps its probe on one collision channel (`ProbeChannel`, the camera channel), so what should not pull it in, foliage and often trees, is set to ignore that channel (P, [USpringArmComponent](https://docs.unrealengine.com/4.27/en-US/API/Runtime/Engine/GameFramework/USpringArmComponent/); C, [a forum fix moving the probe off the camera channel](https://answers.unrealengine.com/questions/900797/view.html)). A trunk is then let hide the character for the moment it crosses.
+- **Lag out, not in.** The arm comes in at once before a wall and lags back out.
+
+What we did (`play/camera.rs`):
+
+- The boom is swept only against walls, the ground and what is broad (`Solid::breadth` 2.5 m or more and not a tree: a boulder). Trees and small things do not pull it in.
+- The lens is a 0.3 m sphere that never goes into any solid: from where it was it moves to the boom's end by collide-and-slide, round a trunk in its way (met head on, round the side the end is on), and comes back to the end at a rate of 2 a second once past. Slid aside, it turns to look at the point it would have looked through from the boom's end, so the player stays where they were in the picture.
+- A trunk that hides the chest and head from the boom's end for 0.6 s has the boom ease in front of it (2.5 a second, no shorter than 2 m), until the player has been in sight from the end for 0.5 s.
+- No shoulder swap: the boom stays over the right shoulder.
+- A tree's own solid, what `Solid::clearance` keeps the lens out of, is its bole, its wood taller than a body; its root flare is added as extra pieces, as a spruce's skirt is, so it still stops a walker (`footing::trunk_solid`). `collide` reads the same on the trees as before.
+
+Measured on both films (the standard `cargo xtask film --time 15` and the pines route), 2400 frames each from the camera's place every frame, logged by a throwaway patch, against main (eda9605) run the same way. A punch-in is the lens-to-head distance falling by over 30% within 0.3 s, the look-up (where the ground behind rightly brings the boom in, as D274) counted apart. In the picture means the point is inside the 55-degree, 16:9 frustum. Inside bark is measured two ways: against the run's own fitted solids, and against the meshes as drawn between 1.5 and 3 m up, the lens's own heights (`lush.footprint` with its band moved, uncommitted).
+
+| | main, film | this, film | main, pines | this, pines |
+|---|---|---|---|---|
+| Punch-ins (look-up apart) | 10 | 0 | 12 | 0 |
+| Lens-to-head distance: least, 5th percentile, median (m) | 0.55, 0.75, 4.53 | 1.89, 2.30, 4.67 | 0.61, 0.86, 4.40 | 3.69, 4.37, 4.67 |
+| Fastest the lens comes in (m/s) | 224 | 16 (the look-up) | 227 | 6 |
+| Framing jumps (chest over 1/8 of the width in 0.3 s) | 17 | 0 | 12 | 0 |
+| Frames with the chest out of the picture (look-up apart) | 255 | 0 | 194 | 0 |
+| ... head, chest and feet all out | 58 | 0 | 96 | 0 |
+| Frames the player is hidden behind a solid; longest | 28; 0.27 s | 88; 0.95 s | 0 | 63; 1.05 s |
+| Lens inside a fitted solid; nearer than 0.2 m | 0; 144 | 0; 0 | 0; 53 | 0; 0 |
+| Lens over a tree's wood as drawn at 1.5 to 3 m | 0 | 0 | 0 | 0 |
+
+Main's hiding counts are against its wide root columns and its fitted-solid distances are nearer than the bark; this one's against boles. The cost is trunks crossing the line: the player is hidden behind one for a second at most, and a trunk the lens slides round sweeps across a third of the picture for half a second, smeared by TAA as it goes. Shipped games fade a trunk at the lens (a camera-distance dither in its material); bark has no such fade here yet (D271 fades leaves only).
+
+Cost, on the walk bench beside main run alternately on the RTX 3080 (load 4 to 5, the GPU otherwise quiet): median 15.06 and 15.01 ms against 14.94 and 15.00, the 99th percentile 17.85 and 17.87 against 17.96, the game's CPU frame 4.27 to 4.47 ms against 4.35 to 4.36, the GPU's 12.40 to 12.48 against 12.34. Nothing measurable; both miss the budget at the 99th percentile, as main already did.

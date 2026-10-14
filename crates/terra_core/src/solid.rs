@@ -307,6 +307,24 @@ impl Solid {
         self.pieces.iter().map(|piece| piece.top).reduce(f32::max)
     }
 
+    /// How wide its own pieces (not a skirt added to it) are across, in plan, near enough:
+    /// twice the furthest they reach from the middle of their corners. A trunk's width, root
+    /// flare and all, or a boulder's; never less than the true width, and exact for one round
+    /// or symmetric piece.
+    pub fn breadth(&self) -> f32 {
+        let own = &self.pieces[..self.firm.min(self.pieces.len())];
+        let corners = own
+            .iter()
+            .map(|piece| piece.hull.len())
+            .sum::<usize>()
+            .max(1);
+        let middle = own.iter().flat_map(|piece| &piece.hull).sum::<Vec2>() / corners as f32;
+        2.0 * own
+            .iter()
+            .flat_map(|piece| piece.hull.iter().map(|p| p.distance(middle) + piece.radius))
+            .fold(0.0, f32::max)
+    }
+
     /// Moves a round body of `radius`, its feet at `at`, out of every piece of this thing it
     /// cannot step onto (`Piece::stops`). A body pushed out of one piece into another
     /// overlapping it is pushed again, a few times.
@@ -758,6 +776,43 @@ mod tests {
         .unwrap();
         assert!(skirted.blocks(ground + Vec3::X * 1.5, 0.3, 0.4));
         assert_eq!(skirted.sweep(over, Vec3::X, 6.0, 0.25), None);
+    }
+
+    #[test]
+    fn breadth_is_how_wide_its_own_pieces_are_not_its_skirt() {
+        let ground = Vec3::Y * 1000.0;
+        let trunk = Solid::of_pieces(ground, vec![Piece::round(Vec2::ZERO, 0.4, 9.0)]);
+        assert!((trunk.breadth() - 0.8).abs() < 1e-4);
+        // A capsule 2 m between its ends and 0.3 round, beside a circle off its end.
+        let log = Solid::of_pieces(
+            ground,
+            vec![
+                Piece {
+                    hull: vec![Vec2::new(-1.0, 0.0), Vec2::new(1.0, 0.0)],
+                    radius: 0.3,
+                    top: 0.6,
+                    crest: 0.6,
+                },
+                Piece::round(Vec2::new(2.0, 0.0), 0.2, 0.4),
+            ],
+        );
+        // Its true width is 3.5 m; from the middle of its corners, a third of the way from
+        // its middle to the circle, the far end of the capsule is 1.67 m and 0.3 more.
+        assert!((log.breadth() - 2.0 * (5.0 / 3.0 + 0.3)).abs() < 1e-3);
+        // A 1 m block with a skirt 4 m across: about its diagonal and its corners' rounding,
+        // not the skirt's 4.
+        let skirted = Solid::fit(
+            &Relief::of(&block(1.0, 1.0, 0.6), &[]),
+            flat_place(1.0, 0.0),
+            |_| 0.0,
+            vec![Piece::round(Vec2::ZERO, 2.0, f32::INFINITY)],
+        )
+        .unwrap();
+        assert!(
+            skirted.breadth() > 1.4 && skirted.breadth() < 1.8,
+            "{}",
+            skirted.breadth()
+        );
     }
 
     #[test]
