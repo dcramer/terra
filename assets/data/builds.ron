@@ -30,9 +30,9 @@
 //                       Gable, LeanTo, or None for flat), in the roof material in hand or
 //                       the walls' own roof; built and changed as any cubes are
 //              Wall     lengths of wall, in metres, drawn by dragging or laid at a length
-//              Window   windows, by width in metres, and the glass's sill above the floor
-//                       and top below the ceiling, in metres: whole cubes, half a metre
-//                       each (D181)
+//              Window   windows, holes by width in metres, and the window's sill height
+//                       above the floor and top below the ceiling, in metres: whole
+//                       cubes, half a metre each (D181)
 //              Floor    a floor drawn alone, on a storey
 //              Flight   stairs or a ramp up a storey (D193): its name, whether it is a
 //                       ramp of slopes rather than stairs, and how wide in metres

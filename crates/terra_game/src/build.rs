@@ -148,7 +148,7 @@ fn give_footprints(
 pub(super) struct Built(pub Build);
 
 /// What every build is drawn with: its kits and their materials and maps, what no kit
-/// draws, glass, a plan's ghosts and the next piece lit, far off sections, and the shapes
+/// draws, a plan's ghosts and the next piece lit, far off sections, and the shapes
 /// a ghost is drawn as (`draw`).
 #[derive(Resource, Clone)]
 pub(super) struct BuildLook {

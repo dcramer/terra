@@ -7,7 +7,7 @@ use crate::{CELL_M, Fill};
 use std::collections::BTreeSet;
 
 /// A frame of boards round every opening in a row, of whatever shape: a board along each
-/// edge where an open or glass cube meets the wall, edges in a line one board. Up the
+/// edge where an open cube meets the wall, edges in a line one board. Up the
 /// sides they are jambs; over the top a head, reaching up into the first log above; under
 /// it a sill, unless the opening is at the foot of its wall, as a doorway is.
 pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mut Layout) {

@@ -4,8 +4,8 @@
 //! - **A cube is air or a kind of construction** ([`Kind`]), with a shape ([`Shape`]),
 //!   planned or built to a fill level ([`State`], D194), at most one change pending on it,
 //!   and the part it was laid in, packed in 32 bits in sections of 16 a side
-//!   ([`cubes`]). What fills it ([`Fill`]) is solid, glass, or open: an opening cut in a
-//!   wall, part of the wall still, which lets a walker through.
+//!   ([`cubes`]). What fills it ([`Fill`]) is solid or open: an opening cut in a
+//!   wall, a doorway or a window, part of the wall still, which lets a walker through.
 //! - **A wall is a row of cubes**, a storey high unless built otherwise; a post is a
 //!   column of them, a floor a layer. So walls meet, cross, are carved and mix kinds by
 //!   sharing cubes.
@@ -181,8 +181,9 @@ impl Face {
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Panel {
     Solid,
-    /// Glass from `sill` metres above the floor to `top` metres below the ceiling.
-    /// Neighbouring tiles with the same glass are one window.
+    /// Open from `sill` metres above the floor to `top` metres below the ceiling, a hole
+    /// framed by its jambs, sill and lintel (D215, D225). Neighbouring tiles with the same
+    /// sill and head are one window.
     Window {
         sill: f32,
         top: f32,
@@ -199,7 +200,7 @@ impl Panel {
         sill: 1.0,
         top: 1.0,
     };
-    /// Glass from half a metre over the floor to half a metre under the ceiling.
+    /// Open from half a metre over the floor to half a metre under the ceiling.
     pub const TALL_WINDOW: Panel = Panel::Window {
         sill: 0.5,
         top: 0.5,
@@ -221,7 +222,7 @@ impl Panel {
         let within = |from: f32, to: f32| bottom >= from - 1e-3 && top <= to + 1e-3;
         match self {
             Panel::Door if within(0.0, DOOR_HEIGHT_M) => Fill::Open,
-            Panel::Window { sill, top: below } if within(sill, STOREY_M - below) => Fill::Glass,
+            Panel::Window { sill, top: below } if within(sill, STOREY_M - below) => Fill::Open,
             _ => Fill::Solid,
         }
     }
@@ -920,11 +921,12 @@ fn panel_of(fills: &[Option<Fill>]) -> Panel {
             .filter(|&i| fills[i as usize] == Some(fill))
             .collect()
     };
-    let (open, glass) = (layers(Fill::Open), layers(Fill::Glass));
-    if !open.is_empty() && open[0] == 0 {
+    // Open from the floor is a doorway; open higher up, a window.
+    let open = layers(Fill::Open);
+    if open.first() == Some(&0) {
         return Panel::Door;
     }
-    match (glass.first(), glass.last()) {
+    match (open.first(), open.last()) {
         (Some(&first), Some(&last)) => Panel::Window {
             sill: first as f32 * CELL_M,
             top: STOREY_M - (last + 1) as f32 * CELL_M,
@@ -1093,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    fn a_window_is_glass_between_its_sill_and_head_and_reads_back() {
+    fn a_window_is_open_between_its_sill_and_head_and_reads_back() {
         let mut base = room();
         let tile = IVec3::new(0, 0, 1);
         base.apply(BuildOp::SetWall {
@@ -1110,8 +1112,8 @@ mod tests {
             [
                 Fill::Solid,
                 Fill::Solid,
-                Fill::Glass,
-                Fill::Glass,
+                Fill::Open,
+                Fill::Open,
                 Fill::Solid,
                 Fill::Solid
             ]

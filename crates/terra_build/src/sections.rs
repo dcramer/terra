@@ -561,7 +561,7 @@ pub struct Ghost {
 }
 
 /// A section drawn: what is in, near, by kind and material (`Kind::PLAIN` for what no one
-/// kit draws, in the first kit's materials); what is drawn plain by colour, and glass; the
+/// kit draws, in the first kit's materials); what is drawn plain by colour; the
 /// next piece, lit; the ghosts, and the shell of a plan's blocks and plain cubes; far off
 /// and further, one surface each; and its doors and windows, for the game to fit.
 #[derive(Clone, Debug, Default)]
@@ -570,7 +570,6 @@ pub struct Drawn {
     /// What is in, a few metres off.
     pub mid: BTreeMap<(Kind, Material), Surface>,
     pub plain: Surface,
-    pub glass: Surface,
     pub next: Surfaces,
     pub ghosts: Vec<Ghost>,
     pub shell: Surface,
@@ -1305,9 +1304,9 @@ fn fallback(material: Material) -> [f32; 3] {
     }
 }
 
-/// What no kit draws, plain by colour, and glass: kept to the triangles in the section,
-/// and the plan's planned plain cubes added to its ghost shell. Only worked out when the
-/// section has something of a kind no kit draws, or glass.
+/// What no kit draws, plain by colour: kept to the triangles in the section, and the
+/// plan's planned plain cubes added to its ghost shell. Only worked out when the section
+/// has something of a kind no kit draws.
 fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     let (base, kits) = (section.base, section.kits);
     let origin = section.at * crate::cubes::SECTION;
@@ -1319,7 +1318,7 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     let any = scope
         .cubes(base, None)
         .iter()
-        .any(|(_, cube)| kitless(cube.kind) || cube.fill == Fill::Glass);
+        .any(|(_, cube)| kitless(cube.kind));
     let _ = laid;
     if !any {
         return;
@@ -1350,7 +1349,6 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     };
     let mesh = shown.mesh_for_kits(kits);
     drawn.plain = keep(&mesh.structure);
-    drawn.glass = keep(&mesh.glass);
     for (material, surface) in &mesh.textured.0 {
         drawn
             .near

@@ -1068,7 +1068,7 @@ mod tests {
         let rules = crate::Rules::default();
         let mut base = Base::default();
         // A stair, a slope, a half and a post planned, a stone cube built over a carving,
-        // a window's glass and an opening: everything a snapshot could hold before.
+        // an opening built and one planned: everything a snapshot could hold before.
         let shapes = [
             Shape::Stair(Facing::West),
             Shape::Slope(Facing::South),
@@ -1098,7 +1098,7 @@ mod tests {
         base.apply(BuildOp::Fill {
             min: [0, 0, 3],
             max: [0, 0, 3],
-            cube: Some(Cube::new(Kind(2), Fill::Glass)),
+            cube: Some(Cube::new(Kind(2), Fill::Open)),
         });
         base.apply(BuildOp::Fill {
             min: [1, 0, 3],
@@ -1147,6 +1147,40 @@ mod tests {
         assert_eq!(read, base);
         assert_eq!(read.snapshot(), now);
         assert_eq!(read.cube(IVec3::new(1, 0, 0)).unwrap().shape, shapes[1]);
+    }
+
+    #[test]
+    fn a_snapshot_holding_glass_loads_it_as_an_opening() {
+        // A window's glass, packed as 30 before D225 took glass out, in a snapshot of now.
+        let mut base = Base::default();
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [1, 0, 0],
+            cube: Some(crate::Cube::new(Kind(2), Fill::Open)),
+        });
+        let now = base.snapshot();
+        let glass = |word: u32| {
+            if (word >> 12) & 0x1F == 31 {
+                word & !(1 << 12)
+            } else {
+                word
+            }
+        };
+        let old = Snapshot {
+            sections: now
+                .sections
+                .iter()
+                .map(|section| SavedSection {
+                    runs: section.runs.iter().map(|&(n, w)| (n, glass(w))).collect(),
+                    ..section.clone()
+                })
+                .collect(),
+            ..now.clone()
+        };
+        assert_ne!(old.sections, now.sections);
+        let read = Base::from_snapshot(&old).unwrap();
+        assert_eq!(read, base);
+        assert_eq!(read.snapshot(), now);
     }
 
     #[test]

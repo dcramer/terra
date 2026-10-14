@@ -173,7 +173,7 @@ pub enum Refusal {
     Taken(IVec3),
     /// There is nothing there.
     Nothing(IVec3),
-    /// It is an opening or glass, not something built.
+    /// It is an opening, not something built.
     Opening(IVec3),
     AlreadyBuilt(IVec3),
     /// Something is in it: take it out first.

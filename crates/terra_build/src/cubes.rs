@@ -7,7 +7,7 @@
 //! | Bits | Holds |
 //! |---|---|
 //! | 0 to 11 | Its kind, plus one, so 0 is air |
-//! | 12 to 16 | Its shape ([`Shape::code`]), and, until windows are props, 30 for glass and 31 for an opening |
+//! | 12 to 16 | Its shape ([`Shape::code`]), and 31 for an opening (30, glass before D225 took it out, reads as an opening) |
 //! | 17 to 20 | Its fill level while planned, in sixteenths of the cube |
 //! | 21 | Built: all of it in |
 //! | 22 to 23 | The change pending on it |
@@ -68,11 +68,10 @@ impl Kind {
 pub enum Fill {
     #[default]
     Solid,
-    /// A window's glass: it stops a walker and lets light through. Until windows are props
-    /// (construction-001, gap 15).
-    Glass,
-    /// An opening cut in a wall: part of the wall still, so the room stays closed in, but
-    /// a walker goes through it.
+    /// An opening cut in a wall, a doorway or a window: part of the wall still, so the
+    /// room stays closed in, but a walker goes through it. A window's glass, written
+    /// before D225 took glass out, reads as one.
+    #[serde(alias = "Glass")]
     Open,
 }
 
@@ -191,8 +190,8 @@ impl Shape {
         ]
     };
 
-    /// Its number in a cube's five shape bits (D231), its place in [`Shape::ALL`]; a
-    /// window's glass and an opening are 30 and 31.
+    /// Its number in a cube's five shape bits (D231), its place in [`Shape::ALL`]; an
+    /// opening is 31, and 30, once glass, reads as one.
     pub fn code(self) -> u8 {
         match self {
             Shape::Whole => 0,
@@ -478,7 +477,6 @@ impl Cube {
             self.kind
         );
         let shape = match self.fill {
-            Fill::Glass => GLASS,
             Fill::Open => OPEN,
             Fill::Solid => u32::from(self.shape.code()),
         };
@@ -502,8 +500,7 @@ impl Cube {
             return None;
         }
         let (fill, shape) = match (word >> 12) & 0x1F {
-            GLASS => (Fill::Glass, Shape::Whole),
-            OPEN => (Fill::Open, Shape::Whole),
+            OLD_GLASS | OPEN => (Fill::Open, Shape::Whole),
             code => (
                 Fill::Solid,
                 Shape::of_code(code as u8).unwrap_or(Shape::Whole),
@@ -534,9 +531,10 @@ impl Cube {
     }
 }
 
-/// The shape codes of a window's glass and an opening.
-const GLASS: u32 = 30;
+/// The shape code of an opening, and of a window's glass before D225 took glass out,
+/// which reads as an opening.
 const OPEN: u32 = 31;
+const OLD_GLASS: u32 = 30;
 
 /// A cube's word as it was packed before D231, with four bits of shape (glass 14, an
 /// opening 15) and three of the pending change, as it is packed now.
@@ -545,7 +543,7 @@ pub fn from_v1(word: u32) -> u32 {
         return 0;
     }
     let shape = match (word >> 12) & 0xF {
-        14 => GLASS,
+        14 => OLD_GLASS,
         15 => OPEN,
         code => code,
     };
@@ -1025,10 +1023,8 @@ mod tests {
                 }
             }
         }
-        for fill in [Fill::Glass, Fill::Open] {
-            all.push(Cube::new(Kind::LAST, fill));
-            all.push(Cube::new(Kind::PLAIN, fill).at_level(4));
-        }
+        all.push(Cube::new(Kind::LAST, Fill::Open));
+        all.push(Cube::new(Kind::PLAIN, Fill::Open).at_level(4));
         all
     }
 
@@ -1054,7 +1050,7 @@ mod tests {
                 shape.facing().is_none()
             );
         }
-        assert!(Shape::ALL.len() < GLASS as usize);
+        assert!(Shape::ALL.len() < OLD_GLASS as usize);
     }
 
     #[test]
@@ -1101,7 +1097,6 @@ mod tests {
         // Packed as cubes were before D231, by hand.
         let v1 = |cube: &Cube, part: u32| {
             let shape = match (cube.fill, cube.shape) {
-                (Fill::Glass, _) => 14,
                 (Fill::Open, _) => 15,
                 (_, shape) => u32::from(shape.code()),
             };
@@ -1124,6 +1119,19 @@ mod tests {
             assert_eq!(from_v1(v1(&cube, part)), cube.pack(part as u8), "{cube:?}");
         }
         assert_eq!(from_v1(0), 0);
+    }
+
+    #[test]
+    fn glass_from_before_d225_reads_as_an_opening() {
+        // A built cube of kind 2 packed as glass now (30) and before D231 (14), and an op
+        // written with a glass cube: each is an opening.
+        let open = Cube::new(Kind(2), Fill::Open);
+        let (glass, _) = Cube::unpack(3 | OLD_GLASS << 12 | 1 << 21).expect("not air");
+        assert_eq!(glass, open);
+        let (glass_v1, _) = Cube::unpack(from_v1(3 | 14 << 12 | 1 << 20)).expect("not air");
+        assert_eq!(glass_v1, open);
+        let written: Cube = ron::from_str("(kind: (2), fill: Glass)").unwrap();
+        assert_eq!(written, open);
     }
 
     #[test]

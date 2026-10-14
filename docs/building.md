@@ -221,7 +221,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 - **Doors and windows**: an open doorway lets weather in; a fitted door, shut, keeps it out, and an open window lets in a little (D139).
 - **Stations** belong to the building they stand in: their expansions count anywhere in it (D151).
 
-Technically: worked out from the cubes when a part is built or taken away, not every frame (D127), as [building-tech.md](building-tech.md) says (D160). Built: a base is half-metre cubes (D181), walls rows of them, floors and flat roofs layers, with rooms worked out from the walls; the room tool is the shortcut, walls are drawn inside or out, and doors and windows are cubes cut open or glazed. Buildings as entities, and indoors, come with weather and stations that read them.
+Technically: worked out from the cubes when a part is built or taken away, not every frame (D127), as [building-tech.md](building-tech.md) says (D160). Built: a base is half-metre cubes (D181), walls rows of them, floors and flat roofs layers, with rooms worked out from the walls; the room tool is the shortcut, walls are drawn inside or out, and doors and windows are cubes cut open. Buildings as entities, and indoors, come with weather and stations that read them.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 
@@ -244,7 +244,7 @@ Because every wall is a whole number of cubes, the kit always fits: a stone wall
 
 - **On a plan**, an opening is planned into the wall: the parts it crosses are shortened or left out, so the wall needs less, and a frame is added to build.
 - **In a finished wall**, an opening is cut: it takes work with a tool, gives back the material of what was cut away, and leaves a frame to build.
-- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather. A plan never shows a door or glass in its openings, only the opening and its frame (2026-10-12). For now no door or window is fitted anywhere, the player's, the village's or the kit sheet's: openings stand as framed holes with their jambs, sills and lintels until better props are made (D225: "we have some of these ugly ass door and window props we can probably just remove for now").
+- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather. A plan never shows a door or glass in its openings, only the opening and its frame (2026-10-12). For now no door or window is fitted anywhere, the player's, the village's or the kit sheet's: openings stand as framed holes with their jambs, sills and lintels until better props are made (D225: "we have some of these ugly ass door and window props we can probably just remove for now"). Nor is there glass: a window is a hole in the wall, its cubes open as a doorway's are (D225: "just leave windows as a hole in the wall").
 
 **Small things are not planned.** Furniture, storage, lights and stations are placed whole, as now: they are made, then set down. Open whether stations should be constructed too, being large.
 
@@ -285,7 +285,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | Room: the shortcut that lays a rectangle's walls, floor and roof | Built |
 | Floor, drawn on its own | Missing; laid by the room shortcut |
 | Roof: cubes of a roof kind by hand; "add a roof", gable, hip, lean-to or flat | Built (D241, [building-kits.md](building-kits.md#roofs-d241)) |
-| Window and doorway, cubes left open or glazed | Built |
+| Window and doorway, cubes left open | Built |
 | Carving cubes by hand, any shape | Built: Carve, a brush's box of built cubes marked and taken out (D226) |
 | Taking out the cube aimed at | Built: take-apart takes the brush's box aimed at where nothing rests on it, else what came last of its part (D226) |
 | Shapes: whole, half, upper half, stair and slope either way up, outer and inner corner slopes, post | Built (D220, D231) |

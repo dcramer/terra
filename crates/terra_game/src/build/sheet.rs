@@ -732,7 +732,7 @@ pub(super) fn roof_cube_rows(walls: Kind, roof: Kind) -> Vec<(String, Vec<BuildO
     dormer.push(BuildOp::Fill {
         min: [6, 6, 11],
         max: [7, 6, 11],
-        cube: Some(Cube::new(walls, Fill::Glass)),
+        cube: Some(Cube::new(walls, Fill::Open)),
     });
     rows.push(("dormer".to_string(), dormer));
     // Two storeys over the west half of a ground floor eight metres by five: the ground

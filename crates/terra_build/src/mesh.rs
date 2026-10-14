@@ -3,9 +3,9 @@
 //! Cubes of a kind with a kit are left to the kit, which lays its own pieces (`layout`,
 //! `timber`, `roofing`); everything else is drawn here: walls of the plain kind as their
 //! cubes, a floor or flat roof as its cubes with a floor's colour on top and a ceiling's
-//! under it, and glass as a pane up the middle of its wall.
+//! under it. Openings, doorways and windows, are holes, not drawn.
 
-use crate::{Base, CELL_M, Fill, IVec3, Kind, storey_of, wall_layer};
+use crate::{Base, CELL_M, Fill, IVec3, Kind, storey_of};
 use glam::Vec3;
 use std::collections::BTreeMap;
 
@@ -17,7 +17,6 @@ const ROOF: [f32; 3] = [0.74, 0.73, 0.7];
 const UNDERSIDE: [f32; 3] = [0.42, 0.43, 0.47];
 const FLOOR: [f32; 3] = [0.6, 0.45, 0.33];
 const CEILING: [f32; 3] = [0.93, 0.91, 0.86];
-const GLASS: [f32; 3] = [0.55, 0.8, 0.9];
 
 /// How thick a pitched roof is under its covering: its rafters and battens. Walls and their
 /// gables stop under it.
@@ -386,8 +385,6 @@ impl Surface {
 pub struct BaseMesh {
     /// Walls, floors, roofs and gables, seen from outside and from inside.
     pub structure: Surface,
-    /// Window glass, to be drawn see-through and from both sides.
-    pub glass: Surface,
     /// What a kit's materials draw: its roofs' covering, edges and undersides.
     pub textured: Surfaces,
 }
@@ -435,10 +432,6 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
         let tile = IVec3::new(at.x, storey_of(at.y), at.z);
         match cube.fill {
             Fill::Open => continue,
-            Fill::Glass => {
-                pane(&mut mesh, base, at);
-                continue;
-            }
             // A kit draws its kind's cubes itself: a block kind as its surface, a timber
             // kind's walls as its members and its floors as decks.
             Fill::Solid if look.is_some() => continue,
@@ -475,25 +468,6 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
         }
     }
     mesh
-}
-
-/// A pane of glass up the middle of a cube of a wall, across the way the wall runs.
-fn pane(mesh: &mut BaseMesh, base: &Base, at: IVec3) {
-    let tile = IVec3::new(at.x, storey_of(at.y), at.z);
-    let [low_left, low_right, ..] = crate::corners(tile, base.along(tile));
-    let bottom = Vec3::Y * ((at.y - wall_layer(tile.y)) as f32 * CELL_M);
-    let up = Vec3::Y * CELL_M;
-    let normal = (low_right - low_left).cross(Vec3::Y).normalize();
-    mesh.glass.quad(
-        [
-            low_left + bottom,
-            low_right + bottom,
-            low_right + bottom + up,
-            low_left + bottom + up,
-        ],
-        normal,
-        GLASS,
-    );
 }
 
 #[cfg(test)]
@@ -544,12 +518,11 @@ mod tests {
     #[test]
     fn every_triangle_faces_the_way_its_normal_says() {
         let mesh = room().mesh(|_| None);
-        assert!(mesh.structure.triangle_count() > 0 && mesh.glass.triangle_count() > 0);
-        for surface in [&mesh.structure, &mesh.glass] {
-            for (corners, normal) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
-                let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
-                assert!(own.dot(normal[0]) > 0.0, "{corners:?} {normal:?}");
-            }
+        let surface = &mesh.structure;
+        assert!(surface.triangle_count() > 0);
+        for (corners, normal) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
+            let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
+            assert!(own.dot(normal[0]) > 0.0, "{corners:?} {normal:?}");
         }
     }
 

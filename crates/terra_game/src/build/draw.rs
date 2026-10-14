@@ -91,13 +91,12 @@ impl bevy::pbr::Material for GhostMaterial {
     }
 }
 
-/// What builds are drawn with beside their kits' materials: what no kit draws, glass, a
-/// plan's ghosts in two shades and its shell, the next piece lit, far off sections in
+/// What builds are drawn with beside their kits' materials: what no kit draws, a plan's
+/// ghosts in two shades and its shell, the next piece lit, far off sections in
 /// their baked colours; and the shapes a ghost is drawn as.
 #[derive(Clone)]
 pub(super) struct Looks {
     structure: Handle<StandardMaterial>,
-    glass: Handle<StandardMaterial>,
     ghost: [Handle<GhostMaterial>; 2],
     shell: Handle<GhostMaterial>,
     pub next: Handle<StandardMaterial>,
@@ -138,17 +137,6 @@ impl Looks {
             structure: materials.add(StandardMaterial {
                 perceptual_roughness: 0.82,
                 reflectance: 0.3,
-                ..default()
-            }),
-            // Old glass, a little green, dark against a dim room as a window is seen from
-            // outside, catching the sky without turning into a sky-blue panel.
-            glass: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.16, 0.2, 0.19, 0.62),
-                alpha_mode: AlphaMode::Blend,
-                perceptual_roughness: 0.12,
-                reflectance: 0.4,
-                cull_mode: None,
-                double_sided: true,
                 ..default()
             }),
             next: materials.add(StandardMaterial {
@@ -248,7 +236,6 @@ pub(super) struct Parts {
     near: Vec<(Kind, Material, Mesh)>,
     mid: Vec<(Kind, Material, Mesh)>,
     plain: Option<Mesh>,
-    glass: Option<Mesh>,
     next: Vec<Mesh>,
     shell: Option<Mesh>,
     ghosts: Vec<Ghost>,
@@ -277,7 +264,6 @@ pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
             })
             .collect(),
         plain: plain(&drawn.plain),
-        glass: plain(&drawn.glass),
         next: drawn.next.0.values().filter_map(plain).collect(),
         shell: mesh(&drawn.shell, centre, Uvs::Only),
         ghosts: drawn.ghosts,
@@ -399,17 +385,11 @@ impl Parts {
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
             + self.next.iter().map(count).sum::<usize>()
-            + [
-                &self.plain,
-                &self.glass,
-                &self.shell,
-                &self.far,
-                &self.proxy,
-            ]
-            .into_iter()
-            .flatten()
-            .map(count)
-            .sum::<usize>()
+            + [&self.plain, &self.shell, &self.far, &self.proxy]
+                .into_iter()
+                .flatten()
+                .map(count)
+                .sum::<usize>()
     }
 }
 
@@ -534,16 +514,6 @@ fn show(
                 ChildOf(entity),
             ));
         }
-    }
-    if let Some(mesh) = parts.glass {
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(looks.glass.clone()),
-            range(None, FAR_M),
-            NotShadowCaster,
-            Transform::IDENTITY,
-            ChildOf(entity),
-        ));
     }
     if let Some(mesh) = parts.shell {
         commands.spawn((

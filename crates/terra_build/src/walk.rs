@@ -1,8 +1,8 @@
 //! Walking in and around a base: what holds a walker up and what stops them.
 //!
 //! This is deliberately simple. A base is cubes on a grid, so a walker can be handled with
-//! arithmetic instead of a physics engine: the tops of cubes hold them up, and solid and
-//! glass cubes stop them, while openings let them through. Coordinates are the base's own,
+//! arithmetic instead of a physics engine: the tops of cubes hold them up, and solid cubes
+//! stop them, while openings, doorways and windows, let them through. Coordinates are the base's own,
 //! in metres, with `y` at the feet.
 
 use crate::cubes::{Cube, Cubes, FULL};
@@ -384,12 +384,13 @@ mod tests {
             "stopped at z {}",
             outside.z
         );
-        // Walking east at the window, from inside.
-        let at_glass = stroll(&base, Vec3::new(4.5, 0.0, 4.5), Vec3::new(14.0, 0.0, 4.5));
+        // Walking east at the window, from inside: its hole is open, but the wall under its
+        // sill stops a walker.
+        let at_window = stroll(&base, Vec3::new(4.5, 0.0, 4.5), Vec3::new(14.0, 0.0, 4.5));
         assert!(
-            (at_glass.x - (8.5 - 0.31)).abs() < 0.02,
+            (at_window.x - (8.5 - 0.31)).abs() < 0.02,
             "stopped at x {}",
-            at_glass.x
+            at_window.x
         );
         // Clipping the side of the doorway counts as hitting the wall beside it.
         let beside_door = stroll(&base, Vec3::new(3.9, 0.0, 14.0), Vec3::new(3.9, 0.0, 4.5));
