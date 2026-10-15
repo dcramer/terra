@@ -1318,9 +1318,10 @@ impl Town {
                 .all(|thing| point_segment(thing.at, a, b) >= GATHERED_M)
     }
 
-    /// Joins a node that reaches none of the streets' nodes (in a narrow street, the walk
-    /// slantwise to one passes too near the fronts) to the nearest street straight across
-    /// from it: a node there on the centre line, between that stretch's own two.
+    /// Joins a node that reaches none of the streets' or the square's nodes (in a narrow
+    /// street, the walk slantwise to one passes too near the fronts; on the square, the
+    /// market stands in the way) to the nearest street straight across from it, a node there
+    /// on the centre line between that stretch's own two; or else a step in onto the square.
     fn straight_across(
         &self,
         nodes: &mut Vec<(Vec2, On)>,
@@ -1356,6 +1357,38 @@ impl Town {
                     edges.insert([a.min(b), a.max(b)]);
                 }
             }
+            return;
+        }
+        // On the square, a step in toward its middle, and on from there to the square's
+        // nearest nodes it can walk to.
+        let outline = &self.square.outline;
+        let middle = outline.iter().copied().sum::<Vec2>() / outline.len() as f32;
+        let step = at + (middle - at).normalize_or_zero() * 1.5;
+        if !self.walkable(at, step) {
+            return;
+        }
+        let mut near: Vec<(f32, u32)> = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, on))| *on == On::Square)
+            .map(|(k, (p, _))| (p.distance(step), k as u32))
+            .filter(|&(d, _)| d < 10.0)
+            .collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let reached: Vec<u32> = near
+            .into_iter()
+            .filter(|&(_, k)| self.walkable(step, nodes[k as usize].0))
+            .take(3)
+            .map(|(_, k)| k)
+            .collect();
+        if reached.is_empty() {
+            return;
+        }
+        let new = nodes.len() as u32;
+        nodes.push((step, On::Square));
+        edges.insert([node.min(new), node.max(new)]);
+        for k in reached {
+            edges.insert([k.min(new), k.max(new)]);
         }
     }
 

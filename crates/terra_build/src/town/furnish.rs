@@ -1,6 +1,6 @@
 //! What a lived-in town has standing about besides its buildings and the things its day is
-//! done at (D346): the trough by the well; barrels by the stalls, by the forge and against
-//! yards' backs; carts by the market and in yards; and fences round the yards, wattle round
+//! done at (D346): the trough by the well; barrels by the stalls, by the forge, against the
+//! fronts round the square and against yards' backs; carts by the market and in yards; and fences round the yards, wattle round
 //! the hens and split rails round the woodpiles, each a run of modules along the yard's
 //! edge with a gap for its gate. Every one is a rule here with its numbers in
 //! [`FURNISHING`], and each is placed only where it keeps clear of every building, thing,
@@ -44,6 +44,9 @@ pub struct Furnishing {
     pub forge_barrels: u32,
     /// Of the yards, the share with barrels against their back, and at most how many each.
     pub yard_barrels: (f32, u32),
+    /// Of the houses on the square, the share with barrels against their front beside the
+    /// door, and at most how many, so its edges are stood about as a market's are.
+    pub front_barrels: (f32, u32),
     /// Carts beside the market, and in yards deep enough to hold one.
     pub market_carts: u32,
     pub yard_carts: u32,
@@ -58,6 +61,7 @@ pub const FURNISHING: Furnishing = Furnishing {
     stall_barrels: (0.6, 2),
     forge_barrels: 2,
     yard_barrels: (0.5, 2),
+    front_barrels: (0.5, 2),
     // None on the square yet: one beside the stalls jammed its crowd (`cargo xtask life`).
     market_carts: 0,
     yard_carts: 2,
@@ -74,6 +78,8 @@ const GOODS_OWN_M: f32 = 2.2;
 /// behind the counter's back, `life.ron`), and as far back.
 const GOODS_ASIDE_M: f32 = 0.8;
 const GOODS_BACK_M: f32 = -0.55;
+/// How far a barrel against a front on the square keeps from every other thing there.
+const FRONT_APART_M: f32 = 2.5;
 /// How far a fence stands inside its yard's edge.
 const FENCE_IN_M: f32 = 0.15;
 /// How far a fence keeps from anything built, and from any way walked.
@@ -376,6 +382,26 @@ impl Town {
                 _ => {}
             }
         }
+        // Against the fronts round the square, beside the doors, on the side the seed picks,
+        // only where they leave the square's crowd room to pass (`FRONT_APART_M`).
+        let mut fronts: Vec<(Vec2, f32)> = Vec::new();
+        let square = &self.square.outline;
+        for (index, door) in self.things.iter().enumerate() {
+            let salt = 2000 + index as u32 * 8;
+            let on_square = (0..square.len())
+                .any(|i| point_segment(door.at, square[i], square[(i + 1) % square.len()]) < 4.0);
+            if door.kind != ThingKind::Door || !on_square || roll(salt) >= numbers.front_barrels.0 {
+                continue;
+            }
+            let side = if roll(salt + 1) < 0.5 { -1.0 } else { 1.0 };
+            let count = 1 + (roll(salt + 2) * numbers.front_barrels.1 as f32) as u32;
+            for k in 0..count.min(numbers.front_barrels.1) {
+                fronts.push((
+                    door.place(Vec2::new(side * (2.0 + k as f32 * 0.64), 0.7)),
+                    door.facing,
+                ));
+            }
+        }
         for (index, (home, quad)) in self.yards.iter().enumerate() {
             let salt = 1000 + index as u32 * 8;
             let kind = self
@@ -409,6 +435,12 @@ impl Town {
         for (at, facing, home) in offers {
             let barrel = Thing::new(ThingKind::Barrel, at, facing, home);
             if self.furnishing_fits(&barrel, 0.5, false) {
+                self.things.push(barrel);
+            }
+        }
+        for (at, facing) in fronts {
+            let barrel = Thing::new(ThingKind::Barrel, at, facing, None);
+            if self.furnishing_fits(&barrel, FRONT_APART_M, false) {
                 self.things.push(barrel);
             }
         }
