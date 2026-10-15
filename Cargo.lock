@@ -5944,6 +5944,7 @@ dependencies = [
 name = "terra_world"
 version = "0.1.0"
 dependencies = [
+ "async-lock",
  "bevy",
  "bevy-inspector-egui",
  "gltf",
