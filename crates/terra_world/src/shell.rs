@@ -790,6 +790,17 @@ impl Plugin for ShellPlugin {
         let readout = !options.clean;
         let window = Window {
             title: "Terra sandbox".into(),
+            // The application id the desktop knows the window by: an unattended run's its own, so
+            // a desktop can put such windows out of the way (a Hyprland rule sends `terra-unattended`
+            // to a hidden workspace) while a window someone plays in stays where they are.
+            name: Some(
+                if options.unattended() {
+                    "terra-unattended"
+                } else {
+                    "terra"
+                }
+                .into(),
+            ),
             // An unattended run needs nobody's attention, and should not take the keyboard
             // away from whatever is in front, nor sit on top of it.
             focused: !options.unattended(),
