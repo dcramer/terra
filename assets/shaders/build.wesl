@@ -149,6 +149,9 @@ const RELIEF_STEPS: u32 = 5u;
 // The view's cosine to the surface below which relief mapping is gone, and above which it
 // is whole: about 75 and 55 degrees from head on.
 const RELIEF_GRAZING: vec2<f32> = vec2(0.25, 0.6);
+// How fast the surface may turn, in radians a metre, before relief mapping fades, and by
+// when it is gone: a log 30 cm across turns about 7, a block's rounded edge about 25.
+const RELIEF_CURVED: vec2<f32> = vec2(10.0, 18.0);
 
 // Timber's damage at a point (D305): how much of it is a split along the grain and a gouge,
 // and how deep it goes, as a share of the relief's depth: a split to its floor, a gouge a
@@ -236,6 +239,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let cut_wood = way == 2 && lost > 0.001 && layers.damage.y > 0.5;
     let splits = select(0.0, max(layers.breaks[layer].y, 1.0), cut_wood);
     let relief_depth = select(depth, max(depth, 0.02), cut_wood);
+    // How sharply the surface turns here, in radians a metre: its normal's change across the
+    // pixel against its position's. Relief mapping takes the surface as a plane; across a
+    // block's rounded edge, a few centimetres round, the march ran down it as streaks, so it
+    // is faded out there, and kept on a log's round, which turns a fifth as fast.
+    let turn = length(fwidth(pbr_input.world_normal)) / max(length(fwidth(wp)), 1e-5);
+    let flat_enough = 1.0 - smoothstep(RELIEF_CURVED.x, RELIEF_CURVED.y, turn);
     // None at the low preset: its frame is its pixels' shading, and a step costs a fetch each.
     if relief_depth > 0.0 && entry.w > 0.0 {
         let V = pbr_input.V;
@@ -244,7 +253,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // plane, and a ray along a rounded edge or a face built up round a sill marched so far
         // across the texture that it drew streaks and fins (research/kit-review-2026-10-14.md);
         // as Unreal's parallax occlusion fades by view angle.
-        let grazing = smoothstep(RELIEF_GRAZING.x, RELIEF_GRAZING.y, abs(Vt.z));
+        let grazing = smoothstep(RELIEF_GRAZING.x, RELIEF_GRAZING.y, abs(Vt.z)) * flat_enough;
         if grazing > 0.0 {
             uv = parallaxed_uv(relief_depth * grazing, entry.w, uv, -Vt, slot, splits, l);
         }

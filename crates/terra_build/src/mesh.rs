@@ -386,7 +386,12 @@ impl Indexed {
     }
 
     /// Each corner's tangent for its normal map, as [`Surface::tangents`] gives them, the
-    /// triangles meeting at a corner each giving theirs and the corner taking their sum.
+    /// triangles meeting at a corner each giving theirs and the corner taking their sum, each
+    /// triangle's ways along its texture as directions weighted by its area, as MikkTSpace
+    /// weighs them: summed as Lengyel's unnormalised, a sliver whose texture barely changes
+    /// across it, as on a rounded edge mapped from the face beside it, outweighed every
+    /// other and turned the frame relief mapping steps through (streaks down a footing's
+    /// rounded edge, research/kit-review-2026-10-14.md).
     pub fn tangents(&self) -> Vec<[f32; 4]> {
         let mut u = vec![Vec3::ZERO; self.positions.len()];
         let mut v = vec![Vec3::ZERO; self.positions.len()];
@@ -410,6 +415,8 @@ impl Indexed {
             }
             let r = 1.0 / det;
             let (tu, tv) = ((e1 * dv2 - e2 * dv1) * r, (e2 * du1 - e1 * du2) * r);
+            let area = e1.cross(e2).length();
+            let (tu, tv) = (tu.normalize_or_zero() * area, tv.normalize_or_zero() * area);
             for i in [a, b, c] {
                 u[i] += tu;
                 v[i] += tv;
