@@ -1677,3 +1677,18 @@ fn a_log_house_is_drawn_with_its_logs_worn_out_of_its_room() {
     assert!(outer > 0.1, "outer faces worn {outer}");
     assert!(outer > inner * 1.3, "outer {outer}, inner {inner}");
 }
+
+#[test]
+fn a_kit_whose_kind_a_base_lacks_lays_nothing_there() {
+    // What lets a base be laid by its own kits alone, however many materials there are.
+    let kits = shipped();
+    for base in bases(&kits) {
+        let kinds: BTreeSet<Kind> = base.cubes().map(|(_, cube)| cube.kind).collect();
+        for kit in &kits.0 {
+            if !kinds.contains(&kit.kind()) {
+                let laid = layout::lay_among(&base, kit, &kits).pieces;
+                assert!(laid.is_empty(), "{:?}: {} pieces", kit.kind(), laid.len());
+            }
+        }
+    }
+}

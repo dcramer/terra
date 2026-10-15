@@ -190,7 +190,14 @@ impl Whole {
 
     fn lay_all(base: &Base, kits: &Kits) -> Whole {
         let mut whole = Whole::default();
+        // A kit lays only its own kind's cubes: one whose kind the base has none of lays
+        // nothing, and is not asked, so a hundred materials cost a base what its own do.
+        let kinds = kinds_of(base);
         for (index, kit) in kits.0.iter().enumerate() {
+            if !kinds.contains(&kit.kind()) {
+                whole.counts.push(0);
+                continue;
+            }
             let pieces = layout::lay_among(base, kit, kits).pieces;
             whole.counts.push(pieces.len());
             for (order, piece) in pieces.into_iter().enumerate() {
@@ -266,9 +273,10 @@ impl Whole {
             counts: self.counts.clone(),
         };
         // A group at a time, each a box no bigger than a piece's reach round the edit.
+        let kinds = kinds_of(base);
         for (group, sections) in groups.iter().enumerate() {
             for (index, kit) in kits.0.iter().enumerate() {
-                if !laid_in(group, kit) {
+                if !laid_in(group, kit) || !kinds.contains(&kit.kind()) {
                     continue;
                 }
                 let pieces = layout::lay_sections(base, kit, kits, sections).pieces;
@@ -283,6 +291,11 @@ impl Whole {
         }
         whole
     }
+}
+
+/// Every kind a base has a cube of.
+fn kinds_of(base: &Base) -> BTreeSet<Kind> {
+    base.cubes().map(|(_, cube)| cube.kind).collect()
 }
 
 /// Runs the work of one base's section, every roof it asks for worked out once
