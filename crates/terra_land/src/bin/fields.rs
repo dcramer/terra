@@ -21,7 +21,7 @@ use terra_land::woods::{self, Stand};
 use terra_land::{Land, PLANET_START, ground, start_climate};
 use terra_voxel::{Field, material};
 
-const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake] [--out shots/fields]
+const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake|tundra] [--out shots/fields]
 
 A region of the world's land on a date as maps of its rules, on the CPU (docs/demos.md, D326):
 the ground's height, steepness and facing, the growing season's mean temperature with the tree
@@ -36,11 +36,12 @@ numbers and what the climate puts at each height and latitude; index.html to loo
   --date     the date, as the sandbox takes it: 06-20 for midsummer's eve, or a day of the
              clock; by default the clock's first day, in late August
   --site     the region round a place the land's rules make, found by its query instead of
-             --at: lake, a basin under the tree line with peaks a kilometre over it (docs/demos.md)
+             --at: lake, a basin under the tree line with peaks a kilometre over it; tundra, level
+             ground past the trees over permafrost, the forest's edge in sight (docs/demos.md)
   --out      the folder to write into";
 
 /// How far upwind shelter is looked for, as Winstral's Sx takes it for drifting snow.
-const SHELTER_REACH_M: f32 = 100.0;
+const SHELTER_REACH_M: f32 = terra_land::drift::REACH_M;
 /// Snow this deep counts as lying, for the snow line.
 const LYING_M: f32 = 0.1;
 
@@ -153,14 +154,40 @@ fn run() -> Result<(), String> {
                         "FIELDS shore walk, metres east and south of the start: {}",
                         through.join(";")
                     );
-                    Some(site)
+                    Some(site.at_km)
                 }
                 None => return Err(format!("no mountain lake on this world: {searched:?}")),
             }
         }
-        Some(other) => return Err(format!("no site called {other}: lake is the one there is")),
+        Some("tundra") => {
+            let want = terra_land::tundra::OpenTundra::DEMO;
+            let (found, searched) = land.tundra_searched(PLANET_START, &want);
+            let found =
+                found.ok_or_else(|| format!("no open tundra on this world: {searched:?}"))?;
+            let forest_km = land.east_north_km(found.toward, found.forest);
+            println!(
+                "FIELDS site tundra: {:.2} km east, {:.2} km north of the start, {:.0} m over the sea, its growing season {:.1} °C and its year {:.1} °C, the closed forest {:.0} m off ({:.2} km east, {:.2} km north of it), {:.1}% of the ground round it pools ({} cells looked at, {} fit)",
+                found.at_km.x,
+                found.at_km.y,
+                found.height_m,
+                found.growing_mean_c,
+                found.year_mean_c,
+                found.forest_m,
+                forest_km.x,
+                forest_km.y,
+                found.pools * 100.0,
+                searched.cells,
+                searched.fit
+            );
+            Some(found.at_km)
+        }
+        Some(other) => {
+            return Err(format!(
+                "no site called {other}: the sites are lake and tundra"
+            ));
+        }
     };
-    let at_km = site.map_or(args.at_km, |site| site.at_km);
+    let at_km = site.unwrap_or(args.at_km);
     let toward = land.along(PLANET_START, at_km * 1000.0);
     let region = Region::sample(&land, toward, args.size_m, args.cell_m);
     let n = region.cells;
@@ -181,7 +208,12 @@ fn run() -> Result<(), String> {
     });
     let seasons = par_map(&places, |&place| land.fields.season(place));
     let season_c: Vec<f32> = seasons.iter().map(|s| s.growing_mean_c).collect();
-    let snow_m: Vec<f32> = par_map(&places, |&place| {
+    // Snow as the ground's shelter from the wind catches it (D323): more in the lee.
+    let snow_m: Vec<f32> = par_map(&cells, |&k| {
+        let place = terra_climate::Place {
+            catch: terra_land::drift::catch(shelter[k]),
+            ..places[k]
+        };
         terra_climate::past(&land.fields, place, day).snow_depth_m()
     });
     let shade = hillshade(&region);
@@ -343,7 +375,7 @@ fn run() -> Result<(), String> {
         ),
         (
             "snow",
-            "Snow lying on the date, from the folded past; a line where it is 10 cm deep",
+            "Snow lying on the date, from the folded past, as the ground's shelter from the wind catches it (D323); a line where it is 10 cm deep",
             Map {
                 cells: n,
                 values: &snow_m,
@@ -419,6 +451,7 @@ fn run() -> Result<(), String> {
                 height_m: h,
                 latitude: lat,
                 sunward: 0.0,
+                catch: 1.0,
             };
             terra_climate::past(&land.fields, place, day).snow_depth_m() >= LYING_M
         });

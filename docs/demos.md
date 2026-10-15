@@ -257,8 +257,8 @@ The cheapest of the three: there is no canopy. Its cost is ground cover to the h
 ### (f) Order of work
 
 1. **The reference:** photos and game frames, `tundra-autumn-day`, a note.
-2. **The place, from the field maps** (§1's step 2): the tundra and its edge where the start's climate puts them. If the climate puts them somewhere useless, the theme's numbers are wrong, and that is found here.
-3. **The ground bends the climate** (D323): aspect and snow catch in `terra_climate::Place`, with tests; the snow patches on the field maps.
+2. **The place, from the field maps** (§1's step 2): the tundra and its edge where the start's climate puts them. If the climate puts them somewhere useless, the theme's numbers are wrong, and that is found here. Done (D337): `cargo xtask fields --site tundra` and the sandbox's `--site tundra` find a fell plateau 10.5 km north and 15.5 km west of the start, at 966 m and 50.6°, its growing season 5.6 °C and its year −6.1 °C, the closed forest's edge 1.9 km south of it, small lakes round it, as Hardangervidda is a tundra plateau at 1,100 to 1,200 m. The lowlands farther north are mountain or polar desert by the start's climate (the tree line reaches the sea at about 59°). On level ground the forest's edge follows the latitude, a band about a kilometre wide but straight: step 7's islands break it.
+3. **The ground bends the climate** (D323): aspect and snow catch in `terra_climate::Place`, with tests; the snow patches on the field maps. Done (D337): `Place::catch` from Winstral's Sx (`terra_land::drift`), in the fold, the land's snow table, the climate maps and the field maps.
 4. **The wind from the climate:** the global wind's direction and strength from `terra_climate::Wind`. It changes every place's look, so the lush forest's checks run too.
 5. **The cover:** the five communities' ground layers, then their shrubs, tussocks and cotton grass as cards, chosen by niche.
 6. **Patterned ground and pools:** the polygon net, and §1's basin filling at a finer grid. Needs §1's step 4.

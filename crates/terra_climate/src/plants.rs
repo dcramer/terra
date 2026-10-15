@@ -158,6 +158,7 @@ mod tests {
             height_m: 40.0,
             latitude: 40.0_f32.to_radians(),
             sunward: 0.0,
+            catch: 1.0,
         }
     }
 

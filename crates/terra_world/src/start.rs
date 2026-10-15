@@ -63,33 +63,88 @@ impl Start {
     }
 }
 
-/// A place the land's rules make, found by its query (`--site`, docs/demos.md). Panics, saying
-/// why, if the land has no such place, as a scripted run should.
-pub fn find_site(planet: &Planet, name: &str) -> terra_land::site::Site {
+/// A place the land's rules make, found by its query (`--site`, docs/demos.md).
+#[derive(Clone, Copy, Debug)]
+pub enum Found {
+    /// A mountain lake: the start on its shore, facing the water.
+    Lake(terra_land::site::Site),
+    /// Open tundra: the start on it, facing the forest's edge.
+    Tundra(terra_land::tundra::TundraSite),
+}
+
+impl Found {
+    /// Where the land round it is worked out from.
+    pub fn middle(&self) -> Vec3 {
+        match self {
+            Found::Lake(site) => site.toward,
+            Found::Tundra(site) => site.toward,
+        }
+    }
+
+    /// The start there, once the land round it is known.
+    pub fn start(&self, planet: &Planet) -> Start {
+        match self {
+            Found::Lake(site) => Start::by_lake(planet, site),
+            Found::Tundra(site) => {
+                let at = planet.surface(site.toward);
+                let up = at.normalize();
+                let facing = (planet.surface(site.forest) - at)
+                    .reject_from(up)
+                    .normalize_or(up.any_orthonormal_vector());
+                Start(
+                    Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up),
+                )
+            }
+        }
+    }
+}
+
+/// The place `--site` names, found by its query. Panics, saying why, if the land has no such
+/// place, as a scripted run should.
+pub fn find_site(planet: &Planet, name: &str) -> Found {
     let climate: terra_climate::Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
     let land = terra_land::Land::new(planet.voxels().field().clone(), climate);
-    let site = match name {
+    match name {
         "lake" => {
             let want = terra_land::site::MountainLake::DEMO;
             let (site, searched) = land.mountain_lake_searched(terra_land::PLANET_START, &want);
-            site.unwrap_or_else(|| {
+            let site = site.unwrap_or_else(|| {
                 panic!(
                     "--site lake: no mountain lake on this world ({searched:?}); mountains need --radius 30000"
                 )
-            })
+            });
+            info!(
+                "Site lake: a lake {:.0} m over the sea, {:.2} km², the tree line {:.0} m, peaks to {:.0} m, {:.2} km east and {:.2} km north of the planet's start",
+                site.level_m,
+                site.area_m2 / 1e6,
+                site.tree_line_m,
+                site.highest_m,
+                site.at_km.x,
+                site.at_km.y
+            );
+            Found::Lake(site)
         }
-        other => panic!("--site {other}: the sites are lake"),
-    };
-    info!(
-        "Site {name}: a lake {:.0} m over the sea, {:.2} km², the tree line {:.0} m, peaks to {:.0} m, {:.2} km east and {:.2} km north of the planet's start",
-        site.level_m,
-        site.area_m2 / 1e6,
-        site.tree_line_m,
-        site.highest_m,
-        site.at_km.x,
-        site.at_km.y
-    );
-    site
+        "tundra" => {
+            let want = terra_land::tundra::OpenTundra::DEMO;
+            let (site, searched) = land.tundra_searched(terra_land::PLANET_START, &want);
+            let site = site.unwrap_or_else(|| {
+                panic!(
+                    "--site tundra: no open tundra on this world ({searched:?}); it needs --radius 30000"
+                )
+            });
+            info!(
+                "Site tundra: {:.0} m over the sea, its growing season {:.1} °C and its year {:.1} °C, the closed forest {:.0} m off, {:.2} km east and {:.2} km north of the planet's start",
+                site.height_m,
+                site.growing_mean_c,
+                site.year_mean_c,
+                site.forest_m,
+                site.at_km.x,
+                site.at_km.y
+            );
+            Found::Tundra(site)
+        }
+        other => panic!("--site {other}: the sites are lake and tundra"),
+    }
 }
 
 /// Where to stand a base: the most level ground near the start that is clear of the sea,

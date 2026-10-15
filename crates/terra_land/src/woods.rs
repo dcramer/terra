@@ -85,8 +85,9 @@ pub struct Seasons {
     height_m: (f32, f32),
     sunward: (f32, f32),
     steps: (usize, usize, usize),
-    /// The growing season's mean and length, by latitude, then height, then leaning.
-    table: Vec<(f32, f32)>,
+    /// The growing season's mean and length and the year's mean, by latitude, then height,
+    /// then leaning.
+    table: Vec<[f32; 3]>,
 }
 
 impl Seasons {
@@ -98,11 +99,25 @@ impl Seasons {
         latitude: (f32, f32),
         height_m: (f32, f32),
     ) -> Self {
+        Self::over_by(fields, latitude, height_m, 0.1, 25.0, 12)
+    }
+
+    /// The seasons over latitudes and heights in steps of so many degrees and metres, and so
+    /// many leanings: coarser for a search over a whole world, finer for the woods round a
+    /// place.
+    pub fn over_by(
+        fields: &terra_climate::Fields,
+        latitude: (f32, f32),
+        height_m: (f32, f32),
+        latitude_step_deg: f32,
+        height_step_m: f32,
+        leanings: usize,
+    ) -> Self {
         let sunward = (-0.9, 0.9);
         let steps = (
-            (((latitude.1 - latitude.0).to_degrees() / 0.1).ceil() as usize).max(1),
-            (((height_m.1 - height_m.0) / 25.0).ceil() as usize).max(1),
-            12,
+            (((latitude.1 - latitude.0).to_degrees() / latitude_step_deg).ceil() as usize).max(1),
+            (((height_m.1 - height_m.0) / height_step_m).ceil() as usize).max(1),
+            leanings.max(1),
         );
         let points: Vec<(usize, usize, usize)> = (0..=steps.0)
             .flat_map(|i| (0..=steps.1).flat_map(move |j| (0..=steps.2).map(move |k| (i, j, k))))
@@ -112,12 +127,16 @@ impl Seasons {
         };
         let table = crate::maps::par_map(&points, |&(i, j, k)| {
             let season = fields.season(terra_climate::Place {
-                at: glam::Vec3::ZERO,
                 height_m: at(height_m, j, steps.1),
                 latitude: at(latitude, i, steps.0),
                 sunward: at(sunward, k, steps.2),
+                ..terra_climate::Place::level(glam::Vec3::ZERO, 0.0, 0.0)
             });
-            (season.growing_mean_c, season.growing_days)
+            [
+                season.growing_mean_c,
+                season.growing_days,
+                season.year_mean_c,
+            ]
         });
         Self {
             latitude,
@@ -129,8 +148,8 @@ impl Seasons {
     }
 
     /// The growing season at a place, blended from the table's points round it: its mean and
-    /// its length, which is all a stand asks of it; the year's means are given as the
-    /// season's.
+    /// its length, which is all a stand asks of it, and the year's mean, which permafrost
+    /// follows; the coldest and warmest days are given as the year's mean.
     pub fn at(&self, latitude: f32, height_m: f32, sunward: f32) -> Season {
         let index = |v: f32, range: (f32, f32), of: usize| {
             let t = ((v - range.0) / (range.1 - range.0)).clamp(0.0, 1.0) * of as f32;
@@ -146,17 +165,16 @@ impl Seasons {
             let c = c.min(self.steps.2);
             self.table[(a * (self.steps.1 + 1) + b) * (self.steps.2 + 1) + c]
         };
-        let lerp =
-            |x: (f32, f32), y: (f32, f32), t: f32| (x.0 + (y.0 - x.0) * t, x.1 + (y.1 - x.1) * t);
+        let lerp = |x: [f32; 3], y: [f32; 3], t: f32| [0, 1, 2].map(|n| x[n] + (y[n] - x[n]) * t);
         let along_k = |a, b| lerp(get(a, b, k), get(a, b, k + 1), fk);
         let along_j = |a| lerp(along_k(a, j), along_k(a, j + 1), fj);
-        let (mean, days) = lerp(along_j(i), along_j(i + 1), fi);
+        let [mean, days, year] = lerp(along_j(i), along_j(i + 1), fi);
         Season {
             growing_days: days,
             growing_mean_c: mean,
-            year_mean_c: mean,
-            coldest_c: mean,
-            warmest_c: mean,
+            year_mean_c: year,
+            coldest_c: year,
+            warmest_c: year,
         }
     }
 }
@@ -350,6 +368,7 @@ mod tests {
                 height_m: height,
                 latitude,
                 sunward,
+                catch: 1.0,
             });
             let blended = seasons.at(latitude, height, sunward);
             // Where it barely grows the season's mean jumps to the year's; trees need months.

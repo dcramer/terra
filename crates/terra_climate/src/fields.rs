@@ -49,6 +49,12 @@ pub struct Place {
     /// equator, which is the old rule for a slope's sunlight: a sunny slope is warmer and its
     /// snow goes sooner, a shaded one colder.
     pub sunward: f32,
+    /// How much of the snow that falls the ground there keeps against the wind, as a share
+    /// of what open level ground keeps (D323): over 1 in a lee hollow, where the wind drops
+    /// what it carried off the rises upwind, under 1 on a rise the wind scours. Worked out
+    /// by the world from its ground (Winstral's Sx, `terra_land::drift`); the climate never
+    /// reads terrain.
+    pub catch: f32,
 }
 
 impl Place {
@@ -59,6 +65,7 @@ impl Place {
             height_m,
             latitude,
             sunward: 0.0,
+            catch: 1.0,
         }
     }
 }
@@ -424,6 +431,7 @@ pub(crate) mod tests {
             height_m: rng.range(0.0, 300.0),
             latitude: rng.range(-1.2, 1.2),
             sunward: 0.0,
+            catch: 1.0,
         }
     }
 
@@ -433,6 +441,7 @@ pub(crate) mod tests {
             height_m: 50.0,
             latitude: 40.0_f32.to_radians(),
             sunward: 0.0,
+            catch: 1.0,
         }
     }
 

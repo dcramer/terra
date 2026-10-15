@@ -646,9 +646,9 @@ pub fn plugin(app: &mut App) {
     };
     let start = match app.world().resource::<Options>().site.clone() {
         Some(name) => {
-            let site = crate::start::find_site(&planet, &name);
-            planet.look_round(site.toward, ROUND_M, day);
-            crate::start::Start::by_lake(&planet, &site)
+            let found = crate::start::find_site(&planet, &name);
+            planet.look_round(found.middle(), ROUND_M, day);
+            found.start(&planet)
         }
         None => {
             let start = crate::start::Start::choose(&planet, yard);

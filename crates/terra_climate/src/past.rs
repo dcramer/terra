@@ -157,7 +157,9 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
         let t = weather.temperature_c;
         let falls = weather.precipitation_mm_per_hour * hours;
         let snow = falls * weather.snow_share;
-        past.snow_mm += snow;
+        // What the wind leaves of it here: more in the lee, less on a scoured rise (D323).
+        // What it carries off a rise is not water the ground there gets either.
+        past.snow_mm += snow * place.catch;
         let melt = if t > 0.0 {
             ((MELT_MM_PER_HOUR_C + MELT_PER_W_M2 * weather.ground_sunlight_w_m2) * t * hours)
                 .min(past.snow_mm)
@@ -321,6 +323,7 @@ mod tests {
             height_m: 0.0,
             latitude: 45.0_f32.to_radians(),
             sunward: 0.0,
+            catch: 1.0,
         }
     }
 
@@ -463,6 +466,7 @@ mod tests {
                     height_m: 0.0,
                     latitude: 0.7,
                     sunward: 0.0,
+                    catch: 1.0,
                 };
                 (Cell::containing(p.at), p)
             })

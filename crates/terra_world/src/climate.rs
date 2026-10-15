@@ -51,6 +51,9 @@ pub struct ClimateFields {
     sea_radius_m: f32,
     /// The world's frame: where each place's latitude comes from.
     pub frame: Frame,
+    /// How much drifting snow the ground round the start catches (D323), where the land
+    /// round it was worked out; open ground's elsewhere.
+    pub drift: Option<Arc<terra_land::drift::Drift>>,
 }
 
 /// The world's frame, turned as the sky is over the planet's own start (`daylight`).
@@ -82,6 +85,7 @@ impl ClimateFields {
             height_m: at.length() - self.sea_radius_m,
             latitude,
             sunward: self.frame.sunward(at, normal),
+            catch: self.drift.as_ref().map_or(1.0, |drift| drift.at(at)),
         }
     }
 
@@ -110,6 +114,7 @@ impl ClimateFields {
             years: Arc::new(years),
             sea_radius_m: 2000.0,
             frame: Frame::turned_for(Vec3::Y, LATITUDE, 0.17).0,
+            drift: None,
         }
     }
 
@@ -302,6 +307,7 @@ fn read_fields(
         years: Arc::new(years),
         sea_radius_m: planet.sea_radius_m(),
         frame: world_frame(&planet, &climate.0),
+        drift: planet.round().map(|round| Arc::new(round.drift.clone())),
     });
     let mut picture = |layers: u32, fill: [u8; 4]| {
         let mut image = Image::new_fill(
@@ -661,6 +667,7 @@ mod tests {
             years: Arc::new(crate::data::read(YEARS_FILE)),
             sea_radius_m: 2000.0,
             frame: Frame::turned_for(Vec3::Y, LATITUDE, 0.17).0,
+            drift: None,
         }
     }
 

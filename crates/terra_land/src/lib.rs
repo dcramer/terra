@@ -8,6 +8,7 @@
 //! the snow lies) changes play, so every machine works it out the same. `terra_world` draws
 //! it; `cargo xtask fields` maps it without the GPU (D326).
 
+pub mod drift;
 pub mod frame;
 pub mod ground;
 pub mod lakes;
@@ -16,6 +17,7 @@ pub mod region;
 pub mod round;
 pub mod site;
 pub mod snow;
+pub mod tundra;
 pub mod water;
 pub mod woods;
 
@@ -75,6 +77,7 @@ impl Land {
             height_m: at.length() - self.sea_radius_m(),
             latitude: self.frame.latitude(at),
             sunward: self.frame.sunward(at, normal),
+            catch: 1.0,
         }
     }
 }

@@ -3,6 +3,7 @@
 //! span of a region. What the world on screen asks of every tree and every vertex of ground.
 
 use crate::Land;
+use crate::drift::Drift;
 use crate::snow::Snow;
 use crate::water::Waters;
 use crate::woods::{self, Footing, Seasons, Stand};
@@ -14,6 +15,9 @@ pub struct Round {
     pub waters: Waters,
     pub seasons: Seasons,
     pub snow: Snow,
+    /// How much of the falling snow its ground keeps against the prevailing wind (D323), over
+    /// the lakes' grid.
+    pub drift: Drift,
     /// Its middle, and how far across it reaches.
     pub middle: Vec3,
     pub across_m: f32,
@@ -28,6 +32,10 @@ impl Round {
     pub fn new(land: Land, toward: Vec3, across_m: f32, day: i64) -> Self {
         let middle = toward.normalize();
         let waters = Waters::round(&land, middle, LAKES_ACROSS_M.min(across_m), LAKE_CELL_M);
+        let drift = Drift::over(
+            waters.region(),
+            crate::drift::wind_from(land.fields.climate().wind.prevailing_from_deg),
+        );
         let latitude = land.frame.latitude(middle);
         let reach = across_m * 0.5 / land.radius_m();
         let latitudes = (latitude - reach, latitude + reach);
@@ -45,6 +53,7 @@ impl Round {
             waters,
             seasons,
             snow,
+            drift,
             middle,
             across_m,
         }
@@ -61,11 +70,21 @@ impl Round {
         woods::stand(&season, slope, footing)
     }
 
-    /// How deep the snow lies at a point on the ground, facing `normal`, in metres.
+    /// How deep the snow lies at a point on the ground, facing `normal`, in metres, as its
+    /// shelter from the wind catches it (D323).
     pub fn snow_m(&self, point: Vec3, normal: Vec3) -> f32 {
-        let place = self.land.place(point, normal);
+        let place = self.place(point, normal);
         self.snow
-            .depth_m(place.latitude, place.height_m, place.sunward)
+            .depth_caught_m(place.latitude, place.height_m, place.sunward, place.catch)
+    }
+
+    /// A point on the ground facing `normal` as the climate takes it, with how much drifting
+    /// snow it catches.
+    pub fn place(&self, point: Vec3, normal: Vec3) -> terra_climate::Place {
+        terra_climate::Place {
+            catch: self.drift.at(point),
+            ..self.land.place(point, normal)
+        }
     }
 }
 

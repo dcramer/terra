@@ -76,6 +76,7 @@ impl Fields {
                 height_m,
                 latitude,
                 sunward,
+                catch: 1.0,
             })
             .holds_trees()
         };
@@ -108,6 +109,7 @@ mod tests {
             height_m,
             latitude: latitude_deg.to_radians(),
             sunward,
+            catch: 1.0,
         }
     }
 
