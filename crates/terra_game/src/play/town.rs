@@ -182,7 +182,10 @@ fn hearth_burns(hour: f32, luck: f32) -> f32 {
     let meals = cooking(6.5, 2.5)
         .max(cooking(12.0, 1.5) * 0.7)
         .max(cooking(19.0, 3.0));
-    (0.18 + meals * 0.82).min(1.0)
+    // Not every house cooks on a big fire: some a pot on embers, so a few columns stand
+    // thick over the roofs and most are a wisp.
+    let big = (luck * 7.31).fract();
+    (0.15 + meals * (0.25 + 0.6 * big)).min(1.0)
 }
 
 /// The hearths and the forge burning as the day has them: a home's while anyone of its
@@ -399,12 +402,14 @@ impl terra_world::cover::CoverSource for TownCover {
         if worn < 0.0 {
             growing.grass = 0.0;
             growing.path = true;
-            // Trodden earth darkened and muddied by feet, wheels and what falls from carts,
-            // in broken patches, not the planet's bare soil.
-            growing.litter = 0.16;
-            growing.roots = 0.42;
+            // Packed earth, trodden hardest along the middle of a way and less toward its
+            // edges, where straw and dung collect (the ground shader's trodden ways).
+            growing.trodden = (0.75 + (-worn).min(2.0) * 0.125).min(1.0);
         } else if worn < 1.5 {
             growing.grass *= worn / 1.5 * 0.7;
+            growing.trodden = 0.6 * (1.0 - worn / 1.5);
+            // Duff gathers where the grass comes back, along a way's edge.
+            growing.roots = 0.35 * (1.0 - worn / 1.5);
         }
         if self
             .yards
@@ -412,6 +417,8 @@ impl terra_world::cover::CoverSource for TownCover {
             .any(|yard| terra_build::town::inside(p, yard))
         {
             growing.grass *= 0.35;
+            // Worn by hens and feet, straw strewn about.
+            growing.trodden = growing.trodden.max(0.45);
         }
         growing
     }
@@ -449,6 +456,9 @@ pub fn plugin(app: &mut App) {
         (burn, light, report).run_if(resource_exists::<Market>),
     );
 }
+
+/// How wide a player or the camera is to the town's walkers.
+const VISITOR_M: f32 = 0.4;
 
 /// The town's people's tick, which what draws them follows.
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -863,11 +873,23 @@ fn live(
     clock: Res<Clock>,
     mut market: ResMut<Market>,
     viewers: Query<&GlobalTransform, Or<(With<Viewpoint>, With<MainCamera>)>>,
+    visitors: Query<&GlobalTransform, Or<(With<super::Player>, With<MainCamera>)>>,
 ) {
     let viewers: Vec<Vec2> = viewers
         .iter()
         .map(|seen| market.local(seen.translation()))
         .collect();
+    // Players and the camera are walked round, as the town's people walk round each other,
+    // so nobody walks through a player or into the lens.
+    let visitors = visitors
+        .iter()
+        .map(|seen| terra_life::orca::Body {
+            at: market.local(seen.translation()),
+            velocity: Vec2::ZERO,
+            radius: VISITOR_M,
+        })
+        .collect();
+    market.life.visitors = visitors;
     let hours = Market::hours(&clock);
     let step = time.delta_secs();
     market.life.step(hours, step, &viewers);

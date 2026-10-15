@@ -227,3 +227,48 @@ fn the_same_town_and_seed_live_the_same_day() {
     let at = |life: &Life| life.people.iter().map(|p| p.at).collect::<Vec<_>>();
     assert_eq!(at(&a), at(&b));
 }
+
+#[test]
+fn walkers_go_round_a_visitor_standing_in_their_way() {
+    // Where someone walks a few minutes into the morning, found without a visitor; then the
+    // same morning with one standing there.
+    let steps = (0.2 * SECONDS_AN_HOUR as f64 / STEP as f64) as u64;
+    let hour = |n: u64| 9.0 + n as f64 * STEP as f64 / SECONDS_AN_HOUR as f64;
+    let mut first = life(3);
+    let viewer = square(&first);
+    first.start(9.0);
+    let mut way = None;
+    for n in 0..steps {
+        first.step(hour(n), STEP, &[viewer]);
+        if n == steps / 2 {
+            way = first
+                .people
+                .iter()
+                .find(|p| matches!(p.state, State::Walking { .. }) && p.velocity.length() > 0.8)
+                .map(|p| (p.at + p.velocity * 2.0, p.velocity));
+        }
+    }
+    let (here, _) = way.expect("someone walking");
+    let mut life = life(3);
+    life.visitors = vec![crate::orca::Body {
+        at: here,
+        velocity: Vec2::ZERO,
+        radius: 0.3,
+    }];
+    life.start(9.0);
+    let (mut closest, mut passed) = (f32::MAX, 0);
+    for n in 0..steps {
+        life.step(hour(n), STEP, &[viewer]);
+        for p in &life.people {
+            if matches!(p.state, State::Walking { .. }) && p.at.distance(here) < 2.0 {
+                passed += 1;
+                closest = closest.min(p.at.distance(here) - p.radius * 0.5);
+            }
+        }
+    }
+    assert!(passed > 0, "someone walks by");
+    assert!(
+        closest > 0.25,
+        "a walker came within {closest} m of the visitor"
+    );
+}

@@ -81,6 +81,10 @@ pub struct Growing {
     /// rock, from 0 away from it to 1 against it: where litter heaps up and climbs onto it
     /// (D294).
     pub heap: f32,
+    /// How trodden the ground is by feet, hooves and wheels, from 0 untouched to 1 a
+    /// settlement's street: packed grey-brown earth with stones worked up and mud in its
+    /// hollows, not the planet's own soil, and straw dropped about its edges.
+    pub trodden: f32,
 }
 
 impl Growing {

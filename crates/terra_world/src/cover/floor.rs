@@ -144,7 +144,7 @@ fn paint(
                         byte(growing.needles),
                         byte(growing.roots),
                         byte(growing.shade),
-                        0,
+                        byte(growing.trodden),
                     ]);
                 }
             }

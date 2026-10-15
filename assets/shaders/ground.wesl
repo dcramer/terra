@@ -87,8 +87,8 @@ var ground_normal: texture_2d_array<f32>;
 var cover_map: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var cover_sampler: sampler;
-// And more of it: fallen needles in red, duff and roots in green, and how much canopy stands
-// over in blue.
+// And more of it: fallen needles in red, duff and roots in green, how much canopy stands
+// over in blue, and how trodden the ground is in alpha (a settlement's ways).
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
 var cover_more: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
@@ -121,6 +121,11 @@ const SNOW: vec3<f32> = vec3<f32>(0.74, 0.76, 0.8);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
+// A settlement's trodden ways, linear: packed earth, grey-brown and dusty, as a market town's
+// streets are in Kingdom Come's and The Witcher's frames, not the planet's warm soil; and the
+// straw dropped about their edges.
+const TRODDEN: vec3<f32> = vec3<f32>(0.15, 0.132, 0.108);
+const STRAW: vec3<f32> = vec3<f32>(0.34, 0.27, 0.13);
 // Rime on the floor in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
@@ -684,6 +689,7 @@ fn fragment(
         var needles = 0.0;
         var roots = 0.0;
         var fresh = 0.0;
+        var trodden = 0.0;
         if ground.cover_on != 0u {
             // The map is half a metre a texel: looked up a little way off, by noise, so what
             // it says frays and wanders rather than ending in smooth blobs.
@@ -704,6 +710,7 @@ fn fragment(
             let more = textureSampleLevel(cover_more, cover_more_sampler, at, 0.0);
             needles = more.r * inside;
             roots = more.g * inside;
+            trodden = more.a * inside;
             // After the fall the broadleaves' leaves lie fresh under them, over the grass too,
             // warm brown through the winter until the spring's growth comes through (D327).
             fresh = fallen_leaves(world) * smoothstep(0.15, 0.6, more.b * inside) * (1.0 - needles);
@@ -769,7 +776,7 @@ fn fragment(
         let amounts = array<f32, 12>(1.0, steep, leaves, needly, rooty, grass, mossy, rock, sandy, bare, scree, gravel);
         let tints = array<vec3<f32>, 12>(
             // Damp, packed patches darker and dry crumbs lighter, as the high preset's (D294).
-            mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch)
+            mix(mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)), TRODDEN, smoothstep(0.08, 0.55, trodden)) * (0.9 + 0.2 * blotch)
                 * mix(1.18, 0.62, smoothstep(0.3, 0.75, noise(world * 0.6 + 31.0) * 0.6 + noise(world * 2.1 + 47.0) * 0.4)),
             ground.steep.rgb * (0.85 + 0.3 * blotch),
             litter_colour * (0.85 + 0.3 * fleck),
@@ -845,6 +852,27 @@ fn fragment(
             if steep > 0.0 {
                 let rock_tint = ground.steep.rgb * (0.85 + 0.3 * blotch);
                 ground_is = over(ground_is, layer(ROCK, 1.0, rock_tint, world + 37.0, gx, gy, n, 0.15), steep);
+            }
+        }
+        // A settlement's trodden ways (TownCover): packed earth of its own colour, its scan's
+        // grain kept but not its hue, stones worked up out of it, mud lying dark in its
+        // hollows, and straw dropped about its edges and in the yards.
+        let worn = smoothstep(0.08, 0.55, trodden + (blotch - 0.5) * 0.35) * flat_ground;
+        if worn > 0.0 {
+            let packed = TRODDEN * (0.82 + 0.36 * blotch) * (0.9 + 0.2 * swell);
+            var earth = layer(SOIL, 0.7, packed, world + 13.0, gx, gy, n, 1.0);
+            let grain = dot(earth.colour, vec3<f32>(0.333)) / dot(packed, vec3<f32>(0.333));
+            earth.colour = packed * pow(max(grain, 0.0), 1.25);
+            let stones = smoothstep(0.5, 0.85, noise(world * 0.7 + 91.0) * 0.7 + fleck * 0.3) * 0.8;
+            if stones > 0.0 {
+                earth = settle(earth, layer(GRAVEL, 0.45, packed * 1.2, world + 19.0, gx, gy, n, 1.0), stones);
+            }
+            let wet = smoothstep(0.58, 0.78, noise(world * 0.28 + 7.0) * 0.75 + noise(world * 1.9 + 3.0) * 0.25) * smoothstep(0.6, 0.9, trodden);
+            earth.colour *= mix(1.0, 0.45, wet);
+            ground_is = over(ground_is, earth, worn);
+            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * (1.0 - smoothstep(0.55, 0.95, trodden)) * worn;
+            if straw > 0.0 {
+                ground_is = settle(ground_is, layer(LITTER, 0.6, STRAW * (0.8 + 0.4 * fleck), world + 67.0, gx, gy, n, 1.0), straw);
             }
         }
         // Fallen leaves, laid on the soil leaf by leaf as they thicken.

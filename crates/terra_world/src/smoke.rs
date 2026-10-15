@@ -95,15 +95,18 @@ fn cards(quality: Quality) -> usize {
 /// Each kind's life, rise, sizes, colour and opacity.
 fn look(burning: Burning) -> (Vec4, Vec4) {
     match burning {
-        // Wood smoke from a hearth: blue-grey, thin, rising slowly and spreading wide.
+        // Wood smoke from a hearth: blue-grey, thin, rising slowly and spreading wide. Its
+        // albedo is a grey's, as smoke's is (a white card glows brighter than the land under a
+        // dusk sky), and a card is a wisp, so only where many overlap low over the roof does
+        // it read as a column.
         Burning::Hearth => (
-            Vec4::new(16.0, 1.0, 0.9, 5.5),
-            Vec4::new(0.62, 0.63, 0.66, 0.42),
+            Vec4::new(14.0, 0.9, 0.7, 5.0),
+            Vec4::new(0.3, 0.31, 0.33, 0.2),
         ),
         // A forge's coal and charcoal: darker, thicker, quicker.
         Burning::Forge => (
-            Vec4::new(11.0, 1.5, 1.0, 4.5),
-            Vec4::new(0.36, 0.35, 0.35, 0.55),
+            Vec4::new(10.0, 1.4, 0.8, 4.0),
+            Vec4::new(0.2, 0.2, 0.2, 0.32),
         ),
     }
 }
@@ -174,7 +177,7 @@ fn draw(
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: 1.0,
                 reflectance: 0.0,
-                diffuse_transmission: 0.2,
+                diffuse_transmission: 0.08,
                 ..default()
             },
             extension: SmokeExtension {

@@ -203,6 +203,9 @@ pub struct Life {
     /// When the town was started, from the clock: windows planned before it are not judged.
     started: f64,
     pub record: Record,
+    /// Bodies from outside the town's life, players and the camera, that its walkers go
+    /// round as they go round each other, set before each step.
+    pub visitors: Vec<Body>,
 }
 
 /// Everything walkers go round, on a grid, so whether a straight walk is clear is asked of
@@ -335,6 +338,7 @@ impl Life {
             steps: 0,
             started: f64::NEG_INFINITY,
             record: Record::default(),
+            visitors: Vec::new(),
             plan,
             town,
         };
@@ -1152,6 +1156,20 @@ impl Life {
                             }
                         }
                     }
+                }
+            }
+            // Visitors, who do not give way: seen a little wider, so a walker leaves them
+            // room though it takes only its share of the avoiding.
+            for visitor in &self.visitors {
+                let d = visitor.at.distance(person.at);
+                if d < 5.0 {
+                    neighbours.push((
+                        d,
+                        Body {
+                            radius: visitor.radius + 0.15,
+                            ..*visitor
+                        },
+                    ));
                 }
             }
             neighbours.sort_by(|a, b| a.0.total_cmp(&b.0));

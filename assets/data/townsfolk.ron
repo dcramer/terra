@@ -14,6 +14,13 @@
     },
     // A body's mix: a template, and up to this much of one other template's morphs.
     mix: 0.45,
+    // What is carried in the right hand for an activity, on the way to it and at it, by held
+    // item (models/held/<item>.glb), so what someone is about shows from across the square.
+    holds: {
+        "Smith": "hammer",
+        "Chop": "iron_axe",
+        "Guard": "spear",
+    },
     roles: {
         "trader": (
             bodies: ["male", "female", "heavy"],

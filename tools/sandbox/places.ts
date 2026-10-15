@@ -95,6 +95,29 @@ export const PLACES: Record<string, Place> = {
     // Across the heath into the prevailing west wind and back with it.
     route: { at: "0,0", face: "40,0", through: "40,4;80,-6;120,4;160,-8;200,0;170,20;120,26;70,18;20,10" },
   },
+  town: {
+    about:
+      "the market town (docs/demos.md §3): laid 300 m from the start on its most level ground, on market morning with its people and animals",
+    args: ["--experiment", "play", "--experiment", "town", "--mute"],
+    // The views the town logs as `Town vantage` (`play::town`), in the start's terms.
+    views: [
+      ["street", "313.85,-31.84,-273.60,327.85,-35.18,-248.44"],
+      ["square", "328.15,-32.73,-227.54,324.27,-30.18,-194.79"],
+      ["market", "320.24,-29.07,-192.70,325.02,-32.37,-210.62"],
+      ["forge", "325.28,-32.80,-233.24,331.23,-34.83,-235.72"],
+      ["yard", "290.87,-27.83,-221.92,297.93,-29.46,-224.90"],
+      ["above", "361.36,-12.98,-246.15,324.57,-33.45,-206.49"],
+    ],
+    measured: ["street", "square", "market", "forge", "yard"],
+    look: "town-market-day",
+    ground: false,
+    forest: false,
+    route: {
+      at: "319.9,-278.6",
+      face: "330.0,-210.0",
+      through: "328.9,-270.4;333.4,-259.0;332.5,-246.8;331.7,-234.5;331.6,-202.6;327.9,-179.5",
+    },
+  },
 };
 
 /// The place a tool's `--place` names, `lush` by default.

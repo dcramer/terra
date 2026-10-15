@@ -4,6 +4,7 @@
 //! feet keep to the ground (`pace.rs`). Indoors, out at the fields or beyond every viewer,
 //! nobody is drawn.
 
+use super::bodies::Body;
 use super::tick::{Sim, Smoothed};
 use super::town::Market;
 use crate::planet::{MainCamera, Planet};
@@ -49,7 +50,26 @@ struct Garment {
 struct Looks {
     mix: f32,
     roles: std::collections::BTreeMap<String, Look>,
+    /// What is carried in the right hand for an activity, on the way to it and while doing
+    /// it, by held item (`models/held/<item>.glb`): the smith's hammer, the guard's spear.
+    #[serde(default)]
+    holds: std::collections::BTreeMap<String, String>,
 }
+
+/// The held items by activity, as the looks say them.
+#[derive(Resource, Default)]
+struct Holds(std::collections::BTreeMap<String, String>);
+
+/// A body's right hand, once its model is in, and what it holds now.
+#[derive(Component)]
+struct Hand {
+    socket: Entity,
+    showing: Option<String>,
+}
+
+/// A held item's look in someone's hand.
+#[derive(Component)]
+struct InHand;
 
 /// One of the town's people: who in the town's life they are.
 #[derive(Component)]
@@ -134,6 +154,7 @@ pub fn plugin(app: &mut App) {
                 prepare,
                 spawn.run_if(resource_exists::<Market>),
                 animate,
+                hold.run_if(resource_exists::<Market>),
                 seat,
                 shade,
             )
@@ -259,6 +280,7 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
             return;
         }
     };
+    commands.insert_resource(Holds(looks.holds.clone()));
     let templates = appearance::templates();
     for (index, person) in market.life.people.iter().enumerate() {
         let role = market.life.role(index);
@@ -330,7 +352,16 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
                 move |ready: On<WorldInstanceReady>,
                       mut commands: Commands,
                       children: Query<&Children>,
+                      names: Query<&Name>,
                       players: Query<(), With<AnimationPlayer>>| {
+                    if let Some(socket) =
+                        character::find(ready.entity, character::HAND_R, &children, &names)
+                    {
+                        commands.entity(folk).insert(Hand {
+                            socket,
+                            showing: None,
+                        });
+                    }
                     for child in children.iter_descendants(ready.entity) {
                         if players.contains(child) {
                             commands.entity(child).insert((
@@ -356,13 +387,14 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
 /// Each body where its life has it this tick, on the ground and facing its way, shown only
 /// out of doors and near a viewer.
 fn place(
+    mut commands: Commands,
     planet: Res<Planet>,
     market: Res<Market>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut folk: Query<(&Folk, &mut Transform, &mut Visibility)>,
+    mut folk: Query<(Entity, &Folk, &mut Transform, &mut Visibility)>,
 ) {
     let eye = camera.single().ok().map(|c| market.local(c.translation()));
-    for (one, mut at, mut shown) in &mut folk {
+    for (entity, one, mut at, mut shown) in &mut folk {
         let Some(person) = market.life.people.get(one.index) else {
             continue;
         };
@@ -377,6 +409,13 @@ fn place(
         };
         if *shown != wanted {
             *shown = wanted;
+            // Out of doors someone takes up room, so a player stops at them rather than
+            // walking through (`bodies`); indoors they leave none at the door.
+            if hidden {
+                commands.entity(entity).remove::<Body>();
+            } else {
+                commands.entity(entity).insert(Body::fixed(person.radius));
+            }
         }
         if hidden {
             continue;
@@ -432,6 +471,47 @@ fn animate(
         let every = plays.every as f32;
         if let Some(active) = player.animation_mut(wanted) {
             active.set_speed(rate.clamp(SLOWEST_RATE, FASTEST_RATE) * every);
+        }
+    }
+}
+
+/// What each person carries in hand for what they are doing or going to do, swapped as
+/// that changes, as a player's figure shows what is in hand (`held`).
+fn hold(
+    mut commands: Commands,
+    market: Res<Market>,
+    holds: Option<Res<Holds>>,
+    assets: Res<AssetServer>,
+    children: Query<&Children>,
+    in_hand: Query<(), With<InHand>>,
+    mut folk: Query<(&Folk, &mut Hand)>,
+) {
+    let Some(holds) = holds else {
+        return;
+    };
+    for (one, mut hand) in &mut folk {
+        let wanted = market
+            .life
+            .activity(one.index)
+            .and_then(|activity| holds.0.get(activity));
+        if hand.showing.as_ref() == wanted {
+            continue;
+        }
+        hand.showing = wanted.cloned();
+        for look in children
+            .iter_descendants(hand.socket)
+            .filter(|&each| in_hand.contains(each))
+        {
+            commands.entity(look).despawn();
+        }
+        if let Some(item) = wanted {
+            let file = character::held_look(item);
+            let look = character::hold(
+                &mut commands,
+                assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file)),
+                hand.socket,
+            );
+            commands.entity(look).insert(InHand);
         }
     }
 }
@@ -581,6 +661,17 @@ mod tests {
             &std::fs::read_to_string(crate::model_files::asset("data/life.ron")).unwrap(),
         )
         .unwrap();
+        for (activity, item) in &looks.holds {
+            assert!(
+                plan.activities.contains_key(activity),
+                "holds: no activity {activity}"
+            );
+            let file = character::held_look(item);
+            assert!(
+                crate::model_files::asset(&file).exists(),
+                "holds: no {file}"
+            );
+        }
         for role in &plan.roles {
             let look = looks.roles.get(&role.name).expect("a look for every role");
             for body in &look.bodies {
