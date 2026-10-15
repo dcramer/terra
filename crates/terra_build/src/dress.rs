@@ -113,6 +113,10 @@ pub struct Stone {
 /// How tall a course of dressed stone is: two to a cube.
 pub const COURSE_M: f32 = CELL_M * 0.5;
 
+/// How far along a band a point one metre over its line moves where it is mitred to a
+/// ramp's raking band: the tangent of half the 45 degrees between them.
+const BEND_MITRE: f32 = 0.414_213_56;
+
 /// How wide and deep the chamfered joint between two stones of a band is.
 const JOINT_M: f32 = 0.012;
 const JOINT_DEPTH_M: f32 = 0.009;
@@ -489,6 +493,13 @@ impl Sweep {
             End::Back => -1.0,
             _ => 0.0,
         });
+        // Mitred in its own plane where a ramp's raking coping meets a level one: on the
+        // line halving the 45 degrees between them, over or under the bend.
+        let bend = self.ends.map(|end| match end {
+            End::Over => BEND_MITRE,
+            End::Under => -BEND_MITRE,
+            _ => 0.0,
+        });
         let extend = self.ends.map(|end| match end {
             End::Square => self.extend,
             _ => 0.0,
@@ -505,8 +516,13 @@ impl Sweep {
         let joint = self
             .ends
             .map(|end| self.joints && matches!(end, End::On | End::Step));
-        let start = |o: f32| -extend[0] - o * mitre[0] + (-o).max(0.0) * recess[0];
-        let end = |o: f32| length + extend[1] + o * mitre[1] - (-o).max(0.0) * recess[1];
+        let start = |o: f32, u: f32| {
+            -extend[0] - o * mitre[0] + (-o).max(0.0) * recess[0] - (u - self.lift) * bend[0]
+        };
+        let end = |o: f32, u: f32| {
+            length + extend[1] + o * mitre[1] - (-o).max(0.0) * recess[1]
+                + (u - self.lift) * bend[1]
+        };
         // Rings along it: at each end, and in from a joint by its chamfer.
         let mut rings: Vec<(f32, bool)> = vec![(f32::MIN, joint[0])];
         if joint[0] {
@@ -530,7 +546,10 @@ impl Sweep {
             round[i] = round[i - 1] + ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
         }
         let along_uv = |ring: usize, i: usize| {
-            let (low, high) = (start(points[i][0]), end(points[i][0]));
+            let (low, high) = (
+                start(points[i][0], points[i][1]),
+                end(points[i][0], points[i][1]),
+            );
             let at = if low <= high {
                 rings[ring].0.clamp(low, high)
             } else {
@@ -549,7 +568,10 @@ impl Sweep {
             }
             // Mitred at both ends of a short line, a point far in from the face would
             // pass itself: it meets its mirror in the middle.
-            let (low, high) = (start(points[i][0]), end(points[i][0]));
+            let (low, high) = (
+                start(points[i][0], points[i][1]),
+                end(points[i][0], points[i][1]),
+            );
             let a = if low <= high {
                 at.clamp(low, high)
             } else {
@@ -602,7 +624,7 @@ impl Sweep {
         // Each end closed, so a piece whose neighbour is not yet in, or never will be, is
         // never seen hollow: across its joint's chamfer, or its whole section.
         for (which, ring, outward) in [(0, 0, -along), (1, rings.len() - 1, along)] {
-            if mitre[which] != 0.0 {
+            if mitre[which] != 0.0 || bend[which] != 0.0 {
                 continue;
             }
             let ring_points: Vec<Vec3> = (0..n).map(|i| point(ring, i, i.min(n - 2))).collect();

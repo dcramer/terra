@@ -1862,3 +1862,94 @@ fn a_flight_of_stone_ramps_coping_runs_on_from_one_stone_to_the_next() {
         assert_eq!(*ends, [foot, head], "the stone at {x}");
     }
 }
+
+#[test]
+fn a_ramps_coping_is_mitred_to_the_level_coping_at_its_head_and_its_foot() {
+    // A stone ramp rising east, one cube, from a step a cube high to a platform two high:
+    // its coping meets a level coping over the bend at its head and under it at its foot,
+    // and each level coping meets it the same way.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    let put = |base: &mut Base, at: [i32; 3], shape: crate::Shape| {
+        base.apply(BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: Some(Cube {
+                shape,
+                ..Cube::new(stone, Fill::Solid)
+            }),
+        });
+    };
+    put(&mut base, [0, 0, 0], crate::Shape::Whole);
+    put(&mut base, [1, 0, 0], crate::Shape::Whole);
+    put(
+        &mut base,
+        [1, 1, 0],
+        crate::Shape::Slope(crate::Facing::East),
+    );
+    put(&mut base, [2, 0, 0], crate::Shape::Whole);
+    put(&mut base, [2, 1, 0], crate::Shape::Whole);
+    let maps = Maps::default();
+    let whole = Whole::lay(&base, &kits);
+    let mut ends = Vec::new();
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        for placed in &lay(&section, &whole).pieces {
+            match &placed.1 {
+                Piece::Band {
+                    role: layout::roles::Role::Crest,
+                    cube,
+                    side,
+                    ends: e,
+                    ..
+                } if side.axis() == 2 => ends.push((*cube, *e)),
+                Piece::Trim {
+                    role: layout::roles::Role::Crest,
+                    cube,
+                    side,
+                    ends: e,
+                    ..
+                } if side.axis() == 2 => ends.push((*cube, *e)),
+                _ => {}
+            }
+        }
+    }
+    use layout::roles::End;
+    let at = |x: i32, y: i32| -> Vec<[End; 2]> {
+        ends.iter()
+            .filter(|(c, _)| c.x == x && c.y == y)
+            .map(|(_, e)| *e)
+            .collect()
+    };
+    // The ramp's, up each side: under at its foot, over at its head.
+    assert_eq!(at(1, 1), vec![[End::Under, End::Over]; 2], "{ends:?}");
+    // The step's top at its east end, and the platform's at its west, meet it so.
+    assert!(
+        at(0, 0).iter().filter(|e| e[1] == End::Under).count() == 2,
+        "{ends:?}"
+    );
+    assert!(
+        at(2, 1).iter().filter(|e| e[0] == End::Over).count() == 2,
+        "{ends:?}"
+    );
+    // And mitred so, nothing is drawn twice in one plane where they meet.
+    let report = crate::inspect::inspect(&base, &kits, &maps);
+    for fault in [
+        crate::inspect::Fault::Coplanar,
+        crate::inspect::Fault::Doubled,
+    ] {
+        let found: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.fault == fault && f.detail == Detail::Near)
+            .collect();
+        assert!(found.is_empty(), "{found:?}");
+    }
+}

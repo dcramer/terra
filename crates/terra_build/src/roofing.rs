@@ -128,6 +128,15 @@ pub fn draw_as(
                 Seat::Crease { up, .. } if part == RoofPart::Ridge => crest_blend(module, up),
                 _ => module.blend,
             };
+            // A hip the same, but narrowing back to the turn as modelled where it meets the
+            // ridge or the other hips at its top, whose cuts are made for that.
+            let crest = match seat {
+                Seat::Crease { up, .. } if part == RoofPart::Hip => Some((
+                    crest_blend(module, up),
+                    met.map(|m| if m { HIP_CLEAR_M } else { 0.0 }),
+                )),
+                _ => None,
+            };
             let line = Line {
                 from,
                 to,
@@ -137,6 +146,7 @@ pub fn draw_as(
                 seed,
                 blend,
                 plumb,
+                crest,
                 // Its anchor seated where its part sits (D290): on the covering for what
                 // lies on it, so one piece fits any covering's thickness.
                 lift: seated(kit, part),
@@ -205,6 +215,9 @@ fn crest_blend(module: &crate::dress::Module, up: [Vec3; 2]) -> f32 {
     let turn = libm::acosf(up[0].dot(up[1]).clamp(-1.0, 1.0));
     module.blend.max(module.dims[1] * turn * CREST_BLEND)
 }
+
+/// How far from its top a hip's capping narrows back to its turn as modelled, in metres.
+const HIP_CLEAR_M: f32 = 0.6;
 
 /// How much of a capping's width over a crest its up turns across, for each metre of its
 /// thickness and each radian the crest turns: its top's arc over the crest, with room for
@@ -618,6 +631,7 @@ mod tests {
                     crest_blend(&module, up)
                 },
                 plumb: 0.0,
+                crest: None,
                 lift: 0.0,
                 mitre: [None; 2],
             };

@@ -101,6 +101,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
         seed,
         blend: 0.0,
         plumb: 0.0,
+        crest: None,
         lift: 0.0,
         mitre: [None; 2],
     };
@@ -183,6 +184,7 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
             seed: crate::layout::hash(&[seed, k as u32]),
             blend: 0.0,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };

@@ -209,6 +209,12 @@ pub enum End {
     Back,
     /// Runs on into the next cube's, which is raised or lowered: capped where it shows.
     Step,
+    /// Meets a coping raking down from it, a ramp's (D231), mitred over the convex bend
+    /// where the slope comes up to a level top, as a coping is at any change of direction.
+    Over,
+    /// Meets a coping raking up from it, a ramp's foot over a level top: mitred under the
+    /// concave bend.
+    Under,
 }
 
 /// One cube's edges with roles, each with how its ends meet the next, low end first along
@@ -579,6 +585,12 @@ impl<'a> Roles<'a> {
             }
             return End::On;
         }
+        if edge.role == Role::Crest
+            && edge.other == Dir::Up
+            && let Some(bend) = self.bend(next, edge.side, along)
+        {
+            return bend;
+        }
         let turned = |side: Dir| Edge { side, ..edge };
         if self.has(cube, turned(along)) {
             return End::Out;
@@ -587,6 +599,31 @@ impl<'a> Roles<'a> {
             return End::Back;
         }
         End::Square
+    }
+
+    /// Whether a level coping along `side` ending at `next`, `along` from its cube, meets a
+    /// ramp's raking coping there: over the bend where the ramp rises to it (its slope's
+    /// high end at this cube), under it where the ramp rises from it (the slope one over
+    /// `next`, its low end here); each where the ramp's side is open, so it has its coping.
+    fn bend(&self, next: IVec3, side: Dir, along: Dir) -> Option<End> {
+        let slope = |at: IVec3, rises: Dir| {
+            self.base.cube(at).is_some_and(|c| {
+                c.kind == self.kind
+                    && c.fill == Fill::Solid
+                    && matches!(c.shape, crate::Shape::Slope(f) if Dir::facing(f) == rises)
+            }) && self.beyond(at + side.step()).open()
+        };
+        if slope(next, along.opposite()) {
+            return Some(End::Over);
+        }
+        let whole = self
+            .base
+            .cube(next)
+            .is_some_and(|c| c.kind == self.kind && c.shape == crate::Shape::Whole);
+        if whole && slope(next + IVec3::Y, along) {
+            return Some(End::Under);
+        }
+        None
     }
 
     /// Every cube of the kind in `cubes`, each with its dressed edges, in order.

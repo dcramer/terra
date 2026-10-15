@@ -77,6 +77,11 @@ pub struct Line {
     /// plumb where it lies along a slope square to it: a verge's board seated square to its
     /// roof, unsheared, its ends still cut plumb at the eave and the apex. 0 cuts them square.
     pub plumb: f32,
+    /// Over a crease, a wider `blend` for its body, and how far from each end it narrows
+    /// back to `blend` (none: wide to that end): a hip's capping turned over its own
+    /// thickness's arc but where it meets the ridge or the other hips at its top, where the
+    /// pieces' cuts are made for the turn as modelled.
+    pub crest: Option<(f32, [f32; 2])>,
 }
 
 /// Lays a modelled module along a line as a modular kit's piece is laid: copies at the length
@@ -1422,8 +1427,27 @@ fn seat(line: &Line, axis: Vec3, q: Vec3, n: Vec3) -> (Vec3, Vec3) {
             } else {
                 into[1] * q.z
             };
-            let t = if line.blend > 0.0 {
-                let t = ((q.z / line.blend) * 0.5 + 0.5).clamp(0.0, 1.0);
+            let blend = match line.crest {
+                Some((wide, clear)) => {
+                    let length = line.from.distance(line.to);
+                    let k = [q.x, length - q.x]
+                        .iter()
+                        .zip(clear)
+                        .map(|(&d, c)| {
+                            if c <= 0.0 {
+                                1.0
+                            } else {
+                                let t = ((d - c * 0.5) / (c * 0.5)).clamp(0.0, 1.0);
+                                t * t * (3.0 - 2.0 * t)
+                            }
+                        })
+                        .fold(1.0f32, f32::min);
+                    line.blend + (wide - line.blend).max(0.0) * k
+                }
+                None => line.blend,
+            };
+            let t = if blend > 0.0 {
+                let t = ((q.z / blend) * 0.5 + 0.5).clamp(0.0, 1.0);
                 t * t * (3.0 - 2.0 * t)
             } else if q.z < 0.0 {
                 0.0
@@ -1514,6 +1538,7 @@ mod tests {
             seed: 5,
             blend: 0.0,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1548,6 +1573,7 @@ mod tests {
             seed: 3,
             blend: 0.0,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1613,6 +1639,7 @@ mod tests {
             blend: 0.0,
             // Along it for each metre up it, so its ends stand plumb: up · level / along · level.
             plumb: -1.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1671,6 +1698,7 @@ mod tests {
             seed: 1,
             blend: 0.0,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1724,6 +1752,7 @@ mod tests {
             seed: 1,
             blend: 0.1,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1782,6 +1811,7 @@ mod tests {
             seed: 2,
             blend: 0.0,
             plumb: 0.0,
+            crest: None,
             lift: 0.0,
             mitre: [None, Some([Vec3::new(0.0, 0.0, -1.0), Vec3::X])],
         };
@@ -1912,6 +1942,7 @@ mod tests {
                 seed: 7,
                 blend: 0.0,
                 plumb: 0.0,
+                crest: None,
                 lift: 0.0,
                 mitre: [None; 2],
             };

@@ -414,14 +414,29 @@ fn shaped(
                         && open(next + side.step())
                         && shape_at(next + side.step()) != Some(this.shape)
                 };
-                let on = |next: IVec3| if runs_on(next) { End::On } else { End::Square };
                 let step = rise.step() + IVec3::Y;
-                band(
-                    Role::Crest,
-                    (low, high),
-                    side,
-                    [on(cube - step), on(cube + step)],
-                );
+                // Else mitred where it meets a level coping, over the bend at its head and
+                // under it at its foot, as a coping is at any change of direction.
+                let level = |at: IVec3| {
+                    shape_at(at) == Some(Shape::Whole)
+                        && open(at + IVec3::Y)
+                        && open(at + side.step())
+                };
+                let foot = if runs_on(cube - step) {
+                    End::On
+                } else if level(cube - step) {
+                    End::Under
+                } else {
+                    End::Square
+                };
+                let head = if runs_on(cube + step) {
+                    End::On
+                } else if level(cube + rise.step()) {
+                    End::Over
+                } else {
+                    End::Square
+                };
+                band(Role::Crest, (low, high), side, [foot, head]);
             }
         }
         Shape::Post => {
