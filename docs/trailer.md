@@ -12,7 +12,7 @@ cargo xtask trailer --only lake --again  # film one run again
 cargo xtask trailer --stills             # a first, middle and last frame of each, to judge a route fast
 ```
 
-Each run is left as `~/.cache/terra-review/trailer/<name>.mp4`, with its own sound; the cut as `cut.mp4` and its contact sheet `cut-sheet.jpg`. The runs are `tools/sandbox/trailer/shots/<name>.json` (place, hour, date, route, sound) and the cut `tools/sandbox/trailer/cut.json`.
+Each run is left as `~/.cache/terra-review/trailer/<name>.mp4`, with its own sound; the cut as `cut.mp4` and its contact sheet `cut-sheet.jpg`. The runs are `tools/sandbox/trailer/runs/<name>.json` (place, hour, date, route, sound) and the cut `tools/sandbox/trailer/cut.json`.
 
 ## The runs
 

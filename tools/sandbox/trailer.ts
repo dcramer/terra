@@ -2,7 +2,7 @@
 // The trailer (docs/trailer.md, D357): one run through each place, the game's own player
 // running a long, nearly straight route and the game's own third-person camera following,
 // filmed with a cinematic look and cut together with crossfades and a sound bed of the
-// game's own sounds. A shot file (trailer/shots/<name>.json) is the place, the hour and the
+// game's own sounds. A shot file (trailer/runs/<name>.json) is the place, the hour and the
 // date, the player's route and the look; the sandbox films it with `--cine`
 // (crates/terra_world/src/cine.rs): the exposure held from when the run starts so it does
 // not pump, the clock held at the hour, motion blur, depth of field if asked. As Unreal's
@@ -57,7 +57,7 @@ const arg = (name: string, fallback: string) => {
 };
 const home = (path: string) => path.replace(/^~(?=\/)/, homedir());
 const cutFile = resolve(ROOT, arg("--cut", "tools/sandbox/trailer/cut.json"));
-const shotsDir = resolve(dirname(cutFile), "shots");
+const shotsDir = resolve(dirname(cutFile), "runs");
 const cut: Cut = JSON.parse(readFileSync(cutFile, "utf8"));
 const size = arg("--size", "1920x1080");
 const [width, height] = size.split("x").map(Number);
@@ -138,6 +138,22 @@ const layersOf = (shot: Shot, from: number, to: number) => [
   ...(shot.music ? [`${shot.music}@${(from + 1).toFixed(2)}`] : []),
 ];
 
+/// A place needs about this much of the GPU's memory at 1080p (the lush forest's run took
+/// 4 to 5 GB); with less free, a shot sharing the GPU runs out and dies.
+const NEEDS_MB = 5000;
+
+/// Waits, up to half an hour, until an NVIDIA GPU has room for a shot; elsewhere, where
+/// nvidia-smi does not answer, at once.
+function roomOnTheGpu() {
+  for (let waited = 0; waited < 1800; waited += 30) {
+    const smi = spawnSync("nvidia-smi", ["--query-gpu=memory.free", "--format=csv,noheader,nounits"], { encoding: "utf8" });
+    const free = Number(`${smi.stdout}`.trim().split("\n")[0]);
+    if (smi.status !== 0 || !Number.isFinite(free) || free >= NEEDS_MB) return;
+    if (waited === 0) console.log(`trailer: waiting for room on the GPU: ${free} MB free of the ${NEEDS_MB} a shot needs`);
+    spawnSync("sleep", ["30"]);
+  }
+}
+
 function renderShot(name: string, n: number) {
   const shot = shots.get(name) as Shot;
   const file = join(shotsDir, `${name}.json`);
@@ -164,7 +180,15 @@ function renderShot(name: string, n: number) {
     stills ? `${dir}/f@${first},${first + 2 * Math.floor(frames / 2)},${last}` : `${dir}/f@${first}-${last}/2`,
   ];
   console.log(`trailer: ${n}/${names.length} ${name}: ${shot.about}`);
-  const run = spawnSync(sandbox, options, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 });
+  // Shots share the GPU with other runs (D319), so one may find no room for a heavy place;
+  // it waits a minute and tries again rather than failing the trailer.
+  const attempt = () => (roomOnTheGpu(), spawnSync(sandbox, options, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 }));
+  let run = attempt();
+  for (let tries = 1; tries < 6 && /Out ?Of ?Memory/i.test(`${run.stdout}${run.stderr}`); tries++) {
+    console.log(`trailer: ${name}: the GPU had no room (out of memory); trying again in a minute`);
+    spawnSync("sleep", ["60"]);
+    run = attempt();
+  }
   writeFileSync(join(work, `${name}.log`), `${sandbox} ${options.join(" ")}\n\n${run.stdout}${run.stderr}`);
   if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
     console.error(`${run.stdout}${run.stderr}`.split("\n").slice(-25).join("\n"));

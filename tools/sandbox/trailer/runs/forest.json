@@ -1,0 +1,10 @@
+{
+  "about": "Through the tall pine stand in the soft morning, the mist low between the trunks",
+  "place": "lush",
+  "hour": 7.5,
+  "seconds": 25,
+  "player": { "at": "-58,-39", "route": "-40,-69;-6,-80;30,-74;59,-54;77,-22" },
+  "look": { "shutter": 90, "exposure_bias": 0.4 },
+  "sound": ["birds:0.8", "wind:0.25"],
+  "music": "calm"
+}
