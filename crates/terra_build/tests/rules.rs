@@ -506,7 +506,7 @@ fn stroll(base: &Base, from: Vec3, to: Vec3) -> Vec3 {
     let mut at = from;
     for i in 1..=400 {
         let target = from.lerp(to, i as f32 / 400.0);
-        at = base.walk(at, Vec3::new(target.x, at.y, target.z), &w);
+        at = base.walk(at, Vec3::new(target.x, at.y, target.z), &w, None);
         at.y = base.support(at, &w).unwrap_or(0.0).max(0.0);
     }
     at

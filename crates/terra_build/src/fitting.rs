@@ -285,12 +285,18 @@ pub fn wall_kind(base: &Base, prop: &Prop) -> Option<Kind> {
 }
 
 /// How far the face of the wall a prop is fitted in stands out from its middle, in metres,
-/// by its kit ([`Kit::face`]); a whole cube's half where its kind has no kit or nothing stands
-/// round it.
-pub fn wall_face(base: &Base, prop: &Prop, kits: &Kits) -> f32 {
+/// by its kit ([`Kit::face`]); a whole cube's half where there are no kits, its kind has none
+/// or nothing stands round it.
+pub fn wall_face(base: &Base, prop: &Prop, kits: Option<&Kits>) -> f32 {
     wall_kind(base, prop)
-        .and_then(|kind| kits.of(kind))
+        .and_then(|kind| kits?.of(kind))
         .map_or(CELL_M * 0.5, Kit::face)
+}
+
+/// A prop's leaves as they hang in the wall it is fitted in, on that wall's face
+/// ([`wall_face`]): both what is drawn and what a walker meets (`walk`), so the two are one.
+pub fn hung(base: &Base, prop: &Prop, kits: Option<&Kits>) -> Vec<Leaf> {
+    prop.leaves(wall_face(base, prop, kits))
 }
 
 /// A frame drawn, on a wall whose face stands `face` out from its middle: its boxes in a
@@ -770,8 +776,75 @@ mod tests {
         let window = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
         assert_eq!(wall_kind(&base, &window), Some(logs));
         let kits = Kits(vec![shipped("logs"), shipped("stone")]);
-        assert_eq!(wall_face(&base, &window, &kits), shipped("logs").face());
-        // Standing alone, it is on a cube's face.
-        assert_eq!(wall_face(&Base::default(), &window, &kits), CUBE_FACE);
+        assert_eq!(
+            wall_face(&base, &window, Some(&kits)),
+            shipped("logs").face()
+        );
+        // Standing alone, or with no kits, it is on a cube's face.
+        assert_eq!(wall_face(&Base::default(), &window, Some(&kits)), CUBE_FACE);
+        assert_eq!(wall_face(&base, &window, None), CUBE_FACE);
+    }
+
+    #[test]
+    fn a_walker_meets_shutters_where_they_are_drawn_on_every_wall() {
+        let walker = crate::walk::Walker {
+            radius: 0.3,
+            height: 0.8,
+            step_up: 0.1,
+        };
+        for name in ["logs", "hewn", "stone"] {
+            let kit = shipped(name);
+            let kits = Kits(vec![kit.clone()]);
+            // A wall of it along x, its middle at z = 0.25, a window a metre square in it
+            // from a metre up, shutters opening out to -z.
+            let mut base = Base::default();
+            for x in 0..6 {
+                for y in 0..6 {
+                    let hole = (2..=3).contains(&x) && (2..=3).contains(&y);
+                    let fill = if hole { Fill::Open } else { Fill::Solid };
+                    base.apply(crate::BuildOp::Fill {
+                        min: [x, y, 0],
+                        max: [x, y, 0],
+                        cube: Some(crate::Cube::new(kit.kind(), fill)),
+                    });
+                }
+            }
+            let mut window = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
+            base.props.insert(window.min, window);
+            // Where they are drawn: the frame on the wall's face, its outer face nearest
+            // the walker, the leaves' backs on it.
+            let frame_out = window
+                .frame(wall_face(&base, &window, Some(&kits)))
+                .iter()
+                .map(|(min, _)| min.z)
+                .fold(f32::MAX, f32::min);
+            let drawn = frame_out - SHUTTER_THICK_M;
+            // In small steps, as the game walks a frame at a time.
+            let walk = |base: &Base, x: f32| {
+                let mut at = Vec3::new(x, 1.0, -1.5);
+                for i in 1..=200 {
+                    let to = Vec3::new(x, 1.0, -1.5 + 1.75 * i as f32 / 200.0);
+                    at = base.walk(at, to, &walker, Some(&kits));
+                }
+                at.z
+            };
+            // Shut, walking at the window stops a walker touching the leaves' fronts.
+            let stopped = walk(&base, 1.5);
+            assert!(
+                (stopped - (drawn - walker.radius)).abs() < 5e-3,
+                "{name}: shut, stopped at {stopped}, drawn at {drawn}"
+            );
+            // Open, they pass into the window, and beside it meet the leaf folded back
+            // on the wall, or the wall's cubes where those stand further out.
+            window.open = true;
+            base.props.insert(window.min, window);
+            assert!(walk(&base, 1.5) > 0.2, "{name}: open");
+            let stopped = walk(&base, 0.75);
+            let nearest = drawn.min(0.0);
+            assert!(
+                (stopped - (nearest - walker.radius)).abs() < 5e-3,
+                "{name}: open, stopped at {stopped}, drawn at {drawn}"
+            );
+        }
     }
 }

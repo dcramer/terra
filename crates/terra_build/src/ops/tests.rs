@@ -141,7 +141,7 @@ fn a_log_course_goes_in_across_its_cubes_and_stands_to_its_fill() {
     // The plan is walked through.
     let walker = Walker::default();
     let (from, to) = (Vec3::new(2.0, 0.0, 0.5), Vec3::new(2.0, 0.0, 4.0));
-    assert!((base.walk(from, to, &walker) - to).length() < 1e-3);
+    assert!((base.walk(from, to, &walker, None) - to).length() < 1e-3);
     // One course: a quarter of a metre, stepped over; it took one log.
     let done = base.act(&course, &cx).unwrap();
     assert_eq!(done.took, Bill::of("Log", Amount::whole(1)));
@@ -1753,7 +1753,7 @@ fn an_opening_is_planned_into_a_wall_and_a_door_fits_it_once_built() {
         ..Walker::default()
     };
     let (from, to) = (Vec3::new(1.25, 0.0, -0.3), Vec3::new(1.25, 0.0, 0.05));
-    assert!(base.walk(from, to, &walker).z < 0.04);
+    assert!(base.walk(from, to, &walker, None).z < 0.04);
     base.act(
         &Op::SetOpen {
             at: [2, 0, 0],
@@ -1762,7 +1762,7 @@ fn an_opening_is_planned_into_a_wall_and_a_door_fits_it_once_built() {
         &cx,
     )
     .unwrap();
-    assert!((base.walk(from, to, &walker) - to).length() < 1e-3);
+    assert!((base.walk(from, to, &walker, None) - to).length() < 1e-3);
     // A fitted opening cannot be closed, and a closed one is planned again.
     assert_eq!(
         base.act(

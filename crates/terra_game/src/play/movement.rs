@@ -190,6 +190,7 @@ fn walk(
                 to_base.transform_point3(feet),
                 to_base.transform_point3(target),
                 &walker,
+                site.kits.as_deref(),
             );
             target = from_base.transform_point3(walked);
         }

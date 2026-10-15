@@ -370,9 +370,7 @@ fn show(
     // in: the wall built in another material, its frame is seated on that one's.
     let kits = build_look.kits.clone();
     let face = |base: &terra_build::Base, prop: &Prop| {
-        kits.as_deref().map_or(terra_build::CELL_M * 0.5, |kits| {
-            terra_build::fitting::wall_face(base, prop, kits)
-        })
+        terra_build::fitting::wall_face(base, prop, kits.as_deref())
     };
     let mut wanted: BTreeMap<(Option<Entity>, [i32; 3]), (Prop, f32)> = changed
         .iter()
@@ -508,12 +506,7 @@ fn preview(
         ))
         .id();
     let ghost = MeshMaterial3d(look.looks.ghost());
-    let face = look
-        .kits
-        .as_deref()
-        .map_or(terra_build::CELL_M * 0.5, |kits| {
-            terra_build::fitting::wall_face(&site.build.base, &prop, kits)
-        });
+    let face = terra_build::fitting::wall_face(&site.build.base, &prop, look.kits.as_deref());
     spawn_leaves(
         &mut commands,
         parent,

@@ -6,6 +6,7 @@
 //! in metres, with `y` at the feet.
 
 use crate::cubes::{Cube, Cubes, FULL};
+use crate::kit::Kits;
 use crate::layout::Piece;
 use crate::{Base, CELL_M};
 use glam::{IVec2, IVec3, Vec3};
@@ -151,11 +152,12 @@ impl Base {
 
     /// Moves a walker along the floor from `from` toward `to`, stopping at walls and
     /// windows and passing through openings. Returns where they end up. Height is taken
-    /// from `to` unchanged; use [`Base::support`] for that.
-    pub fn walk(&self, from: Vec3, to: Vec3, walker: &Walker) -> Vec3 {
+    /// from `to` unchanged; use [`Base::support`] for that. With the kits it is laid by, a
+    /// door's or shutters' leaves are met where they are drawn, on their wall's own face.
+    pub fn walk(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3 {
         // A door's or shutters' leaves stop them where they stand, shut or open (D207);
         // the cubes have the last word.
-        let to = self.off_leaves(from, to, walker);
+        let to = self.off_leaves(from, to, walker, kits);
         let mut at = from;
         // One axis at a time, so that walking into a wall at an angle slides along it.
         for axis in [0, 2] {
@@ -219,12 +221,10 @@ impl Base {
     }
 
     /// Where a walker going from one place to another ends up, kept out of the leaves of
-    /// every door and shutters near, as they stand (`fitting::push_off`). A door hangs in
-    /// its wall's middle whatever the wall; shutters are met as they hang on the thickest
-    /// wall, one whose face is its cubes' (stone's): on a thinner one, logs', they stand
-    /// within the wall's cubes, which stop a walker before them, so a walker keeps a few
-    /// centimetres further off a log wall's shutters than is drawn, never closer.
-    fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker) -> Vec3 {
+    /// every door and shutters near, as they stand (`fitting::push_off`): each leaf where it
+    /// is drawn (`fitting::hung`), shutters on their own wall's face, a log wall's crests or
+    /// a stone wall's cubes.
+    fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3 {
         let reach = walker.radius + 2.5;
         let near = |prop: &&crate::Prop| {
             let low = IVec3::from_array(prop.min).as_vec3() * CELL_M - reach;
@@ -233,7 +233,7 @@ impl Base {
         };
         let leaves = self.props().filter(near).flat_map(|prop| {
             let open = if prop.open { 1.0 } else { 0.0 };
-            prop.leaves(CELL_M * 0.5)
+            crate::fitting::hung(self, prop, kits)
                 .into_iter()
                 .map(move |leaf| (leaf, open))
         });
@@ -344,7 +344,7 @@ mod tests {
         let mut at = from;
         for i in 1..=400 {
             let target = from.lerp(to, i as f32 / 400.0);
-            at = base.walk(at, Vec3::new(target.x, at.y, target.z), &walker());
+            at = base.walk(at, Vec3::new(target.x, at.y, target.z), &walker(), None);
         }
         at
     }
@@ -528,7 +528,7 @@ mod tests {
         let mut at = Vec3::new(2.0, STOREY_M, 0.05);
         for i in 1..=60 {
             let to = Vec3::new(2.0, at.y, 0.05 + 1.4 * i as f32 / 60.0);
-            at = base.walk(at, to, &w);
+            at = base.walk(at, to, &w, None);
             at.y = base.support(at, &w).unwrap_or(at.y);
         }
         assert!(at.z > 1.4 && (at.y - (STOREY_M + at.z)).abs() < 0.1, "{at}");
@@ -662,7 +662,7 @@ mod tests {
         let mut at = from;
         for i in 1..=600 {
             let target = from.lerp(to, i as f32 / 600.0);
-            at = base.walk(at, Vec3::new(target.x, at.y, target.z), &w);
+            at = base.walk(at, Vec3::new(target.x, at.y, target.z), &w, None);
             at.y = base.support(at, &w).unwrap_or(0.0).max(0.0);
         }
         at
