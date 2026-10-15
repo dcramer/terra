@@ -11,8 +11,9 @@ function script(s: Script, set: KitSet) {
     s.cut([14, 8.5, 14], [C[0], 3.2, C[2]]);
     s.wait(30);
     // Taken apart a step at a time, as holding the hammer in take-apart mode does.
-    for (let i = 0; i < 40; i++) {
-      s.call("build.take_apart", { at: [8, 9, 7], steps: 1 });
+    for (let i = 0; i < 30; i++) {
+      // Aimed at an eave, the last of the roof out, so every row before it comes out first.
+      s.call("build.take_apart", { at: [8, 6, 4], steps: 1 });
       s.wait(6);
     }
     s.wait(20);

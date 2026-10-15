@@ -326,7 +326,9 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
     const { median, p99, worst } = stat(ms);
     lines.push(`${title.padEnd(24)} median ${median.toFixed(1).padStart(5)}  p99 ${p99.toFixed(1).padStart(5)}  worst ${worst.toFixed(1).padStart(6)} ms  over ${ms.filter((m) => m > BUDGET_MS).length}  hitches ${ms.filter((m) => m > HITCH_MS).length}`);
   };
-  row("all", rows.map((r) => r.ms));
+  // What is filmed: from the first stage, not a clip's building put up before it.
+  const filmed = rows.filter((r) => r.frame >= (stages[0]?.from ?? 0));
+  row("filmed", filmed.map((r) => r.ms));
   for (const stage of stages) row(stage.name, rows.filter((r) => r.frame >= stage.from && r.frame <= stage.to).map((r) => r.ms));
   // Each change from the call that made it to all its sections on screen, as the run said
   // it: the stage of the call said last before it.
@@ -366,9 +368,9 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   }
   writeFileSync(resolve(folder, `${label}.txt`), lines.join("\n") + "\n");
   console.log(lines.join("\n"));
-  const all = stat(rows.map((r) => r.ms));
+  const all = stat(filmed.map((r) => r.ms));
   const edit = stat(edits.map((each) => each.ms));
-  return { summary: { ...all, over: rows.filter((r) => r.ms > BUDGET_MS).length, hitches: rows.filter((r) => r.ms > HITCH_MS).length, frames: rows.length, torn, edits: edits.length, edit_median: edit.median, edit_worst: edit.worst } };
+  return { summary: { ...all, over: filmed.filter((r) => r.ms > BUDGET_MS).length, hitches: filmed.filter((r) => r.ms > HITCH_MS).length, frames: filmed.length, torn, edits: edits.length, edit_median: edit.median, edit_worst: edit.worst } };
 }
 
 /// shots/qa/index.html: the latest film of each scenario in each set, its contact sheet

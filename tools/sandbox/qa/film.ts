@@ -157,7 +157,7 @@ function script(s: Script, set: KitSet) {
   s.stage("storey", "The roof off, a storey on, a roof over it and a dormer", () => {
     s.glide([14, 9, 14], [4.5, 3, 4], 120);
     // As a player would: the roof taken apart, last in first out.
-    s.call("build.take_apart", { at: [8, 9, 7], steps: 400 });
+    s.call("build.take_apart", { at: [8, 6, 4], steps: 400 });
     s.wait(40);
     s.call("build.lay", { what: "room", min: [X0, 1, Z0], max: [X1, 1, Z1], kind: set.wall(1) });
     s.wait(40);
