@@ -8,7 +8,9 @@
 //! the nearest such shrunk box, over all the cubes round it: flat in the middle of a face,
 //! a quarter-round along an outside edge, a rounded corner where three meet. Sides against
 //! a neighbour are not shrunk, so faces of cubes side by side run on as one, and inside
-//! corners stay sharp, as real ones are. Taking the nearest over every cube round a point,
+//! corners stay sharp, as real ones are; the cube in an inside corner has the edge there
+//! bitten out of its box a bevel round, so where two outside edges meet an inside one, a
+//! window's jamb and sill at the wall's face, the three blend (the cubes opened by a ball). Taking the nearest over every cube round a point,
 //! not only the face's own, makes it the same for every face that shares the point.
 //!
 //! **Relief.** The material's height, read where the texture is drawn (the same planar
@@ -150,6 +152,83 @@ fn step(axis: usize, side: i32) -> IVec3 {
     let mut v = IVec3::ZERO;
     v[axis] = side;
     v
+}
+
+/// The bit of a cube's edge along `axis` at its high side across the next axis (`da`) and
+/// the one after (`db`), each 0 or 1, in a mask of its twelve edges.
+fn bite_bit(axis: usize, da: i32, db: i32) -> u32 {
+    axis as u32 * 4 + da as u32 + 2 * db as u32
+}
+
+/// A cube's box shrunk by the bevel (`draw_slots`), and the edges an inside edge runs along,
+/// bitten out of it a bevel round: the surface is the bevel's radius out from the nearest
+/// point of these. With the bites the shape is the cubes opened by a ball of the bevel
+/// (eroded, then grown again, the morphological opening a bevel mesher's rounded box is):
+/// every outside edge a quarter-round, an inside edge sharp, and where two outside edges
+/// meet an inside one at a face, as a window's jamb meets its sill at the wall's face, a
+/// rounded blend of the three rather than a corner of the cube's box swelling past them.
+#[derive(Clone, Copy, Debug)]
+struct Rounded {
+    low: Vec3,
+    high: Vec3,
+    /// The cube's low corner.
+    cube: Vec3,
+    /// Its edges bitten (`bite_bit`).
+    bites: u16,
+}
+
+impl Rounded {
+    /// The nearest point of it to `p`.
+    fn nearest(&self, p: Vec3, bevel: f32) -> Vec3 {
+        let q = p.clamp(self.low, self.high);
+        if self.bites == 0 {
+            return q;
+        }
+        for axis in 0..3 {
+            let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+            for (da, db) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                if self.bites & (1 << bite_bit(axis, da, db)) == 0 {
+                    continue;
+                }
+                // Across the edge, in from it into the box each way.
+                let corner = [
+                    self.cube[a] + da as f32 * CELL_M,
+                    self.cube[b] + db as f32 * CELL_M,
+                ];
+                let inward = [1.0 - 2.0 * da as f32, 1.0 - 2.0 * db as f32];
+                let into = |v: Vec3| {
+                    [
+                        (v[a] - corner[0]) * inward[0],
+                        (v[b] - corner[1]) * inward[1],
+                    ]
+                };
+                let [u, v] = into(q);
+                if u * u + v * v >= bevel * bevel {
+                    continue;
+                }
+                // In the bite: the nearest point of its arc, the one toward `p` or either
+                // end, or its middle where all are as near.
+                let [pu, pv] = into(p);
+                let (du, dv) = (pu.max(0.0), pv.max(0.0));
+                let length = (du * du + dv * dv).sqrt();
+                let half = core::f32::consts::FRAC_1_SQRT_2;
+                let toward = (length > 1e-6).then(|| [du / length, dv / length]);
+                let arc = |[cu, cv]: [f32; 2]| {
+                    let mut out = q;
+                    out[a] = corner[0] + inward[0] * bevel * cu;
+                    out[b] = corner[1] + inward[1] * bevel * cv;
+                    out
+                };
+                return toward
+                    .into_iter()
+                    .chain([[half, half], [1.0, 0.0], [0.0, 1.0]])
+                    .map(arc)
+                    .min_by(|x, y| x.distance_squared(p).total_cmp(&y.distance_squared(p)))
+                    .unwrap_or(q);
+            }
+        }
+        q
+    }
 }
 
 /// Draws the cubes as one surface into `out`, in the base's own space, and their tops into
@@ -533,7 +612,6 @@ pub fn draw_slots(
             shrunk[i] = (low, high);
         }
     }
-    let shrunk_at = |at: IVec3| grid.index(at).filter(|&i| member[i]).map(|i| shrunk[i]);
     // Every inside edge: a cube's edge with three of the four cubes round it full, kept by
     // the cell its middle is in (a list a cell, linked through `edges`), so a point looks
     // only at those near it.
@@ -752,6 +830,40 @@ pub fn draw_slots(
                 })
         }
     };
+    // Along each edge of a cube where the two cubes across its faces are drawn into the same
+    // surface and the one diagonally across it is not full, an inside edge's corner cube:
+    // the edge bitten out of its shrunk box a bevel round, a bit an edge (`Rounded`), so the
+    // box's corner, unshrunk both ways, does not hold the surface out past the inside edge,
+    // and where the two outside edges either side of it meet a face, the three round into
+    // one another. Not a cube cut, whose top stays on its cut as it is.
+    let mut bitten: Vec<u16> = vec![0; grid.len()];
+    for &cube in cubes {
+        let cube = IVec3::from_array(cube);
+        let Some(i) = grid.index(cube) else {
+            continue;
+        };
+        if really_cut(cube) {
+            continue;
+        }
+        for axis in 0..3 {
+            let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+            for (da, db) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let (across_a, across_b) = (step(a, 2 * da - 1), step(b, 2 * db - 1));
+                if kin(cube + across_a) && kin(cube + across_b) && !full(cube + across_a + across_b)
+                {
+                    bitten[i] |= 1 << bite_bit(axis, da, db);
+                }
+            }
+        }
+    }
+    let shrunk_at = |at: IVec3| {
+        grid.index(at).filter(|&i| member[i]).map(|i| Rounded {
+            low: shrunk[i].0,
+            high: shrunk[i].1,
+            cube: at.as_vec3() * CELL_M,
+            bites: bitten[i],
+        })
+    };
     // Asked only of a cube itself, never of those round it, so a section and its neighbour,
     // each knowing the cubes a step past its edge and no further, agree on the cubes they
     // share. A side against a cut cube follows the cut's line between its corners, which a
@@ -806,7 +918,7 @@ pub fn draw_slots(
     let mut faces: Vec<Face> = Vec::new();
     let mut cube_edges: Vec<(Vec3, Vec3)> = Vec::new();
     let mut face_edges: Vec<(Vec3, Vec3)> = Vec::new();
-    let mut round: Vec<(Vec3, Vec3)> = Vec::with_capacity(27);
+    let mut round: Vec<Rounded> = Vec::with_capacity(27);
     let mut flat: Vec<Vec3> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
@@ -824,7 +936,12 @@ pub fn draw_slots(
         let low = cube.as_vec3() * CELL_M;
         // The inside edges round it, looked for once a face of it is worked out anew.
         let mut edges_found = false;
-        let own_box = shrunk_at(cube).unwrap_or((low, low + Vec3::splat(CELL_M)));
+        let own_box = shrunk_at(cube).unwrap_or(Rounded {
+            low,
+            high: low + Vec3::splat(CELL_M),
+            cube: low,
+            bites: 0,
+        });
         let cut_here = is_cut(cube);
         let signed = if caching.is_some() {
             signature(cube)
@@ -963,12 +1080,13 @@ pub fn draw_slots(
             for x in -1..=1 {
                 for y in -1..=1 {
                     for z in -1..=1 {
-                        let Some((l, h)) = shrunk_at(cube + IVec3::new(x, y, z)) else {
+                        let Some(rounded) = shrunk_at(cube + IVec3::new(x, y, z)) else {
                             continue;
                         };
+                        let (l, h) = (rounded.low, rounded.high);
                         let gap = (l - face_high).max(face_low - h).max(Vec3::ZERO);
                         if gap.length_squared() <= reach {
-                            round.push((l, h));
+                            round.push(rounded);
                         }
                     }
                 }
@@ -1004,7 +1122,12 @@ pub fn draw_slots(
                 for more in &more {
                     floats(more);
                 }
-                for (l, h) in round.iter().chain(&face_edges).chain([&own_box]) {
+                for rounded in round.iter().chain([&own_box]) {
+                    floats(&rounded.low.to_array());
+                    floats(&rounded.high.to_array());
+                    floats(&[f32::from(rounded.bites)]);
+                }
+                for (l, h) in &face_edges {
                     floats(&l.to_array());
                     floats(&h.to_array());
                 }
@@ -1051,10 +1174,10 @@ pub fn draw_slots(
             };
             let own = [own_box];
             let place = |p: Vec3| -> (Vec3, Vec3) {
-                let boxes: &[(Vec3, Vec3)] = if inner(p) { &own } else { &round };
+                let boxes: &[Rounded] = if inner(p) { &own } else { &round };
                 let nearest = boxes
                     .iter()
-                    .map(|&(low, high)| p.clamp(low, high))
+                    .map(|rounded| rounded.nearest(p, look.bevel))
                     .min_by(|a, b| a.distance_squared(p).total_cmp(&b.distance_squared(p)))
                     .unwrap_or(p);
                 let away = p - nearest;
@@ -1824,6 +1947,33 @@ mod tests {
             }
         }
         !edges.is_empty() && edges.values().all(|&count| count == 2)
+    }
+
+    #[test]
+    fn a_jamb_meeting_its_sill_rounds_into_it_at_the_walls_face() {
+        // A wall a cube thick with an opening's corner cut from it, as a window's jamb
+        // meets its sill: the cube under the jamb, beside the sill, has both its faces
+        // there against full cubes, and its box's corner, unshrunk, would hold the wall's
+        // face out flat to the very corner where the jamb's and the sill's rounded edges
+        // meet the inside edge between them, a point the faces round it fold over. Rounded
+        // a bevel as broad as earth's.
+        let look = Look {
+            bevel: 0.12,
+            relief: 0.0,
+            steps: 5,
+            ..look()
+        };
+        let surface = drawn_as(&[[0, 0, 0], [0, 1, 0], [0, 0, 1]], &look, &flat);
+        assert!(closed(&surface));
+        for x in [0.0, 0.5] {
+            let corner = Vec3::new(x, 0.5, 0.5);
+            let nearest = surface
+                .positions
+                .iter()
+                .map(|p| p.distance(corner))
+                .fold(f32::MAX, f32::min);
+            assert!(nearest > 0.02, "a point left at the corner {corner}");
+        }
     }
 
     #[test]
