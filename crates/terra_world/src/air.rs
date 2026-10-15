@@ -89,6 +89,53 @@ fn dust_for(scale: AirScale) -> f32 {
     DUST * HAZE_SCALE / scale.0
 }
 
+/// How much of its dust's haze a day's air holds for how warm it is: the haze that whitens
+/// the distance is mostly water on fine particles, and cold air holds little (a saturated
+/// vapour pressure a third of a mild day's at freezing), so polar and winter air is clear and
+/// its far land stands dark under a pale sky (the tundra's photographs: far land 0.45 of the
+/// sky's brightness against the mountain lake's 0.34). As a mild day's air at `MILD_C` and
+/// warmer, the haze as tuned; never under a third of it.
+fn haze_for(day_mean_c: f32) -> f32 {
+    // Magnus's formula for water's saturated vapour pressure.
+    let vapour = |t: f32| 6.112 * libm::expf(17.62 * t / (243.12 + t));
+    (vapour(day_mean_c) / vapour(MILD_C)).clamp(0.35, 1.0)
+}
+const MILD_C: f32 = 10.0;
+
+/// The air's dust as the day's warmth where the start is leaves it (`haze_for`), once the
+/// climate and the clock are known.
+fn clear_cold_air(
+    fields: Option<Res<crate::climate::ClimateFields>>,
+    clock: Res<crate::daylight::Clock>,
+    start: Res<crate::start::Start>,
+    scale: Option<Res<AirScale>>,
+    air: Query<&Atmosphere, With<Air>>,
+    mut media: ResMut<Assets<ScatteringMedium>>,
+    mut done: Local<bool>,
+) {
+    let (Some(fields), Some(scale)) = (fields, scale) else {
+        return;
+    };
+    if *done {
+        return;
+    }
+    let Ok(atmosphere) = air.single() else {
+        return;
+    };
+    *done = true;
+    let place = fields.place(start.translation);
+    let mean = fields.fields.day(place, clock.time().day()).mean_c();
+    let haze = haze_for(mean);
+    if let Some(mut medium) = media.get_mut(&atmosphere.medium) {
+        *medium = self::medium(dust_for(*scale) * haze);
+    }
+    info!(
+        "Air: the day's mean {mean:.1} °C at the start leaves {:.0}% of its haze, its dust {:.1} times a clear day's",
+        haze * 100.0,
+        dust_for(*scale) * haze
+    );
+}
+
 /// The atmosphere entity.
 #[derive(Component)]
 struct Air;
@@ -110,7 +157,7 @@ const PICTURE: u32 = 128;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, spawn)
-        .add_systems(Update, (settings, picture))
+        .add_systems(Update, (settings, picture, clear_cold_air))
         .add_systems(Update, discs)
         .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
 }
@@ -295,6 +342,16 @@ fn follow(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cold_air_holds_less_haze_than_mild_and_never_none() {
+        assert_eq!(haze_for(MILD_C), 1.0);
+        assert_eq!(haze_for(25.0), 1.0);
+        let freezing = haze_for(0.0);
+        // Water's saturated vapour pressure at 0 and 10 °C, 6.1 and 12.3 hPa: half.
+        assert!((freezing - 6.11 / 12.27).abs() < 0.02, "{freezing}");
+        assert!(haze_for(3.0) > freezing && haze_for(-30.0) == 0.35);
+    }
 
     #[test]
     fn the_air_is_the_small_planets_on_it_and_near_the_true_air_among_mountains() {
