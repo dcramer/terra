@@ -4,7 +4,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 // The sandbox this checkout started listens on a port of its own and answers sandbox.whoami
@@ -31,8 +31,16 @@ export const onWsl = (() => {
 /// `buildOffscreen` builds it first, and paths given to it go through `offscreenPath`.
 export const offscreenRun = (copy: string, args: string[]): [string, string[]] =>
   onWsl
-    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--release", "--copy", copy, "--", "--offscreen", ...args]]
+    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--release", "--copy", own(copy), "--", "--offscreen", ...args]]
     : [resolve(ROOT, "target/release/terra_sandbox"), ["--offscreen", ...args]];
+
+/// A Windows copy's name, this checkout's own: runs from two worktrees under one name would
+/// otherwise share the copy and fight over its program and its files.
+const checkout = (() => {
+  const name = basename(ROOT);
+  return name === "terra" ? "main" : name.slice(-8);
+})();
+export const own = (copy: string) => `${copy}-${checkout}`;
 
 /// Builds what `offscreenRun` runs, once, before runs that may start at once.
 export function buildOffscreen(): boolean {
@@ -126,7 +134,7 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...sandboxArgs];
   writeMark(0);
   const command = windows
-    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", copy ?? `remote-${port}`, "--", ...args]]
+    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", own(copy ?? `remote-${port}`), "--", ...args]]
     : ["cargo", ["run", "-q", ...(release ? ["--release"] : []), "-p", "terra_sandbox", "--", ...args]];
   // Windows will not replace a program that is still closing, such as the last run of this
   // one, so a start that ends at once for that reason is tried again.
