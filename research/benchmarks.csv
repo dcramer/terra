@@ -52,3 +52,6 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-15,4e5dd18d,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town300,11.31,40.18,52.62,2,35.08,143,51.4
 2026-10-15,4e5dd18d,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town300-bare,9.19,136.72,160.59,2,38.50,69,358.1
 2026-10-15,dcbf62e7,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town-day,13.98,44.74,62.07,1,78.33,124,98.4
+2026-10-15,02c2e1e8,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town-day,13.26,18.57,37.17,2,46.75,2,16.9
+2026-10-15,02c2e1e8,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town-bare,10.88,13.55,25.92,2,1.08,0,7.1
+2026-10-15,02c2e1e8,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,town-dusk,11.19,14.58,24.14,2,1.92,0,4.9
