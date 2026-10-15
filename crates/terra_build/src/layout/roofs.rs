@@ -879,6 +879,29 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             })
         };
         let (start, end) = (segment.from.metres(), segment.to.metres());
+        // Its ends at a hip in by its width: laid square across the face, its upper edge
+        // reached past the hip, where the next face's batten at the same height lies.
+        let along = (end - start).normalize_or_zero();
+        let at_hip = |p: Vec3, out: Vec3| {
+            let beyond = p + out * 0.05;
+            roofs
+                .top_over(beyond.x, beyond.z, p.y - CELL_M)
+                .is_some_and(|h| h < p.y - 0.01)
+        };
+        let wide = kit.roof.batten.0;
+        let start = if at_hip(start, -along) {
+            start + along * wide
+        } else {
+            start
+        };
+        let end = if at_hip(end, along) {
+            end - along * wide
+        } else {
+            end
+        };
+        if start.distance(end) < 1e-3 || (end - start).dot(along) <= 0.0 {
+            continue;
+        }
         for (from, to) in framed(base, start, end, true) {
             let capped = [
                 !(from.distance(start) < 1e-3 && joint(segment.from)),
@@ -1569,6 +1592,42 @@ mod tests {
         // Rafters along every cube's edge up each slope, nine a side from one gable's inner
         // face to the other's, none on a gable or out under a verge, and a beam under the ridge.
         assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 9 + 1);
+    }
+
+    #[test]
+    fn battens_either_side_of_a_hip_stop_short_of_one_another() {
+        // A tower's pyramid: four faces, four hips, each face's battens level with the next
+        // face's. Laid square across its face, each stops in from the hip by its width, so
+        // its upper edge does not reach over the hip into the next face's at its height.
+        let base = roofed(&[([0, 0, 0], [7, 0, 7])], Style::Hip);
+        let pieces = laid(&base);
+        let wide = roof_kit().roof.batten.0;
+        let battens = parts(&pieces, RoofPart::Batten);
+        assert!(battens.len() > 8);
+        // The hips run from the corners to the apex at the middle, 45° in plan: a point is
+        // on a face, not past its hips, while it is no nearer the middle across the face than
+        // along the hip.
+        let middle = Vec3::new(2.0, 0.0, 2.0);
+        for (from, to) in &battens {
+            let along = (*to - *from).normalize();
+            let across = Vec3::Y.cross(along).normalize();
+            for end in [*from, *to] {
+                // Its corner up the slope from the end, toward the middle.
+                let toward = (middle - end).with_y(0.0);
+                let up = if across.dot(toward) > 0.0 {
+                    across
+                } else {
+                    -across
+                };
+                let corner = end + up * wide;
+                let d = (corner - middle).with_y(0.0);
+                let (a, c) = (d.dot(along).abs(), d.dot(up).abs());
+                assert!(
+                    a <= c + 1e-3,
+                    "{from}..{to}: its corner {corner} past a hip"
+                );
+            }
+        }
     }
 
     #[test]
