@@ -62,6 +62,9 @@ const LONGEST: i32 = 8;
 const INTO_M: f32 = 0.015;
 /// How far a brace is set back from the members it runs into, so its ends are behind them.
 const BRACE_BACK_M: f32 = 0.012;
+/// How far out of the frame's middle depth a brace is set, one way for those leaning one
+/// way and the other for the rest, so two crossing in a panel are not in one plane.
+const BRACE_CROSS_M: f32 = 0.003;
 
 /// How a run of a face's cells ends along a row: in the open, round an outside corner; in an
 /// inside corner, the cube beside covered; at an opening; against another kind.
@@ -639,10 +642,12 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
                     continue;
                 }
                 let along = side + toward * run * up / rise;
-                let back = dir.step().as_vec3() * -BRACE_BACK_M;
+                // Thinner than what it runs into both ways, and as proud of the infill as
+                // most of its depth (as `braces`).
+                let shift = dir.step().as_vec3() * (BRACE_CROSS_M * toward.signum());
                 out.beam(
-                    at(along, bottom) + back,
-                    at(side, bottom + up) + back,
+                    at(along, bottom) + shift,
+                    at(side, bottom + up) + shift,
                     dir,
                     f.brace,
                     f.deep - BRACE_BACK_M * 2.0,
@@ -751,9 +756,13 @@ fn braces(
                     continue;
                 }
                 // The brace from the inner post's foot to the end's top, or from the end's
-                // top down to the inner post at the rail; set back, so its ends are behind.
-                let back = plane.0.step().as_vec3() * -BRACE_BACK_M;
-                let (a, b) = (at(inner_u, near) + back, at(end_u, far) + back);
+                // top down to the inner post at the rail; thinner than they are both ways, so
+                // its ends are inside them, and standing as proud of the infill as most of
+                // its depth, so its face, however its timber waves, is never in the infill's.
+                // Those leaning one way a hair out of the others' depth, where two cross.
+                let shift = plane.0.step().as_vec3()
+                    * (BRACE_CROSS_M * if toward < 0 { -1.0 } else { 1.0 });
+                let (a, b) = (at(inner_u, near) + shift, at(end_u, far) + shift);
                 out.beam(a, b, plane.0, f.brace, f.deep - BRACE_BACK_M * 2.0);
             }
         }
@@ -1028,6 +1037,42 @@ mod tests {
             &mut pieces,
         );
         pieces
+    }
+
+    #[test]
+    fn braces_stand_proud_of_the_infill_and_two_crossing_are_not_in_one_plane() {
+        // A wall along x, its faces at z 0 and 0.5: every brace's face stands clear of its
+        // face's infill by more than its timber's waves, and those leaning either way are
+        // at depths of their own.
+        let mut base = Base::default();
+        wall(&mut base, 0, 9, 0, kit().kind());
+        let mut depths = std::collections::BTreeMap::<(bool, bool), f32>::new();
+        for piece in laid(&base) {
+            let Piece::Beam {
+                from,
+                to,
+                face,
+                deep,
+                ..
+            } = piece
+            else {
+                continue;
+            };
+            let (a, b) = (from.metres(), to.metres());
+            if (a.y - b.y).abs() < 1e-3 || ((a.x - b.x).abs() < 1e-3 && (a.z - b.z).abs() < 1e-3) {
+                continue;
+            }
+            let out = face.step().as_vec3();
+            let infill = if out.z > 0.0 { 0.5 } else { 0.0 };
+            let front = (a.z - infill) * out.z + super::super::metres(deep) * 0.5;
+            assert!(front > 0.012, "a brace's face {front} m out of the infill");
+            let rising = (b.y - a.y) * (b.x - a.x) > 0.0;
+            depths.insert((out.z > 0.0, rising), a.z);
+        }
+        for south in [false, true] {
+            let (a, b) = (depths[&(south, true)], depths[&(south, false)]);
+            assert!((a - b).abs() > 0.004, "{a} {b}");
+        }
     }
 
     #[test]
