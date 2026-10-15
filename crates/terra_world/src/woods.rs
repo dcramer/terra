@@ -168,10 +168,14 @@ fn plant(
         let up = tree.at.normalize();
         let rotation = Quat::from_axis_angle(up, tree.luck * std::f32::consts::TAU * 7.0)
             * Quat::from_rotation_arc(Vec3::Y, up);
+        // Toward their limit trees grow squat as well as short, crowns spreading low where the
+        // wind and winter's snow cut back what stands above it: krummholz is wider than tall.
+        let stunted = (1.0 - tree.stature / 0.7).clamp(0.0, 1.0);
+        let squat = 1.0 + 1.6 * stunted * stunted;
         let transform = Transform {
             translation: tree.at - up * 0.15,
             rotation,
-            scale: Vec3::splat(scale),
+            scale: Vec3::new(scale * squat, scale, scale * squat),
         };
         grown::draw(
             &mut commands.spawn((transform, Visibility::default())),
