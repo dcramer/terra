@@ -269,31 +269,41 @@ impl Fragment {
             return landing;
         }
         self.at.y = under + down;
+        // On a slope steeper than it can rest on, a roof's, it slides down it and off its
+        // eave rather than lying where it fell: read each way along the floor, so one on a
+        // ridge slides off whichever side falls away most, not balanced between the two.
+        let e = SLOPE_READ_M;
+        let here = floor(self.at);
+        let (way, steep) = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
+            .into_iter()
+            .map(|way| (way, (here - floor(self.at + way * e)) / e))
+            .fold((Vec3::ZERO, 0.0f32), |best, (way, drop)| {
+                if drop > best.1 { (way, drop) } else { best }
+            });
+        // Over an edge, an eave's, it goes on over it.
+        let steep = steep.min(4.0);
+        let sliding = steep > SLIDES_AT;
         if self.velocity.y < 0.0 {
             let hit = -self.velocity.y;
             landing.hit = Some(hit);
             landing.breaks = self.shape == Shape::Whole && hit > BREAKS_AT;
-            self.velocity.y = hit * BOUNCE;
-            self.velocity.x *= FRICTION;
-            self.velocity.z *= FRICTION;
-            // Rolling on along the floor rather than spinning in the air.
-            let along = self.velocity.with_y(0.0);
-            let roll = Vec3::Y.cross(along) / (down.max(0.03));
-            self.spin = self.spin * 0.4 + roll * 0.6;
+            // Following a slope down it, as it slides, is no fall onto it.
+            let following = steep * self.velocity.with_y(0.0).length() + GRAVITY * dt * 2.0;
+            if sliding && hit <= following {
+                self.velocity.y = 0.0;
+            } else {
+                self.velocity.y = hit * BOUNCE;
+                self.velocity.x *= FRICTION;
+                self.velocity.z *= FRICTION;
+                // Rolling on along the floor rather than spinning in the air.
+                let along = self.velocity.with_y(0.0);
+                let roll = Vec3::Y.cross(along) / (down.max(0.03));
+                self.spin = self.spin * 0.4 + roll * 0.6;
+            }
         }
-        // On a slope steeper than it can rest on, a roof's, it slides down it and off its
-        // eave rather than lying where it fell.
-        let e = SLOPE_READ_M;
-        let slope = Vec3::new(
-            (floor(self.at + Vec3::X * e) - floor(self.at - Vec3::X * e)) / (2.0 * e),
-            0.0,
-            (floor(self.at + Vec3::Z * e) - floor(self.at - Vec3::Z * e)) / (2.0 * e),
-        );
-        let steep = slope.length();
-        if steep > SLIDES_AT && steep < 20.0 {
-            let down = -slope / steep;
+        if sliding {
             let pull = GRAVITY * steep / (1.0 + steep * steep).sqrt();
-            self.velocity += down * pull * (1.0 - SLIDE_FRICTION) * dt;
+            self.velocity += way * pull * (1.0 - SLIDE_FRICTION) * dt;
             return landing;
         }
         if self.velocity.length() < SETTLE {
@@ -1007,6 +1017,44 @@ mod tests {
             lying.still && (lying.at.x - 0.5).abs() < 0.3,
             "{}",
             lying.at
+        );
+    }
+
+    #[test]
+    fn a_chip_landing_on_a_built_roof_slides_off_it() {
+        // A gable roof of cubes the roofer lays over a footprint eight cubes by six, from
+        // the third storey's cubes up, on nothing (what a piece lands on is the roof).
+        let footprint: std::collections::BTreeSet<[i32; 2]> =
+            (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        let mut base = Base::default();
+        for (at, shape) in plan.roof {
+            base.apply(crate::BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
+        let floor = |at: Vec3| base.top_under(at).unwrap_or(0.0).max(0.0);
+        let top = (0..8)
+            .map(|z| floor(Vec3::new(2.0, 5.5, z as f32 * 0.5 + 0.25)))
+            .fold(0.0f32, f32::max);
+        assert!(top > 3.0, "a roof to land on: {top}");
+        let fell = [(IVec3::new(4, 8, 2), cube(CubeShape::Whole))];
+        let mut chip = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
+        // Dropped on its ridge, the middle of the footprint's width.
+        chip.at = Vec3::new(2.0, top + 0.6, 1.5);
+        chip.velocity = Vec3::ZERO;
+        for _ in 0..1800 {
+            chip.step(1.0 / 60.0, &floor, &open);
+        }
+        assert!(
+            chip.at.y < 0.4,
+            "on the ground under the eave, not the roof: {}",
+            chip.at
         );
     }
 

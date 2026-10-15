@@ -647,8 +647,47 @@ pub fn contract(kit: &Kit) -> Vec<String> {
             ));
         }
     }
+    // Its corner stones, quoins and jamb stones: each states its real size, the box of its
+    // dressed faces, and is that size, its origin the wall's corner it is laid at, from the
+    // course's foot.
+    for (set, corners) in kit.dress.made.iter().flat_map(|made| &made.corners) {
+        for (which, stones) in [("long", &corners.long), ("short", &corners.short)] {
+            for (variant, stone) in stones.iter().enumerate() {
+                let what = format!("its corner stone {set} {which} {variant}");
+                if stone.dims.iter().any(|d| *d <= 0.0) {
+                    problems.push(format!("{what} states no size"));
+                    continue;
+                }
+                let mut low = [f32::MAX; 3];
+                let mut high = [f32::MIN; 3];
+                for p in &stone.positions {
+                    for i in 0..3 {
+                        low[i] = low[i].min(p[i]);
+                        high[i] = high[i].max(p[i]);
+                    }
+                }
+                let size = [0, 1, 2].map(|i| high[i] - low[i]);
+                if !same_size(size, stone.dims) {
+                    problems.push(format!(
+                        "{what} is {size:?}, not the {:?} its contract says",
+                        stone.dims
+                    ));
+                }
+                if high[0].abs() > STONE_PROUD_M || high[2].abs() > STONE_PROUD_M || low[1] < -0.01
+                {
+                    problems.push(format!(
+                        "{what} is not seated at its corner: its faces {:.3} and {:.3} m out, its foot {:.3} m up",
+                        high[0], high[2], low[1]
+                    ));
+                }
+            }
+        }
+    }
     problems
 }
+
+/// The most a corner stone's dressed face stands out of the wall, pillowed and pitched.
+const STONE_PROUD_M: f32 = 0.05;
 
 /// What a kit draws on a cabin five metres by four with a door and a window, of its kind,
 /// or for a roof kind, of plain walls under a gable of it: triangles a metre of its long
@@ -775,6 +814,7 @@ mod tests {
             .into_iter()
             .collect(),
             near: vec![crate::dress::Stone {
+                dims: [0.0; 3],
                 positions: vec![[0.0, 0.0, 0.0], [dims[0], high, dims[2]]],
                 normals: vec![[0.0, 1.0, 0.0]; 2],
                 triangles: Vec::new(),
@@ -811,6 +851,37 @@ mod tests {
         };
         assert!(!model("a") && !model("b"), "a board flat is the same board");
         assert!(model("c"), "{:?}", reports["c"].problems);
+    }
+
+    #[test]
+    fn a_corner_stone_states_its_size_and_is_it_seated_at_its_corner() {
+        let stone = |dims: [f32; 3], lift: f32| crate::dress::Stone {
+            dims,
+            positions: vec![[-0.42, lift, -0.23], [0.02, 0.236 + lift, 0.02]],
+            ..Default::default()
+        };
+        let kit = |stone: crate::dress::Stone| {
+            let mut pieces = crate::dress::Pieces::default();
+            pieces.corners.insert(
+                "quoin".into(),
+                crate::dress::Corners {
+                    long: vec![stone],
+                    short: Vec::new(),
+                },
+            );
+            let mut kit = Kit::default();
+            kit.dress.made = Some(std::sync::Arc::new(pieces));
+            kit
+        };
+        assert!(contract(&kit(stone([0.44, 0.236, 0.25], 0.0))).is_empty());
+        for (wrong, why) in [
+            (stone([0.0; 3], 0.0), "states no size"),
+            (stone([0.3, 0.236, 0.25], 0.0), "not the"),
+            (stone([0.44, 0.236, 0.25], -0.1), "not seated"),
+        ] {
+            let problems = contract(&kit(wrong));
+            assert!(problems.iter().any(|p| p.contains(why)), "{problems:?}");
+        }
     }
 
     #[test]

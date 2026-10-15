@@ -1,7 +1,10 @@
 // node --test tools/kits/pack.test.ts
 import { strict as assert } from "node:assert";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { bill, materialFile, nextId, packFile } from "./pack.ts";
+import { bill, leavingNothingIfItFails, materialFile, nextId, packFile, underFor } from "./pack.ts";
 
 test("a cost is written as the kit's bill of fractions", () => {
   assert.equal(bill("Stone 1/4"), '[("Stone", 1, 4)]');
@@ -31,4 +34,38 @@ test("a block pack fills its walls and floors with the set, parallax on its wall
   assert.match(text, /light: \(0.6, 0.5, 0.4\)/);
   const over = packFile({ name: "limed", source: "x", pattern: "block", metres: 2, depth: 0, mean: [0.8, 0.8, 0.8], under: "packed_earth" });
   assert.match(over, /pack: "packed_earth",/);
+});
+
+test("a wood is laid over the pine logs' pack and a covering over the shakes', unless told", () => {
+  assert.equal(underFor("coursed"), "pine_logs");
+  assert.equal(underFor("roof"), "shakes");
+  assert.equal(underFor("block"), undefined);
+  assert.equal(underFor("roof", "slate"), "slate");
+  assert.equal(underFor("coursed", "none"), undefined);
+  const text = packFile({ name: "oak_logs", source: "x", pattern: "coursed", metres: 2, depth: 0, mean: [0.5, 0.4, 0.3], under: underFor("coursed") });
+  assert.match(text, /pack: "pine_logs",/);
+});
+
+test("a run that fails leaves nothing behind: what it made gone, what it changed as it was", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pack-test-"));
+  try {
+    const [made, changed, folder] = [join(root, "new.ron"), join(root, "README.md"), join(root, "set")];
+    writeFileSync(changed, "as it was\n");
+    await assert.rejects(
+      leavingNothingIfItFails([made, changed, folder], async () => {
+        writeFileSync(made, "half made");
+        writeFileSync(changed, "changed");
+        mkdirSync(folder);
+        writeFileSync(join(folder, "color.jpg"), "x");
+        throw new Error("the checker fails");
+      }),
+    );
+    assert.ok(!existsSync(made) && !existsSync(folder));
+    assert.equal(readFileSync(changed, "utf8"), "as it was\n");
+    // And one that works keeps what it made.
+    await leavingNothingIfItFails([made], async () => writeFileSync(made, "made"));
+    assert.equal(readFileSync(made, "utf8"), "made");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -6,7 +6,8 @@
 // ImageMagick (`convert`), and Blender for a model's bake.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -20,13 +21,47 @@ const README = join(MATERIALS, "README.md");
 export const SIDE = 1024;
 
 /** What each pattern's material is, unless told otherwise: the texture slots its pack fills,
- * its cost, how heavy it reads where kinds meet, and the roof over it. */
-export const PATTERNS: Record<string, { slots: string[]; cost: string; steps: number; weight: number; roof?: string }> = {
+ * its cost, how heavy it reads where kinds meet, the roof over it, and the reference pack it
+ * is laid over (`under`), which gives it everything its pattern needs but the face it is
+ * made for: a wood the daub, sawn ends and modelled log of the pine logs' pack, a covering
+ * the battens, rafters and ridge of the shakes'. */
+export const PATTERNS: Record<string, { slots: string[]; cost: string; steps: number; weight: number; roof?: string; under?: string }> = {
   block: { slots: ["Masonry", "Floor"], cost: "Stone 1/4", steps: 1, weight: 3, roof: "slate" },
   frame: { slots: ["Masonry", "Floor"], cost: "Wood 1/64, Fibre 1/64", steps: 4, weight: 1, roof: "thatch" },
-  coursed: { slots: ["Log"], cost: "Wood 1/16", steps: 2, weight: 2, roof: "shakes" },
-  roof: { slots: ["Covering"], cost: "Wood 1/32", steps: 4, weight: 0 },
+  coursed: { slots: ["Log"], cost: "Wood 1/16", steps: 2, weight: 2, roof: "shakes", under: "pine_logs" },
+  roof: { slots: ["Covering"], cost: "Wood 1/32", steps: 4, weight: 0, under: "shakes" },
 };
+
+/** The pack a material is laid over: the one asked for, else its pattern's; none if told
+ * `--under none`. */
+export function underFor(pattern: string, asked?: string): string | undefined {
+  if (asked === "none") return undefined;
+  return asked ?? PATTERNS[pattern]?.under;
+}
+
+/** Runs `work`, and if it fails puts every one of `paths` back as it was before (a file's
+ * text, a folder's files) or takes it away if it was not there, so a failed run leaves
+ * nothing behind to break the checks after it. */
+export async function leavingNothingIfItFails<T>(paths: string[], work: () => Promise<T>): Promise<T> {
+  const keep = mkdtempSync(join(tmpdir(), "pack-"));
+  const was = paths.map((path, i) => {
+    if (!existsSync(path)) return { path, kept: undefined };
+    const kept = join(keep, String(i));
+    cpSync(path, kept, { recursive: true });
+    return { path, kept };
+  });
+  try {
+    return await work();
+  } catch (error) {
+    for (const { path, kept } of was) {
+      rmSync(path, { recursive: true, force: true });
+      if (kept) cpSync(kept, path, { recursive: true });
+    }
+    throw error;
+  } finally {
+    rmSync(keep, { recursive: true, force: true });
+  }
+}
 
 /** A bill as the material file writes it: `Stone 1/4, Wood 1/64` to `[("Stone", 1, 4), …]`. */
 export function bill(text: string): string {
@@ -207,7 +242,9 @@ async function main() {
   --title T          what it is, for its file's first line
   --cost "Stone 1/4" what a step takes; --steps N steps a cube (the pattern's by default)
   --weight N         how heavy it reads where kinds meet; --roof <material> the roof over it
-  --under <pack>     a pack it is laid over, its trims and looks the rest (as packed_earth)
+  --under <pack>     the pack it is laid over, for all its pattern needs but its own face:
+                     a coursed wood the pine_logs pack's, a roof covering the shakes' by
+                     default; none for none
   --metres M         how many metres one copy covers (a scan's own size where it says)
   --depth D          its parallax depth (0.015 where it has a height map)
   --rows N           a roof covering's courses a copy; --tint r,g,b its colour multiplied
@@ -217,45 +254,73 @@ async function main() {
     process.exit(values.help ? 0 : 2);
   }
   const started = Date.now();
-  const made = await make(name, values.from!, values);
-  const tint = values.tint?.split(",").map(Number);
-  const mean = fit(name, tint);
-  const wrong = problems(name, mean);
-  if (wrong.length) throw new Error(`${name}: ${wrong.join("; ")}`);
-  const metres = Number(values.metres ?? made.metres ?? 2);
-  const height = existsSync(join(MATERIALS, name, "height.jpg"));
-  const depth = Number(values.depth ?? (height ? 0.015 : 0));
-  mkdirSync(PACKS, { recursive: true });
-  writeFileSync(join(PACKS, `${name}.ron`), packFile({ name, source: values.from!, pattern: values.pattern!, metres, depth, mean, under: values.under, rows: values.rows ? Number(values.rows) : undefined }));
-  const ids = materialIds();
-  const existing = ids.get(name);
-  ids.delete(name);
-  const id = existing ?? nextId([...ids.values()], values.pattern === "roof");
-  const roofName = values.roof ?? pattern.roof;
-  const roof = roofName ? ids.get(roofName) : undefined;
-  if (roofName && roof === undefined) throw new Error(`no roof material ${roofName}`);
-  writeFileSync(
-    join(KITS, `${name}.ron`),
-    materialFile({
-      name,
-      title: values.title ?? name.replaceAll("_", " "),
-      source: values.from!,
-      id,
-      pattern: values.pattern!,
-      cost: values.cost ?? pattern.cost,
-      steps: Number(values.steps ?? pattern.steps),
-      weight: Number(values.weight ?? pattern.weight),
-      roof,
-    }),
-  );
-  if (!values["no-check"]) {
-    // The kit checker over every material, this one among them (cargo xtask kits).
-    const report = execFileSync("cargo", ["run", "-q", "-p", "terra_build", "--example", "kits"], { cwd: ROOT, encoding: "utf8" });
-    const line = report.split("\n").find((l) => l.startsWith(`${name}.ron:`)) ?? "";
-    console.log(line);
-    if (!line.includes(": ok")) throw new Error(`${name} does not pass the kit checker`);
-  }
-  console.log(`${name}: material ${id}, ${values.pattern} pattern, ${fmt(metres)} m a copy, in ${((Date.now() - started) / 1000).toFixed(0)} s. Files: assets/data/kits/${name}.ron, assets/data/packs/${name}.ron, assets/materials/${name}/.`);
+  const under = underFor(values.pattern!, values.under);
+  // Everything it writes, put back as it was if any step fails.
+  const touched = [join(MATERIALS, name), join(PACKS, `${name}.ron`), join(KITS, `${name}.ron`), README];
+  await leavingNothingIfItFails(touched, async () => {
+    const made = await make(name, values.from!, values);
+    const tint = values.tint?.split(",").map(Number);
+    const mean = fit(name, tint);
+    const wrong = problems(name, mean);
+    if (wrong.length) throw new Error(`${name}: ${wrong.join("; ")}`);
+    const metres = Number(values.metres ?? made.metres ?? 2);
+    const height = existsSync(join(MATERIALS, name, "height.jpg"));
+    const depth = Number(values.depth ?? (height ? 0.015 : 0));
+    mkdirSync(PACKS, { recursive: true });
+    writeFileSync(join(PACKS, `${name}.ron`), packFile({ name, source: values.from!, pattern: values.pattern!, metres, depth, mean, under, rows: values.rows ? Number(values.rows) : undefined }));
+    const ids = materialIds();
+    const existing = ids.get(name);
+    ids.delete(name);
+    const id = existing ?? nextId([...ids.values()], values.pattern === "roof");
+    const roofName = values.roof ?? pattern.roof;
+    const roof = roofName ? ids.get(roofName) : undefined;
+    if (roofName && roof === undefined) throw new Error(`no roof material ${roofName}`);
+    writeFileSync(
+      join(KITS, `${name}.ron`),
+      materialFile({
+        name,
+        title: values.title ?? name.replaceAll("_", " "),
+        source: values.from!,
+        id,
+        pattern: values.pattern!,
+        cost: values.cost ?? pattern.cost,
+        steps: Number(values.steps ?? pattern.steps),
+        weight: Number(values.weight ?? pattern.weight),
+        roof,
+      }),
+    );
+    if (!values["no-check"]) {
+      // The kit checker over every material, this one among them (cargo xtask kits).
+      // It exits failing when any material fails; what it says is the same.
+      let report: string;
+      try {
+        report = execFileSync("cargo", ["run", "-q", "-p", "terra_build", "--example", "kits"], { cwd: ROOT, encoding: "utf8" });
+      } catch (error: any) {
+        report = String(error.stdout ?? "");
+      }
+      const lines = report.split("\n");
+      const at = lines.findIndex((l) => l.startsWith(`${name}.ron:`));
+      // Its line and the problems under it.
+      const own: string[] = [];
+      if (at >= 0) {
+        own.push(lines[at]);
+        for (const line of lines.slice(at + 1)) {
+          if (!line.startsWith("  ")) break;
+          own.push(line);
+        }
+      }
+      console.log(own.join("\n"));
+      if (!own[0]?.includes(": ok")) throw new Error(`${name} does not pass the kit checker; nothing of it is kept`);
+    }
+    console.log(`${name}: material ${id}, ${values.pattern} pattern${under ? `, over ${under}` : ""}, ${fmt(metres)} m a copy, in ${((Date.now() - started) / 1000).toFixed(0)} s. Files: assets/data/kits/${name}.ron, assets/data/packs/${name}.ron, assets/materials/${name}/.`);
+  });
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) {
+  try {
+    await main();
+  } catch (error: any) {
+    console.error(`pack: ${error?.message ?? error}`);
+    process.exit(1);
+  }
+}

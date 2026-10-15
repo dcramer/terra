@@ -102,6 +102,9 @@ pub struct Corners {
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Stone {
+    /// Its contract (D303): its real size, along its +Z face (X), up, and along its +X face
+    /// (Z), in metres: its dressed faces' box, from the wall's corner at its origin.
+    pub dims: [f32; 3],
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub triangles: Vec<[u32; 3]>,

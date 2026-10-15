@@ -201,10 +201,13 @@ def ron_floats(values):
     return "(" + ", ".join(f"{v:g}" for v in values) + ")"
 
 
-def ron_mesh(positions, normals, indices, uvs=()):
+def ron_mesh(positions, normals, indices, uvs=(), dims=None):
     tris = [indices[i : i + 3] for i in range(0, len(indices), 3)]
+    stated = f"dims: {ron_floats(dims)},\n                " if dims else ""
     return (
-        "(\n                positions: ["
+        "(\n                "
+        + stated
+        + "positions: ["
         + ", ".join(ron_floats(p) for p in positions)
         + "],\n                normals: ["
         + ", ".join(ron_floats(n) for n in normals)
@@ -889,7 +892,15 @@ def main():
                 ob = stone(f"{name}_{which}_{variant}", spec, a, b, seed)
                 positions, normals, indices, _ = triangles(ob)
                 print(f"corner {name} {which} {variant}: {len(indices) // 3} triangles")
-                meshes.append(ron_mesh(positions, normals, indices))
+                # Its contract (D303): the box of its dressed faces, pillowed, from the
+                # wall's corner, which the kit checker holds it to.
+                joint, proud, pillow = spec["joint"], spec["proud"], spec.get("pillow", 0.0)
+                dims = (
+                    round(a - joint + proud + pillow, 4),
+                    round(spec["height"] - 2 * joint, 4),
+                    round(b - joint + proud + pillow, 4),
+                )
+                meshes.append(ron_mesh(positions, normals, indices, dims=dims))
             lines.append(f"            {which}: [" + ", ".join(meshes) + "],")
         lines.append("        ),")
     lines.append("    },")

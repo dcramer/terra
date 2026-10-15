@@ -1397,6 +1397,7 @@ mod tests {
         // no eaves, its top half a metre up over x and z from 0 to 0.5.
         use crate::layout::roofs::RoofPart;
         let verge = crate::dress::Stone {
+            dims: [0.0; 3],
             positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.2], [0.0, 0.1, 0.0]],
             normals: vec![[0.0, 1.0, 0.0]; 3],
             triangles: vec![[0, 1, 2]],
