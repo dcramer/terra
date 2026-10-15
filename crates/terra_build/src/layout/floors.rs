@@ -417,20 +417,20 @@ impl Deck<'_> {
             Ledger,
             Full,
         }
+        let rim_on = |at: IVec3, side: IVec3| -> Option<Rim> {
+            if !self.has(at) {
+                return None;
+            }
+            match (self.edge(at, side), self.framed(at)) {
+                (Edge::Open, false) => Some(Rim::Full),
+                (Edge::Open, true) if side.dot(across) != 0 => Some(Rim::Joist),
+                (Edge::Wall, true) if side.dot(across) != 0 => Some(Rim::Ledger),
+                _ => None,
+            }
+        };
         for side in SIDES {
             let runs_along = if side.dot(along) != 0 { across } else { along };
-            let joist_ends = side.dot(across) != 0;
-            let rim = |at: IVec3| -> Option<Rim> {
-                if !self.has(at) {
-                    return None;
-                }
-                match (self.edge(at, side), self.framed(at)) {
-                    (Edge::Open, false) => Some(Rim::Full),
-                    (Edge::Open, true) if joist_ends => Some(Rim::Joist),
-                    (Edge::Wall, true) if joist_ends => Some(Rim::Ledger),
-                    _ => None,
-                }
-            };
+            let rim = |at: IVec3| rim_on(at, side);
             let lines: BTreeSet<i32> = cells.iter().map(|at| at.dot(side.abs())).collect();
             let first = cells.iter().map(|at| at.dot(runs_along)).min().unwrap_or(0);
             let last = cells.iter().map(|at| at.dot(runs_along)).max().unwrap_or(0);
@@ -452,6 +452,17 @@ impl Deck<'_> {
                     }
                 }
                 for (from, to, (kind, _)) in found {
+                    // At a corner, the rim along the joists' ends runs through and the one
+                    // across them butts against its inside face, as a carpenter frames a
+                    // box: the two never lie in one another.
+                    let butt = |k: i32, end: IVec3| {
+                        if runs_along == across && rim_on(at_of(k), end).is_some() {
+                            JOIST_WIDE_M
+                        } else {
+                            0.0
+                        }
+                    };
+                    let (start_in, end_in) = (butt(from, -runs_along), butt(to, runs_along));
                     // The cube's face on that side, and the rim's middle set in from it, or
                     // out from it onto the wall's face for a ledger.
                     let face = (line as f32 + 0.5 + outward * 0.5) * CELL_M;
@@ -480,8 +491,8 @@ impl Deck<'_> {
                                 + Vec3::Y * height
                         };
                         layout.pieces.push(Piece::Plank {
-                            from: Place::near(on(from as f32 * CELL_M)),
-                            to: Place::near(on((to + 1) as f32 * CELL_M)),
+                            from: Place::near(on(from as f32 * CELL_M + start_in)),
+                            to: Place::near(on((to + 1) as f32 * CELL_M - end_in)),
                             wide: ticks(JOIST_WIDE_M),
                             high: ticks(deep - GAP_M),
                             seed: hash(&[

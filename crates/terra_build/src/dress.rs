@@ -129,10 +129,12 @@ const SOFFIT_DROP_M: f32 = 0.004;
 const SQUARE_RECESS: f32 = 0.2;
 /// And a piece's whose part set in is all out of sight: a little past the diagonal.
 const BURIED_RECESS: f32 = 1.05;
+/// How far short of the cube's depth an opening's head or sill is sunk behind its piece.
+const REVEAL_SHORT_M: f32 = 0.002;
+/// How far past its half-cube step into what rises behind it a cut shape's band reaches.
+const BAND_PAST_M: f32 = 0.004;
 /// How far short of its square end a border stops.
 const BORDER_SHORT_M: f32 = 0.003;
-/// How far past a lintel's or a sill's back its reveal is sunk.
-const REVEAL_PAST_M: f32 = 0.06;
 /// How far a corner stone may run along a face it shares with the cube's other edge's
 /// stones: to half the cube, short of a joint, so the two meet and never pass.
 const SHARED_REACH_M: f32 = CELL_M * 0.5 - JOINT_M * 0.5;
@@ -194,10 +196,10 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             // in a face, stops a hair short of it, its end not in that face's plane.
             if role == layout::Role::Border {
                 let along = (to - from).normalize_or_zero();
-                if ends[0] == End::Square {
+                if matches!(ends[0], End::Square | End::Free) {
                     from += along * BORDER_SHORT_M;
                 }
-                if ends[1] == End::Square {
+                if matches!(ends[1], End::Square | End::Free) {
                     to -= along * BORDER_SHORT_M;
                 }
             }
@@ -246,9 +248,10 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 return;
             };
             // On a shape cut in half cubes, a step a half cube deep: a nose modelled for a
-            // step a cube deep reaches back no further than its own, not on into the stone of
-            // the stair over it, through whose face its back would show.
-            let back = -CELL_M * 0.5;
+            // step a cube deep reaches back no further than its own and a hair into what
+            // rises behind it, not on into the stone of the stair over it, through whose
+            // face its back would show, nor ending in the plane of the face behind it.
+            let back = -CELL_M * 0.5 - BAND_PAST_M;
             let profile: Vec<[f32; 2]> = profile.iter().map(|&[x, y]| [x.max(back), y]).collect();
             let profile = &profile;
             let (from, to) = (from.metres(), to.metres());
@@ -391,8 +394,9 @@ impl Bed {
         }
         let length = self.from.distance(self.to);
         let along = rel.dot((self.to - self.from) / length.max(1e-6));
-        // Sunk on a little past its back, where the lintel on the wall's other face meets
-        // it, so the head is behind both all the way across.
+        // Sunk through the cube it is set into, so the head is behind the lintel on each
+        // face of a wall a cube thick, and in a thicker one behind each lintel all the way
+        // to the next cube's, never in the plane of either; not on the wall's other face.
         // Along it only its own ends bound it, not where it runs on into the next cube's,
         // whose bed takes over past it.
         if (!self.ends[0] && along < 0.0) || (!self.ends[1] && along > length) {
@@ -400,7 +404,7 @@ impl Bed {
         }
         let end = |own: bool, inset: f32| if own { inset } else { f32::MAX };
         Some(
-            (self.back + REVEAL_PAST_M - deep)
+            (CELL_M - REVEAL_SHORT_M - deep)
                 .min(end(self.ends[0], along))
                 .min(end(self.ends[1], length - along)),
         )
@@ -534,6 +538,16 @@ impl Sweep {
             End::Back => -1.0,
             _ => 0.0,
         });
+        // Shared with a cube corner to corner: out to the turn in the wall, back to the
+        // plane halfway between the two out of it.
+        let shared = self.ends.map(|end| end == End::Shared);
+        let mitre_at = |which: usize, o: f32| {
+            if shared[which] {
+                if o > 0.0 { -1.0 } else { 1.0 }
+            } else {
+                mitre[which]
+            }
+        };
         // Mitred in its own plane where a ramp's raking coping meets a level one: on the
         // line halving the 45 degrees between them, over or under the bend.
         let bend = self.ends.map(|end| match end {
@@ -550,8 +564,10 @@ impl Sweep {
         // and a joint's or a step's, at a cube's side, so it is not in the plane of a step
         // in the footing or the wall under it there.
         let recess = self.ends.map(|end| match end {
-            End::Square if self.extend == 0.0 && self.buried => BURIED_RECESS,
-            End::Square if self.extend == 0.0 => SQUARE_RECESS,
+            End::Square | End::Free if (self.extend == 0.0 || end == End::Free) && self.buried => {
+                BURIED_RECESS
+            }
+            End::Square | End::Free if self.extend == 0.0 || end == End::Free => SQUARE_RECESS,
             End::On | End::Step => SQUARE_RECESS,
             _ => 0.0,
         });
@@ -569,15 +585,19 @@ impl Sweep {
         } else {
             0.0
         };
-        let plumb = self
-            .ends
-            .map(|end| if end == End::Square { lean } else { 0.0 });
+        let plumb = self.ends.map(|end| {
+            if matches!(end, End::Square | End::Free) {
+                lean
+            } else {
+                0.0
+            }
+        });
         let start = |o: f32, u: f32| {
-            -extend[0] - o * mitre[0] + (-o).max(0.0) * recess[0] - (u - self.lift) * bend[0]
+            -extend[0] - o * mitre_at(0, o) + (-o).max(0.0) * recess[0] - (u - self.lift) * bend[0]
                 + (u - self.lift) * plumb[0]
         };
         let end = |o: f32, u: f32| {
-            length + extend[1] + o * mitre[1] - (-o).max(0.0) * recess[1]
+            length + extend[1] + o * mitre_at(1, o) - (-o).max(0.0) * recess[1]
                 + (u - self.lift) * bend[1]
                 + (u - self.lift) * plumb[1]
         };
@@ -684,7 +704,7 @@ impl Sweep {
         // A plumb end looks level along it.
         let ahead = if raking { level.normalize() } else { along };
         for (which, ring, outward) in [(0, 0, -along), (1, rings.len() - 1, along)] {
-            if mitre[which] != 0.0 || bend[which] != 0.0 {
+            if mitre[which] != 0.0 || bend[which] != 0.0 || shared[which] {
                 continue;
             }
             let outward = if plumb[which] != 0.0 {

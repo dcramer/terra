@@ -1395,6 +1395,145 @@ fn relief(kits: &Kits, side: usize, height: impl Fn(usize) -> u8) -> Maps {
 }
 
 #[test]
+fn a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in() {
+    // The commit check's rectangle under a gable (`inspect::cases`, docs/building-voxels.md,
+    // gap 8) in logs, hewn timber and stone, and each two mixed: as a plan, its walls going
+    // up, its roof going on, damaged, and after a wall's lowest course is knocked out.
+    // What is in is closed on its own: a gable's courses go in with the roof's first
+    // stage, a door's posts with their first cube, a lintel left over air stops at its
+    // cube, and nothing the mesh checker finds.
+    let kits = shipped();
+    let ids: Vec<String> = ["logs", "hewn", "stone"]
+        .iter()
+        .map(|name| kits.of(named(&kits, name)).unwrap().id.to_string())
+        .collect();
+    let ours = |who: &str| {
+        who.split(" with ")
+            .all(|id| ids.iter().any(|ours| ours == id))
+    };
+    let maps = Maps::default();
+    let mut found = Vec::new();
+    let mut states = 0;
+    for (name, base) in crate::inspect::cases(&kits, Some("rectangle under a gable")) {
+        let who = name.split(':').next().unwrap_or_default();
+        if !ours(who) {
+            continue;
+        }
+        states += 1;
+        let report = crate::inspect::inspect(&base, &kits, &maps);
+        found.extend(
+            report
+                .findings
+                .iter()
+                .map(|f| format!("{name}: {:?} {:?} {}", f.fault, f.detail, f.what)),
+        );
+    }
+    assert_eq!(states, 6 * 5, "every state of each of six rectangles");
+    assert!(found.is_empty(), "{found:#?}");
+}
+
+#[test]
+fn every_junction_case_is_drawn_without_a_fault() {
+    // The junctions family (`junctions`, docs/building-voxels.md, gaps 3, 7 and 9) in
+    // logs, hewn timber and stone, each under its roof, the wing of the L in the other
+    // roof kind, on footings over level ground: nothing the mesh checker finds.
+    let kits = shipped();
+    let (shakes, slate) = (named(&kits, "shakes"), named(&kits, "slate"));
+    let maps = Maps::default();
+    let mut found = Vec::new();
+    for walls in ["logs", "hewn", "stone"] {
+        let kind = named(&kits, walls);
+        let roof = kits.roof_for(kind).unwrap();
+        let other = if roof == shakes { slate } else { shakes };
+        for (row, ops) in crate::junctions::junctions(kind, roof, other) {
+            let mut base = Base::from_shortcuts(&ops);
+            if let Some(footing) = kits.footing() {
+                base.lay_footings(footing.kind(), |_| 0);
+            }
+            let report = crate::inspect::inspect(&base, &kits, &maps);
+            found.extend(
+                report
+                    .findings
+                    .iter()
+                    .map(|f| format!("{walls}, {row}: {:?} {:?} {}", f.fault, f.detail, f.what)),
+            );
+        }
+    }
+    assert!(found.is_empty(), "{found:#?}");
+}
+
+#[test]
+fn cubes_of_a_kind_meeting_only_along_an_edge_each_dress_their_own_side() {
+    // Stone cubes corner to corner (docs/building-voxels.md, gap 3), on level ground with
+    // no footing, so each takes its own plinth: each turns round its own outside corner at
+    // the shared edge and keeps to its own side of the plane halfway between them, never
+    // lying in the other's dress there.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    type Boxes = Vec<([i32; 3], [i32; 3])>;
+    let arrangements: Vec<(&str, Boxes)> = vec![
+        (
+            "diag pair",
+            vec![([0, 0, 0], [0, 0, 0]), ([1, 0, 1], [1, 0, 1])],
+        ),
+        (
+            "diag pair up",
+            vec![([0, 0, 0], [0, 0, 0]), ([1, 1, 0], [1, 1, 0])],
+        ),
+        (
+            "diag walls",
+            vec![([0, 0, 0], [3, 2, 0]), ([4, 0, 1], [7, 2, 1])],
+        ),
+        (
+            "corbel",
+            vec![([0, 0, 0], [5, 1, 0]), ([0, 2, 1], [5, 3, 1])],
+        ),
+        (
+            "step",
+            vec![
+                ([0, 0, 0], [5, 0, 0]),
+                ([0, 1, 1], [5, 1, 1]),
+                ([0, 0, 2], [5, 2, 2]),
+            ],
+        ),
+        (
+            "checker",
+            vec![
+                ([0, 0, 0], [0, 0, 0]),
+                ([1, 1, 0], [1, 1, 0]),
+                ([0, 2, 0], [0, 2, 0]),
+                ([1, 0, 1], [1, 0, 1]),
+            ],
+        ),
+        (
+            "l in plan",
+            vec![([0, 0, 0], [2, 2, 0]), ([3, 0, 1], [3, 2, 3])],
+        ),
+    ];
+    let mut fighting = Vec::new();
+    for maps in [rough(&kits), Maps::default()] {
+        for (name, boxes) in &arrangements {
+            let mut base = Base::default();
+            for &(min, max) in boxes {
+                base.apply(BuildOp::Fill {
+                    min,
+                    max,
+                    cube: Some(Cube::new(stone, Fill::Solid)),
+                });
+            }
+            let report = crate::inspect::inspect(&base, &kits, &maps);
+            fighting.extend(
+                report
+                    .findings
+                    .iter()
+                    .map(|f| format!("{name}: {:?} {:?} {}", f.fault, f.detail, f.what)),
+            );
+        }
+    }
+    assert!(fighting.is_empty(), "{fighting:#?}");
+}
+
+#[test]
 fn no_stone_wall_or_its_dress_fights_itself_in_one_plane() {
     // A stone house under a gable, its walls cut at the roof's underside up its gables and
     // under its eaves, on footings; and a free wall a cube thick, quoined up both faces at

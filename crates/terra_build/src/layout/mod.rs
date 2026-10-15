@@ -15,7 +15,7 @@
 pub mod blocks;
 mod dressing;
 mod floors;
-pub(crate) use floors::post_in_deck;
+pub(crate) use floors::{decked, post_in_deck};
 
 /// Every cube of the base's flights laid as open timber stairs, on stringers, by a kit of
 /// long members: what is drawn of them is steps, not the cubes' mass.

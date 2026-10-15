@@ -48,6 +48,7 @@ pub mod fragments;
 pub mod ground;
 pub mod hull;
 pub mod inspect;
+pub mod junctions;
 pub mod kit;
 pub mod layers;
 pub mod layout;

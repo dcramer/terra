@@ -207,6 +207,15 @@ pub enum End {
     Out,
     /// Turns into an inside corner: mitred back.
     Back,
+    /// Turns round its own outside corner where another cube of the kind meets this one
+    /// there only along the edge, corner to corner (docs/building-voxels.md, gap 3): its
+    /// part in the wall mitred out to the turn, its part out of the face mitred back to the
+    /// other cube's, cut at the plane through the edge halfway between the two.
+    Shared,
+    /// Stops where nothing of the wall runs on past it, as a lintel left over air where the
+    /// course under its opening's side has come down: capped square at the cube's side,
+    /// not carried on past it into a wall that is not there.
+    Free,
     /// Runs on into the next cube's, which is raised or lowered: capped where it shows.
     Step,
     /// Meets a coping raking down from it, a ramp's (D231), mitred over the convex bend
@@ -595,13 +604,17 @@ impl<'a> Roles<'a> {
             return bend;
         }
         let turned = |side: Dir| Edge { side, ..edge };
-        if self.has(cube, turned(along)) {
-            return End::Out;
+        // Where a cube of the kind meets this one only along the edge, corner to corner,
+        // each turns round its own outside corner there and into the other's inside one:
+        // each keeps to its own side of the plane halfway between them.
+        let back = self.has(next + edge.side.step(), turned(along.opposite()));
+        match (self.has(cube, turned(along)), back) {
+            (true, true) => End::Shared,
+            (true, false) => End::Out,
+            (false, true) => End::Back,
+            (false, false) if self.solid(next).is_none() => End::Free,
+            (false, false) => End::Square,
         }
-        if self.has(next + edge.side.step(), turned(along.opposite())) {
-            return End::Back;
-        }
-        End::Square
     }
 
     /// Whether a level coping along `side` ending at `next`, `along` from its cube, meets a

@@ -761,11 +761,19 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
         return (is_in, vec![cube.to_array()]);
     }
     let first_step = matches!(piece, Piece::Beam { .. });
+    // An upright through several cubes, a post up an opening's side or a corner, is set
+    // up with the first of them, as a builder stands a door's posts before the courses
+    // reach their tops: the courses beside it end against it all the way up.
+    let upright = matches!(piece, Piece::Log { from, to, .. }
+        if from.0[0] == to.0[0] && from.0[2] == to.0[2] && from.0[1] != to.0[1]);
     let Some((min, max)) = piece.bounds() else {
         return (true, Vec::new());
     };
     let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
-    let high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
+    let mut high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
+    if upright {
+        high.y = low.y;
+    }
     let mut cubes = Vec::new();
     let mut is_in = true;
     for x in low.x..=high.x {
@@ -788,7 +796,13 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
                 else {
                     continue;
                 };
-                is_in &= cube.level() >= needed;
+                // A roof's cube is filled by stages, not by height: a wall carried up into
+                // it, a gable's courses, is in with its first.
+                is_in &= if cube.kind.is_roof() {
+                    cube.is_in()
+                } else {
+                    cube.level() >= needed
+                };
                 cubes.push(at.to_array());
             }
         }

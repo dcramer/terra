@@ -245,7 +245,11 @@ pub fn black(surface: &Surface) -> Option<usize> {
 pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
     let mut report = Report::default();
     let whole = sections::Whole::lay(base, kits);
-    let progress = Progress::Whole;
+    // As far as each cube is in: a finished base whole, a plan or one going up as far
+    // as it has gone, its ghosts apart (`states`).
+    let progress = Progress::Cubes {
+        next: std::collections::BTreeSet::new(),
+    };
     let mut drawn: [Drawn; 4] = Default::default();
     for at in sections::drawable(base) {
         let section = Section {
@@ -725,15 +729,28 @@ fn solid(base: &Base, kits: &Kits, at: IVec3) -> bool {
     if crate::layout::post_in_deck(base, kits, at).is_some() {
         return true;
     }
-    base.cube(at).is_some_and(|cube| {
-        cube.is_built()
-            && cube.fill == Fill::Solid
-            && cube.shape == Shape::Whole
-            && !cube.kind.is_roof()
-            && kits
-                .of(cube.kind)
-                .is_some_and(|kit| kit.pattern != Pattern::Roof)
-    })
+    let Some(cube) = base.cube(at) else {
+        return false;
+    };
+    let Some(kit) = kits.of(cube.kind) else {
+        return false;
+    };
+    // A timber cube with none of its kind beside it either way is a post, an upright as
+    // narrow as its kit dresses one, not a wall (`runs::posts`).
+    let post = kit.pattern == Pattern::Logs
+        && [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
+            .iter()
+            .all(|&side| {
+                !base
+                    .cube(at + side)
+                    .is_some_and(|c| c.kind == cube.kind && c.fill == Fill::Solid)
+            });
+    cube.is_built()
+        && cube.fill == Fill::Solid
+        && cube.shape == Shape::Whole
+        && !cube.kind.is_roof()
+        && kit.pattern != Pattern::Roof
+        && !post
 }
 
 /// Lines cast through solid walls and down through roofs; each that passes through without
@@ -795,6 +812,19 @@ fn see_through(
         if !solid(base, kits, at) {
             continue;
         }
+        // The top of what is in, under cubes still going in: its courses reaching up into
+        // them go in with them, so it is ragged until they are, as a wall going up is.
+        if base
+            .cube(at + IVec3::Y)
+            .is_some_and(|over| !over.is_built())
+        {
+            continue;
+        }
+        let timber = kits
+            .of(cube.kind)
+            .is_some_and(|kit| kit.pattern == Pattern::Logs);
+        let runs = |step: IVec3| solid(base, kits, at + step) || solid(base, kits, at - step);
+        let (runs_x, runs_z) = (runs(IVec3::X), runs(IVec3::Z));
         for face in faces {
             let beside = at + face;
             if solid(base, kits, beside) || base.cube(beside).is_some_and(|c| c.kind.is_roof()) {
@@ -841,13 +871,33 @@ fn see_through(
                     dirs.push((-n + t * 0.6 + off * 0.04).normalize());
                 }
             }
+            // A deck out over the air is its frame, open under its joists as every deck is:
+            // a line in through its side below them looks under it, not through a wall.
+            let framed_deck = face.y == 0
+                && crate::layout::decked(base, kits, at).is_some()
+                && !base
+                    .cube(at - IVec3::Y)
+                    .is_some_and(|under| under.fill == Fill::Solid);
             'lines: for (u, v) in samples() {
                 let mut offset = (u_axis * (u - 0.5) + v_axis * (v - 0.5)) * CELL_M;
+                if framed_deck && offset.y < -1e-3 {
+                    continue;
+                }
                 // Up its middle, or toward a wall beside it, where it meets that wall.
                 let side = offset.dot(across);
                 let toward = (across * side.signum()).round().as_ivec3();
                 if end && !solid(base, kits, at + toward) {
                     offset -= across * side;
+                }
+                // Up into a timber wall from under it, or down from over it, as over air a
+                // course has fallen from: up its core, not in the air its cubes hold beside
+                // its members' faces, across the way it does not run.
+                if face.y != 0 && timber {
+                    for (axis, runs) in [(Vec3::X, runs_x), (Vec3::Z, runs_z)] {
+                        if !runs {
+                            offset -= axis * offset.dot(axis);
+                        }
+                    }
                 }
                 let on_face = middle + n * (CELL_M * 0.5) + offset;
                 for &dir in &dirs {
@@ -1388,6 +1438,67 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
             other(first),
         );
     }
+    // The rectangle under a gable, the commit check's, in each wall kind and each two mixed,
+    // in every state a base is drawn in (docs/building-voxels.md, gap 8).
+    let mut rectangles: Vec<(String, Vec<crate::BuildOp>)> = Vec::new();
+    for kit in &walls {
+        rectangles.extend(
+            crate::roof_rows(&[kit.kind()], false, &roof)
+                .into_iter()
+                .take(1)
+                .map(|(_, ops)| (kit.id.to_string(), ops)),
+        );
+    }
+    for (i, a) in walls.iter().enumerate() {
+        for b in &walls[i + 1..] {
+            rectangles.extend(
+                crate::roof_rows(&[a.kind(), b.kind()], true, &roof)
+                    .into_iter()
+                    .take(1)
+                    .map(|(_, ops)| (format!("{} with {}", a.id, b.id), ops)),
+            );
+        }
+    }
+    for (who, ops) in rectangles {
+        let names: Vec<String> = STATES
+            .iter()
+            .map(|state| format!("{who}: rectangle under a gable, {state}"))
+            .collect();
+        if only.is_some_and(|only| !names.iter().any(|name| name.contains(only))) {
+            continue;
+        }
+        let finished = on_ground(kits, &ops);
+        for (name, base) in names.into_iter().zip(states(kits, &finished)) {
+            if only.is_some_and(|only| !name.contains(only)) {
+                continue;
+            }
+            out.push((name, base));
+        }
+    }
+    // The junctions family (`junctions`): a small base for each junction of the voxel
+    // contract no other case has, in each wall kind under its roof, two roof kinds meeting
+    // in the next roof kind there is.
+    let roof_kinds: Vec<Kind> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern == Pattern::Roof)
+        .map(|kit| kit.kind())
+        .collect();
+    for kit in &walls {
+        let own = roof(kit.kind());
+        let at = roof_kinds.iter().position(|&kind| kind == own).unwrap_or(0);
+        let other = roof_kinds
+            .get((at + 1) % roof_kinds.len().max(1))
+            .copied()
+            .unwrap_or(own);
+        for (row, ops) in crate::junctions::junctions(kit.kind(), own, other) {
+            let name = format!("{}: junction, {row}", kit.id);
+            if only.is_some_and(|only| !name.contains(only)) {
+                continue;
+            }
+            out.push((name, on_ground(kits, &ops)));
+        }
+    }
     // The castle, of 140,000 cubes (`castle`), in the footings' stone with each kind of
     // long members for its timber.
     if let Some(stone) = kits.footing() {
@@ -1401,6 +1512,104 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
         }
     }
     out
+}
+
+/// The states a finished base is inspected in besides finished, in order (`states`).
+const STATES: [&str; 5] = [
+    "as a plan",
+    "walls going up",
+    "roof going on",
+    "damaged",
+    "after a collapse",
+];
+
+/// A finished base in each of [`STATES`]: all of it a plan; its walls built to their
+/// second course, the next half in, the rest planned; its walls built and its roof half
+/// on; harmed, a wall's middle half worn through and a cube of it knocked out; and with a
+/// wall's lowest course knocked out, what it alone held come down.
+fn states(kits: &Kits, finished: &Base) -> Vec<Base> {
+    let rules = kits.rules();
+    let cx = crate::ops::Context::free(&rules);
+    let refilled = |level: &dyn Fn(IVec3, &crate::Cube) -> u8| {
+        let mut base = finished.clone();
+        for (at, cube) in finished.cubes() {
+            base.apply(crate::BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(cube.at_level(level(at, &cube))),
+            });
+        }
+        base
+    };
+    let low = finished.cubes().map(|(at, _)| at.y).min().unwrap_or(0);
+    let full = crate::cubes::FULL;
+    let plan = refilled(&|_, _| 0);
+    let walls = refilled(&|at, cube| {
+        if cube.kind.is_roof() || at.y > low + 3 {
+            0
+        } else if at.y == low + 3 {
+            full / 2
+        } else {
+            full
+        }
+    });
+    let roof = refilled(&|_, cube| if cube.kind.is_roof() { full / 2 } else { full });
+    // The wall along the north, x from 1 to 8 at z 0 (`roof_rows`' rectangle).
+    let north: Vec<[i32; 3]> = finished
+        .cubes()
+        .filter(|(at, cube)| at.z == 0 && (1..=8).contains(&at.x) && !cube.kind.is_roof())
+        .map(|(at, _)| at.to_array())
+        .collect();
+    let worn = |cubes: &[[i32; 3]], quarters: u16| -> Base {
+        let mut base = finished.clone();
+        for &at in cubes {
+            let Some(cube) = base.cube(IVec3::from_array(at)) else {
+                continue;
+            };
+            let health = rules.toughness(cube.kind).health;
+            let amount = (health * quarters / 4).max(1);
+            let _ = base.act(
+                &crate::ops::Op::Damage {
+                    cubes: vec![at],
+                    amount,
+                },
+                &cx,
+            );
+        }
+        base
+    };
+    let middle: Vec<[i32; 3]> = north
+        .iter()
+        .copied()
+        .filter(|at| (3..=6).contains(&at[0]) && at[1] >= 1 && at[1] <= 3)
+        .collect();
+    let mut damaged = worn(&middle, 2);
+    let hole = [4, 2, 0];
+    if damaged.cube(IVec3::from_array(hole)).is_some() {
+        let health = damaged
+            .cube(IVec3::from_array(hole))
+            .map_or(1, |cube| rules.toughness(cube.kind).health);
+        let _ = damaged.act(
+            &crate::ops::Op::Damage {
+                cubes: vec![hole],
+                amount: health,
+            },
+            &cx,
+        );
+    }
+    let lowest = north
+        .iter()
+        .map(|at| at[1])
+        .filter(|&y| y >= 0)
+        .min()
+        .unwrap_or(0);
+    let course: Vec<[i32; 3]> = north
+        .iter()
+        .copied()
+        .filter(|at| at[1] == lowest && (2..=7).contains(&at[0]))
+        .collect();
+    let collapsed = worn(&course, 4);
+    vec![plan, walls, roof, damaged, collapsed]
 }
 
 /// A base of shortcuts on ground falling a metre across it, with its footings laid, as the
@@ -1584,6 +1793,26 @@ mod tests {
     }
 
     #[test]
+    fn a_timber_column_alone_is_a_post_not_a_wall_and_one_beside_another_is() {
+        // Timber laid as a column alone is a post, an upright as narrow as its kit dresses
+        // one: no wall to look through. Two side by side are a wall.
+        let kits = Kits(vec![crate::kit::Kit::default()]);
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 2, 0],
+            cube: Some(crate::Cube::new(Kind(1), Fill::Solid)),
+        });
+        assert!(!solid(&base, &kits, IVec3::new(0, 1, 0)));
+        base.apply(crate::BuildOp::Fill {
+            min: [1, 0, 0],
+            max: [1, 2, 0],
+            cube: Some(crate::Cube::new(Kind(1), Fill::Solid)),
+        });
+        assert!(solid(&base, &kits, IVec3::new(0, 1, 0)));
+    }
+
+    #[test]
     fn a_posts_top_in_a_deck_is_as_solid_as_the_deck() {
         // A post two cubes high, a deck beside its top cube on its layer: the deck is laid
         // over the post's top (`layout::post_in_deck`), so lines through the deck in by its
@@ -1632,7 +1861,12 @@ mod tests {
             pattern: Pattern::Roof,
             ..Default::default()
         };
-        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        // Stone, as a timber cube alone is a post, not a wall.
+        let wall_kit = crate::kit::Kit {
+            pattern: Pattern::Masonry,
+            ..Default::default()
+        };
+        let kits = Kits(vec![wall_kit, roof]);
         let wall = |at: [i32; 3], kind: Kind| crate::BuildOp::Fill {
             min: at,
             max: at,
@@ -1686,7 +1920,12 @@ mod tests {
             eaves: 0.0,
             ..Default::default()
         };
-        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        // Stone, as a timber cube alone is a post, not a wall.
+        let wall_kit = crate::kit::Kit {
+            pattern: Pattern::Masonry,
+            ..Default::default()
+        };
+        let kits = Kits(vec![wall_kit, roof]);
         let mut base = Base::default();
         base.apply(crate::BuildOp::Fill {
             min: [0, 0, 0],
