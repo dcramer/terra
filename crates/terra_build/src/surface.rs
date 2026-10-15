@@ -2121,6 +2121,73 @@ mod tests {
         (out, tops)
     }
 
+    #[test]
+    fn a_cube_shapes_only_the_faces_of_the_cubes_beside_it() {
+        // An L of wall two cubes thick and three high, with a buttress: outside and inside
+        // corners, bevels and their fades. Each cube taken out in turn, every face of the
+        // cubes two or more from it comes out the same, to the bit, whatever the bevel:
+        // what `sections::cluster_keys` keys a part by.
+        let mut wall: Vec<[i32; 3]> = Vec::new();
+        for y in 0..3 {
+            for x in 0..6 {
+                wall.extend([[x, y, 0], [x, y, 1]]);
+            }
+            for z in 2..6 {
+                wall.extend([[0, y, z], [1, y, z]]);
+            }
+            wall.push([3, y, 2]);
+        }
+        let heights = Heights {
+            sides: &bumpy,
+            top: &flat,
+            bed: None,
+            bed_key: None,
+            hole: None,
+            holed: None,
+        };
+        let cuts = Cuts {
+            of: &|_| false,
+            at: &|_, _| [f32::MIN, f32::MAX],
+            key: &|_| None,
+        };
+        let soft = Look {
+            bevel: 0.12,
+            ..look()
+        };
+        let mut compared = 0;
+        for look in [look(), soft] {
+            for &gone in &wall {
+                let gone = IVec3::from_array(gone);
+                let far = |at: IVec3| (at - gone).abs().max_element() >= 2;
+                let drawn = |cubes: &BTreeSet<[i32; 3]>| {
+                    let (mut out, mut tops) = (Surface::default(), Surface::default());
+                    draw_part(
+                        cubes,
+                        &far,
+                        &|at| cubes.contains(&at.to_array()),
+                        &|_| false,
+                        &look,
+                        &heights,
+                        &cuts,
+                        [1.0; 3],
+                        &mut out,
+                        &mut tops,
+                        None,
+                    );
+                    out
+                };
+                let all: BTreeSet<[i32; 3]> = wall.iter().copied().collect();
+                let mut less = all.clone();
+                less.remove(&gone.to_array());
+                let (with, without) = (drawn(&all), drawn(&less));
+                assert!(with.triangle_count() > 0);
+                assert!(with == without, "{gone} reaches a face two cubes off");
+                compared += 1;
+            }
+        }
+        assert_eq!(compared, wall.len() * 2);
+    }
+
     /// Both surfaces as one, for checking it is closed.
     fn joined(a: Surface, b: &Surface) -> Surface {
         let mut a = a;

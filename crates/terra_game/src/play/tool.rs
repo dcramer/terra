@@ -265,6 +265,16 @@ enum Undoable {
     TakenAway(Carried),
 }
 
+/// The next step of work on the base, chosen once the last is in: building on with a part,
+/// or taking apart from a cube, from where the player stood, after so many seconds.
+struct Following {
+    doing: Doing,
+    part: Option<terra_build::PartId>,
+    cube: Option<IVec3>,
+    began_at: Vec3,
+    waited_s: f32,
+}
+
 struct Work {
     job: Job,
     hold: Hold,
@@ -322,6 +332,9 @@ pub struct Builder {
     carrying: Option<Carried>,
     /// What is being built or taken apart right now.
     work: Option<Work>,
+    /// Still held after a step went off to be worked out (`Building::act_later`): what
+    /// comes next once it is in, and how long it has been waited for.
+    following: Option<Following>,
     /// The last thing built or taken apart, to undo.
     done: Option<Done>,
     /// Set when something is finished: the button has to come up before the next.
@@ -377,6 +390,7 @@ impl Default for Builder {
             before_mode: None,
             carrying: None,
             work: None,
+            following: None,
             done: None,
             must_release: false,
             shrinking: None,

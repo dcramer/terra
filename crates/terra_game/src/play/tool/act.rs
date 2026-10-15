@@ -123,6 +123,24 @@ pub(super) fn act(
             builder.must_release = false;
         }
 
+        // Still held after a step went off to be worked out: the next once it is in, as
+        // soon as the base is as that step left it, its moment shortened by the wait.
+        if let Some(mut following) = builder.following.take() {
+            let stayed = following.began_at.distance(player_at) < WANDER_M;
+            if !held || !stayed || intent.choosing || !in_hand(&mut building) {
+                continue;
+            }
+            stance.since_acting = 0.0;
+            if building.busy() {
+                following.waited_s += time.delta_secs();
+                builder.must_release = true;
+                builder.following = Some(following);
+                continue;
+            }
+            builder.work = follow(&mut building, player, near, &following);
+            builder.must_release = builder.work.is_none();
+            continue;
+        }
         // Carry on with what is under way, or drop it.
         if let Some(mut work) = builder.work.take() {
             let stayed = work.began_at.distance(player_at) < WANDER_M;
@@ -146,9 +164,17 @@ pub(super) fn act(
                     part,
                     cube,
                 } => {
-                    let Ok(done) = building.act(Some(player), &what, &ops) else {
-                        continue;
+                    // Checked here, so a refusal is told at once; done on a worker and swapped
+                    // in when it is worked out, so a step on a big base never holds up the
+                    // frame (D339).
+                    let done = match building.check(Some(player), &ops) {
+                        Ok(done) => done,
+                        Err(why) => {
+                            building.tell(player, why.message());
+                            continue;
+                        }
                     };
+                    building.act_later(Some(player), &what, ops);
                     let cue = if doing == Doing::TakeApart {
                         Cue::TakenApart
                     } else {
@@ -162,33 +188,19 @@ pub(super) fn act(
                         belongings.wear_in_hand(1);
                     }
                     // Still held, the next goes in, or comes out, at once (building in
-                    // bulk, docs/building.md).
-                    let next = match doing {
-                        Doing::Build => building.next_work(Some(player), part, near),
-                        Doing::TakeApart => {
-                            cube.and_then(|cube| building.last_work(Some(player), cube, near))
-                        }
-                        _ => None,
+                    // bulk, docs/building.md): chosen once this step is in.
+                    let following = Following {
+                        doing,
+                        part,
+                        cube,
+                        began_at: work.began_at,
+                        waited_s: 0.0,
                     };
-                    if let Some(next) = next {
-                        match &next.check {
-                            Ok(done) => {
-                                builder.must_release = false;
-                                builder.work = Some(Work {
-                                    hold: Hold::new(job_seconds(doing, done, &building)),
-                                    job: Job::Base {
-                                        doing,
-                                        what: next.what.clone(),
-                                        ops: next.ops.clone(),
-                                        part,
-                                        cube,
-                                    },
-                                    removing: doing == Doing::TakeApart,
-                                    began_at: work.began_at,
-                                });
-                            }
-                            Err(why) => building.tell(player, why.message()),
-                        }
+                    if building.busy() {
+                        builder.following = Some(following);
+                    } else {
+                        builder.work = follow(&mut building, player, near, &following);
+                        builder.must_release = builder.work.is_none();
                     }
                 }
                 Job::Place {
@@ -516,6 +528,50 @@ pub(super) fn act(
 }
 
 /// How long work on the base takes, all but instant on the yard.
+/// The next step of work after one is in, if there is one and it is allowed: its moment
+/// already as far through as the step before was waited on; else why not is told.
+fn follow(
+    building: &mut Building,
+    player: Entity,
+    near: Vec3,
+    following: &Following,
+) -> Option<Work> {
+    let Following {
+        doing,
+        part,
+        cube,
+        began_at,
+        waited_s,
+    } = *following;
+    let next = match doing {
+        Doing::Build => building.next_work(Some(player), part, near),
+        Doing::TakeApart => cube.and_then(|cube| building.last_work(Some(player), cube, near)),
+        _ => None,
+    }?;
+    match &next.check {
+        Ok(done) => {
+            let mut hold = Hold::new(job_seconds(doing, done, building));
+            hold.advance(waited_s);
+            Some(Work {
+                hold,
+                job: Job::Base {
+                    doing,
+                    what: next.what.clone(),
+                    ops: next.ops.clone(),
+                    part,
+                    cube,
+                },
+                removing: doing == Doing::TakeApart,
+                began_at,
+            })
+        }
+        Err(why) => {
+            building.tell(player, why.message());
+            None
+        }
+    }
+}
+
 fn job_seconds(doing: Doing, done: &terra_build::ops::Done, building: &Building) -> f32 {
     if building.free() {
         0.1

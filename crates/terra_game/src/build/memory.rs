@@ -231,6 +231,12 @@ fn say_on_exit(world: &mut World, mut said: Local<bool>) {
     info!(
         "Builds drawn in view: {drawn} meshes in {materials} materials; their textures {textures:.0} MiB on the GPU; {entities} entities of building in all."
     );
+    let put = |at: usize| super::draw::PUT[at].load(std::sync::atomic::Ordering::Relaxed);
+    info!(
+        "Builds put on the GPU in the run: {} meshes, {} corners.",
+        put(0),
+        put(1)
+    );
     let mut state = bevy::ecs::system::SystemState::<(ResMut<Site>, Query<&mut Built>)>::new(world);
     let Ok((mut site, mut builds)) = state.get_mut(world) else {
         return;

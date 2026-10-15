@@ -773,6 +773,23 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                 edits.push(harmed);
             }
         }
+        // Wall cubes either side of where two parts meet taken out: a cube shapes the faces
+        // of the cubes beside it, across the parts' edge too.
+        for side in [CLUSTER - 1, 0] {
+            if let Some(wall) = base
+                .cubes()
+                .map(|(at, _)| at)
+                .find(|&at| at.y == 3 && base.in_wall(at) && at.x.rem_euclid(CLUSTER) == side)
+            {
+                let mut edited = base.clone();
+                edited.apply(BuildOp::Fill {
+                    min: wall.to_array(),
+                    max: wall.to_array(),
+                    cube: None,
+                });
+                edits.push(edited);
+            }
+        }
         // The highest cube that is not a roof's taken out: what is far under it keeps its key
         // only if it draws as it did.
         if let Some((top, _)) = base
@@ -819,11 +836,16 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                     at: IVec3::from_array(at),
                     progress: &Progress::Whole,
                 };
-                for reach in [Reach::Near, Reach::Mid] {
+                // In parts, and in the finer parts of a section being built.
+                for (reach, parts) in [
+                    (Reach::Near, CLUSTERS),
+                    (Reach::Mid, CLUSTERS),
+                    (Reach::Near, FINE_CLUSTERS),
+                ] {
                     let (before, after) = (section(base), section(edited));
                     let (laid_before, laid_after) = (laid(&before), laid(&after));
-                    let keys_before = cluster_keys(&before, &laid_before, reach);
-                    let keys_after = cluster_keys(&after, &laid_after, reach);
+                    let keys_before = cluster_keys(&before, &laid_before, reach, parts);
+                    let keys_after = cluster_keys(&after, &laid_after, reach, parts);
                     // A part with a cube harmed in it is drawn again, worn.
                     if let Some((edit, cube)) = harm
                         && edit == which
@@ -835,7 +857,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                             "base {index}: harmed, its keys the same"
                         );
                     }
-                    let all = [true; CLUSTERS];
+                    let all = vec![true; parts];
                     let mut drawing = Drawing::default();
                     let was = draw_parts(
                         &before,
@@ -869,7 +891,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                         "base {index} section {at:?}: drawn from what was kept on, it differs"
                     );
                     #[allow(clippy::needless_range_loop)]
-                    for c in 0..CLUSTERS {
+                    for c in 0..parts {
                         let pick = |drawn: &Drawn| {
                             let of = |by: &Vec<BTreeMap<(Kind, Material), Surface>>| {
                                 by.get(c).cloned().unwrap_or_default()

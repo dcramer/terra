@@ -421,6 +421,11 @@ impl Building<'_, '_> {
         self.options.bench || !self.options.scripted()
     }
 
+    /// Whether an act is still being worked out, so the base is not yet as it will be.
+    pub fn busy(&self) -> bool {
+        !self.applying.0.is_empty()
+    }
+
     /// Whether this is a benchmark run, whose remote calls nothing waits on.
     pub fn benchmark(&self) -> bool {
         self.options.bench

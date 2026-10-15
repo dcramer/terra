@@ -339,7 +339,8 @@ impl Staged {
         }
     }
 
-    /// Puts it among the meshes, kept on the CPU too if `cpu`; how many corners it put.
+    /// Puts it among the meshes, kept on the CPU too if `cpu`; how many corners it put,
+    /// counted for the run too ([`PUT`]).
     fn put(&mut self, meshes: &mut Assets<Mesh>, cpu: bool) -> usize {
         let Staged::Made(mesh) = self else {
             return 0;
@@ -355,6 +356,8 @@ impl Staged {
             mesh.asset_usage |= RenderAssetUsages::MAIN_WORLD;
         }
         let (corners, bytes) = (mesh.count_vertices(), gpu_bytes(&mesh));
+        PUT[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        PUT[1].fetch_add(corners, std::sync::atomic::Ordering::Relaxed);
         *self = Staged::Put {
             handle: meshes.add(mesh),
             corners,
@@ -417,6 +420,13 @@ pub(super) fn in_arrays(
     });
     (mesh, rest)
 }
+
+/// How many meshes of builds, and corners in them, have been put on the GPU in the run: what
+/// an edit costs to show, which `memory` says as the run ends.
+pub(super) static PUT: [std::sync::atomic::AtomicUsize; 2] = [
+    std::sync::atomic::AtomicUsize::new(0),
+    std::sync::atomic::AtomicUsize::new(0),
+];
 
 /// A mesh's corners packed as shipped games pack them, by Bevy's own compression, which
 /// its shaders and the arrays' unpack: normals and tangents octahedral in 16 bits, texture
@@ -1540,6 +1550,7 @@ fn stream(
                     at,
                     store::Waiting {
                         force: true,
+                        edited: false,
                         reach: Some(wanted),
                     },
                 );
@@ -1610,6 +1621,7 @@ pub(super) fn aside(
                 at,
                 store::Waiting {
                     force: true,
+                    edited: false,
                     reach: None,
                 },
             );
