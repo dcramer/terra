@@ -43,7 +43,7 @@ Not every change: when a pass is done, a fresh subagent judges it adversarially 
 
 ## 6. Working with agents on it
 
-- **One agent renders at a time** on the developers' machine (one GPU, which they also play on; several sandboxes no longer fit in its memory). Your own shots count: wait for the agent, or do code meanwhile. Agents that only read or measure images can run alongside.
+- **Only benchmarks need the GPU alone** (D319): they wait for `~/.cache/terra/gpu.lock` by themselves, and shots and films share it, running side by side. Measure frame time only on a quiet machine (the 1-minute load under 8): other agents' builds slow the game's CPU work and spoil the numbers.
 - Brief each agent with this skill, the gap in the reviewer's own words, your measurements of the cause, the files, the checks above, and where its scratch goes (`~/.cache/terra-review/<task>/`, kept small).
 - Decisions: what the place should be (an oak wood or a conifer stand, leaves flat or true to life) is the developers'; ask, record their words. How to draw it is yours; record the measured reason.
 

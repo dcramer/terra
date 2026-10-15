@@ -815,7 +815,7 @@ impl Plugin for ShellPlugin {
             stay_awake();
         }
         if self.0.unattended() {
-            crate::gpu_turn::take();
+            crate::gpu_turn::take(self.0.bench);
         }
         let options = self.0.clone();
         let readout = !options.clean;

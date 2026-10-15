@@ -1,14 +1,16 @@
-//! Unattended runs take turns on the GPU (D319). On a developer's machine several agents
-//! and sessions run scripted shots, films and benchmarks, and the developer plays on the same
-//! GPU: two runs at once each go slower, spoil each other's benchmarks, and a heavy scene no
-//! longer fits twice in the GPU's memory. So an unattended run waits for a lock on one file,
-//! held until it exits, and says that it is waiting. A run someone plays is never held back.
+//! Benchmarks have the GPU to themselves (D319). On a developer's machine several agents and
+//! sessions run scripted shots, films and benchmarks, and a benchmark shared with any of them
+//! measures nothing. So a benchmark waits for an exclusive lock on one file, held until it
+//! exits, and says that it is waiting; every other unattended run takes the lock shared, so
+//! shots and films run side by side, and wait only while a benchmark holds it. Taking turns for
+//! every run cost the developers hours of queueing for no gain; only measuring needs the GPU
+//! alone. A run someone plays is never held back.
 //!
-//! The lock is the operating system's advisory lock on the whole file, so anything else that
-//! renders can take the same turn: `flock ~/.cache/terra/gpu.lock blender ...`. A run started
-//! under such a turn, as a film's is when its script is wrapped in `flock`, has the turn
-//! already: on Linux it finds the lock held by one of its own forebears (`/proc/locks`) and
-//! goes on, where it once waited on itself for ever.
+//! The lock is the operating system's advisory lock on the whole file, so anything else can take
+//! the same turn: `flock ~/.cache/terra/gpu.lock <command>` for a measurement of one's own,
+//! `flock --shared` for anything else that renders heavily. A run started under such a turn, as
+//! one is when its script is wrapped in `flock`, has it already: on Linux it finds the lock held
+//! by one of its own forebears (`/proc/locks`) and goes on, where it once waited on itself.
 
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
@@ -30,8 +32,9 @@ pub fn lock_path() -> Option<PathBuf> {
     Some(cache.join("terra").join("gpu.lock"))
 }
 
-/// Waits until no other unattended run holds the GPU, then holds it until this one ends.
-pub fn take() {
+/// Takes the GPU's turn until this run ends: alone for a benchmark (`alone`), waiting until no
+/// other unattended run holds it; shared otherwise, waiting only while a benchmark has it.
+pub fn take(alone: bool) {
     let Some(path) = lock_path() else {
         return;
     };
@@ -46,13 +49,28 @@ pub fn take() {
     else {
         return;
     };
-    if !matches!(file.try_lock(), Ok(())) && !held_above(&file) {
+    let free = if alone {
+        file.try_lock().is_ok()
+    } else {
+        file.try_lock_shared().is_ok()
+    };
+    if !free && !held_above(&file) {
         println!(
-            "SANDBOX waiting for the GPU: another unattended run holds {}",
+            "SANDBOX waiting for the GPU: {} holds {}",
+            if alone {
+                "another unattended run"
+            } else {
+                "a benchmark"
+            },
             path.display()
         );
         let started = std::time::Instant::now();
-        if file.lock().is_err() {
+        let got = if alone {
+            file.lock()
+        } else {
+            file.lock_shared()
+        };
+        if got.is_err() {
             return;
         }
         println!(
