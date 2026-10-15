@@ -377,6 +377,11 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
   - 60 people out and about in view (24 full, 40 reduced), about 150 living in the town in all;
   - about 25 animals: 12 chickens, 3 dogs, 6 goats, an ox or two with a cart.
 - **Step 1 measures** the village, `town300` and `crowd` on the RTX 3080. The counts are then moved to what it shows, never the budget.
+- **Measured on the RTX 3080, 2026-10-15** (`cargo xtask bench`, offscreen 1080p, other agents running beside it, so the p99s are noisy):
+  - `crowd`, 100 dressed characters standing in the open: 6.5 ms median, 3.0 ms of the main thread, 3.0 ms of GPU.
+  - `village`: 8.0 ms median. `town300`: 10.6 ms median, 14.1 ms p99 on its quieter run.
+  - `town-day`, about 100 of the town's 146 out at 10:00, walked into: 13.6 to 14.1 ms median, 16.0 to 16.5 p99; the main thread 8.4 ms, the GPU 8.6. `town-bare`, the same walk with nobody in it: 9.3 to 9.7 median, 10.4 to 10.8 p99, 5.1 ms main thread, 6.5 GPU. So the people and animals cost about 3.3 ms of the main thread and 2.1 of the GPU, near their 3.5 and 1.9 in the budget, and the frame is over 13.3 ms at the p99. `town-dusk`: 12.4 median, 14.7 p99.
+  - Since: a body's pose skipped by swapping in an empty graph rather than taking its graph away (no component moved), shadows cast only within 30 m, nobody drawn past 150 m.
 
 ### (e) How an agent checks it
 

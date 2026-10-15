@@ -73,7 +73,15 @@ pub type SmokeMaterial = ExtendedMaterial<StandardMaterial, SmokeExtension>;
 struct Drawn {
     material: Handle<SmokeMaterial>,
     shown: f32,
+    /// The wind where it stands, when it is next looked up, and what the material was last
+    /// told.
+    wind: Vec3,
+    due: f32,
+    told: Vec4,
 }
+
+/// How often an emitter's wind is looked up again, in seconds.
+const WIND_EVERY_S: f32 = 3.0;
 
 /// How many cards a column is, by preset.
 fn cards(quality: Quality) -> usize {
@@ -180,6 +188,10 @@ fn draw(
         commands.entity(entity).insert(Drawn {
             material: material.clone(),
             shown: 0.0,
+            wind: Vec3::ZERO,
+            // Not all looked up on the same frame.
+            due: (entity.index_u32() % 32) as f32 / 32.0 * WIND_EVERY_S,
+            told: Vec4::splat(-1.0),
         });
         commands.spawn((
             Name::new("Smoke"),
@@ -202,28 +214,40 @@ fn blow(
     mut emitters: Query<(&Smoke, &mut Drawn, &GlobalTransform)>,
     mut materials: ResMut<Assets<SmokeMaterial>>,
 ) {
-    let follow = 1.0 - libm::expf(-time.delta_secs() * FOLLOW * 4.0);
+    let step = time.delta_secs();
+    let follow = 1.0 - libm::expf(-step * FOLLOW * 4.0);
     for (smoke, mut drawn, at) in &mut emitters {
         drawn.shown += (smoke.thickness.clamp(0.0, 1.0) - drawn.shown) * follow;
-        let here = at.translation();
-        let up = here.normalize_or(Vec3::Y);
-        // The wind from the climate where it stands; a light air where there is none.
-        let (speed, from) = match &climate {
-            Some(climate) => {
-                let wind = climate.fields.at(climate.place(here), clock.time()).wind;
-                (wind.speed_m_s, wind.from)
-            }
-            None => (1.5, 0.8),
-        };
-        let north = Vec3::Y
-            .reject_from(up)
-            .normalize_or(up.any_orthonormal_vector());
-        let east = north.cross(up);
-        let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
-        // Smoke drifts slower than the wind at the eaves blows.
-        let carried = blowing_to * speed.min(8.0) * 0.6;
-        if let Some(mut material) = materials.get_mut(&drawn.material) {
-            material.extension.wind = carried.extend(drawn.shown);
+        // The wind looked up again only now and then: it changes over minutes.
+        drawn.due -= step;
+        if drawn.due <= 0.0 {
+            drawn.due = WIND_EVERY_S;
+            let here = at.translation();
+            let up = here.normalize_or(Vec3::Y);
+            // The wind from the climate where it stands; a light air where there is none.
+            let (speed, from) = match &climate {
+                Some(climate) => {
+                    let wind = climate.fields.at(climate.place(here), clock.time()).wind;
+                    (wind.speed_m_s, wind.from)
+                }
+                None => (1.5, 0.8),
+            };
+            let north = Vec3::Y
+                .reject_from(up)
+                .normalize_or(up.any_orthonormal_vector());
+            let east = north.cross(up);
+            let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
+            // Smoke drifts slower than the wind at the eaves blows.
+            drawn.wind = blowing_to * speed.min(8.0) * 0.6;
+        }
+        // The material touched only when what it is told has moved, so it is not sent to
+        // the GPU again every frame.
+        let told = drawn.wind.extend(drawn.shown);
+        if told.distance(drawn.told) > 0.01
+            && let Some(mut material) = materials.get_mut(&drawn.material)
+        {
+            material.extension.wind = told;
+            drawn.told = told;
         }
     }
 }

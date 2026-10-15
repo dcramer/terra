@@ -69,6 +69,8 @@ struct Figure {
 struct Ready {
     scene: Handle<WorldAsset>,
     graph: Handle<AnimationGraph>,
+    /// A graph of nothing, for a body whose pose is not worked out this frame.
+    rest: Handle<AnimationGraph>,
     clips: Clips,
 }
 
@@ -105,6 +107,18 @@ fn every(distance: f32) -> u32 {
         .map_or(FAR_EVERY, |(_, every)| *every)
 }
 
+/// How far off a body is drawn at all: past it, a person is a few pixels high, and the
+/// town's smoke and murmur carry it (docs/demos.md's tiers).
+const DRAWN_M: f32 = 150.0;
+
+/// Within how far of the eye a body casts a shadow: past it, its shadow is lost among the
+/// buildings' and costs the GPU every shadow map it would be drawn into.
+const SHADOWS_M: f32 = 30.0;
+
+/// Whether a body casts its shadow now, as last set on its meshes.
+#[derive(Component, Default)]
+struct Casting(Option<bool>);
+
 /// Where a sitter sits and their hips, found once they sit.
 #[derive(Component, Clone, Copy)]
 struct Sat {
@@ -121,6 +135,7 @@ pub fn plugin(app: &mut App) {
                 spawn.run_if(resource_exists::<Market>),
                 animate,
                 seat,
+                shade,
             )
                 .chain(),
         )
@@ -197,6 +212,7 @@ fn prepare(
     figure.ready = Some(Ready {
         scene,
         graph: graphs.add(graph),
+        rest: graphs.add(AnimationGraph::new()),
         clips: Clips {
             idle: named["Idle_Loop"],
             walk: named["Walk_Loop"],
@@ -294,6 +310,7 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
             .spawn((
                 Name::new(format!("Townsfolk {index}, {role}")),
                 Folk { index },
+                Casting::default(),
                 Transform::from_translation(market.middle),
                 Visibility::Hidden,
                 character::Outfit(wears),
@@ -341,14 +358,18 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
 fn place(
     planet: Res<Planet>,
     market: Res<Market>,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
     mut folk: Query<(&Folk, &mut Transform, &mut Visibility)>,
 ) {
+    let eye = camera.single().ok().map(|c| market.local(c.translation()));
     for (one, mut at, mut shown) in &mut folk {
         let Some(person) = market.life.people.get(one.index) else {
             continue;
         };
-        let hidden =
-            matches!(market.life.shows(one.index), Shows::Hidden) || person.detail == Detail::Far;
+        let beyond = eye.is_some_and(|eye| eye.distance(person.at) > DRAWN_M);
+        let hidden = matches!(market.life.shows(one.index), Shows::Hidden)
+            || person.detail == Detail::Far
+            || beyond;
         let wanted = if hidden {
             Visibility::Hidden
         } else {
@@ -418,29 +439,27 @@ fn animate(
 /// A body's pose worked out only on its frames: on the others, and while nobody can see it,
 /// its player is left without its graph, so Bevy's animation passes it by.
 fn skip(
-    mut commands: Commands,
     figure: Res<Figure>,
     market: Res<Market>,
     frames: Res<bevy::diagnostic::FrameCount>,
     folk: Query<&Folk>,
-    players: Query<(Entity, &Plays, Has<AnimationGraphHandle>)>,
+    mut players: Query<(&Plays, &mut AnimationGraphHandle)>,
 ) {
     let Some(ready) = &figure.ready else {
         return;
     };
-    for (entity, plays, has) in &players {
+    for (plays, mut graph) in &mut players {
         let Ok(one) = folk.get(plays.folk) else {
             continue;
         };
         let seen = !matches!(market.life.shows(one.index), Shows::Hidden)
             && market.life.people[one.index].detail != Detail::Far;
         let due = seen && (frames.0 + one.index as u32).is_multiple_of(plays.every.max(1));
-        if due && !has {
-            commands
-                .entity(entity)
-                .insert(AnimationGraphHandle(ready.graph.clone()));
-        } else if !due && has {
-            commands.entity(entity).remove::<AnimationGraphHandle>();
+        // Its graph on its frames; an empty one on the others, which Bevy's animation
+        // passes by at once, with no component moved.
+        let wanted = if due { &ready.graph } else { &ready.rest };
+        if graph.0 != *wanted {
+            graph.0 = wanted.clone();
         }
     }
 }
@@ -501,6 +520,42 @@ fn seat(
         };
         let wanted = sat.top + sat.top.normalize() * HIPS_ABOVE_SEAT_M;
         at.translation = body.translation() + (wanted - hips.translation());
+    }
+}
+
+/// Each body's meshes cast shadows only near the eye, set again when it crosses the
+/// distance, or when it has been dressed since, a few bodies a frame.
+fn shade(
+    mut commands: Commands,
+    frames: Res<bevy::diagnostic::FrameCount>,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    children: Query<&Children>,
+    meshes: Query<Has<bevy::light::NotShadowCaster>, With<Mesh3d>>,
+    mut folk: Query<(Entity, &Folk, &GlobalTransform, &mut Casting)>,
+) {
+    let Ok(eye) = camera.single() else {
+        return;
+    };
+    for (entity, one, at, mut casting) in &mut folk {
+        let casts = at.translation().distance(eye.translation()) < SHADOWS_M;
+        // Looked at again every half second besides, for garments put on since.
+        let due = casting.0 != Some(casts) || (frames.0 + one.index as u32).is_multiple_of(30);
+        if !due {
+            continue;
+        }
+        casting.0 = Some(casts);
+        for part in children.iter_descendants(entity) {
+            let Ok(not_casting) = meshes.get(part) else {
+                continue;
+            };
+            if casts && not_casting {
+                commands
+                    .entity(part)
+                    .remove::<bevy::light::NotShadowCaster>();
+            } else if !casts && !not_casting {
+                commands.entity(part).insert(bevy::light::NotShadowCaster);
+            }
+        }
     }
 }
 
