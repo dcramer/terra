@@ -56,7 +56,8 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("wall", "A wall's foot knocked out: the wall above falls", () => {
-    s.glide([4.5, 3.0, 15.5], [4.5, 0.6, 8.5], 120);
+    s.glide([4.5, 9, 4], [4.5, 1, 6], 70);
+    s.glide([4.5, 3.0, 15.5], [4.5, 0.6, 8.5], 90, 50);
     s.wait(120);
     s.call("build.damage", { at: [4, 0, 17], to: [13, 0, 17] });
     s.orbit(WALL, { radius: 7, height: 2.5, from: 0, to: 30, frames: 240, look: 0.3 });
@@ -80,7 +81,8 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("tower", "A tower's foot knocked out: the tower comes down", () => {
-    s.glide([-12, 9, 15], [-2.75, 5, 3.5], 150);
+    s.glide([6, 10, 18], [2, 3, 4], 80);
+    s.glide([-12, 9, 15], [-2.75, 5, 3.5], 110, 60);
     s.wait(150);
     s.call("build.damage", { at: [-8, 0, 4], to: [-3, 1, 9] });
     s.orbit(TOWER, { radius: 15, height: 6, from: 320, to: 345, frames: 300, look: 3 });
@@ -101,8 +103,9 @@ function script(s: Script, set: KitSet) {
     s.wait(150);
     s.call("build.gather", {});
     s.wait(120);
-    s.glide([4.5, 1.9, -4], [4.5, 1.2, 2], 120);
-    s.wait(120);
+    s.glide([15, 7.5, 0], [4.5, 1.2, 2], 70);
+    s.glide([4.5, 1.9, -4], [4.5, 1.2, 2], 90, 50);
+    s.wait(140);
     for (const at of [[5, 1, 4], [9, 1, 4], [5, 5, 4], [9, 5, 4]]) s.call("build.repair", { at, brush: 4 });
     s.wait(180);
   });

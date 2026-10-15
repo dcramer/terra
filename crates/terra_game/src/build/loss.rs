@@ -6,13 +6,14 @@
 //! sections are (`terra_build::sections`).
 
 use super::act::Building;
-use super::draw::{self, Uvs};
+use super::arrays::{Arrays, BuildMaterial, Layers};
+use super::draw;
 use super::{Build, BuildLook, Built, Site};
 use crate::play::interact::{CanInteract, Interactable, Interacted};
 use crate::play::{Builder, LocalPlayer, Player};
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use terra_build::loss::Pile;
 use terra_build::ops::Op;
@@ -34,12 +35,28 @@ pub struct Debris {
     pub at: [i32; 3],
 }
 
-/// Debris still falling to where it lies: how far above it, and how fast.
+/// Debris still falling to where it lies: how far above it, and how fast; how far it fell
+/// from, and how it was turned there, tumbling square as it lands.
 #[derive(Component)]
 struct Falling {
     height: f32,
     speed: f32,
     rest: Vec3,
+    from: f32,
+    turned: Quat,
+}
+
+/// Where a pile starts falling, as a share of the highest it fell from, and how it is turned
+/// there, by where it lies: the piles of a wall or a tower brought down rain from all through
+/// the height it stood, each tumbling, rather than dropping as one sheet from its top.
+fn scattered(at: [i32; 3]) -> (f32, Quat) {
+    let hash = (at[0] as u32).wrapping_mul(73_856_093)
+        ^ (at[1] as u32).wrapping_mul(19_349_663)
+        ^ (at[2] as u32).wrapping_mul(83_492_791);
+    let unit = |shift: u32| ((hash >> shift) & 0xff) as f32 / 255.0;
+    let share = 0.35 + 0.65 * unit(0);
+    let axis = Vec3::new(unit(8) - 0.5, 0.25, unit(16) - 0.5).normalize();
+    (share, Quat::from_axis_angle(axis, 0.3 + 0.5 * unit(24)))
 }
 
 /// The piles drawn of each build, by its root.
@@ -57,6 +74,8 @@ struct Drawn {
     was: BTreeMap<[i32; 3], u32>,
     /// Piles changed and being drawn again, still on screen until their new meshes are.
     replacing: BTreeMap<[i32; 3], Entity>,
+    /// The texture arrays' layers each pile drawn wears, kept resident while it lies there.
+    layers: BTreeMap<[i32; 3], Vec<u16>>,
     making: Option<(Task<Vec<Made>>, Instant)>,
 }
 
@@ -65,6 +84,10 @@ struct Made {
     at: [i32; 3],
     pile: Pile,
     centre: Vec3,
+    /// What is drawn in the texture arrays, as a section's surfaces are (D290), and the
+    /// layers it wears; and what has no layer there, in its own material.
+    arrays: Option<Mesh>,
+    layers: Vec<u16>,
     meshes: Vec<((Kind, Material), Mesh)>,
 }
 
@@ -79,10 +102,22 @@ fn show(
     mut piles: ResMut<Piles>,
     mut meshes: ResMut<Assets<Mesh>>,
     options: Res<crate::shell::Options>,
+    (mut arrays, assets, time): (Option<ResMut<Arrays>>, Res<AssetServer>, Res<Time<Real>>),
 ) {
     let Some(kits) = look.kits.clone() else {
         return;
     };
+    let material = arrays.as_ref().map(|arrays| arrays.material.clone());
+    let material = material.as_ref();
+    // What debris lies about keeps its layers of the arrays resident, as sections do.
+    if let Some(arrays) = arrays.as_mut() {
+        let now = time.elapsed_secs();
+        for drawn in piles.0.values() {
+            for layers in drawn.layers.values() {
+                arrays.want(layers, &assets, now);
+            }
+        }
+    }
     let all = std::iter::once((&site.build, true)).chain(builds.iter().map(|b| (&b.0, false)));
     for (build, gathered) in all {
         let drawn = piles.0.entry(build.root).or_default();
@@ -97,7 +132,7 @@ fn show(
                     &mut commands,
                     build,
                     gathered,
-                    &look,
+                    (&look, material),
                     drawn,
                     each,
                     &mut meshes,
@@ -126,6 +161,7 @@ fn show(
         for at in gone {
             if let Some((entity, pile)) = drawn.piles.remove(&at) {
                 drawn.was.insert(at, pile.cubes() + pile.props);
+                drawn.layers.remove(&at);
                 // A pile changed stays on screen until it is drawn again, so it never blinks
                 // out for the frames its new meshes take on the worker; one gathered goes.
                 if now.contains_key(&at) {
@@ -159,12 +195,12 @@ fn show(
         // same every time.
         if options.scripted() && !options.bench {
             for (at, pile) in new {
-                let made = make(at, pile, &kits);
+                let made = make(at, pile, &kits, &look.layers);
                 put(
                     &mut commands,
                     build,
                     gathered,
-                    &look,
+                    (&look, material),
                     drawn,
                     made,
                     &mut meshes,
@@ -173,9 +209,10 @@ fn show(
             continue;
         }
         let kits = kits.clone();
+        let layers = look.layers.clone();
         let task = AsyncComputeTaskPool::get().spawn(async move {
             new.into_iter()
-                .map(|(at, pile)| make(at, pile, &kits))
+                .map(|(at, pile)| make(at, pile, &kits, &layers))
                 .collect()
         });
         drawn.making = Some((task, Instant::now()));
@@ -183,22 +220,26 @@ fn show(
 }
 
 /// A pile's meshes, about its middle on what it lies on.
-fn make(at: [i32; 3], pile: Pile, kits: &terra_build::kit::Kits) -> Made {
+fn make(at: [i32; 3], pile: Pile, kits: &terra_build::kit::Kits, layers: &Layers) -> Made {
     let place = IVec3::from_array(at);
     let centre = Vec3::new(
         (place.x as f32 + 0.5) * CELL_M,
         pile.floor_cm as f32 / 100.0,
         (place.z as f32 + 0.5) * CELL_M,
     );
-    let meshes = terra_build::debris::draw(place, &pile, kits)
-        .into_iter()
-        .filter_map(|(key, surface)| Some((key, draw::mesh(&surface, centre, Uvs::Mapped)?)))
-        .collect();
+    let surfaces = terra_build::debris::draw(place, &pile, kits);
+    let mut used = BTreeSet::new();
+    let (arrays, rest) = draw::in_arrays(&surfaces, layers, centre, &BTreeMap::new(), &mut used);
     Made {
         at,
         pile,
         centre,
-        meshes,
+        arrays,
+        layers: used.into_iter().collect(),
+        meshes: rest
+            .into_iter()
+            .map(|(kind, material, mesh)| ((kind, material), mesh))
+            .collect(),
     }
 }
 
@@ -208,7 +249,7 @@ fn put(
     commands: &mut Commands,
     build: &Build,
     gathered: bool,
-    look: &BuildLook,
+    (look, arrays): (&BuildLook, Option<&Handle<BuildMaterial>>),
     drawn: &mut Drawn,
     made: Made,
     meshes: &mut Assets<Mesh>,
@@ -224,16 +265,18 @@ fn put(
         commands.entity(older).despawn();
     }
     let was = drawn.was.remove(&made.at).unwrap_or(0);
+    let (share, turned) = scattered(made.at);
     let height = if pile.cubes() + pile.props > was {
-        ((pile.from as f32 + 0.5) * CELL_M - made.centre.y).max(0.0)
+        ((pile.from as f32 + 0.5) * CELL_M - made.centre.y).max(0.0) * share
     } else {
         0.0
     };
+    let start = if height > 0.0 { turned } else { Quat::IDENTITY };
     let root = commands
         .spawn((
             Name::new("Debris"),
             Debris { at: made.at },
-            Transform::from_translation(made.centre + Vec3::Y * height),
+            Transform::from_translation(made.centre + Vec3::Y * height).with_rotation(start),
             Visibility::default(),
             ChildOf(build.root),
         ))
@@ -248,8 +291,19 @@ fn put(
             height,
             speed: 0.0,
             rest: made.centre,
+            from: height,
+            turned,
         });
     }
+    if let (Some(mesh), Some(arrays)) = (made.arrays, arrays) {
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(arrays.clone()),
+            Transform::default(),
+            ChildOf(root),
+        ));
+    }
+    drawn.layers.insert(made.at, made.layers);
     for ((kind, material), mesh) in made.meshes {
         let Some(handle) = look
             .materials
@@ -278,6 +332,7 @@ fn fall(
         fall.speed += GRAVITY * time.delta_secs();
         fall.height = (fall.height - fall.speed * time.delta_secs()).max(0.0);
         at.translation = fall.rest + Vec3::Y * fall.height;
+        at.rotation = Quat::IDENTITY.slerp(fall.turned, fall.height / fall.from.max(1e-3));
         if fall.height <= 0.0 {
             commands.entity(entity).remove::<Falling>();
         }
@@ -332,4 +387,25 @@ fn harm_aimed(
         amount: health.div_ceil(4),
     };
     let _ = building.act(None, "damage", &[op]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scattered;
+
+    #[test]
+    fn a_wall_brought_down_rains_from_through_its_height_not_as_one_sheet() {
+        // The piles along a wall ten cubes long: each starts its fall between a third of the
+        // way up and the top, the same each time, and not all from one height.
+        let starts: Vec<f32> = (0..10).map(|x| scattered([x, 0, 4]).0).collect();
+        assert!(starts.iter().all(|share| (0.35..=1.0).contains(share)));
+        let again: Vec<f32> = (0..10).map(|x| scattered([x, 0, 4]).0).collect();
+        assert_eq!(starts, again);
+        let low = starts.iter().copied().fold(1.0, f32::min);
+        let high = starts.iter().copied().fold(0.0, f32::max);
+        assert!(high - low > 0.25, "{starts:?}");
+        // Each is turned where it starts, and so tumbles as it falls.
+        let turned = scattered([3, 0, 4]).1;
+        assert!(turned.angle_between(bevy::prelude::Quat::IDENTITY) > 0.2);
+    }
 }

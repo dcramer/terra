@@ -313,7 +313,7 @@ struct Part {
 /// A detail's surfaces as one mesh in the texture arrays, each corner carrying its layer
 /// (`uv_b`'s first), with the rest left to draw in their own materials.
 #[allow(clippy::type_complexity)]
-fn in_arrays(
+pub(super) fn in_arrays(
     surfaces: &BTreeMap<(Kind, Material), Surface>,
     layers: &Layers,
     centre: Vec3,
@@ -825,6 +825,7 @@ fn upload(
     let mut corners = 0;
     let mut rest = std::collections::VecDeque::new();
     let mut shown: BTreeSet<Entity> = BTreeSet::new();
+    let (mut whole_shown, mut torn): (BTreeSet<Entity>, BTreeSet<Entity>) = Default::default();
     while let Some(done) = jobs.ready.pop_front() {
         let whole = complete.contains(&done.root) || all_back(&done);
         if !whole && !partial.contains(&done.root) {
@@ -842,7 +843,10 @@ fn upload(
             continue;
         }
         corners += size;
-        if shown.insert(done.root) && !whole {
+        shown.insert(done.root);
+        if whole {
+            whole_shown.insert(done.root);
+        } else if torn.insert(done.root) {
             warn!(
                 "Build: sections shown before the rest sent out with them came back, after {HOLD_FRAMES} frames"
             );
@@ -872,8 +876,10 @@ fn upload(
         );
     }
     jobs.ready = rest;
+    // Held is how long since a build last showed a change whole: one edited every few frames
+    // shows each as it comes back and never waits long enough to be shown torn.
     for root in shown {
-        if !jobs.ready.iter().any(|done| done.root == root) {
+        if whole_shown.contains(&root) || !jobs.ready.iter().any(|done| done.root == root) {
             jobs.held.remove(&root);
         }
     }
