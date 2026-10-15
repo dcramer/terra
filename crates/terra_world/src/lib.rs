@@ -41,6 +41,7 @@ pub mod shell;
 pub mod sky;
 pub mod sky_occlusion;
 pub mod skylight;
+pub mod smoke;
 pub mod spatial;
 pub mod start;
 pub mod terrain;

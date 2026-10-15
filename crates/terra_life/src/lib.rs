@@ -16,6 +16,7 @@
 //! Pure and repeatable: no engine, no clock read, no system randomness, `libm` for its
 //! roots and exponentials (D30).
 
+pub mod animals;
 pub mod graph;
 mod life;
 pub mod orca;
@@ -23,6 +24,7 @@ pub mod plan;
 
 pub mod check;
 
+pub use animals::{Animal, Animals};
 pub use life::{
     Arrival, Detail, FULL_M, JOG_PACE, Life, Person, REDUCED_M, Record, Shows, Spot, State,
     WALK_PACE,

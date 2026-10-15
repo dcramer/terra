@@ -1,0 +1,229 @@
+//! Smoke (D325): a column of soft cards rising from where something burns, a hearth's
+//! through a chimney or the thatch, a forge's, drifting with the climate's wind and thinning
+//! as it rises. An emitter is an entity with [`Smoke`]; what burns is the layer above's to
+//! say. Each is drawn as one mesh of cards, moved on the GPU from each card's phase, the
+//! time and the wind (`shaders/smoke.wesl`), on our own material, with no particle library;
+//! how many cards, by the quality preset.
+
+use crate::climate::ClimateFields;
+use crate::daylight::Clock;
+use crate::quality::Quality;
+use bevy::{
+    asset::RenderAssetUsages,
+    camera::primitives::Aabb,
+    light::NotShadowCaster,
+    mesh::{Indices, PrimitiveTopology},
+    pbr::{ExtendedMaterial, MaterialExtension},
+    prelude::*,
+    render::render_resource::AsBindGroup,
+    shader::ShaderRef,
+};
+
+/// What smoke is: a hearth's, thin and blue-grey, or a forge's, thicker and darker.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Burning {
+    Hearth,
+    Forge,
+}
+
+/// Smoke rising from here: what is burning, and how thick it is now, 0 for none to 1. The
+/// layer that owns the fire sets the thickness; the smoke follows it over a few seconds.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Smoke {
+    pub burning: Burning,
+    pub thickness: f32,
+}
+
+/// What the smoke shader is told. Field order must match `smoke.wesl`.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct SmokeExtension {
+    /// Where the wind carries it, metres a second in the world; and how thick it is.
+    #[uniform(100)]
+    wind: Vec4,
+    /// How long a card lives in seconds, how fast it rises, and how wide it is born and ends.
+    #[uniform(100)]
+    shape: Vec4,
+    /// Its colour, linear, and how opaque a card is at its thickest.
+    #[uniform(100)]
+    colour: Vec4,
+}
+
+impl MaterialExtension for SmokeExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/smoke.wesl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/smoke.wesl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/smoke.wesl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/smoke.wesl".into()
+    }
+}
+
+pub type SmokeMaterial = ExtendedMaterial<StandardMaterial, SmokeExtension>;
+
+/// An emitter's drawn column: its material, and how thick it is shown.
+#[derive(Component)]
+struct Drawn {
+    material: Handle<SmokeMaterial>,
+    shown: f32,
+}
+
+/// How many cards a column is, by preset.
+fn cards(quality: Quality) -> usize {
+    match quality {
+        Quality::Low => 10,
+        Quality::Medium => 16,
+        Quality::High => 24,
+    }
+}
+
+/// Each kind's life, rise, sizes, colour and opacity.
+fn look(burning: Burning) -> (Vec4, Vec4) {
+    match burning {
+        // Wood smoke from a hearth: blue-grey, thin, rising slowly and spreading wide.
+        Burning::Hearth => (
+            Vec4::new(14.0, 0.9, 0.7, 4.5),
+            Vec4::new(0.42, 0.43, 0.46, 0.26),
+        ),
+        // A forge's coal and charcoal: darker, thicker, quicker.
+        Burning::Forge => (
+            Vec4::new(10.0, 1.4, 0.8, 3.5),
+            Vec4::new(0.24, 0.23, 0.23, 0.4),
+        ),
+    }
+}
+
+/// How quickly the shown smoke follows its thickness, a share a second.
+const FOLLOW: f32 = 0.35;
+
+pub fn plugin(app: &mut App) {
+    app.add_plugins(MaterialPlugin::<SmokeMaterial>::default())
+        .add_systems(Update, (draw, blow).chain());
+}
+
+/// The cards of a column, every corner at its foot: the first texture coordinate the
+/// corner, the second each card's phase through its life and its luck.
+fn column(count: usize) -> Mesh {
+    let mut positions = Vec::with_capacity(count * 4);
+    let mut corners = Vec::with_capacity(count * 4);
+    let mut seeds = Vec::with_capacity(count * 4);
+    let mut normals = Vec::with_capacity(count * 4);
+    let mut indices = Vec::with_capacity(count * 6);
+    for card in 0..count {
+        let phase = card as f32 / count as f32;
+        // The golden ratio's spread, so neighbours in phase differ in luck.
+        let luck = (card as f32 * 0.618_034) % 1.0;
+        let first = positions.len() as u32;
+        for corner in [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]] {
+            positions.push([0.0f32, 0.0, 0.0]);
+            normals.push([0.0f32, 1.0, 0.0]);
+            corners.push(corner);
+            seeds.push([phase, luck]);
+        }
+        indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, seeds)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+/// A column for each new emitter: its cards, its own material, and room enough round it
+/// that it is not culled while any of it is in view.
+fn draw(
+    mut commands: Commands,
+    quality: Res<Quality>,
+    emitters: Query<(Entity, &Smoke), Added<Smoke>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<SmokeMaterial>>,
+    mut shared: Local<Option<(Quality, Handle<Mesh>)>>,
+) {
+    for (entity, smoke) in &emitters {
+        let mesh = match &*shared {
+            Some((made, mesh)) if *made == *quality => mesh.clone(),
+            _ => {
+                let mesh = meshes.add(column(cards(*quality)));
+                *shared = Some((*quality, mesh.clone()));
+                mesh
+            }
+        };
+        let (shape, colour) = look(smoke.burning);
+        let material = materials.add(SmokeMaterial {
+            base: StandardMaterial {
+                base_color: Color::WHITE,
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                diffuse_transmission: 0.5,
+                ..default()
+            },
+            extension: SmokeExtension {
+                wind: Vec4::ZERO,
+                shape,
+                colour,
+            },
+        });
+        // A column stands up to twenty metres high and leans as far.
+        let reach = shape.x * shape.y + 8.0;
+        commands.entity(entity).insert(Drawn {
+            material: material.clone(),
+            shown: 0.0,
+        });
+        commands.spawn((
+            Name::new("Smoke"),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            Aabb::from_min_max(Vec3::new(-reach, -1.0, -reach), Vec3::splat(reach)),
+            NotShadowCaster,
+            ChildOf(entity),
+        ));
+    }
+}
+
+/// Each column thickening or thinning toward what its fire gives, and carried by the wind
+/// where it stands, as the climate has it now.
+fn blow(
+    time: Res<Time>,
+    clock: Res<Clock>,
+    climate: Option<Res<ClimateFields>>,
+    mut emitters: Query<(&Smoke, &mut Drawn, &GlobalTransform)>,
+    mut materials: ResMut<Assets<SmokeMaterial>>,
+) {
+    let follow = 1.0 - libm::expf(-time.delta_secs() * FOLLOW * 4.0);
+    for (smoke, mut drawn, at) in &mut emitters {
+        drawn.shown += (smoke.thickness.clamp(0.0, 1.0) - drawn.shown) * follow;
+        let here = at.translation();
+        let up = here.normalize_or(Vec3::Y);
+        // The wind from the climate where it stands; a light air where there is none.
+        let (speed, from) = match &climate {
+            Some(climate) => {
+                let wind = climate.fields.at(climate.place(here), clock.time()).wind;
+                (wind.speed_m_s, wind.from)
+            }
+            None => (1.5, 0.8),
+        };
+        let north = Vec3::Y
+            .reject_from(up)
+            .normalize_or(up.any_orthonormal_vector());
+        let east = north.cross(up);
+        let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
+        // Smoke drifts slower than the wind at the eaves blows.
+        let carried = blowing_to * speed.min(8.0) * 0.6;
+        if let Some(mut material) = materials.get_mut(&drawn.material) {
+            material.extension.wind = carried.extend(drawn.shown);
+        }
+    }
+}

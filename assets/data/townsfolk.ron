@@ -1,0 +1,92 @@
+// How a town's people look, by role (play::townsfolk, docs/demos.md): the bodies a role is
+// shaped as (templates of models/character/templates.json, each mixed with a little of
+// another), and what it wears, each item's main material dyed one of a few colours. Someone's
+// look is drawn from these by their seed, so a role reads at a glance by what it wears and
+// no two people of it are alike. Colours are sRGB: undyed wool and linen, madder, woad,
+// weld, walnut and oak-gall browns, as a market town's would be.
+#![enable(implicit_some)]
+(
+    // How each kind of the town's animals is drawn (terra_life's `animals`): its model, its
+    // scale, its clips, and its walk's own pace in metres a second. A kind not here is kept
+    // by the town but not drawn until it has a model.
+    animals: {
+        "Hen": (model: "models/creatures/Chicken.glb", idle: "Idle", walk: "Walk", rest: "Peck", pace: 0.375),
+    },
+    // A body's mix: a template, and up to this much of one other template's morphs.
+    mix: 0.45,
+    roles: {
+        "trader": (
+            bodies: ["male", "female", "heavy"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.46, 0.18, 0.12), (0.22, 0.30, 0.46), (0.52, 0.42, 0.20)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.30, 0.26, 0.20), (0.36, 0.33, 0.27)]),
+            ],
+        ),
+        "smith": (
+            bodies: ["strong", "heavy"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.20, 0.15, 0.11)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.18, 0.17, 0.16)]),
+            ],
+        ),
+        "guard": (
+            bodies: ["strong", "male"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.30, 0.10, 0.08)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.20, 0.20, 0.22)]),
+                (item: "quiver", dye: "Leather", colours: [(0.32, 0.22, 0.14)]),
+            ],
+        ),
+        "woodcutter": (
+            bodies: ["strong", "male", "thin"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.30, 0.34, 0.20), (0.36, 0.28, 0.18)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.32, 0.27, 0.19)]),
+            ],
+        ),
+        "elder": (
+            bodies: ["thin", "heavy", "female"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.34, 0.32, 0.30), (0.26, 0.22, 0.30)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.28, 0.27, 0.25)]),
+            ],
+        ),
+        "washer": (
+            bodies: ["female", "heavy"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.60, 0.55, 0.45), (0.50, 0.30, 0.25)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.48, 0.44, 0.36)]),
+            ],
+        ),
+        "carter": (
+            bodies: ["male", "strong", "heavy"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.38, 0.28, 0.17)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.30, 0.27, 0.22)]),
+                (item: "large_pack", dye: "Pack", colours: [(0.42, 0.36, 0.25)]),
+            ],
+        ),
+        "farmer": (
+            bodies: ["male", "female", "strong", "thin"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.42, 0.38, 0.26), (0.32, 0.36, 0.24), (0.44, 0.32, 0.20)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.36, 0.32, 0.24), (0.30, 0.28, 0.23)]),
+                (item: "small_pack", dye: "Pack", colours: [(0.45, 0.38, 0.26), (0.36, 0.30, 0.22)]),
+            ],
+        ),
+        "child": (
+            bodies: ["thin", "male", "female"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.55, 0.30, 0.20), (0.35, 0.42, 0.55), (0.55, 0.50, 0.30), (0.40, 0.45, 0.30)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.40, 0.36, 0.28)]),
+            ],
+        ),
+        "townsfolk": (
+            bodies: ["male", "female", "female", "heavy", "thin", "strong"],
+            wears: [
+                (item: "leather_coat", dye: "Leather", colours: [(0.44, 0.20, 0.14), (0.24, 0.30, 0.42), (0.50, 0.42, 0.24), (0.32, 0.36, 0.24), (0.40, 0.32, 0.22), (0.30, 0.24, 0.30)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30)]),
+            ],
+        ),
+    },
+)

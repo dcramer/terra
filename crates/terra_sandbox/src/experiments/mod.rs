@@ -11,6 +11,7 @@ mod icons;
 mod look;
 mod lush;
 mod scatter;
+mod town;
 mod workbench;
 
 pub struct Experiment {
@@ -71,6 +72,16 @@ pub const ALL: &[Experiment] = &[
         name: "lush",
         about: "Spike: a forest as rich as big games make them, with trees grown in code and leaves as cards. Use with walk, or play, on the yard.",
         add: lush::plugin,
+    },
+    Experiment {
+        name: "town",
+        about: "A market town and its people about their day, on the rolling yard: use with play, --level yard and --time; the log gives its vantage points.",
+        add: town::plugin,
+    },
+    Experiment {
+        name: "town-empty",
+        about: "The same market town with nobody in it, to measure what its people and animals cost.",
+        add: town::empty,
     },
     Experiment {
         name: "look",

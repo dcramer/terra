@@ -20,6 +20,9 @@ pub struct Plan {
     pub activities: BTreeMap<String, Activity>,
     /// The roles, those taken first first: each takes its count of the town's people.
     pub roles: Vec<Role>,
+    /// The kinds of animal the town keeps, by name.
+    #[serde(default)]
+    pub animals: BTreeMap<String, crate::animals::Kind>,
 }
 
 /// A place by a thing where something is done.

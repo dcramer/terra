@@ -1,0 +1,16 @@
+{
+  "subject": "farmyard hen, a domestic chicken of a village farmyard: plump rounded body, russet red-brown plumage with golden-brown feather edges, lighter golden neck hackle, short upturned dark brown and black tail, red single comb and wattles, pale yellow-horn beak, bare yellow scaly legs with four clawed toes",
+  "file": "Chicken",
+  "into": "creatures",
+  "tripo_project": "24b756b4-f3a9-44ef-8c70-e0f1a35ae3f7",
+  "generator": "h3.1",
+  "faces": 10000,
+  "model": "model.glb is Tripo's export (export --format glb) after its avian auto-rig; the rig is discarded and the hen re-skinned on our own skeleton",
+  "dims": [0.252, 0.509, 0.463],
+  "scale": 0.52,
+  "budget": 2500,
+  "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "clips": { "Idle": 4.0, "Walk": 0.667, "Peck": 2.0 },
+  "walk_speed_m_per_s": 0.375,
+  "credits": { "model": 55, "rig": 20 }
+}

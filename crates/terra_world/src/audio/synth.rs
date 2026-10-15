@@ -31,6 +31,9 @@ pub enum Sound {
     Fire,
     /// Something wrong where magic pools: low beating tones and a whisper. Never ends.
     Hum,
+    /// A crowd talking with no word to be made out: a dozen voices rising and falling in
+    /// syllables and phrases, near and far, left and right. Never ends.
+    Murmur,
     /// Air cut by a swing.
     Whoosh,
     /// A spider's warning.
@@ -48,7 +51,7 @@ impl Sound {
     pub fn endless(self) -> bool {
         matches!(
             self,
-            Sound::Wind | Sound::Birds | Sound::Water | Sound::Fire | Sound::Hum
+            Sound::Wind | Sound::Birds | Sound::Water | Sound::Fire | Sound::Hum | Sound::Murmur
         )
     }
 }
@@ -72,6 +75,7 @@ impl Decodable for Synth {
                 Sound::Water => (Box::new(water(dice)), 2, None),
                 Sound::Fire => (Box::new(fire(dice)), 1, None),
                 Sound::Hum => (Box::new(hum(dice)), 1, None),
+                Sound::Murmur => (Box::new(murmur(dice)), 2, None),
                 Sound::Whoosh => one_shot(0.3, whoosh(&mut dice)),
                 Sound::Hiss => one_shot(0.55, hiss(&mut dice)),
                 Sound::Snort => one_shot(0.4, snort(&mut dice)),
@@ -448,6 +452,103 @@ fn hum(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
     })
 }
 
+/// One voice of a crowd: a pitch, where it is, whether it is talking, and its syllable.
+#[derive(Clone, Copy, Default)]
+struct Talker {
+    pitch: f32,
+    phase: f32,
+    pan: f32,
+    loud: f32,
+    /// Seconds left of its phrase, or of its pause when not talking.
+    left: f32,
+    talking: bool,
+    /// The syllable: how far into it, how long, and the vowel it aims at.
+    into: f32,
+    lasts: f32,
+    aim: (f32, f32),
+    vowel: (Smooth, Smooth),
+    first: Band,
+    second: Band,
+}
+
+/// The vowels a voice moves between, as their first two formants in hertz.
+const VOWELS: [(f32, f32); 6] = [
+    (730.0, 1090.0),
+    (530.0, 1840.0),
+    (270.0, 2290.0),
+    (570.0, 840.0),
+    (300.0, 870.0),
+    (640.0, 1190.0),
+];
+
+/// A crowd heard from among it: voices of every pitch, each speaking in phrases of
+/// syllables, a voiced buzz shaped by two moving formants as speech is, then softened as
+/// a room of people is past the nearest few, so no word is made out (D114, audio.md's
+/// fourth question answered for now with a murmur).
+fn murmur(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
+    const VOICES: usize = 12;
+    let mut talkers = [Talker::default(); VOICES];
+    for talker in &mut talkers {
+        *talker = Talker {
+            pitch: if dice.unit() < 0.5 {
+                dice.range(95.0, 140.0)
+            } else {
+                dice.range(170.0, 250.0)
+            },
+            pan: dice.range(-0.9, 0.9),
+            // Most far, a few near.
+            loud: dice.range(0.15, 1.0) * dice.range(0.3, 1.0),
+            left: dice.range(0.0, 3.0),
+            ..Talker::default()
+        };
+    }
+    let mut air = [Smooth::default(); 2];
+    let mut frame = [0.0f32; 2];
+    let mut channel = 0;
+    std::iter::from_fn(move || {
+        if channel == 0 {
+            let mut left = 0.0;
+            let mut right = 0.0;
+            for talker in &mut talkers {
+                talker.left -= DT;
+                if talker.left <= 0.0 {
+                    talker.talking = !talker.talking;
+                    talker.left = if talker.talking {
+                        dice.range(1.2, 4.5)
+                    } else {
+                        dice.range(0.4, 2.5)
+                    };
+                }
+                if !talker.talking {
+                    continue;
+                }
+                talker.into += DT;
+                if talker.into >= talker.lasts {
+                    talker.into = 0.0;
+                    talker.lasts = dice.range(0.11, 0.26);
+                    talker.aim = VOWELS[(dice.roll() % VOWELS.len() as u64) as usize];
+                }
+                let first = talker.vowel.0.low(talker.aim.0, 18.0);
+                let second = talker.vowel.1.low(talker.aim.1, 18.0);
+                // The pitch falls a little through each syllable, as speech does.
+                let through = talker.into / talker.lasts.max(1e-3);
+                talker.phase = (talker.phase + talker.pitch * (1.06 - 0.12 * through) * DT) % 1.0;
+                let buzz = (talker.phase * 2.0 - 1.0) + dice.noise() * 0.15;
+                let voiced = talker.first.pass(buzz, first, 0.25)
+                    + 0.6 * talker.second.pass(buzz, second, 0.3);
+                let out = voiced * hump(through) * talker.loud * 0.11;
+                left += out * (1.0 - talker.pan);
+                right += out * (1.0 + talker.pan);
+            }
+            // Past the nearest few, a crowd's highs are lost.
+            frame = [air[0].low(left, 2200.0), air[1].low(right, 2200.0)];
+        }
+        let sample = frame[channel];
+        channel = 1 - channel;
+        Some(soft(sample))
+    })
+}
+
 fn whoosh(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     let mut dice = *dice;
     let mut band = Band::default();
@@ -549,6 +650,7 @@ pub mod tests {
             Sound::Water,
             Sound::Fire,
             Sound::Hum,
+            Sound::Murmur,
             Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
@@ -580,6 +682,7 @@ pub mod tests {
             Sound::Water,
             Sound::Fire,
             Sound::Hum,
+            Sound::Murmur,
             Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
@@ -589,7 +692,12 @@ pub mod tests {
         for sound in every {
             // A sound added to `Sound` stops this building until it is in the list above.
             match sound {
-                Sound::Wind | Sound::Birds | Sound::Water | Sound::Fire | Sound::Hum => {}
+                Sound::Wind
+                | Sound::Birds
+                | Sound::Water
+                | Sound::Fire
+                | Sound::Hum
+                | Sound::Murmur => {}
                 Sound::Whoosh | Sound::Hiss | Sound::Snort | Sound::Splash | Sound::Music(_) => {}
             }
             let decoder = Synth { sound, seed: 1 }.decoder();

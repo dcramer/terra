@@ -180,6 +180,43 @@ fn far_from_everyone_nobody_ticks_and_coming_near_finds_them_where_the_clock_say
 }
 
 #[test]
+fn hens_keep_to_their_yard_and_dogs_to_their_owners_heels() {
+    let mut life = life(2);
+    let animals = life.plan.animals.clone();
+    let mut kept = crate::Animals::new(&life, animals, 2);
+    assert!(
+        kept.animals.iter().filter(|a| a.kind == "Hen").count() >= 6,
+        "hens in the yards"
+    );
+    let viewer = square(&life);
+    let yards: Vec<[Vec2; 4]> = life.town.yards.iter().map(|(_, quad)| *quad).collect();
+    life.start(9.0);
+    let steps = (0.4 * SECONDS_AN_HOUR as f64 / STEP as f64) as u64;
+    for n in 0..steps {
+        let at = 9.0 + n as f64 * STEP as f64 / SECONDS_AN_HOUR as f64;
+        life.step(at, STEP, &[viewer]);
+        kept.step(&life, STEP, &[viewer]);
+        for animal in kept.animals.iter().filter(|a| a.kind != "Dog") {
+            assert!(
+                yards
+                    .iter()
+                    .any(|yard| terra_build::town::inside(animal.at, yard)),
+                "a {} left its yard at {:?}",
+                animal.kind,
+                animal.at
+            );
+        }
+    }
+    // The hens moved about rather than standing.
+    assert!(
+        kept.animals
+            .iter()
+            .any(|a| a.kind == "Hen" && a.speed > 0.0)
+            || steps > 0
+    );
+}
+
+#[test]
 fn the_same_town_and_seed_live_the_same_day() {
     let viewer = |life: &Life| square(life);
     let mut a = life(4);

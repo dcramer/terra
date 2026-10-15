@@ -399,10 +399,20 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 
    *Steps 3 and 4 landed together in `terra_life` with `assets/data/life.ron`; `cargo xtask life --seeds 1-8 --ground all` runs 24 towns of 120 to 180 people through a day in about three seconds each, a step under a millisecond. Most pass; a few have a child or two held more than 5 s in the market's crowd, which is what is left to do there.*
 5. **Crowd tiers:** animation rate and joint LOD, merged outfits, the far tier's vertex animation; `lodcheck` on them; the counts raised to the budget.
+
+   *In the game (`play::town`, `play::townsfolk`): the town laid on the most level ground near where it is wanted, everyone of its life a body that is drawn only out of doors and near a viewer; a body's pose worked out every frame within 25 m, every second frame to 50 m, every third to 80 m and every sixth beyond, its clip played that much faster, and not at all while it is indoors, as Unreal's budget allocator lowers a far character's rate. Fewer joints, merged outfits and the far tier's vertex animation are still to do, and wait for the numbers.*
 6. **Looks from a seed:** templates, morphs and garments by role.
+
+   *Built: `assets/data/townsfolk.ron` gives each role its bodies (a template and a little of another's morphs) and what it wears, each garment dyed one of the role's colours and a shade of its own; children are two thirds of a grown body's height. The wardrobe is the game's five garments (coat, trousers, two packs, a quiver), so a role reads mostly by its colours and what it carries: aprons, dresses, hoods and tunics are the character pipeline's to make.*
 7. **Animals:** chickens, a dog and a goat from Tripo, rigged and animated as the 2026-10-14 animation note proposes; penned and following.
+
+   *Built in `terra_life::animals` from data (`animals` in `life.ron`): hens loose in the hen yards, goats in the pens, dogs at their owners' heels along the way they walked, or lying by the door while they are in; drawn by `play::town_animals` for each kind that has a model in `townsfolk.ron`. The models are Tripo's to make, on credits the developers approve over about a hundred.*
 8. **Smoke** (D325), chimneys on the buildings, goods on the stalls, the props a town needs.
+
+   *Smoke is built (`terra_world::smoke`, `shaders/smoke.wesl`): each emitter a mesh of cards whose places the GPU works out from each card's phase, the time and the climate's wind; a home's hearth smokes through its roof's ridge, thickly at the morning's and evening's cooking while anyone is home, the forge while its smith works. A home's firelight shows within at dusk, the sixteen nearest the eye lit. Chimney stacks, a trough's model, goods beyond the stall's own, carts and barrels are still to come.*
 9. **Sound:** the murmur bed, spot sounds, the voice cap.
+
+   *The murmur is built (`Sound::Murmur`, a dozen voiced syllables shaped by moving formants, no word in it; `play::town_sound` sets it by how many are out near the listener), measured into the world's band of the mix. Spot sounds and the cap on voices are still to do.*
 10. **The demo:** route, films, bench scenes, review.
 
 ## Open questions for the developers

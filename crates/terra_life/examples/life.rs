@@ -33,7 +33,7 @@ const KINDS: Kinds = Kinds {
 /// The game's clock: a day is thirty minutes of play (`terra_world::daylight::DAY_SECONDS`).
 const SECONDS_AN_HOUR: f32 = 30.0 * 60.0 / 24.0;
 /// The game's fixed step, in seconds.
-const STEP_S: f32 = 1.0 / 20.0;
+const STEP_S: f32 = 0.1;
 
 fn main() -> ExitCode {
     let mut seeds = (1u32, 1u32);

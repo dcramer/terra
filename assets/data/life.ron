@@ -67,6 +67,8 @@
         ],
         "Yard": [
             (at: (0.0, 0.0), face: (0.0, -1.0), does: ["Tend", "Play"]),
+            // Washing in a tub in the yard, kneeling.
+            (at: (-1.8, 0.9), face: (1.0, 0.0), does: ["Wash"]),
             (at: (1.6, -0.8), face: (-1.0, 0.0), does: ["Tend"]),
         ],
     },
@@ -85,6 +87,14 @@
         "Guard": (clip: "Idle_Loop", stay: (30.0, 90.0), own: true),
         "Tend": (clip: "Fixing_Kneeling", stay: (8.0, 20.0), own: true),
         "Play": (clip: "Idle_Loop", stay: (1.0, 3.0), run: true),
+    },
+    // The animals a town keeps: where each kind lives, how many to a yard or pen (for dogs,
+    // in the town), how fast it walks and runs, how wide it is, and how long it stands,
+    // pecks or grazes at a place before moving on, in seconds.
+    animals: {
+        "Hen": (lives: Yard, count: (3, 5), walk: 0.4, radius: 0.12, rests: (1.5, 6.0)),
+        "Goat": (lives: Pen, count: (2, 3), walk: 0.6, radius: 0.35, rests: (4.0, 14.0)),
+        "Dog": (lives: Follows, count: (3, 3), walk: 1.3, run: 3.2, radius: 0.3, rests: (2.0, 8.0)),
     },
     // A walk across the town takes an hour or two of its clock (a day is half an hour of
     // play), so each window is long enough to walk to and stay at a while.

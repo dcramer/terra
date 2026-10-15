@@ -728,12 +728,7 @@ impl Town {
         let side = facing_of(along);
         self.things
             .push(Thing::new(ThingKind::Well, well, side, None));
-        self.things.push(Thing::new(
-            ThingKind::Trough,
-            well + along * 4.0 * roll(3).signum(),
-            side,
-            None,
-        ));
+        // A trough by it waits for its model; the washing is done at the well meanwhile.
         // The market: two rows of stalls facing each other across an aisle, along the
         // square on the side away from the well.
         let line = middle - across * (well - middle).dot(across).signum() * (high_c - low_c) * 0.18;
