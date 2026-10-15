@@ -73,6 +73,10 @@ pub struct Line {
     /// line's end and closed there, mitred as a hip's capping is to the eaves, rather than
     /// standing out past them square to the line.
     pub mitre: [Option<[Vec3; 2]>; 2],
+    /// How far along it a modelled piece's cut ends lean for each metre up it, so they stand
+    /// plumb where it lies along a slope square to it: a verge's board seated square to its
+    /// roof, unsheared, its ends still cut plumb at the eave and the apex. 0 cuts them square.
+    pub plumb: f32,
 }
 
 /// Lays a modelled module along a line as a modular kit's piece is laid: copies at the length
@@ -133,7 +137,14 @@ fn lay_cut(
         if segments.is_empty() || capped[end] {
             continue;
         }
-        let outward = if end == 0 { -axis } else { axis };
+        // Square to the cut's own plane: a plumb cut along a slope leans off square to it.
+        let cut = match line.seat {
+            Seat::Plane { up, .. } if line.plumb != 0.0 => {
+                (axis + up.normalize_or_zero() * line.plumb).normalize_or(axis)
+            }
+            _ => axis,
+        };
+        let outward = if end == 0 { -cut } else { cut };
         let count = segments.len() as f32;
         let uv = segments
             .iter()
@@ -394,7 +405,9 @@ fn clipped(
         }
         let mut polygon: Vec<Corner> = vec![corners[a], corners[b], corners[c]];
         for (end, (plane, keep_above)) in [(lo, true), (hi, false)].into_iter().enumerate() {
-            let (kept, on_plane) = cut_frame(&polygon, 0, plane, keep_above);
+            // Plumb along a slope: through the line's end on its deck, leaning as it rises.
+            let by = Vec3::new(1.0, line.plumb, 0.0);
+            let (kept, on_plane) = cut_by(&polygon, by, plane - line.plumb * line.lift, keep_above);
             if on_plane.len() == 2 {
                 cuts[end].push((on_plane[0].world, on_plane[1].world, on_plane[0].uv));
             }
@@ -472,12 +485,17 @@ fn cut_frame(
     at: f32,
     keep_above: bool,
 ) -> (Vec<Corner>, Vec<Corner>) {
+    let mut by = Vec3::ZERO;
+    by[axis] = 1.0;
+    cut_by(polygon, by, at, keep_above)
+}
+
+/// A polygon of corners cut by the plane in the frame where `q · by` is `at`, as
+/// [`cut_frame`] cuts by one axis: a plumb end along a slope leans along it as it goes up.
+fn cut_by(polygon: &[Corner], by: Vec3, at: f32, keep_above: bool) -> (Vec<Corner>, Vec<Corner>) {
+    let f = |c: &Corner| c.q.dot(by);
     let inside = |c: &Corner| {
-        if keep_above {
-            c.q[axis] >= at
-        } else {
-            c.q[axis] <= at
-        }
+        if keep_above { f(c) >= at } else { f(c) <= at }
     };
     let mut kept = Vec::new();
     let mut on_plane = Vec::new();
@@ -487,9 +505,8 @@ fn cut_frame(
             kept.push(*p);
         }
         if inside(p) != inside(q) {
-            let t = ((at - p.q[axis]) / (q.q[axis] - p.q[axis])).clamp(0.0, 1.0);
-            let mut place = p.q.lerp(q.q, t);
-            place[axis] = at;
+            let t = ((at - f(p)) / (f(q) - f(p))).clamp(0.0, 1.0);
+            let place = p.q.lerp(q.q, t);
             let cut = Corner {
                 q: place,
                 n: p.n.lerp(q.n, t).normalize_or(p.n),
@@ -1496,6 +1513,7 @@ mod tests {
             capped: [false; 2],
             seed: 5,
             blend: 0.0,
+            plumb: 0.0,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1529,6 +1547,7 @@ mod tests {
             capped: [false; 2],
             seed: 3,
             blend: 0.0,
+            plumb: 0.0,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1564,6 +1583,79 @@ mod tests {
     }
 
     #[test]
+    fn a_board_along_a_slope_is_seated_square_to_it_and_cut_plumb_at_its_ends() {
+        // A board modelled a metre long and 0.2 m wide, its face to +Z, its atlas laid on it
+        // a metre to a unit, as a verge's is: laid up a slope at 45 degrees, square to it.
+        let mut mesh = Stone::default();
+        mesh.positions = vec![
+            [0.0, 0.0, 0.01],
+            [1.0, 0.0, 0.01],
+            [1.0, 0.2, 0.01],
+            [0.0, 0.2, 0.01],
+        ];
+        mesh.normals = vec![[0.0, 0.0, 1.0]; 4];
+        mesh.triangles = vec![[0, 1, 2], [0, 2, 3]];
+        mesh.uvs = mesh.positions.iter().map(|p| [p[0], p[1]]).collect();
+        let module = Module {
+            length: 1.0,
+            near: vec![mesh],
+            ..Module::default()
+        };
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        let (along, up) = (Vec3::new(s, s, 0.0), Vec3::new(-s, s, 0.0));
+        let line = Line {
+            from: Vec3::ZERO,
+            to: along * 1.4,
+            seat: Seat::Plane { up, out: Vec3::Z },
+            across: None,
+            capped: [false; 2],
+            seed: 3,
+            blend: 0.0,
+            // Along it for each metre up it, so its ends stand plumb: up · level / along · level.
+            plumb: -1.0,
+            lift: 0.0,
+            mitre: [None; 2],
+        };
+        let mut surfaces = Surfaces::sharing();
+        lay(&module, &line, &look(), false, &mut surfaces);
+        let made = &surfaces.0[&Material::Piece].shared;
+        assert!(made.triangle_count() > 0);
+        // Its texture is not sheared: a metre of it is a metre each way.
+        for t in made.indices.chunks(3) {
+            let [a, b, c] = [t[0], t[1], t[2]].map(|i| i as usize);
+            let (p, q, r) = (made.positions[a], made.positions[b], made.positions[c]);
+            let (u, v, w) = (made.uvs[a], made.uvs[b], made.uvs[c]);
+            let (d1, d2) = ([v[0] - u[0], v[1] - u[1]], [w[0] - u[0], w[1] - u[1]]);
+            let det = d1[0] * d2[1] - d1[1] * d2[0];
+            if det.abs() < 1e-6 {
+                continue;
+            }
+            let ju = ((q - p) * d2[1] - (r - p) * d1[1]) / det;
+            let jv = ((r - p) * d1[0] - (q - p) * d2[0]) / det;
+            assert!(
+                (ju.length() - 1.0).abs() < 0.02 && (jv.length() - 1.0).abs() < 0.02,
+                "sheared: {ju} {jv}"
+            );
+            assert!(ju.dot(jv).abs() < 0.02, "sheared: {ju} {jv}");
+        }
+        // Its ends cut plumb, through the line's ends: nothing past them level, its closing
+        // faces too, and its top edge reaching the plumb line at its foot.
+        let (start, end) = (0.0, 1.4 * s);
+        assert!(
+            made.positions
+                .iter()
+                .all(|p| p.x > start - 1e-4 && p.x < end + 1e-4),
+            "past a plumb end"
+        );
+        assert!(
+            made.positions
+                .iter()
+                .any(|p| p.x < start + 1e-3 && p.y > 0.2 * s - 1e-3),
+            "its foot not cut plumb"
+        );
+    }
+
+    #[test]
     fn a_capping_over_a_crease_lies_on_both_planes() {
         // A ridge along X: the north slope rises to it from -Z, the south from +Z.
         let s = std::f32::consts::FRAC_1_SQRT_2;
@@ -1578,6 +1670,7 @@ mod tests {
             capped: [false; 2],
             seed: 1,
             blend: 0.0,
+            plumb: 0.0,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1630,6 +1723,7 @@ mod tests {
             capped: [false; 2],
             seed: 1,
             blend: 0.1,
+            plumb: 0.0,
             lift: 0.0,
             mitre: [None; 2],
         };
@@ -1687,6 +1781,7 @@ mod tests {
             capped: [true, false],
             seed: 2,
             blend: 0.0,
+            plumb: 0.0,
             lift: 0.0,
             mitre: [None, Some([Vec3::new(0.0, 0.0, -1.0), Vec3::X])],
         };
@@ -1816,6 +1911,7 @@ mod tests {
                 capped,
                 seed: 7,
                 blend: 0.0,
+                plumb: 0.0,
                 lift: 0.0,
                 mitre: [None; 2],
             };

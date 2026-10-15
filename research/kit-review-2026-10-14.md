@@ -32,7 +32,7 @@ Real buildings compared against: Appalachian and Scandinavian log cabins (saddle
 |---|---|---|---|---|
 | 1 | Dovetailed ends bright, flat orange-tan blocks beside dark adzed faces: read as plywood at 2 and 5 m | `hewn.jpg`, close, eave | As logs 1, `end_tint` (0.9, 0.8, 0.7) | **Fixed in code** as logs 1. **Data, applied**: `hewn_timber.ron`'s `end_tint` (0.9, 0.8, 0.7) to (0.66, 0.58, 0.5) |
 | 2 | The window head's underside a bright yellow band | eave | As logs 3 | **Fixed** (D320) |
-| 3 | The stone footing's top edge smeared into vertical streaks at 2 m | close | Relief mapping (parallax) on the rounded edge: gone at the low preset, which draws no relief. The planar texture's tangent frame turns on the bevel and the parallax steps follow it | **To D290** (the shader is theirs): fade the parallax depth where the surface turns away from its texture's plane, as Unreal's and Unity's POM fade by view and by vertex weight |
+| 3 | The stone footing's top edge smeared into vertical streaks at 2 m | close | Relief mapping (parallax) on the rounded edge: gone at the low preset, which draws no relief. The planar texture's tangent frame turns on the bevel and the parallax steps follow it | **Remaining**: not the texture's stretch (`cargo xtask texels` finds none on a footing on flat ground) and not the view's grazing (fading the relief by it left it); gone only at the low preset, so still the relief mapping, by its tangent frame at the rounded edge |
 | 4 | White lime chinking between every course reads as stripes at 12 m | street | As built: real dovetailed cabins are chinked white | Kept |
 
 ## Fieldstone
@@ -40,9 +40,9 @@ Real buildings compared against: Appalachian and Scandinavian log cabins (saddle
 | # | What | Seen | Cause | Now |
 |---|---|---|---|---|
 | 1 | Every lintel's soffit and every quoin's and jamb stone's underside lit olive-green, brighter than the wall's shaded face | `stone.jpg`, mid | As logs 3 | **Fixed** (D320) |
-| 2 | Under a bedded sill, the stones slant into fins and hang like teeth at 2 m | close | As hewn 3: relief mapping on the face built up round the sill, gone at the low preset | **To D290**, with hewn 3 |
+| 2 | Under a bedded sill, the stones slant into fins and hang like teeth at 2 m | close | As hewn 3: relief mapping on the face built up round the sill, gone at the low preset | **Partly fixed** (D320): relief mapping faded out as the view grazes the surface (`build.wesl`, about 75 to 55 degrees from head on, as Unreal's parallax fades by view angle): the fins under a sill are fewer and shorter |
 | 3 | The plinth and copings read smooth, like cast concrete, at 2 m | close | `rock_boulder_dry` at 1.4 m a copy on long smooth profiles | **Data, applied**: `block.ron`'s `Dressed` from 1.4 to 0.9 m a copy: more grain, still reads dressed |
-| 4 | Jamb stones and quoins stand out from the rubble as boxes with flat sides, close | close | The jamb and quoin sets' depth in `pieces.json` against the rubble's 5 cm relief | **To D290** (pieces): set their faces at the rubble's proud face, not past it |
+| 4 | Jamb stones and quoins stand out from the rubble as boxes with flat sides, close | close | The jamb and quoin sets' depth in `pieces.json` against the rubble's 5 cm relief | **Fixed**: the rubble's relief is now drawn by the shader, its face flat at the cube's, so the quoins stood 4.5 cm and the jamb stones 3.5 cm proud of it as boxes; now 1.8 and 1.4 cm (`art/kits/stone/pieces.json`, made again by `tools/kits`), a shadow line, not a box |
 | 5 | A slope's raking coping steps at every stone: each cube's stone ends square to the slope and the next starts a few centimetres lower and further out, so the coping reads as a sawtooth seen from above | shapes in stone, close | Each cube's band swept on its own along its stretch of the ramp | Remaining: the raking band's joints to be run on as a level band's are (`dress::Sweep`, `End::On`) |
 | 6 | A ramp's paving shows a straight dark line across it at each cube's edge | shapes in stone, close | Not found: a seam in the cut surface or the paving's joint | Remaining |
 | 7 | A wall's flagstone top carried round its rounded edge, stretched up to 3.7:1 | `texels`: stone Floor 2.5% past 2.5:1, at a wall's top under the eaves | The top's planar mapping on the steeper part of the bevel | Remaining, minor: mostly under the eaves |
@@ -52,8 +52,8 @@ Real buildings compared against: Appalachian and Scandinavian log cabins (saddle
 | # | What | Seen | Cause | Now |
 |---|---|---|---|---|
 | 1 | The ridge capping near white against the dark shakes: a pale line along every ridge from the street | `shakes.jpg`, roof | The ridge's part takes no tint (eaves and verges do) | **Data, applied**: `roof.ron`'s `Ridge` and `Hip` parts tinted (0.66, 0.62, 0.58): grey-brown, of the roof |
-| 2 | The ridge's copies meet with a visible step, and its texture is stretched up to 7 to 9:1 | roof; `texels`: shakes Piece 30% past 2.5:1, the module as baked 0% | `modules::seat` drapes a module modelled flat over a crease, bending its halves about the line | Remaining: a ridge modelled for a pitch and laid unbent, or drape only the part beyond `blend`; goals review 3 finding 2 |
-| 3 | Bargeboards sheared: their nail holes and knots lean | gable close; `texels`: shakes Trim 46% past 2.5:1, as baked 0% | A verge's board is stood plumb (`Seat::Plane { up: Y / n.y }`): on a 45-degree roof its texture is sheared 2.6:1 | Remaining: square to the slope in the gable's plane would be unsheared, but changes its ends at the eaves, which the mesh checker holds; to do with the next roof-edge change |
+| 2 | The ridge's copies meet with a visible step, and its texture is stretched up to 7 to 9:1 | roof; `texels`: shakes Piece 30% past 2.5:1, the module as baked 0% | `modules::seat` drapes a module modelled flat over a crease, bending its halves about the line | **Fixed** for ridges (D320): a capping's up turns from one slope's to the other's over as much of its width as its thickness swings through at that pitch, not 2 cm: past 2.5:1 from 30% to 2% of the shakes' ridge pieces, 20% to 1% of the slate's (`texels`); a test holds its top under 2:1 at 30 to 60 degrees. Hips keep the modelled turn, where their tops meet the ridge |
+| 3 | Bargeboards sheared: their nail holes and knots lean | gable close; `texels`: shakes Trim 46% past 2.5:1, as baked 0% | A verge's board is stood plumb (`Seat::Plane { up: Y / n.y }`): on a 45-degree roof its texture is sheared 2.6:1 | **Fixed** (D320): seated square to the roof in the gable's plane, its ends still cut plumb (`Line::plumb`), 4 mm out off the fascia's plane it laps: the roof boards past 2.5:1 from 46% to 0.5% of their area; the mesh checker's counts unchanged |
 
 ## Slate
 
@@ -61,7 +61,7 @@ Real buildings compared against: Appalachian and Scandinavian log cabins (saddle
 |---|---|---|---|---|
 | 1 | From the street the slate reads brown-grey, like weathered boards, not blue-grey slate | `slate.jpg`, street, evening | `grey_roof_tiles_02` under the pack's tint (0.6, 0.62, 0.66) | **Data, applied**: `slate.ron`'s tint (0.6, 0.62, 0.66) to (0.5, 0.53, 0.58) |
 | 2 | The hip and ridge stones pale against it | street | As shakes 1 | **Data, applied**, as shakes 1 |
-| 3 | The ridge's stone copies stretched where draped, 20% past 2.5:1 | `texels` | As shakes 2 | Remaining, as shakes 2 |
+| 3 | The ridge's stone copies stretched where draped, 20% past 2.5:1 | `texels` | As shakes 2 | **Fixed**, as shakes 2 |
 
 ## Where they meet
 

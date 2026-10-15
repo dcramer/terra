@@ -53,7 +53,7 @@
   "corners": {
     "quoin": {
       "about": "Quoins up an outside corner: a stone a course, its long face along one face and its short along the other, turned each course so they alternate; standing out of both faces.",
-      "proud": 0.045,
+      "proud": 0.018,
       "height": 0.25,
       "joint": 0.007,
       "bevel": 0.016,
@@ -65,7 +65,7 @@
     },
     "jamb": {
       "about": "Jamb stones up an opening's side: long and short by turns along the wall's face, each returning into the reveal to the wall's middle; standing out of the face and the reveal.",
-      "proud": 0.035,
+      "proud": 0.014,
       "height": 0.25,
       "joint": 0.007,
       "bevel": 0.014,

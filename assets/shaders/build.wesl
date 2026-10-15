@@ -146,6 +146,9 @@ fn edge_of(uv: vec2<f32>, slot: i32, cell: f32, reach: f32) -> f32 {
 
 // As StandardMaterial's: up to the preset's layers, steeper views fewer, then 5 halvings.
 const RELIEF_STEPS: u32 = 5u;
+// The view's cosine to the surface below which relief mapping is gone, and above which it
+// is whole: about 75 and 55 degrees from head on.
+const RELIEF_GRAZING: vec2<f32> = vec2(0.25, 0.6);
 
 // Timber's damage at a point (D305): how much of it is a split along the grain and a gouge,
 // and how deep it goes, as a share of the relief's depth: a split to its floor, a gouge a
@@ -237,7 +240,14 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if relief_depth > 0.0 && entry.w > 0.0 {
         let V = pbr_input.V;
         let Vt = vec3(dot(V, T), dot(V, B), dot(V, N));
-        uv = parallaxed_uv(relief_depth, entry.w, uv, -Vt, slot, splits, l);
+        // Faded out as the view grazes the surface: relief mapping takes the surface as a
+        // plane, and a ray along a rounded edge or a face built up round a sill marched so far
+        // across the texture that it drew streaks and fins (research/kit-review-2026-10-14.md);
+        // as Unreal's parallax occlusion fades by view angle.
+        let grazing = smoothstep(RELIEF_GRAZING.x, RELIEF_GRAZING.y, abs(Vt.z));
+        if grazing > 0.0 {
+            uv = parallaxed_uv(relief_depth * grazing, entry.w, uv, -Vt, slot, splits, l);
+        }
     }
 
     let bias = view.mip_bias;

@@ -97,7 +97,37 @@ pub fn draw_as(
                 let n = planar_normal(from, to, side);
                 Vec3::new(n.x, 0.0, n.z).normalize_or(Vec3::X)
             });
-            let seat = seat(part, spec.on_roof, from, to, sides);
+            let mut seat = seat(part, spec.on_roof, from, to, sides);
+            // A modelled verge board seated square to its roof, so its grain and knots are
+            // not sheared along the slope (2.6:1 on a roof at 45 degrees, `cargo xtask
+            // texels`), its ends still cut plumb at the eave and the apex (`Line::plumb`).
+            let mut plumb = 0.0;
+            let (mut from, mut to) = (from, to);
+            if part == RoofPart::Verge
+                && modules::modelled(module)
+                && let Seat::Plane { out, .. } = seat
+            {
+                let along = (to - from).normalize_or(Vec3::X);
+                let level = along.with_y(0.0).normalize_or_zero();
+                let n = planar_normal(from, to, sides[0]);
+                let up = n.reject_from(along).reject_from(out).normalize_or(Vec3::Y);
+                if along.dot(level) > 1e-3 && up.y > 0.2 {
+                    plumb = up.dot(level) / along.dot(level);
+                    seat = Seat::Plane { up, out };
+                    // Out off the plane of the eave's board where the two meet at its foot,
+                    // as a bargeboard laps over the fascia's end.
+                    from += out * VERGE_PROUD_M;
+                    to += out * VERGE_PROUD_M;
+                }
+            }
+            // Over a ridge or a hip, the capping's up turns from one slope's to the other's
+            // over as much of it as its own thickness swings through there, so its top is
+            // not stretched over the crest: a cap modelled flat and bent within a couple of
+            // centimetres had its top drawn three or four times its width there.
+            let blend = match seat {
+                Seat::Crease { up, .. } if part == RoofPart::Ridge => crest_blend(module, up),
+                _ => module.blend,
+            };
             let line = Line {
                 from,
                 to,
@@ -105,7 +135,8 @@ pub fn draw_as(
                 across: None,
                 capped,
                 seed,
-                blend: module.blend,
+                blend,
+                plumb,
                 // Its anchor seated where its part sits (D290): on the covering for what
                 // lies on it, so one piece fits any covering's thickness.
                 lift: seated(kit, part),
@@ -167,6 +198,22 @@ fn look(kit: &Kit, part: &Part) -> Look {
 pub(crate) fn seated(kit: &Kit, part: RoofPart) -> f32 {
     on_covering(part) * (kit.roof.thick + kit.roof.relief + PROUD_M)
 }
+
+/// How far either side of a ridge a capping's up turns from one slope's to the other's:
+/// as far as its own thickness swings through there, or its own `blend` if more.
+fn crest_blend(module: &crate::dress::Module, up: [Vec3; 2]) -> f32 {
+    let turn = libm::acosf(up[0].dot(up[1]).clamp(-1.0, 1.0));
+    module.blend.max(module.dims[1] * turn * CREST_BLEND)
+}
+
+/// How much of a capping's width over a crest its up turns across, for each metre of its
+/// thickness and each radian the crest turns: its top's arc over the crest, with room for
+/// the turn eased in and out
+const CREST_BLEND: f32 = 1.0;
+
+/// How far out a verge's board, seated square to its roof, stands past the plane its line
+/// is in: off the plane of the eave's board it laps over at its foot.
+const VERGE_PROUD_M: f32 = 0.004;
 
 /// How far a piece laid on the covering stands off it, so the two are never in one plane.
 const PROUD_M: f32 = 0.002;
@@ -524,6 +571,94 @@ mod tests {
     use crate::layout::roofs;
     use crate::roofer::{self, Style};
     use crate::{Base, BuildOp, Cube, Fill, Kind, STOREY_M};
+
+    #[test]
+    fn a_capping_bent_over_a_ridge_keeps_its_top_near_its_modelled_width() {
+        // A capping modelled flat, 0.4 m across and 6 cm thick, its top's atlas laid on it a
+        // metre to a unit, as a modelled ridge cap is, bent over ridges of 30 to 60 degrees.
+        let mut mesh = crate::dress::Stone::default();
+        let steps = 40;
+        for i in 0..=steps {
+            let z = -0.2 + 0.4 * i as f32 / steps as f32;
+            mesh.positions.push([0.0, 0.06, z]);
+            mesh.positions.push([1.0, 0.06, z]);
+            mesh.normals.extend([[0.0, 1.0, 0.0]; 2]);
+            mesh.uvs.push([0.0, z]);
+            mesh.uvs.push([1.0, z]);
+        }
+        for i in 0..steps as u32 {
+            let k = i * 2;
+            mesh.triangles.push([k, k + 2, k + 1]);
+            mesh.triangles.push([k + 1, k + 2, k + 3]);
+        }
+        let module = crate::dress::Module {
+            length: 1.0,
+            dims: [1.0, 0.06, 0.4],
+            blend: 0.02,
+            near: vec![mesh],
+            ..Default::default()
+        };
+        let worst = |pitch: f32, blend: f32| {
+            let a = pitch.to_radians();
+            let (c, s) = (libm::cosf(a), libm::sinf(a));
+            let up = [Vec3::new(0.0, c, -s), Vec3::new(0.0, c, s)];
+            let line = Line {
+                from: Vec3::ZERO,
+                to: Vec3::X,
+                seat: Seat::Crease {
+                    up,
+                    into: [Vec3::new(0.0, -s, -c), Vec3::new(0.0, -s, c)],
+                },
+                across: None,
+                capped: [false; 2],
+                seed: 1,
+                blend: if blend > 0.0 {
+                    blend
+                } else {
+                    crest_blend(&module, up)
+                },
+                plumb: 0.0,
+                lift: 0.0,
+                mitre: [None; 2],
+            };
+            let look = Look {
+                material: Material::Piece,
+                ends: None,
+                metres: [1.0; 2],
+                end_metres: [1.0; 2],
+                tint: [1.0; 3],
+                shade: 0.0,
+                repeat: 1.0,
+            };
+            let mut surfaces = Surfaces::default();
+            modules::lay(&module, &line, &look, false, &mut surfaces);
+            let all = surfaces.0[&Material::Piece].indexed();
+            let mut worst = 0.0f32;
+            for t in all.indices.chunks(3) {
+                let [a, b, c] = [t[0], t[1], t[2]].map(|i| i as usize);
+                let (p, q, r) = (all.positions[a], all.positions[b], all.positions[c]);
+                let (u, v, w) = (all.uvs[a], all.uvs[b], all.uvs[c]);
+                let (d1, d2) = ([v[0] - u[0], v[1] - u[1]], [w[0] - u[0], w[1] - u[1]]);
+                let det = d1[0] * d2[1] - d1[1] * d2[0];
+                if det.abs() < 1e-9 {
+                    continue;
+                }
+                // Across the cap: how many metres of it a metre of its atlas covers.
+                let jv = ((r - p) * d1[0] - (q - p) * d2[0]) / det;
+                worst = worst.max(jv.length());
+            }
+            worst
+        };
+        for pitch in [30.0, 45.0, 60.0] {
+            let bent = worst(pitch, 0.0);
+            assert!(
+                bent < 2.0,
+                "{pitch}: its top {bent} times its width over the crest"
+            );
+        }
+        // Turned within the 2 cm it was modelled with, its top over the crest was stretched.
+        assert!(worst(45.0, 0.02) > 2.5);
+    }
 
     /// A shipped roof kit, its pieces read, numbered as the first roof kind.
     fn shipped(name: &str) -> Kit {
