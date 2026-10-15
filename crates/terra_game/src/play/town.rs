@@ -387,6 +387,10 @@ impl terra_world::cover::CoverSource for TownCover {
         if worn < 0.0 {
             growing.grass = 0.0;
             growing.path = true;
+            // Trodden earth darkened and muddied by feet, wheels and what falls from carts,
+            // in broken patches, not the planet's bare soil.
+            growing.litter = 0.16;
+            growing.roots = 0.42;
         } else if worn < 1.5 {
             growing.grass *= worn / 1.5 * 0.7;
         }

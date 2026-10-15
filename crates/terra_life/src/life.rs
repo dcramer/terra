@@ -144,6 +144,8 @@ const SPOTS_APART_M: f32 = 0.9;
 const SPOT_CLEAR_M: f32 = 0.7;
 /// How long someone held up waits before squeezing past.
 const SQUEEZE_S: f32 = 2.0;
+/// How long before they edge past those standing about, too.
+const EDGE_S: f32 = 2.0;
 /// Slower than this, a walker stands: the body plays a walk only above it, at the speed the
 /// ground passes (`pace.rs`), so its feet do not slide.
 pub const STANDING_MPS: f32 = 0.12;
@@ -1136,8 +1138,15 @@ impl Life {
                         if other == index {
                             continue;
                         }
-                        if let Some(body) = bodies[other] {
+                        if let Some(mut body) = bodies[other] {
                             let d = body.at.distance(person.at);
+                            // Held up long, someone edges between those standing about,
+                            // as people in a crowd turn a shoulder.
+                            if person.held > EDGE_S
+                                && matches!(self.people[other].state, State::Doing { .. })
+                            {
+                                body.radius *= 0.6;
+                            }
                             if d < 5.0 {
                                 neighbours.push((d, body));
                             }
