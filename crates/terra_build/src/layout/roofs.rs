@@ -547,6 +547,16 @@ impl Roofs {
             .min_by(|a, b| a.total_cmp(b))
     }
 
+    /// The top of the highest roof under a point that is no higher than `below`, eaves too:
+    /// the roof a piece over a point lies on, where one roof's eaves pass over another's.
+    pub fn top_under(&self, x: f32, z: f32, below: f32) -> Option<f32> {
+        self.over(x, z)
+            .iter()
+            .map(|&q| self.height(q, x, z))
+            .filter(|&h| h <= below + 1e-3)
+            .max_by(|a, b| a.total_cmp(b))
+    }
+
     /// Where a wall carried up under the lowest roof over a point, whose top is no lower
     /// than `above`, is cut: the roof's deck, the plane its covering is laid on and the
     /// boards under it are drawn on, so a gable closes to the roof with no gap under it.
@@ -1208,10 +1218,31 @@ fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut
             segment.from.0[1] as u32,
             3,
         ]);
+        // Its top end, where the roof stops past it, as a lean-to's high edge does: laid
+        // under the roof, square to it, it stood out past the edge by as much as it is deep,
+        // so it stops short by as much.
+        let (mut from, mut to) = (segment.from.metres(), segment.to.metres());
+        let axis = (to - from).normalize_or(Vec3::Y);
+        let (top, step) = if to.y >= from.y {
+            (&mut to, axis)
+        } else {
+            (&mut from, -axis)
+        };
+        let level = Vec3::new(step.x, 0.0, step.z).normalize_or_zero();
+        let beyond = *top + level * STEP_M * 0.5;
+        let carries_on = roofs
+            .top_over(beyond.x, beyond.z, top.y - CELL_M)
+            .is_some_and(|h| h < top.y + below + CELL_M);
+        let (from, to) = if !carries_on && level != Vec3::ZERO {
+            *top -= step * (below * 2.0);
+            (Place::near(from), Place::near(to))
+        } else {
+            (segment.from, segment.to)
+        };
         pieces.push(Piece::Roof {
             part: RoofPart::Rafter,
-            from: segment.from,
-            to: segment.to,
+            from,
+            to,
             sides: segment.sides,
             seed,
             cell: roofs.cell(segment.square, 1),

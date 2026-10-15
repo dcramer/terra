@@ -676,6 +676,35 @@ mod tests {
     }
 
     #[test]
+    fn a_lean_tos_rafters_stop_inside_its_high_edge() {
+        // Under a lean-to rising south, the rafters, laid under the roof square to it, run
+        // up to its high edge and no further out than the covering does.
+        let kit = shipped("shakes.ron");
+        let base = cabin(Style::LeanTo);
+        let reach = |only: &dyn Fn(&Piece) -> bool| {
+            let surfaces = drawn(&kit, &base, only);
+            surfaces
+                .0
+                .values()
+                .flat_map(|s| s.positions.iter().chain(&s.shared.positions).copied())
+                .map(|p| p.z)
+                .fold(f32::MIN, f32::max)
+        };
+        let covering = reach(&|p: &Piece| matches!(p, Piece::Covering { .. }));
+        let rafters = reach(&|p: &Piece| {
+            matches!(
+                p,
+                Piece::Roof {
+                    part: RoofPart::Rafter,
+                    ..
+                }
+            )
+        });
+        assert!(rafters > covering - 0.5, "{rafters} {covering}");
+        assert!(rafters <= covering + 0.01, "{rafters} against {covering}");
+    }
+
+    #[test]
     fn a_hips_capping_is_mitred_to_the_eaves_at_its_foot() {
         // Five metres by four under a hip, its eaves half a metre out: each hip's capping
         // runs down to a corner of them and stops at both, never out past them.

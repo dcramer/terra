@@ -1056,7 +1056,26 @@ fn buried(kits: &Kits, drawn: &Drawn, detail: Detail, findings: &mut Vec<Finding
     }
 }
 
+/// How far out past a roof's edge its pieces may stand, at the least: a board's hang.
 const EDGE_M: f32 = 0.08;
+
+/// How far out past a roof's edge, level, a roof kind's own pieces may stand: as far as its
+/// verge's and eave's modules are modelled out past the edge they are laid along (a thatch
+/// verge's bound bundle wraps the covering's cut edge, D258), and a board's hang at least.
+fn edge_reach(kit: &crate::kit::Kit) -> f32 {
+    use crate::layout::roofs::RoofPart;
+    let pieces = kit.dress.made.as_deref();
+    let out = kit
+        .roof
+        .parts
+        .iter()
+        .filter(|(part, _)| matches!(part, RoofPart::Verge | RoofPart::Eave))
+        .filter_map(|(_, spec)| pieces.and_then(|p| p.modules.get(&spec.module)))
+        .flat_map(|module| module.near.iter().chain(&module.cap))
+        .flat_map(|mesh| mesh.positions.iter().map(|p| p[2]))
+        .fold(0.0, f32::max);
+    EDGE_M.max(out + 0.02)
+}
 /// How far a trim may stand out of its cubes (D192), and a little for its relief.
 const TRIM_M: f32 = CELL_M / 8.0 + 0.012;
 
@@ -1091,6 +1110,18 @@ fn pokes_out(
         // Over the roof nearest under it: its covering and caps may stand so far over the
         // roof's top; a wall's piece in a roof cube, or over one, not at all.
         if let Some(top) = roofs.top_over(middle.x, middle.z, middle.y - 0.6) {
+            // A roof's own piece over the roof it lies on, the nearest under it: where its
+            // eaves pass over a lower roof's, not over that one. Looked for a centimetre in
+            // behind the face, so a covering's edge closed down on its square's side is over
+            // its own square, not the next.
+            let behind = middle - t.n * 0.01;
+            let top = if is_roof {
+                roofs
+                    .top_under(behind.x, behind.z, middle.y)
+                    .map_or(top, |under| under.max(top))
+            } else {
+                top
+            };
             // A wall's own face standing up beside a roof is not in it.
             let inside = middle - t.n * 0.01;
             let roof_cube = cube_at(inside).filter(|c| c.kind.is_roof()).or_else(|| {
@@ -1116,13 +1147,14 @@ fn pokes_out(
             }
         } else if is_roof {
             // A roof's piece where no roof is, near or under it: out past its edges.
+            let reach = edge_reach(kit);
             let near_edge = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
                 .iter()
                 .any(|d| {
                     roofs
                         .top_over(
-                            middle.x + d.x * EDGE_M,
-                            middle.z + d.z * EDGE_M,
+                            middle.x + d.x * reach,
+                            middle.z + d.z * reach,
                             middle.y - 0.6,
                         )
                         .is_some()
@@ -1299,6 +1331,121 @@ fn on_ground(kits: &Kits, ops: &[crate::BuildOp]) -> Base {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_roofs_eave_over_a_lower_roof_is_measured_from_its_own_roof() {
+        // Two flat roof cubes, the second a cube east and a cube up, each carried on half a
+        // metre past its edges: over x = 0.75 the first's eaves lie at 0.5 m under the
+        // second's top at 1.0 m.
+        let roof = crate::kit::Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            eaves: 0.5,
+            ..Default::default()
+        };
+        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        let mut base = Base::default();
+        for at in [[0, 0, 0], [1, 1, 0]] {
+            base.apply(crate::BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(crate::Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
+            });
+        }
+        let roofs = crate::layout::roofs::Roofs::whole(&base, &kits, crate::layout::Scope::ALL);
+        let found = |y: f32| {
+            let drawn = Drawn {
+                tris: vec![tri(
+                    [
+                        Vec3::new(0.7, y, 0.2),
+                        Vec3::new(0.8, y, 0.2),
+                        Vec3::new(0.75, y, 0.3),
+                    ],
+                    0,
+                )],
+                meshes: vec!["covering".into()],
+                kinds: vec![Some((Kind::FIRST_ROOF, Material::Covering))],
+            };
+            let mut findings = Vec::new();
+            pokes_out(&base, &kits, &roofs, &drawn, Detail::Near, &mut findings);
+            findings
+        };
+        // The upper roof's covering just over its own top: not over the lower roof.
+        assert!(found(1.05).is_empty(), "{:?}", found(1.05));
+        // Half a metre over the upper roof: over it.
+        assert_eq!(found(1.5).len(), 1);
+    }
+
+    #[test]
+    fn a_roofs_piece_may_stand_past_its_edge_as_far_as_its_verge_is_modelled_and_no_further() {
+        // A roof kind whose verge is modelled standing 0.2 m out past the edge it is laid
+        // along, as thatch's bound bundle wraps its covering's cut edge; one roof cube, with
+        // no eaves, its top half a metre up over x and z from 0 to 0.5.
+        use crate::layout::roofs::RoofPart;
+        let verge = crate::dress::Stone {
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.2], [0.0, 0.1, 0.0]],
+            normals: vec![[0.0, 1.0, 0.0]; 3],
+            triangles: vec![[0, 1, 2]],
+            uvs: vec![],
+        };
+        let mut pieces = crate::dress::Pieces::default();
+        pieces.modules.insert(
+            "verge".into(),
+            crate::dress::Module {
+                length: 1.0,
+                near: vec![verge],
+                ..Default::default()
+            },
+        );
+        let mut roof = crate::kit::Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            eaves: 0.0,
+            ..Default::default()
+        };
+        roof.roof.parts.insert(
+            RoofPart::Verge,
+            crate::kit::Part {
+                module: "verge".into(),
+                material: Material::Piece,
+                ends: None,
+                tint: [1.0; 3],
+                on_roof: false,
+            },
+        );
+        roof.dress.made = Some(std::sync::Arc::new(pieces));
+        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(crate::Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
+        });
+        let roofs = crate::layout::roofs::Roofs::whole(&base, &kits, crate::layout::Scope::ALL);
+        // A small face of the roof kind standing so far out past the roof's east edge.
+        let found = |out: f32| {
+            let x = 0.5 + out;
+            let drawn = Drawn {
+                tris: vec![tri(
+                    [
+                        Vec3::new(x - 0.01, 0.5, 0.2),
+                        Vec3::new(x + 0.01, 0.5, 0.2),
+                        Vec3::new(x, 0.5, 0.3),
+                    ],
+                    0,
+                )],
+                meshes: vec!["verge".into()],
+                kinds: vec![Some((Kind::FIRST_ROOF, Material::Piece))],
+            };
+            let mut findings = Vec::new();
+            pokes_out(&base, &kits, &roofs, &drawn, Detail::Near, &mut findings);
+            findings
+        };
+        assert!(found(0.15).is_empty(), "{:?}", found(0.15));
+        let past = found(0.4);
+        assert_eq!(past.len(), 1, "{past:?}");
+        assert_eq!(past[0].fault, Fault::PokesOut);
+    }
 
     #[test]
     fn a_piece_under_a_block_surface_is_buried_and_one_proud_of_it_is_not() {
