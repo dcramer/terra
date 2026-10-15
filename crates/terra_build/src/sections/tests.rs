@@ -1335,12 +1335,16 @@ fn an_openings_head_is_sunk_behind_its_lintels_underside() {
 /// Maps of rough height for every kit, as a real stone's or earth's: what pushes a block
 /// surface's points about, so faults that only show with relief show.
 fn rough(kits: &Kits) -> Maps {
+    relief(kits, 64, |i| {
+        (crate::layout::hash(&[i as u32, 7]) >> 24) as u8
+    })
+}
+
+/// Maps a side square of the height each of their texels is given, for every kit.
+fn relief(kits: &Kits, side: usize, height: impl Fn(usize) -> u8) -> Maps {
     use crate::relief::{Relief, cored_by, shaped_by, topped_by};
-    const SIDE: usize = 64;
-    let heights = (0..SIDE * SIDE)
-        .map(|i| (crate::layout::hash(&[i as u32, 7]) >> 24) as u8)
-        .collect();
-    let relief = std::sync::Arc::new(Relief::new(SIDE, SIDE, heights).unwrap());
+    let heights = (0..side * side).map(height).collect();
+    let relief = std::sync::Arc::new(Relief::new(side, side, heights).unwrap());
     let mut maps = Maps::default();
     for kit in &kits.0 {
         for path in [shaped_by(kit), topped_by(kit), cored_by(kit)]
@@ -1391,6 +1395,92 @@ fn no_stone_wall_or_its_dress_fights_itself_in_one_plane() {
             );
         }
     }
+}
+
+#[test]
+fn plinths_meeting_at_a_passages_corners_keep_out_of_one_another() {
+    // A stone wall three cubes thick, a passage a cube wide through it over its footing:
+    // the plinths along the passage's sides, on its floor, meet the wall's face's at its
+    // mouths, each ended square, and neither may lie in the other inside the wall.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    base.apply(BuildOp::Fill {
+        min: [0, -2, 0],
+        max: [2, 5, 8],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    base.apply(BuildOp::Fill {
+        min: [0, 0, 4],
+        max: [2, 1, 4],
+        cube: None,
+    });
+    let height = |[x, _]: [i32; 2]| (24 - x * 4) as i16;
+    let ring = base.ground_ring();
+    base.sample_ground(ring.into_iter().map(|column| crate::ground::Sample {
+        column,
+        height_cm: height(column),
+    }));
+    base.lay_footings(stone, height);
+    let maps = rough(&kits);
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        let Some(surface) = drawn.near.get(&(stone, Material::Dressed)) else {
+            continue;
+        };
+        let fighting = crate::inspect::self_overlap(surface);
+        assert!(
+            fighting < 1e-4,
+            "section {at:?}: {:.0} cm² of dressed stone in one plane, overlapping",
+            fighting * 1e4
+        );
+    }
+}
+
+#[test]
+fn a_log_floor_in_a_stone_tower_stops_at_its_walls_faces() {
+    // A stone tower, its walls four cubes thick, floored a storey up in logs inside, as the
+    // castle's north-west one is (`castle`), where it stands: the boards stop at the
+    // stone's faces, and run on under none of its walls as under logs set in from their
+    // cubes' faces by their round; and their tops stand clear of the flats of the stone's
+    // band lying on them.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let logs = kind(&kits, Pattern::Logs, Profile::Round);
+    let mut base = Base::default();
+    base.apply(BuildOp::Fill {
+        min: [-84, 14, -164],
+        max: [-69, 20, -149],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    base.apply(BuildOp::Fill {
+        min: [-80, 14, -160],
+        max: [-73, 20, -153],
+        cube: None,
+    });
+    base.apply(BuildOp::Fill {
+        min: [-80, 17, -160],
+        max: [-73, 17, -153],
+        cube: Some(Cube::new(logs, Fill::Solid)),
+    });
+    // Relief at its full range, a texel's noise, as the checker draws with
+    // (`examples/artifacts`): the band's flats pushed as far down as they go.
+    let maps = relief(&kits, 256, |i| ((i * 2_654_435_761) >> 13) as u8);
+    let report = crate::inspect::inspect(&base, &kits, &maps);
+    let fighting: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.fault == crate::inspect::Fault::Coplanar)
+        .map(|f| &f.what)
+        .collect();
+    assert!(fighting.is_empty(), "{fighting:#?}");
 }
 
 #[test]

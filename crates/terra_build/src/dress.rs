@@ -127,6 +127,8 @@ const JOINT_DEPTH_M: f32 = 0.009;
 const SOFFIT_DROP_M: f32 = 0.004;
 /// How far back a square end's part set into the wall is cut, for each metre it is in.
 const SQUARE_RECESS: f32 = 0.2;
+/// And a piece's whose part set in is all out of sight: a little past the diagonal.
+const BURIED_RECESS: f32 = 1.05;
 /// How far past a lintel's or a sill's back its reveal is sunk.
 const REVEAL_PAST_M: f32 = 0.06;
 /// How far a corner stone may run along a face it shares with the cube's other edge's
@@ -204,6 +206,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 sink: layout::metres(sink),
                 tint: kit.dress.tint,
                 grain,
+                buried: role == layout::Role::Foot,
             };
             sweep.draw(profile, metres, seed, &mut made);
         }
@@ -243,6 +246,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 sink: 0.0,
                 tint: kit.dress.tint,
                 grain,
+                buried: false,
             };
             sweep.draw(profile, metres, seed, &mut made);
         }
@@ -472,6 +476,11 @@ struct Sweep {
     /// Whether its texture runs along it, as timber's grain does, rather than from the
     /// world's planes, as stone's is.
     grain: bool,
+    /// Whether its part set into the wall is all out of sight, as a plinth's is: at a
+    /// square end it is cut back square to the corner's diagonal, so two plinths meeting
+    /// at an outside corner from its two faces, each ended square where the ground steps,
+    /// keep each to its own side of it rather than lying in one another in the wall.
+    buried: bool,
 }
 
 impl Sweep {
@@ -521,6 +530,7 @@ impl Sweep {
         // and a joint's or a step's, at a cube's side, so it is not in the plane of a step
         // in the footing or the wall under it there.
         let recess = self.ends.map(|end| match end {
+            End::Square if self.extend == 0.0 && self.buried => BURIED_RECESS,
             End::Square if self.extend == 0.0 => SQUARE_RECESS,
             End::On | End::Step => SQUARE_RECESS,
             _ => 0.0,
@@ -671,6 +681,13 @@ impl Sweep {
                 })
                 .collect();
             for tri in ears(&flat) {
+                // None across points in a line in the section, a sliver with no area there:
+                // where its end is cut back off the line, as a square end's part set into
+                // the wall is, it would lie in a face of the piece's own, its underside.
+                let [p, q, r] = tri.map(|i| flat[i]);
+                if ((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])).abs() < 1e-7 {
+                    continue;
+                }
                 let c = tri.map(|i| ring_points[i]);
                 let face = (c[1] - c[0]).cross(c[2] - c[0]);
                 let tri = if face.dot(outward) >= 0.0 {
@@ -1406,6 +1423,47 @@ mod tests {
     }
 
     #[test]
+    fn a_square_ends_cap_lays_nothing_over_the_pieces_own_underside() {
+        // A coping's section, its underside three points in a line from its drip back into
+        // the wall: at a square end the part set in is cut back off the line, so a cap
+        // across those three would lie in the underside's plane, over its own faces.
+        let sweep = Sweep {
+            from: Vec3::ZERO,
+            to: Vec3::new(0.5, 0.0, 0.0),
+            side: Vec3::Z,
+            up: Vec3::Y,
+            ends: [End::Square, End::Square],
+            extend: 0.0,
+            joints: false,
+            lift: 0.0,
+            sink: 0.0,
+            tint: [1.0; 3],
+            grain: false,
+            buried: false,
+        };
+        let mut made = Indexed::default();
+        let profile = [
+            [-0.05, 0.05],
+            [0.06, 0.03],
+            [0.06, -0.1],
+            [0.004, -0.1],
+            [0.0, -0.1],
+            [-0.05, -0.1],
+        ];
+        sweep.draw(&profile, [1.0, 1.0], 1, &mut made);
+        let mut surface = Surface::default();
+        for &i in &made.indices {
+            let i = i as usize;
+            surface.positions.push(made.positions[i]);
+            surface.normals.push(made.normals[i]);
+            surface.colours.push(made.colours[i]);
+            surface.uvs.push(made.uvs[i]);
+        }
+        let folded = crate::inspect::self_overlap(&surface);
+        assert!(folded < 1e-7, "{} cm² over itself", folded * 1e4);
+    }
+
+    #[test]
     fn a_bands_ends_at_a_joint_or_a_step_keep_its_part_in_the_wall_off_the_cubes_side() {
         // A band along a cube's face, half of it set into the wall, run on at one end and
         // stepping at the other: the ends of the part set in are cut back off the cube's
@@ -1423,6 +1481,7 @@ mod tests {
             sink: 0.0,
             tint: [1.0; 3],
             grain: false,
+            buried: false,
         };
         let mut made = Indexed::default();
         let profile = [[-0.05, 0.0], [0.05, 0.0], [0.05, 0.1], [-0.05, 0.1]];

@@ -23,9 +23,10 @@ use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
 
 /// How thick a board is, and how far its top stands over its cube's, clear of the relief of
-/// a stone footing it runs onto.
+/// a stone footing it runs onto, and of the flats of a stone wall's border band lying on the
+/// deck at its foot (9 and 12 mm up).
 const BOARD_THICK_M: f32 = 0.04;
-const BOARD_PROUD_M: f32 = 0.008;
+const BOARD_PROUD_M: f32 = 0.007;
 /// The gap between a rim's beams. Boards are laid tight, side by side and end to end, as
 /// a floor under a room and a flat roof over one must be, their rounded edges marking the
 /// seams; each edge on an even tick, so two boards' sides meet exactly, neither in the other.
@@ -525,10 +526,15 @@ impl Deck<'_> {
                 .is_some_and(|c| c.fill != Fill::Open && !c.kind.is_roof())
         };
         // A cube beside the deck under a wall: the boards run on over it, under the wall.
+        // A wall of the deck's own logs, whose face is set in from its cube's by their round:
+        // another kind's stands at its cube's face, which the boards stop at.
         let wall_foot = |at: IVec3| {
             !region.contains(&at.to_array())
                 && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
                 && base.in_wall(at + IVec3::Y)
+                && base
+                    .cube(at + IVec3::Y)
+                    .is_some_and(|c| c.kind == self.kit.kind())
         };
         // How far past a cube beside the deck its boards run: under a wall standing on it,
         // or up to the face of a wall beside the deck on its layer, over the ledger there,

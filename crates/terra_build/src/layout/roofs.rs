@@ -737,6 +737,17 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     let joined = ridges_a_cube_wide(join(segments));
     let r = &kit.roof;
     let (rafter, batten) = (r.rafter * 0.5, r.batten.1);
+    // How far a beam drawn from the kit's rafter module reaches from its line: as it is
+    // modelled, which may be wider than the rafter's laid size.
+    let beam_half = kit
+        .roof
+        .parts
+        .get(&RoofPart::Rafter)
+        .and_then(|part| kit.dress.made.as_deref()?.modules.get(&part.module))
+        .map_or(rafter, |module| {
+            let [high, wide] = module.size();
+            rafter.max(high.max(wide) * 0.5)
+        });
     // The beams under the creases, then every long piece in its own stage.
     for segment in &joined {
         let cell = roofs.cell(segment.square, segment.part.stage());
@@ -764,15 +775,26 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             // another, as a wing's ridge meets the main one at a T, short of that one's beam
             // by half its width, so it butts its side rather than running into it.
             let met = [segment.from, segment.to].map(|end| crease_met(segment, end, &joined));
-            let short = met.map(|met| BEAM_SHORT_M + if met { rafter } else { 0.0 });
+            let short = met.map(|met| BEAM_SHORT_M + if met { beam_half } else { 0.0 });
             for (i, (mut from, mut to)) in beams.into_iter().enumerate() {
                 let along = (to - from).normalize_or_zero();
                 let level = Vec3::new(along.x, 0.0, along.z).length().max(0.2);
+                // Where its crease meets another, its end so far back in plan from where
+                // they meet, measured level from that point, whatever the beam's drop under the
+                // roof carried it toward it; elsewhere only drawn short of its end.
+                let back = |end: Vec3, meet: Vec3, way: Vec3, short: f32, met: bool| {
+                    if !met {
+                        return end + way * (short / level);
+                    }
+                    let level_way = Vec3::new(way.x, 0.0, way.z).normalize_or_zero();
+                    let now = (end - meet).with_y(0.0).dot(level_way);
+                    end + way * ((short - now).max(0.0) / level)
+                };
                 if i == 0 {
-                    from += along * (short[0] / level);
+                    from = back(from, segment.from.metres(), along, short[0], met[0]);
                 }
                 if i == last {
-                    to -= along * (short[1] / level);
+                    to = back(to, segment.to.metres(), -along, short[1], met[1]);
                 }
                 pieces.push(Piece::Roof {
                     part: RoofPart::Rafter,

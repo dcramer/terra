@@ -941,6 +941,50 @@ mod tests {
     }
 
     #[test]
+    fn no_part_of_a_hip_roof_lies_over_itself() {
+        // Every part of a shipped roof under a hip, a cabin's and a tower's square one,
+        // drawn alone: none of its faces over another of its own in one plane.
+        for name in ["shakes.ron", "slate.ron"] {
+            let kit = shipped(name);
+            for base in [cabin(Style::Hip), tower()] {
+                let surfaces = drawn(&kit, &base, |p| matches!(p, Piece::Roof { .. }));
+                for (material, surface) in &surfaces.0 {
+                    let folded = crate::inspect::self_overlap(surface);
+                    assert!(
+                        folded < 1e-4,
+                        "{name} {material:?}: {} cm² over itself",
+                        folded * 1e4
+                    );
+                }
+            }
+        }
+    }
+
+    /// A tower's square room under a hip, as the castle's corners.
+    fn tower() -> Base {
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [11, 0, 11],
+            kind: Kind::PLAIN,
+        });
+        let footprint = (-2..14)
+            .flat_map(|x| (-2..14).map(move |z| [x, z]))
+            .collect();
+        for (at, shape) in roofer::over(&footprint, 6, Style::Hip, None).roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
+        base
+    }
+
+    #[test]
     fn a_hips_capping_keeps_to_its_own_side_of_its_top() {
         // Under a hip, two hips meet each end of the ridge: each one's capping, run on past
         // that top square to it, lay in the planes of the other's and the ridge's over the

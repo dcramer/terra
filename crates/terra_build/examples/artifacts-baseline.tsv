@@ -4,7 +4,7 @@
 # set	kits	fault	count
 all	hewn with logs with stone	Buried	1
 all	stone	Buried	1
-all	stone with hewn	Coplanar	66
+all	stone with hewn	Coplanar	29
 all	stone with hewn	PokesOut	6
-all	stone with logs	Coplanar	66
+all	stone with logs	Coplanar	29
 all	stone with logs	PokesOut	6
