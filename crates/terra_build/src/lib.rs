@@ -84,7 +84,7 @@ pub use example::{
     with_roof,
 };
 pub use ground::{Ground, Sample};
-pub use mesh::{BaseMesh, Indexed, Surface};
+pub use mesh::{Indexed, Surface};
 pub use order::Progress;
 pub use ray::BuildHit;
 pub use shortcuts::{BuildOp, Panel, corners};
@@ -687,12 +687,12 @@ impl Base {
 
     /// The base as triangles, ready to draw: cubes of a kind with a kit, which `kitted`
     /// says, are left to the kit.
-    pub fn mesh(&self, kitted: impl Fn(Kind) -> bool) -> BaseMesh {
+    pub fn mesh(&self, kitted: impl Fn(Kind) -> bool) -> Surface {
         mesh::build(self, kitted)
     }
 
     /// The base as triangles, its cubes of a kind with a kit left to the kit.
-    pub fn mesh_for_kits(&self, kits: &kit::Kits) -> BaseMesh {
+    pub fn mesh_for_kits(&self, kits: &kit::Kits) -> Surface {
         mesh::build(self, |kind| kits.of(kind).is_some())
     }
 }

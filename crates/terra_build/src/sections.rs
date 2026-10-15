@@ -1943,7 +1943,7 @@ fn draw_details(
             Detail::Proxy => drawn.proxy = proxy(section),
         }
     }
-    plain(section, laid, &mut drawn);
+    plain(section, &mut drawn);
     drawn.worn = laid.worn.clone();
     drawn
 }
@@ -2883,7 +2883,7 @@ fn fallback(material: Material) -> [f32; 3] {
 /// What no kit draws, plain by colour: kept to the triangles in the section, and the
 /// plan's planned plain cubes added to its ghost shell. Only worked out when the section
 /// has something of a kind no kit draws.
-fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
+fn plain(section: &Section, drawn: &mut Drawn) {
     let (base, kits) = (section.base, section.kits);
     let origin = section.at * crate::cubes::SECTION;
     let scope = layout::Scope {
@@ -2895,7 +2895,6 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
         .cubes(base, None)
         .iter()
         .any(|(_, cube)| kitless(cube.kind));
-    let _ = laid;
     if !any {
         return;
     }
@@ -2923,21 +2922,9 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
         ),
         _ => (base.clone(), None),
     };
-    let mesh = shown.mesh_for_kits(kits);
-    drawn.plain = keep(&mesh.structure);
-    for (material, surface) in &mesh.textured.0 {
-        drawn
-            .near
-            .entry((Kind::PLAIN, *material))
-            .or_default()
-            .append(keep(surface));
-    }
+    drawn.plain = keep(&shown.mesh_for_kits(kits));
     if let Some(planned) = planned {
-        let mesh = planned.mesh_for_kits(kits);
-        drawn.shell.append(keep(&mesh.structure));
-        for surface in mesh.textured.0.values() {
-            drawn.shell.append(keep(surface));
-        }
+        drawn.shell.append(keep(&planned.mesh_for_kits(kits)));
     }
 }
 

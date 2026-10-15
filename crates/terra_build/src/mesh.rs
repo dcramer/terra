@@ -527,15 +527,6 @@ impl std::hash::Hasher for Corners {
     }
 }
 
-/// A base ready to draw, in the base's own space, in metres.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct BaseMesh {
-    /// Walls, floors, roofs and gables, seen from outside and from inside.
-    pub structure: Surface,
-    /// What a kit's materials draw: its roofs' covering, edges and undersides.
-    pub textured: Surfaces,
-}
-
 /// The six faces of a cube: which way each faces, and its corners as seen from there,
 /// on a cube from 0 to 1.
 const FACES: [([i32; 3], [[f32; 3]; 4]); 6] = [
@@ -567,8 +558,8 @@ const FACES: [([i32; 3], [[f32; 3]; 4]); 6] = [
 
 /// The base's cubes of kinds no kit draws (`kitted` says which a kit draws) as plain
 /// coloured boxes.
-pub(crate) fn build(base: &Base, kitted: impl Fn(Kind) -> bool) -> BaseMesh {
-    let mut mesh = BaseMesh::default();
+pub(crate) fn build(base: &Base, kitted: impl Fn(Kind) -> bool) -> Surface {
+    let mut mesh = Surface::default();
     // What hides a face: a cube drawn as a box beside it.
     let boxed = |at: IVec3| {
         base.cube(at).is_some_and(|cube| {
@@ -609,7 +600,7 @@ pub(crate) fn build(base: &Base, kitted: impl Fn(Kind) -> bool) -> BaseMesh {
                 }
             };
             let corners = corners.map(|c| low + Vec3::from_array(c) * CELL_M);
-            mesh.structure.quad(corners, out.as_vec3(), colour);
+            mesh.quad(corners, out.as_vec3(), colour);
         }
     }
     mesh
@@ -752,7 +743,7 @@ mod tests {
     #[test]
     fn every_triangle_faces_the_way_its_normal_says() {
         let mesh = room().mesh(|_| false);
-        let surface = &mesh.structure;
+        let surface = &mesh;
         assert!(surface.triangle_count() > 0);
         for (corners, normal) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
             let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
@@ -769,14 +760,13 @@ mod tests {
             cube: Some(crate::Cube::new(Kind::PLAIN, Fill::Solid)),
         });
         // Two cubes side by side: ten faces, not twelve.
-        assert_eq!(base.mesh(|_| false).structure.triangle_count(), 20);
+        assert_eq!(base.mesh(|_| false).triangle_count(), 20);
     }
 
     #[test]
     fn walls_with_a_kit_are_left_to_it() {
         let plain = room().mesh(|_| false);
         let kitted = room().mesh(|_| true);
-        assert!(kitted.structure.triangle_count() < plain.structure.triangle_count());
-        assert!(kitted.textured.0.is_empty());
+        assert!(kitted.triangle_count() < plain.triangle_count());
     }
 }
