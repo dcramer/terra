@@ -202,6 +202,14 @@ function fit(name: string, tint?: number[]): number[] {
   return execFileSync("convert", [colour, "-resize", "1x1!", "-format", "%[fx:r] %[fx:g] %[fx:b]", "info:"], { encoding: "utf8" }).split(" ").map(Number);
 }
 
+/** Puts right a height map the kit checker refused (D349): flipped, where its joints were
+ * bright (`invert`), and stretched to the full range, where it was weak (`normalise`). */
+export function fixHeight(path: string, o: { invert?: boolean; normalise?: boolean }) {
+  if (!o.invert && !o.normalise) return;
+  if (!existsSync(path)) throw new Error(`--invert-height and --normalise-height need a height map, and there is no ${path}`);
+  execFileSync("convert", [path, ...(o.invert ? ["-negate"] : []), ...(o.normalise ? ["-auto-level"] : []), "-quality", "92", path]);
+}
+
 /** What makes a texture set usable: its three maps there, a square, its colour not black. */
 export function problems(name: string, mean: number[]): string[] {
   const out = join(MATERIALS, name);
@@ -229,6 +237,8 @@ async function main() {
       tint: { type: "string" },
       round: { type: "string" },
       tile: { type: "string" },
+      "invert-height": { type: "boolean", default: false },
+      "normalise-height": { type: "boolean", default: false },
       "no-check": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
     },
@@ -250,7 +260,9 @@ async function main() {
   --rows N           a roof covering's courses a copy; --tint r,g,b its colour multiplied
   --round D,L        a model: source that is a member (a log), baked round it, laid D thick
                      and L long; its texture once round it by --metres along
-  --no-check         skip the kit checker (for many at once; run cargo xtask kits after)`);
+  --invert-height    flip its height map, where the checker finds it inverted (joints bright)
+  --normalise-height stretch its height map to the full range, where the checker finds it weak
+  --no-check        skip the kit checker (for many at once; run cargo xtask kits after)`);
     process.exit(values.help ? 0 : 2);
   }
   const started = Date.now();
@@ -260,6 +272,7 @@ async function main() {
   await leavingNothingIfItFails(touched, async () => {
     const made = await make(name, values.from!, values);
     const tint = values.tint?.split(",").map(Number);
+    fixHeight(join(MATERIALS, name, "height.jpg"), { invert: values["invert-height"], normalise: values["normalise-height"] });
     const mean = fit(name, tint);
     const wrong = problems(name, mean);
     if (wrong.length) throw new Error(`${name}: ${wrong.join("; ")}`);

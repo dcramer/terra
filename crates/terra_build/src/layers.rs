@@ -288,6 +288,38 @@ pub fn resolve(
     }
 }
 
+/// The texture sets a material's own lines and its packs give, its pattern's left out:
+/// the roles it fills itself, or by the pack it names under it, rather than leaving them to
+/// its pattern's defaults (`packs`, D349). Each as its `textures` entry names it.
+pub fn own_textures(
+    text: &str,
+    read: &dyn Fn(&str) -> Result<String, String>,
+) -> Result<Vec<String>, String> {
+    let Node::Struct(name, mut fields) = parse(text)? else {
+        return Ok(Vec::new());
+    };
+    fields.retain(|(field, value)| {
+        !(field == "pattern" && matches!(value, Node::Atom(a) if a.starts_with('"')))
+    });
+    let node = Node::Struct(name, fields);
+    let whole = layered(node.clone(), read, 0)?.unwrap_or(node);
+    let Node::Struct(_, fields) = whole else {
+        return Ok(Vec::new());
+    };
+    Ok(fields
+        .into_iter()
+        .filter(|(field, _)| field == "textures")
+        .flat_map(|(_, value)| match value {
+            Node::Map(entries) => entries
+                .into_iter()
+                .filter(|(_, value)| !matches!(value, Node::Atom(a) if a == "None"))
+                .map(|(key, _)| key)
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect())
+}
+
 /// A file's value over what it names under it, if it names anything.
 fn layered(
     node: Node,
@@ -362,6 +394,28 @@ mod tests {
             "data/packs/limed.ron" => Ok("(pack: \"clay\", bevel: 0.1)".into()),
             other => Err(format!("no {other}")),
         }
+    }
+
+    #[test]
+    fn a_materials_own_textures_are_its_lines_and_packs_not_its_patterns() {
+        let read = |name: &str| match name {
+            "data/kits/patterns/block.ron" => Ok(
+                "(pattern: Masonry, textures: {Dressed: (path: \"d\"), Floor: (path: \"f\")})"
+                    .to_string(),
+            ),
+            "data/packs/earth.ron" => Ok("(textures: {Masonry: (path: \"e\")})".into()),
+            "data/packs/limed.ron" => {
+                Ok("(pack: \"earth\", textures: {Floor: (path: \"l\")})".into())
+            }
+            other => Err(format!("no {other}")),
+        };
+        let own = |text: &str| own_textures(text, &read).unwrap();
+        assert_eq!(own("(pattern: \"block\", pack: \"earth\")"), ["Masonry"]);
+        // Laid over another pack, it is given what that one gives.
+        assert_eq!(
+            own("(pattern: \"block\", pack: \"limed\", textures: {Hewn: (path: \"h\")})"),
+            ["Masonry", "Floor", "Hewn"]
+        );
     }
 
     #[test]

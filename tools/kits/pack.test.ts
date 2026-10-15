@@ -4,7 +4,33 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { bill, leavingNothingIfItFails, materialFile, nextId, packFile, underFor } from "./pack.ts";
+import { execFileSync, spawnSync } from "node:child_process";
+import { bill, fixHeight, leavingNothingIfItFails, materialFile, nextId, packFile, underFor } from "./pack.ts";
+
+const imageMagick = spawnSync("convert", ["-version"]).status === 0;
+
+test("a height map the checker refused is flipped or stretched as asked", { skip: !imageMagick && "no ImageMagick" }, () => {
+  const root = mkdtempSync(join(tmpdir(), "pack-height-"));
+  try {
+    const path = join(root, "height.jpg");
+    // Joints a fifth of the way up, faces two fifths: weak, and the right way up.
+    const make = () => execFileSync("convert", ["-size", "8x8", "xc:gray(40%)", "-fill", "gray(20%)", "-draw", "rectangle 0,0 7,1", path]);
+    const value = (x: number, y: number) => Number(execFileSync("convert", [path, "-format", `%[fx:p{${x},${y}}.r]`, "info:"], { encoding: "utf8" }));
+    make();
+    fixHeight(path, { invert: true });
+    assert.ok(value(0, 0) > 0.75 && value(4, 4) > 0.55 && value(4, 4) < 0.65, "flipped: the joints high");
+    make();
+    fixHeight(path, { normalise: true });
+    assert.ok(value(0, 0) < 0.05 && value(4, 4) > 0.95, "stretched: the joints black, the faces white");
+    // Nothing asked, nothing done; and a set with no height map is told so.
+    make();
+    fixHeight(path, {});
+    assert.ok(Math.abs(value(4, 4) - 0.4) < 0.03);
+    assert.throws(() => fixHeight(join(root, "none.jpg"), { invert: true }), /need a height map/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("a cost is written as the kit's bill of fractions", () => {
   assert.equal(bill("Stone 1/4"), '[("Stone", 1, 4)]');

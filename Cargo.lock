@@ -5821,6 +5821,8 @@ dependencies = [
  "ron",
  "serde",
  "terra_gen",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

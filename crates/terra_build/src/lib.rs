@@ -57,6 +57,7 @@ mod mesh;
 pub mod modules;
 pub mod ops;
 pub mod order;
+pub mod packs;
 pub mod parts;
 pub mod plans;
 pub mod put_up;
