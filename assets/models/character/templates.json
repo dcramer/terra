@@ -1,5 +1,5 @@
 {
-  "male": {},
+  "male": { "morphs": { "thin": 0.8 } },
   "female": { "morphs": { "female": 1.0 }, "skin": "female" },
   "heavy": { "morphs": { "heavy": 1.0 } },
   "thin": { "morphs": { "thin": 1.0 } },

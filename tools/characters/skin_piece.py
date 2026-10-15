@@ -137,6 +137,45 @@ def fill_gaps(image, mask):
     image.pixels.foreach_set(px.ravel())
 
 
+# How rough each material is at least, on average over its piece: generated models make leather
+# and cloth glossier than worn ones, and a glossy dark garment mirrors the sky (blue, then purple
+# under the game's grade) wherever it is seen. Each is lifted toward 1 as a whole, keeping its grain.
+ROUGHNESS = {"Leather": 0.7, "Cloth": 0.85, "Harness": 0.7}
+# The colour each material is graded to on average, in sRGB, its variation kept: leather a dark,
+# muted brown, little saturated, which stays brown in the forest's shade, where a redder or more
+# saturated one turned mauve and an ochre one read as suede in the sun (D329).
+GRADE = {"Leather": (0.30, 0.24, 0.19)}
+
+
+def grade(image, mask, target):
+    """Scales each channel of `image` so its mean where `mask` says it was baked is `target`.
+    A baked colour image holds sRGB values, as its pixels give them."""
+    w, h = image.size
+    px = np.empty(w * h * 4, np.float32)
+    image.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    was = px[..., :3][mask].mean(axis=0)
+    px[..., :3] = np.clip(px[..., :3] * (np.array(target) / np.maximum(was, 1e-4)), 0, 1)
+    image.pixels.foreach_set(px.ravel())
+    return tuple(round(float(c), 3) for c in was)
+
+
+def roughen(image, mask, least):
+    """Lifts `image`'s roughness, where `mask` says it was baked, so it averages at least `least`:
+    each pixel moved the same share of the way to 1."""
+    w, h = image.size
+    px = np.empty(w * h * 4, np.float32)
+    image.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    mean = float(px[..., 0][mask].mean()) if mask.any() else 1.0
+    if mean >= least:
+        return mean, mean
+    t = (least - mean) / (1.0 - mean)
+    px[..., :3] += (1.0 - px[..., :3]) * t
+    image.pixels.foreach_set(px.ravel())
+    return mean, least
+
+
 def bake(piece, source, name, role, size, reach):
     """Gives `piece` a new unwrap and a material named `role`, its colour, normals and roughness
     baked from `source` (a model of the base person wearing it, lined up with the body) at
@@ -181,6 +220,8 @@ def bake(piece, source, name, role, size, reach):
     bpy.ops.object.bake(type="DIFFUSE")
     written = baked(colour)
     print(f"BAKED {name} covers {written.mean():.0%} of its texture; the rest padded")
+    if role in GRADE:
+        print(f"BAKED {name} colour {grade(colour, written, GRADE[role])} graded to {GRADE[role]} for {role}")
     fill_gaps(colour, written)
     colour.pack()
     # Its surface as well as its colour, so leather reads as leather and not as a printed sheet.
@@ -191,6 +232,9 @@ def bake(piece, source, name, role, size, reach):
         node.image = image
         nodes.active = node
         bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+        if kind == "ROUGHNESS" and role in ROUGHNESS:
+            was, now = roughen(image, written, ROUGHNESS[role])
+            print(f"BAKED {name} roughness {was:.2f}, at least {now:.2f} for {role}")
         fill_gaps(image, written)
         image.pack()
         if kind == "NORMAL":

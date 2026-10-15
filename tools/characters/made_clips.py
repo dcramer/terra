@@ -8,7 +8,8 @@ Each clip in art/animation/made.json has its take, a BVH on Kimodo's SOMA skelet
 standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
 
   - the stride: from one left heel strike to the next, in the take's steady middle, whose first
-    and last poses are nearest alike, so it loops with the smallest seam;
+    and last poses are nearest alike, so it loops with the smallest seam; or for a clip marked
+    "still", which stays where it stands (an idle), the two frames 2 to 5 seconds apart that are;
   - carried onto our skeleton as shipped retargeters do: each bone given the source bone's
     world rotation relative to its T-pose, on our bone's T-pose; the hips' travel scaled by leg
     length and taken off along the ground, so it runs in place as every game clip does;
@@ -66,6 +67,28 @@ def load_take(path):
     return next(o for o in bpy.data.objects if o not in before)
 
 
+def still(src):
+    """For a clip that stays where it stands (an idle): the frames 2 to 5 seconds apart, after
+    the take's first second, whose poses best match, so it loops with the smallest seam."""
+    scene = bpy.context.scene
+    action = src.animation_data.action
+    start, end = (int(round(x)) for x in action.frame_range)
+    fps = scene.render.fps / scene.render.fps_base
+    poses = []
+    for f in range(start, end + 1):
+        scene.frame_set(f)
+        poses.append({s: src.pose.bones[s].matrix_basis.to_quaternion() for s in MAP})
+    best = None
+    for a in range(int(STEADY_S * fps), len(poses)):
+        for b in range(a + int(2 * fps), min(len(poses), a + int(5 * fps) + 1)):
+            seam = sum(math.degrees(poses[a][s].rotation_difference(poses[b][s]).angle) for s in MAP) / len(MAP)
+            if best is None or seam < best[2]:
+                best = (start + a, start + b, seam)
+    if best is None:
+        raise SystemExit(f"{src.name} is too short to loop: it needs {STEADY_S + 2:.0f} seconds")
+    return best
+
+
 def stride(src):
     """The take's frames from one left heel strike to the next whose poses best match."""
     scene = bpy.context.scene
@@ -118,8 +141,15 @@ def retarget(src, arm, name, f0, f1):
     scene.frame_set(f1)
     b = src.matrix_world @ src.pose.bones["Hips"].head
     travel = Vector((b.x - a.x, b.y - a.y, 0.0))
-    # Turned to face our front, -Y, and its travel taken off.
-    turn = Matrix.Rotation(math.atan2(travel.x, -travel.y), 4, "Z")
+    # Turned to face our front, -Y, and its travel taken off. A clip that hardly travels, such as
+    # an idle, faces the way its hips do: forward is up crossed with the hips' left-to-right.
+    if travel.length > 0.3:
+        ahead = travel
+    else:
+        scene.frame_set(f0)
+        across = (src.matrix_world @ src.pose.bones["RightLeg"].head) - (src.matrix_world @ src.pose.bones["LeftLeg"].head)
+        ahead = Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0)))
+    turn = Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 4, "Z")
     per_frame = travel / (f1 - f0)
     action = bpy.data.actions.new(name)
     arm.animation_data_create()
@@ -178,7 +208,7 @@ def main():
         for pb in arm.pose.bones:
             pb.matrix_basis.identity()
         src = load_take(path)
-        f0, f1, seam = stride(src)
+        f0, f1, seam = still(src) if made.get(name, {}).get("still") else stride(src)
         old = bpy.data.actions.get(name)
         if old is not None:
             old.name = name + ".old"

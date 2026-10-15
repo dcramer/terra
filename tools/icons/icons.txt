@@ -20,8 +20,8 @@ torch: a torch, a wooden stick with fibre bound round its head, charred black at
 # Worn
 small_pack: a small leather backpack with straps and pockets
 large_pack: a large leather backpack with straps and pockets
-leather_coat: a fitted jacket of worn tanned leather with long sleeves, closed down the front with wooden toggles
-trousers: plain trousers of rough undyed grey-brown cloth, laid flat, with a narrow dark leather belt
+leather_coat: a plain fitted jacket of dark, matte, weathered brown leather with long sleeves and a plain closed front, no buttons
+trousers: plain trousers of rough dark grey-brown cloth, laid flat
 quiver: a leather quiver holding a few arrows
 
 # Materials and food, which have no look yet

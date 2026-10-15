@@ -81,6 +81,29 @@ bpy.ops.mesh.select_all(action="SELECT")
 bpy.ops.mesh.remove_doubles(threshold=1e-5)
 bpy.ops.object.mode_set(mode="OBJECT")
 
+# 1b. Hands a person's size. Generated bodies come with big hands, wrist to fingertip 12% of the
+# height or more, against a man's 10.8% (the adversarial review, 2026-10-15: "a hand covers half
+# the chest"). Each hand is scaled toward its wrist, its skin by how much the hand's and fingers'
+# bones weigh on it, so it eases out through the wrist, and its finger joints with it.
+HAND_LENGTH = 0.108
+fingers = ("thumb_", "index_", "middle_", "ring_", "pinky_")
+for s in ("l", "r"):
+    wrist = joints[f"hand_{s}"].copy()
+    ours = {f"hand_{s}"} | {n for n in joints if n.startswith(fingers) and n.endswith(f"_{s}")}
+    groups = {g.index for g in body.vertex_groups if g.name in ours}
+    share = {v.index: sum(g.weight for g in v.groups if g.group in groups) for v in body.data.vertices}
+    reach = max(abs(body.data.vertices[i].co.x - wrist.x) for i, w in share.items() if w > 0.5)
+    k = min(1.0, HAND_LENGTH * height / reach)
+    for i, w in share.items():
+        if w > 0:
+            t = min(1.0, w)
+            v = body.data.vertices[i]
+            v.co = wrist + (v.co - wrist) * (1.0 - (1.0 - k) * t * t * (3 - 2 * t))
+    for n in ours - {f"hand_{s}"}:
+        joints[n] = wrist + (joints[n] - wrist) * k
+    print("HANDS", s, f"{reach * 100:.1f} cm wrist to fingertip, scaled to {reach * k * 100:.1f} cm")
+body.data.update()
+
 # 2. Our skeleton, its pose cleared, joints moved to Tripo's, directions kept.
 bpy.ops.import_scene.gltf(filepath=FIGURE)
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
