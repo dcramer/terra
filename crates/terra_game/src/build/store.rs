@@ -346,9 +346,20 @@ pub(super) fn distance_from(
 ) -> f32 {
     let local = frame.compute_affine().inverse().transform_point3(eye);
     match bounds {
-        Some((low, high)) if unit > 1 => local.clamp(low, high).distance(local) + GROUP_SHIFT_M,
+        Some(bounds) if unit > 1 => {
+            let (middle, reach) = sphere(bounds);
+            (local.distance(middle) - reach).max(0.0) + GROUP_SHIFT_M
+        }
         _ => distance_to(local, key, unit),
     }
+}
+
+/// A box's middle and how far its corners are from it: a drawn group is placed at its
+/// sections' middle and measured from there less this, as Bevy measures a detail's range
+/// from where it is placed and dithers its crossfade by that; measured to its box instead
+/// (`use_aabb`), a whole house popped as it switched.
+pub(super) fn sphere((low, high): (Vec3, Vec3)) -> (Vec3, f32) {
+    ((low + high) * 0.5, (high - low).length() * 0.5)
 }
 
 /// The box of a group's members, in its base's own space.
@@ -382,26 +393,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_house_about_its_base_middle_is_one_group_measured_from_beside_its_wall() {
+    fn a_house_about_its_base_middle_is_one_group_measured_from_its_middle_less_its_reach() {
         // A house's sections round its base's middle, two storeys: one group, not eight.
         let house = [[-1, 0, -1], [0, 0, 0], [-1, 1, 0], [0, 1, -1]];
         let groups: BTreeSet<[i32; 3]> = house.iter().map(|&at| unit_of(at, GROUP)).collect();
         assert_eq!(groups.len(), 1);
         // The base being built is drawn a section at a time.
         assert_eq!(unit_of([5, 0, -3], 1), [5, 0, -3]);
-        // Stood a metre from its wall (a section is 8 m, so the house reaches x = 8), it is
-        // half a section further, as a section measured from its middle would be.
+        // Its sections reach 8 m each way and 16 m up from its middle, (0, 8, 0): from 30 m
+        // off along x it is 30 m less that reach, and half a section further, as a section
+        // measured from its middle would be.
         let bounds = members_box(&house);
+        let (middle, reach) = sphere(bounds.unwrap());
+        assert_eq!(middle, Vec3::new(0.0, 8.0, 0.0));
         let key = unit_of(house[0], GROUP);
+        let off = Vec3::new(30.0, 8.0, 0.0);
+        let distance = distance_from(&Transform::IDENTITY, off, key, GROUP, bounds);
+        let expected = 30.0 - reach + GROUP_SHIFT_M;
+        assert!((distance - expected).abs() < 1e-4, "{distance}");
+        // Beside its wall, it is as near as can be.
         let beside = Vec3::new(9.0, 1.0, 0.0);
-        let distance = distance_from(&Transform::IDENTITY, beside, key, GROUP, bounds);
-        assert!(
-            (distance - (1.0 + GROUP_SHIFT_M)).abs() < 1e-4,
-            "{distance}"
-        );
-        // Inside it, it is as near as can be.
-        let within = Vec3::new(1.0, 1.0, 1.0);
-        let inside = distance_from(&Transform::IDENTITY, within, key, GROUP, bounds);
-        assert!((inside - GROUP_SHIFT_M).abs() < 1e-4, "{inside}");
+        let near = distance_from(&Transform::IDENTITY, beside, key, GROUP, bounds);
+        assert!((near - GROUP_SHIFT_M).abs() < 1e-4, "{near}");
     }
 }

@@ -3,7 +3,7 @@
 //! sections' meshes and its cells far off. Read live with `build.memory` over the remote,
 //! and said as the run ends, so a benchmark reports it beside its frames.
 
-use super::store::{Section, each};
+use super::store::{BaseRoot, Section, each};
 use super::{Build, BuildLook, Built, Site};
 use crate::remote::method;
 use bevy::{asset::UntypedAssetId, prelude::*, remote::BrpResult};
@@ -134,16 +134,19 @@ pub(super) fn texture_bytes(image: &Image) -> usize {
 }
 
 /// What building draws with in view, and holds of textures (D290): how many of its meshes
-/// are drawn this frame and in how many materials, each mesh at least a draw a pass, and
-/// how many MiB of textures its materials hold on the GPU.
-fn drawing(world: &mut World) -> (usize, usize, f32) {
-    let mut sections = world.query_filtered::<(), With<Section>>();
-    let mut meshes = world.query::<(
+/// are drawn this frame and in how many materials, each mesh at least a draw a pass, how
+/// many MiB of textures its materials hold on the GPU, and how many entities building has
+/// in all (its bases, their sections and the meshes under them), which Bevy's per-entity
+/// work goes over every frame.
+fn drawing(world: &mut World) -> (usize, usize, f32, usize) {
+    let mut sections = world.query_filtered::<(), Or<(With<Section>, With<BaseRoot>)>>();
+    let holders = sections.iter(world).count();
+    let mut meshes = world.query_filtered::<(
         &ViewVisibility,
         &ChildOf,
         Option<&MeshMaterial3d<StandardMaterial>>,
         Option<&MeshMaterial3d<super::arrays::BuildMaterial>>,
-    )>();
+    ), With<Mesh3d>>();
     let mut drawn = 0;
     let mut materials = std::collections::BTreeSet::new();
     let found: Vec<(Entity, bool, Option<UntypedAssetId>)> = meshes
@@ -155,8 +158,11 @@ fn drawing(world: &mut World) -> (usize, usize, f32) {
             (parent.parent(), seen.get(), material)
         })
         .collect();
+    let mut entities = holders;
     for (parent, seen, material) in found {
-        if seen && sections.get(world, parent).is_ok() {
+        let held = sections.get(world, parent).is_ok();
+        entities += usize::from(held);
+        if seen && held {
             drawn += 1;
             if let Some(material) = material {
                 materials.insert(material);
@@ -208,7 +214,12 @@ fn drawing(world: &mut World) -> (usize, usize, f32) {
         );
     }
     let _ = sets;
-    (drawn, materials.len(), bytes as f32 / (1024.0 * 1024.0))
+    (
+        drawn,
+        materials.len(),
+        bytes as f32 / (1024.0 * 1024.0),
+        entities,
+    )
 }
 
 /// As the run ends, what the bases hold: in all, a median base's and the most any holds.
@@ -220,9 +231,9 @@ fn say_on_exit(world: &mut World, mut said: Local<bool>) {
         return;
     }
     *said = true;
-    let (drawn, materials, textures) = drawing(world);
+    let (drawn, materials, textures, entities) = drawing(world);
     info!(
-        "Builds drawn in view: {drawn} meshes in {materials} materials; their textures {textures:.0} MiB on the GPU."
+        "Builds drawn in view: {drawn} meshes in {materials} materials; their textures {textures:.0} MiB on the GPU; {entities} entities of building in all."
     );
     let mut state = bevy::ecs::system::SystemState::<(ResMut<Site>, Query<&mut Built>)>::new(world);
     let Ok((mut site, mut builds)) = state.get_mut(world) else {

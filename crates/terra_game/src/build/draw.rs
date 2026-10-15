@@ -331,7 +331,7 @@ fn in_arrays(
             }
             continue;
         };
-        let part = surface.indexed();
+        let part = surface.indexed().welded();
         if part.indices.is_empty() {
             continue;
         }
@@ -537,7 +537,7 @@ pub(super) enum Uvs {
 
 /// A surface as a mesh about a point, its corners shared, its colours linear.
 pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
-    let all = surface.indexed();
+    let all = surface.indexed().welded();
     let tangents = (uvs == Uvs::Mapped).then(|| all.tangents());
     let mesh = mesh_of(all, centre, uvs)?;
     Some(match tangents {
@@ -1007,8 +1007,19 @@ fn show(
     });
     let mut kept_parts: Vec<Option<store::OnScreen>> = Vec::new();
     let mut entity = None;
+    // A group's meshes hang off its base, placed at its middle: no entity of its own, so a
+    // town's entities are its meshes.
+    let grouped = build.sections.unit > 1;
     if let Some(old) = old {
-        if keeps {
+        if grouped {
+            for id in old
+                .rest
+                .iter()
+                .chain(old.parts.iter().flat_map(|part| &part.entities))
+            {
+                commands.entity(*id).try_despawn();
+            }
+        } else if keeps {
             for id in old.rest {
                 commands.entity(id).try_despawn();
             }
@@ -1049,30 +1060,47 @@ fn show(
         return;
     }
     let looks = &look.looks;
-    let entity = entity.unwrap_or_else(|| {
-        commands
-            .spawn((
-                Name::new(format!("Section {at}")),
-                Section { at },
-                Transform::from_translation(parts.centre),
-                Visibility::default(),
-                ChildOf(build.root),
-            ))
-            .id()
-    });
-    drawn.entity = Some(entity);
+    let placed = if grouped {
+        Transform::from_translation(parts.centre)
+    } else {
+        Transform::IDENTITY
+    };
+    let entity = if grouped {
+        build.root
+    } else {
+        entity.unwrap_or_else(|| {
+            commands
+                .spawn((
+                    Name::new(format!("Section {at}")),
+                    Section { at },
+                    Transform::from_translation(parts.centre),
+                    Visibility::default(),
+                    ChildOf(build.root),
+                ))
+                .id()
+        })
+    };
+    drawn.entity = (!grouped).then_some(entity);
     // Each detail is seen from where the finer one drawn ends.
     let near = reach == Reach::Near;
     let mid_from = near.then_some(NEAR_M);
     let far_from = (reach >= Reach::Mid).then_some(MID_M);
-    // A group of sections is seen by how near its nearest point is, as its laying is
-    // (`store::distance_to`): stood beside a house, all of it is near.
-    let grouped = build.sections.unit > 1;
+    // A group is seen from its middle as far further as its sections reach, less half a
+    // section, as its laying measures it (`store::distance_from`): stood beside a house, all
+    // of it is near.
+    let further = parts
+        .bounds
+        .map_or(0.0, |bounds| store::sphere(bounds).1 - store::GROUP_SHIFT_M);
     let ranged = move |mut range: VisibilityRange| {
         if grouped {
-            range.use_aabb = true;
             let shift = |r: std::ops::Range<f32>| {
-                (r.start - store::GROUP_SHIFT_M).max(0.0)..(r.end - store::GROUP_SHIFT_M).max(0.0)
+                // Seen from the camera on stays so.
+                if r.end <= 0.0 {
+                    return r;
+                }
+                // On the detail ranges' grid, so a town's houses share a few of them.
+                let at = |m: f32| ((m + further) * 4.0).round() / 4.0;
+                at(r.start).max(0.0)..at(r.end).max(0.0)
             };
             range.start_margin = shift(range.start_margin.clone());
             range.end_margin = shift(range.end_margin.clone());
@@ -1082,12 +1110,7 @@ fn show(
     let mut add = |mesh: Mesh, material: Shade, range: VisibilityRange| {
         let range = ranged(range);
         let mesh = meshes.add(mesh);
-        let mut spawned = commands.spawn((
-            Mesh3d(mesh.clone()),
-            range,
-            Transform::IDENTITY,
-            ChildOf(entity),
-        ));
+        let mut spawned = commands.spawn((Mesh3d(mesh.clone()), range, placed, ChildOf(entity)));
         match material {
             Shade::Standard(material) => spawned.insert(MeshMaterial3d(material)),
             Shade::Arrays(material) => spawned.insert(MeshMaterial3d(material)),
@@ -1212,7 +1235,7 @@ fn show(
                     MeshMaterial3d(looks.shell.clone()),
                     ghost_range(),
                     NotShadowCaster,
-                    Transform::IDENTITY,
+                    placed,
                     ChildOf(entity),
                 ))
                 .id(),
@@ -1226,7 +1249,7 @@ fn show(
                     .spawn((
                         Mesh3d(meshes.add(mesh)),
                         MeshMaterial3d(looks.ghost[shade].clone()),
-                        Transform::IDENTITY,
+                        placed,
                         ghost_range(),
                         NotShadowCaster,
                         ChildOf(entity),
@@ -1250,7 +1273,7 @@ fn show(
                     MeshMaterial3d(looks.far.clone()),
                     ranged(range(None, MID_M)),
                     RenderLayers::layer(SUN_ONLY),
-                    Transform::IDENTITY,
+                    placed,
                     ChildOf(entity),
                 ))
                 .id();
@@ -1334,8 +1357,15 @@ pub(super) fn aside(
         for at in far {
             sections.waiting.remove(&at);
             sections.tickets.remove(&at);
-            if let Some(entity) = sections.drawn.remove(&at).and_then(|drawn| drawn.entity) {
-                commands.entity(entity).try_despawn();
+            if let Some(drawn) = sections.drawn.remove(&at) {
+                // A section's entity, with its meshes; a group's meshes one by one.
+                let meshes = drawn
+                    .rest
+                    .iter()
+                    .chain(drawn.parts.iter().flat_map(|part| &part.entities));
+                for id in drawn.entity.iter().chain(meshes) {
+                    commands.entity(*id).try_despawn();
+                }
             }
             sections.far_off.insert(at);
         }

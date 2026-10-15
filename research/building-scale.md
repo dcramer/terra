@@ -196,3 +196,19 @@ Throwaway drivers in `terra_build`, release, one thread, on the castle's 141,502
 **The hammer's aim** (`Base::raycast`, which the aim casts twice a frame): every cube of the base was tested against the ray, 3.0 ms a ray in the castle, 6 ms of every frame spent aiming. It now walks the ray cell by cell from where it enters the base's bounds (Amanatides and Woo's grid traversal, as voxel engines cast rays), 0.6 µs a ray; a test checks it meets the cube testing every cube does, on 3,600 rays round twelve of the village's buildings.
 
 **A cube taken out of the castle, to the screen**: the castle is no player's base, so it was timed off the screen, each step as the game's workers do it, every section drawn once near and kept first, as the player's own base is. On a machine at load 55 (laying the castle whole took 1.38 s, against 0.34 s quiet): 153 to 192 sections reached; the base laid again in 1.1 to 1.8 s; those reached cut in 48 to 99 ms; 1 to 5 sections changed, drawn again from how they were in 56 to 559 ms, the slowest 174 ms. Laying again is most of it, as long as laying the castle whole: the rows through the edit reach across all of it, and laying any section of them takes in every row crossing it. Quiet, that is about 0.3 to 0.5 s from the edit to the screen. Laying again only the rows an edit is on, with each piece kept by the row it came from, is what would bring it down to the house's 17 ms.
+
+## The town's entities and memory (the lead's brief after the street walk)
+
+town300 on the 5090 at high, one run each, the load noted. What a frame and the GPU held, step by step:
+
+| Step | Building's meshes on the GPU | Building entities | Game's update | Frames (median / p99 / worst) |
+|---|---|---|---|---|
+| Before (load 59) | 2,872 MiB | about 5,750 meshes | 10.0 ms | 12.2 / 28.8 / 56.1 ms |
+| Only the details in use held, meshes packed (load 74) | 1,215 | | 13.6 | 16.5 / 38.3 / 60.2 |
+| Far detail to 120 m, a hull alone past 155 m (load 43) | 976 | | 14.9 | 18.1 / 36.9 / 96.4 |
+| A group of sections at a time, four a side (load 41) | 1,255 | | 5.3 | 6.5 / 15.7 / 40.5 |
+| Corners welded, a group's meshes on its base, cells only far off (load 6) | 647 | 958 | 5.1 | 6.1 / 11.3 / 20.7 |
+
+The main thread was Bevy's work over every entity; drawn a house at a time, the town's are its bases and a few meshes each. Its memory was mostly corners never shared: a surface drawn a triangle at a time has three corners a triangle, and welding the ones the same in every way (place, normal, colour, texture place) halved it. What is left: houses near, 267 MiB for 25 of them, and at the middle detail, 309 MiB for 74.
+
+Bevy 0.20's own 16-bit positions (`Mesh::compressed_mesh` with `COMPRESS_POSITION`, Snorm16x4 unpacked by each mesh's bounds) drew every building nowhere here: the town gone from the screen, its triangles still counted in the passes. Normals, tangents and texture places packed the same way draw right. Whether it is Bevy's or how its bounds reach the shader with these meshes (their own `final_aabb`, entities placed off their middles) is not looked into; positions stay 32-bit.

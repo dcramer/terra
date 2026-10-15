@@ -419,15 +419,16 @@ fn launch(
                                 section, laid, wanted, None, None, None,
                             ));
                         }
+                        let bounds = store::members_box(&members);
                         let mut parts = draw::parts(
                             drawn,
-                            store::unit_centre(at, unit),
+                            bounds.map_or(store::unit_centre(at, unit), |b| store::sphere(b).0),
                             &[],
                             Vec::new(),
                             &layers,
                             true,
                         );
-                        parts.bounds = store::members_box(&members);
+                        parts.bounds = bounds;
                         return Outcome::Drawn {
                             key,
                             reach: wanted,

@@ -29,6 +29,11 @@ pub(super) const HORIZON_M: f32 = 3000.0;
 /// A changed base's cells are made again once the camera is this far off, as authored:
 /// well short of where they are first seen, well past where a builder works.
 const REMAKE_M: f32 = 300.0;
+/// A base's cells are on screen as entities only from this far off, as authored, and let
+/// go again inside `CELLS_GO_M`: they are seen from 540 m (`draw::PROXY_M` less its fade),
+/// and an entity each nearer would only be Bevy's work every frame for nothing seen.
+const CELLS_COME_M: f32 = 300.0;
+const CELLS_GO_M: f32 = 270.0;
 
 /// A base's far meshes: the revision they were made for, their entities, and the worker
 /// making them again.
@@ -36,6 +41,8 @@ const REMAKE_M: f32 = 300.0;
 pub(super) struct Cells {
     made: Option<u64>,
     entities: Vec<Entity>,
+    /// Its meshes, each about its middle, on screen or not.
+    meshes: Vec<(Vec3, Handle<Mesh>)>,
     task: Option<Task<Vec<(Vec3, Option<Mesh>)>>>,
     /// How many bytes its meshes take on the GPU.
     pub gpu_bytes: usize,
@@ -71,23 +78,35 @@ fn make(
             for entity in cells.entities.drain(..) {
                 commands.entity(entity).try_despawn();
             }
+            cells.meshes.clear();
             for (centre, mesh) in made {
                 let Some(mesh) = mesh else { continue };
                 cells.gpu_bytes += draw::gpu_bytes(&mesh);
+                cells.meshes.push((centre, meshes.add(mesh)));
+            }
+            continue;
+        }
+        // On screen far enough off to be seen, and not nearer.
+        let off = eye.map_or(f32::MAX, |eye| build.frame.translation.distance(eye)) / scale.0;
+        if cells.entities.is_empty() && off > CELLS_COME_M {
+            for (centre, mesh) in &cells.meshes {
                 cells.entities.push(
                     commands
                         .spawn((
                             Name::new("Base far off"),
-                            Mesh3d(meshes.add(mesh)),
+                            Mesh3d(mesh.clone()),
                             MeshMaterial3d(look.looks.far.clone()),
                             draw::cell_range(),
-                            Transform::from_translation(centre),
+                            Transform::from_translation(*centre),
                             ChildOf(root),
                         ))
                         .id(),
                 );
             }
-            continue;
+        } else if !cells.entities.is_empty() && off < CELLS_GO_M {
+            for entity in cells.entities.drain(..) {
+                commands.entity(entity).try_despawn();
+            }
         }
         if cells.made == Some(revision) {
             continue;

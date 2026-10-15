@@ -266,6 +266,33 @@ impl Indexed {
         self.indices.len() / 3
     }
 
+    /// Its corners that are the same in every way (place, normal, colour, texture place)
+    /// made one, as a mesh optimiser welds them: a surface drawn a triangle at a time
+    /// shares nothing, three corners a triangle, and its neighbours in one plane and shade
+    /// share most of theirs. What is drawn is the same.
+    pub fn welded(self) -> Indexed {
+        let mut out = Indexed::default();
+        let mut seen: std::collections::HashMap<[u32; 11], u32> =
+            std::collections::HashMap::with_capacity(self.positions.len());
+        let mut remap = Vec::with_capacity(self.positions.len());
+        for i in 0..self.positions.len() {
+            let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
+            let uv = self.uvs.get(i).copied().unwrap_or([0.0; 2]);
+            let key =
+                [p.x, p.y, p.z, n.x, n.y, n.z, c[0], c[1], c[2], uv[0], uv[1]].map(f32::to_bits);
+            let at = *seen.entry(key).or_insert_with(|| {
+                out.positions.push(p);
+                out.normals.push(n);
+                out.colours.push(c);
+                out.uvs.push(uv);
+                (out.positions.len() - 1) as u32
+            });
+            remap.push(at);
+        }
+        out.indices = self.indices.iter().map(|&i| remap[i as usize]).collect();
+        out
+    }
+
     /// Another's triangles added to these.
     pub fn append(&mut self, other: Indexed) {
         if self.positions.is_empty() {
