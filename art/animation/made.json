@@ -37,7 +37,7 @@
     "take": 1
   },
   "Hammer_Loop": {
-    "prompt": "A person repeatedly hammers something on a table in front of them with a hammer in their right hand.",
+    "prompt": "A person repeatedly hammers a nail into a post in front of them at waist height with a hammer in their right hand.",
     "speed": 0,
     "seconds": 10,
     "seed": 2,
