@@ -8,6 +8,7 @@ use super::{Build, BuildLook, Built, Site};
 use crate::remote::method;
 use bevy::{asset::UntypedAssetId, prelude::*, remote::BrpResult};
 use serde_json::{Value, json};
+use terra_build::sections::Reach;
 
 /// What a base holds.
 #[derive(Clone, Copy, Debug, Default)]
@@ -19,6 +20,10 @@ pub(super) struct Held {
     /// About how many bytes on the CPU, and exactly how many of meshes on the GPU.
     pub cpu: usize,
     pub gpu: usize,
+    /// The GPU's bytes by how near its sections are drawn, near to hull, and its cells'.
+    pub gpu_by: [usize; 5],
+    /// How many sections are drawn so near, near to hull.
+    pub laid_by: [usize; 4],
 }
 
 /// What a build holds now.
@@ -36,6 +41,27 @@ pub(super) fn held(build: &Build) -> Held {
                 .map_or(0, |snapshot| snapshot.bytes())
             + sections.whole.as_ref().map_or(0, |whole| whole.bytes()),
         gpu: sections.drawn.values().map(|d| d.gpu_bytes).sum::<usize>() + sections.cells.gpu_bytes,
+        laid_by: {
+            let mut by = [0; 4];
+            for drawn in sections.drawn.values() {
+                by[3 - drawn.reach as usize] += 1;
+            }
+            by
+        },
+        gpu_by: {
+            let mut by = [0; 5];
+            for drawn in sections.drawn.values() {
+                let slot = match drawn.reach {
+                    Reach::Near => 0,
+                    Reach::Mid => 1,
+                    Reach::Far => 2,
+                    Reach::Hull => 3,
+                };
+                by[slot] += drawn.gpu_bytes;
+            }
+            by[4] = sections.cells.gpu_bytes;
+            by
+        },
     }
 }
 
@@ -225,5 +251,11 @@ fn say_on_exit(world: &mut World, mut said: Local<bool>) {
     info!(
         "Builds hold: {} bases, {laid} sections laid and {far_off} set aside far off; {gpu:.0} MiB of meshes on the GPU, a median {gpu_median:.2} MiB a base and the most {gpu_most:.1}; {cpu:.0} MiB on the CPU, a median {cpu_median:.2} MiB and the most {cpu_most:.1}.",
         all.len()
+    );
+    let by: [f32; 5] = std::array::from_fn(|i| mib(all.iter().map(|held| held.gpu_by[i]).sum()));
+    let laid: [usize; 4] = std::array::from_fn(|i| all.iter().map(|held| held.laid_by[i]).sum());
+    info!(
+        "Builds hold by detail: on the GPU, {} sections drawn near {:.0} MiB, {} at the middle detail {:.0}, {} far {:.0}, {} their hulls alone {:.0}, and cells {:.0}.",
+        laid[0], by[0], laid[1], by[1], laid[2], by[2], laid[3], by[3], by[4]
     );
 }

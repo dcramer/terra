@@ -655,6 +655,9 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
 /// which it fades into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Reach {
+    /// Past where its far detail is seen: its hull alone ([`proxy`]), which is all that is
+    /// drawn of it there, so nothing finer is held.
+    Hull,
     Far,
     Mid,
     Near,
@@ -688,6 +691,14 @@ impl Detail {
                 kit.timber.step = kit.timber.step.max(1.0);
                 kit.timber.knots = 0.0;
                 kit.dress.far = true;
+                // A band of dress its profile within a centimetre, a third of a pixel there.
+                if let Some(made) = &kit.dress.made {
+                    let mut coarse = (**made).clone();
+                    for profile in coarse.profiles.values_mut() {
+                        *profile = simplified(profile, MID_PROFILE_M);
+                    }
+                    kit.dress.made = Some(std::sync::Arc::new(coarse));
+                }
             }
             // A log far off a few pixels across: six sides, a ring at each end; a band of
             // dress its outline's three furthest corners, which keep its silhouette.
@@ -745,6 +756,48 @@ impl Detail {
             (Detail::Proxy, _) => false,
         }
     }
+}
+
+/// How far from its profile a band of dress may be drawn a few metres off.
+const MID_PROFILE_M: f32 = 0.01;
+
+/// A profile with the points dropped that stand no more than `within` from the line through
+/// those kept round them (Ramer, Douglas and Peucker).
+fn simplified(profile: &[[f32; 2]], within: f32) -> Vec<[f32; 2]> {
+    if profile.len() < 3 {
+        return profile.to_vec();
+    }
+    let mut keep = vec![false; profile.len()];
+    keep[0] = true;
+    keep[profile.len() - 1] = true;
+    let mut spans = vec![(0, profile.len() - 1)];
+    while let Some((a, b)) = spans.pop() {
+        let (pa, pb) = (glam::Vec2::from(profile[a]), glam::Vec2::from(profile[b]));
+        let along = (pb - pa).normalize_or(glam::Vec2::ZERO);
+        let off = |p: glam::Vec2| {
+            if along == glam::Vec2::ZERO {
+                p.distance(pa)
+            } else {
+                (p - pa).perp_dot(along).abs()
+            }
+        };
+        let far = (a + 1..b)
+            .map(|i| (i, off(glam::Vec2::from(profile[i]))))
+            .max_by(|x, y| x.1.total_cmp(&y.1));
+        if let Some((i, by)) = far
+            && by > within
+        {
+            keep[i] = true;
+            spans.push((a, i));
+            spans.push((i, b));
+        }
+    }
+    profile
+        .iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(p, _)| *p)
+        .collect()
 }
 
 /// A profile cut to its ends and the point that stands furthest from the line between them.
@@ -951,7 +1004,7 @@ pub fn cluster_of(at: IVec3) -> usize {
 /// ground; and the roofs round, which a roof's masks follow. A part whose number is as it
 /// was is drawn as it was, so the game leaves it on screen (`draw_parts`). None far off.
 pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
-    if reach == Reach::Far {
+    if reach <= Reach::Far {
         return Vec::new();
     }
     let origin = section.at * crate::cubes::SECTION;
@@ -1115,9 +1168,14 @@ pub fn draw_parts(
         Reach::Near => &[Detail::Near, Detail::Mid],
         Reach::Mid => &[Detail::Mid, Detail::Far],
         Reach::Far => &[Detail::Far],
+        Reach::Hull => &[],
     };
-    let mut drawn = draw_details(section, laid, details, last, keep, only);
-    if reach == Reach::Far {
+    let mut drawn = if details.is_empty() {
+        Drawn::default()
+    } else {
+        draw_details(section, laid, details, last, keep, only)
+    };
+    if reach <= Reach::Far {
         drawn.proxy = proxy(section);
     }
     drawn

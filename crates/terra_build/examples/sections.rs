@@ -110,6 +110,7 @@ fn main() -> ExitCode {
                     Reach::Near => count(&drawn.near),
                     Reach::Mid => count(&drawn.mid),
                     Reach::Far => drawn.far.triangle_count(),
+                    Reach::Hull => drawn.proxy.triangle_count(),
                 };
                 triangles[slot] += finest;
                 if reach == Reach::Near {

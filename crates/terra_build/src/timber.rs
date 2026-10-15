@@ -751,7 +751,13 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         bend: 0.0,
         adzed: false,
         chamfer: 0.004,
-        step: PLANK_STEP_M,
+        // A few metres off and further, its ends alone: a board's gentle wave along it is
+        // nothing there, and a deck has many.
+        step: if kit.dress.far {
+            COARSE_STEP_M
+        } else {
+            PLANK_STEP_M
+        },
         corner_steps: 1,
     };
     let member = squared(&frame, &look, Split::Whole, &mut random);

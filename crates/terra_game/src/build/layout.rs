@@ -111,6 +111,8 @@ const NEAR_LAY_M: f32 = 35.0;
 const NEAR_KEEP_M: f32 = 42.0;
 const MID_LAY_M: f32 = 72.0;
 const MID_KEEP_M: f32 = 84.0;
+const FAR_LAY_M: f32 = 140.0;
+const FAR_KEEP_M: f32 = 155.0;
 
 /// How finely a section is drawn for a camera so far from its middle, in metres: finer
 /// detail is made a little before it is seen (`draw::NEAR_M`, `draw::MID_M`), and kept until
@@ -120,16 +122,20 @@ const MID_KEEP_M: f32 = 84.0;
 ///
 /// The margins are what laying takes at a run, and no more, so only the details in use are
 /// held: near detail is seen to 26.5 m, laid from 35 m and let go past 42 m; the middle
-/// detail is seen to 63.6 m, laid from 72 m and let go past 84 m. Held to 140 m, the middle
-/// detail of every section within it was most of the GPU's building memory.
+/// detail is seen to 63.6 m, laid from 72 m and let go past 84 m; the far detail is seen to
+/// 127 m, laid from 140 m and let go past 155 m, beyond which a section is its hull alone.
+/// Held to 140 m, the middle detail of every section within it was most of the GPU's
+/// building memory.
 pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
     let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
     if distance < NEAR_LAY_M || (kept(Reach::Near) && distance < NEAR_KEEP_M) {
         Reach::Near
     } else if distance < MID_LAY_M || (kept(Reach::Mid) && distance < MID_KEEP_M) {
         Reach::Mid
-    } else {
+    } else if distance < FAR_LAY_M || (kept(Reach::Far) && distance < FAR_KEEP_M) {
         Reach::Far
+    } else {
+        Reach::Hull
     }
 }
 

@@ -37,19 +37,9 @@ use terra_world::quality::Quality;
 /// makes nearer.
 const NEAR_M: f32 = 25.0;
 const MID_M: f32 = 60.0;
-const FAR_M: f32 = 180.0;
-/// Where the far detail hands over to the hull at the low preset, as authored: nearer, as its
-/// GPU is spent on the far detail's triangles a few pixels across (D278).
-const FAR_LOW_M: f32 = 120.0;
-
-/// Where a section's far detail ends at a quality preset.
-fn far_end(quality: Quality) -> f32 {
-    if quality == Quality::Low {
-        FAR_LOW_M
-    } else {
-        FAR_M
-    }
-}
+/// Past this its hull: the far detail's pieces were two thirds of a town's triangles a
+/// frame, most of them houses a hundred metres off and more (D278).
+pub(super) const FAR_M: f32 = 120.0;
 const PROXY_M: f32 = 600.0;
 /// How far a plan's ghosts are seen.
 const GHOST_M: f32 = 90.0;
@@ -1177,7 +1167,7 @@ fn show(
             add(
                 mesh,
                 Shade::Standard(looks.structure.clone()),
-                range(None, far_end(quality)),
+                range(None, FAR_M),
             )
             .0,
         );
@@ -1187,20 +1177,13 @@ fn show(
             add(
                 mesh,
                 Shade::Standard(looks.far.clone()),
-                range(far_from, far_end(quality)),
+                range(far_from, FAR_M),
             )
             .0,
         );
     }
     if let Some(mesh) = parts.proxy {
-        rest.push(
-            add(
-                mesh,
-                Shade::Standard(looks.far.clone()),
-                proxy_range(far_end(quality)),
-            )
-            .0,
-        );
+        rest.push(add(mesh, Shade::Standard(looks.far.clone()), proxy_range(FAR_M)).0);
     }
     if let Some(mesh) = parts.shell {
         rest.push(

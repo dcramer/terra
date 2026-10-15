@@ -673,6 +673,7 @@ fn worth_saying(line: &str) -> Option<&str> {
         "SANDBOX slowest frames",
         "Scale: ",
         "Builds hold: ",
+        "Builds hold by detail: ",
         "Builds drawn in view: ",
         "Builds' texture arrays: ",
         "frame parts, ",
