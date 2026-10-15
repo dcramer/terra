@@ -516,12 +516,28 @@ impl Sweep {
         let joint = self
             .ends
             .map(|end| self.joints && matches!(end, End::On | End::Step));
+        // A raking band's square end cut plumb, as a raking coping's is, so nothing of its top
+        // leans out past the cube's face it ends at: along it as far, for each metre up
+        // square to it, as its up leans back over its own line.
+        let level = Vec3::new(along.x, 0.0, along.z);
+        let raking = along.y.abs() > 1e-3 && level.length() > 1e-3;
+        let lean = if raking {
+            let h = level.normalize();
+            -self.up.dot(h) / along.dot(h)
+        } else {
+            0.0
+        };
+        let plumb = self
+            .ends
+            .map(|end| if end == End::Square { lean } else { 0.0 });
         let start = |o: f32, u: f32| {
             -extend[0] - o * mitre[0] + (-o).max(0.0) * recess[0] - (u - self.lift) * bend[0]
+                + (u - self.lift) * plumb[0]
         };
         let end = |o: f32, u: f32| {
             length + extend[1] + o * mitre[1] - (-o).max(0.0) * recess[1]
                 + (u - self.lift) * bend[1]
+                + (u - self.lift) * plumb[1]
         };
         // Rings along it: at each end, and in from a joint by its chamfer.
         let mut rings: Vec<(f32, bool)> = vec![(f32::MIN, joint[0])];
@@ -623,10 +639,17 @@ impl Sweep {
         }
         // Each end closed, so a piece whose neighbour is not yet in, or never will be, is
         // never seen hollow: across its joint's chamfer, or its whole section.
+        // A plumb end looks level along it.
+        let ahead = if raking { level.normalize() } else { along };
         for (which, ring, outward) in [(0, 0, -along), (1, rings.len() - 1, along)] {
             if mitre[which] != 0.0 || bend[which] != 0.0 {
                 continue;
             }
+            let outward = if plumb[which] != 0.0 {
+                ahead * outward.dot(along).signum()
+            } else {
+                outward
+            };
             let ring_points: Vec<Vec3> = (0..n).map(|i| point(ring, i, i.min(n - 2))).collect();
             let flat: Vec<[f32; 2]> = ring_points
                 .iter()

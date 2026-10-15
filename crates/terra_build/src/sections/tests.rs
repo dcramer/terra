@@ -1953,3 +1953,79 @@ fn a_ramps_coping_is_mitred_to_the_level_coping_at_its_head_and_its_foot() {
         assert!(found.is_empty(), "{found:?}");
     }
 }
+
+#[test]
+fn a_ramps_coping_runs_down_to_its_foot_over_a_half_beside_it() {
+    // A stone ramp two cubes long rising north, its east side over a half at its foot: the
+    // coping up that side starts at the ramp's foot, not a cube up, and runs on.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    let put = |base: &mut Base, at: [i32; 3], shape: crate::Shape| {
+        base.apply(BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: Some(Cube {
+                shape,
+                ..Cube::new(stone, Fill::Solid)
+            }),
+        });
+    };
+    put(
+        &mut base,
+        [0, 0, 2],
+        crate::Shape::Slope(crate::Facing::North),
+    );
+    put(&mut base, [0, 0, 1], crate::Shape::Whole);
+    put(
+        &mut base,
+        [0, 1, 1],
+        crate::Shape::Slope(crate::Facing::North),
+    );
+    put(&mut base, [1, 0, 2], crate::Shape::Half);
+    let maps = Maps::default();
+    let whole = Whole::lay(&base, &kits);
+    let mut east = Vec::new();
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        for placed in &lay(&section, &whole).pieces {
+            if let Piece::Band {
+                role: layout::roles::Role::Crest,
+                cube,
+                side: layout::roles::Dir::East,
+                ends,
+                ..
+            } = &placed.1
+                && cube.x == 0
+            {
+                east.push((cube.z, *ends));
+            }
+        }
+    }
+    use layout::roles::End;
+    east.sort_by_key(|(z, _)| -z);
+    assert_eq!(
+        east,
+        vec![(2, [End::Square, End::On]), (1, [End::On, End::Square])],
+        "the coping up the ramp's east side"
+    );
+    let report = crate::inspect::inspect(&base, &kits, &maps);
+    for fault in [
+        crate::inspect::Fault::Coplanar,
+        crate::inspect::Fault::Doubled,
+        crate::inspect::Fault::PokesOut,
+    ] {
+        let found: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.fault == fault && f.detail == Detail::Near)
+            .collect();
+        assert!(found.is_empty(), "{found:?}");
+    }
+}

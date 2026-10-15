@@ -386,9 +386,13 @@ fn shaped(
         }
         Shape::Slope(facing) => {
             let rise = Dir::facing(facing);
+            // A slope's side shows over what is beside it where that is open, or a half of the
+            // kind, whose top the slope rises past: the coping runs on over it down to the
+            // ramp's foot, its foot bedded in the half, not stopping a cube up.
+            let shows_over = |at: IVec3| open(at) || shape_at(at) == Some(Shape::Half);
             for side in Dir::LEVEL {
                 if side.axis() == rise.axis()
-                    || !open(cube + side.step())
+                    || !shows_over(cube + side.step())
                     || shape_at(cube + side.step()) == Some(this.shape)
                 {
                     continue;
@@ -411,7 +415,7 @@ fn shaped(
                 // its ends, and the coping stepped at every stone.
                 let runs_on = |next: IVec3| {
                     shape_at(next) == Some(this.shape)
-                        && open(next + side.step())
+                        && shows_over(next + side.step())
                         && shape_at(next + side.step()) != Some(this.shape)
                 };
                 let step = rise.step() + IVec3::Y;
