@@ -105,12 +105,43 @@ pub(super) fn courses(
             let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
             let bottom = layer_of_split(centre, split);
             // Joints at places fixed along the row, a log's length apart and staggered
-            // course to course, so a log is laid the same wherever its row ends.
+            // course to course, so a log is laid the same wherever its row ends. Each
+            // course's joints are shifted on by the golden ratio of a log's length from the
+            // last's (a low-discrepancy sequence), so no two courses near each other share
+            // a joint's place: shifted by halves, every other course's joints lined up and a
+            // seam ran up the wall in every second course.
             let span = (kit.longest - JOINT_CLEAR_M).max(CELL_M);
             let phase = span
-                * (0.5 * course.rem_euclid(2) as f32
+                * ((JOINT_STEP * course as f32).rem_euclid(1.0)
                     + 0.25 * unit(hash(&[axis as u32, row as u32, 17])));
-            for (a, b) in joined(from, to, limit, span, phase) {
+            // No joint in a cube another wall crosses: the logs are notched together there,
+            // and a sawn end would stand in the crossing wall's daub. One that falls in it is
+            // moved out to its nearer side.
+            let crossed = |along: i32| {
+                (low..=high).contains(&along)
+                    && walls.runs(axis.cube(row, along, layer), axis.other())
+            };
+            let clear = |at: f32| {
+                let along = (at / CELL_M).floor() as i32;
+                if !crossed(along) {
+                    return at;
+                }
+                // Out of all the crossed cubes together, a thick wall's being several.
+                let (mut first, mut last) = (along, along);
+                while crossed(first - 1) {
+                    first -= 1;
+                }
+                while crossed(last + 1) {
+                    last += 1;
+                }
+                let (start, end) = (first as f32 * CELL_M, (last + 1) as f32 * CELL_M);
+                if at - start < end - at {
+                    start - JOINT_OFF_CROSSING_M
+                } else {
+                    end + JOINT_OFF_CROSSING_M
+                }
+            };
+            for (a, b) in joined(from, to, limit, span, phase, &clear) {
                 // Each log by the cubes it lies along, so it is the same whatever else of
                 // the row is laid: daub under it where it lies on a course of logs, and
                 // a plate or a sill where it has nothing over it, or under it.
@@ -135,7 +166,20 @@ pub(super) fn courses(
                 } else {
                     None
                 };
-                let chinking = daub.then(|| (wall_from.max(a) - a, wall_to.min(b) - a));
+                // At a joint within the wall, the daub's joint is moved along off the logs'
+                // so its end is not in the plane of either log's sawn end.
+                let (near, far) = (wall_from.max(a) - a, wall_to.min(b) - a);
+                let near = if a > from + 1e-4 {
+                    near + DAUB_PAST_JOINT_M
+                } else {
+                    near
+                };
+                let far = if b < to - 1e-4 {
+                    far + DAUB_PAST_JOINT_M
+                } else {
+                    far
+                };
+                let chinking = daub.then_some((near, far));
                 // Which way is out, by most of the cubes it lies along.
                 let mut votes: BTreeMap<Dir, usize> = BTreeMap::new();
                 for along in first..=last {
@@ -518,7 +562,10 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                     hash(&[seed, index as u32])
                 },
                 chinking.and_then(|(c0, c1)| {
-                    let (c0, c1) = (c0.max(a) - a, c1.min(b) - a);
+                    // Cut where the roof cuts it; at its own ends, as the run laid it, past
+                    // a joint too.
+                    let c0 = if a > 1e-4 { c0.max(a) } else { c0 } - a;
+                    let c1 = if b < length - 1e-4 { c1.min(b) } else { c1 } - a;
                     (c1 > c0).then_some((c0, c1))
                 }),
             );
@@ -910,10 +957,11 @@ pub(super) fn log(
     chinking: Option<(f32, f32)>,
 ) -> Piece {
     let (start, end) = (Place::near(from), Place::near(to));
-    // The daub measured from where the log starts in the grid, and no further than it runs.
+    // The daub measured from where the log starts in the grid, and no further than it runs
+    // but past a joint, under the next log.
     let length = start.metres().distance(end.metres());
     let shift = (from - start.metres()).dot((to - from).normalize_or_zero());
-    let along = |at: f32| ticks((at + shift).clamp(0.0, length));
+    let along = |at: f32| ticks((at + shift).clamp(0.0, length + DAUB_PAST_JOINT_M));
     Piece::Log {
         from: start,
         to: end,
@@ -932,14 +980,21 @@ pub(super) fn log(
 /// from either end, as a builder joins logs where they end, wherever the stretch starts.
 /// Where the joints fall depends on nothing but the row and the course, so a log is the
 /// same whichever part of a wall is laid (D281), and an edit reaches a log's length along it.
-fn joined(start: f32, end: f32, limit: f32, span: f32, phase: f32) -> Vec<(f32, f32)> {
+fn joined(
+    start: f32,
+    end: f32,
+    limit: f32,
+    span: f32,
+    phase: f32,
+    clear: &dyn Fn(f32) -> f32,
+) -> Vec<(f32, f32)> {
     if end - start <= limit {
         return vec![(start, end)];
     }
     let mut cuts = vec![start];
     let mut k = ((start + JOINT_CLEAR_M - phase) / span).floor() + 1.0;
     loop {
-        let at = phase + k * span;
+        let at = clear(phase + k * span);
         if at >= end - JOINT_CLEAR_M {
             break;
         }
@@ -954,6 +1009,15 @@ fn joined(start: f32, end: f32, limit: f32, span: f32, phase: f32) -> Vec<(f32, 
 
 /// How near a stretch's end a joint is not made, in metres: no stub of a log.
 const JOINT_CLEAR_M: f32 = 0.3;
+/// How far past a joint between two logs the first's daub runs under the second, which
+/// starts its own as far on: the daub is jointed off the logs' sawn ends.
+const DAUB_PAST_JOINT_M: f32 = 0.03;
+/// How far outside a cube another wall crosses a joint moved out of it is made, in metres.
+const JOINT_OFF_CROSSING_M: f32 = 0.05;
+/// How far each course's joints are shifted along from the last's, as a share of a log's
+/// length: the golden ratio's fraction, so the shifts never repeat and any two courses up to
+/// four apart have their joints at least a seventh of a log, half a metre, apart.
+const JOINT_STEP: f32 = 0.618_034;
 /// How much shorter every other course is at each end, so the sawn ends of courses one on
 /// another are never in one plane where they overlap.
 const END_STAGGER_M: f32 = 0.006;
@@ -1416,6 +1480,64 @@ mod tests {
         let (first, second) = (seams(kit.course * 0.5), seams(kit.course * 1.5));
         assert!(first.len() > 1 && second.len() > 1);
         assert!(first[1..].iter().all(|x| !second.contains(x)));
+        // Nor in any course near it: no seam runs up the wall every other course. Each
+        // course's joints, the logs' starts but the row's own.
+        let joints = |course: i32| -> Vec<f32> {
+            let y = kit.course * (course as f32 + 0.5);
+            let mut starts: Vec<f32> = logs
+                .iter()
+                .filter(|(from, _, _)| (from.y - y).abs() < 1e-3)
+                .map(|(from, to, _)| from.x.min(to.x))
+                .collect();
+            starts.sort_by(f32::total_cmp);
+            starts.into_iter().skip(1).collect()
+        };
+        let courses = (0..12).filter(|&c| !joints(c).is_empty()).count();
+        assert!(courses > 8, "{courses} courses jointed");
+        for a in 0..12 {
+            for b in a + 1..(a + 5).min(12) {
+                for x in joints(a) {
+                    assert!(
+                        joints(b).iter().all(|y| (x - y).abs() > 0.4),
+                        "courses {a} and {b} jointed together at {x}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_joint_falls_where_another_wall_crosses() {
+        // A wall ten metres long crossed every metre and a half: wherever a course's joints
+        // fall by their stagger, none is left in a crossed cube, where its sawn end would
+        // stand in the crossing wall's logs and daub.
+        let mut base = Base::default();
+        wall(&mut base, (0..20).map(|x| [x, 0, 3]), Panel::Solid);
+        let crossings = [3, 6, 9, 12, 15];
+        for x in crossings {
+            wall(&mut base, (0..7).map(|z| [x, 0, z]), Panel::Solid);
+        }
+        let mut joints = 0;
+        for (from, to, _) in logs(&lay(&base, &kit())) {
+            if (from.z - to.z).abs() > 1e-3 {
+                continue;
+            }
+            for end in [from.x, to.x] {
+                // The run's own ends, at its first and last cubes, are not joints.
+                if !(CELL_M..=19.0 * CELL_M).contains(&end) {
+                    continue;
+                }
+                joints += 1;
+                let cube = (end / CELL_M).floor() as i32;
+                // An end exactly on a cube's side belongs to neither.
+                let on_side = (end / CELL_M - libm::roundf(end / CELL_M)).abs() < 1e-3;
+                assert!(
+                    on_side || !crossings.contains(&cube),
+                    "a joint at {end} in crossed cube {cube}"
+                );
+            }
+        }
+        assert!(joints > 4, "{joints}");
     }
 
     #[test]

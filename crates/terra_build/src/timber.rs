@@ -246,7 +246,12 @@ pub(crate) fn member(
         let under_slope = lean.map(|rise| if rise > 0.0 { over_foot / rise } else { 0.0 });
         let (near, far) = (
             near.max(under_slope[0]) + DAUB_IN_M,
-            far.min(length - under_slope[1]) - DAUB_IN_M,
+            // Past its end only at a joint, under the next log (`layout::runs`).
+            if under_slope[1] > 0.0 {
+                far.min(length - under_slope[1])
+            } else {
+                far
+            } - DAUB_IN_M,
         );
         if far <= near {
             return;
