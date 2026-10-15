@@ -98,25 +98,28 @@ export const PLACES: Record<string, Place> = {
   },
   town: {
     about:
-      "the market town (docs/demos.md §3): laid 300 m from the start on its most level ground, on market morning with its people and animals",
-    args: ["--experiment", "play", "--experiment", "town", "--mute"],
-    // The views the town logs as `Town vantage` (`play::town`), in the start's terms.
+      "the market town (docs/demos.md §3): where the land's rules make room for one on the 30 km world (--site town), a valley floor at the foot of the range, the forest past its fields, on market morning with its people and animals",
+    args: ["--experiment", "play", "--experiment", "town", "--radius", "30000", "--site", "town", "--mute"],
+    // The views the town logs as `Town vantage` (`play::town`), in the start's terms: the start
+    // stands 330 m beside the town, out by its fields.
     views: [
-      ["street", "313.85,-31.84,-273.60,327.85,-35.18,-248.44"],
-      ["square", "328.15,-32.73,-227.54,324.27,-30.18,-194.79"],
-      ["market", "320.24,-29.07,-192.70,325.02,-32.37,-210.62"],
-      ["forge", "325.28,-32.80,-233.24,331.23,-34.83,-235.72"],
-      ["yard", "290.87,-27.83,-221.92,297.93,-29.46,-224.90"],
-      ["above", "361.36,-12.98,-246.15,324.57,-33.45,-206.49"],
+      ["street", "63.00,0.22,-374.58,40.70,0.96,-354.76"],
+      ["square", "20.94,1.11,-347.32,-11.74,0.90,-342.65"],
+      ["market", "-14.89,0.99,-346.09,3.92,0.76,-345.86"],
+      ["forge", "25.68,0.88,-351.56,29.82,0.01,-346.28"],
+      ["yard", "5.63,0.35,-382.04,10.47,-0.47,-375.88"],
+      ["above", "43.63,27.33,-323.67,0.00,-0.61,-345.04"],
     ],
     measured: ["street", "square", "market", "forge", "yard"],
     look: "town-market-day",
     ground: false,
     forest: false,
+    // In along the main street from halfway out, across the square past the market and up the
+    // other main street a way (the town's log gives it as `Town route`).
     route: {
-      at: "319.9,-278.6",
-      face: "330.0,-210.0",
-      through: "328.9,-270.4;333.4,-259.0;332.5,-246.8;331.7,-234.5;331.6,-202.6;327.9,-179.5",
+      at: "63.8,-373.7",
+      face: "0.0,-345.1",
+      through: "54.2,-366.5;45.5,-358.3;35.2,-352.3;23.5,-349.9;-6.6,-341.6;-29.3,-339.0;-40.7,-335.4;-51.9,-331.0",
     },
   },
 };
