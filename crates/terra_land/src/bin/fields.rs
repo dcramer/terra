@@ -256,10 +256,16 @@ fn run() -> Result<(), String> {
         .collect();
     // The trees each cell holds (`woods`): how close and how tall, from its season, its
     // steepness and its footing.
+    let microsites = woods::Microsites::new(Seed(args.seed));
     let stands: Vec<Stand> = par_map(&cells, |&k| {
         let water = lakes.lake[k].map(|_| land.radius_m() + lakes.level[k]);
         let footing = land.footing(points[k], water);
-        woods::stand(&seasons[k], slope[k], footing)
+        woods::stand_in(
+            &seasons[k],
+            slope[k],
+            footing,
+            microsites.at(points[k], shelter[k]),
+        )
     });
     // What covers the open ground past the trees (terra_land::heath), community by community.
     let drainage = terra_land::heath::Drainage::new(Seed(args.seed));

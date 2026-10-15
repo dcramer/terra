@@ -24,6 +24,8 @@ pub struct Round {
     pub drift: Drift,
     /// What covers its open ground past the trees, community by community, over the lakes' grid.
     pub heath: HeathMap,
+    /// How much its places' ground favours a tree beyond their season (`woods::Microsites`).
+    pub microsites: woods::Microsites,
     /// Its middle, and how far across it reaches.
     pub middle: Vec3,
     pub across_m: f32,
@@ -66,7 +68,15 @@ impl Round {
                 p.strength(middle, over_sea) > 0.2
             })
             .then(|| Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M));
-        let heath = heath_over(&land, &waters, pools.as_ref(), &seasons, &drift);
+        let microsites = woods::Microsites::new(land.ground.spec().seed);
+        let heath = heath_over(
+            &land,
+            &waters,
+            pools.as_ref(),
+            &seasons,
+            &drift,
+            &microsites,
+        );
         Self {
             land,
             waters,
@@ -75,6 +85,7 @@ impl Round {
             snow,
             drift,
             heath,
+            microsites,
             middle,
             across_m,
         }
@@ -106,7 +117,11 @@ impl Round {
             .at(place.latitude, place.height_m, place.sunward);
         let up = point.normalize_or(Vec3::Y);
         let slope = libm::acosf(normal.dot(up).clamp(-1.0, 1.0)).to_degrees();
-        woods::stand(&season, slope, footing)
+        let region = self.waters.region();
+        let shelter = region
+            .cell_of(up)
+            .map_or(0.0, |(c, r)| self.drift.shelter_at_cell(c, r));
+        woods::stand_in(&season, slope, footing, self.microsites.at(point, shelter))
     }
 
     /// How deep the snow lies at a point on the ground, facing `normal`, in metres, as its
@@ -143,6 +158,7 @@ fn heath_over(
     pools: Option<&Waters>,
     seasons: &Seasons,
     drift: &Drift,
+    microsites: &woods::Microsites,
 ) -> HeathMap {
     let region = waters.region();
     let radius = land.radius_m();
@@ -169,7 +185,8 @@ fn heath_over(
             return heath::Heath::default();
         }
         let slope_deg = region.slope_deg(c, r);
-        let trees = woods::stand(&season, slope_deg, footing).density;
+        let microsite = microsites.at(point, drift.shelter_at_cell(c, r));
+        let trees = woods::stand_in(&season, slope_deg, footing, microsite).density;
         let frozen = smoothstep(-1.0, -4.0, season.year_mean_c);
         heath::heath(heath::Ground {
             colder_c: terra_climate::TREE_LINE_SEASON_C - season.growing_mean_c,

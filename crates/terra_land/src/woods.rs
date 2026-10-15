@@ -77,6 +77,43 @@ pub fn stand(season: &Season, slope_deg: f32, footing: Footing) -> Stand {
     }
 }
 
+/// How much warmer than its season a place is for a tree, in degrees Celsius: its microsite.
+/// At the forest's limit trees hold on where the ground shelters them, in the lee where winter's
+/// snow covers their young and the wind does not dry and scour them, and in islands where the
+/// soil and the stand's own shelter favour them, so the forest-tundra is a band of tree islands
+/// thinning onto the open heath (*Waldtundra*), never a line along a contour (Holtmeier,
+/// *Mountain Timberlines*, 2009). Inside the forest it changes nothing that shows.
+#[derive(Clone, Debug)]
+pub struct Microsites(terra_gen::Noise);
+
+/// How much the lee warms a tree's place, and an exposed rise chills it, at most; and how much
+/// warmer or colder an island's ground is, at most, its islands some hundreds of metres across.
+const SHELTER_C: f32 = 0.5;
+const ISLANDS_C: f32 = 0.9;
+const ISLANDS_M: f32 = 220.0;
+
+impl Microsites {
+    pub fn new(seed: terra_gen::Seed) -> Self {
+        Self(terra_gen::Noise::new(seed.derive("tree islands")))
+    }
+
+    /// A place's microsite, at a point in the world, so sheltered (Winstral's Sx, degrees).
+    pub fn at(&self, point: glam::Vec3, shelter_deg: f32) -> f32 {
+        // The noise's spread is about 0.27 a sample.
+        let islands = (self.0.fbm(point / ISLANDS_M, 3, 2.2, 0.55) / 0.27).clamp(-2.0, 2.0) * 0.5;
+        SHELTER_C * libm::tanhf(shelter_deg / 8.0) + ISLANDS_C * islands
+    }
+}
+
+/// The trees a place holds, its season warmed or chilled for them by its microsite.
+pub fn stand_in(season: &Season, slope_deg: f32, footing: Footing, microsite_c: f32) -> Stand {
+    let season = Season {
+        growing_mean_c: season.growing_mean_c + microsite_c,
+        ..*season
+    };
+    stand(&season, slope_deg, footing)
+}
+
 /// The growing season worked out ahead over the latitudes, heights and leanings a region
 /// spans, for asking about many places quickly: a season takes a year of days to work out,
 /// and a forest's trees are tens of thousands of places. Between its points it blends; the
@@ -405,5 +442,27 @@ mod tests {
         assert_eq!(stand(&warm, 10.0, Footing::Water).density, 0.0);
         let scree = stand(&warm, 30.0, Footing::Loose).density;
         assert!(scree > 0.0 && scree < 0.3);
+    }
+
+    #[test]
+    fn at_the_forests_limit_trees_stand_in_islands_and_in_the_lee() {
+        // Ground a little past the tree line: along a line across it, some places hold trees
+        // and some none, so the edge is islands, not a line; and the lee holds more than a rise.
+        let sites = Microsites::new(terra_gen::Seed(5));
+        let limit = season(TREE_LINE_SEASON_C - 0.4);
+        let along: Vec<f32> = (0..400)
+            .map(|k| {
+                let at = glam::Vec3::new(k as f32 * 10.0, 30_000.0, 0.0);
+                stand_in(&limit, 5.0, Footing::Soil, sites.at(at, 0.0)).density
+            })
+            .collect();
+        let wooded = along.iter().filter(|&&d| d > 0.3).count();
+        let open = along.iter().filter(|&&d| d == 0.0).count();
+        assert!(
+            wooded > 20 && open > 20,
+            "{wooded} wooded, {open} open of 400"
+        );
+        let at = glam::Vec3::new(0.0, 30_000.0, 0.0);
+        assert!(sites.at(at, 12.0) > sites.at(at, -12.0) + 0.6);
     }
 }
