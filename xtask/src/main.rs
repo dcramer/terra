@@ -179,6 +179,13 @@ const TASKS: &[Task] = &[
         run: artifacts,
     },
     Task {
+        name: "texels",
+        takes: "[building] [--worst N]",
+        does: "find where building's textures are stretched or smeared, from the meshes: each kit's share of area drawn past 1.5:1 and 2.5:1, and where the worst is",
+        group: "Play and check",
+        run: texels,
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
@@ -1247,6 +1254,22 @@ fn sections(args: &[String]) -> bool {
         "terra_build",
         "--example",
         "sections",
+    ];
+    cargo.extend(args.iter().map(String::as_str));
+    run("cargo", &cargo)
+}
+
+/// Where building's textures are stretched (`crates/terra_build/examples/texels.rs`): a name
+/// keeps only the bases whose names hold it.
+fn texels(args: &[String]) -> bool {
+    let mut cargo = vec![
+        "run",
+        "-q",
+        "--release",
+        "-p",
+        "terra_build",
+        "--example",
+        "texels",
     ];
     cargo.extend(args.iter().map(String::as_str));
     run("cargo", &cargo)

@@ -994,8 +994,23 @@ fn masked(
         let luma = (c.x + c.y + c.z) / 3.0;
         c = c.lerp(Vec3::splat(luma * 1.05), grey.clamp(0.0, 1.0));
     }
-    c.to_array()
+    (c * underside(normal)).to_array()
 }
+
+/// How much light a face looking down keeps: none of the sky's, and of the ground's only
+/// what the wall it stands out from, or the opening it spans, lets it see. The sky light
+/// lights an underside by the sunlit ground's whole bounce (`terra_world::skylight`), which
+/// left a lintel's soffit and every quoin's underside lit brighter and greener than the
+/// wall's shaded face beside it; a modelled piece bakes this occlusion into its texture, as
+/// the logs' grooves are shaded (D262).
+fn underside(normal: Vec3) -> f32 {
+    let t = ((-normal.y - UNDER_FROM) / (1.0 - UNDER_FROM)).clamp(0.0, 1.0);
+    1.0 - UNDERSIDE * t * t * (3.0 - 2.0 * t)
+}
+
+/// Faces within about 55 degrees of straight down are shaded, the most `UNDERSIDE` darker.
+const UNDER_FROM: f32 = 0.55;
+const UNDERSIDE: f32 = 0.65;
 
 /// Where the rain marks a block kind's wall (D215), from its cubes: the damp splashed up
 /// over its own foot, and the streaks drawn down under a sill or an open top; each column's
@@ -1100,16 +1115,6 @@ impl Rained<'_> {
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
-    if masks.dirt <= 0.0
-        && masks.wear <= 0.0
-        && masks.weather <= 0.0
-        && masks.strata <= 0.0
-        && masks.dry <= 0.0
-        && masks.splash <= 0.0
-        && masks.streaks <= 0.0
-    {
-        return;
-    }
     // Nothing drawn in it, so no columns to span: the table below would be empty bounds.
     if surface.positions.is_empty() && surface.shared.positions.is_empty() {
         return;
@@ -1325,6 +1330,31 @@ mod tests {
                 assert!(!at_end(p), "{p} set in at the cube's side");
             }
         }
+    }
+
+    #[test]
+    fn a_face_looking_down_is_shaded_as_its_occlusion_would_be_and_a_side_is_not() {
+        let masks = Masks::default();
+        let mut noise = Noise::default();
+        let mut at = |normal: Vec3| {
+            masked(
+                &masks,
+                (false, false),
+                Vec3::new(0.0, 2.0, 0.0),
+                normal,
+                0.0,
+                &mut noise,
+            )[1]
+        };
+        let (down, side, up) = (at(-Vec3::Y), at(Vec3::X), at(Vec3::Y));
+        assert!(
+            (side - 1.0).abs() < 1e-5 && (up - 1.0).abs() < 1e-5,
+            "{side} {up}"
+        );
+        assert!(down < 0.6, "a soffit as lit as a wall: {down}");
+        // A log's lower flank, half way down, by a fifth at most: it sees the sky too.
+        let flank = at(Vec3::new(1.0, -1.0, 0.0).normalize());
+        assert!(flank > 0.8, "{flank}");
     }
 
     #[test]

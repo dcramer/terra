@@ -233,9 +233,8 @@ pub(crate) fn member(
         .enumerate()
     {
         let cell = end_cell(kit, seed.wrapping_add(n as u32));
-        cap(
-            ends, ring, outward, &frame, spin, made.grain, t.end_tint, cell,
-        );
+        let colour = end_colour(t, seed.wrapping_add(n as u32), shade, warmth);
+        cap(ends, ring, outward, &frame, spin, made.grain, colour, cell);
     }
     if let Some((near, far)) = chinking {
         // A hair in from where it is laid to, the log's ends or the wall's faces, out of the
@@ -771,11 +770,23 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
         let step = section[j % columns].0.distance(section[j - 1].0);
         perimeter.push(perimeter[j - 1] + step);
     }
-    // How far across the texture each point of the section falls.
+    // How far across the texture each point of the section falls. Drawn from one plank, each
+    // face takes the plank across it, running on round the section from face to face (the
+    // top left to right, the right side up, the underside right to left, the left side
+    // down), so every edge meets its neighbour: a joist's side or a rim beam's took one
+    // column of the texture smeared down it.
     let across = |j: usize| match look.strip {
         Some([from, wide]) => {
-            let x = section[j % columns].0.x / (2.0 * half_wide) + 0.5;
-            from + wide * x.clamp(0.0, 1.0)
+            let (p, n) = section[j % columns];
+            let x = (p.x / (2.0 * half_wide) + 0.5).clamp(0.0, 1.0);
+            let y = (p.y / (2.0 * half_high) + 0.5).clamp(0.0, 1.0);
+            let k = match (n.y.abs() >= n.x.abs(), n.y > 0.0, n.x > 0.0) {
+                (true, true, _) => x,
+                (true, false, _) => 1.0 - x,
+                (false, _, true) => y,
+                (false, _, false) => 1.0 - y,
+            };
+            from + wide * k
         }
         None => shift[0] + perimeter[j] / look.metres[0],
     };
@@ -899,10 +910,14 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let last = member.grid.len() - 1;
     let ends = surfaces.of(Material::LogEnd);
     let cell = end_cell(kit, seed);
-    for (ring, outward) in [
+    for (n, (ring, outward)) in [
         (&member.grid[0], -frame.axis),
         (&member.grid[last], frame.axis),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let colour = end_colour(t, seed.wrapping_add(n as u32), shade, warmth);
         cap(
             ends,
             ring,
@@ -910,11 +925,34 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             &frame,
             spin,
             member.grain,
-            t.end_tint,
+            colour,
             cell,
         );
     }
 }
+
+/// A sawn end's colour: the kit's end tint, lighter or darker and warmer or cooler with its
+/// member as the member's face is, and then each end its own, a little lighter or darker and
+/// greyed by the weather from hardly at all to nearly half, as a wall's ends are where some
+/// were cut later or face the rain: one tint at every end of a wall read as a row of the same
+/// sticker (research/kit-review-2026-10-14.md).
+fn end_colour(t: &crate::kit::Timber, seed: u32, shade: f32, warmth: f32) -> [f32; 3] {
+    let mut random = Random(layout::hash(&[seed, 0x5a3d]));
+    let own = 1.0 + END_SHADE * random.signed();
+    let grey = END_GREY * random.unit() * random.unit();
+    let tinted = [
+        t.end_tint[0] * shade * own * (1.0 + warmth),
+        t.end_tint[1] * shade * own,
+        t.end_tint[2] * shade * own * (1.0 - warmth),
+    ];
+    let luma = (tinted[0] + tinted[1] + tinted[2]) / 3.0;
+    tinted.map(|v| (v + (luma - v) * grey).clamp(0.0, 1.0))
+}
+
+/// How much lighter or darker each sawn end is than its member's, and the most it is
+/// greyed toward its own lightness.
+const END_SHADE: f32 = 0.1;
+const END_GREY: f32 = 0.6;
 
 /// A member's rings as a closed tube of triangles, each corner shaded smooth across its
 /// neighbours but at a crease, its texture as its rings say, the seam's last column its own.
@@ -1286,6 +1324,98 @@ mod tests {
             }
         }
         assert_eq!(cells.len(), 4, "{cells:?}");
+    }
+
+    #[test]
+    fn a_walls_sawn_ends_differ_from_one_another_and_some_are_greyed() {
+        let kit = pinned(Profile::Round);
+        let mut ends: Vec<[f32; 3]> = Vec::new();
+        for seed in 0..24 {
+            let mut surfaces = Surfaces::default();
+            draw(&log(seed, Split::Whole), &kit, &mut surfaces);
+            let drawn = &surfaces.0[&Material::LogEnd];
+            // Each end one colour across it, its two ends their own.
+            let half = drawn.colours.len() / 2;
+            for colours in [&drawn.colours[..half], &drawn.colours[half..]] {
+                assert!(colours.iter().all(|c| c == &colours[0]));
+                ends.push(colours[0]);
+            }
+        }
+        let lightness = |c: &[f32; 3]| (c[0] + c[1] + c[2]) / 3.0;
+        let (dark, light) = ends
+            .iter()
+            .map(lightness)
+            .fold((f32::MAX, f32::MIN), |(l, h), v| (l.min(v), h.max(v)));
+        assert!(
+            light - dark > 0.08,
+            "every end the same lightness: {dark} {light}"
+        );
+        // As warm as the tint at most, and greyer: red against blue spread out.
+        let warmth = |c: &[f32; 3]| c[0] - c[2];
+        let tint = kit.timber.end_tint;
+        let (cool, warm) = ends
+            .iter()
+            .map(warmth)
+            .fold((f32::MAX, f32::MIN), |(l, h), v| (l.min(v), h.max(v)));
+        assert!(
+            cool < (tint[0] - tint[2]) * 0.7,
+            "none greyed: {cool} {warm}"
+        );
+        assert!(warm - cool > 0.05, "{cool} {warm}");
+    }
+
+    #[test]
+    fn a_plank_drawn_from_one_board_of_its_texture_is_not_smeared_down_its_sides() {
+        let mut kit = pinned(Profile::Hewn);
+        kit.textures.insert(
+            Material::Floor,
+            crate::kit::Texture {
+                path: "planks".into(),
+                metres: [2.0, 2.0],
+                depth: 0.0,
+                reflectance: crate::kit::matte(),
+                strips: Some([0.06, 0.11]),
+                cells: 1,
+                worn: None,
+            },
+        );
+        // A joist, 5 cm wide and 20 cm deep, three metres long.
+        let ticks = |m: f32| crate::layout::ticks(m);
+        let joist = Piece::Plank {
+            from: Place::near(Vec3::new(0.0, 0.0, 0.0)),
+            to: Place::near(Vec3::new(3.0, 0.0, 0.0)),
+            wide: ticks(0.05),
+            high: ticks(0.2),
+            seed: 3,
+        };
+        let mut surfaces = Surfaces::default();
+        plank(&joist, &kit, &mut surfaces);
+        let all = surfaces.0[&Material::Floor].indexed();
+        let mut sides = 0;
+        for t in all.indices.chunks_exact(3) {
+            let [a, b, c] = [t[0], t[1], t[2]].map(|i| i as usize);
+            let normal = (all.positions[b] - all.positions[a])
+                .cross(all.positions[c] - all.positions[a])
+                .normalize_or_zero();
+            let ys = [a, b, c].map(|i| all.positions[i].y);
+            let high = ys.iter().fold(f32::MIN, |m, &y| m.max(y))
+                - ys.iter().fold(f32::MAX, |m, &y| m.min(y));
+            if normal.z.abs() < 0.9 || high < 0.05 {
+                continue;
+            }
+            sides += 1;
+            // Up the side, its texture runs across the plank as it does across its top,
+            // about as many metres of it a metre: not one column of it all the way down.
+            let us = [a, b, c].map(|i| all.uvs[i][0]);
+            let spread = us.iter().fold(f32::MIN, |m, &u| m.max(u))
+                - us.iter().fold(f32::MAX, |m, &u| m.min(u));
+            let metres_a_metre = spread * 2.0 / high;
+            assert!(
+                (0.5..2.0).contains(&metres_a_metre),
+                "a side's triangle stretched: {us:?} over {high} m"
+            );
+        }
+        assert!(sides > 0);
     }
 
     #[test]
