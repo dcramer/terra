@@ -45,11 +45,16 @@ export class KitSet {
     return this.kits.find((kit) => kit.name === wall)?.roof ?? this.kits.find((kit) => kit.pattern === "roof")!.name;
   }
 
-  /// A wall kit other than the n-th, to change a wall to.
+  /// A wall kit other than the n-th, to change a wall to: one of the same pattern if there
+  /// is one, which changes in place at once as its cubes are repainted (D298), as
+  /// Enshrouded's material swap does, rather than coming out and going in again.
   other(n = 0): string {
+    const own = this.kits.find((kit) => kit.name === this.wall(n))!;
     const all = this.kits.filter((kit) => kit.roof);
-    const at = all.findIndex((kit) => kit.name === this.wall(n));
-    return all[(at + 1) % all.length].name;
+    const like = all.filter((kit) => kit.pattern === own.pattern);
+    const pool = like.length > 1 ? like : all;
+    const at = pool.findIndex((kit) => kit.name === own.name);
+    return pool[(at + 1) % pool.length].name;
   }
 }
 

@@ -3,8 +3,9 @@
 //! and walking both read a prop's leaves from here, so what is seen is what stops a
 //! walker, whichever way it stands.
 //!
-//! A door hangs in its hole's reveal, between the frame the kit lays round the hole, and
-//! swings a quarter turn into the room; a doorway two metres wide or more takes a pair,
+//! A door hangs in its hole's reveal, reaching a little behind its jambs and head as a
+//! real one closes against its stop, so it fills the hole whatever the kit lays round it,
+//! and swings a quarter turn into the room; a doorway two metres wide or more takes a pair,
 //! hinged either side, meeting in the middle. Shutters hang on the wall's outside face over
 //! the hole and fold back flat against the wall; a hole wider than a cube takes a pair. This
 //! is how real ones hang, and how Valheim's and Enshrouded's doors do.
@@ -22,12 +23,13 @@ pub enum Hang {
     Shutters,
 }
 
-/// How far the kit's frame stands into a hole, at its sides and head: a door's leaf fits
-/// inside it, clear of the jambs as it swings (`layout::roles`' jambs and heads stand
-/// about 4 cm into a log wall's hole, measured in the game).
-pub const FRAME_M: f32 = 0.045;
-/// How far apart a door's leaf and the frame round it stand: a finger's gap.
-const GAP_M: f32 = 0.008;
+/// How far a leaf reaches past its opening's edges, behind the jambs, the head and a
+/// window's sill, as a real one closes against its stop: so it fills its opening whatever
+/// stands round it, a log wall's frame boards or a stone wall's dressed jambs, with no
+/// gap to see through at any edge (the developers: they "can overlap w/ the voxels a bit").
+pub const OVERLAP_M: f32 = 0.03;
+/// How far over its threshold a door's foot stands, so it swings clear of the floor.
+const THRESHOLD_M: f32 = 0.005;
 /// How thick a door's leaf is, and a shutter's.
 pub const DOOR_THICK_M: f32 = 0.06;
 pub const SHUTTER_THICK_M: f32 = 0.035;
@@ -59,6 +61,9 @@ pub struct Leaf {
     /// Whether it is a door's: its front looks out, away from the way it opens; a
     /// shutter's looks the way it opens.
     pub door: bool,
+    /// How wide and high the part of it over its opening is, less what reaches behind the
+    /// opening's edges: the leaf its model is made as.
+    pub clear: Vec2,
 }
 
 /// Where a leaf stands when it has turned so far open (0 shut, 1 open): its hinge, the way
@@ -120,11 +125,12 @@ impl Prop {
         let middle = (low + high) * 0.5;
         let depth = middle.dot(opens.abs());
         let door = self.hang == Hang::Door;
-        let (inset, foot, top, thick, face, swing, pair) = if door {
+        // Each leaf reaches past the opening's sides and head, and a shutter past its sill;
+        // a door stands on its threshold. A pair meets in the middle.
+        let (foot, top, thick, face, swing, pair) = if door {
             (
-                FRAME_M + GAP_M,
-                low.y + GAP_M,
-                high.y - FRAME_M - GAP_M,
+                low.y + THRESHOLD_M,
+                high.y + OVERLAP_M,
                 DOOR_THICK_M,
                 // Its hinge face toward the room, its middle in the wall's middle.
                 DOOR_THICK_M * 0.5,
@@ -133,22 +139,21 @@ impl Prop {
             )
         } else {
             (
-                0.0,
-                low.y,
-                high.y,
+                low.y - OVERLAP_M,
+                high.y + OVERLAP_M,
                 SHUTTER_THICK_M,
                 SHUTTER_OUT_M + SHUTTER_THICK_M,
                 SHUTTER_SWING_DEGREES,
                 SHUTTER_PAIR_M,
             )
         };
-        let (start, end) = (start + inset, end - inset);
-        let width = end - start;
+        let clear = end - start;
+        let (start, end) = (start - OVERLAP_M, end + OVERLAP_M);
         let at = |b: f32| {
             let level = along * b + opens.abs() * depth;
             Vec3::new(level.x, foot, level.z) + opens * face
         };
-        let leaf = |hinge: f32, across: Vec3, width: f32| Leaf {
+        let leaf = |hinge: f32, across: Vec3, width: f32, clear_width: f32| Leaf {
             hinge: at(hinge),
             across,
             opens,
@@ -157,12 +162,16 @@ impl Prop {
             thick,
             swing: swing.to_radians(),
             door,
+            clear: Vec2::new(clear_width, high.y - low.y),
         };
-        if end - start + 2.0 * inset >= pair - 1e-3 {
-            let half = width * 0.5;
-            vec![leaf(start, along, half), leaf(end, -along, half)]
+        if clear >= pair - 1e-3 {
+            let half = (end - start) * 0.5;
+            vec![
+                leaf(start, along, half, clear * 0.5),
+                leaf(end, -along, half, clear * 0.5),
+            ]
         } else {
-            vec![leaf(start, along, width)]
+            vec![leaf(start, along, end - start, clear)]
         }
     }
 }
@@ -245,9 +254,11 @@ mod tests {
         let leaves = door.leaves();
         assert_eq!(leaves.len(), 1);
         let leaf = leaves[0];
-        // Inside the frame: a metre less the frame either side.
-        assert!((leaf.width - (1.0 - 2.0 * (FRAME_M + GAP_M))).abs() < 1e-4);
-        assert!(leaf.height > 1.85 && leaf.height < 2.0);
+        // A metre, and a little behind the jamb either side; two metres high, and a little
+        // behind the head.
+        assert!((leaf.width - (1.0 + 2.0 * OVERLAP_M)).abs() < 1e-4);
+        assert!(leaf.height > 2.0 && leaf.height < 2.0 + 2.0 * OVERLAP_M);
+        assert_eq!(leaf.clear, Vec2::new(1.0, 2.0));
         // Shut, it stands across the doorway in the wall's middle; open, from its hinge
         // into the room, south, as far as it is wide.
         let shut = leaf.middle(0.0);
@@ -256,6 +267,75 @@ mod tests {
         let open = leaf.middle(1.0);
         assert!(open.z > 0.25 + leaf.width * 0.4, "{open}");
         assert!((open.x - leaf.hinge.x).abs() < leaf.thick + 0.01);
+    }
+
+    #[test]
+    fn every_leaf_fills_its_opening_with_no_gap_at_any_edge() {
+        // Every hole a door or shutters fits, in walls running east and south, each leaf
+        // shut: what the leaves cover, across the wall and up it, measured against the
+        // opening's edges. No gap anywhere, and no more over than the overlap.
+        for hang in [Hang::Door, Hang::Shutters] {
+            for wide in 1..=4 {
+                for high in 2..=4 {
+                    // In a wall running east opening south, and one running south opening
+                    // west.
+                    for (min, max, opens, along) in [
+                        ([2, 2, 3], [1 + wide, 1 + high, 3], [0, 0, 1], Vec3::X),
+                        ([3, 2, 2], [3, 1 + high, 1 + wide], [-1, 0, 0], Vec3::Z),
+                    ] {
+                        let hole = prop(min, max, opens, hang);
+                        let low = IVec3::from_array(hole.min).as_vec3() * CELL_M;
+                        let high_end =
+                            (IVec3::from_array(hole.max) + IVec3::ONE).as_vec3() * CELL_M;
+                        let (start, end) = (low.dot(along), high_end.dot(along));
+                        let mut spans: Vec<(f32, f32)> = Vec::new();
+                        let (mut foot, mut top) = (f32::MAX, f32::MIN);
+                        for leaf in hole.leaves() {
+                            let pose = leaf.pose(0.0);
+                            let a = pose.hinge.dot(along);
+                            let b = (pose.hinge + pose.across * leaf.width).dot(along);
+                            spans.push((a.min(b), a.max(b)));
+                            foot = foot.min(pose.hinge.y);
+                            top = top.max(pose.hinge.y + leaf.height);
+                        }
+                        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+                        // Across: from before the opening's start to past its end, each
+                        // leaf meeting the next.
+                        let mut reach = spans[0].0;
+                        assert!(
+                            reach <= start + 1e-4,
+                            "{hang:?} {wide}x{high}: a gap at its side"
+                        );
+                        for (from, to) in &spans {
+                            assert!(
+                                *from <= reach + 1e-4,
+                                "{hang:?} {wide}x{high}: a gap between leaves"
+                            );
+                            reach = reach.max(*to);
+                        }
+                        assert!(
+                            reach >= end - 1e-4,
+                            "{hang:?} {wide}x{high}: a gap at its other side"
+                        );
+                        assert!(
+                            start - spans[0].0 <= OVERLAP_M + 1e-4
+                                && reach - end <= OVERLAP_M + 1e-4
+                        );
+                        // Up: from the sill, or a door's threshold, to past the head.
+                        let sill = if hang == Hang::Door {
+                            low.y + THRESHOLD_M
+                        } else {
+                            low.y
+                        };
+                        assert!(
+                            foot <= sill + 1e-4 && top >= high_end.y - 1e-4,
+                            "{hang:?} {wide}x{high}: a gap at the head or sill"
+                        );
+                        assert!(top - high_end.y <= OVERLAP_M + 1e-4);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -306,7 +386,7 @@ mod tests {
         assert_eq!(push_off(from, to, 0.25, body, [(leaf, 1.0)]), to);
         // Open, walking east along the inside of the wall, past where the leaf stands in
         // the room, stops at it.
-        let (from, to) = (Vec3::new(0.4, 0.0, 0.8), Vec3::new(1.3, 0.0, 0.8));
+        let (from, to) = (Vec3::new(0.4, 0.0, 0.8), Vec3::new(1.15, 0.0, 0.8));
         let stopped = push_off(from, to, 0.25, body, [(leaf, 1.0)]);
         assert!(stopped.x < leaf.hinge.x - 0.2, "{stopped}");
         // Shut, that walk is clear.

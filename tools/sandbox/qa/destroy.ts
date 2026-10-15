@@ -1,7 +1,7 @@
 // The destruction film: what harm does to what is built in a set (D193, D305). A house
 // cracks under blows; a freestanding wall's foot is knocked out and the wall above falls into
 // debris; a house's walls go and its roof comes down; a tower falls whole; the ground gives
-// way under a corner; the debris is gathered and the cracked wall mended. Places as in
+// way under a corner; the cracked wall is mended. Places as in
 // build.ts: the base's cubes for what is done, metres for the camera.
 
 import type { KitSet, Scenario, Script, Vec3 } from "./script.ts";
@@ -98,11 +98,7 @@ function script(s: Script, set: KitSet) {
     s.wait(300);
   });
 
-  s.stage("gather", "The debris gathered, the cracked wall mended", () => {
-    s.glide([8, 7, 16], [4.5, 0.5, 4], 150);
-    s.wait(150);
-    s.call("build.gather", {});
-    s.wait(120);
+  s.stage("mend", "The cracked wall mended", () => {
     s.glide([15, 7.5, 0], [4.5, 1.2, 2], 70);
     s.glide([4.5, 1.9, -4], [4.5, 1.2, 2], 90, 50);
     s.wait(140);
@@ -112,7 +108,7 @@ function script(s: Script, set: KitSet) {
 }
 
 export default {
-  about: "harm in a set: cracks, a wall's foot knocked out, a roof losing its walls, a tower brought down, the ground giving way, debris gathered and a wall mended",
+  about: "harm in a set: cracks, a wall's foot knocked out, a roof losing its walls, a tower brought down, the ground giving way and a wall mended",
   sandbox: ["--experiment", "play", "--free-build", "--time", "10", "--at", "0,3", "--face", "-8,14"],
   script,
 } satisfies Scenario;

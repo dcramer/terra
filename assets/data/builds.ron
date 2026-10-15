@@ -9,7 +9,9 @@
 //            of prop by its place in the list: its name, its model in
 //            assets/models/openings, how it hangs (Door, a leaf or a pair swinging into
 //            the room; Shutters, folding back against the wall outside), how wide, high
-//            and thick one leaf is in metres in the first hole it fits (dims), the holes
+//            and thick one leaf is made in metres (dims), for the clear opening of the
+//            first hole it fits, which it is stretched to fill and reach a little behind
+//            (terra_build::fitting), the holes
 //            it fits, wide by high in cubes, and what a leaf costs, by items.ron's names,
 //            a pair costing two. Its model is that leaf, hinged at its origin, with its
 //            hinge and handle sockets (the model contract, docs/art-style.md). What walls, floors and roofs take is their kits' to say

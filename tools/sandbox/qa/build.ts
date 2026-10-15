@@ -36,7 +36,7 @@ const up = (what: string) => Number(/(-?\d+) up\)/.exec(what)?.[1] ?? 0);
 function script(s: Script, set: KitSet) {
   // The cabin and its storey and roofs, the deck, and the garden wall: the camera keeps out.
   s.solid([2, -1, 2], [7, 8.5, 6]);
-  s.solid([-2, -2, 6], [3, 0.3, 8]);
+  s.solid([-0.5, -2, 6.5], [4.5, 0.7, 8.5]);
   const wall = set.wall(0);
 
   s.stage("claim", "Claiming the ground", () => {
@@ -69,25 +69,22 @@ function script(s: Script, set: KitSet) {
     s.wait(40);
     s.call("build.opening", { tiles: WINDOW, door: false });
     s.wait(40);
-    // A low garden wall west of the door in blocks, by each brush (D226): a cube at a time,
-    // boxes a metre across, and a pier two metres across at its end, sunk into the ground,
-    // which falls away a metre here; a cut block on top.
+    // A low garden wall west of the door in blocks (D226): in boxes of the metre brush, a
+    // course of them from below the ground, which falls away a metre here, and a course
+    // over it, then a post at each end a cube at a time.
     const garden = set.wall(4);
-    s.glide([1.0, 2.0, 11.5], [1.5, -0.6, 6.8], 120);
-    for (const [at, brush] of [
-      [[0, -3, 14], 1],
-      [[1, -3, 14], 1],
-      [[0, -3, 15], 1],
-      [[1, -3, 15], 1],
-      [[2, -4, 14], 2],
-      [[4, -4, 14], 2],
-      [[-4, -4, 12], 4],
-    ] as const) {
-      s.call("build.lay", { what: "block", min: at, max: at, brush, kind: garden });
+    s.glide([1.0, 2.0, 11.5], [1.8, -0.6, 6.8], 120);
+    for (const y of [-4, -2]) {
+      for (const x of [0, 2, 4, 6]) {
+        s.call("build.lay", { what: "block", min: [x, y, 14], max: [x, y, 14], brush: 2, kind: garden });
+        s.wait(15);
+      }
+    }
+    for (const x of [0, 7]) {
+      for (const z of [14, 15]) s.call("build.lay", { what: "block", min: [x, 0, z], max: [x, 0, z], brush: 1, kind: garden });
       s.wait(30);
     }
-    s.call("build.lay", { what: "block", min: [4, -2, 14], max: [4, -2, 14], kind: garden, shape: { Slope: "West" } });
-    s.wait(90);
+    s.wait(60);
   });
 
   // Built, what goes in next each time: the footing whole, the floor, the walls course by
@@ -191,7 +188,7 @@ function script(s: Script, set: KitSet) {
     s.wait(60);
   });
 
-  s.stage("collapse", "A corner knocked down, gathered and mended", () => {
+  s.stage("collapse", "A corner knocked down and mended", () => {
     s.glide([-4.5, 3.6, 12.5], [2.6, 1.6, 5.2], 120);
     s.wait(30);
     // Cracked, then its foot knocked out: what hangs from nothing falls into debris.
@@ -199,7 +196,6 @@ function script(s: Script, set: KitSet) {
     s.wait(90);
     s.call("build.damage", { at: [X0, 0, Z1 - 1], to: [X0 + 1, 3, Z1] });
     s.wait(150);
-    s.call("build.gather", {});
     s.wait(60);
     // Laid again where it fell, built, and the cracked wall mended.
     s.call("build.lay", { what: "wall", min: [X0, 0, Z1 - 1], max: [X0, 0, Z1], kind: set.other(0) });

@@ -8,8 +8,10 @@
 //! - **Anchor.** Its origin is where its kind says ([`Anchor`]).
 //! - **Sockets.** The points code attaches to are empties in its file, `socket.<name>`,
 //!   and each kind has the ones code needs ([`Entry::sockets`]).
-//! - **Fit.** A door's or shutters' leaf, hung in the first hole it fits, fills it as made,
-//!   and stays within the wall's faces (doors) or on its outer half (shutters).
+//! - **Fit.** A door's or shutters' leaf is made for the clear opening of the first hole it
+//!   fits, within an eighth of it, and is stretched to fill that opening and reach a little
+//!   behind its edges (`terra_build::fitting`); it stays within the wall's faces (doors) or
+//!   on its outer half (shutters).
 //!
 //! [`check`] checks one model; `cargo xtask contract` checks them all and prints each, and
 //! the test here holds `cargo xtask check` to it.
@@ -85,6 +87,10 @@ pub fn entries(builds: &Builds) -> Vec<Entry> {
     });
     entries
 }
+
+/// How far a door's or shutters' leaf may be made from the opening it fills, as a share of
+/// it: it is stretched to fill it.
+const STRETCH: f32 = 0.125;
 
 /// How far a model's size, anchor or socket may be from what its entry says, in metres,
 /// along a side `dim` long: two percent, and never under a centimetre.
@@ -165,11 +171,15 @@ fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String>
     let mut wrong = Vec::new();
     for leaf in prop.leaves() {
         let made = Vec2::new(entry.dims.x, entry.dims.y);
-        let needed = Vec2::new(leaf.width, leaf.height);
-        let tol = Vec2::new(tolerance(made.x), tolerance(made.y));
-        if (needed - made).abs().cmpgt(tol).any() {
+        // Made for the opening it fills, near enough that stretching it to fill the
+        // opening keeps its look.
+        let needed = leaf.clear;
+        if ((needed - made).abs() / needed)
+            .cmpgt(Vec2::splat(STRETCH))
+            .any()
+        {
             wrong.push(format!(
-                "is made {:.3} by {:.3} m, but its hole of {wide} by {high} cubes takes a leaf {:.3} by {:.3} m",
+                "is made {:.3} by {:.3} m, but its hole of {wide} by {high} cubes opens {:.3} by {:.3} m for a leaf",
                 made.x, made.y, needed.x, needed.y
             ));
         }
@@ -290,10 +300,10 @@ mod tests {
             hang: Hang::Door,
         }
         .leaves()[0];
-        let made = |thick: f32| entry(Anchor::Hinge, Vec3::new(leaf.width, leaf.height, thick));
+        let made = |thick: f32| entry(Anchor::Hinge, Vec3::new(leaf.clear.x, leaf.clear.y, thick));
         assert!(check_fit(&made(0.08), Hang::Door, hole).is_empty());
         assert_eq!(check_fit(&made(0.6), Hang::Door, hole).len(), 1);
-        let wide = entry(Anchor::Hinge, Vec3::new(1.2, leaf.height, 0.08));
+        let wide = entry(Anchor::Hinge, Vec3::new(1.2, leaf.clear.y, 0.08));
         assert_eq!(check_fit(&wide, Hang::Door, hole).len(), 1);
     }
 }
