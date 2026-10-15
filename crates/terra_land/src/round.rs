@@ -4,6 +4,7 @@
 
 use crate::Land;
 use crate::drift::Drift;
+use crate::heath::{self, HeathMap};
 use crate::snow::Snow;
 use crate::water::Waters;
 use crate::woods::{self, Footing, Seasons, Stand};
@@ -18,6 +19,8 @@ pub struct Round {
     /// How much of the falling snow its ground keeps against the prevailing wind (D323), over
     /// the lakes' grid.
     pub drift: Drift,
+    /// What covers its open ground past the trees, community by community, over the lakes' grid.
+    pub heath: HeathMap,
     /// Its middle, and how far across it reaches.
     pub middle: Vec3,
     pub across_m: f32,
@@ -48,12 +51,14 @@ impl Round {
             latitudes,
             heights,
         );
+        let heath = heath_over(&land, &waters, &seasons, &drift);
         Self {
             land,
             waters,
             seasons,
             snow,
             drift,
+            heath,
             middle,
             across_m,
         }
@@ -86,6 +91,51 @@ impl Round {
             ..self.land.place(point, normal)
         }
     }
+}
+
+/// The heath over the lakes' grid round a place: each cell's ground as the land makes it, its
+/// growing season against the tree line's, the trees on it, its shelter from the wind and how
+/// wet it is.
+fn heath_over(land: &Land, waters: &Waters, seasons: &Seasons, drift: &Drift) -> HeathMap {
+    let region = waters.region();
+    let radius = land.radius_m();
+    let drainage = heath::Drainage::new(land.ground.spec().seed);
+    HeathMap::over(region, |c, r| {
+        let up = region.direction(c, r);
+        let point = up * (radius + region.height(c, r));
+        let normal = region.normal(c, r);
+        let place = land.place(point, normal);
+        let season = seasons.at(place.latitude, place.height_m, place.sunward);
+        let above_water = waters
+            .lake_near(up, 1)
+            .map_or(50.0, |level| point.length() - level);
+        if above_water < 0.0 {
+            return heath::Heath {
+                wet: 1.0,
+                ..heath::Heath::default()
+            };
+        }
+        let footing = land.footing(point, None);
+        if footing == Footing::Rock {
+            return heath::Heath::default();
+        }
+        let slope_deg = region.slope_deg(c, r);
+        let trees = woods::stand(&season, slope_deg, footing).density;
+        let frozen = smoothstep(-1.0, -4.0, season.year_mean_c);
+        heath::heath(heath::Ground {
+            colder_c: terra_climate::TREE_LINE_SEASON_C - season.growing_mean_c,
+            trees,
+            shelter_deg: drift.shelter_at_cell(c, r),
+            wet: (heath::wetness(region, c, r, above_water, frozen) + drainage.at(point))
+                .clamp(0.0, 1.0),
+            slope_deg,
+        })
+    })
+}
+
+fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
+    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// What a still lake mirrors, all round it (D322): in each of so many ways out, how high the

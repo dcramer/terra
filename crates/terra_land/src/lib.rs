@@ -11,6 +11,7 @@
 pub mod drift;
 pub mod frame;
 pub mod ground;
+pub mod heath;
 pub mod lakes;
 pub mod maps;
 pub mod region;

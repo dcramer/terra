@@ -261,6 +261,49 @@ fn run() -> Result<(), String> {
         let footing = land.footing(points[k], water);
         woods::stand(&seasons[k], slope[k], footing)
     });
+    // What covers the open ground past the trees (terra_land::heath), community by community.
+    let drainage = terra_land::heath::Drainage::new(Seed(args.seed));
+    let wet: Vec<f32> = par_map(&cells, |&k| {
+        let above_water = if lakes.lake[k].is_some() { -1.0 } else { 50.0 };
+        let frozen = ((-1.0 - seasons[k].year_mean_c) / 3.0).clamp(0.0, 1.0);
+        (terra_land::heath::wetness(&region, k % n, k / n, above_water, frozen)
+            + drainage.at(points[k]))
+        .clamp(0.0, 1.0)
+    });
+    let heath_cells: Vec<Option<[u8; 3]>> = par_map(&cells, |&k| {
+        if lakes.lake[k].is_some() {
+            return Some([40, 80, 150]);
+        }
+        let h = terra_land::heath::heath(terra_land::heath::Ground {
+            colder_c: TREE_LINE_SEASON_C - seasons[k].growing_mean_c,
+            trees: stands[k].density,
+            shelter_deg: shelter[k],
+            wet: wet[k],
+            slope_deg: slope[k],
+        });
+        let parts = [
+            (h.fellfield, [150.0, 148.0, 142.0]),
+            (h.lichen, [205.0, 204.0, 176.0]),
+            (h.shrub, [150.0, 72.0, 42.0]),
+            (h.sedge, [178.0, 156.0, 92.0]),
+            (h.moss, [88.0, 128.0, 48.0]),
+            (stands[k].density * (1.0 - h.open), [24.0, 60.0, 30.0]),
+            (
+                (1.0 - h.open) * (1.0 - stands[k].density),
+                [96.0, 136.0, 60.0],
+            ),
+        ];
+        let mut c = [0.0f32; 3];
+        let mut sum = 0.0;
+        for (share, colour) in parts {
+            sum += share;
+            for i in 0..3 {
+                c[i] += share * colour[i];
+            }
+        }
+        let s = shade[k] / sum.max(1e-3);
+        Some(c.map(|v| (v * s).min(255.0) as u8))
+    });
     // Trees standing: closer for denser, and a tree at its full height green, krummholz brown.
     let tree_cells: Vec<Option<[u8; 3]>> = stands
         .iter()
@@ -432,6 +475,36 @@ fn run() -> Result<(), String> {
                 over: None,
             },
             "20 degrees exposed to 20 sheltered".into(),
+        ),
+        (
+            "heath",
+            "What covers open ground past the trees, by exposure and wetness (terra_land::heath): fellfield's stones grey, lichen heath pale, dwarf-shrub heath rust, tussock sedge straw, moss carpet green; the forest dark green, a meadow's grass green; lakes blue",
+            Map {
+                cells: n,
+                values: &density,
+                ramp: Ramp::SNOW,
+                low: 0.0,
+                high: 1.0,
+                shade: Some(&shade),
+                lines: &[],
+                over: Some(&heath_cells),
+            },
+            "by colour".into(),
+        ),
+        (
+            "wetness",
+            "How wet the ground is (terra_land::heath::wetness): hollows, level ground, the shore and permafrost's held water",
+            Map {
+                cells: n,
+                values: &wet,
+                ramp: Ramp::AMOUNT,
+                low: 0.0,
+                high: 1.0,
+                shade: Some(&shade),
+                lines: &[0.45, 0.75],
+                over: None,
+            },
+            "dry to soaked".into(),
         ),
     ];
     for (name, _, map, _) in &maps {

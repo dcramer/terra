@@ -41,6 +41,7 @@ pub fn wind_from(prevailing_from_deg: f32) -> Vec2 {
 #[derive(Clone, Debug)]
 pub struct Drift {
     catches: Vec<f32>,
+    shelters: Vec<f32>,
     region: Region,
 }
 
@@ -48,16 +49,22 @@ impl Drift {
     pub fn over(region: &Region, from: Vec2) -> Self {
         let n = region.cells;
         let cells: Vec<usize> = (0..n * n).collect();
-        let catches = crate::maps::par_map(&cells, |&k| {
-            catch(region.shelter_deg(k % n, k / n, from, REACH_M))
-        });
+        let shelters =
+            crate::maps::par_map(&cells, |&k| region.shelter_deg(k % n, k / n, from, REACH_M));
+        let catches = shelters.iter().map(|&s| catch(s)).collect();
         Self {
             catches,
+            shelters,
             region: Region {
                 heights: Vec::new(),
                 ..region.clone()
             },
         }
+    }
+
+    /// How sheltered a cell is, Winstral's Sx in degrees.
+    pub fn shelter_at_cell(&self, column: usize, row: usize) -> f32 {
+        self.shelters[row * self.region.cells + column]
     }
 
     /// The catch at a cell.
