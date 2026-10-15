@@ -1043,7 +1043,9 @@ fn through_solid(
         t_max[axis] += delta[axis];
         // A wall runs on into a roof's cube it is carried up into, to the roof's deck.
         let now = solid(base, kits, cell, detail)
-            || (base.cube(cell).is_some_and(|c| c.kind.is_roof())
+            || (base
+                .cube(cell)
+                .is_some_and(|c| c.kind.is_roof() && shown(kits, &c, detail))
                 && solid(base, kits, cell - IVec3::Y, detail));
         if now {
             entered = true;
