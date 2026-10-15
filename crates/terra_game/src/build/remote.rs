@@ -71,6 +71,7 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use terra_build::fitting::Hang;
 use terra_build::ops::{Done, Op, Refusal};
 use terra_build::roofer::Style;
 use terra_build::{CELL_M, Facing, Fill, Panel, STOREY_M, Shape};
@@ -646,16 +647,22 @@ fn fit(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     .cloned()
     .ok_or_else(|| refused("there is no such door or shutters"))?;
     as_player(world, |building, player| {
-        let prop = plans::prop_for(&building.site.base, at, fitting.kind, fitting.hang)
-            .ok_or_else(|| refused("that is not an opening"))?;
-        let (wide, high) = plans::hole_size(&prop);
-        if !fitting.fits(wide, high) {
-            return Err(refused(format!(
-                "{} fit holes {}",
-                fitting.name,
-                fitting.sizes()
-            )));
-        }
+        let prop = plans::fit(
+            &building.site.base,
+            at,
+            fitting.kind,
+            fitting.hang,
+            &fitting.fits,
+        )
+        .map_err(|misfit| match misfit {
+            plans::Misfit::NoHole => refused("that is not an opening"),
+            plans::Misfit::Taken => refused("something is fitted there already"),
+            plans::Misfit::Hang(Hang::Door) => refused("a doorway takes a door"),
+            plans::Misfit::Hang(Hang::Shutters) => refused("a window takes shutters"),
+            plans::Misfit::Size(..) => {
+                refused(format!("{} fit holes {}", fitting.name, fitting.sizes()))
+            }
+        })?;
         let what = format!("fit {}", fitting.name.to_lowercase());
         let result = building.act(Some(player), &what, &[Op::FitProp(prop)]);
         Ok(answer(&what, result))

@@ -776,14 +776,8 @@ fn plan_work(
                     base.cube(at)
                         .is_some_and(|cube| cube.fill == terra_build::Fill::Open)
                 })?;
-            if base.prop_in(cube).is_some() {
-                return None;
-            }
-            let prop = plans::prop_for(base, cube, fitting.kind, fitting.hang)?;
-            let (wide, high) = plans::hole_size(&prop);
-            if !fitting.fits(wide, high) {
-                return None;
-            }
+            // Free, of its hang (a doorway a door, a window shutters) and a size it fits.
+            let prop = plans::fit(base, cube, fitting.kind, fitting.hang, &fitting.fits).ok()?;
             let what = format!("fit {}", fitting.name.to_lowercase());
             work(building, Doing::Fit, what, vec![Op::FitProp(prop)])
         }

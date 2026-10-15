@@ -895,6 +895,46 @@ pub fn hang_for(base: &Base, low: IVec3) -> crate::fitting::Hang {
     }
 }
 
+/// Why a door or shutters cannot be fitted where they are asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Misfit {
+    /// The cube is in no opening.
+    NoHole,
+    /// Something is fitted there already.
+    Taken,
+    /// The hole takes the other hang: a doorway a door, a window shutters ([`hang_for`]).
+    Hang(crate::fitting::Hang),
+    /// The hole is this size, wide by high in cubes, which it does not fit.
+    Size(i32, i32),
+}
+
+/// A door or shutters of a kind fitted into the hole a cube is part of, as the hammer and
+/// the remote both fit them: the hole free, its hang the hole's own (a doorway takes a door,
+/// a window shutters, [`hang_for`]), and its size one of those it `fits`, wide by high in
+/// cubes.
+pub fn fit(
+    base: &Base,
+    cube: IVec3,
+    kind: crate::PropKind,
+    hang: crate::fitting::Hang,
+    fits: &[(i32, i32)],
+) -> Result<crate::Prop, Misfit> {
+    let (low, _) = hole(base, cube).ok_or(Misfit::NoHole)?;
+    if base.prop_in(cube).is_some() {
+        return Err(Misfit::Taken);
+    }
+    let wanted = hang_for(base, low);
+    if wanted != hang {
+        return Err(Misfit::Hang(wanted));
+    }
+    let prop = prop_for(base, cube, kind, hang).ok_or(Misfit::NoHole)?;
+    let (wide, high) = hole_size(&prop);
+    if !fits.contains(&(wide, high)) {
+        return Err(Misfit::Size(wide, high));
+    }
+    Ok(prop)
+}
+
 /// How wide and high a hole is, in cubes, along its wall.
 pub fn hole_size(prop: &crate::Prop) -> (i32, i32) {
     let size = IVec3::from_array(prop.max) - IVec3::from_array(prop.min) + IVec3::ONE;
@@ -1115,6 +1155,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!((shutters.opens, hole_size(&shutters)), ([-1, 0, 0], (1, 2)));
+    }
+
+    #[test]
+    fn a_doorway_takes_only_a_door_and_a_window_only_shutters() {
+        use crate::fitting::Hang;
+        use crate::{BuildOp, Cube};
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [5, 0, 4],
+            kind: LOGS,
+        });
+        let open = Some(Cube::new(LOGS, Fill::Open));
+        // A low doorway from the floor in the south wall, two cubes by two, a size shutters
+        // fit too; and a window two by two over a sill in the north wall.
+        base.apply(BuildOp::Fill {
+            min: [2, 0, 4],
+            max: [3, 1, 4],
+            cube: open,
+        });
+        base.apply(BuildOp::Fill {
+            min: [2, 2, 0],
+            max: [3, 3, 0],
+            cube: open,
+        });
+        let (door, window) = (IVec3::new(2, 0, 4), IVec3::new(3, 3, 0));
+        let any = [(2, 2)];
+        let kind = crate::PropKind(0);
+        assert_eq!(
+            fit(&base, door, kind, Hang::Shutters, &any),
+            Err(Misfit::Hang(Hang::Door))
+        );
+        assert!(fit(&base, door, kind, Hang::Door, &any).is_ok());
+        assert_eq!(
+            fit(&base, window, kind, Hang::Door, &any),
+            Err(Misfit::Hang(Hang::Shutters))
+        );
+        let shutters = fit(&base, window, kind, Hang::Shutters, &any).unwrap();
+        assert_eq!(shutters.hang, Hang::Shutters);
+        assert_eq!(
+            fit(&base, window, kind, Hang::Shutters, &[(2, 4)]),
+            Err(Misfit::Size(2, 2))
+        );
+        assert_eq!(
+            fit(&base, IVec3::new(0, 1, 4), kind, Hang::Door, &any),
+            Err(Misfit::NoHole)
+        );
     }
 
     #[test]
