@@ -158,7 +158,7 @@ async function play() {
   await step(
     "rescue",
     async () => {
-      await game.give("spear", "leather_coat", "leather_cap", "health:100", "stamina:100", "fed:80");
+      await game.give("spear", "health:100", "stamina:100", "fed:80");
       // Spear in hand before walking in among them.
       await game.hold("Spear");
       await game.warp([58, -58], [70, -60]);

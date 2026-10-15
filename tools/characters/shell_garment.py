@@ -14,7 +14,7 @@ made by Tripo, as one outer surface. This:
      skin under it does, so skin cannot come through it in any pose;
   5. bakes the dressed model's colour onto it, and lists the patches of skin it hides.
 
-    tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest
+    tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-outfit/model.glb leather_coat Leather chest
 
 The slot (D64) says where on the body the piece can be: a chest piece never reaches the thighs,
 whatever colour Tripo gave the dressed model's shorts.

@@ -31,7 +31,7 @@
 //                holds       what it carries and how many, filling no cells (D118)
 (
     start: (
-        wears: ["Small pack"],
+        wears: ["Small pack", "Leather coat", "Trousers"],
         // On the bar, in this order. A torch among them, so the first night can be got
         // through before a campfire makes more.
         tools: ["Hammer", "Stone axe", "Stone pickaxe", "Knife", "Torch"],
@@ -130,17 +130,18 @@
         ),
         // Armour wears with each blow it takes (D99).
         (
-            name: "Leather cap",
-            about: "Worn, takes a tenth of every blow",
-            lasts: 60,
-            worn: (slot: "Head", protection: 0.1, warmth: 0.15),
-        ),
-        (
             name: "Leather coat",
             size: (2, 2),
             about: "Worn, takes a quarter of every blow",
             lasts: 80,
             worn: (slot: "Body", protection: 0.25, warmth: 1.0),
+        ),
+        (
+            name: "Trousers",
+            size: (2, 2),
+            about: "Worn, takes a tenth of every blow",
+            lasts: 60,
+            worn: (slot: "Legs", protection: 0.1, warmth: 0.3),
         ),
         (
             name: "Quiver",

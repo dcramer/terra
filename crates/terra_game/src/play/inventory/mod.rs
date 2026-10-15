@@ -45,14 +45,15 @@ pub use super::flora_kinds::Cuttable;
 /// How many slots the bar has: eight, as Valheim's has. A placeholder (D84).
 pub const BAR_SLOTS: usize = 8;
 
-/// The slots of the character sheet, by the names the items file wears things in. Which
-/// slots there are is open (D64); a pack, what is worn on the head and body, and a belt
+/// The slots of the character sheet, by the names the items file wears things in: some of
+/// D64's standard slots so far, a pack, what is worn on the head, body and legs, and a belt
 /// for a quiver (D118).
-pub const SLOTS: [(GearSlot, &str); 4] = [
+pub const SLOTS: [(GearSlot, &str); 5] = [
     (GearSlot(0), "Pack"),
     (GearSlot(1), "Head"),
     (GearSlot(2), "Body"),
     (GearSlot(3), "Belt"),
+    (GearSlot(4), "Legs"),
 ];
 #[cfg(test)]
 const PACK: GearSlot = SLOTS[0].0;

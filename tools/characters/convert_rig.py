@@ -157,6 +157,35 @@ if SMOOTH:
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
     bpy.ops.object.mode_set(mode="OBJECT")
 
+# 3b. Feet as wide as a person's. Generated bodies come with short broad feet, 16 cm across
+# on a 1.8 m man, which read as clown shoes (the developers, 2026-10-15: "too large feet"); a
+# man's foot is about 6% of his height across. Each foot is narrowed about its own middle,
+# across its length, as far as the foot's bones weigh on its skin, so it eases out through the
+# ankle; its length is kept. The morphs keep the base's feet (morph.py), so every body has them.
+FOOT_WIDTH = 0.06
+tall = max(v.co.z for v in body.data.vertices) - min(v.co.z for v in body.data.vertices)
+for s in ("l", "r"):
+    feet = {g.index for g in body.vertex_groups if g.name in (f"foot_{s}", f"ball_{s}", f"ball_leaf_{s}")}
+    share = {v.index: sum(g.weight for g in v.groups if g.group in feet) for v in body.data.vertices}
+    ankle = arm.matrix_world @ arm.data.bones[f"foot_{s}"].head_local
+    toe = arm.matrix_world @ arm.data.bones[f"ball_{s}"].head_local
+    ahead = Vector((toe.x - ankle.x, toe.y - ankle.y, 0.0)).normalized()
+    across = Vector((-ahead.y, ahead.x, 0.0))
+    sole = [body.data.vertices[i].co.dot(across) for i, w in share.items() if w > 0.5]
+    middle = (max(sole) + min(sole)) / 2
+    width = max(sole) - min(sole)
+    narrow = min(1.0, FOOT_WIDTH * tall / width)
+    for i, w in share.items():
+        if w <= 0:
+            continue
+        v = body.data.vertices[i]
+        t = min(1.0, w)
+        k = 1.0 - (1.0 - narrow) * t * t * (3 - 2 * t)
+        off = v.co.dot(across) - middle
+        v.co += across * (off * k - off)
+    print("FEET", s, f"{width * 100:.1f} cm across, narrowed to {width * narrow * 100:.1f} cm")
+body.data.update()
+
 # 4. Bind and export the mesh and skin.
 body.parent = arm
 body.matrix_parent_inverse = arm.matrix_world.inverted()

@@ -18,6 +18,7 @@ import math
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 
@@ -89,6 +90,53 @@ def relax(bm, mw, skin, rounds):
             v.co = co
 
 
+def blank(name, size, data=False):
+    """A new image of `size` pixels, all clear, so what a bake writes shows by its alpha."""
+    image = bpy.data.images.new(name, size, size, alpha=True, is_data=data)
+    image.pixels.foreach_set(np.zeros(size * size * 4, np.float32))
+    return image
+
+
+def baked(image):
+    """Which pixels of `image` a bake wrote, by its alpha, row by row as `pixels` holds them."""
+    w, h = image.size
+    px = np.empty(w * h * 4, np.float32)
+    image.pixels.foreach_get(px)
+    return px.reshape(h, w, 4)[..., 3] > 0.5
+
+
+def fill_gaps(image, mask):
+    """Edge padding: every pixel a bake left clear given the colour of the baked pixels nearest
+    it, by pull-push (each smaller copy the mean of the baked pixels under it, then each gap filled
+    from the smallest copy that has something there). Left black, the gaps darken a texture's
+    smaller copies, which a game reads at a distance, and its roughness's, which were 0, glossed
+    the leather until it mirrored the sky. `mask` is where the bake wrote: a colour bake's alpha
+    shows it; a normal or roughness bake writes every pixel opaque, so takes the colour's."""
+    w, h = image.size
+    px = np.empty(w * h * 4, np.float32)
+    image.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    weight = mask.astype(np.float32)
+    if weight.all() or not weight.any():
+        return
+    levels = [(px[..., :3] * weight[..., None], weight)]
+    while levels[-1][1].shape[0] > 1 and levels[-1][1].shape[1] > 1:
+        total, count = levels[-1]
+        hh, ww = count.shape[0] // 2 * 2, count.shape[1] // 2 * 2
+        total = total[:hh, :ww].reshape(hh // 2, 2, ww // 2, 2, 3).sum(axis=(1, 3))
+        count = count[:hh, :ww].reshape(hh // 2, 2, ww // 2, 2).sum(axis=(1, 3))
+        levels.append((total, count))
+    colour = levels[-1][0] / np.maximum(levels[-1][1], 1e-6)[..., None]
+    for total, count in reversed(levels[:-1]):
+        up = np.repeat(np.repeat(colour, 2, axis=0), 2, axis=1)
+        up = np.pad(up, ((0, count.shape[0] - up.shape[0]), (0, count.shape[1] - up.shape[1]), (0, 0)), mode="edge")
+        here = total / np.maximum(count, 1e-6)[..., None]
+        colour = np.where(count[..., None] > 0, here, up)
+    px[..., :3] = np.where(weight[..., None] > 0, px[..., :3], colour)
+    px[..., 3] = 1.0
+    image.pixels.foreach_set(px.ravel())
+
+
 def bake(piece, source, name, role, size, reach):
     """Gives `piece` a new unwrap and a material named `role`, its colour, normals and roughness
     baked from `source` (a model of the base person wearing it, lined up with the body) at
@@ -104,7 +152,7 @@ def bake(piece, source, name, role, size, reach):
     with bpy.context.temp_override(active_object=piece, object=piece, edit_object=piece):
         bpy.ops.uv.smart_project(island_margin=0.01)
     bpy.ops.object.mode_set(mode="OBJECT")
-    colour = bpy.data.images.new(f"{name}_colour", size, size)
+    colour = blank(f"{name}_colour", size)
     mat = bpy.data.materials.new(role)
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -131,15 +179,19 @@ def bake(piece, source, name, role, size, reach):
     piece.select_set(True)
     bpy.context.view_layer.objects.active = piece
     bpy.ops.object.bake(type="DIFFUSE")
+    written = baked(colour)
+    print(f"BAKED {name} covers {written.mean():.0%} of its texture; the rest padded")
+    fill_gaps(colour, written)
     colour.pack()
     # Its surface as well as its colour, so leather reads as leather and not as a printed sheet.
     for kind in ("NORMAL", "ROUGHNESS"):
-        image = bpy.data.images.new(f"{name}_{kind.lower()}", size, size, is_data=True)
+        image = blank(f"{name}_{kind.lower()}", size, data=True)
         image.colorspace_settings.name = "Non-Color"
         node = nodes.new("ShaderNodeTexImage")
         node.image = image
         nodes.active = node
         bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+        fill_gaps(image, written)
         image.pack()
         if kind == "NORMAL":
             mapping = nodes.new("ShaderNodeNormalMap")

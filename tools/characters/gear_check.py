@@ -12,7 +12,7 @@ has passed into a closed piece (a heavy back into a pack's bag) is inside it, co
 and not counted: until 2026-10-12 it was, which failed packs on skin no one could see. Prints one GEARCHECK line of JSON per look; a look passes when,
 in every frame, no more than `through_share` of the skin it watches is through it.
 
-    tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat leather_cap small_pack quiver
+    tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat trousers small_pack quiver
 
 With --fix, it also adds to a file beside each look given as a file (`M-ITEM.glb`) how far
 each of its vertices must move outward for no skin to come through it in any frame, plus a

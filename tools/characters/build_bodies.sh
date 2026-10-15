@@ -30,8 +30,8 @@ base=base-male
 
 # Worn looks made on the base: item, how it is made, and what it is made from.
 garments=(
-  "leather_coat Leather chest_sleeveless art/gear/dressed-male-coat/model.glb"
-  "leather_cap Leather head_cap art/gear/dressed-male-cap/model.glb"
+  "leather_coat Leather chest_long_sleeves art/gear/dressed-male-outfit/model.glb"
+  "trousers Cloth legs_long art/gear/dressed-male-outfit/model.glb"
 )
 rigid=(small_pack large_pack quiver)
 # Morphs: a design kept in art/characters/base-male/morphs/NAME/model.glb, or a rigged body.

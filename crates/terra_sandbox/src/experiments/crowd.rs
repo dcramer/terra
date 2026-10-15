@@ -20,7 +20,7 @@ use terra_game::{
 };
 
 const BODY: &str = "models/character/base.glb";
-const OUTFIT: [&str; 4] = ["leather_coat", "leather_cap", "small_pack", "quiver"];
+const OUTFIT: [&str; 4] = ["leather_coat", "trousers", "small_pack", "quiver"];
 const CLIPS: [&str; 3] = ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop"];
 const SPACING_M: f32 = 1.4;
 

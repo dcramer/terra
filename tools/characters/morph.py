@@ -18,8 +18,8 @@ Steps:
   2. Shape. The base's skin is drawn onto the design's skin. Each pull is smoothed over
      distance (a Gaussian of 6, 4, 2.5 and then 1.5 cm), never over mesh steps, so dense and
      sparse parts fit alike and no crease of the design's clothes comes through. Skin with no
-     trustworthy match (too far, or facing away) is carried by its neighbours. The hands stay
-     the base's.
+     trustworthy match (too far, or facing away) is carried by its neighbours. The hands and
+     feet stay the base's.
   3. Back to the T-pose, by undoing the pose: the change is a pure change of shape.
   4. Joints. A build morph keeps the base's skeleton, as Starfield's Heavy does: placing joints
      from the skin round them let belly fat drag the hips and spine 9-12 cm. A rigged design
@@ -263,8 +263,9 @@ C, ok = nearest(X, 0.1)
 err = np.linalg.norm(C[ok] - X[ok], axis=1)
 print(f"MORPH {name} posed: mean {err.mean() * 100:.2f} cm, 95% {np.percentile(err, 95) * 100:.2f} cm")
 
-# 3. The shape, smoothed by distance, the hands kept.
-hand = sum(W[:, bi[b]] for b in bones if b.startswith(("hand_", "thumb_", "index_", "middle_", "ring_", "pinky_")))
+# 3. The shape, smoothed by distance, the hands and feet kept: generated ones are worse, and
+# the base's feet are made a person's width (convert_rig.py).
+hand = sum(W[:, bi[b]] for b in bones if b.startswith(("hand_", "thumb_", "index_", "middle_", "ring_", "pinky_", "foot_", "ball_")))
 keep = smooth(np.clip(1.0 - hand, 0, 1)[:, None], 4)[:, 0]
 
 

@@ -4,7 +4,7 @@
 # given as references too so new icons keep to them.
 
 @style style/painted-workbench.jpg
-@anchors stone_axe leather_cap stone
+@anchors stone_axe stone
 
 # Tools and weapons
 bow: a wooden recurve bow with a thin string
@@ -20,8 +20,8 @@ torch: a torch, a wooden stick with fibre bound round its head, charred black at
 # Worn
 small_pack: a small leather backpack with straps and pockets
 large_pack: a large leather backpack with straps and pockets
-leather_cap: a rounded cap of stitched leather, on its own, with no head, face, skin or hair under it
-leather_coat: a sleeveless leather jerkin laced at the front, with a belt
+leather_coat: a fitted jacket of worn tanned leather with long sleeves, closed down the front with wooden toggles
+trousers: plain trousers of rough undyed grey-brown cloth, laid flat, with a narrow dark leather belt
 quiver: a leather quiver holding a few arrows
 
 # Materials and food, which have no look yet

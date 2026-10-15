@@ -120,7 +120,7 @@ A piece is made on the base (below), into `tools/characters/out/gear/base-male/`
 3. Build the piece from the base body:
 
 ```bash
-tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest_sleeveless
+tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-outfit/model.glb leather_coat Leather chest_long_sleeves
 ```
 
 The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
@@ -136,7 +136,7 @@ Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. 
 **Check every piece on every body**, by numbers first:
 
 ```bash
-tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat leather_cap small_pack quiver
+tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat trousers small_pack quiver
 ```
 
 It plays our clips and reports, per clip, the share of skin near each piece that shows through it (the piece just beneath the skin, and nothing of it covering the skin from outside), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wesl`).
@@ -218,7 +218,7 @@ Rewriting the items' files changes their bytes, so `cargo xtask check` then find
 **Check it in the game's own renderer**: each template side by side, dressed, through the clips, with where its sockets stand:
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base.glb --template male --model models/character/base.glb --template female --model models/character/base.glb --template heavy --wear leather_coat --wear leather_cap --wear small_pack --anim Idle_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,200 --moments 0.3,0.7 --joints --sheet shots/wb/templates --clean --settle 60
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base.glb --template male --model models/character/base.glb --template female --model models/character/base.glb --template heavy --wear leather_coat --wear trousers --wear small_pack --anim Idle_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,200 --moments 0.3,0.7 --joints --sheet shots/wb/templates --clean --settle 60
 ```
 
 - **The `JOINTS` lines**, in Blender's axes, must match the `SOCKETS` lines the export printed for that morph (`tools/characters/out/M-game.glb`) to a millimetre or so: that is the game shaping a body as the tools do.
