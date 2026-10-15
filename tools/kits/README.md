@@ -3,7 +3,7 @@
 Makes a building kit's dressed pieces (D215, [docs/building-kits.md](../../docs/building-kits.md)): the sections a layout sweeps along each exposed edge by its role (a coping, a plinth, a sill, a lintel) and the corner stones laid up an edge a course at a time (quoins, jamb stones), from their source under `art/kits/<kit>/`, in Blender.
 
 ```bash
-tools/blender/run.sh tools/kits/pieces.py art/kits/stone/pieces.json assets/data/kits/pieces/stone.ron
+tools/blender/run.sh tools/kits/pieces.py art/kits/block/pieces.json assets/data/kits/pieces/block.ron
 ```
 
 The source, `pieces.json`, says each piece in numbers a person can read and change:

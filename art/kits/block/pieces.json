@@ -1,5 +1,5 @@
 {
-  "about": "The stone kit's dressed pieces (D215, tools/kits): sections swept along role edges and corner stones made to fit them. Profiles are (out, up) in metres from the edge: out from the face, up from the edge's line; the cube's half a metre, and nothing stands out past an eighth of it (D192). `round` are the points rounded, by `radius`.",
+  "about": "The block pattern's dressed pieces, shared by every block material and drawn in its own bake (D215, D290, tools/kits): sections swept along role edges and corner stones made to fit them. Profiles are (out, up) in metres from the edge: out from the face, up from the edge's line; the cube's half a metre, and nothing stands out past an eighth of it (D192). `round` are the points rounded, by `radius`.",
   "profiles": {
     "coping": {
       "about": "Over a wall's top: crowned to shed the rain, a rounded nose standing out, a drip under it.",

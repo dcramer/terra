@@ -4,6 +4,8 @@ Status: the building system as the player meets it, for the developers to read a
 
 Everything built is half-metre cubes on its base's own grid (D48, D181): walls are rows of cubes a cube thick, posts columns of them, floors layers, openings cubes left open, and roofs cubes of a roof kind cut to slopes (D241); what is wall, what floor and which rooms are indoors is read from the cubes alone (D261, D277). The player builds by hand, roofs too, with brushes, carving and shapes, and the game lays the details from each cube's neighbours; drawing a room, a wall or a roof of a material over what is enclosed stays as a quick way (D152, D154, D226). Building is done with the hammer in hand, standing in the world, not from a separate view above: the build menu comes from the tool (D67) and offers what you have unlocked (D68), and a plan view from above stays [an idea for later](#ideas-for-later) (D176). You see what you would place before you commit, and taking apart gives back what it cost.
 
+**Held to a baseline for now (D333, the developers):** construction work is held to wood (logs, hewn timber, shakes) and stone (stone, slate), built by hand and destroyed, with infinite pretend resources, until that is flawless and fast. Earth, lime-washed earth, wattle and daub and thatch are frozen: they still build and pass their checks, but are not polished, and are out of the settlement, the QA sets and the fault ratchet. Costs, building from storage, carrying large materials and recruits (building-plan.md's step 7) are paused. No new materials or props unless the developers ask.
+
 ## What the developers want
 
 In their words, shortened.
@@ -259,6 +261,8 @@ Because each piece is chosen by its role from the cubes round its edge, any arra
 **On the voxel grid** (D48, D181): constructing a part fills its cubes; a plan is cubes not yet filled. Carving an opening empties cubes.
 
 ## Large materials and carrying
+
+Paused by D333: what follows is built or decided, but not worked on while the baseline is wood and stone with infinite pretend resources.
 
 Decided (D140, D141): big structures take big materials, such as logs, carried to the plan; building takes what it needs from storage nearby, not only the pack. Leaning: better ways to move big materials come later (D68: a sled, a cart, perhaps D100's mounts), and they need a storage of their own, a log pile or a stone yard, unlocked later.
 

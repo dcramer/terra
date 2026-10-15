@@ -1,6 +1,6 @@
 """A kit's dressed pieces made in Blender from their source (D215; tools/kits/README.md).
 
-    tools/blender/run.sh tools/kits/pieces.py art/kits/stone/pieces.json assets/data/kits/pieces/stone.ron
+    tools/blender/run.sh tools/kits/pieces.py art/kits/block/pieces.json assets/data/kits/pieces/block.ron
 
 Reads the source, a JSON file under art/kits/<kit>/: its modules (D258), lengths of mesh
 swept from a section along +X and shaped as they go, each at a near and a far budget with

@@ -12,7 +12,7 @@
 // textures    the texture sets its pieces wear unless a pack says otherwise: Dressed for its
 //             dressed stone, Log and LogEnd for timber; a pack adds its Masonry (the walls
 //             and footings) and Floor (floors and walls' tops)
-// dress       the pieces every block material shares (tools/kits/pieces.py, art/kits/stone):
+// dress       the pieces every block material shares (tools/kits/pieces.py, art/kits/block):
 //             a coping on every top, a plinth along every foot stepping with the ground,
 //             quoins up every outside corner, a lintel, sill and jamb stones round every
 //             opening, a cap under a thinner wall standing on it, a fascia under an overhang,
@@ -48,7 +48,7 @@
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
     },
     dress: (
-        pieces: Some("data/kits/pieces/stone.ron"),
+        pieces: Some("data/kits/pieces/block.ron"),
         roles: {
             Crest: Profile(name: "coping"),
             Nose: Profile(name: "nose"),
