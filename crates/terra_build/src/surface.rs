@@ -775,7 +775,14 @@ pub fn draw_slots(
         [0, 1, 2].map(|axis| {
             let mut out = across(open(c - step(axis, 1)), open(c + step(axis, 1)), look);
             if axis != 1 && cut {
-                out.extend(crossings(c, axis));
+                // The cut's crossings both ways across, each mirrored, and its middle: a
+                // corner's hip or valley crosses its top on a diagonal, bending the cut
+                // between its edges (`roofs::gable_cut`), and with the same points both ways
+                // every square it crosses has its corners on it, to split along it.
+                for t in crossings(c, 0).into_iter().chain(crossings(c, 2)) {
+                    out.extend([t, 1.0 - t]);
+                }
+                out.push(0.5);
                 out.sort_by(f32::total_cmp);
                 out.dedup_by(|x, y| (*x - *y).abs() < 0.02);
             }

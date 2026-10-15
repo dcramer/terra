@@ -153,7 +153,18 @@ pub(crate) fn member(
     };
     // A gable's log cut to the roof over it: nothing of it above the slope rising from its
     // foot at each end, as a builder saws it.
-    if lean.iter().any(|&rise| rise > 0.0) {
+    let upright = frame.axis.y.abs() > 0.99;
+    if upright && lean != [0.0, 0.0] {
+        // An upright's top cut to a roof's slope rising so much a metre east and south,
+        // its highest at its top.
+        let half = section(kit, None).0 * 0.5;
+        let top = from.y.max(to.y);
+        let middle = top - (lean[0].abs() + lean[1].abs()) * half;
+        for p in made.grid.iter_mut().flatten() {
+            let cut = middle + lean[0] * (p.x - from.x) + lean[1] * (p.z - from.z);
+            p.y = p.y.min(cut);
+        }
+    } else if lean.iter().any(|&rise| rise > 0.0) {
         // Rings close enough to follow the slope: one drawn far off has its ends alone,
         // and its top would fall from its cut end the whole length of it.
         densify(&mut made, LEAN_RING_M);
@@ -196,8 +207,18 @@ pub(crate) fn member(
     if let Some((near, far)) = chinking {
         // A hair in from where it is laid to, the log's ends or the wall's faces, out of the
         // plane of sawn ends there.
-        let (near, far) = (near + DAUB_IN_M, far - DAUB_IN_M);
         let (depth, high) = made.daub;
+        // And under an end cut to a roof's slope, in from it as far as the slope rises
+        // from the log's foot to the daub's top, so none of it stands over the roof.
+        let over_foot = (kit.radius() - kit.course * 0.5 + high * 0.5).max(0.0) + DAUB_IN_M;
+        let under_slope = lean.map(|rise| if rise > 0.0 { over_foot / rise } else { 0.0 });
+        let (near, far) = (
+            near.max(under_slope[0]) + DAUB_IN_M,
+            far.min(length - under_slope[1]) - DAUB_IN_M,
+        );
+        if far <= near {
+            return;
+        }
         let along = frame.axis;
         let across = frame.side * depth;
         let mid = Vec3::Y * (-kit.course * 0.5);

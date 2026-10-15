@@ -1246,10 +1246,24 @@ pub fn gable_cut(cube: IVec3, under: &[[i32; 3]; 3], at: Vec3) -> f32 {
     let z = ((at.z / CELL_M - cube.z as f32) * 2.0).clamp(0.0, 2.0);
     let (i, k) = ((x as usize).min(1), (z as usize).min(1));
     let (tx, tz) = (x - i as f32, z - k as f32);
-    let h = |row: usize, column: usize| super::metres(under[row][column]);
-    let north = h(k, i) * (1.0 - tx) + h(k, i + 1) * tx;
-    let south = h(k + 1, i) * (1.0 - tx) + h(k + 1, i + 1) * tx;
-    north * (1.0 - tz) + south * tz
+    // Each quarter in two triangles split along its diagonal through the cube's middle,
+    // where a corner's hip or valley runs, so the cut follows the crease exactly: across it,
+    // a valley's cut stood up through the roof and a hip's fell short of it.
+    let h = |dx: usize, dz: usize| super::metres(under[k + dz][i + dx]);
+    let (h00, h10, h01, h11) = (h(0, 0), h(1, 0), h(0, 1), h(1, 1));
+    if (i == 0) == (k == 0) {
+        // The diagonal from (0, 0) to (1, 1).
+        if tx >= tz {
+            h00 + tx * (h10 - h00) + tz * (h11 - h10)
+        } else {
+            h00 + tz * (h01 - h00) + tx * (h11 - h01)
+        }
+    } else if tx + tz <= 1.0 {
+        // The diagonal from (1, 0) to (0, 1).
+        h00 + tx * (h10 - h00) + tz * (h01 - h00)
+    } else {
+        h11 + (1.0 - tx) * (h01 - h11) + (1.0 - tz) * (h10 - h11)
+    }
 }
 
 #[cfg(test)]
@@ -1260,6 +1274,31 @@ mod tests {
     use crate::{BuildOp, STOREY_M};
 
     const ROOF: Kind = Kind::FIRST_ROOF;
+
+    #[test]
+    fn a_gable_cut_follows_a_valley_across_its_cube_and_never_stands_over_it() {
+        // An inner corner's underside over a cube: level at 3.5 m along its north and west,
+        // falling to 3 m at its south-east corner, the valley on the diagonal between.
+        let m = |metres: f32| super::super::ticks(metres);
+        let under = [
+            [m(3.5), m(3.5), m(3.5)],
+            [m(3.5), m(3.25), m(3.25)],
+            [m(3.5), m(3.25), m(3.0)],
+        ];
+        // The roof itself: the higher of the two slopes meeting in the valley.
+        let roof = |x: f32, z: f32| 3.5 - 0.5 * x.min(z);
+        for i in 0..=20 {
+            for k in 0..=20 {
+                let (x, z) = (i as f32 / 20.0, k as f32 / 20.0);
+                let cut = gable_cut(IVec3::ZERO, &under, Vec3::new(x * CELL_M, 0.0, z * CELL_M));
+                assert!(
+                    (cut - roof(x, z)).abs() < 2e-3,
+                    "{x} {z}: {cut} for {}",
+                    roof(x, z)
+                );
+            }
+        }
+    }
 
     fn roof_kit() -> Kit {
         Kit {

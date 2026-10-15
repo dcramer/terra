@@ -86,7 +86,9 @@ pub enum Piece {
         chinking: Option<(i32, i32)>,
         /// How each end, at `from` and at `to`, is cut to the slope of a roof over it, as
         /// a gable's logs are: how many ticks the slope rises for each cube it runs in from
-        /// that end, from the log's foot there; none, sawn square.
+        /// that end, from the log's foot there; none, sawn square. For an upright, how many
+        /// ticks the slope its top is cut to rises for each cube east and south, its top
+        /// the highest of it.
         lean: [i32; 2],
         /// The role it is laid for, drawn as the kit dresses that role (`kit::Dress::Member`):
         /// a plate along a wall's top, a sill on what it stands on, a post up an opening's

@@ -270,6 +270,37 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
         };
         let (from, to) = (from.metres(), to.metres());
         let length = from.distance(to);
+        // An upright, a post up a gable's last cube alone: cut level under the roof over
+        // it to its slope (`Piece::Log`'s lean, for an upright), as a gable's logs are.
+        if from.x == to.x && from.z == to.z && length > 1e-3 {
+            let (bottom, top) = (from.y.min(to.y), from.y.max(to.y));
+            let half = crate::timber::section(kit, role).0 * 0.5;
+            let under = |dx: f32, dz: f32| roofs.under_over(from.x + dx, from.z + dz, bottom);
+            let (Some(middle), Some(east), Some(west), Some(south), Some(north)) = (
+                under(0.0, 0.0),
+                under(half, 0.0),
+                under(-half, 0.0),
+                under(0.0, half),
+                under(0.0, -half),
+            ) else {
+                layout.pieces.push(piece);
+                continue;
+            };
+            let slope = [(east - west) / (2.0 * half), (south - north) / (2.0 * half)];
+            // Its top where the roof is highest over its width, cut down to the slope.
+            let highest = middle + (slope[0].abs() + slope[1].abs()) * half;
+            if highest >= top {
+                layout.pieces.push(piece);
+            } else if middle > bottom + 0.05 {
+                let mut cut = log(from.with_y(bottom), from.with_y(highest), split, seed, None);
+                set_role(&mut cut, role);
+                if let Piece::Log { lean, .. } = &mut cut {
+                    *lean = slope.map(|s| libm::roundf(s * TICKS as f32) as i32);
+                }
+                layout.pieces.push(cut);
+            }
+            continue;
+        }
         if from.y != to.y || length < 1e-3 {
             layout.pieces.push(piece);
             continue;
