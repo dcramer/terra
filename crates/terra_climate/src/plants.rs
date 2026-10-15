@@ -55,6 +55,10 @@ pub struct LeafYear {
     /// The colour its leaves turn, as sRGB: an oak's tawny brown, a birch's yellow, grass's
     /// straw. Only for drawing it.
     pub autumn: (f32, f32, f32),
+    /// The leaf cards its leaves are drawn with (`assets/data/foliage.ron`), so a shader can
+    /// tell its leaves from another kind's. Only for drawing it.
+    #[serde(default)]
+    pub cards: Vec<String>,
 }
 
 /// A plant's leaves at a moment.
@@ -135,6 +139,7 @@ mod tests {
             drops: 1.0,
             wilts: None,
             autumn: (0.45, 0.28, 0.1),
+            cards: Vec::new(),
         }
     }
 

@@ -59,6 +59,7 @@ mod far;
 mod floor;
 mod footing;
 mod overgrowth;
+mod seasons;
 mod shade;
 mod species;
 mod thicket;
@@ -244,6 +245,16 @@ pub struct FoliageExtension {
     #[texture(102)]
     #[sampler(103)]
     leaf_normals: Option<Handle<Image>>,
+    /// What the climate does to it, as grown plants' (`terra_world::grown::FoliageClimate`,
+    /// D327), kept up to date by `seasons`.
+    #[uniform(100)]
+    climate: terra_world::grown::FoliageClimate,
+    #[texture(104)]
+    #[sampler(105)]
+    climate_ground: Option<Handle<Image>>,
+    #[texture(106, dimension = "2d_array")]
+    #[sampler(107)]
+    climate_leaves: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -282,6 +293,7 @@ pub fn plugin(app: &mut App) {
         floor::plugin,
         footing::plugin,
         far::plugin,
+        seasons::plugin,
     ))
     .init_resource::<Unmipped>()
     .init_resource::<Scanned>()
@@ -716,6 +728,9 @@ fn plant(
         parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
         relief: 0.0,
         leaf_normals: None,
+        climate: default(),
+        climate_ground: None,
+        climate_leaves: None,
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).

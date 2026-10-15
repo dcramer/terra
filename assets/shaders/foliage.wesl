@@ -25,6 +25,19 @@ import bevy_pbr::render::{
 @group(0) @binding(1) var<uniform> globals: Globals;
 
 // Field order must match FoliageExtension in grown/mod.rs and lush.rs.
+// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): where its maps are
+// round the camera, whether there are any and which painting, how wide the card atlas's cells
+// are, which kind's layer of the leaves map each cell's card is (-1 none), and each layer's
+// autumn colour, linear.
+struct FoliageClimate {
+    from_world: mat4x4<f32>,
+    on: u32,
+    painting: u32,
+    across: f32,
+    layers: array<vec4<i32>, 4>,
+    autumn: array<vec4<f32>, 8>,
+}
+
 struct Wind {
     direction: vec3<f32>,
     strength: f32,
@@ -41,6 +54,7 @@ struct Wind {
     // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
     // (D269); 0 for none.
     relief: f32,
+    climate: FoliageClimate,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -57,6 +71,52 @@ struct Parting {
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
+// Each kind's leaves round the camera (climate.rs): how many a plant has early and late in its
+// kind's year in red and green, how far turned in blue and alpha.
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var climate_leaves: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var climate_leaves_sampler: sampler;
+
+// Which kind's layer of the leaves map a card is, by the atlas cell its picture is in.
+fn card_layer(uv: vec2<f32>) -> i32 {
+    if wind.climate.on == 0u {
+        return -1;
+    }
+    let cell = vec2<i32>(floor(uv / wind.climate.across));
+    if any(cell < vec2<i32>(0)) || any(cell > vec2<i32>(3)) {
+        return -1;
+    }
+    let index = cell.y * 4 + cell.x;
+    return wind.climate.layers[index / 4][index % 4];
+}
+
+// How many leaves a plant standing at `origin` has, of its kind's: between its kind's early
+// and late, by where it stands (climate.md: a stand turns over days).
+fn leaves_on(origin: vec3<f32>, layer: i32) -> f32 {
+    let at = clamp((wind.climate.from_world * vec4<f32>(origin, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, layer, 0.0);
+    return mix(year.r, year.g, hash(origin * 1.7 + 0.3));
+}
+
+// What a card that fell by its rank carries in its second texture coordinate's y, for the
+// fragment shaders: far below any flutter's weight.
+const RANKED: f32 = -1000.0;
+
+// A card falls with the leaves it carries (climate.md, D327), the highest ranks first, as cards
+// drop with distance (D223): those past how many the plant still has shrink to their middles,
+// and are gone. None if the card has no rank, or all of it on.
+fn fallen(local: vec3<f32>, tangent: vec4<f32>, on: f32) -> vec4<f32> {
+    // Taken whichever way the tangent's sign turned it, as a mirrored card's is.
+    let rank = floor(abs(tangent.w));
+    let count = floor(fract(abs(tangent.w)) * 100.0 + 0.02);
+    if count < 1.0 || on >= 0.999 {
+        return vec4<f32>(local, 1.0);
+    }
+    let stays = clamp(count * on - rank, 0.0, 1.0);
+    let middle = local - tangent.xyz;
+    return vec4<f32>(middle + tangent.xyz * stays, stays);
+}
 
 // Plants yield to bodies walking through them (D271), as Ghost of Tsushima's grass takes
 // characters' displacement: what is within a body's reach, between its feet and head, is
@@ -165,8 +225,24 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
     let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var local = vertex.position;
+    // Whether this card falls by its rank here; if not, the fragment shaders thin it (`bare`).
+    var ranked = false;
 @if(VERTEX_TANGENTS) {
-    if wind.cards.z > 0.5 {
+    // A leaf card of a kind whose leaves fall, falling, or gone (D327); otherwise dropping
+    // with distance as before.
+    var falling = 1.0;
+@if(VERTEX_UVS_A) {
+    if wind.bark < 0.5 {
+        let layer = card_layer(vertex.uv);
+        if layer >= 0 {
+            ranked = floor(fract(abs(vertex.tangent.w)) * 100.0 + 0.02) >= 1.0;
+            let fell = fallen(local, vertex.tangent, leaves_on(world_from_local[3].xyz, layer));
+            local = fell.xyz;
+            falling = fell.w;
+        }
+    }
+}
+    if wind.cards.z > 0.5 && falling >= 1.0 {
         local = dropped(local, vertex.tangent, world_from_local[3].xyz);
     }
 }
@@ -197,8 +273,14 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         let foot = world_from_local[3].xyz;
         out.uv += fract(vec2<f32>(sin(dot(foot, vec3<f32>(12.9898, 78.233, 37.719))), sin(dot(foot, vec3<f32>(39.346, 11.135, 83.155)))) * 43758.547);
     }
-@if(VERTEX_UVS_B)
+@if(VERTEX_UVS_B) {
     out.uv_b = vertex.uv_b;
+    // A leaf card that fell by its rank is marked so, its flutter's weight being of no more
+    // use past here, so the fragment shaders do not thin what is left of it again.
+    if ranked {
+        out.uv_b.y = RANKED;
+    }
+}
     out.world_position = world;
     out.position = position_world_to_clip(world.xyz);
 

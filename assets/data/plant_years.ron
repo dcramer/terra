@@ -16,6 +16,7 @@
 //   wilts              for what browns in a drought: the ground's dryness, 1 less its
 //                      wetness, from which it does, and over how much more
 //   autumn             the colour its leaves turn, sRGB, for drawing them
+//   cards              the leaf cards it is drawn with (assets/data/foliage.ron)
 //
 // At the start, on the start's climate (assets/data/climate.ron, 40° north, near the sea),
 // the counts come to: chill about 15 by mid October, 60 by early November, 180 by late
@@ -32,6 +33,7 @@
         turns: 1.0,
         drops: 1.0,
         autumn: (0.47, 0.29, 0.1),
+        cards: ["oak", "oakbranch"],
     ),
     (
         // Birch: yellow first, bare first, and out in leaf first.
@@ -43,6 +45,7 @@
         turns: 1.0,
         drops: 1.0,
         autumn: (0.78, 0.6, 0.16),
+        cards: ["birch"],
     ),
     (
         // Hazel, in the understorey: turns yellow with the oaks, drops a little before.
@@ -54,6 +57,7 @@
         turns: 1.0,
         drops: 1.0,
         autumn: (0.7, 0.58, 0.2),
+        cards: ["hazel"],
     ),
     (
         // Bracken: rust-brown with the first chill, standing dead through the winter and
@@ -66,6 +70,7 @@
         turns: 1.0,
         drops: 0.7,
         autumn: (0.5, 0.25, 0.09),
+        cards: ["fern"],
     ),
     (
         // Scots pine: its oldest needles yellow and drop in autumn, the rest stay.
@@ -77,6 +82,7 @@
         turns: 0.08,
         drops: 0.1,
         autumn: (0.55, 0.48, 0.2),
+        cards: ["pine", "scots"],
     ),
     (
         // Norway spruce: nearly the same all year.
@@ -88,6 +94,7 @@
         turns: 0.04,
         drops: 0.05,
         autumn: (0.45, 0.4, 0.2),
+        cards: ["spruce"],
     ),
     (
         // Grass: straw-coloured in the long cold, green again with the spring's warmth; it

@@ -101,6 +101,18 @@ impl ClimateFields {
         today.between(&next, (time.hour() / terra_climate::HOURS) as f32)
     }
 
+    /// The start's climate with these kinds' years, for tests.
+    #[cfg(test)]
+    pub fn for_tests(years: Vec<LeafYear>) -> Self {
+        let climate: terra_climate::Climate = crate::data::read(WorldClimate::FILE);
+        Self {
+            fields: Arc::new(Fields::new(climate, terra_gen::Seed(1))),
+            years: Arc::new(years),
+            sea_radius_m: 2000.0,
+            frame: Frame::turned_for(Vec3::Y, LATITUDE, 0.17).0,
+        }
+    }
+
     /// A kind's layer in the leaves map.
     pub fn layer(&self, kind: &str) -> Option<usize> {
         self.years.iter().position(|year| year.kind == kind)

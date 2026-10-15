@@ -187,6 +187,19 @@ const FLOOR_LIGHT: f32 = 0.2;
 const BOUNCE: vec3<f32> = vec3<f32>(0.28, 0.3, 0.2);
 
 // Field order must match FoliageExtension in grown/mod.rs and lush.rs.
+// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): where its maps are
+// round the camera, whether there are any and which painting, how wide the card atlas's cells
+// are, which kind's layer of the leaves map each cell's card is (-1 none), and each layer's
+// autumn colour, linear.
+struct FoliageClimate {
+    from_world: mat4x4<f32>,
+    on: u32,
+    painting: u32,
+    across: f32,
+    layers: array<vec4<i32>, 4>,
+    autumn: array<vec4<f32>, 8>,
+}
+
 struct Wind {
     direction: vec3<f32>,
     strength: f32,
@@ -201,6 +214,7 @@ struct Wind {
     // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
     // (D269); 0 for none.
     relief: f32,
+    climate: FoliageClimate,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -211,6 +225,107 @@ var<uniform> wind: Wind;
 var leaf_normals: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103)
 var leaf_normals_sampler: sampler;
+// What the climate leaves round the camera (climate.rs, D327): snow's depth in red, its
+// brightest SNOW_FULL_M; the ground's wetness in green; rain now in blue; frost in alpha. And
+// each kind's leaves: how many early and late in red and green, how far turned in blue and
+// alpha.
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var climate_ground: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var climate_ground_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var climate_leaves: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var climate_leaves_sampler: sampler;
+
+// As ground.wesl's.
+const SNOW_FULL_M: f32 = 0.5;
+const SNOW: vec3<f32> = vec3<f32>(0.74, 0.76, 0.8);
+// How much brighter a turned leaf is than the green one it was, as autumn's crowns read
+// lighter than summer's.
+const AUTUMN_LIGHT: f32 = 1.25;
+
+// Where a plant stands in its kind's year, 0 early to 1 late: foliage.wesl's `hash`, so its
+// leaves fall and turn alike.
+fn plant_share(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+fn climate_place(world: vec3<f32>) -> vec2<f32> {
+    return clamp((wind.climate.from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
+// Which kind's layer of the leaves map a card is, by its atlas cell (foliage.wesl's).
+fn card_layer(uv: vec2<f32>) -> i32 {
+    let cell = vec2<i32>(floor(uv / wind.climate.across));
+    if any(cell < vec2<i32>(0)) || any(cell > vec2<i32>(3)) {
+        return -1;
+    }
+    let index = cell.y * 4 + cell.x;
+    return wind.climate.layers[index / 4][index % 4];
+}
+
+// Leaves its kind's year says have fallen, on a plant whose cards carry no rank to fall by, as
+// a bush's or a fern's do not (foliage.wesl's `fallen` takes the crowns', and marks them
+// `ranked`, its second texture coordinate's y far below nothing): gone in clumps a hand or
+// two across, so it thins and stands bare (D327). The same in the
+// main pass and the prepass, so depth and colour agree on what is left.
+fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
+    if wind.climate.on == 0u || wind.bark > 0.5 || ranked {
+        return;
+    }
+    let layer = card_layer(uv);
+    if layer < 0 {
+        return;
+    }
+    // Taken where the leaf is, not where its plant stands, which a pass may not be told: a
+    // bush's leaves agree, being near each other, and a patch of bushes a few metres across
+    // turns as one plant.
+    let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(world), layer, 0.0);
+    let on = mix(year.r, year.g, plant_share(floor(world / 3.0) * 1.7 + 0.3));
+    if on < 0.999 && plant_share(floor(world * 3.0) + 0.37) > on {
+        discard;
+    }
+}
+
+// The season on a plant (climate.md, D327): its leaves turned their kind's colour, the plant
+// between its kind's early and late by where it stands, each leaf a little apart; snow lying
+// on what faces up, on needles and the tops of limbs while it is cold enough to stay there;
+// and wet bark darker and glossier.
+fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, instance: u32) {
+    if wind.climate.on == 0u {
+        return;
+    }
+    let origin = mesh_functions::get_world_from_local(instance)[3].xyz;
+    let at = climate_place(world);
+    var colour = (*input).material.base_color.rgb;
+    if wind.bark < 0.5 {
+        let layer = card_layer(uv);
+        if layer >= 0 {
+            let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(origin), layer, 0.0);
+            let plant = mix(year.b, year.a, plant_share(origin * 1.7 + 0.3));
+            let leaf = clamp(plant * (0.7 + 0.6 * hash3(floor(world * 4.0))), 0.0, 1.0);
+            let grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let autumn = wind.climate.autumn[layer].rgb;
+            let tone = autumn * grey / max(dot(autumn, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4) * AUTUMN_LIGHT;
+            colour = mix(colour, tone, leaf);
+        }
+    }
+    let weather = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0);
+    if wind.bark > 0.5 {
+        let wet = max(weather.b, weather.g * 0.35);
+        colour *= mix(1.0, 0.6, wet);
+        (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 0.55, wet * 0.6);
+    }
+    // Snow stays on branches only while it is freezing; in a thaw it slides off.
+    let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * smoothstep(0.2, 0.7, weather.a);
+    let up = dot((*input).N, normalize(world));
+    let snow = lying * smoothstep(0.3, 0.75, up) * smoothstep(0.25, 0.6, wander(world * 1.3));
+    colour = mix(colour, SNOW, snow * 0.92);
+    (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
+}
 
 // Each leaf turned to its own angle (D269): the atlas's normal map, laid on the card's own
 // face, leans the crown's normal (which leans out of the whole crown, so it still shades as
@@ -703,6 +818,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         edge_fade(in.position, in.world_position.xyz);
     }
     clear_view(in.position, in.world_position.xyz, in.instance_index, wind.bark < 0.5);
+@if(VERTEX_UVS_A && VERTEX_UVS_B)
+    bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
+@if(VERTEX_UVS_A && !VERTEX_UVS_B)
+    bare(in.uv, false, in.world_position.xyz);
 
     var pbr_input: PbrInput;
 @if(VERTEX_UVS_A && VERTEX_TANGENTS && !VERTEX_UVS_B) {
@@ -775,6 +894,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * inside, pbr_input.material.base_color.a);
     }
 }
+@if(VERTEX_UVS_A)
+    seasoned(&pbr_input, in.uv, in.world_position.xyz, in.instance_index);
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
     pbr_input.specular_occlusion *= sky_specular(pbr_input, in.position);
     if wind.bark < 0.5 {

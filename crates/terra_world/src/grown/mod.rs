@@ -282,6 +282,83 @@ pub struct FoliageExtension {
     #[texture(102)]
     #[sampler(103)]
     pub leaf_normals: Option<Handle<Image>>,
+    /// What the climate does to it (`FoliageClimate`, D327), and the maps it reads.
+    #[uniform(100)]
+    pub climate: FoliageClimate,
+    #[texture(104)]
+    #[sampler(105)]
+    pub climate_ground: Option<Handle<Image>>,
+    #[texture(106, dimension = "2d_array")]
+    #[sampler(107)]
+    pub climate_leaves: Option<Handle<Image>>,
+}
+
+/// How many cells of the card atlas a shader can tell the kind of: four by four.
+const CELLS: usize = 16;
+/// How many kinds' autumn colours a shader is told.
+const AUTUMNS: usize = 8;
+
+/// What the foliage shader is told of the climate (climate.md, D327): where its maps are,
+/// whether there are any and which painting, how wide the atlas's cells are, which kind's
+/// layer of the leaves map each cell's card is (-1 for a card no kind's year names), and each
+/// layer's autumn colour, linear. Field order must match the struct in the foliage shaders.
+/// A plant's leaves fall card by card and turn their kind's colour; snow lies on what faces
+/// up; wet bark darkens.
+#[derive(bevy::render::render_resource::ShaderType, Reflect, Debug, Clone, Copy, PartialEq)]
+pub struct FoliageClimate {
+    pub from_world: Mat4,
+    pub on: u32,
+    pub painting: u32,
+    pub across: f32,
+    pub layers: [IVec4; CELLS / 4],
+    pub autumn: [Vec4; AUTUMNS],
+}
+
+impl Default for FoliageClimate {
+    fn default() -> Self {
+        Self {
+            from_world: Mat4::IDENTITY,
+            on: 0,
+            painting: 0,
+            across: 0.25,
+            layers: [IVec4::splat(-1); CELLS / 4],
+            autumn: [Vec4::splat(0.2); AUTUMNS],
+        }
+    }
+}
+
+impl FoliageClimate {
+    /// As the maps are painted now, for a material drawn from the card atlas `cards`, or from
+    /// another picture (bark, another atlas), whose cells no kind's year names.
+    pub fn from_maps(
+        maps: &crate::climate::ClimateMaps,
+        years: Option<&crate::climate::ClimateFields>,
+        cards: Option<&Cards>,
+    ) -> Self {
+        let mut climate = Self {
+            from_world: maps.from_world,
+            on: maps.ground.is_some() as u32,
+            painting: maps.painting,
+            ..Self::default()
+        };
+        if let (Some(fields), Some(cards)) = (years, cards) {
+            for (layer, year) in fields.years.iter().enumerate() {
+                for name in year.cards.iter().filter(|name| cards.has(name)) {
+                    let card = cards.get(name);
+                    climate.across = card.across;
+                    let cell = (card.cell / card.across).round().as_ivec2();
+                    let index = (cell.y * 4 + cell.x) as usize;
+                    if cell.min_element() >= 0 && cell.max_element() < 4 && index < CELLS {
+                        climate.layers[index / 4][index % 4] = layer as i32;
+                    }
+                }
+            }
+        }
+        for (layer, autumn) in climate.autumn.iter_mut().enumerate() {
+            *autumn = maps.autumn_of(layer as i32);
+        }
+        climate
+    }
 }
 
 /// How far a leaf's own tilt, in the card atlas's normal map, turns it from its crown's
@@ -388,6 +465,9 @@ impl Looks {
             parting,
             relief: 0.0,
             leaf_normals: None,
+            climate: FoliageClimate::default(),
+            climate_ground: None,
+            climate_leaves: None,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
@@ -718,7 +798,34 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
-        .insert_resource(Cards::read());
+        .insert_resource(Cards::read())
+        .add_systems(Update, follow_climate);
+}
+
+/// Every grown plant's material reads the climate's maps again each time they are painted.
+fn follow_climate(
+    maps: Option<Res<crate::climate::ClimateMaps>>,
+    fields: Option<Res<crate::climate::ClimateFields>>,
+    cards: Res<Cards>,
+    assets: Res<AssetServer>,
+    mut materials: ResMut<Assets<Foliage>>,
+) {
+    let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
+        return;
+    };
+    let atlas: Handle<Image> = assets.load(cards.atlas.clone());
+    let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
+    let other = FoliageClimate::from_maps(&maps, None, None);
+    for (_, material) in materials.iter_mut() {
+        let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
+            of_atlas
+        } else {
+            other
+        };
+        material.extension.climate = climate;
+        material.extension.climate_ground = maps.ground.clone();
+        material.extension.climate_leaves = maps.leaves.clone();
+    }
 }
 
 #[cfg(test)]
@@ -748,6 +855,44 @@ mod tests {
                 assert!(own.min_element() >= -1e-3 && own.max_element() <= 1.0 + 1e-3);
             }
         }
+    }
+
+    #[test]
+    fn a_card_is_known_as_the_kind_whose_year_names_it() {
+        let cards = Cards::read();
+        let years: Vec<terra_climate::LeafYear> = data::read(crate::climate::YEARS_FILE);
+        let fields = crate::climate::ClimateFields::for_tests(years.clone());
+        let maps = crate::climate::ClimateMaps::default();
+        let climate = FoliageClimate::from_maps(&maps, Some(&fields), Some(&cards));
+        let layer_of = |name: &str| {
+            let card = cards.get(name);
+            let cell = (card.cell / card.across).round().as_ivec2();
+            let index = (cell.y * 4 + cell.x) as usize;
+            climate.layers[index / 4][index % 4]
+        };
+        let oak = years.iter().position(|year| year.kind == "oak").unwrap() as i32;
+        assert_eq!(layer_of("oakbranch"), oak);
+        assert_eq!(layer_of("oak"), oak);
+        // Holly keeps its leaves, so no year names its card.
+        assert!(
+            years
+                .iter()
+                .all(|year| !year.cards.iter().any(|c| c == "holly"))
+        );
+        assert_eq!(layer_of("holly"), -1);
+        // Every card a year names is in the atlas, but those drawn from atlases yet to come.
+        for year in &years {
+            for card in &year.cards {
+                assert!(
+                    cards.has(card) || card == "scots",
+                    "{} names {card}",
+                    year.kind
+                );
+            }
+        }
+        // Not drawn from the atlas, nothing is a kind's.
+        let other = FoliageClimate::from_maps(&maps, Some(&fields), None);
+        assert!(other.layers.iter().all(|four| *four == IVec4::splat(-1)));
     }
 
     #[test]

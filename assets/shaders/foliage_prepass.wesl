@@ -13,6 +13,7 @@ import bevy_pbr::{
         pbr_functions,
         pbr_functions::SampleBias,
         mesh_bindings::mesh,
+        mesh_functions,
         mesh_view_bindings::view,
     },
     prepass::io as prepass_io,
@@ -23,6 +24,88 @@ import bevy_render::{bindless::{bindless_samplers_filtering, bindless_textures_2
 import bevy_pbr::render::pbr_bindings::material_indices;
 
 @group(0) @binding(1) var<uniform> globals: Globals;
+
+// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): where its maps are
+// round the camera, whether there are any and which painting, how wide the card atlas's cells
+// are, which kind's layer of the leaves map each cell's card is (-1 none), and each layer's
+// autumn colour, linear.
+struct FoliageClimate {
+    from_world: mat4x4<f32>,
+    on: u32,
+    painting: u32,
+    across: f32,
+    layers: array<vec4<i32>, 4>,
+    autumn: array<vec4<f32>, 8>,
+}
+
+struct Wind {
+    direction: vec3<f32>,
+    strength: f32,
+    bark: f32,
+    cards: vec3<f32>,
+    // A shadow stand-in shrinks to its middles between x and y and grows from them between
+    // z and w (D234).
+    shrink: vec4<f32>,
+    // For leaves: how much their colour is greyed and darkened, how brightly they glow lit
+    // through, and how dark the inside of a crown goes at least (D247).
+    leaf: vec4<f32>,
+    // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
+    // (D269); 0 for none.
+    relief: f32,
+    climate: FoliageClimate,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
+var<uniform> wind: Wind;
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var climate_leaves: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var climate_leaves_sampler: sampler;
+
+// Where a plant stands in its kind's year, 0 early to 1 late: foliage.wesl's `hash`, so its
+// leaves fall and turn alike.
+fn plant_share(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+fn climate_place(world: vec3<f32>) -> vec2<f32> {
+    return clamp((wind.climate.from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
+// Which kind's layer of the leaves map a card is, by its atlas cell (foliage.wesl's).
+fn card_layer(uv: vec2<f32>) -> i32 {
+    let cell = vec2<i32>(floor(uv / wind.climate.across));
+    if any(cell < vec2<i32>(0)) || any(cell > vec2<i32>(3)) {
+        return -1;
+    }
+    let index = cell.y * 4 + cell.x;
+    return wind.climate.layers[index / 4][index % 4];
+}
+
+// Leaves its kind's year says have fallen, on a plant whose cards carry no rank to fall by, as
+// a bush's or a fern's do not (foliage.wesl's `fallen` takes the crowns', and marks them
+// `ranked`, its second texture coordinate's y far below nothing): gone in clumps a hand or
+// two across, so it thins and stands bare (D327). The same in the
+// main pass and the prepass, so depth and colour agree on what is left.
+fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
+    if wind.climate.on == 0u || wind.bark > 0.5 || ranked {
+        return;
+    }
+    let layer = card_layer(uv);
+    if layer < 0 {
+        return;
+    }
+    // Taken where the leaf is, not where its plant stands, which a pass may not be told: a
+    // bush's leaves agree, being near each other, and a patch of bushes a few metres across
+    // turns as one plant.
+    let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(world), layer, 0.0);
+    let on = mix(year.r, year.g, plant_share(floor(world / 3.0) * 1.7 + 0.3));
+    if on < 0.999 && plant_share(floor(world * 3.0) + 0.37) > on {
+        discard;
+    }
+}
 
 fn noise_at(frag_coord: vec4<f32>) -> f32 {
     let shifted = frag_coord.xy + 5.588238 * f32(globals.frame_count % 64u);
@@ -121,6 +204,10 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
         edge_fade(in.position, in.world_position.xyz);
     }
     clear_view(in.position, in.world_position.xyz, in.instance_index, leaf);
+@if(VERTEX_UVS_A && VERTEX_UVS_B)
+    bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
+@if(VERTEX_UVS_A && !VERTEX_UVS_B)
+    bare(in.uv, false, in.world_position.xyz);
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 
@@ -178,5 +265,9 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 fn fragment(in: prepass_io::VertexOutput) {
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
+@if(VERTEX_UVS_A && VERTEX_UVS_B)
+    bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
+@if(VERTEX_UVS_A && !VERTEX_UVS_B)
+    bare(in.uv, false, in.world_position.xyz);
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 }
