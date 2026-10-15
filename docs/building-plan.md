@@ -48,7 +48,9 @@ The developers' agenda, above everything below: building takes **an approach to 
 | `layout/roofs` | A roof kind's cubes as a roof, from their neighbours (D241): covering, eave, verge, ridge, hip, valley, flashing, rafters and battens, each waiting on its cube's stage; walls under roof cubes cut at the roof's underside; drawn by `roofing`, the covering as the cubes' surface in its material and every line a module (D258) |
 | `roofer` | "Add a roof with this material" (D226, D241): roof cubes over a footprint, gable, hip or lean-to, and the walls under its gable ends; old saves' roof sections laid as roof cubes through it |
 | `walk` | Walking: each cube to its fill, and to its shape's top under the walker's feet: a stair's steps, a slope's ramp, a half (D220) |
-| `save` | The snapshot format, and conversion of older saves |
+| `save` | The snapshot format; `save/older` reads and converts every older save |
+| `shortcuts` | The quick tools' view: shortcuts that lay built cubes at once, and wall tiles, a storey's column of six cubes read as a panel (D277) |
+| `ray` | A ray cast into the cubes, cell by cell: what the hammer aims at |
 | `sections` | A section laid alone and drawn: its pieces and how far each is in, merged by kind and material near, baked into one coarse surface far off and coarser further, the plan's pieces as ghosts; which sections a change reaches |
 
 A layout is a pure function of a section of cubes and what reaches it (the whole of a row of logs, a roof's cubes or a deck that crosses into it), the kits and the base's seed (`layout::lay_section`). Every piece belongs to one section, the one the cube its middle is in (`Piece::anchor`), so a log crossing a section's edge is laid by one section only, and the sections laid one by one are exactly the base laid whole, held by a test. Its output is **piece instances in grid units**: a role (a log of 3 m, an outer corner's eighth, a ridge cap), a version and a place. No model sizes, so the server needs no art, and nothing floating that machines could disagree on. Versions come from a fixed hash of the base's seed and the cube's place, held to known values by a test.
