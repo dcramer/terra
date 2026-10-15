@@ -147,13 +147,15 @@ struct Sat {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, load)
+    app.init_resource::<Gait>()
+        .add_systems(Startup, load)
         .add_systems(
             Update,
             (
                 prepare,
                 spawn.run_if(resource_exists::<Market>),
                 animate,
+                tell_gait,
                 hold.run_if(resource_exists::<Market>),
                 seat,
                 shade,
@@ -433,6 +435,7 @@ fn place(
 /// Each body playing what its person does: a walk or a run at their speed, else their
 /// activity's clip.
 fn animate(
+    mut gait: ResMut<Gait>,
     figure: Res<Figure>,
     market: Option<Res<Market>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
@@ -452,14 +455,37 @@ fn animate(
             continue;
         };
         plays.every = every(place.translation().distance(eye));
-        let scale = place.scale().y.max(0.1);
-        let (wanted, rate) = match market.life.shows(one.index) {
+        // The body's own height against the base's, which its clips' paces are measured on:
+        // a child's stride is two thirds of a grown body's, so its legs turn faster for the
+        // same speed. (The body is drawn at its height by its shape, not its transform.)
+        let scale = market.life.people[one.index].scale.max(0.1);
+        let (wanted, rate, pace) = match market.life.shows(one.index) {
             Shows::Hidden => continue,
-            Shows::Walk(speed) if speed > 0.05 => (clips.walk, speed / (clips.walk_pace * scale)),
-            Shows::Run(speed) if speed > 0.05 => (clips.jog, speed / (clips.jog_pace * scale)),
-            Shows::Walk(_) | Shows::Run(_) => (clips.idle, 1.0),
-            Shows::Clip(name) => (clips.named.get(name).copied().unwrap_or(clips.idle), 1.0),
+            Shows::Walk(speed) if speed > 0.05 => (
+                clips.walk,
+                speed / (clips.walk_pace * scale),
+                Some((speed, clips.walk_pace * scale, false)),
+            ),
+            Shows::Run(speed) if speed > 0.05 => (
+                clips.jog,
+                speed / (clips.jog_pace * scale),
+                Some((speed, clips.jog_pace * scale, true)),
+            ),
+            Shows::Walk(_) | Shows::Run(_) => (clips.idle, 1.0, None),
+            Shows::Clip(name) => (
+                clips.named.get(name).copied().unwrap_or(clips.idle),
+                1.0,
+                None,
+            ),
         };
+        // How fast the feet move against the ground, as played: 1 when they keep to it.
+        if let Some((speed, pace, run)) = pace
+            && place.translation().distance(eye) < GAIT_SEEN_M
+        {
+            let played = rate.clamp(SLOWEST_RATE, FASTEST_RATE);
+            gait.feet.push(pace * played / speed);
+            gait.running += usize::from(run);
+        }
         if plays.playing != Some(wanted) {
             plays.playing = Some(wanted);
             transitions.play(&mut player, wanted, BLEND).repeat();
@@ -514,6 +540,44 @@ fn hold(
             commands.entity(look).insert(InHand);
         }
     }
+}
+
+/// Within how far of the eye walkers' feet are measured against the ground.
+const GAIT_SEEN_M: f32 = 40.0;
+
+/// How the town's walkers' feet keep to the ground near the eye, gathered as they are
+/// animated and said every ten seconds: each walker's feet's speed as played against their
+/// speed over the ground (1 keeps to it, more is a quick shuffle that reads as running, less
+/// a glide), and how many of them are running.
+#[derive(Resource, Default)]
+struct Gait {
+    feet: Vec<f32>,
+    running: usize,
+    frames: u32,
+    wait: f32,
+}
+
+fn tell_gait(time: Res<Time>, mut gait: ResMut<Gait>) {
+    gait.frames += 1;
+    gait.wait -= time.delta_secs();
+    if gait.wait > 0.0 {
+        return;
+    }
+    gait.wait = 10.0;
+    let frames = gait.frames.max(1) as f32;
+    let mut feet = std::mem::take(&mut gait.feet);
+    let running = std::mem::take(&mut gait.running) as f32 / frames;
+    gait.frames = 0;
+    if feet.is_empty() {
+        return;
+    }
+    feet.sort_by(f32::total_cmp);
+    let median = feet[feet.len() / 2];
+    let (low, high) = (feet[0], feet[feet.len() - 1]);
+    info!(
+        "TOWNSFOLK gait within {GAIT_SEEN_M} m: {:.0} walking or running, {running:.0} running; feet at {median:.2} of the ground's speed (from {low:.2} to {high:.2})",
+        feet.len() as f32 / frames,
+    );
 }
 
 /// A body's pose worked out only on its frames: on the others, and while nobody can see it,
