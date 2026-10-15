@@ -737,8 +737,9 @@ const MATERIALS: [Material; 13] = [
 const UPLOAD_CORNERS: usize = 200_000;
 
 /// How many frames a build's laid sections are held back for the rest sent out with them at
-/// most, before they are shown as they are, so a build always shows its changes.
-const HOLD_FRAMES: u32 = 30;
+/// most, before they are shown as they are, so a build always shows its changes: two
+/// seconds, longer than a castle's tower takes to come down (D308).
+const HOLD_FRAMES: u32 = 120;
 
 /// Puts what the workers have laid on screen, a few builds' changes a frame. What a build
 /// sent out is swapped in whole, every section of it in the same frame once all are back,
@@ -811,9 +812,13 @@ fn upload(
     // change are out: a build edited every few frames shows each change whole rather than
     // waiting for a quiet moment that does not come, and then torn.
     let mut back: BTreeMap<Entity, (Option<u64>, u64)> = BTreeMap::new();
+    let mut streaming: BTreeMap<Entity, u64> = BTreeMap::new();
     for build in each(&mut site, &mut builds) {
         if !roots.contains(&build.root) {
             continue;
+        }
+        if let Some(generation) = build.sections.streaming {
+            streaming.insert(build.root, generation);
         }
         let out = jobs.oldest_out(build.root);
         back.insert(build.root, (out, build.sections.generation));
@@ -821,6 +826,7 @@ fn upload(
         *held += 1;
         if out.is_none() {
             complete.insert(build.root);
+            build.sections.streaming = None;
         } else if *held > HOLD_FRAMES {
             partial.insert(build.root);
         }
@@ -835,7 +841,11 @@ fn upload(
     let (mut whole_shown, mut torn): (BTreeSet<Entity>, BTreeSet<Entity>) = Default::default();
     while let Some(done) = jobs.ready.pop_front() {
         let whole = complete.contains(&done.root) || all_back(&done);
-        if !whole && !partial.contains(&done.root) {
+        // A base laid whole anew streams in, a section as it comes.
+        let streams = streaming
+            .get(&done.root)
+            .is_some_and(|&generation| done.generation == generation);
+        if !whole && !streams && !partial.contains(&done.root) {
             rest.push_back(done);
             continue;
         }
@@ -844,8 +854,13 @@ fn upload(
             Outcome::Same => 0,
         };
         // A change begun this frame is finished this frame, however big; another build's
-        // waits for the next once this frame's corners are spent.
-        if !all && !shown.contains(&done.root) && corners > 0 && corners + size > UPLOAD_CORNERS {
+        // waits for the next once this frame's corners are spent, as does the rest of a base
+        // streaming in.
+        if !all
+            && (streams || !shown.contains(&done.root))
+            && corners > 0
+            && corners + size > UPLOAD_CORNERS
+        {
             rest.push_back(done);
             continue;
         }
@@ -853,7 +868,7 @@ fn upload(
         shown.insert(done.root);
         if whole {
             whole_shown.insert(done.root);
-        } else if torn.insert(done.root) {
+        } else if !streams && torn.insert(done.root) {
             warn!(
                 "Build: sections shown before the rest sent out with them came back, after {HOLD_FRAMES} frames"
             );
@@ -1024,7 +1039,13 @@ fn show(
         return;
     };
     let parts = *parts;
-    let old = build.sections.drawn.remove(&done.section);
+    let mut old = build.sections.drawn.remove(&done.section);
+    // How it was drawn before is let go on a worker: a near section's faces and pieces are
+    // hundreds of thousands of small allocations, whose freeing took up to 15 ms of the
+    // frame an edit came back on (D308).
+    if let Some(drawing) = old.as_mut().and_then(|old| old.drawing.take()) {
+        store::let_go(drawing);
+    }
     // What is on screen is kept, its rest and its parts drawn again taken away, where every
     // part not drawn again is there to keep; else all of it goes.
     let keeps = old.as_ref().is_some_and(|old| {

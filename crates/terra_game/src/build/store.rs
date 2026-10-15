@@ -112,6 +112,10 @@ pub(super) struct Sections {
     /// The sections of cubes lit or no longer lit as what goes in next since the base was
     /// last laid: the worker laying it again works out what they reach.
     pub relit_since: BTreeSet<[i32; 3]>,
+    /// The change that lays every section again, as a base put up or replaced whole: shown
+    /// a section at a time as each comes back, as a world streams in, not held for the
+    /// rest, there being nothing of it on screen to tear.
+    pub streaming: Option<u64>,
     /// When the oldest change not yet all on screen was noticed, to time how long a
     /// change takes to be seen.
     pub changed_at: Option<std::time::Instant>,
@@ -208,7 +212,7 @@ fn noticed(build: &mut Build) {
     // What was laid last, kept to lay only what changed from: the base it was laid from
     // and how, if it was laid; if not, what was kept before still stands.
     if let (Some(base), Some(whole)) = (sections.snapshot.take(), sections.whole.take()) {
-        sections.last_laid = Some((base, whole));
+        let_go(sections.last_laid.replace((base, whole)));
         sections.marked_since.clear();
     }
     sections.laying = None;
@@ -220,6 +224,7 @@ fn noticed(build: &mut Build) {
         waiting.force |= force;
     };
     if std::mem::take(&mut sections.everything) {
+        sections.streaming = Some(sections.generation);
         // Drawn again whole: its look may have changed whatever its parts were drawn from.
         for drawn in sections.drawn.values_mut() {
             for part in &mut drawn.parts {
@@ -268,6 +273,15 @@ fn noticed(build: &mut Build) {
         slowest_ms: 0.0,
         back_ms: 0.0,
     });
+}
+
+/// Lets something big go on a worker rather than the main thread: a castle's base and how
+/// it was laid, or how a section was drawn, are hundreds of thousands of small allocations,
+/// slow to free (D308).
+pub(super) fn let_go<T: Send + 'static>(big: T) {
+    bevy::tasks::AsyncComputeTaskPool::get()
+        .spawn(async move { drop(big) })
+        .detach();
 }
 
 /// How much further a group is taken to be than its nearest point: half a section's
