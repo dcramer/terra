@@ -1,11 +1,26 @@
-// How a picture of the forest looks, in the numbers it is held to (D286): how bright it is
-// and how much of it is near black, how warm, how much local contrast, and how much of its
-// lower third is lit orange litter, measured as research/2026-10-14-sotf-forest-look.md
-// measured Sons of the Forest's own daytime forest frames, whose means are `SOTF`. Values are
-// the picture's sRGB values, as a person sees them, not linear light. Node 22.18 or later;
-// no dependencies.
+#!/usr/bin/env node
+// How a picture of a place looks, in the numbers its look is held to (D286): how bright it is
+// and how much of it is near black, how warm, how much local contrast, the shade's colour and
+// the middle distance's, how much of its lower third is lit orange litter and of its top third
+// lit lime. Measured against a reference: the same numbers over a set of frames of the look
+// aimed at (another game's own frames, photographs), kept as `looks/<name>.json` (the
+// pictures themselves stay out of the repository, which is public). Values are the picture's
+// sRGB values, as a person sees them, not linear light.
+//
+//   node tools/sandbox/look.ts measure [--against sotf-forest-day] [--player] <png|jpg|mp4>...
+//   node tools/sandbox/look.ts reference <name> --about "<what it is>" [--source <url>]... <png|jpg|mp4>...
+//
+// `measure` prints each picture's look and their mean beside the reference's; a film is
+// measured every four seconds; `--player` leaves out the middle of the lower half, where a
+// third-person film's placeholder figure runs. `reference` writes `looks/<name>.json` from
+// the pictures given. The vantage sheet measures its forest views so (`vantage.ts`). Needs
+// ImageMagick, and ffmpeg for films. Node 22.18 or later; no dependencies.
 
-import type { Picture } from "./png.ts";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, resolve } from "node:path";
+import { type Picture, readPng } from "./png.ts";
 
 export type Look = {
   /// Mean brightness (Rec. 709 luma of the sRGB values), and its 5th, 50th and 95th
@@ -34,24 +49,23 @@ export type Look = {
   limeTop: number;
 };
 
-/// Sons of the Forest's twenty daytime forest frames, measured so (the research note's
-/// table).
-export const SOTF: Look = {
-  mean: 0.148,
-  p5: 0.016,
-  p50: 0.106,
-  p95: 0.407,
-  dark: 0.461,
-  bright: 0.003,
-  redOverGreen: 1.095,
-  blueOverGreen: 0.637,
-  contrast: 0.426,
-  litLitter: 0.034,
-  shadeRedOverGreen: 1.261,
-  shadeBlueOverGreen: 0.377,
-  middleBlueOverGreen: 0.514,
-  limeTop: 0.02,
-};
+/// A look aimed at: the mean look of a set of frames, what they are and where from.
+export type Reference = { name: string; about: string; sources: string[]; frames: number; measured: string; look: Look };
+
+const LOOKS = resolve(import.meta.dirname, "looks");
+
+/// A reference kept in `looks/<name>.json`.
+export function reference(name: string): Reference {
+  return JSON.parse(readFileSync(resolve(LOOKS, `${name}.json`), "utf8")) as Reference;
+}
+
+/// The references kept, by name.
+export function references(): string[] {
+  return readdirSync(LOOKS).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+}
+
+/// Sons of the Forest's daytime forest, the lush forest's target by day (D286).
+export const SOTF: Look = reference("sotf-forest-day").look;
 
 /// The picture's look; `masked` pixels (such as the placeholder player in a film) are left
 /// out.
@@ -151,8 +165,73 @@ export function meanOf(looks: Look[]): Look {
   return Object.fromEntries(keys.map((k) => [k, looks.reduce((s, l) => s + l[k], 0) / looks.length])) as Look;
 }
 
-/// One line for a look: each number, and Sons of the Forest's beside it.
-export function line(name: string, l: Look): string {
+/// One line for a look: each number, and the reference's beside it (Sons of the Forest's by day
+/// unless another is given).
+export function line(name: string, l: Look, against: Look = SOTF, called = "SotF"): string {
+  const SOTF = against;
   const f = (v: number) => v.toFixed(3);
-  return `${name}: mean ${f(l.mean)} (SotF ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%)`;
+  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%)`;
+}
+
+/// The middle of the lower half of a picture, where a third-person film's placeholder figure
+/// runs, as the research left it out.
+export const player = (width: number, height: number) => (x: number, y: number) =>
+  x >= width * 0.36 && x < width * 0.64 && y >= height * 0.5;
+
+/// Pictures as 1920 by 1080 PNGs in a folder of their own: each picture, and a film's frame
+/// every four seconds.
+function frames(files: string[], into: string): string[] {
+  const out: string[] = [];
+  files.forEach((file, k) => {
+    if (file.endsWith(".mp4")) {
+      const done = spawnSync("ffmpeg", ["-loglevel", "error", "-i", file, "-vf", "fps=0.25,scale=1920:1080", resolve(into, `${k}-%03d.png`)]);
+      if (done.status !== 0) throw new Error(`ffmpeg ${file}: ${done.stderr}`);
+      out.push(...readdirSync(into).filter((f) => f.startsWith(`${k}-`)).sort().map((f) => resolve(into, f)));
+    } else {
+      const png = resolve(into, `${k}-${basename(file).replace(/\.[^.]+$/, "")}.png`);
+      const done = spawnSync("magick", [file, "-resize", "1920x1080!", "-depth", "8", png]);
+      if (done.status !== 0) throw new Error(`magick ${file}: ${done.stderr}`);
+      out.push(png);
+    }
+  });
+  return out;
+}
+
+if (import.meta.main) {
+  const [command, ...rest] = process.argv.slice(2);
+  const flag = (name: string) => {
+    const at = rest.indexOf(name);
+    return at >= 0 ? rest.splice(at, 2)[1] : undefined;
+  };
+  const sources: string[] = [];
+  for (let s = flag("--source"); s !== undefined; s = flag("--source")) sources.push(s);
+  const against = flag("--against") ?? "sotf-forest-day";
+  const about = flag("--about");
+  const masked = rest.includes("--player");
+  const files = rest.filter((a) => a !== "--player");
+  const name = command === "reference" ? files.shift() : undefined;
+  if ((command !== "measure" && command !== "reference") || !files.length || (command === "reference" && (!name || !about))) {
+    console.error(`usage: look.ts measure [--against <${references().join("|")}>] [--player] <png|jpg|mp4>...`);
+    console.error('       look.ts reference <name> --about "<what it is>" [--source <url>]... <png|jpg|mp4>...');
+    process.exit(2);
+  }
+  const into = mkdtempSync(resolve(tmpdir(), "look-"));
+  try {
+    const looks = frames(files, into).map((file) => {
+      const p = readPng(file);
+      return { file, look: look(p, masked ? player(p.width, p.height) : undefined) };
+    });
+    if (command === "reference") {
+      const kept: Reference = { name: name!, about: about!, sources, frames: looks.length, measured: new Date().toISOString().slice(0, 10), look: meanOf(looks.map((l) => l.look)) };
+      writeFileSync(resolve(LOOKS, `${name}.json`), JSON.stringify(kept, null, 2) + "\n");
+      console.log(line(`${name}, ${looks.length} frames`, kept.look, kept.look, name!));
+      console.log(`look: wrote tools/sandbox/looks/${name}.json`);
+    } else {
+      const target = reference(against);
+      for (const { file, look: l } of looks) console.log(line(basename(file), l, target.look, against));
+      console.log(line(`mean of ${looks.length}`, meanOf(looks.map((l) => l.look)), target.look, against));
+    }
+  } finally {
+    rmSync(into, { recursive: true, force: true });
+  }
 }

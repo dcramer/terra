@@ -67,3 +67,21 @@ test("the mean of looks is the mean of each number", () => {
   const b = look(picture(() => [255, 255, 255]));
   near(meanOf([a, b]).mean, 0.5);
 });
+
+test("every reference kept has every number a look has, each a number", async () => {
+  const { references, reference } = await import("./look.ts");
+  const keys = Object.keys(look(picture(() => [100, 120, 80]))).sort();
+  assert.ok(references().includes("sotf-forest-day"));
+  for (const name of references()) {
+    const kept = reference(name);
+    assert.deepEqual(Object.keys(kept.look).sort(), keys, name);
+    assert.ok(Object.values(kept.look).every((v) => typeof v === "number" && Number.isFinite(v)), name);
+    assert.ok(kept.frames > 0 && kept.about.length > 0, name);
+  }
+});
+
+test("the player's place is the middle of the lower half", async () => {
+  const { player } = await import("./look.ts");
+  const at = player(100, 100);
+  assert.ok(at(50, 75) && !at(50, 25) && !at(10, 75) && !at(90, 75));
+});

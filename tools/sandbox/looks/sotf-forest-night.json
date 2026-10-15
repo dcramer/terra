@@ -1,0 +1,26 @@
+{
+  "name": "sotf-forest-night",
+  "about": "Sons of the Forest's forest by moonlight: ten first-person gameplay frames from Endnight's Trailer 2 on the Steam store (frames t2-03 to t2-07 and t2-10 to t2-14 of a still every two seconds), without campfires, torches or the letterboxed cinematic shots. The lush forest's target by night (D310).",
+  "sources": [
+    "https://store.steampowered.com/app/1326470/",
+    "https://store.steampowered.com/api/appdetails?appids=1326470 (Sons Of The Forest Trailer 2)"
+  ],
+  "frames": 10,
+  "measured": "2026-10-15",
+  "look": {
+    "mean": 0.0752783562809439,
+    "p5": 0.005979843137254901,
+    "p50": 0.049132705882352946,
+    "p95": 0.23228964705882355,
+    "dark": 0.6827952353395061,
+    "bright": 0.000023919753086419755,
+    "redOverGreen": 0.7329898114105918,
+    "blueOverGreen": 1.2870304502042096,
+    "contrast": 0.33609110775779116,
+    "litLitter": 0,
+    "shadeRedOverGreen": 0.5650724548090325,
+    "shadeBlueOverGreen": 1.4661810176541747,
+    "middleBlueOverGreen": 1.2431128278517365,
+    "limeTop": 0.00004282407407407407
+  }
+}

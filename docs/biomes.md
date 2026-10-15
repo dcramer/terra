@@ -216,7 +216,8 @@ A stretch goal, and feasible at moderate cost, because it reuses cover and regro
   - a stream;
   - a hilltop view.
 
-  Rendered side by side, and compared with Sons of the Forest screenshots by link (not committed).
+  Rendered side by side, each forest view's look measured against a reference of the look aimed at, Sons of the Forest's own frames by day and by night (`tools/sandbox/look.ts`, `tools/sandbox/looks/`; the pictures kept outside the repository).
+- **Films** of a walk at each hour, measured the same way, and judged at milestones by an adversarial review against the reference frames. How to build and judge a place's look, and the traps found doing it, is the `environment` skill ([.agents/skills/environment](../.agents/skills/environment/SKILL.md)).
 - **A measure of bare ground.** The share of the ground in view within 30 m that nothing covers, in a living biome.
 - **A walk bench.** The camera flown a few kilometres along a path, recording frame times and hitches while the world streams in, on the RTX 5090 and on the integrated GPU.
 

@@ -1,0 +1,26 @@
+{
+  "name": "sotf-forest-day",
+  "about": "Sons of the Forest's daytime forest interiors: twenty frames from Endnight's Steam store screenshots and three official trailers, measured with the player's hands left in (research/2026-10-14-sotf-forest-look.md). The lush forest's target by day (D286).",
+  "sources": [
+    "https://store.steampowered.com/app/1326470/",
+    "https://store.steampowered.com/api/appdetails?appids=1326470"
+  ],
+  "frames": 20,
+  "measured": "2026-10-14",
+  "look": {
+    "mean": 0.148,
+    "p5": 0.016,
+    "p50": 0.106,
+    "p95": 0.407,
+    "dark": 0.461,
+    "bright": 0.003,
+    "redOverGreen": 1.095,
+    "blueOverGreen": 0.637,
+    "contrast": 0.426,
+    "litLitter": 0.034,
+    "shadeRedOverGreen": 1.261,
+    "shadeBlueOverGreen": 0.377,
+    "middleBlueOverGreen": 0.514,
+    "limeTop": 0.02
+  }
+}

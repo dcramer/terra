@@ -21,7 +21,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The stack is in
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`; `cargo xtask tools` lists them all. |
 | `tools/` | Team tooling outside the game, each with a README; most are started through `cargo xtask`. |
-| `.agents/skills/` | Playbooks for repeated work: making characters and models, item icons, Tripo, Blender. Use the matching one. `.claude/skills` is a link to it, for Claude Code. |
+| `.agents/skills/` | Playbooks for repeated work: making characters and models, item icons, Tripo, Blender, how a place looks (environment). Use the matching one. `.claude/skills` is a link to it, for Claude Code. |
 | `spike/` | Throwaway experiments, each answering one question, deleted once its research note is written (D133). Nothing lasting (a skill, tool, doc or game code) may depend on a spike; move it to `tools/` or the workspace first. |
 
 ## Before doing anything
