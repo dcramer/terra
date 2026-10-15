@@ -1,0 +1,54 @@
+// What a town's market sells (terra_build::town::market, D352). Each stall sells one trade,
+// the trades dealt to the stalls in an order the town's seed draws, so a market sells no
+// trade twice while it has no more stalls than there are trades. On its counter it lays two
+// to four of its trade's `counter` goods side by side; on the ground under its awning
+// behind the counter, either side of its seller, where the layout keeps room (no more than
+// 0.52 m across and 0.86 m deep, or that turned a quarter), one or two of its `ground`
+// goods, its stock. Every good is a catalogue item's file (builds.ron's Goods, made by
+// tools/props/goods.ts). A new trade is an entry here.
+(
+    // The stall's counter top: the length of it goods are laid along, its depth from front to
+    // back round its `counter` socket, the least room between two goods, and how many goods
+    // a counter shows, at least and at most.
+    counter: (wide: 2.2, deep: 0.85, gap: 0.08, goods: (2, 4)),
+    // The lantern some stalls hang at the front of their awning (its `lantern` socket), and
+    // the share of stalls that do.
+    lantern: ("Lantern", 0.6),
+    trades: [
+        (
+            name: "greengrocer",
+            counter: ["AppleBasket", "OnionBasket", "PearBasket", "LemonBowl"],
+            ground: ["RootCrate", "AppleCrate"],
+        ),
+        (
+            name: "baker",
+            counter: ["BreadBoard", "RollBasket", "CroissantBoard", "BunPlate"],
+            ground: ["RollCrate"],
+        ),
+        (
+            name: "potter",
+            counter: ["VaseRow", "VasePair", "Planters"],
+            ground: ["StewPot", "Planters"],
+        ),
+        (
+            name: "turner",
+            counter: ["BowlStack", "PlateStack", "SpoonBowl"],
+            ground: ["SpoonBucket"],
+        ),
+        (
+            name: "toolmaker",
+            counter: ["AxesLaid", "HandTools"],
+            ground: ["ToolBucket"],
+        ),
+        (
+            name: "draper",
+            counter: ["ClothBolts", "FoldedCloth"],
+            ground: ["BoltCrate"],
+        ),
+        (
+            name: "brazier",
+            counter: ["BrassPans", "Goblets"],
+            ground: ["StewPot"],
+        ),
+    ],
+)

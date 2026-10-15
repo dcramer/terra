@@ -37,7 +37,9 @@ use glam::Vec2;
 use std::collections::BTreeSet;
 
 mod furnish;
+mod market;
 pub use furnish::{FURNISHING, Fence, FenceKind, Furnishing};
+pub use market::{Counter, Good, Market, Trade};
 
 /// The shape of a town's square.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,11 +99,13 @@ pub enum ThingKind {
     Barrel,
     /// A hand cart, by the market or in a yard, its shafts to its front (D346).
     Cart,
+    /// Room on the ground beside a stall for the bigger goods of its trade (D352).
+    Goods,
 }
 
 impl ThingKind {
     /// Every kind, in order.
-    pub const ALL: [ThingKind; 14] = [
+    pub const ALL: [ThingKind; 15] = [
         ThingKind::Door,
         ThingKind::Well,
         ThingKind::Stall,
@@ -116,6 +120,7 @@ impl ThingKind {
         ThingKind::Yard,
         ThingKind::Barrel,
         ThingKind::Cart,
+        ThingKind::Goods,
     ];
 
     /// Its name, as data names it (`assets/data/life.ron`).
@@ -135,6 +140,7 @@ impl ThingKind {
             ThingKind::Yard => "Yard",
             ThingKind::Barrel => "Barrel",
             ThingKind::Cart => "Cart",
+            ThingKind::Goods => "Goods",
         }
     }
 
@@ -154,6 +160,7 @@ impl ThingKind {
             ThingKind::Trough => across(1.0, -0.35, 0.35),
             ThingKind::Barrel => across(0.29, -0.29, 0.29),
             ThingKind::Cart => across(0.7, -1.35, 1.35),
+            ThingKind::Goods => across(0.26, -0.43, 0.43),
             _ => None,
         }
     }
@@ -1683,6 +1690,7 @@ pub fn svg(town: &Town, heights: &dyn Fn(Vec2) -> f32, marks: &[Mark]) -> String
             ThingKind::Yard => "#e3d26a",
             ThingKind::Barrel => "#6b4a2b",
             ThingKind::Cart => "#9c7a4a",
+            ThingKind::Goods => "#c9a227",
         };
         match thing.outline() {
             Some(quad) => svg.push_str(&poly(&quad, &format!("fill=\"{colour}\" stroke=\"#222\""))),

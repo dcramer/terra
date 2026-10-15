@@ -61,6 +61,7 @@ mod skills;
 mod sounds;
 mod soundscape;
 mod species;
+mod stall_goods;
 mod station_screen;
 pub(crate) mod storage;
 mod storage_screen;

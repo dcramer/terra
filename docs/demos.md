@@ -291,7 +291,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 | People | `play/people.rs` `Person`, `Doing { Bound, Following, Working, Standing, Sitting }`; four villagers who stand or sit; one base body of 73 joints, five templates, garments; 25 clips including walk, jog and sprint (D316), talk, sit, kneel, pick up | Days and schedules; homes and work places; walking a town; looks from a seed; character and animation LOD (characters.md phase 6) |
 | Navigation | Bodies pushed out of each other and out of `Obstacles` (`play/bodies.rs`), a stand-in until collision is designed (D53) | Any path finding or avoidance; no navigation crate supports Bevy 0.20 yet |
 | Animals | Deer and spiders (`assets/data/creatures.ron`), with idle, graze, wander and flee states; simulation by distance (D145) | Domestic animals: models, rigs, clips, pens, following an owner |
-| Market | `MarketStall`, `Well`, `Stool` props (D304) | Goods on stalls; signs, lanterns (a trough, barrels, hand carts and yard fences are laid by rules, D346) |
+| Market | `MarketStall` (an empty stall with a counter socket), `Well`, `Stool` props (D304); each stall one of seven trades, its goods on its counter and its stock beside its seller, by the seed (`market.ron`, D352) | Signs, lanterns, meat and cheese (no CC0 scans); a trough, barrels, hand carts and yard fences are laid by rules (D346) |
 | Smoke | None: no particle system; the blood spray is CPU cards (`play/hits.rs`) | Chimney smoke, cooking fires, a forge's sparks |
 | Sound | Spatial voices by bus; `Ambient` sources in earshot; footsteps for anything walking; the bell; 88 Kenney CC0 clips | Murmur of a crowd, market calls, animals, cart wheels; any cap on how many voices play |
 | Measured | `crowd` experiment: 100 dressed characters, 5.8 ms on the RTX 5090, bound by the CPU's animation and transforms | Any town or crowd number on the RTX 3080 |
@@ -432,7 +432,7 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 - **Heads and feet:** every body is bald and barefoot. Hair is the characters plan's phase 5 and the developers' question 3 there; headwear and shoes are garments for the character pipeline.
 - **Goats, dogs and an ox with its cart:** their life is built; their models are Tripo's at about 75 credits each, past the hundred the developers approve.
 - **The people's cost:** the far tier's vertex animation, merged outfits and fewer joints, until `town-day` holds 13.3 ms at the p99 with the crowd.
-- **Things of a town:** chimney stacks on stone and hewn houses, a trough, barrels, carts and goods beyond the stall's own.
+- **Things of a town:** chimney stacks on stone and hewn houses; signs and lanterns at the stalls.
 - **The look against `town-market-day`** (eight KCD1, KCD2 and Witcher 3 frames, `cargo xtask vantage --place town`): after round 2 the square's lit litter is 1.4% (the reference 7.6%, before 34 to 51%) and red/green 1.19 (1.00, before 1.24 to 1.32); the frame is still darker (mean 0.24 against 0.34) under a deeper blue sky than the reference's hazy one, and the dark pixels' red is people's skin and brown clothes and timber in shade, not the ground.
 - **Sound:** the cap on voices, and the well's bucket, the hens and a dog's bark.
 - **The game's half of the life check** (counts in view and what is heard, read over the remote protocol), and the one table of places (`places.ts`).

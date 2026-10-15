@@ -145,6 +145,7 @@
         ])),
         (name: "Market stall", tab: Hidden, kind: Items([
             (name: "Market stall", file: "MarketStall", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Stall lantern", file: "Lantern", dims: (0.216, 0.528, 0.235), cost: [("Wood", 1), ("Iron", 1)]),
         ])),
         // A town's furnishing (terra_build::town, D346): its trough, barrels, carts and the
         // fence modules round its yards, each fence fitted between its start and end sockets.
@@ -186,6 +187,7 @@
             (name: "Crate of cloth", file: "BoltCrate", dims: (0.82, 0.432, 0.412), cost: [("Wood", 1)]),
             (name: "Brass pans", file: "BrassPans", dims: (0.784, 0.291, 0.489), cost: [("Iron", 1)]),
             (name: "Brass goblets", file: "Goblets", dims: (0.276, 0.283, 0.291), cost: [("Iron", 1)]),
+            (name: "Bucket of spoons", file: "SpoonBucket", dims: (0.364, 0.552, 0.34), cost: [("Wood", 1)]),
             (name: "Stew pot", file: "StewPot", dims: (0.646, 0.371, 0.502), cost: [("Stone", 1)]),
             (name: "Two jars", file: "VasePair", dims: (0.452, 0.402, 0.248), cost: [("Stone", 1)]),
             (name: "Clay pots", file: "Planters", dims: (0.567, 0.282, 0.287), cost: [("Stone", 1)]),

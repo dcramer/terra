@@ -840,6 +840,28 @@ fn lay(
         }
     }
 
+    // The goods on and by the market's stalls (D352), placed as its things are.
+    let on_site = |p: Vec2, facing: f32| {
+        let point = to_site.transform_point3(middle + east * p.x + south * p.y);
+        let way = terra_build::town::looking(facing);
+        let front = to_site.transform_vector3(east * way.x + south * way.y);
+        (
+            point.with_y(0.0),
+            libm::atan2f(front.x, front.z).to_degrees(),
+        )
+    };
+    placed += super::stall_goods::lay(
+        &mut commands,
+        &models,
+        &builds,
+        &site,
+        &planet,
+        &town,
+        wanted.seed,
+        &at,
+        &on_site,
+    );
+
     // Torches in brackets by some homes' doors, beside the door and leaning out from the
     // wall, lit at dusk (`light`).
     let flame = (

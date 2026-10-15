@@ -1403,5 +1403,49 @@
         "seed": 13
       }
     ]
+  },
+  "SpoonBucket": {
+    "sources": {
+      "bucket": {
+        "from": "wooden_bucket_01",
+        "budget": 600,
+        "texture": 1024
+      },
+      "spoon": {
+        "from": "wooden_spoon",
+        "budget": 90,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "bucket"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "spoon"
+        ],
+        "into": 0,
+        "count": 8,
+        "floor": 0.2,
+        "seed": 14
+      }
+    ]
+  },
+  "Lantern": {
+    "sources": {
+      "lantern": {
+        "from": "wooden_lantern_01",
+        "budget": 700,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "lantern"
+      }
+    ]
   }
 }

@@ -35,6 +35,9 @@ pub struct Fence {
 /// [`super::BUILDINGS`] is.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Furnishing {
+    /// Room beside each stall for goods on the ground (D352): the share of stalls with room
+    /// on both sides rather than one.
+    pub stall_goods: f32,
     /// Of the stalls, the share with barrels beside them, and at most how many each.
     pub stall_barrels: (f32, u32),
     /// Barrels beside the forge, its water for quenching.
@@ -51,6 +54,7 @@ pub struct Furnishing {
 }
 
 pub const FURNISHING: Furnishing = Furnishing {
+    stall_goods: 0.5,
     stall_barrels: (0.6, 2),
     forge_barrels: 2,
     yard_barrels: (0.5, 2),
@@ -62,6 +66,14 @@ pub const FURNISHING: Furnishing = Furnishing {
     gate_m: 1.8,
 };
 
+/// How far goods on the ground keep from every thing but their own stall; and how near a
+/// stall's middle its own goods stand.
+const GOODS_APART_M: f32 = 1.2;
+const GOODS_OWN_M: f32 = 2.2;
+/// Where a stall's stock stands in its own metres: either side of its seller (at 0.5 m
+/// behind the counter's back, `life.ron`), and as far back.
+const GOODS_ASIDE_M: f32 = 0.8;
+const GOODS_BACK_M: f32 = -0.55;
 /// How far a fence stands inside its yard's edge.
 const FENCE_IN_M: f32 = 0.15;
 /// How far a fence keeps from anything built, and from any way walked.
@@ -73,6 +85,7 @@ impl Town {
         let numbers = FURNISHING;
         self.fences_round_yards(&numbers);
         self.trough();
+        self.stall_goods(seed, &numbers);
         self.barrels(seed, &numbers);
         self.carts(seed, &numbers);
     }
@@ -88,7 +101,7 @@ impl Town {
         self.things.retain(|thing| {
             !matches!(
                 thing.kind,
-                ThingKind::Barrel | ThingKind::Cart | ThingKind::Trough
+                ThingKind::Barrel | ThingKind::Cart | ThingKind::Trough | ThingKind::Goods
             ) || parts.get(thing.node as usize) == Some(&main)
         });
         if self.things.len() != before {
@@ -214,7 +227,19 @@ impl Town {
                 .flatten()
                 .all(|quad| polygons(&ground, quad) >= 0.3)
             && self.things.iter().all(|other| {
-                let gap = if other.kind == ThingKind::Barrel && thing.kind == ThingKind::Barrel {
+                // Barrels stand close to one another and to goods, and goods against
+                // their own stall, the one beside them (`stall_goods`).
+                let barrels = matches!(
+                    (thing.kind, other.kind),
+                    (ThingKind::Barrel, ThingKind::Barrel | ThingKind::Goods)
+                        | (ThingKind::Goods, ThingKind::Barrel)
+                );
+                let own = |a: &Thing, b: &Thing| {
+                    a.kind == ThingKind::Goods
+                        && b.kind == ThingKind::Stall
+                        && a.at.distance(b.at) < GOODS_OWN_M
+                };
+                let gap = if barrels || own(thing, other) || own(other, thing) {
                     0.04
                 } else {
                     apart
@@ -285,6 +310,38 @@ impl Town {
             if self.furnishing_fits(&trough, 2.0, true) {
                 self.things.push(trough);
                 return;
+            }
+        }
+    }
+
+    /// Room for goods on the ground at each stall (D352): its stock, under its awning behind
+    /// the counter on one side of its seller or, for some, both, the side by the seed; the
+    /// trades' goods are stood there (`market`). Not before the counter or beside it, where
+    /// the market's crowd walks and browses: room there jammed it (`cargo xtask life`).
+    fn stall_goods(&mut self, seed: u32, numbers: &Furnishing) {
+        let roll = |salt: u32| unit(hash(&[seed, 43, salt]));
+        let stalls: Vec<Thing> = self
+            .things
+            .iter()
+            .filter(|t| t.kind == ThingKind::Stall)
+            .cloned()
+            .collect();
+        for (index, stall) in stalls.iter().enumerate() {
+            let salt = index as u32 * 4;
+            let first = if roll(salt) < 0.5 { -1.0 } else { 1.0 };
+            let sides = if roll(salt + 1) < numbers.stall_goods {
+                2
+            } else {
+                1
+            };
+            for side in [first, -first].into_iter().take(sides) {
+                let local = Vec2::new(side * GOODS_ASIDE_M, GOODS_BACK_M);
+                // Facing the stall's back, where it is come to from, as its seller is.
+                let back = stall.facing + core::f32::consts::PI;
+                let goods = Thing::new(ThingKind::Goods, stall.place(local), back, None);
+                if self.furnishing_fits(&goods, GOODS_APART_M, false) {
+                    self.things.push(goods);
+                }
             }
         }
     }
