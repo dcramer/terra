@@ -27,9 +27,21 @@ pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// sixteenth, so every shadow was near black (D216). Under trees the shade is darker than open
 /// ground's: 1.6 left it three stops brighter than Sons of the Forest's (D286).
 const SKY_LIGHT_GAIN: f32 = 1.2;
-/// By night, how much of the day's saturation is left, and how much cooler the grade is (D302).
+/// By night, how much of the day's saturation is left, how much cooler the grade is, and how
+/// much toward magenta, which the leaves' green bounce otherwise tints (D302, D310).
 const NIGHT_SATURATION: f32 = 0.45;
-const NIGHT_COOL: f32 = 0.05;
+const NIGHT_COOL: f32 = 0.12;
+const NIGHT_TINT: f32 = 0.04;
+/// By night, how bright the haze is against the day's, and its colour, the moon's (D310).
+const NIGHT_HAZE: f32 = 0.15;
+const MOON_HAZE: Vec3 = Vec3::new(0.32, 0.38, 0.52);
+/// How high the moon stands by night, in radians (D310).
+const MOON_HEIGHT: f32 = 0.7;
+
+/// How far into the night it is: 0 by day, 1 once the sun is twelve degrees under the horizon.
+/// The haze, the grade and the eye follow it (D310).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Nightfall(pub f32);
 
 /// How far one sees in the open air, out of the trees, before the forest's haze swallows
 /// what is there, and how bright that haze is against the horizon's colour (D273).
@@ -94,6 +106,16 @@ impl SkyPath {
     pub fn sun(&self, hour: f32) -> Vec3 {
         let (x, y, z) = sun_local(hour);
         (self.east * x + self.north * y + self.up * z).normalize()
+    }
+
+    /// The direction toward the moon at an hour (D310): opposite the sun round the sky, as a
+    /// full moon is, but standing [`MOON_HEIGHT`] up rather than as far below the horizon as the
+    /// sun is, so it lights the night from high, not along the ground from the east at dusk.
+    pub fn moon(&self, hour: f32) -> Vec3 {
+        let across = (-self.sun(hour))
+            .reject_from(self.up)
+            .normalize_or(self.east);
+        (across * libm::cosf(MOON_HEIGHT) + self.up * libm::sinf(MOON_HEIGHT)).normalize()
     }
 
     /// The axis the sky turns about, which points at the pole star.
@@ -169,12 +191,12 @@ fn keys() -> [(f32, Light); 6] {
             -18.0,
             Light {
                 light: moon,
-                illuminance: 370.0,
+                illuminance: 700.0,
                 horizon: v(0.07, 0.09, 0.17),
                 zenith: v(0.015, 0.02, 0.06),
                 glow: v(0.25, 0.3, 0.45),
                 shade: v(0.42, 0.52, 0.9),
-                ambient: 650.0,
+                ambient: 300.0,
                 sky: 1.6,
                 night: 1.0,
                 exposure: 9.0,
@@ -189,7 +211,7 @@ fn keys() -> [(f32, Light); 6] {
                 zenith: v(0.07, 0.09, 0.22),
                 glow: v(0.85, 0.45, 0.35),
                 shade: v(0.48, 0.52, 0.88),
-                ambient: 620.0,
+                ambient: 600.0,
                 sky: 1.6,
                 night: 0.6,
                 exposure: 9.0,
@@ -293,12 +315,13 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
 /// The moon's light with the sun so many degrees below the horizon: none as it sets,
 /// growing to the night's as the twilight goes.
 fn moonlight(height: f32) -> f32 {
-    let t = ((-1.0 - height) / 5.0).clamp(0.0, 1.0);
+    let t = ((-8.0 - height) / 6.0).clamp(0.0, 1.0);
     light_at(height.min(-6.0)).illuminance * t * t * (3.0 - 2.0 * t)
 }
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Clock>()
+        .init_resource::<Nightfall>()
         .register_type::<Clock>()
         .add_systems(Startup, set_clock)
         .add_systems(PostStartup, find_sky)
@@ -340,6 +363,8 @@ fn shine(
     open: Option<Res<crate::sky_occlusion::OpenOverhead>>,
     mut mist: Query<&mut bevy::light::FogVolume>,
     mut grading: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
+    mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
+    mut nightfall: ResMut<Nightfall>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -348,8 +373,12 @@ fn shine(
     let height = path.height(clock.hour);
     let light = light_at(height);
     let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
-    // Above the horizon the light comes from the sun; below it, from the moon opposite.
-    tweaks.sun_direction = if height > -1.0 { sun } else { -sun };
+    // Above the horizon the light comes from the sun; below it, from the moon.
+    tweaks.sun_direction = if height > -1.0 {
+        sun
+    } else {
+        path.moon((clock.hour * SUN_STEPS).round() / SUN_STEPS)
+    };
     tweaks.sun_color = colour(light.light);
     tweaks.sun_illuminance = if height > -1.0 {
         light.illuminance
@@ -373,17 +402,34 @@ fn shine(
             fog.density_factor = wanted;
         }
     }
+    // The volumetric haze's own sky light, likewise (D310).
+    let night_air = 1.0 - smoothstep(-12.0, 0.0, path.height(clock.hour));
+    for mut air in &mut volumetric {
+        let wanted =
+            super::scene::HAZE_AMBIENT * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
+        if (air.ambient_intensity - wanted).abs() > 1e-6 {
+            air.ambient_intensity = wanted;
+        }
+    }
     let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
+    let dark = 1.0 - smoothstep(-12.0, 0.0, height);
+    nightfall.set_if_neq(Nightfall(dark));
     for mut grade in &mut grading {
         // The day's warmth goes with the sun (D302): left on, it turned the moon's blue light
         // to brown, and the night read as a dim dusk.
         let day = smoothstep(-4.0, 2.0, height);
         // By night colour fades and cools, as an eye sees by moonlight and as games draw it: the
         // light under the moon is the leaves' green bounce, and it read green and murky.
-        let warm = (0.02 + 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 }) * day
+        // At a low sun a touch warmer, no more: the shade it lights is the sky's, cool, and more
+        // turned the shade at dusk maroon (D310).
+        let warm = (0.02 + 0.012 * low * if hour > 12.0 { 1.0 } else { 0.5 }) * day
             - NIGHT_COOL * (1.0 - day);
         if (grade.global.temperature - warm).abs() > 1e-4 {
             grade.global.temperature = warm;
+        }
+        let tint = NIGHT_TINT * (1.0 - day);
+        if (grade.global.tint - tint).abs() > 1e-4 {
+            grade.global.tint = tint;
         }
         let saturation =
             super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
@@ -397,9 +443,13 @@ fn shine(
     // air's own haze (`air`) carries the distance from there. A world with no trees to hide
     // the sky keeps the forest's haze.
     let open = open.map_or(0.0, |open| open.0);
+    // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
+    // day's, by night it lit every shadow from within, the night only two stops under the day
+    // (D310). So it dims as night falls, toward the moon's cold light.
+    let level = NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark);
     for mut fog in &mut haze {
         let (air, visible) = haze_for(light.horizon, open);
-        fog.color = colour(air);
+        fog.color = colour(air.lerp(MOON_HAZE, dark) * level);
         fog.directional_light_color = colour(light.light * 0.55).with_alpha(0.5);
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
@@ -509,8 +559,9 @@ mod tests {
         assert_eq!(night, deepest);
         assert_eq!(night.night, 1.0);
         assert!(night.illuminance < art.illuminance && night.ambient < art.ambient);
-        // Most of the night's light is the sky's, so the moon's shadows are faint.
-        assert!(night.illuminance < night.ambient);
+        // Most of the night's light is the moon's, so it lights the night from one side and
+        // casts shadows; the sky's light under it is a glow (D310).
+        assert!(night.illuminance > night.ambient);
         // Halfway between two keys, the light is halfway between theirs.
         for pair in keys.windows(2) {
             let ((low, a), (high, b)) = (pair[0], pair[1]);
@@ -523,10 +574,27 @@ mod tests {
 
     #[test]
     fn the_moon_rises_from_nothing_as_the_sun_sets() {
+        // Not till the dusk has gone, so the afterglow is not lit from the far side (D310).
         assert_eq!(moonlight(-1.0), 0.0);
-        assert!(moonlight(-3.0) < moonlight(-6.0));
-        assert_eq!(moonlight(-6.0), light_at(-6.0).illuminance);
+        assert_eq!(moonlight(-8.0), 0.0);
+        assert!(moonlight(-10.0) < moonlight(-13.0));
+        assert_eq!(moonlight(-14.0), light_at(-14.0).illuminance);
         assert_eq!(moonlight(-18.0), light_at(-18.0).illuminance);
+    }
+
+    #[test]
+    fn the_moon_stands_high_on_the_far_side_of_the_sky_from_the_sun() {
+        let path = SkyPath::over(Vec3::Y);
+        for hour in [21.0, 23.5, 1.0, 3.0] {
+            let moon = path.moon(hour);
+            let up = libm::asinf(moon.dot(Vec3::Y));
+            assert!((up - MOON_HEIGHT).abs() < 1e-3, "{hour}: {up}");
+            let sun = path.sun(hour).reject_from(Vec3::Y);
+            assert!(
+                moon.reject_from(Vec3::Y).dot(sun) < 0.0,
+                "{hour}: on the sun's side"
+            );
+        }
     }
 
     #[test]

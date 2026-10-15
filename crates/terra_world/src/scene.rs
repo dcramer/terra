@@ -40,6 +40,8 @@ pub const EXPOSURE_EV100: f32 = 10.8;
 /// The day's saturation after tone mapping: Neutral keeps saturation where AgX drained it; a
 /// little less, toward the muted greens of the forests we look to. By night less (`daylight`).
 pub const SATURATION: f32 = 0.82;
+/// The volumetric haze's sky light by day; by night dimmer (`daylight`, D310).
+pub const HAZE_AMBIENT: f32 = 0.015;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((SkyPlugin, AutoExposurePlugin))
@@ -234,6 +236,9 @@ const ADAPT_DARKER: f32 = 1.0;
 /// and games with interiors let the eye open that far once inside, as Unreal's auto
 /// exposure does over its range.
 const ADAPT_BRIGHTER_INDOORS: f32 = 5.0;
+/// And at night, little (D310): the eye opening the full band undid a dark night, lifting it
+/// two and a half times.
+const ADAPT_BRIGHTER_NIGHT: f32 = 0.4;
 
 /// Whether the camera is in a room closed and covered, which the game says (D155).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -395,7 +400,7 @@ fn follow_quality(
                 // far dimmer than the open sky's, which laid a grey-blue veil over the spruces
                 // (D266). The haze glows where the sun lights it, in shafts.
                 ambient_color: Color::srgb(0.55, 0.62, 0.5),
-                ambient_intensity: 0.015,
+                ambient_intensity: HAZE_AMBIENT,
                 // Each frame's march starts a little differently, for TAA to smooth.
                 jitter: 0.5,
                 step_count: steps,
@@ -411,20 +416,25 @@ fn follow_quality(
 /// leaves; it adapts there at its own speed, as an eye does stepping through a door.
 fn adapt_indoors(
     indoors: Res<Indoors>,
+    nightfall: Option<Res<crate::daylight::Nightfall>>,
+    mut last: Local<Option<f32>>,
     camera: Query<&AutoExposure, With<MainCamera>>,
     mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
 ) {
     let Some(adapting) = camera.iter().next() else {
         return;
     };
-    // Changed, or the camera's adaptation newly set up.
-    if !indoors.is_changed() {
+    let dark = nightfall.map_or(0.0, |n| n.0);
+    // Changed, or the camera's adaptation newly set up; the night in steps of a twentieth.
+    let stepped = (dark * 20.0).round() / 20.0;
+    if !indoors.is_changed() && *last == Some(stepped) {
         return;
     }
+    *last = Some(stepped);
     let brighter = if indoors.0 {
         ADAPT_BRIGHTER_INDOORS
     } else {
-        ADAPT_BRIGHTER
+        ADAPT_BRIGHTER + (ADAPT_BRIGHTER_NIGHT - ADAPT_BRIGHTER) * stepped
     };
     if let Some(mut curve) = curves.get_mut(&adapting.compensation_curve) {
         *curve = compensation(brighter, ADAPT_DARKER);
