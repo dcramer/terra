@@ -511,13 +511,14 @@ pub struct GroundTextures {
 
 /// The layers of `materials/ground`, in order, and how many metres each covers
 /// (assets/materials/README.md).
-const GROUND_LAYERS: u32 = 11;
+const GROUND_LAYERS: u32 = 12;
 const GROUND_LAYER_METRES: Vec4 = Vec4::new(1.3, 2.0, 2.7, 1.5);
 /// The fifth layer on, for the forest floor: fallen leaves, fallen needles, duff with roots
 /// in it, and moss.
 const GROUND_MORE_METRES: Vec4 = Vec4::new(2.0, 1.5, 1.67, 0.7);
-/// The ninth layer on, for mountains (D322): scree, gravel and snow.
-const GROUND_MOUNTAIN_METRES: Vec4 = Vec4::new(1.8, 2.0, 2.0, 1.0);
+/// The ninth layer on, for mountains (D322): scree, gravel and snow; and a settlement's
+/// cobbles (D350).
+const GROUND_MOUNTAIN_METRES: Vec4 = Vec4::new(1.8, 2.0, 2.0, 2.0);
 
 impl GroundTextures {
     /// The layers' colours and normal maps, as arrays, for materials drawn in them too, as

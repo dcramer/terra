@@ -419,8 +419,13 @@ struct TownCover {
     doors: Vec<Vec2>,
 }
 
+/// How far inside a street's or the square's edge its paving starts.
+const PAVING_EDGE_M: f32 = 0.35;
+
 /// How far round a house's door its ground is worn, as far as the town clears it.
 const HOUSE_WORN_M: f32 = 9.0;
+/// Within how far of a door it is worn as bare as a yard.
+const HOUSE_BARE_M: f32 = 4.5;
 
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
@@ -461,9 +466,9 @@ impl terra_world::cover::CoverSource for TownCover {
         if worn < 0.0 {
             growing.grass = 0.0;
             growing.path = true;
-            // Packed earth, trodden hardest along the middle of a way and less toward its
-            // edges, where straw and dung collect (the ground shader's trodden ways).
-            growing.trodden = (0.75 + (-worn).min(2.0) * 0.125).min(1.0);
+            // Paved with setts (the ground shader's from 0.85, D350), packed earth at the very
+            // edge of a way where the paving gives out and straw and dung collect.
+            growing.trodden = if -worn > PAVING_EDGE_M { 1.0 } else { 0.75 };
         } else if worn < 1.5 {
             growing.grass *= worn / 1.5 * 0.7;
             growing.trodden = 0.6 * (1.0 - worn / 1.5);
@@ -482,9 +487,9 @@ impl terra_world::cover::CoverSource for TownCover {
         // Round every house, where the town clears what grows (`ClearAround` at its door),
         // the ground is worn by feet going about it, not left the planet's bare soil.
         if door < HOUSE_WORN_M {
-            growing.trodden = growing
-                .trodden
-                .max(0.5 * (1.0 - door.max(0.0) / HOUSE_WORN_M));
+            // Worn bare round the house, thinning toward where the clearing ends.
+            let thins = ((door - HOUSE_BARE_M) / (HOUSE_WORN_M - HOUSE_BARE_M)).clamp(0.0, 1.0);
+            growing.trodden = growing.trodden.max(0.6 * (1.0 - thins));
         }
         growing
     }

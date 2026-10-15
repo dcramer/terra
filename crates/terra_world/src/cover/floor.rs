@@ -67,6 +67,7 @@ fn paint(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut images: ResMut<Assets<Image>>,
     mut map: ResMut<GroundCoverMap>,
+    mut changed: Local<bool>,
 ) {
     let Some(camera) = camera.iter().next() else {
         return;
@@ -118,9 +119,15 @@ fn paint(
             from_world: from_world(&start, middle),
         };
     }
-    let stale = floor
-        .middle
-        .is_none_or(|middle| middle.distance(here) > REPAINT_M);
+    // Painted again when the rules change, as when a town is laid round the eye, not only
+    // once the eye has gone far enough off.
+    if rules.is_changed() {
+        *changed = true;
+    }
+    let stale = *changed
+        || floor
+            .middle
+            .is_none_or(|middle| middle.distance(here) > REPAINT_M);
     if floor.painting.is_none() && stale {
         // On a grid, so the same place is painted the same each time.
         let middle = (here / 8.0).round() * 8.0;
@@ -151,6 +158,7 @@ fn paint(
             [pixels, more]
         });
         floor.painting = Some((middle, task));
+        *changed = false;
     }
 }
 

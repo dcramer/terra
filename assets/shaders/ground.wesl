@@ -126,6 +126,8 @@ const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
 // straw dropped about their edges.
 const TRODDEN: vec3<f32> = vec3<f32>(0.15, 0.132, 0.108);
 const STRAW: vec3<f32> = vec3<f32>(0.34, 0.27, 0.13);
+// A settlement's paved streets and square (D350), linear: grey-brown setts of the local stone.
+const SETTS: vec3<f32> = vec3<f32>(0.15, 0.135, 0.112);
 // Rime on the floor in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
@@ -141,6 +143,7 @@ const MOSS: u32 = 7u;
 const SCREE: u32 = 8u;
 const GRAVEL: u32 = 9u;
 const SNOW_LAYER: u32 = 10u;
+const COBBLES: u32 = 11u;
 
 // How wet the ground is at so many metres above a lake's water (D322): soaked at the waterline
 // and drying over a hand or two above it, its edge broken by `fleck`.
@@ -871,6 +874,15 @@ fn fragment(
             let wet = smoothstep(0.58, 0.78, noise(world * 0.28 + 7.0) * 0.75 + noise(world * 1.9 + 3.0) * 0.25) * smoothstep(0.6, 0.9, trodden);
             earth.colour *= mix(1.0, 0.45, wet);
             ground_is = over(ground_is, earth, worn);
+            // Paved where the cover says (a trodden way's middle, from 0.85): setts laid in
+            // the packed earth, their edge broken, earth and mud between them where it thins.
+            let paved = smoothstep(0.8, 0.95, trodden + (blotch - 0.5) * 0.12 + (fleck - 0.5) * 0.04) * flat_ground;
+            if paved > 0.0 {
+                let laid = SETTS * (0.85 + 0.3 * blotch) * (0.92 + 0.16 * swell);
+                var setts = layer(COBBLES, 0.9, laid, world + 5.0, gx, gy, n, PLAIN);
+                setts.colour *= mix(1.0, 0.6, wet);
+                ground_is = settle(ground_is, setts, paved);
+            }
             let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * (1.0 - smoothstep(0.55, 0.95, trodden)) * worn;
             if straw > 0.0 {
                 ground_is = settle(ground_is, layer(LITTER, 0.6, STRAW * (0.8 + 0.4 * fleck), world + 67.0, gx, gy, n, 1.0), straw);
