@@ -190,14 +190,26 @@ fn day(
             .map(|(a, n)| format!("{n:.0} {}", a.to_lowercase()))
             .collect();
         println!(
-            "  {:02}:00  out {:5.1}  walking {:5.1}  on the square {:5.1}  {}",
+            "  {:02}:00  out {:5.1}  walking {:5.1}  on the square {:5.1}  standing in their way {:4.1}  {}",
             hour.hour.rem_euclid(24),
             hour.out,
             hour.walking,
             hour.on_square,
+            hour.aimless,
             doing.join(", ")
         );
     }
+    // By day, the share of those out standing in their way, held up by others, idling
+    // without a purpose to look at: the aim is none.
+    let (standing, out) = watch
+        .hours
+        .iter()
+        .filter(|h| (7..18).contains(&h.hour.rem_euclid(24)))
+        .fold((0.0, 0.0), |(s, o), h| (s + h.aimless, o + h.out));
+    println!(
+        "  standing in their way by day: {:.1}% of those out",
+        100.0 * standing / f32::max(out, 1.0)
+    );
     let faults = &watch.faults;
     let hhmm = |hours: f64| {
         let minutes = (hours.rem_euclid(24.0) * 60.0) as i64;

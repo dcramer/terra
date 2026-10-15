@@ -86,7 +86,7 @@
         "Sit": (clip: "Sitting_Talking_Loop", stay: (20.0, 60.0)),
         "Guard": (clip: "Idle_Loop", stay: (30.0, 90.0), own: true),
         "Tend": (clip: "Fixing_Kneeling", stay: (8.0, 20.0), own: true),
-        "Play": (clip: "Idle_Loop", stay: (1.0, 3.0)),
+        "Play": (clip: "Idle_Loop", stay: (0.1, 0.4)),
     },
     // The animals a town keeps: where each kind lives, how many to a yard or pen (for dogs,
     // in the town), how fast it walks and runs, how wide it is, and how long it stands,
@@ -168,7 +168,7 @@
         (name: "townsfolk", count: Rest, day: [
             (from: 0.0, does: ["Home"]),
             (from: 6.0, does: ["Tend", "Draw"]),
-            (from: 7.5, does: ["Browse", "Chat", "Browse", "Draw", "Sit"]),
+            (from: 7.5, does: ["Browse", "Chat", "Browse", "Sit"]),
             (from: 12.0, does: ["Home"]),
             (from: 14.0, does: ["Browse", "Chat", "Tend", "Sit"]),
             (from: 17.5, does: ["Chat", "Stand"]),

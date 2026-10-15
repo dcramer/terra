@@ -443,7 +443,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
     let corner = |a: f32, u: f32| along * a + across * u;
     let outline = match shape {
         SquareShape::Long => {
-            let (long, wide) = (size(1, 40.0, 50.0) * 0.5, size(2, 22.0, 28.0) * 0.5);
+            let (long, wide) = (size(1, 34.0, 42.0) * 0.5, size(2, 20.0, 24.0) * 0.5);
             vec![
                 corner(-long, -wide),
                 corner(long, -wide),
@@ -453,7 +453,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
         }
         SquareShape::Triangle => {
             // Its base downhill, its point up the slope, its middle at the origin.
-            let (base, deep) = (size(1, 52.0, 60.0) * 0.5, size(2, 32.0, 38.0));
+            let (base, deep) = (size(1, 44.0, 50.0) * 0.5, size(2, 28.0, 32.0));
             vec![
                 corner(-base, -deep / 3.0),
                 corner(base, -deep / 3.0),
@@ -461,7 +461,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
             ]
         }
         SquareShape::Widened => {
-            let (long, wide) = (size(1, 64.0, 76.0) * 0.5, size(2, 15.0, 18.0) * 0.5);
+            let (long, wide) = (size(1, 54.0, 62.0) * 0.5, size(2, 13.0, 15.0) * 0.5);
             vec![
                 corner(-long, -wide),
                 corner(long, -wide),
@@ -980,7 +980,7 @@ impl Town {
             ..probe
         };
         let ground = footprint(&building, &rects);
-        let gap = 1.0 + unit(hash(&[seed, 15])) * 3.0;
+        let gap = 0.6 + unit(hash(&[seed, 15])) * 1.6;
         if !self.clear_for(&ground, APART_M) {
             fronts[f].at += 2.0;
             return Some(false);

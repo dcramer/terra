@@ -17,6 +17,8 @@ use terra_build::town::inside;
 pub const STUCK_S: f32 = 5.0;
 /// How late anyone may be for a window of their day, in game minutes.
 pub const LATE_MIN: f32 = 5.0;
+/// How long someone on their way may stand before they read as idling without a purpose.
+pub const AIMLESS_S: f32 = 1.5;
 /// How long a moment is: two people overlapping, or feet sliding, for less is not counted.
 const MOMENT_S: f32 = 0.5;
 /// The fastest a moving clip plays against its pace (`pace.rs`); slower, a person's walk
@@ -52,6 +54,10 @@ pub struct Hour {
     pub out: f32,
     pub walking: f32,
     pub on_square: f32,
+    /// Out of doors with nowhere they are seen going: on the way somewhere but standing in it
+    /// for more than [`AIMLESS_S`], held up by others, which reads as idling without a
+    /// purpose. Everyone else is walking to a place or doing something at it, facing it.
+    pub aimless: f32,
     /// Who was at each activity, averaged.
     pub doing: BTreeMap<String, f32>,
 }
@@ -204,6 +210,9 @@ impl Watch {
             if inside(person.at, square) {
                 current.on_square += 1.0;
             }
+            if matches!(person.state, State::Walking { .. }) && self.held[index].0 > AIMLESS_S {
+                current.aimless += 1.0;
+            }
             if let State::Doing { .. } = person.state
                 && let Some(activity) = life.activity(index)
             {
@@ -219,6 +228,7 @@ impl Watch {
             hour.out /= steps;
             hour.walking /= steps;
             hour.on_square /= steps;
+            hour.aimless /= steps;
             for value in hour.doing.values_mut() {
                 *value /= steps;
             }
