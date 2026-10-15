@@ -39,8 +39,9 @@ import { type Call, type Known, type KitSet, inBaseline, readSets, type Scenario
 
 const SCENARIOS = resolve(import.meta.dirname, "qa");
 const OUT = resolve(ROOT, "shots/qa");
-/// The frame budget (D25), and a hitch: twice it.
-const BUDGET_MS = 1000 / 60;
+/// The frame budget, 13.3 ms at the 99th percentile (D25, D332: `terra_world::debug::FRAME_BUDGET_MS`),
+/// and a hitch: twice it, a dropped frame.
+const BUDGET_MS = 1000 / 75;
 const HITCH_MS = 2 * BUDGET_MS;
 
 const args = process.argv.slice(2);
