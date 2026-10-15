@@ -1237,6 +1237,15 @@ fn under_roof(
             if !open(at + face) || !open(at + face - IVec3::Y) {
                 continue;
             }
+            // Far off, only from outside: a face open to the room or the loft under the
+            // roof's cubes is seen only from within, and no one within is far from it.
+            let indoors = (1..=crate::STOREY_CUBES * 2).any(|k| {
+                base.cube(at + face + IVec3::Y * k)
+                    .is_some_and(|c| c.kind.is_roof())
+            });
+            if indoors && matches!(detail, Detail::Far | Detail::Proxy) {
+                continue;
+            }
             let n = face.as_vec3();
             let along = Vec3::new(n.z.abs(), 0.0, n.x.abs());
             let middle = (at.as_vec3() + Vec3::splat(0.5)) * CELL_M;
@@ -1486,6 +1495,55 @@ mod tests {
         assert!(found(0.28).is_empty());
         // A wall's thickness behind: another face, not relief over it.
         assert!(found(0.0).is_empty());
+    }
+
+    #[test]
+    fn far_off_a_gap_under_a_roof_counts_only_from_outside() {
+        // A wall cube with a roof cube on it, nothing drawn: the gap over the wall's top is
+        // open through both its east face, to a loft under the roof cube over the east,
+        // and its west face, to the open air.
+        let roof = crate::kit::Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            eaves: 0.0,
+            ..Default::default()
+        };
+        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(crate::Cube::new(Kind(1), Fill::Solid)),
+        });
+        for at in [[0, 1, 0], [1, 2, 0]] {
+            base.apply(crate::BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(crate::Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
+            });
+        }
+        let roofs = crate::layout::roofs::Roofs::whole(&base, &kits, crate::layout::Scope::ALL);
+        let drawn = Drawn {
+            tris: vec![],
+            meshes: vec![],
+            kinds: vec![],
+        };
+        let faces = |detail: Detail| {
+            let mut findings = Vec::new();
+            under_roof(&base, &kits, &roofs, &drawn, detail, &mut findings);
+            // The east and west faces, whose middles lie inside the cube north to south.
+            let mut faces: Vec<bool> = findings
+                .iter()
+                .filter(|f| f.at.z > 0.01 && f.at.z < 0.49)
+                .map(|f| f.at.x > 0.25)
+                .collect();
+            faces.sort();
+            faces
+        };
+        // Near, both: someone in the loft sees the one, someone outside the other.
+        assert_eq!(faces(Detail::Near), vec![false, true]);
+        // Far, only the west, open to the air.
+        assert_eq!(faces(Detail::Far), vec![false]);
     }
 
     fn tri(p: [Vec3; 3], mesh: u32) -> Tri {

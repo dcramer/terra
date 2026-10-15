@@ -287,6 +287,7 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             chinking,
             role,
             lean,
+            ..
         } = piece
         else {
             layout.pieces.push(piece);
@@ -387,7 +388,20 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
                 across,
                 length,
                 joints: [joint(from), joint(to)],
-                unfit: &|i| (!fits(i)).then(|| at(i)),
+                // A row along the north and south leaves the corners where a row along
+                // the east and west crosses it to that one's blocking, so the two are
+                // never laid in one another.
+                unfit: &|i| {
+                    let p = (from + along * at(i)).with_y(foot + 0.01);
+                    let cube = (p / CELL_M).floor().as_ivec3();
+                    let ours = |c: IVec3| {
+                        base.cube(c)
+                            .is_some_and(|c| c.kind == kit.kind() && c.fill == crate::Fill::Solid)
+                    };
+                    let crossed =
+                        along.x.abs() < 0.5 && (ours(cube + IVec3::X) || ours(cube - IVec3::X));
+                    (!fits(i) && !crossed).then(|| at(i))
+                },
                 samples,
             },
             &mut blocking,
@@ -436,6 +450,37 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             if b - a < 0.15 {
                 continue;
             }
+            let leans = [
+                if a < 1e-4 {
+                    lean[0].max(slope(a, 1.0))
+                } else {
+                    slope(a, 1.0)
+                },
+                if b > length - 1e-4 {
+                    lean[1].max(slope(b, -1.0))
+                } else {
+                    slope(b, -1.0)
+                },
+            ];
+            // An end cut to the slope is cut from where the roof meets its foot: where the
+            // log stops short of that, at its stretch's end (a gable's step, where the course
+            // turns to a half log), its cut starts so far over its foot, so it follows the
+            // roof's underside rather than standing under it.
+            let lift_at = |end: f32, rise: i32| {
+                let Some(here) = under(end) else {
+                    return 0;
+                };
+                // Not where it runs past a corner into the open: there the roof is its
+                // verge's, which the log's end clears.
+                let inward = if end < length * 0.5 { 0.01 } else { -0.01 };
+                let at = (from + along * (end + inward)).with_y(foot + 0.01);
+                let inside = base.cube((at / CELL_M).floor().as_ivec3()).is_some();
+                if rise <= 0 || here <= foot + 1e-3 || !inside {
+                    return 0;
+                }
+                ticks((here - foot - SLOPE_SHORT_M).clamp(0.0, 2.0 * radius))
+            };
+            let lifts = [lift_at(a, leans[0]), lift_at(b, leans[1])];
             let mut cut = log(
                 from + along * a,
                 from + along * b,
@@ -451,19 +496,14 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
                 }),
             );
             set_role(&mut cut, role);
-            if let Piece::Log { lean: cut_lean, .. } = &mut cut {
-                *cut_lean = [
-                    if a < 1e-4 {
-                        lean[0].max(slope(a, 1.0))
-                    } else {
-                        slope(a, 1.0)
-                    },
-                    if b > length - 1e-4 {
-                        lean[1].max(slope(b, -1.0))
-                    } else {
-                        slope(b, -1.0)
-                    },
-                ];
+            if let Piece::Log {
+                lean: cut_lean,
+                lift: cut_lift,
+                ..
+            } = &mut cut
+            {
+                *cut_lean = leans;
+                *cut_lift = lifts;
             }
             layout.pieces.push(cut);
         }
@@ -518,7 +558,7 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, layout: &mut Layout) {
             tops.iter().copied().fold(f32::MAX, f32::min),
             tops.iter().copied().fold(f32::MIN, f32::max),
         );
-        (most - least > 0.01 && least > foot + MIN_BLOCKING_M).then_some(least)
+        (most - least > 0.01 && most > foot + MIN_BLOCKING_M).then_some(least)
     };
     let mut i = 0;
     while i <= log.samples {
@@ -557,37 +597,107 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, layout: &mut Layout) {
         if b - a < MIN_BLOCKING_M {
             continue;
         }
-        let ends = [log.from + log.along * a, log.from + log.along * b];
-        let mut min = Vec3::splat(f32::MAX);
-        let mut max = Vec3::splat(f32::MIN);
-        for end in ends {
-            for side in [-1.0, 1.0] {
-                let q = end + log.across * half * side;
-                min = min.min(q.with_y(foot - inset));
-                max = max.max(q.with_y(low - (inset - BLOCKING_SET_BACK_M)));
+        // In lengths split where the roof over it creases (a valley's or a hip's line, a
+        // ridge), each a plane along, so its top cut between its corners follows the roof.
+        let crease = |t: f32| {
+            [-1.0, 0.0, 1.0].iter().any(|&side| {
+                let u = |t: f32| {
+                    let q = log.from + log.along * t + log.across * half * side;
+                    roofs.top_over(q.x, q.z, foot - NEAR_ROOF_M).unwrap_or(foot)
+                };
+                (u(t - CREASE_STEP_M) - 2.0 * u(t) + u(t + CREASE_STEP_M)).abs() > 1e-3
+            })
+        };
+        let mut cuts = vec![a];
+        let mut t = a + CREASE_STEP_M;
+        while t < b - CREASE_STEP_M {
+            if crease(t) && t - cuts.last().copied().unwrap_or(a) > MIN_BLOCKING_M {
+                cuts.push(t);
+                t += CREASE_STEP_M * 2.0;
+            } else {
+                t += CREASE_STEP_M;
             }
         }
-        // Its faces on every fourth tick, those of a row along the north and south two ticks
-        // off them, so two crossing never share a plane, whatever roof they are under.
-        let crossing = i32::from(log.along.x.abs() <= 0.5) * 2;
-        let snap = |p: Vec3| {
-            let mut place = Place::near(p);
-            for t in &mut place.0 {
-                *t = (*t - crossing).div_euclid(4) * 4 + crossing;
+        cuts.push(b);
+        // And in two across, so a crease along it is followed too.
+        for (span, sides) in cuts
+            .windows(2)
+            .flat_map(|span| [(span, [-1.0, 0.0]), (span, [0.0, 1.0])])
+        {
+            let ends = [
+                log.from + log.along * span[0],
+                log.from + log.along * span[1],
+            ];
+            let mut min = Vec3::splat(f32::MAX);
+            let mut max = Vec3::splat(f32::MIN);
+            for end in ends {
+                for side in sides {
+                    let q = end + log.across * half * side;
+                    min = min.min(q.with_y(foot - inset));
+                    max = max.max(q.with_y(low - (inset - BLOCKING_SET_BACK_M)));
+                }
             }
-            place
-        };
-        let board = Piece::Board {
-            min: snap(min),
-            max: snap(max),
-        };
-        // A whole course's two halves, split at a layer, block the same space.
-        if !layout.pieces.contains(&board) {
-            layout.pieces.push(board);
+            // Its faces on every fourth tick, those of a row along the north and south two
+            // ticks off them, so two crossing never share a plane, whatever roof they are
+            // under.
+            let crossing = i32::from(log.along.x.abs() <= 0.5) * 2;
+            let snap = |p: Vec3| {
+                let mut place = Place::near(p);
+                for t in &mut place.0 {
+                    *t = (*t - crossing).div_euclid(4) * 4 + crossing;
+                }
+                place
+            };
+            let (min, max) = (snap(min), snap(max));
+            // Its top cut to the roof's underside over each corner, a hair under it, those
+            // of a row along the north and south a little lower still, as their sides are
+            // set in.
+            let under = |x: i32, z: i32| {
+                let p = Place([x, 0, z]).metres();
+                let roof = roofs.top_over(p.x, p.z, foot - NEAR_ROOF_M).unwrap_or(foot);
+                ticks((roof - (inset - BLOCKING_SET_BACK_M) - BLOCKING_UNDER_M).max(foot))
+            };
+            let top = [
+                under(min.0[0], min.0[2]),
+                under(max.0[0], min.0[2]),
+                under(max.0[0], max.0[2]),
+                under(min.0[0], max.0[2]),
+            ];
+            let board = Piece::Blocking {
+                min,
+                max: Place([
+                    max.0[0],
+                    top.iter().copied().min().unwrap_or(max.0[1]),
+                    max.0[2],
+                ]),
+                top,
+            };
+            // A whole course's two halves, split at a layer, and courses left out one over
+            // another, block the same space: one block, down to the lowest foot.
+            let same = layout.pieces.iter_mut().find_map(|piece| match piece {
+                Piece::Blocking {
+                    min: m,
+                    max: x,
+                    top: t,
+                } if [m.0[0], m.0[2], x.0[0], x.0[2]]
+                    == [min.0[0], min.0[2], max.0[0], max.0[2]]
+                    && *t == top =>
+                {
+                    Some(m)
+                }
+                _ => None,
+            });
+            match same {
+                Some(m) => m.0[1] = m.0[1].min(min.0[1]),
+                None => layout.pieces.push(board),
+            }
         }
     }
 }
-
+/// How finely eave blocking looks for where the roof over it creases.
+const CREASE_STEP_M: f32 = 0.02;
+/// How far under a roof's underside eave blocking's top is cut.
+const BLOCKING_UNDER_M: f32 = 0.003;
 /// How far eave blocking is set back from a log's widest.
 const BLOCKING_SET_BACK_M: f32 = 0.03;
 /// How much further in a row's blocking along the north and south is set than one along the
@@ -596,6 +706,8 @@ const CROSSING_M: f32 = 0.005;
 
 /// The least space under a roof worth blocking.
 const MIN_BLOCKING_M: f32 = 0.02;
+/// How far under the roof a log's slope cut lifted over its foot starts.
+const SLOPE_SHORT_M: f32 = 0.006;
 
 /// A cube of ours with none beside it either way is a post: an upright log up each
 /// stack of them.
@@ -650,6 +762,7 @@ pub(super) fn log(
         seed,
         chinking: chinking.map(|(near, far)| (along(near), along(far))),
         lean: [0, 0],
+        lift: [0, 0],
         role: None,
     }
 }
@@ -903,7 +1016,7 @@ mod tests {
             .pieces
             .iter()
             .filter_map(|p| match *p {
-                Piece::Board { min, max } => Some((min.metres(), max.metres())),
+                Piece::Blocking { .. } => p.bounds(),
                 _ => None,
             })
             .collect();

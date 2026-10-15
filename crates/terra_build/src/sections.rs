@@ -2083,6 +2083,7 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             Shape::Box,
         ),
         Piece::Board { min, max } => Some(boxed(min.metres(), max.metres())),
+        Piece::Blocking { .. } => piece.bounds().map(|(min, max)| boxed(min, max)),
         Piece::Beam {
             from,
             to,

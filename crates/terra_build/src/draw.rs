@@ -43,6 +43,13 @@ pub fn draw_as(
             metres(kit, Material::Board),
             [1.0; 3],
         ),
+        Piece::Blocking { min, max, top } => wedge(
+            surfaces.of(Material::Board),
+            (min.metres(), max.metres()),
+            top.map(crate::layout::metres),
+            metres(kit, Material::Board),
+            [1.0; 3],
+        ),
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
         Piece::Beam { .. } => beam(piece, kit, plain, surfaces),
         Piece::Trim { .. } | Piece::Band { .. } | Piece::Corner { .. } => {
@@ -65,6 +72,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
         split: crate::layout::Split::Whole,
         seed,
         lean: [0, 0],
+        lift: [0, 0],
         role: None,
         ..
     } = *piece
@@ -257,6 +265,56 @@ pub(crate) fn cuboid(
     }
 }
 
+/// A box from `min` to `max` across, its top cut to heights at its corners west-north,
+/// east-north, east-south and west-south: blocking under a roof (`Piece::Blocking`). Its
+/// top is split along the diagonal that leaves it lower, so where it crosses a valley's or
+/// a hip's crease it is cut along it, never standing over the roof.
+pub(crate) fn wedge(
+    surface: &mut Surface,
+    (min, max): (Vec3, Vec3),
+    top: [f32; 4],
+    metres: [f32; 2],
+    colour: [f32; 3],
+) {
+    let foot = [
+        Vec3::new(min.x, min.y, min.z),
+        Vec3::new(max.x, min.y, min.z),
+        Vec3::new(max.x, min.y, max.z),
+        Vec3::new(min.x, min.y, max.z),
+    ];
+    let head = [0, 1, 2, 3].map(|i| foot[i].with_y(top[i].max(min.y)));
+    let mut tri = |t: [Vec3; 3]| {
+        let n = (t[1] - t[0]).cross(t[2] - t[0]);
+        if n.length_squared() < 1e-12 {
+            return;
+        }
+        let n = n.normalize();
+        surface.textured(
+            t,
+            [n; 3],
+            t.map(|p| crate::mesh::planar(p, n, metres)),
+            colour,
+        );
+    };
+    // The foot, looking down.
+    tri([foot[0], foot[1], foot[2]]);
+    tri([foot[0], foot[2], foot[3]]);
+    // The top, looking up, along its lower diagonal.
+    if head[0].y + head[2].y <= head[1].y + head[3].y {
+        tri([head[0], head[2], head[1]]);
+        tri([head[0], head[3], head[2]]);
+    } else {
+        tri([head[1], head[0], head[3]]);
+        tri([head[1], head[3], head[2]]);
+    }
+    // Each side, looking out.
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        tri([foot[j], foot[i], head[i]]);
+        tri([foot[j], head[i], head[j]]);
+    }
+}
+
 /// A long member far off, as a plain box from one end to the other along its middle, so
 /// wide across and so high, its texture mapped from each face's plane: what a log or a
 /// deck's plank comes to a few pixels across, where its round or chamfered section and its
@@ -414,6 +472,7 @@ pub(crate) mod tests {
             seed: 1,
             chinking: None,
             lean: [0, 0],
+            lift: [0, 0],
             role: None,
         };
         let count = |kit: &Kit, piece: &Piece| {

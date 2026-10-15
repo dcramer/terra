@@ -277,6 +277,7 @@ fn a_piece_is_owned_by_the_cube_its_middle_is_in_exactly() {
         seed: 0,
         chinking: None,
         lean: [0, 0],
+        lift: [0, 0],
         role: None,
     };
     let t = layout::TICKS;

@@ -72,6 +72,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         seed,
         chinking,
         lean,
+        lift,
         role,
     } = *piece
     else {
@@ -102,6 +103,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             seed,
             chinking,
             lean.map(|rise| rise as f32 / layout::TICKS as f32),
+            lift.map(layout::metres),
             &dressed,
             &mut own,
         );
@@ -122,6 +124,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         seed,
         chinking,
         lean.map(|rise| rise as f32 / layout::TICKS as f32),
+        lift.map(layout::metres),
         kit,
         surfaces,
     );
@@ -129,7 +132,8 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
 
 /// Draws a long member from one point to another in metres, with the daub under it so far
 /// along it from `from`, and each end cut to a roof's slope rising so many metres a metre
-/// in from it (none, sawn square): as [`draw`] draws a log, and as a roof's rafters are.
+/// in from it (none, sawn square), from so far over its foot there (`lift`): as [`draw`]
+/// draws a log, and as a roof's rafters are.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn member(
     from: Vec3,
@@ -138,6 +142,7 @@ pub(crate) fn member(
     seed: u32,
     chinking: Option<(f32, f32)>,
     lean: [f32; 2],
+    lift: [f32; 2],
     kit: &Kit,
     surfaces: &mut Surfaces,
 ) {
@@ -169,14 +174,30 @@ pub(crate) fn member(
         // and its top would fall from its cut end the whole length of it.
         densify(&mut made, LEAN_RING_M);
         let foot = kit.radius();
+        // And a ring where each cut meets the member's top, so its top is level up to there
+        // and on the slope after, not cut across between rings far apart.
+        let top = made
+            .grid
+            .iter()
+            .flatten()
+            .map(|p| p.y - (from.y + (*p - from).dot(frame.axis) * frame.axis.y))
+            .fold(f32::MIN, f32::max);
+        let mut at = Vec::new();
+        if lean[0] > 0.0 {
+            at.push((top + foot - lift[0]) / lean[0]);
+        }
+        if lean[1] > 0.0 {
+            at.push(length - (top + foot - lift[1]) / lean[1]);
+        }
+        rings_at(&mut made, from, frame.axis, &at);
         for p in made.grid.iter_mut().flatten() {
             let along = (*p - from).dot(frame.axis);
             let mut cut = f32::MAX;
             if lean[0] > 0.0 {
-                cut = cut.min(from.y - foot + lean[0] * along);
+                cut = cut.min(from.y - foot + lift[0] + lean[0] * along);
             }
             if lean[1] > 0.0 {
-                cut = cut.min(to.y - foot + lean[1] * (length - along));
+                cut = cut.min(to.y - foot + lift[1] + lean[1] * (length - along));
             }
             p.y = p.y.min(cut);
         }
@@ -288,6 +309,45 @@ const LEAN_RING_M: f32 = 0.25;
 
 /// Rings put between a member's rings where they are further apart than `most`, on the
 /// lines between them, so its shape is as it was but its points close enough to be cut.
+/// Rings added where a member's rings, along it from `from`, pass these places, each a
+/// blend of the two either side.
+fn rings_at(made: &mut Member, from: Vec3, axis: Vec3, places: &[f32]) {
+    for &place in places {
+        let along = |ring: &[Vec3]| {
+            let middle = ring.iter().copied().sum::<Vec3>() / ring.len().max(1) as f32;
+            (middle - from).dot(axis)
+        };
+        let Some(i) = (1..made.grid.len()).find(|&i| {
+            let (a, b) = (along(&made.grid[i - 1]), along(&made.grid[i]));
+            a + 1e-3 < place && place < b - 1e-3
+        }) else {
+            continue;
+        };
+        let (a, b) = (along(&made.grid[i - 1]), along(&made.grid[i]));
+        let t = (place - a) / (b - a);
+        let ring: Vec<Vec3> = made.grid[i - 1]
+            .iter()
+            .zip(&made.grid[i])
+            .map(|(p, q)| p.lerp(*q, t))
+            .collect();
+        let uv: Vec<[f32; 2]> = made.uvs[i - 1]
+            .iter()
+            .zip(&made.uvs[i])
+            .map(|(p, q)| [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t])
+            .collect();
+        made.grid.insert(i, ring);
+        made.uvs.insert(i, uv);
+        if !made.tone.is_empty() {
+            let tone: Vec<f32> = made.tone[i - 1]
+                .iter()
+                .zip(&made.tone[i])
+                .map(|(p, q)| p + (q - p) * t)
+                .collect();
+            made.tone.insert(i, tone);
+        }
+    }
+}
+
 fn densify(made: &mut Member, most: f32) {
     let mut grid = Vec::with_capacity(made.grid.len());
     let mut uvs = Vec::with_capacity(made.uvs.len());
@@ -974,6 +1034,7 @@ mod tests {
             seed,
             chinking: Some((0, crate::layout::ticks(3.0))),
             lean: [0, 0],
+            lift: [0, 0],
             role: None,
         }
     }
@@ -1149,6 +1210,7 @@ mod tests {
                 seed: 4,
                 chinking: None,
                 lean: [0, 0],
+                lift: [0, 0],
                 role: None,
             };
             let mut surfaces = Surfaces::default();
@@ -1200,6 +1262,7 @@ mod tests {
             seed: 1,
             chinking: None,
             lean: [0, 0],
+            lift: [0, 0],
             role: None,
         };
         let mut surfaces = Surfaces::default();

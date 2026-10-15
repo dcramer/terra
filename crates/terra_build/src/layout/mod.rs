@@ -90,6 +90,11 @@ pub enum Piece {
         /// ticks the slope its top is cut to rises for each cube east and south, its top
         /// the highest of it.
         lean: [i32; 2],
+        /// How far over the log's foot, in ticks, the slope its end is cut to starts at
+        /// each end: where the log stops short of where the roof meets its foot, as at a
+        /// gable's step where its course turns to a half log, its cut still follows the
+        /// roof's underside.
+        lift: [i32; 2],
         /// The role it is laid for, drawn as the kit dresses that role (`kit::Dress::Member`):
         /// a plate along a wall's top, a sill on what it stands on, a post up an opening's
         /// side or a free end, a step's tread; none, a course of the wall.
@@ -97,6 +102,15 @@ pub enum Piece {
     },
     /// A board round an opening: a jamb, a head or a sill.
     Board { min: Place, max: Place },
+    /// Boards blocking the space between a wall's top and a roof falling across it, as a
+    /// builder blocks between rafters over a plate (`runs::eave_blocking`): a box from
+    /// `min` to `max` across, its top cut to the roof's underside, so high at its corners
+    /// west-north, east-north, east-south and west-south, in ticks.
+    Blocking {
+        min: Place,
+        max: Place,
+        top: [i32; 4],
+    },
     /// A profile of the kit's pieces along one edge of one cube, as the kit dresses the
     /// edge's role (`roles`, `dress`, D215): a coping, a plinth, a sill, a lintel. `side`
     /// is the face it looks out of, `other` the edge's other face; `ends` how it meets the
@@ -224,6 +238,10 @@ impl Piece {
                 Some((from.min(to) - across - up, from.max(to) + across + up))
             }
             Piece::Board { min, max } => Some((min.metres(), max.metres())),
+            Piece::Blocking { min, max, top } => {
+                let high = top.iter().copied().fold(max.0[1], i32::max);
+                Some((min.metres(), Place([max.0[0], high, max.0[2]]).metres()))
+            }
             Piece::Beam {
                 from,
                 to,
@@ -269,7 +287,7 @@ impl Piece {
             | Piece::Plank { from, to, .. }
             | Piece::Beam { from, to, .. }
             | Piece::Roof { from, to, .. } => middle(from, to),
-            Piece::Board { min, max } => middle(min, max),
+            Piece::Board { min, max } | Piece::Blocking { min, max, .. } => middle(min, max),
             Piece::Covering { middle, .. } => middle.0,
         };
         IVec3::from_array(point.map(|p| p.div_euclid(TICKS)))
@@ -295,7 +313,7 @@ impl Piece {
             Piece::Plank { from, to, high, .. } => {
                 from.metres().y.min(to.metres().y) - metres(*high) * 0.5
             }
-            Piece::Board { min, .. } => min.metres().y,
+            Piece::Board { min, .. } | Piece::Blocking { min, .. } => min.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
             // A cube's wattle before its daub, woven a layer ahead of it: in after the
             // blocks of the layer under it.

@@ -172,6 +172,7 @@ fn fallen_log(kit: &Kit, at: Vec3, random: &mut Random, surfaces: &mut Surfaces)
         seed: crate::layout::hash(&[(random.unit() * 65535.0) as u32]),
         chinking: None,
         lean: [0, 0],
+        lift: [0, 0],
         role: None,
     };
     crate::draw::draw_as(&piece, kit, None, false, surfaces);
