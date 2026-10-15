@@ -5876,6 +5876,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_life"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "ron",
+ "serde",
+ "terra_build",
+]
+
+[[package]]
 name = "terra_sandbox"
 version = "0.1.0"
 dependencies = [

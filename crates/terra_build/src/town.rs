@@ -127,17 +127,31 @@ impl ThingKind {
         }
     }
 
-    /// How far it stands out of the ground either side of its middle, across and front to
-    /// back, in metres, as a walker must go round it; nothing for what is walked over.
-    pub fn half(self) -> Vec2 {
+    /// The ground it covers that a walker must go round, in its own metres (x across its
+    /// front, y out of it) from low to high, as its model stands (`assets/models/props`);
+    /// nothing for what is walked over. A stall's is its counter, at its front: the seller
+    /// stands behind it, under the awning.
+    pub fn ground(self) -> Option<(Vec2, Vec2)> {
+        let across =
+            |x: f32, back: f32, front: f32| Some((Vec2::new(-x, back), Vec2::new(x, front)));
         match self {
-            ThingKind::Well => Vec2::new(0.9, 0.9),
-            ThingKind::Stall => Vec2::new(1.3, 0.75),
-            ThingKind::Forge => Vec2::new(0.9, 0.7),
-            ThingKind::Block => Vec2::new(0.3, 0.3),
-            ThingKind::Bench => Vec2::new(0.3, 0.3),
-            ThingKind::Trough => Vec2::new(1.0, 0.35),
-            _ => Vec2::ZERO,
+            ThingKind::Well => across(0.85, -0.87, 0.87),
+            ThingKind::Stall => across(1.3, 0.0, 1.0),
+            ThingKind::Forge => across(1.3, -0.77, 0.77),
+            ThingKind::Block => across(0.3, -0.3, 0.3),
+            ThingKind::Bench => across(0.85, -0.22, 0.22),
+            ThingKind::Trough => across(1.0, -0.35, 0.35),
+            _ => None,
+        }
+    }
+
+    /// Where someone coming to it stands, in its own metres: before it, and for a stall
+    /// behind it too, where its seller comes in.
+    pub fn stands(self) -> Vec<Vec2> {
+        let front = self.ground().map_or(0.0, |(_, high)| high.y) + 0.75;
+        match self {
+            ThingKind::Stall => vec![Vec2::new(0.0, front), Vec2::new(0.0, -1.6)],
+            _ => vec![Vec2::new(0.0, front)],
         }
     }
 }
@@ -172,8 +186,8 @@ impl Thing {
 
     /// The ground it covers, a rectangle in order round it, if it stands in a walker's way.
     pub fn outline(&self) -> Option<[Vec2; 4]> {
-        let half = self.kind.half();
-        (half != Vec2::ZERO).then(|| turned_box(self.at, self.facing, -half, half))
+        let (low, high) = self.kind.ground()?;
+        Some(turned_box(self.at, self.facing, low, high))
     }
 
     /// A place in its own metres (x across its front, y out of its front) in the town.
@@ -241,6 +255,9 @@ const OFF_STREET_M: f32 = 0.8;
 const GRID_M: f32 = 4.0;
 /// How far behind a house its yard begins: a way along its back to the yard's gate.
 const BEHIND_M: f32 = 1.6;
+/// How far the paths keep from where people gather: round the few standing and talking, not
+/// through them.
+const GATHERED_M: f32 = 1.8;
 /// How far a walk between two nodes keeps from anything built.
 pub const CLEAR_M: f32 = 0.45;
 
@@ -713,7 +730,7 @@ impl Town {
             .push(Thing::new(ThingKind::Well, well, side, None));
         self.things.push(Thing::new(
             ThingKind::Trough,
-            well + along * 3.0 * roll(3).signum(),
+            well + along * 4.0 * roll(3).signum(),
             side,
             None,
         ));
@@ -740,7 +757,11 @@ impl Town {
                 continue;
             };
             let fits = ground.iter().all(|&corner| well_in(corner, 1.5))
-                && well_in(stall.place(Vec2::new(0.0, 1.6)), 0.5)
+                && stall
+                    .kind
+                    .stands()
+                    .iter()
+                    .all(|&stand| well_in(stall.place(stand), 0.5))
                 && self.things.iter().all(|other| match other.outline() {
                     Some(theirs) => polygons(&ground, &theirs) >= 2.2,
                     None => true,
@@ -776,11 +797,20 @@ impl Town {
                 if !well_in(point, 3.5) {
                     continue;
                 }
+                // Out of the way of anyone coming onto the square from a street.
+                let mouths = self
+                    .streets
+                    .iter()
+                    .map(|street| street.points[0].distance(point) - 5.0)
+                    .fold(f32::MAX, f32::min);
                 let room = self
                     .things
                     .iter()
-                    .map(|thing| thing.at.distance(point) - thing.kind.half().length())
-                    .fold(f32::MAX, f32::min);
+                    .map(|thing| match thing.outline() {
+                        Some(ground) => segment_polygon(point, point, &ground),
+                        None => thing.at.distance(point),
+                    })
+                    .fold(mouths, f32::min);
                 open.push((room, point));
             }
         }
@@ -1163,11 +1193,21 @@ impl Town {
                 .iter()
                 .filter_map(Thing::outline)
                 .all(|quad| segment_polygon(a, b, &quad) >= CLEAR_M)
+            && self
+                .things
+                .iter()
+                .filter(|thing| thing.kind == ThingKind::Gathering)
+                .all(|thing| point_segment(thing.at, a, b) >= GATHERED_M)
     }
 
     /// Whether a point is clear to stand on.
     fn standable(&self, point: Vec2, margin: f32) -> bool {
         self.walkable(point, point)
+            && self
+                .things
+                .iter()
+                .filter(|thing| thing.kind == ThingKind::Gathering)
+                .all(|thing| thing.at.distance(point) >= GATHERED_M + margin)
             && self
                 .footprints
                 .iter()
@@ -1266,13 +1306,20 @@ impl Town {
         // Before each thing, where someone coming to it arrives; a gate at its street's end.
         let stands: Vec<Vec2> = self.things.iter().map(|thing| self.stand(thing)).collect();
         for (index, stand) in stands.into_iter().enumerate() {
-            let at_end = (self.things[index].kind == ThingKind::Gate)
-                .then(|| {
-                    nodes.iter().position(|(point, on)| {
-                        matches!(on, On::Street(_)) && point.distance(stand) < 0.01
-                    })
-                })
-                .flatten();
+            // A gate is its street's last node; a place to gather is come to by the square's
+            // nearest, so no one walks through its middle to get round it.
+            let at_end = match self.things[index].kind {
+                ThingKind::Gate => nodes.iter().position(|(point, on)| {
+                    matches!(on, On::Street(_)) && point.distance(stand) < 0.01
+                }),
+                ThingKind::Gathering => nodes
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (_, on))| *on == On::Square)
+                    .min_by(|a, b| a.1.0.distance(stand).total_cmp(&b.1.0.distance(stand)))
+                    .map(|(node, _)| node),
+                _ => None,
+            };
             let node = match at_end {
                 Some(node) => node as u32,
                 None => {
@@ -1295,6 +1342,14 @@ impl Town {
                 }
             };
             self.things[index].node = node;
+            // Its other places to stand, a stall's back.
+            let thing = &self.things[index];
+            for &extra in thing.kind.stands().iter().skip(1) {
+                let point = thing.place(extra);
+                let more = nodes.len() as u32;
+                nodes.push((point, On::Thing(index)));
+                join(self, &nodes, &mut edges, more, 2);
+            }
         }
         // The lanes to the yards: on from the door's last step, to the yard's gate, and from
         // there to the yard's own things.
@@ -1439,7 +1494,7 @@ impl Town {
                 None => thing.at,
             },
             ThingKind::Yard | ThingKind::Gathering | ThingKind::Gate | ThingKind::Post => thing.at,
-            _ => thing.place(Vec2::new(0.0, thing.kind.half().y + 0.75)),
+            _ => thing.place(thing.kind.stands()[0]),
         }
     }
 }
@@ -1465,6 +1520,210 @@ impl Paths {
             .map(|node| root(&mut part, node))
             .collect()
     }
+}
+
+/// Something to mark on a plan: a place, a colour, how big, and a word by it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Mark {
+    pub at: Vec2,
+    pub colour: &'static str,
+    pub size: f32,
+    pub label: Option<String>,
+}
+
+/// A town's plan as an SVG to look at (`cargo xtask town`, and the life check's map): the
+/// ground's height in metre bands, the square, the streets, every building's ground, the
+/// yards, the things a day is done at, which way each looks, the path graph with anything cut
+/// off from it in red, a legend, and marks laid over it all.
+pub fn svg(town: &Town, heights: &dyn Fn(Vec2) -> f32, marks: &[Mark]) -> String {
+    let mut points: Vec<Vec2> = town.paths.nodes.iter().map(|n| n.0).collect();
+    points.extend(town.footprints.iter().flatten().flatten());
+    let low = points
+        .iter()
+        .copied()
+        .reduce(Vec2::min)
+        .unwrap_or(Vec2::ZERO)
+        - 12.0;
+    let high = points
+        .iter()
+        .copied()
+        .reduce(Vec2::max)
+        .unwrap_or(Vec2::ZERO)
+        + 12.0;
+    let size = high - low;
+    let scale = 4.0;
+    let p = |v: Vec2| {
+        let s = (v - low) * scale;
+        format!("{:.1},{:.1}", s.x, s.y)
+    };
+    let poly = |quad: &[Vec2], style: &str| {
+        let pts: Vec<String> = quad.iter().map(|&v| p(v)).collect();
+        format!("<polygon points=\"{}\" {style}/>\n", pts.join(" "))
+    };
+    let mut svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{:.0}\" height=\"{:.0}\" font-family=\"sans-serif\">\n<rect width=\"100%\" height=\"100%\" fill=\"#e9e4d4\"/>\n",
+        size.x * scale,
+        size.y * scale + 70.0
+    );
+    // Contours every metre, as dots, so the slope reads.
+    let mut y = low.y;
+    while y < high.y {
+        let mut x = low.x;
+        while x < high.x {
+            let h = heights(Vec2::new(x, y));
+            let shade = (h.rem_euclid(2.0) < 1.0) as u8;
+            if shade == 1 {
+                svg.push_str(&format!(
+                    "<rect x=\"{:.0}\" y=\"{:.0}\" width=\"{:.0}\" height=\"{:.0}\" fill=\"#dcd5bf\"/>\n",
+                    (x - low.x) * scale,
+                    (y - low.y) * scale,
+                    2.0 * scale,
+                    2.0 * scale
+                ));
+            }
+            x += 2.0;
+        }
+        y += 2.0;
+    }
+    svg.push_str(&poly(
+        &town.square.outline,
+        "fill=\"#cdbf9c\" stroke=\"#8a7a55\"",
+    ));
+    for street in &town.streets {
+        let pts: Vec<String> = street.points.iter().map(|&v| p(v)).collect();
+        svg.push_str(&format!(
+            "<polyline points=\"{}\" fill=\"none\" stroke=\"#cdbf9c\" stroke-width=\"{:.0}\" stroke-linejoin=\"round\"/>\n",
+            pts.join(" "),
+            street.wide * scale
+        ));
+    }
+    for (_, yard) in &town.yards {
+        svg.push_str(&poly(
+            yard,
+            "fill=\"#b9c99a\" stroke=\"#7d8f5c\" stroke-dasharray=\"3 2\"",
+        ));
+    }
+    for (index, quads) in town.footprints.iter().enumerate() {
+        let home = town.homes.contains(&index);
+        let fill = if home { "#8c6b4f" } else { "#6f6a63" };
+        for quad in quads {
+            svg.push_str(&poly(quad, &format!("fill=\"{fill}\" stroke=\"#3b2f25\"")));
+        }
+    }
+    for &[a, b] in &town.paths.edges {
+        let (pa, pb) = (
+            town.paths.nodes[a as usize].0,
+            town.paths.nodes[b as usize].0,
+        );
+        svg.push_str(&format!(
+            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#2f6db5\" stroke-width=\"0.8\"/>\n",
+            ((pa - low) * scale).x,
+            ((pa - low) * scale).y,
+            ((pb - low) * scale).x,
+            ((pb - low) * scale).y
+        ));
+    }
+    let parts = town.paths.parts();
+    for (index, (at, on)) in town.paths.nodes.iter().enumerate() {
+        let colour = if parts[index] != parts[0] {
+            "#e0201b"
+        } else {
+            match on {
+                On::Street(_) => "#2f6db5",
+                On::Square => "#2f6db5",
+                On::Thing(_) => "#111",
+                On::Lane(_) => "#5a8f2c",
+            }
+        };
+        let s = (*at - low) * scale;
+        svg.push_str(&format!(
+            "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"1.6\" fill=\"{colour}\"/>\n",
+            s.x, s.y
+        ));
+    }
+    for thing in &town.things {
+        let colour = match thing.kind {
+            ThingKind::Door => "#f2c14e",
+            ThingKind::Well => "#3a8fd9",
+            ThingKind::Stall => "#d9573a",
+            ThingKind::Forge => "#1c1c1c",
+            ThingKind::Block => "#a0522d",
+            ThingKind::Bench => "#7a5c3a",
+            ThingKind::Trough => "#3a8fd9",
+            ThingKind::Post => "#7b2fbe",
+            ThingKind::Gathering => "#e08bd1",
+            ThingKind::Gate => "#7b2fbe",
+            ThingKind::Pen => "#d6c7a1",
+            ThingKind::Yard => "#e3d26a",
+        };
+        match thing.outline() {
+            Some(quad) => svg.push_str(&poly(&quad, &format!("fill=\"{colour}\" stroke=\"#222\""))),
+            None => {
+                let s = (thing.at - low) * scale;
+                svg.push_str(&format!(
+                    "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"4\" fill=\"{colour}\" stroke=\"#222\"/>\n",
+                    s.x, s.y
+                ));
+            }
+        }
+        // Which way it looks.
+        let (from, to) = (
+            (thing.at - low) * scale,
+            (thing.at + thing.front() * 1.5 - low) * scale,
+        );
+        svg.push_str(&format!(
+            "<line x1=\"{:.1}\" y1=\"{:.1}\" x2=\"{:.1}\" y2=\"{:.1}\" stroke=\"#222\" stroke-width=\"1\"/>\n",
+            from.x, from.y, to.x, to.y
+        ));
+    }
+    for mark in marks {
+        let s = (mark.at - low) * scale;
+        svg.push_str(&format!(
+            "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"{:.1}\" fill=\"{}\" stroke=\"#111\" stroke-width=\"0.6\"/>\n",
+            s.x, s.y, mark.size, mark.colour
+        ));
+        if let Some(label) = &mark.label {
+            svg.push_str(&format!(
+                "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"9\">{label}</text>\n",
+                s.x + mark.size + 1.0,
+                s.y + 3.0
+            ));
+        }
+    }
+    let legend = [
+        ("#8c6b4f", "home"),
+        ("#6f6a63", "shed, wall"),
+        ("#b9c99a", "yard"),
+        ("#f2c14e", "door"),
+        ("#d9573a", "stall"),
+        ("#3a8fd9", "well, trough"),
+        ("#1c1c1c", "forge"),
+        ("#a0522d", "block"),
+        ("#7a5c3a", "bench"),
+        ("#e08bd1", "gathering"),
+        ("#7b2fbe", "gate, post"),
+        ("#e3d26a", "hens"),
+        ("#d6c7a1", "pen"),
+        ("#2f6db5", "paths"),
+        ("#e0201b", "cut off"),
+    ];
+    let base = size.y * scale + 10.0;
+    for (index, (colour, name)) in legend.iter().enumerate() {
+        let x = 10.0 + (index % 8) as f32 * 110.0;
+        let y = base + (index / 8) as f32 * 24.0;
+        svg.push_str(&format!(
+            "<rect x=\"{x}\" y=\"{y}\" width=\"14\" height=\"14\" fill=\"{colour}\" stroke=\"#222\"/><text x=\"{}\" y=\"{}\" font-size=\"13\">{name}</text>\n",
+            x + 20.0,
+            y + 12.0
+        ));
+    }
+    svg.push_str(&format!(
+        "<text x=\"10\" y=\"{}\" font-size=\"12\">North is up; each ground band is a metre of height. 10 m = {:.0} px.</text>\n",
+        base + 56.0,
+        10.0 * scale
+    ));
+    svg.push_str("</svg>\n");
+    svg
 }
 
 #[cfg(test)]

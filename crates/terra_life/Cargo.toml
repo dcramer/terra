@@ -1,0 +1,18 @@
+[package]
+name = "terra_life"
+description = "People's days in a settlement: schedules by role at smart objects, walking a town's path graph (A*, and ORCA avoidance ported from RVO2), and where anyone far off is from the clock. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+serde.workspace = true
+ron.workspace = true
+# The town people live in: its things, buildings and path graph (terra_build::town).
+terra_build.workspace = true
+
+[lints]
+workspace = true

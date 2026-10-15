@@ -18,6 +18,7 @@ terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_land = { path = "crates/terra_land" }
+terra_life = { path = "crates/terra_life" }
 terra_sim = { path = "crates/terra_sim" }
 terra_voxel = { path = "crates/terra_voxel" }
 terra_world = { path = "crates/terra_world" }

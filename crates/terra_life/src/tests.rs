@@ -1,0 +1,192 @@
+//! A town's life, tested on a town from the layout and the plan the game reads.
+
+use crate::check::Watch;
+use crate::{Life, Plan, State};
+use glam::Vec2;
+use terra_build::Kind;
+use terra_build::town::{ThingKind, town};
+use terra_build::village::Kinds;
+
+const KINDS: Kinds = Kinds {
+    timber: Kind(1),
+    masonry: Kind(2),
+    beams: Kind(3),
+    cob: Kind(4),
+    framed: Kind(5),
+    timber_roof: Kind(0x800),
+    masonry_roof: Kind(0x801),
+    beams_roof: Kind(0x802),
+};
+
+const SECONDS_AN_HOUR: f32 = 75.0;
+const STEP: f32 = 0.1;
+
+fn plan() -> Plan {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/data/life.ron"
+    ))
+    .expect("the plan's file");
+    Plan::parse(&text).expect("the plan reads")
+}
+
+fn life(seed: u32) -> Life {
+    let ground = |at: Vec2| at.x * 0.03;
+    Life::new(town(seed, KINDS, &ground), plan(), seed, SECONDS_AN_HOUR)
+}
+
+/// The middle of the square, where a viewer stands to see everyone.
+fn square(life: &Life) -> Vec2 {
+    let outline = &life.town.square.outline;
+    outline.iter().copied().sum::<Vec2>() / outline.len() as f32
+}
+
+fn run(life: &mut Life, from: f64, hours: f64, viewer: Vec2) -> Watch {
+    let mut watch = Watch::default();
+    life.start(from);
+    let steps = (hours * SECONDS_AN_HOUR as f64 / STEP as f64) as u64;
+    for n in 0..steps {
+        let at = from + n as f64 * STEP as f64 / SECONDS_AN_HOUR as f64;
+        life.step(at, STEP, &[viewer]);
+        watch.see(life, at, STEP);
+    }
+    watch.finish();
+    watch
+}
+
+#[test]
+fn the_plan_names_only_things_a_town_has_and_activities_it_has() {
+    let plan = plan();
+    let kinds: Vec<&str> = ThingKind::ALL.iter().map(|k| k.name()).collect();
+    for thing in plan.things.keys() {
+        assert!(kinds.contains(&thing.as_str()), "no thing {thing}");
+    }
+    // Something to do at home, and somewhere out of town.
+    assert!(plan.activities.values().any(|a| a.inside));
+    assert!(plan.activities.values().any(|a| a.away));
+    let wrong = plan.clone();
+    let text = "(household: (1, 2), things: {}, activities: {}, roles: [(name: \"x\", count: Rest, day: [(from: 0.0, does: [\"Nap\"])])])";
+    assert!(
+        Plan::parse(text).is_err(),
+        "an activity that is not one is caught"
+    );
+    assert_eq!(wrong, plan);
+}
+
+#[test]
+fn everyone_has_a_home_and_a_role_and_owners_own_what_they_work() {
+    let life = life(2);
+    let count = |role: &str| {
+        (0..life.people.len())
+            .filter(|&p| life.role(p) == role)
+            .count()
+    };
+    let stalls = life
+        .town
+        .things
+        .iter()
+        .filter(|t| t.kind == ThingKind::Stall)
+        .count();
+    assert_eq!(count("trader"), stalls, "a trader to each stall");
+    assert_eq!(count("smith"), 1);
+    for (index, person) in life.people.iter().enumerate() {
+        assert_eq!(life.town.things[person.home].kind, ThingKind::Door);
+        if life.role(index) == "trader" {
+            let owns = person.owns.expect("a trader owns a stall");
+            assert_eq!(life.town.things[owns].kind, ThingKind::Stall);
+        }
+        // Children are smaller and step shorter, so walk slower; nobody walks faster than
+        // the walk can be played at.
+        if life.role(index) == "child" {
+            assert!(person.scale < 0.8 && person.walk < crate::WALK_PACE);
+        }
+        assert!(person.walk < crate::WALK_PACE * person.scale * 1.6);
+    }
+    // Every home is lived in, by the plan's household at most.
+    let (_, most) = life.plan.household;
+    for &home in &life.town.homes {
+        let door = life
+            .town
+            .things
+            .iter()
+            .position(|t| t.kind == ThingKind::Door && t.building == Some(home))
+            .unwrap();
+        let living = life.people.iter().filter(|p| p.home == door).count();
+        assert!(
+            living >= 1 && living <= most as usize + 1,
+            "{living} in a home"
+        );
+    }
+}
+
+#[test]
+fn a_market_morning_walks_without_anyone_in_a_wall_or_another() {
+    let mut life = life(1);
+    let viewer = square(&life);
+    let watch = run(&mut life, 9.0, 1.5, viewer);
+    let faults = &watch.faults;
+    assert!(
+        faults.in_walls.is_empty(),
+        "in walls: {:?}",
+        faults.in_walls
+    );
+    assert!(
+        faults.through.is_empty(),
+        "through each other: {:?}",
+        faults.through
+    );
+    assert!(faults.sliding.is_empty(), "sliding: {:?}", faults.sliding);
+    // A morning in the market is busy: most of the town is out, and many on the square.
+    let hour = &watch.hours[0];
+    assert!(
+        hour.out > life.people.len() as f32 * 0.4,
+        "{} out of {}",
+        hour.out,
+        life.people.len()
+    );
+    assert!(hour.on_square > 20.0, "{} on the square", hour.on_square);
+    assert!(
+        hour.doing.get("Sell").copied().unwrap_or(0.0) >= 3.0,
+        "the traders sell"
+    );
+}
+
+#[test]
+fn far_from_everyone_nobody_ticks_and_coming_near_finds_them_where_the_clock_says() {
+    let mut life = life(3);
+    let far = Vec2::new(5000.0, 5000.0);
+    life.start(10.0);
+    let before: Vec<Vec2> = life.people.iter().map(|p| p.at).collect();
+    for n in 0..200 {
+        life.step(10.0 + n as f64 * 0.001, STEP, &[far]);
+    }
+    let after: Vec<Vec2> = life.people.iter().map(|p| p.at).collect();
+    assert_eq!(before, after, "nobody moved with no one near");
+    // At two in the night everyone is indoors; at ten the traders are at their stalls.
+    life.step(26.0, STEP, &[square(&life)]);
+    assert!(
+        life.people.iter().all(|p| p.state == State::Inside),
+        "abed at two"
+    );
+    life.step(34.0, STEP, &[far]);
+    life.step(34.0, STEP, &[square(&life)]);
+    for (index, person) in life.people.iter().enumerate() {
+        if life.role(index) == "trader" {
+            assert_eq!(life.activity(index), Some("Sell"));
+            let spot = &life.spots[person.spot.expect("at a spot")];
+            assert_eq!(Some(spot.thing), person.owns, "at their own stall");
+        }
+    }
+}
+
+#[test]
+fn the_same_town_and_seed_live_the_same_day() {
+    let viewer = |life: &Life| square(life);
+    let mut a = life(4);
+    let mut b = life(4);
+    let (va, vb) = (viewer(&a), viewer(&b));
+    run(&mut a, 7.0, 0.3, va);
+    run(&mut b, 7.0, 0.3, vb);
+    let at = |life: &Life| life.people.iter().map(|p| p.at).collect::<Vec<_>>();
+    assert_eq!(at(&a), at(&b));
+}

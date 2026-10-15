@@ -1,0 +1,168 @@
+// People's days in a settlement (terra_life, docs/demos.md, D324): what can be done round
+// each thing a town has, the activities and the clip each plays, and the roles, each a day
+// of windows. Hours are the world's clock (0 to 24); a stay is game minutes at one place
+// before another is picked, as The Witcher 3's people move between pooled spots.
+//
+// A spot's `at` is in its thing's own metres: across its front, and out of it (a stall's
+// counter is at its front, its seller behind). It faces the thing's middle unless `face`
+// says a way. A new activity is an entry here and a spot that does it.
+#![enable(implicit_some)]
+(
+    household: (3, 6),
+    things: {
+        "Door": [
+            (at: (0.0, 0.0), from_stand: true, shared: true, does: ["Home"]),
+            (at: (1.3, 0.3), face: (0.0, 1.0), from_stand: true, does: ["Stand", "Chat"]),
+            (at: (-1.3, 0.3), face: (0.0, 1.0), from_stand: true, does: ["Stand"]),
+        ],
+        "Well": [
+            (at: (0.0, 1.35), does: ["Draw", "Chat"]),
+            (at: (1.35, 0.0), does: ["Draw"]),
+            (at: (0.0, -1.35), does: ["Draw", "Chat"]),
+            (at: (-1.35, 0.0), does: ["Draw"]),
+            (at: (2.3, 1.5), face: (-1.0, -0.4), does: ["Chat"]),
+            (at: (-2.3, 1.5), face: (1.0, -0.4), does: ["Chat"]),
+        ],
+        "Trough": [
+            (at: (-0.5, 0.95), does: ["Wash"]),
+            (at: (0.5, -0.95), does: ["Wash"]),
+        ],
+        "Stall": [
+            (at: (0.0, -0.5), face: (0.0, 1.0), does: ["Sell"]),
+            (at: (-0.7, 1.45), does: ["Browse"]),
+            (at: (0.7, 1.45), does: ["Browse"]),
+        ],
+        "Forge": [
+            (at: (0.0, 1.35), does: ["Smith"]),
+            (at: (2.1, 1.2), face: (-1.0, 0.0), does: ["Chat"]),
+        ],
+        "Block": [
+            (at: (0.0, 0.85), does: ["Chop"]),
+        ],
+        "Bench": [
+            (at: (-0.45, 0.6), face: (0.0, 1.0), does: ["Sit"]),
+            (at: (0.45, 0.6), face: (0.0, 1.0), does: ["Sit"]),
+        ],
+        "Post": [
+            (at: (0.0, 0.0), face: (0.0, 1.0), does: ["Guard"]),
+        ],
+        "Gathering": [
+            (at: (0.0, 0.9), does: ["Chat"]),
+            (at: (0.9, 0.0), does: ["Chat"]),
+            (at: (0.0, -0.9), does: ["Chat"]),
+            (at: (-0.9, 0.0), does: ["Chat"]),
+            // Where children run between, well apart.
+            (at: (0.0, 3.6), does: ["Play"]),
+            (at: (3.1, 1.8), does: ["Play"]),
+            (at: (3.1, -1.8), does: ["Play"]),
+            (at: (0.0, -3.6), does: ["Play"]),
+            (at: (-3.1, -1.8), does: ["Play"]),
+            (at: (-3.1, 1.8), does: ["Play"]),
+        ],
+        "Gate": [
+            (at: (0.0, 0.0), shared: true, does: ["Fields"]),
+        ],
+        "Pen": [
+            (at: (0.0, 0.0), face: (0.0, -1.0), from_stand: true, does: ["Tend"]),
+        ],
+        "Yard": [
+            (at: (0.0, 0.0), face: (0.0, -1.0), does: ["Tend", "Play"]),
+            (at: (1.6, -0.8), face: (-1.0, 0.0), does: ["Tend"]),
+        ],
+    },
+    activities: {
+        "Home": (inside: true),
+        "Fields": (away: true),
+        "Stand": (clip: "Idle_Loop", stay: (4.0, 12.0)),
+        "Chat": (clip: "Idle_Talking_Loop", stay: (6.0, 20.0)),
+        "Draw": (clip: "PickUp_Table", stay: (2.0, 5.0)),
+        "Wash": (clip: "Fixing_Kneeling", stay: (15.0, 40.0)),
+        "Sell": (clip: "Idle_Talking_Loop", stay: (60.0, 180.0), own: true),
+        "Browse": (clip: "Interact", stay: (3.0, 10.0)),
+        "Smith": (clip: "Interact", stay: (60.0, 120.0), own: true),
+        "Chop": (clip: "Interact", stay: (20.0, 40.0), own: true),
+        "Sit": (clip: "Sitting_Talking_Loop", stay: (20.0, 60.0)),
+        "Guard": (clip: "Idle_Loop", stay: (30.0, 90.0), own: true),
+        "Tend": (clip: "Fixing_Kneeling", stay: (8.0, 20.0), own: true),
+        "Play": (clip: "Idle_Loop", stay: (1.0, 3.0), run: true),
+    },
+    // A walk across the town takes an hour or two of its clock (a day is half an hour of
+    // play), so each window is long enough to walk to and stay at a while.
+    roles: [
+        (name: "trader", count: Per("Stall"), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 6.0, does: ["Sell"]),
+            (from: 15.0, does: ["Browse", "Chat"]),
+            (from: 17.5, does: ["Home"]),
+        ]),
+        (name: "smith", count: Per("Forge"), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 6.5, does: ["Smith"]),
+            (from: 12.0, does: ["Chat"]),
+            (from: 13.0, does: ["Smith"]),
+            (from: 18.0, does: ["Chat"]),
+            (from: 19.5, does: ["Home"]),
+        ]),
+        // On watch all day at their own post.
+        (name: "guard", count: Per("Post"), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 5.5, does: ["Guard"]),
+            (from: 20.5, does: ["Home"]),
+        ]),
+        (name: "woodcutter", count: Fixed(4), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 6.5, does: ["Chop"]),
+            (from: 11.0, does: ["Browse", "Chat"]),
+            (from: 14.0, does: ["Chop"]),
+            (from: 18.0, does: ["Chat"]),
+            (from: 19.5, does: ["Home"]),
+        ]),
+        (name: "elder", count: Fixed(3), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 8.0, does: ["Sit"]),
+            (from: 11.0, does: ["Chat"]),
+            (from: 14.0, does: ["Sit", "Chat"]),
+            (from: 18.0, does: ["Home"]),
+        ]),
+        (name: "washer", count: Fixed(4), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 6.0, does: ["Draw"]),
+            (from: 7.0, does: ["Wash"]),
+            (from: 11.0, does: ["Browse"]),
+            (from: 13.0, does: ["Wash"]),
+            (from: 16.0, does: ["Draw", "Chat"]),
+            (from: 17.5, does: ["Home"]),
+        ]),
+        // Out to the fields and back with the cart, twice a day.
+        (name: "carter", count: Fixed(2), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 5.5, does: ["Fields"]),
+            (from: 9.0, does: ["Browse", "Chat"]),
+            (from: 12.0, does: ["Fields"]),
+            (from: 16.0, does: ["Browse", "Chat"]),
+            (from: 18.0, does: ["Home"]),
+        ]),
+        (name: "farmer", count: Share(0.15), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 5.0, does: ["Tend"]),
+            (from: 6.0, does: ["Fields"]),
+            (from: 15.0, does: ["Browse", "Chat"]),
+            (from: 17.0, does: ["Tend"]),
+            (from: 18.5, does: ["Home"]),
+        ]),
+        (name: "child", count: Share(0.2), child: true, day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 7.5, does: ["Play"]),
+            (from: 18.5, does: ["Home"]),
+        ]),
+        (name: "townsfolk", count: Rest, day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 6.0, does: ["Tend", "Draw"]),
+            (from: 7.5, does: ["Browse", "Chat", "Browse", "Draw", "Sit"]),
+            (from: 12.0, does: ["Home"]),
+            (from: 14.0, does: ["Browse", "Chat", "Tend", "Sit"]),
+            (from: 17.5, does: ["Chat", "Stand"]),
+            (from: 19.0, does: ["Home"]),
+        ]),
+    ],
+)

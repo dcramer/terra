@@ -33,7 +33,7 @@ Each is general, for work we will keep doing (D71, D249, D326).
 | **Field maps**, `cargo xtask fields` | A CPU-only run over the Bevy-free crates. For a region of a world on a date it writes small PNG maps with a legend, and a JSON of numbers: the height, slope and facing; the growing season's mean temperature; snow depth from the folded past; wind exposure; lakes and their levels; each species' fit and the one that wins; the tree line's height, measured. It also answers site queries, a place meeting conditions. | The rules decide every place, so the rules are checked first, in seconds, without the GPU, before anything is drawn. A tree line that comes out at the wrong height is caught here, not in a film. |
 | **Places**, one table for the sandbox tools | `vantage`, `lodcheck`, `film`, `pops`, `collide` and the bench scenes take `--place lush\|lake\|tundra\|town`. Each place names its sandbox options, its views, its route, its look reference and its bench scene, in one file (`tools/sandbox/places.ts`). | Today every view, route and scene is written for the lush forest (`VIEWS`, `FOREST_VIEWS`, `ROUTE`, `--level yard`). A new place should be a table entry, not a fork of five tools. |
 | **Bands in `look.ts`** | Each frame is also measured by band: the sky, the far land, the middle distance and the near ground. That includes the far land's contrast with the sky and its colour shift. | An open view is judged on its distance: peaks lost in haze, or standing too sharp, is the gap the whole-frame means hide. |
-| **Life**, `cargo xtask life` (town) | Runs a settlement through a game day at a fast clock and reads the town from the game over the remote protocol (D69). It reports: who was where they should be and when; anyone stuck for more than 5 s; anyone through a wall or another person; feet sliding (the speed against the clip's pace); people and animals in view at each vantage and hour; smoke rising; what was heard, by part of the mix. | "Bustling" and "going about their day" become numbers that hold from change to change. |
+| **Life**, `cargo xtask life` (town) | Runs a settlement through a game day at a fast clock; first headless, the town's own rules on the CPU (`terra_life`, built), then read from the game over the remote protocol (D69). It reports: who was where they should be and when; anyone stuck for more than 5 s; anyone through a wall or another person; feet sliding (the speed against the clip's pace); people and animals in view at each vantage and hour; smoke rising; what was heard, by part of the mix. | "Bustling" and "going about their day" become numbers that hold from change to change. |
 
 ## 1. A mountain lake
 
@@ -308,8 +308,11 @@ By evening the square empties into lit doorways. A player can watch any one pers
   - Each person picks among the spots free for their activity, as The Sims' objects advertise and The Witcher 3's NPCs pool spots.
   - A new activity is data: an object kind and its clips.
 - **Roles for the demo:** about ten, each a day and the tools and clothes that show it. Trader, smith, baker, farmer, carter, guard, an elder, children, a woodcutter, a washer.
+- **A day's clock is fast against a walk** (a day is 30 minutes of play): crossing a town of 200 m takes one or two of its hours. So every window is long enough to walk to and stay at, people plan the next a few hours ahead and set off early enough for the walk, a window too short for the walks either side of it is passed over, and the place planned is kept for them.
 - **Walking:**
   - Along the town's own path graph: street centre lines, plot paths and doorways, which the layout knows exactly.
+  - No way runs past where someone stands at a spot, so walkers go round the seller and the talkers, not between them and their stall or well.
+  - A body's walk plays at the speed it goes (slower than the clip's own, its stride slowed, not slid), and below a shuffle it stands.
   - A* on it, then ORCA local avoidance between walkers, ported from RVO2 (Apache-2.0).
   - It needs no navmesh, which nothing supports on Bevy 0.20, and stays cheap on a server (D52).
   - A navmesh (Recast's design, zlib) comes with collision (D53) for the wild.
@@ -393,6 +396,8 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 2. **The layout:** a market town with a square, streets along the slope, plots and yards, in `terra_build`, with its path graph. Bench `town-bare`. *Landed: `terra_build::town` (D330); `cargo xtask town --seed N` draws the plan. The bench waits for the game to lay it.*
 3. **Walking:** A* on the path graph and ORCA avoidance. Villagers walk between given points. The first `life` check (stuck, through walls, feet).
 4. **Days:** smart objects (stall, well, forge, block, bench, door) and schedules by role as data. People far off worked out from the clock. `life` checks schedules.
+
+   *Steps 3 and 4 landed together in `terra_life` with `assets/data/life.ron`; `cargo xtask life --seeds 1-8 --ground all` runs 24 towns of 120 to 180 people through a day in about three seconds each, a step under a millisecond. Most pass; a few have a child or two held more than 5 s in the market's crowd, which is what is left to do there.*
 5. **Crowd tiers:** animation rate and joint LOD, merged outfits, the far tier's vertex animation; `lodcheck` on them; the counts raised to the budget.
 6. **Looks from a seed:** templates, morphs and garments by role.
 7. **Animals:** chickens, a dog and a goat from Tripo, rigged and animated as the 2026-10-14 animation note proposes; penned and following.

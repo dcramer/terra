@@ -190,7 +190,14 @@ const TASKS: &[Task] = &[
         takes: "[--seed N | --seeds A-B] [--ground flat|hillside|rolling|all] [--out shots/town.svg]",
         does: "a market town's plan from its seed, drawn as an SVG: square, streets, buildings, yards, the things its day is done at and its path graph; CPU only (terra_build::town)",
         group: "Look at things",
-        run: |args| cargo_example("terra_build", "town", args),
+        run: |args| cargo_example("terra_build", "town", args, false),
+    },
+    Task {
+        name: "life",
+        takes: "[--seed N | --seeds A-B] [--ground flat|hillside|rolling|all] [--from HOUR] [--hours N]",
+        does: "the life check (D326): a market town's people through a game day on the CPU, failing on anyone stuck, in a wall, inside another, sliding their feet or late for their day; counts by hour and a map in shots/life-*.svg (terra_life)",
+        group: "Play and check",
+        run: |args| cargo_example("terra_life", "life", args, true),
     },
     Task {
         name: "fields",
@@ -1157,8 +1164,12 @@ fn use_hooks() {
 }
 
 /// A crate's example program, built quietly and run from the root.
-fn cargo_example(package: &str, example: &str, args: &[String]) -> bool {
-    let mut all = vec!["run", "-q", "-p", package, "--example", example, "--"];
+fn cargo_example(package: &str, example: &str, args: &[String], release: bool) -> bool {
+    let mut all = vec!["run", "-q", "-p", package, "--example", example];
+    if release {
+        all.insert(2, "--release");
+    }
+    all.push("--");
     all.extend(args.iter().map(String::as_str));
     run("cargo", &all)
 }
