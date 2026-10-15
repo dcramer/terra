@@ -145,7 +145,7 @@ fn draw(
     )>,
 ) {
     for (LineText(index), mut text, mut colour, mut backing, mut visibility) in &mut lines {
-        let line = feed.0.get(*index).filter(|_| options.vantage.is_none());
+        let line = feed.0.get(*index).filter(|_| options.shows_interface());
         visibility.set_if_neq(if line.is_some() {
             Visibility::Inherited
         } else {

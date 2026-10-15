@@ -126,6 +126,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "trailer",
+        takes: "[--only lake,forest] [--again] [--stills] [--no-render] [--size 1920x1080]",
+        does: "the trailer: a run through each place filmed with a cinematic look, cut with crossfades and the game's own sound, in ~/.cache/terra-review/trailer/ (docs/trailer.md)",
+        group: "Look at things",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/trailer.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "qa",
         takes: "clips|<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] | --list | --index",
         does: "QA clips of building and destruction in a set, the same every time, each with a real-time frame trace against the budget, in shots/qa/ (tools/sandbox)",

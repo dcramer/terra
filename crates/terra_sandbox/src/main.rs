@@ -11,6 +11,7 @@
 // types are normal here.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+mod bed;
 mod experiments;
 
 /// mimalloc, a thread-caching allocator, as engines replace the system one (Unreal's
@@ -26,6 +27,20 @@ use terra_game::{appearance, character};
 use terra_world::{planet, shell, terrain};
 
 fn main() -> AppExit {
+    // A film's sound bed, written and done with, no window (`bed`).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(at) = args.iter().position(|a| a == "--sound-bed") {
+        return match bed::run(&args[at + 1..]) {
+            Ok(done) => {
+                println!("{done}");
+                AppExit::Success
+            }
+            Err(problem) => {
+                eprintln!("{problem}");
+                AppExit::error()
+            }
+        };
+    }
     let mut options = match shell::Options::from_args(std::env::args().skip(1)) {
         Ok(options) => options,
         Err(problem) => {

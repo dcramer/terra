@@ -364,7 +364,7 @@ fn draw(
         **root = wanted;
     }
     // A fixed camera is for taking pictures, which should show the scene alone.
-    let wanted = if options.vantage.is_some() {
+    let wanted = if !options.shows_interface() {
         Visibility::Hidden
     } else {
         Visibility::Inherited

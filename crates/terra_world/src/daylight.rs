@@ -377,7 +377,8 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                tick.run_if(crate::shell::in_the_world),
+                tick.run_if(crate::shell::in_the_world)
+                    .run_if(crate::cine::clock_runs),
                 follow_the_date,
                 seen_from_the_camera,
                 shine,

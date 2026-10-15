@@ -1,0 +1,311 @@
+#!/usr/bin/env node
+// The trailer (docs/trailer.md, D357): one run through each place, the game's own player
+// running a long, nearly straight route and the game's own third-person camera following,
+// filmed with a cinematic look and cut together with crossfades and a sound bed of the
+// game's own sounds. A shot file (trailer/shots/<name>.json) is the place, the hour and the
+// date, the player's route and the look; the sandbox films it with `--cine`
+// (crates/terra_world/src/cine.rs): the exposure held from when the run starts so it does
+// not pump, the clock held at the hour, motion blur, depth of field if asked. As Unreal's
+// Movie Render Queue renders a sequence, each run is stepped a sixtieth of a second a frame,
+// warmed up where it starts, and every second frame kept, for a film at 30 a second however
+// slowly it is drawn. The route is smoothed (Catmull-Rom, a spot every few metres) so the
+// player, and the camera behind them, turn gently.
+//
+//   node tools/sandbox/trailer.ts [--only lake,forest] [--again] [--stills] [--no-render]
+//     [--size 1920x1080] [--cut tools/sandbox/trailer/cut.json] [--out ~/.cache/terra-review/trailer/cut.mp4]
+//
+// Each run is left beside --out as <name>.mp4 with its own sound; a run whose clip is newer
+// than its shot file and the sandbox is kept, --again renders it again, --only renders just
+// those, --stills only a first, middle and last frame of each on one sheet (stills.jpg), to
+// judge a route fast, --no-render cuts what is there. The cut has a contact sheet,
+// <out>-sheet.jpg. Needs ffmpeg. Node 22.18 or later; no dependencies.
+
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { ROOT } from "./client.ts";
+import { place } from "./places.ts";
+import { bars, joined, lay, type Piece, smoothed } from "./timeline.ts";
+
+type Shot = {
+  about: string;
+  place: string;
+  hour: number;
+  date?: string;
+  /// How long the film of it runs.
+  seconds: number;
+  /// Frames the run waits where it starts before it rolls, for streaming and the eye.
+  warmup?: number;
+  /// Seconds of the run before the film starts, so the player is already running.
+  lead_in?: number;
+  /// Where the runner starts, the spots they run through, and how many degrees the view
+  /// is tilted up from the game's own, by the arrow keys while the run warms up.
+  player: { at: string; face?: string; route: string; tilt?: number };
+  look?: { letterbox?: number };
+  /// Its sound bed's layers, as `terra_sandbox --sound-bed` takes them, without their times.
+  sound?: string[];
+  music?: string;
+};
+type Cut = { title: string; line?: string; end?: string; letterbox: number; crossfade: number; card_seconds: number; shots: string[] };
+
+const FPS = 30;
+const args = process.argv.slice(2);
+const arg = (name: string, fallback: string) => {
+  const at = args.indexOf(name);
+  return at >= 0 ? args[at + 1] : fallback;
+};
+const home = (path: string) => path.replace(/^~(?=\/)/, homedir());
+const cutFile = resolve(ROOT, arg("--cut", "tools/sandbox/trailer/cut.json"));
+const shotsDir = resolve(dirname(cutFile), "shots");
+const cut: Cut = JSON.parse(readFileSync(cutFile, "utf8"));
+const size = arg("--size", "1920x1080");
+const [width, height] = size.split("x").map(Number);
+const out = resolve(home(arg("--out", "~/.cache/terra-review/trailer/cut.mp4")));
+const work = dirname(out);
+const clips = join(work, "clips");
+mkdirSync(clips, { recursive: true });
+const only = args.includes("--only") ? arg("--only", "").split(",") : undefined;
+const again = args.includes("--again");
+const render = !args.includes("--no-render");
+const stills = args.includes("--stills");
+
+const names = only ? cut.shots.filter((name) => only.includes(name)) : cut.shots;
+const shots = new Map<string, Shot>(cut.shots.map((name) => [name, JSON.parse(readFileSync(join(shotsDir, `${name}.json`), "utf8"))]));
+const clipOf = (name: string) => join(clips, `${name}-${size}.mp4`);
+const sandbox = resolve(ROOT, "target/release/terra_sandbox");
+
+/// A font for the cards: a light serif, as trailers' titles are, found by fontconfig.
+const font = (() => {
+  const found = spawnSync("fc-match", ["-f", "%{file}", "Noto Serif Display:light"], { encoding: "utf8" });
+  return found.status === 0 && existsSync(found.stdout) ? found.stdout : undefined;
+})();
+
+const ffmpeg = (list: string[]) => {
+  const run = spawnSync("ffmpeg", ["-y", "-loglevel", "error", ...list], { stdio: "inherit" });
+  if (run.status !== 0) throw new Error(`ffmpeg failed: ${list.join(" ").slice(0, 300)}`);
+};
+const duration = (file: string) => {
+  const probe = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" });
+  return Number(probe.stdout.trim());
+};
+
+/// The view turns up or down at the arrow keys' 1.6 radians a second (play's camera.rs):
+/// held so many frames early in the warm-up, it tilts so many degrees.
+const KEY_LOOK_SPEED = 1.6;
+function tilted(degrees: number): string[] {
+  const frames = Math.round((Math.abs(degrees) * Math.PI) / 180 / KEY_LOOK_SPEED * 60);
+  if (!frames) return [];
+  return ["--press", `${degrees > 0 ? "up" : "down"}@60-${60 + frames}`];
+}
+
+/// The sandbox's options for a run: its place's, the play experiment for the game's own
+/// player (never walk's test body), the hour, the date, where the player starts and the
+/// route, smoothed.
+function sandboxArgs(shot: Shot): string[] {
+  const own = [...place(shot.place).args];
+  const walk = own.indexOf("walk");
+  if (walk > 0 && own[walk - 1] === "--experiment") own[walk] = "play";
+  const date = own.indexOf("--date");
+  if (shot.date && date >= 0) own.splice(date, 2);
+  const spots = [shot.player.at, ...shot.player.route.split(";")].map((s) => s.split(",").map(Number) as [number, number]);
+  const route = smoothed(spots, 4).slice(1);
+  return [
+    ...own,
+    ...(own.includes("--mute") ? [] : ["--mute"]),
+    "--time",
+    `${shot.hour}`,
+    ...(shot.date ? ["--date", shot.date] : []),
+    "--at",
+    shot.player.at,
+    "--face",
+    shot.player.face ?? route[0].map((v) => v.toFixed(1)).join(","),
+    ...route.flatMap(([e, s]) => ["--route", `${e.toFixed(1)},${s.toFixed(1)}`]),
+    ...tilted(shot.player.tilt ?? 0),
+  ];
+}
+
+/// A sound bed of `seconds` from the game's own sounds and music, or undefined if it could
+/// not be made.
+function bedFor(layers: string[], seconds: number, file: string): string | undefined {
+  const made = spawnSync(sandbox, ["--sound-bed", file, "--seconds", seconds.toFixed(2), ...layers], { encoding: "utf8" });
+  if (made.status === 0 && existsSync(file)) return file;
+  console.log(`trailer: no sound bed (${`${made.stderr}`.trim()}); silent`);
+  return undefined;
+}
+const layersOf = (shot: Shot, from: number, to: number) => [
+  ...(shot.sound ?? []).map((sound) => `${sound}@${from.toFixed(2)}-${to.toFixed(2)}`),
+  ...(shot.music ? [`${shot.music}@${(from + 1).toFixed(2)}`] : []),
+];
+
+function renderShot(name: string, n: number) {
+  const shot = shots.get(name) as Shot;
+  const file = join(shotsDir, `${name}.json`);
+  const clip = clipOf(name);
+  const stale = !existsSync(clip) || statSync(clip).mtimeMs < Math.max(statSync(file).mtimeMs, statSync(sandbox).mtimeMs);
+  if (!render || !(stills || again || only || stale)) return;
+  const warmup = shot.warmup ?? 360;
+  const first = warmup + Math.round((shot.lead_in ?? 1.5) * 60);
+  const frames = Math.round(shot.seconds * FPS);
+  const last = first + (frames - 1) * 2;
+  const dir = join(work, stills ? "stills" : "frames", name);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const started = Date.now();
+  const options = [
+    "--offscreen",
+    "--clean",
+    "--picture",
+    size,
+    ...sandboxArgs(shot),
+    "--cine",
+    `${file}@${warmup}`,
+    "--shots",
+    stills ? `${dir}/f@${first},${first + 2 * Math.floor(frames / 2)},${last}` : `${dir}/f@${first}-${last}/2`,
+  ];
+  console.log(`trailer: ${n}/${names.length} ${name}: ${shot.about}`);
+  const run = spawnSync(sandbox, options, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 });
+  writeFileSync(join(work, `${name}.log`), `${sandbox} ${options.join(" ")}\n\n${run.stdout}${run.stderr}`);
+  if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
+    console.error(`${run.stdout}${run.stderr}`.split("\n").slice(-25).join("\n"));
+    throw new Error(`${name} failed; its log is ${join(work, `${name}.log`)}`);
+  }
+  const late = `${run.stdout}${run.stderr}`.split("\n").filter((line) => line.includes("Still loading"));
+  if (late.length) console.log(`trailer: ${name}: ${late[late.length - 1].replace(/.*Still loading/, "still loading")}`);
+  const gaveUp = `${run.stdout}`.split("\n").filter((line) => line.includes("Route: gave up"));
+  if (gaveUp.length) console.log(`trailer: ${name}: the route was blocked: ${gaveUp.join("; ")}`);
+  if (stills) {
+    console.log(`trailer: ${name}: stills in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+    return;
+  }
+  const bar = bars(width, height, shot.look?.letterbox ?? cut.letterbox);
+  const box = bar > 0 ? `drawbox=x=0:y=0:w=iw:h=${bar}:color=black:t=fill,drawbox=x=0:y=ih-${bar}:w=iw:h=${bar}:color=black:t=fill,` : "";
+  ffmpeg(["-framerate", `${FPS}`, "-pattern_type", "glob", "-i", `${dir}/f-*.png`, "-vf", `${box}format=yuv420p`, "-c:v", "libx264", "-preset", "slow", "-crf", "15", "-movflags", "+faststart", clip]);
+  rmSync(dir, { recursive: true, force: true });
+  // The run on its own, to send round: faded in and out, with its own sound.
+  const alone = join(work, `${name}.mp4`);
+  const bed = bedFor(layersOf(shot, 0, shot.seconds), shot.seconds, join(work, `${name}.wav`));
+  const fades = `fade=t=in:d=0.8,fade=t=out:st=${(shot.seconds - 1).toFixed(2)}:d=1`;
+  ffmpeg([
+    "-i",
+    clip,
+    ...(bed ? ["-i", bed, "-af", `afade=t=out:st=${(shot.seconds - 2).toFixed(2)}:d=2,loudnorm=I=-16:TP=-1.5`, "-c:a", "aac", "-b:a", "192k"] : []),
+    "-vf",
+    fades,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "slow",
+    "-crf",
+    "17",
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
+    "-shortest",
+    alone,
+  ]);
+  console.log(`trailer: ${alone}, ${frames} frames in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+}
+
+/// A title card: black, its words fading in and out.
+function card(name: string, title: string, line: string | undefined, seconds: number): string {
+  const file = join(clips, `card-${name}-${size}.mp4`);
+  const text = (words: string, big: boolean, y: string) => {
+    const textFile = join(clips, `card-${name}-${big ? "title" : "line"}.txt`);
+    writeFileSync(textFile, words);
+    const fade = `if(lt(t,0.8),t/0.8,if(lt(t,${seconds - 0.8}),1,(${seconds}-t)/0.8))`;
+    return `drawtext=${font ? `fontfile='${font}':` : ""}textfile='${textFile}':fontsize=${Math.round(height * (big ? 0.075 : 0.028))}:fontcolor=0xEDE6D8:x=(w-text_w)/2:y=${y}:alpha='${fade}'`;
+  };
+  const filters = [text(title, true, line ? "h*0.44-text_h/2" : "(h-text_h)/2"), ...(line ? [text(line, false, "h*0.56")] : [])];
+  ffmpeg(["-f", "lavfi", "-i", `color=c=black:s=${size}:r=${FPS}:d=${seconds}`, "-vf", `${filters.join(",")},format=yuv420p`, "-c:v", "libx264", "-crf", "15", file]);
+  return file;
+}
+
+/// A sheet of rows of pictures, three a row, the first of each row named.
+function sheet(rows: { name: string; pictures: { file: string; at?: number }[] }[], file: string) {
+  const thumbs = join(work, "thumbs");
+  rmSync(thumbs, { recursive: true, force: true });
+  mkdirSync(thumbs, { recursive: true });
+  let tile = 0;
+  for (const row of rows) {
+    for (const [k, picture] of row.pictures.entries()) {
+      const label =
+        k === 0
+          ? `,drawtext=${font ? `fontfile='${font}':` : ""}text='${row.name.replace(/[':\\%]/g, "")}':fontsize=22:fontcolor=white:box=1:boxcolor=black@0.6:x=10:y=h-th-12`
+          : "";
+      const seek = picture.at === undefined ? [] : ["-ss", picture.at.toFixed(2)];
+      ffmpeg([...seek, "-i", picture.file, "-frames:v", "1", "-vf", `scale=640:-2${label}`, join(thumbs, `${String(tile++).padStart(3, "0")}.png`)]);
+    }
+  }
+  if (tile) ffmpeg(["-framerate", "1", "-i", join(thumbs, "%03d.png"), "-vf", `tile=3x${rows.length}:padding=4:color=black`, "-frames:v", "1", "-q:v", "3", file]);
+  rmSync(thumbs, { recursive: true, force: true });
+}
+
+for (const [i, name] of names.entries()) renderShot(name, i + 1);
+
+if (stills) {
+  const rows = names
+    .map((name) => {
+      const dir = join(work, "stills", name);
+      const files = existsSync(dir) ? readdirSync(dir).sort() : [];
+      return { name: `${name}  ${shots.get(name)?.hour}h`, pictures: files.map((f) => ({ file: join(dir, f) })) };
+    })
+    .filter((row) => row.pictures.length);
+  sheet(rows, join(work, "stills.jpg"));
+  console.log(`trailer: stills of ${rows.length} runs in ${join(work, "stills.jpg")}`);
+  process.exit(0);
+}
+
+// The cut: a title, each run crossfaded into the next, an end card.
+const filmed = cut.shots.filter((name) => existsSync(clipOf(name)));
+if (filmed.length < cut.shots.length) console.log(`trailer: cut without ${cut.shots.filter((n) => !filmed.includes(n)).join(", ")}, not filmed yet`);
+const files: string[] = [];
+const pieces: Piece[] = [];
+const add = (file: string, act: number, overlap: number) => {
+  files.push(file);
+  pieces.push({ name: file, seconds: duration(file), overlap, act });
+};
+add(card("open", cut.title, cut.line, cut.card_seconds), -1, 0);
+for (const [i, name] of filmed.entries()) add(clipOf(name), i, i === 0 ? 0.8 : cut.crossfade);
+add(card("end", cut.title, cut.end, cut.card_seconds + 1), filmed.length, 1.0);
+const { starts, seconds } = lay(pieces);
+const layers = filmed.flatMap((name, i) => {
+  const at = i + 1;
+  return layersOf(shots.get(name) as Shot, Math.max(0, starts[at] - 0.5), Math.min(seconds, starts[at] + pieces[at].seconds + 0.5));
+});
+const bed = bedFor(layers, seconds, join(work, "cut.wav"));
+const filter =
+  joined(pieces, FPS, size) + (bed ? `;[${files.length}:a]afade=t=in:d=1,afade=t=out:st=${(seconds - 3).toFixed(2)}:d=3,loudnorm=I=-16:TP=-1.5[bed]` : "");
+ffmpeg([
+  ...files.flatMap((file) => ["-i", file]),
+  ...(bed ? ["-i", bed] : []),
+  "-filter_complex",
+  filter,
+  "-map",
+  "[cut]",
+  ...(bed ? ["-map", "[bed]", "-c:a", "aac", "-b:a", "192k"] : []),
+  "-c:v",
+  "libx264",
+  "-preset",
+  "slow",
+  "-crf",
+  "17",
+  "-pix_fmt",
+  "yuv420p",
+  "-movflags",
+  "+faststart",
+  "-t",
+  seconds.toFixed(2),
+  out,
+]);
+const contact = out.replace(/\.mp4$/, "-sheet.jpg");
+sheet(
+  filmed.map((name) => {
+    const length = duration(clipOf(name));
+    return { name: `${name}  ${shots.get(name)?.hour}h`, pictures: [0.1, 0.5, 0.9].map((at) => ({ file: clipOf(name), at: length * at })) };
+  }),
+  contact,
+);
+console.log(`trailer: ${out}, ${seconds.toFixed(1)} s, ${filmed.length} runs, ${(statSync(out).size / 1e6).toFixed(1)} MB${bed ? ", with its sound" : ""}`);
+console.log(`trailer: contact sheet ${contact}`);

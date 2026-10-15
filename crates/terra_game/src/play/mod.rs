@@ -41,7 +41,7 @@ pub mod inventory;
 mod kinds;
 mod map;
 mod movement;
-mod music;
+pub mod music;
 mod noise;
 mod noises;
 mod options;

@@ -243,7 +243,7 @@ fn show(
             node.width = width;
         }
         if let Ok(mut visibility) = frames.get_mut(parent.parent()) {
-            let wanted = if options.vantage.is_none() {
+            let wanted = if options.shows_interface() {
                 Visibility::Inherited
             } else {
                 Visibility::Hidden

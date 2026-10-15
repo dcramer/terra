@@ -220,6 +220,8 @@ pub(super) fn spawn(
         Stance::default(),
         Transform::from_translation(feet).looking_to(facing, up),
         Visibility::default(),
+        // What a shot films as the player (`--cine`).
+        terra_world::cine::Subject,
     ));
 }
 
@@ -317,7 +319,12 @@ fn follow_route(
     mut next: Local<usize>,
     mut detour: Local<Detour>,
     player: Single<(&Transform, &mut View, &mut Intent), IsLocalPlayer>,
+    cine: Option<Res<terra_world::cine::Cine>>,
 ) {
+    // In a shot, the walk starts as it rolls (`--cine`).
+    if cine.is_some_and(|cine| !cine.rolling()) {
+        return;
+    }
     let Some(&(east, south)) = options.route.get(*next) else {
         return;
     };

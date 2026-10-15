@@ -747,7 +747,7 @@ fn draw(
     let (backpack, bar, gear) = (belongings.backpack(), belongings.bar(), belongings.gear());
     show(&mut panel, screen.open);
     for mut hud in &mut hud {
-        show(&mut hud, options.vantage.is_none());
+        show(&mut hud, options.shows_interface());
     }
     for (slot, mut background, mut border) in &mut slots {
         let held = slot.0 == bar.picked();

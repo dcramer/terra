@@ -183,7 +183,16 @@ usage: terra_sandbox [options]
                         one; repeatable, each from its frame on, counted as --press
                         counts them, to picture several views in one run
   --vantage-ground      every --vantage's heights are above the ground under each
-                        point, not above the start, as on rolling ground";
+                        point, not above the start, as on rolling ground
+  --cine <shot.json>[@frame]
+                        film a shot (D357): the camera on the shot file's keyframed path,
+                        lens, focus, aperture and exposure, rolling on that frame, counted
+                        as --press counts them, and waiting on its first key before; a
+                        route waits for it to roll; a run someone watches plays it over
+                        and over (crates/terra_world/src/cine.rs, tools/sandbox/trailer.ts)
+  --picture <width>x<height>
+                        an offscreen run's picture this size rather than 1920x1080, such
+                        as 2560x1440";
 
 /// Engine messages that say what is normal, kept out of the log so what is left is worth
 /// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.
@@ -349,6 +358,10 @@ pub struct Options {
     /// In the icon baker: items whose painted icons still match their looks, though the
     /// looks' files changed, so they are recorded as made from the looks as they are now.
     pub keeps: Vec<String>,
+    /// A shot to film (`--cine`, `cine`).
+    pub cine: Option<crate::cine::Shot>,
+    /// How big an offscreen run's picture is (`--picture`).
+    pub picture: UVec2,
 }
 
 /// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
@@ -479,6 +492,8 @@ impl Options {
             renders: None,
             keeps: Vec::new(),
             quality: None,
+            cine: None,
+            picture: PICTURE_SIZE,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -598,6 +613,17 @@ impl Options {
                     )
                 }
                 "--glide" => options.glide = true,
+                "--cine" => options.cine = Some(crate::cine::Shot::read(&value("--cine")?)?),
+                "--picture" => {
+                    let text = value("--picture")?;
+                    options.picture = text
+                        .split_once('x')
+                        .and_then(|(w, h)| Some(UVec2::new(w.parse().ok()?, h.parse().ok()?)))
+                        .filter(|size| size.x >= 64 && size.y >= 64)
+                        .ok_or(format!(
+                            "--picture wants a width and height, like 2560x1440, not `{text}`"
+                        ))?;
+                }
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),
@@ -666,6 +692,12 @@ impl Options {
     /// Whether this run drives itself and exits, rather than waiting for a person.
     pub fn scripted(&self) -> bool {
         self.shot.is_some() || self.shots.is_some() || self.bench || self.sheet.is_some()
+    }
+
+    /// Whether the game draws its interface: not for pictures, from a fixed camera or in a
+    /// shot (`--cine`), which show the scene alone.
+    pub fn shows_interface(&self) -> bool {
+        self.vantage.is_none() && self.cine.is_none()
     }
 
     /// Whether this run belongs to a script rather than a person, so it keeps out of the
@@ -817,7 +849,18 @@ impl Plugin for ShellPlugin {
         if self.0.unattended() {
             crate::gpu_turn::take(self.0.bench);
         }
-        let options = self.0.clone();
+        let mut options = self.0.clone();
+        // A shot with a path holds the camera (`cine`), as a fixed camera does.
+        if options
+            .cine
+            .as_ref()
+            .is_some_and(|shot| shot.holds_camera())
+        {
+            options
+                .vantage
+                .get_or_insert((Vec3::new(0.0, 10.0, 10.0), Vec3::ZERO));
+            options.vantage_ground = false;
+        }
         let readout = !options.clean;
         let window = Window {
             title: "Terra sandbox".into(),
@@ -960,10 +1003,10 @@ pub const PICTURE_SIZE: UVec2 = UVec2::new(1920, 1080);
 #[derive(Resource)]
 pub struct Picture(pub Handle<Image>);
 
-fn make_picture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn make_picture(mut commands: Commands, mut images: ResMut<Assets<Image>>, options: Res<Options>) {
     let mut image = Image::new_target_texture(
-        PICTURE_SIZE.x,
-        PICTURE_SIZE.y,
+        options.picture.x,
+        options.picture.y,
         TextureFormat::Rgba8Unorm,
         Some(TextureFormat::Rgba8UnormSrgb),
     );
@@ -1322,7 +1365,7 @@ fn scripted_run(
             let game_tenths = (!part_ms[0].is_empty()).then(|| by_tenths(&part_ms[0]));
             frame_ms.sort_by(|a, b| a.1.total_cmp(&b.1));
             let size = match (&picture, window.single()) {
-                (Some(_), _) => format!("{}x{} offscreen", PICTURE_SIZE.x, PICTURE_SIZE.y),
+                (Some(_), _) => format!("{}x{} offscreen", options.picture.x, options.picture.y),
                 (None, Ok(window)) => {
                     format!("{}x{}", window.physical_width(), window.physical_height())
                 }

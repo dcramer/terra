@@ -1,0 +1,9 @@
+{
+  "title": "TERRA",
+  "line": "one world, made by its own rules",
+  "end": "in development",
+  "letterbox": 2.39,
+  "crossfade": 1.2,
+  "card_seconds": 3,
+  "shots": ["forest", "lake", "tundra", "town"]
+}

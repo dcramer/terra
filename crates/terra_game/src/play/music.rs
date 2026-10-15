@@ -27,7 +27,7 @@ pub enum Mood {
 }
 
 impl Mood {
-    fn phrase(self) -> Phrase {
+    pub fn phrase(self) -> Phrase {
         match self {
             Mood::Calm => Phrase {
                 root_hz: 146.83,
