@@ -23,6 +23,7 @@
 
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// How many cubes a section is along each side.
 pub const SECTION: i32 = 16;
@@ -631,7 +632,9 @@ pub struct TooManyParts;
 /// A base's cubes.
 #[derive(Clone, Default)]
 pub struct Cubes {
-    sections: BTreeMap<[i32; 3], Section>,
+    /// Each shared and copied only when changed, so a base is copied for the workers at
+    /// once (D308).
+    sections: BTreeMap<[i32; 3], Arc<Section>>,
     /// Sections changed since the dirty marks were last taken: their own cubes, or a
     /// neighbour's on their edge.
     dirty: BTreeSet<[i32; 3]>,
@@ -657,7 +660,7 @@ impl Cubes {
         if old == cube {
             return Ok(old);
         }
-        let section = self.sections.entry(key).or_default();
+        let section = Arc::make_mut(self.sections.entry(key).or_default());
         let word = match cube {
             Some(cube) => match section.place_of(cube.part) {
                 Ok(place) => cube.pack(place),

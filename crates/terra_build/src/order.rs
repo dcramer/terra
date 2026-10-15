@@ -33,9 +33,8 @@ impl Base {
     /// Every cube of a part, in order.
     pub fn cubes_of(&self, part: PartId) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
         self.in_parts
-            .get(&part)
-            .into_iter()
-            .flatten()
+            .range((part, i32::MIN)..=(part, i32::MAX))
+            .flat_map(|(_, cubes)| cubes.iter())
             .filter_map(move |&at| {
                 let at = IVec3::from_array(at);
                 self.cube(at)

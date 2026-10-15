@@ -87,6 +87,7 @@ pub use walk::Walker;
 
 use glam::{IVec2, IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// The grid: the size of one cube, in metres. Everything else here is given in metres and
 /// turned into cubes with [`cells`], so this is the one number to change.
@@ -357,14 +358,20 @@ pub struct Base {
     /// (D193, `loss`).
     damage: BTreeMap<[i32; 3], u16>,
     ground: Ground,
-    /// Each column of cubes, by where it stands, and its layers.
-    columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
+    /// Each column of cubes, by where it stands, and its layers. Each column's, part's
+    /// and section's own are shared (`Arc`) and copied only when changed, so a base is
+    /// copied for the workers in a few thousand steps, not hundreds of thousands: a
+    /// castle's copy took 11 ms of the main thread an edit (D308).
+    columns: BTreeMap<[i32; 2], Arc<BTreeSet<i32>>>,
     /// The cubes of each part, and every cube with work pending on it, kept as cubes are
     /// put, so what goes in next is found among them rather than among every cube: a
     /// castle's hundred and forty thousand were walked several times an edit (D308).
-    in_parts: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
-    /// Each part's cubes not yet built, which what goes in next is among.
-    unbuilt: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
+    /// A part's cubes are kept a slab of 16 along x at a time, so a change copies one slab
+    /// of a part shared with a copy, not the whole of a castle's wall; slabs in order of x
+    /// keep the part's cubes in order of `[x, y, z]`.
+    in_parts: BTreeMap<(PartId, i32), Arc<BTreeSet<[i32; 3]>>>,
+    /// Each part's cubes not yet built, which what goes in next is among, in slabs too.
+    unbuilt: BTreeMap<(PartId, i32), Arc<BTreeSet<[i32; 3]>>>,
     pending: BTreeSet<[i32; 3]>,
     /// How many cubes of each kind it has, so which kits lay anything is known at once.
     kinds: BTreeMap<Kind, usize>,
@@ -397,7 +404,7 @@ impl Base {
     /// worked out when asked and not counted.
     pub fn bytes(&self) -> usize {
         const NODE: usize = 48;
-        let layers: usize = self.columns.values().map(BTreeSet::len).sum();
+        let layers: usize = self.columns.values().map(|layers| layers.len()).sum();
         self.cubes.bytes()
             + (self.columns.len()
                 + layers
@@ -593,7 +600,11 @@ impl Base {
 
     /// The layers of the cubes standing at a place, counted in cubes along the floor.
     pub fn column(&self, x: i32, z: i32) -> impl Iterator<Item = i32> + '_ {
-        self.columns.get(&[x, z]).into_iter().flatten().copied()
+        self.columns
+            .get(&[x, z])
+            .into_iter()
+            .flat_map(|layers| layers.iter())
+            .copied()
     }
 
     fn solid(&self, at: IVec3) -> bool {
@@ -739,11 +750,11 @@ impl Base {
         let column = [at.x, at.z];
         match (old.is_some(), cube.is_some()) {
             (false, true) => {
-                self.columns.entry(column).or_default().insert(at.y);
+                Arc::make_mut(self.columns.entry(column).or_default()).insert(at.y);
             }
             (true, false) => {
                 if let Some(layers) = self.columns.get_mut(&column) {
-                    layers.remove(&at.y);
+                    Arc::make_mut(layers).remove(&at.y);
                     if layers.is_empty() {
                         self.columns.remove(&column);
                     }
@@ -879,7 +890,7 @@ impl Base {
         self.kinds.clear();
         let cubes: Vec<(IVec3, Cube)> = self.cubes.iter().collect();
         for (at, cube) in cubes {
-            self.columns.entry([at.x, at.z]).or_default().insert(at.y);
+            Arc::make_mut(self.columns.entry([at.x, at.z]).or_default()).insert(at.y);
             self.mark(at, Some(cube));
         }
     }
@@ -891,9 +902,10 @@ impl Base {
         };
         *self.kinds.entry(cube.kind).or_default() += 1;
         if let Some(part) = cube.part {
-            self.in_parts.entry(part).or_default().insert(at.to_array());
+            let slab = (part, slab_of(at));
+            Arc::make_mut(self.in_parts.entry(slab).or_default()).insert(at.to_array());
             if !cube.is_built() {
-                self.unbuilt.entry(part).or_default().insert(at.to_array());
+                Arc::make_mut(self.unbuilt.entry(slab).or_default()).insert(at.to_array());
             }
         }
         if cube.pending != Pending::None {
@@ -913,19 +925,19 @@ impl Base {
             }
         }
         if let Some(part) = cube.part
-            && let Some(cubes) = self.in_parts.get_mut(&part)
+            && let Some(cubes) = self.in_parts.get_mut(&(part, slab_of(at)))
         {
-            cubes.remove(&at.to_array());
+            Arc::make_mut(cubes).remove(&at.to_array());
             if cubes.is_empty() {
-                self.in_parts.remove(&part);
+                self.in_parts.remove(&(part, slab_of(at)));
             }
         }
         if let Some(part) = cube.part
-            && let Some(cubes) = self.unbuilt.get_mut(&part)
+            && let Some(cubes) = self.unbuilt.get_mut(&(part, slab_of(at)))
         {
-            cubes.remove(&at.to_array());
+            Arc::make_mut(cubes).remove(&at.to_array());
             if cubes.is_empty() {
-                self.unbuilt.remove(&part);
+                self.unbuilt.remove(&(part, slab_of(at)));
             }
         }
         if cube.pending != Pending::None {
@@ -941,9 +953,8 @@ impl Base {
     /// A part's cubes not yet built, in a fixed order: by `[x, y, z]`.
     pub fn unbuilt_of(&self, part: PartId) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
         self.unbuilt
-            .get(&part)
-            .into_iter()
-            .flatten()
+            .range((part, i32::MIN)..=(part, i32::MAX))
+            .flat_map(|(_, cubes)| cubes.iter())
             .filter_map(move |&at| {
                 let at = IVec3::from_array(at);
                 self.cube(at)
@@ -1276,6 +1287,11 @@ fn ray_box(origin: Vec3, direction: Vec3, low: Vec3, high: Vec3) -> Option<(f32,
         far = far.min(leave);
     }
     (near <= far && near > 0.0).then_some((near, normal))
+}
+
+/// The slab of 16 along x a cube's part keeps it in (`Base::in_parts`).
+fn slab_of(at: IVec3) -> i32 {
+    at.x.div_euclid(16)
 }
 
 #[cfg(test)]

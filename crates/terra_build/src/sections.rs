@@ -1407,10 +1407,54 @@ pub fn draw_parts(
     drawn
 }
 
-/// [`draw_parts`]'s parts each drawn alone on a thread of its own, and put together: each
-/// part's surfaces from the thread that drew it, and the section's own (the plan's ghosts
-/// and shell, the next piece, what is drawn plain) from the first, as every thread draws
-/// them the same; how each was drawn kept together, a part's own from its thread.
+/// Threads a process may start beside its workers to draw a section's parts side by side,
+/// all of them together: a few, so a storey's step comes back in a part's time without the
+/// main thread waiting for a core behind dozens of drawing threads (D308).
+const SPARE_THREADS: usize = 4;
+
+static SPARE_IN_USE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Threads taken from [`SPARE_THREADS`], as many as are free up to those wanted, given back
+/// when it goes.
+pub struct Spare(usize);
+
+impl Spare {
+    pub fn take(wanted: usize) -> Spare {
+        use std::sync::atomic::Ordering;
+        let mut taken = 0;
+        let _ = SPARE_IN_USE.fetch_update(Ordering::AcqRel, Ordering::Acquire, |in_use| {
+            taken = wanted.min(SPARE_THREADS.saturating_sub(in_use));
+            Some(in_use + taken)
+        });
+        Spare(taken)
+    }
+
+    /// How many threads were taken.
+    pub fn count(&self) -> usize {
+        self.0
+    }
+}
+
+impl Drop for Spare {
+    fn drop(&mut self) {
+        SPARE_IN_USE.fetch_sub(self.0, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+/// Splits `items` into as many runs, of nearly the same size, as threads to work them: this
+/// one and those spare.
+pub fn shares<T: Copy>(items: &[T], threads: usize) -> Vec<Vec<T>> {
+    let threads = threads.clamp(1, items.len().max(1));
+    (0..threads)
+        .map(|t| items.iter().copied().skip(t).step_by(threads).collect())
+        .collect()
+}
+
+/// [`draw_parts`]'s parts drawn in shares on threads of their own beside this one, as many
+/// as are spare ([`Spare`]), and put together: each part's surfaces from the thread that
+/// drew it, and the section's own (the plan's ghosts and shell, the next piece, what is
+/// drawn plain) from the first, as every thread draws them the same; how each was drawn
+/// kept together, a part's own from its thread.
 fn draw_side_by_side(
     section: &Section,
     laid: &Laid,
@@ -1421,55 +1465,63 @@ fn draw_side_by_side(
 ) -> Drawn {
     let kept = keep.is_some();
     let chosen: Vec<usize> = (0..only.len()).filter(|&c| only[c]).collect();
-    let mut each: Vec<(usize, Drawn, Option<Drawing>)> = std::thread::scope(|scope| {
-        let threads: Vec<_> = chosen
+    let spare = Spare::take(chosen.len() - 1);
+    let groups = shares(&chosen, spare.count() + 1);
+    let draw = |group: &Vec<usize>| {
+        let mut mine = vec![false; only.len()];
+        for &c in group {
+            mine[c] = true;
+        }
+        let mut drawing = kept.then(Drawing::default);
+        let drawn = draw_together(section, laid, reach, last, drawing.as_mut(), Some(&mine));
+        (group.clone(), drawn, drawing)
+    };
+    let mut each: Vec<(Vec<usize>, Drawn, Option<Drawing>)> = std::thread::scope(|scope| {
+        let threads: Vec<_> = groups[1..]
             .iter()
-            .map(|&c| {
-                scope.spawn(move || {
-                    let mut alone = vec![false; only.len()];
-                    alone[c] = true;
-                    let mut drawing = kept.then(Drawing::default);
-                    let drawn =
-                        draw_together(section, laid, reach, last, drawing.as_mut(), Some(&alone));
-                    (c, drawn, drawing)
-                })
-            })
+            .map(|group| scope.spawn(move || draw(group)))
             .collect();
-        threads
-            .into_iter()
-            .map(|thread| thread.join().expect("a part is drawn"))
-            .collect()
+        let mut all = vec![draw(&groups[0])];
+        all.extend(
+            threads
+                .into_iter()
+                .map(|thread| thread.join().expect("a share of parts is drawn")),
+        );
+        all
     });
-    let (_, mut drawn, first) = each.remove(0);
-    let mut drawings: Vec<(usize, Drawing)> = Vec::new();
+    drop(spare);
+    let (first_group, mut drawn, first) = each.remove(0);
+    let mut drawings: Vec<(Vec<usize>, Drawing)> = Vec::new();
     if let Some(first) = first {
-        drawings.push((chosen[0], first));
+        drawings.push((first_group, first));
     }
-    for (c, mut part, drawing) in each {
-        for (to, from) in [
-            (&mut drawn.near_by, &mut part.near_by),
-            (&mut drawn.mid_by, &mut part.mid_by),
-        ] {
-            if let Some(surfaces) = from.get_mut(c) {
-                if to.len() <= c {
-                    to.resize_with(c + 1, BTreeMap::new);
+    for (group, mut part, drawing) in each {
+        for &c in &group {
+            for (to, from) in [
+                (&mut drawn.near_by, &mut part.near_by),
+                (&mut drawn.mid_by, &mut part.mid_by),
+            ] {
+                if let Some(surfaces) = from.get_mut(c) {
+                    if to.len() <= c {
+                        to.resize_with(c + 1, BTreeMap::new);
+                    }
+                    to[c] = std::mem::take(surfaces);
                 }
-                to[c] = std::mem::take(surfaces);
             }
         }
         if let Some(drawing) = drawing {
-            drawings.push((c, drawing));
+            drawings.push((group, drawing));
         }
     }
     if let Some(keep) = keep {
-        for (c, drawing) in drawings {
+        for (group, drawing) in drawings {
             keep.ground = drawing.ground;
             keep.roofs = drawing.roofs;
             keep.faces.take_from(drawing.faces);
             // Each part's pieces from the thread that drew it; the rest, kept on as they
             // were, from any.
             for (key, part) in drawing.pieces {
-                if key.2 == c || !keep.pieces.contains_key(&key) {
+                if group.contains(&key.2) || !keep.pieces.contains_key(&key) {
                     keep.pieces.insert(key, part);
                 }
             }

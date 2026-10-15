@@ -497,23 +497,39 @@ pub(super) fn parts(
             }
         })
     };
-    // A section's parts drawn again together are made into meshes side by side, a thread
-    // each: welding, tangents and packing are most of a near section's time on its worker,
-    // and the parts are apart (D308).
-    let parts: Vec<Option<Part>> = if (0..count)
+    // A section's parts drawn again together are made into meshes side by side, on the
+    // threads spare (`terra_build::sections::Spare`): welding, tangents and packing are
+    // most of a near section's time on its worker, and the parts are apart (D308).
+    let chosen: Vec<usize> = (0..count)
         .filter(|&c| only.get(c).copied().unwrap_or(true))
-        .count()
-        > 1
-    {
-        std::thread::scope(|scope| {
-            let made: Vec<_> = (0..count).map(|c| scope.spawn(move || part(c))).collect();
-            made.into_iter()
-                .map(|made| made.join().expect("a part's meshes are made"))
-                .collect()
-        })
+        .collect();
+    let spare = terra_build::sections::Spare::take(chosen.len().saturating_sub(1));
+    let mut parts: Vec<Option<Part>> = (0..count).map(|_| None).collect();
+    if spare.count() == 0 {
+        for c in chosen {
+            parts[c] = part(c);
+        }
     } else {
-        (0..count).map(part).collect()
-    };
+        let shares = terra_build::sections::shares(&chosen, spare.count() + 1);
+        let made: Vec<(usize, Option<Part>)> = std::thread::scope(|scope| {
+            let threads: Vec<_> = shares[1..]
+                .iter()
+                .map(|share| {
+                    scope.spawn(move || share.iter().map(|&c| (c, part(c))).collect::<Vec<_>>())
+                })
+                .collect();
+            let mut all: Vec<(usize, Option<Part>)> =
+                shares[0].iter().map(|&c| (c, part(c))).collect();
+            for thread in threads {
+                all.extend(thread.join().expect("a share of parts is made into meshes"));
+            }
+            all
+        });
+        for (c, made) in made {
+            parts[c] = made;
+        }
+    }
+    drop(spare);
     let layers: BTreeSet<u16> = parts
         .iter()
         .flatten()
