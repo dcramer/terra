@@ -291,7 +291,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 | People | `play/people.rs` `Person`, `Doing { Bound, Following, Working, Standing, Sitting }`; four villagers who stand or sit; one base body of 73 joints, five templates, garments; 25 clips including walk, jog and sprint (D316), talk, sit, kneel, pick up | Days and schedules; homes and work places; walking a town; looks from a seed; character and animation LOD (characters.md phase 6) |
 | Navigation | Bodies pushed out of each other and out of `Obstacles` (`play/bodies.rs`), a stand-in until collision is designed (D53) | Any path finding or avoidance; no navigation crate supports Bevy 0.20 yet |
 | Animals | Deer and spiders (`assets/data/creatures.ron`), with idle, graze, wander and flee states; simulation by distance (D145) | Domestic animals: models, rigs, clips, pens, following an owner |
-| Market | `MarketStall`, `Well`, `Stool` props (D304) | Goods on stalls; carts, barrels, fences, troughs, signs, lanterns |
+| Market | `MarketStall`, `Well`, `Stool` props (D304) | Goods on stalls; signs, lanterns (a trough, barrels, hand carts and yard fences are laid by rules, D346) |
 | Smoke | None: no particle system; the blood spray is CPU cards (`play/hits.rs`) | Chimney smoke, cooking fires, a forge's sparks |
 | Sound | Spatial voices by bus; `Ambient` sources in earshot; footsteps for anything walking; the bell; 88 Kenney CC0 clips | Murmur of a crowd, market calls, animals, cart wheels; any cap on how many voices play |
 | Measured | `crowd` experiment: 100 dressed characters, 5.8 ms on the RTX 5090, bound by the CPU's animation and transforms | Any town or crowd number on the RTX 3080 |

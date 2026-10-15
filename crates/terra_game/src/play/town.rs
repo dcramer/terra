@@ -501,6 +501,9 @@ fn item_of(kind: ThingKind) -> Option<&'static str> {
         ThingKind::Stall => Some("MarketStall"),
         ThingKind::Forge => Some("Forge"),
         ThingKind::Bench | ThingKind::Block => Some("Log"),
+        ThingKind::Trough => Some("Trough"),
+        ThingKind::Barrel => Some("Barrel"),
+        ThingKind::Cart => Some("HandCart"),
         _ => None,
     }
 }
@@ -552,6 +555,7 @@ fn lay(
     cover: Option<Res<terra_world::cover::CoverRules>>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut obstacles: Option<ResMut<super::flora::Obstacles>>,
 ) {
     let has_cover = cover.is_some();
     let (Some(site), Some(look)) = (site, look) else {
@@ -845,6 +849,17 @@ fn lay(
                 Visibility::Hidden,
             ));
     }
+    // Its yards' fences, a module at a time, each solid.
+    let fences = super::town_fences::lay(
+        &mut commands,
+        &models,
+        &builds,
+        &planet,
+        obstacles.as_deref_mut(),
+        at,
+        &town.fences,
+    );
+    info!("Town: {} fence modules round its yards.", fences);
 
     // Where to stand to see it, as the settlement gives its own (D69).
     let vantage = |name: &str, eye: Vec2, eye_up: f32, look: Vec2, look_up: f32| {

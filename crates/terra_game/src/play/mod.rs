@@ -70,6 +70,7 @@ mod tool;
 mod torchlight;
 pub mod town;
 mod town_animals;
+mod town_fences;
 mod town_sound;
 mod townsfolk;
 mod vitals;

@@ -36,6 +36,9 @@ use crate::{Base, CELL_M, STOREY_CUBES};
 use glam::Vec2;
 use std::collections::BTreeSet;
 
+mod furnish;
+pub use furnish::{FURNISHING, Fence, FenceKind, Furnishing};
+
 /// The shape of a town's square.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SquareShape {
@@ -90,11 +93,15 @@ pub enum ThingKind {
     Pen,
     /// A yard behind a house, where hens scratch.
     Yard,
+    /// A barrel standing by a stall, the forge or in a yard (D346).
+    Barrel,
+    /// A hand cart, by the market or in a yard, its shafts to its front (D346).
+    Cart,
 }
 
 impl ThingKind {
     /// Every kind, in order.
-    pub const ALL: [ThingKind; 12] = [
+    pub const ALL: [ThingKind; 14] = [
         ThingKind::Door,
         ThingKind::Well,
         ThingKind::Stall,
@@ -107,6 +114,8 @@ impl ThingKind {
         ThingKind::Gate,
         ThingKind::Pen,
         ThingKind::Yard,
+        ThingKind::Barrel,
+        ThingKind::Cart,
     ];
 
     /// Its name, as data names it (`assets/data/life.ron`).
@@ -124,6 +133,8 @@ impl ThingKind {
             ThingKind::Gate => "Gate",
             ThingKind::Pen => "Pen",
             ThingKind::Yard => "Yard",
+            ThingKind::Barrel => "Barrel",
+            ThingKind::Cart => "Cart",
         }
     }
 
@@ -141,6 +152,8 @@ impl ThingKind {
             ThingKind::Block => across(0.3, -0.3, 0.3),
             ThingKind::Bench => across(0.85, -0.22, 0.22),
             ThingKind::Trough => across(1.0, -0.35, 0.35),
+            ThingKind::Barrel => across(0.29, -0.29, 0.29),
+            ThingKind::Cart => across(0.7, -1.35, 1.35),
             _ => None,
         }
     }
@@ -233,6 +246,8 @@ pub struct Town {
     pub yards: Vec<(usize, [Vec2; 4])>,
     pub lanes: Vec<(usize, Vec<Vec2>)>,
     pub things: Vec<Thing>,
+    /// The fences round its yards, a module at a time (D346).
+    pub fences: Vec<Fence>,
     pub paths: Paths,
 }
 
@@ -281,13 +296,16 @@ pub fn town(seed: u32, picks: impl Picks + Copy, heights: Heights) -> Town {
         yards: Vec::new(),
         lanes: Vec::new(),
         things: Vec::new(),
+        fences: Vec::new(),
         paths: Paths::default(),
     };
     town.on_the_square(seed);
     town.plots(seed, picks);
     town.yards(seed, picks);
+    town.furnish(seed);
     town.ends();
     town.paths();
+    town.unfurnish_cut_off();
     town
 }
 
@@ -728,7 +746,7 @@ impl Town {
         let side = facing_of(along);
         self.things
             .push(Thing::new(ThingKind::Well, well, side, None));
-        // A trough by it waits for its model; the washing is done at the well meanwhile.
+        // The trough beside it is laid with the town's furnishing (`furnish`).
         // The market: two rows of stalls facing each other across an aisle, along the
         // square on the side away from the well.
         let line = middle - across * (well - middle).dot(across).signum() * (high_c - low_c) * 0.18;
@@ -1189,6 +1207,10 @@ impl Town {
                 .filter_map(Thing::outline)
                 .all(|quad| segment_polygon(a, b, &quad) >= CLEAR_M)
             && self
+                .fences
+                .iter()
+                .all(|fence| segments(a, b, fence.from, fence.to) >= CLEAR_M)
+            && self
                 .things
                 .iter()
                 .filter(|thing| thing.kind == ThingKind::Gathering)
@@ -1358,7 +1380,16 @@ impl Town {
                 continue;
             };
             // The door's node, then its step out past its wings if it has one.
-            let skip = if lane.len() == 5 { 2 } else { 1 };
+            let stepped = self
+                .things
+                .iter()
+                .find(|t| t.kind == ThingKind::Door && t.building == Some(home))
+                .and_then(|t| self.out_of(t));
+            let skip = if stepped.is_some() && lane.get(1) == stepped.as_ref() {
+                2
+            } else {
+                1
+            };
             let mut last = if skip == 2 { door + 1 } else { door };
             let mut gate = last;
             for &point in &lane[skip..] {
@@ -1650,6 +1681,8 @@ pub fn svg(town: &Town, heights: &dyn Fn(Vec2) -> f32, marks: &[Mark]) -> String
             ThingKind::Gate => "#7b2fbe",
             ThingKind::Pen => "#d6c7a1",
             ThingKind::Yard => "#e3d26a",
+            ThingKind::Barrel => "#6b4a2b",
+            ThingKind::Cart => "#9c7a4a",
         };
         match thing.outline() {
             Some(quad) => svg.push_str(&poly(&quad, &format!("fill=\"{colour}\" stroke=\"#222\""))),

@@ -86,3 +86,4 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 | `props.ts` | The steps above |
 | `refine.py` | The clean-up, inside Blender |
 | `fronts.py` | Each model from the front, for the `fronts` sheet |
+| `fence.py` | The town's fence modules, wattle and split rail, built in Blender from the kits' own materials rather than generated (D346): `tools/blender/run.sh tools/props/fence.py` |

@@ -146,6 +146,21 @@
         (name: "Market stall", tab: Hidden, kind: Items([
             (name: "Market stall", file: "MarketStall", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
         ])),
+        // A town's furnishing (terra_build::town, D346): its trough, barrels, carts and the
+        // fence modules round its yards, each fence fitted between its start and end sockets.
+        (name: "Trough", tab: Hidden, kind: Items([
+            (name: "Trough", file: "Trough", dims: (2.0, 0.6, 0.7), cost: [("Stone", 10)]),
+        ])),
+        (name: "Barrel", tab: Hidden, kind: Items([
+            (name: "Barrel", file: "Barrel", dims: (0.58, 0.85, 0.58), cost: [("Wood", 3)]),
+        ])),
+        (name: "Hand cart", tab: Hidden, kind: Items([
+            (name: "Hand cart", file: "HandCart", dims: (1.4, 1.05, 2.7), cost: [("Wood", 8)]),
+        ])),
+        (name: "Fence", tab: Hidden, kind: Items([
+            (name: "Wattle fence", file: "WattleFence", dims: (2.07, 1.08, 0.12), cost: [("Wood", 2), ("Fibre", 2)]),
+            (name: "Rail fence", file: "RailFence", dims: (2.74, 1.15, 0.15), cost: [("Wood", 3)]),
+        ])),
         (name: "Remove", tab: Hidden, kind: Remove),
         (name: "Move", tab: Hidden, kind: Move),
         // Modern pieces from the free packs, such as a couch, kitchen drawers, sci-fi
