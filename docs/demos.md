@@ -380,7 +380,7 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 - **Measured on the RTX 3080, 2026-10-15** (`cargo xtask bench`, offscreen 1080p, other agents running beside it, so the p99s are noisy):
   - `crowd`, 100 dressed characters standing in the open: 6.5 ms median, 3.0 ms of the main thread, 3.0 ms of GPU.
   - `village`: 8.0 ms median. `town300`: 10.6 ms median, 14.1 ms p99 on its quieter run.
-  - `town-day` and `town-bare` as first made, the player's camera stood inside a hall rather than walking in (below), so these are a closer view than meant; the glide along the street replaces them:
+  - `town-day` and `town-bare` as first made, the player was put a few metres off the street, inside a hall: `--at` takes a place on the start's own level straight above the ground, which three hundred metres off on a small planet is not the place's own east and south in the start's frame, and the town gave the latter. So these are a closer view than meant; the glide along the street replaces them:
   - `town-day`, about 100 of the town's 146 out at 10:00: 13.6 to 14.1 ms median, 16.0 to 16.5 p99; the main thread 8.4 ms, the GPU 8.6. `town-bare`, the same walk with nobody in it: 9.3 to 9.7 median, 10.4 to 10.8 p99, 5.1 ms main thread, 6.5 GPU. So the people and animals cost about 3.3 ms of the main thread and 2.1 of the GPU, near their 3.5 and 1.9 in the budget, and the frame is over 13.3 ms at the p99. `town-dusk`: 12.4 median, 14.7 p99.
   - Since: a body's pose skipped by swapping in an empty graph rather than taking its graph away (no component moved), shadows cast only within 30 m, nobody drawn past 150 m.
 
@@ -433,7 +433,6 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 - **Things of a town:** chimney stacks on stone and hewn houses, a trough, barrels, carts and goods beyond the stall's own.
 - **Sound:** the cap on voices, and the well's bucket, the hens and a dog's bark.
 - **The game's half of the life check** (counts in view and what is heard, read over the remote protocol), and the one table of places (`places.ts`).
-- **A player put in the town with `--at`** stands inside a hall rather than on the street, which is not yet understood; the films and benches move the camera instead.
 
 ## Open questions for the developers
 

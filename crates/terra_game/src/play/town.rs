@@ -113,6 +113,18 @@ impl Market {
     }
 }
 
+/// A point on the ground in the terms `--at`, `--route` and `--vantage-ground` take it:
+/// metres east and south on the start's own level, whose ground straight below (toward the
+/// planet's middle) is the point. Not the point's own place in the start's frame, which
+/// differs from it by metres a few hundred metres off on a small planet.
+fn start_terms(start: &Start, point: Vec3) -> Vec2 {
+    let up = start.up().as_vec3();
+    let toward = point.normalize();
+    let on_level = toward * (start.translation.dot(up) / toward.dot(up));
+    let local = start.local(on_level);
+    Vec2::new(local.x, local.z)
+}
+
 /// A home's hearth, whose smoke rises through its roof: the building it is in.
 #[derive(Component)]
 pub struct Hearth {
@@ -757,13 +769,16 @@ fn lay(
         let aside = (toward - eye).normalize_or_zero().perp() * 1.2;
         vantage("street", eye + aside, 1.7, toward, 1.8);
         // Where to stand to walk in, as --at and --face take it.
-        let (from, toward) = (start.local(at(street.points[n / 2])), start.local(middle));
+        let (from, toward) = (
+            start_terms(&start, at(street.points[n / 2])),
+            start_terms(&start, middle),
+        );
         info!(
-            "Town arrival: --at {:.0},{:.0} --face {:.0},{:.0}",
-            from.x, from.z, toward.x, toward.z
+            "Town arrival: --at {:.1},{:.1} --face {:.1},{:.1}",
+            from.x, from.y, toward.x, toward.y
         );
         if wanted.arrive {
-            warp.0 = Some(((from.x, from.z), Some((toward.x, toward.z))));
+            warp.0 = Some(((from.x, from.y), Some((toward.x, toward.y))));
         }
         // A walk for a film: in along the main street from halfway out, across the square
         // past the market, and on up the other main street a way, as `--route` takes it.
@@ -777,8 +792,8 @@ fn lay(
             .iter()
             .step_by(2)
             .map(|&p| {
-                let l = start.local(at(p));
-                format!("--route {:.0},{:.0}", l.x, l.z)
+                let l = start_terms(&start, at(p));
+                format!("--route {:.1},{:.1}", l.x, l.y)
             })
             .collect();
         info!("Town route: {}", route.join(" "));
