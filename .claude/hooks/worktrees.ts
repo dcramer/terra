@@ -1,7 +1,7 @@
 // SessionStart and SubagentStart hook, for worktrees (D183, D259):
 // - in a worktree with no build yet, start linking the main checkout's compiled dependencies
 //   in, so the first build compiles only our own crates (`cargo xtask seed`);
-// - at most once an hour, clear away worktrees agents are done with, in the background
+// - at most once every 15 minutes, clear away worktrees agents are done with, in the background
 //   (`cargo xtask worktrees --prune`, log in the main checkout's target/worktrees.log).
 // Claude Code passes the session's folder as `cwd`; for a worktree session CLAUDE_PROJECT_DIR
 // is the main checkout, not the worktree.
@@ -27,8 +27,8 @@ if (worktree && !existsSync(join(cwd, "target"))) {
 
 const main = process.env.CLAUDE_PROJECT_DIR ?? "";
 const log = join(main, "target", "worktrees.log");
-const hour = 60 * 60 * 1000;
-if (main !== "" && (!existsSync(log) || Date.now() - statSync(log).mtimeMs > hour)) {
+const interval = 15 * 60 * 1000;
+if (main !== "" && (!existsSync(log) || Date.now() - statSync(log).mtimeMs > interval)) {
   mkdirSync(join(main, "target"), { recursive: true });
   const out = openSync(log, "w");
   spawn("cargo", ["xtask", "worktrees", "--prune"], {

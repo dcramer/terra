@@ -2,16 +2,15 @@
 //! Claude Code removes a subagent's worktree when the agent made no changes, and otherwise only
 //! after `cleanupPeriodDays`, a month by default, while each built worktree holds gigabytes.
 //! `cargo xtask worktrees` shows what each holds and what `--prune` would do; a Claude Code hook
-//! runs `--prune` in the background at most once an hour. An agent whose work is pushed runs
+//! runs `--prune` in the background at most once every 15 minutes. An agent whose work is pushed runs
 //! `--done` to delete its own worktree's build at once, rather than leave it for the prune.
 //!
 //! Only worktrees under `.claude/worktrees/` are touched, never the one this runs in, never one
-//! locked (Claude Code locks a subagent's while it runs) and never one used recently:
+//! locked, used by a running process, or used recently:
 //! - a subagent's (`agent-…`) whose commits are all on `main` and that has no changes, untracked
 //!   files included, is removed with its branch once it has been idle two days;
-//! - any other subagent's build folder is deleted once it has been idle two days, and any other
-//!   worktree's once it has been idle three days, since a build can be made again (`cargo xtask
-//!   seed` makes that quick). Their code is never touched.
+//! - any worktree's build folder is deleted after one idle hour, since it can be built again
+//!   (`cargo xtask seed` makes that quick). Its source files are kept.
 //!
 //! Idle is measured from the last thing that touched it: an edit to its files, git (a commit or
 //! a checkout, not the index, which `git status` rewrites) or a build. A subagent sent another
@@ -29,8 +28,8 @@ const HOUR: Duration = Duration::from_secs(60 * 60);
 /// How long an idle subagent's worktree is kept, in case its agent is sent another message: a
 /// lead session may resume its agents many hours later.
 const AGENT_IDLE: Duration = Duration::from_secs(2 * 24 * 60 * 60);
-/// How long any other idle worktree keeps its build folder.
-const OTHER_IDLE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
+/// Build files can be made again; their retention is separate from source retention.
+const BUILD_IDLE: Duration = HOUR;
 
 pub fn worktrees(args: &[String]) -> bool {
     let prune = match args {
@@ -77,6 +76,7 @@ pub fn worktrees(args: &[String]) -> bool {
     }
 
     let managed = main_checkout.join(".claude").join("worktrees");
+    let active_paths = process_paths();
     let now = SystemTime::now();
     let (mut freed, mut ok) = (0u64, true);
     let entries = list(&main_checkout);
@@ -99,20 +99,18 @@ pub fn worktrees(args: &[String]) -> bool {
             .filter(|p| **p != target && !p.ends_with(".git"))
             .map(|p| usage(p))
             .fold(Usage::default(), Usage::add);
+        let build = usage(&target);
         let idle = now
-            .duration_since(last_used(&tree.path).max(checkout.newest))
+            .duration_since(last_used(&tree.path).max(checkout.newest).max(build.newest))
             .unwrap_or_default();
         let agent = name.starts_with("agent-");
         let ours = tree.path.starts_with(&managed) && tree.path != root() && !tree.locked;
-        let action = if !ours {
-            Action::Keep
-        } else if agent && merged && changes == Some(0) && idle >= AGENT_IDLE {
-            Action::Remove
-        } else if target.is_dir() && idle >= if agent { AGENT_IDLE } else { OTHER_IDLE } {
-            Action::FreeBuild
-        } else {
-            Action::Keep
-        };
+        let in_use = tree.path.canonicalize().ok().and_then(|tree_path| {
+            active_paths
+                .as_ref()
+                .map(|paths| paths.iter().any(|path| path.starts_with(&tree_path)))
+        });
+        let action = choose_action(ours, agent, merged, changes, idle, target.is_dir(), in_use);
 
         let state = [
             if merged { "on main" } else { "not on main" }.to_string(),
@@ -124,9 +122,14 @@ pub fn worktrees(args: &[String]) -> bool {
         ]
         .into_iter()
         .chain(tree.locked.then(|| "locked".into()))
+        .chain(match in_use {
+            Some(true) => Some("active process".into()),
+            None => Some("activity unknown".into()),
+            Some(false) => None,
+        })
         .collect::<Vec<_>>()
         .join(", ");
-        let build = usage(&target).bytes;
+        let build = build.bytes;
         let checkout = checkout.bytes;
         let verb = match (action, prune) {
             (Action::Keep, _) => "",
@@ -161,14 +164,58 @@ pub fn worktrees(args: &[String]) -> bool {
     } else {
         println!(
             "\n`cargo xtask worktrees --prune` removes a subagent's worktree once it is on main, \
-             clean and idle two days, and deletes any other's build after two idle days if it is a \
-             subagent's, three if not. `--done` deletes this worktree's build now."
+             clean and idle two days. Build folders are deleted after one idle hour. \
+             Active worktrees and unreadable states are kept. `--done` deletes this worktree's build now."
         );
     }
     ok
 }
 
-#[derive(Clone, Copy)]
+/// Process working directories and executable files protect sessions between builds too.
+/// If process inspection is unavailable, automatic cleanup keeps the worktrees.
+fn process_paths() -> Option<Vec<PathBuf>> {
+    let output = Command::new("lsof")
+        .args(["-nP", "-F", "n", "-d", "cwd,txt"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let paths: Vec<_> = text
+        .lines()
+        .filter_map(|line| line.strip_prefix('n'))
+        // lsof reports protected system processes as /proc/... (readlink: ...).
+        // These are not file paths and cannot identify a managed worktree.
+        .filter(|path| !path.contains(" (readlink:"))
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .map(|path| path.canonicalize().unwrap_or(path))
+        .collect();
+    (!paths.is_empty()).then_some(paths)
+}
+
+fn choose_action(
+    ours: bool,
+    agent: bool,
+    merged: bool,
+    changes: Option<usize>,
+    idle: Duration,
+    has_build: bool,
+    in_use: Option<bool>,
+) -> Action {
+    if !ours || in_use != Some(false) || changes.is_none() {
+        Action::Keep
+    } else if agent && merged && changes == Some(0) && idle >= AGENT_IDLE {
+        Action::Remove
+    } else if has_build && idle >= BUILD_IDLE {
+        Action::FreeBuild
+    } else {
+        Action::Keep
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
     Keep,
     Remove,
@@ -278,8 +325,12 @@ fn remove(main: &Path, tree: &Tree) -> bool {
 /// Deletes a build folder unless a build is under way in it: every profile's Cargo locks are
 /// taken first, and a profile with none of the locks Cargo is known to take is left alone.
 fn free_build(target: &Path) -> bool {
+    let profiles = seed::profile_dirs(target);
+    if profiles.is_empty() {
+        return false;
+    }
     let mut held = Vec::new();
-    for profile in seed::profile_dirs(target) {
+    for profile in profiles {
         let locks: Vec<File> = seed::LOCKS
             .iter()
             .filter_map(|name| File::open(target.join(&profile).join(name)).ok())
@@ -465,5 +516,155 @@ mod tests {
         assert_eq!(age(Duration::from_secs(5 * 60)), "5m");
         assert_eq!(age(Duration::from_secs(30 * 60 * 60)), "30h");
         assert_eq!(age(Duration::from_secs(4 * 24 * 60 * 60)), "4d");
+    }
+
+    #[test]
+    fn build_cleanup_keeps_source_and_waits_for_an_idle_hour() {
+        let hour = Duration::from_secs(3600);
+        for (agent, merged, changes) in [
+            (true, true, Some(0)),
+            (true, false, Some(2)),
+            (false, false, Some(0)),
+        ] {
+            assert_eq!(
+                choose_action(
+                    true,
+                    agent,
+                    merged,
+                    changes,
+                    hour - Duration::from_secs(1),
+                    true,
+                    Some(false)
+                ),
+                Action::Keep
+            );
+            assert_eq!(
+                choose_action(true, agent, merged, changes, hour, true, Some(false)),
+                Action::FreeBuild
+            );
+        }
+        assert_eq!(
+            choose_action(
+                true,
+                true,
+                true,
+                Some(0),
+                Duration::from_secs(2 * 86400),
+                false,
+                Some(false)
+            ),
+            Action::Remove
+        );
+        assert_eq!(
+            choose_action(
+                true,
+                true,
+                false,
+                Some(0),
+                Duration::from_secs(2 * 86400),
+                false,
+                Some(false)
+            ),
+            Action::Keep
+        );
+    }
+
+    #[test]
+    fn active_locked_and_unreadable_worktrees_are_kept() {
+        let old = Duration::from_secs(10 * 86400);
+        for active in [Some(true), None] {
+            assert_eq!(
+                choose_action(true, true, true, Some(0), old, true, active),
+                Action::Keep
+            );
+        }
+        assert_eq!(
+            choose_action(false, true, true, Some(0), old, true, Some(false)),
+            Action::Keep
+        );
+        assert_eq!(
+            choose_action(true, true, true, None, old, true, Some(false)),
+            Action::Keep
+        );
+    }
+
+    #[test]
+    fn a_locked_cargo_profile_cannot_be_deleted() {
+        use std::io::{BufRead, Read, Write};
+        use std::process::Stdio;
+
+        let target = std::env::temp_dir().join(format!("xtask-build-lock-{}", std::process::id()));
+        std::fs::create_dir_all(target.join("debug/.fingerprint")).unwrap();
+        let path = target.join("debug").join(seed::LOCKS[0]);
+        // A separate owner prevents parallel tests' child processes from inheriting this lock.
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "worktrees::tests::hold_cargo_lock",
+                "--nocapture",
+            ])
+            .env("XTASK_TEST_CARGO_LOCK", &path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut output = std::io::BufReader::new(child.stdout.take().unwrap());
+        loop {
+            let mut line = String::new();
+            assert!(output.read_line(&mut line).unwrap() > 0);
+            if line.contains("LOCK_READY") {
+                break;
+            }
+        }
+        assert!(!free_build(&target));
+        assert!(path.exists());
+        child.stdin.take().unwrap().write_all(b"release\n").unwrap();
+        output.read_to_string(&mut String::new()).unwrap();
+        assert!(child.wait().unwrap().success());
+        assert!(free_build(&target));
+    }
+
+    #[test]
+    fn hold_cargo_lock() {
+        let Some(path) = std::env::var_os("XTASK_TEST_CARGO_LOCK") else {
+            return;
+        };
+        let lock = File::create(path).unwrap();
+        lock.try_lock().unwrap();
+        println!("LOCK_READY");
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).unwrap();
+        drop(lock);
+    }
+
+    #[test]
+    fn an_unrecognised_build_folder_is_kept() {
+        let target =
+            std::env::temp_dir().join(format!("xtask-unknown-build-{}", std::process::id()));
+        std::fs::create_dir_all(&target).unwrap();
+        let file = target.join("unrecognised-output");
+        std::fs::write(&file, b"keep").unwrap();
+        assert!(!free_build(&target));
+        assert!(file.exists());
+        std::fs::remove_dir_all(&target).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_inspection_finds_a_session_inside_a_worktree() {
+        let dir = std::env::temp_dir().join(format!("xtask-session-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = dir.canonicalize().unwrap();
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .current_dir(&dir)
+            .spawn()
+            .unwrap();
+        let found =
+            process_paths().is_some_and(|paths| paths.iter().any(|path| path.starts_with(&dir)));
+        let _ = child.kill();
+        let _ = child.wait();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(found);
     }
 }
