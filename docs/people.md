@@ -46,7 +46,7 @@ From the developers, 2026-10-12, with "maybe" (D173): some areas may have people
 
 ## What it asks of the engine
 
-Technical, mine. People speak from what the world knows, so their lines are made from the world's facts and the settlement's state, not written one by one. Settlements and travellers far from players are a cheap summary on the server; full lives only near players.
+Technical, mine. People speak from what the world knows, so their lines are made from the world's facts and the settlement's state, not written one by one. Settlements and travellers far from players are a cheap summary on the server; full lives only near players. How a day is kept, walked and drawn (schedules at smart objects, a settlement's path graph, people far off worked out from the clock, crowds in tiers) is D324, planned with the town demo in [demos.md](demos.md#3-a-living-town).
 
 ## Questions
 

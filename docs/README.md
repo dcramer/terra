@@ -38,6 +38,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 |---|---|
 | [worlds.md](worlds.md) | The realms as physical worlds: what a world's theme sets, terrain, caverns, water, size, gravity, the starting realm, portals between them. |
 | [biomes.md](biomes.md) | Draft: how a world fills with life, from grass to canopy: goals, how placement and drawing could work on voxel terrain, open questions. |
+| [demos.md](demos.md) | Proposal: the next biome demos, a mountain lake, a tundra and a living town, each made by the world's rules: references, what exists, parts and variants, budgets, checks and order of work (D321). |
 | [climate.md](climate.md) | Leaning: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |
 | [survival.md](survival.md) | Needs, rhythms and death: hunger, thirst, warmth, breath, rest, mana; day and night; coming back at a hearth. |
 | [combat.md](combat.md) | A fast action RPG on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |

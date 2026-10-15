@@ -16,7 +16,7 @@ What this covers: everything that grows or lies on the ground, from grass to the
   - ground cover other than grass;
   - deadfall;
   - the forest seen from far off;
-  - more than one biome, and the blend between them.
+  - more than one biome, and the blend between them. The next ones, a mountain lake with its tree line and a tundra, are planned in [demos.md](demos.md) (D321).
 
 ## Goals
 
