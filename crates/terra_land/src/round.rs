@@ -14,6 +14,9 @@ use glam::Vec3;
 pub struct Round {
     pub land: Land,
     pub waters: Waters,
+    /// Where its ground is patterned, the pools in its polygons, on a finer grid nearer the
+    /// middle.
+    pub pools: Option<Waters>,
     pub seasons: Seasons,
     pub snow: Snow,
     /// How much of the falling snow its ground keeps against the prevailing wind (D323), over
@@ -29,6 +32,10 @@ pub struct Round {
 /// Lakes are found on a grid this fine, round the middle, this far across.
 const LAKE_CELL_M: f32 = 10.0;
 const LAKES_ACROSS_M: f32 = 10_000.0;
+/// Where the ground is patterned, the pools of its polygons are found on a grid this fine, this
+/// far across: a polygon's sunken middle is a few metres wide.
+const POOL_CELL_M: f32 = 2.0;
+const POOLS_ACROSS_M: f32 = 1_600.0;
 
 impl Round {
     /// The land round a direction, `across_m` wide, its snow as it lies on `day`.
@@ -51,10 +58,19 @@ impl Round {
             latitudes,
             heights,
         );
-        let heath = heath_over(&land, &waters, &seasons, &drift);
+        let pools = land
+            .ground
+            .patterned()
+            .is_some_and(|p| {
+                let over_sea = land.surface(middle).length() - land.sea_radius_m();
+                p.strength(middle, over_sea) > 0.2
+            })
+            .then(|| Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M));
+        let heath = heath_over(&land, &waters, pools.as_ref(), &seasons, &drift);
         Self {
             land,
             waters,
+            pools,
             seasons,
             snow,
             drift,
@@ -62,6 +78,24 @@ impl Round {
             middle,
             across_m,
         }
+    }
+
+    /// The surface of the water over a direction, a pool's or a lake's, else the sea's.
+    pub fn water_level(&self, up: Vec3) -> Option<f32> {
+        use terra_core::Water;
+        if let Some(level) = self.pools.as_ref().and_then(|pools| pools.lake_level(up)) {
+            return Some(level);
+        }
+        self.waters.level(up)
+    }
+
+    /// The highest water's surface at or beside a direction, a pool's within a cell of its
+    /// grid, else a lake's within `cells` of the lakes'.
+    pub fn water_near(&self, up: Vec3, cells: usize) -> Option<f32> {
+        self.pools
+            .as_ref()
+            .and_then(|pools| pools.lake_near(up, 1))
+            .or_else(|| self.waters.lake_near(up, cells))
     }
 
     /// The trees a point on the ground holds, facing `normal`, standing on `footing`.
@@ -78,6 +112,13 @@ impl Round {
     /// How deep the snow lies at a point on the ground, facing `normal`, in metres, as its
     /// shelter from the wind catches it (D323).
     pub fn snow_m(&self, point: Vec3, normal: Vec3) -> f32 {
+        // The ground's lean over its lakes' 10 m grid, not a vertex's own: the metre-scale
+        // relief of polygons and detail would turn the sun's melt from vertex to vertex.
+        let up = point.normalize_or(Vec3::Y);
+        let region = self.waters.region();
+        let normal = region
+            .cell_of(up)
+            .map_or(normal, |(c, r)| region.normal(c, r));
         let place = self.place(point, normal);
         self.snow
             .depth_caught_m(place.latitude, place.height_m, place.sunward, place.catch)
@@ -96,7 +137,13 @@ impl Round {
 /// The heath over the lakes' grid round a place: each cell's ground as the land makes it, its
 /// growing season against the tree line's, the trees on it, its shelter from the wind and how
 /// wet it is.
-fn heath_over(land: &Land, waters: &Waters, seasons: &Seasons, drift: &Drift) -> HeathMap {
+fn heath_over(
+    land: &Land,
+    waters: &Waters,
+    pools: Option<&Waters>,
+    seasons: &Seasons,
+    drift: &Drift,
+) -> HeathMap {
     let region = waters.region();
     let radius = land.radius_m();
     let drainage = heath::Drainage::new(land.ground.spec().seed);
@@ -106,8 +153,10 @@ fn heath_over(land: &Land, waters: &Waters, seasons: &Seasons, drift: &Drift) ->
         let normal = region.normal(c, r);
         let place = land.place(point, normal);
         let season = seasons.at(place.latitude, place.height_m, place.sunward);
-        let above_water = waters
-            .lake_near(up, 1)
+        // A pool's water within a few metres soaks the ground as a lake's does.
+        let above_water = pools
+            .and_then(|pools| pools.lake_near(up, 3))
+            .or_else(|| waters.lake_near(up, 1))
             .map_or(50.0, |level| point.length() - level);
         if above_water < 0.0 {
             return heath::Heath {

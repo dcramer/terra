@@ -27,6 +27,10 @@ use glam::Vec3;
 use terra_climate::{Climate, Fields, Place};
 use terra_voxel::GeneratedPlanet;
 
+/// Ground whose year's mean is under this, in degrees Celsius, stays frozen at depth through
+/// the summer: permafrost, as continuous permafrost begins near a mean of -2 to -5 °C.
+pub const PERMAFROST_C: f32 = -2.0;
+
 /// Where the planet's own start is, from its centre: the pole of the cube the ground is laid
 /// on, which the free camera takes as up.
 pub const PLANET_START: Vec3 = Vec3::Y;
@@ -46,6 +50,23 @@ impl Land {
         let year = climate.year;
         let declination = terra_climate::declination(year.tilt_deg.to_radians(), year.phase(0));
         let (frame, _, _) = Frame::turned_for(PLANET_START, START_LATITUDE, declination);
+        // On a world to scale, the ground is patterned where its climate keeps it frozen at
+        // depth: the year's mean under PERMAFROST_C, which falls with latitude and height
+        // as the climate's base temperature does (docs/demos.md §2).
+        let seed = ground.spec().seed;
+        let ground = if frame::has_latitudes(ground.spec().radius_m) {
+            let t = &climate.temperature;
+            ground.with_patterned(terra_voxel::Patterned {
+                pole: frame.pole(),
+                sine_squared_c: t.equator_c - t.pole_c,
+                per_m_c: t.lapse_c_per_km / 1000.0,
+                at_c: PERMAFROST_C - t.equator_c,
+                seed: seed.derive("ice wedges").0,
+                ..terra_voxel::Patterned::ICE_WEDGES
+            })
+        } else {
+            ground
+        };
         let fields = Fields::new(climate, ground.spec().seed);
         Self {
             ground,

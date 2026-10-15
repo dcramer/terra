@@ -6,7 +6,7 @@
 
 use super::{
     air, climate, cover, data, daylight, detail, dither, flora, grown, lod, parting, quality,
-    scene, sky_occlusion, skylight, smoke, tick, upscale, woods,
+    scene, sky_occlusion, skylight, smoke, tick, upscale, wind, woods,
 };
 use bevy::prelude::*;
 
@@ -24,6 +24,7 @@ impl Plugin for WorldPlugin {
         sky_occlusion::plugin(app);
         daylight::plugin(app);
         climate::plugin(app);
+        wind::plugin(app);
         parting::plugin(app);
         grown::plugin(app);
         flora::plugin(app);

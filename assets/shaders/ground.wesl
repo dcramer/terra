@@ -61,6 +61,16 @@ struct Ground {
     climate_on: u32,
     climate_painting: u32,
     fallen_layer: i32,
+    // The heath past the trees round the land's middle (planet.rs `LandMap`): the middle's
+    // direction and the planet's radius, east and the map's width, north and whether there is
+    // a map; the leaves map's layers of the heath's dwarf shrubs and of grass, and the shrubs'
+    // autumn colour.
+    land_middle: vec4<f32>,
+    land_east: vec4<f32>,
+    land_north: vec4<f32>,
+    heath_layer: i32,
+    grass_layer: i32,
+    heath_autumn: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -95,6 +105,13 @@ var climate_ground_sampler: sampler;
 var climate_leaves: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(111)
 var climate_leaves_sampler: sampler;
+// The heath past the trees (terra_land::heath), a 10 m cell a texel over the land round its
+// middle: lichen, dwarf shrubs, sedge and moss in the first layer; the fellfield's stones,
+// the wetness and how open the ground is to the heath in the second.
+@group(constants::MATERIAL_BIND_GROUP) @binding(112)
+var land_map: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(113)
+var land_sampler: sampler;
 
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
@@ -359,6 +376,76 @@ fn fallen_leaves(world: vec3<f32>) -> f32 {
     let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
     let leaves = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, ground.fallen_layer, 0.0);
     return 1.0 - 0.5 * (leaves.r + leaves.g);
+}
+
+// The heath at a point: the land map's two layers there, none outside it, fading at its edge.
+// The map is a plane touching the planet at its middle, a point on it where the line from the
+// centre meets it, as `terra_land::region` lays its grid.
+struct HeathHere {
+    // Lichen, dwarf shrubs, sedge, moss.
+    plants: vec4<f32>,
+    // The fellfield's stones, the wetness, how open the ground is to the heath.
+    ground: vec4<f32>,
+}
+
+fn heath_here(world: vec3<f32>) -> HeathHere {
+    var none = HeathHere(vec4<f32>(0.0), vec4<f32>(0.0));
+    if ground.land_north.w < 0.5 {
+        return none;
+    }
+    // Looked up a little way off, by noise at two scales, so the map's 10 m cells never show
+    // as squares and the communities' edges wander as a real mosaic's do.
+    let warp = (vec3<f32>(noise(world * 0.07 + 211.0), noise(world * 0.07 + 223.0), noise(world * 0.07 + 227.0)) - vec3<f32>(0.5)) * 16.0
+        + (vec3<f32>(noise(world * 0.35 + 5.0), noise(world * 0.35 + 9.0), noise(world * 0.35 + 15.0)) - vec3<f32>(0.5)) * 4.0;
+    let at = world + warp;
+    let along = dot(at, ground.land_middle.xyz);
+    if along <= 0.0 {
+        return none;
+    }
+    let scale = ground.land_middle.w / along;
+    let size = ground.land_east.w;
+    let uv = vec2<f32>(
+        dot(at, ground.land_east.xyz) * scale / size + 0.5,
+        0.5 - dot(at, ground.land_north.xyz) * scale / size,
+    );
+    let inside = clamp(min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y)) * 30.0, 0.0, 1.0);
+    if inside <= 0.0 {
+        return none;
+    }
+    return HeathHere(
+        textureSampleLevel(land_map, land_sampler, uv, 0, 0.0) * inside,
+        textureSampleLevel(land_map, land_sampler, uv, 1, 0.0) * inside,
+    );
+}
+
+// How far a kind's leaves have turned near a point, from the climate's leaves map, 0 green to
+// 1 its autumn colour; 0 with no map.
+fn kind_turned(world: vec3<f32>, layer: i32) -> f32 {
+    if ground.climate_on == 0u || layer < 0 {
+        return 0.0;
+    }
+    let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    let leaves = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, layer, 0.0);
+    return 0.5 * (leaves.b + leaves.a);
+}
+
+// The heath's colours, linear, measured off photographs of tundra in late summer and early
+// autumn (research/2026-10-15-tundra-reference.md): pale Cladonia lichen; dwarf birch and
+// crowberry green in summer; sedge green, and straw once turned; Sphagnum's yellow green;
+// the fellfield's grey stones.
+const LICHEN: vec3<f32> = vec3<f32>(0.4, 0.39, 0.27);
+const SHRUB_GREEN: vec3<f32> = vec3<f32>(0.045, 0.06, 0.022);
+const SEDGE_GREEN: vec3<f32> = vec3<f32>(0.1, 0.11, 0.045);
+const SEDGE_STRAW: vec3<f32> = vec3<f32>(0.4, 0.31, 0.12);
+const SPHAGNUM: vec3<f32> = vec3<f32>(0.16, 0.15, 0.04);
+const FELL_STONE: vec3<f32> = vec3<f32>(0.17, 0.165, 0.15);
+
+// The heath's colour as a flat tint, for the low preset and far off: its communities' colours
+// by their shares.
+fn heath_flat(h: HeathHere, shrub_colour: vec3<f32>, sedge_colour: vec3<f32>) -> vec3<f32> {
+    let total = max(h.plants.x + h.plants.y + h.plants.z + h.plants.w + h.ground.x, 0.001);
+    return (LICHEN * h.plants.x + shrub_colour * h.plants.y + sedge_colour * h.plants.z
+        + SPHAGNUM * h.plants.w + FELL_STONE * h.ground.x) / total;
 }
 
 // Snow lying on ground facing up (climate.md, D327): a dusting shows the floor through in
@@ -639,7 +726,10 @@ fn fragment(
             gravel = smoothstep(0.3, 0.7, loose - 1.0);
             // Snow lies on what faces up, its edge broken, thinning off the steep.
             let up_facing = smoothstep(0.5, 0.82, flatness + (fleck - 0.5) * 0.12);
-            snow = smoothstep(0.02, 0.2, in.uv.y + (blotch - 0.5) * 0.12 + (fleck - 0.5) * 0.05) * up_facing;
+            // Its edge broken a metre or two by noise, as a patch of old snow's is, so the
+            // vertices' depths never show as triangles.
+            let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
+            snow = smoothstep(0.03, 0.16, in.uv.y + (edge - 0.5) * 0.22 + (fleck - 0.5) * 0.04) * up_facing;
         }
 @if(VERTEX_UVS_B)
         {
@@ -667,7 +757,8 @@ fn fragment(
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
         let rooty = smoothstep(0.3, 0.75, roots + (fleck - 0.5) * 0.35 + (blotch - 0.5) * 0.3) * flat_ground;
-        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground;
+        let heath = heath_here(world);
+        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground * (1.0 - heath.ground.z);
         let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
         let mossy = smoothstep(0.25, 0.75, moss + (blotch - 0.5) * 0.5) * flat_ground;
         let rock = smoothstep(0.2, 0.4, grows.b);
@@ -692,7 +783,14 @@ fn fragment(
             scree_tint,
             gravel_tint,
         );
-        let ground_is = low_floor(amounts, tints, world, n);
+        var ground_is = low_floor(amounts, tints, world, n);
+        // The heath past the trees, as its flat colours, over the soil it grows on.
+        if heath.ground.z > 0.0 {
+            let shrub_colour = mix(SHRUB_GREEN, ground.heath_autumn.rgb * 0.45, kind_turned(world, ground.heath_layer));
+            let sedge_colour = mix(SEDGE_GREEN, SEDGE_STRAW, smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer)));
+            let tint = heath_flat(heath, shrub_colour, sedge_colour) * (0.85 + 0.3 * blotch);
+            ground_is.colour = mix(ground_is.colour, tint, heath.ground.z * (1.0 - steep) * 0.9);
+        }
         // The blades' shade and the broad swells, over all but dug rock and sand.
         let shaded = (1.0 - 0.6 * smoothstep(0.1, 0.7, blades)) * (0.86 + 0.28 * swell);
         let hollow = smoothstep(0.0, 0.6, ground_is.height);
@@ -771,8 +869,10 @@ fn fragment(
             ground_is = over(ground_is, layer(ROOTS, 1.0, duff, world + 3.0, gx, gy, n, PLAIN), rooty);
         }
 
+        // Past the trees the heath takes the ground from the meadow's grass (terra_land::heath).
+        let heath = heath_here(world);
         // Grass sits in the hollows first, and gives out where the floor stands higher.
-        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground;
+        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground * (1.0 - heath.ground.z);
         if grass > 0.0 {
             let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
             let tint = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck);
@@ -784,6 +884,54 @@ fn fragment(
         if mossy > 0.0 {
             let moss_colour = vec3<f32>(0.056, 0.08, 0.026) * (0.8 + 0.4 * fleck);
             ground_is = settle(ground_is, layer(MOSS, 1.0, moss_colour, world + 5.0, gx, gy, n, PLAIN), mossy);
+        }
+
+        // The heath past the trees (docs/demos.md §2): its communities a mosaic, each where
+        // its share is most, their edges frayed a metre or two by noise so no line shows; the
+        // fellfield's stones under the rest, then lichen, moss, sedge and the dwarf shrubs on
+        // top, as they stand.
+        if heath.ground.z > 0.0 {
+            let mosaic = (noise(world * 0.31 + 101.0) - 0.5) * 0.55 + (noise(world * 1.3 + 103.0) - 0.5) * 0.3
+                + (fleck - 0.5) * 0.15;
+            let stones = smoothstep(0.2, 0.6, heath.ground.x + mosaic);
+            if stones > 0.0 {
+                ground_is = over(ground_is, layer(GRAVEL, 0.8, FELL_STONE * (0.8 + 0.4 * blotch), world + 61.0, gx, gy, n, 1.0), stones);
+            }
+            let lichen = smoothstep(0.15, 0.5, heath.plants.x + mosaic) * flat_ground;
+            if lichen > 0.0 {
+                // Cladonia's pale cushions over the moss's relief, a little greener and greyer
+                // from cushion to cushion.
+                let tint = LICHEN * mix(vec3<f32>(0.92, 0.95, 0.9), vec3<f32>(1.06, 1.03, 1.08), fleck);
+                ground_is = settle(ground_is, layer(MOSS, 0.7, tint, world + 67.0, gx, gy, n, PLAIN), lichen);
+            }
+            // Moss carpets the edges of pools and lakes, soaked a metre or so up from the water.
+            var by_water = 0.0;
+@if(VERTEX_UVS_B)
+            {
+                by_water = (1.0 - smoothstep(0.1, 1.1 + 0.6 * fleck, in.uv_b.y)) * step(-0.05, in.uv_b.y);
+            }
+            let carpet = smoothstep(0.3, 0.65, max(heath.plants.w, by_water * heath.ground.z) + mosaic) * flat_ground;
+            if carpet > 0.0 {
+                let tint = mix(SPHAGNUM, vec3<f32>(0.16, 0.05, 0.03), smoothstep(0.55, 0.85, noise(world * 0.5 + 7.0)) * 0.6);
+                ground_is = settle(ground_is, layer(MOSS, 1.0, tint, world + 71.0, gx, gy, n, PLAIN), carpet);
+            }
+            let sedge = smoothstep(0.15, 0.5, heath.plants.z + mosaic) * flat_ground;
+            if sedge > 0.0 {
+                let tint = mix(SEDGE_GREEN, SEDGE_STRAW, smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer))) * (0.85 + 0.3 * fleck);
+                ground_is = settle(ground_is, layer(GRASS, 0.8, tint, world + 73.0, gx, gy, n, 1.0), sedge);
+            }
+            let shrub = smoothstep(0.12, 0.45, heath.plants.y + mosaic) * flat_ground;
+            if shrub > 0.0 {
+                // Dwarf birch and bilberry turning crimson and rust, crowberry staying dark
+                // green among them, in patches a hand or two across.
+                let crowberry = smoothstep(0.45, 0.7, noise(world * 1.3 + 31.0));
+                let autumn = ground.heath_autumn.rgb * 0.6 * mix(vec3<f32>(1.1, 0.75, 0.8), vec3<f32>(0.9, 1.1, 1.0), fleck);
+                let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), SHRUB_GREEN * 0.8, crowberry);
+                ground_is = settle(ground_is, layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), shrub);
+            }
+            // Wet ground darker and glossier, as wet soil and moss are (Lagarde).
+            let soaked = smoothstep(0.55, 0.95, heath.ground.y) * heath.ground.z;
+            ground_is.colour *= mix(1.0, 0.72, soaked);
         }
 
         // The ground under thick grass is in the blades' own shade, so what shows between

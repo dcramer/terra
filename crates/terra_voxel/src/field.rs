@@ -3,6 +3,7 @@
 //! [`crate::planet`].
 
 use crate::mountains::{Mountains, Range};
+use crate::patterned::Patterned;
 use glam::Vec3;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -222,6 +223,8 @@ pub struct GeneratedPlanet {
     lattice: u32,
     /// Its mountains, on a world with any (D322).
     range: Option<Range>,
+    /// Its patterned ground where it is frozen at depth, on a world whose climate is known.
+    patterned: Option<Patterned>,
 }
 
 impl GeneratedPlanet {
@@ -253,6 +256,7 @@ impl GeneratedPlanet {
             sea_level_m,
             lattice: (quarter_round / Self::LATTICE_M).ceil().max(1.0) as u32,
             range: None,
+            patterned: None,
         }
     }
 
@@ -260,6 +264,17 @@ impl GeneratedPlanet {
     pub fn with_mountains(mut self, mountains: Mountains) -> Self {
         self.range = Some(Range::new(mountains, self.spec.seed));
         self
+    }
+
+    /// The same planet with patterned ground where its world's climate keeps it frozen.
+    pub fn with_patterned(mut self, patterned: Patterned) -> Self {
+        self.patterned = Some(patterned);
+        self
+    }
+
+    /// Its patterned ground, if it has any.
+    pub fn patterned(&self) -> Option<&Patterned> {
+        self.patterned.as_ref()
     }
 
     /// Its mountains, if it has any.
@@ -310,6 +325,11 @@ impl GeneratedPlanet {
             let rise = range.rise(direction, self.spec.radius_m);
             node.height += rise.height_m;
             node.bed = rise.bed;
+        }
+        if let Some(patterned) = &self.patterned {
+            let over_sea = node.height - self.sea_level_m.unwrap_or(0.0);
+            let strength = patterned.strength(direction, over_sea);
+            node.height += patterned.relief_m(direction * self.spec.radius_m, strength);
         }
         node
     }

@@ -16,6 +16,7 @@
 
 pub mod blades;
 mod floor;
+mod heath;
 pub mod litter;
 
 use crate::detail::DetailScale;
@@ -226,10 +227,11 @@ pub fn plugin(app: &mut App) {
         .init_resource::<BareGround>()
         .add_systems(
             Update,
-            (grow, measure, follow_climate)
+            (grow, measure, follow_climate, follow_wind)
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
+        .add_systems(PostStartup, heath::grow_the_lands)
         .add_plugins(floor::plugin);
 }
 
@@ -583,6 +585,26 @@ fn follow_climate(
     }
     if let Some(mut litter) = litters.get_mut(&meadow.litter) {
         litter.extension.read_climate(&maps);
+    }
+}
+
+/// The grass sways with the world's wind (D255), from the climate.
+fn follow_wind(
+    wind: Option<Res<crate::wind::WorldWind>>,
+    meadow: Option<Res<Meadow>>,
+    mut materials: ResMut<Assets<GrassMaterial>>,
+    mut own: Local<crate::wind::OwnSway<GrassMaterial>>,
+) {
+    let (Some(wind), Some(meadow)) = (wind, meadow) else {
+        return;
+    };
+    if !wind.is_changed() && !meadow.is_added() {
+        return;
+    }
+    let id = meadow.material.id();
+    if let Some(mut grass) = materials.get_mut(&meadow.material) {
+        let sway = own.of(id, grass.extension.wind.w);
+        grass.extension.wind = wind.toward.extend(sway * wind.strength);
     }
 }
 

@@ -114,6 +114,12 @@ impl Waters {
         best.map(|(_, (c, r))| self.region.direction(c, r))
     }
 
+    /// The surface of the lake over a direction, if one is.
+    pub fn lake_level(&self, direction: Vec3) -> Option<f32> {
+        let (c, r) = self.region.cell_of(direction)?;
+        self.lake_at(c, r).map(|lake| self.lake_radius_m(lake))
+    }
+
     /// The distance from the centre to a lake's surface.
     pub fn lake_radius_m(&self, lake: usize) -> f32 {
         self.radius_m + self.lakes.lakes[lake].level_m

@@ -17,10 +17,12 @@ pub mod field;
 pub mod lod;
 pub mod mesh;
 pub mod mountains;
+pub mod patterned;
 pub mod planet;
 
 pub use field::{Field, GeneratedPlanet, Sample, material};
 pub use lod::{Detail, chunks_around, may_hold_surface};
 pub use mesh::{CELLS, Sides, VOXEL_M, chunk_at, chunk_origin, chunk_size_m, mesh_chunk};
 pub use mountains::{Mountains, Range, Rise};
+pub use patterned::Patterned;
 pub use planet::VoxelPlanet;

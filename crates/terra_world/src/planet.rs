@@ -77,7 +77,10 @@ pub struct Cover {
 
 impl Planet {
     pub fn new(spec: PlanetSpec) -> Self {
-        let ground = terra_land::ground::world(spec);
+        // The land lays the ground's patterned ground where its climate keeps it frozen.
+        let climate: terra_climate::Climate =
+            crate::data::read(crate::daylight::WorldClimate::FILE);
+        let ground = terra_land::Land::new(terra_land::ground::world(spec), climate).ground;
         // Its hills, and on a world large enough its mountains (D322).
         let relief_m = RELIEF_M
             + ground
@@ -163,9 +166,9 @@ impl Planet {
     /// lake is, the sea's elsewhere (`terra_core::Water`, D45). Where there is no water at all
     /// it is the sea's level all the same, under the ground.
     pub fn water_radius_m(&self, point: Vec3) -> f32 {
-        use terra_core::Water;
-        self.waters()
-            .and_then(|waters| waters.level(point.normalize_or(Vec3::Y)))
+        self.round
+            .as_ref()
+            .and_then(|round| round.water_level(point.normalize_or(Vec3::Y)))
             .unwrap_or(self.sea_radius_m())
     }
 
@@ -173,8 +176,9 @@ impl Planet {
     /// keeps out of it, since a lake's drawn water reaches a cell past its own.
     pub fn water_near_m(&self, point: Vec3) -> f32 {
         let sea = self.sea_radius_m();
-        self.waters()
-            .and_then(|waters| waters.lake_near(point.normalize_or(Vec3::Y), 1))
+        self.round
+            .as_ref()
+            .and_then(|round| round.water_near(point.normalize_or(Vec3::Y), 1))
             .map_or(sea, |lake| lake.max(sea))
     }
 
@@ -272,8 +276,14 @@ impl Planet {
         let above_sea = point.length() - self.water_near_m(point);
         let steepness = 1.0 - normal.dot(point.normalize());
         let patches = self.cover.fbm(point / 70.0, 3, 2.0, 0.5);
+        // Past the trees the heath holds the ground, not a meadow's grass (`terra_land::heath`).
+        let heath = self
+            .round
+            .as_ref()
+            .map_or(0.0, |round| round.heath.at(point).open);
         Cover {
-            grass: smoothstep(-0.4, -0.26, patches)
+            grass: (1.0 - heath)
+                * smoothstep(-0.4, -0.26, patches)
                 * smoothstep(0.5, 1.6, above_sea)
                 * (1.0 - smoothstep(0.14, 0.27, steepness)),
             lush: smoothstep(
@@ -415,6 +425,66 @@ pub struct GroundExtension {
     #[texture(110, dimension = "2d_array")]
     #[sampler(111)]
     climate_leaves: Option<Handle<Image>>,
+    /// The heath past the trees round the land's middle (`terra_land::heath`, `LandMap`):
+    /// the middle's direction and the planet's radius; east and the map's width in metres;
+    /// north and whether there is a map; the leaves map's layers of the heath's dwarf shrubs
+    /// and of grass, for their colour now, and the shrubs' autumn colour.
+    #[uniform(100)]
+    land_middle: Vec4,
+    #[uniform(100)]
+    land_east: Vec4,
+    #[uniform(100)]
+    land_north: Vec4,
+    #[uniform(100)]
+    heath_layer: i32,
+    #[uniform(100)]
+    grass_layer: i32,
+    #[uniform(100)]
+    heath_autumn: Vec4,
+    #[texture(112, dimension = "2d_array")]
+    #[sampler(113)]
+    land_map: Option<Handle<Image>>,
+}
+
+/// What covers the open ground past the trees round the land's middle, as the land's rules
+/// make it (`terra_land::heath`), for the ground to draw: a picture of two layers over the
+/// lakes' grid, the lichen, dwarf shrubs, sedge and moss in the first, the fellfield's stones,
+/// the wetness and how open the ground is in the second.
+#[derive(Resource, Clone, Default)]
+pub struct LandMap {
+    pub image: Option<Handle<Image>>,
+    pub middle: Vec4,
+    pub east: Vec4,
+    pub north: Vec4,
+}
+
+impl LandMap {
+    /// The picture of a place's heath.
+    pub fn of(round: &terra_land::round::Round, images: &mut Assets<Image>) -> Self {
+        use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+        let heath = &round.heath;
+        let region = heath.region();
+        let n = region.cells as u32;
+        let mut image = Image::new(
+            Extent3d {
+                width: n,
+                height: n,
+                depth_or_array_layers: 2,
+            },
+            TextureDimension::D2,
+            heath.bytes(),
+            TextureFormat::Rgba8Unorm,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD,
+        );
+        image.sampler = bevy::image::ImageSampler::linear();
+        let size = region.cell_m * region.cells as f32;
+        Self {
+            image: Some(images.add(image)),
+            middle: region.middle.normalize().extend(region.middle.length()),
+            east: region.east.extend(size),
+            north: region.north.extend(1.0),
+        }
+    }
 }
 
 /// What covers the ground near the camera, painted by the ground cover (`cover`) for the
@@ -526,6 +596,7 @@ impl GroundExtension {
         cover: &GroundCoverMap,
         climate: &crate::climate::ClimateMaps,
         quality: crate::quality::Quality,
+        land: &LandMap,
     ) -> Self {
         let radius_m = planet.radius_m();
         GroundExtension {
@@ -566,6 +637,17 @@ impl GroundExtension {
             // Bevy's fallback pictures, of the right shape, until there are maps.
             climate_ground: climate.ground.clone(),
             climate_leaves: climate.leaves.clone(),
+            land_middle: land.middle,
+            land_east: land.east,
+            land_north: if land.image.is_some() {
+                land.north
+            } else {
+                Vec4::ZERO
+            },
+            heath_layer: climate.heath_layer,
+            grass_layer: climate.grass_layer,
+            heath_autumn: climate.autumn_of(climate.heath_layer),
+            land_map: land.image.clone(),
         }
     }
 }
@@ -701,10 +783,14 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     assets: Res<AssetServer>,
 ) {
     let radius_m = planet.radius_m();
     let textures = GroundTextures::load(&assets);
+    let land = planet
+        .round()
+        .map_or_else(LandMap::default, |round| LandMap::of(round, &mut images));
     let ground_material = ground_materials.add(ExtendedMaterial {
         base: StandardMaterial {
             perceptual_roughness: 0.95,
@@ -718,9 +804,11 @@ fn setup(
             &GroundCoverMap::default(),
             &crate::climate::ClimateMaps::default(),
             crate::quality::Quality::default(),
+            &land,
         ),
     });
     commands.insert_resource(textures);
+    commands.insert_resource(land);
     // The ground itself is drawn in chunks, by `terrain`, with this look.
     commands.insert_resource(GroundLook(ground_material));
     commands.spawn((
@@ -790,6 +878,7 @@ fn apply_tweaks(
     cover: Res<GroundCoverMap>,
     climate: Res<crate::climate::ClimateMaps>,
     quality: Res<crate::quality::Quality>,
+    land: Option<Res<LandMap>>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
     sun.0.color = tweaks.sun_color;
@@ -805,7 +894,11 @@ fn apply_tweaks(
 
     // The ground changes only when its tweaks do, not with the sun, so it is left alone
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover, &climate, *quality);
+    let no_land = LandMap::default();
+    let land = land.as_deref().unwrap_or(&no_land);
+    let ground = GroundExtension::new(
+        &planet, &tweaks, &textures, &cover, &climate, *quality, land,
+    );
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

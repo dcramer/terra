@@ -206,6 +206,9 @@ pub struct ClimateMaps {
     /// (`FALLEN_KIND`), and of grass (`GRASS_KIND`), or -1 if there is none.
     pub fallen_layer: i32,
     pub grass_layer: i32,
+    /// The layer of the dwarf shrubs whose leaves colour the heath past the trees
+    /// (`HEATH_KIND`, `terra_land::heath`), or -1.
+    pub heath_layer: i32,
     /// Each layer's kind's autumn colour, linear, in the years file's order.
     pub autumn: Vec<Vec3>,
 }
@@ -219,6 +222,7 @@ impl Default for ClimateMaps {
             painting: 0,
             fallen_layer: -1,
             grass_layer: -1,
+            heath_layer: -1,
             autumn: Vec::new(),
         }
     }
@@ -243,6 +247,8 @@ impl ClimateMaps {
 /// the ground cover's grass is.
 pub const FALLEN_KIND: &str = "oak";
 pub const GRASS_KIND: &str = "grass";
+/// The kind whose leaves colour the heath's dwarf-shrub ground past the trees.
+pub const HEATH_KIND: &str = "dwarf_birch";
 
 /// Snow this deep is the ground map's brightest.
 pub const SNOW_FULL_M: f32 = 0.5;
@@ -513,6 +519,7 @@ fn paint(
             painting: maps.painting.wrapping_add(1),
             fallen_layer: ClimateMaps::layer_of(&fields, FALLEN_KIND),
             grass_layer: ClimateMaps::layer_of(&fields, GRASS_KIND),
+            heath_layer: ClimateMaps::layer_of(&fields, HEATH_KIND),
             autumn: fields
                 .years
                 .iter()

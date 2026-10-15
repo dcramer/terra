@@ -70,6 +70,31 @@ export const PLACES: Record<string, Place> = {
     // lake` prints; the bench's lake-walk follows the same.
     route: { at: "0,0", face: "0,-200", through: "84,32;123,16;173,16;216,22;248,-3;275,-35;302,-67;340,-84;378,-100" },
   },
+  tundra: {
+    about:
+      "the tundra (docs/demos.md §2): the fell plateau its query finds 10.5 km north of the start (--site tundra), in early October, the heath's autumn colours and the first snow lying in the lees",
+    args: ["--experiment", "walk", "--radius", "30000", "--site", "tundra", "--date", "10-08"],
+    // The start faces the closed forest's edge, 1.9 km off: -south is toward it, the open
+    // plateau and the fells with their snow behind.
+    views: [
+      // The heath at eye height, its communities and the polygons' pools ahead.
+      ["heath", "0,1.7,0,0,0.8,-25"],
+      // Out over the plateau to the forest's edge and its last spruce.
+      ["edge", "0,1.7,0,0,25,-1900"],
+      // The other way, the open plateau to the fells, snow in their lees.
+      ["open", "0,1.7,0,0,2,600"],
+      // Down over the patterned ground and its pools from a rise's height.
+      ["pools", "0,8,0,40,0,-40"],
+      // The plateau from 40 m up.
+      ["overview", "0,40,60,0,0,-200"],
+    ],
+    measured: ["heath", "edge", "open", "overview"],
+    look: "tundra-autumn-day",
+    ground: true,
+    forest: false,
+    // Across the heath into the prevailing west wind and back with it.
+    route: { at: "0,0", face: "40,0", through: "40,4;80,-6;120,4;160,-8;200,0;170,20;120,26;70,18;20,10" },
+  },
 };
 
 /// The place a tool's `--place` names, `lush` by default.

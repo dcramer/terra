@@ -51,7 +51,22 @@ impl Drift {
         let cells: Vec<usize> = (0..n * n).collect();
         let shelters =
             crate::maps::par_map(&cells, |&k| region.shelter_deg(k % n, k / n, from, REACH_M));
-        let catches = shelters.iter().map(|&s| catch(s)).collect();
+        // The catch blended over the cells round each, so a drift's edge is not one cell's square.
+        let raw: Vec<f32> = shelters.iter().map(|&s| catch(s)).collect();
+        let catches = crate::maps::par_map(&cells, |&k| {
+            let (c, r) = ((k % n) as i64, (k / n) as i64);
+            let (mut sum, mut count) = (0.0, 0.0);
+            for dr in -1..=1 {
+                for dc in -1..=1 {
+                    let (cc, rr) = (c + dc, r + dr);
+                    if cc >= 0 && rr >= 0 && cc < n as i64 && rr < n as i64 {
+                        sum += raw[rr as usize * n + cc as usize];
+                        count += 1.0;
+                    }
+                }
+            }
+            sum / count
+        });
         Self {
             catches,
             shelters,
@@ -116,17 +131,18 @@ mod tests {
         for row in 0..61 {
             for column in 0..61 {
                 let x = column as f32 - 30.0;
-                region.heights[row * 61 + column] = (30.0 - 3.0 * x.abs()).max(0.0);
+                region.heights[row * 61 + column] = (30.0 - 1.5 * x.abs()).max(0.0);
             }
         }
         let west = wind_from(270.0);
         assert!((west - Vec2::new(-1.0, 0.0)).length() < 1e-5);
         let drift = Drift::over(&region, west);
-        let crest = drift.at_cell(30, 30);
+        // Just upwind of the crest, scoured, and its blended neighbours too.
+        let crest = drift.at_cell(28, 30);
         let lee = drift.at_cell(34, 30);
         let windward = drift.at_cell(26, 30);
         let open = drift.at_cell(2, 30);
-        assert!(crest < 0.8, "crest {crest}");
+        assert!(crest < 0.5, "crest {crest}");
         assert!(lee > 1.6, "lee {lee}");
         assert!(lee > windward && windward <= 1.0 + 1e-3, "{windward}");
         assert!((open - 1.0).abs() < 0.05, "open {open}");
@@ -149,7 +165,7 @@ mod tests {
         for row in 0..61 {
             for column in 0..61 {
                 let x = column as f32 - 30.0;
-                region.heights[row * 61 + column] = (30.0 - 3.0 * x.abs()).max(0.0);
+                region.heights[row * 61 + column] = (30.0 - 1.5 * x.abs()).max(0.0);
             }
         }
         let from_west = Drift::over(&region, wind_from(270.0));

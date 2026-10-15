@@ -147,6 +147,9 @@ impl Drainage {
     }
 }
 
+/// How many times the heath's shares are blended with their neighbours', three cells a side.
+const SMOOTHING: usize = 2;
+
 /// The heath over a region's cells, worked out once for a place's land.
 #[derive(Clone, Debug)]
 pub struct HeathMap {
@@ -159,7 +162,43 @@ impl HeathMap {
     pub fn over(region: &Region, at: impl Fn(usize, usize) -> Heath + Sync) -> Self {
         let n = region.cells;
         let all: Vec<usize> = (0..n * n).collect();
-        let cells = crate::maps::par_map(&all, |&k| at(k % n, k / n));
+        let mut cells = crate::maps::par_map(&all, |&k| at(k % n, k / n));
+        // The rules' shares blended over a few cells, so a community's ground is a patch tens
+        // of metres across, not one cell's square: the finer mosaic inside it is the drawing's,
+        // by noise.
+        for _ in 0..SMOOTHING {
+            cells = crate::maps::par_map(&all, |&k| {
+                let (c, r) = ((k % n) as i64, (k / n) as i64);
+                let mut sum = Heath::default();
+                let mut count = 0.0;
+                for dr in -1..=1 {
+                    for dc in -1..=1 {
+                        let (cc, rr) = (c + dc, r + dr);
+                        if cc < 0 || rr < 0 || cc >= n as i64 || rr >= n as i64 {
+                            continue;
+                        }
+                        let h = cells[rr as usize * n + cc as usize];
+                        sum.fellfield += h.fellfield;
+                        sum.lichen += h.lichen;
+                        sum.shrub += h.shrub;
+                        sum.sedge += h.sedge;
+                        sum.moss += h.moss;
+                        sum.open += h.open;
+                        sum.wet += h.wet;
+                        count += 1.0;
+                    }
+                }
+                Heath {
+                    fellfield: sum.fellfield / count,
+                    lichen: sum.lichen / count,
+                    shrub: sum.shrub / count,
+                    sedge: sum.sedge / count,
+                    moss: sum.moss / count,
+                    open: sum.open / count,
+                    wet: sum.wet / count,
+                }
+            });
+        }
         Self {
             region: Region {
                 heights: Vec::new(),

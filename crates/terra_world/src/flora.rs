@@ -332,6 +332,7 @@ pub enum FloraSystems {
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
+        .add_systems(Update, follow_wind)
         .init_resource::<Obstacles>()
         // The yard, the flat test level, has nothing growing on it.
         .add_systems(
@@ -347,6 +348,22 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .in_set(FloraSystems::Clear),
         );
+}
+
+/// The flora sways with the world's wind (D255), from the climate.
+fn follow_wind(
+    wind: Option<Res<crate::wind::WorldWind>>,
+    mut materials: ResMut<Assets<WindMaterial>>,
+    mut own: Local<crate::wind::OwnSway<WindMaterial>>,
+) {
+    let Some(wind) = wind.filter(|wind| wind.is_changed()) else {
+        return;
+    };
+    for (id, material) in materials.iter_mut() {
+        let sway = own.of(id, material.extension.strength);
+        material.extension.direction = wind.toward;
+        material.extension.strength = sway * wind.strength;
+    }
 }
 
 /// A model ready to place: its mesh, or what a grown one is drawn from, and its size as

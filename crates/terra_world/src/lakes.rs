@@ -204,6 +204,19 @@ fn spawn(
         "Lakes: {drawn} drawn of {} found round the start",
         waters.lakes().len()
     );
+    // The patterned ground's pools, many and small, drawn as one surface, each at its level.
+    if let Some(pools) = &round.pools {
+        commands.spawn((
+            Name::new("Pools"),
+            Mesh3d(meshes.add(pools_mesh(pools))),
+            MeshMaterial3d(look.clone()),
+            NotShadowCaster,
+        ));
+        info!(
+            "Lakes: {} pools in the patterned ground round the start",
+            pools.lakes().len()
+        );
+    }
     commands.insert_resource(LakeLook(look, mirror));
 }
 
@@ -248,6 +261,64 @@ fn follow_sky_and_wind(
     if let Some(mut material) = materials.get_mut(&look.0) {
         material.extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
     }
+}
+
+/// Every lake of a grid as one surface, as many small pools are best drawn: each cell under a
+/// lake at its level, and each cell beside one at the highest level beside it, so the water's
+/// edge runs under the shore.
+fn pools_mesh(waters: &Waters) -> Mesh {
+    let region = waters.region();
+    let n = region.cells;
+    let corner = |c: usize, r: usize, radius: f32| {
+        let at = region.offset(c, r) + Vec2::new(-0.5, 0.5) * region.cell_m;
+        (region.middle + region.east * at.x + region.north * at.y).normalize() * radius
+    };
+    let (mut positions, mut normals, mut indices) = (Vec::new(), Vec::new(), Vec::new());
+    for r in 0..n {
+        for c in 0..n {
+            let level = waters
+                .lake_at(c, r)
+                .map(|l| waters.lake_radius_m(l))
+                .or_else(|| {
+                    let mut best: Option<f32> = None;
+                    for (dc, dr) in [
+                        (-1i64, -1i64),
+                        (0, -1),
+                        (1, -1),
+                        (-1, 0),
+                        (1, 0),
+                        (-1, 1),
+                        (0, 1),
+                        (1, 1),
+                    ] {
+                        let (cc, rr) = (c as i64 + dc, r as i64 + dr);
+                        if cc < 0 || rr < 0 || cc >= n as i64 || rr >= n as i64 {
+                            continue;
+                        }
+                        if let Some(l) = waters.lake_at(cc as usize, rr as usize) {
+                            let here = waters.lake_radius_m(l);
+                            best = Some(best.map_or(here, |b: f32| b.max(here)));
+                        }
+                    }
+                    best
+                });
+            let Some(radius) = level else { continue };
+            let base = positions.len() as u32;
+            for (dc, dr) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
+                let p = corner(c + dc, r + dr, radius);
+                positions.push(p.to_array());
+                normals.push(p.normalize().to_array());
+            }
+            indices.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 /// A lake's water as Bevy draws it: its cells and a cell's margin round them, so its edge runs

@@ -799,7 +799,23 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .insert_resource(Cards::read())
-        .add_systems(Update, follow_climate);
+        .add_systems(Update, (follow_climate, follow_wind));
+}
+
+/// Every grown plant's material sways with the world's wind (D255), from the climate.
+fn follow_wind(
+    wind: Option<Res<crate::wind::WorldWind>>,
+    mut materials: ResMut<Assets<Foliage>>,
+    mut own: Local<crate::wind::OwnSway<Foliage>>,
+) {
+    let Some(wind) = wind.filter(|wind| wind.is_changed()) else {
+        return;
+    };
+    for (id, material) in materials.iter_mut() {
+        let sway = own.of(id, material.extension.strength);
+        material.extension.direction = wind.toward;
+        material.extension.strength = sway * wind.strength;
+    }
 }
 
 /// Every grown plant's material reads the climate's maps again each time they are painted.

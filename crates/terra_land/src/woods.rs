@@ -215,15 +215,14 @@ impl<'a> Woods<'a> {
 
     /// What trees stand at a point on the ground, facing `normal`.
     pub fn stand_at(&self, point: glam::Vec3, normal: glam::Vec3) -> Stand {
-        use terra_core::Water;
         let up = point.normalize_or(glam::Vec3::Y);
         // A lake is found cell by cell, on a grid metres wide, so ground in a dry cell at its
         // shore can still lie under its surface: the trees there stood in a metre of water. So
         // the lake is asked of the cells round the point too, and a tree's foot stands clear of
         // its water by a little, as a shore's trees stand back from the edge.
-        let water = match self.round.waters.lake_near(up, 2) {
+        let water = match self.round.water_near(up, 2) {
             Some(lake) => Some(lake + DRY_FOOT_M),
-            None => self.round.waters.level(up),
+            None => self.round.water_level(up),
         };
         let footing = self.round.land.footing(point, water);
         self.round.stand(point, normal, footing)
