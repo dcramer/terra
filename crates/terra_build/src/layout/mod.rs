@@ -984,7 +984,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     }
     shapes::lay(&walls, kit, kits, scope, &mut layout);
     // Last, as every log a roof comes down over is cut to it.
-    runs::under_roofs(base, kits, kit, &mut layout);
+    runs::under_roofs(&walls, kits, kit, &mut layout);
     layout
 }
 
