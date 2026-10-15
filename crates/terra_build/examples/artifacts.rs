@@ -35,7 +35,18 @@ fn main() -> ExitCode {
         .find(|a| !a.starts_with("--"))
         .cloned()
         .or_else(|| quick.then(|| QUICK.to_string()));
-    let cases = inspect::cases(&kits, only.as_deref());
+    // The bases of the building baseline's materials (D333), those the settlement is built
+    // of and the roofs they take, unless a name asks for others; a frozen kit is still read,
+    // so a base of it can be asked for by name.
+    let named = only.is_some() && !quick;
+    let Some(scope) = (if named {
+        Some(kits.clone())
+    } else {
+        baseline_kits(&assets, &kits, &names)
+    }) else {
+        return ExitCode::FAILURE;
+    };
+    let cases = inspect::cases(&scope, only.as_deref());
     let started = std::time::Instant::now();
     // Every base on a thread of its own, as many at once as there are cores.
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
@@ -301,6 +312,47 @@ mod baseline {
         println!("artifacts: ratchet holds ({set})");
         ExitCode::SUCCESS
     }
+}
+
+/// The building baseline's kits (D333): the wall materials the settlement is built of
+/// (`data/settlement.ron`) and the roofs over them.
+fn baseline_kits(
+    assets: &Path,
+    kits: &Kits,
+    names: &std::collections::BTreeMap<u16, String>,
+) -> Option<Kits> {
+    let text = std::fs::read_to_string(assets.join(terra_build::village::SETTLEMENT)).ok()?;
+    let settlement: terra_build::village::Settlement = match ron::from_str(&text) {
+        Ok(settlement) => settlement,
+        Err(why) => {
+            println!("artifacts: {}: {why}", terra_build::village::SETTLEMENT);
+            return None;
+        }
+    };
+    let walls: std::collections::BTreeSet<&String> = [
+        &settlement.timber,
+        &settlement.masonry,
+        &settlement.beams,
+        &settlement.cob,
+        &settlement.framed,
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let wall = |kit: &Kit| names.get(&kit.id).is_some_and(|name| walls.contains(name));
+    let roofs: std::collections::BTreeSet<_> = kits
+        .0
+        .iter()
+        .filter(|kit| wall(kit))
+        .filter_map(|kit| kits.roof_for(kit.kind()))
+        .collect();
+    Some(Kits(
+        kits.0
+            .iter()
+            .filter(|kit| wall(kit) || roofs.contains(&kit.kind()))
+            .cloned()
+            .collect(),
+    ))
 }
 
 /// Every kit under `assets/data/kits`, with its dressed pieces, as the game reads them, and

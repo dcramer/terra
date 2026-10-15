@@ -19,7 +19,7 @@ export type Step = { frame: number; what: string };
 export type Known = { fills: Record<string, string[]>; said: Record<string, number> };
 
 /// A building kit as its file in assets/data/kits/ has it.
-export type Kit = { name: string; id: number; pattern: string; roof?: string };
+export type Kit = { name: string; id: number; pattern: string; roof?: string; baseline: boolean };
 
 /// What a film is built in: one wall kit and its roof, or several meeting (`mixes`). A
 /// scenario asks for a kind by what it is for, so one scenario films every set.
@@ -50,7 +50,7 @@ export class KitSet {
   /// Enshrouded's material swap does, rather than coming out and going in again.
   other(n = 0): string {
     const own = this.kits.find((kit) => kit.name === this.wall(n))!;
-    const all = this.kits.filter((kit) => kit.roof);
+    const all = this.kits.filter((kit) => kit.roof && (kit.baseline || !own.baseline));
     const like = all.filter((kit) => kit.pattern === own.pattern);
     const pool = like.length > 1 ? like : all;
     const at = pool.findIndex((kit) => kit.name === own.name);
@@ -70,15 +70,31 @@ export function readKits(folder = KITS): Kit[] {
     const number = (field: string) => Number(new RegExp(`\\b${field}:\\s*(?:Some\\()?(\\d+)`).exec(text)?.[1]);
     return { name: basename(file, ".ron"), id: number("id"), pattern: /\bpattern:\s*"(\w+)"/.exec(text)?.[1] ?? "", roofId: number("roof_kind") };
   });
-  return raw.map(({ roofId, ...kit }) => ({ ...kit, roof: Number.isNaN(roofId) ? undefined : raw.find((each) => each.id === roofId)?.name }));
+  const baseline = readBaseline();
+  return raw.map(({ roofId, ...kit }) => ({
+    ...kit,
+    roof: Number.isNaN(roofId) ? undefined : raw.find((each) => each.id === roofId)?.name,
+    baseline: baseline.has(kit.name),
+  }));
+}
+
+/// The building baseline's wall materials (D333): those the settlement is built of, in
+/// assets/data/settlement.ron. The rest are frozen, filmed only when asked for by name.
+function readBaseline(): Set<string> {
+  const text = readFileSync(resolve(KITS, "../settlement.ron"), "utf8").replace(/\/\/.*$/gm, "");
+  return new Set([...text.matchAll(/"(\w+)"/g)].map((match) => match[1]));
 }
 
 /// The sets a film can be made in: each wall kit (one with a roof of its own), and `mixes`,
-/// every wall kit meeting the others.
+/// the baseline's wall kits meeting one another. `all` is the baseline's sets and `mixes`.
 export function readSets(kits = readKits()): KitSet[] {
   const walls = kits.filter((kit) => kit.roof);
-  return [...walls.map((kit) => new KitSet(kit.name, [kit], kits)), new KitSet("mixes", walls, kits)];
+  const base = walls.filter((kit) => kit.baseline);
+  return [...walls.map((kit) => new KitSet(kit.name, [kit], kits)), new KitSet("mixes", base, kits)];
 }
+
+/// Whether a set is filmed by `--set all`: the baseline's (D333).
+export const inBaseline = (set: KitSet) => set.walls.every((kit) => kit.baseline);
 
 /// A camera move, from wherever the camera is when it starts, eased over its frames.
 type Move = { start: number; frames: number } & ({ glide: [Vec3, Vec3] } | { orbit: Orbit });

@@ -2,10 +2,15 @@
 // roles, construction materials by their files' names in data/kits, each building picking
 // one of a role's by its seed; the roof over each of the first three is that material's own
 // (`roof_kind`). Another people's village names others.
+//
+// The building baseline (D333) is wood and stone, and these are its materials: the fault
+// ratchet (`cargo xtask artifacts`) and the QA films' sets (`cargo xtask qa`) are of what
+// is named here. Earth, limewash, wattle and thatch are frozen, buildable by hand but in no
+// role, so the cob and framed houses are built in stone and hewn timber.
 (
     timber: ["logs"],
     masonry: ["stone"],
     beams: ["hewn"],
-    cob: ["earth"],
-    framed: ["wattle"],
+    cob: ["stone"],
+    framed: ["hewn"],
 )

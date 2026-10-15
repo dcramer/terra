@@ -35,7 +35,7 @@ import { basename, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as game from "./client.ts";
 import { buildOffscreen, imageMagick, offscreenPath, offscreenRun, ROOT } from "./client.ts";
-import { type Call, type Known, type KitSet, readSets, type Scenario, Script, type Stage } from "./qa/script.ts";
+import { type Call, type Known, type KitSet, inBaseline, readSets, type Scenario, Script, type Stage } from "./qa/script.ts";
 
 const SCENARIOS = resolve(import.meta.dirname, "qa");
 const OUT = resolve(ROOT, "shots/qa");
@@ -62,7 +62,7 @@ if (args.includes("--list")) {
     scenario.script(s, sets[0]);
     console.log(`${name}: ${scenario.about}\n  stages: ${s.stages.map((stage) => stage.name).join(", ")}`);
   }
-  console.log(`sets: ${sets.map((set) => set.name).join(", ")}, all`);
+  console.log(`sets: ${sets.map((set) => set.name).join(", ")}; all: ${sets.filter(inBaseline).map((set) => set.name).join(", ")} (the baseline, D333)`);
   process.exit(0);
 }
 if (args.includes("--index")) {
@@ -76,7 +76,7 @@ if (!name || !scenarios.includes(name)) {
   process.exit(1);
 }
 const wanted = option("--set") ?? (sets.find((set) => set.name === "logs") ?? sets[0]).name;
-const chosen = wanted === "all" ? sets : sets.filter((set) => set.name === wanted);
+const chosen = wanted === "all" ? sets.filter(inBaseline) : sets.filter((set) => set.name === wanted);
 if (!chosen.length) {
   console.error(`no set ${wanted}; the sets are ${sets.map((set) => set.name).join(", ")} and all`);
   process.exit(1);
@@ -357,7 +357,9 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
 function index() {
   mkdirSync(OUT, { recursive: true });
   const names = readdirSync(OUT).filter((each) => statSync(resolve(OUT, each)).isDirectory()).sort();
-  const columns = sets.map((set) => set.name);
+  // The baseline's sets, and any frozen one filmed by name.
+  const filmed = (set: string) => names.some((scenario) => existsSync(resolve(OUT, scenario, `${set}.json`)));
+  const columns = sets.filter((set) => inBaseline(set) || filmed(set.name)).map((set) => set.name);
   const cell = (scenario: string, set: string) => {
     const json = resolve(OUT, scenario, `${set}.json`);
     if (!existsSync(json)) return "<td class=none>not filmed</td>";
