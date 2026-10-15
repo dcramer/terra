@@ -214,6 +214,9 @@ pub enum Piece {
         /// that meets a crease or another edge (a verge's top at the ridge) is not capped,
         /// which stood a knob of its cap out over the roof there.
         capped: [bool; 2],
+        /// Whether each end of a crease meets another crease there, as a hip's top meets
+        /// the ridge or the other hips, rather than stopping in the open or at a joint.
+        met: [bool; 2],
     },
 }
 

@@ -2,43 +2,40 @@
 # bases: the ratchet's baseline. `cargo xtask artifacts --record` (every base) and
 # `--quick --record` (the rectangles `cargo xtask check` inspects) write it.
 # set	kits	fault	count
-all	earth	Coplanar	12
+all	earth	Coplanar	9
 all	earth	PokesOut	14
-all	earth with hewn	Coplanar	11
+all	earth with hewn	Coplanar	8
 all	earth with hewn	Inward	3
 all	earth with hewn	PokesOut	5
-all	earth with limewash	Coplanar	20
+all	earth with limewash	Coplanar	17
 all	earth with limewash	Inward	3
 all	earth with limewash	PokesOut	5
-all	earth with logs	Coplanar	7
+all	earth with logs	Coplanar	6
 all	earth with logs	Inward	3
 all	earth with logs	PokesOut	5
 all	earth with stone	Coplanar	6
 all	earth with stone	Inward	3
 all	earth with stone	PokesOut	10
-all	earth with wattle	Coplanar	23
+all	earth with wattle	Coplanar	20
 all	earth with wattle	Inward	3
 all	earth with wattle	PokesOut	5
-all	hewn	Coplanar	5
+all	hewn	Coplanar	2
 all	hewn	PokesOut	2
-all	hewn with limewash	Coplanar	5
+all	hewn with limewash	Coplanar	2
 all	hewn with limewash	PokesOut	2
-all	hewn with logs	Coplanar	1
 all	hewn with logs	PokesOut	2
 all	hewn with stone	PokesOut	2
-all	hewn with wattle	Coplanar	17
+all	hewn with wattle	Coplanar	14
 all	hewn with wattle	PokesOut	2
-all	limewash	Coplanar	5
+all	limewash	Coplanar	2
 all	limewash	PokesOut	2
-all	limewash with logs	Coplanar	1
 all	limewash with logs	PokesOut	2
 all	limewash with stone	PokesOut	2
-all	limewash with wattle	Coplanar	17
+all	limewash with wattle	Coplanar	14
 all	limewash with wattle	PokesOut	2
-all	logs	Coplanar	1
-all	logs with wattle	Coplanar	18
-all	stone with wattle	Coplanar	17
-all	wattle	Coplanar	18
+all	logs with wattle	Coplanar	15
+all	stone with wattle	Coplanar	14
+all	wattle	Coplanar	15
 all	wattle	PokesOut	2
 quick	earth	Coplanar	1
 quick	earth	PokesOut	1

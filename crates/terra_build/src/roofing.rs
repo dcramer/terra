@@ -74,6 +74,7 @@ pub fn draw_as(
             sides,
             seed,
             capped,
+            met,
             ..
         } => {
             let Some(spec) = kit.roof.parts.get(&part) else {
@@ -108,7 +109,28 @@ pub fn draw_as(
                 // Its anchor seated where its part sits (D290): on the covering for what
                 // lies on it, so one piece fits any covering's thickness.
                 lift: seated(kit, part),
-                mitre: capped.map(|capped| (crease && !capped).then_some(out)),
+                mitre: [0, 1].map(|end| {
+                    if crease && !capped[end] {
+                        return Some(out);
+                    }
+                    // A hip's top, where it meets the ridge or the other hips: each half
+                    // cut plumb along its own plane's fall through the top, so the hips
+                    // either side of a hip end, and a hip and the ridge, each keep to their
+                    // own side of it rather than running on into one another there.
+                    let (at, other) = if end == 0 { (from, to) } else { (to, from) };
+                    if part != RoofPart::Hip || !met[end] || at.y <= other.y {
+                        return None;
+                    }
+                    let up = (at - other).with_y(0.0).normalize_or_zero();
+                    Some(out.map(|fall| {
+                        let across = Vec3::new(-fall.z, 0.0, fall.x);
+                        if across.dot(up) < 0.0 {
+                            -across
+                        } else {
+                            across
+                        }
+                    }))
+                }),
             };
             // An eave's butts and a verge's boards are as long as modelled far off too: they
             // are the roof's edge, against the wall below and the sky, which the caps along
@@ -766,6 +788,57 @@ mod tests {
                 }
             }
             assert!(corners > 0, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_hips_capping_keeps_to_its_own_side_of_its_top() {
+        // Under a hip, two hips meet each end of the ridge: each one's capping, run on past
+        // that top square to it, lay in the planes of the other's and the ridge's over the
+        // hip end; it stops at the plumb lines through the top along each plane's fall.
+        for name in ["shakes.ron", "slate.ron", "thatch.ron"] {
+            let kit = shipped(name);
+            let mut pieces = Vec::new();
+            roofs::lay(
+                &cabin(Style::Hip),
+                &kit,
+                &crate::kit::Kits(vec![kit.clone()]),
+                crate::layout::Scope::ALL,
+                &mut pieces,
+            );
+            let mut looked = 0;
+            for piece in &pieces {
+                let Piece::Roof {
+                    part: RoofPart::Hip,
+                    from,
+                    to,
+                    ..
+                } = piece
+                else {
+                    continue;
+                };
+                let (from, to) = (from.metres(), to.metres());
+                let (top, foot) = if from.y > to.y {
+                    (from, to)
+                } else {
+                    (to, from)
+                };
+                let up = top - foot;
+                let mut surfaces = Surfaces::default();
+                draw(piece, &kit, None, &mut surfaces);
+                for surface in surfaces.0.values() {
+                    for p in surface.positions.iter().chain(&surface.shared.positions) {
+                        for axis in [0, 2] {
+                            assert!(
+                                (p[axis] - top[axis]) * up[axis].signum() < 1e-3,
+                                "{name}: the hip up to {top} reaches {p}"
+                            );
+                        }
+                        looked += 1;
+                    }
+                }
+            }
+            assert!(looked > 0, "{name}");
         }
     }
 

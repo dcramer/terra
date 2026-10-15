@@ -782,6 +782,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                     seed: hash(&[seed, 1]),
                     cell: roofs.cell(segment.square, 1),
                     capped: [true; 2],
+                    met: [false; 2],
                 });
             }
         }
@@ -793,6 +794,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             seed,
             cell,
             capped: [segment.from, segment.to].map(|end| !edge_met(segment, end, &joined)),
+            met: [segment.from, segment.to].map(|end| crease_met(segment, end, &joined)),
         });
     }
     rafters(&roofs, &ours, batten + rafter, rafter, pieces);
@@ -871,6 +873,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 seed: 0,
                 cell: roofs.cell(segment.square, 2),
                 capped: [true; 2],
+                met: [false; 2],
             });
         }
     }
@@ -892,6 +895,11 @@ fn crease_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
             return false;
         }
         let (a, b) = (other.from.metres(), other.to.metres());
+        // Not the next piece of its own line, jointed to it.
+        let along = (segment.to.metres() - segment.from.metres()).normalize_or_zero();
+        if along.dot((b - a).normalize_or_zero()).abs() > 0.99 {
+            return false;
+        }
         let t = ((p - a).dot(b - a) / (b - a).length_squared().max(1e-9)).clamp(0.0, 1.0);
         (a + (b - a) * t).distance(p) < 0.01
     })
@@ -1308,6 +1316,7 @@ fn rafters(
             seed,
             cell: roofs.cell(segment.square, 1),
             capped: [true; 2],
+            met: [false; 2],
         });
     }
 }
