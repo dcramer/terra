@@ -829,3 +829,68 @@ fn a_breach_knocked_under_a_standing_wall_is_built_again() {
     assert_eq!(back.gave, done.took);
     assert_eq!(base, before, "undone, as it was");
 }
+
+#[test]
+fn nothing_but_a_roof_is_built_on_a_roof() {
+    // D343, the developers: "we might wanna just not allow you to build non-roof voxels on
+    // the roof voxels". A post of stone with a roof's cube on it, built.
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let post = column(0, 0, 0, 1);
+    plan(&mut base, &cx, STONE, &post, Shape::Whole);
+    build(&mut base, &cx, &post);
+    plan(&mut base, &cx, ROOF, &[[0, 2, 0]], Shape::Whole);
+    build(&mut base, &cx, &[[0, 2, 0]]);
+    let on = IVec3::new(0, 3, 0);
+    let lay = |kind: Kind, at: [i32; 3]| Op::LayPlan {
+        part: Some(PartId(90)),
+        kind,
+        cubes: vec![Planned {
+            at,
+            shape: Shape::Whole,
+        }],
+        ground: Vec::new(),
+    };
+    // A block on the roof is refused, in the words the player is shown.
+    let refused = base.check(&lay(STONE, on.to_array()), &cx);
+    assert_eq!(refused, Err(Refusal::OnRoof(on)));
+    assert_eq!(
+        Refusal::OnRoof(on).message(),
+        "Take the roof off to build above it."
+    );
+    // A roof's cube on it is allowed, as a dormer's or a valley's are.
+    assert!(base.check(&lay(ROOF, on.to_array()), &cx).is_ok());
+    // The roof's own cube changed to stone, a wall in its place, is refused.
+    let change = Op::Replace {
+        cubes: vec![[0, 2, 0]],
+        kind: STONE,
+        part: Some(PartId(91)),
+    };
+    assert_eq!(
+        base.check(&change, &cx),
+        Err(Refusal::OnRoof(IVec3::new(0, 2, 0)))
+    );
+    // A roof's cube put in under a wall's, the same stack from below, is refused too: a
+    // stone arm out from a post, and a roof's cube under its end.
+    let arm = [[5, 0, 0], [5, 1, 0], [5, 2, 0], [6, 2, 0]];
+    plan(&mut base, &cx, STONE, &arm, Shape::Whole);
+    build(&mut base, &cx, &arm);
+    let under = IVec3::new(6, 1, 0);
+    assert_eq!(
+        base.check(&lay(ROOF, under.to_array()), &cx),
+        Err(Refusal::OnRoof(under))
+    );
+    // With the roof taken off, the storey goes on.
+    while base.cube(IVec3::new(0, 2, 0)).unwrap().level() > 0 {
+        base.act(&empty([0, 2, 0]), &cx).unwrap();
+    }
+    base.act(
+        &Op::Unplan {
+            cubes: vec![[0, 2, 0]],
+        },
+        &cx,
+    )
+    .unwrap();
+    assert!(base.check(&lay(STONE, [0, 2, 0]), &cx).is_ok());
+}

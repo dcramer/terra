@@ -707,29 +707,23 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
     hand.layer(x, z, -1, kinds.masonry);
     hand.walls(x, z, [0, 5], kinds.timber, 4);
     hand.gable(x, z, 6, kinds.timber_roof, kinds.timber);
-    // The dormer, four cubes across the front slope: the slopes it stands in taken out,
-    // a face of logs with a window two cubes wide on the slope below, its cheeks back to
-    // the ridge's foot.
+    // The dormer, four cubes across, a wall dormer: its face of logs carried up from the
+    // front wall through the eaves, a window two cubes wide in it, and its own little gable
+    // of shakes running back into the main roof's slope, a roof on a roof (D343): nothing
+    // but a roof stands on a roof's cubes.
     let dormer = [-2, 1];
     for cx in dormer[0]..=dormer[1] {
-        hand.take([cx, 8, -3]);
-        hand.take([cx, 9, -4]);
-    }
-    for cx in dormer[0]..=dormer[1] {
-        if cx == dormer[0] || cx == dormer[1] {
-            hand.put([cx, 8, -2], kinds.timber, Shape::Whole);
-        } else {
-            hand.open([cx, 8, -2], kinds.timber);
+        hand.take([cx, 6, -1]);
+        for layer in 6..=8 {
+            if layer == 7 && cx != dormer[0] && cx != dormer[1] {
+                hand.open([cx, layer, -1], kinds.timber);
+            } else {
+                hand.put([cx, layer, -1], kinds.timber, Shape::Whole);
+            }
         }
     }
-    for cz in [-3, -4] {
-        for cx in dormer {
-            hand.put([cx, 8, cz], kinds.timber, Shape::Whole);
-        }
-    }
-    // Its own little gable of shakes, ridge running back into the main roof, its front a
-    // gable of logs over the window.
-    for cz in -4..=-2 {
+    // Its gable, its front of logs over the window, ridge running back into the main roof.
+    for cz in -3..=-1 {
         hand.put(
             [dormer[0], 9, cz],
             kinds.timber_roof,
@@ -741,7 +735,7 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
             Shape::Slope(Facing::West),
         );
         for cx in dormer[0] + 1..dormer[1] {
-            let kind = if cz == -2 {
+            let kind = if cz == -1 {
                 kinds.timber
             } else {
                 kinds.timber_roof
@@ -762,34 +756,17 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
     hand.0
 }
 
-/// A stone house built by hand with a storey built over its roof (D226): a stone ground
-/// floor under a low roof of slate, its edge sloped and its top flat, and on that roof a
-/// storey of hewn timber under a gable of its roof, laid a cube at a time.
+/// A stone house built by hand with a storey of timber over it (D226): a stone ground floor
+/// floored over in stone, and on that floor a storey of hewn timber, set back from the
+/// stone's edge, under a gable of its roof, laid a cube at a time. A storey goes on a floor,
+/// never on a roof (D343): the roof is put on over the top storey.
 fn storey_over_roof(kinds: Kinds) -> Vec<BuildOp> {
     let mut hand = ByHand(Vec::new());
     let (x, z) = ([-6, 5], [-8, -1]);
     hand.layer(x, z, -1, kinds.masonry);
     hand.walls(x, z, [0, 5], kinds.masonry, 4);
-    // The roof: slopes round its edge rising inward, corners where two meet, flat inside.
-    for cx in x[0]..=x[1] {
-        for cz in z[0]..=z[1] {
-            let (west, east) = (cx == x[0], cx == x[1]);
-            let (north, south) = (cz == z[0], cz == z[1]);
-            let shape = match (west, east, north, south) {
-                (true, _, true, _) => Shape::OuterCorner(Facing::East),
-                (_, true, true, _) => Shape::OuterCorner(Facing::South),
-                (_, true, _, true) => Shape::OuterCorner(Facing::West),
-                (true, _, _, true) => Shape::OuterCorner(Facing::North),
-                (true, ..) => Shape::Slope(Facing::East),
-                (_, true, ..) => Shape::Slope(Facing::West),
-                (_, _, true, _) => Shape::Slope(Facing::South),
-                (_, _, _, true) => Shape::Slope(Facing::North),
-                _ => Shape::Whole,
-            };
-            hand.put([cx, 6, cz], kinds.masonry_roof, shape);
-        }
-    }
-    // The storey over it, on the roof's flat top, a window in its front.
+    hand.layer(x, z, 6, kinds.masonry);
+    // The storey over it, on its floor, a window in its front.
     let (ux, uz) = ([-5, 4], [-7, -2]);
     hand.walls(ux, uz, [7, 11], kinds.beams, 0);
     for cx in [-1, 0] {
@@ -1031,7 +1008,7 @@ pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
         ops: deck(kinds),
     });
     // At the street's ends, two built by hand a cube at a time (D226): a log cabin with a
-    // dormer, and a stone house with a storey of timber built over its roof.
+    // dormer, and a stone house with a storey of timber over it.
     buildings.push(Building {
         name: "log cabin with a dormer, built by hand".to_string(),
         plan: Plan::Rectangle,
@@ -1041,7 +1018,7 @@ pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
         ops: dormer_house(kinds),
     });
     buildings.push(Building {
-        name: "masonry house with a storey over its roof, built by hand".to_string(),
+        name: "masonry house with a timber storey, built by hand".to_string(),
         plan: Plan::Rectangle,
         scheme: Scheme::MasonryUnderBeams,
         at: [54.0, -5.5],

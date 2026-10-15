@@ -45,6 +45,7 @@ Also run for this audit: `cargo xtask check`, `cabin` (every step ok), `kits` (e
 | A damaged cube is mended before more goes in or anything comes out (D305) | Pass | `a_damaged_cube_is_mended_before_anything_more_goes_in_or_comes_out`; live `repair` (worn, refused a take-out, mended) |
 | A breach is built again under the wall over it (D199) | Pass since 2026-10-15 | `a_breach_knocked_under_a_standing_wall_is_built_again`: a cube under one already in goes in whole in one act; it was refused, "Something is built over it", and the build film's cabin kept a hole (goals review 2026-10-15b, finding 3) |
 | Plans hanging from what comes down go with it (D193, D305) | Pass since 2026-10-15 | `plans_hanging_from_what_falls_go_with_it_and_no_others`; they were left as blueprints in the air (goals review 2026-10-15b, finding 5) |
+| Nothing but a roof is built on a roof (D343) | Pass since 2026-10-15 | `nothing_but_a_roof_is_built_on_a_roof`: a block on a roof and a roof under a wall refused, a roof on a roof allowed, a roof's cube not changed to stone; every village building, the town and the castle put up by the operations under it (the dormer a wall dormer, the timber storey on a stone floor) |
 
 ## Physics and collision
 

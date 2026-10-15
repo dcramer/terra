@@ -36,6 +36,7 @@ In their words, shortened.
 - **No stability in the MVP, but wanted later** (D142).
 - **Rooms can be underground** (D143): "yes you can have underground rooms".
 - **Placing is by hand, Enshrouded's way** (D226, amending D154): brushes, carving, shapes and roofs built cube by cube, any shape and any number of storeys; the game makes the details from neighbours, and The Sims' drawing of rooms, walls and "a roof of this material" stays as a convenience.
+- **Nothing but a roof on a roof** (D343): a wall, floor or block is never built on a roof's cubes, nor a roof put in under them; the hammer says "Take the roof off to build above it." Roofs on roofs are fine: dormers, valleys, roofs that merge. To add a storey, take the roof off (it comes apart and gives back what went in), build the storey, and add a roof again.
 
 ## The baseline
 

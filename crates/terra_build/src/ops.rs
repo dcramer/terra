@@ -230,6 +230,8 @@ pub enum Refusal {
     NotDamaged(IVec3),
     /// It is damaged: mended before it is taken apart (`loss`).
     Damaged(IVec3),
+    /// It would stand on a roof, or be built in a roof's place, as only a roof may (D343).
+    OnRoof(IVec3),
 }
 
 impl Refusal {
@@ -274,6 +276,7 @@ impl Refusal {
             Refusal::Undermines(_) => "That would dig out from under what is built.".into(),
             Refusal::NotDamaged(_) => "It isn't damaged.".into(),
             Refusal::Damaged(_) => "It's damaged: repair it first.".into(),
+            Refusal::OnRoof(_) => "Take the roof off to build above it.".into(),
         }
     }
 }
@@ -554,6 +557,9 @@ impl Base {
             if let Some(prop) = self.prop_in(at) {
                 return Err(Refusal::PropThere(IVec3::from_array(prop.min)));
             }
+            if self.on_roof(at, kind) {
+                return Err(Refusal::OnRoof(at));
+            }
         }
         if let Some(claim) = cx.claim
             && self.cubes.planned() + named.len() > claim.budget
@@ -674,6 +680,10 @@ impl Base {
             // A damaged cube is mended before more goes in, as before anything comes out.
             if self.damage.contains_key(&at.to_array()) {
                 return Err(Refusal::Damaged(at));
+            }
+            // A plan laid before roofs were kept clear goes in no more than a new one is laid.
+            if self.on_roof(at, cube.kind) {
+                return Err(Refusal::OnRoof(at));
             }
             let terms = self.terms(&cube);
             // Under something already in, as a breach in a wall rebuilt under the wall that
@@ -912,6 +922,11 @@ impl Base {
             }
             if (cube.kind, cube.part) == (kind, part) {
                 return Err(Refusal::Unchanged);
+            }
+            // A roof's cube is a roof's: changed to a wall's or a floor's material it would be
+            // a wall in a roof's place (D343).
+            if !kind.is_roof() && (cube.kind.is_roof() || self.on_roof(at, kind)) {
+                return Err(Refusal::OnRoof(at));
             }
             let marked = Cube {
                 pending: Pending::Replace,
@@ -1219,6 +1234,22 @@ impl Base {
         }
         change.done.undo = vec![Op::Ground { samples: was }];
         Ok(change)
+    }
+}
+
+impl Base {
+    /// Whether a cube of a kind at a place would put something other than a roof on a
+    /// roof's cube (D343, the developers on 2026-10-15): one not a roof's on a roof's, or a
+    /// roof's under one that is not. Only a roof's cubes go on a roof's, as a dormer's or a
+    /// valley's do; a storey goes up with the roof taken off and put on again over it.
+    pub fn on_roof(&self, at: IVec3, kind: Kind) -> bool {
+        if kind.is_roof() {
+            self.cube(at + IVec3::Y)
+                .is_some_and(|over| !over.kind.is_roof())
+        } else {
+            self.cube(at - IVec3::Y)
+                .is_some_and(|under| under.kind.is_roof())
+        }
     }
 }
 
