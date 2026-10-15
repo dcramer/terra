@@ -38,6 +38,9 @@ const LAKES_ACROSS_M: f32 = 10_000.0;
 /// far across: a polygon's sunken middle is a few metres wide.
 const POOL_CELL_M: f32 = 2.0;
 const POOLS_ACROSS_M: f32 = 1_600.0;
+/// A pool stands as water once it is this deep and this big; shallower hollows are wet ground.
+const POOL_DEEPEST_M: f32 = 0.35;
+const POOL_AREA_M2: f32 = 8.0;
 
 impl Round {
     /// The land round a direction, `across_m` wide, its snow as it lies on `day`.
@@ -67,7 +70,13 @@ impl Round {
                 let over_sea = land.surface(middle).length() - land.sea_radius_m();
                 p.strength(middle, over_sea) > 0.2
             })
-            .then(|| Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M));
+            .then(|| {
+                // Only the thawed pools: the polygons' low middles a hand deep are wet hollows,
+                // their water in the moss, not standing.
+                Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M).keeping(
+                    |pool| pool.deepest_m >= POOL_DEEPEST_M && pool.area_m2 >= POOL_AREA_M2,
+                )
+            });
         let microsites = woods::Microsites::new(land.ground.spec().seed);
         let heath = heath_over(
             &land,

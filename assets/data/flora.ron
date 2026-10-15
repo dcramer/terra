@@ -151,6 +151,17 @@
             size: (0.7, 1.5),
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.7, 0.0)),
         ),
+        // Dwarf birch and bilberry on the heath past the trees, knee-high and lower, turning
+        // crimson and rust in early autumn as the dwarf birch's year says (plant_years.ron).
+        (
+            name: "Dwarf shrub",
+            grown: Bush((leaves: "berry", tint: (0.85, 0.82, 0.72), clumps: (5, 8), spread: 1.7)),
+            variants: 4,
+            sway: Bush,
+            grows: Heath,
+            size: (0.18, 0.45),
+            cut: (what: Plant, gives: ("Fibre", 0.5, 0.0), seconds: (0.5, 0.0)),
+        ),
         (
             name: "Fern",
             grown: Rosette((card: "fern", leaves: (7, 11), tilt: (25.0, 55.0), stalk: (0.03, 0.97), tip: (0.97, 0.03))),

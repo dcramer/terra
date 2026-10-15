@@ -19,12 +19,19 @@ use bevy::{
     shader::ShaderRef,
 };
 
-/// What smoke is: a hearth's, thin and blue-grey, or a forge's, thicker and darker.
+/// What smoke is: a hearth's, thin and blue-grey, or a forge's, thicker and darker; or, with
+/// nothing burning, snow the wind lifts off a patch and carries low along the ground (D325),
+/// only once it blows hard enough.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Burning {
     Hearth,
     Forge,
+    Snow,
 }
+
+/// Snow lifts off a patch from this wind, in metres a second, and drifts thickest from that:
+/// loose snow starts moving at about 5 m/s at a person's height, and blows in sheets by 10.
+const SNOW_LIFTS_M_S: (f32, f32) = (4.5, 9.0);
 
 /// Smoke rising from here: what is burning, and how thick it is now, 0 for none to 1. The
 /// layer that owns the fire sets the thickness; the smoke follows it over a few seconds.
@@ -107,6 +114,11 @@ fn look(burning: Burning) -> (Vec4, Vec4) {
         Burning::Forge => (
             Vec4::new(10.0, 1.4, 0.8, 4.0),
             Vec4::new(0.2, 0.2, 0.2, 0.32),
+        ),
+        // Blown snow: short-lived veils hugging the ground, barely rising, white and thin.
+        Burning::Snow => (
+            Vec4::new(2.6, 0.18, 0.5, 2.4),
+            Vec4::new(0.8, 0.82, 0.87, 0.24),
         ),
     }
 }
@@ -220,7 +232,14 @@ fn blow(
     let step = time.delta_secs();
     let follow = 1.0 - libm::expf(-step * FOLLOW * 4.0);
     for (smoke, mut drawn, at) in &mut emitters {
-        drawn.shown += (smoke.thickness.clamp(0.0, 1.0) - drawn.shown) * follow;
+        // Snow lifts only in a wind hard enough to carry it.
+        let lifted = if smoke.burning == Burning::Snow {
+            let speed = drawn.wind.length();
+            ((speed - SNOW_LIFTS_M_S.0) / (SNOW_LIFTS_M_S.1 - SNOW_LIFTS_M_S.0)).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        drawn.shown += (smoke.thickness.clamp(0.0, 1.0) * lifted - drawn.shown) * follow;
         // The wind looked up again only now and then: it changes over minutes.
         drawn.due -= step;
         if drawn.due <= 0.0 {
@@ -235,13 +254,22 @@ fn blow(
                 }
                 None => (1.5, 0.8),
             };
-            let north = Vec3::Y
-                .reject_from(up)
-                .normalize_or(up.any_orthonormal_vector());
+            // North as the world's frame has it, where there is one.
+            let north = climate.as_ref().map_or_else(
+                || {
+                    Vec3::Y
+                        .reject_from(up)
+                        .normalize_or(up.any_orthonormal_vector())
+                },
+                |climate| climate.frame.north(here),
+            );
             let east = north.cross(up);
             let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
-            // Smoke drifts slower than the wind at the eaves blows.
-            drawn.wind = blowing_to * speed.min(8.0) * 0.6;
+            // Smoke drifts slower than the wind at the eaves blows; snow goes with it.
+            drawn.wind = match smoke.burning {
+                Burning::Snow => blowing_to * speed.min(16.0),
+                _ => blowing_to * speed.min(8.0) * 0.6,
+            };
         }
         // The material touched only when what it is told has moved, so it is not sent to
         // the GPU again every frame.

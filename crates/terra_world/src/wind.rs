@@ -28,7 +28,61 @@ const WILDEST: f32 = 2.2;
 const EVERY_DAYS: f64 = 0.002;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, follow.after(crate::daylight::Ticking));
+    app.add_systems(Update, follow.after(crate::daylight::Ticking))
+        .add_systems(PostStartup, blown_snow);
+}
+
+/// Blown snow is looked for this far round the start, on a grid this fine, and at most so many
+/// patches lift it.
+const DRIFT_REACH_M: f32 = 160.0;
+const DRIFT_STEP_M: f32 = 9.0;
+const DRIFTS: usize = 64;
+
+/// Where snow lies round the start, on the land's rules (`Round::snow_m`), the wind lifts it
+/// (D325): an emitter of blown snow on each patch, as thick as the snow is deep, the smoke's
+/// cards carrying it low downwind once the wind is hard enough (`smoke::Burning::Snow`).
+fn blown_snow(
+    mut commands: Commands,
+    planet: Res<crate::planet::Planet>,
+    start: Res<crate::start::Start>,
+) {
+    let Some(round) = planet.round() else {
+        return;
+    };
+    let steps = (DRIFT_REACH_M / DRIFT_STEP_M) as i32;
+    let mut patches: Vec<(f32, Vec3)> = Vec::new();
+    for i in -steps..=steps {
+        for j in -steps..=steps {
+            // Off the grid a little, by the cell, so patches do not line up.
+            let wobble = |k: i32| {
+                (k.wrapping_mul(7919).rem_euclid(97) as f32 / 97.0 - 0.5) * DRIFT_STEP_M * 0.8
+            };
+            let (x, z) = (
+                i as f32 * DRIFT_STEP_M + wobble(i * 31 + j),
+                j as f32 * DRIFT_STEP_M + wobble(j * 17 - i),
+            );
+            if x * x + z * z > DRIFT_REACH_M * DRIFT_REACH_M {
+                continue;
+            }
+            let point = planet.ground_at(start.at(x, z));
+            let snow = round.snow_m(point, planet.normal(point));
+            if snow > 0.04 {
+                patches.push((snow, point));
+            }
+        }
+    }
+    patches.sort_by(|a, b| b.0.total_cmp(&a.0));
+    for (snow, point) in patches.into_iter().take(DRIFTS) {
+        commands.spawn((
+            Name::new("Blown snow"),
+            crate::smoke::Smoke {
+                burning: crate::smoke::Burning::Snow,
+                thickness: (snow / 0.15).clamp(0.3, 1.0),
+            },
+            Transform::from_translation(point + point.normalize() * 0.1),
+            Visibility::default(),
+        ));
+    }
 }
 
 /// Takes the wind where the camera is, from the climate, every few seconds of the clock; the

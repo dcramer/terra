@@ -281,16 +281,9 @@ fn pools_mesh(waters: &Waters) -> Mesh {
                 .map(|l| waters.lake_radius_m(l))
                 .or_else(|| {
                     let mut best: Option<f32> = None;
-                    for (dc, dr) in [
-                        (-1i64, -1i64),
-                        (0, -1),
-                        (1, -1),
-                        (-1, 0),
-                        (1, 0),
-                        (-1, 1),
-                        (0, 1),
-                        (1, 1),
-                    ] {
+                    // Two cells' margin round a pool, so its edge is where its water meets the
+                    // ground, never a cell's straight edge over ground lower than its level.
+                    for (dc, dr) in (-2i64..=2).flat_map(|dc| (-2i64..=2).map(move |dr| (dc, dr))) {
                         let (cc, rr) = (c as i64 + dc, r as i64 + dr);
                         if cc < 0 || rr < 0 || cc >= n as i64 || rr >= n as i64 {
                             continue;

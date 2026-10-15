@@ -841,6 +841,33 @@ fn plant(
         );
     });
 
+    // The heath's dwarf shrubs past the trees, where its dwarf-shrub community holds the ground
+    // (`terra_land::heath`), in clumps, a few among the lichen and sedge.
+    if let Some(round) = planet.round() {
+        scatter(seed.derive("heath shrubs"), 110.0, 1.7, |rng, x, z| {
+            let point = ground.ground(&planet, x, z);
+            let heath = round.heath.at(point);
+            let clumped = smoothstep(-0.1, 0.25, blooms.fbm(point / 9.0 + 41.0, 2, 2.0, 0.5));
+            let chance = (1.3 * heath.shrub + 0.08 * heath.lichen) * (0.4 + 0.6 * clumped);
+            if rng.unit() > chance || point.length() < planet.water_near_m(point) + 0.1 {
+                return;
+            }
+            let Some(kind) = flora.choose(Grows::Heath, 0.0, 0.0, 0.0, rng) else {
+                return;
+            };
+            let model = pick(rng, &models[kind]);
+            let tall = size(rng, kind);
+            let scale = tall / model.height;
+            put(
+                &model,
+                standing(rng, point, 0.2, scale, 0.02),
+                0.5,
+                flora.kinds()[kind].cuttable(tall),
+                None,
+            );
+        });
+    }
+
     // What lies by the door, such as a stump and a log, as if the clearing had been cut.
     let by_the_door = flora
         .kinds()

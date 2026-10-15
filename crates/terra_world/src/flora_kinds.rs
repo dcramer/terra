@@ -103,6 +103,9 @@ pub enum Grows {
     Bushes,
     Plants,
     Flowers,
+    /// The heath's dwarf shrubs past the trees, where its dwarf-shrub community grows
+    /// (`terra_land::heath`).
+    Heath,
     /// One placed by the base's door, so many metres east and south, so tall.
     ByTheDoor(f32, f32, f32),
 }

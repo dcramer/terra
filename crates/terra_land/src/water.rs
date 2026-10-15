@@ -114,6 +114,17 @@ impl Waters {
         best.map(|(_, (c, r))| self.region.direction(c, r))
     }
 
+    /// The same waters with only the lakes `keep` says, the rest dry ground.
+    pub fn keeping(mut self, keep: impl Fn(&Lake) -> bool) -> Self {
+        let kept: Vec<bool> = self.lakes.lakes.iter().map(&keep).collect();
+        for cell in self.lakes.lake.iter_mut() {
+            if cell.is_some_and(|l| !kept[l as usize]) {
+                *cell = None;
+            }
+        }
+        self
+    }
+
     /// The surface of the lake over a direction, if one is.
     pub fn lake_level(&self, direction: Vec3) -> Option<f32> {
         let (c, r) = self.region.cell_of(direction)?;

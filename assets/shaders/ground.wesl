@@ -439,10 +439,10 @@ fn kind_turned(world: vec3<f32>, layer: i32) -> f32 {
 // crowberry green in summer; sedge green, and straw once turned; Sphagnum's yellow green;
 // the fellfield's grey stones.
 const LICHEN: vec3<f32> = vec3<f32>(0.4, 0.39, 0.27);
-const SHRUB_GREEN: vec3<f32> = vec3<f32>(0.045, 0.06, 0.022);
+const SHRUB_GREEN: vec3<f32> = vec3<f32>(0.05, 0.055, 0.02);
 const SEDGE_GREEN: vec3<f32> = vec3<f32>(0.1, 0.11, 0.045);
 const SEDGE_STRAW: vec3<f32> = vec3<f32>(0.4, 0.31, 0.12);
-const SPHAGNUM: vec3<f32> = vec3<f32>(0.16, 0.15, 0.04);
+const SPHAGNUM: vec3<f32> = vec3<f32>(0.2, 0.16, 0.035);
 const FELL_STONE: vec3<f32> = vec3<f32>(0.17, 0.165, 0.15);
 
 // The heath's colour as a flat tint, for the low preset and far off: its communities' colours
@@ -952,8 +952,8 @@ fn fragment(
             if shrub > 0.0 {
                 // Dwarf birch and bilberry turning crimson and rust, crowberry staying dark
                 // green among them, in patches a hand or two across.
-                let crowberry = smoothstep(0.45, 0.7, noise(world * 1.3 + 31.0));
-                let autumn = ground.heath_autumn.rgb * 0.6 * mix(vec3<f32>(1.1, 0.75, 0.8), vec3<f32>(0.9, 1.1, 1.0), fleck);
+                let crowberry = smoothstep(0.58, 0.8, noise(world * 1.3 + 31.0));
+                let autumn = ground.heath_autumn.rgb * 0.85 * mix(vec3<f32>(1.05, 0.55, 0.75), vec3<f32>(0.95, 1.15, 0.9), fleck);
                 let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), SHRUB_GREEN * 0.8, crowberry);
                 ground_is = settle(ground_is, layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), shrub);
             }
