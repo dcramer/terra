@@ -42,13 +42,26 @@ const POOL_CELL_M: f32 = 2.0;
 const POOLS_ACROSS_M: f32 = 1_600.0;
 /// A pool stands as water once it is this deep and this big; shallower hollows are wet ground.
 const POOL_DEEPEST_M: f32 = 0.35;
+/// On patterned ground a lake is deeper than this or bigger, else a polygon's pool.
+const LAKE_DEEPEST_M: f32 = 1.5;
+const LAKE_AREA_M2: f32 = 5_000.0;
 const POOL_AREA_M2: f32 = 8.0;
 
 impl Round {
     /// The land round a direction, `across_m` wide, its snow as it lies on `day`.
     pub fn new(land: Land, toward: Vec3, across_m: f32, day: i64) -> Self {
         let middle = toward.normalize();
-        let waters = Waters::round(&land, middle, LAKES_ACROSS_M.min(across_m), LAKE_CELL_M);
+        // The lakes' grid sees the patterned ground's polygons too, their pools a few of its
+        // cells: those are the pools' own grid's to find, so a lake here is one deeper than any
+        // polygon's pool, or wider than a field of them.
+        let pooled = land.ground.patterned().is_some_and(|p| {
+            let over_sea = land.surface(middle).length() - land.sea_radius_m();
+            p.strength(middle, over_sea) > 0.0
+        });
+        let waters = Waters::round(&land, middle, LAKES_ACROSS_M.min(across_m), LAKE_CELL_M)
+            .keeping(|lake| {
+                !pooled || lake.deepest_m >= LAKE_DEEPEST_M || lake.area_m2 >= LAKE_AREA_M2
+            });
         let drift = Drift::over(
             waters.region(),
             crate::drift::wind_from(land.fields.climate().wind.prevailing_from_deg),

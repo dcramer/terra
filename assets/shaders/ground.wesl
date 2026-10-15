@@ -442,12 +442,22 @@ fn kind_turned(world: vec3<f32>, layer: i32) -> f32 {
 // crowberry and the lichen carpet's dark olive; sedge green, and wet straw once turned;
 // Sphagnum's gold; the fellfield's grey stones. The dwarf shrubs' autumn is their year's.
 // The lichen and shrub heath are speckled close to, the sedge smooth.
-const LICHEN: vec3<f32> = vec3<f32>(0.5, 0.42, 0.28);
+const LICHEN: vec3<f32> = vec3<f32>(0.36, 0.28, 0.17);
 const SHRUB_GREEN: vec3<f32> = vec3<f32>(0.09, 0.085, 0.045);
 const SEDGE_GREEN: vec3<f32> = vec3<f32>(0.1, 0.11, 0.045);
 const SEDGE_STRAW: vec3<f32> = vec3<f32>(0.22, 0.13, 0.04);
 const SPHAGNUM: vec3<f32> = vec3<f32>(0.23, 0.13, 0.006);
 const FELL_STONE: vec3<f32> = vec3<f32>(0.17, 0.165, 0.15);
+
+// A layer laid in `tint`'s own hue, keeping only its texture's light and dark: a scanned moss
+// or grass swapped to a heath's colour by its average alone keeps every pixel's departure from
+// that average in hue too, and a moss's greener pixels, divided by its dark average's little
+// red and blue, turned a lichen lawn-green.
+fn toned(l: Layer, tint: vec3<f32>) -> Layer {
+    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let light = clamp(dot(l.colour, luma) / max(dot(tint, luma), 0.001), 0.25, 2.2);
+    return Layer(tint * light, l.normal, l.height);
+}
 
 // The heath's colour as a flat tint, for the low preset and far off: its communities' colours
 // by their shares.
@@ -932,18 +942,24 @@ fn fragment(
         // fellfield's stones under the rest, then lichen, moss, sedge and the dwarf shrubs on
         // top, as they stand.
         if heath.ground.z > 0.0 {
-            let mosaic = (noise(world * 0.31 + 101.0) - 0.5) * 0.55 + (noise(world * 1.3 + 103.0) - 0.5) * 0.3
-                + (fleck - 0.5) * 0.15;
+            // Three octaves of the noise, each on axes turned from the last, so no octave's
+            // lattice shows as squares where a community's edge follows it.
+            let turned_a = vec3<f32>(world.x * 0.8 + world.z * 0.6, world.y, world.z * 0.8 - world.x * 0.6);
+            let turned_b = vec3<f32>(world.x * 0.36 - world.y * 0.48 + world.z * 0.8, world.y * 0.8 + world.x * 0.6, world.z * 0.6 - world.x * 0.64);
+            let mosaic = (noise(turned_a * 0.27 + 101.0) - 0.5) * 0.42
+                + (noise(turned_b * 0.71 + 103.0) - 0.5) * 0.26
+                + (noise(world * 1.9 + 107.0) - 0.5) * 0.16
+                + (fleck - 0.5) * 0.1;
             let stones = smoothstep(0.2, 0.6, heath.ground.x + mosaic);
             if stones > 0.0 {
-                ground_is = over(ground_is, layer(GRAVEL, 0.8, FELL_STONE * (0.8 + 0.4 * blotch), world + 61.0, gx, gy, n, 1.0), stones);
+                ground_is = over(ground_is, toned(layer(GRAVEL, 0.8, FELL_STONE * (0.8 + 0.4 * blotch), world + 61.0, gx, gy, n, 1.0), FELL_STONE * (0.8 + 0.4 * blotch)), stones);
             }
             let lichen = smoothstep(0.15, 0.5, heath.plants.x + mosaic) * flat_ground;
             if lichen > 0.0 {
                 // Cladonia's pale cushions over the moss's relief, a little greener and greyer
                 // from cushion to cushion.
                 let tint = LICHEN * mix(vec3<f32>(0.92, 0.95, 0.9), vec3<f32>(1.06, 1.03, 1.08), fleck);
-                ground_is = settle(ground_is, layer(MOSS, 0.7, tint, world + 67.0, gx, gy, n, PLAIN), lichen);
+                ground_is = settle(ground_is, toned(layer(MOSS, 0.7, tint, world + 67.0, gx, gy, n, PLAIN), tint), lichen);
             }
             // Moss carpets the edges of pools and lakes, soaked a metre or so up from the water.
             var by_water = 0.0;
@@ -954,12 +970,12 @@ fn fragment(
             let carpet = smoothstep(0.3, 0.65, max(heath.plants.w, by_water * heath.ground.z) + mosaic) * flat_ground;
             if carpet > 0.0 {
                 let tint = mix(SPHAGNUM, vec3<f32>(0.16, 0.05, 0.03), smoothstep(0.55, 0.85, noise(world * 0.5 + 7.0)) * 0.6);
-                ground_is = settle(ground_is, layer(MOSS, 1.0, tint, world + 71.0, gx, gy, n, PLAIN), carpet);
+                ground_is = settle(ground_is, toned(layer(MOSS, 1.0, tint, world + 71.0, gx, gy, n, PLAIN), tint), carpet);
             }
             let sedge = smoothstep(0.15, 0.5, heath.plants.z + mosaic) * flat_ground;
             if sedge > 0.0 {
                 let tint = mix(SEDGE_GREEN, SEDGE_STRAW, smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer))) * (0.85 + 0.3 * fleck);
-                ground_is = settle(ground_is, layer(GRASS, 0.8, tint, world + 73.0, gx, gy, n, 1.0), sedge);
+                ground_is = settle(ground_is, toned(layer(GRASS, 0.8, tint, world + 73.0, gx, gy, n, 1.0), tint), sedge);
             }
             let shrub = smoothstep(0.12, 0.45, heath.plants.y + mosaic) * flat_ground;
             if shrub > 0.0 {
@@ -968,7 +984,7 @@ fn fragment(
                 let crowberry = smoothstep(0.58, 0.8, noise(world * 1.3 + 31.0));
                 let autumn = ground.heath_autumn.rgb * mix(vec3<f32>(1.05, 0.55, 0.75), vec3<f32>(0.95, 1.15, 0.9), fleck);
                 let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), SHRUB_GREEN * 0.8, crowberry);
-                ground_is = settle(ground_is, layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), shrub);
+                ground_is = settle(ground_is, toned(layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), leaves), shrub);
             }
             // Wet ground darker and glossier, as wet soil and moss are (Lagarde).
             let soaked = smoothstep(0.55, 0.95, heath.ground.y) * heath.ground.z;

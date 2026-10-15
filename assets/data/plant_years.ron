@@ -112,7 +112,8 @@
         // Dwarf birch, and the bilberry among it, on the heath past the trees (terra_land::heath):
         // crimson and rust with the first chill of late summer, before any tree turns, a few
         // leaves left into the first snows; out in leaf as the snow goes. Drawn in the
-        // ground's heath and as the dwarf shrubs on it.
+        // ground's heath; the dwarf shrubs on it are drawn with the berry cards, which turn as
+        // the bilberry's year says.
         kind: "dwarf_birch",
         flush: (from: 40.0, over: 80.0),
         turn: (from: 0.0, over: 35.0),
@@ -121,8 +122,6 @@
         turns: 1.0,
         drops: 0.9,
         autumn: (0.56, 0.3, 0.16),
-        // The heath's dwarf shrubs, and the berry bushes, which are bilberry.
-        cards: ["berry"],
     ),
     (
         // Grass: straw-coloured in the long cold, green again with the spring's warmth; it

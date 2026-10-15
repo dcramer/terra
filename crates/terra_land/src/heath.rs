@@ -83,9 +83,10 @@ pub fn heath(ground: Ground) -> Heath {
     let sedge = smoothstep(0.42, 0.68, w) * (1.0 - moss) * (1.0 - 0.6 * high_arctic);
     let damp = 1.0 - smoothstep(0.5, 0.75, w);
     // Dwarf shrubs want winter's snow over them: the lee most, level ground some.
-    let shrub = damp * smoothstep(-0.2, 0.7, lee - 0.6 * exposed + 0.1) * (1.0 - high_arctic) * 0.6;
+    let shrub =
+        damp * smoothstep(-0.2, 0.7, lee - 0.6 * exposed + 0.1) * (1.0 - high_arctic) * 0.75;
     let lichen = (1.0 - smoothstep(0.35, 0.6, w))
-        * (0.4 + 0.6 * smoothstep(-0.5, -4.0, ground.shelter_deg).max(high_arctic))
+        * (0.25 + 0.75 * smoothstep(-0.5, -4.0, ground.shelter_deg).max(high_arctic))
         * (1.0 - 0.5 * scoured);
     let weights = [fellfield, lichen, shrub, sedge, moss];
     let sum: f32 = weights.iter().sum::<f32>().max(1e-4);

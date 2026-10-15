@@ -747,15 +747,26 @@ fn plant(
     scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
         let cover = planet.cover(point, planet.normal(point));
-        if point.length() - planet.water_near_m(point) < -0.4
-            || rng.unit() > 0.4 - 0.22 * cover.grass
-        {
+        // On the heath past the trees, boulders lie in fields on the scoured rises and the
+        // fellfield, few elsewhere, and lichen grows over them as moss does in the grass.
+        let heath = planet.round().map(|round| round.heath.at(point));
+        let (chance, grown_over) = match heath {
+            Some(h) if h.open > 0.3 => {
+                let field = smoothstep(0.0, 0.3, blooms.fbm(point / 60.0 + 13.0, 2, 2.0, 0.5));
+                (
+                    0.06 + 0.5 * (h.fellfield / h.open).min(1.0) + 0.25 * field,
+                    h.open * 0.8,
+                )
+            }
+            _ => (0.4 - 0.22 * cover.grass, cover.grass),
+        };
+        if point.length() - planet.water_near_m(point) < -0.4 || rng.unit() > chance {
             return;
         }
         // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         // A few of the bigger ones hold ore; in the grass, most are mossy.
-        let Some(kind) = flora.choose(Grows::Rocks, 0.0, cover.grass, size, rng) else {
+        let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
@@ -880,6 +891,19 @@ fn plant(
     for (kind, beside, size) in by_the_door {
         let model = &models[kind][0];
         let point = planet.ground_at(start.transform_point(beside));
+        // No clearing was cut where no trees grew.
+        if planet.round().is_some_and(|round| {
+            round
+                .stand(
+                    point,
+                    planet.normal(point),
+                    terra_land::woods::Footing::Soil,
+                )
+                .density
+                < 0.2
+        }) {
+            continue;
+        }
         let mut rng = seed.derive("props").rng();
         put(
             model,
