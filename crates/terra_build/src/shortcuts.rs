@@ -1,5 +1,5 @@
 //! The quick tools' view of a base (D176, D277): shortcuts ([`BuildOp`]) that lay built
-//! cubes at once, as the yard, the examples and older saves do, and wall *tiles*, a storey's
+//! cubes at once, as the yard and the examples do, and wall *tiles*, a storey's
 //! column of six cubes read as a panel, solid or with a window or doorway. What a cube is,
 //! wall or floor, is read from the cubes alone (`Base::in_wall`); a tile is only the quick
 //! tools' default height.

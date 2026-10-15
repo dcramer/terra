@@ -769,22 +769,10 @@ impl Build {
     }
 
     /// Starts the base again from a snapshot and the operations since, as when a saved
-    /// game is loaded. Operations that no longer apply are left out, and said; roofs from
-    /// before roofs were cubes are laid as roof cubes in the roof `roof_for` gives their
-    /// walls' kind (D241), and folded into a snapshot at once.
-    pub(super) fn restore(
-        &mut self,
-        snapshot: &Snapshot,
-        since: &[terra_build::save::Change],
-        rules: &Rules,
-        roof_for: &dyn Fn(Kind) -> Kind,
-    ) {
+    /// game is loaded. Operations that no longer apply are left out, and said.
+    pub(super) fn restore(&mut self, snapshot: &Snapshot, since: &[Op], rules: &Rules) {
         let cx = Context::free(rules);
-        let old_roofs = !snapshot.roofs.is_empty()
-            || since
-                .iter()
-                .any(|change| matches!(change, terra_build::save::Change::Roof(_)));
-        match terra_build::save::restore(snapshot, since, &cx, roof_for) {
+        match terra_build::save::restore(snapshot, since, &cx) {
             Ok((base, applied, left_out)) => {
                 self.base = base;
                 self.snapshot = Some(snapshot.clone());
@@ -794,17 +782,14 @@ impl Build {
                 }
             }
             Err(problem) => {
-                warn!("The saved base could not be read: {problem:?}");
+                warn!("The saved base could not be read: {problem}");
                 self.base = Base::default();
-                self.snapshot = Some(snapshot.clone());
+                self.snapshot = None;
                 self.since.clear();
             }
         }
         self.sections.everything = true;
         self.operations.clear();
-        if old_roofs {
-            self.fold();
-        }
         self.revision += 1;
     }
 

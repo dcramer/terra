@@ -30,8 +30,7 @@
 //!   roof over a block; and the room tool, walls round a footprint with a floor inside and
 //!   a flat roof over it.
 //!
-//! A base is saved and sent as a snapshot ([`save`]), and before that as the list of
-//! shortcuts that made it (D21), which is still read.
+//! A base is saved and sent as a snapshot ([`save`]); older formats are refused (D353).
 //!
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.

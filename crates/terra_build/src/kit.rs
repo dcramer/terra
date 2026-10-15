@@ -44,7 +44,7 @@ pub struct Kit {
     /// only (D192): down at its eaves, level past its verges (D175, D241).
     pub eaves: f32,
     /// A wall kind's: the roof kind a roof over its walls is laid in where the hammer holds
-    /// no roof's material, and an old save's roof over them is turned into (D241).
+    /// no roof's material (D241).
     pub roof_kind: Option<u16>,
     /// A block kind's surface: the radius its outside edges are rounded to, and how far
     /// its material's relief stands out (`surface.rs`).

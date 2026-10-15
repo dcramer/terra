@@ -7,16 +7,14 @@
 //! | Bits | Holds |
 //! |---|---|
 //! | 0 to 11 | Its kind, plus one, so 0 is air |
-//! | 12 to 16 | Its shape ([`Shape::code`]), and 31 for an opening (30, glass before D225 took it out, reads as an opening) |
+//! | 12 to 16 | Its shape ([`Shape::code`]), and 31 for an opening |
 //! | 17 to 20 | Its fill level while planned, in sixteenths of the cube |
 //! | 21 | Built: all of it in |
 //! | 22 to 23 | The change pending on it |
 //! | 24 to 31 | The part it was laid in, as an index into its section's palette of parts |
 //!
 //! The part is a section's own index, as Minecraft's block palettes are, so a cube stays
-//! 32 bits whatever the number of parts in a base; a section holds up to 255 parts. The
-//! shape had four bits until D231 took one of the three the pending change had, which used
-//! two; [`from_v1`] reads a word packed before.
+//! 32 bits whatever the number of parts in a base; a section holds up to 255 parts.
 //!
 //! Iteration is always in one sorted order, east then up then south (the order of
 //! `[x, y, z]`), so every machine lays and floods the same way.
@@ -70,9 +68,7 @@ pub enum Fill {
     #[default]
     Solid,
     /// An opening cut in a wall, a doorway or a window: part of the wall still, so the
-    /// room stays closed in, but a walker goes through it. A window's glass, written
-    /// before D225 took glass out, reads as one.
-    #[serde(alias = "Glass")]
+    /// room stays closed in, but a walker goes through it.
     Open,
 }
 
@@ -192,7 +188,7 @@ impl Shape {
     };
 
     /// Its number in a cube's five shape bits (D231), its place in [`Shape::ALL`]; an
-    /// opening is 31, and 30, once glass, reads as one.
+    /// opening is 31.
     pub fn code(self) -> u8 {
         match self {
             Shape::Whole => 0,
@@ -506,7 +502,7 @@ impl Cube {
             return None;
         }
         let (fill, shape) = match (word >> 12) & 0x1F {
-            OLD_GLASS | OPEN => (Fill::Open, Shape::Whole),
+            OPEN => (Fill::Open, Shape::Whole),
             code => (
                 Fill::Solid,
                 Shape::of_code(code as u8).unwrap_or(Shape::Whole),
@@ -537,25 +533,8 @@ impl Cube {
     }
 }
 
-/// The shape code of an opening, and of a window's glass before D225 took glass out,
-/// which reads as an opening.
+/// The shape code of an opening.
 const OPEN: u32 = 31;
-const OLD_GLASS: u32 = 30;
-
-/// A cube's word as it was packed before D231, with four bits of shape (glass 14, an
-/// opening 15) and three of the pending change, as it is packed now.
-pub fn from_v1(word: u32) -> u32 {
-    if word & 0xFFF == 0 {
-        return 0;
-    }
-    let shape = match (word >> 12) & 0xF {
-        14 => OLD_GLASS,
-        15 => OPEN,
-        code => code,
-    };
-    let (level, built, pending) = ((word >> 16) & 0xF, (word >> 20) & 1, (word >> 21) & 0x3);
-    (word & 0xFFF) | shape << 12 | level << 17 | built << 21 | pending << 22 | (word & 0xFF00_0000)
-}
 
 /// Which section a cube is in, counted in sections.
 pub fn section_of(at: IVec3) -> IVec3 {
@@ -921,20 +900,6 @@ pub struct SavedSection {
     pub runs: Vec<(u16, u32)>,
 }
 
-impl SavedSection {
-    /// The section saved before D231, its words packed as they are now ([`from_v1`]).
-    pub fn from_v1(&self) -> SavedSection {
-        SavedSection {
-            runs: self
-                .runs
-                .iter()
-                .map(|&(count, word)| (count, from_v1(word)))
-                .collect(),
-            ..self.clone()
-        }
-    }
-}
-
 /// Why saved sections could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BadSection {
@@ -1081,7 +1046,7 @@ mod tests {
                 shape.facing().is_none()
             );
         }
-        assert!(Shape::ALL.len() < OLD_GLASS as usize);
+        assert!(Shape::ALL.len() < OPEN as usize);
     }
 
     #[test]
@@ -1121,48 +1086,6 @@ mod tests {
                 assert!(!filled(shape.bottom(u, v) - 0.01) && filled(shape.bottom(u, v) + 0.01));
             }
         }
-    }
-
-    #[test]
-    fn a_word_packed_before_five_shape_bits_reads_as_the_same_cube() {
-        // Packed as cubes were before D231, by hand.
-        let v1 = |cube: &Cube, part: u32| {
-            let shape = match (cube.fill, cube.shape) {
-                (Fill::Open, _) => 15,
-                (_, shape) => u32::from(shape.code()),
-            };
-            let (level, built) = match cube.state {
-                State::Built => (0, 1),
-                State::Planned { level } => (u32::from(level), 0),
-            };
-            (u32::from(cube.kind.0) + 1)
-                | shape << 12
-                | level << 16
-                | built << 20
-                | (cube.pending as u32) << 21
-                | part << 24
-        };
-        let old = every_cube()
-            .into_iter()
-            .filter(|cube| cube.shape.code() <= 10 && !matches!(cube.pending, Pending::Swapped));
-        for cube in old {
-            let part = u32::from(cube.part.is_some());
-            assert_eq!(from_v1(v1(&cube, part)), cube.pack(part as u8), "{cube:?}");
-        }
-        assert_eq!(from_v1(0), 0);
-    }
-
-    #[test]
-    fn glass_from_before_d225_reads_as_an_opening() {
-        // A built cube of kind 2 packed as glass now (30) and before D231 (14), and an op
-        // written with a glass cube: each is an opening.
-        let open = Cube::new(Kind(2), Fill::Open);
-        let (glass, _) = Cube::unpack(3 | OLD_GLASS << 12 | 1 << 21).expect("not air");
-        assert_eq!(glass, open);
-        let (glass_v1, _) = Cube::unpack(from_v1(3 | 14 << 12 | 1 << 20)).expect("not air");
-        assert_eq!(glass_v1, open);
-        let written: Cube = ron::from_str("(kind: (2), fill: Glass)").unwrap();
-        assert_eq!(written, open);
     }
 
     #[test]

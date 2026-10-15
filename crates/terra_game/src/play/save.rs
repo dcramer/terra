@@ -28,27 +28,25 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use terra_build::Bill;
-use terra_build::save::{Change, SavedOp, Snapshot, convert};
+use terra_build::ops::Op;
+use terra_build::save::Snapshot;
 use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
-/// Bumped when the format changes in a way old saves cannot be read in.
-const VERSION: u32 = 1;
+/// Bumped when the format changes; a save of any other version is refused, not converted
+/// (D353).
+const VERSION: u32 = 2;
 const EVERY_S: f32 = 30.0;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct SaveFile {
     version: u32,
     player: SavedPlayer,
-    /// The base, as saves before snapshots held it: the shortcuts that made it, read and
-    /// turned into cubes, and never written.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    base: Vec<SavedOp>,
     /// The base: a snapshot of it and the operations since (construction-001, gap 4).
     #[serde(default)]
     snapshot: Option<Snapshot>,
     #[serde(default)]
-    since: Vec<Change>,
+    since: Vec<Op>,
     /// What is left of items cut into for building (`build::act::Offcuts`).
     #[serde(default)]
     offcuts: Bill,
@@ -125,9 +123,7 @@ struct SavedItem {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct SavedProp {
-    /// The item, by name. Saves before names were kept give its model's file instead, which
-    /// finds it while the model is the same one.
-    #[serde(alias = "file")]
+    /// The item, by name.
     item: String,
     at: [f32; 3],
     lift: f32,
@@ -204,7 +200,7 @@ fn load(
     options: Res<crate::shell::Options>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
-    (builds, recipes, look): (Res<Builds>, Res<Recipes>, Res<crate::build::BuildLook>),
+    (builds, recipes): (Res<Builds>, Res<Recipes>),
     (rules, mut offcuts): (Res<BuildRules>, ResMut<Offcuts>),
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
@@ -229,6 +225,20 @@ fn load(
         info!("No saved game at {}; starting afresh.", path.0.display());
         return;
     };
+    // Its version first, so a save of another build is refused as one, not as unreadable.
+    #[derive(Deserialize)]
+    struct Versioned {
+        version: u32,
+    }
+    if let Ok(Versioned { version }) = ron::from_str::<Versioned>(&text)
+        && version != VERSION
+    {
+        warn!(
+            "The saved game at {} was saved by an older build; start a new game.",
+            path.0.display()
+        );
+        return;
+    }
     let save: SaveFile = match ron::from_str(&text) {
         Ok(save) => save,
         Err(problem) => {
@@ -239,10 +249,6 @@ fn load(
             return;
         }
     };
-    if save.version != VERSION {
-        warn!("The saved game is from an older version; starting afresh.");
-        return;
-    }
     let (mut transform, mut vitals, mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
 
@@ -284,34 +290,15 @@ fn load(
             Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
         site.move_to(frame, &mut commands, &planet, &mut meshes);
     }
-    match &save.snapshot {
-        Some(snapshot) => site.restore(snapshot, &save.since, &rules.rules, &|walls| {
-            roof_for(&look, walls)
-        }),
-        None => {
-            // A save from before snapshots: the shortcuts that made it, laid as built, its
-            // roofs from before roofs were cubes laid in the roof its walls take (D241).
-            let converted = convert(&save.base, look.laying);
-            if converted.left_out > 0 {
-                warn!(
-                    "{} of the saved base's rooms had a wall pushed or pulled; those changes are left out.",
-                    converted.left_out
-                );
-            }
-            let base = converted.base(&|walls| roof_for(&look, walls));
-            site.restore(&base.snapshot(), &[], &rules.rules, &|walls| {
-                roof_for(&look, walls)
-            });
-        }
+    if let Some(snapshot) = &save.snapshot {
+        site.restore(snapshot, &save.since, &rules.rules);
     }
     offcuts.0 = save.offcuts.clone();
     for entity in &placed {
         commands.entity(entity).despawn();
     }
     for prop in &save.props {
-        let item = builds
-            .item_named(&prop.item)
-            .or_else(|| builds.item_from(&prop.item));
+        let item = builds.item_named(&prop.item);
         if item.is_none() {
             warn!(
                 "The save has a {}, which is not in the catalogue.",
@@ -643,14 +630,13 @@ fn gather(
             bar: bar_slots,
             picked: bar.0.picked(),
         },
-        base: Vec::new(),
         snapshot: Some(
             site.snapshot
                 .clone()
                 .unwrap_or_else(|| site.base.snapshot()),
         ),
         since: if site.snapshot.is_some() {
-            site.since.iter().cloned().map(Change::Now).collect()
+            site.since.clone()
         } else {
             Vec::new()
         },
@@ -758,15 +744,6 @@ fn write(path: &PathBuf, save: &SaveFile) -> bool {
             false
         }
     }
-}
-
-/// The roof a base's walls of a kind take, as its kit says (D241): an old save's roofs are
-/// laid in it.
-fn roof_for(look: &crate::build::BuildLook, walls: terra_build::Kind) -> terra_build::Kind {
-    look.kits
-        .as_ref()
-        .and_then(|kits| kits.roof_for(walls))
-        .unwrap_or(terra_build::Kind::FIRST_ROOF)
 }
 
 #[cfg(test)]
@@ -1292,20 +1269,5 @@ mod tests {
         load_from(world, &path);
         let _ = std::fs::remove_file(&path);
         assert_eq!(kept(world), before);
-    }
-
-    #[test]
-    fn a_save_from_before_snapshots_holds_the_shortcuts_that_made_its_base() {
-        let text = "(version: 1, player: (at: (0, 0, 0), facing: (0, 0, 1), health: 100, \
-            stamina: 100, fed: 100, skills: [], worn: [], backpack: [], bar: [], picked: 0), \
-            base: [Op(AddRoom(min: (0, 0, 0), max: (3, 0, 3), kind: (1)))], props: [], \
-            claim_step: 0, people: [])";
-        let save: SaveFile = ron::from_str(text).unwrap();
-        assert_eq!(save.snapshot, None);
-        let converted = convert(&save.base, terra_build::Kind(1));
-        assert_eq!(
-            terra_build::Base::from_shortcuts(&converted.ops).room_cubes(),
-            4 * 5
-        );
     }
 }
