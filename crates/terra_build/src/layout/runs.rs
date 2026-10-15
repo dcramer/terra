@@ -86,8 +86,20 @@ pub(super) fn courses(
                     _ => 0.0,
                 }) - stagger
             };
-            let from = low as f32 * CELL_M - reach(low, -1, 0);
-            let to = (high + 1) as f32 * CELL_M + reach(high, 1, 1);
+            // Each end on a tick of the course's own parity, in from where it reaches, so the
+            // ends of two courses one on the next, their ragged reach however it falls, are
+            // never in one plane.
+            let parity = |metres: f32, inward: i32| {
+                let t = ticks(metres);
+                let t = if (t - course).rem_euclid(2) == 0 {
+                    t
+                } else {
+                    t + inward
+                };
+                super::metres(t)
+            };
+            let from = parity(low as f32 * CELL_M - reach(low, -1, 0), 1);
+            let to = parity((high + 1) as f32 * CELL_M + reach(high, 1, 1), -1);
             let (wall_from, wall_to) = (low as f32 * CELL_M, (high + 1) as f32 * CELL_M);
             let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
             let bottom = layer_of_split(centre, split);
@@ -555,13 +567,14 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, layout: &mut Layout) {
                 max = max.max(q.with_y(low - (inset - BLOCKING_SET_BACK_M)));
             }
         }
-        // Its foot and top on every fourth tick, those of a row along the north and south
-        // two ticks off them, so two crossing never share a plane, whatever roof they are
-        // under.
+        // Its faces on every fourth tick, those of a row along the north and south two ticks
+        // off them, so two crossing never share a plane, whatever roof they are under.
         let crossing = i32::from(log.along.x.abs() <= 0.5) * 2;
         let snap = |p: Vec3| {
             let mut place = Place::near(p);
-            place.0[1] = (place.0[1] - crossing).div_euclid(4) * 4 + crossing;
+            for t in &mut place.0 {
+                *t = (*t - crossing).div_euclid(4) * 4 + crossing;
+            }
             place
         };
         let board = Piece::Board {
