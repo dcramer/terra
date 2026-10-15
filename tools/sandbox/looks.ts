@@ -119,6 +119,9 @@ export function shown(measure: string, v: number): string {
   return MEASURES[measure]?.share ? `${(100 * v).toFixed(1)}%` : v.toFixed(3);
 }
 
+/// How far out a number is, in tolerances: "1.4x", or "0.03x" for one just past its bound.
+export const times = (out: number) => `${out.toFixed(out < 0.1 ? 2 : 1)}x`;
+
 /// The target as the table prints it: the reference's number and its bounds.
 function bounds(j: Judged): string {
   if (j.low === -Infinity) return `<= ${shown(j.measure, j.high)} (ref ${shown(j.measure, j.target)})`;
@@ -134,7 +137,7 @@ export function table(name: string, about: string, ref: Reference, views: string
     MEASURES[j.measure]?.called ?? j.measure,
     shown(j.measure, j.ours),
     bounds(j),
-    j.holds ? "" : `${j.out.toFixed(1)}x out; ${j.worst.view} ${shown(j.measure, j.worst.value)}`,
+    j.holds ? "" : `${times(j.out)} out; ${j.worst.view} ${shown(j.measure, j.worst.value)}`,
   ]);
   const head = ["", "rule", "number", "ours", "target", "worst view"];
   const widths = head.map((h, k) => Math.max(h.length, ...rows.map((r) => r[k].length)));
@@ -145,7 +148,7 @@ export function table(name: string, about: string, ref: Reference, views: string
     `looks: ${name}: against ${ref.name} (${ref.frames} frames); views ${views.join(", ")} at ${hour}:00`,
     pad(head),
     ...rows.map(pad),
-    `looks: ${name}: ${judged.length - failed.length} of ${judged.length} hold${failed.length ? `; furthest out: ${failed.slice(0, 4).map((j) => `${MEASURES[j.measure]?.called ?? j.measure} ${j.out.toFixed(1)}x (${j.worst.view})`).join(", ")}` : ""}`,
+    `looks: ${name}: ${judged.length - failed.length} of ${judged.length} hold${failed.length ? `; furthest out: ${failed.slice(0, 4).map((j) => `${MEASURES[j.measure]?.called ?? j.measure} ${times(j.out)} (${j.worst.view})`).join(", ")}` : ""}`,
   ].join("\n");
 }
 
@@ -210,7 +213,7 @@ if (import.meta.main) {
   }
   if (names.length > 1) {
     const worst = all.filter((a) => !a.j.holds).sort((a, b) => b.j.out - a.j.out).slice(0, 8);
-    console.log(`looks: ${all.length - failed} of ${all.length} hold across ${names.length} places${worst.length ? `; furthest out: ${worst.map((a) => `${a.place} ${MEASURES[a.j.measure]?.called ?? a.j.measure} ${a.j.out.toFixed(1)}x (${a.j.worst.view})`).join(", ")}` : ""}`);
+    console.log(`looks: ${all.length - failed} of ${all.length} hold across ${names.length} places${worst.length ? `; furthest out: ${worst.map((a) => `${a.place} ${MEASURES[a.j.measure]?.called ?? a.j.measure} ${times(a.j.out)} (${a.j.worst.view})`).join(", ")}` : ""}`);
   }
   process.exit(failed ? 1 : 0);
 }

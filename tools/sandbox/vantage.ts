@@ -64,7 +64,8 @@ export function shootViews(place: Place, hour: string, out: string, dated: strin
   );
   const said = `${run.stdout}${run.stderr}`;
   if (run.status !== 0 || !said.includes("SANDBOX saved")) {
-    console.error(said.split("\n").slice(-20).join("\n"));
+    // The run's last words, past the warnings a run can end in by the hundred.
+    console.error(said.split("\n").filter((l) => !l.includes(" WARN")).slice(-20).join("\n"));
     throw new Error(`the run at ${hour}:00 failed`);
   }
   const files = place.views.map(([name], index): [string, string] => {
