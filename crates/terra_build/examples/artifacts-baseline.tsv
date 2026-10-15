@@ -4,6 +4,7 @@
 # set	kits	fault	count
 all	brick	Coplanar	10
 all	brick	PokesOut	1
+all	brick with cut_sandstone	Coplanar	19
 all	brick with earth	Coplanar	47
 all	brick with earth	PokesOut	12
 all	brick with hewn	Coplanar	20
@@ -11,8 +12,22 @@ all	brick with limewash	Coplanar	47
 all	brick with logs	Coplanar	25
 all	brick with logs	SeeThrough	4
 all	brick with logs	UnderRoof	3
+all	brick with plastered_timber	Coplanar	35
+all	brick with river_cobble	Coplanar	19
 all	brick with stone	Coplanar	10
 all	brick with wattle	Coplanar	26
+all	cut_sandstone	Coplanar	10
+all	cut_sandstone with earth	Coplanar	41
+all	cut_sandstone with earth	PokesOut	12
+all	cut_sandstone with hewn	Coplanar	14
+all	cut_sandstone with limewash	Coplanar	41
+all	cut_sandstone with logs	Coplanar	19
+all	cut_sandstone with logs	SeeThrough	4
+all	cut_sandstone with logs	UnderRoof	3
+all	cut_sandstone with plastered_timber	Coplanar	29
+all	cut_sandstone with river_cobble	Coplanar	19
+all	cut_sandstone with stone	Coplanar	10
+all	cut_sandstone with wattle	Coplanar	26
 all	earth	Coplanar	38
 all	earth	PokesOut	14
 all	earth with hewn	Coplanar	23
@@ -27,6 +42,12 @@ all	earth with logs	Inward	3
 all	earth with logs	PokesOut	5
 all	earth with logs	SeeThrough	4
 all	earth with logs	UnderRoof	5
+all	earth with plastered_timber	Coplanar	38
+all	earth with plastered_timber	Inward	3
+all	earth with plastered_timber	PokesOut	5
+all	earth with river_cobble	Coplanar	28
+all	earth with river_cobble	Inward	3
+all	earth with river_cobble	PokesOut	10
 all	earth with stone	Coplanar	25
 all	earth with stone	Inward	3
 all	earth with stone	PokesOut	10
@@ -41,6 +62,10 @@ all	hewn with logs	Coplanar	21
 all	hewn with logs	PokesOut	2
 all	hewn with logs	SeeThrough	4
 all	hewn with logs	UnderRoof	5
+all	hewn with plastered_timber	Coplanar	29
+all	hewn with plastered_timber	PokesOut	2
+all	hewn with river_cobble	Coplanar	10
+all	hewn with river_cobble	PokesOut	2
 all	hewn with stone	Coplanar	16
 all	hewn with stone	PokesOut	2
 all	hewn with wattle	Coplanar	26
@@ -51,14 +76,31 @@ all	limewash with logs	Coplanar	25
 all	limewash with logs	PokesOut	2
 all	limewash with logs	SeeThrough	4
 all	limewash with logs	UnderRoof	5
+all	limewash with plastered_timber	Coplanar	35
+all	limewash with plastered_timber	PokesOut	2
+all	limewash with river_cobble	Coplanar	25
+all	limewash with river_cobble	PokesOut	2
 all	limewash with stone	Coplanar	22
 all	limewash with stone	PokesOut	2
 all	limewash with wattle	Coplanar	32
 all	limewash with wattle	PokesOut	2
 all	logs	Coplanar	22
 all	logs	UnderRoof	5
+all	logs with plastered_timber	Coplanar	32
+all	logs with river_cobble	Coplanar	11
 all	logs with stone	Coplanar	17
 all	logs with wattle	Coplanar	29
+all	plastered_timber	Coplanar	30
+all	plastered_timber	PokesOut	2
+all	plastered_timber with river_cobble	Coplanar	19
+all	plastered_timber with river_cobble	PokesOut	2
+all	plastered_timber with stone	Coplanar	25
+all	plastered_timber with stone	PokesOut	2
+all	plastered_timber with wattle	Coplanar	27
+all	plastered_timber with wattle	PokesOut	2
+all	river_cobble	Coplanar	10
+all	river_cobble with stone	Coplanar	10
+all	river_cobble with wattle	Coplanar	26
 all	stone	Coplanar	10
 all	stone with wattle	Coplanar	32
 all	wattle	Coplanar	27
