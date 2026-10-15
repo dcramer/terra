@@ -58,6 +58,9 @@ if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
   process.exit(1);
 }
 console.log(`film: ${Math.floor((last - first) / 2) + 1} frames drawn in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+// How far a route's walker got, so a film whose walker stalled or gave up a point says so.
+const route = `${run.stdout}${run.stderr}`.split("\n").filter((l) => l.includes("Route: ")).map((l) => l.slice(l.indexOf("Route: ") + 7));
+if (route.length) console.log(`film: route ${route.join(" ")}`);
 
 const encode = spawnSync(
   "ffmpeg",

@@ -47,6 +47,10 @@ export type Look = {
   /// The share of the top third that is lit green: green, saturated, brighter than 0.3, the
   /// lime of low crowns in the sun.
   limeTop: number;
+  /// The share of the middle third that is brown by hue (8 to 55 degrees): trunks, and olive
+  /// shade with them, as the research measured it (its `brownMid`), the trunks a walk among
+  /// tall boles shows ahead (D301). Older references may not have it.
+  trunkMiddle?: number;
 };
 
 /// One band of a picture by distance (D326): how bright, how blue against green, how
@@ -87,7 +91,7 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
   const ys: number[] = [];
   let r = 0, g = 0, b = 0, dark = 0, bright = 0, lower = 0, litter = 0;
   const shade = [0, 0, 0], middle = [0, 0, 0];
-  let top = 0, lime = 0;
+  let top = 0, lime = 0, centre = 0, brown = 0;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
@@ -121,6 +125,10 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
       if (y >= (H * 2) / 3) {
         lower++;
         if (h >= 8 && h < 45 && s > 0.25 && v > 0.25) litter++;
+      }
+      if (y >= H / 3 && y < (H * 2) / 3) {
+        centre++;
+        if (d > 0 && h >= 8 && h < 55) brown++;
       }
       if (y < H / 3) {
         top++;
@@ -168,6 +176,7 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     shadeBlueOverGreen: shade[1] ? shade[2] / shade[1] : 0,
     middleBlueOverGreen: middle[1] ? middle[2] / middle[1] : 0,
     limeTop: top ? lime / top : 0,
+    trunkMiddle: centre ? brown / centre : 0,
   };
 }
 
@@ -344,7 +353,7 @@ export function drawBands(p: Picture): Picture {
 /// The mean of several pictures' looks.
 export function meanOf(looks: Look[]): Look {
   const keys = Object.keys(SOTF) as (keyof Look)[];
-  return Object.fromEntries(keys.map((k) => [k, looks.reduce((s, l) => s + l[k], 0) / looks.length])) as Look;
+  return Object.fromEntries(keys.map((k) => [k, looks.reduce((s, l) => s + (l[k] ?? 0), 0) / looks.length])) as Look;
 }
 
 /// One line for a look: each number, and the reference's beside it (Sons of the Forest's by day
@@ -352,7 +361,8 @@ export function meanOf(looks: Look[]): Look {
 export function line(name: string, l: Look, against: Look = SOTF, called = "SotF"): string {
   const SOTF = against;
   const f = (v: number) => v.toFixed(3);
-  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%)`;
+  const share = (v: number | undefined) => (v === undefined ? "-" : `${(100 * v).toFixed(1)}%`);
+  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%), trunks middle ${share(l.trunkMiddle)} (${share(SOTF.trunkMiddle)})`;
 }
 
 /// The middle of the lower half of a picture, where a third-person film's placeholder figure

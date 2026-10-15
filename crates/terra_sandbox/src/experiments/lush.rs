@@ -96,6 +96,11 @@ const SHADOW_END: f32 = 0.3;
 /// A crown's cards drop out between these distances, from all of them to two a clump; past
 /// the second it is drawn as those two (D223).
 const CARDS_DROP_M: [f32; 2] = [18.0, 110.0];
+/// A conifer's cards drop out sooner, to its least by 70 m (D318): its crown is high over a
+/// long bole, never seen near, and a pine's pads carry nearly twice the cards its whorls did;
+/// drawn whole out to 110 m they were 1.3 million triangles a pass and half a millisecond of
+/// the walk's GPU time, for no difference the look measures.
+const NEEDLES_DROP_M: [f32; 2] = [18.0, 70.0];
 /// Crowns' shadows hand over from their cards to solid lumps between these distances, for
 /// every tree alike (D234).
 const SHADOW_HANDOVER_M: [f32; 2] = [14.0, 26.0];
@@ -175,6 +180,10 @@ impl Leaf {
 /// toward the sun, a fifth more than when the leaves were paler, as the glow takes their colour;
 /// and how dark the inside of a crown goes in the sun's light, at least.
 const LEAF: Vec4 = Vec4::new(0.0, 0.0, 1.8, 0.3);
+/// A conifer's needles (D318): as a crown's leaves, but lit through far less, as needles are
+/// thick and waxy; lit through as a broadleaf's, a pine's crown seen against the sun glowed
+/// lime.
+const NEEDLES: Vec4 = Vec4::new(0.0, 0.0, 0.6, 0.3);
 /// The middle layer's leaves (D269): darkened as the floor's (D268) but not greyed, its
 /// hazel, bramble and holly graded to living leaves' greens (D292); lit through less than a
 /// crown's, as backlit they glowed lime, and as dark inside as a crown.
@@ -191,23 +200,23 @@ const BEVY_THROUGH: f32 = 0.05;
 /// of a tree and the far forest past the meadow show them (D273).
 const FAR_CROWNS: [Color; 3] = [
     Color::srgb(0.19, 0.3, 0.085),
-    Color::srgb(0.15, 0.23, 0.12),
+    Color::srgb(0.11, 0.155, 0.1),
     Color::srgb(0.13, 0.21, 0.12),
 ];
-/// Each kind's crown cards tinted, oak, pine and spruce (D247, D248); the conifers' as they
-/// read when the crowns' leaves were greyed and darkened (D292), the pine's a little greyer, a
-/// Scots pine's grey-green (D309).
+/// Each kind's crown cards tinted, oak, pine and spruce (D247, D248); the spruce's as it read
+/// when the crowns' leaves were greyed and darkened (D292); the Scots pine's tufts are drawn in
+/// their own dark grey-green (D318).
 const CROWN_TINTS: [Vec3; 3] = [
     Vec3::new(0.92, 0.95, 0.85),
-    Vec3::new(1.12, 0.9, 1.02),
+    Vec3::new(1.05, 1.0, 1.0),
     Vec3::new(1.48, 1.36, 0.67),
 ];
-/// The atlas's oakbranch, pine and spruce pictures' average colour where they are leaf,
+/// The atlas's oakbranch, Scots pine and spruce pictures' average colour where they are leaf,
 /// linear, measured from `materials/foliage/cards.png` by hand-run script: what the far
 /// forest's crowns are coloured from, tinted and darkened as the crowns' cards are (D273).
 const LEAF_MEANS: [Vec3; 3] = [
     Vec3::new(0.079, 0.128, 0.036),
-    Vec3::new(0.027, 0.074, 0.027),
+    Vec3::new(0.015, 0.031, 0.018),
     Vec3::new(0.006, 0.014, 0.007),
 ];
 /// Paths are filed in squares this wide, to find the nearest quickly.
@@ -331,8 +340,13 @@ fn follow_detail(
     if !(detail.is_changed() || forest.is_added()) {
         return;
     }
-    if let Some(mut material) = materials.get_mut(&forest.dropping) {
-        material.extension.cards = (Vec2::from(CARDS_DROP_M) * detail.0).extend(1.0);
+    for (dropping, range) in [
+        (&forest.dropping, CARDS_DROP_M),
+        (&forest.dropping_needles, NEEDLES_DROP_M),
+    ] {
+        if let Some(mut material) = materials.get_mut(dropping) {
+            material.extension.cards = (Vec2::from(range) * detail.0).extend(1.0);
+        }
     }
     let [from, to] = SHADOW_HANDOVER_M;
     let end = SHADOW_M[1];
@@ -510,6 +524,8 @@ struct Forest {
     /// The near crowns' leaves, whose cards drop out between distances that follow how far
     /// detail reaches (D230).
     dropping: Handle<Foliage>,
+    /// And the conifers' needles' (D318).
+    dropping_needles: Handle<Foliage>,
     /// The shadow stand-ins, whose handover follows how far detail reaches too.
     stand_in: Handle<Foliage>,
     lumps: Handle<Foliage>,
@@ -552,19 +568,29 @@ fn glade_at(glades: &Noise, at: Vec2) -> f32 {
     glades.fbm(Vec3::new(at.x, 0.0, at.y) / 45.0, 2, 2.0, 0.5)
 }
 
-/// Which kind of tree grows at a place: Scots pines in groves, where a broad field of noise
-/// is high, Norway spruces in the groves' damper hollows, where another is, oaks everywhere
-/// else; `mixed` moves a grove's edge, so its edges mix.
+/// Which kind of tree grows at a place (D301, D318): the tall stand is Scots pine nearly
+/// everywhere, Norway spruces in its damper hollows, where a second field of noise is high,
+/// and oaks the exception, in the odd patch where a broad field is lowest; `mixed` moves a
+/// patch's edge, so its edges mix.
 fn species_at(groves: &Noise, at: Vec2, mixed: f32) -> Species {
     let grove = groves.fbm(Vec3::new(at.x, 0.0, at.y) / 70.0, 2, 2.0, 0.5);
-    if grove < 0.1 + mixed {
+    if grove < OAKS_BELOW + mixed {
         Species::Oak
-    } else if groves.sample(Vec3::new(at.x, 40.0, at.y) / 35.0) > 0.15 {
+    } else if groves.sample(Vec3::new(at.x, 40.0, at.y) / 35.0) > SPRUCES_OVER {
         Species::Spruce
     } else {
         Species::Pine
     }
 }
+
+/// Where oaks and spruces stand among the pines: below and above these values of their
+/// fields of noise (`species_at`), so about one grown tree in ten is an oak and one in five
+/// a spruce (D318).
+const OAKS_BELOW: f32 = -0.2;
+const SPRUCES_OVER: f32 = 0.3;
+/// How far apart grown pines stand, of `SPACING_M`, before their knots: closer than the oaks
+/// were, as a tall stand's poles are, so a walk among them is among trunks (D301, D318).
+const PINES_APART: f32 = 0.62;
 
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
@@ -607,10 +633,10 @@ struct TreeModel {
 
 /// The kinds of tree the forest grows, each grown once and drawn many times: what it is,
 /// its form, whether young, and the heights it is grown between (D182, D235). Grown oaks
-/// are tall forest oaks, broad ones, and ones forked low; Scots pines stand in groves among
-/// them, pointed, flat-topped, forked and broken (D276), Norway spruces in the groves'
-/// damper hollows, young spruces under them.
-const KINDS: [(Species, Form, bool, (f32, f32)); 26] = [
+/// are tall forest oaks, broad ones, and ones forked low; Scots pines, most of the forest, a
+/// tall stand 24 to 34 m high, pointed, flat-topped, forked and broken (D276, D318), Norway
+/// spruces as tall in its damper hollows, young spruces under them; oaks the exception.
+const KINDS: [(Species, Form, bool, (f32, f32)); 30] = [
     (Species::Oak, Form::Tall, false, (21.0, 27.0)),
     (Species::Oak, Form::Broad, false, (17.0, 23.0)),
     (Species::Oak, Form::Forked, false, (19.0, 25.0)),
@@ -622,22 +648,27 @@ const KINDS: [(Species, Form, bool, (f32, f32)); 26] = [
     (Species::Oak, Form::Tall, true, (8.0, 10.5)),
     (Species::Oak, Form::Tall, true, (9.0, 12.0)),
     (Species::Oak, Form::Broad, true, (8.0, 11.0)),
-    (Species::Pine, Form::Tall, false, (24.0, 28.0)),
-    (Species::Pine, Form::Tall, false, (26.0, 31.0)),
-    (Species::Pine, Form::Broad, false, (23.0, 27.0)),
-    (Species::Pine, Form::Forked, false, (27.0, 32.0)),
-    (Species::Spruce, Form::Tall, false, (19.0, 24.0)),
+    (Species::Pine, Form::Tall, false, (27.0, 31.0)),
+    (Species::Pine, Form::Tall, false, (28.0, 33.0)),
+    (Species::Pine, Form::Broad, false, (25.0, 29.0)),
+    (Species::Pine, Form::Forked, false, (29.0, 34.0)),
+    (Species::Spruce, Form::Tall, false, (24.0, 29.0)),
+    (Species::Spruce, Form::Tall, false, (26.0, 31.0)),
     (Species::Spruce, Form::Tall, false, (22.0, 27.0)),
-    (Species::Spruce, Form::Tall, false, (17.0, 22.0)),
     (Species::Spruce, Form::Tall, true, (3.5, 5.0)),
     (Species::Spruce, Form::Tall, true, (4.5, 6.5)),
     (Species::Spruce, Form::Tall, true, (5.5, 8.0)),
     // Added later, after the rest, so each kind above keeps the seed it was grown from.
-    (Species::Pine, Form::Tall, false, (20.0, 24.0)),
-    (Species::Pine, Form::Broad, false, (27.0, 32.0)),
-    (Species::Pine, Form::Forked, false, (24.0, 29.0)),
-    (Species::Pine, Form::Broken, false, (22.0, 27.0)),
-    (Species::Spruce, Form::Tall, false, (24.0, 29.0)),
+    (Species::Pine, Form::Tall, false, (24.0, 28.0)),
+    (Species::Pine, Form::Broad, false, (28.0, 33.0)),
+    (Species::Pine, Form::Forked, false, (26.0, 31.0)),
+    (Species::Pine, Form::Broken, false, (24.0, 29.0)),
+    (Species::Spruce, Form::Tall, false, (27.0, 32.0)),
+    // The tall stand's pines, most of the forest, in more variants (D318).
+    (Species::Pine, Form::Tall, false, (26.0, 30.0)),
+    (Species::Pine, Form::Tall, false, (30.0, 34.0)),
+    (Species::Pine, Form::Broad, false, (26.0, 31.0)),
+    (Species::Pine, Form::Forked, false, (27.0, 32.0)),
 ];
 
 /// A bark's material, `materials/<name>`, tinted: its colour, normal, roughness and
@@ -807,6 +838,12 @@ fn plant(
         LEAF,
         BEVY_THROUGH,
     ));
+    let needle_leaves = materials.add(crown_material(Vec3::ZERO, NEEDLES, BEVY_THROUGH));
+    let dropping_needles = materials.add(crown_material(
+        Vec2::from(NEEDLES_DROP_M).extend(1.0),
+        NEEDLES,
+        BEVY_THROUGH,
+    ));
     // The shadow stand-ins: their cards shrink away over the handover, and the lumps grow in
     // then shrink away at the end of the shadows (D234).
     let shrinking = |out: [f32; 2], grow: [f32; 2]| FoliageExtension {
@@ -865,7 +902,8 @@ fn plant(
         .collect();
     let leaf_of = [
         Leaf::of(&cards, "oakbranch"),
-        Leaf::of(&cards, "pine"),
+        // A Scots pine's shoots drawn needle by needle (D318).
+        Leaf::of(&cards, "scots"),
         Leaf::of(&cards, "spruce"),
     ];
     // Ivy on the trunks (D309): the forest floor's ivy cards (litter.ron, D275), its own
@@ -922,8 +960,10 @@ fn plant(
             for card in cards.iter_mut().flatten() {
                 card.tint *= tint;
             }
-            let near = crown_near(&cards);
-            let far = crown_far(&cards);
+            // How many cards a clump its crown keeps far off.
+            let keep = if species == Species::Pine { 1 } else { 2 };
+            let near = crown_near(&cards, keep);
+            let far = crown_far(&cards, keep);
             let shadow = crown_stand_in(&cards);
             let clumps = crown_clumps(&tree, 1.0, false);
             let lumps = crown_clumps(&tree, SHADOW_LUMP, true);
@@ -1044,7 +1084,7 @@ fn plant(
             // Its trunk does not sway, so nor do its leaves much with it.
             card.sway.x *= 0.25;
         }
-        let near = crown_near(&cards);
+        let near = crown_near(&cards, 2);
         info!(
             "lush: veteran oak {model}, {VETERAN_M:.0} m: {} clumps, crown {} near",
             tree.tips.len(),
@@ -1058,7 +1098,7 @@ fn plant(
                 shapes.remember(&mesh, seen);
                 mesh
             },
-            crown_far: meshes.add(crown_far(&cards).mesh()),
+            crown_far: meshes.add(crown_far(&cards, 2).mesh()),
             shadow: meshes.add(crown_stand_in(&cards).mesh()),
             clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
             lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
@@ -1134,9 +1174,9 @@ fn plant(
     };
 
     // Grown trees, tried at random over the patch and kept if far enough from the others
-    // and off the paths; then young ones in the gaps between them. Pines grow in groves,
-    // where a broad field of noise is high, spruces in the groves' hollows, where another
-    // is; oaks everywhere else, and the edges of groves mixed.
+    // and off the paths; then young ones in the gaps between them. Pines grow nearly
+    // everywhere, spruces in the stand's hollows, where a field of noise is high, oaks in the
+    // odd patch where another is lowest, the patches' edges mixed (`species_at`, D318).
     let mut dice = seed.derive("places").rng();
     let glades = Noise::new(seed.derive("glades"));
     let groves = Noise::new(seed.derive("groves"));
@@ -1204,7 +1244,7 @@ fn plant(
                             0.25,
                             clumps.fbm(Vec3::new(at.x, 30.0, at.y) / 9.0, 2, 2.0, 0.5),
                         );
-                        0.75 * (0.6 + 1.4 * knots) * dice.range(0.8, 1.2)
+                        PINES_APART * (0.6 + 1.4 * knots) * dice.range(0.8, 1.2)
                     }
                     Species::Oak => 0.65 + 0.8 * clumped.clamp(0.0, 1.0),
                     _ => 0.75 * (0.65 + 0.8 * clumped.clamp(0.0, 1.0)),
@@ -1375,18 +1415,24 @@ fn plant(
                             NotShadowCaster,
                         ));
                     }
-                    // The crown thins card by card out to CARDS_DROP_M[1], then is two cards
-                    // a clump, the same cards at the same size, then lumps (D223).
+                    // The crown thins card by card out to CARDS_DROP_M[1], a conifer's to
+                    // NEEDLES_DROP_M[1], then is those it keeps a clump, the same cards at the
+                    // same size, then lumps (D223).
+                    let (dropping, kept, [_, dropped]) = if model.species == Species::Oak {
+                        (&dropping_leaves, &crown_leaves, CARDS_DROP_M)
+                    } else {
+                        (&dropping_needles, &needle_leaves, NEEDLES_DROP_M)
+                    };
                     tree.spawn((
                         Mesh3d(model.crown_near.clone()),
-                        MeshMaterial3d(dropping_leaves.clone()),
-                        between(0.0, CARDS_DROP_M[1]),
+                        MeshMaterial3d(dropping.clone()),
+                        between(0.0, dropped),
                         NotShadowCaster,
                     ));
                     tree.spawn((
                         Mesh3d(model.crown_far.clone()),
-                        MeshMaterial3d(crown_leaves.clone()),
-                        between(CARDS_DROP_M[1], far_from(size)),
+                        MeshMaterial3d(kept.clone()),
+                        between(dropped, far_from(size)),
                         NotShadowCaster,
                     ));
                     // Far off, the crown as its solid lumps in the leaves' colour, so the
@@ -1542,6 +1588,7 @@ fn plant(
     });
     commands.insert_resource(Forest {
         dropping: dropping_leaves.clone(),
+        dropping_needles: dropping_needles.clone(),
         stand_in: stand_in_leaves.clone(),
         lumps: shadow_lumps.clone(),
     });
@@ -1789,8 +1836,10 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
         for (at, colour) in build.positions.iter().zip(&mut build.colours) {
             let up = smoothstep(from, from + 0.35, at[1] / height);
             // Low on the bole the scan's orange taken to a grey-brown, its plates' red gone
-            // (D309): at (0.7, 0.72, 0.8) the whole stand read as redwoods.
-            let shade = Vec3::new(0.52, 0.72, 1.2).lerp(plates, up);
+            // (D309): at (0.7, 0.72, 0.8) the whole stand read as redwoods; at (0.52, 0.72,
+            // 1.2), a neutral grey, its shaded side went slate-blue in the sky's light, and
+            // with the stand's trunks filling the view, so did the shade (D318).
+            let shade = Vec3::new(0.55, 0.7, 0.8).lerp(plates, up);
             colour[0] = shade.x;
             colour[1] = shade.y;
             colour[2] = shade.z;
@@ -2061,23 +2110,25 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
 
 /// A crown near the camera: every card, each knowing its rank, which the foliage shader
 /// shrinks to its middle one by one with distance while the rest grow to cover as much, as
-/// SpeedTree's leaves drop out: the crown thins without ever being swapped (D223).
-fn crown_near(cards: &[Vec<Card>]) -> Build {
+/// SpeedTree's leaves drop out: the crown thins without ever being swapped (D223), down to
+/// `keep` a clump.
+fn crown_near(cards: &[Vec<Card>], keep: usize) -> Build {
     let mut build = Build::default();
     for tip in cards {
         for (k, card) in tip.iter().enumerate() {
-            card.draw_ranked(&mut build, 1.0, Some((k, tip.len())));
+            card.draw_ranked(&mut build, 1.0, Some((k, tip.len(), keep)));
         }
     }
     build
 }
 
-/// A crown far off: two cards a clump, the first two of its near crown's, grown as they
-/// are there when the rest have dropped out (D223).
-fn crown_far(cards: &[Vec<Card>]) -> Build {
+/// A crown far off: `keep` cards a clump, the first of its near crown's, grown as they are
+/// there when the rest have dropped out (D223): two, or one for a Scots pine, whose tufts
+/// crowd in pads (D318).
+fn crown_far(cards: &[Vec<Card>], keep: usize) -> Build {
     let mut build = Build::default();
     for tip in cards {
-        let keep = 2.min(tip.len());
+        let keep = keep.min(tip.len());
         let grow = libm::powf(tip.len() as f32 / keep as f32, 0.55);
         for card in &tip[..keep] {
             card.draw(&mut build, grow);
@@ -2200,7 +2251,7 @@ impl Card {
         self.draw_ranked(build, grow, None);
     }
 
-    fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize)>) {
+    fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize, usize)>) {
         let half = self.half * grow;
         let base = build.positions.len() as u32;
         for (u, v) in self.leaf.outline {
@@ -2215,11 +2266,14 @@ impl Card {
                 let offset = corner - self.middle;
                 build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
             }
-            if let Some((k, n)) = rank {
+            if let Some((k, n, keep)) = rank {
                 let offset = corner - self.middle;
-                build
-                    .dropping
-                    .push([offset.x, offset.y, offset.z, k as f32 + n as f32 / 100.0]);
+                build.dropping.push([
+                    offset.x,
+                    offset.y,
+                    offset.z,
+                    k as f32 + n as f32 / 100.0 + keep as f32 / 1000.0,
+                ]);
             }
         }
         for i in 1..self.leaf.outline.len() as u32 - 1 {
@@ -2242,8 +2296,9 @@ fn crown_seen(
 ) -> sky_occlusion::Crown {
     let (mid, half, wide, closes) = match species {
         Species::Oak => (0.68, 0.32, 1.0, 0.85),
-        Species::Pine => (0.82, 0.16, 1.0, 0.62),
-        Species::Spruce => (0.55, 0.45, 0.75, 0.92),
+        Species::Pine => (0.82, 0.16, 1.0, 0.78),
+        // A spruce of the tall stand: its crown from a third of its height (D318).
+        Species::Spruce => (0.66, 0.34, 0.75, 0.92),
     };
     sky_occlusion::Crown {
         middle: middle_at_foot + up * height * mid,

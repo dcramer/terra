@@ -184,8 +184,9 @@ fn tree(p: vec2<f32>, size: vec2<f32>, kind: u32, luck: f32) -> Shape {
         bole = 0.86 * h;
         trunk = 0.022 * h;
     } else {
-        // A Norway spruce: a cone of whorls to the ground, each drooping wider at its foot.
-        let base = 0.05 * h;
+        // A Norway spruce of the tall stand: a cone of whorls from a third of its height, each
+        // drooping wider at its foot, over its bare bole (D318).
+        let base = 0.32 * h;
         let up = clamp((p.y - base) / (h - base), 0.0, 1.0);
         let whorl = fract((p.y - base) / (1.3 + 0.03 * h) + luck * 5.0);
         let n = smooth_noise(vec2<f32>(p.y / 0.9, luck * 13.0 + sign(p.x) * 3.0));
@@ -207,9 +208,9 @@ fn tree(p: vec2<f32>, size: vec2<f32>, kind: u32, luck: f32) -> Shape {
         s.light = 0.6;
         s.part = 1u;
     }
-    // Undergrowth round the foot of an oak or a pine, one to three and a half metres high,
-    // across the card, so a wood's edge is a belt of shrubs as a real one is.
-    if kind < 2u && s.inside <= 0.0 {
+    // Undergrowth round the foot of every tree, one to three and a half metres high, across
+    // the card, so a wood's edge is a belt of shrubs as a real one is.
+    if s.inside <= 0.0 {
         let n = smooth_noise(vec2<f32>(p.x / 1.4, luck * 29.0));
         let twigs = smooth_noise(p / 0.35 + vec2<f32>(luck * 17.0, 0.0));
         let tall = (1.0 + 2.5 * n * n) * (1.0 - smoothstep(0.3 * w, 0.5 * w, abs(p.x))) * (0.8 + 0.4 * twigs);

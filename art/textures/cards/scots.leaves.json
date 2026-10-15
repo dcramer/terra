@@ -1,0 +1,17 @@
+{
+  "form": "needles",
+  "leaves": 1,
+  "length": [0.12, 0.17],
+  "stalk": 0.45,
+  "shoots": 12,
+  "spread": [0.2, 1.6],
+  "shoot": { "from": [0.4, 1.0], "length": [0.32, 0.5] },
+  "twig": [0.36, 0.24, 0.14],
+  "thickness": 0.009,
+  "tone": 0.35,
+  "young": 0,
+  "old": 0,
+  "underside": 0,
+  "needle": { "colour": [0.13, 0.2, 0.16], "young": [0.22, 0.3, 0.2], "width": 0.0065, "every": 0.0055, "lean": [0.3, 1.0], "per": 3 },
+  "seed": 11
+}

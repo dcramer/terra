@@ -161,16 +161,20 @@ fn give(weights: vec2<f32>) -> f32 {
 
 // A crown's cards drop out with distance, as SpeedTree's leaves do (D223): each vertex
 // knows its offset from its card's middle, and its card's rank and how many its clump has
-// (the tangent's w: the rank, plus a hundredth of the count). From cards.x to cards.y the
-// clump keeps fewer, down to two: the next card to go shrinks to its middle while those that
-// stay grow to cover as much. The tree's distance from the camera is the same in its shadow's
+// (the tangent's w: the rank, plus a hundredth of the count and a thousandth of how many it
+// keeps). From cards.x to cards.y the clump keeps fewer, down to those: the next card to go
+// shrinks to its middle while those that stay grow to cover as much. The tree's distance from the camera is the same in its shadow's
 // pass, which Bevy measures from the camera too.
 fn dropped(local: vec3<f32>, tangent: vec4<f32>, tree: vec3<f32>) -> vec3<f32> {
     let rank = floor(tangent.w);
-    let count = round(fract(tangent.w) * 100.0);
+    // Its count in hundredths, and in thousandths how many its clump keeps far off: two, or
+    // one for a Scots pine's crowded tufts (D318).
+    let counted = fract(tangent.w) * 100.0;
+    let count = floor(counted + 0.02);
+    let least = max(round((counted - count) * 10.0), 1.0);
     let far = distance(tree, view.lod_view_world_position);
     let t = smoothstep(wind.cards.x, wind.cards.y, far);
-    let keep = mix(count, min(2.0, count), t);
+    let keep = mix(count, min(least, count), t);
     let stays = clamp(keep - rank, 0.0, 1.0);
     let grow = pow(count / max(keep, 1.0), 0.55);
     let middle = local - tangent.xyz;

@@ -213,8 +213,8 @@ pub(super) struct Stand {
 
 impl Stand {
     /// A tree of a species standing at `at`, its crown's middle at `crown_at` reaching
-    /// `crown_m` round it: an oak's crown hides most of the sky under it, a Scots pine's lets
-    /// much of the light through, a spruce's little; a young tree's less.
+    /// `crown_m` round it: an oak's crown hides most of the sky under it, a Scots pine's a
+    /// little less, a spruce's nearly all; a young tree's less.
     pub(super) fn of(
         at: Vec2,
         crown_at: Vec2,
@@ -225,7 +225,9 @@ impl Stand {
     ) -> Self {
         let closes = match species {
             Species::Oak => 0.85,
-            Species::Pine => 0.62,
+            // A Scots pine's crown of pads hides three quarters of the sky straight up through
+            // it, measured from its cards (D318); its old whorls of spray cards hid less.
+            Species::Pine => 0.78,
             Species::Spruce => 0.92,
         };
         Self {
@@ -846,11 +848,13 @@ impl Under {
             Under::Scrub => {
                 smoothstep(0.45, 0.9, here.light) * (0.5 + 0.5 * near(here.path, 1.0, 6.0))
             }
-            // Where a gap lets the light down.
+            // Where a gap lets the light down; a broadleaf's, fewer on a pine stand's needles,
+            // whose high crowns let light down nearly everywhere (D318).
             Under::Sapling => {
                 smoothstep(0.15, 0.6, here.light)
                     * smoothstep(2.0, 4.0, here.bark)
                     * (0.6 + 0.4 * edge)
+                    * (0.3 + 0.7 * broadleaf)
             }
             // Fallen from the trees, round their feet and by the logs.
             Under::Branches => {

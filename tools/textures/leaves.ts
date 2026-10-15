@@ -39,8 +39,18 @@ export type Recipe = {
   length: [number, number];
   /** For `needles`: an old needle's colour and a young one's at the shoots' tips (sRGB), a
    * needle's width at its base as a share of the card, and how far apart needles are along
-   * a twig, as a share of the card. */
-  needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number };
+   * a twig, as a share of the card; how far, in radians, a needle leans forward off its twig,
+   * least and most (0.5 to 1.0 by default, a spruce's), and how many leave each place along it
+   * (3: a Scots pine's stand in pairs, so a brush of them is thicker). */
+  needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number; lean?: [number, number]; per?: number };
+  /** For `needles`: how far the side shoots turn off the main twig, in radians, least and
+   * most (0.8 to 1.15 by default, a spruce's flat spray): a Scots pine's run forward and up,
+   * a tuft. Its `shoot` says where along the main twig they leave it (0.08 to 0.88) and how
+   * long they are (0.42 to 0.58 of the card). */
+  spread?: [number, number];
+  /** For `needles`: how much of the card the main twig runs up (0.92): shorter, with its
+   * shoots fanned from its top, a tuft is as wide as it is long. */
+  stalk?: number;
   /** Side shoots off the main twig. */
   shoots: number;
   /** Where along the main twig the shoots leave it, as shares of its length, and how long
@@ -726,14 +736,17 @@ function needles(recipe: Recipe, size: number): Composed {
   const room = Math.round(big * 0.2);
   const canvas = new Canvas(big + 2 * room);
   const roll = dice(recipe.seed);
-  const main = curve([room + big * 0.5, room + big * 0.98], -Math.PI / 2 + roll.range(-0.1, 0.1), big * 0.92, roll.range(-0.25, 0.25), 16);
+  const main = curve([room + big * 0.5, room + big * 0.98], -Math.PI / 2 + roll.range(-0.1, 0.1), big * (recipe.stalk ?? 0.92), roll.range(-0.25, 0.25), 16);
   const twigs: { points: [number, number][]; rank: number }[] = [{ points: main, rank: 0 }];
   for (let k = 0; k < recipe.shoots; k++) {
-    const t = 0.08 + (0.8 * (k + roll.range(0.1, 0.9))) / recipe.shoots;
+    const [first, last] = recipe.shoot?.from ?? [0.08, 0.88];
+    const t = first + ((last - first) * (k + roll.range(0.1, 0.9))) / recipe.shoots;
     const from = along(main, t);
     const side = k % 2 ? 1 : -1;
-    const reach = big * roll.range(0.42, 0.58) * (1.15 - 0.85 * t);
-    const shoot = curve(from.at, from.heading + side * roll.range(0.8, 1.15), reach, -side * roll.range(0.15, 0.45), 10);
+    const [far, farthest] = recipe.shoot?.length ?? [0.42, 0.58];
+    const [least, most] = recipe.spread ?? [0.8, 1.15];
+    const reach = big * roll.range(far, farthest) * (1.15 - 0.85 * t);
+    const shoot = curve(from.at, from.heading + side * roll.range(least, most), reach, -side * roll.range(0.15, 0.45), 10);
     twigs.push({ points: shoot, rank: 1 });
     const own = Math.floor(roll.unit() * (recipe.leaves + 1));
     for (let j = 0; j < own; j++) {
@@ -751,11 +764,12 @@ function needles(recipe: Recipe, size: number): Composed {
     for (let i = 0; i < steps; i++) {
       const t = Math.min(1, (i + roll.unit()) / steps);
       const { at, heading } = along(twig.points, t);
-      for (let n = 0; n < 3; n++) {
+      const [forward0, forward1] = needle.lean ?? [0.5, 1.0];
+      for (let n = 0; n < (needle.per ?? 3); n++) {
         // Round the twig at `phi`: across it in the picture by its cosine, toward the eye by
         // its sine; leaning forward from the twig by `lean`.
         const phi = roll.range(0, Math.PI * 2);
-        const lean = roll.range(0.5, 1.0);
+        const lean = roll.range(forward0, forward1);
         const length = big * roll.range(recipe.length[0], recipe.length[1]) * (1 - 0.25 * t * t);
         const [hx, hy] = [Math.cos(heading), Math.sin(heading)];
         const [px, py] = [-hy, hx];

@@ -62,6 +62,17 @@ test("lit orange litter is counted only in the lower third, and masked pixels no
   assert.equal(masked.dark, 0);
 });
 
+test("trunks are counted only in the middle third, by their brown hue", () => {
+  const bark: [number, number, number] = [90, 60, 40];
+  const leaves: [number, number, number] = [40, 70, 30];
+  // Bark across the middle third only: all of it is trunk.
+  near(look(picture((_, y) => (y >= H / 3 && y < (H * 2) / 3 ? bark : leaves))).trunkMiddle ?? -1, 1);
+  // Bark above and below it, leaves in it: none.
+  near(look(picture((_, y) => (y >= H / 3 && y < (H * 2) / 3 ? leaves : bark))).trunkMiddle ?? -1, 0);
+  // Half the middle third's width bark: half.
+  near(look(picture((x) => (x < W / 2 ? bark : leaves))).trunkMiddle ?? -1, 0.5);
+});
+
 test("the mean of looks is the mean of each number", () => {
   const a = look(picture(() => [0, 0, 0]));
   const b = look(picture(() => [255, 255, 255]));
@@ -71,10 +82,14 @@ test("the mean of looks is the mean of each number", () => {
 test("every reference kept has every number a look has, each a number", async () => {
   const { references, reference } = await import("./look.ts");
   const keys = Object.keys(look(picture(() => [100, 120, 80]))).sort();
+  // Measured since some references were made, from frames no longer to hand.
+  const later = ["trunkMiddle"];
   assert.ok(references().includes("sotf-forest-day"));
   for (const name of references()) {
     const kept = reference(name);
-    assert.deepEqual(Object.keys(kept.look).sort(), keys, name);
+    const required = keys.filter((k) => !later.includes(k));
+    assert.deepEqual(Object.keys(kept.look).filter((k) => !later.includes(k)).sort(), required, name);
+    assert.ok(Object.keys(kept.look).every((k) => keys.includes(k)), name);
     assert.ok(Object.values(kept.look).every((v) => typeof v === "number" && Number.isFinite(v)), name);
     assert.ok(kept.frames > 0 && kept.about.length > 0, name);
   }

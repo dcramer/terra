@@ -646,7 +646,10 @@ async function cards(name: string, entries: string[], size: number, columns: num
   writeFileSync(ronFile, ron.join("\n"));
   const scanned = [...scans.keys()].map((id) => `[${id}](https://ambientcg.com/a/${id})`).join(", ");
   const parts = [
-    composed.length && `${composed.join(", ")} composed by \`textures.ts cards\` from leaves scanned by ambientCG, ${scanned}, CC0, each with its normal map`,
+    composed.length &&
+      (scans.size
+        ? `${composed.join(", ")} composed by \`textures.ts cards\` from leaves scanned by ambientCG, ${scanned}, CC0, each with its normal map`
+        : `${composed.join(", ")} composed by \`textures.ts cards\`, each with its normal map`),
     pictured.length && `${pictured.join(", ")} each cut out of a generated picture on a blue background (art/textures/cards)`,
     kept.length && `${kept.join(", ")} kept from the atlas as it stood`,
   ].filter(Boolean);

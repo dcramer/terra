@@ -39,7 +39,7 @@ const CELL_M: f32 = 6.5;
 const CHUNK_M: f32 = 160.0;
 /// Each kind's height range, as the near forest grows its grown trees (`KINDS`), and how wide
 /// its crown is for its height.
-const HEIGHTS: [(f32, f32); 3] = [(18.0, 27.0), (23.0, 31.0), (18.0, 26.0)];
+const HEIGHTS: [(f32, f32); 3] = [(18.0, 27.0), (24.0, 34.0), (22.0, 32.0)];
 const CROWN: [f32; 3] = [0.78, 0.42, 0.36];
 
 pub(super) fn plugin(app: &mut App) {
