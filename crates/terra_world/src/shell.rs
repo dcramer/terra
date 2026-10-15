@@ -869,6 +869,10 @@ impl Plugin for ShellPlugin {
                 primary_window: Some(window),
                 ..default()
             })
+            .set(AssetPlugin {
+                file_path: crate::data::assets().to_string_lossy().into_owned(),
+                ..default()
+            })
             .set(LogPlugin {
                 filter: format!("{DEFAULT_FILTER},{QUIET}"),
                 // What the log keeps is kept in memory too, for a script to ask about.

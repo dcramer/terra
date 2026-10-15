@@ -114,12 +114,7 @@ fn load(
         .unwrap_or_default();
     for name in market.animals.kinds.keys() {
         match looks.animals.get(name) {
-            Some(drawn)
-                if bevy::asset::io::file::FileAssetReader::get_base_path()
-                    .join("assets")
-                    .join(&drawn.model)
-                    .exists() =>
-            {
+            Some(drawn) if terra_world::data::assets().join(&drawn.model).exists() => {
                 let model = assets.load(drawn.model.clone());
                 kinds.kinds.insert(name.clone(), (drawn.clone(), model));
             }

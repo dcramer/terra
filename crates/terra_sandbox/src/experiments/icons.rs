@@ -50,7 +50,7 @@ pub fn plugin(app: &mut App) {
 }
 
 fn assets() -> PathBuf {
-    bevy::asset::io::file::FileAssetReader::get_base_path().join("assets")
+    terra_world::data::assets()
 }
 
 /// Every item in the catalogue whose look exists, with its id and what its icon is

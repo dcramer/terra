@@ -7,7 +7,7 @@
 //! textures their material draws, for the game to load and draw them.
 
 use bevy::{
-    asset::{RenderAssetUsages, io::file::FileAssetReader},
+    asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
@@ -76,9 +76,7 @@ pub const SOCKET: &str = "socket.";
 /// A model's sockets, the named points code attaches to (a door's hinge, a chair's seat),
 /// from a file in `assets/models`, by name, in the model's own space.
 pub fn read_sockets(file: &str) -> Result<Vec<(String, Vec3)>, String> {
-    let path = FileAssetReader::get_base_path()
-        .join("assets/models")
-        .join(file);
+    let path = crate::data::assets().join("models").join(file);
     let problem = |what: String| format!("{}: {what}", path.display());
     let bytes = std::fs::read(&path).map_err(|error| problem(error.to_string()))?;
     let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| problem(error.to_string()))?;
@@ -104,9 +102,7 @@ pub fn read_sockets(file: &str) -> Result<Vec<(String, Vec3)>, String> {
 /// Reads a model's triangles from a file in `assets/models`, with +Y up and at the size
 /// its file says, whatever axes and scale the file is stored in.
 pub fn read_model(file: &str) -> Result<Vec<Part>, String> {
-    let path = FileAssetReader::get_base_path()
-        .join("assets/models")
-        .join(file);
+    let path = crate::data::assets().join("models").join(file);
     let problem = |what: String| format!("{}: {what}", path.display());
     let bytes = std::fs::read(&path).map_err(|error| problem(error.to_string()))?;
     let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| problem(error.to_string()))?;

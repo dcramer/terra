@@ -308,7 +308,7 @@ fn kit_assets() -> std::path::PathBuf {
     std::env::var_os("TERRA_SOURCE_ASSETS")
         .map(std::path::PathBuf::from)
         .filter(|path| path.join(KITS).is_dir())
-        .unwrap_or_else(|| bevy::asset::io::file::FileAssetReader::get_base_path().join("assets"))
+        .unwrap_or_else(terra_world::data::assets)
 }
 
 /// Every material's file, by name; `read_kits` puts them in order of id.

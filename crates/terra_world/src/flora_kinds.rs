@@ -317,8 +317,7 @@ mod tests {
                 last.name
             );
         }
-        let folder =
-            bevy::asset::io::file::FileAssetReader::get_base_path().join("assets/models/nature");
+        let folder = crate::data::assets().join("models/nature");
         for kind in flora.kinds() {
             assert!(
                 kind.models.is_empty() == kind.grown.is_some(),

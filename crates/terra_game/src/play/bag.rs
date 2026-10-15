@@ -546,10 +546,7 @@ impl ItemIcons {
             .or_insert_with(|| {
                 let def = items.catalogue.get(kind).ok()?;
                 let file = icons::file(&character::item_id(&def.name));
-                let baked = bevy::asset::io::file::FileAssetReader::get_base_path()
-                    .join("assets")
-                    .join(&file)
-                    .exists();
+                let baked = terra_world::data::assets().join(&file).exists();
                 baked.then(|| (assets.load(file), (def.size.w, def.size.h)))
             })
             .clone()

@@ -18,11 +18,23 @@ use std::time::SystemTime;
 /// How often the flora file is looked at for changes, in seconds.
 const LOOK_EVERY_S: f32 = 1.0;
 
+/// The asset folder: `assets` where Bevy looks for it (`BEVY_ASSET_ROOT`, which Cargo sets,
+/// or beside the program); failing that, in the checkout found above, which holds `assets`
+/// and `Cargo.toml`. A build run straight from `target/release/` by a script or an agent,
+/// outside Cargo, otherwise found no files and failed once it had its turn on the GPU.
+pub fn assets() -> PathBuf {
+    let base = FileAssetReader::get_base_path();
+    if base.join("assets").is_dir() {
+        return base.join("assets");
+    }
+    base.ancestors()
+        .find(|dir| dir.join("assets").is_dir() && dir.join("Cargo.toml").is_file())
+        .map_or_else(|| base.join("assets"), |dir| dir.join("assets"))
+}
+
 /// Where a data file is.
 pub fn path(file: &str) -> PathBuf {
-    FileAssetReader::get_base_path()
-        .join("assets/data")
-        .join(file)
+    assets().join("data").join(file)
 }
 
 /// Reads a data file. A mistake in one is a mistake in the game, so it stops it, saying

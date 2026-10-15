@@ -913,8 +913,7 @@ mod tests {
 
     #[test]
     fn every_bark_a_tree_names_is_a_material_with_its_maps() {
-        let folder =
-            bevy::asset::io::file::FileAssetReader::get_base_path().join("assets/materials");
+        let folder = crate::data::assets().join("materials");
         for kind in Flora::read().kinds() {
             if let Some(Grown::Tree(def)) = &kind.grown {
                 for map in ["color.jpg", "normal.jpg", "arm.jpg"] {
