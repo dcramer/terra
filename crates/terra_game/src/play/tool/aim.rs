@@ -21,6 +21,7 @@ pub(super) fn aim(
     obstacles: Res<Obstacles>,
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut players: Query<(&Transform, &View, &Intent, &mut Builder), With<Player>>,
+    held: Option<Res<crate::remote::HeldCamera>>,
 ) {
     for (player, view, intent, mut builder) in &mut players {
         // What is being worked on stays the target until the work is done or dropped.
@@ -33,8 +34,9 @@ pub(super) fn aim(
             builder.target = Target::Nothing;
             continue;
         }
-        // A fixed camera is for taking pictures, and an open dial is for choosing.
-        if options.vantage.is_some() || intent.choosing {
+        // A fixed camera, or one a script holds, is for taking pictures, and an open dial is
+        // for choosing: the view's middle is not the player's aim.
+        if options.vantage.is_some() || held.as_ref().is_some_and(|h| h.held()) || intent.choosing {
             builder.target = Target::Nothing;
             continue;
         }

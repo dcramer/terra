@@ -126,9 +126,19 @@ usage: terra_sandbox [options]
                         (repeatable)
   --save <file>         where the play experiment keeps its saved game; scripted runs
                         save and load only when given this
+  --calls <file.jsonl>  make remote calls on given frames of a scripted run, one a line,
+                        {\"frame\": 120, \"method\": \"build.fill\", \"params\": {}}, counted
+                        as --press counts them, through the methods --remote answers:
+                        a film of building made the same every time (tools/sandbox/qa.ts)
+  --frame-times <file.csv>
+                        with --bench, write every timed frame's times, on the real clock
+                        and the game's, the render passes' and the GPU's, one a line
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
+  --free-build          building in the play experiment costs nothing, every cost met
+                        as on the yard, though claims still hold: building with
+                        pretend materials, as the QA films do (tools/sandbox/qa.ts)
   --level yard          play on the yard, a flat test level for building: no hills, sea,
                         trees, creatures or village; building is free and instant in
                         a claim that covers it; the sun stands at noon; nothing is saved
@@ -246,8 +256,14 @@ pub struct Options {
     pub save: Option<PathBuf>,
     /// Where the play experiment writes its whole state every frame, to compare runs.
     pub trace: Option<PathBuf>,
+    /// Remote calls a scripted run makes on given frames (`remote::Calls`).
+    pub calls: Option<PathBuf>,
+    /// Where a benchmark writes every timed frame's times.
+    pub frame_times: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
+    /// Building costs nothing: every cost is met, as on the yard, but claims still hold.
+    pub free_build: bool,
     /// Which level the play experiment is on: the world, or a test level.
     pub level: Level,
     /// What walls, floors and roofs are laid in: `logs`, the default, or `plain`
@@ -347,7 +363,7 @@ impl Shots {
         }
         frames.sort_unstable();
         frames.dedup();
-        if prefix.is_empty() || frames.is_empty() || frames.len() > 4000 {
+        if prefix.is_empty() || frames.is_empty() || frames.len() > 20_000 {
             return Err(problem());
         }
         Ok(Self {
@@ -400,7 +416,10 @@ impl Options {
             gives: Vec::new(),
             save: None,
             trace: None,
+            calls: None,
+            frame_times: None,
             fresh: false,
+            free_build: false,
             level: Level::World,
             walls: None,
             kit_sheet: false,
@@ -466,6 +485,7 @@ impl Options {
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
+                "--free-build" => options.free_build = true,
                 "--level" => {
                     options.level = match value("--level")?.as_str() {
                         "world" => Level::World,
@@ -513,6 +533,10 @@ impl Options {
                 }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
+                "--calls" => options.calls = Some(PathBuf::from(value("--calls")?)),
+                "--frame-times" => {
+                    options.frame_times = Some(PathBuf::from(value("--frame-times")?))
+                }
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--shots" => options.shots = Some(Shots::parse(&value("--shots")?)?),
                 "--detail-sweep" => {
@@ -841,7 +865,7 @@ impl Plugin for ShellPlugin {
             )
             .add_systems(Update, scripted_run)
             .add_systems(PostUpdate, keep_the_mouse_free);
-        if self.0.remote {
+        if self.0.remote || self.0.calls.is_some() {
             crate::remote::plugin(app);
         }
         // Meshes share slabs of GPU memory, each grown by copying it into a bigger one,
@@ -1060,6 +1084,7 @@ fn scripted_run(
     ),
     (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
+    mut times: Local<Vec<String>>,
 ) {
     if !options.scripted() {
         return;
@@ -1117,6 +1142,19 @@ fn scripted_run(
         let holds = [entities.len() as usize, meshes.len(), images.len()];
         grew.get_or_insert(holds);
         frame_ms.extend(real_ms.map(|ms| (*frame, ms)));
+        // Every frame, one a line, to read a stretch's hitches beside what happened then.
+        if options.frame_times.is_some()
+            && let Some(ms) = real_ms
+        {
+            let part = |ms: Option<f32>| ms.map_or(String::new(), |ms| format!("{ms:.2}"));
+            times.push(format!(
+                "{},{ms:.2},{},{},{}",
+                *frame,
+                part(parts.as_ref().map(|p| p.game_ms)),
+                part(parts.as_ref().and_then(|p| p.render_ms)),
+                part(parts.as_ref().and_then(|p| p.gpu_ms)),
+            ));
+        }
         if let Some(parts) = &parts {
             part_ms[0].push(parts.game_ms);
             part_ms[1].extend(parts.render_ms);
@@ -1159,6 +1197,13 @@ fn scripted_run(
         }
         let frames = options.bench_frames;
         if frame_ms.len() == frames {
+            if let Some(path) = &options.frame_times {
+                let text = format!("frame,ms,game_ms,render_ms,gpu_ms\n{}\n", times.join("\n"));
+                match std::fs::write(path, text) {
+                    Ok(()) => println!("SANDBOX frame times in {}", path.display()),
+                    Err(error) => println!("SANDBOX could not write {}: {error}", path.display()),
+                }
+            }
             let in_order: Vec<f32> = frame_ms.iter().map(|(_, ms)| *ms).collect();
             // Drift is the game's own work, where leaks and a throttled machine show,
             // apart from what the view happens to hold; frames when that is not measured.

@@ -157,6 +157,12 @@ impl Building<'_, '_> {
         self.options.yard()
     }
 
+    /// Whether every cost is met for nothing: on the yard, and with `--free-build`, which
+    /// builds with pretend materials while claims still hold.
+    pub fn costs_nothing(&self) -> bool {
+        self.free() || self.options.free_build
+    }
+
     /// Where a player stands, in the world.
     pub fn player_at(&self, player: Entity) -> Option<Vec3> {
         self.walkers.get(player).ok().map(|at| at.translation)
@@ -278,7 +284,7 @@ impl Building<'_, '_> {
             })
             .collect();
         let stock = match by {
-            _ if self.free() => None,
+            _ if self.costs_nothing() => None,
             None => None,
             Some(by) => {
                 let names: BTreeSet<String> = self
@@ -484,7 +490,7 @@ impl Building<'_, '_> {
     /// a builder: what they carry and what is stored in their claim counts (D141). None on
     /// the yard, where building is free.
     pub fn short(&mut self, by: Entity, cost: &Cost, times: u32) -> Option<(ItemKind, u32)> {
-        if self.free() {
+        if self.costs_nothing() {
             return None;
         }
         let claim = self.claims.get(by).ok();
@@ -496,7 +502,7 @@ impl Building<'_, '_> {
     /// they carry, then from the storage in their claim, nearest them first (D141).
     /// Returns whether it was; on the yard it always is, for nothing.
     pub fn pay(&mut self, by: Entity, cost: &Cost, times: u32) -> bool {
-        if self.free() {
+        if self.costs_nothing() {
             return true;
         }
         let claim = self.claims.get(by).ok();

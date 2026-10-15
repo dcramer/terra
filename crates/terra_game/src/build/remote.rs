@@ -32,6 +32,10 @@
 //! - `build.op {ops}`: any operations, as `terra_build::ops::Op` serialises them, as one act.
 //! - `build.point {at}`: where a place in the base, in metres, is in the world and from the
 //!   start, to look at it or walk to it.
+//! - `build.look {from, at}`: holds the camera at a place in the base, in metres, looking at
+//!   another, as `sandbox.look` does in the world's terms (a film's camera, `--calls`).
+//! - `build.example {name}`: puts up an example building whole as the base, in place of what
+//!   is there: `castle`, to edit and time a base of 140,000 cubes (`cargo xtask qa castle`).
 //! - `build.material {kind}`: the material in the player's hammer, as Ctrl and the wheel
 //!   pick it (D232); `build.lay` lays in it when no `kind` is given.
 //! - `build.replace {at, brush?, kind?}`: changes the cubes of a brush's box round `at` (a
@@ -63,7 +67,7 @@ use crate::start::Start;
 use bevy::{
     ecs::system::SystemState,
     prelude::*,
-    remote::{BrpResult, builtin_methods::parse_some},
+    remote::{BrpResult, RemoteMethodSystemId, RemoteMethods, builtin_methods::parse_some},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -82,6 +86,8 @@ pub fn plugin(app: &mut App) {
     method(app, "build.undo", undo);
     method(app, "build.op", ops);
     method(app, "build.point", point);
+    method(app, "build.look", look);
+    method(app, "build.example", example);
     method(app, "build.ground", ground);
     method(app, "build.material", material);
     method(app, "build.replace", replace);
@@ -288,6 +294,73 @@ fn point(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         "world": placed.to_array(),
         "from_start": start.local(placed).to_array(),
     }))
+}
+
+#[derive(Deserialize)]
+struct Example {
+    name: String,
+}
+
+/// Puts up an example building whole as the player's base, in place of what is there: the
+/// castle (`terra_build::castle`, some 140,000 cubes), so edits to a base of its size are made
+/// and timed to the screen as the hammer makes them (D185).
+fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Example { name } = parse_some(params)?;
+    if name != "castle" {
+        return Err(refused(format!(
+            "there is no example called {name}: castle"
+        )));
+    }
+    let kits = world
+        .resource::<super::BuildLook>()
+        .kits
+        .clone()
+        .ok_or_else(|| refused("there are no kits"))?;
+    let kinds = super::village_kinds(&kits)
+        .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
+    let first = kinds.first();
+    let ops = terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof);
+    let mut state = SystemState::<(
+        ResMut<Site>,
+        Commands,
+        Res<crate::planet::Planet>,
+        ResMut<Assets<Mesh>>,
+    )>::new(world);
+    let result = {
+        let (mut site, mut commands, planet, mut meshes) = state
+            .get_mut(world)
+            .map_err(|problem| refused(format!("cannot build now: {problem}")))?;
+        site.put_up(&ops, &mut commands, &planet, &mut meshes)
+    };
+    state.apply(world);
+    result.map_err(refused)?;
+    let cubes = world.resource::<Site>().base.cubes().count();
+    info!("Build: put up the {name} as the base, {cubes} cubes.");
+    Ok(json!({ "done": true, "what": format!("put up the {name}"), "cubes": cubes }))
+}
+
+#[derive(Deserialize)]
+struct Look {
+    from: [f32; 3],
+    at: [f32; 3],
+}
+
+/// Holds the camera at a place in the base looking at another, both in metres in its own
+/// space, as `sandbox.look` does in the world's: a script's camera keeps to the base
+/// wherever its claim set it down.
+fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Look { from, at } = parse_some(params)?;
+    let frame = world.resource::<Site>().frame;
+    let placed = |point: [f32; 3]| frame.transform_point(Vec3::from_array(point)).to_array();
+    let handler = world
+        .resource::<RemoteMethods>()
+        .get("sandbox.look")
+        .copied();
+    let Some(RemoteMethodSystemId::Instant(id)) = handler else {
+        return Err(refused("the camera cannot be held in this run"));
+    };
+    let asked = json!({ "at": placed(at), "from": placed(from) });
+    world.run_system_with(id, Some(asked)).map_err(refused)?
 }
 
 type Acting<'w, 's> = (

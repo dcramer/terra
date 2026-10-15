@@ -242,7 +242,9 @@ struct Place {
 }
 
 /// Sets down an item from the build menu where it is asked, paid for from the pack and the
-/// claim's storage, as the hammer pays; refused outside the claim or short of its cost.
+/// claim's storage, as the hammer pays; refused outside the claim or short of its cost. A
+/// claim stone goes down outside one, as the hammer sets it, if the player has none and it
+/// keeps clear of other claims and the village.
 fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Place { item, at, turn } = parse_some(params)?;
     let name = item.unwrap_or_else(|| "Chest".to_string());
@@ -255,9 +257,12 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         Commands,
         Res<Models>,
         Query<(Entity, &Claim), (With<Player>, With<LocalPlayer>)>,
+        Query<&Claim>,
+        Option<Res<super::settlement::Village>>,
+        Res<super::catalogue::Builds>,
     )>::new(world);
     let answer = {
-        let (mut building, mut commands, models, players) = state
+        let (mut building, mut commands, models, players, claims, village, builds) = state
             .get_mut(world)
             .map_err(|problem| refused(format!("cannot build now: {problem}")))?;
         let (player, claim) = players
@@ -265,7 +270,17 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             .map_err(|_| refused("there is no player to build as"))?;
         let at = Vec3::from_array(at);
         let on_planet = building.site.frame.transform_point(at);
-        if !building.free() && !claim.covers(on_planet) {
+        let too_near = || {
+            let others = claims.iter().filter_map(Claim::keeps);
+            let villages = village.iter().flat_map(|v| v.1.iter().map(|&p| (p, 0.0)));
+            super::claim::too_near(on_planet, builds.claim.across_m[0], others, villages)
+        };
+        let claiming = item.claims && !building.free();
+        if claiming && claim.stone.is_some() {
+            json!({ "done": false, "refused": "You already have a claim" })
+        } else if let Some(why) = claiming.then(too_near).flatten() {
+            json!({ "done": false, "refused": why })
+        } else if !claiming && !building.free() && !claim.covers(on_planet) {
             json!({ "done": false, "refused": "That is outside your claim" })
         } else if !building.pay(player, &item.cost, 1) {
             json!({ "done": false, "refused": format!("Not enough to build a {name}") })

@@ -119,6 +119,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "qa",
+        takes: "<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] | --list | --index",
+        does: "a QA film of building in a set: the same scripted film every time, a contact sheet and a real-time frame trace, in shots/qa/ (tools/sandbox)",
+        group: "Look at things",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/qa.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug] [--copy NAME]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded; with every scene, also lodcheck",

@@ -71,30 +71,47 @@ use std::collections::VecDeque;
 const LOOK_DISTANCE_M: f32 = 2.5;
 
 pub fn plugin(app: &mut App) {
-    let port = app.world().resource::<Options>().remote_port;
-    app.add_plugins((
-        RemotePlugin::default(),
-        RemoteHttpPlugin::default().with_port(port),
-    ))
-    .init_resource::<HeldCamera>()
-    .init_resource::<Steps>()
-    .init_resource::<Pressed>()
-    .init_resource::<Pointing>()
-    .init_resource::<Quitting>()
-    .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
-    .add_systems(First, step.before(TimeSystems))
-    .add_systems(
-        PreUpdate,
-        (
-            press_keys,
-            drive_pointer.before(PickingSystems::ProcessInput),
+    let options = app.world().resource::<Options>();
+    let (port, listen) = (options.remote_port, options.remote);
+    let calls = options.calls.clone().map(|path| Calls::read(&path));
+    app.add_plugins(RemotePlugin::default());
+    // A run given only calls answers no one: its methods are there for its own script.
+    if listen {
+        app.add_plugins(RemoteHttpPlugin::default().with_port(port));
+    }
+    if let Some(calls) = calls {
+        match calls {
+            Ok(calls) => {
+                info!("Calls: {} to make", calls.0.len());
+                app.insert_resource(calls).add_systems(
+                    PreUpdate,
+                    make_calls
+                        .after(shell::scripted_presses)
+                        .after(InputSystems),
+                );
+            }
+            Err(why) => error!("Calls: {why}"),
+        }
+    }
+    app.init_resource::<HeldCamera>()
+        .init_resource::<Steps>()
+        .init_resource::<Pressed>()
+        .init_resource::<Pointing>()
+        .init_resource::<Quitting>()
+        .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
+        .add_systems(First, step.before(TimeSystems))
+        .add_systems(
+            PreUpdate,
+            (
+                press_keys,
+                drive_pointer.before(PickingSystems::ProcessInput),
+            )
+                .after(InputSystems)
+                .after(shell::scripted_presses),
         )
-            .after(InputSystems)
-            .after(shell::scripted_presses),
-    )
-    .init_resource::<Burst>()
-    .add_systems(Update, (quit_when_asked, burst))
-    .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
+        .init_resource::<Burst>()
+        .add_systems(Update, (quit_when_asked, burst))
+        .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
     method(app, "sandbox.look", look);
@@ -112,7 +129,9 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.quit", quit);
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
-    info!("remote: listening on localhost:{port}");
+    if listen {
+        info!("remote: listening on localhost:{port}");
+    }
 }
 
 /// Where a held camera is placed: after an experiment places its own camera, before
@@ -234,7 +253,14 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 
 /// What the camera is held on, if anything.
 #[derive(Resource, Default)]
-struct HeldCamera(Option<Hold>);
+pub struct HeldCamera(Option<Hold>);
+
+impl HeldCamera {
+    /// Whether a script holds the camera, taking pictures rather than playing.
+    pub fn held(&self) -> bool {
+        self.0.is_some()
+    }
+}
 
 struct Hold {
     at: Aim,
@@ -816,6 +842,125 @@ fn quit_when_asked(quitting: Res<Quitting>, mut exit: MessageWriter<AppExit>) {
     }
 }
 
+/// Remote calls a scripted run makes on given frames (`--calls`), soonest first: a script
+/// that builds, harms and moves the camera on the frames it says, so a run with `--shots`
+/// is the same every time, and one with `--bench` times the same thing as it happens
+/// (tools/sandbox/qa.ts). Each is made through the method the remote protocol answers, so
+/// a scripted film and a script driving a run live do the same thing.
+#[derive(Resource, Default, Debug)]
+pub struct Calls(VecDeque<Call>);
+
+#[derive(Deserialize, Debug, PartialEq)]
+struct Call {
+    frame: u32,
+    method: String,
+    #[serde(default)]
+    params: Option<Value>,
+}
+
+impl Calls {
+    /// The calls in a file, one a line as JSON, blank lines left out; in frame order, and
+    /// in the file's order within a frame.
+    fn read(path: &std::path::Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        Self::parse(&text)
+    }
+
+    fn parse(text: &str) -> Result<Self, String> {
+        let mut calls = Vec::new();
+        for (number, line) in text.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let call: Call = serde_json::from_str(line)
+                .map_err(|error| format!("line {}: {error}", number + 1))?;
+            calls.push(call);
+        }
+        calls.sort_by_key(|call| call.frame);
+        Ok(Self(calls.into()))
+    }
+}
+
+/// Moving the camera is said nowhere, as it is called every frame of a film.
+const UNSAID: [&str; 3] = ["sandbox.look", "sandbox.release", "build.look"];
+
+/// Makes the calls due by this frame, saying what each did, and warning of each refused.
+fn make_calls(world: &mut World) {
+    let frame = world.resource::<shell::ScriptFrame>().0;
+    if frame == 0 {
+        return;
+    }
+    loop {
+        let due = world
+            .resource::<Calls>()
+            .0
+            .front()
+            .is_some_and(|call| call.frame <= frame);
+        if !due {
+            break;
+        }
+        let Some(call) = world.resource_mut::<Calls>().0.pop_front() else {
+            break;
+        };
+        let handler = world.resource::<RemoteMethods>().get(&call.method).copied();
+        let Some(RemoteMethodSystemId::Instant(id)) = handler else {
+            warn!("Calls: frame {frame}: there is no method {}", call.method);
+            continue;
+        };
+        match world.run_system_with(id, call.params) {
+            Ok(Ok(answer)) => {
+                let (said, refused) = summary(&answer);
+                if let Some(why) = refused {
+                    warn!(
+                        "Calls: frame {frame}: {}: {said}: refused: {why}",
+                        call.method
+                    );
+                } else if !UNSAID.contains(&call.method.as_str()) {
+                    info!("Calls: frame {frame}: {}: {said}", call.method);
+                }
+            }
+            Ok(Err(error)) => warn!(
+                "Calls: frame {frame}: {}: refused: {}",
+                call.method, error.message
+            ),
+            Err(error) => warn!("Calls: frame {frame}: {}: {error}", call.method),
+        }
+    }
+}
+
+/// What an answer says was done, in a few words, and why the first thing refused was, if
+/// one was: building's answers are each `{done, what, refused?}`, one or a list of them.
+fn summary(answer: &Value) -> (String, Option<String>) {
+    let each: Vec<&Value> = match answer {
+        Value::Array(list) => list.iter().collect(),
+        other => vec![other],
+    };
+    let refused = each
+        .iter()
+        .find(|each| each.get("done") == Some(&Value::Bool(false)))
+        .map(|each| {
+            each.get("refused")
+                .and_then(Value::as_str)
+                .unwrap_or("no reason given")
+                .to_string()
+        });
+    let what: Vec<&str> = each
+        .iter()
+        .filter_map(|each| each.get("what").and_then(Value::as_str))
+        .collect();
+    let said = match what.as_slice() {
+        [] if matches!(answer, Value::Array(list) if list.is_empty()) => "nothing to do".into(),
+        [] => {
+            let text = answer.to_string();
+            text.chars().take(160).collect()
+        }
+        [one] => one.to_string(),
+        [first, .., last] => format!("{} steps, {first} to {last}", what.len()),
+    };
+    (said, refused)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -850,5 +995,50 @@ mod tests {
             assert!((said[axis] - want).abs() < 1e-3, "{said:?}");
             assert!((found[axis] - want).abs() < 1e-3, "{found:?}");
         }
+    }
+
+    #[derive(Resource, Default)]
+    struct Heard(Vec<(u32, String)>);
+
+    fn note(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+        let frame = world.resource::<shell::ScriptFrame>().0;
+        let said = params.map_or(String::new(), |p| p["say"].as_str().unwrap().to_string());
+        world.resource_mut::<Heard>().0.push((frame, said.clone()));
+        Ok(json!({ "done": true, "what": said }))
+    }
+
+    #[test]
+    fn calls_are_made_on_their_frames_in_the_order_written_within_a_frame() {
+        let mut world = World::new();
+        let id = world.register_system(note);
+        let mut methods = RemoteMethods::new();
+        methods.insert("test.note", RemoteMethodSystemId::Instant(id));
+        world.insert_resource(methods);
+        world.init_resource::<Heard>();
+        world.init_resource::<shell::ScriptFrame>();
+        // Out of order, two on one frame, a blank line, and a method no one answers.
+        let calls = Calls::parse(concat!(
+            r#"{"frame": 3, "method": "test.note", "params": {"say": "c"}}"#,
+            "\n\n",
+            r#"{"frame": 1, "method": "test.note", "params": {"say": "a"}}"#,
+            "\n",
+            r#"{"frame": 2, "method": "no.such"}"#,
+            "\n",
+            r#"{"frame": 1, "method": "test.note", "params": {"say": "b"}}"#,
+        ))
+        .unwrap();
+        world.insert_resource(calls);
+        for frame in 0..=4 {
+            world.resource_mut::<shell::ScriptFrame>().0 = frame;
+            world.run_system_cached(make_calls).unwrap();
+        }
+        let heard = &world.resource::<Heard>().0;
+        let want = [(1, "a"), (1, "b"), (3, "c")];
+        assert_eq!(heard.len(), want.len(), "{heard:?}");
+        for ((frame, said), (want_frame, want_said)) in heard.iter().zip(want) {
+            assert_eq!((*frame, said.as_str()), (want_frame, want_said));
+        }
+        assert!(world.resource::<Calls>().0.is_empty());
+        assert!(Calls::parse("{\"frame\": 1}").is_err());
     }
 }

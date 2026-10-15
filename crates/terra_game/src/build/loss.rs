@@ -55,6 +55,8 @@ struct Drawn {
     /// How much was in a pile drawn before that is being drawn again, so only more falling
     /// onto it makes it fall.
     was: BTreeMap<[i32; 3], u32>,
+    /// Piles changed and being drawn again, still on screen until their new meshes are.
+    replacing: BTreeMap<[i32; 3], Entity>,
     making: Option<(Task<Vec<Made>>, Instant)>,
 }
 
@@ -76,6 +78,7 @@ fn show(
     look: Res<BuildLook>,
     mut piles: ResMut<Piles>,
     mut meshes: ResMut<Assets<Mesh>>,
+    options: Res<crate::shell::Options>,
 ) {
     let Some(kits) = look.kits.clone() else {
         return;
@@ -123,6 +126,25 @@ fn show(
         for at in gone {
             if let Some((entity, pile)) = drawn.piles.remove(&at) {
                 drawn.was.insert(at, pile.cubes() + pile.props);
+                // A pile changed stays on screen until it is drawn again, so it never blinks
+                // out for the frames its new meshes take on the worker; one gathered goes.
+                if now.contains_key(&at) {
+                    if let Some(older) = drawn.replacing.insert(at, entity) {
+                        commands.entity(older).despawn();
+                    }
+                } else {
+                    commands.entity(entity).despawn();
+                }
+            }
+        }
+        let left: Vec<[i32; 3]> = drawn
+            .replacing
+            .keys()
+            .filter(|at| !now.contains_key(*at))
+            .copied()
+            .collect();
+        for at in left {
+            if let Some(entity) = drawn.replacing.remove(&at) {
                 commands.entity(entity).despawn();
             }
         }
@@ -131,6 +153,23 @@ fn show(
             .filter(|(at, _)| !drawn.piles.contains_key(at))
             .collect();
         if new.is_empty() {
+            continue;
+        }
+        // A scripted run makes them at once, as it lays sections, so its pictures are the
+        // same every time.
+        if options.scripted() && !options.bench {
+            for (at, pile) in new {
+                let made = make(at, pile, &kits);
+                put(
+                    &mut commands,
+                    build,
+                    gathered,
+                    &look,
+                    drawn,
+                    made,
+                    &mut meshes,
+                );
+            }
             continue;
         }
         let kits = kits.clone();
@@ -181,6 +220,9 @@ fn put(
         return;
     }
     let pile = made.pile;
+    if let Some(older) = drawn.replacing.remove(&made.at) {
+        commands.entity(older).despawn();
+    }
     let was = drawn.was.remove(&made.at).unwrap_or(0);
     let height = if pile.cubes() + pile.props > was {
         ((pile.from as f32 + 0.5) * CELL_M - made.centre.y).max(0.0)
