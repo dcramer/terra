@@ -182,6 +182,18 @@ pub struct Whole {
     /// them. Kits read again while the game runs (a material added, taken out or edited)
     /// may be others or in another order.
     laid_by: Vec<Kind>,
+    /// What stands of a base with a plan in it, laid apart (D358): what is in is drawn from
+    /// what is in, as finished, and a plan's ghosts from the plan. None where every cube
+    /// is built, so the two are one.
+    standing: Option<Standing>,
+}
+
+/// What stands of a base (`Base::what_stands`) and its pieces, filed as [`Whole`] files
+/// them.
+#[derive(Clone, Debug)]
+struct Standing {
+    base: std::sync::Arc<Base>,
+    by_section: BTreeMap<[i32; 3], std::sync::Arc<Vec<Filed>>>,
 }
 
 impl Whole {
@@ -197,13 +209,30 @@ impl Whole {
 
     /// About how many bytes its pieces take in memory.
     pub fn bytes(&self) -> usize {
-        let pieces: usize = self.by_section.values().map(|pieces| pieces.len()).sum();
-        pieces * size_of::<(usize, usize, Piece)>() + self.by_section.len() * 64
+        let filed = |by_section: &BTreeMap<[i32; 3], std::sync::Arc<Vec<Filed>>>| {
+            let pieces: usize = by_section.values().map(|pieces| pieces.len()).sum();
+            pieces * size_of::<(usize, usize, Piece)>() + by_section.len() * 64
+        };
+        filed(&self.by_section)
+            + self
+                .standing
+                .as_ref()
+                .map_or(0, |standing| filed(&standing.by_section))
     }
 
-    /// Lays every kit's pieces of a base.
+    /// Lays every kit's pieces of a base: of its plan, and where anything is not yet
+    /// built, of what stands of it too.
     pub fn lay(base: &Base, kits: &Kits) -> Whole {
-        layout::roofs::remembered(|| Self::lay_all(base, kits))
+        let mut whole = layout::roofs::remembered(|| Self::lay_all(base, kits));
+        if base.store().planned() > 0 {
+            let view = base.what_stands();
+            let by_section = layout::roofs::remembered(|| Self::lay_all(&view, kits)).by_section;
+            whole.standing = Some(Standing {
+                base: std::sync::Arc::new(view),
+                by_section,
+            });
+        }
+        whole
     }
 
     fn lay_all(base: &Base, kits: &Kits) -> Whole {
@@ -253,7 +282,45 @@ impl Whole {
         if !self.laid_by(kits) {
             return Whole::lay(base, kits);
         }
-        layout::roofs::remembered(|| self.lay_part(before, base, kits, marked))
+        // The plan, unless all the edit did was fill cubes further in, which no piece of a
+        // plan is laid by (its ghosts are drawn by how far each cube is in).
+        let mut whole = if only_filled(before, base, marked) {
+            Whole {
+                standing: None,
+                ..self.clone()
+            }
+        } else {
+            layout::roofs::remembered(|| self.lay_part(before, base, kits, marked))
+        };
+        if base.store().planned() == 0 {
+            return whole;
+        }
+        // What stands, laid again from what stood only where it changed: as the plan's
+        // pieces where nothing was planned before.
+        let (was, was_by_section) = match &self.standing {
+            Some(standing) => (standing.base.clone(), standing.by_section.clone()),
+            None => (
+                std::sync::Arc::new(before.what_stands()),
+                self.by_section.clone(),
+            ),
+        };
+        let (view, changed) = base.what_stands_again(&was, marked);
+        let by_section = if changed || was.ground() != view.ground() || was.props_differ(&view) {
+            let stood = Whole {
+                by_section: was_by_section,
+                counts: self.counts.clone(),
+                laid_by: self.laid_by.clone(),
+                standing: None,
+            };
+            layout::roofs::remembered(|| stood.lay_part(&was, &view, kits, marked)).by_section
+        } else {
+            was_by_section
+        };
+        whole.standing = Some(Standing {
+            base: std::sync::Arc::new(view),
+            by_section,
+        });
+        whole
     }
 
     fn lay_part(
@@ -302,6 +369,7 @@ impl Whole {
                 .collect(),
             counts: self.counts.clone(),
             laid_by: self.laid_by.clone(),
+            standing: None,
         };
         // A group at a time, each a box no bigger than a piece's reach round the edit.
         let kinds = kinds_of(base);
@@ -324,6 +392,49 @@ impl Whole {
         }
         whole
     }
+}
+
+/// Whether all an edit did was fill cubes further in, in the sections it marked: some
+/// cube changed, each only in how far it is in, with no change pending on it, and the
+/// ground and fitted props as they were. No piece of a plan is laid by how far a cube is
+/// in, so its plan is laid as it was.
+fn only_filled(before: &Base, after: &Base, marked: &BTreeSet<[i32; 3]>) -> bool {
+    if before.ground() != after.ground() || before.props_differ(after) {
+        return false;
+    }
+    let side = crate::cubes::SECTION;
+    let mut any = false;
+    for &at in marked {
+        let low = IVec3::from_array(at) * side;
+        let high = low + IVec3::splat(side - 1);
+        let (was, now) = (
+            before.store().within(low, high),
+            after.store().within(low, high),
+        );
+        if was.len() != now.len() {
+            return false;
+        }
+        for ((a, x), (b, y)) in was.iter().zip(&now) {
+            if a != b {
+                return false;
+            }
+            if x == y {
+                continue;
+            }
+            let plan = |cube: &crate::Cube| crate::Cube {
+                state: crate::State::Planned { level: 0 },
+                ..*cube
+            };
+            if plan(x) != plan(y)
+                || x.pending != crate::Pending::None
+                || y.pending != crate::Pending::None
+            {
+                return false;
+            }
+            any = true;
+        }
+    }
+    any
 }
 
 /// Every kind a base has a cube of.
@@ -620,43 +731,63 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
     let mut own: Vec<(usize, usize, Placed)> = Vec::new();
     let mut edge: Vec<(usize, usize, Placed)> = Vec::new();
     let fraction = matches!(section.progress, Progress::Fraction(_));
-    for offset in NEIGHBOURS.iter().chain([&IVec3::ZERO]) {
-        let at = section.at + *offset;
-        let Some(pieces) = whole.by_section.get(&at.to_array()) else {
-            continue;
-        };
-        for (laid, order, piece) in pieces.iter() {
-            let Some(index) = kit_of.get(*laid).copied().flatten() else {
+    // Built as far as each cube is in, with a plan in the base (D358): what is in from
+    // what stands, drawn as finished from it, and the rest from the plan, as ghosts and
+    // what goes in next. Otherwise every piece from the plan.
+    // What stands is staged by what stands: a piece's end against a cube only planned does
+    // not wait for that cube.
+    type Source<'a> = (
+        &'a BTreeMap<[i32; 3], std::sync::Arc<Vec<Filed>>>,
+        Option<bool>,
+        &'a Base,
+    );
+    let sources: Vec<Source> = match (&whole.standing, section.progress) {
+        (Some(standing), Progress::Cubes { .. }) => vec![
+            (&standing.by_section, Some(true), &*standing.base),
+            (&whole.by_section, Some(false), base),
+        ],
+        _ => vec![(&whole.by_section, None, base)],
+    };
+    for (by_section, wanted_in, staged_by) in sources {
+        for offset in NEIGHBOURS.iter().chain([&IVec3::ZERO]) {
+            let at = section.at + *offset;
+            let Some(pieces) = by_section.get(&at.to_array()) else {
                 continue;
             };
-            if !present[index] {
-                continue;
-            }
-            let placed = |piece: &Piece| {
-                (
-                    index,
-                    *order,
-                    (index, piece.clone(), stage(*laid, *order, piece)),
-                )
-            };
-            if at == section.at {
-                own.push(placed(piece));
-            } else if ((fraction || matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
+            for (laid, order, piece) in pieces.iter() {
+                let Some(index) = kit_of.get(*laid).copied().flatten() else {
+                    continue;
+                };
+                if !present[index] {
+                    continue;
+                }
+                let staged = match section.progress {
+                    Progress::Cubes { next } => stage_by_cubes(staged_by, piece, next),
+                    _ => stage(*laid, *order, piece),
+                };
+                if wanted_in.is_some_and(|wanted| wanted != (staged == Stage::In)) {
+                    continue;
+                }
+                let placed = |piece: &Piece| (index, *order, (index, piece.clone(), staged));
+                if at == section.at {
+                    own.push(placed(piece));
+                } else if ((fraction || matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
                 // Blocks round the edge, and the lintels and sills bedded in them, whose
                 // beds reach a little past their cubes (`dress::Bed`), a cube further: the
                 // cubes round the edge are drawn as finely as a bed near them asks (D284).
                 && piece.anchor().cmpge(low).all()
                 && piece.anchor().cmple(high).all())
-                || (matches!(
-                    piece,
-                    Piece::Trim {
-                        role: layout::Role::Head | layout::Role::Sill,
-                        ..
-                    }
-                ) && piece.anchor().cmpge(low - IVec3::ONE).all()
-                    && piece.anchor().cmple(high + IVec3::ONE).all())
-            {
-                edge.push(placed(piece));
+                    || (matches!(
+                        piece,
+                        Piece::Trim {
+                            role: layout::Role::Head | layout::Role::Sill,
+                            ..
+                        }
+                    ) && piece.anchor().cmpge(low - IVec3::ONE).all()
+                        && piece.anchor().cmple(high + IVec3::ONE).all())
+                {
+                    edge.push(placed(piece));
+                }
             }
         }
     }

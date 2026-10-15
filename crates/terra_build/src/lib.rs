@@ -285,6 +285,9 @@ pub struct Base {
     kinds: BTreeMap<Kind, usize>,
     /// Every cube closed in, and which room it is in, worked out when asked (D261).
     rooms: rooms::Rooms,
+    /// Whether it is what stands of a base ([`Base::what_stands`]): only cubes with
+    /// something in, a cube going in counted as far as it is filled.
+    standing: bool,
 }
 
 impl Base {
@@ -658,6 +661,85 @@ impl Base {
         }
     }
 
+    /// What stands of the base, to draw what is in from (D215 as amended by D358): its
+    /// cubes with something in, and its openings; a plan's cubes with nothing in are left
+    /// out, so a wall built halfway shows a top and an end where it stops. A cube going in
+    /// counts as built as far as it is filled (`standing`).
+    pub fn what_stands(&self) -> Base {
+        let mut view = self.clone();
+        let planned: Vec<IVec3> = self
+            .cubes
+            .iter()
+            .filter(|(_, cube)| !stands(cube))
+            .map(|(at, _)| at)
+            .collect();
+        for at in planned {
+            view.put(at, None);
+        }
+        view.cubes.take_dirty();
+        view.standing = true;
+        view
+    }
+
+    /// What stands of the base, from what stood of it before these sections changed
+    /// (`was`, [`Base::what_stands`] of the base before): only their cubes are looked at
+    /// again, so an edit costs what it changed, not what is planned. Also whether any cube
+    /// of what stands changed.
+    pub fn what_stands_again(&self, was: &Base, marked: &BTreeSet<[i32; 3]>) -> (Base, bool) {
+        let mut view = Base {
+            cubes: was.cubes.clone(),
+            columns: was.columns.clone(),
+            in_parts: was.in_parts.clone(),
+            unbuilt: was.unbuilt.clone(),
+            pending: was.pending.clone(),
+            kinds: was.kinds.clone(),
+            rooms: was.rooms.clone(),
+            standing: true,
+            ..self.clone()
+        };
+        let mut changed = false;
+        let side = cubes::SECTION;
+        for &section in marked {
+            let low = IVec3::from_array(section) * side;
+            let high = low + IVec3::splat(side - 1);
+            let now: BTreeMap<[i32; 3], Cube> = self
+                .cubes
+                .within(low, high)
+                .into_iter()
+                .filter(|(_, cube)| stands(cube))
+                .map(|(at, cube)| (at.to_array(), cube))
+                .collect();
+            let gone: Vec<[i32; 3]> = view
+                .cubes
+                .within(low, high)
+                .into_iter()
+                .map(|(at, _)| at.to_array())
+                .filter(|at| !now.contains_key(at))
+                .collect();
+            for at in gone {
+                changed |= view.put(IVec3::from_array(at), None);
+            }
+            for (at, cube) in now {
+                changed |= view.put(IVec3::from_array(at), Some(cube));
+            }
+        }
+        // What `put` keeps of parts and changes is the base's own.
+        view.parts = self.parts.clone();
+        view.replacing = self.replacing.clone();
+        view.cubes.take_dirty();
+        (view, changed)
+    }
+
+    /// Whether its fitted props are not another's.
+    pub fn props_differ(&self, other: &Base) -> bool {
+        self.props != other.props
+    }
+
+    /// Whether it is what stands of a base ([`Base::what_stands`]).
+    pub fn is_standing(&self) -> bool {
+        self.standing
+    }
+
     /// Every kind it has a cube of, in order.
     pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.kinds.keys().copied()
@@ -698,6 +780,12 @@ impl Base {
 }
 
 pub use mesh::{Material, Surfaces};
+
+/// Whether a cube is part of what stands: something of it in, or an opening, or being
+/// carved, which is drawn open whatever is in.
+fn stands(cube: &Cube) -> bool {
+    cube.level() > 0 || layout::drawn_fill(cube) == Fill::Open
+}
 
 /// The slab of 16 along x a cube's part keeps it in (`Base::in_parts`).
 fn slab_of(at: IVec3) -> i32 {

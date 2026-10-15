@@ -332,6 +332,17 @@ impl<'a> Roles<'a> {
         })
     }
 
+    /// Whether a cube is one of the kind going in, in what stands of a base
+    /// (`Base::what_stands`): built only as far as it is filled, so no higher than the
+    /// foot of a top edge beside it.
+    fn going_in(&self, at: IVec3) -> bool {
+        self.base.is_standing()
+            && self
+                .base
+                .cube(at)
+                .is_some_and(|cube| cube.kind == self.kind && !cube.is_built())
+    }
+
     /// The ground's height under a column, in ticks of the base's grid: its sample, or
     /// where it has none (a base keeps samples only under its cubes, D206), the mean of
     /// those beside it, square on before diagonally, or the base's level.
@@ -398,8 +409,17 @@ impl<'a> Roles<'a> {
         let mut push = |role: Role, side: Dir, other: Dir| out.push(Edge { role, side, other });
         // Level edges: a side face and the top or the bottom.
         for side in Dir::LEVEL {
-            let fs = beyond(side);
             for vertical in [Dir::Up, Dir::Down] {
+                // In what stands (D358), a cube going in has no top edge until it is full,
+                // and one going in beside a cube does not reach that cube's top edge.
+                let top = vertical == Dir::Up;
+                if top && self.going_in(cube) {
+                    continue;
+                }
+                let fs = match beyond(side) {
+                    Beyond::Same if top && self.going_in(cube + side.step()) => Beyond::Air,
+                    fs => fs,
+                };
                 let fv = beyond(vertical);
                 let diagonal = cube + side.step() + vertical.step();
                 let hole = fs == Beyond::Hole || fv == Beyond::Hole;

@@ -238,7 +238,18 @@ impl Piece {
         match *self {
             Piece::Log { from, to, .. } => {
                 let (from, to) = (from.metres(), to.metres());
-                let r = Vec3::splat(0.15);
+                // Round it, but not past its sawn ends along its length, which are where
+                // it stops: a log ending at a cube's face does not stand in the next.
+                let along = (to - from).abs();
+                let r = if along.cmpgt(Vec3::splat(1e-4)).bitmask().count_ones() == 1 {
+                    Vec3::select(
+                        along.cmpgt(Vec3::splat(1e-4)),
+                        Vec3::ZERO,
+                        Vec3::splat(0.15),
+                    )
+                } else {
+                    Vec3::splat(0.15)
+                };
                 Some((from.min(to) - r, from.max(to) + r))
             }
             Piece::Plank {
@@ -706,6 +717,29 @@ impl Walls<'_> {
             .all(|&c| self.ours(c + along).is_some() && self.ours(c - along).is_some())
     }
 
+    /// Whether what stands of a cube reaches a course from `low` to `high`, in metres: in
+    /// what stands of a base (`Base::what_stands`), a cube going in is built as far as it
+    /// is filled, by the rule a piece goes in by (`sections::piece_in`), so the courses it
+    /// has are a wall's top; in a plan every cube is whole.
+    fn filled_to(&self, at: IVec3, low: f32, high: f32) -> bool {
+        if !self.base.is_standing() {
+            return true;
+        }
+        let Some(cube) = self.base.cube(at) else {
+            return true;
+        };
+        if cube.is_built() || cube.kind != self.kind {
+            return true;
+        }
+        let bottom = at.y as f32 * CELL_M;
+        let (from, to) = (low.max(bottom), high.min(bottom + CELL_M));
+        let middle = ((from + to) * 0.5 - bottom) / CELL_M;
+        cube.level()
+            >= (middle * f32::from(crate::cubes::FULL))
+                .ceil()
+                .clamp(1.0, f32::from(crate::cubes::FULL)) as u8
+    }
+
     /// What a course is at a cube of a row: a log where the cubes it lies in are solid and
     /// run its way, split where it is at the foot or top of them, cut where one is open.
     fn spot(&self, kit: &Kit, axis: Axis, row: i32, along: i32, course: i32) -> Spot {
@@ -715,7 +749,7 @@ impl Walls<'_> {
         let (low, high) = (layer(centre - half + 1e-4), layer(centre + half - 1e-4));
         let state = |layer: i32| {
             let at = axis.cube(row, along, layer);
-            if !self.runs(at, axis) {
+            if !self.runs(at, axis) || !self.filled_to(at, centre - half, centre + half) {
                 return None;
             }
             self.ours(at)

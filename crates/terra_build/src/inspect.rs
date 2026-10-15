@@ -812,14 +812,6 @@ fn see_through(
         if !solid(base, kits, at) {
             continue;
         }
-        // The top of what is in, under cubes still going in: its courses reaching up into
-        // them go in with them, so it is ragged until they are, as a wall going up is.
-        if base
-            .cube(at + IVec3::Y)
-            .is_some_and(|over| !over.is_built())
-        {
-            continue;
-        }
         let timber = kits
             .of(cube.kind)
             .is_some_and(|kit| kit.pattern == Pattern::Logs);

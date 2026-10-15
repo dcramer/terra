@@ -2483,3 +2483,317 @@ fn a_logs_top_under_a_roof_is_shaded_and_one_open_to_the_sky_is_not() {
         "{roofed_side} {open_side}"
     );
 }
+
+/// A wall of a kind planned from one cube to another, the cubes `built` says in as far as
+/// it says (a level in sixteenths, none for planned).
+fn wall_going_up(kind: Kind, max: [i32; 3], built: impl Fn(IVec3) -> Option<u8>) -> Base {
+    let mut base = Base::default();
+    for x in 0..=max[0] {
+        for y in 0..=max[1] {
+            for z in 0..=max[2] {
+                let at = IVec3::new(x, y, z);
+                let cube = Cube::planned(kind, None).at_level(built(at).unwrap_or(0));
+                base.apply(BuildOp::Fill {
+                    min: at.to_array(),
+                    max: at.to_array(),
+                    cube: Some(cube),
+                });
+            }
+        }
+    }
+    base
+}
+
+/// Every piece of a base going up as it is drawn, with how far in each is.
+fn drawn_as_built(base: &Base, kits: &Kits) -> Vec<(Piece, Stage)> {
+    let maps = Maps::default();
+    let whole = Whole::lay(base, kits);
+    let progress = Progress::Cubes {
+        next: BTreeSet::new(),
+    };
+    drawable(base)
+        .into_iter()
+        .flat_map(|at| {
+            let section = Section {
+                base,
+                kits,
+                maps: &maps,
+                at: IVec3::from_array(at),
+                progress: &progress,
+            };
+            lay(&section, &whole).pieces
+        })
+        .map(|(_, piece, stage)| (piece, stage))
+        .collect()
+}
+
+type DressedIn = BTreeSet<([i32; 3], layout::Role, [layout::Dir; 2])>;
+
+/// The edges dressed in what is in: each cube's role and the faces it is between, sorted.
+fn dressed_in(drawn: &[(Piece, Stage)]) -> DressedIn {
+    drawn
+        .iter()
+        .filter(|(_, stage)| *stage == Stage::In)
+        .filter_map(|(piece, _)| {
+            let (cube, role, mut faces) = match *piece {
+                Piece::Trim {
+                    cube,
+                    role,
+                    side,
+                    other,
+                    ..
+                } => (cube, role, [side, other]),
+                Piece::Corner {
+                    cube, role, faces, ..
+                } => (cube, role, faces),
+                _ => return None,
+            };
+            faces.sort();
+            Some((cube.to_array(), role, faces))
+        })
+        .collect()
+}
+
+/// Whether a cube's edge between two faces is dressed in what is in with a role.
+fn has_edge(
+    dressed: &DressedIn,
+    cube: [i32; 3],
+    role: layout::Role,
+    faces: [layout::Dir; 2],
+) -> bool {
+    let mut faces = faces;
+    faces.sort();
+    dressed.contains(&(cube, role, faces))
+}
+
+#[test]
+fn a_stone_wall_built_halfway_along_has_an_end_and_a_top_where_it_stops() {
+    // D358: what is in is drawn from what is in. A wall planned eight cubes long and two
+    // high, built four along: where it stops it has quoins up its end and a coping along
+    // its top, across the end too, though the plan runs on; the plan beyond is ghosts.
+    use layout::{Dir, Role};
+    let kits = shipped();
+    let stone = named(&kits, "stone");
+    let base = wall_going_up(stone, [7, 1, 0], |at| (at.x <= 3).then_some(16));
+    let drawn = drawn_as_built(&base, &kits);
+    let dressed = dressed_in(&drawn);
+    for y in 0..=1 {
+        for side in [Dir::South, Dir::North] {
+            assert!(
+                has_edge(&dressed, [3, y, 0], Role::Arris, [Dir::East, side]),
+                "quoins up its end at {y}: {dressed:?}"
+            );
+        }
+    }
+    assert!(has_edge(
+        &dressed,
+        [3, 1, 0],
+        Role::Crest,
+        [Dir::East, Dir::Up]
+    ));
+    assert!(has_edge(
+        &dressed,
+        [2, 1, 0],
+        Role::Crest,
+        [Dir::North, Dir::Up]
+    ));
+    // Nothing of what is in past where it stops, and the plan there drawn as ghosts.
+    assert!(dressed.iter().all(|(cube, _, _)| cube[0] <= 3));
+    assert!(
+        drawn
+            .iter()
+            .any(|(piece, stage)| *stage == Stage::Ghost && piece.anchor().x >= 4)
+    );
+    // Built on to its end, its quoins and coping's end move there.
+    let done = wall_going_up(stone, [7, 1, 0], |_| Some(16));
+    let dressed = dressed_in(&drawn_as_built(&done, &kits));
+    assert!(!has_edge(
+        &dressed,
+        [3, 1, 0],
+        Role::Arris,
+        [Dir::East, Dir::North]
+    ));
+    assert!(!has_edge(
+        &dressed,
+        [3, 1, 0],
+        Role::Crest,
+        [Dir::East, Dir::Up]
+    ));
+    assert!(has_edge(
+        &dressed,
+        [7, 1, 0],
+        Role::Arris,
+        [Dir::East, Dir::North]
+    ));
+    assert!(has_edge(
+        &dressed,
+        [7, 1, 0],
+        Role::Crest,
+        [Dir::East, Dir::Up]
+    ));
+}
+
+#[test]
+fn a_middle_cube_built_alone_has_its_edges_and_finishing_its_neighbour_takes_them_away() {
+    // D358: a wall's middle cube built before those either side of it is a pier on its
+    // own, dressed all round: quoins up both ends and a coping round its top. Built on
+    // beside it, the edge it shares goes, and the coping runs on into its neighbour's.
+    use layout::{Dir, Role};
+    let kits = shipped();
+    let stone = named(&kits, "stone");
+    let alone = wall_going_up(stone, [6, 0, 0], |at| (at.x == 3).then_some(16));
+    let dressed = dressed_in(&drawn_as_built(&alone, &kits));
+    for side in [Dir::East, Dir::West] {
+        for other in [Dir::South, Dir::North] {
+            assert!(has_edge(&dressed, [3, 0, 0], Role::Arris, [side, other]));
+        }
+    }
+    for side in Dir::LEVEL {
+        assert!(
+            has_edge(&dressed, [3, 0, 0], Role::Crest, [side, Dir::Up]),
+            "a coping on its {side:?} side: {dressed:?}"
+        );
+    }
+    let pair = wall_going_up(stone, [6, 0, 0], |at| (3..=4).contains(&at.x).then_some(16));
+    let drawn = drawn_as_built(&pair, &kits);
+    let dressed = dressed_in(&drawn);
+    for (role, faces) in [
+        (Role::Arris, [Dir::East, Dir::North]),
+        (Role::Arris, [Dir::East, Dir::South]),
+        (Role::Crest, [Dir::East, Dir::Up]),
+    ] {
+        assert!(!has_edge(&dressed, [3, 0, 0], role, faces), "{role:?}");
+        assert!(has_edge(&dressed, [4, 0, 0], role, faces), "{role:?}");
+    }
+    assert!(!has_edge(
+        &dressed,
+        [4, 0, 0],
+        Role::Crest,
+        [Dir::West, Dir::Up]
+    ));
+    // Its coping along the wall's side runs on into the neighbour's.
+    let ends = drawn.iter().find_map(|(piece, stage)| match piece {
+        Piece::Trim {
+            cube,
+            role: Role::Crest,
+            side: Dir::North,
+            ends,
+            ..
+        } if *stage == Stage::In && cube.x == 3 => Some(*ends),
+        _ => None,
+    });
+    assert_eq!(ends.map(|ends| ends[1]), Some(layout::End::On));
+}
+
+#[test]
+fn a_log_wall_going_up_ends_its_courses_where_what_is_in_stops() {
+    // D358, in the coursed pattern: a log wall planned eight cubes long, built four along
+    // and the fifth half in. Its lower course runs on through the fifth; the one over it,
+    // not yet in there, ends at the fourth's face, not at a joint short of it; no log of
+    // what is in reaches past the fifth.
+    let kits = shipped();
+    let logs = named(&kits, "logs");
+    let base = wall_going_up(logs, [7, 0, 0], |at| match at.x {
+        0..=3 => Some(16),
+        4 => Some(8),
+        _ => None,
+    });
+    let logs_in: Vec<(Vec3, Vec3)> = drawn_as_built(&base, &kits)
+        .into_iter()
+        .filter(|(piece, stage)| *stage == Stage::In && matches!(piece, Piece::Log { .. }))
+        .filter_map(|(piece, _)| piece.bounds())
+        .collect();
+    assert!(!logs_in.is_empty());
+    let reach = |low: f32, high: f32| {
+        logs_in
+            .iter()
+            .filter(|(min, max)| (min.y + max.y) * 0.5 >= low && (min.y + max.y) * 0.5 < high)
+            .map(|(_, max)| max.x)
+            .fold(f32::MIN, f32::max)
+    };
+    let (fourth, fifth) = (4.0 * CELL_M, 5.0 * CELL_M);
+    let lower = reach(0.0, 0.25);
+    assert!(
+        lower > fourth + 0.2 && lower <= fifth + 0.01,
+        "the lower course ends at {lower}"
+    );
+    let upper = reach(0.25, 0.5);
+    assert!(
+        upper > fourth - 0.05 && upper <= fourth + 0.01,
+        "the upper course ends at {upper}"
+    );
+}
+
+#[test]
+fn a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole() {
+    // D358: what stands is laid apart from the plan, and laid again only where an edit
+    // changed it. A small house in logs and in stone under its roof, planned whole, then
+    // filled a cube at a time from its foot, half in and then built, and a cube of plan
+    // added and taken out: every section, as drawn going up, is as laid whole.
+    let kits = shipped();
+    let maps = Maps::default();
+    let next = Progress::Cubes {
+        next: BTreeSet::new(),
+    };
+    for walls in ["logs", "stone"] {
+        let mut built = Base::default();
+        house(
+            &mut built,
+            &kits,
+            [14, 2],
+            [5, 4],
+            named(&kits, walls),
+            Style::Gable,
+        );
+        let mut before = built.clone();
+        let mut cubes: Vec<(IVec3, Cube)> = built.cubes().collect();
+        for (at, cube) in &cubes {
+            before.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(cube.at_level(0)),
+            });
+        }
+        before.take_dirty();
+        let mut whole = Whole::lay(&before, &kits);
+        cubes.sort_by_key(|(at, _)| (at.y, at.x, at.z));
+        let mut edits: Vec<(IVec3, Option<Cube>)> = cubes
+            .iter()
+            .step_by(7)
+            .flat_map(|&(at, cube)| [(at, Some(cube.at_level(8))), (at, Some(cube))])
+            .collect();
+        let (low, kind) = (cubes[0].0, cubes[0].1.kind);
+        edits.push((low - IVec3::X * 2, Some(Cube::planned(kind, None))));
+        edits.push((low - IVec3::X * 2, None));
+        for (at, cube) in edits {
+            let mut after = before.clone();
+            after.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube,
+            });
+            let marked = after.take_dirty();
+            let again = whole.lay_again(&before, &after, &kits, &marked);
+            let afresh = Whole::lay(&after, &kits);
+            for at_section in drawable(&after).union(&drawable(&before)) {
+                let section = Section {
+                    base: &after,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(*at_section),
+                    progress: &next,
+                };
+                assert!(
+                    lay(&section, &again) == lay(&section, &afresh),
+                    "{walls}: {at} set to {cube:?}: section {at_section:?} is not as laid whole"
+                );
+            }
+            (before, whole) = (after, again);
+        }
+        let built = before.cubes().filter(|(_, c)| c.is_built()).count();
+        assert!(
+            built > 10 && before.store().planned() > 0,
+            "{walls}: {built} built"
+        );
+    }
+}
