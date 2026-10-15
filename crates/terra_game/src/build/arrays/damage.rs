@@ -66,8 +66,15 @@ fn noise(px: f32, py: f32, cells: usize, salt: u32) -> f32 {
 
 /// Each texel's threshold, from 0.1 (breaks at the first quarter lost) to 1 (only when the
 /// cube is all but gone), `side` square, tiling.
-pub fn thresholds(side: usize) -> Vec<f32> {
-    let mut out = vec![1.0f32; side * side];
+#[cfg(test)]
+fn thresholds(side: usize) -> Vec<f32> {
+    mask(side).into_iter().map(|(t, _)| t).collect()
+}
+
+/// Each texel's threshold, and how much of it is a chip rather than a crack: a crack is a
+/// narrow dark split, a chip a flake knocked off, showing the material fresh under it.
+fn mask(side: usize) -> Vec<(f32, f32)> {
+    let mut out = vec![(1.0f32, 0.0f32); side * side];
     for y in 0..side {
         for x in 0..side {
             let (u, v) = (x as f32 / side as f32, y as f32 / side as f32);
@@ -88,19 +95,25 @@ pub fn thresholds(side: usize) -> Vec<f32> {
             // Chips: blobs knocked out along and between the cracks, later on.
             let chip = 0.55 + 0.9 * (1.0 - noise(u * 9.0, v * 9.0, 9, 41)).powi(2)
                 - 0.25 * noise(u * 31.0, v * 31.0, 31, 43);
-            let t = (0.1 + 0.9 * crack.min(1.0)).min(chip.max(0.45));
-            out[y * side + x] = t.clamp(0.1, 1.0);
+            let (cracked, chipped) = (0.1 + 0.9 * crack.min(1.0), chip.max(0.45));
+            let t = cracked.min(chipped);
+            // A chip where it breaks before the crack there would, by a margin, so a crack
+            // runs dark through a chip's edge.
+            let flake = ((cracked - chipped) / 0.08).clamp(0.0, 1.0);
+            out[y * side + x] = (t.clamp(0.1, 1.0), flake);
         }
     }
     out
 }
 
-/// The mask as the arrays' four maps, RGBA a texel: colour and ARM neutral (the shader
-/// darkens and roughens what breaks), the normal from the thresholds' slopes (each crack's
-/// walls), the height the thresholds.
+/// The mask as the arrays' four maps, RGBA a texel: the colour how much of a texel is a chip
+/// (the shader darkens a crack and shows a chip's fresh face, and roughens both), ARM
+/// neutral, the normal from the thresholds' slopes (each crack's and chip's walls), the
+/// height the thresholds.
 pub fn maps() -> [Vec<u8>; 4] {
     let side = SIDE as usize;
-    let t = thresholds(side);
+    let made = mask(side);
+    let t: Vec<f32> = made.iter().map(|&(t, _)| t).collect();
     let at = |x: usize, y: usize| t[(y % side) * side + (x % side)];
     let mut colour = vec![255u8; side * side * 4];
     let mut normal = vec![0u8; side * side * 4];
@@ -122,7 +135,8 @@ pub fn maps() -> [Vec<u8>; 4] {
             normal[i + 3] = 255;
             let v = (at(x, y) * 255.0) as u8;
             height[i..i + 4].copy_from_slice(&[v, v, v, 255]);
-            colour[i + 3] = 255;
+            let flake = (made[y * side + x].1 * 255.0) as u8;
+            colour[i..i + 4].copy_from_slice(&[flake, flake, flake, 255]);
             arm[i + 2] = 0;
         }
     }
@@ -154,5 +168,21 @@ mod tests {
         };
         let (edge, inner) = (gap(0, side - 1), gap(side / 2, side / 2 - 1));
         assert!(edge < inner * 2.5 + 0.02, "{edge} {inner}");
+        // Of what breaks by half lost, some is cracks and some chips; the hairlines that
+        // break first are cracks.
+        let made = mask(side);
+        let half: Vec<f32> = made
+            .iter()
+            .filter(|(t, _)| *t < 0.5)
+            .map(|(_, f)| *f)
+            .collect();
+        let chips = half.iter().filter(|f| **f > 0.5).count() as f32 / half.len() as f32;
+        assert!(chips > 0.1 && chips < 0.9, "{chips}");
+        let first: Vec<f32> = made
+            .iter()
+            .filter(|(t, _)| *t < 0.2)
+            .map(|(_, f)| *f)
+            .collect();
+        assert!(first.iter().sum::<f32>() / (first.len() as f32) < 0.2);
     }
 }

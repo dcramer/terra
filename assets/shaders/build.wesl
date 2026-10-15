@@ -144,19 +144,25 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     // Damage (D305), every material alike: the shared mask's threshold says how much of its
     // cube's health must be lost before each texel breaks, so hairline cracks open first,
-    // then widen and chip, then flakes go; broken, it is dark in the crack, rough, and its
-    // walls take the mask's normal. Where the mask is not drawn, darkened as far off.
+    // then widen and chip, then flakes go. A crack is dark; a chip is the material's fresh
+    // face where a flake came off, paler, greyer and rougher, its rim in shade; both take
+    // the mask's normal on their walls. Where the mask is not drawn, darkened as far off.
     let lost = clamp(in.uv_b.y, 0.0, 1.0);
     var broken = 0.0;
     var crack_n = vec2(0.5, 0.5);
     if layers.damage.y > 0.5 {
         let mask = i32(layers.damage.x);
         let threshold = textureSampleBias(height_array, array_sampler, uv, mask, bias).r;
+        let flake = textureSampleBias(colour_array, array_sampler, uv, mask, bias).r;
         crack_n = textureSampleBias(normal_array, array_sampler, uv, mask, bias).rg;
         broken = smoothstep(threshold - 0.03, threshold + 0.03, lost);
         let deep = clamp((lost - threshold) * 4.0, 0.0, 1.0);
-        let shade = mix(1.0, 0.32 - 0.12 * deep, broken);
-        pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * shade, 1.0);
+        let base = pbr_input.material.base_color.rgb;
+        let grey = vec3(dot(base, vec3(0.3, 0.59, 0.11)));
+        let crack = base * (0.32 - 0.12 * deep);
+        let rim = 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.12, lost - threshold));
+        let chip = mix(base, grey, 0.45) * 1.18 * rim;
+        pbr_input.material.base_color = vec4(mix(base, mix(crack, chip, flake), broken), 1.0);
         pbr_input.material.perceptual_roughness = mix(arm.g, 0.95, broken);
     } else {
         let shade = 1.0 - layers.damage.z * lost;
