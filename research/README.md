@@ -70,6 +70,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 - End with the limits: what the note does not show.
 - Link sources.
 | [skin-deformation.md](skin-deformation.md) | Why did characters' limbs knot and squeeze in our animations, and what makes them deform correctly through every clip? |
+| [2026-10-14-animation.md](2026-10-14-animation.md) | Why does the dressed character's run look wrong and what makes it look right, and how do we animate creatures whose bodies are not a person's without an animator? |
 | [procedural-loot-and-spells.md](procedural-loot-and-spells.md) | How do shipped games generate loot procedurally, and spells, so our essence powers can be built the same way? |
 | [enshrouded-combat.md](enshrouded-combat.md) | How does Enshrouded's combat play, now that it is the baseline for ours? |
 | [worktree-builds.md](worktree-builds.md) | Agents work in many worktrees, each building Bevy from nothing. What makes a new one quick, and what is safe? |
