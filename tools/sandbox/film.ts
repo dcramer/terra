@@ -4,7 +4,7 @@
 // sixtieth of a second a frame, put together at 30 frames a second, so it plays at the
 // game's own speed however slowly it was drawn.
 //
-//   node tools/sandbox/film.ts [--frames 300-2700] [--time 15] [--out shots/film.mp4] [-- <sandbox options>]
+//   node tools/sandbox/film.ts [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- <sandbox options>]
 //
 // Without sandbox options it walks the bench's route through the lush forest, the world
 // and the walker alone. Needs ffmpeg. Node 22.18 or later; no dependencies.
@@ -26,7 +26,10 @@ const arg = (name: string, fallback: string) => {
   return at >= 0 ? own[at + 1] : fallback;
 };
 const hour = arg("--time", "15");
-const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...ROUTE, ...LOOK] : args.slice(dash + 1);
+// A day of the year to film, as the sandbox's --date takes it (docs/climate.md).
+const date = arg("--date", "");
+const dated = date ? ["--date", date] : [];
+const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK] : args.slice(dash + 1);
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
 const frames = resolve(dirname(out), "film-frames");

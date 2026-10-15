@@ -1,0 +1,25 @@
+{
+  "name": "sotf-forest-snow",
+  "about": "Sons of the Forest's forest in winter: snow lying on the floor between conifers, overcast daylight, from the store's multiplayer trailer, sampled every two seconds; frames of the snowy forest only",
+  "sources": [
+    "https://store.steampowered.com/app/1326470"
+  ],
+  "frames": 12,
+  "measured": "2026-10-15",
+  "look": {
+    "mean": 0.37255532266716784,
+    "p5": 0.050717581699346405,
+    "p50": 0.3312050326797386,
+    "p95": 0.7803101307189543,
+    "dark": 0.15974649562757207,
+    "bright": 0.04996222350823046,
+    "redOverGreen": 1.0428603609853704,
+    "blueOverGreen": 0.9000050520587334,
+    "contrast": 0.2081597582664271,
+    "litLitter": 0.06621515721450617,
+    "shadeRedOverGreen": 1.5183373694764475,
+    "shadeBlueOverGreen": 0.5209344153230656,
+    "middleBlueOverGreen": 0.8180046125322901,
+    "limeTop": 0.0026488956404320985
+  }
+}

@@ -65,7 +65,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "vantage",
-        takes: "[--time 13,17]",
+        takes: "[--time 13,17] [--date 10-15]",
         does: "the vantage sheet: the lush forest from fixed views, side by side, to judge how the world looks (tools/sandbox)",
         group: "Play and check",
         run: |args| {
@@ -109,7 +109,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "film",
-        takes: "[--frames 300-2700] [--time 15] [--out shots/film.mp4] [-- sandbox args]",
+        takes: "[--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- sandbox args]",
         does: "a video of a scripted run, by default the forest walk, at the game's own speed (tools/sandbox)",
         group: "Look at things",
         run: |args| {

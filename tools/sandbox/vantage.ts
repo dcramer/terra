@@ -9,7 +9,9 @@
 // For the views inside the forest, how each looks against Sons of the Forest's own daytime
 // frames: brightness, near black, warmth, local contrast, lit litter (look.ts, D286).
 //
-//   node tools/sandbox/vantage.ts [--time 13,17] [--out shots/vantage]
+//   node tools/sandbox/vantage.ts [--time 13,17] [--date 10-15] [--out shots/vantage]
+//
+// --date shows the views on a day of the year (the sandbox's --date, docs/climate.md).
 //
 // Writes <out>/<hour>-<view>.png and <out>/sheet.jpg. Needs ImageMagick (cargo xtask doctor).
 // Node 22.18 or later; no dependencies.
@@ -55,6 +57,8 @@ const arg = (name: string, fallback: string) => {
   return at > 0 ? process.argv[at + 1] : fallback;
 };
 const hours = arg("--time", "13,17").split(",");
+const date = arg("--date", "");
+const dated = date ? ["--date", date] : [];
 const out = resolve(ROOT, arg("--out", "shots/vantage"));
 mkdirSync(out, { recursive: true });
 
@@ -69,7 +73,7 @@ for (const hour of hours) {
   const started = Date.now();
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...vantages, "--shots", `${prefix}@${frames}`],
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
     // Run outside Cargo, so told where assets/ is, as Cargo would.
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );
@@ -117,7 +121,7 @@ function canopy(hour: string): string[] {
   const prefix = resolve(out, `sky-${hour}`);
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, "--vantage-ground", ...vantages, "--shots", `${prefix}@${frames.join(",")}`],
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, "--vantage-ground", ...vantages, "--shots", `${prefix}@${frames.join(",")}`],
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );
   if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
@@ -169,7 +173,7 @@ async function blocking(hour: string): Promise<string[]> {
   });
   const view = (p: number[]) => [p[0], 1.7, p[1], p[2], 1.7, p[3]];
   await game.start(
-    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, "--vantage-ground", "--vantage", view(places[0]).join(",")],
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, "--vantage-ground", "--vantage", view(places[0]).join(",")],
     { release: true },
   );
   await game.waitFor("undergrowth:", { since: 0, timeout: 120 });
