@@ -494,9 +494,12 @@ impl Sweep {
             _ => 0.0,
         });
         // A square end's part set into the wall cut back from its line, so it is not in the
-        // plane of the wall's end or an opening's reveal there, nor of the next piece's.
+        // plane of the wall's end or an opening's reveal there, nor of the next piece's;
+        // and a joint's or a step's, at a cube's side, so it is not in the plane of a step
+        // in the footing or the wall under it there.
         let recess = self.ends.map(|end| match end {
             End::Square if self.extend == 0.0 => SQUARE_RECESS,
+            End::On | End::Step => SQUARE_RECESS,
             _ => 0.0,
         });
         let joint = self
@@ -1291,6 +1294,37 @@ mod tests {
         assert!(foot < 0.65, "{foot}");
         let up = rained.shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out).x;
         assert!((up - 1.0).abs() < 1e-4, "{up}");
+    }
+
+    #[test]
+    fn a_bands_ends_at_a_joint_or_a_step_keep_its_part_in_the_wall_off_the_cubes_side() {
+        // A band along a cube's face, half of it set into the wall, run on at one end and
+        // stepping at the other: the ends of the part set in are cut back off the cube's
+        // sides, where a step in the footing under it may have a face of its own; the part
+        // standing out still meets the next band's at the line.
+        let sweep = Sweep {
+            from: Vec3::ZERO,
+            to: Vec3::new(0.5, 0.0, 0.0),
+            side: Vec3::Z,
+            up: Vec3::Y,
+            ends: [End::On, End::Step],
+            extend: 0.0,
+            joints: false,
+            lift: 0.0,
+            sink: 0.0,
+            tint: [1.0; 3],
+            grain: false,
+        };
+        let mut made = Indexed::default();
+        let profile = [[-0.05, 0.0], [0.05, 0.0], [0.05, 0.1], [-0.05, 0.1]];
+        sweep.draw(&profile, [1.0, 1.0], 1, &mut made);
+        let at_end = |p: &Vec3| p.x < 1e-4 || p.x > 0.5 - 1e-4;
+        assert!(made.positions.iter().any(|p| p.z > 0.0 && at_end(p)));
+        for p in &made.positions {
+            if p.z < -1e-3 {
+                assert!(!at_end(p), "{p} set in at the cube's side");
+            }
+        }
     }
 
     #[test]
