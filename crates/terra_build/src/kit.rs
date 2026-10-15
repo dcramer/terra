@@ -131,7 +131,8 @@ pub struct Framing {
     pub braces: Braces,
     /// Its members' material: squared timber.
     pub material: Material,
-    /// The module of the kit's pieces each member is (D258), scaled across to its size.
+    /// The module of the kit's pieces each member is (D258), scaled across to its size, as
+    /// its pattern names it; none by default.
     pub module: String,
     /// What the infill is made on before it is finished, and is shown while a cube is part
     /// built or being cut out (`Piece::Wattle`): wattle under daub. None, nothing.
@@ -164,7 +165,7 @@ impl Default for Framing {
             rails: vec![2, 4],
             braces: Braces::Ends,
             material: Material::Hewn,
-            module: "member".into(),
+            module: String::new(),
             core: Some(Material::Wattle),
             core_relief: 0.03,
         }
@@ -1071,6 +1072,24 @@ mod tests {
             }
         }
         assert!(names.len() >= 10, "{names:?}");
+        // And no piece by its name, so none is nudged, scaled or fixed up by code: a piece
+        // lands right by its contract (D303), held by the kit checker.
+        let pieces = assets().join("data/kits/pieces");
+        for entry in std::fs::read_dir(&pieces).unwrap().flatten() {
+            let text = std::fs::read_to_string(entry.path()).unwrap();
+            for line in text.lines() {
+                let line = line.trim();
+                if let Some(name) = line
+                    .strip_prefix('"')
+                    .and_then(|rest| rest.strip_suffix("\": ("))
+                {
+                    names.push(name.to_string());
+                }
+            }
+        }
+        names.sort();
+        names.dedup();
+        assert!(names.iter().any(|n| n == "ridge"), "{names:?}");
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut found = Vec::new();
         for krate in [root.to_path_buf(), root.join("../terra_game")] {
@@ -1090,6 +1109,24 @@ mod tests {
                                 n + 1
                             ));
                         }
+                    }
+                    // A material's id compared with a number.
+                    let by_id = ["id == ", "id != ", "id() == ", "id() != "]
+                        .iter()
+                        .any(|op| {
+                            line.match_indices(op).any(|(at, _)| {
+                                line[at + op.len()..]
+                                    .chars()
+                                    .next()
+                                    .is_some_and(|c| c.is_ascii_digit())
+                            })
+                        });
+                    if by_id {
+                        found.push(format!(
+                            "{}:{}: a material by its id: {line}",
+                            path.display(),
+                            n + 1
+                        ));
                     }
                     let numbered = line.match_indices("Kind(").any(|(at, _)| {
                         let before = line[..at].chars().last();
