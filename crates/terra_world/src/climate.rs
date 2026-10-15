@@ -183,6 +183,8 @@ pub struct ClimateMaps {
     /// (`FALLEN_KIND`), and of grass (`GRASS_KIND`), or -1 if there is none.
     pub fallen_layer: i32,
     pub grass_layer: i32,
+    /// Each layer's kind's autumn colour, linear, in the years file's order.
+    pub autumn: Vec<Vec3>,
 }
 
 impl Default for ClimateMaps {
@@ -194,11 +196,20 @@ impl Default for ClimateMaps {
             painting: 0,
             fallen_layer: -1,
             grass_layer: -1,
+            autumn: Vec::new(),
         }
     }
 }
 
 impl ClimateMaps {
+    /// A layer's autumn colour, linear, as a shader takes it; grey where there is none.
+    pub fn autumn_of(&self, layer: i32) -> Vec4 {
+        usize::try_from(layer)
+            .ok()
+            .and_then(|layer| self.autumn.get(layer))
+            .map_or(Vec4::splat(0.2), |colour| colour.extend(1.0))
+    }
+
     /// A kind's layer in the leaves map, as the shaders take it: -1 if it has none.
     pub fn layer_of(fields: &ClimateFields, kind: &str) -> i32 {
         fields.layer(kind).map_or(-1, |layer| layer as i32)
@@ -478,6 +489,14 @@ fn paint(
             painting: maps.painting.wrapping_add(1),
             fallen_layer: ClimateMaps::layer_of(&fields, FALLEN_KIND),
             grass_layer: ClimateMaps::layer_of(&fields, GRASS_KIND),
+            autumn: fields
+                .years
+                .iter()
+                .map(|year| {
+                    let (r, g, b) = year.autumn;
+                    Vec3::from(Color::srgb(r, g, b).to_linear().to_f32_array_no_alpha())
+                })
+                .collect(),
         };
         if !painting.said {
             painting.said = true;

@@ -42,6 +42,8 @@ struct Grass {
     climate_on: u32,
     climate_painting: u32,
     grass_layer: i32,
+    // The colour grass browns to, linear, as its year says.
+    grass_autumn: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -70,8 +72,7 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
-// Grass browned by the long cold, linear: straw, and rime on its blades in a hard frost.
-const STRAW: vec3<f32> = vec3<f32>(0.2, 0.15, 0.07);
+// Rime on grass's blades in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
 fn climate_place(world: vec3<f32>) -> vec2<f32> {
@@ -253,7 +254,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, grass.grass_layer, 0.0);
             let browned = mix(year.b, year.a, hash(floor(world.xyz * 2.0)));
             let light = dot(colour, vec3<f32>(0.333)) / 0.06;
-            colour = mix(colour, STRAW * clamp(light, 0.5, 1.6), browned);
+            // Its year's colour at a blade's own brightness, darker as straw is than a lawn.
+            let straw = grass.grass_autumn.rgb * 0.35;
+            colour = mix(colour, straw * clamp(light, 0.5, 1.6), browned);
         }
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;

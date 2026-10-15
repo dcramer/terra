@@ -15,6 +15,7 @@
 //                      pine's needles
 //   wilts              for what browns in a drought: the ground's dryness, 1 less its
 //                      wetness, from which it does, and over how much more
+//   autumn             the colour its leaves turn, sRGB, for drawing them
 //
 // At the start, on the start's climate (assets/data/climate.ron, 40° north, near the sea),
 // the counts come to: chill about 15 by mid October, 60 by early November, 180 by late
@@ -30,6 +31,7 @@
         turns_under_hours: 12.0,
         turns: 1.0,
         drops: 1.0,
+        autumn: (0.47, 0.29, 0.1),
     ),
     (
         // Birch: yellow first, bare first, and out in leaf first.
@@ -40,6 +42,7 @@
         turns_under_hours: 12.5,
         turns: 1.0,
         drops: 1.0,
+        autumn: (0.78, 0.6, 0.16),
     ),
     (
         // Hazel, in the understorey: turns yellow with the oaks, drops a little before.
@@ -50,6 +53,7 @@
         turns_under_hours: 12.0,
         turns: 1.0,
         drops: 1.0,
+        autumn: (0.7, 0.58, 0.2),
     ),
     (
         // Bracken: rust-brown with the first chill, standing dead through the winter and
@@ -61,6 +65,7 @@
         turns_under_hours: 12.5,
         turns: 1.0,
         drops: 0.7,
+        autumn: (0.5, 0.25, 0.09),
     ),
     (
         // Scots pine: its oldest needles yellow and drop in autumn, the rest stay.
@@ -71,6 +76,7 @@
         turns_under_hours: 12.0,
         turns: 0.08,
         drops: 0.1,
+        autumn: (0.55, 0.48, 0.2),
     ),
     (
         // Norway spruce: nearly the same all year.
@@ -81,6 +87,7 @@
         turns_under_hours: 12.0,
         turns: 0.04,
         drops: 0.05,
+        autumn: (0.45, 0.4, 0.2),
     ),
     (
         // Grass: straw-coloured in the long cold, green again with the spring's warmth; it
@@ -92,5 +99,6 @@
         turns_under_hours: 12.0,
         turns: 0.7,
         drops: 0.0,
+        autumn: (0.62, 0.53, 0.32),
     ),
 ]

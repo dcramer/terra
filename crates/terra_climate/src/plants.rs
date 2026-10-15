@@ -52,6 +52,9 @@ pub struct LeafYear {
     /// it does.
     #[serde(default)]
     pub wilts: Option<Ramp>,
+    /// The colour its leaves turn, as sRGB: an oak's tawny brown, a birch's yellow, grass's
+    /// straw. Only for drawing it.
+    pub autumn: (f32, f32, f32),
 }
 
 /// A plant's leaves at a moment.
@@ -131,6 +134,7 @@ mod tests {
             turns: 1.0,
             drops: 1.0,
             wilts: None,
+            autumn: (0.45, 0.28, 0.1),
         }
     }
 

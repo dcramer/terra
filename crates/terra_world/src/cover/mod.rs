@@ -148,6 +148,9 @@ pub struct GrassExtension {
     pub climate_painting: u32,
     #[uniform(100)]
     pub grass_layer: i32,
+    /// The colour grass browns to, linear (its year's `autumn`).
+    #[uniform(100)]
+    pub grass_autumn: Vec4,
     #[texture(102)]
     #[sampler(103)]
     pub climate_ground: Option<Handle<Image>>,
@@ -163,6 +166,7 @@ impl GrassExtension {
         self.climate_on = maps.ground.is_some() as u32;
         self.climate_painting = maps.painting;
         self.grass_layer = maps.grass_layer;
+        self.grass_autumn = maps.autumn_of(maps.grass_layer);
         self.climate_ground = maps.ground.clone();
         self.climate_leaves = maps.leaves.clone();
     }
@@ -328,6 +332,7 @@ fn grow(
                 climate_on: 0,
                 climate_painting: 0,
                 grass_layer: -1,
+                grass_autumn: Vec4::splat(0.2),
                 climate_ground: None,
                 climate_leaves: None,
             },
