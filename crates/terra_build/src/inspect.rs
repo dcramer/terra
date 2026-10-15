@@ -377,6 +377,22 @@ fn overlaps(drawn: &Drawn) -> BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> {
     for (i, t) in drawn.tris.iter().enumerate() {
         bins.entry(key(t)).or_default().push(i as u32);
     }
+    // The stone's triangles, a block kind's surface and its dress, filed by cube, made when
+    // first asked.
+    let stone = std::cell::OnceCell::new();
+    let stone = || {
+        stone.get_or_init(|| {
+            let is_stone = |mesh: u32| {
+                drawn.kinds[mesh as usize].is_some_and(|(_, material)| {
+                    matches!(
+                        material,
+                        Material::Masonry | Material::Floor | Material::Dressed
+                    )
+                })
+            };
+            Grid::of(drawn, |t| is_stone(t.mesh))
+        })
+    };
     // One finding for each pair of meshes, where they first fight, and how much.
     let mut pairs: BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> = BTreeMap::new();
     let mut near: Vec<u32> = Vec::new();
@@ -414,7 +430,7 @@ fn overlaps(drawn: &Drawn) -> BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> {
             // Pressed against a face turned to meet them in their plane, as a sill's
             // underside and a split log's flat foot both on a footing's top: never seen,
             // as a viewer would have to be inside what that face closes.
-            if !same && pressed(drawn, &bins, a, middle) {
+            if !same && pressed(drawn, &bins, Some(stone()), a, middle) {
                 continue;
             }
             let entry = pairs
@@ -436,34 +452,24 @@ const PRESSED_M: f32 = 0.01;
 fn pressed(
     drawn: &Drawn,
     bins: &std::collections::HashMap<[i32; 4], Vec<u32>>,
+    stone: Option<&Grid>,
     a: &Tri,
     at: Vec3,
 ) -> bool {
     let n = (-a.n * 20.0).round().as_ivec3();
     let d = (-a.d * 100.0).round() as i32;
-    // Only a mass of stone (a block kind's surface or its dress) is solid enough to be
-    // inside; any face in the plane will do.
-    let inside = |c: &Tri| {
-        let stone = drawn.kinds[c.mesh as usize].is_some_and(|(_, material)| {
-            matches!(
-                material,
-                Material::Masonry | Material::Floor | Material::Dressed
-            )
-        });
-        if stone { PRESSED_M } else { COPLANAR_M }
-    };
     for dx in -1..=1 {
         for dy in -1..=1 {
             for dz in -1..=1 {
-                for dd in -2..=2 {
+                for dd in -1..=1 {
                     let Some(bin) = bins.get(&[n.x + dx, n.y + dy, n.z + dz, d + dd]) else {
                         continue;
                     };
                     for &j in bin {
                         let c = &drawn.tris[j as usize];
                         if c.n.dot(-a.n) >= SAME_FACING
-                            && (-inside(c)..=COPLANAR_M).contains(&(c.n.dot(at) - c.d))
-                            && contains(c, at - c.n * (c.n.dot(at) - c.d))
+                            && (c.n.dot(at) - c.d).abs() <= COPLANAR_M
+                            && contains(c, at)
                         {
                             return true;
                         }
@@ -472,7 +478,13 @@ fn pressed(
             }
         }
     }
-    false
+    // Inside a mass of stone (a block kind's surface or its dress): a line back from the
+    // point, against the way it faces, comes out through the stone's face within a few
+    // millimetres.
+    stone.is_some_and(|grid| {
+        grid.hit_where(drawn, at, -a.n, 0.0, PRESSED_M, |c| c.n.dot(-a.n) > 0.7)
+            .is_some()
+    })
 }
 
 /// Whether a point in a triangle's plane is within it.
@@ -548,9 +560,17 @@ struct Grid {
 
 impl Grid {
     fn new(drawn: &Drawn) -> Grid {
+        Grid::of(drawn, |_| true)
+    }
+
+    /// Those of the triangles `keep` keeps.
+    fn of(drawn: &Drawn, keep: impl Fn(&Tri) -> bool) -> Grid {
         let mut cells: std::collections::HashMap<[i32; 3], Vec<u32>> =
             std::collections::HashMap::new();
         for (i, t) in drawn.tris.iter().enumerate() {
+            if !keep(t) {
+                continue;
+            }
             let low = (t.p[0].min(t.p[1]).min(t.p[2]) / CELL_M).floor().as_ivec3();
             let high = (t.p[0].max(t.p[1]).max(t.p[2]) / CELL_M).floor().as_ivec3();
             for x in low.x..=high.x {
@@ -1071,13 +1091,26 @@ fn pokes_out(
         // Over the roof nearest under it: its covering and caps may stand so far over the
         // roof's top; a wall's piece in a roof cube, or over one, not at all.
         if let Some(top) = roofs.top_over(middle.x, middle.z, middle.y - 0.6) {
-            let allowed = if is_roof { roof_reach(kit) } else { 0.02 };
             // A wall's own face standing up beside a roof is not in it.
             let inside = middle - t.n * 0.01;
-            let in_roof = is_roof
-                || cube_at(inside).is_some_and(|c| c.kind.is_roof())
-                || (cube_at(inside).is_none()
-                    && cube_at(inside - Vec3::Y * CELL_M).is_some_and(|c| c.kind.is_roof()));
+            let roof_cube = cube_at(inside).filter(|c| c.kind.is_roof()).or_else(|| {
+                cube_at(inside)
+                    .is_none()
+                    .then(|| cube_at(inside - Vec3::Y * CELL_M))
+                    .flatten()
+                    .filter(|c| c.kind.is_roof())
+            });
+            let in_roof = is_roof || roof_cube.is_some();
+            // A roof's own pieces as far as they reach; a wall's into the roof's covering,
+            // which closes over it, but not through it.
+            let allowed = if is_roof {
+                roof_reach(kit)
+            } else {
+                roof_cube
+                    .and_then(|c| kits.of(c.kind))
+                    .map_or(0.0, |roof| roof.roof.thick)
+                    .max(0.02)
+            };
             if in_roof && middle.y > top + allowed {
                 note(t.mesh, middle.y - top - allowed, middle, "over the roof");
             }
@@ -1425,6 +1458,55 @@ mod tests {
         assert_eq!(found(0.1, 0.2).len(), 1);
         // Under the ground, where a plinth is sunk to meet it, nothing is out.
         assert!(found(0.1, -0.2).is_empty());
+    }
+
+    #[test]
+    fn a_wall_reaching_into_a_roofs_covering_is_not_through_it() {
+        // A stone cube under a roof's sloping cube whose covering is 10 cm thick, and a
+        // level triangle of stone over the middle of the roof cube, at `over` above the
+        // roof's deck there.
+        let stone = crate::kit::Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            ..Default::default()
+        };
+        let mut roof = crate::kit::Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            ..Default::default()
+        };
+        roof.roof.thick = 0.1;
+        let kits = Kits(vec![stone, roof]);
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(crate::Cube::new(Kind(2), Fill::Solid)),
+        });
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 1, 0],
+            max: [0, 1, 0],
+            cube: Some(crate::Cube {
+                shape: crate::Shape::Slope(crate::Facing::North),
+                ..crate::Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+            }),
+        });
+        let roofs = crate::layout::roofs::Roofs::whole(&base, &kits, crate::layout::Scope::ALL);
+        let (x, z) = (0.25, 0.25);
+        let deck = roofs.top_over(x, z, 0.0).expect("a roof");
+        let found = |over: f32| {
+            let c = |dx: f32, dz: f32| Vec3::new(x + dx, deck + over, z + dz);
+            let drawn = Drawn {
+                tris: vec![tri([c(-0.01, -0.01), c(-0.01, 0.02), c(0.02, -0.01)], 0)],
+                meshes: vec!["gable".into()],
+                kinds: vec![Some((Kind(2), Material::Floor))],
+            };
+            let mut findings = Vec::new();
+            pokes_out(&base, &kits, &roofs, &drawn, Detail::Near, &mut findings);
+            findings
+        };
+        assert!(found(0.05).is_empty(), "{:?}", found(0.05));
+        assert_eq!(found(0.15).len(), 1);
     }
 
     #[test]

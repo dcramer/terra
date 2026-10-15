@@ -170,8 +170,18 @@ pub(super) fn corner_posts(
             }
             let middle = corner + inward * (width * 0.5 - CORNER_POST_PROUD_M);
             let mut post = log(
-                Vec3::new(middle.x, at.y as f32 * CELL_M, middle.z),
-                Vec3::new(middle.x, (top.y + 1) as f32 * CELL_M, middle.z),
+                // Its foot a hair into what it stands on and its top a hair under the courses',
+                // out of the planes of their feet and tops.
+                Vec3::new(
+                    middle.x,
+                    at.y as f32 * CELL_M - CORNER_POST_SUNK_M,
+                    middle.z,
+                ),
+                Vec3::new(
+                    middle.x,
+                    (top.y + 1) as f32 * CELL_M - CORNER_POST_SUNK_M,
+                    middle.z,
+                ),
                 Split::Whole,
                 hash(&[at.x as u32, at.y as u32, at.z as u32, edge.side as u32, 13]),
                 None,
@@ -185,6 +195,8 @@ pub(super) fn corner_posts(
 /// How far a corner post stands out of the faces it covers: within an eighth of a cube
 /// (D192).
 const CORNER_POST_PROUD_M: f32 = 0.03;
+/// How far a corner post's foot is let into what it stands on.
+const CORNER_POST_SUNK_M: f32 = 0.012;
 
 /// How wide a post up an opening's side is, where the kit dresses jambs with one.
 pub(super) fn post_width(kit: &Kit) -> Option<f32> {
