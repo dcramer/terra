@@ -1226,27 +1226,10 @@ pub fn draw_again(
 pub const CLUSTER: i32 = 8;
 /// How many parts a section has.
 pub const CLUSTERS: usize = ((crate::cubes::SECTION / CLUSTER) as usize).pow(3);
-/// How far a section's parts are each way where it is being built, in cubes: a section a
-/// cube of which was just filled or emptied is drawn in parts an eighth as big, so each
-/// step built puts on screen again an eighth as much, as a voxel game meshes the chunks
-/// round an edit finer. Only those, as eight times the parts are eight times the meshes.
-pub const FINE_CLUSTER: i32 = 4;
-/// How many parts a section being built has.
-pub const FINE_CLUSTERS: usize = ((crate::cubes::SECTION / FINE_CLUSTER) as usize).pow(3);
-
-/// How many cubes a side the parts are of a section in so many parts.
-pub fn cluster_side(parts: usize) -> i32 {
-    let across = (1..=crate::cubes::SECTION)
-        .find(|n| (n * n * n) as usize >= parts)
-        .unwrap_or(1);
-    crate::cubes::SECTION / across
-}
-
-/// Which part of its section a cube is in, of so many.
-pub fn cluster_of(at: IVec3, parts: usize) -> usize {
-    let size = cluster_side(parts);
-    let local = (at - crate::cubes::section_of(at) * crate::cubes::SECTION) / size;
-    let side = crate::cubes::SECTION / size;
+/// Which part of its section a cube is in.
+pub fn cluster_of(at: IVec3) -> usize {
+    let local = (at - crate::cubes::section_of(at) * crate::cubes::SECTION) / CLUSTER;
+    let side = crate::cubes::SECTION / CLUSTER;
     (local.x + side * (local.y + side * local.z)) as usize
 }
 
@@ -1256,7 +1239,7 @@ pub fn cluster_of(at: IVec3, parts: usize) -> usize {
 /// below it up over it, with a few round it, whose faces, shading and rain it takes; the
 /// ground; and the roofs round, which a roof's masks follow. A part whose number is as it
 /// was is drawn as it was, so the game leaves it on screen (`draw_parts`). None far off.
-pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach, parts: usize) -> Vec<u64> {
+pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
     if reach <= Reach::Far {
         return Vec::new();
     }
@@ -1303,8 +1286,7 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach, parts: usize) 
         .max()
         .unwrap_or(0)
         + 1;
-    let size = cluster_side(parts);
-    let side = crate::cubes::SECTION / size;
+    let (size, side) = (CLUSTER, crate::cubes::SECTION / CLUSTER);
     // Each piece's box in cubes, worked out once.
     let boxes: Vec<(IVec3, IVec3, &Placed)> = laid
         .pieces
@@ -1369,15 +1351,29 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach, parts: usize) 
         })
         .collect();
     for (piece_low, piece_high, placed) in &boxes {
-        // A piece shapes what is drawn of the cubes beside the cubes it overlaps, no
-        // further: a block kind's cube only the faces of the cubes beside it, its surface
-        // rounded, faded and smoothed within a few centimetres of where it is
-        // (`surface::tests`), and a lintel's or sill's bed only the stone it is set in.
-        let reach = IVec3::ONE;
+        // A piece is drawn in the part its anchor is in, whatever it spans (`slot_of`), so
+        // it is that part's. Beside that it shapes what is drawn of the cubes beside the
+        // cubes it overlaps, no further, where it shapes anything: a block kind's cube the
+        // faces of the cubes beside it, its surface rounded, faded and smoothed within a few
+        // centimetres of where it is (`surface::tests`), and a lintel's or sill's bed the
+        // stone it is set in (`dress::bed`). A coping's or a band's run, a roof's piece, is
+        // nobody else's: a course laid along a wall redraws the parts it is drawn in, not
+        // every part its run passes.
+        let shapes_round = matches!(
+            placed.1,
+            Piece::Block { .. } | Piece::Gable { .. } | Piece::Wattle { .. }
+        ) || section
+            .kits
+            .0
+            .get(placed.0)
+            .is_some_and(|kit| crate::dress::bed(&placed.1, kit).is_some());
         let anchor = placed.1.anchor();
         for part in parts.iter_mut() {
-            if piece_low.cmple(part.high + reach).all() && piece_high.cmpge(part.low - reach).all()
-            {
+            let own = anchor.cmpge(part.low).all() && anchor.cmple(part.high).all();
+            let beside = shapes_round
+                && piece_low.cmple(part.high + IVec3::ONE).all()
+                && piece_high.cmpge(part.low - IVec3::ONE).all();
+            if own || beside {
                 placed.hash(&mut part.hasher);
                 part.roofed |= roofing(placed);
                 (part.reach_low, part.reach_high) = (
@@ -1385,7 +1381,7 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach, parts: usize) 
                     part.reach_high.max(*piece_high),
                 );
                 // A piece drawn in the part is shaded by the rain over every cube it spans.
-                if anchor.cmpge(part.low).all() && anchor.cmple(part.high).all() {
+                if own {
                     (part.looks_low, part.looks_high) = (
                         part.looks_low.min(*piece_low - IVec3::ONE),
                         part.looks_high.max(*piece_high + IVec3::ONE),
@@ -1498,10 +1494,7 @@ pub fn draw_parts(
     if let (Some(keep), Some(last), Some(only)) = (keep, last, only) {
         keep.faces.carry_on(&last.faces, &|cube| {
             crate::cubes::section_of(cube) == section.at
-                && !only
-                    .get(cluster_of(cube, only.len()))
-                    .copied()
-                    .unwrap_or(true)
+                && !only.get(cluster_of(cube)).copied().unwrap_or(true)
         });
     }
     drawn
@@ -1728,12 +1721,13 @@ fn draw_details(
             .then_some(&harm as crate::timber::Harm);
         // Near and a few metres off, each part of the section ([`CLUSTER`]) apart, so the
         // game puts on screen again only the parts an edit reached; far off, one.
-        let slots = match only {
-            Some(only) if matches!(detail, Detail::Near | Detail::Mid) => only.len(),
-            _ => 1,
+        let slots = if only.is_some() && matches!(detail, Detail::Near | Detail::Mid) {
+            CLUSTERS
+        } else {
+            1
         };
         let slot_of = |at: IVec3| {
-            if slots == 1 { 0 } else { cluster_of(at, slots) }
+            if slots == 1 { 0 } else { cluster_of(at) }
         };
         // Whether a part is drawn this time.
         let wanted = |slot: usize| slots == 1 || only.is_none_or(|only| only[slot]);
@@ -2109,8 +2103,7 @@ fn draw_blocks(
     let wanted_boxes: Vec<(IVec3, IVec3)> = (0..slots)
         .filter(|&slot| wanted(slot))
         .map(|slot| {
-            let size = cluster_side(slots);
-            let side = crate::cubes::SECTION / size;
+            let (size, side) = (CLUSTER, crate::cubes::SECTION / CLUSTER);
             let s = slot as i32;
             let low = section_low + IVec3::new(s % side, s / side % side, s / (side * side)) * size;
             (

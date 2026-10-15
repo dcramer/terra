@@ -836,16 +836,11 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                     at: IVec3::from_array(at),
                     progress: &Progress::Whole,
                 };
-                // In parts, and in the finer parts of a section being built.
-                for (reach, parts) in [
-                    (Reach::Near, CLUSTERS),
-                    (Reach::Mid, CLUSTERS),
-                    (Reach::Near, FINE_CLUSTERS),
-                ] {
+                for reach in [Reach::Near, Reach::Mid] {
                     let (before, after) = (section(base), section(edited));
                     let (laid_before, laid_after) = (laid(&before), laid(&after));
-                    let keys_before = cluster_keys(&before, &laid_before, reach, parts);
-                    let keys_after = cluster_keys(&after, &laid_after, reach, parts);
+                    let keys_before = cluster_keys(&before, &laid_before, reach);
+                    let keys_after = cluster_keys(&after, &laid_after, reach);
                     // A part with a cube harmed in it is drawn again, worn.
                     if let Some((edit, cube)) = harm
                         && edit == which
@@ -857,7 +852,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                             "base {index}: harmed, its keys the same"
                         );
                     }
-                    let all = vec![true; parts];
+                    let all = [true; CLUSTERS];
                     let mut drawing = Drawing::default();
                     let was = draw_parts(
                         &before,
@@ -891,7 +886,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                         "base {index} section {at:?}: drawn from what was kept on, it differs"
                     );
                     #[allow(clippy::needless_range_loop)]
-                    for c in 0..parts {
+                    for c in 0..CLUSTERS {
                         let pick = |drawn: &Drawn| {
                             let of = |by: &Vec<BTreeMap<(Kind, Material), Surface>>| {
                                 by.get(c).cloned().unwrap_or_default()

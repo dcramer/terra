@@ -253,8 +253,7 @@ fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> 
     let before = section(base);
     let whole = sections::Whole::lay(base, kits);
     let laid_before = sections::lay(&before, &whole);
-    let keys_before =
-        sections::cluster_keys(&before, &laid_before, Reach::Near, sections::CLUSTERS);
+    let keys_before = sections::cluster_keys(&before, &laid_before, Reach::Near);
     let all = vec![true; keys_before.len()];
     sections::draw_parts(
         &before,
@@ -284,7 +283,7 @@ fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> 
     let started = Instant::now();
     sections::remembered(|| {
         let laid = sections::lay(&after, &whole);
-        let keys = sections::cluster_keys(&after, &laid, Reach::Near, sections::CLUSTERS);
+        let keys = sections::cluster_keys(&after, &laid, Reach::Near);
         let only: Vec<bool> = keys.iter().zip(&keys_before).map(|(a, b)| a != b).collect();
         std::hint::black_box(sections::draw_parts(
             &after,

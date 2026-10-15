@@ -431,15 +431,6 @@ fn launch(
                 .reach
                 .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
             let force = waiting.force;
-            // A section being built in finer parts: one whose cubes this change filled or
-            // emptied, or one in them already and drawn as finely as before.
-            let parts = if waiting.edited
-                || (part_keys.len() == sections::FINE_CLUSTERS && waiting.reach.is_none())
-            {
-                sections::FINE_CLUSTERS
-            } else {
-                sections::CLUSTERS
-            };
             let whole = whole.clone();
             let unit = build.sections.unit;
             let task = pool.spawn(async move {
@@ -510,14 +501,12 @@ fn launch(
                     // changed, if it is drawn as finely as it was; any other in one part, fewer
                     // meshes.
                     let keys = if keeps {
-                        sections::cluster_keys(&section, &laid, wanted, parts)
+                        sections::cluster_keys(&section, &laid, wanted)
                     } else {
                         Vec::new()
                     };
                     let keyed_ms = started.elapsed().as_secs_f32() * 1000.0;
-                    // Drawn again whole at another detail, or in parts of another size.
-                    let same_reach = previous.is_some_and(|(_, reach)| reach == wanted)
-                        && part_keys.len() == keys.len();
+                    let same_reach = previous.is_some_and(|(_, reach)| reach == wanted);
                     let only: Vec<bool> = keys
                         .iter()
                         .enumerate()

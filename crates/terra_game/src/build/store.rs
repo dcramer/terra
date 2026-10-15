@@ -75,13 +75,10 @@ pub(super) struct Repaint {
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
-/// as one whose cubes changed or whose look has must; whether its cubes changed, so it is
-/// being built and is drawn in finer parts (`sections::FINE_CLUSTER`); and how finely, if
-/// that is decided.
+/// as one whose cubes changed or whose look has must; and how finely, if that is decided.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) struct Waiting {
     pub force: bool,
-    pub edited: bool,
     pub reach: Option<Reach>,
 }
 
@@ -150,6 +147,8 @@ pub(super) struct Change {
     pub laid_ms: f32,
     pub slowest_ms: f32,
     pub back_ms: f32,
+    /// How many corners builds had put on the GPU when it was made (`draw::PUT`).
+    pub put_from: usize,
 }
 
 pub fn plugin(app: &mut App) {
@@ -267,11 +266,6 @@ fn noticed(build: &mut Build) {
         wait(at, false);
     }
     sections.relit_since.extend(relit);
-    for &at in &marked {
-        if let Some(waiting) = sections.waiting.get_mut(&unit_of(at, unit)) {
-            waiting.edited = true;
-        }
-    }
     sections.change = Some(Change {
         since: std::time::Instant::now(),
         waiting: sections.waiting.len(),
@@ -280,6 +274,7 @@ fn noticed(build: &mut Build) {
         laid_ms: 0.0,
         slowest_ms: 0.0,
         back_ms: 0.0,
+        put_from: super::draw::PUT[1].load(std::sync::atomic::Ordering::Relaxed),
     });
 }
 

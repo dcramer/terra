@@ -1065,7 +1065,7 @@ fn upload(
             }
             if let Some(change) = build.sections.change.take() {
                 info!(
-                    "Build: change on screen in {:.1} ms: {} sections set waiting, {} merged anew, {} laid the same; the base laid again by {:.1} ms, the slowest section {:.1} ms on its worker, the last back at {:.1} ms.",
+                    "Build: change on screen in {:.1} ms: {} sections set waiting, {} merged anew, {} laid the same; the base laid again by {:.1} ms, the slowest section {:.1} ms on its worker, the last back at {:.1} ms; {} corners put on the GPU meanwhile.",
                     change.since.elapsed().as_secs_f32() * 1000.0,
                     change.waiting,
                     change.merged,
@@ -1073,6 +1073,9 @@ fn upload(
                     change.laid_ms,
                     change.slowest_ms,
                     change.back_ms,
+                    PUT[1]
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        .saturating_sub(change.put_from),
                 );
             }
         }
@@ -1550,7 +1553,6 @@ fn stream(
                     at,
                     store::Waiting {
                         force: true,
-                        edited: false,
                         reach: Some(wanted),
                     },
                 );
@@ -1621,7 +1623,6 @@ pub(super) fn aside(
                 at,
                 store::Waiting {
                     force: true,
-                    edited: false,
                     reach: None,
                 },
             );
