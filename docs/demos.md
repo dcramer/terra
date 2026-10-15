@@ -390,7 +390,7 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 ### (f) Order of work
 
 1. **The reference** and the bustle counts; then the village, `town300` and `crowd` measured on the RTX 3080, which sets the counts.
-2. **The layout:** a market town with a square, streets along the slope, plots and yards, in `terra_build`, with its path graph. Bench `town-bare`.
+2. **The layout:** a market town with a square, streets along the slope, plots and yards, in `terra_build`, with its path graph. Bench `town-bare`. *Landed: `terra_build::town` (D330); `cargo xtask town --seed N` draws the plan. The bench waits for the game to lay it.*
 3. **Walking:** A* on the path graph and ORCA avoidance. Villagers walk between given points. The first `life` check (stuck, through walls, feet).
 4. **Days:** smart objects (stall, well, forge, block, bench, door) and schedules by role as data. People far off worked out from the clock. `life` checks schedules.
 5. **Crowd tiers:** animation rate and joint LOD, merged outfits, the far tier's vertex animation; `lodcheck` on them; the counts raised to the budget.

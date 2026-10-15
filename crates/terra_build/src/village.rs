@@ -1142,7 +1142,7 @@ pub fn every_building() -> Vec<(Plan, Scheme, Roof, i32)> {
 }
 
 /// A building of [`every_building`]'s, from its seed, its door at a place looking a way.
-fn put_up(
+pub(crate) fn put_up(
     seed: u32,
     (plan, scheme, roofed, wide): (Plan, Scheme, Roof, i32),
     at: [f32; 2],

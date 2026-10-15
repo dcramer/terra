@@ -186,6 +186,13 @@ const TASKS: &[Task] = &[
         run: texels,
     },
     Task {
+        name: "town",
+        takes: "[--seed N | --seeds A-B] [--ground flat|hillside|rolling|all] [--out shots/town.svg]",
+        does: "a market town's plan from its seed, drawn as an SVG: square, streets, buildings, yards, the things its day is done at and its path graph; CPU only (terra_build::town)",
+        group: "Look at things",
+        run: |args| cargo_example("terra_build", "town", args),
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
@@ -1127,6 +1134,13 @@ fn use_hooks() {
             eprintln!("git now runs `cargo xtask check` before each commit (.githooks)");
         }
     }
+}
+
+/// A crate's example program, built quietly and run from the root.
+fn cargo_example(package: &str, example: &str, args: &[String]) -> bool {
+    let mut all = vec!["run", "-q", "-p", package, "--example", example, "--"];
+    all.extend(args.iter().map(String::as_str));
+    run("cargo", &all)
 }
 
 /// A TypeScript tool, run by Node from the root.

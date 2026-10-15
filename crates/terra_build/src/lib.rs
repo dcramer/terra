@@ -67,6 +67,7 @@ pub mod sections;
 pub mod support;
 pub mod surface;
 pub mod timber;
+pub mod town;
 pub mod village;
 mod walk;
 
