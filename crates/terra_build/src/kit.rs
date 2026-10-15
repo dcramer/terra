@@ -835,8 +835,11 @@ pub fn matte() -> f32 {
     0.35
 }
 
-/// The plain colours of what a kit has no texture for yet: a floor, a flat roof and their
-/// sides, and the daub between courses, which tints its texture.
+/// A kit's plain colours: `light`, the dust it throws up as it comes down
+/// (`terra_game::build::loss`), and `chinking`, the daub between courses, which tints its
+/// texture. `dark` and `roof` coloured kitted floors and flat roofs before every kind was
+/// drawn by its kit; nothing reads them now but the checker, and they go when the packs
+/// stop writing them (research/building-code-health-2026-10-15.md).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct KitColours {
