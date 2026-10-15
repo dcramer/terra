@@ -453,17 +453,18 @@ pub fn reach(
         whole.extend(affected(after, marked));
         return vec![whole];
     }
-    // Which way a log looks out of its room (D261) is worked out from the rooms beside its
-    // wall, which an edit anywhere round a room opens or closes: where a cube went into a
-    // room or out of one, its section is laid again as though marked, with the rows of logs
-    // along from it, as a log a wall's thickness from it may look out another way.
+    // Which way a log looks out of its building (D261) is worked out from what is within
+    // the building beside its wall (`layout::enclosed`), which only an edit that empties or
+    // first fills a column, or changes what covers it, can change: the sections that can
+    // see such a column along the floor are laid again as though marked, with the rows of
+    // logs along from them. A window or a hole cut through a wall changes none.
     let logs_here = kits
         .0
         .iter()
         .any(|kit| kit.pattern == Pattern::Logs && here(kit, &near));
     let mut marked = marked.clone();
     if logs_here {
-        let moved = rooms_moved(before, after);
+        let moved = enclosure_moved(before, after, &marked, &drawn);
         if !moved.is_empty() {
             marked.extend(moved);
             near = round_marks(&marked);
@@ -498,43 +499,56 @@ pub fn reach(
     groups
 }
 
-/// The sections of every cube in a room before an edit and not after, or after and not
-/// before: what a log looks out of may have changed there.
-fn rooms_moved(before: &Base, after: &Base) -> BTreeSet<[i32; 3]> {
-    let mut moved = BTreeSet::new();
-    let (mut a, mut b) = (
-        before.room_cells().map(|(at, _)| at).peekable(),
-        after.room_cells().map(|(at, _)| at).peekable(),
-    );
-    let mut note = |at: IVec3| {
-        moved.insert(crate::cubes::section_of(at).to_array());
+/// The sections from which a column the edit changed, in the sections marked, can be seen
+/// along the floor within `layout::ENCLOSE_REACH`: where a column was emptied or first
+/// filled, or what is highest built in it changed, which whether a place is within a
+/// building is read from (`layout::enclosed`).
+fn enclosure_moved(
+    before: &Base,
+    after: &Base,
+    marked: &BTreeSet<[i32; 3]>,
+    drawn: &BTreeSet<[i32; 3]>,
+) -> BTreeSet<[i32; 3]> {
+    let side = crate::cubes::SECTION;
+    let profile = |base: &Base, x: i32, z: i32| {
+        let top = base
+            .column(x, z)
+            .filter(|&y| {
+                base.cube(IVec3::new(x, y, z))
+                    .is_some_and(|cube| cube.fill != Fill::Open)
+            })
+            .max();
+        (base.occupied(x, z), top)
     };
-    loop {
-        match (a.peek().copied(), b.peek().copied()) {
-            (Some(x), Some(y)) if x == y => {
-                a.next();
-                b.next();
+    let columns: BTreeSet<[i32; 2]> = marked
+        .iter()
+        .map(|&[x, _, z]| [x, z])
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .flat_map(|[sx, sz]| {
+            (0..side).flat_map(move |i| (0..side).map(move |j| [sx * side + i, sz * side + j]))
+        })
+        .filter(|&[x, z]| profile(before, x, z) != profile(after, x, z))
+        .collect();
+    let mut seen: BTreeSet<[i32; 2]> = BTreeSet::new();
+    for &[x, z] in &columns {
+        for step in [
+            glam::IVec2::X,
+            glam::IVec2::NEG_X,
+            glam::IVec2::Y,
+            glam::IVec2::NEG_Y,
+        ] {
+            for k in 0..=layout::ENCLOSE_REACH {
+                let at = glam::IVec2::new(x, z) + step * k;
+                seen.insert([at.x.div_euclid(side), at.y.div_euclid(side)]);
             }
-            (Some(x), Some(y)) if x.to_array() < y.to_array() => {
-                note(x);
-                a.next();
-            }
-            (Some(_), Some(y)) => {
-                note(y);
-                b.next();
-            }
-            (Some(x), None) => {
-                note(x);
-                a.next();
-            }
-            (None, Some(y)) => {
-                note(y);
-                b.next();
-            }
-            (None, None) => break,
         }
     }
-    moved
+    drawn
+        .iter()
+        .filter(|&&[x, _, z]| seen.contains(&[x, z]))
+        .copied()
+        .collect()
 }
 
 /// How far a section's cubes are searched for the kinds whose kits may lay pieces in it.

@@ -460,6 +460,37 @@ struct Walls<'a> {
     stairs_known: Scope,
     stairs_beyond: std::cell::RefCell<crate::mesh::QuickMap<[i32; 2], BTreeSet<i32>>>,
     kits: &'a Kits,
+    /// Whether each place asked about is within a building (`enclosed`), worked out once.
+    enclosed_known: std::cell::RefCell<crate::mesh::QuickMap<IVec3, bool>>,
+}
+
+/// How far across the floor, in cubes, a place looks each way for the building round it
+/// (`enclosed`): a room of a building is never wider.
+pub(crate) const ENCLOSE_REACH: i32 = 16;
+
+/// Whether a place is within a building, for which side of its walls the weather is on
+/// (D261 as amended): something built over it, and something standing each way along the
+/// floor from it, east, west, north and south, within [`ENCLOSE_REACH`]. What stands is
+/// read by column, anything in it at any height, so an opening, a window or a door with a
+/// lintel over it, or a hole knocked through, closes it in as the wall round it does, and
+/// a wall's weather side stays as it was however it is cut. Rooms (D155) are for light and
+/// shelter, and open at any opening.
+pub(crate) fn enclosed(base: &Base, at: IVec3) -> bool {
+    let covered = base.column(at.x, at.z).any(|y| {
+        y > at.y
+            && base
+                .cube(IVec3::new(at.x, y, at.z))
+                .is_some_and(|cube| cube.fill != Fill::Open)
+    });
+    covered
+        && [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
+            .iter()
+            .all(|&step| {
+                (1..=ENCLOSE_REACH).any(|k| {
+                    let c = at + step * k;
+                    base.occupied(c.x, c.z)
+                })
+            })
 }
 
 /// What a timber kind's cube is laid as.
@@ -579,15 +610,23 @@ impl Walls<'_> {
 
     /// A cube of the kit's kind that is part of a wall, or a roof's cube its wall is carried
     /// up into.
-    /// Which way a wall's cube looks out of the room it closes in (D261): across the wall,
-    /// the side with no room where the other, past the wall's thickness, has one.
+    /// Which way a wall's cube looks out of the building it walls (D261): across the
+    /// wall, the side not enclosed (`enclosed`) where the other, past the wall's thickness,
+    /// is. Not from its rooms, which a window or a hole opens: a wall's weather side is the
+    /// same whatever is cut through it.
     fn outside(&self, axis: Axis, at: IVec3) -> Option<Dir> {
         let across = axis.other().step();
         let room = |sign: i32| {
             (1..=THICK + 1)
                 .map(|k| at + across * (sign * k))
                 .find(|&cube| self.ours(cube).is_none())
-                .is_some_and(|cube| self.base.contains(cube))
+                .is_some_and(|cube| {
+                    *self
+                        .enclosed_known
+                        .borrow_mut()
+                        .entry(cube)
+                        .or_insert_with(|| enclosed(self.base, cube))
+                })
         };
         let axis = match axis.other() {
             Axis::X => 0,
@@ -916,6 +955,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         stairs_known,
         stairs_beyond: Default::default(),
         kits,
+        enclosed_known: Default::default(),
     };
     let band = |axis: Axis| {
         let (mut low, mut high) = (scope.low - along, scope.high + along);

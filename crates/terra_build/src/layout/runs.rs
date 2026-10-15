@@ -1147,6 +1147,64 @@ mod tests {
     }
 
     #[test]
+    fn a_window_or_a_hole_cut_through_a_wall_turns_no_log_to_another_weather_side() {
+        let kit = kit();
+        let mut base = roofed_cabin(Style::Gable);
+        base.apply(BuildOp::Fill {
+            min: [0, -1, 0],
+            max: [7, -1, 5],
+            cube: Some(Cube::new(kit.kind(), Fill::Solid)),
+        });
+        assert!(base.room_count() > 0, "no room");
+        let sides = |base: &Base| -> BTreeMap<[i32; 6], Option<Dir>> {
+            lay(base, &kit)
+                .pieces
+                .iter()
+                .filter_map(|piece| match piece {
+                    Piece::Log {
+                        from, to, outside, ..
+                    } => {
+                        let key = |v: Vec3| (v * 100.0).round().as_ivec3().to_array();
+                        let ([a, b, c], [d, e, f]) = (key(from.metres()), key(to.metres()));
+                        Some(([a, b, c, d, e, f], *outside))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let whole = sides(&base);
+        assert!(whole.values().filter(|out| out.is_some()).count() * 2 > whole.len());
+        // A window two cubes wide in the south wall, and a hole knocked through the east.
+        let mut cut = base.clone();
+        let layers: Vec<i32> = cut.column(3, 0).collect();
+        let middle = layers[layers.len() / 2];
+        cut.apply(BuildOp::Fill {
+            min: [3, middle, 0],
+            max: [4, middle, 0],
+            cube: None,
+        });
+        cut.apply(BuildOp::Fill {
+            min: [7, middle, 2],
+            max: [7, middle, 2],
+            cube: None,
+        });
+        assert_eq!(cut.room_count(), 0, "the holes open the room");
+        let after = sides(&cut);
+        let mut same = 0;
+        for (log, out) in &after {
+            if let Some(was) = whole.get(log) {
+                assert_eq!(out, was, "the log {log:?} turned");
+                same += 1;
+            }
+        }
+        assert!(
+            same * 10 > whole.len() * 8,
+            "{same} of {} logs kept",
+            whole.len()
+        );
+    }
+
+    #[test]
     fn walls_either_way_never_share_a_course() {
         let logs = logs(&lay(&cabin(), &kit()));
         let height = |run_x: bool| -> Vec<i32> {
