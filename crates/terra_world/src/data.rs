@@ -32,6 +32,20 @@ pub fn assets() -> PathBuf {
         .map_or_else(|| base.join("assets"), |dir| dir.join("assets"))
 }
 
+/// The asset source of pictures read on the CPU only, such as building's texture arrays read
+/// them (D290): the same folder as `assets()`, as `cpu://<path>`. Bevy keeps one asset per
+/// path, and the first load's settings win, so a picture read CPU-only and the same picture
+/// drawn by a material were one asset that never reached the GPU: in the play experiment the
+/// lush forest's log ends and stumps, which share `materials/log_end` with the log kits, were
+/// never drawn and held the loading screen up to its cap. From their own source they are two
+/// assets.
+pub const CPU_ONLY: &str = "cpu";
+
+/// A picture under `assets()` as read on the CPU only (`CPU_ONLY`).
+pub fn cpu_only(path: &str) -> String {
+    format!("{CPU_ONLY}://{path}")
+}
+
 /// Where a data file is.
 pub fn path(file: &str) -> PathBuf {
     assets().join("data").join(file)

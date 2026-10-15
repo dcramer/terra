@@ -117,7 +117,8 @@ pub(super) fn load(
 ) {
     let paths = look.kits.as_deref().map(wanted).unwrap_or_default();
     if loading.wanted.as_ref() != Some(&paths) {
-        // Read on the CPU only, as the texture arrays read them (D290): never sent to the GPU.
+        // Read on the CPU only, as the texture arrays read them (D290): never sent to the GPU,
+        // and from their own source, so never the same asset as the picture a material draws.
         let read = |path: String, srgb: bool| -> Handle<Image> {
             assets
                 .load_builder()
@@ -125,7 +126,7 @@ pub(super) fn load(
                     settings.is_srgb = srgb;
                     settings.asset_usage = bevy::asset::RenderAssetUsages::MAIN_WORLD;
                 })
-                .load(path)
+                .load(terra_world::data::cpu_only(&path))
         };
         let linear = |path: String| read(path, false);
         loading.heights = paths

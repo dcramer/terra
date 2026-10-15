@@ -44,6 +44,21 @@ const QUIET_FRAMES: u32 = 10;
 const FADE_S: f32 = 0.4;
 /// Something that never loads should not keep the player out for good.
 const GIVE_UP: Duration = Duration::from_secs(60);
+/// A scripted run's pictures and films must not start with anything missing, as pines
+/// drawn as crowns over no trunks on a busy machine, so it waits far longer, saying what it
+/// is waiting for as it goes (D352).
+const GIVE_UP_SCRIPTED: Duration = Duration::from_secs(600);
+/// How often a run still loading past the player's cap says what it waits for.
+const SAY_EVERY: Duration = Duration::from_secs(15);
+
+/// How long a run waits for everything before it starts anyway.
+fn give_up(options: &Options) -> Duration {
+    if options.scripted() {
+        GIVE_UP_SCRIPTED
+    } else {
+        GIVE_UP
+    }
+}
 
 const BACKDROP: Color = Color::srgb(0.035, 0.04, 0.05);
 const TITLE: Color = Color::srgb(0.88, 0.86, 0.80);
@@ -105,7 +120,12 @@ impl Shaders {
 struct Drawables {
     waiting: usize,
     ready: usize,
+    /// Some of those waiting, with what they wait for, to say which.
+    missing: Vec<(Entity, &'static str)>,
 }
+
+/// How many of those waiting the render world names.
+const NAMED: usize = 64;
 
 /// The systems that report to [`Progress`]. They run only while loading, before the screen
 /// looks at what they said.
@@ -251,19 +271,31 @@ fn count_drawables(
     else {
         return;
     };
+    let mut missing = Vec::new();
     let waiting = instances
         .instances
         .iter()
-        .filter(|(entity, instance)| {
-            materials.get(instance.asset_id).is_none()
-                || placed
-                    .mesh_asset_id(**entity)
-                    .is_some_and(|mesh| meshes.get(mesh).is_none())
+        .filter_map(|(entity, instance)| {
+            let why = if materials.get(instance.asset_id).is_none() {
+                "its material"
+            } else if placed
+                .mesh_asset_id(*entity)
+                .is_some_and(|mesh| meshes.get(mesh).is_none())
+            {
+                "its mesh"
+            } else {
+                return None;
+            };
+            if missing.len() < NAMED {
+                missing.push((entity.id(), why));
+            }
+            Some(())
         })
         .count();
     if let Some(mut drawables) = main_world.get_resource_mut::<Drawables>() {
         drawables.waiting = waiting;
         drawables.ready = instances.instances.len() - waiting;
+        drawables.missing = missing;
     }
 }
 
@@ -414,6 +446,7 @@ fn watch(
     mut bar: Single<&mut Node, With<Bar>>,
     mut status: Single<&mut Text, With<Status>>,
     mut next: ResMut<NextState<Screen>>,
+    (drawables, names): (Res<Drawables>, Query<(Option<&Name>, Option<&ChildOf>)>),
 ) {
     // What was said this frame; next frame is said afresh.
     let progress = std::mem::take(&mut *progress);
@@ -439,14 +472,76 @@ fn watch(
             progress.summary()
         );
         next.set(Screen::Playing);
-    } else if loading.up_for > GIVE_UP {
+        return;
+    }
+    let cap = give_up(&options);
+    let waited = loading.up_for;
+    if waited > cap {
         warn!(
-            "Still loading after {} s, starting anyway: {}.",
-            GIVE_UP.as_secs(),
-            progress.summary()
+            "Still loading after {} s, starting anyway: {}; waiting for {}.",
+            cap.as_secs(),
+            progress.summary(),
+            waiting_for(&drawables, &names)
         );
         next.set(Screen::Playing);
+    } else if waited > GIVE_UP
+        && (waited - real.delta()).as_secs() / SAY_EVERY.as_secs()
+            != waited.as_secs() / SAY_EVERY.as_secs()
+    {
+        // A scripted run past the player's cap: what it is still waiting for, loudly.
+        warn!(
+            "Still loading after {} s, waiting up to {} s: {}; waiting for {}.",
+            waited.as_secs(),
+            cap.as_secs(),
+            progress.summary(),
+            waiting_for(&drawables, &names)
+        );
     }
+}
+
+/// What in view the renderer cannot draw yet, by name, with what each waits for and how
+/// many of each: `Pine bark (its material) x12, Chunk (its mesh) x3`.
+fn waiting_for(drawables: &Drawables, names: &Query<(Option<&Name>, Option<&ChildOf>)>) -> String {
+    if drawables.waiting == 0 {
+        return "nothing in view".into();
+    }
+    // An entity's own name, or the nearest named one it hangs from.
+    let name = |mut entity: Entity| {
+        let mut part = false;
+        for _ in 0..8 {
+            match names.get(entity) {
+                Ok((Some(name), _)) if part => return format!("part of {}", name.as_str()),
+                Ok((Some(name), _)) => return name.as_str().to_string(),
+                Ok((None, Some(parent))) => {
+                    entity = parent.parent();
+                    part = true;
+                }
+                _ => break,
+            }
+        }
+        format!("unnamed {entity}")
+    };
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for &(entity, why) in &drawables.missing {
+        let key = format!("{} ({why})", name(entity));
+        match counts.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((key, 1)),
+        }
+    }
+    counts.sort_by_key(|count| std::cmp::Reverse(count.1));
+    let named: Vec<String> = counts.iter().map(|(k, n)| format!("{k} x{n}")).collect();
+    let more = drawables.waiting.saturating_sub(drawables.missing.len());
+    format!(
+        "{} things in view: {}{}",
+        drawables.waiting,
+        named.join(", "),
+        if more > 0 {
+            format!(" and {more} more")
+        } else {
+            String::new()
+        }
+    )
 }
 
 /// Fades the screen away as the game starts; a scripted run takes it away at once, so its
@@ -530,13 +625,19 @@ mod tests {
 
     /// The loading screen as `cover` puts it up, with no frame yet watched.
     fn screen() -> World {
+        screen_for(&[])
+    }
+
+    /// The screen for a run given these options.
+    fn screen_for(args: &[&str]) -> World {
         let mut world = World::new();
         world.insert_resource(Loading::default());
         world.insert_resource(Progress::default());
+        world.insert_resource(Drawables::default());
         let mut real = Time::<Real>::default();
         real.update_with_duration(Duration::ZERO);
         world.insert_resource(real);
-        world.insert_resource(Options::from_args(std::iter::empty()).unwrap());
+        world.insert_resource(Options::from_args(args.iter().map(|a| a.to_string())).unwrap());
         world.insert_resource(NextState::<Screen>::default());
         world.spawn((Bar, Node::default()));
         world.spawn((Status, Text::new("Loading")));
@@ -596,5 +697,52 @@ mod tests {
         assert!(!frame(&mut world, 1, 0, half).0);
         assert!(!frame(&mut world, 1, 0, half).0);
         assert!(frame(&mut world, 1, 0, 0.1).0);
+    }
+
+    /// A scripted run's pictures wait for everything far longer than a player would, so a
+    /// busy machine does not film pines with no trunks; it still starts in the end.
+    #[test]
+    fn a_scripted_run_waits_far_longer_for_what_never_loads() {
+        let mut world = screen_for(&["--shot", "out.png"]);
+        let step = GIVE_UP.as_secs_f32();
+        assert!(!frame(&mut world, 1, 0, step).0);
+        assert!(
+            !frame(&mut world, 1, 0, step).0,
+            "gave up at the player's cap"
+        );
+        let rest = GIVE_UP_SCRIPTED.as_secs_f32() - 2.0 * step;
+        assert!(!frame(&mut world, 1, 0, rest - 1.0).0);
+        assert!(frame(&mut world, 1, 0, 2.0).0, "never gave up");
+    }
+
+    /// What cannot be drawn yet is named, by the nearest name it hangs from, and counted.
+    #[test]
+    fn what_is_waiting_is_named() {
+        let mut world = World::new();
+        let tree = world.spawn(Name::new("Pine")).id();
+        let bark = world.spawn(ChildOf(tree)).id();
+        let bark2 = world.spawn(ChildOf(tree)).id();
+        let chunk = world.spawn(Name::new("Chunk")).id();
+        let drawables = Drawables {
+            waiting: 4,
+            ready: 10,
+            missing: vec![
+                (bark, "its material"),
+                (bark2, "its material"),
+                (chunk, "its mesh"),
+            ],
+        };
+        let said = world
+            .run_system_cached_with(
+                |In(d): In<Drawables>, names: Query<(Option<&Name>, Option<&ChildOf>)>| {
+                    waiting_for(&d, &names)
+                },
+                drawables,
+            )
+            .unwrap();
+        assert_eq!(
+            said,
+            "4 things in view: part of Pine (its material) x2, Chunk (its mesh) x1 and 1 more"
+        );
     }
 }

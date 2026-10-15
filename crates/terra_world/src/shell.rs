@@ -909,6 +909,13 @@ impl Plugin for ShellPlugin {
                 1.0 / 60.0,
             )));
         }
+        // Pictures read on the CPU only have a source of their own (`data::CPU_ONLY`), which
+        // must be there before the asset server is made.
+        let assets_folder = crate::data::assets().to_string_lossy().into_owned();
+        app.register_asset_source(
+            crate::data::CPU_ONLY,
+            bevy::asset::io::AssetSourceBuilder::platform_default(&assets_folder, None),
+        );
         let sound = options.sound_on();
         let engine = DefaultPlugins
             .set(WindowPlugin {
