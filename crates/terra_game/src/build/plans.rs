@@ -952,10 +952,10 @@ mod tests {
 
     #[test]
     fn a_floor_of_a_block_kind_stands_on_footings_of_its_own_kind() {
-        // Stone by default; a floor of another block kind, brick, on brick.
-        const BRICK: Kind = Kind(3);
+        // Stone by default; a floor of another block kind, earth, on earth.
+        const EARTH: Kind = Kind(3);
         let ground = |_: [i32; 2]| -60i16;
-        let blocks = BTreeSet::from([STONE, BRICK]);
+        let blocks = BTreeSet::from([STONE, EARTH]);
         let footings = Footings {
             kind: STONE,
             ground_cm: &ground,
@@ -967,7 +967,7 @@ mod tests {
                 Op::LayPlan { kind, .. } => *kind,
                 other => panic!("{other:?}"),
             };
-        assert_eq!(kind_of_footing(BRICK), BRICK);
+        assert_eq!(kind_of_footing(EARTH), EARTH);
         assert_eq!(kind_of_footing(LOGS), STONE);
     }
 
@@ -1211,18 +1211,18 @@ mod tests {
         // Within a pattern, a change is a repaint at once: every step in one act, after which
         // the cubes are the new kind, built as they were, nothing pending (D298); across
         // patterns, marked to be built anew.
-        const BRICK: Kind = Kind(7);
-        let families = BTreeMap::from([(LOGS, 0), (STONE, 2), (BRICK, 2)]);
+        const EARTH: Kind = Kind(7);
+        let families = BTreeMap::from([(LOGS, 0), (STONE, 2), (EARTH, 2)]);
         let blocky = |kind: Kind| kind != LOGS;
         let marked = super::change(&base, &two, LOGS, &rules, &families, blocky);
         assert!(matches!(&marked[..], [Op::Replace { .. }]));
-        let repaint = super::change(&base, &two, BRICK, &rules, &families, blocky);
+        let repaint = super::change(&base, &two, EARTH, &rules, &families, blocky);
         assert!(repaint.len() > 2, "{repaint:?}");
         let mut repainted = base.clone();
         repainted.act_all(&repaint, &cx).unwrap();
         for at in &two {
             let (was, now) = (base.cube(*at).unwrap(), repainted.cube(*at).unwrap());
-            assert_eq!(now.kind, BRICK);
+            assert_eq!(now.kind, EARTH);
             assert_eq!(
                 (now.shape, now.state, now.pending),
                 (was.shape, was.state, terra_build::Pending::None)

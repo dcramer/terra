@@ -1,5 +1,5 @@
 //! Block kinds drawn as their cubes' own surface (D197, research/block-modules.md): stone,
-//! brick, plaster and earth are not laid as models but as the outer faces of their cubes,
+//! plaster and earth are not laid as models but as the outer faces of their cubes,
 //! each a fine grid, rounded along every outside edge and displaced by their material's
 //! height, so a wall of any shape, carved anywhere, is one surface with no seams.
 //!

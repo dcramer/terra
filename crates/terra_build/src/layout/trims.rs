@@ -130,7 +130,7 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
 }
 
 /// Where another kind's wall comes in square against the side of one of the kit's, as a
-/// stone or brick wall's end against a log end wall at a corner: a board up the joint,
+/// stone or earth wall's end against a log end wall at a corner: a board up the joint,
 /// filling the space the cube holds between the members' face and the other's, which a
 /// cube's wall of logs, narrower than its cube, leaves as a slot through the corner. From
 /// the foot of each stack of such cubes to its top.

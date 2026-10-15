@@ -1,8 +1,0 @@
-// plastered_timber's reference pack (D290), made by `cargo xtask pack` from polyhaven:plastered_wall_02.
-(
-    textures: {
-        Masonry: (path: "materials/plastered_timber", metres: (2.23, 2.23), depth: 0.015),
-        Floor: (path: "materials/plastered_timber", metres: (2.23, 2.23)),
-    },
-    colours: (light: (0.732, 0.695, 0.641), dark: (0.476, 0.452, 0.417), chinking: (0.841, 0.799, 0.737)),
-)

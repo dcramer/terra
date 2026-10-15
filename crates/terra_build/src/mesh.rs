@@ -52,7 +52,7 @@ pub enum Material {
     Stone,
     /// A floor's planks.
     Floor,
-    /// A block kind's surface: stone, brick, plaster, earth (D197).
+    /// A block kind's surface: stone, plaster, earth (D197).
     Masonry,
     /// Mortar where a roof meets a wall standing above it.
     Flashing,

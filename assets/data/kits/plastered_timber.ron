@@ -1,9 +1,0 @@
-// Plastered timber: made by `cargo xtask pack` from polyhaven:plastered_wall_02 (D290).
-(
-    id: 10,
-    pattern: "frame",
-    pack: "plastered_timber",
-    cost: (steps: 4, step: [("Wood", 1, 64), ("Fibre", 1, 64)]),
-    weight: 1,
-    roof_kind: Some(2050),
-)

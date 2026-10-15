@@ -671,7 +671,7 @@ pub enum Pattern {
     /// Courses of long members, crossing at the corners (`layout::runs`).
     #[default]
     Logs,
-    /// Blocks (`layout::blocks`): stone, brick, plaster or earth, drawn as the cubes' own
+    /// Blocks (`layout::blocks`): stone, plaster or earth, drawn as the cubes' own
     /// surface, rounded and displaced by the kit's `Masonry` material (D197). Where it
     /// meets logs, it runs through and the logs end flush against it (D179).
     Masonry,
@@ -1163,7 +1163,7 @@ mod tests {
             );
             seen += 1;
         }
-        assert!(seen >= 10, "{seen}");
+        assert!(seen >= 9, "{seen}");
     }
 
     #[test]

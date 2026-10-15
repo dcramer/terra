@@ -201,7 +201,7 @@ fn main() -> ExitCode {
 /// The bases `--quick` inspects: each kit's and each two kits' rectangle under a gable.
 const QUICK: &str = "rectangle, gable roof";
 
-/// The kits a base is of, by their files' names, from its name: "brick", "logs with brick".
+/// The kits a base is of, by their files' names, from its name: "stone", "logs with stone".
 fn group(case: &str, names: &std::collections::BTreeMap<u16, String>) -> String {
     let ids = case.split(':').next().unwrap_or(case);
     ids.split(" with ")

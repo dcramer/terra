@@ -4,7 +4,7 @@
 //!
 //! - **Coursed** (logs, hewn timber): lengths of its members, drawn as the kit draws a
 //!   course's log, fallen across one another, and splinters of them.
-//! - **Block** (stone, brick, earth): rubble, rough lumps wearing the wall's own texture.
+//! - **Block** (stone, earth, lime): rubble, rough lumps wearing the wall's own texture.
 //! - **Frame** (wattle and daub): lumps of its infill and lengths of its squared frame.
 //! - **Roof** (shakes, slate, thatch): slabs of its covering and a rafter or two.
 //! - **Doors and windows**: boards.

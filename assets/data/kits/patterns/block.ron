@@ -2,7 +2,7 @@
 // along its outside edges and given relief by its material's maps, so a wall of any shape,
 // carved anywhere, is one wall with no seams (crates/terra_build/src/surface.rs); every
 // exposed edge dressed by its role in pieces this pattern shares with every material of it,
-// each drawn in the material's own bake. A material of it (stone, brick, earth) is a few
+// each drawn in the material's own bake. A material of it (stone, earth, lime) is a few
 // lines naming this pattern and its pack (docs/proposals/construction-002.md).
 //
 // pattern     Masonry: laid as its cubes' surface (`layout::blocks`)

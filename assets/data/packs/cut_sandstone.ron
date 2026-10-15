@@ -1,9 +1,0 @@
-// cut_sandstone's reference pack (D290), made by `cargo xtask pack` from polyhaven:sandstone_blocks_05.
-(
-    textures: {
-        Masonry: (path: "materials/cut_sandstone", metres: (3.0, 3.0), depth: 0.015),
-        Floor: (path: "materials/cut_sandstone", metres: (3.0, 3.0)),
-        Dressed: (path: "materials/cut_sandstone", metres: (1.5, 1.5)),
-    },
-    colours: (light: (0.687, 0.61, 0.517), dark: (0.446, 0.396, 0.336), chinking: (0.79, 0.701, 0.595)),
-)

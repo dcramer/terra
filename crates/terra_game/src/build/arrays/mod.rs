@@ -913,17 +913,17 @@ mod tests {
         };
         let layers = Layers::of(&Kits(vec![
             kit(2, "materials/stone"),
-            kit(7, "materials/brick"),
+            kit(7, "materials/lime"),
         ]));
         let stone = layers.get(Kind(2), Material::Masonry).unwrap();
-        let brick = layers.get(Kind(7), Material::Masonry).unwrap();
-        assert_ne!(stone, brick);
+        let lime = layers.get(Kind(7), Material::Masonry).unwrap();
+        assert_ne!(stone, lime);
         assert_eq!(
             layers.get(Kind(2), Material::Dressed),
             layers.get(Kind(7), Material::Dressed)
         );
         assert_eq!(layers.get(Kind(2), Material::Piece), None);
-        assert!(stone > 0 && brick > 0);
+        assert!(stone > 0 && lime > 0);
         assert_eq!(layers.sets.len(), 3);
     }
 

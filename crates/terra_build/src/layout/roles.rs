@@ -903,9 +903,9 @@ mod tests {
 
     #[test]
     fn a_wall_with_a_plinth_on_a_footing_with_its_own_takes_none() {
-        // A brick wall on a stone footing a cube high on the ground: the footing's plinth
+        // An earth wall on a stone footing a cube high on the ground: the footing's plinth
         // is the foot there, not a second one stacked on it and run into it; on the
-        // ground, the brick has its own.
+        // ground, the earth has its own.
         let plinth = |id: u16| {
             let mut kit = Kit {
                 id,
@@ -924,12 +924,12 @@ mod tests {
             kit
         };
         let kits = Kits(vec![plinth(2), plinth(7)]);
-        let brick = Kind(7);
+        let earth = Kind(7);
         let mut base = base(&[([0, 0, 0], [3, 0, 0])]);
-        fill(&mut base, [0, 1, 0], [3, 3, 0], brick);
-        fill(&mut base, [5, 0, 0], [6, 3, 0], brick);
+        fill(&mut base, [0, 1, 0], [3, 3, 0], earth);
+        fill(&mut base, [5, 0, 0], [6, 3, 0], earth);
         let feet = |at: [i32; 3]| {
-            Roles::new(&base, brick, &kits)
+            Roles::new(&base, earth, &kits)
                 .dressed(IVec3::from_array(at))
                 .into_iter()
                 .filter(|e| e.edge.role == Role::Foot)

@@ -19,6 +19,8 @@ The source, `pieces.json`, says each piece in numbers a person can read and chan
 
 ## A new material in one command (D290)
 
+Which materials the game has is the developers' choice (D236): make one only when they ask. The names below are examples.
+
 ```bash
 cargo xtask pack river_cobble --from polyhaven:river_small_rocks --title "River cobble" --pattern block
 cargo xtask pack cut_sandstone --from ambientcg:Bricks076C --metres 2 --pattern block

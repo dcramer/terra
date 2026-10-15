@@ -1,9 +1,0 @@
-// Old red brick with stone dressings (D290): a material of the block pattern, under slate.
-(
-    id: 7,
-    pattern: "block",
-    pack: "red_brick",
-    cost: (steps: 1, step: [("Stone", 1, 4)]),
-    weight: 3,
-    roof_kind: Some(2049),
-)
