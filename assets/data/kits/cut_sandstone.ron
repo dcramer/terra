@@ -1,0 +1,9 @@
+// Cut sandstone: made by `cargo xtask pack` from polyhaven:sandstone_blocks_05 (D290).
+(
+    id: 8,
+    pattern: "block",
+    pack: "cut_sandstone",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+)

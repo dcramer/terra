@@ -174,6 +174,7 @@ fn fallen_log(kit: &Kit, at: Vec3, random: &mut Random, surfaces: &mut Surfaces)
         lean: [0, 0],
         lift: [0, 0],
         role: None,
+        outside: None,
     };
     crate::draw::draw_as(&piece, kit, None, false, surfaces);
 }

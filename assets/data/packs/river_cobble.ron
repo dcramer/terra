@@ -1,0 +1,8 @@
+// river_cobble's reference pack (D290), made by `cargo xtask pack` from polyhaven:large_pebbles.
+(
+    textures: {
+        Masonry: (path: "materials/river_cobble", metres: (2.0, 2.0), depth: 0.015),
+        Floor: (path: "materials/river_cobble", metres: (2.0, 2.0)),
+    },
+    colours: (light: (0.26, 0.23, 0.196), dark: (0.169, 0.149, 0.127), chinking: (0.299, 0.264, 0.225)),
+)

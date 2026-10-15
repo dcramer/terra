@@ -198,28 +198,24 @@ fn drawing(world: &mut World) -> (usize, usize, f32, usize) {
             }
         }
     }
-    let mut sets = 0;
+    let mib = |bytes: usize| bytes as f32 / (1024.0 * 1024.0);
+    let atlases = bytes;
     if let (Some(arrays), Some(images)) = (
         world.get_resource::<super::arrays::Arrays>(),
         world.get_resource::<Assets<Image>>(),
     ) {
         let (held, resident) = arrays.bytes(images);
         bytes += held;
-        sets = resident;
         info!(
-            "Builds' texture arrays: {resident} texture sets resident of their room for more, {:.1} MiB a set, {} made resident and {} let go in the run.",
-            arrays.set_bytes() as f32 / (1024.0 * 1024.0),
+            "Builds' texture arrays: {resident} texture sets resident in {:.0} MiB with their room for more, {:.1} MiB a set, {} made resident and {} let go in the run; the pieces' atlases {:.0} MiB.",
+            mib(held),
+            mib(arrays.set_bytes()),
             arrays.made,
-            arrays.dropped
+            arrays.dropped,
+            mib(atlases)
         );
     }
-    let _ = sets;
-    (
-        drawn,
-        materials.len(),
-        bytes as f32 / (1024.0 * 1024.0),
-        entities,
-    )
+    (drawn, materials.len(), mib(bytes), entities)
 }
 
 /// As the run ends, what the bases hold: in all, a median base's and the most any holds.

@@ -279,6 +279,7 @@ fn a_piece_is_owned_by_the_cube_its_middle_is_in_exactly() {
         lean: [0, 0],
         lift: [0, 0],
         role: None,
+        outside: None,
     };
     let t = layout::TICKS;
     // A log from the middle of cube 2 to the middle of cube 8 has its middle in 5; one
@@ -1626,4 +1627,53 @@ fn a_stone_house_near_keeps_to_the_block_kinds_budget() {
         "{per_cube} triangles a cube with its dress"
     );
     assert!(mib <= NEAR_MIB_A_BASE, "{mib} MiB");
+}
+
+#[test]
+fn a_log_house_is_drawn_with_its_logs_worn_out_of_its_room() {
+    // The shipped log kit's face names what it wears down to: its logs carry their wear to
+    // the drawing, more of it on the walls' outer faces than their inner.
+    let kits = shipped();
+    let logs = named(&kits, "logs");
+    let mut base = Base::default();
+    house(&mut base, &kits, [0, 0], [7, 6], logs, Style::Gable);
+    assert!(base.room_count() > 0, "no room");
+    let maps = Maps::default();
+    let (mut outer, mut inner) = ((0.0, 0), (0.0, 0));
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        let Some(surface) = drawn.near.get(&(logs, Material::Log)) else {
+            continue;
+        };
+        let face = surface.indexed();
+        let middle = Vec3::new(1.75, 0.0, 1.5);
+        for (i, (p, n)) in face.positions.iter().zip(&face.normals).enumerate() {
+            // Facing level, away from the room's middle or toward it.
+            if n.y.abs() > 0.5 {
+                continue;
+            }
+            let wear = face.wear.get(i).copied().unwrap_or(0.0);
+            let out = (*p - middle).with_y(0.0);
+            let side = if out.dot(n.with_y(0.0)) > 0.0 {
+                &mut outer
+            } else {
+                &mut inner
+            };
+            side.0 += wear;
+            side.1 += 1;
+        }
+    }
+    let (outer, inner) = (
+        outer.0 / outer.1.max(1) as f32,
+        inner.0 / inner.1.max(1) as f32,
+    );
+    assert!(outer > 0.1, "outer faces worn {outer}");
+    assert!(outer > inner * 1.3, "outer {outer}, inner {inner}");
 }

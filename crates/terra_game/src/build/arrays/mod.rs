@@ -72,6 +72,10 @@ pub struct BuildArrays {
     /// has lost, as far off), z how much darker a cube all but gone is.
     #[uniform(100)]
     pub damage: Vec4,
+    /// For each layer, four to an entry: the slot of the texture set it wears down to
+    /// (`Texture::worn`) and one, or none.
+    #[uniform(100)]
+    pub worn: [Vec4; MAX_LAYERS / 4],
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub colour: Handle<Image>,
@@ -104,6 +108,8 @@ pub struct Layers {
     pub sets: Vec<Set>,
     by_kind: BTreeMap<(Kind, Material), u16>,
     first: BTreeMap<Material, u16>,
+    /// Each layer that wears down to another, and that other's layer.
+    worn: BTreeMap<u16, u16>,
 }
 
 impl Layers {
@@ -119,21 +125,43 @@ impl Layers {
                     depth: kit.depth(*material),
                     reflectance: texture.reflectance,
                 };
-                let id = match out.sets.iter().position(|s| *s == set) {
-                    Some(at) => at + 1,
-                    None => {
-                        out.sets.push(set);
-                        out.sets.len()
-                    }
-                };
+                let id = out.layer(set);
                 if id >= MAX_LAYERS {
                     warn!("Build: more than {MAX_LAYERS} texture sets; the rest drawn plain");
                     continue;
+                }
+                if let Some(worn) = &texture.worn {
+                    let under = out.layer(Set {
+                        path: worn.clone(),
+                        depth: 0.0,
+                        reflectance: texture.reflectance,
+                    });
+                    if under < MAX_LAYERS {
+                        out.worn.insert(id as u16, under as u16);
+                    }
                 }
                 out.by_kind.insert((kit.kind(), *material), id as u16);
                 out.first.entry(*material).or_insert(id as u16);
             }
         }
+        out
+    }
+
+    /// A set's layer, a new one if no kit has named it yet.
+    fn layer(&mut self, set: Set) -> usize {
+        match self.sets.iter().position(|s| *s == set) {
+            Some(at) => at + 1,
+            None => {
+                self.sets.push(set);
+                self.sets.len()
+            }
+        }
+    }
+
+    /// These layers and those they wear down to, which are made resident with them.
+    pub fn with_worn(&self, ids: &[u16]) -> Vec<u16> {
+        let mut out = ids.to_vec();
+        out.extend(ids.iter().filter_map(|id| self.worn.get(id)));
         out
     }
 
@@ -315,6 +343,7 @@ impl Arrays {
             extension: BuildArrays {
                 table: [Vec4::ZERO; MAX_LAYERS],
                 damage: Vec4::new(DAMAGE_SLOT as f32, 0.0, DAMAGE_DARK, 0.0),
+                worn: [Vec4::ZERO; MAX_LAYERS / 4],
                 colour: images[0].clone(),
                 normal: images[1].clone(),
                 arm: images[2].clone(),
@@ -359,7 +388,7 @@ impl Arrays {
 
     /// Whether every layer of these is resident and written.
     pub fn ready(&self, ids: &[u16]) -> bool {
-        ids.iter().all(|&id| {
+        self.layers.with_worn(ids).iter().all(|&id| {
             self.layers.set(id).is_none_or(|set| {
                 self.slots
                     .get(&set.path)
@@ -371,7 +400,7 @@ impl Arrays {
     /// Asks for these layers to be made resident, and marks them used now.
     pub fn want(&mut self, ids: &[u16], assets: &AssetServer, now: f32) {
         let layers = self.layers.clone();
-        for &id in ids {
+        for id in layers.with_worn(ids) {
             let Some(set) = layers.set(id) else {
                 continue;
             };
@@ -427,6 +456,26 @@ impl Arrays {
                     .sum::<usize>()
             })
             .sum()
+    }
+
+    /// Each layer's worn set's slot and one, where it is resident, four layers an entry.
+    fn worn(&self) -> [Vec4; MAX_LAYERS / 4] {
+        let mut out = [Vec4::ZERO; MAX_LAYERS / 4];
+        for (&layer, &under) in &self.layers.worn {
+            let Some(slot) = self
+                .layers
+                .set(under)
+                .and_then(|set| self.slots.get(&set.path))
+                .filter(|slot| slot.ready_in == 0)
+            else {
+                continue;
+            };
+            let layer = usize::from(layer);
+            if let Some(entry) = out.get_mut(layer / 4) {
+                entry[layer % 4] = slot.slot as f32 + 1.0;
+            }
+        }
+        out
     }
 
     fn table(&self) -> [Vec4; MAX_LAYERS] {
@@ -489,7 +538,7 @@ fn to_side(data: &[u8], width: u32, height: u32, channels: usize) -> Vec<u8> {
 }
 
 /// A loaded picture's first level's bytes, its size and channels a texel.
-fn pixels(image: &Image) -> Option<(Vec<u8>, u32, u32, usize)> {
+pub(crate) fn pixels(image: &Image) -> Option<(Vec<u8>, u32, u32, usize)> {
     let size = image.texture_descriptor.size;
     let data = image.data.as_ref()?;
     let texels = (size.width * size.height) as usize;
@@ -677,9 +726,11 @@ pub fn stream(
     if arrays.table_dirty {
         arrays.table_dirty = false;
         let table = arrays.table();
+        let worn = arrays.worn();
         let drawn = arrays.damage_detail && matches!(arrays.damage, DamageMask::Ready);
         if let Some(mut material) = materials.get_mut(&arrays.material) {
             material.extension.table = table;
+            material.extension.worn = worn;
             material.extension.damage.y = if drawn { 1.0 } else { 0.0 };
         }
     }
@@ -847,6 +898,7 @@ mod tests {
             reflectance: 0.35,
             strips: None,
             cells: 1,
+            worn: None,
         };
         let kit = |id: u16, masonry: &str| terra_build::kit::Kit {
             id,

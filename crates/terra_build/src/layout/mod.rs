@@ -99,6 +99,9 @@ pub enum Piece {
         /// a plate along a wall's top, a sill on what it stands on, a post up an opening's
         /// side or a free end, a step's tread; none, a course of the wall.
         role: Option<Role>,
+        /// The way out of the room it walls, where a room is on one side of it and not the
+        /// other (D261): the side the weather beats on, which loses its bark first.
+        outside: Option<Dir>,
     },
     /// A board round an opening: a jamb, a head or a sill.
     Board { min: Place, max: Place },
@@ -573,6 +576,27 @@ impl Walls<'_> {
 
     /// A cube of the kit's kind that is part of a wall, or a roof's cube its wall is carried
     /// up into.
+    /// Which way a wall's cube looks out of the room it closes in (D261): across the wall,
+    /// the side with no room where the other, past the wall's thickness, has one.
+    fn outside(&self, axis: Axis, at: IVec3) -> Option<Dir> {
+        let across = axis.other().step();
+        let room = |sign: i32| {
+            (1..=THICK + 1)
+                .map(|k| at + across * (sign * k))
+                .find(|&cube| self.ours(cube).is_none())
+                .is_some_and(|cube| self.base.contains(cube))
+        };
+        let axis = match axis.other() {
+            Axis::X => 0,
+            Axis::Z => 2,
+        };
+        match (room(1), room(-1)) {
+            (true, false) => Some(Dir::of(axis, -1)),
+            (false, true) => Some(Dir::of(axis, 1)),
+            _ => None,
+        }
+    }
+
     fn ours(&self, at: IVec3) -> Option<Fill> {
         if self.stair(at) {
             return None;
@@ -1094,6 +1118,7 @@ pub(crate) mod tests {
             reflectance: crate::kit::matte(),
             strips: None,
             cells: 1,
+            worn: None,
         };
         Kit {
             textures: BTreeMap::from([(Material::Floor, texture("floor"))]),

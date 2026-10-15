@@ -74,6 +74,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         lean,
         lift,
         role,
+        outside,
     } = *piece
     else {
         return;
@@ -104,6 +105,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             chinking,
             lean.map(|rise| rise as f32 / layout::TICKS as f32),
             lift.map(layout::metres),
+            outside.map(|dir| dir.step().as_vec3()),
             &dressed,
             &mut own,
         );
@@ -125,6 +127,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         chinking,
         lean.map(|rise| rise as f32 / layout::TICKS as f32),
         lift.map(layout::metres),
+        outside.map(|dir| dir.step().as_vec3()),
         kit,
         surfaces,
     );
@@ -132,7 +135,8 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
 
 /// Draws a long member from one point to another in metres, with the daub under it so far
 /// along it from `from`, and each end cut to a roof's slope rising so many metres a metre
-/// in from it (none, sawn square), from so far over its foot there (`lift`): as [`draw`]
+/// in from it (none, sawn square), from so far over its foot there (`lift`), its weathered
+/// side `outside` where it walls a room (else the way the weather comes): as [`draw`]
 /// draws a log, and as a roof's rafters are.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn member(
@@ -143,6 +147,7 @@ pub(crate) fn member(
     chinking: Option<(f32, f32)>,
     lean: [f32; 2],
     lift: [f32; 2],
+    outside: Option<Vec3>,
     kit: &Kit,
     surfaces: &mut Surfaces,
 ) {
@@ -153,7 +158,14 @@ pub(crate) fn member(
     let frame = Frame::new(from, to);
     let mut random = Random(seed);
     let mut made = match kit.timber.profile {
-        Profile::Round => round(&frame, kit, split, chinking.is_some(), &mut random),
+        Profile::Round => round(
+            &frame,
+            kit,
+            split,
+            chinking.is_some(),
+            outside.unwrap_or(WEATHER),
+            &mut random,
+        ),
         Profile::Hewn => hewn(&frame, kit, split, &mut random),
     };
     // A gable's log cut to the roof over it: nothing of it above the slope rising from its
@@ -302,6 +314,9 @@ struct Member {
     /// What each point's colour is multiplied by, ring by ring, where it differs from one:
     /// the shade of the grooves and the mottling along it. Empty for none.
     tone: Vec<Vec<f32>>,
+    /// How worn each point's face is to what its texture wears down to (`Texture::worn`),
+    /// ring by ring. Empty for none.
+    wear: Vec<Vec<f32>>,
 }
 
 /// How far apart a member's rings are at most where its end is cut to a roof's slope.
@@ -352,6 +367,7 @@ fn densify(made: &mut Member, most: f32) {
     let mut grid = Vec::with_capacity(made.grid.len());
     let mut uvs = Vec::with_capacity(made.uvs.len());
     let mut tone = Vec::with_capacity(made.tone.len());
+    let mut wear = Vec::with_capacity(made.wear.len());
     for i in 0..made.grid.len() {
         if i > 0 {
             let (a, b) = (&made.grid[i - 1], &made.grid[i]);
@@ -371,6 +387,10 @@ fn densify(made: &mut Member, most: f32) {
                     let (ta, tb) = (&made.tone[i - 1], &made.tone[i]);
                     tone.push(ta.iter().zip(tb).map(|(p, q)| p + (q - p) * t).collect());
                 }
+                if !made.wear.is_empty() {
+                    let (wa, wb) = (&made.wear[i - 1], &made.wear[i]);
+                    wear.push(wa.iter().zip(wb).map(|(p, q)| p + (q - p) * t).collect());
+                }
             }
         }
         grid.push(made.grid[i].clone());
@@ -378,15 +398,22 @@ fn densify(made: &mut Member, most: f32) {
         if !made.tone.is_empty() {
             tone.push(made.tone[i].clone());
         }
+        if !made.wear.is_empty() {
+            wear.push(made.wear[i].clone());
+        }
     }
-    (made.grid, made.uvs, made.tone) = (grid, uvs, tone);
+    (made.grid, made.uvs, made.tone, made.wear) = (grid, uvs, tone, wear);
 }
 
-/// The way the weather comes from, in a base's own space: the face of a lying log that looks
-/// most this way loses its bark first (`Timber::exposed`).
+/// The way the weather comes from, in a base's own space, for a log that walls no room:
+/// the face of a lying log that looks most this way loses its bark first
+/// (`Timber::exposed`); one walling a room loses it on its face out of it (D261).
 const WEATHER: Vec3 = Vec3::new(-0.8, 0.0, 0.6);
 /// How much paler a weathered log is at its very ends.
 const END_WEATHER: f32 = 0.14;
+/// How far in from a sawn end a log wearing a worn texture has lost its bark, most at the
+/// end (`Texture::worn`).
+const END_WEAR_M: f32 = 0.7;
 
 /// Rings this far apart, or further, are a member drawn far off, with no more than its ends.
 const COARSE_STEP_M: f32 = 4.0;
@@ -422,7 +449,14 @@ fn on_cut(height: f32, split: Split) -> bool {
 
 /// A: a round log, tapered and bowed as a tree grows, its section a little uneven and
 /// swelling here and there, its bark displaced by the bark's height.
-fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Random) -> Member {
+fn round(
+    frame: &Frame,
+    kit: &Kit,
+    split: Split,
+    walled: bool,
+    weather: Vec3,
+    random: &mut Random,
+) -> Member {
     let t = &kit.timber;
     let metres = kit
         .textures
@@ -445,7 +479,15 @@ fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Rand
     // round a lying log from underneath, its middle on top and its first quarter to the
     // weather, so the bark it has lost lies there; any other face, wherever its seed says.
     let exposed = t.exposed && frame.axis.y.abs() < 0.5;
-    let to_weather = frame.side.dot(WEATHER) >= 0.0;
+    let to_weather = frame.side.dot(weather) >= 0.0;
+    // Its bark worn to bare wood point by point, where its texture names what it wears to:
+    // near its sawn ends, on its top and on the face the weather beats on, in patches.
+    let worn = exposed
+        && kit
+            .textures
+            .get(&Material::Log)
+            .is_some_and(|texture| texture.worn.is_some());
+    let weather_flat = weather.with_y(0.0).normalize_or_zero();
     let uv = |t_along: f32, j: usize| {
         let along = shift[1] + t_along * frame.length / metres[1];
         if exposed {
@@ -529,6 +571,7 @@ fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Rand
         })
         .collect();
     let mut tone = Vec::with_capacity(at.len());
+    let mut wear = Vec::with_capacity(if worn { at.len() } else { 0 });
     for (i, &along) in at.iter().enumerate() {
         let (shift_sin, shift_cos) = (libm::sinf(along * 1.3), libm::cosf(along * 1.3));
         // Lighter and darker in long patches along it, and round it a little.
@@ -537,7 +580,7 @@ fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Rand
             * (0.6 * libm::sinf(metres * 1.9 + mottle_phase[0])
                 + 0.4 * libm::sinf(metres * 4.7 + mottle_phase[1]))
             // Weathered paler toward its ends, where the rain and sun get at it most.
-            + if exposed {
+            + if exposed && !worn {
                 END_WEATHER * (1.0 - smoothstep(0.0, 0.45, metres.min(frame.length - metres)))
             } else {
                 0.0
@@ -606,6 +649,26 @@ fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Rand
         }
         // The seam's last column, where the texture comes round to its start.
         ring_uv.push(uv(along, columns));
+        if worn {
+            let end = 1.0 - smoothstep(0.0, END_WEAR_M, metres.min(frame.length - metres));
+            wear.push(
+                round
+                    .iter()
+                    .map(|&[sin, cos, ..]| {
+                        let out = frame.side * cos + frame.up * sin;
+                        // Its face to the weather most, its top on that side some, the
+                        // top on its sheltered side a little, underneath not at all.
+                        let to = out.dot(weather_flat);
+                        let facing =
+                            (0.8 * to.max(0.0) + 0.4 * sin.max(0.0) * (to + 1.0) * 0.5).min(1.0);
+                        let patchy = 0.5
+                            + 0.3 * libm::sinf(metres * 1.3 + mottle_phase[1] + cos * 0.9)
+                            + 0.2 * libm::sinf(metres * 3.7 + mottle_phase[2]);
+                        (end + facing * (0.2 + 0.45 * patchy)).clamp(0.0, 1.0)
+                    })
+                    .collect(),
+            );
+        }
         tone.push(ring_tone);
         grid.push(ring);
         uvs.push(ring_uv);
@@ -616,6 +679,7 @@ fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Rand
         grain: [0.47, 0.47],
         daub: (kit.radius() * t.daub.0, t.daub.1),
         tone,
+        wear,
     }
 }
 
@@ -770,6 +834,7 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
         grain: [0.3, 0.24],
         daub: (0.0, 0.0),
         tone: Vec::new(),
+        wear: Vec::new(),
     }
 }
 
@@ -861,6 +926,14 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
         Some(&k) => colour.map(|v| (v * k).clamp(0.0, 1.0)),
         None => colour,
     };
+    let wear_at = |r: usize, c: usize| {
+        member
+            .wear
+            .get(r)
+            .and_then(|ring| ring.get(c))
+            .copied()
+            .unwrap_or(0.0)
+    };
     // Each point's normal: the sum of the faces round it. The rings go round the way that
     // makes each quad's first triangle face out, as `round` and `hewn` lay them.
     let face = |a: Vec3, b: Vec3, c: Vec3| (b - a).cross(c - a);
@@ -900,11 +973,23 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
                         let normal = normals[r][c].normalize_or_zero();
                         let uv = member.uvs[r][column];
                         if normal.dot(own) < CREASE {
-                            return out.shared.corner(grid[r][c], own, uv, colour_at(r, c));
+                            return out.shared.worn_corner(
+                                grid[r][c],
+                                own,
+                                uv,
+                                colour_at(r, c),
+                                wear_at(r, c),
+                            );
                         }
                         let slot = &mut smooth[r * (columns + 1) + column];
                         if *slot == u32::MAX {
-                            *slot = out.shared.corner(grid[r][c], normal, uv, colour_at(r, c));
+                            *slot = out.shared.worn_corner(
+                                grid[r][c],
+                                normal,
+                                uv,
+                                colour_at(r, c),
+                                wear_at(r, c),
+                            );
                         }
                         *slot
                     });
@@ -928,6 +1013,10 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
                 for index in tri {
                     let (r, c) = quad[index];
                     let smooth = normals[r][c].normalize_or_zero();
+                    if wear_at(r, c) > 0.0 {
+                        crate::mesh::worn(&mut out.wear, out.positions.len());
+                        out.wear.push(wear_at(r, c));
+                    }
                     out.positions.push(grid[r][c]);
                     out.normals.push(if smooth.dot(own) < CREASE {
                         own
@@ -1023,6 +1112,7 @@ mod tests {
     use super::*;
     use crate::draw::tests::facing_out;
     use crate::kit::Timber;
+    use crate::layout::roles::Dir;
     use crate::layout::{Place, lay, tests as layouts};
     use crate::{CELL_M, Panel};
 
@@ -1036,6 +1126,7 @@ mod tests {
             lean: [0, 0],
             lift: [0, 0],
             role: None,
+            outside: None,
         }
     }
 
@@ -1153,6 +1244,7 @@ mod tests {
                 reflectance: crate::kit::matte(),
                 strips: None,
                 cells: 2,
+                worn: None,
             },
         );
         let mut surfaces = Surfaces::default();
@@ -1212,6 +1304,7 @@ mod tests {
                 lean: [0, 0],
                 lift: [0, 0],
                 role: None,
+                outside: None,
             };
             let mut surfaces = Surfaces::default();
             draw(&piece, &kit, &mut surfaces);
@@ -1235,6 +1328,62 @@ mod tests {
                 (weather - 0.25).abs() < 0.08,
                 "{from}: weather face at {weather}"
             );
+        }
+    }
+
+    #[test]
+    fn a_log_wears_to_bare_wood_at_its_ends_and_on_its_face_out_of_its_room() {
+        let mut kit = pinned(Profile::Round);
+        kit.timber.exposed = true;
+        kit.textures.insert(
+            Material::Log,
+            crate::kit::Texture {
+                path: "bark".into(),
+                metres: [1.0, 2.0],
+                depth: 0.0,
+                reflectance: crate::kit::matte(),
+                strips: None,
+                cells: 1,
+                worn: Some("bare".into()),
+            },
+        );
+        // Along X; its room to the north (-Z), so its outside is south, against the way the
+        // weather comes for a log walling nothing (from the north-west).
+        for (outside, out_z) in [(Some(Dir::South), 1.0), (Some(Dir::North), -1.0)] {
+            let piece = Piece::Log {
+                from: Place::near(Vec3::new(0.0, 0.125, 0.25)),
+                to: Place::near(Vec3::new(3.0, 0.125, 0.25)),
+                split: Split::Whole,
+                seed: 4,
+                chinking: None,
+                lean: [0, 0],
+                lift: [0, 0],
+                role: None,
+                outside,
+            };
+            let mut surfaces = Surfaces::default();
+            draw(&piece, &kit, &mut surfaces);
+            let face = surfaces.0[&Material::Log].indexed();
+            assert_eq!(face.wear.len(), face.positions.len());
+            let mean = |keep: &dyn Fn(&Vec3) -> bool| {
+                let picked: Vec<f32> = face
+                    .positions
+                    .iter()
+                    .zip(&face.wear)
+                    .filter(|(p, _)| keep(p))
+                    .map(|(_, w)| *w)
+                    .collect();
+                picked.iter().sum::<f32>() / picked.len().max(1) as f32
+            };
+            let middle = |p: &Vec3| (p.x - 1.5).abs() < 0.4;
+            let side = |sign: f32| move |p: &Vec3| middle(p) && (p.z - 0.25) * sign > 0.08;
+            let (out, inside) = (mean(&side(out_z)), mean(&side(-out_z)));
+            assert!(out > inside + 0.15, "{outside:?}: out {out}, in {inside}");
+            // Its sawn ends lose their bark whichever way it faces; its middle underside keeps it.
+            let ends = mean(&|p: &Vec3| p.x < 0.1 || p.x > 2.9);
+            let under = mean(&|p: &Vec3| middle(p) && p.y < 0.05);
+            assert!(ends > 0.7, "ends {ends}");
+            assert!(under < 0.2, "underside {under}");
         }
     }
 
@@ -1264,6 +1413,7 @@ mod tests {
             lean: [0, 0],
             lift: [0, 0],
             role: None,
+            outside: None,
         };
         let mut surfaces = Surfaces::default();
         draw(&post, &pinned(Profile::Round), &mut surfaces);

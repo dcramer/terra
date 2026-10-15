@@ -380,7 +380,22 @@ pub fn reach(
     };
     // A frame's members run the length of their wall, and are laid only as far round a
     // box as a member reaches from a post, so a framed building is laid again whole.
-    if kits.0.iter().any(|kit| kit.framing.is_some() && here(kit)) {
+    // Which way a log looks out of its room (D261) is worked out from the rooms, which an
+    // edit anywhere round a room opens or closes: where they changed, a log kind's building
+    // is laid again whole, as each of its logs may look out another way.
+    let rooms_changed = || {
+        before
+            .room_cells()
+            .map(|(at, _)| at)
+            .ne(after.room_cells().map(|(at, _)| at))
+    };
+    if kits.0.iter().any(|kit| kit.framing.is_some() && here(kit))
+        || (kits
+            .0
+            .iter()
+            .any(|kit| kit.pattern == Pattern::Logs && here(kit))
+            && rooms_changed())
+    {
         let mut whole = affected(before, marked);
         whole.extend(affected(after, marked));
         return vec![whole];

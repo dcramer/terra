@@ -115,6 +115,9 @@ pub struct Surface {
     pub colours: Vec<[f32; 3]>,
     /// Where each corner falls on its texture, if it has one.
     pub uvs: Vec<[f32; 2]>,
+    /// How far each corner's face is worn to what its texture names under it (`worn`: a
+    /// log's bark to its bare wood), 0 to 1, by corner; corners past its end are unworn.
+    pub wear: Vec<f32>,
     /// Triangles whose corners are shared, drawn with the others.
     pub shared: Indexed,
     /// Whether a long member swept into it shares its corners (`shared`), rather than
@@ -135,6 +138,10 @@ impl Surface {
         out.positions.extend(&self.positions);
         out.normals.extend(&self.normals);
         out.colours.extend(&self.colours);
+        if !self.wear.is_empty() {
+            worn(&mut out.wear, first as usize);
+            out.wear.extend(&self.wear);
+        }
         if self.uvs.len() == self.positions.len() {
             out.uvs.extend(&self.uvs);
         } else {
@@ -154,6 +161,10 @@ impl Surface {
             self.sharing = sharing;
             return;
         }
+        if !other.wear.is_empty() {
+            worn(&mut self.wear, self.positions.len());
+            self.wear.extend(other.wear);
+        }
         self.positions.extend(other.positions);
         self.normals.extend(other.normals);
         self.colours.extend(other.colours);
@@ -163,6 +174,10 @@ impl Surface {
 
     /// Another's triangles added to its own, copied from where they are.
     pub fn extend_from(&mut self, other: &Surface) {
+        if !other.wear.is_empty() {
+            worn(&mut self.wear, self.positions.len());
+            self.wear.extend_from_slice(&other.wear);
+        }
         self.positions.extend_from_slice(&other.positions);
         self.normals.extend_from_slice(&other.normals);
         self.colours.extend_from_slice(&other.colours);
@@ -258,7 +273,17 @@ pub struct Indexed {
     pub normals: Vec<Vec3>,
     pub colours: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
+    /// As [`Surface::wear`].
+    pub wear: Vec<f32>,
     pub indices: Vec<u32>,
+}
+
+/// Wear given to every corner up to `corners`, those not given it unworn: so wear can be
+/// added after corners that had none, and corners added after it that have none.
+pub(crate) fn worn(wear: &mut Vec<f32>, corners: usize) {
+    if wear.len() < corners {
+        wear.resize(corners, 0.0);
+    }
 }
 
 impl Indexed {
@@ -300,6 +325,10 @@ impl Indexed {
             return;
         }
         let first = self.positions.len() as u32;
+        if !other.wear.is_empty() {
+            worn(&mut self.wear, self.positions.len());
+            self.wear.extend(other.wear);
+        }
         self.positions.extend(other.positions);
         self.normals.extend(other.normals);
         self.colours.extend(other.colours);
@@ -311,6 +340,10 @@ impl Indexed {
     /// Another's corners and triangles added to its own, copied from where they are.
     pub fn extend_from(&mut self, other: &Indexed) {
         let first = self.positions.len() as u32;
+        if !other.wear.is_empty() {
+            worn(&mut self.wear, self.positions.len());
+            self.wear.extend_from_slice(&other.wear);
+        }
         self.positions.extend_from_slice(&other.positions);
         self.normals.extend_from_slice(&other.normals);
         self.colours.extend_from_slice(&other.colours);
@@ -325,6 +358,22 @@ impl Indexed {
         self.uvs.reserve(corners);
         self.colours.reserve(corners);
         self.indices.reserve(indices);
+    }
+
+    /// A corner worn so far (`wear`), and its index.
+    pub(crate) fn worn_corner(
+        &mut self,
+        p: Vec3,
+        n: Vec3,
+        uv: [f32; 2],
+        colour: [f32; 3],
+        wear: f32,
+    ) -> u32 {
+        if wear > 0.0 {
+            worn(&mut self.wear, self.positions.len());
+            self.wear.push(wear);
+        }
+        self.corner(p, n, uv, colour)
     }
 
     /// A corner, and its index.
@@ -427,11 +476,11 @@ impl std::hash::Hasher for Corners {
 
 impl Surface {
     /// The same triangles with every corner that is the same in every way, place, normal,
-    /// colour and place on the texture, shared.
+    /// colour, place on the texture and wear, shared.
     pub fn weld(&self) -> Indexed {
         let mut out = Indexed::default();
         let mut seen: std::collections::HashMap<
-            [u32; 11],
+            [u32; 12],
             u32,
             std::hash::BuildHasherDefault<Corners>,
         > = std::collections::HashMap::with_capacity_and_hasher(
@@ -443,6 +492,7 @@ impl Surface {
         for i in 0..self.positions.len() {
             let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
             let uv = if textured { self.uvs[i] } else { [0.0; 2] };
+            let wear = self.wear.get(i).copied().unwrap_or(0.0);
             let key = [
                 p.x.to_bits(),
                 p.y.to_bits(),
@@ -455,8 +505,13 @@ impl Surface {
                 c[2].to_bits(),
                 uv[0].to_bits(),
                 uv[1].to_bits(),
+                wear.to_bits(),
             ];
             let index = *seen.entry(key).or_insert_with(|| {
+                if wear > 0.0 {
+                    worn(&mut out.wear, out.positions.len());
+                    out.wear.push(wear);
+                }
                 out.positions.push(p);
                 out.normals.push(n);
                 out.colours.push(c);

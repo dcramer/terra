@@ -814,6 +814,11 @@ pub struct Texture {
     /// and down it: each piece draws one, by its seed. One, the whole texture, if not given.
     #[serde(default = "one")]
     pub cells: u32,
+    /// The texture set its face wears down to, a folder under `assets/` (a log's bark to
+    /// its bare, silvered wood): shown where a piece's corners say it is worn, through its
+    /// own height's low places first, as a material blends its layers by their heights.
+    #[serde(default)]
+    pub worn: Option<String>,
 }
 
 fn one() -> u32 {

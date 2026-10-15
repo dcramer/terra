@@ -129,9 +129,12 @@ async function make(name: string, source: string, values: Record<string, any>): 
   if (kind === "model") {
     // A hand-made reference (a Tripo model of a patch of the material, cleaned up), baked
     // onto a square of it seen from above: its colour, normal, occlusion-roughness and height.
+    // A member's reference (a log) is baked round it instead, `--round diameter,length`
+    // giving the size the kit lays it at.
     mkdirSync(out, { recursive: true });
-    execFileSync(join(ROOT, "tools/blender/run.sh"), [join(ROOT, "tools/kits/bake.py"), resolve(what), out, String(values.metres ?? 2), String(SIDE)], { stdio: "inherit" });
-    credit(name, `baked by \`tools/kits/bake.py\` from the reference model \`${what}\`.`);
+    const round = values.round ? ["round", ...values.round.split(",")] : [];
+    execFileSync(join(ROOT, "tools/blender/run.sh"), [join(ROOT, "tools/kits/bake.py"), resolve(what), out, String(values.metres ?? 2), String(SIDE), ...round], { stdio: "inherit" });
+    credit(name, `baked ${round.length ? "round " : ""}by \`tools/kits/bake.py\` from the reference model \`${what}\`${round.length ? `, ${values.metres ?? 2} m along` : ""}.`);
     return { metres: Number(values.metres ?? 2) };
   }
   if (kind === "pack") {
@@ -142,7 +145,10 @@ async function make(name: string, source: string, values: Record<string, any>): 
     mkdirSync(out, { recursive: true });
     for (const file of readdirSync(from).filter((f) => f.endsWith(".jpg"))) copyFileSync(join(from, file), join(out, file));
     credit(name, `a variant of \`${what}\` by \`tools/kits/pack.ts\`${values.tint ? `, tinted ${values.tint}` : ""}.`);
-    return {};
+    // Its size the set's own, where a pack of that name says it.
+    const pack = join(PACKS, `${what}.ron`);
+    const metres = existsSync(pack) ? readFileSync(pack, "utf8").match(/metres: \(([\d.]+)/) : null;
+    return { metres: metres ? Number(metres[1]) : undefined };
   }
   throw new Error(`a source is polyhaven:<id>, ambientcg:<Id>, image:<file>, model:<file.glb> or pack:<texture set>, not ${source}`);
 }
@@ -186,6 +192,7 @@ async function main() {
       depth: { type: "string" },
       rows: { type: "string" },
       tint: { type: "string" },
+      round: { type: "string" },
       tile: { type: "string" },
       "no-check": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
@@ -204,6 +211,8 @@ async function main() {
   --metres M         how many metres one copy covers (a scan's own size where it says)
   --depth D          its parallax depth (0.015 where it has a height map)
   --rows N           a roof covering's courses a copy; --tint r,g,b its colour multiplied
+  --round D,L        a model: source that is a member (a log), baked round it, laid D thick
+                     and L long; its texture once round it by --metres along
   --no-check         skip the kit checker (for many at once; run cargo xtask kits after)`);
     process.exit(values.help ? 0 : 2);
   }
@@ -246,7 +255,7 @@ async function main() {
     console.log(line);
     if (!line.includes(": ok")) throw new Error(`${name} does not pass the kit checker`);
   }
-  console.log(`${name}: material ${id}, ${values.pattern} pattern, ${metres} m a copy, in ${((Date.now() - started) / 1000).toFixed(0)} s. Files: assets/data/kits/${name}.ron, assets/data/packs/${name}.ron, assets/materials/${name}/.`);
+  console.log(`${name}: material ${id}, ${values.pattern} pattern, ${fmt(metres)} m a copy, in ${((Date.now() - started) / 1000).toFixed(0)} s. Files: assets/data/kits/${name}.ron, assets/data/packs/${name}.ron, assets/materials/${name}/.`);
 }
 
 if (import.meta.main) await main();

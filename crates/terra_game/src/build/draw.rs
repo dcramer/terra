@@ -556,16 +556,23 @@ fn mesh_of(all: terra_build::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     // The base's colours are as they should look on screen; a mesh wants them linear.
     // Runs of corners share a colour, a log's or a face's, so each is turned once.
     let mut last: Option<([f32; 3], [f32; 4])> = None;
+    // Its alpha is how unworn it is (`Indexed::wear`): the texture arrays' shader shows the
+    // set a layer wears down to as it falls; opaque materials take no other note of it.
     let colours: Vec<[f32; 4]> = all
         .colours
         .iter()
-        .map(|c| match last {
-            Some((from, to)) if from == *c => to,
-            _ => {
-                let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
-                last = Some((*c, to));
-                to
-            }
+        .enumerate()
+        .map(|(i, c)| {
+            let mut to = match last {
+                Some((from, to)) if from == *c => to,
+                _ => {
+                    let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
+                    last = Some((*c, to));
+                    to
+                }
+            };
+            to[3] = 1.0 - all.wear.get(i).copied().unwrap_or(0.0);
+            to
         })
         .collect();
     let positions: Vec<Vec3> = all.positions.iter().map(|p| *p - centre).collect();

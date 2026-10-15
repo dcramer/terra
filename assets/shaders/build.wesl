@@ -31,6 +31,9 @@ struct Layers {
     // The shared damage mask (D290, D305): x its slot, y whether it is drawn (else a damaged
     // surface is darkened by what it has lost, as far off), z how much darker all but gone.
     damage: vec4<f32>,
+    // For each layer, four to an entry: the slot of the texture set it wears down to (a
+    // log's bark to its bare wood) and one, or 0 for none.
+    worn: array<vec4<f32>, 128>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -108,9 +111,33 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
 
     let bias = view.mip_bias;
-    let colour = textureSampleBias(colour_array, array_sampler, uv, slot, bias);
-    let arm = textureSampleBias(arm_array, array_sampler, uv, slot, bias);
-    let normal = textureSampleBias(normal_array, array_sampler, uv, slot, bias).rg;
+    var colour = textureSampleBias(colour_array, array_sampler, uv, slot, bias);
+    var arm = textureSampleBias(arm_array, array_sampler, uv, slot, bias);
+    var normal = textureSampleBias(normal_array, array_sampler, uv, slot, bias).rg;
+
+    // Worn (D290): where its corners say its face is worn (the vertex colour's alpha, one
+    // less how worn), the set its layer wears down to shows through, through the low places
+    // of its height first, as engines blend a material's layers by their heights: a log's
+    // bark lost toward its sawn ends and on its weather side to the bare wood under it.
+    // Taken by gradients worked out where every pixel runs, as it is sampled in a branch.
+    var wear = 0.0;
+@if(VERTEX_COLORS) {
+    wear = 1.0 - in.color.a;
+}
+    let scale = exp2(bias);
+    let ddx = dpdx(uv) * scale;
+    let ddy = dpdy(uv) * scale;
+    let under = i32(layers.worn[layer / 4u][layer % 4u]) - 1;
+    if under >= 0 && wear > 0.002 {
+        let high = textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r;
+        let bare = smoothstep(0.0, 0.25, wear * 1.4 - high);
+        let under_colour = textureSampleGrad(colour_array, array_sampler, uv, under, ddx, ddy);
+        let under_arm = textureSampleGrad(arm_array, array_sampler, uv, under, ddx, ddy);
+        let under_normal = textureSampleGrad(normal_array, array_sampler, uv, under, ddx, ddy).rg;
+        colour = mix(colour, under_colour, bare);
+        arm = mix(arm, under_arm, bare);
+        normal = mix(normal, under_normal, bare);
+    }
 
     pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * colour.rgb, 1.0);
     pbr_input.material.perceptual_roughness = arm.g;

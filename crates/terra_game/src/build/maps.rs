@@ -274,6 +274,7 @@ mod tests {
             reflectance: terra_build::kit::matte(),
             strips: None,
             cells: 1,
+            worn: None,
         };
         let stone = Kit {
             pattern: terra_build::kit::Pattern::Masonry,

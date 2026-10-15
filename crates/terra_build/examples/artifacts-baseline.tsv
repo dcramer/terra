@@ -65,11 +65,18 @@ all	stone	Coplanar	10
 all	stone with wattle	Coplanar	32
 all	wattle	Coplanar	27
 all	wattle	PokesOut	2
+quick	brick with cut_sandstone	Coplanar	3
 quick	brick with earth	Coplanar	5
 quick	brick with earth	PokesOut	1
 quick	brick with hewn	Coplanar	2
 quick	brick with limewash	Coplanar	5
 quick	brick with logs	Coplanar	2
+quick	brick with plastered_timber	Coplanar	2
+quick	brick with river_cobble	Coplanar	3
+quick	cut_sandstone with earth	Coplanar	3
+quick	cut_sandstone with earth	PokesOut	1
+quick	cut_sandstone with limewash	Coplanar	3
+quick	cut_sandstone with river_cobble	Coplanar	3
 quick	earth	Coplanar	2
 quick	earth	PokesOut	1
 quick	earth with hewn	Coplanar	1
@@ -78,6 +85,10 @@ quick	earth with limewash	Coplanar	4
 quick	earth with limewash	PokesOut	1
 quick	earth with logs	Coplanar	1
 quick	earth with logs	PokesOut	1
+quick	earth with plastered_timber	Coplanar	1
+quick	earth with plastered_timber	PokesOut	1
+quick	earth with river_cobble	Coplanar	4
+quick	earth with river_cobble	PokesOut	1
 quick	earth with stone	Coplanar	3
 quick	earth with stone	PokesOut	1
 quick	earth with wattle	Coplanar	1
@@ -85,10 +96,15 @@ quick	earth with wattle	PokesOut	1
 quick	hewn with stone	Coplanar	2
 quick	limewash	Coplanar	2
 quick	limewash with logs	Coplanar	1
+quick	limewash with plastered_timber	Coplanar	1
+quick	limewash with river_cobble	Coplanar	4
 quick	limewash with stone	Coplanar	3
 quick	limewash with wattle	Coplanar	1
 quick	logs	Coplanar	1
 quick	logs	UnderRoof	2
+quick	logs with plastered_timber	Coplanar	2
+quick	logs with river_cobble	Coplanar	1
 quick	logs with stone	Coplanar	3
 quick	logs with wattle	Coplanar	2
+quick	plastered_timber with stone	Coplanar	2
 quick	stone with wattle	Coplanar	2

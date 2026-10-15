@@ -27,6 +27,7 @@ use terra_core::Operation;
 
 pub(crate) mod act;
 mod arrays;
+mod atlases;
 mod draw;
 mod going_up;
 mod hlod;
@@ -242,6 +243,21 @@ fn read_kits() -> Option<Kits> {
     (!kits.is_empty()).then_some(Kits(kits))
 }
 
+/// Every material read again, or none if one does not read: a material saved half-edited
+/// while the game runs keeps the kits as they were, rather than taking it out from under
+/// the bases built of it.
+fn read_kits_again() -> Option<Kits> {
+    let paths = kit_paths();
+    let mut kits: Vec<Kit> = paths.iter().filter_map(|path| read_kit(path)).collect();
+    if kits.len() < paths.len() {
+        warn!("Build: a material in {KITS} does not read; the kits are kept as they were.");
+        return None;
+    }
+    // By id: the first, which things are laid in by default, the lowest (D290).
+    kits.sort_by_key(|kit| kit.id);
+    (!kits.is_empty()).then_some(Kits(kits))
+}
+
 fn read_kit(path: &std::path::Path) -> Option<Kit> {
     // A material over its pattern and its pack, and its dressed pieces (D215, D290).
     let assets = kit_assets();
@@ -325,6 +341,7 @@ pub fn plugin(app: &mut App) {
             (keep_footprint, give_footprints).before(crate::play::FloraSystems::Clear),
         )
         .init_resource::<maps::Loading>()
+        .init_resource::<atlases::Atlases>()
         .add_systems(
             Update,
             (
@@ -334,6 +351,7 @@ pub fn plugin(app: &mut App) {
                 village::lay_scale,
                 maps::load,
                 arrays::stream.run_if(resource_exists::<arrays::Arrays>),
+                atlases::compress.run_if(resource_exists::<BuildLook>),
             ),
         );
     arrays::plugin(app);
@@ -951,7 +969,7 @@ fn reload_kit(
         return;
     }
     file.modified = now;
-    let Some(kits) = read_kits().map(Arc::new) else {
+    let Some(kits) = read_kits_again().map(Arc::new) else {
         return;
     };
     info!("Read the kits in {KITS} again.");

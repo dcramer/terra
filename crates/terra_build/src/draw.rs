@@ -474,6 +474,7 @@ pub(crate) mod tests {
             lean: [0, 0],
             lift: [0, 0],
             role: None,
+            outside: None,
         };
         let count = |kit: &Kit, piece: &Piece| {
             let mut surfaces = Surfaces::default();

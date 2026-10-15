@@ -11,12 +11,13 @@
 //! courses carry on up, shortening to the ridge, and any log a roof comes down over is cut
 //! back (D241).
 
-use super::roles::Role;
+use super::roles::{Dir, Role};
 use super::roofs::Roofs;
 use super::{Axis, Layout, Piece, Place, Split, Spot, TICKS, Walls, hash, metres, ticks, unit};
 use crate::kit::{Kit, Kits};
 use crate::{CELL_M, Fill};
 use glam::{IVec3, Vec3};
+use std::collections::BTreeMap;
 
 /// How finely a gable's logs are fitted under its roof, in metres along the wall.
 const GABLE_STEP_M: f32 = 0.02;
@@ -135,6 +136,17 @@ pub(super) fn courses(
                     None
                 };
                 let chinking = daub.then(|| (wall_from.max(a) - a, wall_to.min(b) - a));
+                // Which way is out, by most of the cubes it lies along.
+                let mut votes: BTreeMap<Dir, usize> = BTreeMap::new();
+                for along in first..=last {
+                    if let Some(out) = walls.outside(axis, axis.cube(row, along, layer)) {
+                        *votes.entry(out).or_default() += 1;
+                    }
+                }
+                let outside = votes
+                    .into_iter()
+                    .max_by_key(|&(_, n)| n)
+                    .map(|(dir, _)| dir);
                 let mut piece = log(
                     axis.point(row, a, centre),
                     axis.point(row, b, centre),
@@ -143,6 +155,9 @@ pub(super) fn courses(
                     chinking.filter(|(near, far)| far > near),
                 );
                 set_role(&mut piece, role);
+                if let Piece::Log { outside: out, .. } = &mut piece {
+                    *out = outside;
+                }
                 layout.pieces.push(piece);
             }
         }
@@ -287,6 +302,7 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             chinking,
             role,
             lean,
+            outside,
             ..
         } = piece
         else {
@@ -499,11 +515,13 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             if let Piece::Log {
                 lean: cut_lean,
                 lift: cut_lift,
+                outside: cut_outside,
                 ..
             } = &mut cut
             {
                 *cut_lean = leans;
                 *cut_lift = lifts;
+                *cut_outside = outside;
             }
             layout.pieces.push(cut);
         }
@@ -764,6 +782,7 @@ pub(super) fn log(
         lean: [0, 0],
         lift: [0, 0],
         role: None,
+        outside: None,
     }
 }
 
@@ -880,6 +899,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_log_walling_a_room_weathers_on_its_face_out_of_it() {
+        let kit = kit();
+        let mut base = roofed_cabin(Style::Gable);
+        // A floor, so the room is closed in under as well as over.
+        base.apply(BuildOp::Fill {
+            min: [0, -1, 0],
+            max: [7, -1, 5],
+            cube: Some(Cube::new(kit.kind(), Fill::Solid)),
+        });
+        assert!(base.room_count() > 0, "no room");
+        let layout = lay(&base, &kit);
+        let middle = Vec3::new(2.0, 0.0, 1.5);
+        let (mut out, mut level) = (0, 0);
+        for piece in &layout.pieces {
+            let Piece::Log {
+                from, to, outside, ..
+            } = piece
+            else {
+                continue;
+            };
+            let (from, to) = (from.metres(), to.metres());
+            if from.y != to.y {
+                continue;
+            }
+            level += 1;
+            if let Some(dir) = outside {
+                out += 1;
+                let mid = (from + to) * 0.5 - middle;
+                assert!(
+                    mid.with_y(0.0).dot(dir.step().as_vec3()) > 0.5,
+                    "{from} {to} looks {dir:?}, into the room"
+                );
+            }
+        }
+        // Every course of the four walls knows its outside; the gables' logs above the
+        // room's ceiling may not.
+        assert!(out * 3 >= level * 2, "{out} of {level}");
     }
 
     #[test]
