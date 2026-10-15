@@ -1,0 +1,57 @@
+{
+  "name": "morskie-oko-day",
+  "about": "Morskie Oko in the Tatras in summer by day: eighteen photographs from Wikimedia Commons (CC BY and CC BY-SA, credited in research/2026-10-15-mountain-lake-reference.md) across the lake to spruce slopes, dwarf pine, scree, rock and snow patches, measured by band. The real place the mountain lake's rules are judged against (D321).",
+  "sources": [
+    "https://commons.wikimedia.org/wiki/Category:Morskie_Oko"
+  ],
+  "frames": 18,
+  "measured": "2026-10-15",
+  "look": {
+    "mean": 0.4970676265159383,
+    "p5": 0.21012187363834423,
+    "p50": 0.44814418300653597,
+    "p95": 0.9446479302832242,
+    "dark": 0.011552104766803843,
+    "bright": 0.13691146369170093,
+    "redOverGreen": 0.9212093315935344,
+    "blueOverGreen": 0.9315618058267494,
+    "contrast": 0.165381916310305,
+    "litLitter": 0.029832497427983534,
+    "shadeRedOverGreen": 0.8554559684535891,
+    "shadeBlueOverGreen": 0.45863833377149255,
+    "middleBlueOverGreen": 0.7764271611686001,
+    "limeTop": 0.046340020576131694
+  },
+  "bands": {
+    "sky": {
+      "share": 0.25082773383916324,
+      "mean": 0.7618771138530849,
+      "blueOverGreen": 1.058008063754143,
+      "saturation": 0.1081614518280816,
+      "contrast": 0.04169627250123672
+    },
+    "far": {
+      "share": 0.10000000000000003,
+      "mean": 0.5057181535430717,
+      "blueOverGreen": 1.0037525816766535,
+      "saturation": 0.1732951911269136,
+      "contrast": 0.13414196435133777
+    },
+    "middle": {
+      "share": 0.3176659486454047,
+      "mean": 0.4196065809999706,
+      "blueOverGreen": 0.8717588458423038,
+      "saturation": 0.25964401113478724,
+      "contrast": 0.16609801070667177
+    },
+    "near": {
+      "share": 0.331506317515432,
+      "mean": 0.38151015813471223,
+      "blueOverGreen": 0.7932268253059622,
+      "saturation": 0.37128818268845026,
+      "contrast": 0.15284628791928317
+    },
+    "farUnderSky": 0.33456777286360334,
+    "farBluerThanMiddle": 0.13199373583434967
+  }
+}

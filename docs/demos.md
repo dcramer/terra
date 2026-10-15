@@ -150,7 +150,7 @@ The view is open: across the water, up the slopes. The lush forest's full densit
 
 Each step lands, passes `cargo xtask check` and is judged on its own.
 
-1. **The reference:** frames, photos, `mountain-lake-day`, and a research note of what they show.
+1. **The reference:** frames, photos, `mountain-lake-day`, and a research note of what they show. Done: `mountain-lake-day` (Far Cry 5) and `morskie-oko-day` (photographs), by band ([research](../research/2026-10-15-mountain-lake-reference.md)).
 2. **The field maps tool** and the latitude read from the camera. It shows what the start's climate puts at each height and latitude before anything is drawn.
 3. **Mountain ground:** the mountain term, steep ground in the octree, rock, scree and gravel as ground layers; a `lake` place with its first views. Measured: chunks, meshing time, bench.
 4. **Lakes:** basins filled by Priority-Flood, a water surface per lake, `terra_core::Water` implemented, wading and swimming in lakes.

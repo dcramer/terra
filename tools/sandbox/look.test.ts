@@ -85,3 +85,38 @@ test("the player's place is the middle of the lower half", async () => {
   const at = player(100, 100);
   assert.ok(at(50, 75) && !at(50, 25) && !at(10, 75) && !at(90, 75));
 });
+
+test("a blue sky over green land has its skyline at the land, and the bands below it", async () => {
+  const { bands, skyline } = await import("./look.ts");
+  // Sky down to row 30, then land darker for being nearer: far grey-green, nearer greener.
+  const p = picture((_, y) => (y < 30 ? [120, 160, 230] : y < 64 ? [90, 110, 100] : [40, 90, 30]));
+  for (const at of skyline(p)) near(at, 30);
+  const b = bands(p);
+  near(b.sky.share, 30 / H);
+  near(b.far.share, 9.6 / H, 0.02);
+  near(b.near.share, 1 / 3, 0.02);
+  assert.ok(b.sky.blueOverGreen > 1.3 && b.near.blueOverGreen < 0.5);
+  // The far land is darker than the sky by its share of the sky's brightness, and bluer than
+  // the middle distance only where the middle is greener.
+  assert.ok(b.farUnderSky > 0.2 && b.farUnderSky < 0.6, `${b.farUnderSky}`);
+  near(b.farBluerThanMiddle, 0, 0.02);
+});
+
+test("a land with no sky in it has no sky band, and its far land under the sky reads 0", async () => {
+  const { bands } = await import("./look.ts");
+  const b = bands(picture(() => [40, 90, 30]));
+  assert.equal(b.sky.share, 0);
+  assert.equal(b.farUnderSky, 0);
+});
+
+test("a reference of open views keeps every band's numbers", async () => {
+  const { references, reference } = await import("./look.ts");
+  for (const name of references()) {
+    const kept = reference(name);
+    if (!kept.bands) continue;
+    for (const k of ["sky", "far", "middle", "near"] as const) {
+      assert.deepEqual(Object.keys(kept.bands[k]).sort(), ["blueOverGreen", "contrast", "mean", "saturation", "share"], name);
+    }
+    assert.ok(Number.isFinite(kept.bands.farUnderSky) && Number.isFinite(kept.bands.farBluerThanMiddle), name);
+  }
+});

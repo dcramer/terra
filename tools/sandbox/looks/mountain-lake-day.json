@@ -1,0 +1,58 @@
+{
+  "name": "mountain-lake-day",
+  "about": "Far Cry 5's Montana by day: eleven frames of forested valleys, lakes and rivers under far mountains, from Ubisoft's Steam store screenshots and four official trailers, letterboxes trimmed, measured by band (research/2026-10-15-mountain-lake-reference.md). The mountain lake demo's target for the look (D321, D326).",
+  "sources": [
+    "https://store.steampowered.com/app/552520/",
+    "https://store.steampowered.com/api/appdetails?appids=552520"
+  ],
+  "frames": 11,
+  "measured": "2026-10-15",
+  "look": {
+    "mean": 0.38594260274466696,
+    "p5": 0.06019672014260249,
+    "p50": 0.3239886631016043,
+    "p95": 0.8568685204991088,
+    "dark": 0.09864228219696969,
+    "bright": 0.09122584350448934,
+    "redOverGreen": 1.0284199951886646,
+    "blueOverGreen": 0.9278233914411661,
+    "contrast": 0.28285117232837326,
+    "litLitter": 0.12903067129629628,
+    "shadeRedOverGreen": 1.1614229756164323,
+    "shadeBlueOverGreen": 0.650189768556658,
+    "middleBlueOverGreen": 0.7877268663922194,
+    "limeTop": 0.023601904461279462
+  },
+  "bands": {
+    "sky": {
+      "share": 0.2525745300224467,
+      "mean": 0.7320321030853537,
+      "blueOverGreen": 1.0529892592249679,
+      "saturation": 0.17565561195809412,
+      "contrast": 0.02791332630553576
+    },
+    "far": {
+      "share": 0.09999999999999999,
+      "mean": 0.40008295474969374,
+      "blueOverGreen": 0.8976199177204557,
+      "saturation": 0.28965981351397363,
+      "contrast": 0.23448345476996169
+    },
+    "middle": {
+      "share": 0.316770877174523,
+      "mean": 0.2839158334624879,
+      "blueOverGreen": 0.8281243617673867,
+      "saturation": 0.3711748201161706,
+      "contrast": 0.2743690626100902
+    },
+    "near": {
+      "share": 0.33065459280303033,
+      "mean": 0.23659890640476977,
+      "blueOverGreen": 0.7434015147044103,
+      "saturation": 0.4465723092061653,
+      "contrast": 0.3265157729941455
+    },
+    "farUnderSky": 0.45243938458760025,
+    "farBluerThanMiddle": 0.06949555595306905
+  }
+}
