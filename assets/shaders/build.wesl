@@ -366,7 +366,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let aa = max(max(fw.x, fw.y) * CELLS * 0.7, 0.15);
             let own = in_cell(uv, slot);
             let joint = 1.0 - smoothstep(-aa, aa, own);
-            let fall = smoothstep(0.0, 0.06, wear);
+            // Anywhere sunk at all is the hole: its floor all sunk, its sides between the
+            // face and its floor, where nothing of the stone's face is drawn, stretched.
+            let fall = step(0.0001, wear);
+            let side = fall * (1.0 - step(0.999, wear));
             let erode = joint * smoothstep(0.02, 0.3, l) * (1.0 - fall);
             // A standing stone's edge, chipped back to its fresh face only once much is lost.
             let edge = (1.0 - joint) * (1.0 - smoothstep(0.5, 3.0, own));
@@ -383,7 +386,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let behind = textureSampleGrad(colour_array, array_sampler, behind_uv, slot, ddx, ddy).rgb;
             let behind_joint = 1.0 - smoothstep(-aa, aa, in_cell(behind_uv, slot));
             let core = pbr_input.material.base_color.rgb / max(colour.rgb, vec3(0.01)) * behind;
-            let hollow = core * (0.42 - 0.25 * behind_joint) * (0.75 + 0.35 * rubble) * shade;
+            let hollow_floor = core * (0.42 - 0.25 * behind_joint) * (0.75 + 0.35 * rubble) * shade;
+            // Its sides plain mortar and rubble, by where they are in the world, as their
+            // texture would run down them stretched.
+            let grit = noise21(vec2(wp.x + wp.z, wp.y) * 40.0) * 0.6 + noise21(vec2(wp.x - wp.z, wp.y) * 11.0) * 0.4;
+            let mortar = mean * (0.2 + 0.3 * grit * grit);
+            let hollow = mix(hollow_floor, mortar, side);
             colour_out = mix(base, base * 0.3, erode);
             colour_out = mix(colour_out, fresh, chip);
             colour_out = mix(colour_out, hollow, fall);

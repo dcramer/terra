@@ -636,6 +636,12 @@ impl Base {
     /// space: the highest cube with something in it at or below it in its column, by its
     /// shape and how far in it is, within a storey and a half; none if nothing is.
     pub fn top_under(&self, at: Vec3) -> Option<f32> {
+        self.top_under_of(at).map(|(top, _)| top)
+    }
+
+    /// As [`Base::top_under`], with the kind of the cube it is the top of: a roof's is drawn
+    /// higher, by its covering (`Roofing::thick`).
+    pub fn top_under_of(&self, at: Vec3) -> Option<(f32, Kind)> {
         let cell = (at / CELL_M).floor().as_ivec3();
         let (u, w) = (at.x / CELL_M - cell.x as f32, at.z / CELL_M - cell.z as f32);
         for y in (cell.y - 9..=cell.y).rev() {
@@ -645,7 +651,7 @@ impl Base {
             };
             let fill = f32::from(cube.level()) / f32::from(FULL);
             let top = cube.shape.top(u, w).min(fill);
-            return Some((y as f32 + top) * CELL_M);
+            return Some(((y as f32 + top) * CELL_M, cube.kind));
         }
         None
     }

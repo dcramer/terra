@@ -624,7 +624,18 @@ fn step(
                     );
                     -planet.distance(frame.transform_point(middle))
                 });
-                base.top_under(at).map_or(ground, |top| top.max(ground))
+                // On a roof, its covering as drawn, over its cubes' surface by its thickness.
+                base.top_under_of(at).map_or(ground, |(top, kind)| {
+                    let skin = if kind.is_roof() {
+                        look.kits
+                            .as_deref()
+                            .and_then(|kits| kits.of(kind))
+                            .map_or(0.0, |kit| kit.roof.thick + kit.roof.relief * 0.5)
+                    } else {
+                        0.0
+                    };
+                    (top + skin).max(ground)
+                })
             };
             let solid = |at: Vec3| base.solid_at(at);
             let landing = live.fragment.step(STEP_S, &floor, &solid);
