@@ -6,7 +6,9 @@
 #   tools/characters/build_bodies.sh
 #
 #   0. the clips the game plays (art/animation/clips.txt) cut from the animation libraries
-#      into the mannequin file (clips.py), if the libraries are here, and checked (clip_check.py)
+#      into the mannequin file (clips.py), if the libraries are here; the clips we made
+#      (art/animation/made.json) put in place of theirs (made_clips.py); all checked
+#      (clip_check.py)
 #   1. the base body (base-male) from Tripo's rig: converted, checked, exported
 #   2. every worn look made on it: garments from the dressed models (shell_garment.py),
 #      rigid pieces at their sockets (fit_gear.py); into tools/characters/out/gear/base-male/
@@ -42,6 +44,7 @@ echo "== 0. the clips"
 if ls art/animation/library/*.glb >/dev/null 2>&1; then
   $blender $here/clips.py | grep -E "CLIPS|Error|not in" || true
 fi
+$blender $here/made_clips.py | grep -E "^MADE|Error|no clean stride" || true
 $blender $here/clip_check.py | grep -E "^CLIPCHECK (pass|fail)|\"pass\": false|Error" | tee $out/build-clips.log || true
 
 echo "== 1. the base"

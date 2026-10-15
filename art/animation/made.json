@@ -1,0 +1,23 @@
+{
+  "Walk_Loop": {
+    "prompt": "A person walks forward at a steady, relaxed pace, arms swinging naturally.",
+    "speed": 1.4,
+    "seconds": 6,
+    "seed": 1,
+    "take": 1
+  },
+  "Jog_Fwd_Loop": {
+    "prompt": "A person jogs forward at a steady, comfortable pace.",
+    "speed": 3.2,
+    "seconds": 6,
+    "seed": 1,
+    "take": 0
+  },
+  "Sprint_Loop": {
+    "prompt": "A person sprints forward at full speed, leaning forward, arms driving hard back and forth.",
+    "speed": 6.5,
+    "seconds": 6,
+    "seed": 1,
+    "take": 0
+  }
+}

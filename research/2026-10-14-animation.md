@@ -97,6 +97,12 @@ Kimodo-SOMA-RP-v1.1 run locally, its text encoder on the processor (about 16 GB 
 
 On sheets side by side, dressed, the Kimodo walk and jog read as a person walking and jogging, upright, arms close; Quaternius's as stiff and hunched. The Kimodo sprint is upright and quick but its arms stay tucked at the chest and it leans less than a real sprint (10 to 20 degrees), a hard run more than a sprint: a prompt asking for driving arms is the next try. Feet slide about as much as Quaternius's, a few centimetres; foot locking in the game removes it from either.
 
+## Third trial: the sprint, and the prompt read properly
+
+The text encoder wraps each prompt in Llama 3's chat format only when the model calls itself `meta-llama/Meta-Llama-3-8B-Instruct`; pointing the LLM2Vec adapters at a local copy had renamed it, so the walk and jog above were made from prompts read without that format, and the straight path did most of the work. With the name restored (only the adapters' `base_model_name_or_path` points at the copy), "A person sprints forward at full speed, leaning forward, arms driving hard back and forth" at 6.5 m/s gave three takes plainly following the words: one leaning 21.5 degrees with the hands at 0.33, one 31 degrees, one upright with the hands high. The first is kept: a real sprinter's lean is 10 to 20 degrees, Quaternius's 41. The walk and jog already measure and look right and are kept as made.
+
+The made clips are part of the build: `tools/characters/made_clips.py` puts them into the mannequin file in place of the library's, the upper arm's and thigh's roll handed to the forearm and shin so they pass `clip_check.py` (0 degrees of upper-limb roll; the jog had 34, over the 30 our skinning takes), the other 23 clips coming through to the frame unchanged; `motion.ts` makes and measures a clip's takes (D316).
+
 ## Not settled
 
 Prices for Cascadeur and the commercial terms of Rokoko Vision were not confirmed. The figure of 13 key poses for Overgrowth's whole character comes from a forum post.

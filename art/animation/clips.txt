@@ -1,6 +1,7 @@
 # The clips the game plays, by name, from Quaternius's animation libraries (art/README.md).
 # tools/characters/clips.py cuts these from the libraries into the game's mannequin file;
-# every body is exported with them. A clip named in code must be listed here.
+# every body is exported with them. A clip named in code must be listed here. One we made
+# instead (made.json, tools/characters/made_clips.py) takes the place of the library's.
 Idle_Loop
 Idle_Talking_Loop
 Walk_Loop
