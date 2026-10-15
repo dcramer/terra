@@ -3,6 +3,7 @@
 //! level, its water a medium by depth (`assets/shaders/lake.wesl`, ported from
 //! boujie_water_shader, MIT), rippled by the climate's wind and reflecting the sky.
 
+use crate::air::AirPicture;
 use crate::climate::ClimateFields;
 use crate::daylight::Clock;
 use crate::planet::{MainCamera, Planet};
@@ -77,6 +78,14 @@ pub struct LakeExtension {
     north: Vec4,
     #[uniform(100)]
     skyline: [Vec4; SKYLINE_WAYS],
+    /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
+    /// draws, exposed as it is, rather than the painted sky's two colours.
+    #[uniform(100)]
+    over_air: u32,
+    /// The air all round the camera (`air::AirPicture`), unexposed.
+    #[texture(101, dimension = "cube")]
+    #[sampler(102)]
+    air: Option<Handle<Image>>,
 }
 
 /// How many ways out round the lake its skyline is taken in.
@@ -98,7 +107,8 @@ impl MaterialExtension for LakeExtension {
 }
 
 impl LakeExtension {
-    fn new(sky: Option<&Sky>, wind: Vec4, mirror: &Mirror) -> Self {
+    fn new(sky: Option<&Sky>, air: Option<&AirPicture>, wind: Vec4, mirror: &Mirror) -> Self {
+        let air = air.map(|picture| picture.0.clone());
         let (horizon, zenith, sky_brightness) = sky
             .map_or((LinearRgba::BLACK, LinearRgba::BLACK, 0.0), |sky| {
                 (sky.horizon.into(), sky.zenith.into(), sky.brightness)
@@ -120,6 +130,8 @@ impl LakeExtension {
             east: mirror.east.extend(0.0),
             north: mirror.north.extend(0.0),
             skyline: mirror.skyline,
+            over_air: air.is_some() as u32,
+            air,
         }
     }
 }
@@ -173,7 +185,7 @@ fn spawn(
             alpha_mode: AlphaMode::Blend,
             ..default()
         },
-        extension: LakeExtension::new(sky.as_deref(), Vec4::ZERO, &mirror),
+        extension: LakeExtension::new(sky.as_deref(), None, Vec4::ZERO, &mirror),
     });
     let mut drawn = 0;
     for (index, lake) in waters.lakes().iter().enumerate() {
@@ -200,6 +212,7 @@ fn spawn(
 fn follow_sky_and_wind(
     look: Option<Res<LakeLook>>,
     sky: Option<Res<Sky>>,
+    air: Option<Res<AirPicture>>,
     fields: Option<Res<ClimateFields>>,
     clock: Res<Clock>,
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
@@ -224,7 +237,8 @@ fn follow_sky_and_wind(
         }
         _ => last.map_or(Vec4::ZERO, |(_, wind)| wind),
     };
-    let sky_changed = sky.as_ref().is_some_and(|sky| sky.is_changed());
+    let sky_changed = sky.as_ref().is_some_and(|sky| sky.is_changed())
+        || air.as_ref().is_some_and(|air| air.is_changed());
     let Some(material) = materials.get(&look.0) else {
         return;
     };
@@ -232,7 +246,7 @@ fn follow_sky_and_wind(
         return;
     }
     if let Some(mut material) = materials.get_mut(&look.0) {
-        material.extension = LakeExtension::new(sky.as_deref(), wind, &look.1);
+        material.extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
     }
 }
 

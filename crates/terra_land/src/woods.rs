@@ -19,6 +19,8 @@ pub const KRUMMHOLZ_C: f32 = 0.6;
 /// it fewer: roots hold on ledges, not walls.
 pub const TOO_STEEP_DEG: f32 = 45.0;
 pub const THINS_FROM_DEG: f32 = 32.0;
+/// How far over a lake's surface a tree's foot stands at the least, in metres.
+pub const DRY_FOOT_M: f32 = 0.4;
 
 /// What a place's ground is, for what grows on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -215,7 +217,14 @@ impl<'a> Woods<'a> {
     pub fn stand_at(&self, point: glam::Vec3, normal: glam::Vec3) -> Stand {
         use terra_core::Water;
         let up = point.normalize_or(glam::Vec3::Y);
-        let water = self.round.waters.level(up);
+        // A lake is found cell by cell, on a grid metres wide, so ground in a dry cell at its
+        // shore can still lie under its surface: the trees there stood in a metre of water. So
+        // the lake is asked of the cells round the point too, and a tree's foot stands clear of
+        // its water by a little, as a shore's trees stand back from the edge.
+        let water = match self.round.waters.lake_near(up, 2) {
+            Some(lake) => Some(lake + DRY_FOOT_M),
+            None => self.round.waters.level(up),
+        };
         let footing = self.round.land.footing(point, water);
         self.round.stand(point, normal, footing)
     }

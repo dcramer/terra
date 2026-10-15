@@ -258,5 +258,18 @@ mod tests {
                 .all(|s| s.elevation >= 0.0 && s.elevation < 0.8)
         );
         assert!(skyline[0].tree_line_m > 0.0 && skyline[0].snow_line_m > skyline[0].tree_line_m);
+        // No tree round its shore stands in its water: every foot is above the surface of any
+        // lake within two cells of it.
+        let trees = crate::woods::Woods::of(&round).trees(site.toward, 0.0, 700.0, 4.0, Seed(5));
+        assert!(trees.len() > 1000, "{}", trees.len());
+        for tree in &trees {
+            if let Some(level) = round.waters.lake_near(tree.at.normalize(), 2) {
+                assert!(
+                    tree.at.length() > level,
+                    "a tree {:.2} m under the lake",
+                    level - tree.at.length()
+                );
+            }
+        }
     }
 }

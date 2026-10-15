@@ -345,6 +345,12 @@ fn climate_at(world: vec3<f32>) -> vec4<f32> {
     return textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0);
 }
 
+// How far inside the climate map a point is: 1 well inside, falling to 0 at its edge.
+fn climate_inside(world: vec3<f32>) -> f32 {
+    let at = (ground.climate_from_world * vec4<f32>(world, 1.0)).xy;
+    return clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 10.0, 0.0, 1.0);
+}
+
 // How much of the broadleaves' leaves have fallen where a point is, 0 to 1.
 fn fallen_leaves(world: vec3<f32>) -> f32 {
     if ground.climate_on == 0u || ground.fallen_layer < 0 {
@@ -886,7 +892,15 @@ fn fragment(
     // hard frost, and snow lying on what faces up.
     let climate = climate_at(world);
     let level = dot(normalize(in.world_normal), up);
-    let snow = snow_on(climate.r * SNOW_FULL_M, world, level, canopy_over(world));
+    // Where the land's rules carry the snow on the ground's own vertices out to the far land
+    // (D335), they draw it there; the climate map's, whose edge's answer reaches on past it,
+    // fades out before its edge, or it smeared the edge's snow white over every far ridge.
+    var map_snow = climate.r;
+@if(VERTEX_UVS_A)
+    {
+        map_snow *= climate_inside(world);
+    }
+    let snow = snow_on(map_snow * SNOW_FULL_M, world, level, canopy_over(world));
     let wet = max(climate.g * 0.6, climate.b) * (1.0 - snow);
     colour *= mix(1.0, 0.6, wet);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.5, wet * 0.7);

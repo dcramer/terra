@@ -575,11 +575,31 @@ fn shine(
     };
     // Set only when it changes, so the sky is painted again only then.
     skylight.set_if_neq(lit);
+    let set = open_exposure(light.exposure, open, far_seeing, dark);
     for mut camera in &mut exposure {
-        if camera.ev100 != light.exposure {
-            camera.ev100 = light.exposure;
+        let ev = set;
+        if camera.ev100 != ev {
+            camera.ev100 = ev;
         }
     }
+}
+
+/// How many stops brighter the eye is set by day out in the open on a world whose views reach
+/// kilometres (D338). The day's exposures were tuned under the lush forest's canopy against
+/// Sons of the Forest; out over the mountain lake at noon they left the sky at 0.17 where the
+/// references' is 0.73, and the whole frame at 0.24 against 0.39. A stop and a half brighter
+/// measured 0.55 and 0.45, as a photographer opens up for a bright open view a forest's
+/// meter would stop down for.
+const OPEN_EYE_EV: f32 = 1.5;
+
+/// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
+/// that sees far or not, so far into the night: the key in a forest, under trees and by night;
+/// opened up by day in the open air of a far-seeing world.
+fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
+    if !far_seeing {
+        return key;
+    }
+    key - OPEN_EYE_EV * smoothstep(0.55, 0.98, open) * (1.0 - night)
 }
 
 #[cfg(test)]
@@ -589,6 +609,25 @@ mod tests {
 
     fn path() -> SkyPath {
         SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))
+    }
+
+    #[test]
+    fn the_eye_opens_up_by_day_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
+        let key = 11.8;
+        // The lush forest's world and any world's forest keep the key; so does the night.
+        assert_eq!(open_exposure(key, 1.0, false, 0.0), key);
+        assert_eq!(open_exposure(key, 0.2, true, 0.0), key);
+        assert_eq!(open_exposure(key, 1.0, true, 1.0), key);
+        // Out on a mountain lake's shore by day, brighter: a lower EV.
+        let open = open_exposure(key, 1.0, true, 0.0);
+        assert!(open < key - 1.0, "{open}");
+        // And smoothly between, as one walks out of the trees.
+        let mut last = key;
+        for k in 0..=20 {
+            let now = open_exposure(key, k as f32 / 20.0, true, 0.0);
+            assert!(now <= last && last - now < 0.3, "{last} then {now}");
+            last = now;
+        }
     }
 
     #[test]

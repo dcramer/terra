@@ -65,12 +65,28 @@ struct Lake {
     east: vec4<f32>,
     north: vec4<f32>,
     skyline: array<vec4<f32>, 64>,
+    // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
+    over_air: u32,
+}
+
+// The air all round the camera, as Bevy's atmosphere works it out each frame, unexposed: what
+// the sky over the water is drawn from, so the water mirrors the same sky.
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var air_texture: texture_cube<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var air_sampler: sampler;
+
+// The air's light from a direction, exposed as the sky is. The cube is left-handed, as
+// Bevy's environment maps are.
+fn air_seen(direction: vec3<f32>) -> vec3<f32> {
+    let d = vec3<f32>(direction.x, direction.y, -direction.z);
+    return textureSampleLevel(air_texture, air_sampler, d, 0.0).rgb * view.exposure;
 }
 
 // What the water mirrors along a reflected ray: the slopes round the lake where the ray runs
 // below their skyline, their woods, rock and snow by how high up them it meets them, lit as the
 // horizon is and a little hazed; the sky above.
-fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>) -> vec3<f32> {
+fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -> vec3<f32> {
     let level = ray - up * dot(ray, up);
     let around = atan2(dot(level, lake.north.xyz), dot(level, lake.east.xyz));
     let t = fract(around / 6.2831853) * 64.0;
@@ -89,15 +105,15 @@ fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>) -> vec3<f32> {
     let height = clamp(rises / s.x, 0.0, 1.0) * s.y;
     let woods = 1.0 - smoothstep(s.z - 60.0, s.z + 60.0, height);
     let snow = smoothstep(s.w - 40.0, s.w + 60.0, height);
-    let rock = lake.horizon.rgb * vec3<f32>(0.32, 0.31, 0.3);
-    let forest = lake.horizon.rgb * vec3<f32>(0.035, 0.06, 0.035);
-    let white = lake.horizon.rgb * 0.9;
+    let rock = horizon * vec3<f32>(0.32, 0.31, 0.3);
+    let forest = horizon * vec3<f32>(0.035, 0.06, 0.035);
+    let white = horizon * 0.9;
     var ground = mix(rock, forest, woods);
     ground = mix(ground, white, snow);
     // The slopes are hazed toward the horizon's colour a little, the peaks, farther, the more,
     // as little as the land itself is over the lake's few kilometres: hazed as much as the sky
     // is bright, the woods' reflection read as the sky's.
-    let hazed = mix(ground, lake.horizon.rgb, 0.03 + 0.1 * clamp(rises / max(s.x, 0.01), 0.0, 1.0));
+    let hazed = mix(ground, horizon, 0.03 + 0.1 * clamp(rises / max(s.x, 0.01), 0.0, 1.0));
     return mix(hazed, sky, over);
 }
 
@@ -140,8 +156,8 @@ fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>) -> f32 {
     // Finer along the wind than across it, so the crests run across the wind, as they do:
     // the wind's way is one fixed direction over a lake, not the level one at each point.
     let q = p + lake.wind.xyz * dot(p, lake.wind.xyz) * 0.8;
-    return noise(q * 0.8 - downwind * t * 0.6) * 0.6
-        + noise(q * 2.1 - downwind * t * 1.1 + across * t * 0.2 + 11.0) * 0.4;
+    return noise(q * 1.6 - downwind * t * 1.2) * 0.6
+        + noise(q * 4.3 - downwind * t * 2.2 + across * t * 0.4 + 11.0) * 0.4;
 }
 
 @fragment
@@ -166,11 +182,11 @@ fn fragment(
     let local = world - lake.origin.xyz;
     let here = ripples(local, downwind, across);
     let slope = vec2<f32>(
-        ripples(local + downwind * 0.15, downwind, across) - here,
-        ripples(local + across * 0.15, downwind, across) - here,
+        ripples(local + downwind * 0.075, downwind, across) - here,
+        ripples(local + across * 0.075, downwind, across) - here,
     );
     // Calm water still shivers a little; far off the ripples are under a pixel.
-    let strength = (0.25 + 0.9 * lake.wind.w) / (1.0 + distance / 120.0);
+    let strength = (0.15 + 0.55 * lake.wind.w) / (1.0 + distance / 120.0);
     let normal = normalize(up - (downwind * slope.x + across * slope.y) * strength);
     pbr_input.world_normal = normal;
     pbr_input.N = normal;
@@ -209,15 +225,23 @@ fn fragment(
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
     let reflected = reflect(-toward_eye, normal);
-    let sky = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(0.0, 0.62, dot(reflected, up)), 0.55));
-    let seen = mirrored(reflected, up, sky);
+    // The sky it mirrors: the air's own, exposed, where the air is drawn; else the painted
+    // sky's two colours at its brightness.
+    var seen: vec3<f32>;
+    if lake.over_air != 0u {
+        let level = normalize(reflected - up * dot(reflected, up) + up * 0.02);
+        seen = mirrored(reflected, up, air_seen(reflected), air_seen(level));
+    } else {
+        let sky = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(0.0, 0.62, dot(reflected, up)), 0.55));
+        seen = mirrored(reflected, up, sky, lake.horizon.rgb) * lake.sky_brightness;
+    }
     // The sun's glint off the ripples: a normalised Blinn-Phong lobe, as sharp as still water's.
     let sun = lights.directional_lights[0];
     let half_way = normalize(sun.direction_to_light + toward_eye);
     let lit = max(dot(normal, sun.direction_to_light), 0.0);
     let glint = pow(max(dot(normal, half_way), 0.0), 600.0) * (608.0 / 25.13) * lit;
     let glinting = sun.color.rgb * view.exposure * glint * mirror;
-    out.color = vec4<f32>(out.color.rgb + (seen * lake.sky_brightness * mirror + glinting) * (1.0 - foam), out.color.a);
+    out.color = vec4<f32>(out.color.rgb + (seen * mirror + glinting) * (1.0 - foam), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }
