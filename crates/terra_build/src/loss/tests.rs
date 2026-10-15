@@ -196,6 +196,71 @@ fn damage_short_of_its_health_wears_a_cube_and_a_repair_costs_a_share_by_quarter
 }
 
 #[test]
+fn plans_hanging_from_what_falls_go_with_it_and_no_others() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    // A stone post two high, a roof's plan laid out from its top as a ghost, and the plan
+    // of a wall on the ground beside it, apart.
+    wall(&mut base, 1, 2, &cx);
+    let lay = |base: &mut Base, part: u32, cubes: &[[i32; 3]]| {
+        let ground = cubes
+            .iter()
+            .map(|at| Sample {
+                column: [at[0], at[2]],
+                height_cm: 10,
+            })
+            .collect();
+        base.act(
+            &Op::LayPlan {
+                part: Some(PartId(part)),
+                kind: STONE,
+                cubes: cubes
+                    .iter()
+                    .map(|&at| Planned {
+                        at,
+                        shape: Shape::Whole,
+                    })
+                    .collect(),
+                ground,
+            },
+            &cx,
+        )
+        .unwrap();
+    };
+    let ghost = [[1, 1, 0], [2, 1, 0], [2, 2, 0]];
+    lay(&mut base, 40, &ghost);
+    lay(&mut base, 41, &[[5, 0, 0], [6, 0, 0]]);
+    let before = base.clone();
+    // The post's foot destroyed: the post comes down, and the plan that hung from it.
+    let done = base
+        .act(
+            &Op::Damage {
+                cubes: vec![[0, 0, 0]],
+                amount: 100,
+            },
+            &cx,
+        )
+        .unwrap();
+    assert_eq!(done.fell.len(), 2, "only what was built bursts");
+    for at in ghost {
+        assert_eq!(
+            base.cube(IVec3::from_array(at)),
+            None,
+            "{at:?} left floating"
+        );
+    }
+    assert!(
+        base.cube(IVec3::new(5, 0, 0)).is_some(),
+        "the plan on the ground stays"
+    );
+    assert_eq!(base.cubes().count(), 2);
+    // Undone, the plan comes back with the post.
+    base.act_all(&done.undo, &cx).unwrap();
+    assert_eq!(base, before);
+}
+
+#[test]
 fn a_door_falls_with_its_hole() {
     let rules = rules();
     let cx = Context::free(&rules);

@@ -24,7 +24,7 @@
 //! undo it.
 
 use crate::cost::{Bill, Rules};
-use crate::cubes::{Cube, Fill, Kind, PartId, Pending, Replacement, Shape, section_of};
+use crate::cubes::{Cube, FULL, Fill, Kind, PartId, Pending, Replacement, Shape, section_of};
 use crate::ground::Sample;
 use crate::support::Holder;
 use crate::{Base, Part, Prop};
@@ -657,6 +657,8 @@ impl Base {
     fn fill(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
         let named = self.named(cubes, cx)?;
         let mut after: BTreeMap<[i32; 3], Cube> = BTreeMap::new();
+        // Cubes going in whole, by how many steps that is (D199 as amended by D305).
+        let mut whole: BTreeMap<[i32; 3], u8> = BTreeMap::new();
         let mut change = Change::default();
         for &at in &named {
             let cube = self.there(at)?;
@@ -674,6 +676,19 @@ impl Base {
                 return Err(Refusal::Damaged(at));
             }
             let terms = self.terms(&cube);
+            // Under something already in, as a breach in a wall rebuilt under the wall that
+            // stands over it, a cube goes in whole in one act, worked in from the side as a
+            // repair is, since it may not be left partly in under what is in.
+            if self.is_in(at + IVec3::Y) && !cube.pending.in_place() {
+                let steps = (FULL - cube.level()).div_ceil(terms.step().max(1));
+                change
+                    .done
+                    .took
+                    .add(&terms.per_step.times(u64::from(steps)));
+                after.insert(at.to_array(), cube.at_level(FULL));
+                whole.insert(at.to_array(), steps);
+                continue;
+            }
             change.done.took.add(&terms.per_step);
             after.insert(at.to_array(), cube.at_level(cube.level() + terms.step()));
         }
@@ -732,9 +747,32 @@ impl Base {
             .into_iter()
             .map(|(at, cube)| (IVec3::from_array(at), Some(cube)))
             .collect();
-        change.done.undo = vec![Op::Empty {
-            cubes: cubes.to_vec(),
-        }];
+        // Undone, a step out of what went in a step, and what went in whole out from under
+        // what stays, as a carving comes out, step by step, its mark then cleared.
+        let stepped: Vec<[i32; 3]> = cubes
+            .iter()
+            .copied()
+            .filter(|at| !whole.contains_key(at))
+            .collect();
+        if !stepped.is_empty() {
+            change.done.undo.push(Op::Empty { cubes: stepped });
+        }
+        if !whole.is_empty() {
+            let under: Vec<[i32; 3]> = whole.keys().copied().collect();
+            change.done.undo.push(Op::Carve {
+                cubes: under.clone(),
+            });
+            let most = whole.values().copied().max().unwrap_or(0);
+            for step in 0..most {
+                let out: Vec<[i32; 3]> = whole
+                    .iter()
+                    .filter(|&(_, &steps)| steps > step)
+                    .map(|(&at, _)| at)
+                    .collect();
+                change.done.undo.push(Op::Empty { cubes: out });
+            }
+            change.done.undo.push(Op::Cancel { cubes: under });
+        }
         Ok(change)
     }
 

@@ -791,3 +791,41 @@ fn a_damaged_cube_is_mended_before_anything_more_goes_in_or_comes_out() {
     base.act(&fill([0, 0, 0]), &cx).unwrap();
     assert!(base.cube(at).unwrap().is_built());
 }
+
+#[test]
+fn a_breach_knocked_under_a_standing_wall_is_built_again() {
+    // A log wall three long and three high; the middle of its first course knocked out,
+    // the wall over it held by the courses either side. Laid again, the breach goes in
+    // whole in one act, worked in from the side, both its courses' logs taken; undone, it
+    // comes out from under the wall as it went in.
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let wall: Vec<[i32; 3]> = (0..3).flat_map(|x| column(x, 0, 0, 2)).collect();
+    plan(&mut base, &cx, LOGS, &wall, Shape::Whole);
+    build(&mut base, &cx, &wall);
+    base.act(
+        &Op::Damage {
+            cubes: vec![[1, 0, 0]],
+            amount: u16::MAX,
+        },
+        &cx,
+    )
+    .unwrap();
+    let breach = IVec3::new(1, 0, 0);
+    assert_eq!(base.cube(breach), None);
+    assert!(base.is_in(breach + IVec3::Y), "the wall over it stands");
+    plan(&mut base, &cx, LOGS, &[[1, 0, 0]], Shape::Whole);
+    let before = base.clone();
+    let done = base.act(&fill([1, 0, 0]), &cx).unwrap();
+    assert!(base.cube(breach).unwrap().is_built());
+    assert_eq!(
+        done.took,
+        Bill::of("Log", Amount::new(1, 8)),
+        "both courses"
+    );
+    assert!(base.floating().is_empty());
+    let back = base.act_all(&done.undo, &cx).unwrap();
+    assert_eq!(back.gave, done.took);
+    assert_eq!(base, before, "undone, as it was");
+}

@@ -124,7 +124,7 @@ impl Base {
         let lost = self.unjoined_without(&destroyed);
         let mut falling = destroyed;
         falling.extend(lost.iter().map(|at| at.to_array()));
-        self.collapse(&falling, &mut change, &mut patch);
+        self.collapse(&falling, &self.ground, &mut change, &mut patch);
         change.done.undo = vec![Op::Restore(Box::new(patch))];
         Ok(change)
     }
@@ -170,7 +170,7 @@ impl Base {
             .into_iter()
             .map(|at| at.to_array())
             .collect();
-        self.collapse(&falling, &mut change, &mut patch);
+        self.collapse(&falling, &ground, &mut change, &mut patch);
         change.done.undo = vec![Op::Restore(Box::new(patch))];
         Ok(change)
     }
@@ -178,7 +178,15 @@ impl Base {
     /// Takes cubes coming down out of the base, with props whose holes they were part of:
     /// the change, what puts it back, and what came down, said in [`Done::fell`]. What went
     /// into them is lost.
-    fn collapse(&self, falling: &BTreeSet<[i32; 3]>, change: &mut Change, patch: &mut Patch) {
+    fn collapse(
+        &self,
+        falling: &BTreeSet<[i32; 3]>,
+        ground: &crate::Ground,
+        change: &mut Change,
+        patch: &mut Patch,
+    ) {
+        // The plans that hung from what fell go with it: nothing floats, a ghost neither.
+        let adrift = self.adrift(falling, ground);
         let mut parts: BTreeMap<PartId, Part> = BTreeMap::new();
         let mut lost = Bill::default();
         let keep_part = |id: Option<PartId>, parts: &mut BTreeMap<PartId, Part>| {
@@ -189,14 +197,16 @@ impl Base {
             }
         };
         let recorded: BTreeSet<[i32; 3]> = patch.damage.iter().map(|(at, _)| *at).collect();
-        for &at in falling {
+        for &at in falling.iter().chain(&adrift) {
             let place = IVec3::from_array(at);
             let Some(cube) = self.cube(place) else {
                 continue;
             };
             patch.cubes.push((at, Some(cube)));
             change.cubes.push((place, None));
-            change.done.fell.push((place, cube));
+            if falling.contains(&at) {
+                change.done.fell.push((place, cube));
+            }
             keep_part(cube.part, &mut parts);
             if let Some(to) = self.replacing(place) {
                 patch.replacing.push((at, to));
@@ -212,9 +222,17 @@ impl Base {
         patch.parts = parts.into_iter().collect();
         // A door or window whose hole is broken comes down with it.
         for prop in self.props() {
-            let broken = self
-                .hole_for(prop)
-                .is_some_and(|holders| holders.iter().any(|at| falling.contains(&at.to_array())));
+            // Its hole is broken if anything of it fell, or the ground gave way under a foot
+            // that stood on it.
+            let foot_lost = prop.cubes().filter(|at| at.y == prop.min[1]).any(|foot| {
+                let under = foot - IVec3::Y;
+                !ground.reaches(foot)
+                    && !(self.bears(under) && !falling.contains(&under.to_array()))
+            });
+            let broken = foot_lost
+                || self.hole_for(prop).is_some_and(|holders| {
+                    holders.iter().any(|at| falling.contains(&at.to_array()))
+                });
             if !broken {
                 continue;
             }
@@ -226,9 +244,10 @@ impl Base {
         // The ground under columns the fall leaves empty, which is forgotten with them.
         let mut ground_was: BTreeMap<[i32; 2], Option<i16>> =
             patch.ground.iter().copied().collect();
-        let emptied: BTreeSet<[i32; 2]> = falling.iter().map(|at| [at[0], at[2]]).collect();
+        let taken: BTreeSet<[i32; 3]> = falling.iter().chain(&adrift).copied().collect();
+        let emptied: BTreeSet<[i32; 2]> = taken.iter().map(|at| [at[0], at[2]]).collect();
         for [x, z] in emptied {
-            if self.column(x, z).all(|y| falling.contains(&[x, y, z])) {
+            if self.column(x, z).all(|y| taken.contains(&[x, y, z])) {
                 ground_was
                     .entry([x, z])
                     .or_insert_with(|| self.ground.sample([x, z]));
@@ -237,6 +256,46 @@ impl Base {
         patch.ground = ground_was.into_iter().collect();
         patch.recovered = lost.clone();
         change.done.lost = lost;
+    }
+
+    /// The plans, cubes with nothing in them yet, that what falls leaves hanging from
+    /// nothing, sorted: those joined, through other plans, to what fell and to neither the
+    /// ground nor anything that stays in. Flooded from what fell, so it costs what it reaches.
+    fn adrift(&self, falling: &BTreeSet<[i32; 3]>, ground: &crate::Ground) -> Vec<[i32; 3]> {
+        let plan = |at: IVec3| {
+            !falling.contains(&at.to_array()) && self.cube(at).is_some_and(|cube| !cube.is_in())
+        };
+        let stays_in = |at: IVec3| !falling.contains(&at.to_array()) && self.is_in(at);
+        let mut settled: BTreeSet<[i32; 3]> = BTreeSet::new();
+        let mut out: BTreeSet<[i32; 3]> = BTreeSet::new();
+        for &at in falling {
+            for start in self.joins(IVec3::from_array(at)) {
+                let key = start.to_array();
+                if !plan(start) || settled.contains(&key) {
+                    continue;
+                }
+                let mut seen = BTreeSet::from([key]);
+                let mut frontier = vec![start];
+                let mut held = false;
+                while let Some(here) = frontier.pop() {
+                    if ground.reaches(here) {
+                        held = true;
+                    }
+                    for next in self.joins(here) {
+                        if stays_in(next) {
+                            held = true;
+                        } else if plan(next) && seen.insert(next.to_array()) {
+                            frontier.push(next);
+                        }
+                    }
+                }
+                if !held {
+                    out.extend(&seen);
+                }
+                settled.extend(seen);
+            }
+        }
+        out.into_iter().collect()
     }
 
     /// Mends damaged cubes ([`Op::Repair`]).

@@ -1567,8 +1567,13 @@ fn random_operations_keep_every_rule() {
                         if let Op::Empty { cubes } = op {
                             for &cube in cubes {
                                 let cube = IVec3::from_array(cube);
+                                // Marked to be carved out, now or by the act itself, as
+                                // the undo of a cube put in whole under what stands is.
                                 let carved =
-                                    base.cube(cube).is_some_and(|cube| cube.pending.in_place());
+                                    base.cube(cube).is_some_and(|cube| cube.pending.in_place())
+                                        || ops.iter().any(|op| {
+                                            matches!(op, Op::Carve { cubes } if cubes.contains(&cube.to_array()))
+                                        });
                                 assert!(
                                     !base.is_in(cube + IVec3::Y) || base.is_in(cube) || carved,
                                     "{at}: {cube} taken from under what rests on it"
@@ -1617,7 +1622,7 @@ fn random_operations_keep_every_rule() {
                     assert!(!why.message().is_empty());
                 }
             }
-            check_rules(&base, &at);
+            check_rules(&base, &format!("{at} after {ops:?}"));
             // What is in, came out and was lost is what went in and was
             // brought back, exactly.
             let mut held = value(&base, &rules);
