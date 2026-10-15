@@ -70,7 +70,14 @@ pub enum Found {
     Lake(terra_land::site::Site),
     /// Open tundra: the start on it, facing the forest's edge.
     Tundra(terra_land::tundra::TundraSite),
+    /// A market town's place: the start beside it, out by its fields, facing it; the town is
+    /// the layer above's to lay there.
+    Town(terra_land::town::TownSite),
 }
+
+/// The place the land's rules made that the world starts at, if `--site` asked for one.
+#[derive(Resource, Clone, Copy, Debug, Deref)]
+pub struct Sited(pub Found);
 
 impl Found {
     /// Where the land round it is worked out from.
@@ -78,6 +85,24 @@ impl Found {
         match self {
             Found::Lake(site) => site.toward,
             Found::Tundra(site) => site.toward,
+            Found::Town(site) => site.toward,
+        }
+    }
+
+    /// Where the woods round it are grown from, if not the start: a town's own middle, so its
+    /// streets look out on grown trees whichever way.
+    pub fn woods_middle(&self, planet: &Planet) -> Option<Vec3> {
+        match self {
+            Found::Town(site) => Some(planet.surface(site.toward)),
+            Found::Lake(_) | Found::Tundra(_) => None,
+        }
+    }
+
+    /// The forest it has cleared, if it is a settlement's: a town's fields.
+    pub fn clearings(&self, land: &terra_land::Land) -> Vec<terra_land::town::Clearing> {
+        match self {
+            Found::Town(site) => terra_land::town::MarketTown::DEMO.clearings(land, site),
+            Found::Lake(_) | Found::Tundra(_) => Vec::new(),
         }
     }
 
@@ -89,6 +114,16 @@ impl Found {
                 let at = planet.surface(site.toward);
                 let up = at.normalize();
                 let facing = (planet.surface(site.forest) - at)
+                    .reject_from(up)
+                    .normalize_or(up.any_orthonormal_vector());
+                Start(
+                    Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up),
+                )
+            }
+            Found::Town(site) => {
+                let at = planet.surface(site.start);
+                let up = at.normalize();
+                let facing = (planet.surface(site.toward) - at)
                     .reject_from(up)
                     .normalize_or(up.any_orthonormal_vector());
                 Start(
@@ -143,7 +178,29 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
             );
             Found::Tundra(site)
         }
-        other => panic!("--site {other}: the sites are lake and tundra"),
+        "town" => {
+            let want = terra_land::town::MarketTown::DEMO;
+            let (site, searched) = land.market_town_searched(terra_land::PLANET_START, &want);
+            let site = site.unwrap_or_else(|| {
+                panic!(
+                    "--site town: no place for a market town on this world ({searched:?}); it needs --radius 30000"
+                )
+            });
+            info!(
+                "Site town: {:.0} m over the sea, its growing season {:.1} °C, {:.1} m of rise and fall over the town, closed forest past its fields on {:.0}% of the ways out, the highest ground {:.0} m over the sea {:.1} km off, the skyline to {:.1}°, {:.2} km east and {:.2} km north of the planet's start",
+                site.height_m,
+                site.growing_mean_c,
+                site.relief_m,
+                site.forest * 100.0,
+                site.peak_m,
+                site.peak_off_m / 1000.0,
+                site.skyline_deg,
+                site.at_km.x,
+                site.at_km.y
+            );
+            Found::Town(site)
+        }
+        other => panic!("--site {other}: the sites are lake, tundra and town"),
     }
 }
 

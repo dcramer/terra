@@ -91,13 +91,16 @@ fn plant(
     mut plain: ResMut<Assets<StandardMaterial>>,
     mut far: ResMut<Assets<FarWoods>>,
     parting: Option<Res<crate::parting::Parting>>,
+    sited: Option<Res<crate::start::Sited>>,
 ) {
     let Some(round) = planet.round() else {
         return;
     };
     let began = std::time::Instant::now();
     let land = &round.land;
-    let middle = start.translation;
+    let middle = sited
+        .and_then(|sited| sited.woods_middle(&planet))
+        .unwrap_or(start.translation);
     let woods = Woods::of(round);
     let seed = planet.seed().derive("woods");
     let near = woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed);

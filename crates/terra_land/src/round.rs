@@ -29,6 +29,8 @@ pub struct Round {
     /// Its middle, and how far across it reaches.
     pub middle: Vec3,
     pub across_m: f32,
+    /// Ground settlements have cleared of the forest for their fields (`town::Clearing`).
+    pub clearings: Vec<crate::town::Clearing>,
 }
 
 /// Lakes are found on a grid this fine, round the middle, this far across.
@@ -97,6 +99,7 @@ impl Round {
             microsites,
             middle,
             across_m,
+            clearings: Vec::new(),
         }
     }
 
@@ -130,7 +133,12 @@ impl Round {
         let shelter = region
             .cell_of(up)
             .map_or(0.0, |(c, r)| self.drift.shelter_at_cell(c, r));
-        woods::stand_in(&season, slope, footing, self.microsites.at(point, shelter))
+        let stand = woods::stand_in(&season, slope, footing, self.microsites.at(point, shelter));
+        let kept: f32 = self.clearings.iter().map(|c| c.keeps(point)).product();
+        Stand {
+            density: stand.density * kept,
+            ..stand
+        }
     }
 
     /// How deep the snow lies at a point on the ground, facing `normal`, in metres, as its

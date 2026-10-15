@@ -21,7 +21,7 @@ use terra_land::woods::{self, Stand};
 use terra_land::{Land, PLANET_START, ground, start_climate};
 use terra_voxel::{Field, material};
 
-const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake|tundra] [--out shots/fields]
+const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake|tundra|town] [--out shots/fields]
 
 A region of the world's land on a date as maps of its rules, on the CPU (docs/demos.md, D326):
 the ground's height, steepness and facing, the growing season's mean temperature with the tree
@@ -37,7 +37,9 @@ numbers and what the climate puts at each height and latitude; index.html to loo
              clock; by default the clock's first day, in late August
   --site     the region round a place the land's rules make, found by its query instead of
              --at: lake, a basin under the tree line with peaks a kilometre over it; tundra, level
-             ground past the trees over permafrost, the forest's edge in sight (docs/demos.md)
+             ground past the trees over permafrost, the forest's edge in sight; town, level ground
+             for a market town below the tree line, the forest past its fields and peaks over
+             it (docs/demos.md)
   --out      the folder to write into";
 
 /// How far upwind shelter is looked for, as Winstral's Sx takes it for drifting snow.
@@ -122,6 +124,8 @@ fn run() -> Result<(), String> {
         }),
         climate,
     );
+    // Ground a settlement found by its query has cleared of the forest for its fields.
+    let mut clearings: Vec<terra_land::town::Clearing> = Vec::new();
     let site = match args.site.as_deref() {
         None => None,
         Some("lake") => {
@@ -181,9 +185,41 @@ fn run() -> Result<(), String> {
             );
             Some(found.at_km)
         }
+        Some("town") => {
+            let want = terra_land::town::MarketTown::DEMO;
+            let (found, searched) = land.market_town_searched(PLANET_START, &want);
+            let found =
+                found.ok_or_else(|| format!("no place for a town on this world: {searched:?}"))?;
+            let peak_km = land.east_north_km(found.toward, found.peak);
+            let start_km = land.east_north_km(found.toward, found.start);
+            println!(
+                "FIELDS site town: {:.2} km east, {:.2} km north of the start, {:.0} m over the sea, its growing season {:.1} °C, the tree line at {:.0} m; {:.1} m of rise and fall within {:.0} m, {:.1}° at its middle; closed forest past its fields on {:.0}% of the ways out; the highest ground {:.0} m over the sea {:.1} km off ({:.2} km east, {:.2} km north of it), the skyline up to {:.1}° and over 2° on {:.0}% of the ways round; the world's start {:.2} km east, {:.2} km north of it ({} cells looked at, {} fit)",
+                found.at_km.x,
+                found.at_km.y,
+                found.height_m,
+                found.growing_mean_c,
+                found.tree_line_m,
+                found.relief_m,
+                want.reach_m,
+                found.slope_deg,
+                found.forest * 100.0,
+                found.peak_m,
+                found.peak_off_m / 1000.0,
+                peak_km.x,
+                peak_km.y,
+                found.skyline_deg,
+                found.ringed * 100.0,
+                start_km.x,
+                start_km.y,
+                searched.cells,
+                searched.fit
+            );
+            clearings = want.clearings(&land, &found);
+            Some(found.at_km)
+        }
         Some(other) => {
             return Err(format!(
-                "no site called {other}: the sites are lake and tundra"
+                "no site called {other}: the sites are lake, tundra and town"
             ));
         }
     };
@@ -260,12 +296,17 @@ fn run() -> Result<(), String> {
     let stands: Vec<Stand> = par_map(&cells, |&k| {
         let water = lakes.lake[k].map(|_| land.radius_m() + lakes.level[k]);
         let footing = land.footing(points[k], water);
-        woods::stand_in(
+        let stand = woods::stand_in(
             &seasons[k],
             slope[k],
             footing,
             microsites.at(points[k], shelter[k]),
-        )
+        );
+        let kept: f32 = clearings.iter().map(|c| c.keeps(points[k])).product();
+        Stand {
+            density: stand.density * kept,
+            ..stand
+        }
     });
     // What covers the open ground past the trees (terra_land::heath), community by community.
     let drainage = terra_land::heath::Drainage::new(Seed(args.seed));

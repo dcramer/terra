@@ -75,7 +75,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "town",
-        about: "A market town and its people about their day, on the rolling yard: use with play, --level yard and --time; the log gives its vantage points.",
+        about: "A market town and its people about their day: use with play and --time; with --radius 30000 --site town it stands where the land's rules make room for one, below the range with the forest past its fields; the log gives its vantage points.",
         add: town::plugin,
     },
     Experiment {

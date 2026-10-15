@@ -205,6 +205,17 @@ impl Planet {
         )));
     }
 
+    /// Clears the woods of the land round the place from where settlements have their fields
+    /// (`terra_land::town::Clearing`), once it is worked out and before anything stands on it.
+    pub fn clear_woods(
+        &mut self,
+        clearings: impl FnOnce(&terra_land::Land) -> Vec<terra_land::town::Clearing>,
+    ) {
+        if let Some(round) = self.round.as_mut().and_then(Arc::get_mut) {
+            round.clearings = clearings(&round.land);
+        }
+    }
+
     /// Which way the ground faces at a point on it.
     pub fn normal(&self, point: Vec3) -> Vec3 {
         self.ground.normal(point)
@@ -731,6 +742,8 @@ pub fn plugin(app: &mut App) {
         Some(name) => {
             let found = crate::start::find_site(&planet, &name);
             planet.look_round(found.middle(), ROUND_M, day);
+            planet.clear_woods(|land| found.clearings(land));
+            app.insert_resource(crate::start::Sited(found));
             found.start(&planet)
         }
         None => {

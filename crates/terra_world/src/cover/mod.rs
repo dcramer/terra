@@ -438,6 +438,14 @@ fn grow(
             }
         }
     }
+    // New rules for what grows, as a town laid on a world that grows its own sets over it,
+    // grow every square again by them.
+    if rules.is_changed() {
+        for square in squares.values_mut() {
+            square.building = None;
+            square.ring = usize::MAX;
+        }
+    }
     // A new quality preset grows every square again at its density.
     if quality.is_changed() && !quality.is_added() {
         for square in squares.values_mut() {

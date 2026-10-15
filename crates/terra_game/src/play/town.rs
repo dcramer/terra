@@ -499,6 +499,48 @@ impl terra_world::cover::CoverSource for TownCover {
     }
 }
 
+/// A town's cover within its reach, and past it what the world grows, on a world that grows
+/// its own (the land's heath and meadow round a town the land's rules found, `--site town`).
+struct TownOverWorld {
+    town: TownCover,
+    world: std::sync::Arc<dyn terra_world::cover::CoverSource>,
+}
+
+impl terra_world::cover::CoverSource for TownOverWorld {
+    fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> terra_world::cover::Growing {
+        if at.distance(self.town.at) < COVER_REACH_M {
+            self.town.growing(planet, ground, at)
+        } else {
+            self.world.growing(planet, ground, at)
+        }
+    }
+
+    fn reaches(&self, middle: Vec2, half: f32) -> bool {
+        self.town.reaches(middle, half) || self.world.reaches(middle, half)
+    }
+}
+
+/// The rules for what grows once a town is laid: its own, over the world's if it has any.
+fn over_the_worlds(
+    world: Option<&terra_world::cover::CoverRules>,
+    planet: &Planet,
+    town: TownCover,
+) -> terra_world::cover::CoverRules {
+    match world {
+        Some(world) => terra_world::cover::CoverRules {
+            source: std::sync::Arc::new(TownOverWorld {
+                town,
+                world: world.source.clone(),
+            }),
+            seed: world.seed,
+        },
+        None => terra_world::cover::CoverRules {
+            source: std::sync::Arc::new(town),
+            seed: planet.seed().derive("town cover"),
+        },
+    }
+}
+
 /// The catalogue item each thing in a town is drawn as, if it is drawn.
 fn item_of(kind: ThingKind) -> Option<&'static str> {
     match kind {
@@ -562,7 +604,6 @@ fn lay(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut obstacles: Option<ResMut<super::flora::Obstacles>>,
 ) {
-    let has_cover = cover.is_some();
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
@@ -954,11 +995,13 @@ fn lay(
         info!("Town route: {}", route.join(" "));
     }
 
-    // Its ground cover, unless the world grows its own.
-    if !has_cover {
+    // Its ground cover, over what the world grows round it if it grows its own.
+    {
         let at2 = start.local(middle);
-        commands.insert_resource(terra_world::cover::CoverRules {
-            source: std::sync::Arc::new(TownCover {
+        commands.insert_resource(over_the_worlds(
+            cover.as_deref(),
+            &planet,
+            TownCover {
                 middle,
                 east,
                 south,
@@ -976,9 +1019,8 @@ fn lay(
                     .filter(|t| t.kind == ThingKind::Door)
                     .map(|t| t.place(Vec2::new(0.0, 0.8)))
                     .collect(),
-            }),
-            seed: planet.seed().derive("town cover"),
-        });
+            },
+        ));
     }
     let life = Life::new(town, plan, seed, DAY_SECONDS / 24.0);
     let local = start.local(middle);
