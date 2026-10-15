@@ -380,11 +380,21 @@ impl Deck<'_> {
                     _ => -JOIST_WIDE_M * 0.5,
                 };
                 let a = k as f32 * CELL_M + shift;
-                let owner = |b: i32| if after { cell(k, b) } else { cell(k - 1, b) };
-                let reach = |b: i32, side: IVec3| match self.edge(owner(b), side) {
+                // How far past its end cube it runs, onto a ledger or short of a rim: the
+                // nearer of the two cubes either side of its line, where both are framed, so
+                // it never runs past the ledger of the one into it, as where a wall of another
+                // kind meets the deck beside a wall of its own.
+                let reach_of = |at: IVec3, side: IVec3| match self.edge(at, side) {
                     Edge::Open => -JOIST_WIDE_M,
-                    Edge::Wall => self.wall_face(owner(b) + side) - JOIST_WIDE_M,
+                    Edge::Wall => self.wall_face(at + side) - JOIST_WIDE_M,
                     Edge::Closed => 0.0,
+                };
+                let reach = |b: i32, side: IVec3| {
+                    [(before, cell(k - 1, b)), (after, cell(k, b))]
+                        .into_iter()
+                        .filter(|&(framed, _)| framed)
+                        .map(|(_, at)| reach_of(at, side))
+                        .fold(f32::MAX, f32::min)
                 };
                 let from = first as f32 * CELL_M - reach(first, -across);
                 let to = (last + 1) as f32 * CELL_M + reach(last, across);
@@ -426,17 +436,21 @@ impl Deck<'_> {
             let outward = side.dot(side.abs()) as f32;
             for line in lines {
                 let at_of = |k: i32| side.abs() * line + runs_along * k + IVec3::Y * y;
-                let mut found: Vec<(i32, i32, Rim)> = Vec::new();
+                // A run a kind of rim, and for a ledger, the face of the wall it is on: a
+                // ledger on a wall of ours set in by its logs' round, on another kind's at
+                // its face, each where the joists running onto it end.
+                let mut found: Vec<(i32, i32, (Rim, i32))> = Vec::new();
                 for k in first..=last {
-                    let Some(here) = rim(at_of(k)) else {
+                    let Some(rim) = rim(at_of(k)) else {
                         continue;
                     };
+                    let here = (rim, ticks(self.wall_face(at_of(k) + side)));
                     match found.last_mut() {
                         Some((_, end, was)) if *end + 1 == k && *was == here => *end = k,
                         _ => found.push((k, k, here)),
                     }
                 }
-                for (from, to, kind) in found {
+                for (from, to, (kind, _)) in found {
                     // The cube's face on that side, and the rim's middle set in from it, or
                     // out from it onto the wall's face for a ledger.
                     let face = (line as f32 + 0.5 + outward * 0.5) * CELL_M;

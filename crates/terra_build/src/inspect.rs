@@ -755,8 +755,11 @@ fn see_through(
         IVec3::NEG_Z,
     ];
     let ground = base.ground();
+    // A timber flight's cubes are drawn as steps on stringers, open under them as a stair
+    // is: not a wall to look through.
+    let open = crate::layout::open_flights(base, kits);
     for (at, cube) in base.cubes() {
-        if found.contains_key(&at.to_array()) {
+        if found.contains_key(&at.to_array()) || open.contains(&at.to_array()) {
             continue;
         }
         // A roof cube open to the sky is covered: every line down through it meets its
@@ -1183,7 +1186,9 @@ fn pokes_out(
         if !is_roof {
             // Out of its cubes: how far from the nearest cube of the base, of any kind, out
             // of any one of its faces (a trim at a corner stands out of both), unless it
-            // is in the ground, as a plinth sunk to meet it is.
+            // is in the ground, as a plinth sunk to meet it is. Over a stair, the cube over
+            // it counts too: a flight's stringers rise along the line of its noses, over the
+            // back of each step.
             for p in t.p {
                 let cell = (p / CELL_M).floor().as_ivec3();
                 let ground = f32::from(base.ground().height_cm([cell.x, cell.z])) / 100.0;
@@ -1195,7 +1200,10 @@ fn pokes_out(
                     for dy in -1..=1 {
                         for dz in -1..=1 {
                             let c = cell + IVec3::new(dx, dy, dz);
-                            if base.cube(c).is_none() {
+                            let over_stair = base
+                                .cube(c - IVec3::Y)
+                                .is_some_and(|under| matches!(under.shape, crate::Shape::Stair(_)));
+                            if base.cube(c).is_none() && !over_stair {
                                 continue;
                             }
                             let low = c.as_vec3() * CELL_M;
@@ -1334,7 +1342,8 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
     // The QA build film's cabin as a player leaves it (`qa_cabin`): a storey over a roof,
     // a dormer, a deck, a wall changed and a window carved, in each wall kit, the wall changed
     // to the next of its pattern, and in all of them mixed.
-    let height = |[x, z]: [i32; 2]| (-(x as f32) * 4.0 - z as f32 * 2.0) as i16;
+    // On ground falling half a metre across it, as the film's does where its stairs come down.
+    let height = |[x, z]: [i32; 2]| (-(x as f32) * 2.0 - z as f32) as i16;
     let other = |kit: &crate::kit::Kit| {
         let like: Vec<&&crate::kit::Kit> = walls
             .iter()

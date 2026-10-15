@@ -123,6 +123,8 @@ const BEND_MITRE: f32 = 0.414_213_56;
 /// How wide and deep the chamfered joint between two stones of a band is.
 const JOINT_M: f32 = 0.012;
 const JOINT_DEPTH_M: f32 = 0.009;
+/// How far a soffit hangs under the underside it runs along.
+const SOFFIT_DROP_M: f32 = 0.004;
 /// How far back a square end's part set into the wall is cut, for each metre it is in.
 const SQUARE_RECESS: f32 = 0.2;
 /// How far past a lintel's or a sill's back its reveal is sunk.
@@ -191,7 +193,14 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 ends,
                 extend: *extend,
                 joints: *joints,
-                lift: layout::metres(lift),
+                // A soffit hangs a little under the underside it runs along, so its own
+                // underside is not in that face's plane.
+                lift: layout::metres(lift)
+                    - if role == layout::Role::Soffit {
+                        SOFFIT_DROP_M
+                    } else {
+                        0.0
+                    },
                 sink: layout::metres(sink),
                 tint: kit.dress.tint,
                 grain,

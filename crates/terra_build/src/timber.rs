@@ -354,6 +354,29 @@ const LEAN_RING_M: f32 = 0.25;
 /// lines between them, so its shape is as it was but its points close enough to be cut.
 /// Rings added where a member's rings, along it from `from`, pass these places, each a
 /// blend of the two either side.
+/// A member cut level at a height: rings added where each line along it crosses the height,
+/// and every point over it brought down onto it.
+fn level_cut(made: &mut Member, from: Vec3, axis: Vec3, height: f32) {
+    if made.grid.iter().flatten().all(|p| p.y <= height) {
+        return;
+    }
+    let mut places: Vec<f32> = Vec::new();
+    for i in 1..made.grid.len() {
+        for (p, q) in made.grid[i - 1].iter().zip(&made.grid[i]) {
+            if (p.y - height) * (q.y - height) < 0.0 {
+                let t = (height - p.y) / (q.y - p.y);
+                places.push((p.lerp(*q, t) - from).dot(axis));
+            }
+        }
+    }
+    places.sort_by(f32::total_cmp);
+    places.dedup_by(|a, b| (*a - *b).abs() < 2e-3);
+    rings_at(made, from, axis, &places);
+    for p in made.grid.iter_mut().flatten() {
+        p.y = p.y.min(height);
+    }
+}
+
 fn rings_at(made: &mut Member, from: Vec3, axis: Vec3, places: &[f32]) {
     for &place in places {
         let along = |ring: &[Vec3]| {
@@ -1141,7 +1164,14 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         corner_steps: 1,
         tight: true,
     };
-    let member = squared(&frame, &look, Split::Whole, &mut random);
+    let mut member = squared(&frame, &look, Split::Whole, &mut random);
+    // A sloping one, a flight's stringer, cut level at the top of the cube its higher end
+    // is in, as a carpenter cuts a stringer's head level with the deck it hangs from, its
+    // square end against the rim and nothing of it standing over the boards.
+    if (from.y - to.y).abs() > 0.05 {
+        let cap = libm::ceilf(from.y.max(to.y) / crate::CELL_M - 1e-3) * crate::CELL_M;
+        level_cut(&mut member, from, frame.axis, cap);
+    }
     let t = &kit.timber;
     let shade = 1.0 - t.variation.shade * 0.8 * random.unit();
     let warmth = t.variation.warmth * random.signed();

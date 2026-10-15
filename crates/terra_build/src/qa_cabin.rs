@@ -246,3 +246,58 @@ fn build(base: &mut Base, cx: &Context, blocks: &dyn Fn(Kind) -> bool) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Fill;
+
+    #[test]
+    fn the_cabin_is_built_whole_with_its_storey_dormer_and_deck() {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let read = |path: &str| {
+            std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+        };
+        let kits = Kits(
+            ["logs", "hewn", "stone", "shakes", "slate"]
+                .iter()
+                .map(|name| crate::kit::Kit::read(&format!("data/kits/{name}.ron"), &read).unwrap())
+                .collect(),
+        );
+        let logs = kits.0[0].kind();
+        let hewn = kits.0[1].kind();
+        let base = cabin(&kits, &[logs], hewn, &|[x, z]| {
+            (-(x as f32) * 2.0 - z as f32) as i16
+        });
+        // Everything laid is built: the film's fills leave nothing waiting.
+        let waiting: Vec<_> = base
+            .cubes()
+            .filter(|(_, cube)| cube.fill != Fill::Open && !cube.is_built())
+            .map(|(at, _)| at)
+            .collect();
+        assert!(
+            waiting.is_empty(),
+            "{} not built: {:?}",
+            waiting.len(),
+            &waiting[..waiting.len().min(8)]
+        );
+        // A storey over the first, a roof over it with a dormer standing out of its south
+        // slope, a deck on posts, the west wall changed and carved.
+        assert!(base.cube(IVec3::new(X1, 8, 5)).is_some(), "the storey");
+        let roof = |at: [i32; 3]| {
+            base.cube(IVec3::from_array(at))
+                .is_some_and(|c| c.kind.is_roof())
+        };
+        assert!(
+            (12..20).any(|y| roof([8, y, Z1])),
+            "the dormer at the eaves"
+        );
+        assert!(base.cube(IVec3::new(20, 5, 7)).is_some(), "the deck");
+        assert_eq!(base.cube(IVec3::new(X0, 1, 6)).map(|c| c.kind), Some(hewn));
+        assert!(
+            base.cube(IVec3::new(X0, 2, 6))
+                .is_none_or(|c| c.fill == Fill::Open),
+            "the carve"
+        );
+    }
+}

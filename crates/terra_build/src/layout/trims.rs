@@ -34,16 +34,16 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
                 let middle = face + outward as f32 * width * 0.5;
                 // Down into the course under a window's sill too: the course its foot's
                 // layer starts in ends at the post, so a post standing on the layer's floor
-                // left a hole under it between that course's end and the sill. A little
-                // short of the head's top and the sill's foot, whose faces are in those
-                // planes.
+                // left a hole under it between that course's end and the sill. Half a course
+                // and a little in, inside a round log or a squared one, clear of the planes of
+                // a squared course's top and foot and of the head's and the sill's faces.
                 let over = if solid(along, high + 1) {
-                    kit.course - POST_SHORT_M
+                    kit.course * 0.5 + POST_PAST_M
                 } else {
                     0.0
                 };
                 let under = if solid(along, low - 1) {
-                    kit.course - POST_SHORT_M
+                    kit.course * 0.5 + POST_PAST_M
                 } else {
                     0.0
                 };
@@ -197,8 +197,6 @@ const SIDE_BOARD_INTO_M: f32 = 0.03;
 /// where every other course's logs stop short (`runs::END_STAGGER_M`).
 const SIDE_BOARD_IN_M: f32 = 0.01;
 
-/// How far short of a head's top or a sill's foot a post up an opening's side stops.
-const POST_SHORT_M: f32 = 0.03;
 /// How far in from its stack's foot and top an end board stops.
 const END_BOARD_IN_M: f32 = 0.005;
 
@@ -240,6 +238,10 @@ pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut 
         }
     }
 }
+
+/// How far past the middle of the course over an opening's head, or under its sill, a post
+/// up its side reaches.
+const POST_PAST_M: f32 = 0.04;
 
 #[cfg(test)]
 mod tests {

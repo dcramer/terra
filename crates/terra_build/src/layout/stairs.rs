@@ -54,7 +54,9 @@ impl Step {
 /// stringer stands out of the flight's side.
 const TREAD_M: f32 = 0.07;
 const NOSING_M: f32 = 0.03;
-const STRINGER_PROUD_M: f32 = 0.03;
+/// A little in, not out: a post under it, centred under it and wider, then stands out of
+/// the flight's cubes no further than a trim may (D192).
+const STRINGER_PROUD_M: f32 = -0.01;
 /// A stringer: how thick and how deep a board, and how far its top edge stands over the
 /// line of the treads' noses.
 const STRINGER_M: (f32, f32) = (0.07, 0.32);
@@ -360,6 +362,26 @@ fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &
         // Up past the top nose until the stringer's lower corner meets the plane of the
         // top step's back, where a deck's rim stands: its square-cut end bears on it.
         let up = ((CELL_M - rise.y * STRINGER_M.1 * 0.5) / level).max(0.0);
+        // Whether anything stands behind the top step at its top, for the head to bear on.
+        let top_column = {
+            let mut at = IVec3::ZERO;
+            at[out.axis()] = high_at;
+            at[side_axis] = line;
+            at.with_y(high.top)
+        };
+        let bears = base
+            .cube(top_column - out.step())
+            .is_some_and(|cube| cube.fill == Fill::Solid);
+        // With nothing to bear on, no further than its top edge meets the top step's top,
+        // so it does not stand up past the flight into the air over it. Where a deck stands
+        // behind, its head is cut level with the deck as it is drawn (`timber::plank`).
+        let up = if bears || rise.y < 1e-3 {
+            up
+        } else {
+            let top = (high.top + 1) as f32 * CELL_M;
+            let edge_over = level * STRINGER_M.1 * 0.5;
+            up.min(((top - (b.y + edge_over)) / rise.y).max(0.0))
+        };
         let (foot, head) = (a - rise * down, b + rise * up);
         let seed = hash(&[line as u32, sign as u32, out as u32, 23]);
         layout.pieces.push(Piece::Plank {
@@ -373,16 +395,6 @@ fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &
         if run < 1e-3 {
             continue;
         }
-        // Whether anything stands behind the top step at its top, for the head to bear on.
-        let top_column = {
-            let mut at = IVec3::ZERO;
-            at[out.axis()] = high_at;
-            at[side_axis] = line;
-            at.with_y(high.top)
-        };
-        let bears = base
-            .cube(top_column - out.step())
-            .is_some_and(|cube| cube.fill == Fill::Solid);
         // Where posts stand along its run from its foot: evenly between its bearings, as
         // many as keep each span within a stringer's; and under its head if it bears on
         // nothing there.
@@ -486,6 +498,22 @@ mod tests {
             };
             assert!(low.y < 0.2, "{low}");
             assert!(high.y > 1.5, "{high}");
+        }
+        // Drawn, nothing of a stringer stands over the top step's cube, as its head is cut
+        // level with what it climbs to; nor out of the flight's side further than a trim.
+        for piece in layout
+            .pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Plank { from, to, .. } if from.0[1] != to.0[1]))
+        {
+            let mut surfaces = crate::mesh::Surfaces::default();
+            crate::draw::draw(piece, &kit(), None, &mut surfaces);
+            for surface in surfaces.0.values() {
+                for p in &surface.positions {
+                    assert!(p.y <= 4.0 * crate::CELL_M + 1e-3, "{p} over the top step");
+                    assert!(p.x > -0.0625 && p.x < 2.0 * crate::CELL_M + 0.0625, "{p}");
+                }
+            }
         }
         // Posts under them where the flight stands high: upright, from the floor.
         let posts = logs
