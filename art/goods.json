@@ -1,0 +1,1407 @@
+{
+  "AppleBasket": {
+    "sources": {
+      "basket": {
+        "from": "wicker_basket_01",
+        "budget": 600,
+        "texture": 1024,
+        "bake": 0.01
+      },
+      "apple": {
+        "from": "food_apple_01",
+        "budget": 90,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "basket"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "apple"
+        ],
+        "into": 0,
+        "count": 18,
+        "floor": 0.07,
+        "seed": 1
+      }
+    ]
+  },
+  "OnionBasket": {
+    "sources": {
+      "basket": {
+        "from": "wicker_basket_01",
+        "budget": 600,
+        "texture": 1024,
+        "bake": 0.01
+      },
+      "onion": {
+        "from": "yellow_onion",
+        "budget": 70,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "basket",
+        "turn": 180
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "onion"
+        ],
+        "into": 0,
+        "count": 15,
+        "floor": 0.07,
+        "seed": 3
+      }
+    ]
+  },
+  "PearBasket": {
+    "sources": {
+      "basket": {
+        "from": "wicker_basket_02",
+        "skip": [
+          "lid"
+        ],
+        "budget": 600,
+        "texture": 1024,
+        "bake": 0.01
+      },
+      "pear": {
+        "from": "food_pears_asian_01",
+        "split": true,
+        "budget": 100,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "basket"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "pear"
+        ],
+        "into": 0,
+        "count": 10,
+        "floor": 0.15,
+        "seed": 4
+      }
+    ]
+  },
+  "LemonBowl": {
+    "sources": {
+      "bowl": {
+        "from": "wooden_bowl_01",
+        "budget": 400,
+        "texture": 1024
+      },
+      "lemon": {
+        "from": "lemon",
+        "budget": 100,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "bowl"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "lemon"
+        ],
+        "into": 0,
+        "count": 9,
+        "floor": 0.02,
+        "seed": 5
+      }
+    ]
+  },
+  "RootCrate": {
+    "sources": {
+      "crate": {
+        "from": "wooden_crate_01",
+        "skip": [
+          "lid",
+          "latch"
+        ],
+        "budget": 700,
+        "texture": 1024
+      },
+      "potato": {
+        "from": "sweet_potato",
+        "budget": 50,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "crate"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "potato"
+        ],
+        "into": 0,
+        "count": 28,
+        "floor": 0.26,
+        "seed": 6
+      }
+    ]
+  },
+  "AppleCrate": {
+    "sources": {
+      "crate": {
+        "from": "wooden_crate_01",
+        "skip": [
+          "lid",
+          "latch"
+        ],
+        "budget": 700,
+        "texture": 1024
+      },
+      "apple": {
+        "from": "food_apple_01",
+        "budget": 60,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "crate",
+        "turn": 180
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "apple"
+        ],
+        "into": 0,
+        "count": 30,
+        "floor": 0.27,
+        "seed": 7
+      }
+    ]
+  },
+  "BreadBoard": {
+    "sources": {
+      "board": {
+        "from": "wooden_cutting_board",
+        "budget": 200,
+        "texture": 512
+      },
+      "bun": {
+        "from": "hamburger_buns",
+        "split": true,
+        "budget": 110,
+        "texture": 512
+      },
+      "croissant": {
+        "from": "croissant",
+        "budget": 160,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "board"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "bun",
+          "croissant"
+        ],
+        "area": [
+          0.42,
+          0.22
+        ],
+        "base": 0.035,
+        "walls": 0.2,
+        "count": 6,
+        "margin": 0.05,
+        "seed": 2
+      }
+    ]
+  },
+  "RollBasket": {
+    "sources": {
+      "basket": {
+        "from": "wicker_basket_01",
+        "budget": 600,
+        "texture": 1024,
+        "bake": 0.01
+      },
+      "bun": {
+        "from": "hamburger_buns",
+        "split": true,
+        "budget": 110,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "basket"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "bun"
+        ],
+        "into": 0,
+        "count": 10,
+        "floor": 0.05,
+        "seed": 8
+      }
+    ]
+  },
+  "RollCrate": {
+    "sources": {
+      "crate": {
+        "from": "wooden_crate_01",
+        "skip": [
+          "lid",
+          "latch"
+        ],
+        "budget": 700,
+        "texture": 1024
+      },
+      "bun": {
+        "from": "hamburger_buns",
+        "split": true,
+        "budget": 80,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "crate"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "bun"
+        ],
+        "into": 0,
+        "count": 24,
+        "floor": 0.26,
+        "seed": 10
+      }
+    ]
+  },
+  "VaseRow": {
+    "sources": {
+      "tall": {
+        "from": "ceramic_vase_01",
+        "budget": 300,
+        "texture": 512,
+        "tint": [
+          0.84,
+          0.74,
+          0.58
+        ]
+      },
+      "wide": {
+        "from": "ceramic_vase_02",
+        "budget": 300,
+        "texture": 512,
+        "tint": [
+          0.64,
+          0.68,
+          0.6
+        ]
+      },
+      "jug": {
+        "from": "ceramic_vase_04",
+        "budget": 300,
+        "texture": 512,
+        "tint": [
+          0.66,
+          0.52,
+          0.4
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "tall",
+        "at": [
+          -0.22,
+          0,
+          0.02
+        ]
+      },
+      {
+        "of": "wide",
+        "at": [
+          0,
+          0,
+          -0.03
+        ],
+        "turn": 30
+      },
+      {
+        "of": "jug",
+        "at": [
+          0.22,
+          0,
+          0.03
+        ],
+        "turn": -60
+      }
+    ]
+  },
+  "PlanterStack": {
+    "sources": {
+      "planter": {
+        "from": "planter_pot_clay",
+        "budget": 300,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "planter",
+        "at": [
+          -0.15,
+          0,
+          -0.1
+        ]
+      },
+      {
+        "of": "planter",
+        "at": [
+          -0.15,
+          0.06,
+          -0.1
+        ],
+        "turn": 40
+      },
+      {
+        "of": "planter",
+        "at": [
+          -0.15,
+          0.12,
+          -0.1
+        ],
+        "turn": 95
+      },
+      {
+        "of": "planter",
+        "at": [
+          0.15,
+          0,
+          -0.08
+        ],
+        "turn": 15
+      },
+      {
+        "of": "planter",
+        "at": [
+          0,
+          0,
+          0.17
+        ],
+        "turn": 70
+      }
+    ]
+  },
+  "BowlStack": {
+    "sources": {
+      "bowl": {
+        "from": "wooden_bowl_01",
+        "budget": 350,
+        "texture": 512
+      },
+      "small": {
+        "from": "wooden_bowl_02",
+        "budget": 250,
+        "texture": 512
+      },
+      "spoon": {
+        "from": "wooden_spoon",
+        "budget": 90,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "bowl",
+        "at": [
+          -0.12,
+          0,
+          0
+        ]
+      },
+      {
+        "of": "bowl",
+        "at": [
+          -0.12,
+          0.03,
+          0
+        ],
+        "turn": 70
+      },
+      {
+        "of": "small",
+        "at": [
+          0.16,
+          0,
+          -0.06
+        ],
+        "turn": 20
+      },
+      {
+        "of": "small",
+        "at": [
+          0.16,
+          0.025,
+          -0.06
+        ],
+        "turn": 110
+      },
+      {
+        "of": "spoon",
+        "at": [
+          0.17,
+          0,
+          0.1
+        ],
+        "turn": 82
+      },
+      {
+        "of": "spoon",
+        "at": [
+          0.2,
+          0,
+          0.13
+        ],
+        "turn": 97
+      }
+    ]
+  },
+  "PlateStack": {
+    "sources": {
+      "plate": {
+        "from": "carved_wooden_plate",
+        "budget": 300,
+        "texture": 512
+      },
+      "board": {
+        "from": "wooden_cutting_board",
+        "budget": 200,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "plate",
+        "at": [
+          -0.17,
+          0,
+          0
+        ]
+      },
+      {
+        "of": "plate",
+        "at": [
+          -0.17,
+          0.014,
+          0
+        ],
+        "turn": 40
+      },
+      {
+        "of": "plate",
+        "at": [
+          -0.17,
+          0.028,
+          0
+        ],
+        "turn": 75
+      },
+      {
+        "of": "plate",
+        "at": [
+          -0.17,
+          0.042,
+          0
+        ],
+        "turn": 130
+      },
+      {
+        "of": "board",
+        "at": [
+          0.2,
+          0,
+          0.02
+        ],
+        "turn": 80
+      }
+    ]
+  },
+  "Buckets": {
+    "sources": {
+      "tub": {
+        "from": "wooden_bucket_02",
+        "budget": 800,
+        "texture": 1024
+      },
+      "bucket": {
+        "from": "wooden_bucket_01",
+        "budget": 600,
+        "texture": 1024
+      }
+    },
+    "pieces": [
+      {
+        "of": "tub"
+      },
+      {
+        "of": "bucket",
+        "at": [
+          0.05,
+          0.03,
+          0.02
+        ],
+        "turn": 30
+      }
+    ]
+  },
+  "AxesLaid": {
+    "sources": {
+      "axe": {
+        "from": "wooden_axe",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          90,
+          0
+        ]
+      },
+      "broad": {
+        "from": "wooden_axe_02",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          90,
+          0
+        ]
+      },
+      "narrow": {
+        "from": "wooden_axe_03",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          90,
+          0
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "axe",
+        "at": [
+          0,
+          0,
+          -0.16
+        ],
+        "turn": 3
+      },
+      {
+        "of": "broad",
+        "at": [
+          0.02,
+          0,
+          0.02
+        ],
+        "turn": -2
+      },
+      {
+        "of": "narrow",
+        "at": [
+          -0.01,
+          0,
+          0.19
+        ],
+        "turn": 4
+      }
+    ]
+  },
+  "HandTools": {
+    "sources": {
+      "hammer": {
+        "from": "cross_pein_hammer",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          90,
+          0,
+          90
+        ]
+      },
+      "mallet": {
+        "from": "wooden_hammer_01",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          90,
+          0,
+          90
+        ]
+      },
+      "trowel": {
+        "from": "trowel_01",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          0,
+          90
+        ]
+      },
+      "saw": {
+        "from": "handsaw_wood",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          90,
+          90
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "saw",
+        "at": [
+          0,
+          0,
+          -0.14
+        ],
+        "turn": 2
+      },
+      {
+        "of": "hammer",
+        "at": [
+          -0.18,
+          0,
+          0.06
+        ],
+        "turn": -6
+      },
+      {
+        "of": "mallet",
+        "at": [
+          0.15,
+          0,
+          0.08
+        ],
+        "turn": 8
+      },
+      {
+        "of": "trowel",
+        "at": [
+          0,
+          0,
+          0.21
+        ],
+        "turn": -4
+      }
+    ]
+  },
+  "ToolBucket": {
+    "sources": {
+      "bucket": {
+        "from": "wooden_bucket_01",
+        "budget": 600,
+        "texture": 1024
+      },
+      "spade": {
+        "from": "rusted_spade_01",
+        "budget": 250,
+        "texture": 512
+      },
+      "pick": {
+        "from": "picke_dirty_01",
+        "budget": 250,
+        "texture": 512
+      },
+      "axe": {
+        "from": "wooden_axe_02",
+        "budget": 200,
+        "texture": 512,
+        "rotate": [
+          0,
+          180,
+          0
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "bucket"
+      },
+      {
+        "of": "spade",
+        "at": [
+          -0.05,
+          0.03,
+          0.03
+        ],
+        "rotate": [
+          8,
+          -6,
+          0
+        ],
+        "turn": 20
+      },
+      {
+        "of": "pick",
+        "at": [
+          0.06,
+          0.03,
+          -0.04
+        ],
+        "rotate": [
+          -6,
+          7,
+          0
+        ],
+        "turn": -35
+      },
+      {
+        "of": "axe",
+        "at": [
+          0.03,
+          0.03,
+          0.07
+        ],
+        "rotate": [
+          10,
+          9,
+          0
+        ],
+        "turn": 100
+      }
+    ]
+  },
+  "ClothBolts": {
+    "sources": {
+      "blue": {
+        "make": "bolt",
+        "cloth": "rough_linen",
+        "size": [
+          0.7,
+          0.15,
+          0.15
+        ],
+        "flap": 0.14,
+        "saturation": 0.7,
+        "tint": [
+          0.8,
+          0.85,
+          0.95
+        ]
+      },
+      "red": {
+        "make": "bolt",
+        "cloth": "quatrefoil_jacquard_fabric",
+        "size": [
+          0.7,
+          0.15,
+          0.15
+        ],
+        "saturation": 0.7,
+        "tint": [
+          0.95,
+          0.85,
+          0.82
+        ]
+      },
+      "ochre": {
+        "make": "bolt",
+        "cloth": "caban",
+        "size": [
+          0.7,
+          0.15,
+          0.15
+        ],
+        "saturation": 0.55,
+        "tint": [
+          0.92,
+          0.85,
+          0.7
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "blue",
+        "at": [
+          -0.08,
+          0,
+          0
+        ],
+        "turn": 88
+      },
+      {
+        "of": "red",
+        "at": [
+          0.08,
+          0,
+          0.02
+        ],
+        "turn": 93
+      },
+      {
+        "of": "ochre",
+        "at": [
+          0,
+          0.12,
+          -0.02
+        ],
+        "turn": 90
+      }
+    ]
+  },
+  "FoldedCloth": {
+    "sources": {
+      "check": {
+        "make": "fold",
+        "cloth": "gingham_check",
+        "size": [
+          0.36,
+          0.3,
+          0.035
+        ],
+        "saturation": 0.7,
+        "tint": [
+          0.95,
+          0.92,
+          0.85
+        ]
+      },
+      "herring": {
+        "make": "fold",
+        "cloth": "poly_wool_herringbone",
+        "size": [
+          0.36,
+          0.3,
+          0.045
+        ],
+        "tint": [
+          0.95,
+          0.9,
+          0.82
+        ]
+      },
+      "hessian": {
+        "make": "fold",
+        "cloth": "hessian_230",
+        "size": [
+          0.36,
+          0.3,
+          0.04
+        ]
+      },
+      "velvet": {
+        "make": "fold",
+        "cloth": "velour_velvet",
+        "size": [
+          0.36,
+          0.3,
+          0.03
+        ],
+        "saturation": 0.7,
+        "tint": [
+          0.85,
+          0.8,
+          0.85
+        ]
+      },
+      "linen": {
+        "make": "fold",
+        "cloth": "rough_linen",
+        "size": [
+          0.36,
+          0.3,
+          0.035
+        ],
+        "saturation": 0.25,
+        "tint": [
+          1.05,
+          1,
+          0.88
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "hessian",
+        "at": [
+          -0.2,
+          0,
+          0
+        ],
+        "turn": 3
+      },
+      {
+        "of": "check",
+        "at": [
+          -0.2,
+          0.04,
+          0.005
+        ],
+        "turn": -4
+      },
+      {
+        "of": "linen",
+        "at": [
+          -0.2,
+          0.075,
+          -0.004
+        ],
+        "turn": 6
+      },
+      {
+        "of": "herring",
+        "at": [
+          0.2,
+          0,
+          0.01
+        ],
+        "turn": -2
+      },
+      {
+        "of": "velvet",
+        "at": [
+          0.2,
+          0.045,
+          0
+        ],
+        "turn": 5
+      }
+    ]
+  },
+  "BoltCrate": {
+    "sources": {
+      "crate": {
+        "from": "wooden_crate_01",
+        "skip": [
+          "lid",
+          "latch"
+        ],
+        "budget": 700,
+        "texture": 1024
+      },
+      "green": {
+        "make": "bolt",
+        "cloth": "gingham_check",
+        "size": [
+          0.78,
+          0.13,
+          0.13
+        ],
+        "saturation": 0.7,
+        "tint": [
+          0.95,
+          0.92,
+          0.85
+        ]
+      },
+      "grey": {
+        "make": "bolt",
+        "cloth": "poly_wool_herringbone",
+        "size": [
+          0.78,
+          0.13,
+          0.13
+        ],
+        "tint": [
+          0.95,
+          0.9,
+          0.82
+        ]
+      },
+      "brown": {
+        "make": "bolt",
+        "cloth": "hessian_230",
+        "size": [
+          0.78,
+          0.13,
+          0.13
+        ]
+      },
+      "wine": {
+        "make": "bolt",
+        "cloth": "velour_velvet",
+        "size": [
+          0.78,
+          0.13,
+          0.13
+        ],
+        "saturation": 0.7,
+        "tint": [
+          0.85,
+          0.8,
+          0.85
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "crate"
+      },
+      {
+        "of": "green",
+        "at": [
+          0,
+          0.2,
+          -0.12
+        ],
+        "turn": 1
+      },
+      {
+        "of": "grey",
+        "at": [
+          0,
+          0.2,
+          0.01
+        ],
+        "turn": -1
+      },
+      {
+        "of": "brown",
+        "at": [
+          0,
+          0.2,
+          0.13
+        ],
+        "turn": 2
+      },
+      {
+        "of": "wine",
+        "at": [
+          0.01,
+          0.31,
+          -0.05
+        ],
+        "turn": -2
+      }
+    ]
+  },
+  "BrassPans": {
+    "sources": {
+      "pan": {
+        "from": "brass_pan_01",
+        "budget": 300,
+        "texture": 512
+      },
+      "pot": {
+        "from": "brass_pot_01",
+        "budget": 400,
+        "texture": 512
+      },
+      "dish": {
+        "from": "brass_pot_02",
+        "budget": 300,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "pot",
+        "at": [
+          -0.2,
+          0,
+          0
+        ]
+      },
+      {
+        "of": "dish",
+        "at": [
+          0.2,
+          0,
+          -0.05
+        ],
+        "turn": 15
+      },
+      {
+        "of": "pan",
+        "at": [
+          0.21,
+          0,
+          0.17
+        ],
+        "turn": 80
+      }
+    ]
+  },
+  "Goblets": {
+    "sources": {
+      "goblet": {
+        "from": "brass_goblets",
+        "split": true,
+        "budget": 250,
+        "texture": 512
+      },
+      "plate": {
+        "from": "carved_wooden_plate",
+        "budget": 300,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "plate"
+      },
+      {
+        "of": "goblet",
+        "variant": 0,
+        "at": [
+          -0.06,
+          0.012,
+          0.04
+        ]
+      },
+      {
+        "of": "goblet",
+        "variant": 1,
+        "at": [
+          0.07,
+          0.012,
+          0.03
+        ],
+        "turn": 40
+      },
+      {
+        "of": "goblet",
+        "variant": 2,
+        "at": [
+          0,
+          0.012,
+          -0.08
+        ],
+        "turn": 100
+      }
+    ]
+  },
+  "StewPot": {
+    "sources": {
+      "pot": {
+        "from": "ceramic_pot",
+        "budget": 700,
+        "texture": 1024
+      }
+    },
+    "pieces": [
+      {
+        "of": "pot",
+        "turn": 10
+      }
+    ]
+  },
+  "VasePair": {
+    "sources": {
+      "wide": {
+        "from": "ceramic_vase_02",
+        "budget": 300,
+        "texture": 512,
+        "tint": [
+          0.62,
+          0.5,
+          0.38
+        ]
+      },
+      "tall": {
+        "from": "ceramic_vase_01",
+        "budget": 300,
+        "texture": 512,
+        "tint": [
+          0.6,
+          0.62,
+          0.6
+        ]
+      }
+    },
+    "pieces": [
+      {
+        "of": "wide",
+        "at": [
+          -0.12,
+          0,
+          0.02
+        ],
+        "turn": 200
+      },
+      {
+        "of": "tall",
+        "at": [
+          0.12,
+          0,
+          -0.02
+        ],
+        "turn": 20
+      }
+    ]
+  },
+  "Planters": {
+    "sources": {
+      "planter": {
+        "from": "planter_pot_clay",
+        "budget": 300,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "planter",
+        "at": [
+          -0.15,
+          0,
+          0
+        ]
+      },
+      {
+        "of": "planter",
+        "at": [
+          -0.15,
+          0.06,
+          0
+        ],
+        "turn": 50
+      },
+      {
+        "of": "planter",
+        "at": [
+          0.15,
+          0,
+          0.02
+        ],
+        "turn": 120
+      }
+    ]
+  },
+  "CroissantBoard": {
+    "sources": {
+      "board": {
+        "from": "wooden_cutting_board",
+        "budget": 200,
+        "texture": 512
+      },
+      "croissant": {
+        "from": "croissant",
+        "budget": 160,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "board",
+        "turn": 180
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "croissant"
+        ],
+        "area": [
+          0.42,
+          0.22
+        ],
+        "base": 0.035,
+        "walls": 0.2,
+        "count": 5,
+        "margin": 0.05,
+        "seed": 11
+      }
+    ]
+  },
+  "BunPlate": {
+    "sources": {
+      "plate": {
+        "from": "carved_wooden_plate",
+        "budget": 300,
+        "texture": 512
+      },
+      "bun": {
+        "from": "hamburger_buns",
+        "split": true,
+        "budget": 110,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "plate"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "bun"
+        ],
+        "area": [
+          0.24,
+          0.24
+        ],
+        "base": 0.01,
+        "walls": 0.2,
+        "count": 6,
+        "margin": 0.05,
+        "seed": 12
+      }
+    ]
+  },
+  "SpoonBowl": {
+    "sources": {
+      "bowl": {
+        "from": "wooden_bowl_01",
+        "budget": 350,
+        "texture": 512
+      },
+      "spoon": {
+        "from": "wooden_spoon",
+        "budget": 90,
+        "texture": 512
+      }
+    },
+    "pieces": [
+      {
+        "of": "bowl"
+      }
+    ],
+    "heaps": [
+      {
+        "of": [
+          "spoon"
+        ],
+        "into": 0,
+        "count": 6,
+        "floor": 0.02,
+        "seed": 13
+      }
+    ]
+  }
+}

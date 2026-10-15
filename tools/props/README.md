@@ -69,6 +69,17 @@ node tools/props/scans.ts Rock_4     # one
 
 [art/scans.json](../../art/scans.json) names each model the game loads and what it is made from: the Poly Haven id, which piece of a set (largest first), the triangle budget and the folder of `assets/models`. [scans.ts](scans.ts) fetches the scan's geometry without its textures into `out/scans`, and [tools/blender/scan.py](../blender/scan.py) cuts it into its loose pieces, largest first, reduces each to the budget, shades it smooth across curves and split at creases (`--loose --crease 50`) and stands it at the origin; the piece wanted is copied into `assets/models`. The game draws it in its kind's material (`flora.ron`).
 
+## Goods
+
+What a market stall shows (a basket of apples, bread on a board, jars, bolts of cloth) is made from Poly Haven's CC0 scanned models with their own textures, composed by a recipe rather than generated (D352):
+
+```bash
+node tools/props/goods.ts                  # every recipe in art/goods.json
+node tools/props/goods.ts AppleBasket      # one
+```
+
+A recipe in [art/goods.json](../../art/goods.json) names its `sources`, each a scan (`from`, cut to a triangle `budget`, its maps kept at `texture` pixels, `tint` and `saturation` dyeing a glaze; `bake`, a voxel size in metres, for a woven basket that decimation tears apart, remeshed as a shell with the scan's colour, relief and roughness baked into it) or cloth made in a CC0 fabric (`make`: a `bolt` wound into a roll or a `fold`); then its `pieces`, each stood `at` a point (glTF's x, y up, z front) turned `turn` degrees, after `rotate` lays it as it rests; and its `heaps`, a `count` of sources dropped into a piece (`into`) or onto an `area`, onto a false floor, by Blender's rigid bodies, so only a heap's top layer is modelled, as games fill a crate. [goods.py](goods.py) does it in Blender, CPU only, and writes `assets/models/props/<file>.glb` to the model contract (its origin the middle of its base, its front +Z) and `out/goods/<file>.json` with its triangles and the `dims` its catalogue entry states (`builds.ron`'s `Goods`).
+
 ## Checking it in the game
 
 The sheet shows a prop in Blender. To see it as the game draws it (its textures, the glow, its box, origin and sockets) beside a body, without playing, line it up in the sandbox's workbench; each prop's size, sockets and whether it keeps the model contract are printed, and its box is drawn green if it does and red if not:
@@ -87,3 +98,4 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 | `refine.py` | The clean-up, inside Blender |
 | `fronts.py` | Each model from the front, for the `fronts` sheet |
 | `fence.py` | The town's fence modules, wattle and split rail, built in Blender from the kits' own materials rather than generated (D346): `tools/blender/run.sh tools/props/fence.py` |
+| `goods.ts`, `goods.py` | A market stall's goods from CC0 scans, by the recipes in `art/goods.json` (D352), above |
