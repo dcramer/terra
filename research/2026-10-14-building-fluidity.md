@@ -21,7 +21,8 @@ Each film was read frame by frame where things change (contact sheets, and runs 
 
 ## Measured, not fixed (others' areas)
 
-- **A castle edit takes 120 to 150 ms of the main thread** (`cargo xtask qa castle`): a profile (Bevy's `trace_chrome`) puts about 100 ms in `build::light::place`, which floods the whole base for its rooms (`Base::indoors`) after every change; 30 to 60 ms in finding what goes in next (`next_work`); 15 to 25 ms in `store::notice`. Each carve or block is a 100 ms hitch, and the tower brought down a 180 ms frame. The cabin's edits cost under 2 ms each.
+- **A castle edit took 120 to 150 ms of the main thread** (`cargo xtask qa castle`): a profile (Bevy's `trace_chrome`) put about 100 ms in `build::light::place`, which flooded the whole base for its rooms after every change. The room flood is now incremental (7b4735f): on 2026-10-15 the castle's carves and blocks were under 33 ms a frame, and the tower's fall 71 ms worst, with the machine fully loaded by other work.
+- **A kit file watch stalled every second** from a Windows copy run under WSL: whether a kit file had changed was asked by listing the files over WSL's share on the main thread, 140 ms a second when the machine was busy. Now asked on a worker (5d307ae).
 - **Time from an edit to the screen** is 15 to 30 ms for a wall's course, but 50 to 200 ms in the storey and roof stages, where one section's near detail takes up to 70 ms to merge on a worker (`Build: change on screen` breaks it down); the castle's edits 60 to 90 ms, the tower's fall 500 to 740 ms.
 - **Building everything at once** (`build.fill` of a few thousand steps in one call) takes several seconds on the main thread: what goes in next is found afresh each step.
 
