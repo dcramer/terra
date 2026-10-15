@@ -11,7 +11,8 @@
 // An entry: prompt, speed (m/s, held along a straight path; 0 to stand), seconds, seed, take
 // (the one kept), samples (takes made, 3 unless it says), and still, for a clip that stays where it stands, such as an idle, with loop
 // (seconds, least and most) for how long a loop of it may be, and busy for one that works where
-// it stands (a hammer, an axe), looped in its busiest stretch. Kimodo is set up apart from the repository (README.md, "Made clips"), at
+// it stands (a hammer, an axe), looped in its busiest stretch; a stride may also have step, arms
+// and fist, which made_clips.py and aim.py apply over the take (README.md, "Made clips"). Kimodo is set up apart from the repository (README.md, "Made clips"), at
 // KIMODO_HOME, ~/.cache/terra-kimodo by default. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";

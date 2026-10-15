@@ -7,18 +7,45 @@
     "take": 1
   },
   "Jog_Fwd_Loop": {
-    "prompt": "A person jogs forward at an easy, relaxed pace with a long loose arm swing, each hand swinging back past the hip and forward to the belly, shoulders down and relaxed.",
-    "speed": 3.2,
+    "prompt": "A person jogs forward with long strides, arms bent and swinging at the sides.",
+    "speed": 5,
     "seconds": 6,
-    "seed": 2,
-    "take": 0
+    "seed": 5,
+    "take": 2,
+    "step": 0.1,
+    "arms": {
+      "swing": [
+        30,
+        50
+      ],
+      "elbow": [
+        65,
+        100
+      ],
+      "tuck": 12,
+      "wrist": 8,
+      "across": 8,
+      "palm": 30
+    },
+    "fist": 0.95
   },
   "Sprint_Loop": {
     "prompt": "A person sprints forward at full speed, leaning forward, arms driving hard back and forth.",
     "speed": 6.5,
     "seconds": 6,
     "seed": 1,
-    "take": 0
+    "take": 0,
+    "step": 0.1,
+    "arms": {
+      "elbow": [
+        70,
+        110
+      ],
+      "wrist": 10,
+      "across": 25,
+      "palm": 35
+    },
+    "fist": 0.6
   },
   "Idle_Loop": {
     "prompt": "A person stands still and relaxed, weight on both feet, arms hanging loosely at the sides, breathing calmly and shifting their weight slightly.",

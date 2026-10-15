@@ -17,12 +17,14 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import json
 import re
 
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 
+import aim
 import look
 import patches
 import lift
@@ -181,13 +183,21 @@ if MORPHS:
         print("MORPH", m, "target added;", len(moved), "joints and sockets move")
     arm["morphs"] = json.dumps(offsets)
 
-# The clips, from the mannequin's file; its objects are thrown away.
+# The clips, from the mannequin's file; its objects are thrown away, once its limbs' rest
+# lines are read for the clips aimed by them (aim.py).
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)
+mannequin = aim.segments(next(o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"))
 for o in list(bpy.data.objects):
     if o not in before:
         bpy.data.objects.remove(o)
 actions = [a for a in bpy.data.actions]
+# The strides that ask for it carried by where the mannequin's limbs point and the feet
+# landing their step apart, not by the bones' rotations, so this body's own rest stance does
+# not carry into them (aim.py).
+with open(os.path.join(look.ART, "animation", "made.json")) as f:
+    steps = {name: entry["step"] for name, entry in json.load(f).items() if "step" in entry}
+aim.bake(arm, actions, mannequin, steps)
 # The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
 twist.bake(arm, actions)
 # The hips lifted by this body's size wherever it would go deeper into the floor than the

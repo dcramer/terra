@@ -18,7 +18,10 @@ standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
   - the upper arms' and thighs' roll about their own length handed down to the forearm and
     shin, where the twist step (twist.py) spreads it; our skinning assumes the upper limbs never
     roll (clip_check.py), as Quaternius's clips never do;
-  - closed into a loop: the last frame the first again, the frames before it eased into it.
+  - closed into a loop: the last frame the first again, the frames before it eased into it;
+  - for a stride with "arms", its arms set to a runner's swing, its legs and spine untouched
+    (swing_arms), and for one with "fist", its fingers closed that share of the way into the
+    library's clenched fist (Kimodo leaves them straight).
 
 OUT defaults to the game's mannequin file, which it reads and writes; clips.py makes it from
 the libraries first where they are here. --try puts one take into OUT instead of the kept one,
@@ -201,6 +204,183 @@ def retarget(src, arm, name, f0, f1, k=1.0):
     return action
 
 
+FINGERS = ("thumb", "index", "middle", "ring", "pinky")
+FIST_CLIP = "Punch_Cross"   # the library's clenched fist, held through its punch
+
+
+def fist_pose(clip):
+    """Each finger bone's turn in the middle of the library's `clip`, from its curves."""
+    action = bpy.data.actions.get(clip)
+    if action is None:
+        raise SystemExit(f"no {clip} in the mannequin file to take a fist from")
+    mid = sum(action.frame_range) / 2
+    by_bone = {}
+    for fc in curves(action):
+        bone = fc.data_path.split('"')[1] if '"' in fc.data_path else ""
+        if fc.data_path.endswith("rotation_quaternion") and bone.split("_")[0] in FINGERS:
+            by_bone.setdefault(bone, [0.0] * 4)[fc.array_index] = fc.evaluate(mid)
+    return {b: Quaternion(q).normalized() for b, q in by_bone.items()}
+
+
+def close_hands(action, fist, share):
+    """Every finger key of `action` turned `share` of the way to `fist`: Kimodo leaves the
+    fingers straight, an open, stiff hand; a runner's are loosely curled, the thumb on them."""
+    by_bone = {}
+    for fc in curves(action):
+        bone = fc.data_path.split('"')[1] if '"' in fc.data_path else ""
+        if fc.data_path.endswith("rotation_quaternion") and bone in fist:
+            by_bone.setdefault(bone, {})[fc.array_index] = fc
+    for bone, fcs in by_bone.items():
+        if len(fcs) != 4:
+            continue
+        for k in range(len(fcs[0].keyframe_points)):
+            q = Quaternion([fcs[i].keyframe_points[k].co[1] for i in range(4)])
+            if q.dot(fist[bone]) < 0:
+                q.negate()
+            q = q.slerp(fist[bone], share)
+            for i in range(4):
+                fcs[i].keyframe_points[k].co[1] = q[i]
+                fcs[i].keyframe_points[k].handle_left_type = fcs[i].keyframe_points[k].handle_right_type = "AUTO_CLAMPED"
+        for fc in fcs.values():
+            fc.update()
+
+
+def swing_arms(arm, action, spec):
+    """The arms of a stride `action` set to a runner's, its legs and spine left exactly as they
+    are: an additive pass on the arm chain, as a game layers an arm pose over a locomotion clip.
+    Each of `spec`'s entries is optional:
+
+      - swing: [forward, back], degrees from the trunk's line: the upper arms' swing mapped from
+        the take's own range onto it, both arms timed by the left's, the right half a stride
+        later (Kimodo's right arm may hardly swing at all, where a runner's mirror each other);
+      - tuck: degrees: the upper arm kept at most this far out from the trunk's side, the
+        elbows close to the ribs;
+      - elbow: [back, front], degrees bent: the elbow closing as the hand comes forward and up
+        and opening behind, as a runner's does (Kimodo's bends most behind, the hand hovering at
+        the belly);
+      - across: degrees: the forearm turned out about the upper arm's line until it points
+        across the body at most this much, the hands passing in front of the ribs rather than
+        meeting at the belly;
+      - wrist: degrees: the hand bent at most this far off the forearm's line;
+      - palm: degrees: the hand rolled about the forearm to this far from thumb side up toward
+        palm down, as a loose fist is carried.
+
+    Returns, per side, how far the take's upper arm swung forward and back of the trunk."""
+    scene = bpy.context.scene
+    mw = arm.matrix_world
+    pose = arm.pose.bones
+    front, back = spec.get("swing", (None, None))
+    elbow_range = spec.get("elbow")
+    wrist = spec.get("wrist", 180.0)
+    across = spec.get("across", 90.0)
+    palm = spec.get("palm")
+    tuck = spec.get("tuck", 90.0)
+    frames = range(int(round(action.frame_range[0])), int(round(action.frame_range[1])) + 1)
+    ad = arm.animation_data
+    ad.action = action
+    if getattr(action, "slots", None) and len(action.slots):
+        ad.action_slot = action.slots[0]
+
+    def trunk():
+        down = (mw @ pose["pelvis"].head - mw @ pose["neck_01"].head).normalized()
+        ahead = Vector((0.0, -1.0, 0.0))
+        ahead = (ahead - down * ahead.dot(down)).normalized()
+        return down, ahead
+
+    def swing_of(s):
+        down, ahead = trunk()
+        u = mw @ pose[f"lowerarm_{s}"].head - mw @ pose[f"upperarm_{s}"].head
+        return math.degrees(math.atan2(u.dot(ahead), u.dot(down)))
+
+    took = {s: [] for s in "lr"}
+    for f in frames:
+        scene.frame_set(f)
+        for s in "lr":
+            took[s].append(swing_of(s))
+    n = len(frames) - 1   # the last frame is the first again
+    lo, hi = min(took["l"]), max(took["l"])
+    gain = (front + back) / (hi - lo) if front is not None else 1.0
+
+    def driven(s, k):
+        t = (k + (n / 2 if s == "r" else 0)) % n
+        i = int(t)
+        w = t - i
+        return took["l"][i] * (1 - w) + took["l"][(i + 1) % n] * w
+
+    def turn(s, f, turns):
+        names = (f"upperarm_{s}", f"lowerarm_{s}", f"hand_{s}")
+        was = {b: (mw @ pose[b].matrix).to_quaternion() for b in names}
+        for b, t in zip(names, turns):
+            pb = pose[b]
+            pb.matrix = mw.inverted() @ Matrix.LocRotScale((mw @ pb.matrix).translation, t @ was[b], None)
+            if b in NO_ROLL:
+                pb.rotation_mode = "QUATERNION"
+                pb.rotation_quaternion = without_roll(pb.rotation_quaternion)
+            bpy.context.view_layer.update()
+            pb.keyframe_insert("rotation_quaternion", frame=f)
+
+    for s in "lr":
+        for k, f in enumerate(frames):
+            scene.frame_set(f)
+            down, ahead = trunk()
+            shoulder, elbow, wrist_at = (mw @ pose[b].head for b in (f"upperarm_{s}", f"lowerarm_{s}", f"hand_{s}"))
+            knuckle = mw @ pose[f"middle_01_{s}"].head
+            if front is not None:
+                new = -back + (driven(s, k) - lo) * gain
+                share = (new + back) / (front + back)
+            else:
+                new = took[s][k]
+                share = (new - min(took[s])) / (max(took[s]) - min(took[s]))
+            swing = Quaternion(down.cross(ahead), math.radians(new - took[s][k]))
+            outward = down.cross(ahead) * (1 if s == "r" else -1)   # the body's left is +X
+            # The upper arm brought in toward the ribs, out from the trunk's side at most `tuck`
+            # degrees: a turn about the forward line, which takes a hanging arm toward +X.
+            u = swing @ (elbow - shoulder)
+            out = math.degrees(math.asin(max(-1.0, min(1.0, u.normalized().dot(outward)))))
+            if out > tuck:
+                swing = Quaternion(ahead, math.radians(out - tuck) * (1 if s == "r" else -1)) @ swing
+            # The elbow, about its own hinge, from the take's bend to the one this swing asks for.
+            u, fa = swing @ (elbow - shoulder), swing @ (wrist_at - elbow)
+            hinge = Quaternion()
+            if elbow_range:
+                bent = elbow_range[0] + (elbow_range[1] - elbow_range[0]) * share * share * (3 - 2 * share)
+                hinge = Quaternion(u.cross(fa).normalized(), math.radians(bent - math.degrees(u.angle(fa))))
+            fa = hinge @ fa
+            # The forearm turned out about the upper arm's line, found by halving.
+            twist = Quaternion()
+            axis = u.normalized()
+            inward = lambda q: math.degrees(math.asin(max(-1.0, min(1.0, -(q @ fa).normalized().dot(outward)))))
+            if inward(twist) > across:
+                way = 1 if inward(Quaternion(axis, 0.01)) < inward(twist) else -1
+                lo_a, hi_a = 0.0, math.radians(90)
+                for _ in range(30):
+                    mid = (lo_a + hi_a) / 2
+                    lo_a, hi_a = (mid, hi_a) if inward(Quaternion(axis, way * mid)) > across else (lo_a, mid)
+                twist = Quaternion(axis, way * hi_a)
+            fa = twist @ fa
+            # The hand brought toward the forearm's line.
+            h = twist @ hinge @ swing @ (knuckle - wrist_at)
+            bend = math.degrees(h.angle(fa))
+            straighten = Quaternion() if bend <= wrist else Quaternion().slerp(h.rotation_difference(fa), 1 - wrist / bend)
+            # The hand's roll: from thumb side up (which turns with the forearm as it sweeps, so
+            # the hand does not wring), `palm` degrees toward the palm facing down, the thumb
+            # turned in, as a loose fist is carried (twist.py spreads the roll down the forearm).
+            hand_turn = straighten @ twist @ hinge @ swing
+            line = fa.normalized()
+            radial = hand_turn @ (mw @ pose[f"index_01_{s}"].head - mw @ pose[f"pinky_01_{s}"].head)
+            radial = radial - line * radial.dot(line)
+            neutral = line.cross(ahead.cross(down))   # the body's left crossed: thumb up when the forearm points ahead
+            middle = -outward - line * (-outward).dot(line)
+            if palm is not None and radial.length > 1e-6 and neutral.length > 1e-6 and middle.length > 1e-6:
+                aim_at = neutral.normalized() * math.cos(math.radians(palm)) + middle.normalized() * math.sin(math.radians(palm))
+                off = radial.angle(aim_at)
+                sign = 1 if line.dot(radial.cross(aim_at)) > 0 else -1
+                hand_turn = Quaternion(line, sign * off) @ hand_turn
+            turn(s, f, (swing, twist @ hinge @ swing, hand_turn))
+    ad.action = None
+    return {"l": (hi, -lo), "r": (max(took["r"]), -min(took["r"]))}
+
+
 def curves(action):
     if hasattr(action, "fcurves"):
         return list(action.fcurves)
@@ -223,6 +403,7 @@ def main():
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = None
     names = [t.name for t in ad.nla_tracks]
+    fist = fist_pose(FIST_CLIP) if any("fist" in made.get(n, {}) for n in takes) else {}
     for name, path in takes.items():
         for pb in arm.pose.bones:
             pb.matrix_basis.identity()
@@ -240,6 +421,13 @@ def main():
         if entry.get("still"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
         action = retarget(src, arm, name, f0, f1, k)
+        if "arms" in entry:
+            took = swing_arms(arm, action, entry["arms"])
+            now = entry["arms"].get("swing")
+            print(f"ARMS {name}: upper arms swung {', '.join(f'{s} {a:.0f} forward to {b:.0f} back' for s, (a, b) in took.items())} of the trunk in the take"
+                  + (f", now {now[0]} to {now[1]}" if now else ", kept"))
+        if "fist" in entry:
+            close_hands(action, fist, entry["fist"])
         bpy.data.objects.remove(src)
         ad.action = None
         if old is not None:
