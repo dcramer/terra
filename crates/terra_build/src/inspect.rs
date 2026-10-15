@@ -513,7 +513,11 @@ fn overlap(a: &Tri, b: &Tri) -> f32 {
 fn clipped(a: &Tri, b: &Tri) -> (f32, Vec3) {
     let u = a.n.any_orthonormal_vector();
     let v = a.n.cross(u);
-    let flat = |p: Vec3| Vec2::new(p.dot(u), p.dot(v));
+    // Measured from a corner of the first, not the world's origin: tens of metres out, a
+    // place in single precision is good to a few micrometres, and an area summed from such
+    // places only to a square centimetre, a sliver beside a triangle counted as over it.
+    let origin = a.p[0];
+    let flat = |p: Vec3| Vec2::new((p - origin).dot(u), (p - origin).dot(v));
     let mut poly: Vec<Vec2> = b.p.iter().map(|p| flat(*p)).collect();
     let clip: Vec<Vec2> = a.p.iter().map(|p| flat(*p)).collect();
     // Wound the same way as the clipping triangle, counter-clockwise.
@@ -549,7 +553,7 @@ fn clipped(a: &Tri, b: &Tri) -> (f32, Vec3) {
         twice += poly[i].perp_dot(poly[(i + 1) % poly.len()]);
     }
     let flat_middle = poly.iter().copied().sum::<Vec2>() / poly.len() as f32;
-    let middle = u * flat_middle.x + v * flat_middle.y + a.n * a.d;
+    let middle = origin + u * flat_middle.x + v * flat_middle.y;
     (twice.abs() * 0.5, middle)
 }
 
@@ -1899,6 +1903,29 @@ mod tests {
             1,
         );
         assert!(overlap(&a, &c) < 1e-6);
+    }
+
+    #[test]
+    fn triangles_side_by_side_far_from_the_origin_do_not_overlap() {
+        // A rafter's sawn end, 45 degrees across, 90 metres out: a sliver laid beside a
+        // triangle along its edge, touching it and nowhere over it.
+        let a = tri(
+            [
+                Vec3::new(-40.42636, 17.429008, -82.43467),
+                Vec3::new(-40.526676, 17.39709, -82.402756),
+                Vec3::new(-40.568623, 17.445776, -82.45143),
+            ],
+            0,
+        );
+        let b = tri(
+            [
+                Vec3::new(-40.526676, 17.39709, -82.402756),
+                Vec3::new(-40.561783, 17.43503, -82.44069),
+                Vec3::new(-40.55909, 17.434713, -82.44038),
+            ],
+            0,
+        );
+        assert!(overlap(&a, &b) < 1e-6, "{} cm²", overlap(&a, &b) * 1e4);
     }
 
     #[test]

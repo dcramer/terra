@@ -845,7 +845,22 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         // A batten under the foot of every course across the square, each joined to the
         // next square's into one along the face.
         let (base_m, step) = (super::metres(courses.0), super::metres(courses.1));
-        let r_batten_wide = r.batten.0;
+        // How far up the slope a batten reaches, as it is modelled: across it from its line,
+        // and how far it hangs under the roof's deck, whose plane leans back toward the crest.
+        let (reach_up, reach_down) = kit
+            .roof
+            .parts
+            .get(&RoofPart::Batten)
+            .and_then(|part| kit.dress.made.as_deref()?.modules.get(&part.module))
+            .map_or((r.batten.0, 0.0), |module| {
+                module
+                    .near
+                    .iter()
+                    .flat_map(|mesh| &mesh.positions)
+                    .fold((r.batten.0, 0.0f32), |(up, down), p| {
+                        (up.max(p[2]), down.max(-p[1]))
+                    })
+            });
         for side in 0..4 {
             let t = roofs.triangle(q, side);
             let n = normal(&t);
@@ -861,16 +876,20 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 if p.distance(r) < 1e-3 {
                     continue;
                 }
-                // None at a crest, where the roof falls away within a batten's width up the
-                // slope from it: the far slope's own top batten would cross it there.
+                // None at a crest, where the roof falls away within the batten's reach up the
+                // slope from it: the far slope's own top batten would cross it there. Past
+                // that reach the roof falls on the way on, as it never does on its own plane
+                // nor past a hip, beyond which it runs level the way this face rises.
                 let middle = (p + r) * 0.5;
-                let up = middle + upslope * r_batten_wide;
-                let past = Vec3::new(upslope.x, 0.0, upslope.z).normalize_or_zero() * 0.01;
-                if roofs
-                    .top_over(up.x + past.x, up.z + past.z, middle.y - CELL_M)
-                    .is_none_or(|h| h < up.y - 0.01)
-                {
-                    continue;
+                let way = Vec3::new(upslope.x, 0.0, upslope.z).normalize_or_zero();
+                let reach = (upslope * reach_up - n * reach_down).dot(way);
+                let top = |past: f32| {
+                    let at = middle + way * (reach + past);
+                    roofs.top_over(at.x, at.z, middle.y - CELL_M)
+                };
+                match (top(0.01), top(0.02)) {
+                    (Some(near), Some(far)) if far > near - CREST_FALL_M => {}
+                    _ => continue,
                 }
                 let beside = Place::near(middle + upslope * 0.1);
                 battens.push(Segment {
@@ -1272,6 +1291,11 @@ fn gcd(a: i32, b: i32) -> i32 {
 
 /// How much shorter at each end than its crease the beam under a ridge, a hip or a valley is.
 const BEAM_SHORT_M: f32 = 0.006;
+
+/// How far the roof falls over a centimetre on past a batten's reach up the slope, where a
+/// crest is within that reach: more than rounding, less than the centimetre a 45-degree roof
+/// falls there.
+const CREST_FALL_M: f32 = 0.002;
 
 /// The rafters: one up every slope along every cube's edge, from its foot at the eaves to
 /// the ridge, hip or valley it meets, under the battens.

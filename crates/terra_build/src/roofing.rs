@@ -941,12 +941,14 @@ mod tests {
     }
 
     #[test]
-    fn no_part_of_a_hip_roof_lies_over_itself() {
-        // Every part of a shipped roof under a hip, a cabin's and a tower's square one,
-        // drawn alone: none of its faces over another of its own in one plane.
+    fn no_part_of_a_roof_lies_over_itself() {
+        // Every part of a shipped roof under a hip, a cabin's and a tower's square one, and
+        // the castle's, its towers' hips tens of metres out and its keep's great gable, whose
+        // battens at the ridge would cross; drawn alone: none of its faces over another of its
+        // own in one plane.
         for name in ["shakes.ron", "slate.ron"] {
             let kit = shipped(name);
-            for base in [cabin(Style::Hip), tower()] {
+            for base in [cabin(Style::Hip), tower(), castle()] {
                 let surfaces = drawn(&kit, &base, |p| matches!(p, Piece::Roof { .. }));
                 for (material, surface) in &surfaces.0 {
                     let folded = crate::inspect::self_overlap(surface);
@@ -958,6 +960,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The castle (`castle`), its towers' hips, its keep's and hall's gables.
+    fn castle() -> Base {
+        Base::from_shortcuts(&crate::castle::castle(
+            Kind::PLAIN,
+            Kind::PLAIN,
+            Kind::FIRST_ROOF,
+        ))
     }
 
     /// A tower's square room under a hip, as the castle's corners.
