@@ -3,6 +3,7 @@
 // Places are the base's cubes, half a metre each, east, up a storey and south of the claim
 // stone for plans, and metres for the camera.
 
+import { roofOff } from "./lib/cabin.ts";
 import type { KitSet, Scenario, Script, Step, Vec3 } from "./script.ts";
 
 /// The cabin's corner tiles: five metres east to west and four north to south.
@@ -157,7 +158,7 @@ function script(s: Script, set: KitSet) {
   s.stage("storey", "The roof off, a storey on, a roof over it and a dormer", () => {
     s.glide([14, 9, 14], [4.5, 3, 4], 120);
     // As a player would: the roof taken apart, last in first out.
-    s.call("build.take_apart", { at: [8, 6, 4], steps: 400 });
+    roofOff(s, 8);
     s.wait(40);
     s.call("build.lay", { what: "room", min: [X0, 1, Z0], max: [X1, 1, Z1], kind: set.wall(1) });
     s.wait(40);

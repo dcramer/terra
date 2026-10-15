@@ -2,7 +2,7 @@
 // the storey built on the walls, a roof added over it (tools/sandbox/qa.ts). Nothing but a
 // roof is built on a roof's cubes.
 
-import { C, putUp, SANDBOX, X0, X1, Z0, Z1 } from "./lib/cabin.ts";
+import { C, putUp, roofOff, SANDBOX, X0, X1, Z0, Z1 } from "./lib/cabin.ts";
 import type { KitSet, Scenario, Script } from "./script.ts";
 
 function script(s: Script, set: KitSet) {
@@ -10,12 +10,7 @@ function script(s: Script, set: KitSet) {
   s.stage("storey", "Look for: the roof coming off last in first out, the storey's courses on the walls, the new roof whole", () => {
     s.cut([14, 8.5, 14], [C[0], 3.2, C[2]]);
     s.wait(30);
-    // Taken apart a step at a time, as holding the hammer in take-apart mode does.
-    for (let i = 0; i < 30; i++) {
-      // Aimed at an eave, the last of the roof out, so every row before it comes out first.
-      s.call("build.take_apart", { at: [8, 6, 4], steps: 1 });
-      s.wait(6);
-    }
+    roofOff(s);
     s.wait(20);
     s.call("build.lay", { what: "room", min: [X0, 1, Z0], max: [X1, 1, Z1], kind: set.wall(1) });
     s.wait(30);

@@ -76,6 +76,26 @@ export function plan(s: Script, set: KitSet, gap = 0) {
   s.wait(Math.max(1, gap));
 }
 
+/// The cabin's gable roof taken off as a player takes it apart, last in first out: from the
+/// ridge down to the eaves, each row on both slopes through its four stages, a row every
+/// `gap` frames.
+export function roofOff(s: Script, gap = 15) {
+  const rows: [number, number][] = [
+    [9, 7],
+    [9, 8],
+    [8, 6],
+    [8, 9],
+    [7, 5],
+    [7, 10],
+    [6, Z0],
+    [6, Z1],
+  ];
+  for (const [y, z] of rows) {
+    s.call("build.take_apart", { at: [8, y, z], steps: 4 });
+    s.wait(gap);
+  }
+}
+
 /// Everything planned built, at once.
 export function buildAll(s: Script) {
   for (let i = 0; i < 3; i++) {
