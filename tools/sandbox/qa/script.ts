@@ -101,6 +101,9 @@ export class Script {
   readonly stages: Stage[] = [];
   private readonly moves: Move[] = [];
   private shift?: { until: number; by: Vec3 };
+  private readonly solids: [Vec3, Vec3, number][] = [];
+  /// The frames the camera is within 40 cm of a solid, found by `all`.
+  readonly clipping: number[] = [];
 
   readonly known?: Known;
 
@@ -189,8 +192,9 @@ export class Script {
 
   /// The camera glides from where it is to an eye looking at a point, eased in and out,
   /// over so many frames from now; the cursor stays, so building goes on while it moves.
-  glide(eye: Vec3, at: Vec3, frames = 90) {
-    this.moves.push({ start: this.frame, frames: Math.max(1, frames), glide: [eye, at] });
+  /// `after` frames from now if given, as the second leg of a move round something.
+  glide(eye: Vec3, at: Vec3, frames = 90, after = 0) {
+    this.moves.push({ start: this.frame + after, frames: Math.max(1, frames), glide: [eye, at] });
   }
 
   /// The camera cuts to an eye looking at a point.
@@ -203,6 +207,13 @@ export class Script {
   /// the point `look` metres above it; it eases in from where it was over its first second.
   orbit(centre: Vec3, { radius, height, from, to, frames, look = 0 }: { radius: number; height: number; from: number; to: number; frames: number; look?: number }) {
     this.moves.push({ start: this.frame, frames: Math.max(1, frames), orbit: { centre, radius, height, from, to, look } });
+  }
+
+  /// Something solid the camera must keep out of, a box in metres: a building, so a move
+  /// that would pass through it is found before it is filmed (`clipping`); from a frame on,
+  /// if it is not there before.
+  solid(min: Vec3, max: Vec3, from = 0) {
+    this.solids.push([min, max, from]);
   }
 
   /// Until a frame the base stands elsewhere, `by` from where it will be: before its claim
@@ -239,6 +250,7 @@ export class Script {
       let [eye, at] = pose;
       if (this.shift && frame < this.shift.until) [eye, at] = [plus(eye, this.shift.by), plus(at, this.shift.by)];
       const fixed = (v: Vec3) => v.map((n) => Math.round(n * 1000) / 1000);
+      if (this.solids.some(([min, max, from]) => frame >= from && [0, 1, 2].every((i) => eye[i] > min[i] - 0.4 && eye[i] < max[i] + 0.4))) this.clipping.push(frame);
       camera.push({ frame, method: "build.look", params: { from: fixed(eye), at: fixed(at) } });
     }
     return [...this.calls, ...camera].sort((a, b) => a.frame - b.frame);

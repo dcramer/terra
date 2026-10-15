@@ -72,6 +72,7 @@ struct Job {
     root: Entity,
     section: [i32; 3],
     ticket: u64,
+    generation: u64,
     task: Task<Outcome>,
 }
 
@@ -80,6 +81,8 @@ pub(super) struct Done {
     pub root: Entity,
     pub section: [i32; 3],
     pub ticket: u64,
+    /// The change it was laid for (`Sections::generation`).
+    pub generation: u64,
     pub outcome: Outcome,
 }
 
@@ -314,6 +317,7 @@ fn launch(
                     root,
                     section: at,
                     ticket,
+                    generation: sections.generation,
                     outcome: Outcome::Same,
                 });
             }
@@ -362,6 +366,7 @@ fn launch(
             jobs.tickets += 1;
             jobs.busy_since.get_or_insert_with(Instant::now);
             let ticket = jobs.tickets;
+            let generation = build.sections.generation;
             build.sections.tickets.insert(at, ticket);
             let snapshot = build
                 .sections
@@ -509,6 +514,7 @@ fn launch(
                 root,
                 section: at,
                 ticket,
+                generation,
                 task,
             });
         }
@@ -554,6 +560,7 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
                     root: job.root,
                     section: job.section,
                     ticket: job.ticket,
+                    generation: job.generation,
                     outcome,
                 });
             }
@@ -563,9 +570,13 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
 }
 
 impl Jobs {
-    /// Whether any section of a build is still on a worker.
-    pub fn laying(&self, root: Entity) -> bool {
-        self.running.iter().any(|job| job.root == root)
+    /// The oldest change any section of a build still on a worker was laid for, if one is.
+    pub fn oldest_out(&self, root: Entity) -> Option<u64> {
+        self.running
+            .iter()
+            .filter(|job| job.root == root)
+            .map(|job| job.generation)
+            .min()
     }
 
     /// Whether nothing is being laid or waiting to be put on screen.

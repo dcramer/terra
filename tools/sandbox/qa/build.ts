@@ -34,10 +34,13 @@ const first = (steps: Step[], test: (what: string) => boolean, or: number) => st
 const up = (what: string) => Number(/(-?\d+) up\)/.exec(what)?.[1] ?? 0);
 
 function script(s: Script, set: KitSet) {
+  // The cabin and its storey and roofs, the deck, and the garden wall: the camera keeps out.
+  s.solid([2, -1, 2], [7, 8.5, 6]);
+  s.solid([-2, -2, 6], [3, 0.3, 8]);
   const wall = set.wall(0);
 
   s.stage("claim", "Claiming the ground", () => {
-    s.orbit(C, { radius: 12, height: 5, from: 160, to: 120, frames: 480, look: 0.5 });
+    s.orbit([1.5, 0, 2.5], { radius: 7, height: 2.2, from: 280, to: 230, frames: 480, look: 0.7 });
     s.wait(120);
     // The claim stone set down; the base, until then at the start, half a metre above the
     // ground, stands at the stone from the next frame.
@@ -47,7 +50,7 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("plan", "Laying the plan: walls, floor, openings, blocks", () => {
-    s.glide([13, 5.5, 13.5], [4.5, 0.8, 4.5], 240);
+    s.glide([-3.5, 5, 13], [4.5, 0.8, 4.5], 240);
     s.press("backspace");
     // Wall by wall, the blueprint showing each as it is laid; a mix lays each in its own kind.
     const walls: [number[], number[]][] = [
@@ -66,19 +69,24 @@ function script(s: Script, set: KitSet) {
     s.wait(40);
     s.call("build.opening", { tiles: WINDOW, door: false });
     s.wait(40);
-    // A low garden wall west of the door in blocks, a brush at a time: a cube, a metre, two,
-    // sunk into the ground, which falls away a metre here.
+    // A low garden wall west of the door in blocks, by each brush (D226): a cube at a time,
+    // boxes a metre across, and a pier two metres across at its end, sunk into the ground,
+    // which falls away a metre here; a cut block on top.
     const garden = set.wall(4);
-    s.glide([1.0, 2.0, 11.5], [2.6, -0.6, 6.8], 120);
-    for (const [min, max] of [
-      [[0, -3, 14], [0, -3, 14]],
-      [[1, -3, 14], [2, -2, 14]],
-      [[3, -3, 14], [6, -2, 14]],
-    ]) {
-      s.call("build.lay", { what: "block", min, max, kind: garden });
-      s.wait(40);
+    s.glide([1.0, 2.0, 11.5], [1.5, -0.6, 6.8], 120);
+    for (const [at, brush] of [
+      [[0, -3, 14], 1],
+      [[1, -3, 14], 1],
+      [[0, -3, 15], 1],
+      [[1, -3, 15], 1],
+      [[2, -4, 14], 2],
+      [[4, -4, 14], 2],
+      [[-4, -4, 12], 4],
+    ] as const) {
+      s.call("build.lay", { what: "block", min: at, max: at, brush, kind: garden });
+      s.wait(30);
     }
-    s.call("build.lay", { what: "block", min: [0, -2, 14], max: [0, -2, 14], kind: garden, shape: { Slope: "East" } });
+    s.call("build.lay", { what: "block", min: [4, -2, 14], max: [4, -2, 14], kind: garden, shape: { Slope: "West" } });
     s.wait(90);
   });
 
@@ -96,21 +104,23 @@ function script(s: Script, set: KitSet) {
   // The walls going up from round the cabin, then in close at a corner where they meet.
   const going = s.frame;
   s.frame = walls;
-  s.orbit([C[0], 1.2, C[2]], { radius: 11, height: 3.5, from: 150, to: 230, frames: Math.max(60, Math.round((going - walls) * 0.6)) });
+  s.orbit([C[0], 1.2, C[2]], { radius: 11, height: 3.5, from: 30, to: -60, frames: Math.max(60, Math.round((going - walls) * 0.6)) });
   s.wait(Math.round((going - walls) * 0.6));
   s.glide([9.6, 2.6, 8.2], [6.7, 1.2, 5.6], Math.max(60, going - s.frame));
   s.frame = going;
   s.wait(60);
 
   s.stage("openings", "A window cut, the door and shutters fitted, the door opened", () => {
-    s.glide([4.5, 2.2, -5.5], [4.5, 1.2, 2.5], 120);
+    s.glide([11.5, 3, 1], [4.5, 1.2, 3], 70);
+    s.glide([4.5, 2.2, -5.5], [4.5, 1.2, 2.5], 90, 50);
     s.call("build.opening", { tiles: CUT, door: false });
     s.wait(30);
     s.fill("cut", { seconds: 3, gap: 10 });
     s.wait(30);
     s.call("build.fit", { at: [CUT[0][0], 2, Z0], kind: "Louvred shutters" });
     s.wait(60);
-    s.glide([7.5, 2.0, 11.0], [4.5, 1.1, 5.0], 120);
+    s.glide([11.5, 3, 1], [4.5, 1.2, 3], 70);
+    s.glide([7.5, 2.0, 11.0], [4.5, 1.1, 5.0], 90, 50);
     s.wait(100);
     s.call("build.fit", { at: DOOR[0], kind: "Plank door" });
     s.wait(50);
@@ -130,7 +140,8 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("material", `One wall changed to ${set.other(0)} in place`, () => {
-    s.glide([-5.5, 2.5, 8.5], [2.5, 1.2, 4], 90);
+    s.glide([-6, 5, -1], [2.5, 1.5, 4], 60);
+    s.glide([-5.5, 2.5, 8.5], [2.5, 1.2, 4], 70, 45);
     for (const z of [4, 6, 8, 10]) for (const y of [0, 2, 4]) s.call("build.replace", { at: [X0, y, z], brush: 2, kind: set.other(0) });
     s.wait(30);
     s.fill("material", { seconds: 8, gap: 10 });
@@ -166,6 +177,7 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("deck", "A deck on posts, and stairs up to it", () => {
+    s.solid([8.5, 0, 2.5], [11.5, 3.5, 5.5], s.frame);
     s.glide([17.5, 5, 16.5], [9.8, 1.5, 4.5], 120);
     for (const at of POSTS) {
       s.call("build.lay", { what: "post", min: at, max: at, kind: set.wall(2) });
@@ -180,7 +192,7 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("collapse", "A corner knocked down, gathered and mended", () => {
-    s.glide([-2.5, 2.4, 10.5], [2.4, 1.2, 5.4], 120);
+    s.glide([-4.5, 3.6, 12.5], [2.6, 1.6, 5.2], 120);
     s.wait(30);
     // Cracked, then its foot knocked out: what hangs from nothing falls into debris.
     s.call("build.damage", { at: [X0, 0, Z1 - 3], to: [X0, 4, Z1 - 1], amount: 30 });
@@ -197,8 +209,12 @@ function script(s: Script, set: KitSet) {
     s.fill("mend", { seconds: 5, gap: 10 });
     s.call("build.repair", { at: [X0, 2, Z1 - 2], brush: 4 });
     s.wait(90);
-    s.orbit([C[0], 2.5, C[2]], { radius: 14, height: 6, from: 250, to: 160, frames: 420 });
-    s.wait(420);
+    s.wait(60);
+  });
+
+  s.stage("finished", "Finished: round the cabin", () => {
+    s.orbit([C[0] + 2, 2.5, C[2]], { radius: 15, height: 6, from: 250, to: -40, frames: 900, look: 0.5 });
+    s.wait(900);
   });
 }
 

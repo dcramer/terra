@@ -30,7 +30,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, relative, resolve } from "node:path";
+import { basename, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as game from "./client.ts";
 import { buildOffscreen, imageMagick, offscreenPath, offscreenRun, ROOT } from "./client.ts";
@@ -114,6 +114,7 @@ async function film(set: KitSet) {
   scenario.script(s, set);
   const last = s.frame;
   const calls = s.all(last);
+  if (s.clipping.length) console.log(`  the camera is within 40 cm of a solid at frames ${spans(s.clipping)}`);
   const stage = part ? s.stages.find((each) => each.name === part) : undefined;
   if (part && !stage) throw new Error(`no stage ${part}; ${name} has ${s.stages.map((each) => each.name).join(", ")}`);
   const [from, to] = stage ? [stage.from, stage.to] : [1, last];
@@ -268,7 +269,7 @@ function contactSheet(frames: string, out: string, stages: Stage[], from: number
   }
 }
 
-type Trace = { summary: { median: number; p99: number; worst: number; over: number; hitches: number; frames: number } };
+type Trace = { summary: { median: number; p99: number; worst: number; over: number; hitches: number; frames: number; torn: number; edits: number; edit_median: number; edit_worst: number } };
 
 /// The same calls on the same frames in a benchmark run, every frame's time written, read
 /// against the budget stage by stage, its worst frames beside what was done on them.
@@ -299,14 +300,24 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   for (const stage of stages) row(stage.name, rows.filter((r) => r.frame >= stage.from && r.frame <= stage.to).map((r) => r.ms));
   // Each change from the call that made it to all its sections on screen, as the run said
   // it: the stage of the call said last before it.
+  // Torn: sections of one change put on screen before the rest came back, so for a frame a
+  // piece is twice or missing where they meet. Debris: piles made on a worker, and how long
+  // after the collapse they were on screen.
   const edits: { stage: string; ms: number }[] = [];
+  const debris: number[] = [];
+  let torn = 0;
   let lastFrame = 0;
   for (const line of `${run.stdout}${run.stderr}`.split("\n")) {
     const call = /Calls: frame (\d+)/.exec(line);
     if (call) lastFrame = Number(call[1]);
     const change = /Build: change on screen in ([\d.]+) ms/.exec(line);
     if (change) edits.push({ stage: stages.find((each) => lastFrame >= each.from && lastFrame <= each.to)?.name ?? "-", ms: Number(change[1]) });
+    const piles = /Build: debris drawn: \d+ piles, ([\d.]+) ms/.exec(line);
+    if (piles) debris.push(Number(piles[1]));
+    if (line.includes("sections shown before the rest")) torn++;
   }
+  lines.push("", `Changes shown torn, a section before the rest of its change: ${torn}`);
+  if (debris.length) lines.push(`Debris on screen after the collapse: ${debris.map((ms) => `${ms.toFixed(0)} ms`).join(", ")}`);
   if (edits.length) {
     lines.push("", "Edits to the screen, from the change to all its sections drawn:");
     for (const stage of [...stages.map((each) => each.name), "-"]) {
@@ -326,7 +337,8 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   writeFileSync(resolve(folder, `${label}.txt`), lines.join("\n") + "\n");
   console.log(lines.join("\n"));
   const all = stat(rows.map((r) => r.ms));
-  return { summary: { ...all, over: rows.filter((r) => r.ms > BUDGET_MS).length, hitches: rows.filter((r) => r.ms > HITCH_MS).length, frames: rows.length } };
+  const edit = stat(edits.map((each) => each.ms));
+  return { summary: { ...all, over: rows.filter((r) => r.ms > BUDGET_MS).length, hitches: rows.filter((r) => r.ms > HITCH_MS).length, frames: rows.length, torn, edits: edits.length, edit_median: edit.median, edit_worst: edit.worst } };
 }
 
 /// shots/qa/index.html: the latest film of each scenario in each set, its contact sheet
@@ -340,7 +352,7 @@ function index() {
     if (!existsSync(json)) return "<td class=none>not filmed</td>";
     const made = JSON.parse(readFileSync(json, "utf8"));
     const t = made.trace;
-    const timing = t ? `median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>` : "not traced";
+    const timing = t ? `median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>${t.edits ? `<br>edits to screen median ${t.edit_median.toFixed(0)} · worst ${t.edit_worst.toFixed(0)} ms · <span class=${t.torn ? "bad" : "good"}>${t.torn} torn</span>` : ""}` : "not traced";
     const refused = made.refusals?.length ? `<br><span class=bad>${made.refusals.length} refused</span>` : "";
     return `<td><a href="${scenario}/${set}.mp4"><img src="${scenario}/${set}.jpg" alt="${scenario} in ${set}"></a><br>${timing}${refused}<br><a href="${scenario}/${set}.txt">trace</a> · ${made.made.slice(0, 16).replace("T", " ")}</td>`;
   };
@@ -352,4 +364,16 @@ ${names.map((scenario) => `<tr><th>${scenario}</th>${columns.map((set) => cell(s
 </table>`;
   writeFileSync(resolve(OUT, "index.html"), html);
   console.log(`qa: ${relative(ROOT, resolve(OUT, "index.html"))}`);
+}
+
+/// Frames as runs, like 120-180, 400.
+function spans(frames: number[]) {
+  const out: string[] = [];
+  for (let i = 0; i < frames.length; ) {
+    let j = i;
+    while (j + 1 < frames.length && frames[j + 1] === frames[j] + 1) j++;
+    out.push(i === j ? `${frames[i]}` : `${frames[i]}-${frames[j]}`);
+    i = j + 1;
+  }
+  return out.join(", ");
 }

@@ -86,7 +86,7 @@ async function send(body: string): Promise<Reply> {
       if (through === "direct" || !onWsl) throw new Error(`no sandbox answering on ${url()}; start one with \`start\``);
     }
   }
-  const curl = spawnSync("/mnt/c/Windows/System32/curl.exe", ["-s", "--max-time", "5", "-X", "POST", url(), "-H", "content-type: application/json", "--data-binary", "@-"], {
+  const curl = spawnSync("/mnt/c/Windows/System32/curl.exe", ["-s", "--max-time", "60", "-X", "POST", url(), "-H", "content-type: application/json", "--data-binary", "@-"], {
     input: body,
     encoding: "utf8",
   });

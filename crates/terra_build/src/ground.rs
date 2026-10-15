@@ -304,9 +304,19 @@ impl Base {
             // A floor on one side at the threshold's layer, and nothing on the other.
             let floored = |out: IVec3| solid(at - IVec3::Y + out);
             let clear = |out: IVec3| self.cube(at + out).is_none() && !floored(out);
+            // Inward, through the rest of the opening, a room to walk into: a hole in a wall
+            // thicker than it, a window in a castle's curtain or a recess carved in a thick
+            // wall, has a floor beside its sill but leads into the wall, not a room.
+            let leads_in = |inward: IVec3| {
+                let mut step = inward;
+                while open(at + step) {
+                    step += inward;
+                }
+                self.cube(at + step).is_none() && floored(step)
+            };
             let outward = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
                 .into_iter()
-                .find(|&out| clear(out) && floored(-out));
+                .find(|&out| clear(out) && floored(-out) && leads_in(-out));
             if let Some(outward) = outward {
                 found.push(Doorway { at, outward });
             }
@@ -522,6 +532,39 @@ mod tests {
             at: IVec3::new(5, 0, 2),
             outward: IVec3::X
         }));
+    }
+
+    #[test]
+    fn a_hole_in_a_thick_wall_above_the_floor_is_no_doorway() {
+        // A wall four cubes thick and six high, east to west, on a floor that runs on south
+        // of it under a room.
+        let mut base = Base::default();
+        let solid = Some(Cube::new(Kind(2), Fill::Solid));
+        base.apply(BuildOp::Fill {
+            min: [0, -1, 0],
+            max: [7, -1, 7],
+            cube: solid,
+        });
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [7, 5, 3],
+            cube: solid,
+        });
+        // A window two cubes deep and two high cut into its north face a metre up: its sill
+        // has wall beside it inside, but leads into the wall, not a room.
+        let window: BTreeSet<[i32; 3]> = [[3, 2, 0], [3, 3, 0], [3, 2, 1], [3, 3, 1]].into();
+        assert!(base.doorways(&window).is_empty());
+        // Cut right through at the floor, it leads into the room: a doorway out to the north.
+        let through: BTreeSet<[i32; 3]> = (0..4)
+            .flat_map(|z| (0..4).map(move |y| [3, y, z]))
+            .collect();
+        assert_eq!(
+            base.doorways(&through),
+            [Doorway {
+                at: IVec3::new(3, 0, 0),
+                outward: IVec3::NEG_Z
+            }]
+        );
     }
 
     #[test]

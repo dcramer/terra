@@ -797,27 +797,36 @@ fn upload(
     // What was laid for a build since taken away is dropped.
     jobs.ready.retain(|done| standing.contains(&done.root));
     jobs.held.retain(|root, _| standing.contains(root));
+    // Every section sent out has come back: what came back is the latest of each, laid from
+    // one base, to show together. Sections still waiting to be sent, for a newer change, are
+    // shown when theirs come back. And a change older than the newest is shown once nothing
+    // sent out for it, or for one before it, is still on a worker, though sections for a newer
+    // change are out: a build edited every few frames shows each change whole rather than
+    // waiting for a quiet moment that does not come, and then torn.
+    let mut back: BTreeMap<Entity, (Option<u64>, u64)> = BTreeMap::new();
     for build in each(&mut site, &mut builds) {
         if !roots.contains(&build.root) {
             continue;
         }
-        // Every section sent out has come back: what came back is the latest of each, laid
-        // from one base, to show together. Sections still waiting to be sent, for a newer
-        // change, are shown when theirs come back.
-        let laid = !jobs.laying(build.root);
+        let out = jobs.oldest_out(build.root);
+        back.insert(build.root, (out, build.sections.generation));
         let held = jobs.held.entry(build.root).or_default();
         *held += 1;
-        if laid {
+        if out.is_none() {
             complete.insert(build.root);
         } else if *held > HOLD_FRAMES {
             partial.insert(build.root);
         }
     }
+    let all_back = |done: &Done| {
+        back.get(&done.root)
+            .is_some_and(|&(out, newest)| change_back(done.generation, out, newest))
+    };
     let mut corners = 0;
     let mut rest = std::collections::VecDeque::new();
     let mut shown: BTreeSet<Entity> = BTreeSet::new();
     while let Some(done) = jobs.ready.pop_front() {
-        let whole = complete.contains(&done.root);
+        let whole = complete.contains(&done.root) || all_back(&done);
         if !whole && !partial.contains(&done.root) {
             rest.push_back(done);
             continue;
@@ -903,6 +912,14 @@ fn upload(
         }
     }
     jobs.settle(waiting);
+}
+
+/// Whether what came back for a change, `generation`, is all back while sections are still
+/// out: a newer change has been noticed since, and nothing of this change or an older one
+/// is still on a worker (`out`, the oldest change still out). The newest change waits for
+/// every section out to come back.
+fn change_back(generation: u64, out: Option<u64>, newest: u64) -> bool {
+    generation < newest && out.is_none_or(|out| generation < out)
 }
 
 impl Parts {
@@ -1401,5 +1418,24 @@ fn follow_quality(quality: Res<Quality>, mut site: ResMut<Site>, mut builds: Que
     }
     for build in each(&mut site, &mut builds) {
         build.redraw_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::change_back;
+
+    #[test]
+    fn a_change_is_shown_once_it_and_older_ones_are_back_though_newer_ones_are_out() {
+        // Change 3 back, 4 and 5 out, 5 the newest: 3 is whole, shown.
+        assert!(change_back(3, Some(4), 5));
+        // A section of change 3 still out: 3 waits, and so does 4 behind it.
+        assert!(!change_back(3, Some(3), 5));
+        assert!(!change_back(4, Some(3), 5));
+        // The newest change waits for everything out, as before.
+        assert!(!change_back(5, Some(6), 5));
+        assert!(!change_back(5, None, 5));
+        // An older change with nothing out at all is back.
+        assert!(change_back(2, None, 5));
     }
 }

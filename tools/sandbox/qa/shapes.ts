@@ -46,17 +46,18 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("carve", "A wall carved by each brush", () => {
-    s.call("build.lay", { what: "block", min: [FIRST_X, 1, -12], max: [FIRST_X + 9, 4, -12], kind });
+    // A wall a metre thick and two high, in boxes of the two-cube brush.
+    for (let x = -12; x < 0; x += 2) for (const y of [0, 2]) s.call("build.lay", { what: "block", min: [x, y, -12], max: [x, y, -12], brush: 2, kind });
     s.wait(2);
     s.call("build.fill", { steps: 100000 });
     s.glide([-3.5, 2.5, 0], [-3.5, 1.2, -6], 150);
     s.wait(150);
-    for (const [x, brush] of [
-      [FIRST_X + 1, 1],
-      [FIRST_X + 3, 2],
-      [FIRST_X + 6, 4],
+    for (const [x, y, brush] of [
+      [-11, 2, 1],
+      [-8, 2, 2],
+      [-4, 0, 4],
     ]) {
-      s.call("build.carve", { at: [x, 2, -12], brush });
+      s.call("build.carve", { at: [x, y, -12], brush });
       s.wait(20);
       s.fill(`carve ${brush}`, { seconds: 2, gap: 8 });
       s.wait(60);

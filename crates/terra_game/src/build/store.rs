@@ -98,6 +98,9 @@ pub(super) struct Sections {
     /// The revision last noticed, and what its sections are laid from.
     pub noticed: Option<u64>,
     pub snapshot: Option<Arc<Base>>,
+    /// How many changes have been noticed: each section sent out is laid for one, and what
+    /// comes back for a change is shown once nothing sent out for it or before it is out.
+    pub generation: u64,
     /// The snapshot laid whole, which its sections are cut from, once a worker has laid it;
     /// and the worker laying it.
     pub whole: Option<Arc<terra_build::sections::Whole>>,
@@ -192,6 +195,7 @@ fn notice(planet: Res<Planet>, mut site: ResMut<Site>, mut builds: Query<&mut Bu
 fn noticed(build: &mut Build) {
     let sections = &mut build.sections;
     sections.noticed = Some(build.revision);
+    sections.generation += 1;
     // Timed from here, a change to something on screen, not a build first laid.
     if !sections.drawn.is_empty() {
         sections

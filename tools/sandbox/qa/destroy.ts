@@ -17,6 +17,11 @@ const ALL: Vec3 = [4.5, 1, 5];
 
 function script(s: Script, set: KitSet) {
   const health = (n: number) => HEALTH[set.walls[n % set.walls.length].pattern] ?? 400;
+  // The house, the shed, the tower and the wall: the camera keeps out.
+  s.solid([2, -1, 2], [7, 5.5, 6]);
+  s.solid([10, -1, 2], [14, 5, 5]);
+  s.solid([-4, -1, 2], [-1, 14, 5]);
+  s.solid([2, -1, 8.5], [7, 3, 9]);
 
   s.stage("built", "What stands: a house, a shed, a tower and a wall", () => {
     s.call("storage.place", { item: "Claim stone", at: [0, 0, 0] });
@@ -40,11 +45,11 @@ function script(s: Script, set: KitSet) {
   });
 
   s.stage("cracks", "Blows crack a wall", () => {
-    s.glide([6.5, 1.8, 11.5], [4, 1.2, 6], 120);
+    s.glide([4.5, 1.9, -4], [4.5, 1.2, 2], 120);
     s.wait(120);
     const hit = Math.ceil(health(0) / 5);
     for (let i = 0; i < 4; i++) {
-      s.call("build.damage", { at: [5, 0, 11], to: [7, 4, 11], amount: hit });
+      s.call("build.damage", { at: [5, 0, 4], to: [8, 4, 4], amount: hit });
       s.wait(60);
     }
     s.wait(60);
@@ -96,9 +101,9 @@ function script(s: Script, set: KitSet) {
     s.wait(150);
     s.call("build.gather", {});
     s.wait(120);
-    s.glide([6.5, 1.8, 11.5], [4, 1.2, 6], 120);
+    s.glide([4.5, 1.9, -4], [4.5, 1.2, 2], 120);
     s.wait(120);
-    s.call("build.repair", { at: [6, 2, 11], brush: 4 });
+    for (const at of [[5, 1, 4], [9, 1, 4], [5, 5, 4], [9, 5, 4]]) s.call("build.repair", { at, brush: 4 });
     s.wait(180);
   });
 }
