@@ -6,15 +6,12 @@ Reads the source, a JSON file under art/kits/<kit>/: its modules (D258), lengths
 swept from a section along +X and shaped as they go, each at a near and a far budget with
 a cap for where its line stops; its profiles, each a polyline in
 (out, up) metres from the edge it is swept along, the corners named rounded by Blender's
-vertex bevel; and its corner stones, each a block at an edge's corner, standing out of both
-faces, its two faces divided, pillowed and pitched as a mason dresses them, its arrises
-bevelled, shaded smooth across curves and hard at creases with face-weighted normals.
+vertex bevel. Corner stones are not made here: the game makes them from each material's own
+wall (`terra_build::dress::corner`, D215 as amended).
 
 Writes the game's file, RON as `terra_build::dress::Pieces` reads it: the profiles as points,
-the corner stones as indexed triangles with their normals. Game space: Y up, a stone's
-corner at the origin, its faces looking +X and +Z, the wall behind it in -X and -Z, from
-y = 0 up a course. Nothing else is written; the file is committed with the kit, as the
-props' models are.
+the modules as indexed triangles with their normals. Game space: Y up. Nothing else is
+written; the file is committed with the kit, as the props' models are.
 """
 
 import bmesh
@@ -75,95 +72,6 @@ def profile(spec):
     return out
 
 
-def stone(name, spec, along_a, along_b, seed):
-    """A corner stone: in game space (x, y up, z), from x = -along_a to proud along its +Z
-    face, z = -along_b to proud along its +X face, a course high less its joints. Built in
-    Blender's frame, Z up: game (x, y, z) is Blender (x, -z, y)."""
-    rng = random.Random(seed)
-    proud = spec["proud"]
-    joint = spec["joint"]
-    height = spec["height"] - 2 * joint
-    bevel = spec["bevel"]
-    cell = spec["cell"]
-    # The box in Blender's frame: x from -a to proud, y (game -z) from -proud to b.
-    x0, x1 = -along_a + joint, proud
-    y0, y1 = -proud, along_b - joint
-    z0, z1 = joint, joint + height
-    bm = bmesh.new()
-    bmesh.ops.create_cube(bm, size=1.0)
-    bmesh.ops.scale(bm, vec=(x1 - x0, y1 - y0, z1 - z0), verts=bm.verts)
-    bmesh.ops.translate(bm, vec=((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), verts=bm.verts)
-    # Its back, in the wall, is never seen.
-    back = [f for f in bm.faces if f.normal.x < -0.99 or f.normal.y > 0.99]
-    bmesh.ops.delete(bm, geom=back, context="FACES")
-    # Its two faces divided, so they can be pillowed and pitched.
-    faces = [f for f in bm.faces if f.normal.x > 0.99 or f.normal.y < -0.99]
-    longest = max(x1 - x0, y1 - y0, z1 - z0)
-    cuts = max(1, int(round(longest / cell)) - 1)
-    bmesh.ops.subdivide_edges(
-        bm, edges=list({e for f in faces for e in f.edges}), cuts=cuts, use_grid_fill=True
-    )
-    # Its arrises round its faces bevelled; not where it is cut open at the back.
-    edges = []
-    for e in bm.edges:
-        if len(e.link_faces) != 2:
-            continue
-        a, b = e.link_faces
-        if a.normal.dot(b.normal) > 0.5:
-            continue
-        edges.append(e)
-    bmesh.ops.bevel(
-        bm, geom=edges, offset=bevel, segments=2, affect="EDGES", profile=0.6, clamp_overlap=True
-    )
-    # Pillowed towards each face's middle and pitched by the chisel, never on the bevels.
-    for v in bm.verts:
-        on_x = v.co.x > proud - 1e-4
-        on_y = v.co.y < -proud + 1e-4
-        if not (on_x or on_y):
-            continue
-        if on_x:
-            dy, size_a = min(v.co.y - y0, y1 - v.co.y), y1 - y0
-        else:
-            dy, size_a = min(v.co.x - x0, x1 - v.co.x), x1 - x0
-        dz = min(v.co.z - z0, z1 - v.co.z)
-        inner = min(dy, dz)
-        if inner < bevel * 0.9:
-            continue
-        pillow = math.sin(min(1.0, dy / (0.5 * size_a)) * math.pi / 2) * math.sin(
-            min(1.0, dz / (0.5 * height)) * math.pi / 2
-        )
-        at = Vector((v.co.x * 11.0 + seed * 0.37, v.co.y * 11.0, v.co.z * 11.0 + seed * 0.71))
-        n = noise.noise(at) + 0.5 * noise.noise(at * 2.3 + Vector((3.0, 1.0, 2.0)))
-        push = spec["pillow"] * pillow + spec["pitch"] * n * min(1.0, inner / 0.02)
-        if on_x:
-            v.co.x += push
-        else:
-            v.co.y -= push
-    # A little out of true, as set by hand.
-    tilt = rng.uniform(-0.006, 0.006)
-    for v in bm.verts:
-        if v.co.x > proud - 0.03:
-            v.co.x += tilt * (v.co.z - (z0 + z1) / 2)
-    bmesh.ops.triangulate(bm, faces=bm.faces)
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    ob = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(ob)
-    bpy.context.view_layer.objects.active = ob
-    ob.select_set(True)
-    # Hard at creases over about 50 degrees, smooth across curves (docs/art-style.md); the
-    # big faces keep their own normals and the bevels take the turn, as hard-surface game
-    # art is weighted.
-    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50))
-    weighted = ob.modifiers.new("Weighted", "WEIGHTED_NORMAL")
-    weighted.mode = "FACE_AREA"
-    weighted.weight = 100
-    weighted.keep_sharp = True
-    ob.select_set(False)
-    return ob
-
-
 def triangles(ob):
     """An object's triangles as shared corners in game space: positions, normals, indices,
     and, for a modelled piece, where each falls in its kit's atlas (its `atlas` UV map, V
@@ -201,13 +109,10 @@ def ron_floats(values):
     return "(" + ", ".join(f"{v:g}" for v in values) + ")"
 
 
-def ron_mesh(positions, normals, indices, uvs=(), dims=None):
+def ron_mesh(positions, normals, indices, uvs=()):
     tris = [indices[i : i + 3] for i in range(0, len(indices), 3)]
-    stated = f"dims: {ron_floats(dims)},\n                " if dims else ""
     return (
-        "(\n                "
-        + stated
-        + "positions: ["
+        "(\n                positions: ["
         + ", ".join(ron_floats(p) for p in positions)
         + "],\n                normals: ["
         + ", ".join(ron_floats(n) for n in normals)
@@ -881,28 +786,6 @@ def main():
         points = profile(spec)
         lines.append(f'        "{name}": [' + ", ".join(ron_floats(p) for p in points) + "],")
         print(f"profile {name}: {len(points)} points")
-    lines.append("    },")
-    lines.append("    corners: {")
-    for name, spec in source.get("corners", {}).items():
-        lines.append(f'        "{name}": (')
-        for which in ("long", "short"):
-            meshes = []
-            for variant, (a, b) in enumerate(spec.get(which, [])):
-                seed = zlib.crc32(f"{name}{which}{variant}".encode()) % 1000
-                ob = stone(f"{name}_{which}_{variant}", spec, a, b, seed)
-                positions, normals, indices, _ = triangles(ob)
-                print(f"corner {name} {which} {variant}: {len(indices) // 3} triangles")
-                # Its contract (D303): the box of its dressed faces, pillowed, from the
-                # wall's corner, which the kit checker holds it to.
-                joint, proud, pillow = spec["joint"], spec["proud"], spec.get("pillow", 0.0)
-                dims = (
-                    round(a - joint + proud + pillow, 4),
-                    round(spec["height"] - 2 * joint, 4),
-                    round(b - joint + proud + pillow, 4),
-                )
-                meshes.append(ron_mesh(positions, normals, indices, dims=dims))
-            lines.append(f"            {which}: [" + ", ".join(meshes) + "],")
-        lines.append("        ),")
     lines.append("    },")
     lines.append("    modules: {")
     # The modelled ones first, so their textures go into one atlas together.

@@ -299,8 +299,23 @@ pub enum Dress {
         #[serde(default)]
         material: Option<Material>,
     },
-    /// Corner stones of one of the kit's sets up the edge, a stone a course.
-    Corners { set: String },
+    /// Corner stones up the edge, a stone a course, made from the material's own wall
+    /// (`dress::corner`): dressed blocks cut from its own texture and height map, quoins
+    /// long and short by turns, jamb stones long and short along the wall, standing `proud`
+    /// of the wall's faces with their arrises bevelled by `bevel`, a `joint` round each, all
+    /// in metres. `long` gives each variant's length along its first face and its second,
+    /// and `short`, if any, the variants laid by turns with them (jamb stones); with none,
+    /// the stones turn each course instead (quoins). Nothing modelled is shared: every
+    /// material's corners match its wall (D215 as amended).
+    Corners {
+        long: Vec<[f32; 2]>,
+        #[serde(default)]
+        short: Vec<[f32; 2]>,
+        proud: f32,
+        bevel: f32,
+        #[serde(default = "joint")]
+        joint: f32,
+    },
     /// A long member of the kit's timber along the edge's run (D200): its section, how much
     /// thicker than a log, and its face's material.
     Member {
@@ -311,10 +326,18 @@ pub enum Dress {
     /// A block kind's post (`Role::Post`): a pillar of its stone so wide, in metres, a drum a
     /// cube, its base and its cap dressed as its foot and its crest are.
     Pillar { width: f32 },
+    /// Nothing: the role left as the cubes are, as a material's pack turns off a role its
+    /// pattern dresses (the escape hatch, docs/proposals/construction-002.md).
+    Off,
 }
 
 fn joints() -> bool {
     true
+}
+
+/// A corner stone's joint, all round it, in metres.
+fn joint() -> f32 {
+    0.007
 }
 
 /// How a kit's walls weather (research/role-pieces.md, candidate 2's masks): dirt and damp
@@ -437,7 +460,6 @@ impl Dressing {
             let own = file(path, false)?;
             let all = made.get_or_insert_with(Default::default);
             all.profiles.extend(own.profiles);
-            all.corners.extend(own.corners);
             all.modules.extend(own.modules);
         }
         self.made = made.map(Arc::new);

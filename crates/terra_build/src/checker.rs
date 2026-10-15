@@ -281,14 +281,15 @@ fn dressed_in(kit: &Kit) -> Vec<(String, Material)> {
         .dress
         .roles
         .iter()
-        .map(|(role, dress)| {
+        .filter_map(|(role, dress)| {
             let material = match dress {
                 Dress::Profile { material, .. } => material.unwrap_or(Material::Dressed),
-                Dress::Corners { .. } => Material::Dressed,
+                Dress::Corners { .. } => Material::Masonry,
                 Dress::Member { material, .. } => *material,
                 Dress::Pillar { .. } => Material::Masonry,
+                Dress::Off => return None,
             };
-            (format!("{role:?}"), material)
+            Some((format!("{role:?}"), material))
         })
         .collect();
     if let Some(framing) = &kit.framing {
@@ -375,35 +376,31 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
                     ));
                 }
             }
-            Dress::Corners { set } => {
-                let Some(stones) = pieces.and_then(|p| p.corners.get(set)) else {
-                    fail(format!(
-                        "dresses {role:?} with the corner set {set}, which it has not"
-                    ));
-                    continue;
-                };
-                if stones.long.is_empty() {
-                    fail(format!("its corner set {set} has no stones"));
+            Dress::Corners {
+                long,
+                short,
+                proud,
+                bevel,
+                joint,
+            } => {
+                if long.is_empty() {
+                    fail(format!("its {role:?} stones are none"));
                 }
-                for stone in stones.long.iter().chain(&stones.short) {
-                    if stone.triangles.len() > CORNER_STONE {
+                if !(0.0..=CELL_M / 8.0).contains(proud) {
+                    fail(format!(
+                        "its {role:?} stones stand out {proud} m, not within an eighth of a cube (D192)"
+                    ));
+                }
+                for [a, b] in long.iter().chain(short) {
+                    let least = 2.0 * (bevel + joint);
+                    if *a <= least || *b <= least || *a > CELL_M || *b > CELL_M {
                         fail(format!(
-                            "a stone of its corner set {set}: {} triangles, over the {CORNER_STONE} its budget allows",
-                            stone.triangles.len()
-                        ));
-                    }
-                    let out = stone
-                        .positions
-                        .iter()
-                        .map(|p| p[0].max(p[2]))
-                        .fold(f32::MIN, f32::max);
-                    if out > CELL_M / 8.0 + 1e-3 {
-                        fail(format!(
-                            "a stone of its corner set {set} stands out {out} m, past an eighth of a cube (D192)"
+                            "a {role:?} stone {a} by {b} m, not within a cube or not longer than its bevel and joint"
                         ));
                     }
                 }
             }
+            Dress::Off => {}
             Dress::Member {
                 material, scale, ..
             } => {
@@ -645,47 +642,8 @@ pub fn contract(kit: &Kit) -> Vec<String> {
             ));
         }
     }
-    // Its corner stones, quoins and jamb stones: each states its real size, the box of its
-    // dressed faces, and is that size, its origin the wall's corner it is laid at, from the
-    // course's foot.
-    for (set, corners) in kit.dress.made.iter().flat_map(|made| &made.corners) {
-        for (which, stones) in [("long", &corners.long), ("short", &corners.short)] {
-            for (variant, stone) in stones.iter().enumerate() {
-                let what = format!("its corner stone {set} {which} {variant}");
-                if stone.dims.iter().any(|d| *d <= 0.0) {
-                    problems.push(format!("{what} states no size"));
-                    continue;
-                }
-                let mut low = [f32::MAX; 3];
-                let mut high = [f32::MIN; 3];
-                for p in &stone.positions {
-                    for i in 0..3 {
-                        low[i] = low[i].min(p[i]);
-                        high[i] = high[i].max(p[i]);
-                    }
-                }
-                let size = [0, 1, 2].map(|i| high[i] - low[i]);
-                if !same_size(size, stone.dims) {
-                    problems.push(format!(
-                        "{what} is {size:?}, not the {:?} its contract says",
-                        stone.dims
-                    ));
-                }
-                if high[0].abs() > STONE_PROUD_M || high[2].abs() > STONE_PROUD_M || low[1] < -0.01
-                {
-                    problems.push(format!(
-                        "{what} is not seated at its corner: its faces {:.3} and {:.3} m out, its foot {:.3} m up",
-                        high[0], high[2], low[1]
-                    ));
-                }
-            }
-        }
-    }
     problems
 }
-
-/// The most a corner stone's dressed face stands out of the wall, pillowed and pitched.
-const STONE_PROUD_M: f32 = 0.05;
 
 /// What a kit draws on a cabin five metres by four with a door and a window, of its kind,
 /// or for a roof kind, of plain walls under a gable of it: triangles a metre of its long
@@ -812,7 +770,6 @@ mod tests {
             .into_iter()
             .collect(),
             near: vec![crate::dress::Stone {
-                dims: [0.0; 3],
                 positions: vec![[0.0, 0.0, 0.0], [dims[0], high, dims[2]]],
                 normals: vec![[0.0, 1.0, 0.0]; 2],
                 triangles: Vec::new(),
@@ -852,33 +809,24 @@ mod tests {
     }
 
     #[test]
-    fn a_corner_stone_states_its_size_and_is_it_seated_at_its_corner() {
-        let stone = |dims: [f32; 3], lift: f32| crate::dress::Stone {
-            dims,
-            positions: vec![[-0.42, lift, -0.23], [0.02, 0.236 + lift, 0.02]],
-            ..Default::default()
+    fn corner_stones_out_of_their_bounds_are_refused() {
+        let mut kit = Kit::default();
+        let corners = |long: Vec<[f32; 2]>, proud: f32| crate::kit::Dress::Corners {
+            long,
+            short: Vec::new(),
+            proud,
+            bevel: 0.016,
+            joint: 0.007,
         };
-        let kit = |stone: crate::dress::Stone| {
-            let mut pieces = crate::dress::Pieces::default();
-            pieces.corners.insert(
-                "quoin".into(),
-                crate::dress::Corners {
-                    long: vec![stone],
-                    short: Vec::new(),
-                },
-            );
-            let mut kit = Kit::default();
-            kit.dress.made = Some(std::sync::Arc::new(pieces));
-            kit
-        };
-        assert!(contract(&kit(stone([0.44, 0.236, 0.25], 0.0))).is_empty());
-        for (wrong, why) in [
-            (stone([0.0; 3], 0.0), "states no size"),
-            (stone([0.3, 0.236, 0.25], 0.0), "not the"),
-            (stone([0.44, 0.236, 0.25], -0.1), "not seated"),
+        for (dress, words) in [
+            (corners(Vec::new(), 0.018), "are none"),
+            (corners(vec![[0.42, 0.23]], 0.2), "stand out"),
+            (corners(vec![[0.9, 0.23]], 0.018), "not within a cube"),
+            (corners(vec![[0.04, 0.23]], 0.018), "not longer than"),
         ] {
-            let problems = contract(&kit(wrong));
-            assert!(problems.iter().any(|p| p.contains(why)), "{problems:?}");
+            kit.dress.roles.insert(crate::layout::Role::Arris, dress);
+            let said = check(&kit, &|_| true, &[]).problems.join("; ");
+            assert!(said.contains(words), "{words}: {said}");
         }
     }
 
@@ -945,7 +893,7 @@ mod tests {
         for words in ["is not a roof's", "not 2 steps", "no Covering material"] {
             assert!(said.contains(words), "{said}");
         }
-        // The stone kit dressing a role with a piece it has not, and one past its budget.
+        // The stone kit dressing a role with a piece it has not.
         let mut stone = kits
             .iter()
             .find(|(name, _)| name == "stone.ron")
@@ -960,16 +908,11 @@ mod tests {
                 material: None,
             },
         );
-        let mut pieces = (**stone.dress.made.as_ref().unwrap()).clone();
-        let quoin = pieces.corners.get_mut("quoin").unwrap();
-        let stone_of = &mut quoin.long[0];
-        let more = stone_of.triangles.clone();
-        stone_of.triangles.extend(more);
-        stone.dress.made = Some(std::sync::Arc::new(pieces));
         let said = check(&stone, &|_| true, &items).problems.join("; ");
-        for words in ["the profile cornice, which it has not", "corner set quoin"] {
-            assert!(said.contains(words), "{said}");
-        }
+        assert!(
+            said.contains("the profile cornice, which it has not"),
+            "{said}"
+        );
         // Two kits of one kind.
         let twice = [("a".to_string(), kit.clone()), ("b".to_string(), kit)];
         let reports = check_all(&twice, &|_| true, &items);

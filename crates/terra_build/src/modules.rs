@@ -1954,7 +1954,6 @@ mod tests {
     fn a_modelled_mesh_is_cleaned_of_doubled_faces_folds_and_faces_over_one_another() {
         let up = [0.0, 1.0, 0.0];
         let mut mesh = Stone {
-            dims: [0.0; 3],
             positions: vec![
                 // A square, as two triangles, facing up.
                 [0.0, 0.0, 0.0],
@@ -1980,7 +1979,6 @@ mod tests {
         // Two triangles crossing one another in one plane, as a cap's end face triangulated
         // across itself: what is left covers their union once.
         let mut crossed = Stone {
-            dims: [0.0; 3],
             positions: vec![
                 [0.0, 0.0, 0.0],
                 [1.0, 0.0, 0.0],

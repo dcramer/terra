@@ -544,7 +544,7 @@ fn piece(roles: &Roles, kit: &Kit, dressed: &Dressed) -> Option<Piece> {
                 seed,
             })
         }
-        Dress::Member { .. } | Dress::Pillar { .. } => None,
+        Dress::Member { .. } | Dress::Pillar { .. } | Dress::Off => None,
     }
 }
 

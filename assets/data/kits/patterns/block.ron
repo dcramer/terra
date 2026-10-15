@@ -12,11 +12,14 @@
 // textures    the texture sets its pieces wear unless a pack says otherwise: Dressed for its
 //             dressed stone, Log and LogEnd for timber; a pack adds its Masonry (the walls
 //             and footings) and Floor (floors and walls' tops)
-// dress       the pieces every block material shares (tools/kits/pieces.py, art/kits/block):
-//             a coping on every top, a plinth along every foot stepping with the ground,
-//             quoins up every outside corner, a lintel, sill and jamb stones round every
-//             opening, a cap under a thinner wall standing on it, a fascia under an overhang,
-//             a tread on every step and a border round a floor; posts as pillars 36 cm square
+// dress       the profiles every block material shares (tools/kits/pieces.py, art/kits/block):
+//             a coping on every top, a plinth along every foot stepping with the ground, a
+//             lintel and sill round every opening, a cap under a thinner wall standing on it,
+//             a fascia under an overhang, a tread on every step and a border round a floor;
+//             and, made from each material's own wall (D215 as amended), quoins up every
+//             outside corner and jamb stones round every opening, dressed blocks so long along
+//             each face, standing so proud, their arrises so bevelled; posts as pillars 36 cm
+//             square
 // meets       heavier than timber (weight 3), so it runs through a joint with it, quoined up
 //             its end, and caps its top where timber stands on it (D232)
 // colours     light: the colour of the dust it throws up as it comes down; a pack's own
@@ -59,8 +62,8 @@
             Foot: Profile(name: "plinth"),
             Meet: Profile(name: "cap"),
             Border: Profile(name: "border"),
-            Arris: Corners(set: "quoin"),
-            Jamb: Corners(set: "jamb"),
+            Arris: Corners(long: [(0.42, 0.23), (0.46, 0.24), (0.39, 0.22)], proud: 0.018, bevel: 0.016),
+            Jamb: Corners(long: [(0.32, 0.25), (0.34, 0.25)], short: [(0.19, 0.25), (0.21, 0.25)], proud: 0.014, bevel: 0.014),
             Post: Pillar(width: 0.36),
         },
     ),

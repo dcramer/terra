@@ -2,8 +2,6 @@
 (
     profiles: {
     },
-    corners: {
-    },
     modules: {
         "rafter": (
             length: 1,

@@ -18,7 +18,14 @@ pub struct Relief {
     rows: std::sync::OnceLock<Vec<f32>>,
     /// Its cells (`cells`, D305) for the share of it its joints are, once asked for.
     cells: std::sync::OnceLock<(u32, Arc<Vec<u8>>)>,
+    /// Its largest stones (`stones`), once asked for.
+    stones: std::sync::OnceLock<Arc<Vec<crate::cells::Stone>>>,
 }
+
+/// How many of a material's largest stones its corner stones are cut from, and how far
+/// across the least of them is from its middle to its nearest edge, in texels of the cells.
+const STONES_KEPT: usize = 24;
+const STONE_LEAST: f32 = 6.0;
 
 impl Relief {
     /// A height map `width` by `height`, a byte a texel; `None` if the bytes are not that
@@ -30,7 +37,22 @@ impl Relief {
             data,
             rows: std::sync::OnceLock::new(),
             cells: std::sync::OnceLock::new(),
+            stones: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Its largest stones, where its joints are the lowest `share` of it (`cells::largest`):
+    /// what a block material's dressed corner stones are cut from (`dress::corner`).
+    pub fn stones(&self, share: f32) -> Arc<Vec<crate::cells::Stone>> {
+        self.stones
+            .get_or_init(|| {
+                Arc::new(crate::cells::largest(
+                    &self.cells(share),
+                    STONES_KEPT,
+                    STONE_LEAST,
+                ))
+            })
+            .clone()
     }
 
     /// The height across a row of the texture, at a point down it, repeating, between rows:

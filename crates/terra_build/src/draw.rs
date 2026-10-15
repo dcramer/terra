@@ -66,7 +66,7 @@ pub fn draw_harmed(
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
         Piece::Beam { .. } => beam(piece, kit, plain, surfaces),
         Piece::Trim { .. } | Piece::Band { .. } | Piece::Corner { .. } => {
-            crate::dress::draw(piece, kit, surfaces)
+            crate::dress::draw(piece, kit, face, surfaces)
         }
         Piece::Covering { .. } | Piece::Roof { .. } => {
             crate::roofing::draw_as(piece, kit, face, plain, surfaces)

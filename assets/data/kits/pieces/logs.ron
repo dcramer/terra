@@ -2,8 +2,6 @@
 (
     profiles: {
     },
-    corners: {
-    },
     modules: {
         "log_model": (
             length: 3,

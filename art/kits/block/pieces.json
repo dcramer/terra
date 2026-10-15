@@ -49,31 +49,5 @@
       "round": [2, 3],
       "radius": 0.008
     }
-  },
-  "corners": {
-    "quoin": {
-      "about": "Quoins up an outside corner: a stone a course, its long face along one face and its short along the other, turned each course so they alternate; standing out of both faces.",
-      "proud": 0.018,
-      "height": 0.25,
-      "joint": 0.007,
-      "bevel": 0.016,
-      "pillow": 0.009,
-      "pitch": 0.007,
-      "cell": 0.1,
-      "long": [[0.42, 0.23], [0.46, 0.24], [0.39, 0.22]],
-      "short": []
-    },
-    "jamb": {
-      "about": "Jamb stones up an opening's side: long and short by turns along the wall's face, each returning into the reveal to the wall's middle; standing out of the face and the reveal.",
-      "proud": 0.014,
-      "height": 0.25,
-      "joint": 0.007,
-      "bevel": 0.014,
-      "pillow": 0.007,
-      "pitch": 0.006,
-      "cell": 0.075,
-      "long": [[0.32, 0.25], [0.34, 0.25]],
-      "short": [[0.19, 0.25], [0.21, 0.25]]
-    }
   }
 }

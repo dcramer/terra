@@ -236,6 +236,45 @@ pub fn fallen(cells: &[u8], uv: [f32; 2], lost: &dyn Fn([f32; 2]) -> f32) -> boo
     })
 }
 
+/// One of a picture's cells: its middle on the texture and how far its edge is from it at
+/// its nearest, both as a share of the texture.
+pub type Stone = ([f32; 2], f32);
+
+/// Its largest cells, at most `most` of them, largest first, none less than `least` texels
+/// from its middle to its nearest edge: each its middle on the texture and how far from
+/// it its edge is at its nearest, both as a share of the texture. What a dressed block cut
+/// from the material is drawn from (`dress::corner`), each the inside of one of its own
+/// stones.
+pub fn largest(cells: &[u8], most: usize, least: f32) -> Vec<Stone> {
+    let n = CELLS as usize;
+    let mut by_middle: std::collections::BTreeMap<[i32; 2], f32> =
+        std::collections::BTreeMap::new();
+    for at in 0..n * n {
+        let t = &cells[at * 4..at * 4 + 4];
+        if t[0] == 0 {
+            continue;
+        }
+        let far = f32::from(t[3]) / DISTANCE_SCALE;
+        if far < least {
+            continue;
+        }
+        let (x, y) = ((at % n) as i32, (at / n) as i32);
+        let middle = [x + i32::from(t[1]) - 128, y + i32::from(t[2]) - 128];
+        let best = by_middle.entry(middle).or_insert(0.0);
+        *best = best.max(far);
+    }
+    let mut out: Vec<Stone> = by_middle
+        .into_iter()
+        .map(|([x, y], far)| {
+            let n = n as f32;
+            ([(x as f32 + 0.5) / n, (y as f32 + 0.5) / n], far / n)
+        })
+        .collect();
+    out.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0[0].total_cmp(&b.0[0])));
+    out.truncate(most);
+    out
+}
+
 /// The texel of the cells where a texture is at a point, repeating (as the arrays' shader
 /// reads it, unfiltered).
 fn texel(cells: &[u8], uv: [f32; 2]) -> &[u8] {

@@ -8,12 +8,16 @@
 //! stops, run on past a stopped end as far as the kit says (a lintel bearing on the wall
 //! either side), raised and run down into the ground where a foot steps with it.
 //!
-//! **Corner stones** (`Piece::Corner`): a stone modelled in Blender for each course up an
-//! upright edge, turned and mirrored onto its two faces: quoins long and short by turns,
-//! jamb stones long and short along the wall.
+//! **Corner stones** (`Piece::Corner`): a dressed block for each course up an upright edge,
+//! made from the material's own wall (D215 as amended): a bevelled block of the size its
+//! pattern's numbers give, standing a little proud of both faces, cut from its own texture
+//! and height map, the inside of one of its largest stones (`Relief::stones`) wrapped round
+//! the block's faces; quoins long and short by turns, jamb stones long and short along the
+//! wall. Nothing modelled is shared, so every block material's corners match its wall.
 //!
-//! Both are textured from the world's planes, as the cubes' surface is, each stone a part of
-//! the texture of its own and a little lighter or darker, in the kit's `Dressed` material.
+//! Profiles are textured from the world's planes, as the cubes' surface is, each stone a
+//! part of the texture of its own and a little lighter or darker, in the kit's `Dressed`
+//! material.
 
 use crate::kit::{Dress, Kit, Masks};
 use crate::layout::{self, Dir, End, Piece, TICKS, hash};
@@ -29,8 +33,6 @@ pub struct Pieces {
     /// Sections by name, as points (out, up) in metres from the edge they are swept along:
     /// out from its face, up from its line.
     pub profiles: BTreeMap<String, Vec<[f32; 2]>>,
-    /// Corner stones by set.
-    pub corners: BTreeMap<String, Corners>,
     /// Modules by name (D258, `modules`): lengths of mesh repeated along a line.
     pub modules: BTreeMap<String, Module>,
 }
@@ -87,24 +89,10 @@ impl Module {
     }
 }
 
-/// A set of corner stones: each a variant. A set with `short` ones lays long and short by
-/// turns, each with its long side on the same face; with none, its stones turn each course,
-/// their long side on one face and then the other.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields, default)]
-pub struct Corners {
-    pub long: Vec<Stone>,
-    pub short: Vec<Stone>,
-}
-
-/// A corner stone's triangles: its corner at the origin, its faces looking +X and +Z with
-/// the wall behind in -X and -Z, from y = 0 up a course; its longer side along its +Z face.
+/// A mesh of a module's: triangles over shared corners.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Stone {
-    /// Its contract (D303): its real size, along its +Z face (X), up, and along its +X face
-    /// (Z), in metres: its dressed faces' box, from the wall's corner at its origin.
-    pub dims: [f32; 3],
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub triangles: Vec<[u32; 3]>,
@@ -142,9 +130,74 @@ const SHARED_REACH_M: f32 = CELL_M * 0.5 - JOINT_M * 0.5;
 /// Faces meeting at more than about 50 degrees are shaded apart (docs/art-style.md).
 const CREASE: f32 = 0.64;
 
-/// Draws a dressed piece into the kit's `Dressed` material; nothing if the kit has no
-/// pieces for its role.
-pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
+/// Draws a dressed piece into the kit's `Dressed` material, a corner stone into its wall's
+/// own (`Masonry`), cut from `wall`, its height map, where it is given; nothing if the kit
+/// has no pieces for its role.
+pub fn draw(
+    piece: &Piece,
+    kit: &Kit,
+    wall: Option<&crate::relief::Relief>,
+    surfaces: &mut Surfaces,
+) {
+    if let Piece::Corner {
+        cube,
+        role,
+        faces,
+        courses,
+        shared,
+        seed,
+    } = *piece
+    {
+        let Some(Dress::Corners {
+            long,
+            short,
+            proud,
+            bevel,
+            joint,
+        }) = kit.dress.roles.get(&role)
+        else {
+            return;
+        };
+        let material = if kit.textures.contains_key(&Material::Masonry) {
+            Material::Masonry
+        } else {
+            Material::Dressed
+        };
+        let metres = kit
+            .textures
+            .get(&material)
+            .map_or([1.2, 1.2], |texture| texture.metres);
+        let share = match kit.damage.get(&Material::Masonry) {
+            Some(crate::kit::Breaks::Joints { share, .. }) => *share,
+            _ => STONE_SHARE,
+        };
+        let stones = wall.map(|wall| wall.stones(share));
+        let mut made = Indexed::default();
+        corner(
+            cube,
+            (faces, shared),
+            courses,
+            &CornerStones {
+                long,
+                short,
+                proud: *proud,
+                bevel: *bevel,
+                joint: *joint,
+            },
+            (
+                stones
+                    .as_deref()
+                    .map(Vec::as_slice)
+                    .filter(|s| !s.is_empty()),
+                metres,
+                kit.tint,
+            ),
+            seed,
+            &mut made,
+        );
+        surfaces.of(material).add(made);
+        return;
+    }
     let Some(pieces) = kit.dress.made.as_deref() else {
         return;
     };
@@ -273,34 +326,13 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             };
             sweep.draw(profile, metres, seed, &mut made);
         }
-        Piece::Corner {
-            cube,
-            role,
-            faces,
-            courses,
-            shared,
-            seed,
-        } => {
-            let Some(Dress::Corners { set }) = kit.dress.roles.get(&role) else {
-                return;
-            };
-            let Some(set) = pieces.corners.get(set) else {
-                return;
-            };
-            corner(
-                cube,
-                (faces, shared),
-                courses,
-                set,
-                (metres, kit.dress.tint),
-                seed,
-                &mut made,
-            );
-        }
         _ => return,
     }
     surfaces.of(material).add(made);
 }
+
+/// The share of a wall's height map its joints are where its kit does not say (`Breaks`).
+const STONE_SHARE: f32 = 0.22;
 
 /// A way's unit vector.
 fn unit(dir: Dir) -> Vec3 {
@@ -778,13 +810,29 @@ fn vertex_normal(normals: &[[f32; 2]], seg: usize, end: usize) -> [f32; 2] {
     }
 }
 
-/// Corner stones up an upright edge of a cube, one a course in the courses it shows.
+/// A kind's corner stones, as its pattern gives their numbers (`Dress::Corners`).
+struct CornerStones<'a> {
+    long: &'a [[f32; 2]],
+    short: &'a [[f32; 2]],
+    proud: f32,
+    bevel: f32,
+    joint: f32,
+}
+
+/// A corner stone for each course of the cube's upright edge that shows one: a dressed
+/// block of the wall's own stone, its foot at the course's, its corner the edge's, standing
+/// `proud` of both faces, its long side along the first face and its short along the second,
+/// turned each course where it has no `short` stones (quoins) or long and short by turns
+/// (jamb stones). Where it shares a face with the cube's other edge's stones it reaches
+/// along it no further than the face's middle, short of a joint. Each of its faces wears the
+/// inside of one of the wall's own largest stones (`stones`, middles and sizes on its
+/// texture), else the wall's texture at its own size; each a little lighter or darker.
 fn corner(
     cube: IVec3,
     (faces, shared): ([Dir; 2], [bool; 2]),
     courses: [bool; 2],
-    set: &Corners,
-    (metres, tint): ([f32; 2], [f32; 3]),
+    set: &CornerStones,
+    (stones, metres, tint): (Option<&[crate::cells::Stone]>, [f32; 2], [f32; 3]),
     seed: u32,
     out: &mut Indexed,
 ) {
@@ -804,60 +852,95 @@ fn corner(
         }
         let turn = (cube.y * 2 + course as i32).rem_euclid(2) == 1;
         let stone_seed = hash(&[seed, course as u32]);
-        fn pick(stones: &[Stone], seed: u32) -> Option<&Stone> {
-            (!stones.is_empty()).then(|| &stones[hash(&[seed, 9]) as usize % stones.len()])
-        }
-        let (stone, [a, b]) = if set.short.is_empty() {
+        let pick = |sizes: &[[f32; 2]]| -> Option<[f32; 2]> {
+            (!sizes.is_empty()).then(|| sizes[hash(&[stone_seed, 9]) as usize % sizes.len()])
+        };
+        let (size, [a, b]) = if set.short.is_empty() {
             (
-                pick(&set.long, stone_seed),
+                pick(set.long),
                 if turn { [faces[1], faces[0]] } else { faces },
             )
         } else {
-            (
-                pick(if turn { &set.short } else { &set.long }, stone_seed),
-                faces,
-            )
+            (pick(if turn { set.short } else { set.long }), faces)
         };
-        let Some(stone) = stone else {
+        let Some([along_a, along_b]) = size else {
             continue;
         };
-        // Its +Z face onto the first face, its +X onto the second.
+        let shares = |face: Dir| faces.iter().zip(shared).any(|(f, s)| *f == face && s);
+        let reach = |shares: bool, length: f32| {
+            if shares {
+                length.min(SHARED_REACH_M + set.joint)
+            } else {
+                length
+            }
+        };
+        // In its own frame: its +Z face on the first face (a), running back along -X; its +X
+        // face on the second (b), running back along -Z; a course high less its joints.
+        let (along_a, along_b) = (reach(shares(a), along_a), reach(shares(b), along_b));
+        let low = Vec3::new(-along_a + set.joint, set.joint, -along_b + set.joint);
+        let high = Vec3::new(set.proud, COURSE_M - set.joint, set.proud);
         let turned = Mat3::from_cols(unit(b), Vec3::Y, unit(a));
         let mirrored = turned.determinant() < 0.0;
         let at = base + Vec3::Y * (course as f32 * COURSE_M);
         let (colour, shift) = stone_look(stone_seed, tint);
-        // On a face it shares with the cube's other edge's stones, squeezed to stop a joint
-        // short of the face's middle, where the other's stop. It runs along the first face
-        // as far back as its -X goes, along the second as its -Z.
-        let shares = |face: Dir| faces.iter().zip(shared).any(|(f, s)| *f == face && s);
-        let squeeze = |shares: bool, reach: f32| {
-            if shares && reach > SHARED_REACH_M {
-                SHARED_REACH_M / reach
+        // Each of its faces cut from a stone of its own, across the face and down it (up
+        // it, its top and bottom), its middle at the stone's, as large as the stone allows
+        // without a joint showing; else the wall's texture at its own size.
+        let face_of = |n: Vec3| -> usize {
+            let n = n.abs();
+            if n.y >= n.x && n.y >= n.z {
+                2
+            } else if n.x > n.z {
+                1
             } else {
-                1.0
+                0
             }
         };
-        let back = |axis: usize| stone.positions.iter().map(|p| -p[axis]).fold(0.0, f32::max);
-        let (sx, sz) = (squeeze(shares(a), back(0)), squeeze(shares(b), back(2)));
+        let flat = |face: usize, p: Vec3| -> [f32; 2] {
+            match face {
+                0 => [p.x, -p.y],
+                1 => [-p.z, -p.y],
+                _ => [p.x, p.z],
+            }
+        };
+        let centre_of = (low + high) * 0.5;
+        let extent = high - low;
+        let cut = |face: usize| -> ([f32; 2], [f32; 2], f32) {
+            let middle = flat(face, centre_of);
+            let span = match face {
+                0 => extent.x.max(extent.y),
+                1 => extent.z.max(extent.y),
+                _ => extent.x.max(extent.z),
+            };
+            match stones {
+                Some(stones) => {
+                    let (centre, radius) =
+                        stones[hash(&[stone_seed, 11 + face as u32]) as usize % stones.len()];
+                    (centre, middle, radius * 1.8 / span)
+                }
+                None => (shift, middle, 1.0 / metres[0]),
+            }
+        };
+        let cuts = [cut(0), cut(1), cut(2)];
         let first = out.positions.len() as u32;
-        for (p, n) in stone.positions.iter().zip(&stone.normals) {
-            let [mut x, y, mut z] = *p;
-            let [mut nx, ny, mut nz] = *n;
-            if x < 0.0 {
-                x *= sx;
-                nx /= sx;
-            }
-            if z < 0.0 {
-                z *= sz;
-                nz /= sz;
-            }
-            let p = at + turned * Vec3::new(x, y, z);
-            let n = (turned * Vec3::new(nx, ny, nz)).normalize_or(Vec3::Y);
-            let t = planar(p, n, metres);
-            out.corner(p, n, [t[0] + shift[0], t[1] + shift[1]], colour);
+        for (p, n) in bevelled_box(low, high, set.bevel) {
+            let face = face_of(n);
+            let (centre, middle, scale) = cuts[face];
+            let t = flat(face, p);
+            let uv = [
+                centre[0] + (t[0] - middle[0]) * scale,
+                centre[1] + (t[1] - middle[1]) * scale,
+            ];
+            out.corner(
+                at + turned * p,
+                (turned * n).normalize_or(Vec3::Y),
+                uv,
+                colour,
+            );
         }
-        for t in &stone.triangles {
-            let [x, y, z] = t.map(|i| first + i);
+        let count = out.positions.len() as u32 - first;
+        for t in (0..count).step_by(3) {
+            let [x, y, z] = [first + t, first + t + 1, first + t + 2];
             if mirrored {
                 out.indices.extend([x, z, y]);
             } else {
@@ -865,6 +948,84 @@ fn corner(
             }
         }
     }
+}
+
+/// A box from `low` to `high` with its twelve edges bevelled by `bevel` and its eight
+/// corners cut, as triangles, three corners each, each with its own face's normal, wound to
+/// face out: a dressed block's hard arrises.
+fn bevelled_box(low: Vec3, high: Vec3, bevel: f32) -> Vec<(Vec3, Vec3)> {
+    let half = (high - low) * 0.5;
+    let middle = (high + low) * 0.5;
+    let b = bevel.min(half.min_element() * 0.45);
+    let inner = half - Vec3::splat(b);
+    let point = |sign: Vec3, out: [bool; 3]| -> Vec3 {
+        middle
+            + Vec3::new(
+                sign.x * if out[0] { half.x } else { inner.x },
+                sign.y * if out[1] { half.y } else { inner.y },
+                sign.z * if out[2] { half.z } else { inner.z },
+            )
+    };
+    let mut triangles = Vec::new();
+    let mut add = |corners: &[Vec3]| {
+        let centre = corners.iter().copied().sum::<Vec3>() / corners.len() as f32;
+        for i in 1..corners.len() - 1 {
+            let (mut p, q, mut r) = (corners[0], corners[i], corners[i + 1]);
+            let mut normal = (q - p).cross(r - p).normalize_or_zero();
+            if normal.dot(centre - middle) < 0.0 {
+                std::mem::swap(&mut p, &mut r);
+                normal = -normal;
+            }
+            triangles.extend([(p, normal), (q, normal), (r, normal)]);
+        }
+    };
+    let signs = [-1.0f32, 1.0];
+    for axis in 0..3 {
+        for s in signs {
+            let mut quad = Vec::new();
+            for (a, b2) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                let mut sign = Vec3::ZERO;
+                sign[axis] = s;
+                sign[(axis + 1) % 3] = a;
+                sign[(axis + 2) % 3] = b2;
+                let mut out = [false; 3];
+                out[axis] = true;
+                quad.push(point(sign, out));
+            }
+            add(&quad);
+        }
+    }
+    for axis in 0..3 {
+        let (p, q) = ((axis + 1) % 3, (axis + 2) % 3);
+        for sp in signs {
+            for sq in signs {
+                let mut quad = Vec::new();
+                for (along, outer) in [(-1.0, p), (1.0, p), (1.0, q), (-1.0, q)] {
+                    let mut sign = Vec3::ZERO;
+                    sign[axis] = along;
+                    sign[p] = sp;
+                    sign[q] = sq;
+                    let mut out = [false; 3];
+                    out[outer] = true;
+                    quad.push(point(sign, out));
+                }
+                add(&quad);
+            }
+        }
+    }
+    for sx in signs {
+        for sy in signs {
+            for sz in signs {
+                let sign = Vec3::new(sx, sy, sz);
+                add(&[0, 1, 2].map(|axis| {
+                    let mut out = [false; 3];
+                    out[axis] = true;
+                    point(sign, out)
+                }));
+            }
+        }
+    }
+    triangles
 }
 
 /// The ground's height under a point of a base, in metres in its own space, as the roles
@@ -1341,6 +1502,86 @@ pub fn trim_triangles(profile: &[[f32; 2]]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_corner_stone_is_cut_from_inside_one_of_the_walls_own_stones_at_its_size() {
+        use crate::kit::Dress;
+        // A wall's height map of square stones 64 texels across in joints 8 wide.
+        const SIDE: usize = 512;
+        let heights = (0..SIDE * SIDE)
+            .map(|i| {
+                if (i % SIDE) % 64 < 8 || (i / SIDE) % 64 < 8 {
+                    20
+                } else {
+                    220
+                }
+            })
+            .collect();
+        let wall = crate::relief::Relief::new(SIDE, SIDE, heights).unwrap();
+        let mut kit = Kit::default();
+        kit.textures.insert(
+            Material::Masonry,
+            crate::kit::Texture {
+                path: "wall".into(),
+                metres: [2.0, 2.0],
+                depth: 0.02,
+                reflectance: crate::kit::matte(),
+                strips: None,
+                cells: 1,
+                worn: None,
+            },
+        );
+        let (proud, joint, long) = (0.018, 0.007, [0.42, 0.23]);
+        kit.dress.roles.insert(
+            layout::Role::Arris,
+            Dress::Corners {
+                long: vec![long],
+                short: Vec::new(),
+                proud,
+                bevel: 0.016,
+                joint,
+            },
+        );
+        let piece = Piece::Corner {
+            cube: IVec3::ZERO,
+            role: layout::Role::Arris,
+            faces: [Dir::North, Dir::West],
+            courses: [true, false],
+            shared: [false, false],
+            seed: 7,
+        };
+        let mut surfaces = Surfaces::default();
+        draw(&piece, &kit, Some(&wall), &mut surfaces);
+        let stone = &surfaces.0[&Material::Masonry];
+        assert!(!stone.positions.is_empty(), "in the wall's own material");
+        assert!(stone.triangle_count() <= crate::checker::CORNER_STONE);
+        // Its size the pattern's numbers: so long along each face less its joint, out by
+        // its proud, a course high less its joints.
+        let (low, high) = stone.positions.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(l, h), p| (l.min(*p), h.max(*p)),
+        );
+        let size = high - low;
+        let along: Vec<f32> = [size.x, size.z].to_vec();
+        let wanted = [long[0] - joint + proud, long[1] - joint + proud];
+        assert!(
+            (along.iter().any(|a| (a - wanted[0]).abs() < 1e-3))
+                && along.iter().any(|a| (a - wanted[1]).abs() < 1e-3),
+            "{size}"
+        );
+        assert!((size.y - (COURSE_M - 2.0 * joint)).abs() < 1e-3, "{size}");
+        assert!(
+            (low.x + proud).abs() < 1e-3 && (low.z + proud).abs() < 1e-3,
+            "proud of both faces: {low}"
+        );
+        // Every corner of it on one stone of the wall's picture, well inside its edges: no
+        // joint shows on a block.
+        let cells = wall.cells(STONE_SHARE);
+        for uv in &stone.uvs {
+            let inside = crate::cells::standing(&cells, *uv, &|_| 0.0, 2.0, 0.0);
+            assert!(inside > 1.0, "{uv:?} is {inside} texels inside a stone");
+        }
+    }
 
     #[test]
     fn rain_streaks_a_wall_under_its_sill_and_open_top_not_under_a_roof_and_wets_its_foot() {

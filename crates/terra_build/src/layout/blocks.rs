@@ -222,10 +222,23 @@ mod tests {
             (
                 Role::Arris,
                 Dress::Corners {
-                    set: "quoin".into(),
+                    long: vec![[0.42, 0.23], [0.46, 0.24]],
+                    short: Vec::new(),
+                    proud: 0.018,
+                    bevel: 0.016,
+                    joint: 0.007,
                 },
             ),
-            (Role::Jamb, Dress::Corners { set: "jamb".into() }),
+            (
+                Role::Jamb,
+                Dress::Corners {
+                    long: vec![[0.32, 0.25]],
+                    short: vec![[0.19, 0.25]],
+                    proud: 0.014,
+                    bevel: 0.014,
+                    joint: 0.007,
+                },
+            ),
         ]
         .into_iter()
         .collect();
@@ -275,6 +288,30 @@ mod tests {
                 assert!(base.cube(*cube).is_some_and(|c| c.fill == Fill::Solid));
             }
         }
+    }
+
+    #[test]
+    fn a_role_a_material_turns_off_lays_nothing() {
+        let mut base = Base::default();
+        for x in 0..6 {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 0],
+                panel: Some(if x == 2 { Panel::WINDOW } else { Panel::Solid }),
+                kind: kit().kind(),
+            });
+        }
+        let mut kit = dressed();
+        kit.dress.roles.insert(Role::Jamb, crate::kit::Dress::Off);
+        let pieces = lay(&base, &kit, &Kits(vec![kit.clone()]), Scope::ALL);
+        assert!(!pieces.iter().any(|p| matches!(
+            p,
+            Piece::Corner {
+                role: Role::Jamb,
+                ..
+            }
+        )));
+        // The rest as they were.
+        assert_eq!(trims(&pieces, Role::Head), 2);
     }
 
     #[test]

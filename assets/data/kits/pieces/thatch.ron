@@ -2,8 +2,6 @@
 (
     profiles: {
     },
-    corners: {
-    },
     modules: {
         "valley": (
             length: 1,

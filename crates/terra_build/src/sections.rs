@@ -1745,9 +1745,11 @@ fn draw_details(
             }
             let coarse = detail.kit(kit);
             // A roof's covering keeps its relief a few metres off too, where its swell is
-            // what shows of it; walls' and logs' only near.
+            // what shows of it, and a block wall the stones its corner stones are cut from,
+            // so they are the same near and a few metres off; walls' and logs' only near.
             let face = if detail == Detail::Near
-                || (detail == Detail::Mid && kit.pattern == Pattern::Roof)
+                || (detail == Detail::Mid
+                    && matches!(kit.pattern, Pattern::Roof | Pattern::Masonry))
             {
                 section.maps.shape(kit)
             } else {

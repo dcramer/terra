@@ -2,8 +2,6 @@
 (
     profiles: {
     },
-    corners: {
-    },
     modules: {
         "member": (
             length: 3,
