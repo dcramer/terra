@@ -917,6 +917,20 @@ impl Plugin for ShellPlugin {
             bevy::asset::io::AssetSourceBuilder::platform_default(&assets_folder, None),
         );
         let sound = options.sound_on();
+        // Bevy's glTF loader decodes a model's images in a scope on the IO pool, and a thread
+        // waiting on a scope runs the other loads queued meanwhile within it, so many models
+        // loading together nest deep enough to overflow a thread's default 2 MiB (seen with a
+        // forest's trees and a dozen animals at once, Bevy 0.20). So the IO pool is made here,
+        // as Bevy would make it but with room for that, before Bevy's TaskPoolPlugin makes its
+        // own; it keeps the one it finds.
+        bevy::tasks::IoTaskPool::get_or_init(|| {
+            let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+            bevy::tasks::TaskPoolBuilder::new()
+                .thread_name("IO Task Pool".to_string())
+                .num_threads((cores / 4).clamp(1, 4))
+                .stack_size(32 << 20)
+                .build()
+        });
         let engine = DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(window),
