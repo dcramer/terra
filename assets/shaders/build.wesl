@@ -57,6 +57,12 @@ var height_array: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
 var cells_array: texture_2d_array<f32>;
 
+// How much lighter or darker, and warmer or cooler, each piece of a shingled covering is.
+const PIECE_TONE: f32 = 0.18;
+const PIECE_WARMTH: f32 = 0.04;
+// How many of the cells' texels a pixel spans when that is faded, and when it is gone.
+const PIECE_FADE: vec2<f32> = vec2(6.0, 14.0);
+
 // How many texels a side the cells are (`arrays::cells::CELLS`).
 const CELLS: f32 = 512.0;
 const TAU: f32 = 6.2831853;
@@ -308,6 +314,25 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         * textureSampleLevel(colour_array, array_sampler, uv, slot, 8.0).rgb;
     pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * colour.rgb, 1.0);
     pbr_input.material.perceptual_roughness = arm.g;
+    // A covering laid a shingle at a time (D305's cells, as its damage finds them): each
+    // slate or shake a little lighter or darker, warmer or cooler than the next, as no two
+    // from a quarry or a tree are alike, so the courses read as pieces, not boards.
+    // Read unfiltered, so faded out before a piece is a few pixels across, where it would
+    // sparkle instead.
+    let cell_px = max(length(dpdx(uv)), length(dpdy(uv))) * CELLS;
+    let piece_shown = 1.0 - smoothstep(PIECE_FADE.x, PIECE_FADE.y, cell_px);
+    if way == 4 && piece_shown > 0.0 {
+        let cell = cell_at(uv, slot);
+        if cell > 0.0 {
+            let n = cell * 255.0;
+            let tone = 1.0 + piece_shown * PIECE_TONE * (2.0 * hash21(vec2(n, 7.0)) - 1.0);
+            let warm = piece_shown * PIECE_WARMTH * (2.0 * hash21(vec2(n, 13.0)) - 1.0);
+            pbr_input.material.base_color = vec4(
+                pbr_input.material.base_color.rgb * tone * vec3(1.0 + warm, 1.0, 1.0 - warm),
+                1.0,
+            );
+        }
+    }
 
     // Damage (D305), by the structure of what breaks, one way a pattern: a wall's mortar
     // washes out of its joints, its stones' edges chip back to their fresh face and then

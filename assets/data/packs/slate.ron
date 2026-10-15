@@ -1,5 +1,6 @@
 // Slate's reference pack (D241, D258, D290): Poly Haven's `grey_roof_tiles_02` (CC0), eleven
-// courses a copy, 2.5 cm thick; its own modelled ridge tiles, valley, fascia, bargeboard and
+// courses a copy laid 2.4 m across, so its slates are a real slate's size, a course 22 cm
+// and a slate about 28 cm wide, each butt standing 3 cm proud; 2.5 cm thick; its own modelled ridge tiles, valley, fascia, bargeboard and
 // flashing (art/kits/slate); hewn oak rafters; pale lichen toward the eaves.
 (
     eaves: 0.4,
@@ -11,9 +12,9 @@
     ),
     roof: (
         rows: 11.0,
-        phase: 0.0,
+        phase: 0.005,
         thick: 0.025,
-        relief: 0.02,
+        relief: 0.032,
         tint: (0.6, 0.64, 0.72),
         rafter: 0.13,
         batten: (0.05, 0.025),
@@ -24,7 +25,7 @@
         },
     ),
     textures: {
-        Covering: (path: "materials/grey_roof_tiles_02", metres: (1.5, 1.5)),
+        Covering: (path: "materials/grey_roof_tiles_02", metres: (2.4, 2.4)),
         Piece: (path: "materials/slate_pieces", metres: (1.0, 1.0)),
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
     },

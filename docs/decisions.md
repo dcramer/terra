@@ -686,3 +686,4 @@ One line per decision added or changed in status. What was built is in git histo
 - **2026-10-15**: D322 amended (by the agent): scree from 24 to 38° under a cliff; the water's depth shading ported from boujie's MIT shader, mirroring the land's skyline until the planar reflection comes.
 - **2026-10-15**: D334 added (Decided, by the agent): the air's scale is the world's, amending D212 and D299.
 - **2026-10-15**: D335 added (Decided, by the agent): woods and snow round the start by the land's rules, worked out ahead, carried on the ground's vertices and drawn near as trees, far as billboards and the canopy's tint.
+- **2026-10-15**: D320 amended (by the agent): a shingled covering's pieces toned one by one from the cells its damage finds (D305), faded out at a distance; slate laid at a real slate's size (2.4 m a copy) with deeper butts.
