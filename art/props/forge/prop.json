@@ -1,10 +1,7 @@
 {
-  "subject": "village blacksmith's forge: a waist-high hearth of stacked stone with glowing orange coals on top, a stone hood and short chimney over the coals, and an iron anvil on a squat tree stump beside the hearth",
+  "subject": "village blacksmith's forge: a waist-high rectangular hearth of rough grey fieldstone laid in lime mortar, a bed of glowing orange charcoal on its top, a smoke hood of the same fieldstone corbelled out over the coals and carrying a short square stone chimney, a big leather bellows on a weathered oak frame at the hearth's left side, and a dark wrought-iron anvil on a squat oak stump at its right side",
   "file": "Forge",
   "dims": [2.6, 2.59, 1.55],
   "budget": 2500,
-  "roles": ["Rock", "RockDark", "Ore", "MetalDark", "Wood", "WoodDark", "Fire", "Black"],
-  "match": {
-    "Fire": [0.68, 0.24, 0.17]
-  }
+  "roles": ["Rock", "RockDark", "Ore", "MetalDark", "Wood", "WoodDark", "Fire", "Black"]
 }
