@@ -386,7 +386,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let behind = textureSampleGrad(colour_array, array_sampler, behind_uv, slot, ddx, ddy).rgb;
             let behind_joint = 1.0 - smoothstep(-aa, aa, in_cell(behind_uv, slot));
             let core = pbr_input.material.base_color.rgb / max(colour.rgb, vec3(0.01)) * behind;
-            let hollow_floor = core * (0.42 - 0.25 * behind_joint) * (0.75 + 0.35 * rubble) * shade;
+            // Its floor deep in the wall, a stone's thickness and more back, occluded: the
+            // core's stones barely lit, near black in their joints.
+            let hollow_floor = core * (0.2 - 0.14 * behind_joint) * (0.7 + 0.4 * rubble) * shade;
             // Its sides plain mortar and rubble, by where they are in the world, as their
             // texture would run down them stretched.
             let grit = noise21(vec2(wp.x + wp.z, wp.y) * 40.0) * 0.6 + noise21(vec2(wp.x - wp.z, wp.y) * 11.0) * 0.4;

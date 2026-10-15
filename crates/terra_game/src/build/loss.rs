@@ -266,11 +266,23 @@ fn spawn(commands: &mut Commands, (mesh, drawn): (Handle<Mesh>, Drawn), at: Tran
     entity.id()
 }
 
-/// A rest a fragment lies still for before it shrinks away, its own, the same each time.
+/// A rest a fragment lies still for before it shrinks away, its own, the same each time: a
+/// big piece, a block or a slab, long enough for the heap it makes to be seen, as rubble
+/// lies at a fallen wall's foot; a small one briefly. Every one fades in the end, and the
+/// oldest first wherever the cap needs the room (`fade_oldest`).
 fn rest_for(fragment: &Fragment) -> f32 {
     let unit = (fragment.seed % 1000) as f32 / 1000.0;
-    REST_S[0] + (REST_S[1] - REST_S[0]) * unit
+    let rest = if fragment.size.max_element() >= BIG_M {
+        BIG_REST_S
+    } else {
+        REST_S
+    };
+    rest[0] + (rest[1] - rest[0]) * unit
 }
+
+/// How big a piece is, at its longest, to lie as long as a big one, and how long that is.
+const BIG_M: f32 = 0.2;
+const BIG_REST_S: [f32; 2] = [8.0, 10.0];
 
 /// Bursts what came down in each build since last looked into fragments, with dust where it
 /// broke and the view shaken if a big collapse is near.
@@ -830,4 +842,30 @@ pub(super) fn live(world: &World) -> usize {
     world
         .get_resource::<Shards>()
         .map_or(0, |shards| shards.live.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_big_piece_lies_for_seconds_before_it_fades_and_a_small_one_briefly() {
+        let fell = [(
+            IVec3::new(0, 8, 0),
+            terra_build::Cube::new(terra_build::Kind(2), terra_build::Fill::Solid),
+        )];
+        let breaks = |_| Breaks::Chunks;
+        let made = fragments::burst(&fell, &|_| true, &breaks, 1.0, 100);
+        let (big, small): (Vec<&Fragment>, Vec<&Fragment>) = made
+            .iter()
+            .partition(|piece| piece.size.max_element() >= BIG_M);
+        assert!(!big.is_empty() && !small.is_empty());
+        for piece in big {
+            let rest = rest_for(piece);
+            assert!((8.0..=10.0).contains(&rest), "{rest}");
+        }
+        for piece in small {
+            assert!(rest_for(piece) < 4.0);
+        }
+    }
 }
