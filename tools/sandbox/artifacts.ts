@@ -24,6 +24,13 @@
 //   pair seen held still with damage drawn and then hidden (`build.damage_drawn`, through
 //   `--calls`): the two pictures must agree, or damage is drawn where there is none, as a
 //   web of cracks drawn black on undamaged daub was.
+// - **damaged**: a house of each of the baseline's wall kits (D333) under its roof, its front
+//   wall and its roof harmed but standing, timber's and roofs' damage being drawn only in
+//   the shader (docs/building-voxels.md, gap 8). Each pair is seen held still twice with its
+//   damage drawn and once with it hidden: drawn, it must hold still (no crack or wear
+//   crawling under temporal filtering), and it must show (damage hidden must change the
+//   picture), or a kind's damage is drawn nowhere; at the low preset, which draws no damage
+//   mask but darkens what is harmed, it need only hold still.
 //
 // Each check prints its numbers against its limit, and saves its worst frame with what
 // changed marked red, in shots/artifacts/<quality>/sheet: so a person sees at a glance what
@@ -70,12 +77,46 @@ function undamaged(): Run {
   return { name: "houses", check: "undamaged", args, frames: [shots[0], shots.at(-1)!], shots };
 }
 
+/// The damaged check's run: each baseline wall kit's house, its front wall and roof harmed
+/// short of coming down, two to a view, each view shot twice with damage drawn and once
+/// without.
+function damaged(): Run {
+  const walls = readKits().filter((kit) => kit.roof && kit.baseline);
+  const calls: { frame: number; method: string; params?: unknown }[] = [];
+  walls.forEach((kit, i) => {
+    const x = i * 7;
+    calls.push({ frame: 5, method: "build.lay", params: { what: "room", min: [x, 0, 0], max: [x + 4, 0, 4], kind: kit.name, floor: "stone" } });
+    calls.push({ frame: 5, method: "build.opening", params: { tiles: [[x + 2, 0, 4]], door: false } });
+    calls.push({ frame: 5, method: "build.lay", params: { what: "roof", over: [x + 2, 0, 2], kind: kit.name, style: "Hip" } });
+    // Short of each pattern's health: timber's 400 and stone's 600 a cube; a roof's 200.
+    calls.push({ frame: 8, method: "build.damage", params: { at: [x, 0, 4], to: [x + 4, 4, 4], amount: 250 } });
+    calls.push({ frame: 9, method: "build.damage", params: { at: [x - 1, 5, -1], to: [x + 5, 9, 5], amount: 140 } });
+  });
+  calls.push({ frame: 2, method: "play.warp", params: { at: [walls.length * 1.75, 6] } });
+  calls.push({ frame: 6, method: "build.fill", params: { steps: 100000 } });
+  calls.push({ frame: 7, method: "build.fill", params: { steps: 100000 } });
+  const shots: number[] = [];
+  for (let v = 0; v * 2 < walls.length; v++) {
+    const start = 200 + v * 140;
+    const middle = v * 7 + 3;
+    calls.push({ frame: start, method: "build.look", params: { from: [middle, 3.2, 7.5], at: [middle, 1.8, 1.2] } });
+    calls.push({ frame: start + 101, method: "build.damage_drawn", params: { drawn: false } });
+    calls.push({ frame: start + 131, method: "build.damage_drawn", params: { drawn: true } });
+    shots.push(start + 80, start + 100, start + 130);
+  }
+  const file = resolve(ROOT, "shots/artifacts/damaged.calls.jsonl");
+  mkdirSync(resolve(ROOT, "shots/artifacts"), { recursive: true });
+  writeFileSync(file, calls.map((call) => JSON.stringify(call)).join("\n") + "\n");
+  const args = ["--experiment", "play", "--level", "yard", "--free-build", "--detail-sweep", "1-1@150-151", "--calls", offscreenPath(file)];
+  return { name: "houses", check: "damaged", args, frames: [shots[0], shots.at(-1)!], shots };
+}
+
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : fallback;
 };
 const qualities = arg("--quality", "high,low").split(",");
-const only = arg("--checks", "still,sun,glide,going-up,undamaged").split(",");
+const only = arg("--checks", "still,sun,glide,going-up,undamaged,damaged").split(",");
 
 const VILLAGE = ["--experiment", "play", "--level", "yard", "--village", "--time", "17"];
 const TOWN = ["--experiment", "play", "--level", "yard", "--radius", "30000", "--town", "40", "--time", "17"];
@@ -86,7 +127,7 @@ const GOING_UP = ["--experiment", "play", "--level", "yard", "--time", "17", "--
 const STOP = 200;
 const STILL = [240, 279];
 
-type Check = "still" | "sun" | "glide" | "going-up" | "undamaged";
+type Check = "still" | "sun" | "glide" | "going-up" | "undamaged" | "damaged";
 type Run = { name: string; check: Check; args: string[]; frames: [number, number]; shots?: number[] };
 // Undamaged: a house of every wall kit and its roof, built and never harmed, each pair seen
 // held still with damage drawn and then with it hidden (`build.damage_drawn`): the same
@@ -94,6 +135,7 @@ type Run = { name: string; check: Check; args: string[]; frames: [number, number
 // on undamaged daub was. Every kit, frozen ones too.
 const RUNS: Run[] = [
   undamaged(),
+  damaged(),
   {
     name: "village",
     check: "still",
@@ -147,7 +189,10 @@ const RUNS: Run[] = [
 /// flash in one frame, or still be changing three frames after a step; and how far the
 /// picture's brightness may jump in one frame.
 const LIMITS = { still: 0.3, sun: 0.5, glide: 0.3, flash: 0.3, trail: 0.3, jump: 4, undamaged: 0.1 };
-type Result = { what: string; frame: number; share: number; mask: Uint8Array; picture: string; limit: number };
+/// How much of a view of two harmed houses, in percent, their damage must change at least.
+const DAMAGE_SHOWN = 0.5;
+/// A result's share is a most it may be, or with `least`, a least it must be.
+type Result = { what: string; frame: number; share: number; mask: Uint8Array; picture: string; limit: number; least?: boolean };
 
 /// The frames a run saved, by number.
 function frames(dir: string): Map<number, string> {
@@ -159,7 +204,7 @@ function frames(dir: string): Map<number, string> {
   return out;
 }
 
-function analyse(run: Run, dir: string): Result[] {
+function analyse(run: Run, dir: string, quality: string): Result[] {
   const files = frames(dir);
   const numbers = [...files.keys()].sort((a, b) => a - b);
   const g = numbers.map((n) => grey(readPng(files.get(n)!)));
@@ -184,6 +229,25 @@ function analyse(run: Run, dir: string): Result[] {
     // past the still noise between them is damage drawn on what is not damaged.
     const b = g.map((x) => blur(x, 1));
     return [worst("damage drawn where there is none", LIMITS.undamaged, (i) => (i % 2 === 1 ? changed(b[i - 1], b[i], CHANGED * 2) : undefined))];
+  }
+  if (run.check === "damaged") {
+    // Three shots a view: damage drawn, drawn again held still, hidden.
+    const b = g.map((x) => blur(x, 1));
+    const still = worst("damage changed while still", LIMITS.still, (i) => (i % 3 === 1 ? changed(g[i - 1], g[i]) : undefined));
+    // The low preset draws no damage mask, by design: a damaged surface is only darkened by
+    // what it has lost, drawn or hidden alike, so there is nothing to show by hiding it.
+    if (quality === "low") return [still];
+    // The view whose damage shows least.
+    let least: Result | undefined;
+    for (let i = 2; i < g.length; i += 3) {
+      const mask = changed(b[i - 1], b[i], CHANGED * 2);
+      const s = share(mask);
+      if (!least || s < least.share) {
+        least = { what: "damage shown", frame: numbers[i - 1], share: s, mask, picture: files.get(numbers[i - 1])!, limit: DAMAGE_SHOWN, least: true };
+      }
+    }
+    console.log(`artifacts: damaged ${run.name}: damage shown: least ${least!.share.toFixed(3)}% of a view at frame ${least!.frame} (at least ${DAMAGE_SHOWN}%)`);
+    return [still, least!];
   }
   if (run.check === "still") {
     return [worst("changed while still", LIMITS.still, (i) => (i > 0 ? changed(g[i - 1], g[i]) : undefined))];
@@ -270,17 +334,17 @@ for (const quality of qualities) {
         process.exit(1);
       }
       if (/thread .* panicked|ERROR/.test(said)) console.log(`artifacts: ${run.check} ${run.name}: the run reported errors:\n${said.split("\n").filter((l) => /panicked|ERROR/.test(l)).slice(0, 5).join("\n")}`);
-      results.push(analyse(run, resolve(out, `${run.check}-${run.name}`)));
+      results.push(analyse(run, resolve(out, `${run.check}-${run.name}`), quality));
     });
   }
   console.log(`artifacts: ${quality}:`);
   for (const [r, run] of results.map((r, i) => [r, runs[i]] as const)) {
     for (const result of r) {
-      const over = result.share > result.limit;
+      const over = result.least ? result.share < result.limit : result.share > result.limit;
       failed ||= over;
       const file = resolve(out, "sheet", `${run.check}-${run.name}-${result.what.replace(/\W+/g, "-")}.png`);
       marked(result, file);
-      console.log(`  ${over ? "FAIL" : "ok  "}  ${run.check} ${run.name}: ${result.what}: worst ${result.share.toFixed(3)}% at frame ${result.frame} (limit ${result.limit}%)  ${file}`);
+      console.log(`  ${over ? "FAIL" : "ok  "}  ${run.check} ${run.name}: ${result.what}: worst ${result.share.toFixed(3)}% at frame ${result.frame} (${result.least ? "at least" : "limit"} ${result.limit}%)  ${file}`);
     }
   }
 }

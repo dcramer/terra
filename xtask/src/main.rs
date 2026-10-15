@@ -191,7 +191,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "artifacts",
-        takes: "[building] [--all] [--quick] [--ratchet|--record] | --frames [--quality high,low] [--checks still,sun,glide,going-up,undamaged]",
+        takes: "[building] [--all] [--quick] [--ratchet|--record] | --frames [--quality high,low] [--checks still,sun,glide,going-up,undamaged,damaged]",
         does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out; --frames, what only frames show, on the GPU: shimmer, acne, flashes during an edit, TAA trails, light probes popping",
         group: "Play and check",
         run: artifacts,
