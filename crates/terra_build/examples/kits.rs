@@ -53,6 +53,7 @@ fn main() -> ExitCode {
     let mut kits = Vec::new();
     // The roles each material's own lines and packs give (D349).
     let mut given: BTreeMap<String, BTreeSet<Material>> = BTreeMap::new();
+    let mut sets: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     let mut failed = false;
     let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
         .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
@@ -81,6 +82,11 @@ fn main() -> ExitCode {
         let own = read(&file)
             .and_then(|text| terra_build::layers::own_textures(&text, &read))
             .unwrap_or_default();
+        // Every field its files set, so one its pattern never reads is refused.
+        let set = read(&file)
+            .and_then(|text| terra_build::layers::fields_set(&file, &text, &read))
+            .unwrap_or_default();
+        sets.insert(name.clone(), set);
         given.insert(
             name,
             own.iter()
@@ -114,6 +120,8 @@ fn main() -> ExitCode {
         if let Some((_, kit)) = kits.iter().find(|(n, _)| *n == name) {
             let own = given.get(&name).cloned().unwrap_or_default();
             report.problems.extend(packs::check(kit, &own, &measured));
+            let set = sets.get(&name).cloned().unwrap_or_default();
+            report.problems.extend(packs::fields(kit, &set));
         }
         let m = &report.measured;
         let per_metre = m.per_metre.map_or("no logs".into(), |n| {

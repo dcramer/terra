@@ -3,7 +3,6 @@
 // valley, fascia, bargeboard and flashing (art/kits/shakes) baked into one atlas; pine
 // rafters in their bark; greened by moss toward the eaves.
 (
-    timber: (relief: 0.015),
     roof: (rows: 6.0, phase: 0.145, thick: 0.03, relief: 0.03, tint: (1.0, 0.97, 0.93)),
     textures: {
         Covering: (path: "materials/shakes", metres: (3.2, 1.6)),

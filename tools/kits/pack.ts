@@ -107,9 +107,12 @@ export function packFile(o: { name: string; source: string; pattern: string; met
     "    },",
   ];
   if (o.pattern === "roof") lines.push(`    roof: (rows: ${fmt(o.rows ?? 6)}, phase: 0.0),`);
-  if (o.pattern !== "roof") {
-    const scaled = (k: number) => o.mean.map((c) => Math.min(1, c * k));
-    lines.push(`    colours: (light: ${triple(o.mean)}, dark: ${triple(scaled(0.65))}, chinking: ${triple(scaled(1.15))}),`);
+  // Its dust's colour as it comes down; and a coursed wood's daub, which only courses have.
+  if (o.pattern === "coursed") {
+    const daub = o.mean.map((c) => Math.min(1, c * 1.15));
+    lines.push(`    colours: (light: ${triple(o.mean)}, chinking: ${triple(daub)}),`);
+  } else if (o.pattern !== "roof") {
+    lines.push(`    colours: (light: ${triple(o.mean)}),`);
   }
   lines.push(")", "");
   return lines.join("\n");

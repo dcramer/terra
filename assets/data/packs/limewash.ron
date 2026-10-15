@@ -15,5 +15,5 @@
         tint: (0.95, 0.92, 0.88),
         masks: (dirt_tint: (0.7, 0.64, 0.56), wear: 0.08, strata: 0.03, dry: 0.0, splash: 0.0, streaks: 0.0, streak_reach: 1.5),
     ),
-    colours: (light: (0.86, 0.82, 0.74), dark: (0.6, 0.55, 0.48), chinking: (0.86, 0.82, 0.74)),
+    colours: (light: (0.86, 0.82, 0.74)),
 )

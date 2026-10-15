@@ -836,17 +836,22 @@ pub fn matte() -> f32 {
 }
 
 /// A kit's plain colours: `light`, the dust it throws up as it comes down
-/// (`terra_game::build::loss`), and `chinking`, the daub between courses, which tints its
-/// texture. `dark` and `roof` coloured kitted floors and flat roofs before every kind was
-/// drawn by its kit; nothing reads them now but the checker, and they go when the packs
-/// stop writing them (research/building-code-health-2026-10-15.md).
+/// (`terra_game::build::loss`), and `chinking`, the daub between a coursed kit's courses,
+/// which tints its texture. What a file leaves out is pine's.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct KitColours {
     pub light: [f32; 3],
-    pub dark: [f32; 3],
-    pub roof: [f32; 3],
     pub chinking: [f32; 3],
+}
+
+impl Default for KitColours {
+    fn default() -> Self {
+        KitColours {
+            light: [0.74, 0.56, 0.37],
+            chinking: [0.66, 0.62, 0.58],
+        }
+    }
 }
 
 impl Default for Timber {
@@ -938,12 +943,7 @@ impl Default for Kit {
             toughness: KitToughness::default(),
             damage: BTreeMap::new(),
             dress: Dressing::default(),
-            colours: KitColours {
-                light: [0.74, 0.56, 0.37],
-                dark: [0.5, 0.34, 0.22],
-                roof: [0.47, 0.42, 0.37],
-                chinking: [0.66, 0.62, 0.58],
-            },
+            colours: KitColours::default(),
             meets: None,
             framing: None,
             packed: None,

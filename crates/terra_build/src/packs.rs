@@ -457,6 +457,44 @@ pub fn check(
     out
 }
 
+/// The fields a pattern's materials never read, and why: baggage that would make a material's
+/// file say something it does not draw (research/building-code-health-2026-10-15.md, R8).
+pub fn unread(kit: &Kit) -> &'static [(&'static str, &'static str)] {
+    const COURSES: &str = "only a coursed kind lays daub between courses";
+    match kit.pattern {
+        Pattern::Roof => &[
+            (
+                "timber",
+                "a roof lays no timber: its rafters are modules, tinted by its parts",
+            ),
+            ("chinking", COURSES),
+            ("colours.chinking", COURSES),
+            ("packed", "only a block kind is packed by hand"),
+            ("framing", "only a frame kind has a frame"),
+        ],
+        Pattern::Masonry => &[("chinking", COURSES), ("colours.chinking", COURSES)],
+        Pattern::Logs => &[
+            ("packed", "only a block kind is packed by hand"),
+            ("framing", "only a frame kind has a frame"),
+        ],
+    }
+}
+
+/// A material's fields its pattern never reads, `set` being every field its files set and
+/// the file that sets it (`layers::fields_set`): each a problem naming the file.
+pub fn fields(kit: &Kit, set: &[(String, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (file, field) in set {
+        if let Some((_, why)) = unread(kit).iter().find(|(name, _)| name == field) {
+            out.push(format!(
+                "{file} sets {field}, which the {} pattern never reads ({why}): take it out, so its file says only what it draws",
+                pattern_name(kit)
+            ));
+        }
+    }
+    out
+}
+
 fn cm(metres: f32) -> String {
     format!("{:.0} cm", metres * 100.0)
 }
@@ -1051,6 +1089,48 @@ mod tests {
         assert!(given.contains(&Material::Floor), "{given:?}");
     }
 
+    #[test]
+    fn a_field_its_pattern_never_reads_is_refused_naming_its_file() {
+        let assets = assets();
+        let read = |path: &str| {
+            std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+        };
+        let own = "data/kits/thatch.ron";
+        let set = crate::layers::fields_set(own, &read(own).unwrap(), &read).unwrap();
+        // Its pattern's, its pack's and its own fields, each by the file that sets it.
+        for (file, field) in [
+            ("data/kits/patterns/roof.ron", "eaves"),
+            ("data/packs/thatch.ron", "roof.rows"),
+            (own, "id"),
+        ] {
+            assert!(
+                set.iter().any(|(f, n)| f == file && n == field),
+                "{file} {field}: {set:?}"
+            );
+        }
+        let (thatch, _) = kit("thatch");
+        assert!(fields(&thatch, &set).is_empty());
+        // Timber written into a roof's pack, as its packs once had it, and daub into a wall's.
+        let mut baggage = set.clone();
+        baggage.push(("data/packs/slate.ron".into(), "timber".into()));
+        let said = fields(&thatch, &baggage).join("\n");
+        assert!(
+            said.contains("data/packs/slate.ron sets timber, which the roof pattern never reads (a roof lays no timber"),
+            "{said}"
+        );
+        let (stone, _) = kit("stone");
+        let said = fields(
+            &stone,
+            &[(
+                "data/packs/fieldstone.ron".into(),
+                "colours.chinking".into(),
+            )],
+        );
+        assert_eq!(said.len(), 1, "{said:?}");
+        // And a colour the kits no longer have does not read at all.
+        assert!(ron::from_str::<crate::kit::KitColours>("(dark: (0.4, 0.38, 0.35))").is_err());
+    }
+
     /// Every shipped material passes, its real maps read; and a real scan planted wrong
     /// (flipped, cropped so it does not tile, laid at the wrong size) fails as the made ones
     /// do.
@@ -1066,6 +1146,12 @@ mod tests {
             }
             let said = check(&kit, &given, &|path| measures.get(path).cloned().flatten());
             assert!(said.is_empty(), "{name}: {said:?}");
+            let file = format!("{}/{name}.ron", crate::kit::MATERIALS);
+            let read = |path: &str| {
+                std::fs::read_to_string(assets().join(path)).map_err(|why| format!("{path}: {why}"))
+            };
+            let set = crate::layers::fields_set(&file, &read(&file).unwrap(), &read).unwrap();
+            assert_eq!(fields(&kit, &set), Vec::<String>::new(), "{name}");
         }
         let [colour, arm, height] = set("materials/stone_wall");
         let (colour, height) = (colour.unwrap(), height.unwrap());

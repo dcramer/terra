@@ -19,7 +19,7 @@
 //             a tread on every step and a border round a floor; posts as pillars 36 cm square
 // meets       heavier than timber (weight 3), so it runs through a joint with it, quoined up
 //             its end, and caps its top where timber stands on it (D232)
-// colours     its plain colours far off and for what has no texture: a pack's own
+// colours     light: the colour of the dust it throws up as it comes down; a pack's own
 // toughness  how much damage a cube takes before it is destroyed (D193, D305); half its
 //             cost to repair from nothing; breaking into chunks (`fragments::Breaks`)
 // damage      how it breaks as it loses its health (D305): its walls, floors and dressed
@@ -67,8 +67,5 @@
     meets: Some((weight: 3, end: None, carries: Cap)),
     colours: (
         light: (0.62, 0.6, 0.56),
-        dark: (0.4, 0.38, 0.35),
-        roof: (0.47, 0.42, 0.37),
-        chinking: (0.72, 0.68, 0.6),
     ),
 )

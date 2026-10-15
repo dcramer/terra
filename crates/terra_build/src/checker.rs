@@ -181,9 +181,7 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         }
     }
     let c = &kit.colours;
-    let colours = [
-        c.light, c.dark, c.roof, c.chinking, t.tint, t.end_tint, r.tint,
-    ];
+    let colours = [c.light, c.chinking, t.tint, t.end_tint, r.tint];
     if !colours.iter().flatten().all(|v| (0.0..=1.0).contains(v)) {
         fail("a colour out of 0 to 1".into());
     }

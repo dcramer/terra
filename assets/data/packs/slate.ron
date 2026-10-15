@@ -4,12 +4,6 @@
 // flashing (art/kits/slate); hewn oak rafters; pale lichen toward the eaves.
 (
     eaves: 0.4,
-    timber: (
-        profile: Hewn,
-        relief: 0.0,
-        tint: (0.9, 0.84, 0.76),
-        end_tint: (0.86, 0.82, 0.78),
-    ),
     roof: (
         rows: 11.0,
         phase: 0.005,

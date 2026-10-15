@@ -7,7 +7,6 @@
 // covering and, where its outline is its look, its own pieces.
 //
 // eaves       how far its covering is carried on past its cubes' open edges, drawn only
-// timber      its rafters' timber
 // roof        rows: courses one copy of the covering's texture holds up the slope; phase:
 //             where a course's lower edge falls on it; thick: the covering's thickness;
 //             relief: how far its texture's height pushes each course out; tint; rafter and
@@ -30,10 +29,6 @@
         Covering: Shingles(share: 0.22),
     },
     eaves: 0.5,
-    timber: (
-        profile: Round,
-        notch: Flush,
-    ),
     roof: (
         rafter: 0.14,
         batten: (0.06, 0.025),

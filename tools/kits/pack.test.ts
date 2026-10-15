@@ -58,6 +58,8 @@ test("a block pack fills its walls and floors with the set, parallax on its wall
   assert.match(text, /Masonry: \(path: "materials\/cut_sandstone", metres: \(2.0, 2.0\), depth: 0.015\),/);
   assert.match(text, /Floor: \(path: "materials\/cut_sandstone", metres: \(2.0, 2.0\)\),/);
   assert.match(text, /light: \(0.6, 0.5, 0.4\)/);
+  // Its dust's colour, and nothing it does not read: only a coursed wood has daub.
+  assert.doesNotMatch(text, /dark|chinking/);
   const over = packFile({ name: "limed", source: "x", pattern: "block", metres: 2, depth: 0, mean: [0.8, 0.8, 0.8], under: "packed_earth" });
   assert.match(over, /pack: "packed_earth",/);
 });
@@ -70,6 +72,7 @@ test("a wood is laid over the pine logs' pack and a covering over the shakes', u
   assert.equal(underFor("coursed", "none"), undefined);
   const text = packFile({ name: "oak_logs", source: "x", pattern: "coursed", metres: 2, depth: 0, mean: [0.5, 0.4, 0.3], under: underFor("coursed") });
   assert.match(text, /pack: "pine_logs",/);
+  assert.match(text, /colours: \(light: \(0.5, 0.4, 0.3\), chinking: \(/);
 });
 
 test("a run that fails leaves nothing behind: what it made gone, what it changed as it was", async () => {

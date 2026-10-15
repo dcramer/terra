@@ -320,6 +320,49 @@ pub fn own_textures(
         .collect())
 }
 
+/// Every field a material's files set, each with the file under `assets/` that sets it: its
+/// own (`own`), its pattern's and its packs', as `timber` or, a level down, `colours.light`.
+/// So the checker can refuse a field nothing reads for its pattern, wherever it was written.
+pub fn fields_set(
+    own: &str,
+    text: &str,
+    read: &dyn Fn(&str) -> Result<String, String>,
+) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    let mut files = vec![(own.to_string(), text.to_string())];
+    let mut depth = 0;
+    while let Some((file, text)) = files.pop() {
+        depth += 1;
+        if depth > 16 {
+            return Err("patterns and packs name one another in a loop".into());
+        }
+        let Node::Struct(_, fields) = parse(&text).map_err(|why| format!("{file}: {why}"))? else {
+            continue;
+        };
+        for (field, value) in fields {
+            let quoted = matches!(&value, Node::Atom(a) if a.starts_with('"'));
+            match (field.as_str(), &value) {
+                ("pattern", Node::Atom(name)) if quoted => {
+                    let path = format!("{PATTERNS}/{}.ron", name.trim_matches('"'));
+                    files.push((path.clone(), read(&path)?));
+                }
+                ("pack", Node::Atom(name)) if quoted => {
+                    let path = format!("{PACKS}/{}.ron", name.trim_matches('"'));
+                    files.push((path.clone(), read(&path)?));
+                }
+                (_, Node::Struct(None, inner)) => {
+                    out.push((file.clone(), field.clone()));
+                    for (each, _) in inner {
+                        out.push((file.clone(), format!("{field}.{each}")));
+                    }
+                }
+                _ => out.push((file.clone(), field)),
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// A file's value over what it names under it, if it names anything.
 fn layered(
     node: Node,
@@ -386,7 +429,7 @@ mod tests {
     fn files(name: &str) -> Result<String, String> {
         match name {
             "data/kits/patterns/block.ron" => Ok("// the block pattern\n(pattern: Masonry, bevel: 0.04, \
-                 colours: (light: (1, 1, 1), dark: (0, 0, 0)), \
+                 colours: (light: (1, 1, 1), chinking: (0, 0, 0)), \
                  dress: (roles: {Head: Profile(name: \"lintel\", extend: 0.2), Arris: Corners(set: \"quoin\")}), \
                  meets: Some((weight: 3, end: None, carries: Cap)))"
                 .into()),
@@ -427,7 +470,7 @@ mod tests {
             parse(&resolved).unwrap(),
             parse(
                 "(pattern: Masonry, bevel: 0.12, \
-                 colours: (light: (0.5, 0.4, 0.3), dark: (0, 0, 0)), \
+                 colours: (light: (0.5, 0.4, 0.3), chinking: (0, 0, 0)), \
                  dress: (roles: {Head: Profile(name: \"lintel\", extend: 0.3), Arris: Corners(set: \"quoin\"), Post: Pillar(width: 0.4)}), \
                  meets: Some((weight: 2, end: None, carries: Cap)), id: 9)"
             )
