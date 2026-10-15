@@ -9,7 +9,7 @@
 
 use crate::{Base, Prop, Shape};
 use glam::IVec3;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 /// The six neighbours of a cube, face to face.
 pub const FACES: [IVec3; 6] = [
@@ -278,19 +278,6 @@ impl Base {
                 .is_some_and(|holders| holders.contains(&at))
             {
                 found.push(Holder::Prop(IVec3::from_array(prop.min)));
-            }
-        }
-        found
-    }
-
-    /// For every cube something rests on or is attached to, what does, beyond the cube
-    /// over it; for checking the rules held.
-    pub fn attachments(&self) -> BTreeMap<[i32; 3], Vec<Holder>> {
-        let mut found: BTreeMap<[i32; 3], Vec<Holder>> = BTreeMap::new();
-        for prop in self.props() {
-            for at in self.hole_for(prop).unwrap_or_default() {
-                let holder = Holder::Prop(IVec3::from_array(prop.min));
-                found.entry(at.to_array()).or_default().push(holder);
             }
         }
         found

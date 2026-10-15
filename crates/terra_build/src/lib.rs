@@ -166,11 +166,6 @@ impl Side {
             _ => Side::Down,
         }
     }
-
-    /// Whether this is a wall, as opposed to a floor or roof.
-    pub fn is_wall(self) -> bool {
-        !matches!(self, Side::Up | Side::Down)
-    }
 }
 
 /// One side of one tile.
@@ -1175,38 +1170,19 @@ impl Base {
         corners(tile, self.along(tile))
     }
 
-    /// The base as triangles, ready to draw: walls of a kind with a kit are left to the
-    /// kit, which `kit` says.
-    pub fn mesh(&self, kit: impl Fn(Kind) -> Option<mesh::KitLook>) -> BaseMesh {
-        mesh::build(self, kit)
+    /// The base as triangles, ready to draw: cubes of a kind with a kit, which `kitted`
+    /// says, are left to the kit.
+    pub fn mesh(&self, kitted: impl Fn(Kind) -> bool) -> BaseMesh {
+        mesh::build(self, kitted)
     }
 
-    /// The base with its log walls laid as logs: everything else as triangles, and the
-    /// logs, in the order they go in, to draw as they stand.
-    pub fn mesh_with_kits(&self, kits: &kit::Kits) -> (BaseMesh, Vec<layout::Layout>) {
-        let mesh = self.mesh_for_kits(kits);
-        let layouts = kits
-            .0
-            .iter()
-            .map(|kit| layout::lay_among(self, kit, kits))
-            .collect();
-        (mesh, layouts)
-    }
-
-    /// The base as triangles, its walls and pitched roofs of a kind with a kit left to the
-    /// kit, and its floors and flat roofs in the kits' colours.
+    /// The base as triangles, its cubes of a kind with a kit left to the kit.
     pub fn mesh_for_kits(&self, kits: &kit::Kits) -> BaseMesh {
-        mesh::build(self, |kind| {
-            kits.of(kind).map(|kit| mesh::KitLook {
-                floor: kit.colours.light,
-                roof: kit.colours.roof,
-                side: kit.colours.dark,
-            })
-        })
+        mesh::build(self, |kind| kits.of(kind).is_some())
     }
 }
 
-pub use mesh::{KitLook, Material, Surfaces};
+pub use mesh::{Material, Surfaces};
 
 /// The rectangle up the middle of a wall tile running along `along`, in the base's own
 /// space: low-left, low-right, high-right, high-left as seen from the south or east.

@@ -1199,16 +1199,6 @@ pub fn town(seed: u32, count: usize, picks: impl Picks + Copy) -> Vec<Building> 
         .collect()
 }
 
-/// The middles of a town's streets, in metres south of its middle, and how far each runs
-/// either side of it east and west: where a walk down one goes.
-pub fn town_streets(count: usize) -> (Vec<f32>, f32) {
-    let streets = count.div_ceil(PLOTS_A_SIDE * 2).max(1);
-    let middles = (0..streets)
-        .map(|street| (street as f32 - (streets as f32 - 1.0) * 0.5) * STREETS_APART_M)
-        .collect();
-    (middles, PLOTS_A_SIDE as f32 * PLOT_M * 0.5)
-}
-
 /// Hamlets of houses spread over the land round a middle, out to `radius_m` and no nearer
 /// than a tenth of it, to measure bases seen far off (D185's `far`): `count` buildings, five
 /// to a hamlet along a lane of its own, each hamlet turned its own way.

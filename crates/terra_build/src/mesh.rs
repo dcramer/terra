@@ -22,15 +22,6 @@ const CEILING: [f32; 3] = [0.93, 0.91, 0.86];
 /// gables stop under it.
 pub(crate) const ROOF_THICK_M: f32 = 0.15;
 
-/// The colours a kit gives what it does not lay itself: its floors and flat roofs.
-#[derive(Clone, Debug, PartialEq)]
-pub struct KitLook {
-    pub floor: [f32; 3],
-    pub roof: [f32; 3],
-    /// The sides and undersides of its floors and flat roofs.
-    pub side: [f32; 3],
-}
-
 /// What a surface is drawn in: plain colour from each triangle, or one of a kit's
 /// materials, which the game gives textures (D14).
 #[derive(
@@ -183,37 +174,6 @@ impl Surface {
         self.colours.extend_from_slice(&other.colours);
         self.uvs.extend_from_slice(&other.uvs);
         self.shared.extend_from(&other.shared);
-    }
-
-    /// Each corner's tangent for its normal map: the way its texture's U runs across its
-    /// triangle, square to its normal, and in the fourth the side V runs to, as glTF and
-    /// Bevy take them. Worked out a triangle at a time from its corners and their places
-    /// on the texture (Lengyel's method), which, as no two triangles share a corner, is as
-    /// good as MikkTSpace here and a hundred times quicker on a log wall's 100,000.
-    pub fn tangents(&self) -> Vec<[f32; 4]> {
-        let mut out = Vec::with_capacity(self.positions.len());
-        for (corners, (normals, uvs)) in self
-            .positions
-            .chunks_exact(3)
-            .zip(self.normals.chunks_exact(3).zip(self.uvs.chunks_exact(3)))
-        {
-            let (e1, e2) = (corners[1] - corners[0], corners[2] - corners[0]);
-            let (du1, dv1) = (uvs[1][0] - uvs[0][0], uvs[1][1] - uvs[0][1]);
-            let (du2, dv2) = (uvs[2][0] - uvs[0][0], uvs[2][1] - uvs[0][1]);
-            let det = du1 * dv2 - du2 * dv1;
-            let (u, v) = if det.abs() > 1e-12 {
-                let r = 1.0 / det;
-                ((e1 * dv2 - e2 * dv1) * r, (e2 * du1 - e1 * du2) * r)
-            } else {
-                (e1, e1.cross(normals[0]))
-            };
-            for n in normals {
-                let t = (u - *n * n.dot(u)).normalize_or(n.any_orthonormal_vector());
-                let w = if n.cross(t).dot(v) < 0.0 { -1.0 } else { 1.0 };
-                out.push([t.x, t.y, t.z, w]);
-            }
-        }
-        out
     }
 
     /// A triangle with a normal and a place on its texture at each corner.
@@ -488,56 +448,6 @@ impl std::hash::Hasher for Corners {
     }
 }
 
-impl Surface {
-    /// The same triangles with every corner that is the same in every way, place, normal,
-    /// colour, place on the texture and wear, shared.
-    pub fn weld(&self) -> Indexed {
-        let mut out = Indexed::default();
-        let mut seen: std::collections::HashMap<
-            [u32; 12],
-            u32,
-            std::hash::BuildHasherDefault<Corners>,
-        > = std::collections::HashMap::with_capacity_and_hasher(
-            self.positions.len() / 3,
-            Default::default(),
-        );
-        out.indices.reserve(self.positions.len());
-        let textured = self.uvs.len() == self.positions.len();
-        for i in 0..self.positions.len() {
-            let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
-            let uv = if textured { self.uvs[i] } else { [0.0; 2] };
-            let wear = self.wear.get(i).copied().unwrap_or(0.0);
-            let key = [
-                p.x.to_bits(),
-                p.y.to_bits(),
-                p.z.to_bits(),
-                n.x.to_bits(),
-                n.y.to_bits(),
-                n.z.to_bits(),
-                c[0].to_bits(),
-                c[1].to_bits(),
-                c[2].to_bits(),
-                uv[0].to_bits(),
-                uv[1].to_bits(),
-                wear.to_bits(),
-            ];
-            let index = *seen.entry(key).or_insert_with(|| {
-                if wear > 0.0 {
-                    worn(&mut out.wear, out.positions.len());
-                    out.wear.push(wear);
-                }
-                out.positions.push(p);
-                out.normals.push(n);
-                out.colours.push(c);
-                out.uvs.push(uv);
-                (out.positions.len() - 1) as u32
-            });
-            out.indices.push(index);
-        }
-        out
-    }
-}
-
 /// A base ready to draw, in the base's own space, in metres.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BaseMesh {
@@ -576,22 +486,23 @@ const FACES: [([i32; 3], [[f32; 3]; 4]); 6] = [
     ),
 ];
 
-pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseMesh {
+/// The base's cubes of kinds no kit draws (`kitted` says which a kit draws) as plain
+/// coloured boxes.
+pub(crate) fn build(base: &Base, kitted: impl Fn(Kind) -> bool) -> BaseMesh {
     let mut mesh = BaseMesh::default();
     // What hides a face: a cube drawn as a box beside it.
     let boxed = |at: IVec3| {
         base.cube(at).is_some_and(|cube| {
-            cube.fill == Fill::Solid && (!base.in_wall(at) || kit(cube.kind).is_none())
+            cube.fill == Fill::Solid && (!base.in_wall(at) || !kitted(cube.kind))
         })
     };
     for (at, cube) in base.cubes() {
         let wall = base.in_wall(at);
-        let look = kit(cube.kind);
         match cube.fill {
             Fill::Open => continue,
             // A kit draws its kind's cubes itself: a block kind as its surface, a timber
             // kind's walls as its members and its floors as decks.
-            Fill::Solid if look.is_some() => continue,
+            Fill::Solid if kitted(cube.kind) => continue,
             Fill::Solid => {}
         }
         let low = at.as_vec3() * CELL_M;
@@ -611,13 +522,10 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
                 // A floor or flat roof: its top a floor where a room is over it, its
                 // underside a ceiling where one is under it (D261).
                 let (above, below) = (base.contains(at + IVec3::Y), base.contains(at - IVec3::Y));
-                match (out.y, &look) {
-                    (1, Some(look)) if above => look.floor,
-                    (1, Some(look)) => look.roof,
-                    (1, None) if above => FLOOR,
-                    (1, None) => ROOF,
-                    (-1, _) if below => CEILING,
-                    (_, Some(look)) => look.side,
+                match out.y {
+                    1 if above => FLOOR,
+                    1 => ROOF,
+                    -1 if below => CEILING,
                     _ => UNDERSIDE,
                 }
             };
@@ -670,7 +578,7 @@ mod tests {
             ];
             let uvs = corners.map(|p| [p.x, p.z * flip]);
             surface.textured(corners, [Vec3::Y; 3], uvs, [1.0; 3]);
-            for t in surface.tangents() {
+            for t in surface.indexed().tangents() {
                 assert!(
                     (Vec3::new(t[0], t[1], t[2]) - Vec3::X).length() < 1e-5,
                     "{t:?}"
@@ -699,7 +607,7 @@ mod tests {
 
     #[test]
     fn every_triangle_faces_the_way_its_normal_says() {
-        let mesh = room().mesh(|_| None);
+        let mesh = room().mesh(|_| false);
         let surface = &mesh.structure;
         assert!(surface.triangle_count() > 0);
         for (corners, normal) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
@@ -717,18 +625,13 @@ mod tests {
             cube: Some(crate::Cube::new(Kind::PLAIN, Fill::Solid)),
         });
         // Two cubes side by side: ten faces, not twelve.
-        assert_eq!(base.mesh(|_| None).structure.triangle_count(), 20);
+        assert_eq!(base.mesh(|_| false).structure.triangle_count(), 20);
     }
 
     #[test]
     fn walls_with_a_kit_are_left_to_it() {
-        let look = KitLook {
-            floor: [0.0; 3],
-            roof: [1.0, 0.0, 0.0],
-            side: [0.0; 3],
-        };
-        let plain = room().mesh(|_| None);
-        let kitted = room().mesh(|_| Some(look.clone()));
+        let plain = room().mesh(|_| false);
+        let kitted = room().mesh(|_| true);
         assert!(kitted.structure.triangle_count() < plain.structure.triangle_count());
         assert!(kitted.textured.0.is_empty());
     }
