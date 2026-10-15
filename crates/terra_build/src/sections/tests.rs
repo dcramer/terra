@@ -2104,3 +2104,57 @@ fn a_ramps_coping_runs_down_to_its_foot_over_a_half_beside_it() {
         assert!(found.is_empty(), "{found:?}");
     }
 }
+
+#[test]
+fn a_logs_top_under_a_roof_is_shaded_and_one_open_to_the_sky_is_not() {
+    // The same room of logs with a roof and without: its logs' upper faces, which see the
+    // roof's underside rather than the sky, are darker under the roof; their sides are not.
+    let kits = shipped();
+    let logs = kind(&kits, Pattern::Logs, Profile::Round);
+    let mut open = Base::default();
+    open.apply(BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [7, 0, 5],
+        kind: logs,
+    });
+    let mut roofed = open.clone();
+    roof(&mut roofed, &kits, [0, 0], [7, 5], Style::Gable, true);
+    let maps = Maps::default();
+    // The mean lightness of the logs' faces looking up (`up`) or level (not), below the
+    // wall's top.
+    let lightness = |base: &Base, up: bool| {
+        let whole = Whole::lay(base, &kits);
+        let (mut sum, mut count) = (0.0, 0usize);
+        for at in drawable(base) {
+            let section = Section {
+                base,
+                kits: &kits,
+                maps: &maps,
+                at: IVec3::from_array(at),
+                progress: &Progress::Whole,
+            };
+            let drawn = draw(&section, &lay(&section, &whole), Reach::Near);
+            for ((kind, material), surface) in &drawn.near {
+                if *kind != logs || *material != Material::Log {
+                    continue;
+                }
+                let all = surface.indexed();
+                for ((p, n), c) in all.positions.iter().zip(&all.normals).zip(&all.colours) {
+                    if p.y > 2.5 || (n.y > 0.8) != up || (!up && n.y.abs() > 0.2) {
+                        continue;
+                    }
+                    sum += (c[0] + c[1] + c[2]) / 3.0;
+                    count += 1;
+                }
+            }
+        }
+        sum / count.max(1) as f32
+    };
+    let (open_top, roofed_top) = (lightness(&open, true), lightness(&roofed, true));
+    let (open_side, roofed_side) = (lightness(&open, false), lightness(&roofed, false));
+    assert!(roofed_top < open_top * 0.85, "{roofed_top} {open_top}");
+    assert!(
+        (roofed_side - open_side).abs() < open_side * 0.03,
+        "{roofed_side} {open_side}"
+    );
+}

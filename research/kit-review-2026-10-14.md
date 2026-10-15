@@ -75,3 +75,11 @@ Real buildings compared against: Appalachian and Scandinavian log cabins (saddle
 ## Summary
 
 Fixed in shared code (D320): undersides shaded as baked occlusion would be, every kit; sawn ends varied and greyed, every coursed kit; a plank's texture run round its faces, every deck, joist, rim and stair; a long wall's joints staggered so no seam climbs it. Sent to D290 as data: the logs' and hewn ends' tints, the logs' daub, the dressed stone's scale, the jamb and quoin depth, the slate's tint, and a tint for the ridges and hips of both roofs; and the relief mapping at rounded edges and beds, which is the shader's. Remaining: the ridge's stretch over a crease and the bargeboards' shear (modules and roofing, with the mesh checker), sky reflections indoors (lighting), and a wall top's flagstones round its bevel (minor).
+
+## After the fourth goals review
+
+The fourth review ([goals-review-2026-10-15b.md](goals-review-2026-10-15b.md), finding 10) still saw slate reading as brown boards and near black in the evening, hewn corners as a striped column, and a pale blue-white sheen on logs on gables and indoors. Before and after: `shots/kits/review4.jpg`.
+
+- **The logs' sheen was specular**, not diffuse: with the logs' reflectance at nothing the bands went, so it was the sky mirrored at a slant by a face whose bark's and checks' microshadows are not in its maps. The pine logs' face now reflects 0.1 (a third of the matte default); `log_wood` is made 112% as light rather than 130%; the weather mask's greying is halved. And in shared code (D320), what faces up under a roof is shaded as its sky is hidden (`dress::sheltered`, up to 40% darker, by the roof's height over it), by test.
+- **Hewn corners**: the dovetailed ends darker (`end_tint` (0.52, 0.46, 0.4)) and the lime chinking a weathered grey rather than white ((0.66, 0.63, 0.58)), so the corner's column steps in value less.
+- **Slate**: the covering's tint cooler and lighter, (0.6, 0.64, 0.72) from (0.5, 0.53, 0.58), so it reads blue-grey and its shaded plane is not black at evening; its lichen fainter and paler; its ridge and hip stones the slate's grey, not the boards'. From above the hip still reads more as courses than as slates.

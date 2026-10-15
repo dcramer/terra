@@ -1514,6 +1514,10 @@ fn draw_details(
                     if stone || *material != Material::Masonry {
                         crate::dress::mask(surface, kit, *material, section.base);
                     }
+                    // What faces up under a roof, its sky hidden (D320).
+                    if kit.pattern != Pattern::Roof && (stone || *material != Material::Masonry) {
+                        crate::dress::sheltered(surface, roofs_round());
+                    }
                     // A roof's own, by where on the roof each point is.
                     if matches!(material, Material::Covering | Material::Flashing) {
                         crate::dress::roof_mask(surface, kit, roofs_round());

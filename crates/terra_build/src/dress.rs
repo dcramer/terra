@@ -1235,6 +1235,53 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     }
 }
 
+/// What a roof over a wall hides of the sky from what faces up under it, shaded as baked
+/// occlusion would (D320): a log's or a stone's upper face under an eave, a verge or a
+/// ceiling sees the roof's underside, not the sky, which lit the worn pale tops of logs on a
+/// gable and indoors blue-white. Up to `SHELTERED` darker for a face looking straight up
+/// with a roof close over it, fading with the roof's height over it to `SHELTER_REACH_M`.
+pub fn sheltered(surface: &mut Surface, roofs: &crate::layout::roofs::Roofs) {
+    if roofs.is_empty() {
+        return;
+    }
+    let shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
+        let up = n.y.max(0.0);
+        if up < 0.05 {
+            return;
+        }
+        // A hair out from the face, so a wall's own top under its roof's eave counts.
+        let at = p + Vec3::new(n.x, 0.0, n.z) * 0.05;
+        let Some(top) = roofs.top_over(at.x, at.z, p.y + 0.05) else {
+            return;
+        };
+        let near = 1.0 - ((top - p.y) / SHELTER_REACH_M).clamp(0.0, 1.0);
+        let k = 1.0 - SHELTERED * up * (0.4 + 0.6 * near);
+        *c = c.map(|v| v * k);
+    };
+    for ((p, n), c) in surface
+        .positions
+        .iter()
+        .zip(&surface.normals)
+        .zip(surface.colours.iter_mut())
+    {
+        shade(*p, *n, c);
+    }
+    let shared = &mut surface.shared;
+    for ((p, n), c) in shared
+        .positions
+        .iter()
+        .zip(&shared.normals)
+        .zip(shared.colours.iter_mut())
+    {
+        shade(*p, *n, c);
+    }
+}
+
+/// How much darker a face looking up under a roof is, at most, and how high over it a roof
+/// still shades it.
+const SHELTERED: f32 = 0.4;
+const SHELTER_REACH_M: f32 = 4.0;
+
 /// A kit's masks laid over a roof's covering and its mortar, in its base's own space, as
 /// the role pieces' are (D215): toward its eaves, where the rain runs off and lingers, the
 /// covering greened by moss and lichen in blotches; up toward its ridge and hips greyed by

@@ -14,10 +14,14 @@
         phase: 0.0,
         thick: 0.025,
         relief: 0.02,
-        tint: (0.5, 0.53, 0.58),
+        tint: (0.6, 0.64, 0.72),
         rafter: 0.13,
         batten: (0.05, 0.025),
-        parts: { Rafter: (tint: (0.9, 0.84, 0.76)) },
+        parts: {
+            Rafter: (tint: (0.9, 0.84, 0.76)),
+            Ridge: (tint: (0.62, 0.64, 0.7)),
+            Hip: (tint: (0.62, 0.64, 0.7)),
+        },
     ),
     textures: {
         Covering: (path: "materials/grey_roof_tiles_02", metres: (1.5, 1.5)),
@@ -26,6 +30,6 @@
     },
     dress: (
         own: Some("data/kits/pieces/slate.ron"),
-        masks: (wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
+        masks: (wear: 0.14, moss: 0.3, moss_tint: (1.15, 1.15, 1.0)),
     ),
 )
