@@ -154,6 +154,11 @@ async function film(set: KitSet) {
     resolve(folder, `${label}.json`),
     JSON.stringify({ scenario: name, set: set.name, part, made: new Date().toISOString(), seconds: (to - from) / 60, refusals: [...refusals, ...warned], trace: trace?.summary }, null, 1),
   );
+  // A refusal the scenario did not say to expect (`allow`) fails the film: what it shows is
+  // not what it says.
+  const allowed = s.calls.flatMap((call) => call.allow ?? []);
+  const unexpected = [...refusals, ...warned].filter((line) => !allowed.some((text) => line.includes(text)));
+  if (unexpected.length) throw new Error(`${unexpected.length} unexpected refusals:\n  ${unexpected.join("\n  ")}`);
 }
 
 /// Makes the timeline's calls in order in a live run, stepping the clock between them as

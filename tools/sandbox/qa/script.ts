@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 export type Vec3 = [number, number, number];
-export type Call = { frame: number; method: string; params?: unknown; tag?: string; expect?: { name: string; text: string } };
+export type Call = { frame: number; method: string; params?: unknown; tag?: string; expect?: { name: string; text: string }; allow?: string[] };
 /// A stretch of the film with a name, which `--part` films alone and the contact sheet labels.
 export type Stage = { name: string; title: string; from: number; to: number };
 /// A step of building, as a fill gave it: what went in, and on which frame of the film.
@@ -148,6 +148,13 @@ export class Script {
   /// Moves the cursor on, the camera still moving and the game still running.
   wait(frames: number) {
     this.frame += Math.max(0, Math.round(frames));
+  }
+
+  /// The last call may be refused with words containing `text`, as the scenario means it
+  /// to be; any other refusal fails the film.
+  allow(text: string) {
+    const last = this.calls.at(-1)!;
+    (last.allow ??= []).push(text);
   }
 
   /// Keys pressed as the player would, named as --press names them, timed from now.
