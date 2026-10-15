@@ -82,8 +82,9 @@ test("the mean of looks is the mean of each number", () => {
 test("every reference kept has every number a look has, each a number", async () => {
   const { references, reference } = await import("./look.ts");
   const keys = Object.keys(look(picture(() => [100, 120, 80]))).sort();
-  // Measured since some references were made, from frames no longer to hand.
-  const later = ["trunkMiddle"];
+  // Measured since some references were made, from frames no longer to hand; a reference a
+  // place is held to has what it is held on (looks.test.ts).
+  const later = ["trunkMiddle", "tint", "lilac", "hardEdges", "facets", "flat"];
   assert.ok(references().includes("sotf-forest-day"));
   for (const name of references()) {
     const kept = reference(name);
@@ -134,4 +135,87 @@ test("a reference of open views keeps every band's numbers", async () => {
     }
     assert.ok(Number.isFinite(kept.bands.farUnderSky) && Number.isFinite(kept.bands.farBluerThanMiddle), name);
   }
+});
+
+/// A picture of its own size, coloured pixel by pixel.
+function sized(w: number, h: number, colour: (x: number, y: number) => [number, number, number]): Picture {
+  const rgba = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) rgba.set([...colour(x, y), 255], (y * w + x) * 4);
+  return { width: w, height: h, rgba };
+}
+/// A value's own noise, the same every run: a texture's grain.
+const grain = (x: number, y: number) => {
+  const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+};
+
+test("a flat saturated orange is a debug tint; the same orange textured, or a flat sky blue, is not", async () => {
+  const { tints } = await import("./look.ts");
+  near(tints(picture(() => [230, 110, 40])).tint, 1);
+  const textured = tints(picture((x, y) => {
+    const k = 0.7 + 0.6 * grain(x, y);
+    return [230 * k, 110 * k, 40 * k].map(Math.round) as [number, number, number];
+  }));
+  near(textured.tint, 0);
+  near(tints(picture(() => [70, 120, 200])).tint, 0);
+  // A grey picture with an orange quarter: the quarter's squares.
+  near(tints(sized(64, 64, (x, y) => (x < 32 && y < 32 ? [230, 110, 40] : [128, 128, 128]))).tint, 0.25);
+});
+
+test("lilac is lilac and nothing else is", async () => {
+  const { tints } = await import("./look.ts");
+  near(tints(picture(() => [170, 140, 190])).lilac, 1);
+  near(tints(picture(() => [140, 160, 120])).lilac, 0);
+  near(tints(picture(() => [90, 110, 200])).lilac, 0);
+  near(tints(sized(64, 64, (x) => (x < 16 ? [170, 140, 190] : [128, 128, 128]))).lilac, 0.25);
+});
+
+test("a shadow's edge is hard when it falls in a pixel or two, soft over thirty, and a colour's edge is no shadow", async () => {
+  const { hardEdges } = await import("./look.ts");
+  const green = (v: number): [number, number, number] => [Math.round(0.6 * v), Math.round(v), Math.round(0.4 * v)];
+  // Lit grass and its shadow, the same green a quarter as bright.
+  near(hardEdges(sized(200, 40, (x) => green(x < 100 ? 200 : 50))), 1);
+  near(hardEdges(sized(200, 40, (x) => green(x < 85 ? 200 : x > 115 ? 50 : 200 - (150 * (x - 85)) / 30))), 0);
+  // Two pixels of blur is still hard.
+  near(hardEdges(sized(200, 40, (x) => green(x < 100 ? 200 : x > 101 ? 50 : 125))), 1);
+  // Bright green grass against a dark red trunk is a thing against a thing: counted neither way.
+  near(hardEdges(sized(200, 40, (x) => (x < 100 ? green(200) : [60, 20, 15]))), 0);
+  // Along each row a shadow falls hard and lifts again softly: half its edges hard.
+  near(hardEdges(sized(400, 40, (x) => green(x < 100 ? 200 : x < 200 ? 50 : x < 230 ? 50 + (150 * (x - 200)) / 30 : 200))), 0.5, 0.05);
+});
+
+test("a long slanting straight edge across the ground is a facet; a wavy one, a level one and an upright one are not", async () => {
+  const { facets } = await import("./look.ts");
+  const [w, h] = [384, 216];
+  const red: [number, number, number] = [150, 40, 30];
+  const green: [number, number, number] = [60, 140, 50];
+  // A line at 40 degrees from the bottom edge up through the lower half.
+  const slant = (x: number, y: number) => (h - y) < (x - 60) * Math.tan((40 * Math.PI) / 180);
+  const straight = facets(sized(w, h, (x, y) => (slant(x, y) ? red : green)));
+  // Its length in the lower half is about 108 / sin 40 pixels, 0.44 of the width, give or take its ends.
+  assert.ok(straight > 0.3 && straight < 0.6, `${straight}`);
+  // The same edge, wavy along its length.
+  const wave = (x: number, y: number) => (h - y) < (x - 60 + 18 * Math.sin(y / 5)) * Math.tan((40 * Math.PI) / 180);
+  const wavy = facets(sized(w, h, (x, y) => (wave(x, y) ? red : green)));
+  assert.ok(wavy < 0.05, `${wavy}`);
+  near(facets(sized(w, h, (_, y) => (y < 160 ? green : red))), 0);
+  near(facets(sized(w, h, (x) => (x < 200 ? green : red))), 0);
+  // Above the lower half, nothing counts.
+  const above = (x: number, y: number) => y < h / 2 - 8 && slant(x, y + h / 2);
+  near(facets(sized(w, h, (x, y) => (above(x, y) ? red : green))), 0);
+});
+
+test("a flat fill below the skyline is flat colour; grain is not, and black is left out", async () => {
+  const { flat } = await import("./look.ts");
+  near(flat(picture(() => [120, 100, 80])), 1);
+  near(flat(picture((x, y) => {
+    const k = 0.8 + 0.4 * grain(x, y);
+    return [120 * k, 100 * k, 80 * k].map(Math.round) as [number, number, number];
+  })), 0);
+  near(flat(picture(() => [8, 8, 8])), 0);
+  // Half flat, half grain: half.
+  near(flat(sized(64, 64, (x, y) => {
+    const k = x < 32 ? 1 : 0.8 + 0.4 * grain(x, y);
+    return [120 * k, 100 * k, 80 * k].map(Math.round) as [number, number, number];
+  })), 0.5);
 });

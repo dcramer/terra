@@ -1,8 +1,8 @@
 # Art style guide
 
-How to make anything the game draws: characters, creatures, props, machines, building pieces, plants, rocks, items and their icons. It holds for every realm, whatever its setting: medieval, cyber, tech, alien or something nobody has thought of yet. Read it before making or judging a model, and check what you made against [the checklist](#checklist).
+How to make anything the game draws: characters, creatures, props, machines, building pieces, plants, rocks, items and their icons, and how a place looks. It holds for every realm, whatever its setting: medieval, cyber, tech, alien or something nobody has thought of yet. Read it before making or judging a model or a place; check a model against [the checklist](#checklist) and a place against [its rules](#places) (`cargo xtask looks`).
 
-Status: Decided (D14), 2026-10-12. The style is **textured, lightly stylised realism**: real materials in detailed textures, a little shaded, neither photoreal nor cartoon. It replaced direction D's flat colour the same day, after the developers saw a log cabin both ways ([research/realistic-building-textures.md](../research/realistic-building-textures.md)). Like the rest of pre-production it can change. How the renderer draws it is [below](#how-the-renderer-makes-it). The explorations that led here are research, not guidance: see [research/art-explorations.md](../research/art-explorations.md).
+Status: Decided (D14), 2026-10-12. The style is **textured, lightly stylised realism**: real materials in detailed textures, a little shaded, neither photoreal nor cartoon. It replaced direction D's flat colour the same day, after the developers saw a log cabin both ways ([research/realistic-building-textures.md](../research/realistic-building-textures.md)). Its environment half, [how a place looks](#places), is D356, written 2026-10-15 from the first four places' reviews. Like the rest of pre-production it can change. How the renderer draws it is [below](#how-the-renderer-makes-it). The explorations that led here are research, not guidance: see [research/art-explorations.md](../research/art-explorations.md).
 
 ## The look in one line
 
@@ -53,6 +53,35 @@ Trees should be mighty, towering over the player (the developers, 2026-10-12). S
 3. **No outlines.**
 4. **Edges: hard at creases, smooth across curves.** Normals are smooth across a gentle curve and split where faces meet at more than about 50 degrees. Never flat-shade every triangle.
 5. **No shimmer.** Textures have mipmaps and are filtered, so grain does not sparkle at a distance. Textures are 2K unless a piece is seen very close.
+
+## Places
+
+How a place looks, the environment half of the style (D356). A place is aimed at a reference: frames of the look wanted (another game's, photographs) measured into numbers ([the environment skill](../.agents/skills/environment/SKILL.md), D311). Its fixed views are held to those numbers, and the rules below hold in every place.
+
+| Place | Aimed at | Reference | Held to, among others (tolerance) | Review, 2026-10-15 |
+|---|---|---|---|---|
+| The lush forest (D301) | Sons of the Forest's forest by day: dark shade broken by flecks, tall trunks in rows, crowns far overhead | `sotf-forest-day`, 20 frames | brightness 0.148 (±0.05), near black 46% (±15), hard shade edges at most 34%, trunks across the middle 49% (±20) | 6/10 |
+| The mountain lake | Far Cry 5's Montana for the look; Morskie Oko's photographs for where trees, scree and snow lie | `mountain-lake-day`, 11 frames | brightness 0.386 (±0.08), sky 0.73 (±0.10), far land under the sky 0.45 (±0.08), far contrast at least 0.13 | 4/10 |
+| The tundra | Photographs of tundra in early autumn: red and rust dwarf shrubs, lichen, sedge, pools, snow in the lees | `tundra-autumn-day`, 29 photographs | brightness 0.487 (±0.08), near black 3% (±3), facet edges at most 0.05 widths, debug tint at most 0.5% | 3/10 |
+| The market town | Kingdom Come: Deliverance I and II and The Witcher 3's towns by day | `town-market-day`, 8 frames | brightness 0.34 (±0.06), sky 0.69 (±0.12), lit orange ground at most 16%, lilac at most 0.3% | 4/10 |
+
+Every number, its tolerance and its rule is in [tools/sandbox/style.json](../tools/sandbox/style.json); a tolerance is about one standard deviation of the reference's own frames. Values are sRGB, as a person sees them.
+
+**The rules every place keeps.** Each says what breaks it, as the reviews found it, and how it is measured: by **the check**, `cargo xtask looks [--place <name>]`, which shoots the place's views and prints each number against its target (D356), or by **review**, the adversarial review against the reference frames at each milestone. A number only finds a symptom; a review still judges the whole.
+
+1. **Lit and exposed as the reference.** The shade is as deep as the reference's and the sky as bright: not a forest exposed back up to mid-grey, not a noon sky half the photographs' brightness. *Check:* brightness, near black, the sky's brightness.
+2. **Coloured as the reference.** Its warmth and blue are the reference's: olive under the trees, no cyan cast, no orange grade. *Check:* red and blue against green.
+3. **Shade is soft and takes the sky's colour.** Cool and blue in the open, olive under leaves; never a hard-edged disc, never black, never lilac. A sun's penumbra metres from what casts it is wide. *Check:* the share of shading edges that are hard (brightness halving within four pixels, its colour kept), the shade's red and blue against green.
+4. **Plants are communities with height and self-shadow.** Kinds grow mixed in patches, tall over short, each shading itself and what is under it: never flat paint on the ground, never a lawn of one green. *Check:* local contrast, of the near ground where the reference has bands. *Review:* the mix and the height.
+5. **Ground layers blend by height and noise.** Where one layer gives way to another (litter, moss, lichen, heath, snow), it follows the ground's height and a noise, never the triangles of the mesh; litter lies dark and umber, not lit orange. *Check:* long straight slanting colour edges in the lower half, in picture widths; lit orange below.
+6. **Nothing reads as a debug tint.** No saturated flat fill a real material never is: orange rocks, a lime log, lilac skin. Real saturated things, autumn leaves, flowers, cloth, are textured. *Check:* saturated smooth squares below the skyline; lilac.
+7. **Far things keep the near things' light.** Far forest and far slopes are lit by the same sun and sky as near ones, paler and bluer in the air but never darker than the trees they stand for. *Check:* the far land's brightness, and how far under the sky it falls.
+8. **The horizon is never empty.** Something stands on it: ridges, far trees, peaks, a roofline, each with its own shape against the sky, never a bare line of haze. *Check:* the far land's local contrast, at least the reference's less its tolerance.
+9. **Every surface is textured in the style.** Every prop, the ground and the people are textured as [Colour and materials](#colour-and-materials) asks, never a flat fill or a placeholder colour. *Check:* flat colour, squares below the skyline whose brightness hardly varies. *Review:* the style.
+10. **What the eye meets is the reference's.** The forest's view is trunks across its middle and crowns far overhead, the sky in slits. *Check:* trunks across the middle, lime crowns above (the forest only).
+11. **Water mirrors what stands round it and takes the colour of what lies under it.** A lake reflects its shore, forest and peaks, dark green over rock, brown over peat, milky turquoise under snow; never a flat sheet of the sky's colour. *Review* (flat colour finds a flat sheet).
+
+`cargo xtask looks` fails on any number out of tolerance, naming the view furthest out; run it after every change to a place, and before the review. Its measures are tested on made-up pictures whose answers are known (`tools/sandbox/look.test.ts`).
 
 ## Budgets
 
@@ -155,7 +184,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Exposure, bloom and grading | A fixed exposure for sunlit ground, opening a little through the dusk; AgX tone mapping, a film's response; soft bloom (D212) | Working |
 | Dense foliage and wind | Plants grown from cards, merged grass blades, one wind shader | Working near the start |
 | Ground cover | Grass as clumped blades round the camera, by the light the canopy lets through, in tussocks where it is thin (D268), under the canopy most of the floor, shade grass and sedge (D293), fading into ground of its own colour; leaf litter, needles, moss, and duff with roots painted onto the ground under trees and round their feet, umber, micro-shadowed in the sun (D202, D246, D294), litter heaped against trunks, logs and rocks (D294) | Working in the lush forest; litter, needles and roots are Poly Haven's Forest Leaves 02, Forest Ground 03 and Roots, layers of the ground |
-| Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
+| Water | The sea a see-through surface mirroring the sky; lakes by depth, with shore foam and wind ripples (`lake.wesl`, ported from an MIT Godot shader, D322), mirroring the air's sky and the skyline round them | Working; a planar reflection of the land is to come |
 | Shade in corners | Screen-space ambient occlusion over about a metre (D212), and contact shadows where things meet (D204) | Working |
 | Trees, bushes and small plants | Grown by rules, as SpeedTree makes them: trunks and branches of real bark, leaves as cards of real sprays, broadleaves composed from scanned leaves with a normal map (D269) and conifers drawn needle by needle, every leaf at its real size (D276), a few variants a kind, levels of detail and shadow stand-ins by size (D203, D222) | Working: pine, birch and a broadleaf, two bushes, fern, herb and three flowers; in the lush forest, a tall conifer stand (D301): Scots pines 24 to 34 m, pointed, flat-topped, forked and broken, each its own girth, lean and bark, in knots (D276), their live crowns their top quarter or third, pads of needle tufts on crooked limbs with sky between (D318), Norway spruces as tall in its hollows, and as the exception oaks in three forms and veteran oaks whose trunks are models in the grown bark with grown crowns (D235, D264), leaves lit through from behind and dark seen from below (D247, D264), each leaf at its own tilt and crowns and shrubs dark inside under a bright skin (D269), and under them bracken, ferns, herbs, hazel, bilberry, oak scrub, saplings, dead branches and flowers in drifts (D246), with a middle layer of hazel stools as vases, fans, rods and overstood stems (D276), holly, young spruces, saplings, bramble and snags one to five metres tall (D268) |
 | Rocks | Shapes from CC0 scans cut to 350 to 550 triangles, drawn in real rock materials projected triplanar and tinted by their kind (D212, D222); in the lush forest sunk into the ground, moss over what faces up, a scanned moss in cushions (D246, D294) | Working |

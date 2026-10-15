@@ -51,6 +51,16 @@ export type Look = {
   /// shade with them, as the research measured it (its `brownMid`), the trunks a walk among
   /// tall boles shows ahead (D301). Older references may not have it.
   trunkMiddle?: number;
+  /// The art style's rules that one picture can show (docs/art-style.md, "Places"; D356): how
+  /// much of it is a debug tint, a pure lit hue (`tint`), or lilac (`lilac`); what share of
+  /// its shading edges are hard (`hardEdges`); how much long straight colour edge its lower
+  /// third has, as triangles show through the ground's layers (`facets`); and how much of the
+  /// land is flat colour, untextured (`flat`). References measured before them lack them.
+  tint?: number;
+  lilac?: number;
+  hardEdges?: number;
+  facets?: number;
+  flat?: number;
 };
 
 /// One band of a picture by distance (D326): how bright, how blue against green, how
@@ -177,7 +187,273 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     middleBlueOverGreen: middle[1] ? middle[2] / middle[1] : 0,
     limeTop: top ? lime / top : 0,
     trunkMiddle: centre ? brown / centre : 0,
+    ...tints(p, masked),
+    hardEdges: hardEdges(p, masked),
+    facets: facets(p, masked),
+    flat: flat(p, masked),
   };
+}
+
+/// Hue in degrees, saturation (chroma over value) and value of sRGB values 0 to 1, as HSV has
+/// them.
+function hsv(r: number, g: number, b: number): [number, number, number] {
+  const high = Math.max(r, g, b), d = high - Math.min(r, g, b);
+  if (d === 0) return [0, 0, high];
+  const h = high === r ? 60 * (((g - b) / d + 6) % 6) : high === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  return [h, d / high, high];
+}
+
+/// Debug tints (docs/art-style.md, "Nothing reads as a debug tint"). `tint`: of the 8-pixel
+/// squares below the skyline, the share that are a saturated fill: their mean colour saturated
+/// past 0.45 and brighter than 0.3 in HSV, and their brightness smooth, spread under 4% of it,
+/// as orange rocks and a lime log were. Real saturated things, autumn leaves, flowers, painted
+/// cloth, are textured, and water's sky blue (195 to 245 degrees) is left out. `lilac`: the
+/// share of the picture that is lilac, a hue from 255 to 335 degrees saturated past 0.12 and
+/// brighter than 0.25, which nothing in our places' references is but a flower.
+export function tints(p: Picture, masked: (x: number, y: number) => boolean = () => false): { tint: number; lilac: number } {
+  const { width: W, height: H, rgba } = p;
+  let n = 0, lilac = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (masked(x, y)) continue;
+      const i = (y * W + x) * 4;
+      const [h, s, v] = hsv(rgba[i] / 255, rgba[i + 1] / 255, rgba[i + 2] / 255);
+      n++;
+      if (h >= 255 && h < 335 && s > 0.12 && v > 0.25) lilac++;
+    }
+  }
+  const line = skyline(p);
+  let squares = 0, fills = 0;
+  for (let by = 0; by + 8 <= H; by += 8) {
+    for (let bx = 0; bx + 8 <= W; bx += 8) {
+      let r = 0, g = 0, b = 0, m = 0, m2 = 0, out = false;
+      for (let y = by; y < by + 8 && !out; y++) {
+        for (let x = bx; x < bx + 8; x++) {
+          if (masked(x, y) || y < line[x]) {
+            out = true;
+            break;
+          }
+          const i = (y * W + x) * 4;
+          r += rgba[i];
+          g += rgba[i + 1];
+          b += rgba[i + 2];
+          const v = (0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]) / 255;
+          m += v;
+          m2 += v * v;
+        }
+      }
+      if (out) continue;
+      squares++;
+      const [h, s, v] = hsv(r / (64 * 255), g / (64 * 255), b / (64 * 255));
+      m /= 64;
+      const spread = Math.sqrt(Math.max(0, m2 / 64 - m * m)) / Math.max(m, 0.02);
+      if (s > 0.45 && v > 0.3 && !(h >= 195 && h < 245) && spread < 0.04) fills++;
+    }
+  }
+  return { tint: squares ? fills / squares : 0, lilac: n ? lilac / n : 0 };
+}
+
+/// The brightness of every pixel as its logarithm (Rec. 709 luma of the sRGB values, lifted by
+/// 0.02 so black is finite), NaN where masked.
+function logLuma(p: Picture, masked: (x: number, y: number) => boolean): Float32Array {
+  const { width: W, height: H, rgba } = p;
+  const out = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      out[y * W + x] = masked(x, y) ? NaN : Math.log(0.02 + (0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]) / 255);
+    }
+  }
+  return out;
+}
+
+/// Hard shade (docs/art-style.md, "Shade is soft and takes the sky's colour"): of the
+/// picture's shading edges, the share that are hard. A shading edge is where brightness at
+/// least halves across 24 pixels and the colour stays the same, a shadow or a surface turning
+/// from the light, not one thing against another: the mean colours 9 to 12 pixels either side
+/// differ by under 0.04 in each of red's and blue's share of the sum, or the dark side is black.
+/// Each edge is counted once a row and once a column, where its one-pixel step is the steepest
+/// within six, and it is hard when seven tenths of its change happens within four pixels, as a
+/// shadow map's crisp edge does and a real penumbra, metres from what casts it, does not.
+export function hardEdges(p: Picture, masked: (x: number, y: number) => boolean = () => false): number {
+  const { width: W, height: H, rgba } = p;
+  const l = logLuma(p, masked);
+  let edges = 0, hard = 0;
+  const side = (at: (k: number) => number, from: number, to: number) => {
+    let r = 0, g = 0, b = 0;
+    for (let k = from; k <= to; k++) {
+      const i = at(k) * 4;
+      r += rgba[i];
+      g += rgba[i + 1];
+      b += rgba[i + 2];
+    }
+    return [r, g, b];
+  };
+  const scan = (length: number, at: (k: number) => number) => {
+    for (let k = 12; k < length - 13; k++) {
+      const big = l[at(k + 12)] - l[at(k - 11)];
+      if (!(Math.abs(big) > Math.LN2)) continue;
+      const step = l[at(k + 1)] - l[at(k)];
+      if (Math.sign(step) !== Math.sign(big)) continue;
+      let steepest = true;
+      for (let j = -6; j <= 6 && steepest; j++) {
+        if (j === 0) continue;
+        const other = Math.abs(l[at(k + j + 1)] - l[at(k + j)]);
+        if (other > Math.abs(step) || (j > 0 && other === Math.abs(step))) steepest = false;
+      }
+      if (!steepest) continue;
+      const a = side(at, k - 11, k - 9), c = side(at, k + 10, k + 12);
+      const sa = a[0] + a[1] + a[2], sc = c[0] + c[1] + c[2];
+      const black = Math.min(sa, sc) < 3 * 3 * 0.03 * 255;
+      const same = black || (Math.abs(a[0] / sa - c[0] / sc) < 0.04 && Math.abs(a[2] / sa - c[2] / sc) < 0.04);
+      if (!same) continue;
+      edges++;
+      if (Math.abs(l[at(k + 2)] - l[at(k - 2)]) > 0.7 * Math.abs(big)) hard++;
+    }
+  };
+  for (let y = 0; y < H; y++) scan(W, (k) => y * W + k);
+  for (let x = 0; x < W; x++) scan(H, (k) => k * W + x);
+  return edges ? hard / edges : 0;
+}
+
+/// Facets (docs/art-style.md, "Ground layers blend by height and noise"): the length of long
+/// straight colour edges in the lower half, in picture widths, as a ground whose layers change
+/// along its triangles shows them. At a quarter size, smoothed twice by a 3 by 3 box, so grass
+/// and a texture's grain melt into the patches they make, an edge pixel is where the colour
+/// changes by more than 0.06 (the colour's gradient, Di Zenzo's, thinned to its ridge). It is
+/// straight when the edge runs on through it in a straight line for a thirty-second of the
+/// picture's width each way: edge pixels lying on that line, within a pixel and their direction
+/// within 15 degrees, at both its ends and at half its steps or more (tufts crossing it break it
+/// in places). A facet's edge does; a plant's or a stone's curves away. Edges within 12 degrees
+/// of upright or 20 of level are left out: a trunk, a post, a shore or water's ripples is
+/// straight, and a triangle's edge seldom lies so. `marks`, if given (a quarter size), is set 1
+/// at each edge pixel looked at and 2 at each straight one, to draw what counted.
+export function facets(p: Picture, masked: (x: number, y: number) => boolean = () => false, marks?: Uint8Array): number {
+  const S = 4;
+  const W = Math.floor(p.width / S), H = Math.floor(p.height / S);
+  // A quarter size, each pixel the mean of sixteen; masked ones NaN.
+  const c = new Float32Array(W * H * 3);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let dy = 0; dy < S; dy++) {
+        for (let dx = 0; dx < S; dx++) {
+          const [sx, sy] = [S * x + dx, S * y + dy];
+          const i = (sy * p.width + sx) * 4;
+          if (masked(sx, sy)) r = NaN;
+          r += p.rgba[i];
+          g += p.rgba[i + 1];
+          b += p.rgba[i + 2];
+        }
+      }
+      c.set([r / (255 * S * S), g / (255 * S * S), b / (255 * S * S)], (y * W + x) * 3);
+    }
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const was = c.slice();
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        for (let ch = 0; ch < 3; ch++) {
+          let s = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += was[((y + dy) * W + x + dx) * 3 + ch];
+          c[(y * W + x) * 3 + ch] = s / 9;
+        }
+      }
+    }
+  }
+  const first = Math.floor(H / 2);
+  const magnitude = new Float32Array(W * H), angle = new Float32Array(W * H);
+  for (let y = Math.max(1, first - 2); y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      let xx = 0, yy = 0, xy = 0;
+      for (let ch = 0; ch < 3; ch++) {
+        const v = (dx: number, dy: number) => c[((y + dy) * W + x + dx) * 3 + ch];
+        // Sobel, an eighth of it, so a step of d reads d once doubled below.
+        const gx = (v(1, -1) + 2 * v(1, 0) + v(1, 1) - v(-1, -1) - 2 * v(-1, 0) - v(-1, 1)) / 8;
+        const gy = (v(-1, 1) + 2 * v(0, 1) + v(1, 1) - v(-1, -1) - 2 * v(0, -1) - v(1, -1)) / 8;
+        xx += gx * gx;
+        yy += gy * gy;
+        xy += gx * gy;
+      }
+      const largest = (xx + yy + Math.sqrt((xx - yy) ** 2 + 4 * xy * xy)) / 2;
+      magnitude[y * W + x] = Number.isNaN(largest) ? 0 : 2 * Math.sqrt(largest);
+      angle[y * W + x] = 0.5 * Math.atan2(2 * xy, xx - yy);
+    }
+  }
+  // Thinned: kept where the gradient is largest across the edge.
+  const edge = new Uint8Array(W * H);
+  for (let y = first; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const m = magnitude[y * W + x];
+      if (m <= 0.06) continue;
+      const [nx, ny] = [Math.round(Math.cos(angle[y * W + x])), Math.round(Math.sin(angle[y * W + x]))];
+      if (m >= magnitude[(y + ny) * W + x + nx] && m > magnitude[(y - ny) * W + x - nx]) edge[y * W + x] = 1;
+    }
+  }
+  const reach = Math.max(4, Math.round(W / 32));
+  const degrees = Math.PI / 180;
+  const turned = (a: number, b: number) => {
+    const d = Math.abs(a - b) % Math.PI;
+    return Math.min(d, Math.PI - d);
+  };
+  let straight = 0;
+  for (let y = first; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      if (!edge[y * W + x]) continue;
+      // The gradient's direction: 0 across an upright edge, a right angle across a level one.
+      const a = angle[y * W + x];
+      if (Math.abs(a) < 12 * degrees || Math.PI / 2 - Math.abs(a) < 20 * degrees) continue;
+      // Along the edge, across the gradient.
+      const [tx, ty] = [-Math.sin(a), Math.cos(a)];
+      const on = (k: number) => {
+        for (const off of [0, -1, 1]) {
+          const qx = Math.round(x + k * tx + off * Math.cos(a)), qy = Math.round(y + k * ty + off * Math.sin(a));
+          if (qx >= 0 && qy >= first && qx < W && qy < H && edge[qy * W + qx] && turned(angle[qy * W + qx], a) < 15 * degrees) return true;
+        }
+        return false;
+      };
+      let hits = 0;
+      for (let k = 1; k <= reach; k++) hits += (on(k) ? 1 : 0) + (on(-k) ? 1 : 0);
+      const ends = (on(reach) || on(reach - 1)) && (on(-reach) || on(1 - reach));
+      const long = ends && hits >= reach;
+      if (marks) marks[y * W + x] = long ? 2 : 1;
+      if (long) straight++;
+    }
+  }
+  return straight / W;
+}
+
+/// Flat colour (docs/art-style.md, "Every surface is textured in the style"): of the 16-pixel
+/// squares below the skyline that are not near black, the share whose brightness hardly varies,
+/// spread under 1.5% of their brightness, as an untextured fill or a debug colour is and a
+/// textured material, snow and still water included, seldom is at this size.
+export function flat(p: Picture, masked: (x: number, y: number) => boolean = () => false): number {
+  const { width: W, height: H, rgba } = p;
+  const line = skyline(p);
+  let squares = 0, smooth = 0;
+  for (let by = 0; by + 16 <= H; by += 16) {
+    for (let bx = 0; bx + 16 <= W; bx += 16) {
+      let m = 0, m2 = 0, out = false;
+      for (let y = by; y < by + 16 && !out; y++) {
+        for (let x = bx; x < bx + 16; x++) {
+          if (masked(x, y) || y < line[x]) {
+            out = true;
+            break;
+          }
+          const i = (y * W + x) * 4;
+          const v = (0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]) / 255;
+          m += v;
+          m2 += v * v;
+        }
+      }
+      if (out) continue;
+      m /= 256;
+      if (m < 0.06) continue;
+      squares++;
+      if (Math.sqrt(Math.max(0, m2 / 256 - m * m)) / m < 0.015) smooth++;
+    }
+  }
+  return squares ? smooth / squares : 0;
 }
 
 /// How far down from the top each column's sky reaches (D326): sky is read down from the top
@@ -352,7 +628,7 @@ export function drawBands(p: Picture): Picture {
 
 /// The mean of several pictures' looks.
 export function meanOf(looks: Look[]): Look {
-  const keys = Object.keys(SOTF) as (keyof Look)[];
+  const keys = [...new Set(looks.flatMap((l) => Object.keys(l)))] as (keyof Look)[];
   return Object.fromEntries(keys.map((k) => [k, looks.reduce((s, l) => s + (l[k] ?? 0), 0) / looks.length])) as Look;
 }
 

@@ -75,6 +75,13 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "looks",
+        takes: "[--place lush|lake|tundra|town|all] [--time 13] [--from DIR]",
+        does: "the looks check (D356): each place's views shot and held to the art style's rules, each number against its reference, pass or fail, and the view furthest out (docs/art-style.md#places)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/looks.ts", args),
+    },
+    Task {
         name: "collide",
         takes: "[--count 20]",
         does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check against their meshes that each stops them where it is drawn, or is stepped over if low (tools/sandbox)",

@@ -5,7 +5,7 @@ description: Build or judge how a place looks in Terra: a biome's forest, ground
 
 # Building how a place looks
 
-The lush forest (2026-10-13 to 14) went from an adversarial score of 3/10 to over 6 by this loop, and lost most of its rounds where it was skipped: tuning by eye, fixing a reviewer's symptom without finding its cause, or measuring the wrong thing. Do it in this order. The art guide ([docs/art-style.md](../../../docs/art-style.md)) decides how anything looks; this is how to get there and know it.
+The lush forest (2026-10-13 to 14) went from an adversarial score of 3/10 to over 6 by this loop, and lost most of its rounds where it was skipped: tuning by eye, fixing a reviewer's symptom without finding its cause, or measuring the wrong thing. Do it in this order. The art guide ([docs/art-style.md](../../../docs/art-style.md)) decides how anything looks, and [its Places section](../../../docs/art-style.md#places) what each place is aimed at, the numbers it is held to and the rules every place keeps, each with its measure (D356); read it first. This is how to get there and know it.
 
 ## 1. A reference before anything
 
@@ -36,11 +36,11 @@ A look is aimed at something you can measure, never at memory or adjectives.
 - `node tools/sandbox/lodcheck.ts`: nothing pops as levels of detail change, nothing pure black (a light gone missing, NaNs).
 - `cargo xtask collide`: what should stop a walker does.
 - `cargo xtask bench walk`: within the frame budget ([development.md](../../../docs/development.md#measuring-performance), D25). Frame time matters as much as the look: prefer free changes (exposure, keys, grading, constants) and say what anything else costs.
-- The vantage look lines stay near the reference.
+- **`cargo xtask looks --place <name>`** ([tools/sandbox/looks.ts](../../../tools/sandbox/looks.ts), D356): shoots the place's measured views and prints each number the style holds against its reference, pass or fail, with the view furthest out; it fails on any. `--from <dir>` measures views already shot (a vantage run's). A new place gets its entry in `tools/sandbox/style.json` under the guide's rules; a new rule a picture can show gets a measure in `look.ts`, tested on made-up pictures whose answer is known, then a row in each place's entry.
 
 ## 5. The review at milestones
 
-Not every change: when a pass is done, a fresh subagent judges it adversarially against the reference frames, side by side, and scores it. Give it the films and vantage shots, the reference frames' folder, the previous reviews' scores and gaps, what changed since, and tell it to measure, not to edit or use the GPU. Ask for an overall score and sub-scores (foliage density, foliage asset quality, trees, ground, light and shade, atmosphere, motion and wind, glitches including the camera), the top six gaps with where they are seen, why they read as not shipped quality and a guess at the cause, what is now good, and whether it approves. Then find each gap's cause yourself before handing any of it on: the reviewer's guess was wrong about as often as right.
+Not every change: when a pass is done, a fresh subagent judges it adversarially against the reference frames, side by side, and scores it. Give it the films and vantage shots, the reference frames' folder, the previous reviews' scores and gaps, what changed since, and tell it to measure, not to edit or use the GPU. Ask for an overall score and sub-scores (foliage density, foliage asset quality, trees, ground, light and shade, atmosphere, motion and wind, glitches including the camera), the top six gaps with where they are seen, why they read as not shipped quality and a guess at the cause, what is now good, and whether it approves. Then find each gap's cause yourself before handing any of it on: the reviewer's guess was wrong about as often as right. Give the reviewer the guide's rules and the looks table too; a gap it finds that comes back from place to place is a rule: write it in the guide, and measure it in the check where a picture can show it.
 
 ## 6. Working with agents on it
 

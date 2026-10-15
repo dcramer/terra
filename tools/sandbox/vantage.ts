@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
 import * as game from "./client.ts";
 import { bands, bandsLine, line, look, meanOf, meanOfBands, reference } from "./look.ts";
-import { place } from "./places.ts";
+import { type Place, place } from "./places.ts";
 import { readPng } from "./png.ts";
 import { ROOT, imageMagick } from "./client.ts";
 
@@ -32,14 +32,6 @@ const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : fallback;
 };
-/// The place (places.ts): its views, a name and where the camera stands and what it looks at,
-/// in metres east, up and south of the start; those held to its look's reference; the
-/// sandbox's options that make it.
-const PLACE = place(arg("--place", "lush"));
-const VIEWS = PLACE.views;
-const FOREST_VIEWS = PLACE.measured;
-const AIM = reference(PLACE.look);
-const MADE = [...PLACE.args, ...(PLACE.ground ? ["--vantage-ground"] : [])];
 /// Frames each view is held for before it is pictured: grass is built round the camera as
 /// it arrives, and levels of detail fade in.
 const HOLD = 200;
@@ -54,59 +46,98 @@ const BLOCK_M = 20;
 /// from a bush rather than standing in it.
 const ASIDE_M = 1.2;
 
-const hours = arg("--time", "13,17").split(",");
-const date = arg("--date", "");
-const dated = date ? ["--date", date] : [];
-const placeName = arg("--place", "lush");
-const out = resolve(ROOT, arg("--out", placeName === "lush" ? "shots/vantage" : `shots/vantage-${placeName}`));
-mkdirSync(out, { recursive: true });
-
-const build = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" });
-if (build.status !== 0) process.exit(1);
-
-const tiles: string[] = [];
-for (const hour of hours) {
-  const vantages = VIEWS.flatMap(([, view], index) => ["--vantage", `${view}@${index * HOLD}`]);
-  const frames = VIEWS.map((_, index) => index * HOLD + HOLD - 10).join(",");
+/// A place's fixed views at an hour (places.ts), each held and pictured in one scripted run of
+/// the release build (built already), saved as `<out>/<hour>-<view>.png`: the view's name and
+/// its file, and what the run said. The run shares the GPU, waiting only while a benchmark has
+/// it (D319). The looks check shoots its views so too (`looks.ts`).
+export function shootViews(place: Place, hour: string, out: string, dated: string[] = []): { files: [string, string][]; said: string } {
+  mkdirSync(out, { recursive: true });
+  const made = [...place.args, ...(place.ground ? ["--vantage-ground"] : [])];
+  const vantages = place.views.flatMap(([, view], index) => ["--vantage", `${view}@${index * HOLD}`]);
+  const frames = place.views.map((_, index) => index * HOLD + HOLD - 10).join(",");
   const prefix = resolve(out, `run-${hour}`);
-  const started = Date.now();
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", ...MADE, "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
+    ["--offscreen", "--clean", ...made, "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
     // Run outside Cargo, so told where assets/ is, as Cargo would.
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );
   const said = `${run.stdout}${run.stderr}`;
   if (run.status !== 0 || !said.includes("SANDBOX saved")) {
     console.error(said.split("\n").slice(-20).join("\n"));
-    console.error(`vantage: the run at ${hour}:00 failed`);
+    throw new Error(`the run at ${hour}:00 failed`);
+  }
+  const files = place.views.map(([name], index): [string, string] => {
+    const file = resolve(out, `${hour}-${name}.png`);
+    renameSync(`${prefix}-${String(index * HOLD + HOLD - 10).padStart(5, "0")}.png`, file);
+    return [name, file];
+  });
+  return { files, said };
+}
+
+if (import.meta.main) {
+  /// The place (places.ts): its views, a name and where the camera stands and what it looks
+  /// at, in metres east, up and south of the start; those held to its look's reference; the
+  /// sandbox's options that make it.
+  const PLACE = place(arg("--place", "lush"));
+  const VIEWS = PLACE.views;
+  const FOREST_VIEWS = PLACE.measured;
+  const AIM = reference(PLACE.look);
+  const hours = arg("--time", "13,17").split(",");
+  const date = arg("--date", "");
+  const dated = date ? ["--date", date] : [];
+  const placeName = arg("--place", "lush");
+  const out = resolve(ROOT, arg("--out", placeName === "lush" ? "shots/vantage" : `shots/vantage-${placeName}`));
+  mkdirSync(out, { recursive: true });
+
+  const build = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" });
+  if (build.status !== 0) process.exit(1);
+
+  const tiles: string[] = [];
+  for (const hour of hours) {
+    const started = Date.now();
+    let shot: ReturnType<typeof shootViews>;
+    try {
+      shot = shootViews(PLACE, hour, out, dated);
+    } catch (e) {
+      console.error(`vantage: ${(e as Error).message}`);
+      process.exit(1);
+    }
+    shot.files.forEach(([name, file], index) => {
+      const frame = index * HOLD + HOLD - 10;
+      // The share of the ground within 30 m that nothing grows on (docs/biomes.md), as the
+      // run measured it with the picture.
+      const bare = new RegExp(`SANDBOX frame ${frame}: bare ground within 30 m ([\\d.]+)%, paths ([\\d.]+)%`).exec(shot.said);
+      const measured = bare ? `, bare ${bare[1]}% (paths ${bare[2]}%)` : "";
+      if (bare) console.log(`vantage: ${name} at ${hour}:00: bare ground within 30 m ${bare[1]}%, paths ${bare[2]}%`);
+      tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
+    });
+    // How the measured views look against the place's reference (D286), and by band where the
+    // reference is of open views (D326). `cargo xtask looks` judges them against the style.
+    const inside = VIEWS.filter(([name]) => FOREST_VIEWS.includes(name)).map(([name]) => {
+      const p = readPng(resolve(out, `${hour}-${name}.png`));
+      const l = look(p);
+      console.log(`vantage: look: ${line(`${name} at ${hour}:00`, l, AIM.look, PLACE.look)}`);
+      const b = bands(p);
+      if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`${name} at ${hour}:00`, b, AIM.bands, PLACE.look)}`);
+      return { l, b };
+    });
+    console.log(`vantage: look: ${line(`mean at ${hour}:00`, meanOf(inside.map((v) => v.l)), AIM.look, PLACE.look)}`);
+    if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`mean at ${hour}:00`, meanOfBands(inside.map((v) => v.b)), AIM.bands, PLACE.look)}`);
+    console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+    if (hour === hours[0] && PLACE.forest) tiles.push(...canopy(hour, out, dated), ...(await blocking(hour, out, dated)));
+  }
+
+  const sheet = resolve(out, "sheet.jpg");
+  const montage = spawnSync(
+    ...imageMagick(["montage", ...tiles, "-tile", `${VIEWS.length + 1}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet]),
+    { encoding: "utf8" },
+  );
+  if (montage.status !== 0 || !existsSync(sheet)) {
+    console.error(montage.stderr);
     process.exit(1);
   }
-  VIEWS.forEach(([name], index) => {
-    const frame = index * HOLD + HOLD - 10;
-    const file = resolve(out, `${hour}-${name}.png`);
-    renameSync(`${prefix}-${String(frame).padStart(5, "0")}.png`, file);
-    // The share of the ground within 30 m that nothing grows on (docs/biomes.md), as the
-    // run measured it with the picture.
-    const bare = new RegExp(`SANDBOX frame ${frame}: bare ground within 30 m ([\\d.]+)%, paths ([\\d.]+)%`).exec(said);
-    const measured = bare ? `, bare ${bare[1]}% (paths ${bare[2]}%)` : "";
-    if (bare) console.log(`vantage: ${name} at ${hour}:00: bare ground within 30 m ${bare[1]}%, paths ${bare[2]}%`);
-    tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
-  });
-  // How the measured views look against the place's reference (D286), and by band where the
-  // reference is of open views (D326).
-  const inside = VIEWS.filter(([name]) => FOREST_VIEWS.includes(name)).map(([name]) => {
-    const p = readPng(resolve(out, `${hour}-${name}.png`));
-    const l = look(p);
-    console.log(`vantage: look: ${line(`${name} at ${hour}:00`, l, AIM.look, PLACE.look)}`);
-    const b = bands(p);
-    if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`${name} at ${hour}:00`, b, AIM.bands, PLACE.look)}`);
-    return { l, b };
-  });
-  console.log(`vantage: look: ${line(`mean at ${hour}:00`, meanOf(inside.map((v) => v.l)), AIM.look, PLACE.look)}`);
-  if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`mean at ${hour}:00`, meanOfBands(inside.map((v) => v.b)), AIM.bands, PLACE.look)}`);
-  console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
-  if (hour === hours[0] && PLACE.forest) tiles.push(...canopy(hour), ...(await blocking(hour)));
+  console.log(`vantage: ${sheet}`);
 }
 
 /// How closed the canopy is: from eye height, 1.7 m over the ground, looking straight up at
@@ -114,7 +145,7 @@ for (const hour of hours) {
 /// colour. Under a closed canopy little sky shows; the forest's aim is under 15% (D244).
 /// Places on a spiral from 40 to 170 m out, the same every run; some fall on paths and in
 /// glades, as a walker's would.
-function canopy(hour: string): string[] {
+function canopy(hour: string, out: string, dated: string[]): string[] {
   const places = Array.from({ length: SKY_PLACES }, (_, k) => {
     const distance = 40 + (130 * k) / (SKY_PLACES - 1);
     const angle = k * 2.39996;
@@ -167,7 +198,7 @@ function canopy(hour: string): string[] {
 /// hides. Reported for the band round the horizon, the middle fifth of the picture, which is
 /// what a sightline crosses, and for the whole picture. The forest's aim is 30 to 60% of the
 /// band.
-async function blocking(hour: string): Promise<string[]> {
+async function blocking(hour: string, out: string, dated: string[]): Promise<string[]> {
   const places = Array.from({ length: BLOCK_PLACES }, (_, k) => {
     const distance = 30 + (130 * k) / (BLOCK_PLACES - 1);
     const angle = k * 2.39996 + 0.7;
@@ -223,14 +254,3 @@ async function blocking(hour: string): Promise<string[]> {
     "-label", `what it hides there (${results[typical].band.toFixed(0)}%)`, resolve(out, `block-${typical}-mask.png`),
   ];
 }
-
-const sheet = resolve(out, "sheet.jpg");
-const montage = spawnSync(
-  ...imageMagick(["montage", ...tiles, "-tile", `${VIEWS.length + 1}x`, "-geometry", "640x360+4+4", "-pointsize", "18", "-background", "#222", "-fill", "#eee", sheet]),
-  { encoding: "utf8" },
-);
-if (montage.status !== 0 || !existsSync(sheet)) {
-  console.error(montage.stderr);
-  process.exit(1);
-}
-console.log(`vantage: ${sheet}`);

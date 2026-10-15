@@ -1,0 +1,97 @@
+{
+  "about": "The art style's environment rules as numbers (docs/art-style.md, \"Places\"; D356): for each place, the numbers of its vantage views (places.ts) held to its reference (looks/<name>.json), each under the rule it measures. `within` holds the mean of the views within that of the reference's; `under` holds it at most that above, `over` at least that below. Tolerances are about one standard deviation of the reference's own frames, rounded, tighter where a rule asks no more than the reference shows. `cargo xtask looks` shoots the views and prints the table.",
+  "rules": {
+    "light": "Lit and exposed as the reference",
+    "grade": "Coloured as the reference",
+    "shade": "Shade is soft and takes the sky's colour",
+    "plants": "Plants are communities with height and self-shadow",
+    "ground": "Ground layers blend by height and noise",
+    "tint": "Nothing reads as a debug tint",
+    "far": "Far things keep the near things' light",
+    "horizon": "The horizon is never empty",
+    "textured": "Every surface is textured in the style",
+    "eye": "What the eye meets is the reference's"
+  },
+  "places": {
+    "lush": {
+      "time": "13",
+      "hold": {
+        "mean": { "rule": "light", "within": 0.05 },
+        "dark": { "rule": "light", "within": 0.15 },
+        "redOverGreen": { "rule": "grade", "within": 0.08 },
+        "blueOverGreen": { "rule": "grade", "within": 0.1 },
+        "shadeRedOverGreen": { "rule": "shade", "within": 0.2 },
+        "shadeBlueOverGreen": { "rule": "shade", "within": 0.1 },
+        "hardEdges": { "rule": "shade", "under": 0.07 },
+        "contrast": { "rule": "plants", "within": 0.1 },
+        "facets": { "rule": "ground", "under": 0.1 },
+        "litLitter": { "rule": "ground", "under": 0.04 },
+        "tint": { "rule": "tint", "under": 0.01 },
+        "lilac": { "rule": "tint", "under": 0.002 },
+        "flat": { "rule": "textured", "under": 0.01 },
+        "trunkMiddle": { "rule": "eye", "within": 0.2 },
+        "limeTop": { "rule": "eye", "under": 0.03 }
+      }
+    },
+    "lake": {
+      "time": "13",
+      "hold": {
+        "mean": { "rule": "light", "within": 0.08 },
+        "dark": { "rule": "light", "within": 0.05 },
+        "sky.mean": { "rule": "light", "within": 0.1 },
+        "redOverGreen": { "rule": "grade", "within": 0.05 },
+        "blueOverGreen": { "rule": "grade", "within": 0.07 },
+        "shadeBlueOverGreen": { "rule": "shade", "within": 0.3 },
+        "hardEdges": { "rule": "shade", "under": 0.09 },
+        "near.contrast": { "rule": "plants", "within": 0.09 },
+        "facets": { "rule": "ground", "under": 0.1 },
+        "tint": { "rule": "tint", "under": 0.005 },
+        "lilac": { "rule": "tint", "under": 0.004 },
+        "far.mean": { "rule": "far", "within": 0.08 },
+        "farUnderSky": { "rule": "far", "within": 0.08 },
+        "far.contrast": { "rule": "horizon", "over": 0.1 },
+        "flat": { "rule": "textured", "under": 0.025 }
+      }
+    },
+    "tundra": {
+      "time": "13",
+      "hold": {
+        "mean": { "rule": "light", "within": 0.08 },
+        "dark": { "rule": "light", "within": 0.03 },
+        "sky.mean": { "rule": "light", "within": 0.12 },
+        "redOverGreen": { "rule": "grade", "within": 0.1 },
+        "blueOverGreen": { "rule": "grade", "within": 0.08 },
+        "hardEdges": { "rule": "shade", "under": 0.08 },
+        "near.contrast": { "rule": "plants", "within": 0.13 },
+        "litLitter": { "rule": "plants", "within": 0.18 },
+        "facets": { "rule": "ground", "under": 0.03 },
+        "tint": { "rule": "tint", "under": 0.004 },
+        "lilac": { "rule": "tint", "under": 0.005 },
+        "far.mean": { "rule": "far", "within": 0.09 },
+        "farUnderSky": { "rule": "far", "within": 0.1 },
+        "far.contrast": { "rule": "horizon", "over": 0.08 },
+        "flat": { "rule": "textured", "under": 0.03 }
+      }
+    },
+    "town": {
+      "time": "13",
+      "hold": {
+        "mean": { "rule": "light", "within": 0.06 },
+        "dark": { "rule": "light", "within": 0.06 },
+        "sky.mean": { "rule": "light", "within": 0.12 },
+        "redOverGreen": { "rule": "grade", "within": 0.09 },
+        "blueOverGreen": { "rule": "grade", "within": 0.08 },
+        "shadeRedOverGreen": { "rule": "shade", "within": 0.12 },
+        "shadeBlueOverGreen": { "rule": "shade", "within": 0.18 },
+        "hardEdges": { "rule": "shade", "under": 0.05 },
+        "near.contrast": { "rule": "plants", "within": 0.06 },
+        "litLitter": { "rule": "ground", "under": 0.08 },
+        "tint": { "rule": "tint", "under": 0.003 },
+        "lilac": { "rule": "tint", "under": 0.002 },
+        "far.mean": { "rule": "far", "within": 0.07 },
+        "far.contrast": { "rule": "horizon", "over": 0.11 },
+        "flat": { "rule": "textured", "under": 0.025 }
+      }
+    }
+  }
+}
