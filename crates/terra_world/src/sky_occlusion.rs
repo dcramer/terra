@@ -57,8 +57,10 @@ const LAYER_M: f32 = 2.5;
 /// How far a look toward the sky is followed through the crowns.
 const REACH_M: f32 = 90.0;
 /// The light a crown's underside gives where it hides the sky, as a share of the sky's it
-/// hides: sunlight through the leaves above, green; dim, as a forest's shade is (D286).
-const LEAF_GLOW: Vec3 = Vec3::new(0.06, 0.09, 0.03);
+/// hides: sunlight through the leaves above, green, a quarter as bright as the sky they hide. A
+/// twelfth was too little: what is not a leaf, skin, leather and stone, was lit by the gaps'
+/// blue sky alone and read lilac (D286).
+const LEAF_GLOW: Vec3 = Vec3::new(0.18, 0.27, 0.09);
 /// How much of the ground's bounce is left in the deepest shade, where little sun reaches it.
 const SHADED_GROUND: f32 = 0.1;
 
