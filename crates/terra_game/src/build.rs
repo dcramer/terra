@@ -171,10 +171,15 @@ pub(super) struct BuildLook {
 
 /// The kits' files, `assets/data/kits/`, read again when one is saved so a wall's look can
 /// be tuned while the game runs.
+///
+/// Whether one has changed is asked on a worker, never the main thread: from a Windows copy
+/// run from WSL the files are over WSL's share, and listing them took 140 ms a second there
+/// when the machine was busy, a hitch every second (`cargo xtask qa`'s trace).
 #[derive(Resource)]
 struct KitFile {
     modified: Option<SystemTime>,
     timer: Timer,
+    asking: Option<bevy::tasks::Task<Option<SystemTime>>>,
 }
 
 const KITS: &str = "data/kits";
@@ -938,6 +943,7 @@ fn setup(
     commands.insert_resource(KitFile {
         modified: modified(),
         timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+        asking: None,
     });
     let mut build = Build::new(&mut commands, &look, frame, "Base");
     // The player's base is built by plans, drawn as far as each cube is in.
@@ -1026,10 +1032,16 @@ fn reload_kit(
     (assets, mut materials): (Res<AssetServer>, ResMut<Assets<StandardMaterial>>),
     mut arrays: Option<ResMut<arrays::Arrays>>,
 ) {
-    if !file.timer.tick(time.delta()).just_finished() {
-        return;
+    if file.timer.tick(time.delta()).just_finished() && file.asking.is_none() {
+        file.asking = Some(bevy::tasks::IoTaskPool::get().spawn(async { modified() }));
     }
-    let now = modified();
+    let Some(task) = file.asking.as_mut() else {
+        return;
+    };
+    let Some(now) = bevy::tasks::block_on(bevy::tasks::poll_once(task)) else {
+        return;
+    };
+    file.asking = None;
     if now == file.modified {
         return;
     }
