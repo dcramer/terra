@@ -1750,7 +1750,7 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
     let kits = shipped();
     let stone = kind(&kits, Pattern::Masonry, Profile::Round);
     let kit = kits.of(stone).unwrap();
-    let Some(crate::kit::Breaks::Joints { depth, .. }) =
+    let Some(crate::kit::Breaks::Joints { depth, share }) =
         kit.damage.get(&Material::Masonry).copied()
     else {
         panic!("stone breaks at its joints");
@@ -1760,7 +1760,7 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
         .map(|i| {
             let (x, y) = (i % SIDE, i / SIDE);
             // Its joints off the cubes' lines, so the hole's outline is not the grid's.
-            if (x + 11) % 32 < 4 || (y + 7) % 32 < 4 {
+            if (x + 11) % 32 < 4 || (y + 19) % 32 < 4 {
                 30
             } else {
                 220
@@ -1769,8 +1769,10 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
         .collect();
     let relief = std::sync::Arc::new(crate::relief::Relief::new(SIDE, SIDE, heights).unwrap());
     let mut maps = Maps::default();
-    maps.heights
-        .insert(crate::relief::shaped_by(kit).unwrap().to_string(), relief);
+    maps.heights.insert(
+        crate::relief::shaped_by(kit).unwrap().to_string(),
+        relief.clone(),
+    );
     let mut base = Base::default();
     base.apply(BuildOp::Fill {
         min: [0, 0, 0],
@@ -1841,6 +1843,40 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
         "{off} of {} off the grid: on {on:?}",
         rim.len()
     );
+    // Each stone whole and flat to the face, or gone and sunk, never part of each: every
+    // point well inside a stone, by the stone it is in, sunk (`wear`) alike.
+    let cells = relief.cells(share);
+    let metres = kit.textures[&Material::Masonry].metres;
+    let mut stones: BTreeMap<[i32; 2], (usize, usize)> = BTreeMap::new();
+    for (index, p) in face.positions.iter().enumerate() {
+        if p.z < 0.3 || p.x < 0.6 || p.x > 1.9 || p.y < 0.1 || p.y > 1.4 {
+            continue;
+        }
+        let uv = [p.x / metres[0], -p.y / metres[1]];
+        if crate::cells::standing(&cells, uv, &|_| 0.0, 2.0, 0.0) < 3.0 {
+            continue;
+        }
+        let middle = crate::cells::middle(&cells, uv).map(|v| (v * 4096.0).round() as i32);
+        let sunk = face.wear.get(index).copied().unwrap_or(0.0) > 0.5;
+        let entry = stones.entry(middle).or_default();
+        if sunk {
+            entry.0 += 1;
+        } else {
+            entry.1 += 1;
+        }
+    }
+    let gone = stones.values().filter(|(sunk, _)| *sunk > 0).count();
+    assert!(
+        gone > 0 && gone < stones.len(),
+        "{gone} of {} stones gone",
+        stones.len()
+    );
+    for (middle, (sunk, flat)) in &stones {
+        assert!(
+            *sunk == 0 || *flat == 0,
+            "the stone at {middle:?} is {sunk} sunk, {flat} not"
+        );
+    }
 }
 
 #[test]

@@ -342,14 +342,19 @@ pub fn remembered<T>(run: impl FnOnce() -> T) -> T {
 /// 6 cm, less than any hole a stone and its mortar leave.
 const HOLE_LOOKS: usize = 8;
 
-/// How much more what is lost at a stone's middle may be than at a point of it, carried
-/// across the stone (`cells::given`): below the first stones' fall by more, nothing falls.
-const CARRIED_MOST: f32 = 0.3;
+/// How much more may have been lost at a stone's middle than at a point of the stone, the
+/// most a stone's width can carry it at a hit's steepest: below the first stones' fall by
+/// more, nothing there falls.
+const STONE_REACH_LOST: f32 = 0.45;
 
-/// A cube and the 26 round it: as far as a cube's loss reaches (`loss::struck`).
+/// The cells' side, in texels, as a number to scale by.
+const CELLS_F: f32 = crate::cells::CELLS as f32;
+
+/// A cube and those two round it: as far as a cube's loss reaches (`loss::struck`), and a
+/// stone of the next cube's middle past that.
 fn round_it(cube: IVec3) -> impl Iterator<Item = IVec3> {
-    (-1..=1).flat_map(move |x| {
-        (-1..=1).flat_map(move |y| (-1..=1).map(move |z| cube + IVec3::new(x, y, z)))
+    (-2..=2).flat_map(move |x| {
+        (-2..=2).flat_map(move |y| (-2..=2).map(move |z| cube + IVec3::new(x, y, z)))
     })
 }
 
@@ -2011,44 +2016,10 @@ fn draw_blocks(
         fall_keys.borrow_mut().insert(cube, key);
         key
     };
-    // What is lost at each point of the fine grid holed faces are drawn on (`surface`),
-    // each worked out once, and between them as the GPU has it between its corners'.
-    let fine = CELL_M / (crate::surface::HOLED_FINER as u32 * look.steps.max(1)) as f32;
-    let grid_lost: std::cell::RefCell<crate::mesh::QuickMap<([i32; 3], u8), f32>> =
-        Default::default();
-    let lost_at = |at: IVec3, normal: Vec3| -> f32 {
-        let side = normal.abs().max_position() as u8 * 2 + u8::from(normal.max_element() > 0.5);
-        if let Some(&lost) = grid_lost.borrow().get(&(at.to_array(), side)) {
-            return lost;
-        }
-        let lost = crate::loss::struck(&worn, at.as_vec3() * fine, normal);
-        grid_lost.borrow_mut().insert((at.to_array(), side), lost);
-        lost
-    };
-    let lost_between = |q: Vec3, normal: Vec3| -> f32 {
-        let axis = normal.abs().max_position();
-        let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
-        let at = q / fine;
-        let mut low = at.floor().as_ivec3();
-        low[axis] = at[axis].round() as i32;
-        // On a point of the grid, as the grid's own points and their neighbours are.
-        let (ra, rb) = (at[a].round(), at[b].round());
-        if (at[a] - ra).abs() < 1e-3 && (at[b] - rb).abs() < 1e-3 {
-            let mut c = low;
-            c[a] = ra as i32;
-            c[b] = rb as i32;
-            return lost_at(c, normal);
-        }
-        let (fa, fb) = (at[a] - low[a] as f32, at[b] - low[b] as f32);
-        let corner = |da: i32, db: i32| {
-            let mut c = low;
-            c[a] += da;
-            c[b] += db;
-            lost_at(c, normal)
-        };
-        let (l00, l10, l01, l11) = (corner(0, 0), corner(1, 0), corner(0, 1), corner(1, 1));
-        (l00 * (1.0 - fa) + l10 * fa) * (1.0 - fb) + (l01 * (1.0 - fa) + l11 * fa) * fb
-    };
+    // What was lost at a stone's middle, read there once for each stone of each wall's face
+    // (`cells::middle` is the very same from every texel of a stone): a stone is whole or
+    // gone, never cut across.
+    let at_middles: std::cell::RefCell<crate::mesh::QuickMap<[i32; 5], f32>> = Default::default();
     let hole_anywhere = |p: Vec3, normal: Vec3| -> f32 {
         let Some((cells, depth)) = &joints else {
             return 0.0;
@@ -2062,11 +2033,29 @@ fn draw_blocks(
         if fall_key(cube).is_none() {
             return 0.0;
         }
+        // Too little lost here for any stone near to have gone, a stone's middle no further
+        // than a stone from it.
+        if crate::loss::struck(&worn, p, normal) < crate::cells::FALLS[0] - STONE_REACH_LOST {
+            return 0.0;
+        }
         let uv = crate::mesh::planar(p, normal, look.metres);
-        // What was lost at a place on the texture: at the point of the face there, the
-        // texture being mapped flat on it (`mesh::planar`, upright on walls), between the
-        // fine grid's points as the arrays' shader has it between its corners'.
+        let axis = normal.abs().max_position();
+        let plane = (p[axis] * 1000.0).round() as i32;
+        let side = axis as i32 * 2 + i32::from(normal[axis] > 0.0);
+        // What was lost at a place on the texture: at the point of the wall's face there,
+        // the texture being mapped flat on it (`mesh::planar`, upright on walls).
         let at_uv = |to: [f32; 2]| {
+            let n = CELLS_F * 2.0;
+            let key = [
+                (to[0] * n).round() as i32,
+                (to[1] * n).round() as i32,
+                plane,
+                side,
+                0,
+            ];
+            if let Some(&lost) = at_middles.borrow().get(&key) {
+                return lost;
+            }
             let (da, db) = (
                 (to[0] - uv[0]) * look.metres[0],
                 (to[1] - uv[1]) * look.metres[1],
@@ -2077,30 +2066,15 @@ fn draw_blocks(
             } else {
                 p + Vec3::new(da, -db, 0.0)
             };
-            lost_between(q, normal)
-        };
-        // Carried on from here by how it changes across the texture here, as the arrays'
-        // shader carries it from its pixel (`slope_of`, its corners' loss between them), so
-        // what is drawn gone and what is pushed back agree.
-        let here = at_uv(uv);
-        // Too little lost here for any stone near to have gone.
-        if here < crate::cells::FALLS[0] - CARRIED_MOST {
-            return 0.0;
-        }
-        let e = [fine / look.metres[0], fine / look.metres[1]];
-        let slope = [
-            ((at_uv([uv[0] + e[0], uv[1]]) - at_uv([uv[0] - e[0], uv[1]])) / (2.0 * e[0]))
-                .clamp(-6.0, 6.0),
-            ((at_uv([uv[0], uv[1] + e[1]]) - at_uv([uv[0], uv[1] - e[1]])) / (2.0 * e[1]))
-                .clamp(-6.0, 6.0),
-        ];
-        let carried = |to: [f32; 2]| {
-            (here + slope[0] * (to[0] - uv[0]) + slope[1] * (to[1] - uv[1])).clamp(0.0, 1.0)
+            let lost = crate::loss::struck(&worn, q, normal);
+            at_middles.borrow_mut().insert(key, lost);
+            lost
         };
         // A stone there or gone, read from the cells' distance field so its outline is
         // smooth: the surface (`surface::draw_slots`) puts the points beside a hole on it,
-        // so its sides stand square along its stones' edges.
-        if crate::cells::fallen(cells, uv, &carried) {
+        // so its sides stand square along its stones' edges, and marks what is sunk, which
+        // the texture arrays' shader draws as the hollow.
+        if crate::cells::fallen(cells, uv, &at_uv) {
             *depth
         } else {
             0.0
@@ -2109,7 +2083,7 @@ fn draw_blocks(
     // Whether any stone has gone from a cube's sides, read every few centimetres over each:
     // only those are drawn finely, and holed; the rest of a damaged wall as it was.
     let has_holes: std::cell::RefCell<crate::mesh::QuickMap<IVec3, bool>> = Default::default();
-    let has_hole = |cube: IVec3| -> bool {
+    let own_hole = |cube: IVec3| -> bool {
         if let Some(&has) = has_holes.borrow().get(&cube) {
             return has;
         }
@@ -2133,6 +2107,21 @@ fn draw_blocks(
                 });
         has_holes.borrow_mut().insert(cube, has);
         has
+    };
+    // And a cube beside one, which the hole's mortar or a stone across their edge may reach
+    // into, so a hole is never cut off square at a cube's edge.
+    let has_hole = |cube: IVec3| -> bool {
+        own_hole(cube)
+            || [
+                IVec3::X,
+                IVec3::NEG_X,
+                IVec3::Y,
+                IVec3::NEG_Y,
+                IVec3::Z,
+                IVec3::NEG_Z,
+            ]
+            .into_iter()
+            .any(|step| own_hole(cube + step))
     };
     let hole = |p: Vec3, normal: Vec3| -> f32 {
         if !has_hole(((p - normal * 0.02) / CELL_M).floor().as_ivec3()) {

@@ -37,8 +37,8 @@
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
     damage: {
-        Log: Grain(splits: 5.0, chunks: 0.06),
-        Hewn: Grain(splits: 3.0, chunks: 0.05),
+        Log: Grain(splits: 5.0, chunks: 0.08),
+        Hewn: Grain(splits: 3.0, chunks: 0.07),
         Board: Grain(splits: 3.0),
         Floor: Grain(splits: 9.0),
         LogEnd: Ends,

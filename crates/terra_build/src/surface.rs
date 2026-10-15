@@ -1424,6 +1424,7 @@ pub fn draw_slots(
                 normals: Vec::new(),
                 order: Vec::new(),
                 indices: Vec::new(),
+                sunk: Vec::new(),
             };
             // Each point cut to the heights there, and where it would be unrounded, to
             // choose each square's diagonal by; a cube not cut is all there.
@@ -1664,6 +1665,13 @@ pub fn draw_slots(
                     }
                 }
             }
+            if holing {
+                face.sunk = sunk
+                    .borrow()
+                    .iter()
+                    .map(|&s| f32::from(u8::from(s)))
+                    .collect();
+            }
             faces.push(Face {
                 data: Arc::new(face),
                 keeping,
@@ -1795,8 +1803,13 @@ pub fn draw_slots(
             let first = into.shared.positions.len() as u32;
             for &c in &data.order {
                 let c = c as usize;
-                into.shared
-                    .corner(data.points[c], data.normals[c], data.uvs[c], colour);
+                into.shared.worn_corner(
+                    data.points[c],
+                    data.normals[c],
+                    data.uvs[c],
+                    colour,
+                    data.sunk.get(c).copied().unwrap_or(0.0),
+                );
             }
             into.shared
                 .indices
@@ -1807,6 +1820,11 @@ pub fn draw_slots(
             let corners = t.map(|c| data.points[c as usize]);
             let normals = t.map(|c| data.normals[c as usize]);
             into.textured(corners, normals, t.map(|c| data.uvs[c as usize]), colour);
+            let sunk = t.map(|c| data.sunk.get(c as usize).copied().unwrap_or(0.0));
+            if sunk.iter().any(|&s| s > 0.0) {
+                crate::mesh::worn(&mut into.wear, into.positions.len() - 3);
+                into.wear.extend(sunk);
+            }
         }
     }
     if let Some(caching) = caching.as_mut() {
@@ -1922,6 +1940,10 @@ pub struct FaceData {
     normals: Vec<Vec3>,
     order: Vec<u32>,
     indices: Vec<u32>,
+    /// Each point's share sunk into a hole damage left (D305), 0 or 1, which the texture
+    /// arrays' shader draws as the hollow behind: its wear (`Surface::wear`). Empty for
+    /// none.
+    sunk: Vec<f32>,
 }
 
 /// How far the surface is pushed out at a point: its materials' heights there, their three

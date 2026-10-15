@@ -39,6 +39,12 @@ const FRICTION: f32 = 0.6;
 const SETTLE: f32 = 0.3;
 /// How hard, in metres a second, a whole cube must land to break.
 const BREAKS_AT: f32 = 1.8;
+/// The steepest a fragment rests on, as a rise a metre, about 20 degrees: on anything
+/// steeper, a roof's pitch, it slides, losing so much of its pull down to friction; and how
+/// far either side of it the slope is read.
+const SLIDES_AT: f32 = 0.36;
+const SLIDE_FRICTION: f32 = 0.35;
+const SLOPE_READ_M: f32 = 0.12;
 /// How long after what gave way a cube left hanging starts to fall, for each cube it stood
 /// above it, in seconds, and at most.
 const STAGGER_S: f32 = 0.035;
@@ -275,6 +281,21 @@ impl Fragment {
             let roll = Vec3::Y.cross(along) / (down.max(0.03));
             self.spin = self.spin * 0.4 + roll * 0.6;
         }
+        // On a slope steeper than it can rest on, a roof's, it slides down it and off its
+        // eave rather than lying where it fell.
+        let e = SLOPE_READ_M;
+        let slope = Vec3::new(
+            (floor(self.at + Vec3::X * e) - floor(self.at - Vec3::X * e)) / (2.0 * e),
+            0.0,
+            (floor(self.at + Vec3::Z * e) - floor(self.at - Vec3::Z * e)) / (2.0 * e),
+        );
+        let steep = slope.length();
+        if steep > SLIDES_AT && steep < 20.0 {
+            let down = -slope / steep;
+            let pull = GRAVITY * steep / (1.0 + steep * steep).sqrt();
+            self.velocity += down * pull * (1.0 - SLIDE_FRICTION) * dt;
+            return landing;
+        }
         if self.velocity.length() < SETTLE {
             self.velocity = Vec3::ZERO;
             self.spin = Vec3::ZERO;
@@ -287,34 +308,48 @@ impl Fragment {
     /// breaking says, thrown up and out a little: what is left of its fall.
     pub fn shatter(&self, breaks: Breaks, share: f32) -> Vec<Fragment> {
         let mut out = Vec::new();
-        // A block of cubes splits where it lands into halves of itself along each side
-        // longer than a cube, each whole still, to break again where it lands.
+        // A block of cubes bursts where it first lands into the cubes it was made of, as
+        // voxels do: some of them whole, to tumble on and break where they land again, the
+        // rest at once into its way of breaking's pieces.
         if self.size.max_element() > CELL_M * 1.2 {
-            let half = |side: f32| if side > CELL_M * 1.2 { 2 } else { 1 };
-            let halves = IVec3::new(half(self.size.x), half(self.size.y), half(self.size.z));
-            let part = self.size / halves.as_vec3();
-            for x in 0..halves.x {
-                for y in 0..halves.y {
-                    for z in 0..halves.z {
+            let count = (self.size / CELL_M).round().max(Vec3::ONE).as_ivec3();
+            let part = self.size / count.as_vec3();
+            for x in 0..count.x {
+                for y in 0..count.y {
+                    for z in 0..count.z {
                         let offset = (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * part
                             - self.size * 0.5;
-                        let seed = hash(&[self.seed, (x | y << 2 | z << 4) as u32]);
+                        let seed = hash(&[self.seed, (x | y << 3 | z << 6) as u32]);
                         let r = |salt: u32| unit(&[seed, salt]);
+                        let at = self.at + self.turn * offset;
                         let out_from = (self.turn * offset).normalize_or_zero();
-                        let axis =
-                            Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
-                        out.push(Fragment {
-                            at: self.at + self.turn * offset,
-                            velocity: self.velocity.with_y(0.0) * 0.5
-                                + out_from * (1.0 + r(4))
-                                + Vec3::Y * (0.8 + r(5)),
-                            spin: axis * (2.0 + 3.0 * r(6)),
-                            size: part * 0.97,
-                            wait: 0.0,
-                            still: false,
-                            seed,
-                            ..*self
-                        });
+                        let away = self.velocity.with_y(0.0) * 0.5 + out_from * (1.0 + r(4));
+                        if r(7) < WHOLE_SHARE {
+                            let axis =
+                                Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
+                            out.push(Fragment {
+                                at,
+                                velocity: away + Vec3::Y * (0.8 + r(5)),
+                                spin: axis * (2.0 + 3.0 * r(6)),
+                                size: part * 0.97,
+                                wait: 0.0,
+                                still: false,
+                                seed,
+                                ..*self
+                            });
+                        } else {
+                            pieces(
+                                self.kind,
+                                breaks,
+                                at - Vec3::splat(CELL_M * 0.5),
+                                1.0,
+                                seed,
+                                share,
+                                away,
+                                0.7,
+                                &mut out,
+                            );
+                        }
                     }
                 }
             }
@@ -492,6 +527,8 @@ pub fn burst(
     // rather than as a lattice of every so many cubes.
     let left = most - out.len();
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
+    let fallen: std::collections::BTreeSet<[i32; 3]> =
+        fell.iter().map(|(at, _)| at.to_array()).collect();
     let mut across = 1;
     let mut blocks = group(&hanging, across);
     while blocks.len() > left && across < MOST_ACROSS {
@@ -519,6 +556,27 @@ pub fn burst(
         let cubes = (high - low + IVec3::ONE).as_vec3();
         let foot = low.as_vec3() * CELL_M;
         let size = Vec3::new(cubes.x, cubes.y * fill, cubes.z) * CELL_M;
+        // Its grain, if it has one, along its first axis (`surfaces`): turned along the
+        // wall it fell from, the way the block or the cubes beside it run.
+        let beside = |step: IVec3| {
+            block
+                .iter()
+                .filter(|(at, _)| {
+                    fallen.contains(&(*at + step).to_array())
+                        || fallen.contains(&(*at - step).to_array())
+                })
+                .count()
+        };
+        let along_z =
+            cubes.z > cubes.x || (cubes.z == cubes.x && beside(IVec3::Z) > beside(IVec3::X));
+        let (turn, size) = if along_z {
+            (
+                Quat::from_rotation_y(core::f32::consts::FRAC_PI_2),
+                Vec3::new(size.z, size.y, size.x),
+            )
+        } else {
+            (Quat::IDENTITY, size)
+        };
         let middle = foot + size * 0.5;
         let away = (middle - impact).with_y(0.0).normalize_or_zero();
         let axis = Vec3::new(r(1) - 0.5, 0.2 * r(2), r(3) - 0.5).normalize_or(Vec3::X);
@@ -528,7 +586,7 @@ pub fn burst(
             at: middle,
             // The higher, the further it topples out from where it gave way.
             velocity: away * (0.3 + 0.6 * r(4) + (0.07 * (low.y - lowest) as f32).min(1.5)),
-            turn: Quat::IDENTITY,
+            turn,
             spin: axis * (0.6 + 1.6 * r(5)) / cubes.max_element().sqrt(),
             // A hair smaller than its cubes, so it never fights the cubes drawn where they
             // were for the frames before their sections are drawn again.
@@ -541,6 +599,10 @@ pub fn burst(
     }
     out
 }
+
+/// How many of the cubes a block bursts into where it first lands stay whole, to break
+/// where they land again (`Fragment::shatter`).
+const WHOLE_SHARE: f32 = 0.4;
 
 /// The most cubes along each side a block of cubes left hanging falls as one.
 const MOST_ACROSS: i32 = 4;
@@ -614,6 +676,12 @@ const FRAGMENT_SHADE: f32 = 0.72;
 /// A shape of fragment, a metre across, in a kind's material: a box with its twelve edges
 /// bevelled and its eight corners cut, which the game scales to each piece; its texture as it
 /// would be on one `drawn_m` across ([`Fragment::mesh`]).
+///
+/// Timber's is a piece of the log it came from, its grain along its own first axis (the
+/// game turns it along the wall it fell from, `Fragment::turn`): its ends across the grain
+/// the log's sawn end, rings and all (`LogEnd`); its two sides the face of the log, bark
+/// and weathered wood; its top and bottom, and its bevels, where it was split from the rest,
+/// fresh pale wood (the face's worn set, `Texture::worn`), its grain running along it.
 pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
     let material = material(kit);
     let metres = kit
@@ -621,14 +689,16 @@ pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
         .get(&material)
         .map_or([1.0, 1.0], |texture| texture.metres)
         .map(|m| m / drawn_m.max(0.05));
+    let timber = kit.pattern == Pattern::Logs && kit.textures.contains_key(&Material::LogEnd);
     let colour = if material == Material::Masonry {
         kit.tint
     } else {
         [1.0; 3]
     }
-    .map(|channel| channel * FRAGMENT_SHADE);
+    .map(|channel| channel * if timber { TIMBER_SHADE } else { FRAGMENT_SHADE });
+    let end = crate::timber::end_cell(kit, 0x51ce);
     let mut surfaces = Surfaces::sharing();
-    let surface = surfaces.of(material);
+    let mut wood = Surfaces::sharing();
     let half = 0.5;
     let b = half * shape.bevel();
     let inner = half - b;
@@ -654,8 +724,46 @@ pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
                 normal = -normal;
             }
             let triangle = [a, bb, c];
-            let uvs = triangle.map(|p| crate::mesh::planar(p, normal, metres));
-            surface.textured(triangle, [normal; 3], uvs, colour);
+            if !timber {
+                let uvs = triangle.map(|p| crate::mesh::planar(p, normal, metres));
+                surfaces
+                    .of(material)
+                    .textured(triangle, [normal; 3], uvs, colour);
+                continue;
+            }
+            if normal.x.abs() > 0.9 {
+                // Its sawn end: the end's picture over it, one of the kit's.
+                let (corner, size) = end;
+                let uvs = triangle.map(|p| {
+                    [
+                        corner[0] + size * (0.5 + p.z * 0.94),
+                        corner[1] + size * (0.5 - p.y * 0.94),
+                    ]
+                });
+                surfaces
+                    .of(Material::LogEnd)
+                    .textured(triangle, [normal; 3], uvs, colour);
+                continue;
+            }
+            // Along the grain: across it by whichever way the face looks least, along it by
+            // its first axis.
+            let across = if normal.y.abs() > normal.z.abs() {
+                2
+            } else {
+                1
+            };
+            let uvs = triangle.map(|p| [p[across] / metres[0], p.x / metres[1]]);
+            let side = normal.z.abs() > 0.9;
+            let (wear, shade) = if side { (0.25, 1.0) } else { (1.0, FRESH_WOOD) };
+            let surface = wood.of(material);
+            surface.textured(
+                triangle,
+                [normal; 3],
+                uvs,
+                colour.map(|c| (c * shade).min(1.0)),
+            );
+            crate::mesh::worn(&mut surface.wear, surface.positions.len() - 3);
+            surface.wear.extend([wear; 3]);
         }
     };
     let signs = [-1.0f32, 1.0];
@@ -707,8 +815,16 @@ pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
             }
         }
     }
+    for (material, surface) in wood.0 {
+        surfaces.of(material).append(surface);
+    }
     surfaces
 }
+
+/// How much darker timber's fragments are drawn than its face, less than stone's: split wood
+/// is pale, and its fresh faces paler again than its weathered ones.
+const TIMBER_SHADE: f32 = 0.9;
+const FRESH_WOOD: f32 = 1.2;
 
 #[cfg(test)]
 mod tests {
@@ -784,21 +900,114 @@ mod tests {
     }
 
     #[test]
-    fn a_block_landing_splits_into_halves_and_they_into_pieces() {
-        let block: Vec<(IVec3, Cube)> = (0..2)
-            .flat_map(|y| (0..2).flat_map(move |x| (0..2).map(move |z| IVec3::new(x, 10 + y, z))))
+    fn a_block_landing_bursts_into_its_cubes_some_whole_and_the_rest_into_pieces() {
+        // A block two metres a side, four cubes, falling as one.
+        let block: Vec<(IVec3, Cube)> = (0..4)
+            .flat_map(|y| (0..4).flat_map(move |x| (0..4).map(move |z| IVec3::new(x, 12 + y, z))))
             .map(|at| (at, cube(CubeShape::Whole)))
             .collect();
         let parts = burst(&block, &|_| false, &chunks, 1.0, 2);
-        assert_eq!(parts.len(), 1, "two to a side, as one");
-        let halves = parts[0].shatter(Breaks::Chunks, 1.0);
-        assert_eq!(halves.len(), 8);
+        assert_eq!(parts.len(), 1, "four to a side, as one");
+        let burst = parts[0].shatter(Breaks::Chunks, 1.0);
+        // Nothing left bigger than a cube where it first lands.
+        assert!(burst.iter().all(|part| part.size.max_element() < CELL_M));
+        let whole: Vec<_> = burst
+            .iter()
+            .filter(|part| part.shape == Shape::Whole)
+            .collect();
         assert!(
-            halves.iter().all(|half| half.shape == Shape::Whole
-                && (half.size.x - CELL_M * 0.97 * 0.97).abs() < 0.01)
+            whole.len() > 10 && whole.len() < 54,
+            "{} whole of 64",
+            whole.len()
         );
-        let pieces = halves[0].shatter(Breaks::Chunks, 1.0);
+        assert!(burst.len() > 64 * 2, "the rest in pieces: {}", burst.len());
+        let pieces = whole[0].shatter(Breaks::Chunks, 1.0);
         assert!(pieces.iter().all(|piece| piece.shape != Shape::Whole));
+    }
+
+    #[test]
+    fn a_timber_fragment_shows_end_grain_across_its_grain_bark_on_its_sides_and_fresh_wood_where_split()
+     {
+        let mut kit = Kit::default();
+        for (material, path) in [(Material::Log, "log"), (Material::LogEnd, "ends")] {
+            kit.textures.insert(
+                material,
+                crate::kit::Texture {
+                    path: path.into(),
+                    metres: [1.0, 1.0],
+                    depth: 0.0,
+                    reflectance: crate::kit::matte(),
+                    strips: None,
+                    cells: 1,
+                    worn: Some("wood".into()),
+                },
+            );
+        }
+        let made = surfaces(&kit, Shape::Whole, CELL_M);
+        let ends = &made.0[&Material::LogEnd];
+        // Its ends, across its grain, its first axis: the sawn end, all of its picture.
+        assert!(ends.normals.iter().all(|n| n.x.abs() > 0.9));
+        assert_eq!(ends.normals.iter().filter(|n| n.x > 0.0).count(), 6);
+        let (low, high) = ends
+            .uvs
+            .iter()
+            .fold(([1.0f32; 2], [0.0f32; 2]), |(l, h), uv| {
+                (
+                    [l[0].min(uv[0]), l[1].min(uv[1])],
+                    [h[0].max(uv[0]), h[1].max(uv[1])],
+                )
+            });
+        assert!(
+            low[0] > 0.0 && high[0] < 1.0 && high[0] - low[0] > 0.8,
+            "{low:?} {high:?}"
+        );
+        // Along it, its texture runs with the grain: its second texture axis along the first.
+        let face = &made.0[&Material::Log];
+        for (corners, uvs) in face.positions.chunks(3).zip(face.uvs.chunks(3)) {
+            for (p, uv) in corners.iter().zip(uvs) {
+                assert!((uv[1] - p.x * CELL_M).abs() < 1e-4, "{p} at {uv:?}");
+            }
+        }
+        // Its sides bark, a little weathered; its top and bottom, split, bare fresh wood.
+        for ((n, wear), colour) in face.normals.iter().zip(&face.wear).zip(&face.colours) {
+            if n.z.abs() > 0.9 {
+                assert!(*wear < 0.5);
+            } else if n.y.abs() > 0.9 {
+                assert!(*wear > 0.9 && colour[0] > TIMBER_SHADE);
+            }
+        }
+    }
+
+    #[test]
+    fn a_chip_landing_on_a_roof_slides_down_it_and_off_the_eave() {
+        // A roof pitched at 35 degrees down to its eave at x = 2 m, 1.6 m up; the ground
+        // past it.
+        let roof = |p: Vec3| if p.x < 2.0 { 3.0 - p.x * 0.7 } else { 0.0 };
+        let fell = [(IVec3::new(1, 8, 0), cube(CubeShape::Whole))];
+        let mut chip = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
+        chip.at = Vec3::new(0.5, 4.0, 0.25);
+        chip.velocity = Vec3::ZERO;
+        for _ in 0..1200 {
+            chip.step(1.0 / 60.0, &roof, &open);
+        }
+        assert!(chip.still, "it comes to rest");
+        assert!(
+            chip.at.x > 2.0 && chip.at.y < 0.4,
+            "on the ground past the eave: {}",
+            chip.at
+        );
+        // On level ground it lies where it fell.
+        let mut lying = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
+        lying.at = Vec3::new(0.5, 1.0, 0.25);
+        lying.velocity = Vec3::ZERO;
+        for _ in 0..600 {
+            lying.step(1.0 / 60.0, &flat, &open);
+        }
+        assert!(
+            lying.still && (lying.at.x - 0.5).abs() < 0.3,
+            "{}",
+            lying.at
+        );
     }
 
     #[test]

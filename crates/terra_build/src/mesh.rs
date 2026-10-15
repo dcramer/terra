@@ -291,21 +291,28 @@ impl Indexed {
         self.indices.len() / 3
     }
 
-    /// Its corners that are the same in every way (place, normal, colour, texture place)
+    /// Its corners that are the same in every way (place, normal, colour, texture place, wear)
     /// made one, as a mesh optimiser welds them: a surface drawn a triangle at a time
     /// shares nothing, three corners a triangle, and its neighbours in one plane and shade
     /// share most of theirs. What is drawn is the same.
     pub fn welded(self) -> Indexed {
         let mut out = Indexed::default();
-        let mut seen: std::collections::HashMap<[u32; 11], u32> =
+        let mut seen: std::collections::HashMap<[u32; 12], u32> =
             std::collections::HashMap::with_capacity(self.positions.len());
         let mut remap = Vec::with_capacity(self.positions.len());
         for i in 0..self.positions.len() {
             let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
             let uv = self.uvs.get(i).copied().unwrap_or([0.0; 2]);
-            let key =
-                [p.x, p.y, p.z, n.x, n.y, n.z, c[0], c[1], c[2], uv[0], uv[1]].map(f32::to_bits);
+            let wear = self.wear.get(i).copied().unwrap_or(0.0);
+            let key = [
+                p.x, p.y, p.z, n.x, n.y, n.z, c[0], c[1], c[2], uv[0], uv[1], wear,
+            ]
+            .map(f32::to_bits);
             let at = *seen.entry(key).or_insert_with(|| {
+                if wear > 0.0 {
+                    worn(&mut out.wear, out.positions.len());
+                    out.wear.push(wear);
+                }
                 out.positions.push(p);
                 out.normals.push(n);
                 out.colours.push(c);
@@ -624,6 +631,30 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn welding_keeps_each_corners_wear_and_parts_corners_that_differ_by_it_alone() {
+        // Two triangles sharing an edge, one worn through and one not, as a hole's side
+        // meets the face round it.
+        let mut surface = Surface::default();
+        let (a, b) = (Vec3::ZERO, Vec3::X);
+        surface.textured([a, b, Vec3::Z], [Vec3::Y; 3], [[0.0; 2]; 3], [1.0; 3]);
+        surface.textured([b, a, -Vec3::Z], [Vec3::Y; 3], [[0.0; 2]; 3], [1.0; 3]);
+        worn(&mut surface.wear, 3);
+        surface.wear.extend([1.0; 3]);
+        let welded = surface.indexed().welded();
+        let worn_at = |i: usize| welded.wear.get(i).copied().unwrap_or(0.0);
+        let first: Vec<f32> = welded.indices[..3]
+            .iter()
+            .map(|&i| worn_at(i as usize))
+            .collect();
+        let second: Vec<f32> = welded.indices[3..]
+            .iter()
+            .map(|&i| worn_at(i as usize))
+            .collect();
+        assert_eq!(first, [0.0; 3]);
+        assert_eq!(second, [1.0; 3]);
+    }
 
     #[test]
     fn a_tangent_runs_the_way_the_texture_does_square_to_the_normal() {

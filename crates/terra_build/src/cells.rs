@@ -4,20 +4,23 @@
 //! map are the joints (mortar, the gaps under and between shingles); what they part are its
 //! cells, each found by a flood over the map, as the islands of an image are labelled, and
 //! given a number of its own. Four bytes a texel, [`CELLS`] square: the cell's number (0 a
-//! joint, any other from 8 to 255), and the way to its middle, in pairs of texels across and
-//! down from 128, so a cell gives way whole, by how much was lost at its middle.
+//! joint, any other from 8 to 255), the way to its middle in texels across and down from
+//! 128, rounded so every texel of a cell finds the very same middle, and how far the texel
+//! is from its cell's edge (`distances`). A cell gives way whole, by how much was lost at
+//! its middle, read once there.
 //!
-//! Worked out the same from the same picture wherever it is read: on the GPU beside the
-//! material's maps (`terra_game`'s texture arrays), where a stone that has gone is drawn as
-//! gone, and on the CPU (`relief::Relief::cells`), where the wall's surface is pushed back
-//! where it has gone, so the hole and its picture agree.
+//! Worked out the same from the same picture wherever it is read: on the CPU
+//! (`relief::Relief::cells`), where a wall's surface is pushed back where a stone has gone,
+//! its points marked sunk, which the texture arrays' shader draws as gone; and on the GPU
+//! beside the material's maps (`terra_game`'s texture arrays), for a covering's shingles
+//! and every edge's shape.
 
 /// How many texels a side the cells are kept at.
 pub const CELLS: u32 = 512;
 
 /// Where a laid stone falls out of its wall (D305): from this much lost at its middle, the
 /// weakest first and the last at the two summed, each stone at its cell's share between.
-/// The texture arrays' shader (`build.wesl`, its joints) reads the same two numbers.
+/// The surface reads them (`fallen`), marking where it is sunk for the shader to draw.
 pub const FALLS: [f32; 2] = [0.55, 0.45];
 
 /// The least a cell is, in texels at [`CELLS`]: a speck parted off by a joint is joint.
@@ -116,7 +119,7 @@ pub fn label(data: &[u8], width: usize, height: usize, stride: usize, share: f32
             (a + x as f32 / count_f, b + y as f32 / count_f)
         });
         for &(at, ux, uy) in &members {
-            let to = |d: f32| (128.0 + (d / 2.0).round()).clamp(1.0, 255.0) as u8;
+            let to = |d: f32| (128.0 + d.round()).clamp(1.0, 255.0) as u8;
             out[at * 4..at * 4 + 4].copy_from_slice(&[
                 value,
                 to(mx - ux as f32),
@@ -181,8 +184,9 @@ fn distances(out: &mut [u8], n: usize) {
 pub const DISTANCE_SCALE: f32 = 16.0;
 
 /// How far a laid stone's hollow reaches round it into the mortar, in texels of the cells:
-/// the mortar round a stone that has gone goes with it, up to the stones beside.
-pub const MORTAR_REACH: f32 = 6.0;
+/// the mortar round a stone that has gone goes with it, up to the stones beside, so no fin
+/// of mortar is left standing between two stones gone.
+pub const MORTAR_REACH: f32 = 12.0;
 
 /// How far inside a stone left standing a point is, in texels of the cells, read between
 /// the four texels round it from their distance fields: below 0 in a joint, or in a stone
@@ -212,8 +216,8 @@ pub fn standing(
 }
 
 /// Whether a point of a laid wall has gone (D305): out of what stands (`standing`), and in
-/// a stone that has given way or the mortar within [`MORTAR_REACH`] of one. The texture
-/// arrays' shader draws the same.
+/// a stone that has given way or the mortar within [`MORTAR_REACH`] of one, each stone judged once,
+/// at its middle (`middle`).
 pub fn fallen(cells: &[u8], uv: [f32; 2], lost: &dyn Fn([f32; 2]) -> f32) -> bool {
     let [begin, span] = FALLS;
     if standing(cells, uv, lost, begin, span) >= 0.0 {
@@ -222,11 +226,13 @@ pub fn fallen(cells: &[u8], uv: [f32; 2], lost: &dyn Fn([f32; 2]) -> f32) -> boo
     if given(cells, uv, lost, begin, span).1 >= 0.5 {
         return true;
     }
-    let r = MORTAR_REACH / CELLS as f32;
-    (0..8).any(|k| {
-        let a = k as f32 * std::f32::consts::TAU / 8.0 + 0.4;
-        let near = [uv[0] + libm::cosf(a) * r, uv[1] + libm::sinf(a) * r];
-        given(cells, near, lost, begin, span).1 >= 0.5
+    [0.5, 1.0].into_iter().any(|share| {
+        let r = MORTAR_REACH * share / CELLS as f32;
+        (0..8).any(|k| {
+            let a = k as f32 * std::f32::consts::TAU / 8.0 + 0.4;
+            let near = [uv[0] + libm::cosf(a) * r, uv[1] + libm::sinf(a) * r];
+            given(cells, near, lost, begin, span).1 >= 0.5
+        })
     })
 }
 
@@ -251,8 +257,8 @@ pub fn middle(cells: &[u8], uv: [f32; 2]) -> [f32; 2] {
     let n = CELLS as f32;
     let centre = |v: f32| ((v * n).floor() + 0.5) / n;
     [
-        centre(uv[0]) + (f32::from(t[1]) - 128.0) * 2.0 / n,
-        centre(uv[1]) + (f32::from(t[2]) - 128.0) * 2.0 / n,
+        centre(uv[0]) + (f32::from(t[1]) - 128.0) / n,
+        centre(uv[1]) + (f32::from(t[2]) - 128.0) / n,
     ]
 }
 
@@ -324,7 +330,7 @@ mod tests {
             given(&made, uv, &|_| 0.5 + 0.5 * number + 0.01, 0.5, 0.5).1,
             1.0
         );
-        // Every texel of a stone knows the same middle: the stone's, at (70, 70) texels of
+        // Every texel of a stone knows its middle: the stone's, at (70, 70) texels of
         // the cells for a stone from 12 to 127 across and down (a stone a quarter of the
         // picture, its joint 12 texels wide, the cells half the picture's size).
         let middle_of = |x: usize, y: usize| {
@@ -334,12 +340,15 @@ mod tests {
             )
             .map(|v| v * n as f32)
         };
-        for (x, y) in [(20, 20), (64, 64), (120, 100)] {
-            let m = middle_of(x, y);
-            assert!(
-                (m[0] - 70.0).abs() < 2.5 && (m[1] - 70.0).abs() < 2.5,
-                "{m:?}"
-            );
+        // The very same from every one of its texels, so a stone is judged whole by one
+        // reading, never split across it.
+        let first = middle_of(20, 20);
+        assert!(
+            (first[0] - 70.0).abs() < 1.0 && (first[1] - 70.0).abs() < 1.0,
+            "{first:?}"
+        );
+        for (x, y) in [(64, 64), (120, 100), (20, 115), (115, 20)] {
+            assert_eq!(middle_of(x, y), first, "from ({x}, {y})");
         }
     }
 

@@ -39,7 +39,7 @@ fn cell_at(uv: vec2<f32>, slot: i32) -> f32 {
 fn middle_at(uv: vec2<f32>, slot: i32) -> vec2<f32> {
     let at = vec2<i32>(floor(fract(uv) * CELLS)) % vec2<i32>(i32(CELLS));
     let way = textureLoad(cells_array, at, slot, 0).gb * 255.0 - 128.0;
-    return (floor(uv * CELLS) + 0.5 + way * 2.0) / CELLS;
+    return (floor(uv * CELLS) + 0.5 + way) / CELLS;
 }
 
 // Of the four cells' texels round a point, weighed by how near each is: how much of it is
