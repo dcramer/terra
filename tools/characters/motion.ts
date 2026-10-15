@@ -9,7 +9,7 @@
 //   node tools/characters/motion.ts Sprint_Loop --keep 2     # keep take 2
 //
 // An entry: prompt, speed (m/s, held along a straight path; 0 to stand), seconds, seed, take
-// (the one kept), and still, for a clip that stays where it stands, such as an idle, with loop
+// (the one kept), samples (takes made, 3 unless it says), and still, for a clip that stays where it stands, such as an idle, with loop
 // (seconds, least and most) for how long a loop of it may be, and busy for one that works where
 // it stands (a hammer, an axe), looped in its busiest stretch. Kimodo is set up apart from the repository (README.md, "Made clips"), at
 // KIMODO_HOME, ~/.cache/terra-kimodo by default. Node 22.18 or later; no dependencies.
@@ -31,7 +31,7 @@ const KIMODO = process.env.KIMODO_HOME ?? join(homedir(), ".cache", "terra-kimod
 const MODEL = "Kimodo-SOMA-RP-v1.1";
 const FPS = 30;
 
-type Entry = { prompt: string; speed: number; seconds: number; seed: number; take?: number; still?: boolean; loop?: [number, number]; busy?: boolean };
+type Entry = { prompt: string; speed: number; seconds: number; seed: number; take?: number; samples?: number; still?: boolean; loop?: [number, number]; busy?: boolean };
 
 /** A straight path along Kimodo's forward (+z) at `speed`, a point a frame: what holds a take
  * to the clip's speed. */
@@ -47,11 +47,13 @@ function run(command: string, args: string[], env: Record<string, string> = {}) 
 }
 
 function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { keep: { type: "string" }, measure: { type: "boolean" }, samples: { type: "string", default: "3" } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { keep: { type: "string" }, measure: { type: "boolean" }, samples: { type: "string" } } });
   const clip = positionals[0];
   const list: Record<string, Entry> = JSON.parse(readFileSync(LIST, "utf8"));
   const entry = list[clip];
   if (!entry) throw new Error(`${clip} is not in art/animation/made.json; add its prompt, speed, seconds and seed`);
+  // How many takes are made: the entry's, so its kept take can be made again, or 3.
+  const samples = values.samples ?? String(entry.samples ?? 3);
   const dir = join(OUT, clip);
   // Kimodo writes several samples into a folder named after the output's stem.
   const take = (n: number) => join(dir, clip, `${clip}_${String(n).padStart(2, "0")}.bvh`);
@@ -61,7 +63,7 @@ function main() {
     if (!existsSync(take(n))) throw new Error(`no take ${n}: make the takes first`);
     mkdirSync(MADE, { recursive: true });
     copyFileSync(take(n), join(MADE, `${clip}.bvh`));
-    list[clip] = { ...entry, take: n };
+    list[clip] = { ...entry, take: n, ...(n >= 3 || entry.samples ? { samples: Math.max(entry.samples ?? 3, n + 1) } : {}) };
     writeFileSync(LIST, JSON.stringify(list, null, 2) + "\n");
     console.log(`${clip}: take ${n} kept as art/animation/made/${clip}.bvh; tools/characters/build_bodies.sh puts it into the game`);
     return;
@@ -74,13 +76,13 @@ function main() {
     writeFileSync(constraints, JSON.stringify(path(entry.speed, entry.seconds)));
     // The text encoder on the processor leaves the graphics card about 3 GB of work.
     run(join(KIMODO, "venv", "bin", "kimodo_gen"), [
-      entry.prompt, "--model", MODEL, "--duration", String(entry.seconds), "--num_samples", values.samples!,
+      entry.prompt, "--model", MODEL, "--duration", String(entry.seconds), "--num_samples", samples,
       "--constraints", constraints, "--output", join(dir, clip), "--bvh", "--bvh_standard_tpose", "--seed", String(entry.seed),
     ], { TEXT_ENCODERS_DIR: join(KIMODO, "text_encoders"), TEXT_ENCODER_DEVICE: "cpu", HF_HUB_OFFLINE: "1", LOCAL_CACHE: "True" });
   }
 
   // Each take on a copy of the mannequin, measured against the library's clip.
-  for (let n = 0; n < Number(values.samples); n++) {
+  for (let n = 0; n < Number(samples); n++) {
     if (!existsSync(take(n))) continue;
     const figure = join(dir, `try_${n}.glb`);
     copyFileSync(join(ROOT, "assets", "models", "character", "mannequin.glb"), figure);
