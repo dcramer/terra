@@ -28,6 +28,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 | UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning (D35) |
 | Sound | Bevy's audio; ambience and music generated in code; recorded clips in named sets ([audio.md](audio.md)) | Decided (D113) |
 | Maths in shared state | The `libm` crate for sine and friends, not the system maths library | Decided (D30) |
+| Allocator | mimalloc in place of the system allocator, which stalled the main thread behind the workers on Windows | Decided (D340) |
 | Saves | `serde` with `ron`; network messages not chosen yet | Leaning |
 | Coordinates | One frame per world, relative to a moving origin; no `big_space` | Leaning (D36) |
 

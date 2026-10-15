@@ -170,12 +170,13 @@ fn damage(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         let amount = harm.amount.unwrap_or(u16::MAX);
         let before = building.site.base.cubes().count();
         let started = std::time::Instant::now();
-        let result = building.act(None, "damage", &[Op::Damage { cubes, amount }]);
-        let took_ms = started.elapsed().as_secs_f32() * 1000.0;
-        let fell = before - building.site.base.cubes().count();
-        let mut said = answer("damage", result);
-        said["fell"] = json!(fell);
-        said["took_ms"] = json!(took_ms);
+        let mut said = act_answer(building, None, "damage", vec![Op::Damage { cubes, amount }]);
+        if said.get("applying").is_none() {
+            let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+            let fell = before - building.site.base.cubes().count();
+            said["fell"] = json!(fell);
+            said["took_ms"] = json!(took_ms);
+        }
         Ok(said)
     })
 }
@@ -223,8 +224,12 @@ fn repair(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         if cubes.is_empty() {
             return Err(refused("nothing there is damaged"));
         }
-        let result = building.act(Some(player), "repair", &[Op::Repair { cubes }]);
-        Ok(answer("repair", result))
+        Ok(act_answer(
+            building,
+            Some(player),
+            "repair",
+            vec![Op::Repair { cubes }],
+        ))
     })
 }
 
@@ -364,10 +369,26 @@ fn as_player(world: &mut World, run: impl FnOnce(&mut Building, Entity) -> BrpRe
         let player = local
             .single()
             .map_err(|_| refused("there is no player to build as"))?;
+        // Every act still being worked out taken in first, so a call sees the base as every
+        // call before it left it.
+        building.settle_all();
         run(&mut building, player)
     };
     state.apply(world);
     result
+}
+
+/// Acts as `by`, answering with what was done, or why not. In a benchmark, whose calls
+/// nothing waits on, the act is worked out on a worker and swapped in when done
+/// (`Building::act_later`), and its answer says only that it is under way; its outcome is
+/// logged when it is taken in, as an act at once's is.
+fn act_answer(building: &mut Building, by: Option<Entity>, what: &str, ops: Vec<Op>) -> Value {
+    if building.benchmark() {
+        building.act_later(by, what, ops);
+        return json!({ "done": true, "what": what, "applying": true });
+    }
+    let result = building.act(by, what, &ops);
+    answer(what, result)
 }
 
 /// An act's answer: what it took and gave back, or why it was refused.
@@ -567,8 +588,7 @@ fn opening(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         } else {
             "cut a window"
         };
-        let result = building.act(Some(player), what, &ops);
-        Ok(answer(what, result))
+        Ok(act_answer(building, Some(player), what, ops))
     })
 }
 
@@ -584,6 +604,7 @@ fn fill(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         let near = player_near(building, player);
         let mut done = Vec::new();
         for _ in 0..fill.steps.unwrap_or(1) {
+            building.settle_all();
             let Some(work) =
                 building.next_work(Some(player), fill.part.map(terra_build::PartId), near)
             else {
@@ -594,9 +615,9 @@ fn fill(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                 info!("Build: {}: refused: {}", work.what, why.message());
                 break;
             }
-            let result = building.act(Some(player), &work.what, &work.ops);
-            let refused = result.is_err();
-            done.push(with_cubes(answer(&work.what, result), &work.ops));
+            let said = act_answer(building, Some(player), &work.what, work.ops.clone());
+            let refused = said["done"] == json!(false);
+            done.push(with_cubes(said, &work.ops));
             if refused {
                 break;
             }
@@ -622,13 +643,14 @@ fn take_apart(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         let near = player_near(building, player);
         let mut done = Vec::new();
         for _ in 0..take.steps.unwrap_or(1) {
+            building.settle_all();
             let Some(work) = building.last_work(Some(player), IVec3::from_array(take.at), near)
             else {
                 break;
             };
-            let result = building.act(Some(player), &work.what, &work.ops);
-            let refused = result.is_err();
-            done.push(with_cubes(answer(&work.what, result), &work.ops));
+            let said = act_answer(building, Some(player), &work.what, work.ops.clone());
+            let refused = said["done"] == json!(false);
+            done.push(with_cubes(said, &work.ops));
             if refused {
                 break;
             }
@@ -792,8 +814,7 @@ fn replace(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             return Err(refused("there is nothing there to change"));
         }
         let what = format!("change to {}", rules.name(kind));
-        let result = building.act(Some(player), &what, &ops);
-        Ok(answer(&what, result))
+        Ok(act_answer(building, Some(player), &what, ops))
     })
 }
 
@@ -813,8 +834,7 @@ fn carve(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         if ops.is_empty() {
             return Err(refused("there is nothing there to carve"));
         }
-        let result = building.act(Some(player), "carve", &ops);
-        Ok(answer("carve", result))
+        Ok(act_answer(building, Some(player), "carve", ops))
     })
 }
 
@@ -828,8 +848,8 @@ fn take_out(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         if ops.is_empty() {
             return Err(refused("nothing is in there"));
         }
-        let result = building.act(Some(player), "take out", &ops);
-        Ok(with_cubes(answer("take out", result), &ops))
+        let said = act_answer(building, Some(player), "take out", ops.clone());
+        Ok(with_cubes(said, &ops))
     })
 }
 

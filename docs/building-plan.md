@@ -62,7 +62,7 @@ A layout is a pure function of a section of cubes and what reaches it (the whole
 | `draw` | Puts each section on screen a few a frame: a mesh per kind and material near, the plan's pieces as ghosts and the next part lit, far off one baked mesh and further a coarser one, with `VisibilityRange`; near detail only near the camera |
 | `models`, `maps` | Load each kit's door and window models (`pieces`), and the height and colour maps its pieces are made with on the CPU (`maps`) |
 | `props` | Doors and windows: entities fitted into holes, opening, shutting, lit within, and later broken and mended |
-| `act` | Laying plans, building by fill (hold the key), taking apart with the reason it is refused, undo, fitting props; driven by the hammer's existing aim and act |
+| `act` | Laying plans, building by fill (hold the key), taking apart with the reason it is refused, undo, fitting props; driven by the hammer's existing aim and act; an act may be worked out off the main thread and swapped in, in order (D339) |
 | `light` | Rooms dim the sky's light from inside (D155) |
 | `sheet` | The kit sheet: a row for every case in construction-001's table, in every state |
 | `village` | Fifty buildings of every kind, roof and plan, for the `village` bench |

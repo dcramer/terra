@@ -13,6 +13,14 @@
 
 mod experiments;
 
+/// mimalloc, a thread-caching allocator, as engines replace the system one (Unreal's
+/// mimalloc and TBB options, Bevy's examples): the game's workers make and free hundreds of
+/// megabytes of section meshes and base copies while the main and render threads run, and
+/// on Windows the system heap's lock made both wait tens of milliseconds behind them
+/// (D340).
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use bevy::prelude::*;
 use terra_game::{appearance, character};
 use terra_world::{planet, shell, terrain};

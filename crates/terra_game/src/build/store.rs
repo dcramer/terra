@@ -279,9 +279,10 @@ fn noticed(build: &mut Build) {
 /// it was laid, or how a section was drawn, are hundreds of thousands of small allocations,
 /// slow to free (D308).
 pub(super) fn let_go<T: Send + 'static>(big: T) {
-    bevy::tasks::AsyncComputeTaskPool::get()
-        .spawn(async move { drop(big) })
-        .detach();
+    // Where there are no workers, as in a test, here.
+    if let Some(pool) = bevy::tasks::AsyncComputeTaskPool::try_get() {
+        pool.spawn(async move { drop(big) }).detach();
+    }
 }
 
 /// How much further a group is taken to be than its nearest point: half a section's

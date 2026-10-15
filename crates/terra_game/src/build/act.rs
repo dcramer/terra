@@ -13,8 +13,16 @@
 //!
 //! Every act is logged as `Build: <what>: done` or `Build: <what>: refused: <why>`, so a
 //! script can wait for it.
+//!
+//! An act may be worked out on a worker (`Building::act_later`, D213): against a copy of
+//! the base, which shares its cubes until they change, the operations applied and what
+//! comes down worked out, then swapped in whole on the main thread a frame or so later, as
+//! a streaming engine double-buffers what its workers build. Acts are swapped in in the
+//! order they were made, and anything that reads or changes the base first takes in every
+//! act still being worked out, so the result is the same as acting at once; a scripted run
+//! that is not a benchmark acts at once, so its films are the same frame for frame.
 
-use super::Site;
+use super::{Applied, Site};
 use crate::planet::Planet;
 use crate::play::Player;
 use crate::play::bodies::Body;
@@ -26,7 +34,10 @@ use crate::play::storage::Stores;
 use crate::play::told::Told;
 use crate::shell::Options;
 use bevy::{ecs::system::SystemParam, prelude::*};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 use terra_build::ops::{self, Context, Done, Op, Refusal};
 use terra_build::{Amount, Bill, CELL_M, Kind, PartId, Rules, Sample, Walker};
 use terra_items::ItemKind;
@@ -101,7 +112,81 @@ pub struct Work {
 pub fn plugin(app: &mut App) {
     app.init_resource::<BuildRules>()
         .init_resource::<Offcuts>()
-        .register_required_components::<Player, History>();
+        .init_resource::<Applying>()
+        .register_required_components::<Player, History>()
+        .add_systems(Update, take_in.before(super::layout::Drawing::Notice));
+}
+
+/// Acts being worked out on workers, oldest first (`Building::act_later`).
+#[derive(Resource, Default)]
+pub struct Applying(VecDeque<InFlight>);
+
+/// An act out on a worker: who made it and what it is called, whether it is paid for and
+/// kept to be undone, when it was made, and the worker.
+struct InFlight {
+    by: Option<Entity>,
+    what: String,
+    pays: bool,
+    remembered: bool,
+    began: Instant,
+    /// Behind a lock only so the resource may be shared; only ever read with it held whole.
+    worked: Mutex<Receiver<Result<Applied, Refusal>>>,
+}
+
+/// Work for the thread acts are worked out on.
+type Job = Box<dyn FnOnce() + Send>;
+
+/// The thread acts are worked out on, started the first time one is: a thread of their
+/// own, so an act, a few milliseconds, never waits behind the section workers' longer jobs
+/// (a castle's section redrawn takes tens), and they are worked out in the order made.
+fn actor() -> &'static Mutex<Sender<Job>> {
+    static ACTOR: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+    ACTOR.get_or_init(|| {
+        let (send, jobs) = channel::<Job>();
+        std::thread::Builder::new()
+            .name("acts".to_string())
+            .spawn(move || {
+                for job in jobs {
+                    job();
+                }
+            })
+            .expect("a thread for acts");
+        Mutex::new(send)
+    })
+}
+
+/// Works something out on the acts' thread; what it comes to is read from the answer.
+fn on_actor<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Receiver<T> {
+    let (answer, worked) = channel();
+    let job: Job = Box::new(move || {
+        answer.send(work()).ok();
+    });
+    if let Ok(actor) = actor().lock() {
+        actor.send(job).ok();
+    }
+    worked
+}
+
+/// Takes in the acts the workers have finished, in the order they were made.
+fn take_in(mut building: Building) {
+    while let Some(front) = building.applying.0.front_mut() {
+        let tried = match front.worked.get_mut() {
+            Ok(worked) => worked.try_recv(),
+            Err(_) => Err(TryRecvError::Disconnected),
+        };
+        let result = match tried {
+            Ok(result) => result,
+            Err(TryRecvError::Empty) => break,
+            // Its thread gone, the act is refused as nothing it was asked for.
+            Err(TryRecvError::Disconnected) => Err(Refusal::Malformed),
+        };
+        let flight = building
+            .applying
+            .0
+            .pop_front()
+            .expect("the front was just looked at");
+        building.land(flight, result);
+    }
 }
 
 /// The world round the base, as an operation is checked against it.
@@ -149,6 +234,7 @@ pub struct Building<'w, 's> {
     items: Query<'w, 's, &'static Item>,
     histories: Query<'w, 's, &'static mut History>,
     told: MessageWriter<'w, Told>,
+    applying: ResMut<'w, Applying>,
 }
 
 impl Building<'_, '_> {
@@ -329,6 +415,127 @@ impl Building<'_, '_> {
         }
     }
 
+    /// Whether acts are worked out on workers here: in play, and in a benchmark, but not in
+    /// a scripted run's film, which acts at once so it comes out the same frame for frame.
+    pub fn defers(&self) -> bool {
+        self.options.bench || !self.options.scripted()
+    }
+
+    /// Whether this is a benchmark run, whose remote calls nothing waits on.
+    pub fn benchmark(&self) -> bool {
+        self.options.bench
+    }
+
+    /// Takes in every act still being worked out, waiting for each, in order: what reads or
+    /// changes the base then sees it as every act made so far left it.
+    pub fn settle_all(&mut self) {
+        while let Some(mut flight) = self.applying.0.pop_front() {
+            let result = flight
+                .worked
+                .get_mut()
+                .ok()
+                .and_then(|worked| worked.recv().ok())
+                .unwrap_or(Err(Refusal::Malformed));
+            self.land(flight, result);
+        }
+    }
+
+    /// Does operations to the base as one act, as [`Building::act`] does, but worked out on
+    /// a worker against a copy of the base and swapped in when it is done; where acts are
+    /// not deferred (`defers`), at once. Its outcome is logged and a refusal told, as at once.
+    pub fn act_later(&mut self, by: Option<Entity>, what: &str, ops: Vec<Op>) {
+        self.settle_all();
+        if !self.defers() {
+            let _ = self.act(by, what, &ops);
+            return;
+        }
+        let around = self.around(by);
+        let claim = self.claim_of(by);
+        let pays = by.is_some() && around.stock.is_some();
+        let rules = self.rules.rules.clone();
+        let base = self.site.base.clone();
+        let kits = self.site.kits.clone();
+        let worked = on_actor(move || {
+            let cx = Context {
+                rules: &rules,
+                claim: claim.as_ref(),
+                world: &around,
+            };
+            super::work_out(base, kits, ops, &cx)
+        });
+        self.applying.0.push_back(InFlight {
+            by,
+            what: what.to_string(),
+            pays,
+            remembered: by.is_some(),
+            began: Instant::now(),
+            worked: Mutex::new(worked),
+        });
+    }
+
+    /// Swaps in an act worked out on a worker, pays for it and keeps it to be undone, or
+    /// tells why it was refused.
+    fn land(&mut self, flight: InFlight, result: Result<Applied, Refusal>) {
+        let InFlight {
+            by,
+            what,
+            pays,
+            remembered,
+            began,
+            ..
+        } = flight;
+        match result {
+            Ok(applied) => {
+                let done = applied.done.clone();
+                self.site.swap(applied, began);
+                if let Some(by) = by
+                    && pays
+                {
+                    self.settle(by, &done);
+                }
+                self.done(by, &what, &done, began, remembered);
+            }
+            Err(why) => self.refused(by, &what, &why),
+        }
+    }
+
+    /// Says an act was done, and keeps it to be undone by whoever did it.
+    fn done(
+        &mut self,
+        by: Option<Entity>,
+        what: &str,
+        done: &Done,
+        began: Instant,
+        remember: bool,
+    ) {
+        info!(
+            "Build: {what}: done{}{} ({:.1} ms)",
+            describe(" taking ", &done.took),
+            describe(" giving back ", &done.gave),
+            began.elapsed().as_secs_f32() * 1000.0
+        );
+        if remember
+            && let Some(by) = by
+            && let Ok(mut history) = self.histories.get_mut(by)
+        {
+            history.0.push(Undo {
+                what: what.to_string(),
+                ops: done.undo.clone(),
+                at_s: self.time.elapsed_secs(),
+            });
+            let keep = history.0.len().saturating_sub(64);
+            history.0.drain(..keep);
+        }
+    }
+
+    /// Says an act was refused, and tells whoever made it why.
+    fn refused(&mut self, by: Option<Entity>, what: &str, why: &Refusal) {
+        info!("Build: {what}: refused: {}", why.message());
+        if let Some(by) = by {
+            self.told.write(Told::new(by, why.message()));
+        }
+    }
+
     /// Whether operations would be allowed, as one act, and what they would take and give
     /// back; nothing changes.
     pub fn check(&mut self, by: Option<Entity>, ops: &[Op]) -> Result<Done, Refusal> {
@@ -348,34 +555,12 @@ impl Building<'_, '_> {
     /// Does operations to the base as one act, taking and giving back what they say, and
     /// keeping what undoes them. A refusal is told to the builder. Logged either way.
     pub fn act(&mut self, by: Option<Entity>, what: &str, ops: &[Op]) -> Result<Done, Refusal> {
-        let began = std::time::Instant::now();
+        self.settle_all();
+        let began = Instant::now();
         let done = self.apply(by, ops);
         match &done {
-            Ok(done) => {
-                info!(
-                    "Build: {what}: done{}{} ({:.1} ms)",
-                    describe(" taking ", &done.took),
-                    describe(" giving back ", &done.gave),
-                    began.elapsed().as_secs_f32() * 1000.0
-                );
-                if let Some(by) = by
-                    && let Ok(mut history) = self.histories.get_mut(by)
-                {
-                    history.0.push(Undo {
-                        what: what.to_string(),
-                        ops: done.undo.clone(),
-                        at_s: self.time.elapsed_secs(),
-                    });
-                    let keep = history.0.len().saturating_sub(64);
-                    history.0.drain(..keep);
-                }
-            }
-            Err(why) => {
-                info!("Build: {what}: refused: {}", why.message());
-                if let Some(by) = by {
-                    self.told.write(Told::new(by, why.message()));
-                }
-            }
+            Ok(done) => self.done(by, what, done, began, true),
+            Err(why) => self.refused(by, what, why),
         }
         done
     }
@@ -383,6 +568,7 @@ impl Building<'_, '_> {
     /// Undoes the last change a player made, within a while: its inverse, checked like
     /// anything else, so it is refused if the base has moved on under it.
     pub fn undo(&mut self, by: Entity) -> Result<String, String> {
+        self.settle_all();
         let now = self.time.elapsed_secs();
         let last = self
             .histories
@@ -577,6 +763,7 @@ impl Building<'_, '_> {
         ops: Vec<Op>,
         room: Option<(IVec3, IVec3)>,
     ) -> Result<Done, Refusal> {
+        self.settle_all();
         let Some((min, max)) = room else {
             let ops = self.with_ground(ops);
             return self.act(by, what, &ops);
@@ -741,8 +928,19 @@ impl Building<'_, '_> {
             }
         }
         let mut first: Option<Work> = None;
+        // What surrounds the base, worked out once for every candidate.
+        let around = self.around(by);
+        let claim = self.claim_of(by);
+        let cx = Context {
+            rules: &self.rules.rules,
+            claim: claim.as_ref(),
+            world: &around,
+        };
         for (what, ops) in candidates {
-            let check = self.check(by, &ops);
+            let check = match ops.as_slice() {
+                [op] => self.site.base.check(op, &cx),
+                ops => self.site.base.clone().act_all(ops, &cx),
+            };
             let work = Work { what, ops, check };
             if work.check.is_ok() {
                 return Some(work);

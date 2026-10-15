@@ -834,7 +834,7 @@ fn harm_aimed(
         cubes: vec![at.to_array()],
         amount: health.div_ceil(4),
     };
-    let _ = building.act(None, "damage", &[op]);
+    building.act_later(None, "damage", vec![op]);
 }
 
 /// How many fragments are about, for the remote's state.

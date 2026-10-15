@@ -110,6 +110,123 @@ pub enum Shown {
 /// How many operations are kept before they are folded into a snapshot.
 const FOLD_AFTER: usize = 400;
 
+/// An act worked out against a copy of a base, on a worker or at once, ready to be swapped
+/// in (`Build::swap`): the base after it, what it did, what came down or was chipped off,
+/// the cubes it only repainted, and its operations.
+pub(super) struct Applied {
+    pub base: Base,
+    pub done: Done,
+    pub fallen: Vec<loss::Fallen>,
+    pub repainted: Vec<([i32; 3], Kind, Kind)>,
+    pub ops: Vec<Op>,
+}
+
+/// Does operations to a copy of a base as one act (D21): all of them or, if one is refused,
+/// none; with what harm chipped off and brought down, and the cubes only repainted (D298).
+/// Touches nothing else, so it runs on a worker against the copy (`act::Applying`).
+pub(super) fn work_out(
+    mut base: Base,
+    kits: Option<Arc<Kits>>,
+    ops: Vec<Op>,
+    cx: &Context,
+) -> Result<Applied, Refusal> {
+    let named: BTreeSet<[i32; 3]> = ops.iter().flat_map(op_cubes).collect();
+    let before: Vec<([i32; 3], Option<terra_build::Cube>)> = named
+        .iter()
+        .map(|&at| (at, base.cube(IVec3::from_array(at))))
+        .collect();
+    // What harm is aimed at, and how much of each it has lost already.
+    let rules = kits.as_deref().map(Kits::rules).unwrap_or_default();
+    let harmed_before: Vec<(IVec3, u8)> = ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|at| {
+            let at = IVec3::from_array(at);
+            let cube = base.cube(at)?;
+            let toughness = rules.toughness(cube.kind);
+            Some((at, toughness.quarters(base.damage(at))))
+        })
+        .collect();
+    let done = base.act_all(&ops, cx)?;
+    let mut fallen = Vec::new();
+    // What came off what harm hit and still stands (D305).
+    let mut chipped = Vec::new();
+    for (at, before) in harmed_before {
+        let Some(cube) = base.cube(at) else {
+            continue;
+        };
+        let now = rules.toughness(cube.kind).quarters(base.damage(at));
+        if now <= before {
+            continue;
+        }
+        // Its open faces' way, or up.
+        let out = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z, IVec3::Y]
+            .into_iter()
+            .filter(|&step| base.cube(at + step).is_none())
+            .map(|step| step.as_vec3())
+            .sum::<Vec3>()
+            .normalize_or(Vec3::Y);
+        chipped.push((at, cube, before, now, out));
+    }
+    if !chipped.is_empty() {
+        fallen.push(loss::Fallen {
+            chipped,
+            ..default()
+        });
+    }
+    // What came down, for its fragments: what harm destroyed, and what hung from it.
+    if !done.fell.is_empty() {
+        let hit: BTreeSet<[i32; 3]> = ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        fallen.push(loss::Fallen {
+            destroyed: done
+                .fell
+                .iter()
+                .map(|(at, _)| at.to_array())
+                .filter(|at| hit.contains(at))
+                .collect(),
+            fell: done.fell.clone(),
+            chipped: Vec::new(),
+        });
+    }
+    // A change of material and nothing else: the drawing looks it up at once (D298).
+    let mut repainted = Vec::new();
+    let mut only_kind = true;
+    for (at, was) in before {
+        let now = base.cube(IVec3::from_array(at));
+        match (was, now) {
+            (Some(was), Some(now))
+                if (was.fill, was.shape, was.state) == (now.fill, now.shape, now.state) =>
+            {
+                if was.kind != now.kind {
+                    repainted.push((at, was.kind, now.kind));
+                }
+            }
+            _ => only_kind = false,
+        }
+    }
+    if !only_kind {
+        repainted.clear();
+    }
+    Ok(Applied {
+        base,
+        done,
+        fallen,
+        repainted,
+        ops,
+    })
+}
+
 /// The build under construction by the player, and where it stands.
 #[derive(Resource, Deref, DerefMut)]
 pub(super) struct Site {
@@ -603,103 +720,34 @@ impl Build {
     /// Does operations to the base as one act, checked against it as it is (D21): all of
     /// them or, if one is refused, none. It is drawn again on the next frame.
     pub(super) fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
-        let named: BTreeSet<[i32; 3]> = ops.iter().flat_map(op_cubes).collect();
-        let before: Vec<([i32; 3], Option<terra_build::Cube>)> = named
-            .iter()
-            .map(|&at| (at, self.base.cube(IVec3::from_array(at))))
-            .collect();
-        // What harm is aimed at, and how much of each it has lost already.
-        let rules = self.kits.as_deref().map(Kits::rules).unwrap_or_default();
-        let harmed_before: Vec<(IVec3, u8)> = ops
-            .iter()
-            .filter_map(|op| match op {
-                Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
-                _ => None,
-            })
-            .flatten()
-            .filter_map(|at| {
-                let at = IVec3::from_array(at);
-                let cube = self.base.cube(at)?;
-                let toughness = rules.toughness(cube.kind);
-                Some((at, toughness.quarters(self.base.damage(at))))
-            })
-            .collect();
-        let done = self.base.act_all(ops, cx)?;
-        // What came off what harm hit and still stands (D305).
-        let mut chipped = Vec::new();
-        for (at, before) in harmed_before {
-            let Some(cube) = self.base.cube(at) else {
-                continue;
-            };
-            let now = rules.toughness(cube.kind).quarters(self.base.damage(at));
-            if now <= before {
-                continue;
-            }
-            // Its open faces' way, or up.
-            let out = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z, IVec3::Y]
-                .into_iter()
-                .filter(|&step| self.base.cube(at + step).is_none())
-                .map(|step| step.as_vec3())
-                .sum::<Vec3>()
-                .normalize_or(Vec3::Y);
-            chipped.push((at, cube, before, now, out));
+        let applied = work_out(self.base.clone(), self.kits.clone(), ops.to_vec(), cx)?;
+        let done = applied.done.clone();
+        self.swap(applied, std::time::Instant::now());
+        Ok(done)
+    }
+
+    /// Takes in an act worked out on a worker (`work_out`): its base, what came down and
+    /// what was only repainted, kept to be saved with the base. Its change to the screen is
+    /// timed from when the act was `made`.
+    pub(super) fn swap(&mut self, applied: Applied, made: std::time::Instant) {
+        if !self.sections.drawn.is_empty() {
+            self.sections.changed_at.get_or_insert(made);
         }
-        if !chipped.is_empty() {
-            self.fallen.push(loss::Fallen {
-                chipped,
-                ..default()
-            });
-        }
-        // What came down, for its fragments: what harm destroyed, and what hung from it.
-        if !done.fell.is_empty() {
-            let hit: BTreeSet<[i32; 3]> = ops
-                .iter()
-                .filter_map(|op| match op {
-                    Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
-                    _ => None,
-                })
-                .flatten()
-                .collect();
-            self.fallen.push(loss::Fallen {
-                destroyed: done
-                    .fell
-                    .iter()
-                    .map(|(at, _)| at.to_array())
-                    .filter(|at| hit.contains(at))
-                    .collect(),
-                fell: done.fell.clone(),
-                chipped: Vec::new(),
-            });
-        }
-        // A change of material and nothing else: the drawing looks it up at once (D298).
-        let mut repainted = Vec::new();
-        let mut only_kind = true;
-        for (at, was) in before {
-            let now = self.base.cube(IVec3::from_array(at));
-            match (was, now) {
-                (Some(was), Some(now))
-                    if (was.fill, was.shape, was.state) == (now.fill, now.shape, now.state) =>
-                {
-                    if was.kind != now.kind {
-                        repainted.push((at, was.kind, now.kind));
-                    }
-                }
-                _ => only_kind = false,
-            }
-        }
-        if only_kind && !repainted.is_empty() {
+        // What the old base alone held is let go on a worker, not the main thread.
+        store::let_go(std::mem::replace(&mut self.base, applied.base));
+        self.fallen.extend(applied.fallen);
+        if !applied.repainted.is_empty() {
             self.sections.repaints.push(store::Repaint {
-                cubes: repainted,
+                cubes: applied.repainted,
                 since: std::time::Instant::now(),
             });
         }
-        self.since.extend(ops.iter().cloned());
+        self.since.extend(applied.ops);
         // Now and then what has been done is folded into a snapshot.
         if self.since.len() > FOLD_AFTER {
             self.fold();
         }
         self.revision += 1;
-        Ok(done)
     }
 
     /// Lights these cubes as what goes in next, drawing their sections again if that
