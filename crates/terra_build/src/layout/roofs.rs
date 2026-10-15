@@ -805,6 +805,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         // A batten under the foot of every course across the square, each joined to the
         // next square's into one along the face.
         let (base_m, step) = (super::metres(courses.0), super::metres(courses.1));
+        let r_batten_wide = r.batten.0;
         for side in 0..4 {
             let t = roofs.triangle(q, side);
             let n = normal(&t);
@@ -820,7 +821,18 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 if p.distance(r) < 1e-3 {
                     continue;
                 }
-                let beside = Place::near((p + r) * 0.5 + upslope * 0.1);
+                // None at a crest, where the roof falls away within a batten's width up the
+                // slope from it: the far slope's own top batten would cross it there.
+                let middle = (p + r) * 0.5;
+                let up = middle + upslope * r_batten_wide;
+                let past = Vec3::new(upslope.x, 0.0, upslope.z).normalize_or_zero() * 0.01;
+                if roofs
+                    .top_over(up.x + past.x, up.z + past.z, middle.y - CELL_M)
+                    .is_none_or(|h| h < up.y - 0.01)
+                {
+                    continue;
+                }
+                let beside = Place::near(middle + upslope * 0.1);
                 battens.push(Segment {
                     part: RoofPart::Batten,
                     from: Place::near(p),

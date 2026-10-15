@@ -676,6 +676,41 @@ mod tests {
     }
 
     #[test]
+    fn no_batten_is_laid_across_a_crest() {
+        // Under a gable, a course's foot falling within a batten's width of the ridge has no
+        // batten: the two slopes' top battens would cross one another over it.
+        for name in ["shakes.ron", "slate.ron", "thatch.ron"] {
+            let kit = shipped(name);
+            let mut pieces = Vec::new();
+            roofs::lay(
+                &cabin(Style::Gable),
+                &kit,
+                &crate::kit::Kits(vec![kit.clone()]),
+                crate::layout::Scope::ALL,
+                &mut pieces,
+            );
+            let top = STOREY_M + 2.0;
+            let rise = kit.roof.batten.0 * std::f32::consts::FRAC_1_SQRT_2;
+            let mut battens = 0;
+            for piece in &pieces {
+                if let Piece::Roof {
+                    part: RoofPart::Batten,
+                    from,
+                    to,
+                    ..
+                } = piece
+                {
+                    battens += 1;
+                    for end in [from.metres(), to.metres()] {
+                        assert!(end.y < top - rise + 0.011, "{name}: {end}");
+                    }
+                }
+            }
+            assert!(battens > 0, "{name}");
+        }
+    }
+
+    #[test]
     fn a_lean_tos_rafters_stop_inside_its_high_edge() {
         // Under a lean-to rising south, the rafters, laid under the roof square to it, run
         // up to its high edge and no further out than the covering does.
