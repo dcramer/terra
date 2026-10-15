@@ -17,6 +17,7 @@ use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::{Models, Prop};
 use super::tick::{Sim, Smoothed};
 use super::told::Told;
+use super::warmth::BodyHeat;
 use crate::loading::Loading;
 use crate::planet::Planet;
 use crate::start::Start;
@@ -26,6 +27,7 @@ use bevy::{
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
 use std::time::Duration;
+use terra_world::climate::ClimateSample;
 
 const BLEND: Duration = Duration::from_millis(220);
 /// How close the spiders may be while a prisoner is freed.
@@ -49,7 +51,7 @@ pub enum Doing {
 }
 
 #[derive(Component)]
-#[require(Smoothed)]
+#[require(Smoothed, ClimateSample, BodyHeat)]
 pub struct Person {
     pub name: &'static str,
     /// What they say when spoken to, if anything in particular.

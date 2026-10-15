@@ -8,13 +8,18 @@
 //! Far out of its band the body is in danger, and health falls (`vitals`), the first of
 //! climate.md's effects, the stakes. A body says how it feels as it crosses each edge of the
 //! band, as a body would feel it; there is no meter (D93).
+//!
+//! People feel it as players do (D169), in what their outfit shows they wear, and out of
+//! their band they work slower (`crafting`, `terra_climate::body::pace`).
 
 use super::death::effort;
 use super::inventory::{Gear, Items, warmth};
+use super::people::{Doing, Person};
 use super::tick::Sim;
 use super::told::Told;
 use super::vitals::{Effort, Vitals};
 use super::{Motion, Player, Stance};
+use crate::character::{self, Outfit};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_climate::body::{self, COMFORT_C, DANGER_C, NORMAL_C, Surroundings};
@@ -107,7 +112,44 @@ impl Feeling {
 
 pub fn plugin(app: &mut App) {
     app.register_type::<BodyHeat>()
-        .add_systems(FixedUpdate, feel.in_set(Sim::World));
+        .add_systems(FixedUpdate, (feel, feel_people).in_set(Sim::World));
+}
+
+/// How warm what an outfit shows keeps its wearer, in clo, by each worn item's warmth.
+fn outfit_warmth(items: &Items, outfit: &Outfit) -> f32 {
+    outfit
+        .0
+        .iter()
+        .filter_map(|worn| {
+            items
+                .kinds()
+                .find(|&kind| character::item_id(items.name(kind)) == worn.item)
+        })
+        .filter_map(|kind| items.worn(kind))
+        .map(|worn| worn.warmth)
+        .sum()
+}
+
+/// Moves every person's warmth on by a tick, as a player's: working warms them, standing
+/// about does not.
+fn feel_people(
+    time: Res<Time>,
+    items: Res<Items>,
+    mut people: Query<(&Person, &ClimateSample, &mut BodyHeat, Option<&Outfit>), Without<Player>>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    for (person, sample, mut heat, outfit) in &mut people {
+        let clo = BARE_CLO + outfit.map_or(0.0, |outfit| outfit_warmth(&items, outfit));
+        let mets = match person.doing {
+            Doing::Working(_) | Doing::Following(_) => 3.0,
+            _ => 1.0,
+        };
+        let next = warmed(*heat, sample, clo, mets, false, dt);
+        heat.set_if_neq(BodyHeat {
+            felt: Feeling::at(next.temperature_c),
+            ..next
+        });
+    }
 }
 
 /// How hard a body works, in mets: what warms it.
@@ -250,6 +292,15 @@ mod tests {
             warmed(BodyHeat::default(), &dry, 1.0, 1.0, true, 0.1).wet,
             1.0
         );
+    }
+
+    #[test]
+    fn a_persons_outfit_keeps_them_as_warm_as_its_items_say() {
+        let items = Items::default();
+        let coat = Outfit(vec![character::Clothing::new("leather_coat")]);
+        let warm = items.worn(items.kind("Leather coat")).unwrap().warmth;
+        assert_eq!(outfit_warmth(&items, &coat), warm);
+        assert_eq!(outfit_warmth(&items, &Outfit(Vec::new())), 0.0);
     }
 
     #[test]

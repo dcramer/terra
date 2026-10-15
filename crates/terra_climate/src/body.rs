@@ -106,6 +106,15 @@ pub fn danger(body_c: f32) -> f32 {
     (body_c - DANGER_C.0).min(0.0) + (body_c - DANGER_C.1).max(0.0)
 }
 
+/// How fast a body works at a temperature, as a share of its pace in comfort: slower the
+/// farther out of the band, half as fast at the edge of danger, and never under a third
+/// (D153, D169: the cold slows a recruit's work).
+pub fn pace(body_c: f32) -> f32 {
+    let (below, above) = (COMFORT_C.0 - body_c, body_c - COMFORT_C.1);
+    let out = (below / (COMFORT_C.0 - DANGER_C.0)).max(above / (DANGER_C.1 - COMFORT_C.1));
+    (1.0 - 0.5 * out.max(0.0)).max(1.0 / 3.0)
+}
+
 /// How fast a walker can go over ground with so much snow lying and so wet, as a share of
 /// its pace on dry, bare ground: a foot of snow halves it, as a walker without snowshoes
 /// finds; mud slows it by a sixth.
@@ -221,6 +230,16 @@ mod tests {
         assert!(effort(-50.0) < 0.0 && effort(-50.0) > -1.0);
         assert_eq!(effort(-500.0), -1.0);
         assert_eq!(effort(500.0), 1.0);
+    }
+
+    #[test]
+    fn a_body_out_of_its_band_works_slower_the_farther_out() {
+        assert_eq!(pace(NORMAL_C), 1.0);
+        assert_eq!(pace(COMFORT_C.0), 1.0);
+        assert!((pace(DANGER_C.0) - 0.5).abs() < 1e-6);
+        assert!((pace(DANGER_C.1) - 0.5).abs() < 1e-6);
+        assert!(pace(35.5) > pace(35.0) && pace(35.5) < 1.0);
+        assert_eq!(pace(25.0), 1.0 / 3.0);
     }
 
     #[test]

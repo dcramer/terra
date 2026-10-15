@@ -22,6 +22,7 @@ use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
 use super::tick::Sim;
 use super::told::{Notice, Told};
+use super::warmth::BodyHeat;
 use super::{IsLocalPlayer, Player};
 use bevy::{
     ecs::system::SystemParam,
@@ -247,7 +248,7 @@ const WORKER_REACH_M: f32 = 3.0;
 #[derive(SystemParam)]
 pub struct Staff<'w, 's> {
     kinds: Res<'w, Stations>,
-    people: Query<'w, 's, &'static Person>,
+    people: Query<'w, 's, (&'static Person, Option<&'static BodyHeat>)>,
     stations: Query<'w, 's, &'static Transform, With<Works>>,
 }
 
@@ -255,10 +256,26 @@ impl Staff<'_, '_> {
     /// Whoever is at work at a station, if it is one that needs someone.
     pub fn worker(&self, entity: Entity, station: Station) -> Option<&Person> {
         let trade = self.kinds.worked_by(station)?;
+        self.at_work(entity, trade).map(|(person, _)| person)
+    }
+
+    /// Whoever of a trade is at work at a station, and how warm they are.
+    fn at_work(&self, entity: Entity, trade: &str) -> Option<(&Person, Option<&BodyHeat>)> {
         let at = self.stations.get(entity).ok()?.translation;
         self.people
             .iter()
-            .find(|person| person.trade == Some(trade) && at_work(person, at))
+            .find(|(person, _)| person.trade == Some(trade) && at_work(person, at))
+    }
+
+    /// How fast a station is worked: as fast as its worker works, slower out of their
+    /// warmth's band (D169); at its own pace if it needs no one.
+    pub fn pace(&self, entity: Entity, station: Station) -> f32 {
+        let Some(trade) = self.kinds.worked_by(station) else {
+            return 1.0;
+        };
+        self.at_work(entity, trade)
+            .and_then(|(_, heat)| heat)
+            .map_or(1.0, |heat| terra_climate::body::pace(heat.temperature_c))
     }
 
     /// Whether a station can get on with its queue: always, unless it needs someone to
@@ -412,7 +429,7 @@ fn work(
                 .any(|player| within_reach(player.translation, prop, at.translation))
         };
         if staff.works(entity, station) && (kinds.works_alone(station) || attended()) {
-            works.advance(time.delta_secs(), &recipes);
+            works.advance(time.delta_secs() * staff.pace(entity, station), &recipes);
         }
     }
 }
@@ -634,6 +651,17 @@ mod tests {
         assert!(!staffed(&mut world, forge_kind));
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 1.8);
         assert!(staffed(&mut world, forge_kind));
+        // A smith out of their warmth's band works the forge slower (D169); the smelter goes
+        // at its own pace whoever is cold.
+        let pace = |world: &mut World, kind| {
+            world
+                .run_system_once(move |staff: Staff| staff.pace(built, kind))
+                .unwrap()
+        };
+        assert_eq!(pace(&mut world, forge_kind), 1.0);
+        world.get_mut::<BodyHeat>(smith).unwrap().temperature_c = 35.2;
+        assert!(pace(&mut world, forge_kind) < 0.7);
+        assert_eq!(pace(&mut world, smelter), 1.0);
         // Someone at work at another forge far off does not work this one.
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 50.0);
         assert!(!staffed(&mut world, forge_kind));
