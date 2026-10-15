@@ -107,10 +107,10 @@ pub(super) enum Outcome {
     },
 }
 
-const NEAR_LAY_M: f32 = 35.0;
-const NEAR_KEEP_M: f32 = 42.0;
-const MID_LAY_M: f32 = 72.0;
-const MID_KEEP_M: f32 = 84.0;
+const NEAR_LAY_M: f32 = 32.0;
+const NEAR_KEEP_M: f32 = 36.0;
+const MID_LAY_M: f32 = 70.0;
+const MID_KEEP_M: f32 = 76.0;
 const FAR_LAY_M: f32 = 140.0;
 const FAR_KEEP_M: f32 = 155.0;
 
@@ -121,8 +121,8 @@ const FAR_KEEP_M: f32 = 155.0;
 /// as a section drawn near has nothing coarser than its middle detail.
 ///
 /// The margins are what laying takes at a run, and no more, so only the details in use are
-/// held: near detail is seen to 26.5 m, laid from 35 m and let go past 42 m; the middle
-/// detail is seen to 63.6 m, laid from 72 m and let go past 84 m; the far detail is seen to
+/// held: near detail is seen to 26.5 m, laid from 32 m and let go past 36 m; the middle
+/// detail is seen to 63.6 m, laid from 70 m and let go past 76 m; the far detail is seen to
 /// 127 m, laid from 140 m and let go past 155 m, beyond which a section is its hull alone.
 /// Held to 140 m, the middle detail of every section within it was most of the GPU's
 /// building memory.

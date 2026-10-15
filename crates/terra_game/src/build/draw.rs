@@ -358,15 +358,16 @@ fn in_arrays(
 
 /// A mesh's corners packed as shipped games pack them, by Bevy's own compression, which
 /// its shaders and the arrays' unpack: normals and tangents octahedral in 16 bits, texture
-/// places 16-bit within their range, colours half floats, and indices 16-bit where they
-/// fit. A textured corner goes from 76 bytes to 36; one far off, its textures baked into
-/// its colour, from 44 to 24. Positions stay 32-bit: Bevy 0.20's 16-bit positions, unpacked
+/// places 16-bit within their range, colours 8-bit (tints and baked shades, smooth enough
+/// at 256 steps), and indices 16-bit where they
+/// fit. A textured corner goes from 76 bytes to 32; one far off, its textures baked into
+/// its colour, from 44 to 20. Positions stay 32-bit: Bevy 0.20's 16-bit positions, unpacked
 /// by each mesh's bounds, drew every building nowhere here (tried on the 5090, the town
 /// gone from the screen with its triangles still counted), which is Bevy's to look into.
 pub(super) fn packed(mesh: Mesh) -> Mesh {
     let args = MeshCompressionArgs {
         compress_indices: true,
-        quantize_attributes: (&[(Mesh::ATTRIBUTE_COLOR.id, AttributeQuantization::Float16)]).into(),
+        quantize_attributes: (&[(Mesh::ATTRIBUTE_COLOR.id, AttributeQuantization::Unorm8)]).into(),
         compress_attributes: MeshAttributeCompressionFlags::all()
             - MeshAttributeCompressionFlags::COMPRESS_POSITION,
     };
