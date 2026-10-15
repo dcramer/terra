@@ -17,7 +17,7 @@ use bevy::{
     asset::RenderAssetUsages,
     camera::visibility::{RenderLayers, VisibilityRange},
     light::NotShadowCaster,
-    mesh::Indices,
+    mesh::{AttributeQuantization, Indices, MeshAttributeCompressionFlags, MeshCompressionArgs},
     prelude::*,
     render::render_resource::{AsBindGroup, PrimitiveTopology},
     shader::ShaderRef,
@@ -357,15 +357,37 @@ fn in_arrays(
     (mesh, rest)
 }
 
+/// A mesh's corners packed as shipped games pack them, by Bevy's own compression, which
+/// its shaders and the arrays' unpack: normals and tangents octahedral in 16 bits, texture
+/// places 16-bit within their range, colours half floats, and indices 16-bit where they
+/// fit. A textured corner goes from 76 bytes to 36; one far off, its textures baked into
+/// its colour, from 44 to 24. Positions stay 32-bit: Bevy 0.20's 16-bit positions, unpacked
+/// by each mesh's bounds, drew every building nowhere here (tried on the 5090, the town
+/// gone from the screen with its triangles still counted), which is Bevy's to look into.
+pub(super) fn packed(mesh: Mesh) -> Mesh {
+    let args = MeshCompressionArgs {
+        compress_indices: true,
+        quantize_attributes: (&[(Mesh::ATTRIBUTE_COLOR.id, AttributeQuantization::Float16)]).into(),
+        compress_attributes: MeshAttributeCompressionFlags::all()
+            - MeshAttributeCompressionFlags::COMPRESS_POSITION,
+    };
+    match mesh.compressed_mesh(&args) {
+        Ok(mesh) | Err((mesh, _)) => mesh,
+    }
+}
+
 /// Turns a section drawn into meshes, about its middle: of its parts, only those `only`
-/// says, which were drawn; its surfaces in the texture arrays by `layers`.
+/// says, which were drawn; its surfaces in the texture arrays by `layers`; packed
+/// ([`packed`]) unless it is kept on the CPU to repaint in place, as a base being built is.
 pub(super) fn parts(
     drawn: Merged,
     centre: Vec3,
     only: &[bool],
     keys: Vec<u64>,
     layers: &Layers,
+    pack: bool,
 ) -> Parts {
+    let pack = |mesh: Mesh| if pack { packed(mesh) } else { mesh };
     // A surface whose colours came out near black, as a mask reading the real maps can make
     // it, is drawn black in any light: said once a run (`terra_build::inspect`).
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -379,7 +401,7 @@ pub(super) fn parts(
             );
         }
     }
-    let plain = |surface: &Surface| mesh(surface, centre, Uvs::None);
+    let plain = |surface: &Surface| mesh(surface, centre, Uvs::None).map(pack);
     let none = BTreeMap::new();
     let count = drawn.near_by.len().max(drawn.mid_by.len());
     let parts: Vec<Option<Part>> = (0..count)
@@ -398,11 +420,16 @@ pub(super) fn parts(
                     centre,
                     &mut used,
                 );
+                let packs = |all: Vec<(Kind, Material, Mesh)>| {
+                    all.into_iter()
+                        .map(|(kind, material, mesh)| (kind, material, pack(mesh)))
+                        .collect()
+                };
                 Part {
-                    arrays: [near_arrays, mid_arrays],
+                    arrays: [near_arrays.map(pack), mid_arrays.map(pack)],
                     layers: used.into_iter().collect(),
-                    near,
-                    mid,
+                    near: packs(near),
+                    mid: packs(mid),
                 }
             })
         })

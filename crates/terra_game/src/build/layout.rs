@@ -107,16 +107,26 @@ pub(super) enum Outcome {
     },
 }
 
+const NEAR_LAY_M: f32 = 35.0;
+const NEAR_KEEP_M: f32 = 42.0;
+const MID_LAY_M: f32 = 72.0;
+const MID_KEEP_M: f32 = 84.0;
+
 /// How finely a section is drawn for a camera so far from its middle, in metres: finer
 /// detail is made a little before it is seen (`draw::NEAR_M`, `draw::MID_M`), and kept until
 /// the camera is further off again, so a section near a boundary is not laid over and over;
 /// but laid coarser before the detail it fades into is seen (`draw::MID_M` less its fade),
 /// as a section drawn near has nothing coarser than its middle detail.
+///
+/// The margins are what laying takes at a run, and no more, so only the details in use are
+/// held: near detail is seen to 26.5 m, laid from 35 m and let go past 42 m; the middle
+/// detail is seen to 63.6 m, laid from 72 m and let go past 84 m. Held to 140 m, the middle
+/// detail of every section within it was most of the GPU's building memory.
 pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
     let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
-    if distance < 40.0 || (kept(Reach::Near) && distance < 50.0) {
+    if distance < NEAR_LAY_M || (kept(Reach::Near) && distance < NEAR_KEEP_M) {
         Reach::Near
-    } else if distance < 95.0 || (kept(Reach::Mid) && distance < 140.0) {
+    } else if distance < MID_LAY_M || (kept(Reach::Mid) && distance < MID_KEEP_M) {
         Reach::Mid
     } else {
         Reach::Far
@@ -408,7 +418,14 @@ fn launch(
                 );
                 let drawn_ms = started.elapsed().as_secs_f32() * 1000.0;
                 let some = !only.is_empty() && only.iter().any(|o| !o);
-                let parts = draw::parts(drawn, store::centre(section.at), &only, keys, &layers);
+                let parts = draw::parts(
+                    drawn,
+                    store::centre(section.at),
+                    &only,
+                    keys,
+                    &layers,
+                    !keeps,
+                );
                 let took_ms = started.elapsed().as_secs_f32() * 1000.0;
                 Outcome::Drawn {
                     key,

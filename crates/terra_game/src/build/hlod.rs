@@ -129,7 +129,10 @@ fn make(
                     // Measured from the middle of its sections, as each of them is.
                     let middles: Vec<Vec3> = members.into_iter().map(store::centre).collect();
                     let centre = middles.iter().sum::<Vec3>() / middles.len().max(1) as f32;
-                    (centre, draw::mesh(&hull, centre, Uvs::None))
+                    (
+                        centre,
+                        draw::mesh(&hull, centre, Uvs::None).map(draw::packed),
+                    )
                 })
                 .collect()
         }));
