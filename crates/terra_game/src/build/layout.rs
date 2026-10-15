@@ -285,6 +285,11 @@ fn launch(
                     Some((before, whole)) => whole.lay_again(&before, &snapshot, &kits, &marked),
                     None => sections::Whole::lay(&snapshot, &kits),
                 };
+                // And where what stands was laid again further (D358).
+                let reached: BTreeSet<[i32; 3]> = reached
+                    .into_iter()
+                    .chain(whole.standing_reached().map(|at| store::unit_of(at, unit)))
+                    .collect();
                 let took_ms = started.elapsed().as_secs_f32() * 1000.0;
                 let same = candidates
                     .into_iter()

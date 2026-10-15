@@ -194,6 +194,8 @@ pub struct Whole {
 struct Standing {
     base: std::sync::Arc<Base>,
     by_section: BTreeMap<[i32; 3], std::sync::Arc<Vec<Filed>>>,
+    /// The sections laid again in it by the edit it was laid again after, if any.
+    reached: BTreeSet<[i32; 3]>,
 }
 
 impl Whole {
@@ -230,9 +232,20 @@ impl Whole {
             whole.standing = Some(Standing {
                 base: std::sync::Arc::new(view),
                 by_section,
+                reached: BTreeSet::new(),
             });
         }
         whole
+    }
+
+    /// The sections what stands of the base was laid again in by the edit this was laid
+    /// again after (D358): beyond those its plan's `reach` names, a column first built in
+    /// turning the logs along the floor from it (`enclosure_moved`), so they are drawn
+    /// again too.
+    pub fn standing_reached(&self) -> impl Iterator<Item = [i32; 3]> + '_ {
+        self.standing
+            .iter()
+            .flat_map(|standing| standing.reached.iter().copied())
     }
 
     fn lay_all(base: &Base, kits: &Kits) -> Whole {
@@ -305,20 +318,26 @@ impl Whole {
             ),
         };
         let (view, changed) = base.what_stands_again(&was, marked);
-        let by_section = if changed || was.ground() != view.ground() || was.props_differ(&view) {
-            let stood = Whole {
-                by_section: was_by_section,
-                counts: self.counts.clone(),
-                laid_by: self.laid_by.clone(),
-                standing: None,
+        let (by_section, reached) =
+            if changed || was.ground() != view.ground() || was.props_differ(&view) {
+                let stood = Whole {
+                    by_section: was_by_section,
+                    counts: self.counts.clone(),
+                    laid_by: self.laid_by.clone(),
+                    standing: None,
+                };
+                let groups = reach(&was, &view, kits, marked);
+                let laid = layout::roofs::remembered(|| {
+                    stood.lay_groups(&was, &view, kits, marked, &groups)
+                });
+                (laid.by_section, groups.into_iter().flatten().collect())
+            } else {
+                (was_by_section, BTreeSet::new())
             };
-            layout::roofs::remembered(|| stood.lay_part(&was, &view, kits, marked)).by_section
-        } else {
-            was_by_section
-        };
         whole.standing = Some(Standing {
             base: std::sync::Arc::new(view),
             by_section,
+            reached,
         });
         whole
     }
@@ -331,6 +350,18 @@ impl Whole {
         marked: &BTreeSet<[i32; 3]>,
     ) -> Whole {
         let groups = reach(before, base, kits, marked);
+        self.lay_groups(before, base, kits, marked, &groups)
+    }
+
+    /// As [`Whole::lay_part`], the sections it reaches given.
+    fn lay_groups(
+        &self,
+        before: &Base,
+        base: &Base,
+        kits: &Kits,
+        marked: &BTreeSet<[i32; 3]>,
+        groups: &[BTreeSet<[i32; 3]>],
+    ) -> Whole {
         // The first group, round the marks, is laid again in every kit; the rest are rows
         // of logs along the floor from them, which only a log kit's courses reach: every
         // other kit's pieces there are as they were, laid from cubes that did not change.
@@ -476,51 +507,13 @@ const ROOF_REACH: i32 = 4;
 /// Whether any cube that changed between two bases, in the sections marked, has a roof's
 /// cube within [`ROOF_REACH`] of it, before or after.
 fn roof_near_changes(before: &Base, after: &Base, marked: &BTreeSet<[i32; 3]>) -> bool {
-    let side = crate::cubes::SECTION;
-    marked.iter().any(|&at| {
-        let low = IVec3::from_array(at) * side;
-        let high = low + IVec3::splat(side - 1);
-        let (was, now) = (
-            before.store().within(low, high),
-            after.store().within(low, high),
-        );
-        let mut changed: Vec<IVec3> = Vec::new();
-        let (mut i, mut j) = (0, 0);
-        while i < was.len() || j < now.len() {
-            match (was.get(i), now.get(j)) {
-                (Some(a), Some(b)) if a.0 == b.0 => {
-                    if a.1 != b.1 {
-                        changed.push(a.0);
-                    }
-                    (i, j) = (i + 1, j + 1);
-                }
-                (Some(a), Some(b)) if a.0.to_array() < b.0.to_array() => {
-                    changed.push(a.0);
-                    i += 1;
-                }
-                (Some(_), Some(b)) => {
-                    changed.push(b.0);
-                    j += 1;
-                }
-                (Some(a), None) => {
-                    changed.push(a.0);
-                    i += 1;
-                }
-                (None, Some(b)) => {
-                    changed.push(b.0);
-                    j += 1;
-                }
-                (None, None) => break,
-            }
-        }
-        changed.iter().any(|&cube| {
-            let reach = IVec3::splat(ROOF_REACH);
-            [before, after].iter().any(|base| {
-                !base
-                    .store()
-                    .within_where(cube - reach, cube + reach, |c| c.kind.is_roof())
-                    .is_empty()
-            })
+    changed_cubes(before, after, marked).iter().any(|&cube| {
+        let reach = IVec3::splat(ROOF_REACH);
+        [before, after].iter().any(|base| {
+            !base
+                .store()
+                .within_where(cube - reach, cube + reach, |c| c.kind.is_roof())
+                .is_empty()
         })
     })
 }
@@ -611,8 +604,113 @@ pub fn reach(
                 groups.push(line);
             }
         }
+        // A deck's boards run its region's longer way, or square to the walls it meets
+        // (`layout::floors`), so a cube joined to it, or a wall beside it, lays all of it
+        // again: the sections of every deck beside a changed cube, before or after.
+        let decks: BTreeSet<[i32; 3]> = decks_beside(before, after, kits, &marked)
+            .into_iter()
+            .filter(|at| drawn.contains(at) && !taken.contains(at))
+            .collect();
+        if !decks.is_empty() {
+            groups.push(decks);
+        }
     }
     groups
+}
+
+/// The cubes that differ between two bases in the sections marked.
+fn changed_cubes(before: &Base, after: &Base, marked: &BTreeSet<[i32; 3]>) -> Vec<IVec3> {
+    let side = crate::cubes::SECTION;
+    let mut changed: Vec<IVec3> = Vec::new();
+    for &at in marked {
+        let low = IVec3::from_array(at) * side;
+        let high = low + IVec3::splat(side - 1);
+        let (was, now) = (
+            before.store().within(low, high),
+            after.store().within(low, high),
+        );
+        let (mut i, mut j) = (0, 0);
+        while i < was.len() || j < now.len() {
+            match (was.get(i), now.get(j)) {
+                (Some(a), Some(b)) if a.0 == b.0 => {
+                    if a.1 != b.1 {
+                        changed.push(a.0);
+                    }
+                    (i, j) = (i + 1, j + 1);
+                }
+                (Some(a), Some(b)) if a.0.to_array() < b.0.to_array() => {
+                    changed.push(a.0);
+                    i += 1;
+                }
+                (Some(_), Some(b)) => {
+                    changed.push(b.0);
+                    j += 1;
+                }
+                (Some(a), None) => {
+                    changed.push(a.0);
+                    i += 1;
+                }
+                (None, Some(b)) => {
+                    changed.push(b.0);
+                    j += 1;
+                }
+                (None, None) => break,
+            }
+        }
+    }
+    changed
+}
+
+/// The sections of every timber deck (`layout::decked`) a cube that changed is in or
+/// beside, before the change or after, each region of it joined on its layer whole, and a
+/// cube round it.
+fn decks_beside(
+    before: &Base,
+    after: &Base,
+    kits: &Kits,
+    marked: &BTreeSet<[i32; 3]>,
+) -> BTreeSet<[i32; 3]> {
+    let mut out = BTreeSet::new();
+    let changed = changed_cubes(before, after, marked);
+    for base in [before, after] {
+        let mut seen: BTreeSet<[i32; 3]> = BTreeSet::new();
+        for &cube in &changed {
+            for offset in round_it(cube).filter(|at| (*at - cube).abs().max_element() <= 1) {
+                let Some(kind) = layout::decked(base, kits, offset) else {
+                    continue;
+                };
+                if !seen.insert(offset.to_array()) {
+                    continue;
+                }
+                let mut next = vec![offset];
+                let (mut low, mut high) = (offset, offset);
+                while let Some(at) = next.pop() {
+                    for side in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+                        let beside = at + side;
+                        if !seen.contains(&beside.to_array())
+                            && layout::decked(base, kits, beside) == Some(kind)
+                        {
+                            seen.insert(beside.to_array());
+                            (low, high) = (low.min(beside), high.max(beside));
+                            next.push(beside);
+                        }
+                    }
+                }
+                let (from, to) = (
+                    crate::cubes::section_of(low - IVec3::ONE),
+                    crate::cubes::section_of(high + IVec3::ONE),
+                );
+                for x in from.x..=to.x {
+                    for y in from.y..=to.y {
+                        for z in from.z..=to.z {
+                            out.insert([x, y, z]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The sections from which a column the edit changed, in the sections marked, can be seen

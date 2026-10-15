@@ -2734,11 +2734,65 @@ fn a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole() {
     // D358: what stands is laid apart from the plan, and laid again only where an edit
     // changed it. A small house in logs and in stone under its roof, planned whole, then
     // filled a cube at a time from its foot, half in and then built, and a cube of plan
-    // added and taken out: every section, as drawn going up, is as laid whole.
+    // added and taken out; and a long log hall built but for its end wall, then that wall,
+    // whose first cubes turn the logs along the floor from them: every section, as drawn
+    // going up, is as laid whole, and every section drawn otherwise than before is one
+    // the edit says it reached.
     let kits = shipped();
     let maps = Maps::default();
     let next = Progress::Cubes {
         next: BTreeSet::new(),
+    };
+    let going_up = |name: &str, mut before: Base, edits: Vec<(IVec3, Option<Cube>)>| {
+        before.take_dirty();
+        let mut whole = Whole::lay(&before, &kits);
+        for (at, cube) in edits {
+            let mut after = before.clone();
+            after.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube,
+            });
+            let marked = after.take_dirty();
+            let again = whole.lay_again(&before, &after, &kits, &marked);
+            let afresh = Whole::lay(&after, &kits);
+            let mut reached: BTreeSet<[i32; 3]> = reach(&before, &after, &kits, &marked)
+                .into_iter()
+                .flatten()
+                .collect();
+            reached.extend(again.standing_reached());
+            for at_section in drawable(&after).union(&drawable(&before)) {
+                let section = |base| Section {
+                    base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(*at_section),
+                    progress: &next,
+                };
+                let now = lay(&section(&after), &again);
+                assert!(
+                    now == lay(&section(&after), &afresh),
+                    "{name}: {at} set to {cube:?}: section {at_section:?} is not as laid whole"
+                );
+                assert!(
+                    now == lay(&section(&before), &whole) || reached.contains(at_section),
+                    "{name}: {at} set to {cube:?}: section {at_section:?} changed unreached"
+                );
+            }
+            (before, whole) = (after, again);
+        }
+        before
+    };
+    let planned = |built: &Base, keep: &dyn Fn(IVec3) -> bool| {
+        let mut base = built.clone();
+        for (at, cube) in built.cubes().filter(|(at, _)| !keep(*at)) {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(cube.at_level(0)),
+            });
+        }
+        base
     };
     for walls in ["logs", "stone"] {
         let mut built = Base::default();
@@ -2750,17 +2804,7 @@ fn a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole() {
             named(&kits, walls),
             Style::Gable,
         );
-        let mut before = built.clone();
         let mut cubes: Vec<(IVec3, Cube)> = built.cubes().collect();
-        for (at, cube) in &cubes {
-            before.apply(BuildOp::Fill {
-                min: at.to_array(),
-                max: at.to_array(),
-                cube: Some(cube.at_level(0)),
-            });
-        }
-        before.take_dirty();
-        let mut whole = Whole::lay(&before, &kits);
         cubes.sort_by_key(|(at, _)| (at.y, at.x, at.z));
         let mut edits: Vec<(IVec3, Option<Cube>)> = cubes
             .iter()
@@ -2770,35 +2814,32 @@ fn a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole() {
         let (low, kind) = (cubes[0].0, cubes[0].1.kind);
         edits.push((low - IVec3::X * 2, Some(Cube::planned(kind, None))));
         edits.push((low - IVec3::X * 2, None));
-        for (at, cube) in edits {
-            let mut after = before.clone();
-            after.apply(BuildOp::Fill {
-                min: at.to_array(),
-                max: at.to_array(),
-                cube,
-            });
-            let marked = after.take_dirty();
-            let again = whole.lay_again(&before, &after, &kits, &marked);
-            let afresh = Whole::lay(&after, &kits);
-            for at_section in drawable(&after).union(&drawable(&before)) {
-                let section = Section {
-                    base: &after,
-                    kits: &kits,
-                    maps: &maps,
-                    at: IVec3::from_array(*at_section),
-                    progress: &next,
-                };
-                assert!(
-                    lay(&section, &again) == lay(&section, &afresh),
-                    "{walls}: {at} set to {cube:?}: section {at_section:?} is not as laid whole"
-                );
-            }
-            (before, whole) = (after, again);
-        }
-        let built = before.cubes().filter(|(_, c)| c.is_built()).count();
+        let after = going_up(walls, planned(&built, &|_| false), edits);
+        let built = after.cubes().filter(|(_, c)| c.is_built()).count();
         assert!(
-            built > 10 && before.store().planned() > 0,
+            built > 10 && after.store().planned() > 0,
             "{walls}: {built} built"
         );
     }
+    let mut hall = Base::default();
+    let logs = named(&kits, "logs");
+    house(&mut hall, &kits, [-3, 2], [40, 9], logs, Style::Gable);
+    let end = hall.cubes().map(|(at, _)| at.x).max().unwrap_or(0);
+    let mut wall: Vec<(IVec3, Cube)> = hall
+        .cubes()
+        .filter(|(at, cube)| at.x == end && !cube.kind.is_roof())
+        .collect();
+    wall.sort_by_key(|(at, _)| (at.y, at.z));
+    let edits = wall
+        .iter()
+        .take(12)
+        .map(|&(at, cube)| (at, Some(cube)))
+        .collect();
+    going_up(
+        "a long log hall",
+        planned(&hall, &|at| {
+            at.x != end || hall.cube(at).is_some_and(|c| c.kind.is_roof())
+        }),
+        edits,
+    );
 }
