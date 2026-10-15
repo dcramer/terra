@@ -793,7 +793,12 @@ fn see_through(
             // sides runs along the wall in the air its cubes hold beside a timber wall's
             // faces, not through it, so lines go in up its middle, along its core, and
             // beside it only where another wall meets it there.
-            let end = face.y == 0 && solid(base, kits, at - face);
+            // Carried on up into a roof's cube behind, as a gable is, it runs on too.
+            let behind = at - face;
+            let end = face.y == 0
+                && (solid(base, kits, behind)
+                    || (base.cube(behind).is_some_and(|c| c.kind.is_roof())
+                        && solid(base, kits, behind - IVec3::Y)));
             let across = IVec3::new(face.z, 0, face.x).abs().as_vec3();
             // A face down into the ground, or a footing's sides in it, is not seen.
             let floor_m = at.y as f32 * CELL_M;
@@ -1495,6 +1500,60 @@ mod tests {
         assert!(found(0.28).is_empty());
         // A wall's thickness behind: another face, not relief over it.
         assert!(found(0.0).is_empty());
+    }
+
+    #[test]
+    fn a_walls_end_carried_on_up_into_a_roof_behind_is_looked_into_along_its_core() {
+        // A wall cube, its south face open, with a roof's cube behind it to the north on a
+        // wall cube: the wall runs on behind it, carried up into the roof as a gable is, so
+        // a line in through its south face near its sides runs along the wall in the air
+        // beside a timber wall's faces. Drawn: a member up its middle alone.
+        let roof = crate::kit::Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            ..Default::default()
+        };
+        let kits = Kits(vec![crate::kit::Kit::default(), roof]);
+        let wall = |at: [i32; 3], kind: Kind| crate::BuildOp::Fill {
+            min: at,
+            max: at,
+            cube: Some(crate::Cube::new(kind, Fill::Solid)),
+        };
+        let found = |gable: bool| {
+            let mut base = Base::default();
+            base.apply(wall([0, 1, 1], Kind(1)));
+            base.apply(wall([0, 0, 0], Kind(1)));
+            if gable {
+                base.apply(wall([0, 1, 0], Kind::FIRST_ROOF));
+            }
+            // Up its middle, and across it each other way, whole.
+            let c = |x: f32, y: f32| Vec3::new(x, y, 0.75);
+            let across = |p: [Vec3; 4]| [tri([p[0], p[1], p[2]], 0), tri([p[0], p[2], p[3]], 0)];
+            let mut tris =
+                across([c(0.15, 0.4), c(0.35, 0.4), c(0.35, 1.1), c(0.15, 1.1)]).to_vec();
+            let x = |y: f32, z: f32| Vec3::new(0.25, y, z);
+            tris.extend(across([x(0.4, 0.4), x(1.1, 0.4), x(1.1, 1.1), x(0.4, 1.1)]));
+            let y = |x: f32, z: f32| Vec3::new(x, 0.75, z);
+            tris.extend(across([
+                y(-0.1, 0.4),
+                y(0.6, 0.4),
+                y(0.6, 1.1),
+                y(-0.1, 1.1),
+            ]));
+            let drawn = Drawn {
+                tris,
+                meshes: vec!["log".into()],
+                kinds: vec![Some((Kind(1), Material::Log))],
+            };
+            let mut findings = Vec::new();
+            see_through(&base, &kits, &drawn, Detail::Near, false, &mut findings);
+            findings
+                .iter()
+                .any(|f| f.fault == Fault::SeeThrough && f.what.contains("cube [0, 1, 1]"))
+        };
+        assert!(!found(true), "a gable's end looked into beside its core");
+        // With nothing behind it, the cube is a wall of its own, looked through anywhere.
+        assert!(found(false));
     }
 
     #[test]

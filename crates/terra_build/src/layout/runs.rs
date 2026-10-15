@@ -419,6 +419,7 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 (!fits(i) && !crossed).then(|| at(i))
             },
             samples,
+            outward: outside.map(|dir| dir.step().as_vec3()),
             fits: &fits_at,
             carried: &|p: Vec3| {
                 let cube = (p / CELL_M).floor().as_ivec3();
@@ -551,6 +552,8 @@ struct Dropped<'a> {
     /// For each of so many samples along it, where along it is, if it does not fit there.
     unfit: &'a dyn Fn(i32) -> Option<f32>,
     samples: i32,
+    /// The way out of the room its wall closes in, if it has one.
+    outward: Option<Vec3>,
     /// Whether a log of its line with its foot so high fits under the roof at a point.
     fits: &'a dyn Fn(Vec3, f32) -> bool,
     /// Whether a course of its run is laid in the cube a point is in.
@@ -749,7 +752,18 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
             let mut max = Vec3::splat(f32::MIN);
             for end in ends {
                 for side in sides {
-                    let q = end + log.across * half * side;
+                    // Its face to the weather out to the log's widest, all but flush, so no
+                    // slot runs along under the eaves between its face and the log's; both,
+                    // where no room on either side says which that is.
+                    let out = log
+                        .outward
+                        .is_some_and(|outward| outward.dot(log.across * side) > 0.5);
+                    let reach = if out || log.outward.is_none() {
+                        radius - BLOCKING_OUT_M
+                    } else {
+                        half
+                    };
+                    let q = end + log.across * reach * side;
                     min = min.min(q.with_y(stand - inset));
                     max = max.max(q.with_y(low - (inset - BLOCKING_SET_BACK_M)));
                 }
@@ -840,6 +854,9 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
 const CREASE_STEP_M: f32 = 0.02;
 /// How far under a roof's underside eave blocking's top is cut.
 const BLOCKING_UNDER_M: f32 = 0.003;
+/// How far eave blocking's face to the weather is set back from a log's widest: off the
+/// plane of anything flat along the wall's face.
+const BLOCKING_OUT_M: f32 = 0.004;
 /// How far eave blocking is set back from a log's widest.
 const BLOCKING_SET_BACK_M: f32 = 0.03;
 /// How much further in a row's blocking along the north and south is set than one along the
@@ -1221,22 +1238,29 @@ mod tests {
                 .expect("a roof over the wall");
             let mut y = 2.0;
             while y < under - 0.02 {
-                let p = Vec3::new(x, y, z);
-                let in_log = logs.iter().any(|(from, to, _)| {
-                    let (low, high) = (from.min(*to), from.max(*to));
-                    let near =
-                        |a: f32, lo: f32, hi: f32| a >= lo - kit.radius() && a <= hi + kit.radius();
-                    near(p.x, low.x, high.x)
-                        && near(p.z, low.z, high.z)
-                        && (p.y - from.y).abs() < kit.radius() * 0.9
-                });
-                let in_board = boards
-                    .iter()
-                    .any(|(lo, hi)| p.cmpge(*lo).all() && p.cmple(*hi).all());
-                assert!(
-                    in_log || in_board,
-                    "nothing at {p}, under the roof at {under}"
-                );
+                // Up its middle, and a centimetre in from the logs' widest on the side to
+                // the weather, where no slot may run along under the eaves.
+                for p in [
+                    Vec3::new(x, y, z),
+                    Vec3::new(x, y, z) + outward * (kit.radius() - 0.012),
+                ] {
+                    let in_log = logs.iter().any(|(from, to, _)| {
+                        let (low, high) = (from.min(*to), from.max(*to));
+                        let near = |a: f32, lo: f32, hi: f32| {
+                            a >= lo - kit.radius() && a <= hi + kit.radius()
+                        };
+                        near(p.x, low.x, high.x)
+                            && near(p.z, low.z, high.z)
+                            && (p.y - from.y).abs() < kit.radius() * 0.9
+                    });
+                    let in_board = boards
+                        .iter()
+                        .any(|(lo, hi)| p.cmpge(*lo).all() && p.cmple(*hi).all());
+                    assert!(
+                        in_log || in_board,
+                        "nothing at {p}, under the roof at {under}"
+                    );
+                }
                 y += 0.01;
             }
         }
