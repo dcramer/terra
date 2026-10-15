@@ -9,8 +9,8 @@
   },
   "hinge": "right",
   "into": "openings",
-  "budget": 3000,
+  "budget": 1500,
   "block": true,
-  "generator": "h3.1",
-  "faces": 12000
+  "generator": "p1",
+  "faces": 3000
 }
