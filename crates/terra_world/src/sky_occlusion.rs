@@ -61,6 +61,9 @@ const REACH_M: f32 = 90.0;
 /// twelfth was too little: what is not a leaf, skin, leather and stone, was lit by the gaps'
 /// blue sky alone and read lilac (D286).
 const LEAF_GLOW: Vec3 = Vec3::new(0.18, 0.27, 0.09);
+/// A tree's trunk is about its height over this across at a person's height (a 30 m pine half
+/// a metre), for the stems that hide the low sky under the crowns.
+const GIRTH_PER: f32 = 60.0;
 /// How much of the ground's bounce is left in the deepest shade, where little sun reaches it.
 const SHADED_GROUND: f32 = 0.1;
 
@@ -116,6 +119,18 @@ impl SkySeen<'_> {
             _ => 1.0,
         }
     }
+
+    /// How much of the sky is open round a point, over it and to every side, as a rough shiny
+    /// surface standing there mirrors it (`skylight`): from 0 deep in a stand to 1 in the open.
+    pub fn around_at(&self, point: Vec3) -> f32 {
+        match (&self.occluders, &self.baked) {
+            (Some(o), Some(baked)) => blend_at(o, &baked.seen, point, |seen, i| {
+                let s = seen.sides[i];
+                (s[0] + s[1] + s[2] + s[4] + s[5]) / 5.0
+            }),
+            _ => 1.0,
+        }
+    }
 }
 
 /// Follows how open the sky is over the camera, between the cells round it.
@@ -141,6 +156,17 @@ fn overhead(
 /// How much of the sky is seen overhead at a point, blended between the eight cells round
 /// it; outside the volume, all of it, as the volume sees there at its edges.
 fn open_at(o: &SkyOccluders, seen: &Seen, point: Vec3) -> f32 {
+    blend_at(o, seen, point, |seen, i| seen.up[i])
+}
+
+/// A value of the cells at a point, blended between the eight cells round it; outside the
+/// volume 1, all of the sky, as the volume sees there at its edges.
+fn blend_at(
+    o: &SkyOccluders,
+    seen: &Seen,
+    point: Vec3,
+    value: impl Fn(&Seen, usize) -> f32,
+) -> f32 {
     let south = o.east.cross(o.up);
     let height = o.above_m + o.below_m;
     let size = Vec3::new(o.half_m * 2.0, height, o.half_m * 2.0);
@@ -160,7 +186,7 @@ fn open_at(o: &SkyOccluders, seen: &Seen, point: Vec3) -> f32 {
     let high = (low + 1).min(seen.cells - 1);
     let t = at - low.as_vec3();
     let cell =
-        |x: u32, y: u32, z: u32| seen.up[((z * seen.cells.y + y) * seen.cells.x + x) as usize];
+        |x: u32, y: u32, z: u32| value(seen, ((z * seen.cells.y + y) * seen.cells.x + x) as usize);
     let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
     let row = |y: u32, z: u32| lerp(cell(low.x, y, z), cell(high.x, y, z), t.x);
     let layer = |z: u32| lerp(row(low.y, z), row(high.y, z), t.y);
@@ -488,6 +514,25 @@ impl Leaves {
                     }
                 }
             }
+            // The trunk under it, from the ground up to the crown, in its column: a look along
+            // the ground through a stand ends on stems, not on sky. Without them a tall pine's
+            // crown, 20 m up, left every low look open, and what stands under the trees was lit
+            // from the side by the open horizon, blue and lilac by a low sun, while the ground
+            // took the leaves' green. A stem of girth d in a cell of floor area A hides d / A of
+            // a level look a metre, as shipped probe bakes treat a stand of stems.
+            let tall = (at.y + half.y - o.below_m).max(1.0);
+            let girth = (tall / GIRTH_PER).clamp(0.15, 1.0);
+            let column = (at / step)
+                .floor()
+                .max(Vec3::ZERO)
+                .as_uvec3()
+                .min(cells - 1);
+            let per_m = girth / (step.x * step.z);
+            let bottom = ((at.y - half.y) / step.y).floor().max(0.0) as u32;
+            for y in 0..bottom.min(cells.y) {
+                let cell = ((column.z * cells.y + y) * cells.x + column.x) as usize;
+                thickness[cell] += per_m;
+            }
         }
         Self {
             cells,
@@ -590,6 +635,36 @@ mod tests {
         );
         let away = cell_at(&seen, &o, Vec3::new(35.0, 1.0, 35.0));
         assert!(seen.sides[away][2] > seen.sides[under][2] + 0.3);
+    }
+
+    #[test]
+    fn in_a_tall_stand_the_low_sky_is_hidden_by_the_stems() {
+        // Crowns 22 to 30 m up, one every 4 m over the whole square, as a tall pine stand's.
+        let mut crowns = Vec::new();
+        for i in -10..10 {
+            for j in -10..10 {
+                crowns.push(Crown {
+                    middle: Vec3::new(i as f32 * 4.0 + 2.0, 26.0, j as f32 * 4.0 + 2.0),
+                    half: Vec3::new(2.5, 4.0, 2.5),
+                    closes: 0.6,
+                });
+            }
+        }
+        let o = wood(crowns);
+        let seen = seen(&o);
+        let under = cell_at(&seen, &o, Vec3::new(1.0, 1.5, -1.0));
+        // Stems half a metre across, one a 16 m² cell, hide 0.03 of a level look a metre;
+        // the low looks run 40 m or more to the square's edge under the crowns, so a side sees
+        // a third of its sky at most (exp(-1.2) along the lowest), against all of it without.
+        for side in [0, 1, 4, 5] {
+            let s = seen.sides[under][side];
+            assert!(s < 0.4, "side {side} sees {s} of its sky");
+        }
+        let above = cell_at(&seen, &o, Vec3::new(1.0, 33.5, -1.0));
+        assert!(
+            seen.sides[above][2] > 0.99,
+            "above the crowns the sky is open"
+        );
     }
 
     #[test]

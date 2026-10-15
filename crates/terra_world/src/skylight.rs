@@ -70,11 +70,11 @@ const FILTER_FRAMES: u32 = 4;
 /// black in a run whose sky did not change, a scripted shot of the kit sheet.
 const FIRST_FILTER_FRAMES: u32 = 30;
 
-/// How much of the open sky's reflection reaches an eye with so much sky overhead
-/// (`OpenOverhead`), in steps of a fiftieth so the light is not changed every frame. Under a
-/// canopy a shiny thing mirrors leaves, not sky: the irradiance volume takes away the sky's
-/// diffuse light where the crowns hide it (D270), but not its reflection, so leather, skin and
-/// stone under the trees mirrored the whole open sky and read lilac by a low sun. Shipped
+/// How much of the open sky's reflection reaches an eye with so much sky open round it, over
+/// it and to its sides (`SkySeen::around_at`, D336), in steps of a fiftieth so the light is
+/// not changed every frame. Under a canopy a shiny thing mirrors leaves and stems, not sky:
+/// the irradiance volume takes away the sky's diffuse light where the crowns hide it (D270),
+/// but not its reflection, so leather, skin and stone under the trees mirrored the whole open sky and read lilac by a low sun. Shipped
 /// engines occlude the reflection so (specular occlusion); this does it once, for where the
 /// eye is, which is right for what stands near it. Beyond the volume the environment map gives
 /// the diffuse light as well, and that dims with it while the eye is under the trees.
@@ -142,7 +142,7 @@ fn paint(
     tweaks: Res<Tweaks>,
     mut painted: ResMut<Painted>,
     mut open: ResMut<OpenSky>,
-    overhead: Option<Res<crate::sky_occlusion::OpenOverhead>>,
+    sky_seen: crate::sky_occlusion::SkySeen,
     shaders: Option<Res<crate::loading::Shaders>>,
     screen: Option<Res<State<crate::loading::Screen>>>,
     mut images: ResMut<Assets<Image>>,
@@ -160,7 +160,11 @@ fn paint(
         return;
     };
     let up = at.translation().normalize_or(Vec3::Y);
-    let intensity = light.brightness * overhead.map_or(1.0, |open| sky_reflected(open.0));
+    // Squared: the volume's coarse crowns leave about a third of the sky open round an eye in
+    // the forest where the vantage views measure a few hundredths of it seen (D336); leather
+    // still read lilac with the third.
+    let around = sky_seen.around_at(at.translation());
+    let intensity = light.brightness * sky_reflected(around * around);
     let rotation = Quat::from_rotation_arc(Vec3::Y, up);
     // Bevy makes the light the shading reads, `EnvironmentMapLight`, from the generated
     // one, and does not follow later changes to its brightness or turn, so they are given
