@@ -71,7 +71,10 @@ pub(super) fn courses(
                 let cube = axis.cube(row, end, layer.max(layer_of_split(centre, split)));
                 let corner = walls.runs(cube, axis.other());
                 let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
-                match next {
+                // Every other course a hair shorter: courses overlap a little, one on the
+                // next, so their sawn ends in one plane overlap there and fight.
+                let stagger = END_STAGGER_M * course.rem_euclid(2) as f32;
+                (match next {
                     Spot::Hole => -beside_hole,
                     // Ending against another kind under an end board (`trims::ends`): its
                     // sawn end inside the board, not in the plane of the board's face.
@@ -81,7 +84,7 @@ pub(super) fn courses(
                         kit.overhang - unit(hash(&[seed, end as u32, which])) * kit.ragged()
                     }
                     _ => 0.0,
-                }
+                }) - stagger
             };
             let from = low as f32 * CELL_M - reach(low, -1, 0);
             let to = (high + 1) as f32 * CELL_M + reach(high, 1, 1);
@@ -622,6 +625,9 @@ fn joined(start: f32, end: f32, limit: f32, span: f32, phase: f32) -> Vec<(f32, 
 
 /// How near a stretch's end a joint is not made, in metres: no stub of a log.
 const JOINT_CLEAR_M: f32 = 0.3;
+/// How much shorter every other course is at each end, so the sawn ends of courses one on
+/// another are never in one plane where they overlap.
+const END_STAGGER_M: f32 = 0.006;
 
 /// How far along a row, in cubes, laying a log depends on its cubes: a log is at most a
 /// stretch's limit long, and where its stretch is jointed depends on its stretch's ends,
@@ -690,7 +696,7 @@ mod tests {
             .collect();
         assert_eq!(south.len(), courses);
         for (from, to, _) in south {
-            let short = kit.ragged + 1e-4;
+            let short = kit.ragged + END_STAGGER_M + 1e-3;
             assert!(
                 from.x >= 0.0 && from.x < short && to.x <= 4.0 && to.x > 4.0 - short,
                 "{from} {to}"
@@ -752,14 +758,14 @@ mod tests {
     }
 
     #[test]
-    fn a_free_end_is_cut_flush() {
+    fn a_free_end_is_cut_flush_every_other_course_a_hair_short() {
         let mut base = Base::default();
         wall(&mut base, (0..4).map(|x| [x, 0, 0]), Panel::Solid);
         let logs = logs(&lay(&base, &kit()));
         assert!(!logs.is_empty());
         for (from, to, _) in logs {
             assert!(
-                from.x.abs() < 1e-4 && (to.x - 2.0).abs() < 1e-4,
+                from.x.abs() < END_STAGGER_M + 1e-3 && (to.x - 2.0).abs() < END_STAGGER_M + 1e-3,
                 "{from} {to}"
             );
         }

@@ -404,13 +404,19 @@ fn overlaps(drawn: &Drawn) -> BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> {
             {
                 continue;
             }
-            let area = overlap(a, b);
+            let (area, middle) = clipped(a, b);
             if area < OVERLAP_M2 {
                 continue;
             }
             let same =
                 a.p.iter()
                     .all(|p| b.p.iter().any(|q| p.distance(*q) < 1e-4));
+            // Pressed against a face turned to meet them in their plane, as a sill's
+            // underside and a split log's flat foot both on a footing's top: never seen,
+            // as a viewer would have to be inside what that face closes.
+            if !same && pressed(drawn, &bins, a, middle) {
+                continue;
+            }
             let entry = pairs
                 .entry((a.mesh.min(b.mesh), a.mesh.max(b.mesh), same))
                 .or_insert(((a.p[0] + a.p[1] + a.p[2]) / 3.0, 0.0, 0));
@@ -421,9 +427,78 @@ fn overlaps(drawn: &Drawn) -> BTreeMap<(u32, u32, bool), (Vec3, f32, usize)> {
     pairs
 }
 
+/// How far inside what a face turned to meet it closes a point may be and still be pressed
+/// against it: the few millimetres a piece is let into the stone it stands on.
+const PRESSED_M: f32 = 0.01;
+
+/// Whether a point of a triangle's plane is on a triangle facing it in that plane, or a
+/// little behind one, inside what that face closes.
+fn pressed(
+    drawn: &Drawn,
+    bins: &std::collections::HashMap<[i32; 4], Vec<u32>>,
+    a: &Tri,
+    at: Vec3,
+) -> bool {
+    let n = (-a.n * 20.0).round().as_ivec3();
+    let d = (-a.d * 100.0).round() as i32;
+    // Only a mass of stone (a block kind's surface or its dress) is solid enough to be
+    // inside; any face in the plane will do.
+    let inside = |c: &Tri| {
+        let stone = drawn.kinds[c.mesh as usize].is_some_and(|(_, material)| {
+            matches!(
+                material,
+                Material::Masonry | Material::Floor | Material::Dressed
+            )
+        });
+        if stone { PRESSED_M } else { COPLANAR_M }
+    };
+    for dx in -1..=1 {
+        for dy in -1..=1 {
+            for dz in -1..=1 {
+                for dd in -2..=2 {
+                    let Some(bin) = bins.get(&[n.x + dx, n.y + dy, n.z + dz, d + dd]) else {
+                        continue;
+                    };
+                    for &j in bin {
+                        let c = &drawn.tris[j as usize];
+                        if c.n.dot(-a.n) >= SAME_FACING
+                            && (-inside(c)..=COPLANAR_M).contains(&(c.n.dot(at) - c.d))
+                            && contains(c, at - c.n * (c.n.dot(at) - c.d))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Whether a point in a triangle's plane is within it.
+fn contains(t: &Tri, p: Vec3) -> bool {
+    let (e1, e2, w) = (t.p[1] - t.p[0], t.p[2] - t.p[0], p - t.p[0]);
+    let (d11, d12, d22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
+    let (dw1, dw2) = (w.dot(e1), w.dot(e2));
+    let det = d11 * d22 - d12 * d12;
+    if det.abs() < 1e-12 {
+        return false;
+    }
+    let u = (d22 * dw1 - d12 * dw2) / det;
+    let v = (d11 * dw2 - d12 * dw1) / det;
+    u >= -1e-4 && v >= -1e-4 && u + v <= 1.0 + 1e-4
+}
+
 /// How much two triangles in one plane overlap, in square metres: the one clipped by the
 /// other's edges (Sutherland and Hodgman), in the plane's own two axes.
+#[cfg(test)]
 fn overlap(a: &Tri, b: &Tri) -> f32 {
+    clipped(a, b).0
+}
+
+/// How much two triangles in one plane overlap, in square metres, and the middle of where
+/// they do.
+fn clipped(a: &Tri, b: &Tri) -> (f32, Vec3) {
     let u = a.n.any_orthonormal_vector();
     let v = a.n.cross(u);
     let flat = |p: Vec3| Vec2::new(p.dot(u), p.dot(v));
@@ -454,14 +529,16 @@ fn overlap(a: &Tri, b: &Tri) -> f32 {
         }
         poly = out;
         if poly.len() < 3 {
-            return 0.0;
+            return (0.0, Vec3::ZERO);
         }
     }
     let mut twice = 0.0;
     for i in 0..poly.len() {
         twice += poly[i].perp_dot(poly[(i + 1) % poly.len()]);
     }
-    twice.abs() * 0.5
+    let flat_middle = poly.iter().copied().sum::<Vec2>() / poly.len() as f32;
+    let middle = u * flat_middle.x + v * flat_middle.y + a.n * a.d;
+    (twice.abs() * 0.5, middle)
 }
 
 /// Triangles filed by the cubes their bounds reach, to cast lines through.
@@ -1378,6 +1455,37 @@ mod tests {
         coplanar(&drawn, Detail::Near, &mut found);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].fault, Fault::Coplanar);
+        // Pressed against a face turned to meet them over where they overlap, as two
+        // pieces' undersides on a footing's top, they are never seen.
+        let mut pressed = Drawn {
+            tris: drawn.tris.clone(),
+            meshes: vec!["a".into(), "b".into(), "c".into()],
+            kinds: vec![None, None, None],
+        };
+        pressed.tris.push(tri(
+            [
+                Vec3::new(-1.0, -1.0, 0.0),
+                Vec3::new(-1.0, 3.0, 0.0),
+                Vec3::new(3.0, -1.0, 0.0),
+            ],
+            2,
+        ));
+        found.clear();
+        coplanar(&pressed, Detail::Near, &mut found);
+        assert!(found.is_empty(), "{found:?}");
+        // Let a few millimetres into stone whose face that is, the same; into anything
+        // else, whose face may be a sheet seen from behind, not.
+        for p in &mut pressed.tris[2].p {
+            p.z -= 0.005;
+        }
+        pressed.tris[2].d = pressed.tris[2].n.dot(pressed.tris[2].p[0]);
+        found.clear();
+        coplanar(&pressed, Detail::Near, &mut found);
+        assert_eq!(found.len(), 1, "{found:?}");
+        pressed.kinds[2] = Some((Kind(2), Material::Masonry));
+        found.clear();
+        coplanar(&pressed, Detail::Near, &mut found);
+        assert!(found.is_empty(), "{found:?}");
         // A centimetre out of the plane, they do not fight.
         for p in &mut drawn.tris[1].p {
             p.z += 0.01;

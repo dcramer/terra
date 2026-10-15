@@ -174,12 +174,12 @@ pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut
                 };
                 let low = point(
                     a.min(b),
-                    along as f32 * CELL_M + END_BOARD_IN_M,
+                    along as f32 * CELL_M + SIDE_BOARD_IN_M,
                     at.y as f32 * CELL_M + END_BOARD_IN_M,
                 );
                 let high = point(
                     a.max(b),
-                    (along + 1) as f32 * CELL_M - END_BOARD_IN_M,
+                    (along + 1) as f32 * CELL_M - SIDE_BOARD_IN_M,
                     (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M,
                 );
                 layout.pieces.push(Piece::Board {
@@ -193,6 +193,9 @@ pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut
 
 /// How far into the members a board up a side joint reaches, past their face.
 const SIDE_BOARD_INTO_M: f32 = 0.03;
+/// How far in from its cube's faces along the wall a board up a side joint stops: past
+/// where every other course's logs stop short (`runs::END_STAGGER_M`).
+const SIDE_BOARD_IN_M: f32 = 0.01;
 
 /// How far short of a head's top or a sill's foot a post up an opening's side stops.
 const POST_SHORT_M: f32 = 0.03;
@@ -371,7 +374,7 @@ mod tests {
         let face = CELL_M * 0.5 + kit.radius();
         assert!(a.z < face && (b.z - CELL_M).abs() < 1e-3, "{a} {b}");
         assert!(
-            (a.x - 1.0).abs() < 0.01 && (b.x - 1.5).abs() < 0.01,
+            (a.x - 1.0).abs() < 0.02 && (b.x - 1.5).abs() < 0.02,
             "{a} {b}"
         );
         assert!(a.y < 0.01 && b.y > crate::STOREY_M - 0.01, "{a} {b}");

@@ -37,6 +37,8 @@ const PLANK_EDGE_M: f32 = 0.006;
 const SHAPE_RING_M: f32 = 0.25;
 /// How far apart a plank's rings are: its face waves only gently, and a floor has many.
 const PLANK_STEP_M: f32 = 0.4;
+/// How far in from where it is laid to the daub under a log stops.
+const DAUB_IN_M: f32 = 0.002;
 
 /// A hewn member's half width, as a fraction of its kit's log, and half height, of a course.
 const HEWN_WIDE: f32 = 0.45;
@@ -192,6 +194,9 @@ pub(crate) fn member(
         );
     }
     if let Some((near, far)) = chinking {
+        // A hair in from where it is laid to, the log's ends or the wall's faces, out of the
+        // plane of sawn ends there.
+        let (near, far) = (near + DAUB_IN_M, far - DAUB_IN_M);
         let (depth, high) = made.daub;
         let along = frame.axis;
         let across = frame.side * depth;
@@ -990,9 +995,9 @@ mod tests {
         assert_eq!(
             sums,
             [
-                0x8b56_adb0_1c7d_bfe3,
-                0xa096_7969_9a67_e35a,
-                0xae55_c81f_31d4_b99f
+                0xa1ea_b741_3e3f_3a37,
+                0x0422_b06f_8ea0_fcee,
+                0x7791_36f7_9c91_a57f
             ],
             "drawn differently from the machine these were taken on (D30)"
         );
