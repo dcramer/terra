@@ -863,8 +863,27 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     }
     // Each over the roof's own cubes, from wall to wall: none out under the eaves and
     // verges, where the boards under the covering are all that shows, nor through a gable.
-    for segment in join(battens) {
-        for (from, to) in framed(base, segment.from.metres(), segment.to.metres(), true) {
+    // Capped where it stops, not at a joint with the next of its line, where the two run on
+    // as one and a cap on each stood in the other.
+    let joined = join(battens);
+    for segment in &joined {
+        let joint = |end: Place| {
+            joined.iter().any(|other| {
+                !std::ptr::eq(other, segment)
+                    && (other.from == end || other.to == end)
+                    && (other.to.metres() - other.from.metres())
+                        .normalize_or_zero()
+                        .dot((segment.to.metres() - segment.from.metres()).normalize_or_zero())
+                        .abs()
+                        > 0.99
+            })
+        };
+        let (start, end) = (segment.from.metres(), segment.to.metres());
+        for (from, to) in framed(base, start, end, true) {
+            let capped = [
+                !(from.distance(start) < 1e-3 && joint(segment.from)),
+                !(to.distance(end) < 1e-3 && joint(segment.to)),
+            ];
             pieces.push(Piece::Roof {
                 part: RoofPart::Batten,
                 from: Place::near(from),
@@ -872,18 +891,13 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 sides: segment.sides,
                 seed: 0,
                 cell: roofs.cell(segment.square, 2),
-                capped: [true; 2],
+                capped,
                 met: [false; 2],
             });
         }
     }
 }
 
-/// Whether a line's end meets another line of the roof there, and so takes no cap: a verge's
-/// top under its ridge's cap, two verges at an apex, whose own module covers the joint; a
-/// hip's or a valley's foot at the eaves, where it is mitred to them (`roofing`) rather
-/// than capped square across the line and standing out past them. An eave meets nothing it
-/// should stop at.
 /// Whether a crease's end meets another crease, at its end or along it, as a wing's ridge
 /// meets the main ridge at a T, or a hip the ridge's end.
 fn crease_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
@@ -905,6 +919,11 @@ fn crease_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
     })
 }
 
+/// Whether a line's end meets another line of the roof there, and so takes no cap: a verge's
+/// top under its ridge's cap, two verges at an apex, whose own module covers the joint; a
+/// hip's or a valley's foot at the eaves, where it is mitred to them (`roofing`) rather
+/// than capped square across the line and standing out past them. An eave meets nothing it
+/// should stop at.
 fn edge_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
     let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
     if matches!(segment.part, RoofPart::Hip | RoofPart::Valley) {
@@ -1550,6 +1569,38 @@ mod tests {
         // Rafters along every cube's edge up each slope, nine a side from one gable's inner
         // face to the other's, none on a gable or out under a verge, and a beam under the ridge.
         assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 9 + 1);
+    }
+
+    #[test]
+    fn a_batten_jointed_to_the_next_of_its_line_takes_no_cap_there() {
+        // Twenty metres long: the battens jointed at sections' edges, each two at a joint
+        // running on as one, so neither is capped there; capped at the gables.
+        let base = roofed(&[([0, 0, 0], [39, 0, 7])], Style::Gable);
+        let pieces = laid(&base);
+        let battens: Vec<(Place, Place, [bool; 2])> = pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Roof {
+                    part: RoofPart::Batten,
+                    from,
+                    to,
+                    capped,
+                    ..
+                } => Some((from, to, capped)),
+                _ => None,
+            })
+            .collect();
+        let mut joints = 0;
+        for &(from, to, capped) in &battens {
+            for (end, at) in [from, to].into_iter().enumerate() {
+                let joined = battens
+                    .iter()
+                    .any(|&(f, t, _)| (f, t) != (from, to) && (f == at || t == at));
+                assert_eq!(capped[end], !joined, "{from:?}..{to:?} at {at:?}");
+                joints += usize::from(joined);
+            }
+        }
+        assert!(joints >= 4, "{joints}");
     }
 
     #[test]
