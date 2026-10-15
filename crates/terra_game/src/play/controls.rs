@@ -16,7 +16,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use std::path::PathBuf;
-use terra_world::quality::Quality;
+use terra_world::{pacing::FrameLimit, quality::Quality};
 
 /// Something the player does, which a key or a mouse button is set to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -361,6 +361,8 @@ pub struct Settings {
     pub field_of_view: f32,
     pub full_screen: bool,
     pub vsync: bool,
+    /// The most frames a second, with vsync off (D25).
+    pub frame_limit: FrameLimit,
     /// The quality preset, or `None` for the one chosen for the GPU (D239).
     pub graphics: Option<Quality>,
     /// How loud everything is, and each part of it, from 0 to 1.
@@ -381,6 +383,7 @@ impl Default for Settings {
             field_of_view: 55.0,
             full_screen: false,
             vsync: true,
+            frame_limit: FrameLimit::Off,
             graphics: None,
             master_volume: 1.0,
             // Music is meant to sit under the world, not over it.
@@ -466,6 +469,7 @@ impl Settings {
         text += &format!("field_of_view = {}\n", self.field_of_view);
         text += &format!("full_screen = {}\n", self.full_screen);
         text += &format!("vsync = {}\n", self.vsync);
+        text += &format!("frame_limit = {}\n", self.frame_limit.name());
         text += &format!(
             "graphics = {}\n",
             self.graphics.map_or("auto", Quality::name)
@@ -508,6 +512,9 @@ impl Settings {
                 "invert_look" => settings.invert_look = value == "true",
                 "full_screen" => settings.full_screen = value == "true",
                 "vsync" => settings.vsync = value != "false",
+                "frame_limit" => {
+                    settings.frame_limit = FrameLimit::from_name(value).unwrap_or_default();
+                }
                 "graphics" => settings.graphics = Quality::from_name(value),
                 "master_volume" => settings.master_volume = number(&VOLUME).unwrap_or(1.0),
                 "music_volume" => settings.music_volume = number(&VOLUME).unwrap_or(0.7),
@@ -617,6 +624,7 @@ mod tests {
             field_of_view: 70.0,
             full_screen: true,
             vsync: false,
+            frame_limit: FrameLimit::Fps(75),
             ..default()
         };
         settings.bind(Action::Jump, 1, Some(Binding::Mouse(MouseButton::Other(7))));

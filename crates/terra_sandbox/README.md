@@ -26,7 +26,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
-| `--bench` | Measure frame times with vsync off, print them, the median game, render-CPU and GPU parts of a frame, and when the slowest frames came, then exit. `cargo xtask bench` runs the benchmark scenes this way ([development.md](../../docs/development.md#measuring-performance)) |
+| `--bench` | Measure frame times with vsync off and no frame-rate limit, print them, the median game, render-CPU and GPU parts of a frame, and when the slowest frames came, then exit. `cargo xtask bench` runs the benchmark scenes this way ([development.md](../../docs/development.md#measuring-performance)) |
 | `--bench-frames <n>` | How many frames `--bench` times (600 by default) |
 | `--offscreen` | In a scripted or background run: draw into a picture 1920x1080 instead of the window, which stays hidden. Works with the screen asleep or locked, covers nothing, and measures every machine at the same size; a benchmark waits on the GPU as a window would. Use it for screenshots and benchmarks on macOS, which draws nothing of a covered window |
 | `--on-top` | In a scripted or background run: float the window above the others, still without taking focus, so it is drawn. Only needed to watch one; `--offscreen` needs no window |

@@ -34,7 +34,7 @@ A look is aimed at something you can measure, never at memory or adjectives.
 
 - `node tools/sandbox/lodcheck.ts`: nothing pops as levels of detail change, nothing pure black (a light gone missing, NaNs).
 - `cargo xtask collide`: what should stop a walker does.
-- `cargo xtask bench walk`: within 16.7 ms (D25). Frame time matters as much as the look: prefer free changes (exposure, keys, grading, constants) and say what anything else costs.
+- `cargo xtask bench walk`: within the frame budget ([development.md](../../../docs/development.md#measuring-performance), D25). Frame time matters as much as the look: prefer free changes (exposure, keys, grading, constants) and say what anything else costs.
 - The vantage look lines stay near the reference.
 
 ## 5. The review at milestones

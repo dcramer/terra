@@ -9,7 +9,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 - Many round worlds with no space between them, reached probably by portals (D4, D72).
 - Fully diggable smooth terrain (D9). Only players reshape the ground (D20).
 - Multiplayer built around a server that decides everything (D51), toward a thousand players on one persistent server (D52).
-- Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, as a client of a server holding a thousand players, with dozens of them in view (D25).
+- Performant: 75 fps comfortably at 1080p on the developers' RTX 3080 at the high preset ([the frame budget](development.md#measuring-performance)); 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, as a client of a server holding a thousand players, with dozens of them in view (D25).
 - Developed on Windows via WSL and on macOS (D7), with all code written by agents (D1).
 
 ## Stack

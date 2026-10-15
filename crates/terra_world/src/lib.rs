@@ -30,6 +30,7 @@ pub mod loading;
 pub mod lod;
 pub mod mipmaps;
 pub mod models;
+pub mod pacing;
 pub mod parting;
 pub mod planet;
 pub mod quality;

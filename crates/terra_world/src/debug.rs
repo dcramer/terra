@@ -4,7 +4,8 @@
 //! to the log, as a summary once a minute and a warning when frames stutter, so every
 //! session leaves a record of how it ran.
 //!
-//! The budget is D25: 60 frames a second on a mid-range GPU. A frame's work is the most
+//! The budget is D25's: 75 frames a second, comfortably, at its 99th percentile. A frame's
+//! work is the most
 //! of three things that run side by side: the game's own update on the CPU, the render
 //! passes recorded on the CPU, and the GPU drawing them. With vsync on, the time between
 //! frames only says how fast the screen refreshes, so headroom is judged on the work.
@@ -32,10 +33,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// How long a frame may take: 60 frames a second (D25).
-pub const FRAME_BUDGET_MS: f32 = 1000.0 / 60.0;
-/// A frame this long is a stutter a player can see.
-const STUTTER_MS: f32 = FRAME_BUDGET_MS * 2.0;
+/// The frame rate the game is made to hold (D25), at the high preset on the developers'
+/// RTX 3080 at 1080p, at its 99th percentile.
+pub const TARGET_FPS: f32 = 75.0;
+/// How long a frame may take, 13.3 ms: the one budget the readout, the log and every
+/// benchmark judge frames against (D25, D185).
+pub const FRAME_BUDGET_MS: f32 = 1000.0 / TARGET_FPS;
+/// Work past this share of the budget is close to it, amber rather than green.
+const CLOSE_SHARE: f32 = 0.75;
+/// A frame this long is a stutter a player can see: two frames' time, one dropped.
+pub const STUTTER_MS: f32 = FRAME_BUDGET_MS * 2.0;
 /// How often the readout changes, so it can be read and costs little.
 const REFRESH: Duration = Duration::from_millis(250);
 /// The readout's figures cover this much of the recent past.
@@ -46,7 +53,7 @@ const SUMMARY: Duration = Duration::from_secs(60);
 const STUTTER_REPORT: Duration = Duration::from_secs(10);
 /// Frames at the start that load and compile shaders, and say nothing about play.
 const WARM_UP_FRAMES: u32 = 300;
-/// How many frames the graph shows: four seconds at 60 a second.
+/// How many frames the graph shows: some three seconds at 75 a second.
 const GRAPH_FRAMES: usize = 240;
 /// How wide each frame's bar is, in pixels.
 const BAR_PX: usize = 2;
@@ -112,7 +119,7 @@ impl Standing {
     pub fn of(work_ms: f32) -> Self {
         if work_ms > FRAME_BUDGET_MS {
             Self::Over
-        } else if work_ms > FRAME_BUDGET_MS * 0.75 {
+        } else if work_ms > FRAME_BUDGET_MS * CLOSE_SHARE {
             Self::Close
         } else {
             Self::Within
@@ -303,8 +310,29 @@ fn begin_update(mut frames: ResMut<Frames>) {
     frames.update_began = Some(Instant::now());
 }
 
-/// The render passes' times, summed over the outermost ones so nothing counts twice.
+/// When the render passes were last timed. Bevy gives the times of the last frame the GPU
+/// finished, all at once, and only the passes that ran in it; a pass that has stopped running,
+/// as a light probe's filter does once its sky is filtered, keeps its last time for ever.
+pub fn passes_timed(store: &DiagnosticsStore) -> Option<Instant> {
+    store
+        .iter()
+        .filter(|d| d.path().as_str().starts_with("render/"))
+        .filter_map(|d| d.measurement().map(|m| m.time))
+        .max()
+}
+
+/// A render pass's time from the frame last timed, if it ran in it.
+pub fn timed_then(diagnostic: &bevy::diagnostic::Diagnostic, then: Instant) -> Option<f64> {
+    diagnostic
+        .measurement()
+        .filter(|m| m.time == then)
+        .map(|m| m.value)
+}
+
+/// The render passes' times, summed over the outermost ones so nothing counts twice, of
+/// the passes that ran in the frame last timed.
 fn render_times(store: &DiagnosticsStore, field: &str) -> Option<f32> {
+    let then = passes_timed(store)?;
     let mut total = None;
     for diagnostic in store.iter() {
         let mut parts = diagnostic.path().components();
@@ -315,7 +343,7 @@ fn render_times(store: &DiagnosticsStore, field: &str) -> Option<f32> {
             continue;
         };
         if last == field
-            && let Some(value) = diagnostic.value()
+            && let Some(value) = timed_then(diagnostic, then)
         {
             *total.get_or_insert(0.0) += value as f32;
         }
@@ -622,8 +650,10 @@ fn show(
     };
     if detail.0 {
         let mut lines = vec![
-            "the line's colour is its p99: green under 12.5 ms, amber to 16.7, red over the budget"
-                .to_string(),
+            format!(
+                "the line's colour is its p99: green under {:.1} ms, amber to {FRAME_BUDGET_MS:.1}, red over the budget",
+                FRAME_BUDGET_MS * CLOSE_SHARE
+            ),
             format!(
                 "graphs: the last {GRAPH_FRAMES} frames, newest right; the line is the budget, the top a stutter ({STUTTER_MS:.0} ms)"
             ),
@@ -667,8 +697,11 @@ fn show(
         } else {
             "elapsed_cpu"
         };
+        // Only passes still running: one that ran once keeps its last time.
+        let then = passes_timed(&store);
         let mut passes: Vec<(String, f64)> = store
             .iter()
+            .filter(|d| then.is_some_and(|then| timed_then(d, then).is_some()))
             .filter_map(|d| {
                 let path = d.path().as_str();
                 let pass = path.strip_prefix("render/")?.strip_suffix(field)?;
@@ -709,9 +742,9 @@ mod tests {
 
     #[test]
     fn judges_work_against_the_budget() {
-        assert_eq!(Standing::of(5.0), Standing::Within);
-        assert_eq!(Standing::of(14.0), Standing::Close);
-        assert_eq!(Standing::of(20.0), Standing::Over);
+        assert_eq!(Standing::of(FRAME_BUDGET_MS * 0.5), Standing::Within);
+        assert_eq!(Standing::of(FRAME_BUDGET_MS * 0.9), Standing::Close);
+        assert_eq!(Standing::of(FRAME_BUDGET_MS * 1.2), Standing::Over);
     }
 
     #[test]
@@ -724,7 +757,8 @@ mod tests {
         };
         let quarter = FRAME_BUDGET_MS / 2.0;
         // Five frames for four bars: the oldest is left off.
-        let times = [Some(50.0), None, Some(quarter), Some(14.0), Some(100.0)];
+        let close = FRAME_BUDGET_MS * 0.9;
+        let times = [Some(50.0), None, Some(quarter), Some(close), Some(100.0)];
         draw_graph(&times, width, height, &mut pixels);
         // A frame with no time is empty.
         assert_eq!(pixel(&pixels, 0, height - 1), GRAPH_BACKGROUND);

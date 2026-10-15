@@ -20,7 +20,10 @@ use bevy::{
     ui::Pressed,
     window::{CursorOptions, MonitorSelection, PresentMode, PrimaryWindow, WindowMode},
 };
-use terra_world::quality::{Asked, Forced, Quality};
+use terra_world::{
+    pacing::{FrameLimit, ScreenRate},
+    quality::{Asked, Forced, Quality},
+};
 
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
@@ -53,6 +56,7 @@ enum General {
     FieldOfView,
     FullScreen,
     Vsync,
+    FrameLimit,
     Graphics,
     Volume(Part),
 }
@@ -87,12 +91,13 @@ impl Part {
 }
 
 impl General {
-    const ALL: [General; 10] = [
+    const ALL: [General; 11] = [
         General::LookSpeed,
         General::InvertLook,
         General::FieldOfView,
         General::FullScreen,
         General::Vsync,
+        General::FrameLimit,
         General::Graphics,
         General::Volume(Part::Master),
         General::Volume(Part::Music),
@@ -107,6 +112,7 @@ impl General {
             General::FieldOfView => "Field of view",
             General::FullScreen => "Full screen",
             General::Vsync => "Vsync",
+            General::FrameLimit => "Frame-rate limit",
             General::Graphics => "Graphics",
             General::Volume(Part::Master) => "Master volume",
             General::Volume(Part::Music) => "Music",
@@ -115,7 +121,8 @@ impl General {
         }
     }
 
-    fn value(self, settings: &Settings) -> String {
+    /// What it is set to; `screen` is the screen's refresh rate in millihertz, if known.
+    fn value(self, settings: &Settings, screen: Option<u32>) -> String {
         let on_off = |on: bool| if on { "On" } else { "Off" }.to_string();
         match self {
             General::LookSpeed => format!("{:.1}", settings.look_speed),
@@ -123,6 +130,18 @@ impl General {
             General::FieldOfView => format!("{}", settings.field_of_view),
             General::FullScreen => on_off(settings.full_screen),
             General::Vsync => on_off(settings.vsync),
+            // With vsync on the screen paces frames, and no limit applies.
+            General::FrameLimit if settings.vsync => "Vsync".to_string(),
+            General::FrameLimit => match settings.frame_limit {
+                FrameLimit::Off => "Off".to_string(),
+                FrameLimit::Fps(fps) => format!("{fps} fps"),
+                FrameLimit::Screen => match screen {
+                    Some(millihertz) => {
+                        format!("Screen {}", libm::roundf(millihertz as f32 / 1000.0))
+                    }
+                    None => "Screen".to_string(),
+                },
+            },
             General::Graphics => match settings.graphics {
                 Some(quality) => capitalised(quality.name().to_string()),
                 None => "Automatic".to_string(),
@@ -148,6 +167,18 @@ impl General {
             General::InvertLook => settings.invert_look = !settings.invert_look,
             General::FullScreen => settings.full_screen = !settings.full_screen,
             General::Vsync => settings.vsync = !settings.vsync,
+            // The next limit, round again; a limit applies with vsync off, so choosing
+            // one turns vsync off.
+            General::FrameLimit => {
+                let order = FrameLimit::CHOICES;
+                let at = order
+                    .iter()
+                    .position(|limit| *limit == settings.frame_limit)
+                    .unwrap_or(0);
+                let step = if up { 1 } else { order.len() - 1 };
+                settings.frame_limit = order[(at + step) % order.len()];
+                settings.vsync = false;
+            }
             // Automatic, then each preset from low to high, round again.
             General::Graphics => {
                 let order: Vec<Option<Quality>> = std::iter::once(None)
@@ -593,6 +624,7 @@ fn draw(
     mut screen: Single<&mut Visibility, With<Screen>>,
     mut buttons: Query<(&Hovered, Has<Pressed>, &Control, &mut BackgroundColor)>,
     mut texts: Query<(&Shows, &mut Text)>,
+    rate: Res<ScreenRate>,
 ) {
     let wanted = if menu.open {
         Visibility::Visible
@@ -620,7 +652,7 @@ fn draw(
     }
     for (shows, mut text) in &mut texts {
         let wanted = match *shows {
-            Shows::Value(general) => general.value(&settings),
+            Shows::Value(general) => general.value(&settings, rate.0),
             Shows::Binding(action, slot) if menu.listening == Some((action, slot)) => {
                 "Press a key".to_string()
             }
@@ -652,6 +684,7 @@ fn apply(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     mut projection: Single<&mut Projection, With<MainCamera>>,
     (mut asked, forced): (ResMut<Asked>, Res<Forced>),
+    mut frame_limit: ResMut<FrameLimit>,
 ) {
     if !settings.is_changed() {
         return;
@@ -683,6 +716,15 @@ fn apply(
     };
     if window.present_mode != present_mode {
         window.present_mode = present_mode;
+    }
+    // A limit applies with vsync off; with it on, the screen paces frames.
+    let limit = if settings.vsync {
+        FrameLimit::Off
+    } else {
+        settings.frame_limit
+    };
+    if *frame_limit != limit {
+        *frame_limit = limit;
     }
 }
 

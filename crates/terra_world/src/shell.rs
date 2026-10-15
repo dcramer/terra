@@ -1,7 +1,7 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
-use crate::debug::FRAME_BUDGET_MS;
+use crate::debug::{FRAME_BUDGET_MS, STUTTER_MS};
 use crate::{
     audio, debug,
     loading::{self, Screen},
@@ -880,6 +880,7 @@ impl Plugin for ShellPlugin {
                 EguiPlugin::default(),
                 // On by default, screenshots included, so it is there when it is needed.
                 debug::plugin(readout),
+                crate::pacing::plugin,
             ))
             // F1: every entity, resource and asset in the world, editable live.
             .add_plugins(
@@ -1105,10 +1106,11 @@ fn scripted_run(
         Local<Option<[usize; 3]>>,
         Option<Res<crate::cover::BareGround>>,
     ),
-    (store, mut pass_ms, mut pass_triangles): (
+    (store, mut pass_ms, mut pass_triangles, mut timed): (
         Res<bevy::diagnostic::DiagnosticsStore>,
         Local<std::collections::BTreeMap<String, Vec<f32>>>,
         Local<std::collections::BTreeMap<String, Vec<f32>>>,
+        Local<(Option<Instant>, usize)>,
     ),
     (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
@@ -1188,15 +1190,27 @@ fn scripted_run(
             part_ms[1].extend(parts.render_ms);
             part_ms[2].extend(parts.gpu_ms);
         }
-        // Each render pass's time on the GPU, to say which passes the frame goes on.
+        // Each render pass's time on the GPU, to say which passes the frame goes on: for
+        // each frame the GPU has timed, what each pass took, and nothing for a pass that did
+        // not run, so one that ran once is not counted in every frame.
+        let then = crate::debug::passes_timed(&store).filter(|&then| timed.0 != Some(then));
+        if let Some(then) = then {
+            timed.0 = Some(then);
+            timed.1 += 1;
+        }
         for diagnostic in store.iter() {
             let path = diagnostic.path().as_str();
-            if let (Some(pass), Some(ms)) = (
+            if let (Some(pass), Some(then)) = (
                 path.strip_prefix("render/")
                     .and_then(|p| p.strip_suffix("/elapsed_gpu")),
-                diagnostic.value(),
+                then,
             ) {
-                pass_ms.entry(pass.to_string()).or_default().push(ms as f32);
+                let ms = crate::debug::timed_then(diagnostic, then).unwrap_or(0.0);
+                let earlier = timed.1 - 1;
+                let times = pass_ms
+                    .entry(pass.to_string())
+                    .or_insert_with(|| vec![0.0; earlier]);
+                times.push(ms as f32);
             }
             // The triangles each pass sent to be drawn, where the GPU counts them.
             if let (Some(pass), Some(count)) = (
@@ -1271,10 +1285,7 @@ fn scripted_run(
             );
             println!(
                 "SANDBOX against the {FRAME_BUDGET_MS:.1} ms budget: {:.2}% of frames over, {} hitches over {:.1} ms, the game's work in the last third {:+.1}% on the first",
-                sustained.over_pct,
-                sustained.hitches,
-                2.0 * FRAME_BUDGET_MS,
-                sustained.drift_pct
+                sustained.over_pct, sustained.hitches, STUTTER_MS, sustained.drift_pct
             );
             // Where the time goes: the medians of the game's systems, the render passes on
             // the CPU, and the GPU, so a slow frame says which to work on.
@@ -1445,10 +1456,7 @@ pub struct Sustained {
 impl Sustained {
     pub fn of(frame_ms: &[f32], game_ms: Option<&[f32]>) -> Self {
         let over = frame_ms.iter().filter(|&&ms| ms > FRAME_BUDGET_MS).count();
-        let hitches = frame_ms
-            .iter()
-            .filter(|&&ms| ms > 2.0 * FRAME_BUDGET_MS)
-            .count();
+        let hitches = frame_ms.iter().filter(|&&ms| ms > STUTTER_MS).count();
         let median = |part: &[f32]| {
             let mut part = part.to_vec();
             part.sort_by(f32::total_cmp);

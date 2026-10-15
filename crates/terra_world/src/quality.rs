@@ -6,7 +6,7 @@
 //!
 //! Low is the integrated GPU's: 30 frames a second at 1080p shown, drawn at a lower
 //! resolution and scaled up (`render_scale`), as consoles and low presets do. High is
-//! what the game is made to look like, on a mid-range discrete GPU at 60 (D25).
+//! what the game is made to look like, at 75 on the developers' RTX 3080 (D25).
 
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::platform::collections::HashMap;

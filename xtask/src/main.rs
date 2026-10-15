@@ -653,10 +653,10 @@ const SLOWER_BY: f32 = 0.10;
 const BENCHMARKS: &str = "research/benchmarks.csv";
 const BENCHMARKS_HEADER: &str =
     "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct";
-/// The frame budget (D25), and what a scene must hold to on the machine it runs on: at most
-/// this share of frames over budget, no hitch (a frame over twice it), and its last third
-/// no slower than its first by more than this.
-const BUDGET_MS: f32 = 1000.0 / 60.0;
+/// What a scene must hold to on the machine it runs on, against the frame budget (D25)
+/// the sandbox judged its frames by and says (`terra_world::debug::FRAME_BUDGET_MS`, the
+/// one place it is set): at most this share of frames over it, no hitch (a frame over
+/// twice it), and its last third no slower than its first by more than this.
 const MOST_OVER_PCT: f32 = 1.0;
 const MOST_DRIFT_PCT: f32 = 15.0;
 
@@ -668,7 +668,9 @@ struct Timing {
     median_ms: f32,
     p99_ms: f32,
     worst_ms: f32,
-    /// How the run held to the budget, from its next line.
+    /// The budget the sandbox judged the run against, and how the run held to it, from
+    /// its next line.
+    budget_ms: f32,
     over_pct: f32,
     hitches: u32,
     drift_pct: f32,
@@ -678,8 +680,10 @@ impl Timing {
     /// What the scene missed of the budget's gates, if anything.
     fn misses(&self) -> Vec<String> {
         let mut missed = Vec::new();
-        if self.p99_ms > BUDGET_MS {
-            missed.push(format!("99th percentile over {BUDGET_MS:.1} ms"));
+        if self.budget_ms <= 0.0 {
+            missed.push("the run did not say how it held to the budget".to_string());
+        } else if self.p99_ms > self.budget_ms {
+            missed.push(format!("99th percentile over {:.1} ms", self.budget_ms));
         }
         if self.over_pct > MOST_OVER_PCT {
             missed.push(format!("{:.1}% of frames over budget", self.over_pct));
@@ -694,16 +698,18 @@ impl Timing {
     }
 }
 
-/// Reads `SANDBOX against the 16.7 ms budget: 0.50% of frames over, 2 hitches over
-/// 33.3 ms, the last third +3.0% on the first`.
-fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
+/// Reads `SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over
+/// 26.7 ms, the last third +3.0% on the first`, as the budget, the share over, hitches and
+/// drift.
+fn parse_sustained(line: &str) -> Option<(f32, f32, u32, f32)> {
     let rest = line.strip_prefix("SANDBOX against the ")?;
-    let (_, rest) = rest.split_once(" budget: ")?;
+    let (budget, rest) = rest.split_once(" ms budget: ")?;
     let (over, rest) = rest.split_once("% of frames over, ")?;
     let (hitches, rest) = rest.split_once(" hitches over ")?;
     let (_, drift) = rest.split_once("in the last third ")?;
     let drift = drift.strip_suffix("% on the first")?;
     Some((
+        budget.parse().ok()?,
         over.parse().ok()?,
         hitches.parse().ok()?,
         drift.parse().ok()?,
@@ -762,6 +768,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         median_ms,
         p99_ms,
         worst_ms,
+        budget_ms: 0.0,
         over_pct: 0.0,
         hitches: 0,
         drift_pct: 0.0,
@@ -937,9 +944,11 @@ fn bench(args: &[String]) -> bool {
             ok &= missed.is_empty();
         }
         println!(
-            "  The budget is {BUDGET_MS:.1} ms (D25): a scene holds to it with its 99th percentile under it, \
-             at most {MOST_OVER_PCT}% of frames over, no hitch over twice it, and no more than \
-             {MOST_DRIFT_PCT}% slower by the end. On this machine; D25's target is a mid-range GPU."
+            "  The budget is {:.1} ms (D25: 75 fps on the developers' RTX 3080 at the high preset): \
+             a scene holds to it with its 99th percentile under it, at most {MOST_OVER_PCT}% of \
+             frames over, no hitch over twice it, and no more than {MOST_DRIFT_PCT}% slower by \
+             the end, on the machine it runs on.",
+            first.budget_ms
         );
         if let Some((load, cores)) = busiest
             && load > cores as f32 / 2.0
@@ -1057,10 +1066,15 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
                 timing = Some(read);
             } else if let Some(said) = worth_saying(&line) {
                 println!("  {said}");
-            } else if let (Some(timing), Some((over, hitches, drift))) =
+            } else if let (Some(timing), Some((budget, over, hitches, drift))) =
                 (&mut timing, parse_sustained(&line))
             {
-                (timing.over_pct, timing.hitches, timing.drift_pct) = (over, hitches, drift);
+                (
+                    timing.budget_ms,
+                    timing.over_pct,
+                    timing.hitches,
+                    timing.drift_pct,
+                ) = (budget, over, hitches, drift);
             }
         }
         timing
@@ -1977,6 +1991,7 @@ mod bench_tests {
             median_ms,
             p99_ms,
             worst_ms,
+            budget_ms: 13.3,
             over_pct: 0.0,
             hitches: 0,
             drift_pct: 0.0,
@@ -1985,16 +2000,28 @@ mod bench_tests {
 
     #[test]
     fn reads_how_a_run_held_to_the_budget() {
-        let line = "SANDBOX against the 16.7 ms budget: 0.50% of frames over, 2 hitches over \
-                    33.3 ms, the game's work in the last third -3.0% on the first";
-        assert_eq!(parse_sustained(line), Some((0.5, 2, -3.0)));
+        let line = "SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over \
+                    26.7 ms, the game's work in the last third -3.0% on the first";
+        assert_eq!(parse_sustained(line), Some((13.3, 0.5, 2, -3.0)));
         assert_eq!(parse_sustained("SANDBOX saved shot.png"), None);
     }
 
     #[test]
     fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
         assert!(timing(5.0, 9.0, 20.0).misses().is_empty());
-        assert_eq!(timing(5.0, 18.0, 20.0).misses().len(), 1);
+        assert_eq!(timing(5.0, 14.0, 20.0).misses().len(), 1);
+        // Judged against the budget the run said, not one of its own.
+        let at_60 = Timing {
+            budget_ms: 16.7,
+            ..timing(5.0, 14.0, 20.0)
+        };
+        assert!(at_60.misses().is_empty());
+        // A run that never said how it held is not taken to have held.
+        let unsaid = Timing {
+            budget_ms: 0.0,
+            ..timing(5.0, 9.0, 20.0)
+        };
+        assert_eq!(unsaid.misses().len(), 1);
         let stutters = Timing {
             hitches: 1,
             drift_pct: 20.0,
@@ -2008,7 +2035,11 @@ mod bench_tests {
     fn reads_the_sandboxs_frame_times() {
         let line = "SANDBOX frames on Apple M4 Max at 1920x1080 offscreen: median 7.51 ms, \
                     99th percentile 15.39 ms, worst 16.40 ms";
-        assert_eq!(parse_timing(line), Some(timing(7.51, 15.39, 16.40)));
+        let read = Timing {
+            budget_ms: 0.0,
+            ..timing(7.51, 15.39, 16.40)
+        };
+        assert_eq!(parse_timing(line), Some(read));
         assert_eq!(parse_timing("SANDBOX saved shot.png"), None);
     }
 

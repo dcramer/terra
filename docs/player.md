@@ -78,7 +78,7 @@ An options menu with what players expect of one (D80), including audio and remap
 - **Graphics**: a few quality levels, and the settings under them (shadows, draw distance, grass).
 - **Interface**: text size, and hiding the frame-time readout (D77).
 
-Built in the sandbox's `play` experiment, opened with Esc: remapping every control to any key or mouse button, two per action; look speed; invert look; field of view; full screen; vsync; master, music, ambience and effects volume. Saved as the player changes them. Not yet: voices, resolution, frame-rate cap, graphics quality, text size.
+Built in the sandbox's `play` experiment, opened with Esc: remapping every control to any key or mouse button, two per action; look speed; invert look; field of view; full screen; vsync; a frame-rate limit with vsync off (off, 30, 60, 75, 120, 144 or the screen's own rate, D332); graphics quality; master, music, ambience and effects volume. Saved as the player changes them. Not yet: voices, resolution, text size.
 
 ## What it asks of the engine
 

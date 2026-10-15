@@ -44,7 +44,7 @@ Proposed, and reshaped by the developers' answers of 2026-10-12. Each goal says 
 7. **Alive.** Everything moves in the wind, grass and bushes give way as you pass, and dug or built ground clears. What is cut grows back, and you see it grow rather than find it whole again (D150).
 8. **Every world its own, by rules.** Nobody writes a list of biomes. Each realm's come from its theme and seed (D8, D17, D59), so two temperate realms still grow different forests. A gothic realm's dead trees and roots, or a techno realm's growth, are new rules and data, not new code.
 9. **Interactive at scale.** Likely every plant can be harvested, perhaps not some grass (D43). The server keeps nothing per plant but what players changed (D47, D52).
-10. **Fast.** 60 fps on the mid-range target, checked on the integrated GPU too (D25).
+10. **Fast.** Within the frame budget (D25), checked on the integrated GPU too.
 11. **Seasons** (D149). Leaves turn and fall, snow comes and goes, and grass browns and greens again. They change play as well as the look: cold, food, growth.
 12. **Paths worn by use.** A stretch goal: where players and creatures walk often, the grass wears into a path, and it grows over again when no one does.
 
