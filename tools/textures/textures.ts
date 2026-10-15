@@ -9,7 +9,7 @@
 //   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n]
 //   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m]
 //                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
-//                                         [--exposed] [--soft f]
+//                                         [--exposed] [--soft f] [--wood-roughness r]
 //   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f] [--checks n]
 //
 // Each writes assets/materials/<name>/, and adds or updates its line in that folder's
@@ -752,6 +752,7 @@ function blend(
     lighten,
     exposed,
     soft,
+    woodRoughness,
   }: {
     around: number;
     along: number;
@@ -762,6 +763,7 @@ function blend(
     lighten: number;
     exposed: boolean;
     soft: number;
+    woodRoughness?: number;
   },
 ) {
   const out = join(ROOT, "assets", "materials", name);
@@ -787,6 +789,15 @@ function blend(
   // The bark's colour toward its grey by `saturation`, as bark on a felled log fades; the
   // bare wood lighter by `lighten`, as wood left in the sun goes silver.
   for (let i = 0; i < w * h * 3; i++) wood.colour[i] = Math.min(255, Math.round(wood.colour[i] * lighten));
+  // And rougher, as wood weathered silver is: its roughness moved to `woodRoughness` on
+  // average, keeping its grain's variation. Sawn wood's scan is half rough, which caught the
+  // sky as a blue sheen on every log's silvered top at noon.
+  if (woodRoughness !== undefined) {
+    let sum = 0;
+    for (let i = 0; i < w * h; i++) sum += wood.arm[i * 3 + 1];
+    const shift = woodRoughness * 255 - sum / (w * h);
+    for (let i = 0; i < w * h; i++) wood.arm[i * 3 + 1] = Math.max(0, Math.min(255, Math.round(wood.arm[i * 3 + 1] + shift)));
+  }
   for (let i = 0; i < w * h; i++) {
     const [r, g, b] = [bark.colour[i * 3], bark.colour[i * 3 + 1], bark.colour[i * 3 + 2]];
     const luma = 0.3 * r + 0.55 * g + 0.15 * b;
@@ -864,7 +875,7 @@ function blend(
   record(
     name,
     `${credit(overName)} at ${overM} m lying in patches over ${credit(baseName)} at ${baseM} m, ` +
-      `${Math.round(cover * 100)}% covered, its colour ${Math.round(saturation * 100)}% saturated and the wood's ${Math.round(lighten * 100)}% as light${exposed ? ", the bark lost where a log is exposed" : ""}, by \`textures.ts blend\`. ${around.toFixed(2)} m round by ${along.toFixed(2)} m along.`,
+      `${Math.round(cover * 100)}% covered, its colour ${Math.round(saturation * 100)}% saturated and the wood's ${Math.round(lighten * 100)}% as light${woodRoughness !== undefined ? ` and ${woodRoughness} rough` : ""}${exposed ? ", the bark lost where a log is exposed" : ""}, by \`textures.ts blend\`. ${around.toFixed(2)} m round by ${along.toFixed(2)} m along.`,
   );
   console.log(`${name}: ${out}, ${around} m round by ${along} m along, ${Math.round(cover * 100)}% ${overName}`);
 }
@@ -1051,6 +1062,7 @@ async function main() {
       lighten: { type: "string", default: "1" },
       exposed: { type: "boolean", default: false },
       soft: { type: "string", default: "0.01" },
+      "wood-roughness": { type: "string", default: "" },
       checks: { type: "string", default: "0" },
       help: { type: "boolean", short: "h" },
     },
@@ -1076,6 +1088,7 @@ async function main() {
       lighten: Number(values.lighten),
       exposed: Boolean(values.exposed),
       soft: Number(values.soft),
+      woodRoughness: values["wood-roughness"] ? Number(values["wood-roughness"]) : undefined,
     });
   } else if (step === "ends" && name && rest.length) {
     await ends(name, rest, Number(values.size), Number(values.weather), Number(values.checks));
@@ -1088,7 +1101,7 @@ async function main() {
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k] [--height]
   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n] [--cut a]
-  node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f] [--exposed] [--soft f]
+  node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f] [--exposed] [--soft f] [--wood-roughness r]
   node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f] [--checks n]`);
     process.exit(values.help ? 0 : 2);
   }

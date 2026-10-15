@@ -13,7 +13,7 @@
         relief: 0.0,
         daub: (0.8, 0.06),
         tint: (1.0, 0.86, 0.7),
-        end_tint: (0.9, 0.8, 0.7),
+        end_tint: (0.66, 0.58, 0.5),
         variation: (thickness: 0.05, shade: 0.14, warmth: 0.06),
     ),
     textures: {

@@ -14,7 +14,7 @@
         phase: 0.0,
         thick: 0.025,
         relief: 0.02,
-        tint: (0.6, 0.62, 0.66),
+        tint: (0.5, 0.53, 0.58),
         rafter: 0.13,
         batten: (0.05, 0.025),
         parts: { Rafter: (tint: (0.9, 0.84, 0.76)) },
