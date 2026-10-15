@@ -165,15 +165,40 @@ pub struct Roofs {
     inside: Vec<u16>,
 }
 
+thread_local! {
+    /// The roofs worked out while laying is [`remembered`], by the base and the roof cubes.
+    static MEMO: std::cell::RefCell<Option<QuickMap<u64, std::rc::Rc<Roofs>>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs a laying of one base, every roof it asks for ([`Roofs::whole`]) worked out once,
+/// and forgotten after.
+pub(crate) fn remembered<T>(run: impl FnOnce() -> T) -> T {
+    let outer = MEMO.with(|memo| {
+        let mut memo = memo.borrow_mut();
+        let outer = memo.is_some();
+        if !outer {
+            *memo = Some(QuickMap::default());
+        }
+        outer
+    });
+    let out = run();
+    if !outer {
+        MEMO.with(|memo| *memo.borrow_mut() = None);
+    }
+    out
+}
+
 impl Roofs {
     /// The roofs of a base's roof cubes within `near` and every roof cube joined to them,
-    /// whole, so every piece of them is laid as laying the whole base would.
-    pub(crate) fn whole(base: &Base, kits: &Kits, near: Scope) -> Roofs {
+    /// whole, so every piece of them is laid as laying the whole base would. Worked out once
+    /// for the same roofs while laying is [`remembered`]: every roof kit's layout, and every
+    /// log kit's cut under them, asks for the same.
+    pub(crate) fn whole(base: &Base, kits: &Kits, near: Scope) -> std::rc::Rc<Roofs> {
         let mut found: BTreeSet<[i32; 3]> = BTreeSet::new();
         let mut frontier: Vec<IVec3> = near
-            .cubes(base, None)
+            .cubes_where(base, None, |cube| cube.kind.is_roof())
             .into_iter()
-            .filter(|(_, cube)| cube.kind.is_roof())
             .map(|(at, _)| at)
             .collect();
         found.extend(frontier.iter().map(|at| at.to_array()));
@@ -191,6 +216,17 @@ impl Roofs {
                 }
             }
         }
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            (base as *const Base as usize).hash(&mut hasher);
+            (kits as *const Kits as usize).hash(&mut hasher);
+            found.hash(&mut hasher);
+            hasher.finish()
+        };
+        if let Some(known) = MEMO.with(|memo| memo.borrow().as_ref()?.get(&key).cloned()) {
+            return known;
+        }
         let cubes: Vec<(IVec3, Cube)> = found
             .into_iter()
             .filter_map(|at| {
@@ -198,7 +234,13 @@ impl Roofs {
                 base.cube(at).map(|cube| (at, cube))
             })
             .collect();
-        Roofs::of(base, kits, &cubes)
+        let roofs = std::rc::Rc::new(Roofs::of(base, kits, &cubes));
+        MEMO.with(|memo| {
+            if let Some(memo) = memo.borrow_mut().as_mut() {
+                memo.insert(key, roofs.clone());
+            }
+        });
+        roofs
     }
 
     /// Whether there is no roof at all.
@@ -602,10 +644,9 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     }
     // Only the roofs with a cube of the kind near the scope, whole, so their long pieces
     // join as they do over the whole base.
-    let mine = scope
-        .cubes(base, None)
-        .iter()
-        .any(|(_, cube)| cube.kind == kit.kind());
+    let mine = !scope
+        .cubes_where(base, None, |cube| cube.kind == kit.kind())
+        .is_empty();
     if !mine {
         return;
     }
@@ -1169,7 +1210,7 @@ fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut
 /// roof cube standing on one of its whole cubes, its surface cut at the roof's underside, as
 /// a gable end rises to its verges and a wall's top closes the wedge under its eaves.
 pub(crate) fn gables(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece>) {
-    for (at, cube) in scope.cubes(base, None) {
+    for (at, cube) in scope.cubes_where(base, None, |cube| cube.kind.is_roof()) {
         if !cube.kind.is_roof() || cube.fill == Fill::Open {
             continue;
         }

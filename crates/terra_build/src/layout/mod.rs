@@ -736,10 +736,9 @@ pub fn lay_sections(base: &Base, kit: &Kit, kits: &Kits, sections: &BTreeSet<[i3
         high: scope.high + IVec3::splat(side),
     };
     if kit.pattern != Pattern::Roof
-        && !round
-            .cubes(base, None)
-            .iter()
-            .any(|(_, cube)| cube.kind == kit.kind())
+        && round
+            .cubes_where(base, None, |cube| cube.kind == kit.kind())
+            .is_empty()
     {
         return Layout::default();
     }
@@ -795,6 +794,16 @@ impl Scope {
 
     /// Its cubes in a base, sorted, within a box as well if given.
     pub fn cubes(&self, base: &Base, within: Option<(IVec3, IVec3)>) -> Vec<(IVec3, crate::Cube)> {
+        self.cubes_where(base, within, |_| true)
+    }
+
+    /// As [`Scope::cubes`], only those `keep` takes.
+    pub fn cubes_where(
+        &self,
+        base: &Base,
+        within: Option<(IVec3, IVec3)>,
+        keep: impl Fn(&crate::Cube) -> bool,
+    ) -> Vec<(IVec3, crate::Cube)> {
         let Some((low, high)) = base.store().bounds() else {
             return Vec::new();
         };
@@ -805,7 +814,7 @@ impl Scope {
         if low.cmpgt(high).any() {
             return Vec::new();
         }
-        base.store().within(low, high)
+        base.store().within_where(low, high, keep)
     }
 
     /// A row's cubes of the base along an axis, wherever they are along it: the row
@@ -868,7 +877,11 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
             Axis::X => (low.z, high.z) = (scope.low.z, scope.high.z),
             Axis::Z => (low.x, high.x) = (scope.low.x, scope.high.x),
         }
-        Scope::ALL.cubes(base, Some((low, high)))
+        // Only the kit's own cubes and roofs' can be ours (`Walls::ours`): a castle's band
+        // is tens of thousands of another kind's.
+        Scope::ALL.cubes_where(base, Some((low, high)), |cube| {
+            cube.kind == kit.kind() || cube.kind.is_roof()
+        })
     };
     let mut ours: Vec<IVec3> = band(Axis::X)
         .into_iter()

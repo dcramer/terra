@@ -770,6 +770,17 @@ impl Cubes {
     /// `[x, y, z]`: only the sections the box reaches are read, so a layout of one section
     /// does not walk a whole castle (docs/building-plan.md, drawing).
     pub fn within(&self, low: IVec3, high: IVec3) -> Vec<(IVec3, Cube)> {
+        self.within_where(low, high, |_| true)
+    }
+
+    /// As [`Cubes::within`], only the cubes `keep` takes: a layout looking for its own kind
+    /// among a castle's stone gathers only what it looks for.
+    pub fn within_where(
+        &self,
+        low: IVec3,
+        high: IVec3,
+        keep: impl Fn(&Cube) -> bool,
+    ) -> Vec<(IVec3, Cube)> {
         let (from, to) = (section_of(low), section_of(high));
         let mut found = Vec::new();
         for (&key, section) in self.sections.range(from.to_array()..=to.to_array()) {
@@ -789,6 +800,7 @@ impl Cubes {
                         let index = (x * SECTION * SECTION + y * SECTION + z) as usize;
                         if section.cubes[index] != 0
                             && let Some(cube) = section.get(index)
+                            && keep(&cube)
                         {
                             found.push((origin + local, cube));
                         }

@@ -185,6 +185,10 @@ impl Whole {
 
     /// Lays every kit's pieces of a base.
     pub fn lay(base: &Base, kits: &Kits) -> Whole {
+        layout::roofs::remembered(|| Self::lay_all(base, kits))
+    }
+
+    fn lay_all(base: &Base, kits: &Kits) -> Whole {
         let mut whole = Whole::default();
         for (index, kit) in kits.0.iter().enumerate() {
             let pieces = layout::lay_among(base, kit, kits).pieces;
@@ -214,21 +218,60 @@ impl Whole {
         kits: &Kits,
         marked: &BTreeSet<[i32; 3]>,
     ) -> Whole {
+        layout::roofs::remembered(|| self.lay_part(before, base, kits, marked))
+    }
+
+    fn lay_part(
+        &self,
+        before: &Base,
+        base: &Base,
+        kits: &Kits,
+        marked: &BTreeSet<[i32; 3]>,
+    ) -> Whole {
         let groups = reach(before, base, kits, marked);
-        let again: BTreeSet<[i32; 3]> = groups.iter().flatten().copied().collect();
+        // The first group, round the marks, is laid again in every kit; the rest are rows
+        // of logs along the floor from them, which only a log kit's courses reach: every
+        // other kit's pieces there are as they were, laid from cubes that did not change.
+        // A roof's pieces are laid from its own cubes and those a step or two round them
+        // (what is under its eaves, what stands over it), so a roof kit lays nothing again
+        // where no cube changed within a few of a roof's.
+        let roofed = roof_near_changes(before, base, marked);
+        let laid_in = |group: usize, kit: &Kit| match kit.pattern {
+            Pattern::Roof => group == 0 && roofed,
+            Pattern::Logs => true,
+            _ => group == 0,
+        };
+        let again: BTreeMap<[i32; 3], usize> = groups
+            .iter()
+            .enumerate()
+            .flat_map(|(group, sections)| sections.iter().map(move |&at| (at, group)))
+            .collect();
         let mut whole = Whole {
             by_section: self
                 .by_section
                 .iter()
-                .filter(|(at, _)| !again.contains(*at))
-                .map(|(at, pieces)| (*at, pieces.clone()))
+                .map(|(at, pieces)| {
+                    let kept: Vec<(usize, usize, Piece)> = match again.get(at) {
+                        None => pieces.clone(),
+                        Some(&group) => pieces
+                            .iter()
+                            .filter(|(index, _, _)| !laid_in(group, &kits.0[*index]))
+                            .cloned()
+                            .collect(),
+                    };
+                    (*at, kept)
+                })
+                .filter(|(_, pieces)| !pieces.is_empty())
                 .collect(),
             counts: self.counts.clone(),
         };
         // A group at a time, each a box no bigger than a piece's reach round the edit.
-        for group in &groups {
+        for (group, sections) in groups.iter().enumerate() {
             for (index, kit) in kits.0.iter().enumerate() {
-                let pieces = layout::lay_sections(base, kit, kits, group).pieces;
+                if !laid_in(group, kit) {
+                    continue;
+                }
+                let pieces = layout::lay_sections(base, kit, kits, sections).pieces;
                 for (order, piece) in pieces.into_iter().enumerate() {
                     whole
                         .by_section
@@ -240,6 +283,62 @@ impl Whole {
         }
         whole
     }
+}
+
+/// How far round a cube that changed a roof's pieces may change, in cubes: further than
+/// its eaves run on past its walls or anything under or over it is looked at.
+const ROOF_REACH: i32 = 4;
+
+/// Whether any cube that changed between two bases, in the sections marked, has a roof's
+/// cube within [`ROOF_REACH`] of it, before or after.
+fn roof_near_changes(before: &Base, after: &Base, marked: &BTreeSet<[i32; 3]>) -> bool {
+    let side = crate::cubes::SECTION;
+    marked.iter().any(|&at| {
+        let low = IVec3::from_array(at) * side;
+        let high = low + IVec3::splat(side - 1);
+        let (was, now) = (
+            before.store().within(low, high),
+            after.store().within(low, high),
+        );
+        let mut changed: Vec<IVec3> = Vec::new();
+        let (mut i, mut j) = (0, 0);
+        while i < was.len() || j < now.len() {
+            match (was.get(i), now.get(j)) {
+                (Some(a), Some(b)) if a.0 == b.0 => {
+                    if a.1 != b.1 {
+                        changed.push(a.0);
+                    }
+                    (i, j) = (i + 1, j + 1);
+                }
+                (Some(a), Some(b)) if a.0.to_array() < b.0.to_array() => {
+                    changed.push(a.0);
+                    i += 1;
+                }
+                (Some(_), Some(b)) => {
+                    changed.push(b.0);
+                    j += 1;
+                }
+                (Some(a), None) => {
+                    changed.push(a.0);
+                    i += 1;
+                }
+                (None, Some(b)) => {
+                    changed.push(b.0);
+                    j += 1;
+                }
+                (None, None) => break,
+            }
+        }
+        changed.iter().any(|&cube| {
+            let reach = IVec3::splat(ROOF_REACH);
+            [before, after].iter().any(|base| {
+                !base
+                    .store()
+                    .within_where(cube - reach, cube + reach, |c| c.kind.is_roof())
+                    .is_empty()
+            })
+        })
+    })
 }
 
 /// The sections whose pieces an edit that marked these may change, before it and after,

@@ -19,27 +19,47 @@ const PAD_M: f32 = 0.06;
 pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: &mut Layout) {
     let base = walls.base;
     let kind = kit.kind();
-    let shaped = |shape: Shape| -> BTreeSet<[i32; 3]> {
-        base.cubes()
-            .filter(|(_, cube)| {
-                cube.kind == kind && cube.fill == Fill::Solid && cube.shape == shape
-            })
-            .map(|(at, _)| at.to_array())
-            .collect()
-    };
-    let halves = shaped(Shape::Half);
+    let solid = |cube: &crate::Cube| cube.kind == kind && cube.fill == Fill::Solid;
+    let is = |at: IVec3, shape: Shape| base.cube(at).is_some_and(|c| solid(&c) && c.shape == shape);
+    // Its cubes in the scope, not the base's: a castle's are a hundred thousand.
+    let mine = scope.cubes_where(base, None, solid);
+    // Every run of halves joined side by side on its layer with one in the scope, whole,
+    // as laying the whole base finds them.
+    let mut halves: BTreeSet<[i32; 3]> = BTreeSet::new();
+    let mut next: Vec<IVec3> = mine
+        .iter()
+        .filter(|(_, cube)| cube.shape == Shape::Half)
+        .map(|&(at, _)| at)
+        .collect();
+    halves.extend(next.iter().map(|at| at.to_array()));
+    while let Some(at) = next.pop() {
+        for side in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+            let beside = at + side;
+            if !halves.contains(&beside.to_array()) && is(beside, Shape::Half) {
+                halves.insert(beside.to_array());
+                next.push(beside);
+            }
+        }
+    }
     if !halves.is_empty() && kit.textures.contains_key(&crate::mesh::Material::Floor) {
         super::floors::regions(walls, kit, &halves, CELL_M * 0.5, scope, layout);
     }
-    let posts = shaped(Shape::Post);
-    for &at in &posts {
-        let at = IVec3::from_array(at);
-        // From the foot of each column.
-        if posts.contains(&(at - IVec3::Y).to_array()) {
+    // Each column of posts reaching into the scope, from its foot.
+    let mut feet: BTreeSet<[i32; 3]> = BTreeSet::new();
+    for &(at, cube) in &mine {
+        if cube.shape != Shape::Post {
             continue;
         }
+        let mut foot = at;
+        while is(foot - IVec3::Y, Shape::Post) {
+            foot -= IVec3::Y;
+        }
+        feet.insert(foot.to_array());
+    }
+    for at in feet {
+        let at = IVec3::from_array(at);
         let mut top = at;
-        while posts.contains(&(top + IVec3::Y).to_array()) {
+        while is(top + IVec3::Y, Shape::Post) {
             top += IVec3::Y;
         }
         if !scope.reaches(at, top) {
@@ -48,12 +68,8 @@ pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: 
         post(walls, kit, at, top, layout);
     }
     // The shapes of D231, each boarded as a box of planks.
-    for (at, cube) in base.cubes() {
-        if cube.kind == kind
-            && cube.fill == Fill::Solid
-            && boarded(cube.shape)
-            && scope.reaches(at, at)
-        {
+    for &(at, cube) in &mine {
+        if boarded(cube.shape) {
             board(base, at, cube.shape, layout);
         }
     }

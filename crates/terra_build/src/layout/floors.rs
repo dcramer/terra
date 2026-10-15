@@ -55,8 +55,11 @@ pub(super) fn decks(walls: &Walls, kit: &Kit, scope: super::Scope, layout: &mut 
     };
     // Every region with a cube in the scope, whole: found from those, not from every cube.
     let mut deck: BTreeSet<[i32; 3]> = BTreeSet::new();
+    // Only its own kind's cubes and posts can be (`is_deck`, `post_in_deck`).
     let mut next: Vec<IVec3> = scope
-        .cubes(base, None)
+        .cubes_where(base, None, |cube| {
+            cube.kind == kind || cube.shape == Shape::Post
+        })
         .into_iter()
         .filter(|&(at, _)| is_deck(at))
         .map(|(at, _)| at)
