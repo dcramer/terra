@@ -603,7 +603,48 @@ impl Build {
             .iter()
             .map(|&at| (at, self.base.cube(IVec3::from_array(at))))
             .collect();
+        // What harm is aimed at, and how much of each it has lost already.
+        let rules = self.kits.as_deref().map(Kits::rules).unwrap_or_default();
+        let harmed_before: Vec<(IVec3, u8)> = ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
+                _ => None,
+            })
+            .flatten()
+            .filter_map(|at| {
+                let at = IVec3::from_array(at);
+                let cube = self.base.cube(at)?;
+                let toughness = rules.toughness(cube.kind);
+                Some((at, toughness.quarters(self.base.damage(at))))
+            })
+            .collect();
         let done = self.base.act_all(ops, cx)?;
+        // What came off what harm hit and still stands (D305).
+        let mut chipped = Vec::new();
+        for (at, before) in harmed_before {
+            let Some(cube) = self.base.cube(at) else {
+                continue;
+            };
+            let now = rules.toughness(cube.kind).quarters(self.base.damage(at));
+            if now <= before {
+                continue;
+            }
+            // Its open faces' way, or up.
+            let out = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z, IVec3::Y]
+                .into_iter()
+                .filter(|&step| self.base.cube(at + step).is_none())
+                .map(|step| step.as_vec3())
+                .sum::<Vec3>()
+                .normalize_or(Vec3::Y);
+            chipped.push((at, cube, before, now, out));
+        }
+        if !chipped.is_empty() {
+            self.fallen.push(loss::Fallen {
+                chipped,
+                ..default()
+            });
+        }
         // What came down, for its fragments: what harm destroyed, and what hung from it.
         if !done.fell.is_empty() {
             let hit: BTreeSet<[i32; 3]> = ops
@@ -622,6 +663,7 @@ impl Build {
                     .filter(|at| hit.contains(at))
                     .collect(),
                 fell: done.fell.clone(),
+                chipped: Vec::new(),
             });
         }
         // A change of material and nothing else: the drawing looks it up at once (D298).

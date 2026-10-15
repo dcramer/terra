@@ -24,14 +24,14 @@
 //             cost to repair from nothing; breaking into chunks (`fragments::Breaks`)
 // damage      how it breaks as it loses its health (D305): its walls, floors and dressed
 //             stone at their joints (the lowest share of its height map), the mortar first,
-//             then the stones' edges, then whole stones
+//             then the stones' edges, then whole stones, leaving holes so deep
 (
     pattern: Masonry,
     toughness: (health: 600, breaks: Chunks),
     damage: {
-        Masonry: Joints(share: 0.22),
-        Floor: Joints(share: 0.2),
-        Dressed: Joints(share: 0.12),
+        Masonry: Joints(share: 0.22, depth: 0.06),
+        Floor: Joints(share: 0.2, depth: 0.04),
+        Dressed: Joints(share: 0.12, depth: 0.04),
     },
     bevel: 0.04,
     relief: 0.05,

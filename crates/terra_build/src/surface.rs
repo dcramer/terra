@@ -114,6 +114,13 @@ pub struct Heights<'a> {
     /// A number for the pieces bedded near a cube, two cubes round it, that `bed` reads:
     /// what a face kept from one drawing to the next ([`FaceCache`]) must have the same.
     pub bed_key: Option<&'a dyn Fn(IVec3) -> u64>,
+    /// Where damage has taken its stones out (D305): how far behind its face a point is,
+    /// from where it is before it is rounded and its face's normal; and, for a cube that
+    /// is damaged or beside one, a number for its damage, which draws its faces finely
+    /// enough to follow its stones and which a face kept from one drawing to the next must
+    /// have the same; none for a cube with none.
+    pub hole: Option<&'a dyn Fn(Vec3, Vec3) -> f32>,
+    pub holed: Option<&'a dyn Fn(IVec3) -> Option<u64>>,
 }
 
 /// How far behind its deepest relief a wall's face is sunk where a piece is bedded in it.
@@ -729,7 +736,11 @@ pub fn draw_slots(
         let cut = cuts.xor(&grid, cube, 2);
         let beds = heights
             .bed_key
-            .map_or(0, |bed_key| crate::layout::splitmix(bed_key(cube) ^ 0x5bed));
+            .map_or(0, |bed_key| crate::layout::splitmix(bed_key(cube) ^ 0x5bed))
+            ^ heights
+                .holed
+                .and_then(|holed| holed(cube))
+                .map_or(0, |key| crate::layout::splitmix(key ^ 0x401e));
         Some(Signature {
             shape: states.xor(&grid, cube, 2) ^ cut ^ beds,
             whole: states.xor(&grid, cube, 3) ^ cut ^ beds ^ 0x3,
@@ -741,6 +752,11 @@ pub fn draw_slots(
     // between, its relief left to its maps. A cube's, whichever of its faces asks, so the
     // faces round a line agree on it.
     let even: Vec<f32> = (0..=n).map(|i| i as f32 / n as f32).collect();
+    // Holed by damage, at three times its steps, so a stone's hole follows its outline.
+    let fine: Vec<f32> = {
+        let m = 3 * n;
+        (0..=m).map(|i| i as f32 / m as f32).collect()
+    };
     // Round a bed, at half its steps: the wall's lap over a lintel's edge every 10 cm near.
     let half: Vec<f32> = {
         let m = n.div_ceil(2).max(1);
@@ -879,6 +895,10 @@ pub fn draw_slots(
         if look.packed.is_some() && cut {
             let even: Arc<[f32]> = even.clone().into();
             return [even.clone(), even.clone(), even];
+        }
+        if heights.holed.is_some_and(|holed| holed(c).is_some()) {
+            let fine: Arc<[f32]> = fine.clone().into();
+            return [fine.clone(), fine.clone(), fine];
         }
         if bedded_near(c) {
             let half: Arc<[f32]> = half.clone().into();
@@ -1142,6 +1162,9 @@ pub fn draw_slots(
                 if let Some(bed_key) = heights.bed_key {
                     hash.write_u64(bed_key(cube));
                 }
+                if let Some(key) = heights.holed.and_then(|holed| holed(cube)) {
+                    hash.write_u64(key);
+                }
                 hash.finish()
             });
             if let (Some(signed), Some(old), Some(placed)) = (signed, old, placed)
@@ -1226,6 +1249,10 @@ pub fn draw_slots(
                     if lapped && over > 0.0 {
                         out = out.max(over * (face + BED_OVER_M));
                     }
+                }
+                // Pushed back where damage has taken its stones out.
+                if let Some(hole) = heights.hole {
+                    out -= hole(p, normal);
                 }
                 // Its normal the rounding's where it is no more than rounded, the same
                 // worked out from any face; else from its triangles (`ZERO`).
@@ -1868,6 +1895,8 @@ mod tests {
             top: &flat,
             bed: None,
             bed_key: None,
+            hole: None,
+            holed: None,
         };
         draw(
             &set,
@@ -1917,6 +1946,8 @@ mod tests {
             top: &flat,
             bed: None,
             bed_key: None,
+            hole: None,
+            holed: None,
         };
         let (min, max) = (Vec3::new(0.0, -0.3, 0.0), Vec3::new(1.5, 0.12, 0.32));
         slab(min, max, &look(), &heights, [1.0; 3], &mut out, &mut tops);
@@ -2005,6 +2036,8 @@ mod tests {
             top: &flat,
             bed: None,
             bed_key: None,
+            hole: None,
+            holed: None,
         };
         draw_cut(
             &set,

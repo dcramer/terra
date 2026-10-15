@@ -19,7 +19,7 @@
 //! `assets/materials`, whatever draws it.
 
 pub mod bc;
-pub mod cells;
+
 pub mod damage;
 
 use bc::Codec;
@@ -43,6 +43,7 @@ use bevy::{
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+use terra_build::cells::CELLS;
 use terra_build::kit::Kits;
 use terra_build::{Kind, Material};
 use terra_world::quality::Quality;
@@ -99,6 +100,11 @@ pub struct BuildArrays {
 impl MaterialExtension for BuildArrays {
     fn fragment_shader() -> ShaderRef {
         "shaders/build.wesl".into()
+    }
+
+    /// So a covering's shingles that damage took are not in depth or shadow either (D305).
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/build_prepass.wesl".into()
     }
 }
 
@@ -220,10 +226,11 @@ fn breaks(breaks: Option<&terra_build::kit::Breaks>, cells: u32) -> (Vec4, f32) 
     use terra_build::kit::Breaks;
     match breaks {
         None => (Vec4::ZERO, 0.0),
-        Some(Breaks::Joints { share }) => (Vec4::new(1.0, 0.0, 0.0, 0.0), *share),
+        Some(Breaks::Joints { share, .. }) => (Vec4::new(1.0, 0.0, 0.0, 0.0), *share),
         Some(Breaks::Grain { splits }) => (Vec4::new(2.0, *splits, 0.0, 0.0), 0.0),
         Some(Breaks::Ends) => (Vec4::new(3.0, cells.max(1) as f32, 0.0, 0.0), 0.0),
         Some(Breaks::Shingles { share }) => (Vec4::new(4.0, 0.0, 0.0, 0.0), *share),
+        Some(Breaks::Crumbles) => (Vec4::new(5.0, 0.0, 0.0, 0.0), 0.0),
     }
 }
 
@@ -376,10 +383,10 @@ impl Arrays {
         let images_of: [Handle<Image>; 4] =
             std::array::from_fn(|i| images.add(array(formats[i], FIRST_SLOTS, i == 0)));
         let cells = images.add(sized(
-            TextureFormat::R8Unorm,
+            TextureFormat::Rgba8Unorm,
             FIRST_SLOTS,
             false,
-            cells::CELLS,
+            CELLS,
             1,
         ));
         let images = images_of;
@@ -387,6 +394,8 @@ impl Arrays {
             base: StandardMaterial {
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
+                // May discard: a covering's lost shingles (D305), in every pass.
+                alpha_mode: AlphaMode::Mask(0.5),
                 ..default()
             },
             extension: BuildArrays {
@@ -708,20 +717,25 @@ pub fn stream(
                     let mut out: [Vec<Vec<u8>>; 4] = Default::default();
                     let mut found = Vec::new();
                     for (i, map) in maps.into_iter().enumerate() {
-                        let has = map.is_some();
+                        // Its stones or shingles, from its height as read (D305), as the
+                        // CPU finds them from the same picture; none, one cell.
+                        if i == 3 {
+                            found = match &map {
+                                Some((data, w, h, channels)) => terra_build::cells::label(
+                                    data,
+                                    *w as usize,
+                                    *h as usize,
+                                    *channels,
+                                    share,
+                                ),
+                                None => [128u8, 128, 128, 255].repeat((CELLS * CELLS) as usize),
+                            };
+                        }
                         let base = match map {
                             Some((data, w, h, channels)) => to_side(&data, w, h, channels),
                             // No height: flat.
                             None => vec![0u8; (SIDE * SIDE * 4) as usize],
                         };
-                        // Its stones or shingles, from its height (D305); none, one cell.
-                        if i == 3 {
-                            found = if has {
-                                cells::cells(&base, SIDE, share)
-                            } else {
-                                vec![128u8; (cells::CELLS * cells::CELLS) as usize]
-                            };
-                        }
                         out[i] = bc::chain(&base, SIDE)
                             .iter()
                             .enumerate()
@@ -780,9 +794,9 @@ pub fn stream(
             }
             uploads.push(Upload {
                 image: arrays.cells.id(),
-                side: cells::CELLS,
+                side: CELLS,
                 slot,
-                codec: Codec::Raw(1),
+                codec: Codec::Raw(4),
                 levels: vec![encoded.cells],
             });
         }

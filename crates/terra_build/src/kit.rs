@@ -890,9 +890,9 @@ impl Default for Variation {
 #[serde(deny_unknown_fields)]
 pub enum Breaks {
     /// Laid stones in mortar: the joints open first and darken, then the stones' edges chip
-    /// back to their fresh face, then whole stones fall out, leaving their hollows. No crack
-    /// runs through a stone.
-    Joints { share: f32 },
+    /// back to their fresh face, then whole stones fall out, leaving their hollows `depth`
+    /// metres deep in the wall's surface. No crack runs through a stone.
+    Joints { share: f32, depth: f32 },
     /// Timber: splits run along the grain, `splits` of them round or across a member's
     /// face, opening and lengthening as more is lost, and chunks gouge out of it showing
     /// the fresh wood.
@@ -900,8 +900,10 @@ pub enum Breaks {
     /// A member's sawn end: checks open out from its heart and its rim splinters.
     Ends,
     /// A covering of shingles, slates or shakes: one cracks, then whole ones go missing,
-    /// showing the dark under them.
+    /// what is under them (its battens and rafters) showing through.
     Shingles { share: f32 },
+    /// Daub and mud: crumbling in patches, darker and rougher, bits of it gone.
+    Crumbles,
 }
 
 impl Default for Kit {

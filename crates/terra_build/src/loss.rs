@@ -426,6 +426,23 @@ pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -
     most
 }
 
+/// How much a point of a face has lost, its cube's loss (`lost`) more near the middle of
+/// the face and less toward its corners (D305): a hit breaks a cube from its middle out,
+/// so a hole is round rather than the cube's square, growing as more is lost. Across the
+/// face only, so a point pushed back into it, as a hole's floor is, has lost the same.
+pub fn struck(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
+    let lost = lost(worn, at, normal);
+    if lost <= 0.0 {
+        return 0.0;
+    }
+    let inside = at - normal * 0.02;
+    let centre = ((inside / crate::CELL_M).floor() + 0.5) * crate::CELL_M;
+    let mut off = inside - centre;
+    off[normal.abs().max_position()] = 0.0;
+    let r = off.length() / (crate::CELL_M * core::f32::consts::FRAC_1_SQRT_2);
+    (lost * (1.25 - 0.6 * r * r)).clamp(0.0, 1.0)
+}
+
 /// How far into a cube a damaged one beside it spreads, as a share of a cube, and how
 /// much of its loss it carries there at their shared edge.
 const SPREAD: f32 = 0.45;

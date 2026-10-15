@@ -69,6 +69,10 @@ pub fn plugin(app: &mut App) {
 pub struct Fallen {
     pub fell: Vec<(IVec3, Cube)>,
     pub destroyed: BTreeSet<[i32; 3]>,
+    /// Cubes harmed and still standing, as they are, with how many quarters of their health
+    /// they had lost before and have now (D305): the stones, timber and shingles that came
+    /// off them as they broke, falling from their open faces.
+    pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
 }
 
 /// Marks a fragment's entity.
@@ -149,6 +153,10 @@ struct Shards {
     warming: Vec<Entity>,
     warm_s: f32,
 }
+
+/// How much of a cube's burst comes off it as it is harmed and still stands, a quarter of
+/// its health lost (D305).
+const CHIPPED_SHARE: f32 = 0.35;
 
 /// How many fragments and puffs may be at once, and how much of a full burst to make, at a
 /// preset.
@@ -305,14 +313,37 @@ fn burst(
         let middle = fallen
             .fell
             .iter()
-            .map(|(at, _)| (at.as_vec3() + 0.5) * CELL_M)
+            .map(|(at, _)| *at)
+            .chain(fallen.chipped.iter().map(|chip| chip.0))
+            .map(|at| (at.as_vec3() + 0.5) * CELL_M)
             .sum::<Vec3>()
-            / fallen.fell.len().max(1) as f32;
+            / (fallen.fell.len() + fallen.chipped.len()).max(1) as f32;
         let world = frame.transform_point(middle);
         let distance = eye.map_or(0.0, |eye| eye.distance(world));
         let share = preset * if distance > FAR_M { FAR_SHARE } else { 1.0 };
         let destroyed = |at: IVec3| fallen.destroyed.contains(&at.to_array());
-        let made = fragments::burst(&fallen.fell, &destroyed, &breaks, share, most);
+        let mut made = fragments::burst(&fallen.fell, &destroyed, &breaks, share, most);
+        // What came off a cube still standing: a few pieces a quarter of its health lost,
+        // out of its open face, where its stones and shingles were.
+        for (at, cube, from, to, out) in &fallen.chipped {
+            let lost = f32::from(to.saturating_sub(*from)) / 4.0;
+            let pieces = fragments::burst(
+                &[(*at, *cube)],
+                &|_| true,
+                &breaks,
+                share * CHIPPED_SHARE * lost,
+                most.saturating_sub(made.len()),
+            );
+            made.extend(pieces.into_iter().map(|mut piece| {
+                // Off its face, not inside it.
+                let centre = (at.as_vec3() + 0.5) * CELL_M;
+                let across = piece.at - centre;
+                piece.at = centre + across - *out * across.dot(*out)
+                    + *out * (CELL_M * 0.5 + piece.size.max_element() * 0.5);
+                piece.velocity += *out * 0.8;
+                piece
+            }));
+        }
         let count = made.len();
         // Moving at once, drawn a few hundred a frame (`step`), so a big fall's entities are
         // not all made in one frame.

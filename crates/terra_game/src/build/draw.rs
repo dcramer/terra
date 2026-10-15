@@ -343,7 +343,7 @@ pub(super) fn in_arrays(
             let lost = if worn.is_empty() {
                 0.0
             } else {
-                terra_build::loss::lost(worn, *p, *n)
+                terra_build::loss::struck(worn, *p, *n)
             };
             [f32::from(id), lost]
         }));

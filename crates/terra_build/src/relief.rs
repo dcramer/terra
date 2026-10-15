@@ -16,6 +16,8 @@ pub struct Relief {
     /// Each row's height across it, from its lowest row's to its highest's as 0 to 1, once
     /// asked for ([`Relief::row`]).
     rows: std::sync::OnceLock<Vec<f32>>,
+    /// Its cells (`cells`, D305) for the share of it its joints are, once asked for.
+    cells: std::sync::OnceLock<(u32, Arc<Vec<u8>>)>,
 }
 
 impl Relief {
@@ -27,6 +29,7 @@ impl Relief {
             height,
             data,
             rows: std::sync::OnceLock::new(),
+            cells: std::sync::OnceLock::new(),
         })
     }
 
@@ -50,6 +53,34 @@ impl Relief {
         let f = y - y0;
         let at = |j: f32| rows[(j as i64).rem_euclid(self.height as i64) as usize];
         at(y0) * (1.0 - f) + at(y0 + 1.0) * f
+    }
+
+    /// Its cells, its lowest `share` being joints (`cells::label`): worked out once, the
+    /// same as the texture arrays find them from the same picture.
+    pub fn cells(&self, share: f32) -> Arc<Vec<u8>> {
+        let made = self.cells.get_or_init(|| {
+            (
+                share.to_bits(),
+                Arc::new(crate::cells::label(
+                    &self.data,
+                    self.width,
+                    self.height,
+                    1,
+                    share,
+                )),
+            )
+        });
+        if made.0 == share.to_bits() {
+            made.1.clone()
+        } else {
+            Arc::new(crate::cells::label(
+                &self.data,
+                self.width,
+                self.height,
+                1,
+                share,
+            ))
+        }
     }
 
     /// The height, from 0 to 1, where the texture is at a point, repeating, between texels.

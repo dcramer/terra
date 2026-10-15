@@ -412,6 +412,8 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     top: &flat,
                     bed: (!beds.is_empty()).then_some(&bed as crate::surface::BedAt),
                     bed_key: None,
+                    hole: None,
+                    holed: None,
                 };
                 let (mut faces, mut tops) = (Surface::default(), Surface::default());
                 crate::surface::draw_cut(
@@ -1738,4 +1740,66 @@ fn kits_read_again_with_one_taken_out_added_or_reordered_lay_and_draw_without_fa
             }
         }
     }
+}
+
+#[test]
+fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed() {
+    // A stone wall a cube thick over a grid of stones in mortar, one cube of it all but
+    // gone: its face there is pushed back a stone's depth over the stones gone, and the
+    // cubes not near it keep their face.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let kit = kits.of(stone).unwrap();
+    let Some(crate::kit::Breaks::Joints { depth, .. }) =
+        kit.damage.get(&Material::Masonry).copied()
+    else {
+        panic!("stone breaks at its joints");
+    };
+    const SIDE: usize = 256;
+    let heights = (0..SIDE * SIDE)
+        .map(|i| {
+            let (x, y) = (i % SIDE, i / SIDE);
+            if x % 32 < 4 || y % 32 < 4 { 30 } else { 220 }
+        })
+        .collect();
+    let relief = std::sync::Arc::new(crate::relief::Relief::new(SIDE, SIDE, heights).unwrap());
+    let mut maps = Maps::default();
+    maps.heights
+        .insert(crate::relief::shaped_by(kit).unwrap().to_string(), relief);
+    let mut base = Base::default();
+    base.apply(BuildOp::Fill {
+        min: [0, 0, 0],
+        max: [7, 3, 0],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    let rules = kits.rules();
+    let health = kit.toughness.rules().health;
+    base.act(
+        &crate::ops::Op::Damage {
+            cubes: vec![[2, 1, 0]],
+            amount: (f32::from(health) * 0.97) as u16,
+        },
+        &crate::ops::Context::free(&rules),
+    )
+    .unwrap();
+    let section = Section {
+        base: &base,
+        kits: &kits,
+        maps: &maps,
+        at: IVec3::ZERO,
+        progress: &Progress::Whole,
+    };
+    let drawn = draw(&section, &laid(&section), Reach::Near);
+    let face = drawn.near[&(stone, Material::Masonry)].indexed();
+    // The south face, z = 0.5 m: over the harmed cube, and over one far from it.
+    let behind = |x: [f32; 2]| {
+        face.positions
+            .iter()
+            .filter(|p| p.x > x[0] && p.x < x[1] && p.y > 0.55 && p.y < 0.95 && p.z > 0.3)
+            .map(|p| 0.5 - p.z)
+            .fold(0.0f32, f32::max)
+    };
+    let (harmed, whole) = (behind([1.05, 1.45]), behind([3.05, 3.45]));
+    assert!(harmed > depth * 0.8, "{harmed}");
+    assert!(whole < 0.005, "{whole}");
 }

@@ -37,6 +37,7 @@
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
 pub mod castle;
+pub mod cells;
 pub mod checker;
 pub mod cost;
 pub mod cubes;
