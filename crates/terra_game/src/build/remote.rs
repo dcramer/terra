@@ -49,11 +49,10 @@
 //! - `build.cube {at}`: a cube: its material, shape, fill, how far in, and what is pending.
 //! - `build.ground {columns}`: the ground's height under the middle of each column, in metres
 //!   in the base's own space, as the planet has it now: to see what building changed of it.
-//! - `build.damage {at, to?, amount?, build?}`: harms the cubes of the box from `at` to `to`
+//! - `build.damage {at, to?, amount?}`: harms the cubes of the box from `at` to `to`
 //!   (`at` alone if not given) by `amount`, enough to destroy each if not given, as an attack
 //!   will (D90, D305): what then hangs from nothing comes down, breaking into fragments
-//!   that fall and fade. With `build`, a
-//!   scene's building whose name holds it (`castle`, with `--castle`) rather than the base.
+//!   that fall and fade.
 //! - `build.subside {columns, by_m}`: the ground under columns gives way by so many metres,
 //!   bringing down what it alone held (D193).
 //! - `build.repair {at, brush?}`: mends the damaged cubes of a brush's box round `at`, as
@@ -106,7 +105,6 @@ struct Harm {
     at: [i32; 3],
     to: Option<[i32; 3]>,
     amount: Option<u16>,
-    build: Option<String>,
 }
 
 impl Harm {
@@ -126,42 +124,10 @@ impl Harm {
     }
 }
 
-/// Harms a scene's building, a castle's tower, by the same operation, to time a collapse
-/// (D185's castle).
-fn damage_built(harm: &Harm, name: &str, world: &mut World) -> BrpResult {
-    let rules = world.resource::<BuildRules>().rules.clone();
-    let mut builds = world.query::<(&Name, &mut super::Built)>();
-    let Some((_, mut built)) = builds
-        .iter_mut(world)
-        .find(|(each, _)| each.as_str().contains(name))
-    else {
-        return Err(refused(format!("there is no building called {name}")));
-    };
-    let cubes = harm.cubes(&built.base);
-    if cubes.is_empty() {
-        return Err(refused("nothing is built there"));
-    }
-    let amount = harm.amount.unwrap_or(u16::MAX);
-    let before = built.base.cubes().count();
-    let started = std::time::Instant::now();
-    let cx = terra_build::ops::Context::free(&rules);
-    let result = built.act(&[Op::Damage { cubes, amount }], &cx);
-    let took_ms = started.elapsed().as_secs_f32() * 1000.0;
-    let fell = before - built.base.cubes().count();
-    info!("Build: damage {name}: {fell} cubes fell, worked out in {took_ms:.1} ms");
-    let mut said = answer("damage", result);
-    said["fell"] = json!(fell);
-    said["took_ms"] = json!(took_ms);
-    Ok(said)
-}
-
 /// Harms a box of cubes, as an attack will (D305): not the player's act, so not theirs to
 /// undo.
 fn damage(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let harm: Harm = parse_some(params)?;
-    if let Some(name) = harm.build.clone() {
-        return damage_built(&harm, &name, world);
-    }
     as_player(world, |building, _| {
         let cubes = harm.cubes(&building.site.base);
         if cubes.is_empty() {
