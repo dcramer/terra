@@ -138,9 +138,24 @@ pub struct Firelight {
     pub home: usize,
 }
 
-/// How many homes' firelight is lit at once, the nearest the eye: unshadowed lights each
-/// cost the GPU (docs/demos.md's budget: 16 near).
+/// A torch in a bracket by a home's door, lit at dusk: its flame, with its light.
+#[derive(Component)]
+pub struct DoorTorch;
+
+/// How many lights, homes' firelight and door torches, are lit at once, the nearest the
+/// eye: unshadowed lights each cost the GPU (docs/demos.md's budget: 16 near). A torch's
+/// flame shows however far it is.
 const LIT_HOMES: usize = 16;
+/// The share of homes with a torch by the door, and how bright one is, in lumens, and how
+/// far its light reaches, as a torch in hand (`torchlight`).
+const DOOR_TORCHES: f32 = 0.45;
+const TORCH_LUMENS: f32 = 160_000.0;
+const TORCH_M: f32 = 12.0;
+/// How far up a door's side its torch's bracket is, how far it leans out from the wall, in
+/// radians, and where its head is along it, from the bracket.
+const BRACKET_M: f32 = 1.55;
+const TORCH_LEAN: f32 = 0.45;
+const TORCH_HEAD_M: f32 = 0.54;
 /// How bright a hearth's fire is within, in lumens, and how far it reaches.
 const FIRELIGHT_LUMENS: f32 = 400_000.0;
 const FIRELIGHT_M: f32 = 6.0;
@@ -236,52 +251,91 @@ fn burn(
 }
 
 /// Each home's firelight lit when the light outside fails and its hearth burns with someone
-/// home, the nearest the eye only, so the square empties into lit doorways at dusk.
+/// home, and the torches by doors lit, the nearest the eye only, so the square empties into
+/// lit doorways at dusk. A torch's flame shows at any distance.
+#[allow(clippy::type_complexity)]
 fn light(
     clock: Res<Clock>,
     sky: Option<Res<super::daylight::SkyPath>>,
     market: Res<Market>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut lights: Query<(&Firelight, &GlobalTransform, &mut PointLight)>,
+    mut fires: Query<(&Firelight, &GlobalTransform, &mut PointLight), Without<DoorTorch>>,
+    mut torches: Query<
+        (&GlobalTransform, &mut PointLight, &mut Visibility),
+        (With<DoorTorch>, Without<Firelight>),
+    >,
+    mut lit: ResMut<Lit>,
 ) {
-    // From when the sun is a few degrees up in the evening until it is up again.
+    // From when the sun is ten degrees up in the evening until it is up again, as people
+    // light their fires and torches before the light has gone.
     let dark = sky.map_or(0.0, |sky| {
-        ((6.0 - sky.height(clock.hour)) / 8.0).clamp(0.0, 1.0)
+        ((10.0 - sky.height(clock.hour)) / 10.0).clamp(0.0, 1.0)
     });
     let eye = camera
         .single()
         .map(|c| c.translation())
         .unwrap_or(market.middle);
     let life = &market.life;
-    let mut near: Vec<(f32, usize)> = lights
-        .iter()
-        .enumerate()
-        .map(|(n, (_, at, _))| (at.translation().distance(eye), n))
-        .collect();
-    near.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let nearest: Vec<usize> = near.iter().take(LIT_HOMES).map(|(_, n)| *n).collect();
-    for (n, (fire, _, mut light)) in lights.iter_mut().enumerate() {
+    // Every light that would burn, by how far it is from the eye.
+    let mut wanted: Vec<(f32, bool, usize, f32)> = Vec::new();
+    for (n, (fire, at, _)) in fires.iter().enumerate() {
         let door = life
             .town
             .things
             .iter()
             .position(|t| t.kind == ThingKind::Door && t.building == Some(fire.home));
         let home = door.is_some_and(|door| {
-            life.people
-                .iter()
-                .any(|p| p.home == door && p.state == terra_life::State::Inside)
+            life.people.iter().any(|p| {
+                p.home == door
+                    && (p.state == terra_life::State::Inside
+                        || p.at.distance(life.town.things[door].at) < 12.0)
+            })
         });
         let luck = (fire.home as f32 * 0.618_034) % 1.0;
-        let wanted = if nearest.contains(&n) && home {
-            FIRELIGHT_LUMENS * dark * (0.7 + 0.6 * luck)
-        } else {
-            0.0
-        };
-        if (light.intensity - wanted).abs() > 1.0 {
-            light.intensity = wanted;
+        if home && dark > 0.0 {
+            let brightness = FIRELIGHT_LUMENS * dark * (0.7 + 0.6 * luck);
+            wanted.push((at.translation().distance(eye), false, n, brightness));
+        }
+    }
+    for (n, (at, _, _)) in torches.iter().enumerate() {
+        if dark > 0.05 {
+            wanted.push((at.translation().distance(eye), true, n, TORCH_LUMENS * dark));
+        }
+    }
+    wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
+    wanted.truncate(LIT_HOMES);
+    let brightness = |torch: bool, n: usize| {
+        wanted
+            .iter()
+            .find(|w| w.1 == torch && w.2 == n)
+            .map_or(0.0, |w| w.3)
+    };
+    lit.0 = wanted.len();
+    for (n, (_, _, mut light)) in fires.iter_mut().enumerate() {
+        let want = brightness(false, n);
+        if (light.intensity - want).abs() > 1.0 {
+            light.intensity = want;
+        }
+    }
+    let shown = if dark > 0.05 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for (n, (_, mut light, mut visible)) in torches.iter_mut().enumerate() {
+        let want = brightness(true, n);
+        if (light.intensity - want).abs() > 1.0 {
+            light.intensity = want;
+        }
+        if *visible != shown {
+            *visible = shown;
         }
     }
 }
+
+/// How many of the town's lights are lit now, for the report.
+#[derive(Resource, Default)]
+pub struct Lit(usize);
 
 /// How bustling the town looks from the eye, every so often, as the life check counts it
 /// (D326): its people out within 30 m and 100 m and in front of the eye, those walking, its
@@ -292,6 +346,7 @@ fn report(
     market: Res<Market>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     smoke: Query<(&Smoke, &GlobalTransform)>,
+    lit: Res<Lit>,
     mut wait: Local<f32>,
 ) {
     *wait -= time.delta_secs();
@@ -337,13 +392,14 @@ fn report(
         .filter(|(s, at)| s.thickness > 0.3 && at.translation().distance(eye.translation()) < 200.0)
         .count();
     info!(
-        "TOWN at {:02}:{:02}: {} of {} people out, {walking} walking; in front of the eye {} within 30 m and {} within 100 m; {animals} animals within 30 m; {columns} smoke columns within 200 m",
+        "TOWN at {:02}:{:02}: {} of {} people out, {walking} walking; in front of the eye {} within 30 m and {} within 100 m; {animals} animals within 30 m; {columns} smoke columns within 200 m; {} lights lit",
         clock.hour as u32,
         ((clock.hour.fract()) * 60.0) as u32,
         out.len(),
         life.people.len(),
         within(30.0),
         within(100.0),
+        lit.0,
     );
 }
 
@@ -362,6 +418,9 @@ struct TownCover {
     yards: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
 }
+
+/// How far round a house's door its ground is worn, as far as the town clears it.
+const HOUSE_WORN_M: f32 = 9.0;
 
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
@@ -420,6 +479,13 @@ impl terra_world::cover::CoverSource for TownCover {
             // Worn by hens and feet, straw strewn about.
             growing.trodden = growing.trodden.max(0.45);
         }
+        // Round every house, where the town clears what grows (`ClearAround` at its door),
+        // the ground is worn by feet going about it, not left the planet's bare soil.
+        if door < HOUSE_WORN_M {
+            growing.trodden = growing
+                .trodden
+                .max(0.5 * (1.0 - door.max(0.0) / HOUSE_WORN_M));
+        }
         growing
     }
 
@@ -451,6 +517,7 @@ pub fn plugin(app: &mut App) {
             .in_set(Sim::World)
             .in_set(Live),
     )
+    .init_resource::<Lit>()
     .add_systems(
         Update,
         (burn, light, report).run_if(resource_exists::<Market>),
@@ -483,6 +550,8 @@ fn lay(
     mut clear: MessageWriter<ClearAround>,
     mut warp: ResMut<super::WarpTo>,
     cover: Option<Res<terra_world::cover::CoverRules>>,
+    assets: Res<AssetServer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let has_cover = cover.is_some();
     let (Some(site), Some(look)) = (site, look) else {
@@ -719,6 +788,62 @@ fn lay(
                 Visibility::default(),
             ));
         }
+    }
+
+    // Torches in brackets by some homes' doors, beside the door and leaning out from the
+    // wall, lit at dusk (`light`).
+    let flame = (
+        meshes.add(Sphere::new(0.06)),
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.6, 0.2),
+            emissive: LinearRgba::rgb(14.0, 5.0, 1.2),
+            unlit: true,
+            ..default()
+        }),
+    );
+    let torch = assets.load(
+        bevy::gltf::GltfAssetLabel::Scene(0).from_asset(crate::character::held_look("torch")),
+    );
+    for (index, thing) in town.things.iter().enumerate() {
+        if thing.kind != ThingKind::Door || !thing.building.is_some_and(|b| town.homes.contains(&b))
+        {
+            continue;
+        }
+        let luck = ((index as f32 + 1.0) * 0.618_034) % 1.0;
+        if luck >= DOOR_TORCHES {
+            continue;
+        }
+        let side = if luck < DOOR_TORCHES * 0.5 { 0.8 } else { -0.8 };
+        let foot = at(thing.place(Vec2::new(side, 0.08)));
+        let up = foot.normalize();
+        let out = (east * thing.front().x + south * thing.front().y)
+            .reject_from(up)
+            .normalize_or(east);
+        let rotation = Quat::from_axis_angle(up.cross(out).normalize_or(east), TORCH_LEAN)
+            * Quat::from_rotation_arc(Vec3::Y, up);
+        commands
+            .spawn((
+                Name::new("Door torch"),
+                bevy::world_serialization::WorldAssetRoot(torch.clone()),
+                Transform::from_translation(foot + up * BRACKET_M).with_rotation(rotation),
+                Visibility::default(),
+            ))
+            .with_child((
+                DoorTorch,
+                Mesh3d(flame.0.clone()),
+                MeshMaterial3d(flame.1.clone()),
+                bevy::light::NotShadowCaster,
+                PointLight {
+                    color: Color::srgb(1.0, 0.62, 0.3),
+                    intensity: 0.0,
+                    range: TORCH_M,
+                    radius: 0.05,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, TORCH_HEAD_M, 0.0),
+                Visibility::Hidden,
+            ));
     }
 
     // Where to stand to see it, as the settlement gives its own (D69).
