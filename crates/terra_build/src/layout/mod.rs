@@ -752,6 +752,13 @@ impl Walls<'_> {
     }
 }
 
+/// Whether a door is fitted in an opening's cube: it comes with its own frame (D225), so
+/// the kit lays no frame boards, posts or lintel of its own round that hole.
+pub(crate) fn framed(base: &Base, at: IVec3) -> bool {
+    base.prop_in(at)
+        .is_some_and(|prop| prop.hang == crate::fitting::Hang::Door)
+}
+
 /// What fills a cube as a layout draws it: an opening already once any of it has been
 /// carved out, so a log is cut and framed at the saw's first cut.
 pub fn drawn_fill(cube: &crate::Cube) -> Fill {

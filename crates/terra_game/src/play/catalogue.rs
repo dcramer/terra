@@ -52,6 +52,8 @@ struct FittingFile {
     hang: Hang,
     dims: (f32, f32, f32),
     fits: Vec<(i32, i32)>,
+    #[serde(default)]
+    frame: Option<String>,
     cost: Vec<(String, u32)>,
 }
 
@@ -141,6 +143,7 @@ impl Builds {
                     hang: each.hang,
                     dims: Vec3::from(each.dims),
                     fits: each.fits,
+                    frame: each.frame,
                 })
             })
             .collect();
@@ -310,6 +313,9 @@ pub struct Fitting {
     pub cost: Vec<(ItemKind, u32)>,
     /// The kind of prop it is, as the base keeps it.
     pub kind: PropKind,
+    /// The material its frame is drawn in, a kit's name: a door's comes with its frame
+    /// (`terra_build::fitting::Prop::frame`).
+    pub frame: Option<String>,
 }
 
 impl Fitting {
@@ -541,6 +547,29 @@ mod tests {
         let items = Items::default();
         let builds = Builds::read(&items, &Stations::read());
         (items, builds)
+    }
+
+    #[test]
+    fn every_door_comes_with_a_frame_in_a_material_there_is() {
+        let (_, builds) = builds();
+        let kits = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/data/kits");
+        let doors: Vec<_> = builds
+            .fittings()
+            .iter()
+            .filter(|f| f.hang == Hang::Door)
+            .collect();
+        assert!(!doors.is_empty());
+        for door in doors {
+            let frame = door
+                .frame
+                .as_deref()
+                .unwrap_or_else(|| panic!("{} has no frame", door.name));
+            assert!(
+                kits.join(format!("{frame}.ron")).exists(),
+                "{}'s frame is of {frame}, no kit",
+                door.name
+            );
+        }
     }
 
     /// Reading the file checks every item and station it names is one there is.

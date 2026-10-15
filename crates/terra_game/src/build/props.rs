@@ -38,6 +38,85 @@ pub struct FittingLook {
     pub dims: Vec3,
     /// The foot of its hinge, in its own space: its origin, as the contract has it.
     pub hinge: Vec3,
+    /// The kit whose material its frame is drawn in, by name: a door's frame
+    /// (`terra_build::fitting::Prop::frame`).
+    pub frame: Option<String>,
+}
+
+/// The texture arrays' layers doors' frames wear, kept resident while any is drawn.
+#[derive(Resource, Default)]
+struct FrameLayers(std::collections::BTreeSet<u16>);
+
+/// Keeps the layers frames wear resident, as sections keep theirs.
+fn keep_frame_layers(
+    layers: Res<FrameLayers>,
+    mut arrays: Option<ResMut<super::arrays::Arrays>>,
+    assets: Res<AssetServer>,
+    time: Res<Time<Real>>,
+) {
+    let Some(arrays) = arrays.as_mut() else {
+        return;
+    };
+    if !layers.0.is_empty() {
+        let ids: Vec<u16> = layers.0.iter().copied().collect();
+        arrays.want(&ids, &assets, time.elapsed_secs());
+    }
+}
+
+/// A door's frame drawn under `parent`, in its look's kit's material: in the texture
+/// arrays as sections are, the layers it wears added to `layers`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_frame(
+    commands: &mut Commands,
+    parent: Entity,
+    prop: &Prop,
+    look: &FittingLook,
+    build_look: &super::BuildLook,
+    rules: Option<&super::act::BuildRules>,
+    arrays: Option<&super::arrays::Arrays>,
+    meshes: &mut Assets<Mesh>,
+    layers: &mut FrameLayers,
+) {
+    let Some(kind) = look.frame.as_deref().and_then(|name| rules?.kind(name)) else {
+        return;
+    };
+    let Some(kit) = build_look.kits.as_deref().and_then(|kits| kits.of(kind)) else {
+        return;
+    };
+    let surfaces: BTreeMap<_, _> = terra_build::fitting::frame_surfaces(prop, kit, foot(prop))
+        .0
+        .into_iter()
+        .map(|(material, surface)| ((kind, material), surface))
+        .collect();
+    let mut used = std::collections::BTreeSet::new();
+    let (in_arrays, rest) = super::draw::in_arrays(
+        &surfaces,
+        &build_look.layers,
+        Vec3::ZERO,
+        &BTreeMap::new(),
+        &mut used,
+    );
+    layers.0.extend(used);
+    if let (Some(mesh), Some(arrays)) = (in_arrays, arrays) {
+        commands.spawn((
+            Name::new("Frame"),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(arrays.material.clone()),
+            Transform::default(),
+            ChildOf(parent),
+        ));
+    }
+    for (kind, material, mesh) in rest {
+        if let Some(own) = build_look.materials.get(kind, material) {
+            commands.spawn((
+                Name::new("Frame"),
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(own.clone()),
+                Transform::default(),
+                ChildOf(parent),
+            ));
+        }
+    }
 }
 
 /// A model loaded: its mesh, its material and the same drawn mirrored.
@@ -90,6 +169,8 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<FittingLooks>()
         .init_resource::<Models>()
         .init_resource::<FitPreview>()
+        .init_resource::<FrameLayers>()
+        .add_systems(Update, keep_frame_layers)
         .add_systems(Update, (load, show, swing, preview).chain())
         .add_systems(
             FixedUpdate,
@@ -247,6 +328,13 @@ fn show(
     looks: Res<FittingLooks>,
     mut drawn: Query<(Entity, &mut Fitted)>,
     mut seen: Local<BTreeMap<Option<Entity>, (u64, u64)>>,
+    (build_look, rules, arrays, mut meshes, mut frame_layers): (
+        Res<super::BuildLook>,
+        Option<Res<super::act::BuildRules>>,
+        Option<Res<super::arrays::Arrays>>,
+        ResMut<Assets<Mesh>>,
+        ResMut<FrameLayers>,
+    ),
 ) {
     let mut bases: Vec<(Option<Entity>, &super::Build)> = Vec::new();
     if let Some(site) = site.as_deref() {
@@ -327,6 +415,17 @@ fn show(
         }));
         let parent = entity.id();
         spawn_leaves(&mut commands, parent, &prop, model, look, open, None);
+        spawn_frame(
+            &mut commands,
+            parent,
+            &prop,
+            look,
+            &build_look,
+            rules.as_deref(),
+            arrays.as_deref(),
+            &mut meshes,
+            &mut frame_layers,
+        );
     }
 }
 
@@ -505,6 +604,7 @@ mod tests {
                 Hang::Shutters => Vec3::new(0.5, 1.0, 0.05),
             },
             hinge: Vec3::ZERO,
+            frame: None,
         }
     }
 

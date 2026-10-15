@@ -9,13 +9,14 @@
 //            of prop by its place in the list: its name, its model in
 //            assets/models/openings, how it hangs (Door, a leaf or a pair swinging into
 //            the room; Shutters, folding back against the wall outside), how wide, high
-//            and thick one leaf is made in metres (dims), for the clear opening of the
-//            first hole it fits, which it is stretched to fill and reach a little behind
-//            (terra_build::fitting), the holes
-//            it fits, wide by high in cubes, and what a leaf costs, by items.ron's names,
-//            a pair costing two. Its model is that leaf, hinged at its origin, with its
-//            hinge and handle sockets (the model contract, docs/art-style.md). What walls, floors and roofs take is their kits' to say
-//            (assets/data/kits).
+//            and thick one leaf is made in metres (dims), for the first hole it fits,
+//            which it is stretched to (terra_build::fitting), the holes it fits, wide by
+//            high in cubes, what a leaf costs, by items.ron's names, a pair costing two,
+//            and for a door the kit whose material the frame it comes with is drawn in
+//            (frame): jambs, a head and a threshold sized to the hole by rule, the leaf
+//            hung centred in it. Its model is that leaf, hinged at its origin, with its
+//            hinge and handle sockets (the model contract, docs/art-style.md). What walls,
+//            floors and roofs take is their kits' to say (assets/data/kits).
 // claim      how far across a claim is at each step, what growing it to the next step
 //            costs (D94, D104), and how many cubes it may have planned and not yet built
 //            at each step (D193), a cabin's plan being about three hundred
@@ -60,11 +61,11 @@
 (
     fittings: [
         (name: "Plank door", model: "PlankDoor", hang: Door, dims: (0.894, 1.939, 0.08),
-            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 2)]),
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 2)], frame: Some("hewn")),
         (name: "Ledged and braced door", model: "LedgedDoor", hang: Door, dims: (0.894, 1.939, 0.08),
-            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3)]),
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3)], frame: Some("hewn")),
         (name: "Studded door", model: "StuddedDoor", hang: Door, dims: (0.894, 1.939, 0.08),
-            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3), ("Iron", 1)]),
+            fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3), ("Iron", 1)], frame: Some("hewn")),
         (name: "Board shutters", model: "BoardShutter", hang: Shutters, dims: (0.5, 1.0, 0.05),
             fits: [(1, 2), (2, 2), (3, 2), (1, 3), (2, 3), (3, 3)], cost: [("Wood", 1)]),
         (name: "Louvred shutters", model: "LouvredShutter", hang: Shutters, dims: (0.5, 1.0, 0.05),

@@ -122,8 +122,10 @@ fn openings(
         );
         let along_x = high.x > low.x || (high.z == low.z && base.runs_along(low) == IVec3::X);
         let over = solid(IVec3::new(low.x, high.y + 1, low.z));
-        // A timber lintel, into the wall either side, where the wall goes on over it.
-        if lintels && over {
+        // A timber lintel, into the wall either side, where the wall goes on over it; none
+        // over a door's own frame.
+        let door = region.iter().any(|&at| super::framed(base, at));
+        if lintels && over && !door {
             let reach = if along_x { Vec3::X } else { Vec3::Z } * LINTEL_BEARING_M;
             let across = if along_x { Vec3::Z } else { Vec3::X };
             let inset = across * CELL_M * 0.1;

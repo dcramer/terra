@@ -8,10 +8,10 @@
 //! - **Anchor.** Its origin is where its kind says ([`Anchor`]).
 //! - **Sockets.** The points code attaches to are empties in its file, `socket.<name>`,
 //!   and each kind has the ones code needs ([`Entry::sockets`]).
-//! - **Fit.** A door's or shutters' leaf is made for the clear opening of the first hole it
-//!   fits, within an eighth of it, and is stretched to fill that opening and reach a little
-//!   behind its edges (`terra_build::fitting`); it stays within the wall's faces (doors) or
-//!   on its outer half (shutters).
+//! - **Fit.** A door's or shutters' leaf is made for the leaf the first hole it fits takes, within
+//!   an eighth of it, and is stretched to that leaf (`terra_build::fitting`): a door's inside
+//!   the frame it comes with, shutters over the hole and a little past its edges; it stays
+//!   within the wall's faces (doors) or on its outer half (shutters).
 //!
 //! [`check`] checks one model; `cargo xtask contract` checks them all and prints each, and
 //! the test here holds `cargo xtask check` to it.
@@ -173,7 +173,7 @@ fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String>
         let made = Vec2::new(entry.dims.x, entry.dims.y);
         // Made for the opening it fills, near enough that stretching it to fill the
         // opening keeps its look.
-        let needed = leaf.clear;
+        let needed = Vec2::new(leaf.width, leaf.height);
         if ((needed - made).abs() / needed)
             .cmpgt(Vec2::splat(STRETCH))
             .any()
@@ -300,10 +300,10 @@ mod tests {
             hang: Hang::Door,
         }
         .leaves()[0];
-        let made = |thick: f32| entry(Anchor::Hinge, Vec3::new(leaf.clear.x, leaf.clear.y, thick));
+        let made = |thick: f32| entry(Anchor::Hinge, Vec3::new(leaf.width, leaf.height, thick));
         assert!(check_fit(&made(0.08), Hang::Door, hole).is_empty());
         assert_eq!(check_fit(&made(0.6), Hang::Door, hole).len(), 1);
-        let wide = entry(Anchor::Hinge, Vec3::new(1.2, leaf.clear.y, 0.08));
+        let wide = entry(Anchor::Hinge, Vec3::new(1.2, leaf.height, 0.08));
         assert_eq!(check_fit(&wide, Hang::Door, hole).len(), 1);
     }
 }

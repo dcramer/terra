@@ -14,7 +14,11 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
     let mut holes: BTreeSet<(i32, i32)> = BTreeSet::new();
     for (at, cube) in super::Scope::row_cubes(walls.base, axis, row) {
         let (_, along) = axis.row_of(at);
-        if super::drawn_fill(&cube) != Fill::Solid && walls.runs(at, axis) {
+        // A doorway with a door fitted is framed by the door's own frame.
+        if super::drawn_fill(&cube) != Fill::Solid
+            && walls.runs(at, axis)
+            && !super::framed(walls.base, at)
+        {
             holes.insert((along, at.y));
         }
     }
@@ -276,6 +280,20 @@ mod tests {
         }
         // Two jambs and a head; a doorway needs no sill.
         assert_eq!(boards(&layout), 3);
+        // A door fitted in it comes with its own frame: the kit's boards round it go.
+        let rules = crate::Rules::default();
+        let door = crate::Prop {
+            min: [3, 0, 5],
+            max: [4, 3, 5],
+            opens: [0, 0, 1],
+            ..crate::Prop::default()
+        };
+        base.act(
+            &crate::ops::Op::FitProp(door),
+            &crate::ops::Context::free(&rules),
+        )
+        .unwrap();
+        assert_eq!(boards(&lay(&base, &kit)), 0);
     }
 
     #[test]

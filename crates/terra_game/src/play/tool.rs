@@ -690,6 +690,7 @@ fn price(
                     .ok()
                     .and_then(|sockets| crate::play::props::socket(&sockets, "hinge"))
                     .unwrap_or(Vec3::ZERO),
+                    frame: fitting.frame.clone(),
                 },
             )
         })
