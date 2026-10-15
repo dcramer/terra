@@ -227,12 +227,15 @@ fn follow_sky_and_wind(
     sky: Option<Res<Sky>>,
     air: Option<Res<AirPicture>>,
     fields: Option<Res<ClimateFields>>,
-    clock: Res<Clock>,
+    clock: Option<Res<Clock>>,
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut materials: ResMut<Assets<LakeMaterial>>,
     mut last: Local<Option<(f64, Vec4)>>,
 ) {
-    let Some(look) = look else { return };
+    // Without the world's clock, as in the icon baker and the workbench, there is no lake to follow.
+    let (Some(look), Some(clock)) = (look, clock) else {
+        return;
+    };
     let now = clock.time().0;
     let wind = match (&fields, &camera) {
         (Some(fields), Some(camera)) if last.is_none_or(|(when, _)| (now - when).abs() > 0.002) => {

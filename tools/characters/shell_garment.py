@@ -47,6 +47,8 @@ SPECK = 0.03           # marked or unmarked islands smaller than this share of t
 WHOLE = 0.3            # marked islands smaller than this share of the largest are not the piece
 OFFSET_M = 0.008       # how far out from the skin the piece sits
 BULK_M = 0.03          # the most it follows the dressed surface standing off
+DRAPE_ROUNDS = 12      # rounds of draping the piece over the hollows of the body under it
+DRAPE = 0.5            # how far each round moves a vertex toward its neighbours' middle
 CROSSED_M = 0.018      # and above the waist, where straps cross the chest, a chest piece's height
                        # off the skin, which they clear (fit_gear.py, docs/characters.md)
 MATCH_M = 0.03         # skin this close lines the dressed model up
@@ -317,6 +319,32 @@ for v in piece.data.vertices:
     out = OFFSET_M + (out - OFFSET_M) * t * t * (3 - 2 * t)
     v.co = inv @ (on_skin[i] + normals[i] * out)
 piece.data.update()
+
+# 3b. Drape: cloth bridges the hollows between muscles rather than following the skin into
+# them, as a shrink-wrapped shell does (the adversarial review, 2026-10-15: "the jacket is a
+# muscle suit"). The surface is smoothed, each vertex moved toward its neighbours' middle, but
+# never nearer the skin than it was, so hollows fill and rises stay; the edges, where an
+# armhole, neckline or hem lies, are held.
+placed = [mw @ v.co for v in piece.data.vertices]
+least = [(placed[i] - on_skin[i]).dot(normals[i]) for i in range(len(placed))]
+for _ in range(DRAPE_ROUNDS):
+    moved = []
+    for i, p in enumerate(placed):
+        if i in border or not near[i]:
+            moved.append(p)
+            continue
+        middle = sum((placed[j] for j, _ in near[i]), Vector()) / len(near[i])
+        held = min(1.0, from_edge.get(i, math.inf) / TAPER_M)
+        q = p.lerp(middle, DRAPE * held)
+        off = (q - on_skin[i]).dot(normals[i])
+        if off < least[i]:
+            q += normals[i] * (least[i] - off)
+        moved.append(q)
+    placed = moved
+for v in piece.data.vertices:
+    v.co = inv @ placed[v.index]
+piece.data.update()
+print(f"SHELL {item} draped: {sum((placed[i] - on_skin[i]).dot(normals[i]) for i in range(len(placed))) / len(placed) * 100:.2f} cm off the skin on average")
 # 4. Weights: the vertex groups came with the copy of the body, so each vertex keeps its own.
 
 # 5. Its colour, surface and roughness, baked from the dressed model onto a new unwrap.
