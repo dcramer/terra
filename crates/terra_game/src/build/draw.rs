@@ -828,8 +828,9 @@ const MATERIALS: [Material; 13] = [
 ];
 
 /// How many corners are put on the GPU a frame, at most, beyond the first section's
-/// meshes: a section near is a few hundred thousand, far a few thousand.
-const UPLOAD_CORNERS: usize = 200_000;
+/// meshes: a section near is a few hundred thousand, far a few thousand. A storey's fill
+/// a few frames apart is a near section's 200,000 or so, spread over two frames.
+const UPLOAD_CORNERS: usize = 120_000;
 
 /// How many frames a build's laid sections are held back for the rest sent out with them at
 /// most, before they are shown as they are, so a build always shows its changes: two

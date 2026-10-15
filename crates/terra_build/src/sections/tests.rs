@@ -773,6 +773,21 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                 edits.push(harmed);
             }
         }
+        // The highest cube that is not a roof's taken out: what is far under it keeps its key
+        // only if it draws as it did.
+        if let Some((top, _)) = base
+            .cubes()
+            .filter(|(_, cube)| !cube.kind.is_roof())
+            .max_by_key(|(at, _)| (at.y, at.x, at.z))
+        {
+            let mut edited = base.clone();
+            edited.apply(BuildOp::Fill {
+                min: top.to_array(),
+                max: top.to_array(),
+                cube: None,
+            });
+            edits.push(edited);
+        }
         if let Some((roof, _)) = base
             .cubes()
             .filter(|(_, cube)| cube.kind.is_roof())

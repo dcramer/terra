@@ -1253,6 +1253,15 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
             .is_some_and(|kit| kit.pattern == Pattern::Roof)
     };
     let ground = section.base.ground();
+    // How many cubes up a streak of rain runs down from, at most, in any kit.
+    let streak_cubes = section
+        .kits
+        .0
+        .iter()
+        .map(|kit| libm::ceilf(kit.dress.masks.streak_reach / CELL_M) as i32)
+        .max()
+        .unwrap_or(0)
+        .max(1);
     let side = crate::cubes::SECTION / CLUSTER;
     // Each piece's box in cubes, worked out once.
     let boxes: Vec<(IVec3, IVec3, &Placed)> = laid
@@ -1339,13 +1348,29 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
                     ground.sample([x, z]).hash(&mut hasher);
                 }
             }
+            // The cubes it is drawn from, and those its masks look at: down to where the rain
+            // splashes up from (a wall's foot, two storeys down at most) and up to where it
+            // streaks down from (an opening's foot or an open top within a streak's reach,
+            // open for a storey over it); and over that only roofs, which shelter it however
+            // high (`dress::sheltered`). A storey built over another redraws the parts under
+            // it where it meets them, not every part of its section.
+            let (low, high) = (
+                near_low - IVec3::Y * (crate::STOREY_CUBES * 2),
+                near_high + IVec3::Y * (streak_cubes + crate::STOREY_CUBES),
+            );
+            for (at, cube) in section.base.store().within(low, high) {
+                at.hash(&mut hasher);
+                cube.word().hash(&mut hasher);
+            }
             for (at, cube) in section
                 .base
                 .store()
-                .within(near_low, near_high.with_y(i32::MAX / 4))
+                .within(near_low.with_y(high.y + 1), near_high.with_y(i32::MAX / 4))
             {
-                at.hash(&mut hasher);
-                cube.word().hash(&mut hasher);
+                if cube.kind.is_roof() {
+                    at.hash(&mut hasher);
+                    cube.word().hash(&mut hasher);
+                }
             }
             // And the damage its cubes have taken, kept beside them (D305), which wears it.
             for (at, quarters) in &laid.worn {
