@@ -426,21 +426,83 @@ pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -
     most
 }
 
-/// How much a point of a face has lost, its cube's loss (`lost`) more near the middle of
-/// the face and less toward its corners (D305): a hit breaks a cube from its middle out,
-/// so a hole is round rather than the cube's square, growing as more is lost. Across the
-/// face only, so a point pushed back into it, as a hole's floor is, has lost the same.
+/// How much a point of a face has lost (D305): each cube round it in the face's layer, by
+/// how much it has lost and how near its middle the point is, over [`STRUCK_M`] and falling
+/// smoothly to nothing, the cubes' together as chances are (one less what none of them
+/// takes); and more in some patches of a wall than others (`patch`). A hit breaks a cube
+/// from its middle out, round rather than square, into the next a little; a battered wall
+/// gives way in clumps where it was weakest, never evenly over every cube. Smooth across
+/// the face, cube to cube, so what is lost at a stone's middle is read the same from any
+/// point of the stone (`cells::given`, and the arrays' shader from its corners'). Across
+/// the face only, so a point pushed back into it, as a hole's floor is, has lost the same.
 pub fn struck(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
-    let lost = lost(worn, at, normal);
-    if lost <= 0.0 {
+    if worn.is_empty() {
         return 0.0;
     }
     let inside = at - normal * 0.02;
-    let centre = ((inside / crate::CELL_M).floor() + 0.5) * crate::CELL_M;
-    let mut off = inside - centre;
-    off[normal.abs().max_position()] = 0.0;
-    let r = off.length() / (crate::CELL_M * core::f32::consts::FRAC_1_SQRT_2);
-    (lost * (1.25 - 0.6 * r * r)).clamp(0.0, 1.0)
+    let cube = (inside / crate::CELL_M).floor().as_ivec3();
+    let axis = normal.abs().max_position();
+    let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+    let mut kept = 1.0;
+    for da in -1..=1 {
+        for db in -1..=1 {
+            let mut near = cube;
+            near[a] += da;
+            near[b] += db;
+            let Some(&quarters) = worn.get(&near.to_array()) else {
+                continue;
+            };
+            let mut off = inside - (near.as_vec3() + 0.5) * crate::CELL_M;
+            off[axis] = 0.0;
+            let t = (off.length() / STRUCK_M).min(1.0);
+            let reach = 1.0 - t * t * (3.0 - 2.0 * t);
+            kept *= 1.0 - f32::from(quarters.min(4)) / 4.0 * reach;
+        }
+    }
+    let lost = 1.0 - kept;
+    if lost <= 0.0 {
+        return 0.0;
+    }
+    let weak = PATCH_LEAST + (PATCH_MOST - PATCH_LEAST) * patch(inside, normal);
+    (lost * weak).clamp(0.0, 1.0)
+}
+
+/// How far from a cube's middle across its face its loss reaches, in metres: past its
+/// edges a little into the cubes beside it.
+pub const STRUCK_M: f32 = 0.6;
+
+/// How far across a wall's weak and strong patches are, in metres, and how much of a
+/// cube's loss tells at a point in the strongest and the weakest.
+const PATCH_M: f32 = 1.5;
+const PATCH_LEAST: f32 = 0.55;
+pub const PATCH_MOST: f32 = 1.45;
+
+/// How weak a wall is at a point, from 0 to 1, smoothly across its face: value noise over
+/// [`PATCH_M`] squares, the same on every wall in the same plane.
+fn patch(at: glam::Vec3, normal: glam::Vec3) -> f32 {
+    let mut q = at / PATCH_M;
+    q[normal.abs().max_position()] = 0.0;
+    let low = q.floor();
+    let f = q - low;
+    let f = f * f * (glam::Vec3::splat(3.0) - 2.0 * f);
+    let low = low.as_ivec3();
+    let mut sum = 0.0;
+    for corner in 0..8 {
+        let step = IVec3::new(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+        let weight = (0..3)
+            .map(|axis| {
+                if step[axis] == 1 {
+                    f[axis]
+                } else {
+                    1.0 - f[axis]
+                }
+            })
+            .product::<f32>();
+        if weight > 0.0 {
+            sum += weight * unit(low + step + IVec3::splat(7919));
+        }
+    }
+    sum
 }
 
 /// How far into a cube a damaged one beside it spreads, as a share of a cube, and how

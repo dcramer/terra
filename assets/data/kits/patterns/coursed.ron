@@ -31,13 +31,14 @@
 //             cost to repair from nothing; breaking into lengths (`fragments::Breaks`)
 // damage      how it breaks as it loses its health (D305): its logs, beams, boards and
 //             planks split along their grain, so many splits round or across each, and
-//             gouge; their sawn ends check from the rim; the daub between crumbles
+//             gouge; a log or beam loses chunks so deep out of its outline, and its sawn
+//             ends splinter; their sawn ends check from the rim; the daub between crumbles
 (
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
     damage: {
-        Log: Grain(splits: 5.0),
-        Hewn: Grain(splits: 3.0),
+        Log: Grain(splits: 5.0, chunks: 0.06),
+        Hewn: Grain(splits: 3.0, chunks: 0.05),
         Board: Grain(splits: 3.0),
         Floor: Grain(splits: 9.0),
         LogEnd: Ends,

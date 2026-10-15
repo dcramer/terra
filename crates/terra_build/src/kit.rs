@@ -895,8 +895,13 @@ pub enum Breaks {
     Joints { share: f32, depth: f32 },
     /// Timber: splits run along the grain, `splits` of them round or across a member's
     /// face, opening and lengthening as more is lost, and chunks gouge out of it showing
-    /// the fresh wood.
-    Grain { splits: f32 },
+    /// the fresh wood; a log or beam, harmed past half, loses whole chunks of it `chunks`
+    /// metres deep at most, out of its outline, and its sawn ends splinter (none if 0).
+    Grain {
+        splits: f32,
+        #[serde(default)]
+        chunks: f32,
+    },
     /// A member's sawn end: checks open out from its heart and its rim splinters.
     Ends,
     /// A covering of shingles, slates or shakes: one cracks, then whole ones go missing,

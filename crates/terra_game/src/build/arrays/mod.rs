@@ -227,7 +227,7 @@ fn breaks(breaks: Option<&terra_build::kit::Breaks>, cells: u32) -> (Vec4, f32) 
     match breaks {
         None => (Vec4::ZERO, 0.0),
         Some(Breaks::Joints { share, .. }) => (Vec4::new(1.0, 0.0, 0.0, 0.0), *share),
-        Some(Breaks::Grain { splits }) => (Vec4::new(2.0, *splits, 0.0, 0.0), 0.0),
+        Some(Breaks::Grain { splits, .. }) => (Vec4::new(2.0, *splits, 0.0, 0.0), 0.0),
         Some(Breaks::Ends) => (Vec4::new(3.0, cells.max(1) as f32, 0.0, 0.0), 0.0),
         Some(Breaks::Shingles { share }) => (Vec4::new(4.0, 0.0, 0.0, 0.0), *share),
         Some(Breaks::Crumbles) => (Vec4::new(5.0, 0.0, 0.0, 0.0), 0.0),
@@ -259,6 +259,17 @@ enum Loading {
     Reading([Option<Handle<Image>>; 4], f32),
     Encoding(Task<Option<Encoded>>),
 }
+
+/// A layer's slot in the table where its set is resident and written; else [`MISSING`],
+/// never another set's, nor the damage mask's in `DAMAGE_SLOT`: a set still being read in
+/// or written is drawn plain, in its corners' colours, and never in another's pictures.
+fn slot_of(slot: Option<&Slot>) -> f32 {
+    slot.filter(|slot| slot.ready_in == 0)
+        .map_or(MISSING, |slot| slot.slot as f32)
+}
+
+/// A table entry's slot for a layer whose set is not resident yet (`build.wesl` reads it).
+const MISSING: f32 = -1.0;
 
 /// A texture set resident in a slot: ready once the frame its layers were written in has
 /// passed.
@@ -556,11 +567,15 @@ impl Arrays {
     }
 
     fn table(&self) -> [Vec4; MAX_LAYERS] {
-        let mut table = [Vec4::ZERO; MAX_LAYERS];
+        let mut table = [Vec4::new(MISSING, 0.0, 0.0, 0.0); MAX_LAYERS];
         for (i, set) in self.layers.sets.iter().enumerate() {
-            let slot = self.slots.get(&set.path).map_or(0, |slot| slot.slot);
             if let Some(entry) = table.get_mut(i + 1) {
-                *entry = Vec4::new(slot as f32, set.depth, set.reflectance, self.relief);
+                *entry = Vec4::new(
+                    slot_of(self.slots.get(&set.path)),
+                    set.depth,
+                    set.reflectance,
+                    self.relief,
+                );
             }
         }
         table
@@ -995,6 +1010,29 @@ pub fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_set_not_yet_resident_or_written_never_reads_another_slot_nor_the_damage_mask() {
+        // Not resident, resident but not yet written, and ready.
+        let reading = Slot {
+            slot: 3,
+            ready_in: 1,
+            last_used: 0.0,
+        };
+        let ready = Slot {
+            slot: 3,
+            ready_in: 0,
+            last_used: 0.0,
+        };
+        for drawn in [slot_of(None), slot_of(Some(&reading))] {
+            assert!(
+                drawn < 0.0,
+                "drawn plain until written, not from slot {drawn}"
+            );
+            assert_ne!(drawn, DAMAGE_SLOT as f32);
+        }
+        assert_eq!(slot_of(Some(&ready)), 3.0);
+    }
 
     #[test]
     fn kits_naming_the_same_set_share_its_layer_and_pieces_have_none() {

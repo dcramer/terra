@@ -62,9 +62,19 @@ pub fn section(kit: &Kit, role: Option<crate::layout::Role>) -> (f32, f32) {
     }
 }
 
+/// How much of its health a point of a member has lost, from 0 to 1, by where it is and
+/// which way its face looks out there (`loss::struck`, D305).
+pub type Harm<'a> = &'a dyn Fn(Vec3, Vec3) -> f32;
+
 /// Draws a log, a beam or a post, and the daub under it, into the kit's materials: its face
 /// in `Log`, its cut ends in `LogEnd`, its daub in `Daub`.
 pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
+    draw_harmed(piece, kit, None, surfaces);
+}
+
+/// As [`draw`], broken where it has lost so much of its health that chunks of it have gone
+/// (`harm`, [`break_up`]).
+pub fn draw_harmed(piece: &Piece, kit: &Kit, harm: Option<Harm>, surfaces: &mut Surfaces) {
     let Piece::Log {
         from,
         to,
@@ -106,6 +116,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             lean.map(|rise| rise as f32 / layout::TICKS as f32),
             lift.map(layout::metres),
             outside.map(|dir| dir.step().as_vec3()),
+            harm,
             &dressed,
             &mut own,
         );
@@ -128,6 +139,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         lean.map(|rise| rise as f32 / layout::TICKS as f32),
         lift.map(layout::metres),
         outside.map(|dir| dir.step().as_vec3()),
+        harm,
         kit,
         surfaces,
     );
@@ -148,6 +160,7 @@ pub(crate) fn member(
     lean: [f32; 2],
     lift: [f32; 2],
     outside: Option<Vec3>,
+    harm: Option<Harm>,
     kit: &Kit,
     surfaces: &mut Surfaces,
 ) {
@@ -157,6 +170,10 @@ pub(crate) fn member(
     }
     let frame = Frame::new(from, to);
     let mut random = Random(seed);
+    // Broken only where it has lost enough somewhere along it for chunks to have gone, and
+    // only if its kit's timber breaks so; then drawn finer round, so a chunk has an edge.
+    let chunks = chunk_depth(kit);
+    let harm = harm.filter(|harm| chunks > 0.0 && harmed_along(&frame, kit.radius(), harm));
     let mut made = match kit.timber.profile {
         Profile::Round => round(
             &frame,
@@ -164,6 +181,7 @@ pub(crate) fn member(
             split,
             chinking.is_some(),
             outside.unwrap_or(WEATHER),
+            if harm.is_some() { 2 } else { 1 },
             &mut random,
         ),
         Profile::Hewn => hewn(&frame, kit, split, &mut random),
@@ -213,6 +231,9 @@ pub(crate) fn member(
             }
             p.y = p.y.min(cut);
         }
+    }
+    if let Some(harm) = harm {
+        break_up(&mut made, &frame, harm, chunks, seed);
     }
     let t = &kit.timber;
     let shade = 1.0 - t.variation.shade * random.unit();
@@ -364,6 +385,146 @@ fn rings_at(made: &mut Member, from: Vec3, axis: Vec3, places: &[f32]) {
                 .collect();
             made.tone.insert(i, tone);
         }
+        if !made.wear.is_empty() {
+            let wear: Vec<f32> = made.wear[i - 1]
+                .iter()
+                .zip(&made.wear[i])
+                .map(|(p, q)| p + (q - p) * t)
+                .collect();
+            made.wear.insert(i, wear);
+        }
+    }
+}
+
+/// How deep a kit's timber loses chunks where it is harmed most (`Breaks::Grain`), in
+/// metres: none if its kit does not say.
+fn chunk_depth(kit: &Kit) -> f32 {
+    [Material::Log, Material::Hewn]
+        .iter()
+        .find_map(|material| match kit.damage.get(material) {
+            Some(crate::kit::Breaks::Grain { chunks, .. }) => Some(*chunks),
+            _ => None,
+        })
+        .unwrap_or(0.0)
+}
+
+/// From how much lost a member starts to lose chunks, and how much of it has gone, at most,
+/// where it has lost everything.
+const CHUNK_FROM: f32 = 0.45;
+const CHUNK_MOST: f32 = 0.7;
+/// A chunk's size: how long along the grain, and how wide round the member, in metres.
+const CHUNK_LONG_M: f32 = 0.22;
+const CHUNK_ACROSS_M: f32 = 0.075;
+/// How far apart a member's rings are where it is broken, so a chunk's ends are its own.
+const CHUNK_RING_M: f32 = 0.03;
+/// How far back a sawn end splinters where it is harmed most, at its longest splinter.
+const SPLINTER_M: f32 = 0.07;
+
+/// Whether a member has lost enough anywhere along it to have lost chunks: read every tenth
+/// of a metre along it, on each of its four sides.
+fn harmed_along(frame: &Frame, radius: f32, harm: Harm) -> bool {
+    let count = (frame.length / 0.1).ceil().max(1.0) as usize;
+    (0..=count).any(|i| {
+        let at = frame.from + frame.axis * (frame.length * i as f32 / count as f32);
+        [frame.side, -frame.side, frame.up, -frame.up]
+            .into_iter()
+            .any(|out| harm(at + out * radius, out) > CHUNK_FROM)
+    })
+}
+
+/// A member broken where it is harmed (D305): its rings drawn close where it has lost
+/// enough, and, as more is lost, more chunks of it gone, each a split-off length of the
+/// grain, deepest in its middle and splintering out to its ends, the fresh wood under it
+/// bared (its texture's worn set, `Texture::worn`) and in shade; its sawn ends splintered
+/// back unevenly. Points move only in toward its middle or back from its end, so it stays
+/// closed and faces out.
+fn break_up(made: &mut Member, frame: &Frame, harm: Harm, depth: f32, seed: u32) {
+    let middle_of = |ring: &[Vec3]| ring.iter().copied().sum::<Vec3>() / ring.len().max(1) as f32;
+    let along = |ring: &[Vec3]| (middle_of(ring) - frame.from).dot(frame.axis);
+    let out_at = |p: Vec3, middle: Vec3| {
+        let d = p - middle;
+        (d - frame.axis * d.dot(frame.axis)).normalize_or_zero()
+    };
+    let most = |ring: &[Vec3]| {
+        let middle = middle_of(ring);
+        ring.iter()
+            .map(|p| harm(*p, out_at(*p, middle)))
+            .fold(0.0f32, f32::max)
+    };
+    // Rings every few centimetres between any two either of which has lost enough.
+    let harmed: Vec<bool> = made
+        .grid
+        .iter()
+        .map(|ring| most(ring) > CHUNK_FROM * 0.8)
+        .collect();
+    let mut places = Vec::new();
+    for i in 1..made.grid.len() {
+        if harmed[i - 1] || harmed[i] {
+            let (a, b) = (along(&made.grid[i - 1]), along(&made.grid[i]));
+            let more = ((b - a) / CHUNK_RING_M).ceil() as usize;
+            places.extend((1..more).map(|k| a + (b - a) * k as f32 / more as f32));
+        }
+    }
+    rings_at(made, frame.from, frame.axis, &places);
+    if made.wear.is_empty() {
+        made.wear = made.grid.iter().map(|ring| vec![0.0; ring.len()]).collect();
+    }
+    let unit = |a: u32, b: i32, c: i32| {
+        let mut hash = seed
+            ^ a.wrapping_mul(0x9E37_79B1)
+            ^ (b as u32).wrapping_mul(0x85EB_CA77)
+            ^ (c as u32).wrapping_mul(0xC2B2_AE3D);
+        hash ^= hash >> 15;
+        hash = hash.wrapping_mul(0x2C1B_3C6D);
+        hash ^= hash >> 12;
+        (hash & 0xFFFF) as f32 / 65535.0
+    };
+    let rows = made.grid.len();
+    let length = frame.length;
+    for i in 0..rows {
+        let middle = middle_of(&made.grid[i]);
+        let at = along(&made.grid[i]).clamp(0.0, length);
+        let from_end = at.min(length - at);
+        let inward = if at < length * 0.5 {
+            frame.axis
+        } else {
+            -frame.axis
+        };
+        let columns = made.grid[i].len();
+        for j in 0..columns {
+            let p = made.grid[i][j];
+            let out = out_at(p, middle);
+            let share = ((harm(p, out) - CHUNK_FROM) / (1.0 - CHUNK_FROM)).clamp(0.0, 1.0);
+            if share <= 0.0 {
+                continue;
+            }
+            let mut moved = p;
+            // Which lane of the grain round it the point is in, and which length of that
+            // lane, each lane's lengths staggered from the next's.
+            let turn = libm::atan2f(out.dot(frame.up), out.dot(frame.side)) / TAU + 0.5;
+            let round = (p - middle).length() * TAU;
+            let lane = (turn * round / CHUNK_ACROSS_M).floor() as i32;
+            let run = at / CHUNK_LONG_M + unit(1, lane, 0);
+            let length_of = run.floor() as i32;
+            let through = run - run.floor();
+            if unit(2, lane, length_of) < share * CHUNK_MOST {
+                // Deepest in its middle, splintering out to nothing at its ends.
+                let tip = (2.0 * through - 1.0).abs();
+                let shape = 1.0 - tip * tip * tip;
+                let deep = depth * (0.55 + 0.45 * unit(3, lane, length_of)) * shape;
+                moved -= out * deep.min((p - middle).length() * 0.6);
+                made.wear[i][j] = 1.0;
+                if let Some(tone) = made.tone.get_mut(i).and_then(|ring| ring.get_mut(j)) {
+                    *tone *= 1.0 - 0.3 * shape;
+                }
+            }
+            // A sawn end splintered back, each lane of it by its own length.
+            let reach = SPLINTER_M * share * libm::powf(unit(4, j as i32 / 2, 0), 1.5);
+            if from_end < SPLINTER_M + 0.02 {
+                moved += inward * reach * (1.0 - from_end / (SPLINTER_M + 0.02)).clamp(0.0, 1.0);
+            }
+            made.grid[i][j] = moved;
+        }
     }
 }
 
@@ -459,6 +620,7 @@ fn round(
     split: Split,
     walled: bool,
     weather: Vec3,
+    finer: u32,
     random: &mut Random,
 ) -> Member {
     let t = &kit.timber;
@@ -477,7 +639,7 @@ fn round(
         Notch::Saddle => 0.03,
         Notch::Flush => 0.012,
     };
-    let columns = t.sides as usize;
+    let columns = (t.sides * finer) as usize;
     let around = TAU * radius;
     // A face weathered where a log is exposed (`textures.ts blend --exposed`) is laid once
     // round a lying log from underneath, its middle on top and its first quarter to the
@@ -1519,6 +1681,68 @@ mod tests {
             let under = mean(&|p: &Vec3| middle(p) && p.y < 0.05);
             assert!(ends > 0.7, "ends {ends}");
             assert!(under < 0.2, "underside {under}");
+        }
+    }
+
+    #[test]
+    fn a_log_harmed_past_half_loses_chunks_out_of_its_outline_and_splinters_at_its_end() {
+        let mut kit = pinned(Profile::Round);
+        kit.damage.insert(
+            Material::Log,
+            crate::kit::Breaks::Grain {
+                splits: 5.0,
+                chunks: 0.06,
+            },
+        );
+        // Its west half all but gone, its east half whole.
+        let harm = |p: Vec3, _: Vec3| if p.x < 1.5 { 0.95 } else { 0.0 };
+        let piece = log(3, Split::Whole);
+        let (mut whole, mut harmed) = (Surfaces::default(), Surfaces::default());
+        draw(&piece, &kit, &mut whole);
+        draw_harmed(&piece, &kit, Some(&harm), &mut harmed);
+        // How near its middle line it comes between two places along it.
+        let nearest = |surfaces: &Surfaces, from: f32, to: f32| {
+            surfaces.0[&Material::Log]
+                .positions
+                .iter()
+                .filter(|p| p.x > from && p.x < to)
+                .map(|p| glam::Vec2::new(p.y - 0.125, p.z - 0.25).length())
+                .fold(f32::MAX, f32::min)
+        };
+        let lost = nearest(&whole, 0.2, 1.3) - nearest(&harmed, 0.2, 1.3);
+        assert!(lost > 0.025, "chunks out of its outline: {lost}");
+        let kept = nearest(&whole, 1.7, 2.8) - nearest(&harmed, 1.7, 2.8);
+        assert!(kept.abs() < 0.004, "whole where not harmed: {kept}");
+        // Its west end splintered back unevenly, its east end sawn square.
+        let spread = |surfaces: &Surfaces, near: f32| {
+            let xs: Vec<f32> = surfaces.0[&Material::LogEnd]
+                .positions
+                .iter()
+                .map(|p| p.x)
+                .filter(|x| (x - near).abs() < 0.2)
+                .collect();
+            xs.iter().copied().fold(f32::MIN, f32::max)
+                - xs.iter().copied().fold(f32::MAX, f32::min)
+        };
+        assert!(spread(&harmed, 0.0) > 0.02, "{}", spread(&harmed, 0.0));
+        assert!(spread(&whole, 0.0) < 0.005 && spread(&harmed, 3.0) < 0.005);
+        // And still facing out from its middle line, clear of its ends, where splinters
+        // turn its faces every way.
+        let log = &harmed.0[&Material::Log];
+        let mut inward = 0;
+        for corners in log.positions.chunks(3) {
+            if corners.iter().all(|p| p.x > 0.2 && p.x < 2.8) {
+                let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
+                let centre = (corners[0] + corners[1] + corners[2]) / 3.0;
+                let out = Vec3::new(0.0, centre.y - 0.125, centre.z - 0.25);
+                if own.dot(out) <= 0.0 {
+                    inward += 1;
+                }
+            }
+        }
+        assert_eq!(inward, 0, "triangles facing in");
+        for material in [Material::Log, Material::LogEnd] {
+            assert!(harmed.0[&material].positions.iter().all(|p| p.is_finite()));
         }
     }
 

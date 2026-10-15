@@ -15,6 +15,11 @@
 /// How many texels a side the cells are kept at.
 pub const CELLS: u32 = 512;
 
+/// Where a laid stone falls out of its wall (D305): from this much lost at its middle, the
+/// weakest first and the last at the two summed, each stone at its cell's share between.
+/// The texture arrays' shader (`build.wesl`, its joints) reads the same two numbers.
+pub const FALLS: [f32; 2] = [0.55, 0.45];
+
 /// The least a cell is, in texels at [`CELLS`]: a speck parted off by a joint is joint.
 const LEAST: usize = 20;
 
@@ -120,7 +125,109 @@ pub fn label(data: &[u8], width: usize, height: usize, stride: usize, share: f32
             ]);
         }
     }
+    distances(&mut out, n);
     out
+}
+
+/// How far each texel is from the edge of its cell or joint, in texels, in the fourth
+/// channel at [`DISTANCE_SCALE`] a texel: a distance field, as fonts and decals are drawn
+/// from (Valve's signed distance fields), so an edge read between texels runs smooth and
+/// straight however near it is seen, where the texels' numbers alone would step. Two
+/// sweeps of a chamfer transform (Borgefors), wrapping.
+fn distances(out: &mut [u8], n: usize) {
+    let id = |at: usize| out[at * 4];
+    let mut far: Vec<f32> = (0..n * n)
+        .map(|at| {
+            let (x, y) = (at % n, at / n);
+            let edge = [(1, 0), (n - 1, 0), (0, 1), (0, n - 1)]
+                .iter()
+                .any(|&(dx, dy)| id((y + dy) % n * n + (x + dx) % n) != id(at));
+            if edge { 0.5 } else { f32::MAX }
+        })
+        .collect();
+    const DIAGONAL: f32 = std::f32::consts::SQRT_2;
+    let forward = [
+        (n - 1, n - 1, DIAGONAL),
+        (0, n - 1, 1.0),
+        (1, n - 1, DIAGONAL),
+        (n - 1, 0, 1.0),
+    ];
+    let backward = [
+        (1, 1, DIAGONAL),
+        (0, 1, 1.0),
+        (n - 1, 1, DIAGONAL),
+        (1, 0, 1.0),
+    ];
+    for _ in 0..2 {
+        for (steps, reversed) in [(forward, false), (backward, true)] {
+            for k in 0..n * n {
+                let at = if reversed { n * n - 1 - k } else { k };
+                let (x, y) = (at % n, at / n);
+                for &(dx, dy, cost) in &steps {
+                    let from = (y + dy) % n * n + (x + dx) % n;
+                    if id(from) == id(at) && far[from] + cost < far[at] {
+                        far[at] = far[from] + cost;
+                    }
+                }
+            }
+        }
+    }
+    for (at, distance) in far.into_iter().enumerate() {
+        out[at * 4 + 3] = (distance.min(255.0 / DISTANCE_SCALE) * DISTANCE_SCALE) as u8;
+    }
+}
+
+/// How many steps a texel the cells' distances are kept in (`distances`): to 15.9 texels.
+pub const DISTANCE_SCALE: f32 = 16.0;
+
+/// How far a laid stone's hollow reaches round it into the mortar, in texels of the cells:
+/// the mortar round a stone that has gone goes with it, up to the stones beside.
+pub const MORTAR_REACH: f32 = 6.0;
+
+/// How far inside a stone left standing a point is, in texels of the cells, read between
+/// the four texels round it from their distance fields: below 0 in a joint, or in a stone
+/// that has given way (`given`'s rule), so the edge of what stands is smooth.
+pub fn standing(
+    cells: &[u8],
+    uv: [f32; 2],
+    lost: &dyn Fn([f32; 2]) -> f32,
+    begin: f32,
+    span: f32,
+) -> f32 {
+    let n = CELLS as f32;
+    let (px, py) = (uv[0] * n - 0.5, uv[1] * n - 0.5);
+    let (ox, oy) = (px.floor(), py.floor());
+    let (fx, fy) = (px - ox, py - oy);
+    let mut out = 0.0;
+    for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+        let w = (if dx > 0.0 { fx } else { 1.0 - fx }) * (if dy > 0.0 { fy } else { 1.0 - fy });
+        let tap = [(ox + dx + 0.5) / n, (oy + dy + 0.5) / n];
+        let t = texel(cells, tap);
+        let far = f32::from(t[3]) / DISTANCE_SCALE;
+        let cell = f32::from(t[0]) / 255.0;
+        let stands = cell >= 0.01 && lost(middle(cells, tap)) < begin + span * cell;
+        out += w * if stands { far } else { -far };
+    }
+    out
+}
+
+/// Whether a point of a laid wall has gone (D305): out of what stands (`standing`), and in
+/// a stone that has given way or the mortar within [`MORTAR_REACH`] of one. The texture
+/// arrays' shader draws the same.
+pub fn fallen(cells: &[u8], uv: [f32; 2], lost: &dyn Fn([f32; 2]) -> f32) -> bool {
+    let [begin, span] = FALLS;
+    if standing(cells, uv, lost, begin, span) >= 0.0 {
+        return false;
+    }
+    if given(cells, uv, lost, begin, span).1 >= 0.5 {
+        return true;
+    }
+    let r = MORTAR_REACH / CELLS as f32;
+    (0..8).any(|k| {
+        let a = k as f32 * std::f32::consts::TAU / 8.0 + 0.4;
+        let near = [uv[0] + libm::cosf(a) * r, uv[1] + libm::sinf(a) * r];
+        given(cells, near, lost, begin, span).1 >= 0.5
+    })
 }
 
 /// The texel of the cells where a texture is at a point, repeating (as the arrays' shader
@@ -234,5 +341,46 @@ mod tests {
                 "{m:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_stones_edge_read_between_texels_runs_straight_through_them() {
+        // One raised square, a stone, its edges at texels 128 and 384 of the cells.
+        let side = 512usize;
+        let height: Vec<u8> = (0..side * side)
+            .map(|i| {
+                let (x, y) = (i % side, i / side);
+                if (128..384).contains(&x) && (128..384).contains(&y) {
+                    220
+                } else {
+                    30
+                }
+            })
+            .collect();
+        let made = label(&height, side, side, 1, 0.5);
+        let n = CELLS as f32;
+        let whole = |_: [f32; 2]| 0.0;
+        // Deep inside, as far as is kept.
+        let deep = standing(&made, [0.5, 0.5], &whole, 0.5, 0.5);
+        assert!(deep > 15.0, "{deep}");
+        // Across its west edge the reading rises steadily, half a texel at a time.
+        let across: Vec<f32> = (0..9)
+            .map(|k| standing(&made, [(126.0 + k as f32 * 0.5) / n, 0.5], &whole, 0.5, 0.5))
+            .collect();
+        for pair in across.windows(2) {
+            assert!(pair[1] > pair[0], "{across:?}");
+        }
+        // And crosses into the stone at the same place on every row: a straight edge.
+        let crossing = |v: f32| {
+            (0..60)
+                .map(|k| standing(&made, [(124.0 + k as f32 * 0.1) / n, v], &whole, 0.5, 0.5))
+                .position(|s| s >= 0.0)
+        };
+        assert!(crossing(0.3).is_some());
+        assert_eq!(crossing(0.3), crossing(0.61));
+        // Gone, it stands nowhere.
+        let gone = |_: [f32; 2]| 1.0;
+        assert!(standing(&made, [0.5, 0.5], &gone, 0.5, 0.5) < 0.0);
+        assert!(fallen(&made, [0.5, 0.5], &gone) && !fallen(&made, [0.5, 0.5], &whole));
     }
 }

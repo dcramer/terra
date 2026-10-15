@@ -99,6 +99,15 @@ impl Packed {
 /// Where a point of a surface is against the pieces set into it (`dress::Bed::at`).
 pub type BedAt<'a> = &'a dyn Fn(Vec3) -> Option<(f32, f32, bool)>;
 
+/// How far a point on a face's side may slide along it onto a hole's outline, as a share of
+/// the fine grid's step: less than half, so it never passes a point another face's grid
+/// put on the same side.
+const RIM_SLIDE: f32 = 0.45;
+
+/// How many times finer than its steps a face holed by damage is drawn: the points beside a
+/// hole are put on its outline, so the grid need only be fine enough to find it.
+pub const HOLED_FINER: usize = 2;
+
 /// What a surface is displaced by: its material's height where its texture is at a point,
 /// from 0 to 1, and its tops' material's, if they have one.
 pub struct Heights<'a> {
@@ -752,11 +761,12 @@ pub fn draw_slots(
     // between, its relief left to its maps. A cube's, whichever of its faces asks, so the
     // faces round a line agree on it.
     let even: Vec<f32> = (0..=n).map(|i| i as f32 / n as f32).collect();
-    // Holed by damage, at three times its steps, so a stone's hole follows its outline.
+    // Holed by damage, finer than its steps (`HOLED_FINER`), so a stone's hole is found.
     let fine: Vec<f32> = {
-        let m = 3 * n;
+        let m = HOLED_FINER * n;
         (0..=m).map(|i| i as f32 / m as f32).collect()
     };
+    let fine_step = CELL_M / (HOLED_FINER * n) as f32;
     // Round a bed, at half its steps: the wall's lap over a lintel's edge every 10 cm near.
     let half: Vec<f32> = {
         let m = n.div_ceil(2).max(1);
@@ -1195,6 +1205,138 @@ pub fn draw_slots(
                     && p[b] - face_low[b] > margin
                     && face_high[b] - p[b] > margin
             };
+            // Holed by damage: where the hole is, and each point beside it moved onto its
+            // outline, so the hole's rim runs along its stones' edges rather than stepping
+            // round the grid's squares, as a contour is marched (marching squares): along
+            // each line of the grid from a point left standing to one gone, the place it
+            // crosses the outline, found by halving. A point inside the face takes the
+            // middle of its crossings, or the nearest where the middle falls in the hole;
+            // one on the face's side slides along that side only, the same from the face
+            // beside it, and only where the wall runs on flat past it, so faces still meet.
+            let holing = axis != 1
+                && heights.hole.is_some()
+                && heights.holed.is_some_and(|holed| holed(cube).is_some());
+            let hole_raw = |p: Vec3| heights.hole.map_or(0.0, |hole| hole(p, normal));
+            // Read once at each point of the fine grid and one round it, which every point
+            // and its neighbours fall on; between them, as asked.
+            let fine_n = HOLED_FINER * n;
+            let lattice: Vec<f32> = if holing {
+                (0..(fine_n + 3) * (fine_n + 3))
+                    .map(|k| {
+                        let (i, j) = (k % (fine_n + 3), k / (fine_n + 3));
+                        let mut p = Vec3::ZERO;
+                        p[axis] = plane;
+                        p[a] = low[a] + (i as f32 - 1.0) * fine_step;
+                        p[b] = low[b] + (j as f32 - 1.0) * fine_step;
+                        hole_raw(p)
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let on_lattice = |p: Vec3| -> Option<usize> {
+                let (u, v) = ((p[a] - low[a]) / fine_step, (p[b] - low[b]) / fine_step);
+                let (i, j) = (u.round(), v.round());
+                (!lattice.is_empty()
+                    && (u - i).abs() < 1e-3
+                    && (v - j).abs() < 1e-3
+                    && (-1.0..=fine_n as f32 + 1.0).contains(&i)
+                    && (-1.0..=fine_n as f32 + 1.0).contains(&j))
+                .then(|| (j as usize + 1) * (fine_n + 3) + i as usize + 1)
+            };
+            let hole_at = |p: Vec3| on_lattice(p).map_or_else(|| hole_raw(p), |at| lattice[at]);
+            let sunk_at = |p: Vec3| hole_at(p) > 1e-4;
+            // How far a point is pushed back: as deep as its hole where it has gone; and a
+            // speck left standing in a hole, too small for the grid to draw but as a spike,
+            // goes with it: a point of the grid with no more than two of the eight round it
+            // standing.
+            let depth_of = |p: Vec3| -> f32 {
+                let here = hole_at(p);
+                if here > 1e-4 || !holing || on_lattice(p).is_none() {
+                    return here;
+                }
+                let (mut standing, mut deepest) = (0, 0.0f32);
+                for (da, db) in [
+                    (1, 0),
+                    (1, 1),
+                    (0, 1),
+                    (-1, 1),
+                    (-1, 0),
+                    (-1, -1),
+                    (0, -1),
+                    (1, -1),
+                ] {
+                    let mut q = p;
+                    q[a] += da as f32 * fine_step;
+                    q[b] += db as f32 * fine_step;
+                    let there = hole_at(q);
+                    if there <= 1e-4 {
+                        standing += 1;
+                        if standing > 2 {
+                            return here;
+                        }
+                    }
+                    deepest = deepest.max(there);
+                }
+                deepest
+            };
+            let deep = |p: Vec3| depth_of(p) > 1e-4;
+            let on_side = |p: Vec3, k: usize| -> Option<i32> {
+                if (p[k] - face_low[k]).abs() < 1e-5 {
+                    Some(-1)
+                } else if (face_high[k] - p[k]).abs() < 1e-5 {
+                    Some(1)
+                } else {
+                    None
+                }
+            };
+            let runs_on = |k: usize, toward: i32| {
+                kin(cube + step(k, toward)) && !full(beyond + step(k, toward))
+            };
+            let snap = |p: Vec3| -> Vec3 {
+                if !holing || deep(p) {
+                    return p;
+                }
+                let (ways, reach): (&[usize], f32) = match (on_side(p, a), on_side(p, b)) {
+                    (None, None) => (&[a, b], 1.0),
+                    (Some(toward), None) if runs_on(a, toward) => (&[b], RIM_SLIDE),
+                    (None, Some(toward)) if runs_on(b, toward) => (&[a], RIM_SLIDE),
+                    _ => return p,
+                };
+                let (mut sum, mut count, mut nearest) = (Vec3::ZERO, 0.0, None::<Vec3>);
+                for &k in ways {
+                    for sign in [-1.0f32, 1.0] {
+                        let mut d = Vec3::ZERO;
+                        d[k] = sign * fine_step;
+                        if !deep(p + d) {
+                            continue;
+                        }
+                        // Between the two, on the outline itself, a speck aside.
+                        let (mut standing, mut gone) = (0.0f32, 1.0f32);
+                        for _ in 0..4 {
+                            let middle = (standing + gone) * 0.5;
+                            if sunk_at(p + d * middle) {
+                                gone = middle;
+                            } else {
+                                standing = middle;
+                            }
+                        }
+                        let crossing = p + d * standing.min(reach);
+                        sum += crossing;
+                        count += 1.0;
+                        if nearest
+                            .is_none_or(|n| n.distance_squared(p) > crossing.distance_squared(p))
+                        {
+                            nearest = Some(crossing);
+                        }
+                    }
+                }
+                let Some(nearest) = nearest else {
+                    return p;
+                };
+                let middle = sum / count;
+                if sunk_at(middle) { nearest } else { middle }
+            };
             let own = [own_box];
             let place = |p: Vec3| -> (Vec3, Vec3) {
                 let boxes: &[Rounded] = if inner(p) { &own } else { &round };
@@ -1251,9 +1393,7 @@ pub fn draw_slots(
                     }
                 }
                 // Pushed back where damage has taken its stones out.
-                if let Some(hole) = heights.hole {
-                    out -= hole(p, normal);
-                }
+                out -= if holing { depth_of(p) } else { hole_raw(p) };
                 // Its normal the rounding's where it is no more than rounded, the same
                 // worked out from any face; else from its triangles (`ZERO`).
                 let exact = if out.abs() < 1e-7 {
@@ -1263,6 +1403,7 @@ pub fn draw_slots(
                 };
                 (rounded + outward * out, exact)
             };
+            let sunk = std::cell::RefCell::new(Vec::<bool>::new());
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
             let top = axis == 1 && side > 0.0 && look.top.is_some();
@@ -1312,7 +1453,9 @@ pub fn draw_slots(
                 if against_cut {
                     s.y = s.y.max(cut(beyond, p)[1].min(high));
                 }
+                let s = snap(s);
                 let (mut q, mut exact) = place(s);
+                sunk.borrow_mut().push(holing && deep(s));
                 let placed = q;
                 if cut_here {
                     q.y = q.y.max(low).min(high);
@@ -1403,8 +1546,18 @@ pub fn draw_slots(
                         // smooth face's triangle turned more than 84° from its face is folded
                         // too, edge on in another face's plane (a foot's rounding pinched at
                         // an inner corner); its rounding's own steps turn no more than 75°.
+                        // A hole's side, from its rim down to its floor, stands square to the
+                        // face or near it, and is kept.
+                        let side_of_hole = {
+                            let sunk = sunk.borrow();
+                            holing
+                                && t.iter().any(|&c| sunk[c as usize])
+                                && t.iter().any(|&c| !sunk[c as usize])
+                        };
                         let folded = if look.packed.is_some() {
                             -0.5 * cross.length()
+                        } else if side_of_hole {
+                            -0.2 * cross.length()
                         } else {
                             0.1 * cross.length()
                         };
@@ -1490,6 +1643,21 @@ pub fn draw_slots(
                         } else {
                             [[0, 1, 3], [1, 2, 3]]
                         };
+                    }
+                    // Beside a hole, along the diagonal that keeps a corner on its own side
+                    // of the outline: the rim runs between the two corners moved onto it.
+                    if holing {
+                        let sunk = sunk.borrow();
+                        let gone = corners.map(|c| sunk[c as usize]);
+                        let count = gone.iter().filter(|g| **g).count();
+                        if count == 1 || count == 3 {
+                            let odd = gone.iter().position(|g| *g == (count == 1)).unwrap_or(0);
+                            split = if odd % 2 == 0 {
+                                [[0, 1, 3], [1, 2, 3]]
+                            } else {
+                                [[0, 1, 2], [0, 2, 3]]
+                            };
+                        }
                     }
                     for [x, y, z] in split {
                         triangle([corners[x], corners[y], corners[z]], &mut face);

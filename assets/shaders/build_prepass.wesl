@@ -93,7 +93,7 @@ fn gone(in: prepass_io::VertexOutput, slope: vec2<f32>) -> bool {
 @if(VERTEX_UVS_A && VERTEX_UVS_B) {
     let layer = min(u32(round(in.uv_b.x)), 511u);
     let lost = clamp(in.uv_b.y, 0.0, 1.0);
-    if lost > 0.001 && i32(layers.breaks[layer].x) == 4 && layers.damage.y > 0.5 {
+    if lost > 0.001 && i32(layers.breaks[layer].x) == 4 && layers.damage.y > 0.5 && layers.table[layer].x >= 0.0 {
         let slot = i32(layers.table[layer].x);
         let hit = lost;
         let shingle = given(in.uv, slot, hit, slope, 0.3, 0.65);

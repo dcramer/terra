@@ -1759,7 +1759,12 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
     let heights = (0..SIDE * SIDE)
         .map(|i| {
             let (x, y) = (i % SIDE, i / SIDE);
-            if x % 32 < 4 || y % 32 < 4 { 30 } else { 220 }
+            // Its joints off the cubes' lines, so the hole's outline is not the grid's.
+            if (x + 11) % 32 < 4 || (y + 7) % 32 < 4 {
+                30
+            } else {
+                220
+            }
         })
         .collect();
     let relief = std::sync::Arc::new(crate::relief::Relief::new(SIDE, SIDE, heights).unwrap());
@@ -1802,6 +1807,40 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
     let (harmed, whole) = (behind([1.05, 1.45]), behind([3.05, 3.45]));
     assert!(harmed > depth * 0.8, "{harmed}");
     assert!(whole < 0.005, "{whole}");
+    // Its hole's rim runs along its stones' edges rather than round the grid's squares: the
+    // points left standing at the top of its sides lie where the outline crosses the grid's
+    // lines, off the grid's points, which a rim stepped on the grid keeps to.
+    let step = crate::CELL_M / (crate::surface::HOLED_FINER as u32 * SURFACE_STEPS) as f32;
+    let on_grid = |v: f32| ((v / step) - (v / step).round()).abs() < 0.02;
+    let standing = |p: Vec3| p.z > 0.5 - 0.002;
+    let mut rim = std::collections::BTreeSet::new();
+    for t in face.indices.chunks(3) {
+        let corners = [0, 1, 2].map(|k| face.positions[t[k] as usize]);
+        let middle = (corners[0] + corners[1] + corners[2]) / 3.0;
+        if middle.x < 0.95 || middle.x > 1.55 || middle.y < 0.45 || middle.y > 1.05 {
+            continue;
+        }
+        if corners.iter().any(|p| !standing(*p)) {
+            for p in corners.iter().filter(|p| standing(**p)) {
+                rim.insert([p.x.to_bits(), p.y.to_bits()]);
+            }
+        }
+    }
+    let off = rim
+        .iter()
+        .filter(|[x, y]| !(on_grid(f32::from_bits(*x)) && on_grid(f32::from_bits(*y))))
+        .count();
+    assert!(rim.len() > 20, "a hole with a rim: {}", rim.len());
+    let on: Vec<[f32; 2]> = rim
+        .iter()
+        .filter(|[x, y]| on_grid(f32::from_bits(*x)) && on_grid(f32::from_bits(*y)))
+        .map(|[x, y]| [f32::from_bits(*x), f32::from_bits(*y)])
+        .collect();
+    assert!(
+        off * 10 > rim.len() * 7,
+        "{off} of {} off the grid: on {on:?}",
+        rim.len()
+    );
 }
 
 #[test]

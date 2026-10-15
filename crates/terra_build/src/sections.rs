@@ -338,19 +338,20 @@ pub fn remembered<T>(run: impl FnOnce() -> T) -> T {
     layout::roofs::remembered(run)
 }
 
-/// A cube and the six beside it.
-const STEPS_ROUND: [IVec3; 7] = [
-    IVec3::ZERO,
-    IVec3::X,
-    IVec3::NEG_X,
-    IVec3::Y,
-    IVec3::NEG_Y,
-    IVec3::Z,
-    IVec3::NEG_Z,
-];
+/// How many steps across a cube's side whether a stone has gone from it is read at: every
+/// 6 cm, less than any hole a stone and its mortar leave.
+const HOLE_LOOKS: usize = 8;
 
-/// How far back a stone's edge is chipped beside its joints when it is all but gone (D305).
-const CHIP_M: f32 = 0.012;
+/// How much more what is lost at a stone's middle may be than at a point of it, carried
+/// across the stone (`cells::given`): below the first stones' fall by more, nothing falls.
+const CARRIED_MOST: f32 = 0.3;
+
+/// A cube and the 26 round it: as far as a cube's loss reaches (`loss::struck`).
+fn round_it(cube: IVec3) -> impl Iterator<Item = IVec3> {
+    (-1..=1).flat_map(move |x| {
+        (-1..=1).flat_map(move |y| (-1..=1).map(move |z| cube + IVec3::new(x, y, z)))
+    })
+}
 
 /// How far round a cube that changed a roof's pieces may change, in cubes: further than
 /// its eaves run on past its walls or anything under or over it is looked at.
@@ -1129,8 +1130,37 @@ impl Drawing {
     }
 }
 
-/// A part's pieces drawn and masked, by kit and piece.
-type PiecesDrawn = crate::mesh::QuickMap<(usize, Piece), std::sync::Arc<Surfaces>>;
+/// A part's pieces drawn and masked, by kit, piece and the damage round it ([`harm_key`]).
+type PiecesDrawn = crate::mesh::QuickMap<(usize, Piece, u64), std::sync::Arc<Surfaces>>;
+
+/// The damage a member is broken by, as a number (`timber::draw_harmed`): that of the cubes
+/// round the box it fills, which a cube's spreads into (`loss::lost`); none for any other
+/// piece, which damage does not change.
+fn harm_key(piece: &Piece, worn: &BTreeMap<[i32; 3], u8>) -> u64 {
+    if worn.is_empty() || !matches!(piece, Piece::Log { .. }) {
+        return 0;
+    }
+    let Some((low, high)) = piece.bounds() else {
+        return 0;
+    };
+    let (low, high) = (
+        (low / CELL_M).floor().as_ivec3() - IVec3::ONE,
+        (high / CELL_M).floor().as_ivec3() + IVec3::ONE,
+    );
+    let mut key = 0;
+    for (at, quarters) in worn.range(low.to_array()..=high.to_array()) {
+        let at = IVec3::from_array(*at);
+        if at.cmpge(low).all() && at.cmple(high).all() {
+            key = layout::splitmix(
+                key ^ u64::from(*quarters)
+                    ^ ((at.x as u64 & 0xFFFF) << 8
+                        | (at.y as u64 & 0xFFFF) << 24
+                        | (at.z as u64 & 0xFFFF) << 40),
+            );
+        }
+    }
+    key
+}
 
 /// As [`draw`], taking what is unchanged from how the section was drawn last time, if
 /// that is given, and keeping how it is drawn now in `keep`, if that is: the same surfaces
@@ -1414,8 +1444,13 @@ fn draw_details(
         })
         .map(|last| &last.pieces);
     let finest = details[0];
+    // Where its members have lost so much that chunks of them have gone (D305).
+    let worn: BTreeMap<[i32; 3], u8> = laid.worn.iter().copied().collect();
+    let harm = |p: Vec3, normal: Vec3| crate::loss::struck(&worn, p, normal);
     for &detail in details {
         let first = detail == finest && detail != Detail::Far;
+        let harm = (!worn.is_empty() && matches!(detail, Detail::Near | Detail::Mid))
+            .then_some(&harm as crate::timber::Harm);
         // Near and a few metres off, each part of the section ([`CLUSTER`]) apart, so the
         // game puts on screen again only the parts an edit reached; far off, one.
         let slots = if only.is_some() && matches!(detail, Detail::Near | Detail::Mid) {
@@ -1488,7 +1523,7 @@ fn draw_details(
                 match stage {
                     Stage::In if far_box(piece, &coarse, detail, &mut fresh[slot]) => {}
                     Stage::In if kept => {
-                        let key = (index, piece.clone());
+                        let key = (index, piece.clone(), harm_key(piece, &worn));
                         // Kept masked, so only while the ground its dirt rises from is as
                         // it was; but for stone, whose rain streaks hang from whatever is
                         // built above, which is masked afresh each time.
@@ -1496,7 +1531,9 @@ fn draw_details(
                             Some(made) => made.clone(),
                             None => {
                                 let mut made = Surfaces::sharing();
-                                crate::draw::draw_as(piece, &coarse, face, false, &mut made);
+                                crate::draw::draw_harmed(
+                                    piece, &coarse, face, false, harm, &mut made,
+                                );
                                 std::sync::Arc::new(masked(made, false))
                             }
                         };
@@ -1505,11 +1542,12 @@ fn draw_details(
                             drawn_pieces[slot].insert(key, made);
                         }
                     }
-                    Stage::In => crate::draw::draw_as(
+                    Stage::In => crate::draw::draw_harmed(
                         piece,
                         &coarse,
                         face,
                         detail == Detail::Far,
+                        harm,
                         &mut fresh[slot],
                     ),
                     Stage::Next if first => {
@@ -1921,8 +1959,7 @@ fn draw_blocks(
         hasher.finish()
     };
     // Where damage has taken stones out of its walls (D305), the surface is pushed back a
-    // stone's depth over each stone gone, and the mortar round it, its stones' edges chipped
-    // back a little: by the same cells, and the same loss at a point, as the texture
+    // stone's depth over each stone gone, and the mortar round it: by the same cells, and the same loss at a point, as the texture
     // arrays' shader draws them gone with.
     let origin = section.at * crate::cubes::SECTION;
     let worn = worn_within(
@@ -1937,7 +1974,68 @@ fn draw_blocks(
         }
         _ => None,
     };
-    let hole = |p: Vec3, normal: Vec3| -> f32 {
+    // A cube can lose stones where a cube round it has lost enough for one to go
+    // anywhere: a number for that damage, which draws its faces finely.
+    let fall_keys: std::cell::RefCell<crate::mesh::QuickMap<IVec3, Option<u64>>> =
+        Default::default();
+    let fall_key = |cube: IVec3| -> Option<u64> {
+        if let Some(&key) = fall_keys.borrow().get(&cube) {
+            return key;
+        }
+        let mut key = 0u64;
+        let mut most = 0u8;
+        for (index, near) in round_it(cube).enumerate() {
+            if let Some(&quarters) = worn.get(&near.to_array()) {
+                most = most.max(quarters);
+                key = crate::layout::splitmix(key ^ u64::from(quarters) ^ (index as u64) << 8);
+            }
+        }
+        // None where no cube round it has lost enough for a stone to go anywhere.
+        let can_fall =
+            f32::from(most.min(4)) / 4.0 * crate::loss::PATCH_MOST >= crate::cells::FALLS[0];
+        let key = can_fall.then_some(key);
+        fall_keys.borrow_mut().insert(cube, key);
+        key
+    };
+    // What is lost at each point of the fine grid holed faces are drawn on (`surface`),
+    // each worked out once, and between them as the GPU has it between its corners'.
+    let fine = CELL_M / (crate::surface::HOLED_FINER as u32 * look.steps.max(1)) as f32;
+    let grid_lost: std::cell::RefCell<crate::mesh::QuickMap<([i32; 3], u8), f32>> =
+        Default::default();
+    let lost_at = |at: IVec3, normal: Vec3| -> f32 {
+        let side = normal.abs().max_position() as u8 * 2 + u8::from(normal.max_element() > 0.5);
+        if let Some(&lost) = grid_lost.borrow().get(&(at.to_array(), side)) {
+            return lost;
+        }
+        let lost = crate::loss::struck(&worn, at.as_vec3() * fine, normal);
+        grid_lost.borrow_mut().insert((at.to_array(), side), lost);
+        lost
+    };
+    let lost_between = |q: Vec3, normal: Vec3| -> f32 {
+        let axis = normal.abs().max_position();
+        let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+        let at = q / fine;
+        let mut low = at.floor().as_ivec3();
+        low[axis] = at[axis].round() as i32;
+        // On a point of the grid, as the grid's own points and their neighbours are.
+        let (ra, rb) = (at[a].round(), at[b].round());
+        if (at[a] - ra).abs() < 1e-3 && (at[b] - rb).abs() < 1e-3 {
+            let mut c = low;
+            c[a] = ra as i32;
+            c[b] = rb as i32;
+            return lost_at(c, normal);
+        }
+        let (fa, fb) = (at[a] - low[a] as f32, at[b] - low[b] as f32);
+        let corner = |da: i32, db: i32| {
+            let mut c = low;
+            c[a] += da;
+            c[b] += db;
+            lost_at(c, normal)
+        };
+        let (l00, l10, l01, l11) = (corner(0, 0), corner(1, 0), corner(0, 1), corner(1, 1));
+        (l00 * (1.0 - fa) + l10 * fa) * (1.0 - fb) + (l01 * (1.0 - fa) + l11 * fa) * fb
+    };
+    let hole_anywhere = |p: Vec3, normal: Vec3| -> f32 {
         let Some((cells, depth)) = &joints else {
             return 0.0;
         };
@@ -1945,18 +2043,15 @@ fn draw_blocks(
         if normal.y.abs() > 0.5 {
             return 0.0;
         }
-        // Nothing near it damaged: nothing gone.
+        // Nothing near it damaged enough: nothing gone.
         let cube = ((p - normal * 0.02) / CELL_M).floor().as_ivec3();
-        if !STEPS_ROUND
-            .iter()
-            .any(|step| worn.contains_key(&(cube + *step).to_array()))
-        {
+        if fall_key(cube).is_none() {
             return 0.0;
         }
-        let hit = crate::loss::struck(&worn, p, normal);
         let uv = crate::mesh::planar(p, normal, look.metres);
         // What was lost at a place on the texture: at the point of the face there, the
-        // texture being mapped flat on it (`mesh::planar`, upright on walls).
+        // texture being mapped flat on it (`mesh::planar`, upright on walls), between the
+        // fine grid's points as the arrays' shader has it between its corners'.
         let at_uv = |to: [f32; 2]| {
             let (da, db) = (
                 (to[0] - uv[0]) * look.metres[0],
@@ -1968,57 +2063,74 @@ fn draw_blocks(
             } else {
                 p + Vec3::new(da, -db, 0.0)
             };
-            crate::loss::struck(&worn, q, normal)
+            lost_between(q, normal)
         };
-        let (joint, mut gone) = crate::cells::given(cells, uv, &at_uv, 0.5, 0.5);
-        if joint > 0.0 {
-            let r = 3.0 / crate::cells::CELLS as f32;
-            for k in 0..4 {
-                let a = k as f32 * std::f32::consts::TAU / 4.0 + 0.4;
-                let near = [uv[0] + libm::cosf(a) * r, uv[1] + libm::sinf(a) * r];
-                gone = gone.max(joint * crate::cells::given(cells, near, &at_uv, 0.5, 0.5).1);
-            }
+        // Carried on from here by how it changes across the texture here, as the arrays'
+        // shader carries it from its pixel (`slope_of`, its corners' loss between them), so
+        // what is drawn gone and what is pushed back agree.
+        let here = at_uv(uv);
+        // Too little lost here for any stone near to have gone.
+        if here < crate::cells::FALLS[0] - CARRIED_MOST {
+            return 0.0;
         }
-        // A stone's edge beside a joint, chipped back as more is lost.
-        let own = crate::cells::at(cells, uv);
-        let r = 2.0 / crate::cells::CELLS as f32;
-        let edge = (0..8).any(|k| {
-            let a = k as f32 * std::f32::consts::TAU / 8.0;
-            let near = [uv[0] + libm::cosf(a) * r, uv[1] + libm::sinf(a) * r];
-            (crate::cells::at(cells, near) - own).abs() > 0.002
-        });
-        let chip = if edge && own > 0.01 {
-            if hit > 0.45 { CHIP_M } else { 0.0 }
+        let e = [fine / look.metres[0], fine / look.metres[1]];
+        let slope = [
+            ((at_uv([uv[0] + e[0], uv[1]]) - at_uv([uv[0] - e[0], uv[1]])) / (2.0 * e[0]))
+                .clamp(-6.0, 6.0),
+            ((at_uv([uv[0], uv[1] + e[1]]) - at_uv([uv[0], uv[1] - e[1]])) / (2.0 * e[1]))
+                .clamp(-6.0, 6.0),
+        ];
+        let carried = |to: [f32; 2]| {
+            (here + slope[0] * (to[0] - uv[0]) + slope[1] * (to[1] - uv[1])).clamp(0.0, 1.0)
+        };
+        // A stone there or gone, read from the cells' distance field so its outline is
+        // smooth: the surface (`surface::draw_slots`) puts the points beside a hole on it,
+        // so its sides stand square along its stones' edges.
+        if crate::cells::fallen(cells, uv, &carried) {
+            *depth
         } else {
             0.0
-        };
-        // A stone there or gone, its hole's sides as steep as the grid lets them.
-        let gone = if gone >= 0.5 { 1.0 } else { 0.0 };
-        depth * gone + chip * (1.0 - gone)
+        }
     };
-    // A cube is holed where it or a cube beside it is damaged, damage spreading a little
-    // across into the next (`loss::lost`).
+    // Whether any stone has gone from a cube's sides, read every few centimetres over each:
+    // only those are drawn finely, and holed; the rest of a damaged wall as it was.
+    let has_holes: std::cell::RefCell<crate::mesh::QuickMap<IVec3, bool>> = Default::default();
+    let has_hole = |cube: IVec3| -> bool {
+        if let Some(&has) = has_holes.borrow().get(&cube) {
+            return has;
+        }
+        let low = cube.as_vec3() * CELL_M;
+        let has = fall_key(cube).is_some()
+            && [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
+                .into_iter()
+                .any(|normal| {
+                    let axis = normal.abs().max_position();
+                    let across = if axis == 0 { 2 } else { 0 };
+                    let mut p = low;
+                    p[axis] += if normal[axis] > 0.0 { CELL_M } else { 0.0 };
+                    (0..=HOLE_LOOKS).any(|i| {
+                        (0..=HOLE_LOOKS).any(|j| {
+                            let mut q = p;
+                            q[across] += CELL_M * i as f32 / HOLE_LOOKS as f32;
+                            q.y += CELL_M * j as f32 / HOLE_LOOKS as f32;
+                            hole_anywhere(q, normal) > 0.0
+                        })
+                    })
+                });
+        has_holes.borrow_mut().insert(cube, has);
+        has
+    };
+    let hole = |p: Vec3, normal: Vec3| -> f32 {
+        if !has_hole(((p - normal * 0.02) / CELL_M).floor().as_ivec3()) {
+            return 0.0;
+        }
+        hole_anywhere(p, normal)
+    };
+    // A cube is holed where a stone has gone from it, which damage round it can take
+    // (`loss::struck`): a number for that damage.
     let holed = |cube: IVec3| -> Option<u64> {
         joints.as_ref()?;
-        let mut key = 0u64;
-        let mut any = false;
-        for step in [
-            IVec3::ZERO,
-            IVec3::X,
-            IVec3::NEG_X,
-            IVec3::Y,
-            IVec3::NEG_Y,
-            IVec3::Z,
-            IVec3::NEG_Z,
-        ] {
-            if let Some(&quarters) = worn.get(&(cube + step).to_array()) {
-                any = true;
-                key = crate::layout::splitmix(
-                    key ^ u64::from(quarters) ^ (step.x + 2 * step.y + 4 * step.z) as u64,
-                );
-            }
-        }
-        any.then_some(key)
+        fall_key(cube).filter(|_| has_hole(cube))
     };
     let heights = Heights {
         sides: &sides,

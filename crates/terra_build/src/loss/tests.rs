@@ -389,3 +389,57 @@ fn damage_spreads_a_little_into_the_cubes_beside_a_damaged_one_and_no_further() 
     assert!(at(0.25, 0.53) > 0.3);
     assert_eq!(lost(&worn, glam::Vec3::new(0.25, 0.25, 1.0), normal), 0.0);
 }
+
+#[test]
+fn a_wall_harmed_evenly_gives_way_in_patches_not_evenly_over_every_cube() {
+    // A wall twenty cubes long and high, every cube half its health lost.
+    let worn: BTreeMap<[i32; 3], u8> = (0..20)
+        .flat_map(|x| (0..20).map(move |y| ([x, y, 0], 2u8)))
+        .collect();
+    let normal = glam::Vec3::NEG_Z;
+    // Read at each cube's middle on its face, so the hit's focus is the same at each.
+    let at = |x: i32, y: i32| {
+        struck(
+            &worn,
+            glam::Vec3::new(x as f32 + 0.5, y as f32 + 0.5, 0.0) * crate::CELL_M,
+            normal,
+        )
+    };
+    let all: Vec<f32> = (0..20)
+        .flat_map(|x| (0..20).map(move |y| (x, y)))
+        .map(|(x, y)| at(x, y))
+        .collect();
+    let mean = all.iter().sum::<f32>() / all.len() as f32;
+    let (least, most) = all
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(l, h), v| (l.min(*v), h.max(*v)));
+    // As lost as its cubes on the whole, but some places far weaker than others.
+    assert!((mean - 0.5 * 1.15).abs() < 0.12, "mean {mean}");
+    assert!(most > least * 1.8, "from {least} to {most}");
+    // In patches: a cube is harmed much as the one beside it, far less like one across the wall.
+    let (mut near, mut far) = (0.0, 0.0);
+    for x in 0..19 {
+        for y in 0..20 {
+            near += (at(x, y) - at(x + 1, y)).abs();
+            far += (at(x, y) - at((x + 10) % 20, (y + 7) % 20)).abs();
+        }
+    }
+    assert!(near < far * 0.6, "beside {near}, across {far}");
+}
+
+#[test]
+fn what_a_point_has_lost_runs_on_smoothly_across_cubes_and_is_most_at_a_hits_middle() {
+    // One cube all but gone in a wall, and how much is lost along a line through it.
+    let worn: BTreeMap<[i32; 3], u8> = [([4, 4, 0], 4u8)].into_iter().collect();
+    let normal = glam::Vec3::NEG_Z;
+    let at = |x: f32| struck(&worn, glam::Vec3::new(x, 2.25, 0.0), normal);
+    let line: Vec<f32> = (0..=200).map(|k| at(1.25 + k as f32 * 0.01)).collect();
+    // No step anywhere, at the cubes' edges (x = 1.5, 2.0, 2.5) or between.
+    for pair in line.windows(2) {
+        assert!((pair[1] - pair[0]).abs() < 0.03, "{pair:?}");
+    }
+    // Most at its middle, reaching a little past its edges, nothing two cubes off.
+    let middle = at(2.25);
+    assert!(middle > 0.4 && middle > at(2.0) && at(2.0) > at(1.8) && at(1.8) > 0.0);
+    assert_eq!(at(1.4), 0.0);
+}

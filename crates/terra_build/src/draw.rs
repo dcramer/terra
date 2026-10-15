@@ -33,9 +33,22 @@ pub fn draw_as(
     plain: bool,
     surfaces: &mut Surfaces,
 ) {
+    draw_harmed(piece, kit, face, plain, None, surfaces);
+}
+
+/// As [`draw_as`], a member broken where it has lost so much of its health that chunks of
+/// it have gone (`timber::draw_harmed`, D305).
+pub fn draw_harmed(
+    piece: &Piece,
+    kit: &Kit,
+    face: Option<&Relief>,
+    plain: bool,
+    harm: Option<crate::timber::Harm>,
+    surfaces: &mut Surfaces,
+) {
     match *piece {
         Piece::Log { .. } if log_module(piece, kit, plain, surfaces) => {}
-        Piece::Log { .. } => crate::timber::draw(piece, kit, surfaces),
+        Piece::Log { .. } => crate::timber::draw_harmed(piece, kit, harm, surfaces),
         Piece::Board { min, max } => cuboid(
             surfaces.of(Material::Board),
             min.metres(),

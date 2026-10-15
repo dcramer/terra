@@ -59,7 +59,14 @@ var cells_array: texture_2d_array<f32>;
 
 // How many texels a side the cells are (`arrays::cells::CELLS`).
 const CELLS: f32 = 512.0;
+// Where a laid stone falls out of its wall: `terra_build::cells::FALLS`.
+const FALL_BEGIN: f32 = 0.55;
+const FALL_SPAN: f32 = 0.45;
 const TAU: f32 = 6.2831853;
+// The cells' distances, steps a texel (`terra_build::cells::DISTANCE_SCALE`), and how far
+// the mortar round a stone gone goes with it (`MORTAR_REACH`).
+const DISTANCE_SCALE: f32 = 16.0;
+const MORTAR_REACH: f32 = 6.0;
 
 // A number from 0 to 1 for a point of a lattice, by integer hashing (a sine's hash loses
 // its precision far from the origin and draws in blocks on some GPUs).
@@ -116,6 +123,29 @@ fn given(uv: vec2<f32>, slot: i32, lost: f32, slope: vec2<f32>, begin: f32, span
     return out;
 }
 
+// How far inside what stands a point is, in texels of the cells, read between the four
+// texels round it from their distance fields (`terra_build::cells::standing`): below 0 in a
+// joint or a stone that has given way, so the edge of what stands runs smooth however near.
+// With `begin` past 1, nothing has given way: the stones' own outline.
+fn standing(uv: vec2<f32>, slot: i32, lost: f32, slope: vec2<f32>, begin: f32, span: f32) -> f32 {
+    let p = uv * CELLS - 0.5;
+    let f = fract(p);
+    let o = floor(p);
+    var out = 0.0;
+    for (var k = 0; k < 4; k++) {
+        let d = vec2(f32(k % 2), f32(k / 2));
+        let w = mix(1.0 - f.x, f.x, d.x) * mix(1.0 - f.y, f.y, d.y);
+        let tap = (o + d + 0.5) / CELLS;
+        let at = vec2<i32>(floor(fract(tap) * CELLS)) % vec2<i32>(i32(CELLS));
+        let texel = textureLoad(cells_array, at, slot, 0);
+        let far = texel.a * 255.0 / DISTANCE_SCALE;
+        let there = clamp(lost + dot(slope, middle_at(tap, slot) - uv), 0.0, 1.0);
+        let stands = texel.r >= 0.01 && there < begin + span * texel.r;
+        out += w * select(-far, far, stands);
+    }
+    return out;
+}
+
 // How what a cube has lost changes across its texture at a pixel, from the pixels beside it:
 // worked out where every pixel runs.
 fn slope_of(lost: f32, uv: vec2<f32>) -> vec2<f32> {
@@ -156,19 +186,22 @@ const RELIEF_CURVED: vec2<f32> = vec2(10.0, 18.0);
 // Timber's damage at a point (D305): how much of it is a split along the grain and a gouge,
 // and how deep it goes, as a share of the relief's depth: a split to its floor, a gouge a
 // third of the way, deeper in its middle.
-fn grain_cut(uv: vec2<f32>, splits: f32, l: f32, aa: f32) -> vec3<f32> {
+fn grain_cut(uv: vec2<f32>, splits: f32, l: f32, aa: f32) -> vec4<f32> {
     let a = uv.x * splits + 0.45 * noise21(vec2(uv.x * 3.0, uv.y * 1.1));
     let lane = floor(a);
     let dist = min(fract(a), 1.0 - fract(a));
     let reach = noise21(vec2(lane * 7.3 + 1.7, uv.y * 1.6));
     let open = smoothstep(1.0 - l * 1.4, 1.1 - l * 1.4, reach);
-    let width = (0.02 + 0.1 * l) * open * (0.4 + 0.9 * noise21(vec2(lane * 3.7, uv.y * 6.0)));
+    // Wide enough to read a dozen metres off as it opens: a hand's width at the most.
+    let width = (0.03 + 0.2 * l) * open * (0.45 + 0.8 * noise21(vec2(lane * 3.7, uv.y * 6.0)));
     let split = (1.0 - smoothstep(width, width + aa, dist)) * open;
+    // Its lips torn up pale, the fibres pulled out of either side.
+    let lip = (1.0 - smoothstep(width + aa, width * 1.6 + 0.02 + aa, dist)) * open * (1.0 - split);
     let g = noise21(uv * vec2(6.0, 2.2)) * 0.7 + noise21(uv * 23.0) * 0.3;
     let reach_g = 0.82 - 0.35 * smoothstep(0.35, 1.0, l);
     let gouge = smoothstep(reach_g, reach_g + 0.03, g);
     let deep = max(split, gouge * (0.3 + 0.4 * smoothstep(reach_g, reach_g + 0.12, g)));
-    return vec3(split, gouge, deep);
+    return vec4(split, gouge, deep, lip);
 }
 
 // The relief's depth at a point: its material's, and where timber is damaged, its splits'
@@ -220,8 +253,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     let layer = min(u32(round(in.uv_b.x)), 511u);
     let entry = layers.table[layer];
-    let slot = i32(entry.x);
-    let depth = entry.y;
+    // A set not resident yet (its slot below 0) is drawn plain, in its corners' colours,
+    // undamaged: never in the pictures of the slot it would read, the damage mask's.
+    let missing = entry.x < 0.0;
+    let slot = max(i32(entry.x), 0);
+    let depth = select(entry.y, 0.0, missing);
 
     let TBN = calculate_tbn_mikktspace(pbr_input.world_normal, in.world_tangent);
     let T = TBN[0];
@@ -235,7 +271,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let wp = in.world_position.xyz;
     let patchy = noise21(vec2(wp.x + wp.z * 0.71, wp.y * 1.3) * 1.6);
     let l = clamp(lost * (0.6 + 0.8 * patchy), 0.0, 1.0);
-    let way = i32(layers.breaks[layer].x);
+    let way = select(i32(layers.breaks[layer].x), 0, missing);
     let cut_wood = way == 2 && lost > 0.001 && layers.damage.y > 0.5;
     let splits = select(0.0, max(layers.breaks[layer].y, 1.0), cut_wood);
     let relief_depth = select(depth, max(depth, 0.02), cut_wood);
@@ -263,6 +299,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var colour = textureSampleBias(colour_array, array_sampler, uv, slot, bias);
     var arm = textureSampleBias(arm_array, array_sampler, uv, slot, bias);
     var normal = textureSampleBias(normal_array, array_sampler, uv, slot, bias).rg;
+    if missing {
+        colour = vec4(1.0);
+        arm = vec4(1.0, 0.85, 0.0, 1.0);
+        normal = vec2(0.5);
+    }
 
     // Worn (D290): where its corners say its face is worn (the vertex colour's alpha, one
     // less how worn), the set its layer wears down to shows through, through the low places
@@ -276,7 +317,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let scale = exp2(bias);
     let ddx = dpdx(uv) * scale;
     let ddy = dpdy(uv) * scale;
-    let under = i32(layers.worn[layer / 4u][layer % 4u]) - 1;
+    let under = select(i32(layers.worn[layer / 4u][layer % 4u]) - 1, -1, missing);
     if under >= 0 && wear > 0.002 {
         let high = textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r;
         let bare = smoothstep(0.0, 0.25, wear * 1.4 - high);
@@ -305,7 +346,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let fw = fwidth(uv);
     var broken = 0.0;
     var crack_n = vec2(0.5, 0.5);
-    if layers.damage.y > 0.5 {
+    if layers.damage.y > 0.5 && !missing {
         let mask = i32(layers.damage.x);
         let threshold = textureSampleBias(height_array, array_sampler, uv, mask, bias).r;
         let flake = textureSampleBias(colour_array, array_sampler, uv, mask, bias).r;
@@ -318,22 +359,26 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         if way == 1 {
             // Laid stones: the joints first, then the stones' edges, then whole stones, each
             // leaving its hollow: the mortar bed and rubble behind it, in shade at its rim.
-            let cell = cell_at(uv, slot);
+            // Every edge read from the cells' distance field, so it runs smooth however near.
             let hit = lost;
-            let given_here = given(uv, slot, hit, slope, 0.5, 0.5);
-            let joint = given_here.x;
-            // The mortar round a stone that has gone goes with it.
-            let r = 3.0 / CELLS;
-            var round_fall = 0.0;
-            for (var k = 0; k < 4; k++) {
-                let a = f32(k) * TAU / 4.0 + 0.4;
-                round_fall = max(round_fall, given(uv + vec2(cos(a), sin(a)) * r, slot, hit, slope, 0.5, 0.5).y);
+            // How wide a pixel is in texels of the cells, to soften an edge over.
+            let aa = max(max(fw.x, fw.y) * CELLS * 0.7, 0.15);
+            let own = standing(uv, slot, hit, slope, 2.0, 0.0);
+            let stands = standing(uv, slot, hit, slope, FALL_BEGIN, FALL_SPAN);
+            let joint = 1.0 - smoothstep(-aa, aa, own);
+            // The mortar round a stone that has gone goes with it, up to the stones beside.
+            let r = MORTAR_REACH / CELLS;
+            var near_fall = given(uv, slot, hit, slope, FALL_BEGIN, FALL_SPAN).y;
+            for (var k = 0; k < 8; k++) {
+                let a = f32(k) * TAU / 8.0 + 0.4;
+                near_fall = max(near_fall, given(uv + vec2(cos(a), sin(a)) * r, slot, hit, slope, FALL_BEGIN, FALL_SPAN).y);
             }
-            let fall = max(given_here.y, joint * round_fall);
+            let fall = (1.0 - smoothstep(-aa, aa, stands)) * smoothstep(0.35, 0.65, near_fall);
             let erode = joint * smoothstep(0.02, 0.3, l);
-            let edge = edge_of(uv, slot, cell, 2.0) * (1.0 - joint);
+            // A standing stone's edge, chipped back to its fresh face only once much is lost.
+            let edge = (1.0 - joint) * (1.0 - smoothstep(0.5, 3.0, own));
             let bite = noise21(uv * 34.0) * 0.6 + noise21(uv * 9.0) * 0.4;
-            let chip = edge * smoothstep(bite - 0.05, bite, smoothstep(0.15, 0.8, l) * 0.7)
+            let chip = edge * smoothstep(bite - 0.05, bite, smoothstep(0.4, 0.95, l) * 0.6)
                 * (1.0 - fall);
             let fresh = mix(base, grey, 0.3) * 1.05;
             // A hollow: the rubble and mortar bed behind, its top in the shadow of the stone
@@ -341,15 +386,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             // texture runs down its face).
             let rubble = noise21(uv * 30.0) * 0.6 + noise21(uv * 8.0) * 0.4;
             let d = 4.0 / CELLS;
-            let over = select(0.0, 1.0, abs(cell_at(uv - vec2(0.0, d), slot) - cell) > 0.002);
-            let under = select(0.0, 1.0, abs(cell_at(uv + vec2(0.0, d), slot) - cell) > 0.002);
-            let rim = edge_of(uv, slot, cell, 3.0);
+            let over = smoothstep(-1.0, 1.0, standing(uv - vec2(0.0, d), slot, hit, slope, FALL_BEGIN, FALL_SPAN));
+            let under = smoothstep(-1.0, 1.0, standing(uv + vec2(0.0, d), slot, hit, slope, FALL_BEGIN, FALL_SPAN));
+            let rim = 1.0 - smoothstep(0.0, 4.0, -stands);
             let shade = (1.0 - 0.7 * over) * (1.0 + 0.6 * under * (1.0 - over)) * (1.0 - 0.35 * rim);
             // Behind it, the wall's core: more of its stones, set back in shadow, their
             // joints dark.
             let behind_uv = uv + vec2(0.37, 0.53);
             let behind = textureSampleGrad(colour_array, array_sampler, behind_uv, slot, ddx, ddy).rgb;
-            let behind_joint = select(0.0, 1.0, cell_at(behind_uv, slot) < 0.01);
+            let behind_joint = 1.0 - smoothstep(-aa, aa, standing(behind_uv, slot, 0.0, vec2(0.0), 2.0, 0.0));
             let core = pbr_input.material.base_color.rgb / max(colour.rgb, vec3(0.01)) * behind;
             let hollow = core * (0.42 - 0.25 * behind_joint) * (0.75 + 0.35 * rubble) * shade;
             colour_out = mix(base, base * 0.3, erode);
@@ -371,7 +416,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let fresh = mix(base * 1.25, vec3(0.5, 0.36, 0.22), 0.4);
             let floor_shade = 1.0 - 0.45 * cut.z;
             colour_out = mix(base, fresh * floor_shade, cut.y);
-            colour_out = mix(colour_out, base * 0.06, cut.x);
+            colour_out = mix(colour_out, fresh * 1.1, cut.w * 0.8);
+            colour_out = mix(colour_out, base * 0.03, cut.x);
             broken = max(cut.x, cut.y);
             crack_n = clamp(vec2(0.5) + vec2(du, -dv) * 1.2, vec2(0.0), vec2(1.0));
             rough = mix(arm.g, 0.95, broken);
