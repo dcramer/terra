@@ -48,6 +48,9 @@ struct Scene {
     deck: Kind,
     layer: i32,
     footprint: BTreeSet<[i32; 2]>,
+    /// The ground's height under each column in centimetres, where it is not level at the
+    /// base's floor, as the hammer samples it.
+    ground: Option<fn([i32; 2]) -> i16>,
 }
 
 impl Scene {
@@ -57,7 +60,79 @@ impl Scene {
             deck,
             layer,
             footprint: footprint.into_iter().collect(),
+            ground: None,
         }
+    }
+
+    /// Posts as the hammer lays them on the ground under each column, aimed at the cube the
+    /// ground passes through: each on its footing at the ground, up to the deck's layer.
+    fn posts_on_ground(mut self, kind: Kind, columns: &[[i32; 2]]) -> Scene {
+        let ground = self.ground.expect("a ground");
+        for &column in columns {
+            let aimed = i32::from(ground(column)).div_euclid(50);
+            let (foot, footing) =
+                terra_build::ground::post_on_ground(&self.base, column, aimed, ground);
+            for at in footing {
+                put(
+                    &mut self.base,
+                    at.to_array(),
+                    at.to_array(),
+                    STONE,
+                    Shape::Whole,
+                );
+            }
+            let [x, z] = column;
+            put(
+                &mut self.base,
+                [x, foot, z],
+                [x, self.layer, z],
+                kind,
+                Shape::Post,
+            );
+        }
+        self
+    }
+
+    /// A flight as the hammer lays one from the cube the ground passes through at `foot`,
+    /// `wide` columns across, up onto what is ahead of it, on a footing.
+    fn flight_on_ground(mut self, foot: [i32; 2], facing: Facing, wide: i32) -> Scene {
+        let ground = self.ground.expect("a ground");
+        let y = i32::from(ground(foot)).div_euclid(50);
+        let start = IVec3::new(foot[0], y, foot[1]);
+        let rise = terra_build::ground::flight_onto(&self.base, start, facing, wide)
+            .expect("the flight reaches the deck");
+        let (forward, across) = (facing.step(), facing.turned(1).step());
+        for i in 0..rise {
+            for w in 0..wide {
+                let at = start + forward * i + across * w;
+                for f in terra_build::ground::footing(&self.base, [([at.x, at.z], y - 1)], ground) {
+                    put(
+                        &mut self.base,
+                        f.to_array(),
+                        f.to_array(),
+                        STONE,
+                        Shape::Whole,
+                    );
+                }
+                if i > 0 {
+                    put(
+                        &mut self.base,
+                        [at.x, y, at.z],
+                        [at.x, y + i - 1, at.z],
+                        self.deck,
+                        Shape::Whole,
+                    );
+                }
+                put(
+                    &mut self.base,
+                    [at.x, y + i, at.z],
+                    [at.x, y + i, at.z],
+                    self.deck,
+                    Shape::Stair(facing),
+                );
+            }
+        }
+        self
     }
 
     fn rect(deck: Kind, layer: i32, min: [i32; 2], max: [i32; 2]) -> Scene {
@@ -254,6 +329,15 @@ fn check(name: &str, scene: &Scene, kits: &Kits) {
                 "{name}: the post at {x},{z} stands at {} on nothing",
                 low.y
             );
+            // On the ground, never buried in it: its footing's top at the ground or over it.
+            if let Some(ground) = scene.ground {
+                let at = f32::from(ground([x, z])) / 100.0;
+                assert!(
+                    foot_cube as f32 * CELL_M >= at - 0.005,
+                    "{name}: the post at {x},{z} stands at {}, buried in the ground at {at}",
+                    low.y
+                );
+            }
             // Within the deck's footprint, all round.
             let (wide, _) = terra_build::timber::section(kits.of(kind).unwrap(), Some(Role::Post));
             for corner in [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z] {
@@ -342,9 +426,8 @@ fn check(name: &str, scene: &Scene, kits: &Kits) {
         let normal = (Vec3::Y - axis * axis.y).normalize();
         let (seat, head) = (low - normal * deep * 0.5, high - normal * deep * 0.5);
         assert!(
-            seat.y.abs() < 0.01,
-            "{name}: a stringer's foot is at {}, not on the floor",
-            seat.y
+            on_something(base, seat),
+            "{name}: a stringer's foot at {seat} is on nothing"
         );
         // The deck's face it bears on: the side of the footprint nearest the head.
         let rim = joists_and_rims(&pieces, scene.deck, foot)
@@ -388,11 +471,24 @@ fn check(name: &str, scene: &Scene, kits: &Kits) {
             "{name}: a post under a flight at {low}..{high} carries no stringer"
         );
         assert!(
-            low.y.abs() < 0.01,
-            "{name}: a post under a flight stands at {}",
-            low.y
+            on_something(base, low),
+            "{name}: a post under a flight stands at {low} on nothing"
         );
     }
+}
+
+/// Whether a point is on the top of a solid cube: a footing, or a flight's own cubes.
+fn on_something(base: &Base, at: Vec3) -> bool {
+    let layer = (at.y / CELL_M).round();
+    let column = IVec3::new(
+        (at.x / CELL_M).floor() as i32,
+        layer as i32 - 1,
+        (at.z / CELL_M).floor() as i32,
+    );
+    (at.y - layer * CELL_M).abs() < 0.01
+        && base
+            .cube(column)
+            .is_some_and(|cube| cube.fill == Fill::Solid)
 }
 
 /// Half a joist's thickness: a stringer's head touches a rim joist's face.
@@ -505,6 +601,42 @@ fn an_l_a_deck_against_a_wall_and_one_two_storeys_up_are_framed_the_same() {
             .posts(deck, &[[0, 0, 0], [5, 0, 0], [0, -1, 4], [5, -2, 4]], true)
             .laid();
         check(&format!("over a slope in {deck:?}"), &slope, &kits);
+    }
+}
+
+/// Ground falling south, 15 cm a cube, three metres up at the deck's north edge.
+fn falling([_, z]: [i32; 2]) -> i16 {
+    (300 - 15 * z) as i16
+}
+
+#[test]
+fn on_falling_ground_posts_stand_on_footings_at_the_ground_and_the_flight_reaches_the_deck() {
+    let kits = kits();
+    for deck in [LOGS, HEWN] {
+        // Two storeys up from the base's floor, a storey over the falling ground: posts of
+        // different lengths on footings stepping down the hill, laid as the hammer lays
+        // them, and a flight from the ground up to the deck's south rim.
+        let mut slope = Scene::rect(deck, 11, [0, 0], [5, 4]);
+        slope.ground = Some(falling);
+        let slope = slope
+            .posts_on_ground(deck, &[[0, 0], [5, 0], [0, 4], [5, 4]])
+            .laid()
+            .flight_on_ground([2, 15], Facing::North, 2);
+        check(&format!("hammered on a slope in {deck:?}"), &slope, &kits);
+        let feet: BTreeSet<i32> = [[0, 0], [0, 4]]
+            .iter()
+            .map(|&[x, z]| {
+                (-3..11)
+                    .find(|&y| {
+                        slope
+                            .base
+                            .cube(IVec3::new(x, y, z))
+                            .is_some_and(|cube| cube.shape == Shape::Post)
+                    })
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(feet.len(), 2, "the posts are all one length: {feet:?}");
     }
 }
 

@@ -234,8 +234,8 @@ fn floor_over(cube: IVec3) -> i32 {
 
 /// A flight of stairs or a ramp (D193), as one part, from its foot at `foot`, the first
 /// cube over the floor or ground it starts on, rising toward `facing` a cube a column up to
-/// the floor of the storey above, `wide` columns across: each column whole cubes under a
-/// stair or a slope. Where it rests on the ground, with footings, a footing under it first.
+/// what is ahead of it, a deck or a floor, or else the floor of the storey above, `wide`
+/// columns across: each column whole cubes under a stair or a slope. Where it rests on the ground, with footings, a footing under it first.
 pub fn flight(
     base: &Base,
     foot: IVec3,
@@ -246,7 +246,9 @@ pub fn flight(
     footings: Option<Footings>,
 ) -> Vec<Op> {
     let mut parts = Numbers::of(base);
-    let rise = (floor_over(foot) - foot.y + 1).max(1);
+    // Up onto what is ahead of it, a deck or a floor, else a storey (D306).
+    let rise = terra_build::ground::flight_onto(base, foot, facing, wide)
+        .unwrap_or((floor_over(foot) - foot.y + 1).max(1));
     let (forward, across) = (facing.step(), facing.turned(1).step());
     let columns: Vec<IVec3> = (0..rise)
         .flat_map(|i| (0..wide.max(1)).map(move |w| foot + forward * i + across * w + IVec3::Y * i))
@@ -267,14 +269,20 @@ pub fn flight(
 }
 
 /// A post (D193), as one part: a column of post cubes from `foot` up to the floor of the
-/// storey above, which it carries. Where it rests on the ground, with footings, a footing under it.
+/// storey above, which it carries. Where it rests on the ground, with footings, on a footing
+/// whose top is at the ground, so it is never buried (D306: `ground::post_on_ground`).
 pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) -> Vec<Op> {
     let mut parts = Numbers::of(base);
     let mut ops = Vec::new();
+    let top = floor_over(foot);
+    let mut from = foot.y;
     if let Some(footings) = footings.filter(|f| f.on_ground(base, foot)) {
-        ops.extend(footings.plan(base, parts.next(), [([foot.x, foot.z], foot.y - 1)]));
+        let (on, cubes) =
+            terra_build::ground::post_on_ground(base, [foot.x, foot.z], foot.y, footings.ground_cm);
+        from = on.min(top);
+        ops.extend(plan(base, parts.next(), footings.kind, cubes));
     }
-    let cubes = (foot.y..=floor_over(foot)).map(|y| (foot.with_y(y), Shape::Post));
+    let cubes = (from..=top).map(|y| (foot.with_y(y), Shape::Post));
     ops.extend(shaped(base, parts.next(), kind, cubes));
     ops
 }

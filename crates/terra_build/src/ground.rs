@@ -116,6 +116,57 @@ pub fn footing(
     cubes
 }
 
+/// Where a post laid from the cube `aimed` in a column stands on the ground, and the footing
+/// under it (D194, D306): its foot, and the footing's cubes, top first. A post stands on a
+/// footing whose top is at the ground or a little over it, as a post is set on a pier, never
+/// buried: where the ground passes through the cube aimed at, the footing fills it and the
+/// post starts on the cube over it; over a dip the footing goes down to the ground, as far
+/// as a footing goes. A post standing on a cube has none and starts where it is aimed.
+pub fn post_on_ground(
+    base: &Base,
+    column: [i32; 2],
+    aimed: i32,
+    height_cm: impl Fn([i32; 2]) -> i16,
+) -> (i32, Vec<IVec3>) {
+    let at = IVec3::new(column[0], aimed, column[1]);
+    if base.cube(at - IVec3::Y).is_some() {
+        return (aimed, Vec::new());
+    }
+    let ground = i32::from(height_cm(column));
+    let foot = if aimed * cube_cm() < ground {
+        aimed + 1
+    } else {
+        aimed
+    };
+    (foot, footing(base, [(column, foot - 1)], height_cm))
+}
+
+/// How many columns a flight from `foot`, rising toward `facing` a cube a column and `wide`
+/// columns across, climbs to step onto what is ahead of it (D306): the fewest, up to two
+/// storeys, for which the cube after its top step, on the top step's layer, is solid all
+/// across it, none of its own cubes being taken. None where it reaches nothing.
+pub fn flight_onto(base: &Base, foot: IVec3, facing: Facing, wide: i32) -> Option<i32> {
+    let (forward, across) = (facing.step(), facing.turned(1).step());
+    let across_all =
+        |at: IVec3, test: &dyn Fn(IVec3) -> bool| (0..wide.max(1)).all(|w| test(at + across * w));
+    for rise in 1..=2 * crate::STOREY_CUBES {
+        let column = foot + forward * (rise - 1);
+        let free = |at: IVec3| (foot.y..foot.y + rise).all(|y| base.cube(at.with_y(y)).is_none());
+        if !across_all(column, &free) {
+            return None;
+        }
+        let ahead = foot + forward * rise + IVec3::Y * (rise - 1);
+        let solid = |at: IVec3| {
+            base.cube(at)
+                .is_some_and(|cube| cube.fill == Fill::Solid && !cube.kind.is_roof())
+        };
+        if across_all(ahead, &solid) {
+            return Some(rise);
+        }
+    }
+    None
+}
+
 impl Base {
     /// Keeps samples of the ground's height under columns, as a plan carries them, for what
     /// the shortcuts build: the ground beside a building's walls, which its roles are read
