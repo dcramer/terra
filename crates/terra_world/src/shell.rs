@@ -786,6 +786,9 @@ impl Plugin for ShellPlugin {
         if self.0.scripted() {
             stay_awake();
         }
+        if self.0.unattended() {
+            crate::gpu_turn::take();
+        }
         let options = self.0.clone();
         let readout = !options.clean;
         let window = Window {
