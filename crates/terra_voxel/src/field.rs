@@ -2,6 +2,7 @@
 //! made of. A generated planet answers from its seed alone; edits are laid over it in
 //! [`crate::planet`].
 
+use crate::mountains::{Mountains, Range};
 use glam::Vec3;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -23,14 +24,20 @@ pub mod material {
     pub const ORE: MaterialId = MaterialId(3);
     /// The top layer by the sea.
     pub const SAND: MaterialId = MaterialId(4);
+    /// Broken rock lying under a cliff, in mountains (D322).
+    pub const SCREE: MaterialId = MaterialId(5);
+    /// Water-worn stones in a gully's bed and on a gentle shore.
+    pub const GRAVEL: MaterialId = MaterialId(6);
 
     /// Each material, and the name data files know it by.
-    pub const NAMED: [(MaterialId, &str); 5] = [
+    pub const NAMED: [(MaterialId, &str); 7] = [
         (AIR, "Air"),
         (SOIL, "Soil"),
         (STONE, "Stone"),
         (ORE, "Ore"),
         (SAND, "Sand"),
+        (SCREE, "Scree"),
+        (GRAVEL, "Gravel"),
     ];
 
     /// The material a data file names.
@@ -82,14 +89,24 @@ pub trait Field: Send + Sync {
     fn sample(&self, point: Vec3) -> Sample {
         self.sample_in(point, &mut Self::Memo::default())
     }
+
+    /// The tangent of the steepest ground it has, about: how much further than its true
+    /// distance from a point the ground can be, measured straight up from the centre, which
+    /// is what [`crate::may_hold_surface`] allows for. Hills' is about 48 degrees'.
+    fn steepest(&self) -> f32 {
+        1.5
+    }
 }
 
-/// The heights of the land at lattice points already worked out, for asks nearby.
+/// The land at lattice points already worked out, for asks nearby.
 pub struct HeightMemo {
-    heights: HashMap<(u8, u32, u32), f32, BuildHasherDefault<LatticeHasher>>,
+    heights: HashMap<(u8, u32, u32), Node, BuildHasherDefault<LatticeHasher>>,
     /// Blend between every so many lattice points, for ground seen coarsely: 1 is the
     /// ground itself.
     step: u32,
+    /// The ground round about, as coarsely as looking for a cliff uphill of scree needs it,
+    /// kept apart so those looks share their lattice points.
+    around: Option<Box<HeightMemo>>,
 }
 
 impl HeightMemo {
@@ -100,7 +117,15 @@ impl HeightMemo {
         Self {
             heights: HashMap::default(),
             step: step.next_power_of_two(),
+            around: None,
         }
+    }
+
+    /// The memo for the ground round about: at least `spacing_m` between its points.
+    fn around(&mut self, spacing_m: f32) -> &mut HeightMemo {
+        let step = self.step as f32 * GeneratedPlanet::LATTICE_M;
+        self.around
+            .get_or_insert_with(|| Box::new(HeightMemo::coarse(spacing_m.max(step))))
     }
 }
 
@@ -109,6 +134,39 @@ impl Default for HeightMemo {
         Self::coarse(GeneratedPlanet::LATTICE_M)
     }
 }
+
+/// The land at a lattice point: its height, and shares, 0 to 1, of what lies on it that is not
+/// soil: bare rock, scree and gravel, as the mountains lay them.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Node {
+    height: f32,
+    /// How far down into a mountain gully's bed it lies (`Rise::bed`).
+    bed: f32,
+}
+
+impl Node {
+    fn lerp(self, other: Node, t: f32) -> Node {
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        Node {
+            height: mix(self.height, other.height),
+            bed: mix(self.bed, other.bed),
+        }
+    }
+}
+
+/// What lies on mountains (D322): bare rock where the ground is steeper than this, in degrees;
+/// scree where it is between these, a talus's angle, and a cliff stands within so many metres
+/// uphill, as scree rests at 33 to 37 degrees below the cliff it fell from; gravel in a gully's
+/// bed gentler than this.
+const BARE_ROCK_DEG: f32 = 40.0;
+const SCREE_DEG: (f32, f32) = (24.0, 38.0);
+const CLIFF_WITHIN_M: [f32; 2] = [20.0, 45.0];
+/// How finely the ground uphill is looked at for a cliff, in metres between its points.
+const CLIFF_LOOK_M: f32 = 8.0;
+const GRAVEL_UNDER_DEG: f32 = 28.0;
+/// A bed on ground flatter than this is a dip in a meadow, not a stream's.
+const GRAVEL_OVER_DEG: f32 = 5.0;
+const GRAVEL_BED: f32 = 0.8;
 
 /// A quick hash for lattice points, which are small integers.
 #[derive(Default)]
@@ -162,6 +220,8 @@ pub struct GeneratedPlanet {
     sea_level_m: Option<f32>,
     /// Lattice points along each edge of a face.
     lattice: u32,
+    /// Its mountains, on a world with any (D322).
+    range: Option<Range>,
 }
 
 impl GeneratedPlanet {
@@ -192,7 +252,25 @@ impl GeneratedPlanet {
             detail_m: Self::DETAIL_M,
             sea_level_m,
             lattice: (quarter_round / Self::LATTICE_M).ceil().max(1.0) as u32,
+            range: None,
         }
+    }
+
+    /// The same planet with mountains (D322).
+    pub fn with_mountains(mut self, mountains: Mountains) -> Self {
+        self.range = Some(Range::new(mountains, self.spec.seed));
+        self
+    }
+
+    /// Its mountains, if it has any.
+    pub fn mountains(&self) -> Option<&Range> {
+        self.range.as_ref()
+    }
+
+    /// The most the ground stands above or below the nominal radius, in metres, before
+    /// digging: its hills, its finer detail and its mountains.
+    pub fn reach_m(&self) -> f32 {
+        self.relief_m + self.detail_m + self.range.as_ref().map_or(0.0, |r| r.mountains.highest_m())
     }
 
     /// The same planet without its finer detail: with no relief, perfectly smooth, as a
@@ -222,7 +300,66 @@ impl GeneratedPlanet {
         self.height_in(direction, &mut HeightMemo::default())
     }
 
-    /// The height at a lattice point, worked out from the noise.
+    /// The land at a lattice point, worked out from the noise.
+    fn exact(&self, direction: Vec3) -> Node {
+        let mut node = Node {
+            height: self.exact_height(direction),
+            ..Node::default()
+        };
+        if let Some(range) = &self.range {
+            let rise = range.rise(direction, self.spec.radius_m);
+            node.height += rise.height_m;
+            node.bed = rise.bed;
+        }
+        node
+    }
+
+    /// How the ground rises in a direction, as the memo's lattice has it: which way is
+    /// uphill, level there, and how steep, in degrees.
+    fn rising_in(&self, direction: Vec3, memo: &mut HeightMemo) -> (Vec3, f32) {
+        let step_m = memo.step as f32 * Self::LATTICE_M;
+        let here = self.height_in(direction, memo);
+        let (a, b) = (
+            direction.any_orthonormal_vector(),
+            direction.any_orthonormal_vector().cross(direction),
+        );
+        let across = step_m / self.spec.radius_m;
+        let rise = |v: Vec3, memo: &mut HeightMemo| {
+            (self.height_in((direction + v * across).normalize(), memo) - here) / step_m
+        };
+        let gradient = a * rise(a, memo) + b * rise(b, memo);
+        (
+            gradient.normalize_or_zero(),
+            libm::atanf(gradient.length()).to_degrees(),
+        )
+    }
+
+    /// What lies on the ground in a direction, where it is not soil: bare rock too steep to
+    /// hold anything, scree under a cliff, gravel in a gully's bed (D322). Only in mountains.
+    fn lying_in(&self, direction: Vec3, bed: f32, memo: &mut HeightMemo) -> Option<MaterialId> {
+        self.range.as_ref()?;
+        let (uphill, slope) = self.rising_in(direction, memo);
+        if slope > BARE_ROCK_DEG {
+            return Some(material::STONE);
+        }
+        if bed > GRAVEL_BED && (GRAVEL_OVER_DEG..GRAVEL_UNDER_DEG).contains(&slope) {
+            return Some(material::GRAVEL);
+        }
+        if (SCREE_DEG.0..SCREE_DEG.1).contains(&slope) && uphill != Vec3::ZERO {
+            let radius = self.spec.radius_m;
+            let around = memo.around(CLIFF_LOOK_M);
+            let cliff = CLIFF_WITHIN_M.iter().any(|&reach| {
+                let above = (direction * radius + uphill * reach).normalize();
+                self.rising_in(above, around).1 > BARE_ROCK_DEG
+            });
+            if cliff {
+                return Some(material::SCREE);
+            }
+        }
+        None
+    }
+
+    /// The height at a lattice point of the hills and their finer detail, from the noise.
     fn exact_height(&self, direction: Vec3) -> f32 {
         let hills = self.relief_m
             * self
@@ -240,6 +377,11 @@ impl GeneratedPlanet {
 
     /// The height in a direction: a blend of the four lattice points round it.
     fn height_in(&self, direction: Vec3, memo: &mut HeightMemo) -> f32 {
+        self.land_in(direction, memo).height
+    }
+
+    /// The land in a direction: a blend of the four lattice points round it.
+    fn land_in(&self, direction: Vec3, memo: &mut HeightMemo) -> Node {
         let (face, s, t) = cube_coordinates(direction);
         let cells = self.lattice as f32;
         let step = memo.step.min(self.lattice);
@@ -254,13 +396,11 @@ impl GeneratedPlanet {
         let mut node = |i: u32, j: u32| {
             *memo.heights.entry((face, i, j)).or_insert_with(|| {
                 let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
-                self.exact_height(cube_direction(face, u(i), u(j)))
+                self.exact(cube_direction(face, u(i), u(j)))
             })
         };
         let (a, b, c, d) = (node(i, j), node(i2, j), node(i, j2), node(i2, j2));
-        let near = a + (b - a) * fi;
-        let far = c + (d - c) * fi;
-        near + (far - near) * fj
+        a.lerp(b, fi).lerp(c.lerp(d, fi), fj)
     }
 }
 
@@ -317,6 +457,11 @@ impl Field for GeneratedPlanet {
         HeightMemo::coarse(spacing_m)
     }
 
+    /// Mountains' walls stand to about 72 degrees (D322).
+    fn steepest(&self) -> f32 {
+        if self.range.is_some() { 3.0 } else { 1.5 }
+    }
+
     fn distance_in(&self, point: Vec3, memo: &mut HeightMemo) -> f32 {
         let from_centre = point.length();
         if from_centre < 1e-3 {
@@ -333,10 +478,19 @@ impl Field for GeneratedPlanet {
                 material: material::STONE,
             };
         }
-        let height = self.height_in(point / from_centre, memo);
+        let land = self.land_in(point / from_centre, memo);
+        let height = land.height;
         let distance = from_centre - (self.spec.radius_m + height);
         let depth = -distance;
-        let material = if depth < Self::TOPSOIL_M {
+        // In mountains what lies on the surface, a topsoil's depth of it.
+        let lying = if depth < Self::TOPSOIL_M {
+            self.lying_in(point / from_centre, land.bed, memo)
+        } else {
+            None
+        };
+        let material = if let Some(lying) = lying {
+            lying
+        } else if depth < Self::TOPSOIL_M {
             let beach = self
                 .sea_level_m
                 .is_some_and(|sea| height < sea + Self::BEACH_M);

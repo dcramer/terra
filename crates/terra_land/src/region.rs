@@ -58,6 +58,24 @@ impl Region {
         (self.middle + self.east * at.x + self.north * at.y).normalize()
     }
 
+    /// The cell a direction from the centre falls in, if it falls in the region: the inverse
+    /// of [`Region::direction`].
+    pub fn cell_of(&self, direction: Vec3) -> Option<(usize, usize)> {
+        let toward = self.middle.normalize();
+        let along = direction.dot(toward);
+        if along <= 0.0 {
+            return None;
+        }
+        let on_plane = direction * (self.middle.length() / along) - self.middle;
+        let at = Vec2::new(on_plane.dot(self.east), on_plane.dot(self.north));
+        let half = self.cells as f32 * 0.5;
+        let (column, row) = (at.x / self.cell_m + half, half - at.y / self.cell_m);
+        if column < 0.0 || row < 0.0 || column >= self.cells as f32 || row >= self.cells as f32 {
+            return None;
+        }
+        Some((column as usize, row as usize))
+    }
+
     /// The point on the ground at a cell's middle.
     pub fn point(&self, land: &Land, column: usize, row: usize) -> Vec3 {
         self.direction(column, row) * (land.radius_m() + self.height(column, row))

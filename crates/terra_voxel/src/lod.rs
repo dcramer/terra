@@ -39,13 +39,13 @@ impl Detail {
 
 /// Whether the surface of a ground might pass through a chunk, judged from how far the
 /// chunk's middle is from it. A distance measured straight up from the centre is longer
-/// than the true one on a slope, so the test allows half as much again as the chunk's
-/// reach, enough for slopes up to about 48 degrees.
+/// than the true one on a slope, so the test allows the chunk's reach times the tangent of
+/// the ground's steepest slope (`Field::steepest`): hills' about 48 degrees, mountains' 72.
 pub fn may_hold_surface<F: Field>(field: &F, id: ChunkId) -> bool {
     let half = chunk_size_m(id.level) * 0.5;
     let middle = chunk_origin(id) + Vec3::splat(half);
     let reach = half * 3f32.sqrt();
-    field.distance_in(middle, &mut F::Memo::default()).abs() <= reach * 1.5 + VOXEL_M
+    field.distance_in(middle, &mut F::Memo::default()).abs() <= reach * field.steepest() + VOXEL_M
 }
 
 /// The chunks to draw for some viewers, and which faces of each meet finer chunks.

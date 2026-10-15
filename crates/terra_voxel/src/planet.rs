@@ -254,6 +254,10 @@ impl<F: Field> Field for VoxelPlanet<F> {
         self.field.memo_for(spacing_m)
     }
 
+    fn steepest(&self) -> f32 {
+        self.field.steepest()
+    }
+
     fn distance_in(&self, point: Vec3, memo: &mut F::Memo) -> f32 {
         let mut distance = self.field.distance_in(point, memo);
         for edit in self.edits_at(point) {

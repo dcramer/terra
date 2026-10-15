@@ -16,6 +16,16 @@ pub const START_LATITUDE: f32 = 40.0_f32.to_radians();
 pub const MORNING: f32 = 7.5;
 pub const ART_SUN: Vec3 = Vec3::new(0.74, 0.33, 0.58);
 
+/// A world at least this big is to scale (D13): each place's latitude is its own, as the
+/// frame says. On a smaller one, the 2 km test planet, a few hundred metres would be several
+/// degrees, so the whole of it takes the start's latitude, as one season covers it (D149).
+pub const LATITUDES_FROM_RADIUS_M: f32 = 10_000.0;
+
+/// Whether places on a world of so many metres' radius have latitudes of their own.
+pub fn has_latitudes(radius_m: f32) -> bool {
+    radius_m >= LATITUDES_FROM_RADIUS_M
+}
+
 /// A world's frame: the axis it turns about.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frame {

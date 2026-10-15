@@ -26,6 +26,7 @@ pub mod flora_kinds;
 pub mod footprint;
 pub mod gpu_turn;
 pub mod grown;
+pub mod lakes;
 pub mod loading;
 pub mod lod;
 pub mod mipmaps;
@@ -47,6 +48,7 @@ pub mod start;
 pub mod terrain;
 pub mod tick;
 pub mod upscale;
+pub mod woods;
 pub mod world;
 
 pub use world::WorldPlugin;

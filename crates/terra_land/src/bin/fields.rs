@@ -13,11 +13,15 @@ use std::path::PathBuf;
 use std::time::Instant;
 use terra_climate::{Date, TREE_LINE_SEASON_C};
 use terra_core::{PlanetSpec, Seed};
+use terra_land::lakes;
 use terra_land::maps::{Map, Ramp, hillshade, par_map};
 use terra_land::region::Region;
+use terra_land::site::MountainLake;
+use terra_land::woods::{self, Stand};
 use terra_land::{Land, PLANET_START, ground, start_climate};
+use terra_voxel::{Field, material};
 
-const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--out shots/fields]
+const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake] [--out shots/fields]
 
 A region of the world's land on a date as maps of its rules, on the CPU (docs/demos.md, D326):
 the ground's height, steepness and facing, the growing season's mean temperature with the tree
@@ -31,6 +35,8 @@ numbers and what the climate puts at each height and latitude; index.html to loo
   --cell     how wide each cell of the maps is, in metres; the past's own cells are 32 m
   --date     the date, as the sandbox takes it: 06-20 for midsummer's eve, or a day of the
              clock; by default the clock's first day, in late August
+  --site     the region round a place the land's rules make, found by its query instead of
+             --at: lake, a basin under the tree line with peaks a kilometre over it (docs/demos.md)
   --out      the folder to write into";
 
 /// How far upwind shelter is looked for, as Winstral's Sx takes it for drifting snow.
@@ -46,6 +52,7 @@ struct Args {
     cell_m: f32,
     date: Option<Date>,
     out: PathBuf,
+    site: Option<String>,
 }
 
 fn parse() -> Result<Args, String> {
@@ -57,6 +64,7 @@ fn parse() -> Result<Args, String> {
         cell_m: 32.0,
         date: None,
         out: PathBuf::from("shots/fields"),
+        site: None,
     };
     let mut all = std::env::args().skip(1);
     while let Some(arg) = all.next() {
@@ -83,6 +91,7 @@ fn parse() -> Result<Args, String> {
             "--cell" => args.cell_m = number(value()?)?,
             "--date" => args.date = Some(Date::parse(&value()?)?),
             "--out" => args.out = PathBuf::from(value()?),
+            "--site" => args.site = Some(value()?),
             "--help" | "-h" => return Err(USAGE.into()),
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
         }
@@ -112,7 +121,47 @@ fn run() -> Result<(), String> {
         }),
         climate,
     );
-    let toward = toward(&land, args.at_km);
+    let site = match args.site.as_deref() {
+        None => None,
+        Some("lake") => {
+            let (site, searched) = land.mountain_lake_searched(PLANET_START, &MountainLake::DEMO);
+            match site {
+                Some(site) => {
+                    println!(
+                        "FIELDS site lake: {:.2} km east, {:.2} km north of the start, its water {:.0} m over the sea, {:.2} km² and {:.0} m deep, the tree line at {:.0} m, peaks to {:.0} m within 3 km ({} lakes looked at, {} fit)",
+                        site.at_km.x,
+                        site.at_km.y,
+                        site.level_m,
+                        site.area_m2 / 1e6,
+                        site.deepest_m,
+                        site.tree_line_m,
+                        site.highest_m,
+                        searched.lakes,
+                        searched.fit
+                    );
+                    // The walk round its shore from where the sandbox starts by it, for a
+                    // film's and a bench's route (places.ts), on the game's own lake grid.
+                    let waters =
+                        terra_land::water::Waters::round(&land, site.toward, 10_000.0, 10.0);
+                    let shore = waters.shore_of(site.toward).unwrap_or(site.shore);
+                    let walk = terra_land::site::shore_walk(&waters, shore, site.toward, 40.0);
+                    let through: Vec<String> = walk
+                        .iter()
+                        .map(|p| format!("{:.0},{:.0}", p.x, p.y))
+                        .collect();
+                    println!(
+                        "FIELDS shore walk, metres east and south of the start: {}",
+                        through.join(";")
+                    );
+                    Some(site)
+                }
+                None => return Err(format!("no mountain lake on this world: {searched:?}")),
+            }
+        }
+        Some(other) => return Err(format!("no site called {other}: lake is the one there is")),
+    };
+    let at_km = site.map_or(args.at_km, |site| site.at_km);
+    let toward = land.along(PLANET_START, at_km * 1000.0);
     let region = Region::sample(&land, toward, args.size_m, args.cell_m);
     let n = region.cells;
     let cells: Vec<usize> = (0..n * n).collect();
@@ -136,6 +185,91 @@ fn run() -> Result<(), String> {
         terra_climate::past(&land.fields, place, day).snow_depth_m()
     });
     let shade = hillshade(&region);
+    // What the ground is made of just under its surface, as digging finds it, and the sea.
+    let sea = land.sea_radius_m();
+    let lying: Vec<Option<[u8; 3]>> = par_map(&cells, |&k| {
+        let point = points[k];
+        if point.length() < sea {
+            return Some([40, 70, 120]);
+        }
+        let made_of = land.ground.sample(point - point.normalize() * 0.3).material;
+        Some(match made_of {
+            material::STONE => [128, 126, 122],
+            material::SCREE => [196, 194, 188],
+            material::GRAVEL => [190, 160, 110],
+            material::SAND => [220, 200, 140],
+            material::ORE => [150, 70, 40],
+            _ => [92, 120, 64],
+        })
+    });
+    // Lakes: the region's hollows filled to their spill points (D322), water leaving by its
+    // edge; the sea is not a lake.
+    let sea_level = land.sea_radius_m() - land.radius_m();
+    let lakes = lakes::fill(&region, land.ground.sea_radius_m().map(|_| sea_level));
+    let lake_cells: Vec<Option<[u8; 3]>> = lakes
+        .lake
+        .iter()
+        .zip(&lakes.level)
+        .zip(&region.heights)
+        .map(|((lake, level), ground)| {
+            lake.map(|_| {
+                let deep = ((level - ground) / 20.0).clamp(0.0, 1.0);
+                [
+                    (60.0 - 40.0 * deep) as u8,
+                    (120.0 - 60.0 * deep) as u8,
+                    (190.0 - 60.0 * deep) as u8,
+                ]
+            })
+        })
+        .collect();
+    // The trees each cell holds (`woods`): how close and how tall, from its season, its
+    // steepness and its footing.
+    let stands: Vec<Stand> = par_map(&cells, |&k| {
+        let water = lakes.lake[k].map(|_| land.radius_m() + lakes.level[k]);
+        let footing = land.footing(points[k], water);
+        woods::stand(&seasons[k], slope[k], footing)
+    });
+    // Trees standing: closer for denser, and a tree at its full height green, krummholz brown.
+    let tree_cells: Vec<Option<[u8; 3]>> = stands
+        .iter()
+        .zip(&shade)
+        .map(|(stand, s)| {
+            (stand.density > 0.02).then(|| {
+                let tall = [24.0, 70.0, 34.0];
+                let low = [120.0, 96.0, 50.0];
+                let t = stand.stature;
+                let c: Vec<u8> = (0..3)
+                    .map(|i| {
+                        ((low[i] + (tall[i] - low[i]) * t) * (1.2 - 0.6 * stand.density) * s)
+                            .min(255.0) as u8
+                    })
+                    .collect();
+                [c[0], c[1], c[2]]
+            })
+        })
+        .collect();
+    let density: Vec<f32> = stands.iter().map(|s| s.density).collect();
+    // The tree line as the map has it, measured: the height under which nine in ten of the
+    // cells holding trees of three metres and more stand, on ground leaning toward the
+    // equator, level, and toward the pole.
+    let measured = |keep: &dyn Fn(f32) -> bool| {
+        let mut heights: Vec<f32> = (0..n * n)
+            .filter(|&k| stands[k].density > 0.3 && !stands[k].krummholz() && keep(facing[k]))
+            .map(|k| over_sea[k])
+            .collect();
+        heights.sort_by(f32::total_cmp);
+        heights.get((heights.len() as f32 * 0.9) as usize).copied()
+    };
+    let measured_sunny = measured(&|f| f > 10.0);
+    let measured_level = measured(&|f| f.abs() <= 10.0);
+    let measured_shaded = measured(&|f| f < -10.0);
+    let mut by_size = lakes.lakes.clone();
+    by_size.sort_by(|a, b| b.area_m2.total_cmp(&a.area_m2));
+    let shaded_lying: Vec<Option<[u8; 3]>> = lying
+        .iter()
+        .zip(&shade)
+        .map(|(c, s)| c.map(|c| c.map(|ch| (ch as f32 * s).min(255.0) as u8)))
+        .collect();
 
     std::fs::create_dir_all(&args.out).map_err(|e| format!("{}: {e}", args.out.display()))?;
     let scale = (768 / n).max(1);
@@ -149,7 +283,7 @@ fn run() -> Result<(), String> {
     let maps: Vec<(&str, &str, Map, String)> = vec![
         (
             "height",
-            "Height over the sea, shaded by the relief, a line every 250 m",
+            "Height over the sea, shaded by the relief, a line every 250 m; lakes, filled to their spill points, blue",
             Map {
                 cells: n,
                 values: &over_sea,
@@ -158,7 +292,7 @@ fn run() -> Result<(), String> {
                 high: high.max(low + 1.0),
                 shade: Some(&shade),
                 lines: &height_lines,
-                over: None,
+                over: Some(&lake_cells),
             },
             format!("{low:.0} m to {high:.0} m"),
         ),
@@ -223,6 +357,36 @@ fn run() -> Result<(), String> {
             format!("none to {snow_top:.2} m"),
         ),
         (
+            "ground",
+            "What the ground is made of at its surface: soil green, bare rock grey, scree pale grey, gravel tan, sand yellow, the sea blue",
+            Map {
+                cells: n,
+                values: &slope,
+                ramp: Ramp::AMOUNT,
+                low: 0.0,
+                high: 60.0,
+                shade: None,
+                lines: &[],
+                over: Some(&shaded_lying),
+            },
+            "by colour".into(),
+        ),
+        (
+            "trees",
+            "Trees as the land's rules grow them: green at their full height, brown as krummholz, darker for closer; a line at half a closed forest",
+            Map {
+                cells: n,
+                values: &density,
+                ramp: Ramp::SNOW,
+                low: 0.0,
+                high: 1.0,
+                shade: Some(&shade),
+                lines: &[0.5],
+                over: Some(&tree_cells),
+            },
+            "none to a closed forest".into(),
+        ),
+        (
             "shelter",
             "Shelter from the prevailing wind (Winstral's Sx over 100 m): red exposed, blue in the lee",
             Map {
@@ -283,8 +447,8 @@ fn run() -> Result<(), String> {
         "  \"region\": {{ \"radius_m\": {}, \"seed\": {}, \"at_km\": [{}, {}], \"size_m\": {}, \"cell_m\": {}, \"cells\": {n}, \"latitude_deg\": {:.2} }},",
         args.radius_m,
         args.seed,
-        args.at_km.x,
-        args.at_km.y,
+        at_km.x,
+        at_km.y,
         args.size_m,
         args.cell_m,
         latitude.to_degrees()
@@ -295,9 +459,52 @@ fn run() -> Result<(), String> {
         "  \"height_m\": {{ \"lowest\": {low:.1}, \"highest\": {high:.1} }},"
     );
     let _ = writeln!(json, "  \"steepest_deg\": {:.1},", range(&slope).1);
+    // How steep the high ground is, a kilometre and more over the sea: the shares of it under
+    // 20 degrees, to 30, to 40, and over, which sets what can grow on it and what is bare.
+    let high_ground: Vec<f32> = (0..n * n)
+        .filter(|&k| over_sea[k] > 1000.0)
+        .map(|k| slope[k])
+        .collect();
+    let share = |lo: f32, hi: f32| {
+        high_ground.iter().filter(|&&s| s >= lo && s < hi).count() as f32
+            / high_ground.len().max(1) as f32
+    };
+    let _ = writeln!(
+        json,
+        "  \"high_ground_slopes\": {{ \"under_20\": {:.3}, \"20_to_30\": {:.3}, \"30_to_40\": {:.3}, \"over_40\": {:.3} }},",
+        share(0.0, 20.0),
+        share(20.0, 30.0),
+        share(30.0, 40.0),
+        share(40.0, 90.0)
+    );
     let _ = writeln!(json, "  \"tree_line_m\": {},", opt(here_line));
     let _ = writeln!(json, "  \"share_above_tree_line\": {above_line:.3},");
     let _ = writeln!(json, "  \"share_with_snow\": {snowy:.3},");
+    let _ = writeln!(
+        json,
+        "  \"tree_line_measured_m\": {{ \"facing_the_equator\": {}, \"level\": {}, \"facing_the_pole\": {} }},",
+        opt(measured_sunny),
+        opt(measured_level),
+        opt(measured_shaded)
+    );
+    let _ = writeln!(json, "  \"lakes\": [");
+    let listed: Vec<String> = by_size
+        .iter()
+        .take(12)
+        .map(|lake| {
+            let at = region.offset(lake.deepest.0, lake.deepest.1);
+            format!(
+                "    {{ \"level_m\": {:.1}, \"area_m2\": {:.0}, \"deepest_m\": {:.1}, \"deepest_at_m\": [{:.0}, {:.0}] }}",
+                lake.level_m - sea_level,
+                lake.area_m2,
+                lake.deepest_m,
+                at.x,
+                at.y
+            )
+        })
+        .collect();
+    let _ = writeln!(json, "{}", listed.join(",\n"));
+    let _ = writeln!(json, "  ],");
     let _ = writeln!(json, "  \"by_latitude\": [");
     for (k, (deg, level, sunny, shaded, snow)) in table.iter().enumerate() {
         let _ = writeln!(
@@ -322,8 +529,8 @@ fn run() -> Result<(), String> {
         "<h1>Field maps</h1><p>{:.1} km by {:.1} km at {:.1} km east, {:.1} km north of the planet's start, latitude {:.2}°, cells of {} m, day {day} of the clock. Tree line here {} m over the sea; {:.0}% of the region above it; {:.0}% under 10 cm of snow or more. North is up.</p>",
         args.size_m / 1000.0,
         args.size_m / 1000.0,
-        args.at_km.x,
-        args.at_km.y,
+        at_km.x,
+        at_km.y,
         latitude.to_degrees(),
         args.cell_m,
         opt(here_line),
@@ -363,20 +570,6 @@ fn run() -> Result<(), String> {
         args.out.join("index.html").display()
     );
     Ok(())
-}
-
-/// The direction from the centre so many kilometres east and north of the planet's start,
-/// along the ground.
-fn toward(land: &Land, at_km: Vec2) -> Vec3 {
-    let start = PLANET_START;
-    let (east, north) = (land.frame.east(start), land.frame.north(start));
-    let along = east * at_km.x + north * at_km.y;
-    let distance_m = along.length() * 1000.0;
-    if distance_m < 1e-3 {
-        return start;
-    }
-    let angle = distance_m / land.radius_m();
-    start * libm::cosf(angle) + along.normalize() * libm::sinf(angle)
 }
 
 /// Heights every `every` metres between two.

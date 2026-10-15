@@ -65,7 +65,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "vantage",
-        takes: "[--time 13,17] [--date 10-15]",
+        takes: "[--place lake] [--time 13,17] [--date 10-15]",
         does: "the vantage sheet: the lush forest from fixed views, side by side, to judge how the world looks (tools/sandbox)",
         group: "Play and check",
         run: |args| {
@@ -109,7 +109,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "film",
-        takes: "[--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- sandbox args]",
+        takes: "[--place lake] [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- sandbox args]",
         does: "a video of a scripted run, by default the forest walk, at the game's own speed (tools/sandbox)",
         group: "Look at things",
         run: |args| {
@@ -201,7 +201,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "fields",
-        takes: "[--radius 30000] [--at E,N] [--size 8000] [--cell 32] [--date 06-20] [--out shots/fields]",
+        takes: "[--radius 30000] [--at E,N] [--size 8000] [--cell 32] [--date 06-20] [--site lake] [--out shots/fields]",
         does: "the field maps: a region of the world's land on a date as maps of its rules (height, slope, facing, the growing season and the tree line, snow, shelter) and their numbers, on the CPU, no GPU (D326)",
         group: "Look at things",
         run: |args| {
@@ -700,7 +700,66 @@ const SCENES: &[Scene] = &[
         ],
         frames: "2400",
     },
+    Scene {
+        name: "lake",
+        about: "the mountain lake (docs/demos.md): from up its shore across the water to the woods, the tree line and the snowy peaks, still; the world and the walker alone",
+        args: &[
+            "--experiment",
+            "walk",
+            "--radius",
+            SCALE_RADIUS,
+            "--site",
+            "lake",
+            "--date",
+            "06-10",
+            "--time",
+            "17",
+            "--vantage-ground",
+            "--vantage",
+            LAKE_VIEW,
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "lake-walk",
+        about: "the mountain lake's shore walked, under the trees and out along the water, as a player would; the world and the walker alone",
+        args: &[
+            "--experiment",
+            "walk",
+            "--radius",
+            SCALE_RADIUS,
+            "--site",
+            "lake",
+            "--date",
+            "06-10",
+            "--time",
+            "17",
+            "--route",
+            "84,32",
+            "--route",
+            "123,16",
+            "--route",
+            "173,16",
+            "--route",
+            "216,22",
+            "--route",
+            "248,-3",
+            "--route",
+            "275,-35",
+            "--route",
+            "302,-67",
+            "--route",
+            "340,-84",
+            "--route",
+            "378,-100",
+        ],
+        frames: "1800",
+    },
 ];
+
+/// Where the lake scene looks from and at, east, up and south of the lake's shore, its height
+/// over the ground there (`places.ts`, the lake's `across`).
+const LAKE_VIEW: &str = "40,60,120,0,200,-1500";
 
 /// Frames run before any are timed, so shaders are ready and the scene has settled.
 const BENCH_SETTLE: &str = "240";

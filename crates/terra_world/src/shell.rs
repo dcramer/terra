@@ -150,6 +150,10 @@ usage: terra_sandbox [options]
                         that share of the world's year after midwinter (21 December),
                         or a day of the clock itself, such as 0, when it starts, in late
                         August (docs/climate.md)
+  --site lake           start at a place the land's rules make, found by its query:
+                        lake, a mountain lake under the tree line with peaks a kilometre
+                        over it, on a world with mountains (--radius 30000); the start
+                        is its shore, facing the water (docs/demos.md)
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
@@ -300,6 +304,9 @@ pub struct Options {
     pub time: Option<f32>,
     /// The date the world's clock is set to, if not its own (`--date`).
     pub date: Option<Date>,
+    /// A place the land's rules make to start at, found by its query (`--site`): `lake`, a
+    /// mountain lake under the tree line with peaks a kilometre over it (docs/demos.md).
+    pub site: Option<String>,
     /// Where the play experiment's player starts, east and south of the start in metres.
     pub start_at: Option<(f32, f32)>,
     /// What the play experiment's player starts facing, east and south of the start.
@@ -445,6 +452,7 @@ impl Options {
             start_at: None,
             time: None,
             date: None,
+            site: None,
             start_facing: None,
             warps: Vec::new(),
             route: Vec::new(),
@@ -518,6 +526,7 @@ impl Options {
                     options.time = Some(hour);
                 }
                 "--date" => options.date = Some(Date::parse(&value("--date")?)?),
+                "--site" => options.site = Some(value("--site")?),
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
                 "--route" => options

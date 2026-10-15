@@ -34,6 +34,23 @@ impl Start {
         })
     }
 
+    /// The start by a lake the land's rules made (`--site`, docs/demos.md): on the shore
+    /// nearest its deepest water, as its lakes were found round it (`Planet::look_round`),
+    /// facing the water, east and south as that facing's right and back.
+    pub fn by_lake(planet: &Planet, site: &terra_land::site::Site) -> Self {
+        let water = planet.surface(site.toward);
+        let shore = planet
+            .waters()
+            .and_then(|waters| waters.shore_of(site.toward))
+            .unwrap_or(site.shore);
+        let shore = planet.surface(shore);
+        let up = shore.normalize();
+        let facing = (water - shore)
+            .reject_from(up)
+            .normalize_or(up.any_orthonormal_vector());
+        Self(Transform::from_translation(shore + up * FLOOR_CLEARANCE_M).looking_to(facing, up))
+    }
+
     /// The point so many metres east and south of the start, on its level.
     pub fn at(&self, east: f32, south: f32) -> Vec3 {
         self.transform_point(Vec3::new(east, 0.0, south))
@@ -44,6 +61,35 @@ impl Start {
     pub fn local(&self, point: Vec3) -> Vec3 {
         self.compute_affine().inverse().transform_point3(point)
     }
+}
+
+/// A place the land's rules make, found by its query (`--site`, docs/demos.md). Panics, saying
+/// why, if the land has no such place, as a scripted run should.
+pub fn find_site(planet: &Planet, name: &str) -> terra_land::site::Site {
+    let climate: terra_climate::Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
+    let land = terra_land::Land::new(planet.voxels().field().clone(), climate);
+    let site = match name {
+        "lake" => {
+            let want = terra_land::site::MountainLake::DEMO;
+            let (site, searched) = land.mountain_lake_searched(terra_land::PLANET_START, &want);
+            site.unwrap_or_else(|| {
+                panic!(
+                    "--site lake: no mountain lake on this world ({searched:?}); mountains need --radius 30000"
+                )
+            })
+        }
+        other => panic!("--site {other}: the sites are lake"),
+    };
+    info!(
+        "Site {name}: a lake {:.0} m over the sea, {:.2} km², the tree line {:.0} m, peaks to {:.0} m, {:.2} km east and {:.2} km north of the planet's start",
+        site.level_m,
+        site.area_m2 / 1e6,
+        site.tree_line_m,
+        site.highest_m,
+        site.at_km.x,
+        site.at_km.y
+    );
+    site
 }
 
 /// Where to stand a base: the most level ground near the start that is clear of the sea,

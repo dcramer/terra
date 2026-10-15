@@ -10,8 +10,14 @@
 
 pub mod frame;
 pub mod ground;
+pub mod lakes;
 pub mod maps;
 pub mod region;
+pub mod round;
+pub mod site;
+pub mod snow;
+pub mod water;
+pub mod woods;
 
 use frame::{Frame, START_LATITUDE};
 use glam::Vec3;
@@ -69,6 +75,23 @@ impl Land {
             height_m: at.length() - self.sea_radius_m(),
             latitude: self.frame.latitude(at),
             sunward: self.frame.sunward(at, normal),
+        }
+    }
+}
+
+impl Land {
+    /// What the ground at a point on it is, for what grows there (`woods`): rock, loose
+    /// stones, soil, or under water by `water` (the distance from the centre to the water's
+    /// surface over it, if there is water).
+    pub fn footing(&self, point: Vec3, water: Option<f32>) -> woods::Footing {
+        use terra_voxel::{Field, material};
+        if water.is_some_and(|level| point.length() < level) {
+            return woods::Footing::Water;
+        }
+        match self.ground.sample(point - point.normalize() * 0.3).material {
+            material::STONE | material::ORE => woods::Footing::Rock,
+            material::SCREE | material::GRAVEL => woods::Footing::Loose,
+            _ => woods::Footing::Soil,
         }
     }
 }

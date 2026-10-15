@@ -31,6 +31,11 @@ use terra_land::ground::{RELIEF_M, ROLLING_M, SEA_LEVEL_M};
 /// on the planet where that matches the ground.
 const START: Vec3 = Vec3::Y;
 
+/// How far round the start the land is worked out ahead on a world with mountains (D322):
+/// its lakes, the seasons its trees follow and its snow, as far as one sees its woods and
+/// peaks clearly.
+const ROUND_M: f32 = 16_000.0;
+
 /// The six faces of the cube the planet is divided along, each as (outward, across, up),
 /// ordered so that triangles built across-then-up face outward. Anything that divides the
 /// planet's surface into a grid uses these.
@@ -55,6 +60,10 @@ pub struct Planet {
     /// How high its hills rise, in metres.
     relief_m: f32,
     cover: Noise,
+    /// The land round the start worked out ahead: its lakes filled to their spill points, its
+    /// seasons and its snow (D322); none
+    /// asked for, the sea alone.
+    round: Option<Arc<terra_land::round::Round>>,
 }
 
 /// What grows at a place, each from 0 to 1.
@@ -68,10 +77,17 @@ pub struct Cover {
 
 impl Planet {
     pub fn new(spec: PlanetSpec) -> Self {
+        let ground = terra_land::ground::world(spec);
+        // Its hills, and on a world large enough its mountains (D322).
+        let relief_m = RELIEF_M
+            + ground
+                .mountains()
+                .map_or(0.0, |range| range.mountains.highest_m());
         Planet {
-            ground: Arc::new(VoxelPlanet::new(terra_land::ground::world(spec))),
-            relief_m: RELIEF_M,
+            ground: Arc::new(VoxelPlanet::new(ground)),
+            relief_m,
             cover: Noise::new(spec.seed.derive("ground cover")),
+            round: None,
         }
     }
 
@@ -82,6 +98,7 @@ impl Planet {
             ground: Arc::new(VoxelPlanet::new(terra_land::ground::smooth(spec))),
             relief_m: 0.0,
             cover: Noise::new(spec.seed.derive("ground cover")),
+            round: None,
         }
     }
 
@@ -92,6 +109,7 @@ impl Planet {
             ground: Arc::new(VoxelPlanet::new(terra_land::ground::rolling(spec))),
             relief_m: ROLLING_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
+            round: None,
         }
     }
 
@@ -136,9 +154,51 @@ impl Planet {
         (self.ground_at(point).length() - self.surface(up).length()).abs() > 0.15
     }
 
-    /// Whether the ground at a point is under the sea.
+    /// Whether the ground at a point is under water: the sea, or a lake (D322).
     pub fn under_sea(&self, point: Vec3) -> bool {
-        self.ground_at(point).length() < self.sea_radius_m()
+        self.ground_at(point).length() < self.water_radius_m(point)
+    }
+
+    /// The distance from the centre to the water's surface over a point: a lake's where a
+    /// lake is, the sea's elsewhere (`terra_core::Water`, D45). Where there is no water at all
+    /// it is the sea's level all the same, under the ground.
+    pub fn water_radius_m(&self, point: Vec3) -> f32 {
+        use terra_core::Water;
+        self.waters()
+            .and_then(|waters| waters.level(point.normalize_or(Vec3::Y)))
+            .unwrap_or(self.sea_radius_m())
+    }
+
+    /// The highest water's surface at or beside a point, a lake's cell on (D322): what grows
+    /// keeps out of it, since a lake's drawn water reaches a cell past its own.
+    pub fn water_near_m(&self, point: Vec3) -> f32 {
+        let sea = self.sea_radius_m();
+        self.waters()
+            .and_then(|waters| waters.lake_near(point.normalize_or(Vec3::Y), 1))
+            .map_or(sea, |lake| lake.max(sea))
+    }
+
+    /// The lakes found round the start, if the land round it was looked at.
+    pub fn waters(&self) -> Option<&terra_land::water::Waters> {
+        self.round.as_ref().map(|round| &round.waters)
+    }
+
+    /// The land round the start, its rules worked out ahead (lakes, seasons, snow), if it
+    /// was looked at.
+    pub fn round(&self) -> Option<&Arc<terra_land::round::Round>> {
+        self.round.as_ref()
+    }
+
+    /// Works out the land round a point, so many metres across, ahead (D322): every hollow of
+    /// the ground as generated filled to its spill point, the growing seasons its trees follow
+    /// and the snow lying on `day`.
+    pub fn look_round(&mut self, around: Vec3, across_m: f32, day: i64) {
+        let climate: terra_climate::Climate =
+            crate::data::read(crate::daylight::WorldClimate::FILE);
+        let land = terra_land::Land::new(self.ground.field().clone(), climate);
+        self.round = Some(Arc::new(terra_land::round::Round::new(
+            land, around, across_m, day,
+        )));
     }
 
     /// Which way the ground faces at a point on it.
@@ -185,6 +245,12 @@ impl Planet {
         self.relief_m
     }
 
+    /// Whether the planet has mountains (D322), whose bare rock, scree and gravel the ground is
+    /// drawn with.
+    pub fn has_mountains(&self) -> bool {
+        self.ground.field().mountains().is_some()
+    }
+
     /// The point on the ground as it was generated, in a direction from the centre: before
     /// any digging, which is right for laying out a world.
     pub fn surface(&self, direction: Vec3) -> Vec3 {
@@ -203,7 +269,7 @@ impl Planet {
 
     /// What grows on the ground at a point, given which way the ground faces there.
     pub fn cover(&self, point: Vec3, normal: Vec3) -> Cover {
-        let above_sea = point.length() - self.sea_radius_m();
+        let above_sea = point.length() - self.water_near_m(point);
         let steepness = 1.0 - normal.dot(point.normalize());
         let patches = self.cover.fbm(point / 70.0, 3, 2.0, 0.5);
         Cover {
@@ -307,6 +373,9 @@ pub struct GroundExtension {
     /// How many metres the fifth layer on, leaf litter, needles and roots, each cover.
     #[uniform(100)]
     more_metres: Vec4,
+    /// How many metres the ninth layer on, scree, gravel and snow, each cover.
+    #[uniform(100)]
+    mountain_metres: Vec4,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     color: Option<Handle<Image>>,
@@ -372,11 +441,13 @@ pub struct GroundTextures {
 
 /// The layers of `materials/ground`, in order, and how many metres each covers
 /// (assets/materials/README.md).
-const GROUND_LAYERS: u32 = 8;
+const GROUND_LAYERS: u32 = 11;
 const GROUND_LAYER_METRES: Vec4 = Vec4::new(1.3, 2.0, 2.7, 1.5);
 /// The fifth layer on, for the forest floor: fallen leaves, fallen needles, duff with roots
 /// in it, and moss.
 const GROUND_MORE_METRES: Vec4 = Vec4::new(2.0, 1.5, 1.67, 0.7);
+/// The ninth layer on, for mountains (D322): scree, gravel and snow.
+const GROUND_MOUNTAIN_METRES: Vec4 = Vec4::new(1.8, 2.0, 2.0, 1.0);
 
 impl GroundTextures {
     /// The layers' colours and normal maps, as arrays, for materials drawn in them too, as
@@ -477,6 +548,7 @@ impl GroundExtension {
             sea_deep: tweaks.sea_deep.into(),
             layer_metres: GROUND_LAYER_METRES,
             more_metres: GROUND_MORE_METRES,
+            mountain_metres: GROUND_MOUNTAIN_METRES,
             // Textures are for ground that is covered; the bare stand-in stays flat.
             textured: (tweaks.ground_cover > 0.0) as u32,
             color: Some(textures.color.clone()),
@@ -539,7 +611,7 @@ pub fn plugin(app: &mut App) {
     };
     let yard = app.world().resource::<Options>().yard();
     let rolling = app.world().resource::<Options>().rolling;
-    let planet = if yard && rolling {
+    let mut planet = if yard && rolling {
         Planet::rolling(spec)
     } else if yard {
         Planet::smooth(spec)
@@ -563,7 +635,29 @@ pub fn plugin(app: &mut App) {
         grass_lush: Color::srgb(0.3, 0.5, 0.2),
         sand: Color::srgb(0.84, 0.74, 0.55),
     };
-    let start = crate::start::Start::choose(&planet, yard);
+    // On a world with mountains, the land round the start is worked out before anything stands
+    // on it (D322): its lakes, seasons and snow on the clock's date. A site the land's rules
+    // make is found first, and the start stood on its shore once its lakes are known.
+    let day = {
+        let options = app.world().resource::<Options>();
+        let climate: terra_climate::Climate =
+            crate::data::read(crate::daylight::WorldClimate::FILE);
+        options.date.map_or(0, |date| date.day(&climate.year))
+    };
+    let start = match app.world().resource::<Options>().site.clone() {
+        Some(name) => {
+            let site = crate::start::find_site(&planet, &name);
+            planet.look_round(site.toward, ROUND_M, day);
+            crate::start::Start::by_lake(&planet, &site)
+        }
+        None => {
+            let start = crate::start::Start::choose(&planet, yard);
+            if planet.has_mountains() {
+                planet.look_round(start.translation, ROUND_M, day);
+            }
+            start
+        }
+    };
     app.insert_resource(planet)
         .insert_resource(start)
         .insert_resource(tweaks)
@@ -580,6 +674,7 @@ pub fn plugin(app: &mut App) {
         .add_plugins((
             MaterialPlugin::<GroundMaterial>::default(),
             MaterialPlugin::<WaterMaterial>::default(),
+            crate::lakes::plugin,
         ))
         .add_plugins(
             ResourceInspectorPlugin::<Tweaks>::default()
@@ -681,7 +776,14 @@ fn apply_tweaks(
     planet: Res<Planet>,
     sky: Option<Res<Sky>>,
     mut sun: Single<(&mut DirectionalLight, &mut Transform), (With<Sun>, Without<Sea>)>,
-    mut sea: Single<(&mut Transform, &mut Visibility), With<Sea>>,
+    mut sea: Single<
+        (
+            &mut Transform,
+            &mut Visibility,
+            &MeshMaterial3d<WaterMaterial>,
+        ),
+        With<Sea>,
+    >,
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
     textures: Res<GroundTextures>,
@@ -714,8 +816,12 @@ fn apply_tweaks(
             material.extension = ground.clone();
         }
     }
-    for (_, material) in water_materials.iter_mut() {
-        material.base.base_color = tweaks.sea_shallow;
+    // Every water reflects the sky; the sea's colour is the tweaks', a lake's its own.
+    let sea_material = sea.2.id();
+    for (id, material) in water_materials.iter_mut() {
+        if id == sea_material {
+            material.base.base_color = tweaks.sea_shallow;
+        }
         material.extension = WaterExtension::new(sky.as_deref());
     }
 }

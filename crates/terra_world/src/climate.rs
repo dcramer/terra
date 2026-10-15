@@ -71,10 +71,16 @@ impl ClimateFields {
     /// A point as the climate takes it, on ground facing `normal`, which leans it toward the
     /// sun or away (D323).
     pub fn place_facing(&self, at: Vec3, normal: Vec3) -> Place {
+        // On a world too small to be to scale, the whole of it takes the start's latitude.
+        let latitude = if terra_land::frame::has_latitudes(self.sea_radius_m) {
+            self.frame.latitude(at)
+        } else {
+            LATITUDE
+        };
         Place {
             at,
             height_m: at.length() - self.sea_radius_m,
-            latitude: self.frame.latitude(at),
+            latitude,
             sunward: self.frame.sunward(at, normal),
         }
     }
@@ -549,8 +555,8 @@ fn paint_maps(
     let corner = corner(middle);
     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     let latitude = fields
-        .frame
-        .latitude(planet.surface(start.at(middle.x, middle.y).normalize()));
+        .place(planet.surface(start.at(middle.x, middle.y).normalize()))
+        .latitude;
     let day_hours = fields.fields.daylight(latitude, time.day()).day_hours;
     for b in 0..TEXELS {
         for a in 0..TEXELS {

@@ -327,14 +327,17 @@ fn keys() -> [(f32, Light); 6] {
 /// The haze's colour and how far one sees through it, for the horizon's colour and how much
 /// of the sky is open over the eye (D224, D273): the forest's own shaded green air under a
 /// closed canopy, the open air's in the open.
-fn haze_for(horizon: Vec3, open: f32) -> (Vec3, f32) {
+fn haze_for(horizon: Vec3, open: f32, air: crate::air::AirScale) -> (Vec3, f32) {
     // Only well out from under the trees: in a glade among old oaks, half open, it is still
     // the forest's haze, and it is green, the light come through leaves, not the horizon's
     // blue, which washed the middle distance teal (D279).
     let open = smoothstep(0.55, 0.98, open);
     let shade = horizon.lerp(Vec3::new(0.44, 0.48, 0.3), 0.65) * 0.62;
+    // Out in the open as far as the small planet's air let one see, in the air's own metres
+    // (D334): on a world whose air is nearer the true air, farther.
+    let open_visible = OPEN_VISIBLE_M * crate::air::HAZE_SCALE / air.0;
     let visible = super::scene::HAZE_VISIBLE_M
-        * libm::powf(OPEN_VISIBLE_M / super::scene::HAZE_VISIBLE_M, open);
+        * libm::powf(open_visible / super::scene::HAZE_VISIBLE_M, open);
     (shade.lerp(horizon * OPEN_AIR, open), visible)
 }
 
@@ -427,7 +430,14 @@ fn follow_the_date(clock: Res<Clock>, climate: Res<WorldClimate>, path: Option<R
 fn seen_from_the_camera(
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     path: Option<ResMut<SkyPath>>,
+    planet: Res<Planet>,
+    options: Res<Options>,
 ) {
+    // On a world too small to be to scale the sky is the start's everywhere, as it always was:
+    // a few hundred metres there would be degrees of latitude. The yard's sun stands still.
+    if !terra_land::frame::has_latitudes(planet.radius_m()) || options.yard() {
+        return;
+    }
     let (Some(camera), Some(mut path)) = (camera, path) else {
         return;
     };
@@ -455,6 +465,7 @@ fn shine(
     mut grading: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
+    air_scale: Option<Res<crate::air::AirScale>>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -531,14 +542,22 @@ fn shine(
     // way to the open air's (D273): thinner, so the far forest and the land beyond show, and
     // in the horizon's colour, so they fade toward the sky rather than into a dark band. The
     // air's own haze (`air`) carries the distance from there. A world with no trees to hide
-    // the sky keeps the forest's haze.
-    let open = open.map_or(0.0, |open| open.0);
+    // the sky keeps the forest's haze on the small planet, as it was tuned; on a world whose
+    // views reach kilometres (D334) its far ground stands in the open air.
+    let far_seeing = air_scale
+        .as_deref()
+        .is_some_and(|scale| scale.0 < crate::air::HAZE_SCALE);
+    let open = open.map_or(if far_seeing { 1.0 } else { 0.0 }, |open| open.0);
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
     let level = NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark);
     for mut fog in &mut haze {
-        let (air, visible) = haze_for(light.horizon, open);
+        let air_scale = air_scale
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::air::AirScale(crate::air::HAZE_SCALE));
+        let (air, visible) = haze_for(light.horizon, open, air_scale);
         fog.color = colour(air.lerp(MOON_HAZE, dark) * level);
         fog.directional_light_color = colour(light.light * 0.55).with_alpha(0.5);
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
@@ -575,8 +594,9 @@ mod tests {
     #[test]
     fn out_of_the_trees_the_haze_is_thinner_and_takes_the_horizons_colour() {
         let horizon = Vec3::new(0.9, 0.86, 0.8);
-        let (under, near) = haze_for(horizon, 0.1);
-        let (out, far) = haze_for(horizon, 1.0);
+        let small = crate::air::AirScale(crate::air::HAZE_SCALE);
+        let (under, near) = haze_for(horizon, 0.1, small);
+        let (out, far) = haze_for(horizon, 1.0, small);
         assert_eq!(near, super::super::scene::HAZE_VISIBLE_M);
         assert!(far > near * 8.0, "{far} against {near}");
         // Under the canopy green and dim; out of it the horizon's own hue.
@@ -589,7 +609,7 @@ mod tests {
         // Between, it changes smoothly as the eye walks out.
         let mut last = near;
         for k in 1..=20 {
-            let (_, now) = haze_for(horizon, k as f32 / 20.0);
+            let (_, now) = haze_for(horizon, k as f32 / 20.0, small);
             assert!(now >= last && now < last * 1.6, "{last} then {now}");
             last = now;
         }

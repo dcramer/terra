@@ -100,14 +100,69 @@ fn wanted(planet: &Planet, viewer: Vec3) -> HashMap<ChunkId, Sides> {
 /// and alpha how much of the sky it sees (see [`sky_seen`]).
 fn colour(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> [f32; 4] {
     let rock = match made_of {
+        // In mountains stone at the surface is their bare rock, drawn as [`lying`] says.
+        material::STONE if planet.has_mountains() => 0.0,
         material::STONE => 0.5,
         material::ORE => 1.0,
         _ => 0.0,
     };
     let cover = planet.cover(point, normal);
-    let grass = if rock > 0.0 { 0.0 } else { cover.grass };
+    let laid_bare = planet.has_mountains()
+        && matches!(
+            made_of,
+            material::SCREE | material::GRAVEL | material::STONE
+        );
+    let grass = if rock > 0.0 || laid_bare {
+        0.0
+    } else {
+        cover.grass
+    };
     [grass, cover.lush, rock, 1.0]
 }
+
+/// What the land's rules lay on the ground, for the ground shader (D322), in a vertex's two
+/// texture coordinates:
+/// - the first's x what loose stones lie there, 1 scree and 2 gravel, 0 none; its y how deep
+///   the snow lies, in metres;
+/// - the second's x the bare rock there, 0 to 1, or below 0 the woods standing on it, as how
+///   close they stand, negated; its y how far it stands above the nearest lake's water, in
+///   metres, below 0 under it, [`DRY_M`] far from any.
+fn lying(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> ([f32; 2], [f32; 2]) {
+    use terra_land::woods::Footing;
+    let up = point.normalize_or(Vec3::Y);
+    let Some(round) = planet.round() else {
+        let loose = match made_of {
+            material::SCREE => 1.0,
+            material::GRAVEL => 2.0,
+            _ => 0.0,
+        };
+        let bare = if made_of == material::STONE { 1.0 } else { 0.0 };
+        return ([loose, 0.0], [bare, DRY_M]);
+    };
+    let lake = round.waters.lake_near(up, 2);
+    let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
+    let snow = round.snow_m(point, normal);
+    let (loose, footing) = match made_of {
+        material::SCREE => (1.0, Footing::Loose),
+        material::GRAVEL => (2.0, Footing::Loose),
+        material::STONE => (0.0, Footing::Rock),
+        _ => (0.0, Footing::Soil),
+    };
+    let footing = if above_water < 0.0 {
+        Footing::Water
+    } else {
+        footing
+    };
+    let rock_or_woods = if footing == Footing::Rock {
+        1.0
+    } else {
+        -round.stand(point, normal, footing).density
+    };
+    ([loose, snow], [rock_or_woods, above_water])
+}
+
+/// How far above a lake a vertex is said to be when no lake is near.
+const DRY_M: f32 = 50.0;
 
 /// Chunks this fine or finer work out how much sky each vertex sees; coarser ones are
 /// far enough off that it does not show.
@@ -153,15 +208,26 @@ fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
             colour
         })
         .collect();
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    // Only a world with mountains carries what they lay, so other worlds' ground costs no more.
+    if planet.has_mountains() {
+        let (laid, bare): (Vec<[f32; 2]>, Vec<[f32; 2]>) = chunk
+            .materials
+            .iter()
+            .zip(chunk.positions.iter().zip(&chunk.normals))
+            .map(|(weights, (&point, &normal))| lying(planet, point, normal, weights.ids[0]))
+            .unzip();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, laid);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, bare);
+    }
     Some(
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, chunk.positions)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, chunk.normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
-        .with_inserted_indices(Indices::U32(chunk.indices)),
+        mesh.with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, chunk.positions)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, chunk.normals)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+            .with_inserted_indices(Indices::U32(chunk.indices)),
     )
 }
 

@@ -4,15 +4,17 @@
 // sixtieth of a second a frame, put together at 30 frames a second, so it plays at the
 // game's own speed however slowly it was drawn.
 //
-//   node tools/sandbox/film.ts [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- <sandbox options>]
+//   node tools/sandbox/film.ts [--place lush|lake] [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- <sandbox options>]
 //
 // Without sandbox options it walks the bench's route through the lush forest, the world
-// and the walker alone. Needs ffmpeg. Node 22.18 or later; no dependencies.
+// and the walker alone; with --place, that place's own route (places.ts). Needs ffmpeg. Node 22.18
+// or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ROOT } from "./client.ts";
+import { place } from "./places.ts";
 
 const ROUTE = ["-58,-39", "-40,-69", "-6,-80", "30,-74", "59,-54", "77,-22", "79,14"].flatMap((at) => ["--route", at]);
 // Halfway, a look up into the canopy and back down, as the walk bench does (D185).
@@ -29,7 +31,13 @@ const hour = arg("--time", "15");
 // A day of the year to film, as the sandbox's --date takes it (docs/climate.md).
 const date = arg("--date", "");
 const dated = date ? ["--date", date] : [];
-const sandbox = dash < 0 ? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK] : args.slice(dash + 1);
+// A place's own route (places.ts, D326), walked from where it starts.
+const placed = own.includes("--place") ? place(arg("--place", "lush")) : undefined;
+const walked = placed?.route
+  ? [...placed.args, "--time", hour, ...dated, "--at", placed.route.at, "--face", placed.route.face, ...placed.route.through.split(";").flatMap((at) => ["--route", at])]
+  : undefined;
+const sandbox =
+  dash >= 0 ? args.slice(dash + 1) : (walked ?? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK]);
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
 const frames = resolve(dirname(out), "film-frames");

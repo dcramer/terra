@@ -196,9 +196,9 @@ fn walk(
         // Trunks, rocks, stumps and logs taller than a step push the player round them; lower
         // ones are stepped onto, below (D267).
         target = obstacles.push_out(target, walker.radius, walker.step_up);
-        // The sea is for looking at: wade in a little way and no further.
+        // The sea and the lakes are for looking at: wade in a little way and no further.
         let ground_ahead = planet.ground_at(target).length();
-        if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
+        if ground_ahead < planet.water_radius_m(target) - WADE_DEPTH_M
             && ground_ahead < planet.ground_at(feet).length()
         {
             target = feet;

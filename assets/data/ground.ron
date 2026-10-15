@@ -5,4 +5,6 @@
 [
     (material: "Stone", gives: "Stone", per_item_m3: 0.4),
     (material: "Ore", gives: "Ore", per_item_m3: 0.4),
+    // Scree is loose broken rock: more of it makes a stone than of solid stone.
+    (material: "Scree", gives: "Stone", per_item_m3: 0.6),
 ]

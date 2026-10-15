@@ -9,9 +9,12 @@
 // For the views inside the forest, how each looks against Sons of the Forest's own daytime
 // frames: brightness, near black, warmth, local contrast, lit litter (look.ts, D286).
 //
-//   node tools/sandbox/vantage.ts [--time 13,17] [--date 10-15] [--out shots/vantage]
+//   node tools/sandbox/vantage.ts [--place lush|lake] [--time 13,17] [--date 10-15] [--out shots/vantage]
 //
-// --date shows the views on a day of the year (the sandbox's --date, docs/climate.md).
+// --place picks the place and its views (places.ts, D326): the lush forest by default, or the
+// mountain lake, whose views are measured by band against its own reference and which has no
+// canopy to look up through. --date shows the views on a day of the year (the sandbox's
+// --date, docs/climate.md), over the place's own.
 //
 // Writes <out>/<hour>-<view>.png and <out>/sheet.jpg. Needs ImageMagick (cargo xtask doctor).
 // Node 22.18 or later; no dependencies.
@@ -20,24 +23,23 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
 import * as game from "./client.ts";
-import { line, look, meanOf } from "./look.ts";
+import { bands, bandsLine, line, look, meanOf, meanOfBands, reference } from "./look.ts";
+import { place } from "./places.ts";
 import { readPng } from "./png.ts";
 import { ROOT, imageMagick } from "./client.ts";
 
-/// Each view: a name, where the camera stands and what it looks at, in metres east, up and
-/// south of the start. The forest is 220 m round the start, with a clearing of 14 m.
-const VIEWS: [string, string][] = [
-  ["floor", "-56,1.7,-43,-72,1.0,-55"],
-  ["edge", "0,1.8,250,0,5,200"],
-  ["clearing", "7,1.8,9,-8,1.2,-7"],
-  ["overlook", "0,45,150,0,0,0"],
-  // Close along a path at eye height, where the floor, undergrowth and trunks are judged.
-  ["path", "-54,1.6,-41,-60,0.5,-48"],
-  // Into a spruce grove.
-  ["grove", "-21.9,1.7,-100,-21.9,4,-114"],
-];
-/// The views inside the forest, whose look (`look.ts`) is held against Sons of the Forest's.
-const FOREST_VIEWS = ["floor", "clearing", "path", "grove"];
+const arg = (name: string, fallback: string) => {
+  const at = process.argv.indexOf(name);
+  return at > 0 ? process.argv[at + 1] : fallback;
+};
+/// The place (places.ts): its views, a name and where the camera stands and what it looks at,
+/// in metres east, up and south of the start; those held to its look's reference; the
+/// sandbox's options that make it.
+const PLACE = place(arg("--place", "lush"));
+const VIEWS = PLACE.views;
+const FOREST_VIEWS = PLACE.measured;
+const AIM = reference(PLACE.look);
+const MADE = [...PLACE.args, ...(PLACE.ground ? ["--vantage-ground"] : [])];
 /// Frames each view is held for before it is pictured: grass is built round the camera as
 /// it arrives, and levels of detail fade in.
 const HOLD = 200;
@@ -52,14 +54,11 @@ const BLOCK_M = 20;
 /// from a bush rather than standing in it.
 const ASIDE_M = 1.2;
 
-const arg = (name: string, fallback: string) => {
-  const at = process.argv.indexOf(name);
-  return at > 0 ? process.argv[at + 1] : fallback;
-};
 const hours = arg("--time", "13,17").split(",");
 const date = arg("--date", "");
 const dated = date ? ["--date", date] : [];
-const out = resolve(ROOT, arg("--out", "shots/vantage"));
+const placeName = arg("--place", "lush");
+const out = resolve(ROOT, arg("--out", placeName === "lush" ? "shots/vantage" : `shots/vantage-${placeName}`));
 mkdirSync(out, { recursive: true });
 
 const build = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" });
@@ -73,7 +72,7 @@ for (const hour of hours) {
   const started = Date.now();
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
+    ["--offscreen", "--clean", ...MADE, "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
     // Run outside Cargo, so told where assets/ is, as Cargo would.
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );
@@ -94,15 +93,20 @@ for (const hour of hours) {
     if (bare) console.log(`vantage: ${name} at ${hour}:00: bare ground within 30 m ${bare[1]}%, paths ${bare[2]}%`);
     tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
   });
-  // How the views inside the forest look against Sons of the Forest's own frames (D286).
+  // How the measured views look against the place's reference (D286), and by band where the
+  // reference is of open views (D326).
   const inside = VIEWS.filter(([name]) => FOREST_VIEWS.includes(name)).map(([name]) => {
-    const l = look(readPng(resolve(out, `${hour}-${name}.png`)));
-    console.log(`vantage: look: ${line(`${name} at ${hour}:00`, l)}`);
-    return l;
+    const p = readPng(resolve(out, `${hour}-${name}.png`));
+    const l = look(p);
+    console.log(`vantage: look: ${line(`${name} at ${hour}:00`, l, AIM.look, PLACE.look)}`);
+    const b = bands(p);
+    if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`${name} at ${hour}:00`, b, AIM.bands, PLACE.look)}`);
+    return { l, b };
   });
-  console.log(`vantage: look: ${line(`mean at ${hour}:00`, meanOf(inside))}`);
+  console.log(`vantage: look: ${line(`mean at ${hour}:00`, meanOf(inside.map((v) => v.l)), AIM.look, PLACE.look)}`);
+  if (AIM.bands) console.log(`vantage: bands: ${bandsLine(`mean at ${hour}:00`, meanOfBands(inside.map((v) => v.b)), AIM.bands, PLACE.look)}`);
   console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
-  if (hour === hours[0]) tiles.push(...canopy(hour), ...(await blocking(hour)));
+  if (hour === hours[0] && PLACE.forest) tiles.push(...canopy(hour), ...(await blocking(hour)));
 }
 
 /// How closed the canopy is: from eye height, 1.7 m over the ground, looking straight up at

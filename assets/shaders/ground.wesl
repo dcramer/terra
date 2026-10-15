@@ -50,6 +50,8 @@ struct Ground {
     layer_metres: vec4<f32>,
     textured: u32,
     more_metres: vec4<f32>,
+    // How many metres the ninth layer on, scree, gravel and snow, each cover.
+    mountain_metres: vec4<f32>,
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
@@ -114,6 +116,26 @@ const LITTER: u32 = 4u;
 const NEEDLES: u32 = 5u;
 const ROOTS: u32 = 6u;
 const MOSS: u32 = 7u;
+const SCREE: u32 = 8u;
+const GRAVEL: u32 = 9u;
+const SNOW_LAYER: u32 = 10u;
+
+// How wet the ground is at so many metres above a lake's water (D322): soaked at the waterline
+// and drying over a hand or two above it, its edge broken by `fleck`.
+fn wet_band(above: f32, fleck: f32) -> f32 {
+    return (1.0 - smoothstep(0.0, 0.3 + 0.25 * fleck, above)) * step(-0.3, above);
+}
+
+// The ground by a lake (D322): darker where wet above the water, as wet stone and soil are
+// (Lagarde: wet ground darkens and smooths the dry, its lighting the same), and under it
+// darkened toward the water's colour with depth, the bed fading into the deep. `above` is how
+// far over the nearest lake's water the ground stands, below 0 under it.
+fn lake_shore(colour: vec3<f32>, above: f32, fleck: f32) -> vec3<f32> {
+    let wet = wet_band(above, fleck);
+    let under = smoothstep(0.0, 5.0, -above);
+    let damp = colour * mix(1.0, 0.55, wet);
+    return mix(damp, vec3<f32>(0.012, 0.03, 0.026), under * 0.75);
+}
 
 // How much more the layers' relief bends the light than their normal maps say: the floor's
 // leaves, clods and needles are lit mostly by the sky under the canopy (D270), where a
@@ -220,8 +242,10 @@ fn layer(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32
     var metres = 1.0;
     if index < 4u {
         metres = ground.layer_metres[index];
-    } else {
+    } else if index < 8u {
         metres = ground.more_metres[index - 4u];
+    } else {
+        metres = ground.mountain_metres[index - 8u];
     }
     let k = 1.0 / (metres * scale);
     let p = world * k;
@@ -415,8 +439,10 @@ fn biplanar(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<
     var metres = 1.0;
     if index < 4u {
         metres = ground.layer_metres[index];
-    } else {
+    } else if index < 8u {
         metres = ground.more_metres[index - 4u];
+    } else {
+        metres = ground.mountain_metres[index - 8u];
     }
     let k = 1.0 / (metres * scale);
     let a = abs(n);
@@ -445,18 +471,18 @@ fn biplanar(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<
 // The layers the low preset may draw, in the order they lie, bottom first, as the high
 // preset lays them one over another.
 @if(GROUND_LOW)
-const LOW_LAYERS: u32 = 9u;
+const LOW_LAYERS: u32 = 12u;
 
 // The floor at the low preset: each layer's share where it shows, then the two that show
 // most sampled and settled by height, near the camera; flat colours farther off. `amounts`
 // are how much of each lies over what is under it, and `tints` its colour.
 @if(GROUND_LOW)
-fn low_floor(amounts: array<f32, 9>, tint_of: array<vec3<f32>, 9>, world: vec3<f32>, n: vec3<f32>) -> Layer {
+fn low_floor(amounts: array<f32, 12>, tint_of: array<vec3<f32>, 12>, world: vec3<f32>, n: vec3<f32>) -> Layer {
     var tints = tint_of;
     let gx = dpdx(world);
     let gy = dpdy(world);
     // What shows of each, from the top down: its own amount of what the layers over it leave.
-    var shares: array<f32, 9>;
+    var shares: array<f32, 12>;
     var left = 1.0;
     for (var k = 0u; k < LOW_LAYERS; k++) {
         let i = LOW_LAYERS - 1u - k;
@@ -509,9 +535,9 @@ fn low_floor(amounts: array<f32, 9>, tint_of: array<vec3<f32>, 9>, world: vec3<f
 // same place.
 @if(GROUND_LOW)
 fn low_layer(i: u32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
-    var index = array<u32, 9>(SOIL, ROCK, LITTER, NEEDLES, ROOTS, GRASS, MOSS, ROCK, SAND);
-    var scale = array<f32, 9>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6, 1.0);
-    var offset = array<f32, 9>(0.0, 37.0, 41.0, 29.0, 3.0, 11.0, 5.0, 0.0, 0.0);
+    var index = array<u32, 12>(SOIL, ROCK, LITTER, NEEDLES, ROOTS, GRASS, MOSS, ROCK, SAND, ROCK, SCREE, GRAVEL);
+    var scale = array<f32, 12>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6, 1.0, 1.0, 1.0, 1.0);
+    var offset = array<f32, 12>(0.0, 37.0, 41.0, 29.0, 3.0, 11.0, 5.0, 0.0, 0.0, 37.0, 19.0, 23.0);
     var drawn = biplanar(index[i], scale[i], tint, world + offset[i], gx, gy, n);
     if i == 0u {
         // Trodden soil's light and dark drawn out, as the high preset's (D294).
@@ -591,6 +617,41 @@ fn fragment(
             litter = max(litter, fresh);
             grows.r = min(grows.r, 1.0 - fresh);
         }
+        // What the land's rules lay on the ground (D322, terrain.rs `lying`): scree and gravel,
+        // bare rock, snow, and how close the woods stand, frayed by noise so edges wander.
+        // The first texture coordinate's x is the loose stones (1 scree, 2 gravel), its y the
+        // snow's depth in metres; the second's x the bare rock, or below 0 the woods.
+        var scree = 0.0;
+        var gravel = 0.0;
+        var bare = 0.0;
+        var snow = 0.0;
+        var woods = 0.0;
+@if(VERTEX_UVS_A)
+        {
+            let loose = in.uv.x + (blotch - 0.5) * 0.6;
+            scree = smoothstep(0.3, 0.7, 1.0 - abs(loose - 1.0));
+            gravel = smoothstep(0.3, 0.7, loose - 1.0);
+            // Snow lies on what faces up, its edge broken, thinning off the steep.
+            let up_facing = smoothstep(0.5, 0.82, flatness + (fleck - 0.5) * 0.12);
+            snow = smoothstep(0.02, 0.2, in.uv.y + (blotch - 0.5) * 0.12 + (fleck - 0.5) * 0.05) * up_facing;
+        }
+@if(VERTEX_UVS_B)
+        {
+            bare = smoothstep(0.25, 0.6, in.uv_b.x + (fleck - 0.5) * 0.3 + (blotch - 0.5) * 0.3);
+            woods = clamp(-in.uv_b.x, 0.0, 1.0);
+        }
+        let snow_tint = vec3<f32>(0.7, 0.74, 0.8) * (0.92 + 0.12 * fleck);
+        // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
+        // conifer canopy (the far crowns' colour, linear), so a forested slope reads forested to
+        // the horizon (docs/demos.md §1); nearer, the cards stand on it and it is darker
+        // under them a little.
+        let far_off = distance(world, view.world_position);
+        let canopy = vec3<f32>(0.018, 0.036, 0.016) * (0.85 + 0.3 * blotch);
+        let under_woods = woods * mix(0.25, 1.0, smoothstep(3200.0, 4400.0, far_off)) * smoothstep(300.0, 700.0, far_off);
+        let granite = ground.steep.rgb * (0.8 + 0.4 * blotch);
+        let scree_tint = ground.steep.rgb * 1.25 * (0.85 + 0.3 * fleck);
+        // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
+        let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);
 @if(GROUND_LOW) {
         // The same layers and shares as below, drawn as `low_floor` says.
         let n = normalize(in.world_normal);
@@ -608,8 +669,8 @@ fn fragment(
         let above_sea = from_centre - ground.sea_radius_m;
         let undug = 1.0 - smoothstep(0.1, 0.3, grows.b);
         let sandy = (1.0 - smoothstep(0.35, 1.5, above_sea + (blotch - 0.5) * 0.9)) * ground.cover * undug;
-        let amounts = array<f32, 9>(1.0, steep, leaves, needly, rooty, grass, mossy, rock, sandy);
-        let tints = array<vec3<f32>, 9>(
+        let amounts = array<f32, 12>(1.0, steep, leaves, needly, rooty, grass, mossy, rock, sandy, bare, scree, gravel);
+        let tints = array<vec3<f32>, 12>(
             // Damp, packed patches darker and dry crumbs lighter, as the high preset's (D294).
             mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch)
                 * mix(1.18, 0.62, smoothstep(0.3, 0.75, noise(world * 0.6 + 31.0) * 0.6 + noise(world * 2.1 + 47.0) * 0.4)),
@@ -621,6 +682,9 @@ fn fragment(
             vec3<f32>(0.056, 0.08, 0.026) * (0.8 + 0.4 * fleck),
             mix(vec3<f32>(0.12, 0.1, 0.08) * (0.85 + 0.3 * blotch), vec3<f32>(0.24, 0.08, 0.04) * (0.8 + 0.4 * fleck), ore),
             ground.sand.rgb,
+            granite,
+            scree_tint,
+            gravel_tint,
         );
         let ground_is = low_floor(amounts, tints, world, n);
         // The blades' shade and the broad swells, over all but dug rock and sand.
@@ -637,6 +701,12 @@ fn fragment(
             let foam_width = 0.07 + 0.05 * noise(world * 1.7 + globals.time * 0.25);
             let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
             colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover * undug);
+        }
+        colour = mix(colour, snow_tint, snow);
+        colour = mix(colour, canopy, under_woods * (1.0 - snow));
+@if(VERTEX_UVS_B)
+        {
+            colour = lake_shore(colour, in.uv_b.y, fleck);
         }
         pbr_input.N = ground_is.normal;
 } @else {
@@ -715,6 +785,21 @@ fn fragment(
         ground_is.colour *= 1.0 - 0.6 * smoothstep(0.1, 0.7, blades);
         ground_is.colour *= 0.86 + 0.28 * swell;
 
+        // The mountains' bare rock, their scree under its cliffs and gravel in gullies' beds,
+        // over whatever grew: nothing grows through them.
+        if bare > 0.0 {
+            ground_is = over(ground_is, layer(ROCK, 1.0, granite, world + 37.0, gx, gy, n, 0.15), bare);
+        }
+        if scree > 0.0 {
+            ground_is = over(ground_is, layer(SCREE, 1.0, scree_tint, world + 19.0, gx, gy, n, 1.0), scree);
+        }
+        if gravel > 0.0 {
+            ground_is = over(ground_is, layer(GRAVEL, 1.0, gravel_tint, world + 23.0, gx, gy, n, 1.0), gravel);
+        }
+        if snow > 0.0 {
+            ground_is = over(ground_is, layer(SNOW_LAYER, 1.0, snow_tint, world + 13.0, gx, gy, n, 1.0), snow);
+        }
+
         let rock = smoothstep(0.2, 0.4, grows.b);
         if rock > 0.0 {
             let ore = smoothstep(0.7, 0.9, grows.b);
@@ -748,6 +833,12 @@ fn fragment(
         let foam_width = 0.07 + 0.05 * noise(world * 1.7 + globals.time * 0.25);
         let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
         colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover * undug);
+        colour = mix(colour, canopy, under_woods * (1.0 - snow));
+@if(VERTEX_UVS_B)
+        {
+            colour = lake_shore(colour, in.uv_b.y, fleck);
+            pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.35, wet_band(in.uv_b.y, fleck));
+        }
         pbr_input.N = ground_is.normal;
 }
     } else {

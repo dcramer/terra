@@ -625,7 +625,6 @@ fn plant(
         rng.range(least, most)
     };
 
-    let sea = planet.sea_radius_m();
     let to_base = start.compute_affine().inverse();
     let woods = Noise::new(seed.derive("woods"));
     let species = Noise::new(seed.derive("species"));
@@ -687,12 +686,15 @@ fn plant(
         }
     };
 
-    // Trees: woods with clearings, thinning to nothing around the base and at the shore.
-    scatter(seed.derive("trees"), 340.0, 6.5, |rng, x, z| {
+    // Trees: woods with clearings, thinning to nothing around the base and at the shore. On a
+    // world with mountains the woods grow them, by the land's rules (`woods`).
+    let trees_m = if planet.has_mountains() { 0.0 } else { 340.0 };
+    scatter(seed.derive("trees"), trees_m, 6.5, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
         let normal = planet.normal(point);
         let from_base = Vec2::new(x, z).length();
-        if point.length() - sea < 1.4 || normal.dot(point.normalize()) < 0.86 {
+        if point.length() - planet.water_near_m(point) < 1.4 || normal.dot(point.normalize()) < 0.86
+        {
             return;
         }
         // Keep the view from the door to the water open.
@@ -728,7 +730,9 @@ fn plant(
     scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
         let cover = planet.cover(point, planet.normal(point));
-        if point.length() - sea < -0.4 || rng.unit() > 0.4 - 0.22 * cover.grass {
+        if point.length() - planet.water_near_m(point) < -0.4
+            || rng.unit() > 0.4 - 0.22 * cover.grass
+        {
             return;
         }
         // Mostly small, now and then a boulder; a few of the bigger ones hold ore.

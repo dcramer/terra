@@ -4,7 +4,7 @@ The world on screen, in Bevy (D198): what every run stands on, and nothing of wh
 
 - **The shell** every run starts in: the window and camera, the launch options, scripted runs and screenshots, the frame-time readout, the remote protocol, and sound (`shell`, `debug`, `remote`, `record`, `loading`, `audio`).
 - **The planet**: its voxel terrain, sea, sky, and **the start**, the fixed place every east-and-south position is measured from (`planet`, `terrain`, `sky`, `start`).
-- **The world layer of the game**, [`WorldPlugin`](src/world.rs): the light and air, the day, what grows and its data file, the tick and levels of detail (`scene`, `skylight`, `daylight`, `flora`, `flora_kinds`, `data`, `tick`, `lod`).
+- **The world layer of the game**, [`WorldPlugin`](src/world.rs): the light and air, the day, what grows and its data file, the tick and levels of detail (`scene`, `skylight`, `daylight`, `flora`, `flora_kinds`, `data`, `tick`, `lod`), and on a world with mountains its woods by the land's rules (`woods`) and its lakes (`lakes`, D322, D335).
 
 It builds, tests and runs without the game:
 
