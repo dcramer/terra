@@ -164,7 +164,7 @@ const SAMPLE_CELLS: usize = 4096;
 const MAP_CELLS: usize = 4096;
 
 /// What the shaders read of the climate round the camera.
-#[derive(Resource, Clone, Default)]
+#[derive(Resource, Clone)]
 pub struct ClimateMaps {
     /// What lies on and falls on the ground: snow depth in red, a texel's full brightness
     /// [`SNOW_FULL_M`]; the ground's wetness in green; rain falling now in blue; frost on
@@ -176,7 +176,39 @@ pub struct ClimateMaps {
     pub leaves: Option<Handle<Image>>,
     /// From a point in the world to its place on the maps, x and y from 0 to 1.
     pub from_world: Mat4,
+    /// How many times the maps have been painted: a material that reads them is prepared
+    /// again when it changes, so it draws from the new pictures.
+    pub painting: u32,
+    /// The leaves map's layer of the broadleaves whose fallen leaves lie on the forest floor
+    /// (`FALLEN_KIND`), and of grass (`GRASS_KIND`), or -1 if there is none.
+    pub fallen_layer: i32,
+    pub grass_layer: i32,
 }
+
+impl Default for ClimateMaps {
+    fn default() -> Self {
+        Self {
+            ground: None,
+            leaves: None,
+            from_world: Mat4::IDENTITY,
+            painting: 0,
+            fallen_layer: -1,
+            grass_layer: -1,
+        }
+    }
+}
+
+impl ClimateMaps {
+    /// A kind's layer in the leaves map, as the shaders take it: -1 if it has none.
+    pub fn layer_of(fields: &ClimateFields, kind: &str) -> i32 {
+        fields.layer(kind).map_or(-1, |layer| layer as i32)
+    }
+}
+
+/// The kind whose fallen leaves are the forest floor's litter after the fall, and the kind
+/// the ground cover's grass is.
+pub const FALLEN_KIND: &str = "oak";
+pub const GRASS_KIND: &str = "grass";
 
 /// Snow this deep is the ground map's brightest.
 pub const SNOW_FULL_M: f32 = 0.5;
@@ -443,6 +475,9 @@ fn paint(
             ground: Some(painting.ground.clone()),
             leaves: Some(painting.leaves.clone()),
             from_world: from_world(&start, painted.middle),
+            painting: maps.painting.wrapping_add(1),
+            fallen_layer: ClimateMaps::layer_of(&fields, FALLEN_KIND),
+            grass_layer: ClimateMaps::layer_of(&fields, GRASS_KIND),
         };
         if !painting.said {
             painting.said = true;

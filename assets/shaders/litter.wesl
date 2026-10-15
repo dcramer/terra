@@ -19,17 +19,58 @@ import bevy_pbr::render::forward_io::{Vertex, VertexOutput, decompress_vertex};
 struct Litter {
     // From how far pieces start to sink, and where the last is gone.
     fade: vec4<f32>,
+    // The climate's ground map round the camera, as grass.wesl reads it (D327).
+    climate_from_world: mat4x4<f32>,
+    climate_on: u32,
+    climate_painting: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> litter: Litter;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var climate_ground: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var climate_ground_sampler: sampler;
+
+// As ground.wesl's.
+const SNOW_FULL_M: f32 = 0.5;
+
+fn hash(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+// As ground.wesl's, so the snow's edge falls in the same places.
+fn noise(p: vec3<f32>) -> f32 {
+    let cell = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(hash(cell), hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(hash(cell + vec3<f32>(0.0, 1.0, 0.0)), hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(hash(cell + vec3<f32>(0.0, 0.0, 1.0)), hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(hash(cell + vec3<f32>(0.0, 1.0, 1.0)), hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+// Whether snow covers the floor where a piece lies, as ground.wesl lays it: buried pieces
+// sink out of sight under it (D327).
+fn under_snow(world: vec3<f32>) -> f32 {
+    if litter.climate_on == 0u {
+        return 0.0;
+    }
+    let at = clamp((litter.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    let depth = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).r * SNOW_FULL_M;
+    let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
+    return smoothstep(0.3, 0.6, (depth - 0.004) / 0.09 + (edge - 0.5) * 0.9);
+}
 
 // A point sunk under the ground as the camera draws away from it, by its piece's rank. The
 // planet's centre is the world's origin, so up is away from it.
 fn sunk(world: vec3<f32>, rank: f32) -> vec3<f32> {
     let far = distance(world, view.world_position);
     let gone = mix(litter.fade.y, litter.fade.x + 1.5, rank);
-    let sink = smoothstep(gone - 1.5, gone, far);
+    let sink = max(smoothstep(gone - 1.5, gone, far), under_snow(world));
     return world - normalize(world) * sink * 0.1;
 }
 

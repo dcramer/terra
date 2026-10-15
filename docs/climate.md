@@ -167,7 +167,7 @@ The world layer bakes small climate maps round the camera, as it bakes the cover
 
 On the GPU this is a few texture reads; on the CPU a few cheap functions and a fold per cell per day.
 
-In code (D327): two maps a kilometre across round the camera, a 32 m cell a texel, painted on another thread when the camera has gone 128 m or the clock a quarter of an hour: the ground's (snow depth, its wetness, rain falling now, frost), and the leaves', a layer a kind in the years file's order, how many leaves it has and how far they have turned, each for a plant early and late in its kind's year, so a plant takes its place between by its seed.
+In code (D327): two maps a kilometre across round the camera, a 32 m cell a texel, painted on another thread when the camera has gone 128 m or the clock a quarter of an hour: the ground's (snow depth, its wetness, rain falling now, frost), and the leaves', a layer a kind in the years file's order, how many leaves it has and how far they have turned, each for a plant early and late in its kind's year, so a plant takes its place between by its seed. The ground reads them (D327): snow lying where it faces up, a dusting patchy and some ten centimetres covering it, less under the crowns, its edge broken by noise; wet ground darker and glossier; rime in a hard frost; and after the fall the oaks' leaves fresh and warm brown on the floor under broadleaves, over the grass too. The grass sinks into the snow by its depth, browns to straw as grass's year says, and takes rime at its tips; litter under snow sinks out of sight.
 
 ### Order of work
 

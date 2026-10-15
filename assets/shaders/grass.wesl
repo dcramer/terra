@@ -35,6 +35,13 @@ struct Grass {
     // The share of blades the second ring keeps and where the rest are gone; the same for
     // the third.
     thinning: vec4<f32>,
+    // The climate's maps round the camera (climate.rs, D327): from a point in the world to
+    // its place on them, whether there are any, which painting it is, and grass's layer in
+    // the leaves map, or -1.
+    climate_from_world: mat4x4<f32>,
+    climate_on: u32,
+    climate_painting: u32,
+    grass_layer: i32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -50,6 +57,56 @@ struct Parting {
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
+// As ground.wesl's: snow's depth, the ground's wetness, rain now and frost; and each kind's
+// leaves, grass's how far it has browned in blue and alpha.
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var climate_ground: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var climate_ground_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var climate_leaves: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var climate_leaves_sampler: sampler;
+
+// As ground.wesl's.
+const SNOW_FULL_M: f32 = 0.5;
+// Grass browned by the long cold, linear: straw, and rime on its blades in a hard frost.
+const STRAW: vec3<f32> = vec3<f32>(0.2, 0.15, 0.07);
+const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
+
+fn climate_place(world: vec3<f32>) -> vec2<f32> {
+    return clamp((grass.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
+// How deep the snow lies over a blade's root, as ground.wesl lays it, so the blades sink
+// into the white the ground is painted: none where its broken edge leaves the ground bare.
+fn snow_over(root: vec3<f32>) -> f32 {
+    if grass.climate_on == 0u {
+        return 0.0;
+    }
+    let depth = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(root), 0.0).r * SNOW_FULL_M;
+    let edge = noise(root * 0.35 + 91.0) * 0.6 + noise(root * 1.9 + 23.0) * 0.4;
+    let cover = smoothstep(0.0, 1.0, (depth - 0.004) / 0.09 + (edge - 0.5) * 0.9);
+    return depth * cover * 1.2;
+}
+
+fn hash(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+// As ground.wesl's, so the snow's edge falls in the same places on both.
+fn noise(p: vec3<f32>) -> f32 {
+    let cell = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(hash(cell), hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(hash(cell + vec3<f32>(0.0, 1.0, 0.0)), hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(hash(cell + vec3<f32>(0.0, 0.0, 1.0)), hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(hash(cell + vec3<f32>(0.0, 1.0, 1.0)), hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
 
 // As foliage.wesl: blades bend away from bodies walking through them, the more the higher
 // up the blade (D271), leaning rather than parting (D274).
@@ -145,7 +202,9 @@ fn shrunk(local: vec3<f32>, to_root: vec2<f32>, rise: f32, rank: f32, world_from
         gone = mix(t.w, t.y, (rank - t.z) / (t.x - t.z));
     }
     keep *= 1.0 - smoothstep(gone - 2.0, gone, far);
-    return root + (local - root) * keep;
+    // Under snow only what stands above it shows (D327).
+    let sunk = min(rise * keep, snow_over(root_world));
+    return root + (local - root) * keep - vec3<f32>(0.0, sunk, 0.0);
 }
 
 @vertex
@@ -183,9 +242,26 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 } @else {
 @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
-@if(VERTEX_COLORS)
-    // Alpha carries the blade's rise, not transparency; the blades are solid.
-    out.color = vec4<f32>(vertex.color.rgb, 1.0);
+@if(VERTEX_COLORS) {
+    // Alpha carries the blade's rise, not transparency; the blades are solid. Browned to
+    // straw in the long cold as grass's year says, keeping each blade's light and dark, and
+    // white with rime toward its tip in a hard frost (D327).
+    var colour = vertex.color.rgb;
+    if grass.climate_on != 0u {
+        let at = climate_place(world.xyz);
+        if grass.grass_layer >= 0 {
+            let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, grass.grass_layer, 0.0);
+            let browned = mix(year.b, year.a, hash(floor(world.xyz * 2.0)));
+            let light = dot(colour, vec3<f32>(0.333)) / 0.06;
+            colour = mix(colour, STRAW * clamp(light, 0.5, 1.6), browned);
+        }
+@if(VERTEX_UVS_B) {
+        let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;
+        colour = mix(colour, RIME, frost * 0.6 * vertex.uv_b.x);
+}
+    }
+    out.color = vec4<f32>(colour, 1.0);
+}
 }
 
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)

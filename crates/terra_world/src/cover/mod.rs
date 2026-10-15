@@ -137,6 +137,35 @@ pub struct GrassExtension {
     /// (`crate::parting`, D271).
     #[storage(101, read_only)]
     pub parting: Handle<ShaderBuffer>,
+    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): where it is,
+    /// whether there is any, which painting, and grass's layer of the leaves map, or -1. The
+    /// blades sink under snow, brown in the long cold and take rime in a frost.
+    #[uniform(100)]
+    pub climate_from_world: Mat4,
+    #[uniform(100)]
+    pub climate_on: u32,
+    #[uniform(100)]
+    pub climate_painting: u32,
+    #[uniform(100)]
+    pub grass_layer: i32,
+    #[texture(102)]
+    #[sampler(103)]
+    pub climate_ground: Option<Handle<Image>>,
+    #[texture(104, dimension = "2d_array")]
+    #[sampler(105)]
+    pub climate_leaves: Option<Handle<Image>>,
+}
+
+impl GrassExtension {
+    /// Reads the climate's maps as they are now painted.
+    pub fn read_climate(&mut self, maps: &crate::climate::ClimateMaps) {
+        self.climate_from_world = maps.from_world;
+        self.climate_on = maps.ground.is_some() as u32;
+        self.climate_painting = maps.painting;
+        self.grass_layer = maps.grass_layer;
+        self.climate_ground = maps.ground.clone();
+        self.climate_leaves = maps.leaves.clone();
+    }
 }
 
 impl MaterialExtension for GrassExtension {
@@ -193,7 +222,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<BareGround>()
         .add_systems(
             Update,
-            (grow, measure)
+            (grow, measure, follow_climate)
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
@@ -295,6 +324,12 @@ fn grow(
                 fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
                 thinning: blades::thinning(density),
                 parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
+                climate_from_world: Mat4::IDENTITY,
+                climate_on: 0,
+                climate_painting: 0,
+                grass_layer: -1,
+                climate_ground: None,
+                climate_leaves: None,
             },
         });
         let cards = crate::grown::Cards::read_file(litter::FILE);
@@ -313,6 +348,10 @@ fn grow(
             },
             extension: litter::LitterExtension {
                 fade: Vec4::new(litter::FADE_M[0], litter::FADE_M[1], 0.0, 0.0) * detail.0,
+                climate_from_world: Mat4::IDENTITY,
+                climate_on: 0,
+                climate_painting: 0,
+                climate_ground: None,
             },
         });
         commands.insert_resource(Meadow {
@@ -518,6 +557,27 @@ fn grow(
             building: None,
         });
         square.building = Some((ring, task));
+    }
+}
+
+/// The grass reads the climate's maps again each time they are painted.
+fn follow_climate(
+    maps: Option<Res<crate::climate::ClimateMaps>>,
+    meadow: Option<Res<Meadow>>,
+    mut materials: ResMut<Assets<GrassMaterial>>,
+    mut litters: ResMut<Assets<litter::LitterMaterial>>,
+) {
+    let (Some(maps), Some(meadow)) = (maps, meadow) else {
+        return;
+    };
+    if !maps.is_changed() && !meadow.is_added() {
+        return;
+    }
+    if let Some(mut grass) = materials.get_mut(&meadow.material) {
+        grass.extension.read_climate(&maps);
+    }
+    if let Some(mut litter) = litters.get_mut(&meadow.litter) {
+        litter.extension.read_climate(&maps);
     }
 }
 

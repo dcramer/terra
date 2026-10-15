@@ -57,6 +57,27 @@ pub const FADE_M: [f32; 2] = [8.0, 16.0];
 pub struct LitterExtension {
     #[uniform(100)]
     pub fade: Vec4,
+    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): pieces under
+    /// snow sink out of sight.
+    #[uniform(100)]
+    pub climate_from_world: Mat4,
+    #[uniform(100)]
+    pub climate_on: u32,
+    #[uniform(100)]
+    pub climate_painting: u32,
+    #[texture(101)]
+    #[sampler(102)]
+    pub climate_ground: Option<Handle<Image>>,
+}
+
+impl LitterExtension {
+    /// Reads the climate's maps as they are now painted.
+    pub fn read_climate(&mut self, maps: &crate::climate::ClimateMaps) {
+        self.climate_from_world = maps.from_world;
+        self.climate_on = maps.ground.is_some() as u32;
+        self.climate_painting = maps.painting;
+        self.climate_ground = maps.ground.clone();
+    }
 }
 
 impl MaterialExtension for LitterExtension {

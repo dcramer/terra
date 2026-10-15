@@ -328,6 +328,24 @@ pub struct GroundExtension {
     #[texture(106)]
     #[sampler(107)]
     cover_more: Option<Handle<Image>>,
+    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point
+    /// in the world to its place on the maps, whether there are maps, which painting of them
+    /// this is (so the ground is prepared again with the new pictures), and the leaves map's
+    /// layer for the broadleaves whose fallen leaves lie on it, or -1.
+    #[uniform(100)]
+    climate_from_world: Mat4,
+    #[uniform(100)]
+    climate_on: u32,
+    #[uniform(100)]
+    climate_painting: u32,
+    #[uniform(100)]
+    fallen_layer: i32,
+    #[texture(108)]
+    #[sampler(109)]
+    climate_ground: Option<Handle<Image>>,
+    #[texture(110, dimension = "2d_array")]
+    #[sampler(111)]
+    climate_leaves: Option<Handle<Image>>,
 }
 
 /// What covers the ground near the camera, painted by the ground cover (`cover`) for the
@@ -435,6 +453,7 @@ impl GroundExtension {
         tweaks: &Tweaks,
         textures: &GroundTextures,
         cover: &GroundCoverMap,
+        climate: &crate::climate::ClimateMaps,
         quality: crate::quality::Quality,
     ) -> Self {
         let radius_m = planet.radius_m();
@@ -468,6 +487,13 @@ impl GroundExtension {
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
             cover_more: Some(cover.more.clone().unwrap_or_default()),
+            climate_from_world: climate.from_world,
+            climate_on: climate.ground.is_some() as u32,
+            climate_painting: climate.painting,
+            fallen_layer: climate.fallen_layer,
+            // Bevy's fallback pictures, of the right shape, until there are maps.
+            climate_ground: climate.ground.clone(),
+            climate_leaves: climate.leaves.clone(),
         }
     }
 }
@@ -542,6 +568,7 @@ pub fn plugin(app: &mut App) {
         .insert_resource(start)
         .insert_resource(tweaks)
         .init_resource::<GroundCoverMap>()
+        .init_resource::<crate::climate::ClimateMaps>()
         // The ground is drawn at a quality, chosen by the world layer when it runs; the
         // default otherwise, as on the workbench.
         .init_resource::<crate::quality::Quality>()
@@ -565,6 +592,7 @@ pub fn plugin(app: &mut App) {
                 resource_changed::<Tweaks>
                     .or_eager(resource_exists_and_changed::<Sky>)
                     .or_eager(resource_changed::<GroundCoverMap>)
+                    .or_eager(resource_changed::<crate::climate::ClimateMaps>)
                     .or_eager(resource_changed::<crate::quality::Quality>),
             ),
         );
@@ -593,6 +621,7 @@ fn setup(
             &tweaks,
             &textures,
             &GroundCoverMap::default(),
+            &crate::climate::ClimateMaps::default(),
             crate::quality::Quality::default(),
         ),
     });
@@ -657,6 +686,7 @@ fn apply_tweaks(
     mut water_materials: ResMut<Assets<WaterMaterial>>,
     textures: Res<GroundTextures>,
     cover: Res<GroundCoverMap>,
+    climate: Res<crate::climate::ClimateMaps>,
     quality: Res<crate::quality::Quality>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
@@ -673,7 +703,7 @@ fn apply_tweaks(
 
     // The ground changes only when its tweaks do, not with the sun, so it is left alone
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover, *quality);
+    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover, &climate, *quality);
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

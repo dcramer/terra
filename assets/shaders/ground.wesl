@@ -53,6 +53,12 @@ struct Ground {
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
+    // The same for the climate's maps (climate.rs, D327), which painting of them it is, and
+    // the leaves map's layer for the broadleaves whose leaves fall on the floor, or -1.
+    climate_from_world: mat4x4<f32>,
+    climate_on: u32,
+    climate_painting: u32,
+    fallen_layer: i32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -75,6 +81,29 @@ var cover_sampler: sampler;
 var cover_more: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var cover_more_sampler: sampler;
+// What the climate leaves round the camera, a 32 m cell a texel (climate.rs): snow's depth in
+// red, its brightest SNOW_FULL_M; the ground's wetness in green; rain falling now in blue;
+// frost in alpha. And each kind's leaves, a layer a kind: how many it has early and late in
+// its year in red and green, how far turned in blue and alpha.
+@group(constants::MATERIAL_BIND_GROUP) @binding(108)
+var climate_ground: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(109)
+var climate_ground_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(110)
+var climate_leaves: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(111)
+var climate_leaves_sampler: sampler;
+
+// Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
+const SNOW_FULL_M: f32 = 0.5;
+// Lying snow, linear: a little short of fresh snow's albedo of 0.9, settled and dusted with
+// what falls from the trees.
+const SNOW: vec3<f32> = vec3<f32>(0.74, 0.76, 0.8);
+// Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
+// old umber litter.
+const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
+// Rime on the floor in a hard frost, linear.
+const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
 // The layers of the texture array, in the order planet.rs gives them.
 const SOIL: u32 = 0u;
@@ -280,6 +309,36 @@ fn canopy_over(world: vec3<f32>) -> f32 {
     let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
     let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
     return textureSampleLevel(cover_more, cover_more_sampler, at, 0.0).b * inside * 0.85;
+}
+
+// The climate map round the camera at a point. Past its edge, the edge's answer: the
+// climate changes slowly, over hundreds of metres.
+fn climate_at(world: vec3<f32>) -> vec4<f32> {
+    if ground.climate_on == 0u {
+        return vec4<f32>(0.0);
+    }
+    let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    return textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0);
+}
+
+// How much of the broadleaves' leaves have fallen where a point is, 0 to 1.
+fn fallen_leaves(world: vec3<f32>) -> f32 {
+    if ground.climate_on == 0u || ground.fallen_layer < 0 {
+        return 0.0;
+    }
+    let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    let leaves = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, ground.fallen_layer, 0.0);
+    return 1.0 - 0.5 * (leaves.r + leaves.g);
+}
+
+// Snow lying on ground facing up (climate.md, D327): a dusting shows the floor through in
+// patches, its edge broken by noise, and some ten centimetres covers it; less under the
+// crowns, which catch what falls. `up_facing` is how level the surface is.
+fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
+    let lying = depth_m * (1.0 - 0.6 * under);
+    let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
+    let cover = smoothstep(0.0, 1.0, (lying - 0.004) / 0.09 + (edge - 0.5) * 0.9);
+    return cover * smoothstep(0.55, 0.85, up_facing) * step(0.001, lying);
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -505,6 +564,7 @@ fn fragment(
         var blades = 0.0;
         var needles = 0.0;
         var roots = 0.0;
+        var fresh = 0.0;
         if ground.cover_on != 0u {
             // The map is half a metre a texel: looked up a little way off, by noise, so what
             // it says frays and wanders rather than ending in smooth blobs.
@@ -525,12 +585,17 @@ fn fragment(
             let more = textureSampleLevel(cover_more, cover_more_sampler, at, 0.0);
             needles = more.r * inside;
             roots = more.g * inside;
+            // After the fall the broadleaves' leaves lie fresh under them, over the grass too,
+            // warm brown through the winter until the spring's growth comes through (D327).
+            fresh = fallen_leaves(world) * smoothstep(0.15, 0.6, more.b * inside) * (1.0 - needles);
+            litter = max(litter, fresh);
+            grows.r = min(grows.r, 1.0 - fresh);
         }
 @if(GROUND_LOW) {
         // The same layers and shares as below, drawn as `low_floor` says.
         let n = normalize(in.world_normal);
         let flat_ground = 1.0 - steep;
-        let litter_colour = vec3<f32>(0.068, 0.054, 0.036);
+        let litter_colour = mix(vec3<f32>(0.068, 0.054, 0.036), FRESH_LITTER, fresh);
         let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
@@ -582,7 +647,7 @@ fn fragment(
         // Under broadleaves the floor is their fallen leaves, brown with paler and darker
         // ones; under conifers, needles, a warmer red-brown. Both a dark umber, as Sons of
         // the Forest's floor is, not lit orange (D293).
-        let litter_colour = vec3<f32>(0.068, 0.054, 0.036);
+        let litter_colour = mix(vec3<f32>(0.068, 0.054, 0.036), FRESH_LITTER, fresh);
         let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
@@ -725,6 +790,22 @@ fn fragment(
         let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
         colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover);
     }
+@if(!PREPASS_PIPELINE) {
+    // What the weather has left (climate.md, D327): wet ground darker and glossier, rime in a
+    // hard frost, and snow lying on what faces up.
+    let climate = climate_at(world);
+    let level = dot(normalize(in.world_normal), up);
+    let snow = snow_on(climate.r * SNOW_FULL_M, world, level, canopy_over(world));
+    let wet = max(climate.g * 0.6, climate.b) * (1.0 - snow);
+    colour *= mix(1.0, 0.6, wet);
+    pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.5, wet * 0.7);
+    let rime = climate.a * (1.0 - snow) * smoothstep(0.6, 0.9, level) * smoothstep(0.3, 0.7, noise(world * 4.3 + 61.0));
+    colour = mix(colour, RIME, rime * 0.5);
+    let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
+    colour = mix(colour, SNOW * sparkle, snow);
+    pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);
+    pbr_input.N = normalize(mix(pbr_input.N, normalize(in.world_normal), snow));
+}
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
     // The vertex's alpha is how much of the sky it sees: the sky's light is dimmed by it,
     // so the bottom of a dug hole is dark rather than lit as open ground.
