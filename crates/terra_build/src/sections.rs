@@ -285,6 +285,13 @@ impl Whole {
     }
 }
 
+/// Runs the work of one base's section, every roof it asks for worked out once
+/// ([`layout::roofs::Roofs::whole`]): a section's parts' keys, its roofs' masks and how they
+/// were drawn ask for the same.
+pub fn remembered<T>(run: impl FnOnce() -> T) -> T {
+    layout::roofs::remembered(run)
+}
+
 /// How far round a cube that changed a roof's pieces may change, in cubes: further than
 /// its eaves run on past its walls or anything under or over it is looked at.
 const ROOF_REACH: i32 = 4;
@@ -989,7 +996,17 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
             )
         })
         .collect();
-    (0..CLUSTERS as i32)
+    // Each part's box grown by what reaches it, and its number begun: the pieces reaching
+    // it hashed in their order, in one pass over the pieces for every part.
+    struct Part {
+        near_low: IVec3,
+        near_high: IVec3,
+        hasher: std::collections::hash_map::DefaultHasher,
+        roofed: bool,
+        reach_low: IVec3,
+        reach_high: IVec3,
+    }
+    let mut parts: Vec<Part> = (0..CLUSTERS as i32)
         .map(|c| {
             let low = origin + IVec3::new(c % side, c / side % side, c / (side * side)) * CLUSTER;
             let high = low + IVec3::splat(CLUSTER - 1);
@@ -999,15 +1016,39 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
             );
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             reach.hash(&mut hasher);
-            let (mut roofed, mut reach_low, mut reach_high) = (false, near_low, near_high);
-            for (piece_low, piece_high, placed) in &boxes {
-                if piece_low.cmple(near_high).all() && piece_high.cmpge(near_low).all() {
-                    placed.hash(&mut hasher);
-                    roofed |= roofing(placed);
-                    (reach_low, reach_high) =
-                        (reach_low.min(*piece_low), reach_high.max(*piece_high));
-                }
+            Part {
+                near_low,
+                near_high,
+                hasher,
+                roofed: false,
+                reach_low: near_low,
+                reach_high: near_high,
             }
+        })
+        .collect();
+    for (piece_low, piece_high, placed) in &boxes {
+        for part in parts.iter_mut() {
+            if piece_low.cmple(part.near_high).all() && piece_high.cmpge(part.near_low).all() {
+                placed.hash(&mut part.hasher);
+                part.roofed |= roofing(placed);
+                (part.reach_low, part.reach_high) = (
+                    part.reach_low.min(*piece_low),
+                    part.reach_high.max(*piece_high),
+                );
+            }
+        }
+    }
+    parts
+        .into_iter()
+        .map(|part| {
+            let Part {
+                near_low,
+                near_high,
+                mut hasher,
+                roofed,
+                reach_low,
+                reach_high,
+            } = part;
             // A roof's masks follow where on the roofs round each point is.
             if roofed {
                 roofs_round().hash(&mut hasher);

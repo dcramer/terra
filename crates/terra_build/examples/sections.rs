@@ -283,17 +283,19 @@ fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> 
     // only the parts whose key changed drawn, from how they were drawn.
     let mut now = sections::Drawing::default();
     let started = Instant::now();
-    let laid = sections::lay(&after, &whole);
-    let keys = sections::cluster_keys(&after, &laid, Reach::Near);
-    let only: Vec<bool> = keys.iter().zip(&keys_before).map(|(a, b)| a != b).collect();
-    std::hint::black_box(sections::draw_parts(
-        &after,
-        &laid,
-        Reach::Near,
-        Some(&last),
-        Some(&mut now),
-        Some(&only),
-    ));
+    sections::remembered(|| {
+        let laid = sections::lay(&after, &whole);
+        let keys = sections::cluster_keys(&after, &laid, Reach::Near);
+        let only: Vec<bool> = keys.iter().zip(&keys_before).map(|(a, b)| a != b).collect();
+        std::hint::black_box(sections::draw_parts(
+            &after,
+            &laid,
+            Reach::Near,
+            Some(&last),
+            Some(&mut now),
+            Some(&only),
+        ));
+    });
     let again = started.elapsed().as_secs_f32() * 1000.0;
     Some(Edit {
         what: format!("{name}, section {:?}", at.to_array()),

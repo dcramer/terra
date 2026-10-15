@@ -163,6 +163,8 @@ pub struct Roofs {
     span: Vec<(f32, f32)>,
     /// How far each square is from the nearest open edge, in squares.
     inside: Vec<u16>,
+    /// Its fingerprint, once asked for.
+    fingerprinted: std::cell::OnceCell<u64>,
 }
 
 thread_local! {
@@ -257,6 +259,7 @@ impl Roofs {
             roof: Vec::new(),
             span: Vec::new(),
             inside: Vec::new(),
+            fingerprinted: std::cell::OnceCell::new(),
         };
         // The top of every roof cube with nothing over it.
         for &(at, cube) in cubes {
@@ -569,6 +572,10 @@ impl Roofs {
     /// A number for everything a point's place on the roofs depends on ([`Roofs::place_of`]):
     /// every square, how far in from an edge each is, and each roof's span.
     pub(crate) fn fingerprint(&self) -> u64 {
+        *self.fingerprinted.get_or_init(|| self.fingerprint_of())
+    }
+
+    fn fingerprint_of(&self) -> u64 {
         use std::hash::Hasher;
         let mut hash = crate::mesh::Corners::default();
         for (q, square) in self.squares.iter().enumerate() {

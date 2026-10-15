@@ -374,72 +374,74 @@ fn launch(
             let force = waiting.force;
             let whole = whole.clone();
             let task = pool.spawn(async move {
-                let started = Instant::now();
-                let section = Section {
-                    base: &snapshot,
-                    kits: &kits,
-                    maps: &maps,
-                    at: IVec3::from_array(at),
-                    progress: &progress,
-                };
-                let laid = sections::lay(&section, &whole);
-                let cut_ms = started.elapsed().as_secs_f32() * 1000.0;
-                let key = laid.key();
-                if !force && previous == Some((key, wanted)) {
-                    return Outcome::Same;
-                }
-                let mut drawing = keeps.then(sections::Drawing::default);
-                // The base being built a part at a time, and only the parts whose key
-                // changed, if it is drawn as finely as it was; any other in one part, fewer
-                // meshes.
-                let keys = if keeps {
-                    sections::cluster_keys(&section, &laid, wanted)
-                } else {
-                    Vec::new()
-                };
-                let keyed_ms = started.elapsed().as_secs_f32() * 1000.0;
-                let same_reach = previous.is_some_and(|(_, reach)| reach == wanted);
-                let only: Vec<bool> = keys
-                    .iter()
-                    .enumerate()
-                    .map(|(c, key)| {
-                        !same_reach || part_keys.get(c).copied().flatten() != Some(*key)
-                    })
-                    .collect();
-                let drawn = sections::draw_parts(
-                    &section,
-                    &laid,
-                    wanted,
-                    last.as_deref(),
-                    drawing.as_mut(),
-                    keeps
-                        .then_some(only.as_slice())
-                        .filter(|only| !only.is_empty()),
-                );
-                let drawn_ms = started.elapsed().as_secs_f32() * 1000.0;
-                let some = !only.is_empty() && only.iter().any(|o| !o);
-                let parts = draw::parts(
-                    drawn,
-                    store::centre(section.at),
-                    &only,
-                    keys,
-                    &layers,
-                    !keeps,
-                );
-                let took_ms = started.elapsed().as_secs_f32() * 1000.0;
-                Outcome::Drawn {
-                    key,
-                    reach: wanted,
-                    parts: Box::new(parts),
-                    drawing: drawing.map(Arc::new),
-                    took_ms,
-                    again: some.then_some([
-                        cut_ms,
-                        keyed_ms - cut_ms,
-                        drawn_ms - keyed_ms,
-                        took_ms - drawn_ms,
-                    ]),
-                }
+                sections::remembered(|| {
+                    let started = Instant::now();
+                    let section = Section {
+                        base: &snapshot,
+                        kits: &kits,
+                        maps: &maps,
+                        at: IVec3::from_array(at),
+                        progress: &progress,
+                    };
+                    let laid = sections::lay(&section, &whole);
+                    let cut_ms = started.elapsed().as_secs_f32() * 1000.0;
+                    let key = laid.key();
+                    if !force && previous == Some((key, wanted)) {
+                        return Outcome::Same;
+                    }
+                    let mut drawing = keeps.then(sections::Drawing::default);
+                    // The base being built a part at a time, and only the parts whose key
+                    // changed, if it is drawn as finely as it was; any other in one part, fewer
+                    // meshes.
+                    let keys = if keeps {
+                        sections::cluster_keys(&section, &laid, wanted)
+                    } else {
+                        Vec::new()
+                    };
+                    let keyed_ms = started.elapsed().as_secs_f32() * 1000.0;
+                    let same_reach = previous.is_some_and(|(_, reach)| reach == wanted);
+                    let only: Vec<bool> = keys
+                        .iter()
+                        .enumerate()
+                        .map(|(c, key)| {
+                            !same_reach || part_keys.get(c).copied().flatten() != Some(*key)
+                        })
+                        .collect();
+                    let drawn = sections::draw_parts(
+                        &section,
+                        &laid,
+                        wanted,
+                        last.as_deref(),
+                        drawing.as_mut(),
+                        keeps
+                            .then_some(only.as_slice())
+                            .filter(|only| !only.is_empty()),
+                    );
+                    let drawn_ms = started.elapsed().as_secs_f32() * 1000.0;
+                    let some = !only.is_empty() && only.iter().any(|o| !o);
+                    let parts = draw::parts(
+                        drawn,
+                        store::centre(section.at),
+                        &only,
+                        keys,
+                        &layers,
+                        !keeps,
+                    );
+                    let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+                    Outcome::Drawn {
+                        key,
+                        reach: wanted,
+                        parts: Box::new(parts),
+                        drawing: drawing.map(Arc::new),
+                        took_ms,
+                        again: some.then_some([
+                            cut_ms,
+                            keyed_ms - cut_ms,
+                            drawn_ms - keyed_ms,
+                            took_ms - drawn_ms,
+                        ]),
+                    }
+                })
             });
             jobs.running.push(Job {
                 root,
