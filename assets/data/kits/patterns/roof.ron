@@ -21,9 +21,14 @@
 //             on the deck or the covering by the layout, so one fits every covering
 // meets       a roof is drawn over what it rests on, which it neither caps nor ends against
 // toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
+// damage      how its covering breaks as it loses its health (D305): a shingle, slate or
+//             shake at a time, the gaps between them the lowest share of its height map
 (
     pattern: Roof,
     toughness: (health: 200, breaks: Bits),
+    damage: {
+        Covering: Shingles(share: 0.22),
+    },
     eaves: 0.5,
     timber: (
         profile: Round,

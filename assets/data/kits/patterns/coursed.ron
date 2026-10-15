@@ -29,9 +29,19 @@
 // meets       weight 2, ending against heavier kinds with an end board over its sawn ends
 // toughness  how much damage a cube takes before it is destroyed (D193, D305); half its
 //             cost to repair from nothing; breaking into lengths (`fragments::Breaks`)
+// damage      how it breaks as it loses its health (D305): its logs, beams, boards and
+//             planks split along their grain, so many splits round or across each, and
+//             gouge; their sawn ends check from the rim
 (
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
+    damage: {
+        Log: Grain(splits: 5.0),
+        Hewn: Grain(splits: 3.0),
+        Board: Grain(splits: 3.0),
+        Floor: Grain(splits: 9.0),
+        LogEnd: Ends,
+    },
     diameter: 0.3,
     course: 0.25,
     longest: 4.0,

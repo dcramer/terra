@@ -373,3 +373,19 @@ fn a_damaged_cubes_surface_is_drawn_darker_the_more_it_has_lost_and_no_other() {
     assert!(worn(4, 0.0) < worn(2, 0.0));
     assert!(worn(4, 0.0) > 0.2, "still its material, only worn");
 }
+
+#[test]
+fn damage_spreads_a_little_into_the_cubes_beside_a_damaged_one_and_no_further() {
+    // One cube at the origin all but gone, its face looking south (+Z) at z = 0.5 m.
+    let worn = BTreeMap::from([([0, 0, 0], 4u8)]);
+    let normal = glam::Vec3::Z;
+    let at = |x: f32, y: f32| lost(&worn, glam::Vec3::new(x, y, 0.5), normal);
+    assert_eq!(at(0.25, 0.25), 1.0);
+    // In the next cube east, near their shared edge, some of it; past the spread, none.
+    let near = at(0.52, 0.25);
+    assert!(near > 0.3 && near < 1.0, "{near}");
+    assert_eq!(at(0.9, 0.25), 0.0);
+    // Above it too, and not through the face to the cube behind.
+    assert!(at(0.25, 0.53) > 0.3);
+    assert_eq!(lost(&worn, glam::Vec3::new(0.25, 0.25, 1.0), normal), 0.0);
+}

@@ -401,10 +401,35 @@ const FLECK_M: f32 = 0.07;
 /// the cube it lies in a little in from its face (`normal`).
 pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
     let inside = at - normal * 0.02;
-    let cube = (inside / crate::CELL_M).floor().as_ivec3().to_array();
-    worn.get(&cube)
-        .map_or(0.0, |&quarters| f32::from(quarters.min(4)) / 4.0)
+    let cube = (inside / crate::CELL_M).floor().as_ivec3();
+    let of = |cube: glam::IVec3| {
+        worn.get(&cube.to_array())
+            .map_or(0.0, |&quarters| f32::from(quarters.min(4)) / 4.0)
+    };
+    // Damage spreads a little over into the cubes beside a damaged one, across the face,
+    // so a hit breaks a patch of wall rather than a square of it.
+    let within = inside / crate::CELL_M - cube.as_vec3();
+    let mut most = of(cube);
+    for axis in 0..3 {
+        if normal.abs()[axis] > 0.5 {
+            continue;
+        }
+        for (side, gap) in [(-1, within[axis]), (1, 1.0 - within[axis])] {
+            let mut step = glam::IVec3::ZERO;
+            step[axis] = side;
+            let near = (1.0 - gap / SPREAD).clamp(0.0, 1.0);
+            if near > 0.0 {
+                most = most.max(of(cube + step) * SPREAD_SHARE * near);
+            }
+        }
+    }
+    most
 }
+
+/// How far into a cube a damaged one beside it spreads, as a share of a cube, and how
+/// much of its loss it carries there at their shared edge.
+const SPREAD: f32 = 0.45;
+const SPREAD_SHARE: f32 = 0.7;
 
 /// Wears a drawn surface where its cubes are damaged, by how many quarters of their health
 /// they have lost: darker, and broken up in dark flecks that spread as more is lost, as a

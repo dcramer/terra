@@ -63,6 +63,11 @@ pub struct Kit {
     /// How it stands up to harm and what is left when it falls (D193): its pattern's, unless
     /// its file says otherwise.
     pub toughness: KitToughness,
+    /// How each of its materials breaks as its cubes lose their health (D305): by the
+    /// structure its pattern lays (a block wall at its joints, timber along its grain, a
+    /// covering a shingle at a time), as its pattern's file says; a material left out takes
+    /// the shared crack and chip mask.
+    pub damage: BTreeMap<Material, Breaks>,
     /// How each exposed edge of its cubes is dressed by its role (D215, `layout::roles`):
     /// its pieces, what each role takes, and its masks.
     pub dress: Dressing,
@@ -877,6 +882,28 @@ impl Default for Variation {
     }
 }
 
+/// How a material breaks, by the structure of what it is (D305): drawn by the texture
+/// arrays' shader from each corner's lost health, the same for every material of a pattern.
+/// Where it has cells (stones, shingles), they are the islands its height map's lowest
+/// `share` of texels, its joints, part.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub enum Breaks {
+    /// Laid stones in mortar: the joints open first and darken, then the stones' edges chip
+    /// back to their fresh face, then whole stones fall out, leaving their hollows. No crack
+    /// runs through a stone.
+    Joints { share: f32 },
+    /// Timber: splits run along the grain, `splits` of them round or across a member's
+    /// face, opening and lengthening as more is lost, and chunks gouge out of it showing
+    /// the fresh wood.
+    Grain { splits: f32 },
+    /// A member's sawn end: checks open out from its heart and its rim splinters.
+    Ends,
+    /// A covering of shingles, slates or shakes: one cracks, then whole ones go missing,
+    /// showing the dark under them.
+    Shingles { share: f32 },
+}
+
 impl Default for Kit {
     /// Pine, as `assets/data/kits/logs.ron` has it; for tests.
     fn default() -> Self {
@@ -899,6 +926,7 @@ impl Default for Kit {
             textures: BTreeMap::new(),
             cost: KitCost::default(),
             toughness: KitToughness::default(),
+            damage: BTreeMap::new(),
             dress: Dressing::default(),
             colours: KitColours {
                 light: [0.74, 0.56, 0.37],
@@ -1220,7 +1248,7 @@ mod tests {
         // its ends run past the corners and its role members, so tests lay plain logs
         // inside their cubes; and how it meets other kinds, which the default leaves to
         // its pattern, so a test's stone kit meets as stone, and the file says as logs; and
-        // the roof over it, which the file names.
+        // the roof over it, which the file names; and how it breaks, which its pattern says.
         let file = shipped("logs.ron");
         assert_eq!(file.meets, Some(Meets::of(Pattern::Logs)));
         let pine = Kit {
@@ -1230,6 +1258,7 @@ mod tests {
             dress: Dressing::default(),
             meets: None,
             roof_kind: None,
+            damage: BTreeMap::new(),
             ..file
         };
         assert_eq!(pine, Kit::default());
