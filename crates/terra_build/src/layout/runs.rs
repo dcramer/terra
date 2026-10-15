@@ -76,6 +76,12 @@ pub(super) fn courses(
                 // next, so their sawn ends in one plane overlap there and fight.
                 let stagger = END_STAGGER_M * course.rem_euclid(2) as f32;
                 (match next {
+                    // A hole with a door or shutters fitted: its own frame reaches a little
+                    // into the wall (`fitting::OVERLAP_M`), so the log runs on to end inside
+                    // it, not short of the kit's own post or boards, which give way to it.
+                    Spot::Hole if super::framed(walls.base, axis.cube(row, beyond, cube.y)) => {
+                        -crate::fitting::OVERLAP_M * 0.5
+                    }
                     Spot::Hole => -beside_hole,
                     // Ending against another kind under an end board (`trims::ends`): its
                     // sawn end inside the board, not in the plane of the board's face.

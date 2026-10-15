@@ -293,7 +293,19 @@ mod tests {
             &crate::ops::Context::free(&rules),
         )
         .unwrap();
-        assert_eq!(boards(&lay(&base, &kit)), 0);
+        let fitted = lay(&base, &kit);
+        assert_eq!(boards(&fitted), 0);
+        // And the courses it crosses run on to end inside that frame, which reaches
+        // `OVERLAP_M` into the wall: no gap between them and it to see through.
+        let overlap = crate::fitting::OVERLAP_M;
+        for (from, to, _) in logs(&fitted) {
+            if from.z != 2.75 || to.z != 2.75 || from.y > DOOR_HEIGHT_M {
+                continue;
+            }
+            let ends_west = to.x < 2.0 && to.x > 1.5 - overlap && to.x <= 1.5 + 1e-4;
+            let ends_east = from.x > 2.0 && from.x < 2.5 + overlap && from.x >= 2.5 - 1e-4;
+            assert!(ends_west || ends_east, "{from} {to}");
+        }
     }
 
     #[test]
