@@ -98,6 +98,55 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             board(a, b, low as f32 * CELL_M, (high + 1) as f32 * CELL_M, 0.0);
         }
     }
+    // Under a roof's cube over the top, the roof's cube is the head (docs/building-voxels.md,
+    // gap 6): a head board along the opening's top under each, cut a hair under the roof's
+    // deck, which comes down to the opening's top at an eave.
+    let roofed = |along: i32, layer: i32| {
+        let at = axis.cube(row, along, layer);
+        walls
+            .base
+            .cube(at)
+            .filter(|c| c.kind.is_roof() && c.fill != Fill::Open)
+            .and_then(|c| super::roofs::underside(at, c).map(|under| (at, under)))
+    };
+    let mut heads = Vec::new();
+    let edges: BTreeSet<(i32, i32)> = holes
+        .iter()
+        .copied()
+        .filter(|&(along, layer)| !solid(along, layer + 1) && roofed(along, layer + 1).is_some())
+        .collect();
+    for (layer, low, high) in runs_of(&edges, |(along, layer)| (layer, along)) {
+        for along in low..=high {
+            let Some((over, under)) = roofed(along, layer + 1) else {
+                continue;
+            };
+            let edge = (layer + 1) as f32 * CELL_M;
+            let a = along as f32 * CELL_M - if along == low { kit.frame } else { 0.0 };
+            let b = (along + 1) as f32 * CELL_M + if along == high { kit.frame } else { 0.0 };
+            let out = across * (depth + 0.01);
+            let (min, max) = (
+                (axis.point(row, a, edge) - out).min(axis.point(row, b, edge) + out),
+                (axis.point(row, a, edge) - out).max(axis.point(row, b, edge) + out),
+            );
+            let cut = |x: f32, z: f32| {
+                let deck = super::roofs::gable_cut(over, &under, glam::Vec3::new(x, 0.0, z));
+                super::ticks((deck - END_BOARD_UNDER_M).min(edge + HEAD_UNDER_ROOF_M))
+            };
+            let top = [
+                cut(min.x, min.z),
+                cut(max.x, min.z),
+                cut(max.x, max.z),
+                cut(min.x, max.z),
+            ];
+            if top.iter().any(|&t| super::metres(t) > edge + 0.01) {
+                heads.push(Piece::Blocking {
+                    min: Place::near(min),
+                    max: Place::near(max.with_y(edge)),
+                    top,
+                });
+            }
+        }
+    }
     // Over the top and under the bottom: a head and a sill along every run of hole cubes
     // with wall over or under them.
     for upward in [1, -1] {
@@ -131,6 +180,7 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             }
         }
     }
+    layout.pieces.extend(heads);
 }
 
 /// Where another kind's wall comes in square against the side of one of the kit's, as a
@@ -203,17 +253,27 @@ const SIDE_BOARD_IN_M: f32 = 0.01;
 
 /// How far in from its stack's foot and top an end board stops.
 const END_BOARD_IN_M: f32 = 0.005;
+/// How tall a head board under a roof's cube stands at most, where the roof is high enough.
+const HEAD_UNDER_ROOF_M: f32 = 0.12;
+/// How far under a roof's deck an end board carried up into the roof is cut.
+const END_BOARD_UNDER_M: f32 = 0.004;
 
 /// Where a wall of the kit's kind ends against a wall of another kind, as logs end flush
 /// against stone (D179): an end board up the joint, over the logs' sawn ends, from the
 /// foot of each stack of such cubes to its top, where the kits say it ends there with a
 /// board (D232: the other runs through it, or neither does).
 pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
-    let ends_at = |at: glam::IVec3, axis: Axis, outward: i32| {
+    let carried = |at: glam::IVec3, axis: Axis, outward: i32| {
         walls.ours(at) == Some(Fill::Solid)
             && walls.runs(at, axis)
             && walls.board_against(at + axis.step() * outward)
     };
+    // Not up into a roof's cube the wall is carried up into, where the board is cut to the
+    // roof's deck (docs/building-voxels.md, gap 1): a board standing to the cube's top came
+    // up through the roof's covering beside a chimney.
+    let in_roof = |at: glam::IVec3| walls.base.cube(at).is_some_and(|c| c.kind.is_roof());
+    let ends_at =
+        |at: glam::IVec3, axis: Axis, outward: i32| carried(at, axis, outward) && !in_roof(at);
     for axis in [Axis::X, Axis::Z] {
         for outward in [-1, 1] {
             for &at in ours {
@@ -238,6 +298,35 @@ pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut 
                     min: Place::near(low.min(high)),
                     max: Place::near(low.max(high)),
                 });
+                // On up into the roof's cube over the stack the wall is carried up into, its
+                // top cut a hair under the roof's deck.
+                let over = top + glam::IVec3::Y;
+                if let Some(cube) = walls
+                    .base
+                    .cube(over)
+                    .filter(|_| carried(over, axis, outward))
+                    && let Some(under) = super::roofs::underside(over, cube)
+                {
+                    let floor = over.y as f32 * CELL_M + END_BOARD_IN_M;
+                    let (min, max) = (low.min(high).with_y(floor), low.max(high).with_y(floor));
+                    let cut = |x: f32, z: f32| {
+                        let h = super::roofs::gable_cut(over, &under, glam::Vec3::new(x, 0.0, z));
+                        super::ticks(h - END_BOARD_UNDER_M)
+                    };
+                    let top = [
+                        cut(min.x, min.z),
+                        cut(max.x, min.z),
+                        cut(max.x, max.z),
+                        cut(min.x, max.z),
+                    ];
+                    if top.iter().any(|&t| super::metres(t) > floor + 0.01) {
+                        layout.pieces.push(Piece::Blocking {
+                            min: Place::near(min),
+                            max: Place::near(max),
+                            top,
+                        });
+                    }
+                }
             }
         }
     }

@@ -1057,9 +1057,12 @@ pub fn draw_slots(
                 continue;
             }
             // A side against another of the cubes drawn shows where that one is cut lower
-            // than this one, as a slope's side shows over a half beside it: from the other's
-            // cut up to this one's. Against anything else full, nothing shows; nor against
-            // a cube not cut at all, which is never lower.
+            // than this one, as a slope's side shows over a half beside it, or a tall wall's
+            // over a gable carried up into a roof beside it. It is drawn whole, its part under
+            // the other's cut inside the other's stone and never seen: brought up onto a
+            // sloping cut between its points, it folded over itself in its own plane.
+            // Against anything else full, nothing shows; nor against a cube not cut at all,
+            // which is never lower.
             let against_cut = axis != 1
                 && is_member(beyond)
                 && is_cut(beyond)
@@ -1465,14 +1468,11 @@ pub fn draw_slots(
                 // A side is cut before it is rounded and displaced, and textured where the
                 // point ends up, so the texture runs on unstretched to the cut and points cut
                 // to the same place stay one.
-                let mut s = if axis == 1 || !cut_here {
+                let s = if axis == 1 || !cut_here {
                     p
                 } else {
                     p.with_y(p.y.max(low).min(high))
                 };
-                if against_cut {
-                    s.y = s.y.max(cut(beyond, p)[1].min(high));
-                }
                 let s = snap(s);
                 let (mut q, mut exact) = place(s);
                 sunk.borrow_mut().push(holing && deep(s));
@@ -1491,9 +1491,6 @@ pub fn draw_slots(
                     } else if look.packed.is_some() {
                         q.y = q.y.max(under);
                     }
-                }
-                if against_cut {
-                    q.y = q.y.max(cut(beyond, p)[1].min(high));
                 }
                 if q != placed {
                     exact = Vec3::ZERO;
@@ -2357,13 +2354,15 @@ mod tests {
             t.iter().all(|p| (p.x - CELL_M).abs() < 0.05) && t.iter().all(|p| p.y > CELL_M * 0.49)
         });
         assert!(side, "no side over the half");
+        // Drawn whole, its part under the half's top inside the half and never seen: brought
+        // up onto a sloping cut between its points, a side folded over itself in its plane.
         assert!(
-            !out.positions.chunks(3).any(|t| {
+            out.positions.chunks(3).any(|t| {
                 side_on(t)
                     && t.iter().all(|p| (p.x - CELL_M).abs() < 0.05)
                     && t.iter().all(|p| p.y < CELL_M * 0.45)
             }),
-            "a side inside the half"
+            "the side drawn whole"
         );
     }
 

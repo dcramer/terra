@@ -831,66 +831,199 @@ fn a_breach_knocked_under_a_standing_wall_is_built_again() {
 }
 
 #[test]
-fn nothing_but_a_roof_is_built_on_a_roof() {
-    // D343, the developers: "we might wanna just not allow you to build non-roof voxels on
-    // the roof voxels". A post of stone with a roof's cube on it, built.
+fn a_wall_stands_on_a_roof_and_is_held_by_what_holds_the_roof() {
+    // D343 as amended, the developers: walls may stand on roof cubes, "but they need to be
+    // modular then so theres no gaps". A post of stone with a sloped roof's cube on it.
     let rules = rules();
     let cx = Context::free(&rules);
     let mut base = Base::default();
     let post = column(0, 0, 0, 1);
     plan(&mut base, &cx, STONE, &post, Shape::Whole);
     build(&mut base, &cx, &post);
-    plan(&mut base, &cx, ROOF, &[[0, 2, 0]], Shape::Whole);
-    build(&mut base, &cx, &[[0, 2, 0]]);
-    let on = IVec3::new(0, 3, 0);
-    let lay = |kind: Kind, at: [i32; 3]| Op::LayPlan {
-        part: Some(PartId(90)),
-        kind,
-        cubes: vec![Planned {
-            at,
-            shape: Shape::Whole,
-        }],
-        ground: Vec::new(),
-    };
-    // A block on the roof is refused, in the words the player is shown.
-    let refused = base.check(&lay(STONE, on.to_array()), &cx);
-    assert_eq!(refused, Err(Refusal::OnRoof(on)));
-    assert_eq!(
-        Refusal::OnRoof(on).message(),
-        "Take the roof off to build above it."
+    plan(
+        &mut base,
+        &cx,
+        ROOF,
+        &[[0, 2, 0]],
+        Shape::Slope(Facing::East),
     );
-    // A roof's cube on it is allowed, as a dormer's or a valley's are.
-    assert!(base.check(&lay(ROOF, on.to_array()), &cx).is_ok());
-    // The roof's own cube changed to stone, a wall in its place, is refused.
+    build(&mut base, &cx, &[[0, 2, 0]]);
+    // A wall of stone two cubes high on the roof's cube, laid and built.
+    let wall = column(0, 0, 3, 4);
+    plan(&mut base, &cx, STONE, &wall, Shape::Whole);
+    build(&mut base, &cx, &wall);
+    assert!(base.floating().is_empty());
+    // Held by the roof: the roof's cube is not taken out from under it, told what holds it.
+    assert_eq!(
+        base.check(&empty([0, 2, 0]), &cx),
+        Err(Refusal::Holds(vec![Holder::Cube(IVec3::new(0, 3, 0))]))
+    );
+    // A roof's cube put in under a wall, a stone arm out from a post and a roof's cube
+    // under its end, goes in whole in one act as anything under a cube already in does.
+    let arm = [[5, 0, 0], [5, 1, 0], [5, 2, 0], [6, 2, 0]];
+    plan(&mut base, &cx, STONE, &arm, Shape::Whole);
+    build(&mut base, &cx, &arm);
+    plan(
+        &mut base,
+        &cx,
+        ROOF,
+        &[[6, 1, 0]],
+        Shape::Slope(Facing::West),
+    );
+    assert!(base.act(&fill([6, 1, 0]), &cx).is_ok());
+    assert!(base.cube(IVec3::new(6, 1, 0)).unwrap().is_built());
+    // A roof's cube changed to stone, as any cube's kind is changed.
     let change = Op::Replace {
         cubes: vec![[0, 2, 0]],
         kind: STONE,
         part: Some(PartId(91)),
     };
-    assert_eq!(
-        base.check(&change, &cx),
-        Err(Refusal::OnRoof(IVec3::new(0, 2, 0)))
-    );
-    // A roof's cube put in under a wall's, the same stack from below, is refused too: a
-    // stone arm out from a post, and a roof's cube under its end.
-    let arm = [[5, 0, 0], [5, 1, 0], [5, 2, 0], [6, 2, 0]];
-    plan(&mut base, &cx, STONE, &arm, Shape::Whole);
-    build(&mut base, &cx, &arm);
-    let under = IVec3::new(6, 1, 0);
-    assert_eq!(
-        base.check(&lay(ROOF, under.to_array()), &cx),
-        Err(Refusal::OnRoof(under))
-    );
-    // With the roof taken off, the storey goes on.
-    while base.cube(IVec3::new(0, 2, 0)).unwrap().level() > 0 {
-        base.act(&empty([0, 2, 0]), &cx).unwrap();
+    assert!(base.check(&change, &cx).is_ok());
+    // Destroyed, the roof's cube brings down what hangs from it alone: the wall on it.
+    let done = base
+        .act(
+            &Op::Damage {
+                cubes: vec![[0, 2, 0]],
+                amount: u16::MAX,
+            },
+            &cx,
+        )
+        .unwrap();
+    let fell: BTreeSet<[i32; 3]> = done.fell.iter().map(|(at, _)| at.to_array()).collect();
+    assert_eq!(fell, BTreeSet::from([[0, 2, 0], [0, 3, 0], [0, 4, 0]]));
+    assert!(base.floating().is_empty());
+}
+
+#[test]
+fn a_roof_is_cut_only_to_the_shapes_a_roof_has() {
+    // docs/building-voxels.md, gap 4: a roof's cube cut to a stair, an upper half, a post
+    // or one upside down drew a flat top whose boards lay in one another. Refused, in the
+    // words the player is shown, however it is asked for; a wall's kind may still take them.
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let lay = |kind: Kind, shape: Shape| Op::LayPlan {
+        part: Some(PartId(90)),
+        kind,
+        cubes: vec![Planned {
+            at: [0, 0, 0],
+            shape,
+        }],
+        ground: Vec::new(),
+    };
+    for shape in [
+        Shape::Stair(Facing::North),
+        Shape::UpperHalf,
+        Shape::Post,
+        Shape::InvertedSlope(Facing::East),
+        Shape::InvertedStair(Facing::South),
+    ] {
+        let at = IVec3::ZERO;
+        assert_eq!(
+            base.check(&lay(ROOF, shape), &cx),
+            Err(Refusal::RoofShape(at))
+        );
+        assert!(base.check(&lay(STONE, shape), &cx).is_ok(), "{shape:?}");
     }
-    base.act(
-        &Op::Unplan {
-            cubes: vec![[0, 2, 0]],
-        },
+    assert_eq!(
+        Refusal::RoofShape(IVec3::ZERO).message(),
+        "A roof is cut only to slopes, corners and halves."
+    );
+    for shape in [
+        Shape::Whole,
+        Shape::Half,
+        Shape::Slope(Facing::West),
+        Shape::OuterCorner(Facing::North),
+        Shape::InnerCorner(Facing::South),
+    ] {
+        assert!(base.check(&lay(ROOF, shape), &cx).is_ok(), "{shape:?}");
+    }
+    // Nor a roof's planned cube reshaped to one, nor a stone stair changed to a roof.
+    plan(&mut base, &cx, ROOF, &[[2, 0, 0]], Shape::Whole);
+    assert_eq!(
+        base.check(
+            &Op::SetShape {
+                cubes: vec![[2, 0, 0]],
+                shape: Shape::Post,
+            },
+            &cx
+        ),
+        Err(Refusal::RoofShape(IVec3::new(2, 0, 0)))
+    );
+    plan(
+        &mut base,
         &cx,
-    )
-    .unwrap();
-    assert!(base.check(&lay(STONE, [0, 2, 0]), &cx).is_ok());
+        STONE,
+        &[[4, 0, 0]],
+        Shape::Stair(Facing::North),
+    );
+    build(&mut base, &cx, &[[4, 0, 0]]);
+    assert_eq!(
+        base.check(
+            &Op::Replace {
+                cubes: vec![[4, 0, 0]],
+                kind: ROOF,
+                part: Some(PartId(91)),
+            },
+            &cx
+        ),
+        Err(Refusal::RoofShape(IVec3::new(4, 0, 0)))
+    );
+}
+
+#[test]
+fn a_storey_goes_up_over_a_roof_left_on() {
+    // The storey the QA film builds, with the roof still on (D343 as amended): a room of
+    // stone a cube high under a gable of roof cubes, and walls laid over it round the
+    // same footprint, standing on the roof's eaves and on its gables, every cube built.
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let ring: Vec<[i32; 3]> = (0..=4)
+        .flat_map(|x| (0..=4).map(move |z| [x, 0, z]))
+        .filter(|&[x, _, z]| x == 0 || x == 4 || z == 0 || z == 4)
+        .collect();
+    plan(&mut base, &cx, STONE, &ring, Shape::Whole);
+    build(&mut base, &cx, &ring);
+    // The roof: slopes rising north and south to a ridge two cubes wide over z = 1..=3,
+    // its gables of stone.
+    let mut roof = Vec::new();
+    for x in 0..=4 {
+        for (z, y, shape) in [
+            (0, 1, Shape::Slope(Facing::South)),
+            (1, 2, Shape::Slope(Facing::South)),
+            (2, 3, Shape::Whole),
+            (3, 2, Shape::Slope(Facing::North)),
+            (4, 1, Shape::Slope(Facing::North)),
+        ] {
+            roof.push(([x, y, z], shape));
+        }
+    }
+    for x in [0, 4] {
+        let gable = [[x, 1, 1], [x, 1, 2], [x, 1, 3], [x, 2, 2]];
+        plan(&mut base, &cx, STONE, &gable, Shape::Whole);
+        build(&mut base, &cx, &gable);
+    }
+    for (at, shape) in &roof {
+        plan(&mut base, &cx, ROOF, &[*at], *shape);
+    }
+    build(
+        &mut base,
+        &cx,
+        &roof.iter().map(|(at, _)| *at).collect::<Vec<_>>(),
+    );
+    // The storey's walls, three cubes high from the eaves' top up, wherever nothing is.
+    let storey: Vec<[i32; 3]> = ring
+        .iter()
+        .flat_map(|&[x, _, z]| (2..=4).map(move |y| [x, y, z]))
+        .filter(|&at| base.cube(IVec3::from_array(at)).is_none())
+        .collect();
+    plan(&mut base, &cx, LOGS, &storey, Shape::Whole);
+    build(&mut base, &cx, &storey);
+    assert!(base.floating().is_empty());
+    let on_roof = storey.iter().filter(|at| {
+        base.cube(IVec3::new(at[0], at[1] - 1, at[2]))
+            .is_some_and(|under| under.kind.is_roof())
+    });
+    assert!(on_roof.count() >= 10, "the storey stands on the eaves");
 }

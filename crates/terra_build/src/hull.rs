@@ -25,7 +25,19 @@ const SHADE: f32 = 0.85;
 /// colours sRGB as a surface's are.
 pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> Surface {
     let store = base.store();
-    let solid = |at: IVec3| store.get(at).is_some_and(|cube| fills(&cube));
+    // A roof cube something stands on is drawn whole, in what stands on it: the wall
+    // carried down into it to the roof's deck (D343).
+    let carried = |at: IVec3, cube: Cube| -> Cube {
+        match crate::layout::roofs::standing_on(base, at) {
+            Some(over) if cube.kind.is_roof() && cube.is_in() => Cube {
+                kind: over.kind,
+                shape: Shape::Whole,
+                ..cube
+            },
+            _ => cube,
+        }
+    };
+    let solid = |at: IVec3| store.get(at).is_some_and(|cube| fills(&carried(at, cube)));
     let mut colours = Colours::new(kits, maps);
     // Whole faces by their direction, the plane they lie in and their colour: the cells
     // of each plane, merged into rectangles once all are known.
@@ -38,6 +50,7 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
         if !cube.is_in() {
             continue;
         }
+        let cube = carried(at, cube);
         let tops = corners(cube.shape);
         if tops == [1.0; 4] {
             for (dir, normal) in DIRECTIONS.iter().enumerate() {

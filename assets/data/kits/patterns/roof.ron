@@ -38,7 +38,12 @@
             Valley: (module: "valley", material: Trim),
             Eave: (module: "eave", material: Trim, tint: (0.58, 0.54, 0.5)),
             Verge: (module: "verge", material: Trim, tint: (0.58, 0.54, 0.5)),
+            // Where the covering meets something standing on or beside the roof (D343): an
+            // apron where the roof rises to it, steps up a sloping line, a back gutter where it
+            // falls to it; the one board for each until a piece is made for each.
             Flashing: (module: "flashing", material: Trim, tint: (0.62, 0.6, 0.58)),
+            Step: (module: "flashing", material: Trim, tint: (0.62, 0.6, 0.58)),
+            Gutter: (module: "flashing", material: Trim, tint: (0.62, 0.6, 0.58)),
             Rafter: (module: "rafter", material: Log, ends: Some(LogEnd)),
             Batten: (module: "batten", material: Board, tint: (0.9, 0.9, 0.9)),
         },

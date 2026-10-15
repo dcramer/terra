@@ -1247,6 +1247,41 @@ pub(super) fn lay(
             row += 1;
         }
     }
+    // Where roofs and walls meet (D343), every case in each wall kind under its own roof,
+    // a group of its own: `--sheet-rows "roofs and walls"`, or one case by its name.
+    group += 1;
+    let mut row = 0;
+    for &walls in &wall_kinds {
+        let Some(kit) = kits.of(walls) else {
+            continue;
+        };
+        let block = kit.pattern == Pattern::Masonry;
+        let other = wall_kinds.iter().copied().find(|&kind| {
+            kits.of(kind).is_some_and(|other| {
+                other.pattern != kit.pattern && (block || other.pattern == Pattern::Masonry)
+            })
+        });
+        let covering = roof(walls);
+        let name = |kind: Kind| {
+            names
+                .get(&kind)
+                .cloned()
+                .unwrap_or_else(|| kind.0.to_string())
+        };
+        for (case, ops) in terra_build::roof_walls::rows(walls, covering, other) {
+            placed.push((
+                format!(
+                    "roofs and walls: {} under {}: {case}",
+                    name(walls),
+                    name(covering)
+                ),
+                ops,
+                ROOF_GROUP_M * group as f32,
+                row,
+            ));
+            row += 1;
+        }
+    }
     for (name, ops, group_east, row) in placed {
         // Only the rows asked for, each where it always is.
         let wanted = &options.sheet_rows;

@@ -365,6 +365,11 @@ impl<'a> Roles<'a> {
                 if cube.kind.is_roof() && self.ours(at - IVec3::Y) {
                     return Beyond::Same;
                 }
+                // And one a whole cube of the kind stands on is the wall carried down into it
+                // to the roof's deck (D343): no foot or plinth where it stands on the roof.
+                if cube.kind.is_roof() && self.ours(at + IVec3::Y) {
+                    return Beyond::Same;
+                }
                 if cube.kind == self.kind && cube.shape.is_cut() {
                     Beyond::Cut
                 } else if cube.kind == self.kind {

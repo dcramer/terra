@@ -64,6 +64,7 @@ pub mod put_up;
 pub mod qa_cabin;
 mod ray;
 pub mod relief;
+pub mod roof_walls;
 pub mod roofer;
 pub mod roofing;
 pub mod rooms;

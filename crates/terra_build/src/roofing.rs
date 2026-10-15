@@ -75,9 +75,16 @@ pub fn draw_as(
             seed,
             capped,
             met,
+            wide,
             ..
         } => {
-            let Some(spec) = kit.roof.parts.get(&part) else {
+            // A step or a back gutter is the pattern's flashing where its kit names no piece
+            // of its own for it.
+            let Some(spec) = kit.roof.parts.get(&part).or_else(|| {
+                crate::layout::roofs::is_flashing(part)
+                    .then(|| kit.roof.parts.get(&RoofPart::Flashing))
+                    .flatten()
+            }) else {
                 return;
             };
             let Some(module) = kit
@@ -137,11 +144,13 @@ pub fn draw_as(
                 )),
                 _ => None,
             };
+            // Narrowed across where the roof folds away under it, its thickness as modelled.
+            let across = wide.map(|wide| [module.size()[0], metres(wide)]);
             let line = Line {
                 from,
                 to,
                 seat,
-                across: None,
+                across,
                 capped,
                 seed,
                 blend,
@@ -228,12 +237,24 @@ const CREST_BLEND: f32 = 1.0;
 /// is in: off the plane of the eave's board it laps over at its foot.
 const VERGE_PROUD_M: f32 = 0.004;
 
+/// How far under the roof's deck its boards are drawn, plumb: more than two planes need to
+/// be apart not to fight (`inspect`), less than anything seated under the deck reaches.
+pub(crate) const BOARDS_UNDER_M: f32 = 0.004;
+
+/// How far in from its edge the foot of a covering's closed edge is, on the boards.
+const EDGE_FOOT_IN_M: f32 = 0.003;
+
 /// How far a piece laid on the covering stands off it, so the two are never in one plane.
 const PROUD_M: f32 = 0.002;
 
 fn on_covering(part: RoofPart) -> f32 {
     match part {
-        RoofPart::Ridge | RoofPart::Hip | RoofPart::Verge | RoofPart::Flashing => 1.0,
+        RoofPart::Ridge
+        | RoofPart::Hip
+        | RoofPart::Verge
+        | RoofPart::Flashing
+        | RoofPart::Step
+        | RoofPart::Gutter => 1.0,
         RoofPart::Valley | RoofPart::Eave | RoofPart::Rafter | RoofPart::Batten => 0.0,
     }
 }
@@ -250,7 +271,7 @@ fn seat(part: RoofPart, on_roof: bool, from: Vec3, to: Vec3, sides: [Vec3; 2]) -
         // On the roof along its edge, standing plumb and as much taller as the covering is
         // lifted, so nothing of it leans out past the edge; out past it, or toward the wall
         // it meets.
-        RoofPart::Verge | RoofPart::Flashing => Seat::Plane {
+        RoofPart::Verge | RoofPart::Flashing | RoofPart::Step | RoofPart::Gutter => Seat::Plane {
             up: Vec3::Y / normals[0].y.max(0.2),
             out: -into[0],
         },
@@ -374,10 +395,14 @@ impl Square {
             // but along an edge no covering carries on past, square off the roof, so the
             // sheet's edge leans out over the eave as the courses' butts do.
             let h = r.thick + r.relief * 0.5;
+            // Only along a level edge, an eave's: lifted square to the roof along a sloping one,
+            // a verge's, a point slid along the edge, into the covering tucked under a wall
+            // where the verge meets it.
             let open_edge = |p: Vec3| {
                 (0..4).any(|side| {
                     let (a, b) = (self.corners[side], self.corners[(side + 1) % 4]);
                     self.open[side]
+                        && (a.y - b.y).abs() < 1e-4
                         && (p - a).cross(b - a).length() < 1e-4 * (b - a).length().max(1e-3)
                 })
             };
@@ -475,14 +500,31 @@ impl Square {
                         }
                         let quad = [p, q, placed[(i + 1) % placed.len()].0, placed[i].0];
                         side(covering, quad, outward, texture, colour);
+                        // And from the boards under the deck up to it, so no slit is left
+                        // between them, leaning in to a hair in from the edge at the boards:
+                        // out of the plane of a wall's face carried up to the deck under the
+                        // edge, as round a hole.
+                        if p.distance(q) > 1e-3 {
+                            let drop = Vec3::Y * BOARDS_UNDER_M + outward * EDGE_FOOT_IN_M;
+                            side(
+                                covering,
+                                [p - drop, q - drop, q, p],
+                                outward,
+                                texture,
+                                colour,
+                            );
+                        }
                     }
                 }
             }
-            // Its underside, boarded, seen from inside.
+            // Its underside, boarded, seen from inside: a little under the deck, so nothing
+            // standing on the deck or cut at it, a wall carried down to it or up to it, lies
+            // in the boards' plane.
             let board = size(kit, Material::Board);
             let under = surfaces.of(Material::Board);
+            let drop = Vec3::Y * BOARDS_UNDER_M;
             for i in 1..polygon.len() - 1 {
-                let corners = [polygon[0], polygon[i + 1], polygon[i]];
+                let corners = [polygon[0] - drop, polygon[i + 1] - drop, polygon[i] - drop];
                 under.textured(
                     corners,
                     [-n; 3],
@@ -1059,7 +1101,10 @@ mod tests {
             let at_eave = corners
                 .iter()
                 .all(|p| (p.z + 0.5).abs() < 0.01 || (p.z - 4.5).abs() < 0.01);
-            if !at_eave {
+            // Not the skirt from the deck down to the boards, leaning in a hair.
+            let low = corners.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+            let high = corners.iter().map(|p| p.y).fold(f32::MIN, f32::max);
+            if !at_eave || high - low < 0.01 {
                 continue;
             }
             found += 1;

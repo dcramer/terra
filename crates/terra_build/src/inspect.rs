@@ -310,6 +310,14 @@ pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
             details[slot],
             &mut report.findings,
         );
+        report.rays += junctions(
+            base,
+            kits,
+            &roofs,
+            drawn,
+            details[slot],
+            &mut report.findings,
+        );
         report.triangles[slot] = drawn.tris.len();
         coplanar(drawn, details[slot], &mut report.findings);
         // Far off a wall's lines need only be square to it: slanting ones find the coarser
@@ -722,35 +730,53 @@ fn meets(from: Vec3, dir: Vec3, t: &Tri) -> Option<f32> {
     Some(e2.dot(q) * inv)
 }
 
-/// Whether a cube is a solid wall's, every part of it there to see: built, whole, a wall
+/// Whether a cube is drawn whole: in to its middle, as a piece standing in it is drawn once
+/// its cube's fill reaches the middle of it (`sections::piece_in`); a roof's once its
+/// covering is on. A built cube is.
+fn shown(kits: &Kits, cube: &crate::Cube, detail: Detail) -> bool {
+    // The hull draws every cube with anything of it in, whole.
+    if detail == Detail::Proxy {
+        return cube.is_in();
+    }
+    if cube.kind.is_roof() {
+        crate::layout::roofs::stage_of(cube) >= 3
+    } else if kits
+        .of(cube.kind)
+        .is_some_and(|kit| kit.pattern == Pattern::Logs)
+    {
+        // A timber kind's courses go in one by one up its cube, the last once it is built.
+        cube.is_built()
+    } else {
+        cube.level() >= 8
+    }
+}
+
+/// Whether a cube is a solid wall's, every part of it there to see: in, whole, a wall
 /// kind's, not glass or an opening.
-fn solid(base: &Base, kits: &Kits, at: IVec3) -> bool {
+fn solid(base: &Base, kits: &Kits, at: IVec3, detail: Detail) -> bool {
     // A post's top in a deck, boarded over as the deck is (`layout::post_in_deck`).
     if crate::layout::post_in_deck(base, kits, at).is_some() {
         return true;
     }
-    let Some(cube) = base.cube(at) else {
-        return false;
-    };
-    let Some(kit) = kits.of(cube.kind) else {
-        return false;
-    };
-    // A timber cube with none of its kind beside it either way is a post, an upright as
-    // narrow as its kit dresses one, not a wall (`runs::posts`).
-    let post = kit.pattern == Pattern::Logs
-        && [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
-            .iter()
-            .all(|&side| {
-                !base
-                    .cube(at + side)
-                    .is_some_and(|c| c.kind == cube.kind && c.fill == Fill::Solid)
-            });
-    cube.is_built()
-        && cube.fill == Fill::Solid
-        && cube.shape == Shape::Whole
-        && !cube.kind.is_roof()
-        && kit.pattern != Pattern::Roof
-        && !post
+    base.cube(at).is_some_and(|cube| {
+        shown(kits, &cube, detail)
+            && cube.fill == Fill::Solid
+            && cube.shape == Shape::Whole
+            && !cube.kind.is_roof()
+            && kits.of(cube.kind).is_some_and(|kit| {
+                kit.pattern != Pattern::Roof
+                    // A timber kind's cube with none of its kind beside it is a post, an
+                    // upright as narrow as its kit dresses it (`runs::posts`), not a wall; but
+                    // in the hull, which draws every cube whole.
+                    && (kit.pattern != Pattern::Logs
+                        || detail == Detail::Proxy
+                        || [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z].iter().any(|&d| {
+                            base.cube(at + d).is_some_and(|c| {
+                                c.kind == cube.kind && c.fill == Fill::Solid && c.is_in()
+                            })
+                        }))
+            })
+    })
 }
 
 /// Lines cast through solid walls and down through roofs; each that passes through without
@@ -785,7 +811,7 @@ fn see_through(
         }
         // A roof cube open to the sky is covered: every line down through it meets its
         // covering.
-        if cube.kind.is_roof() && cube.is_built() {
+        if cube.kind.is_roof() && shown(kits, &cube, detail) {
             if base.cube(at + IVec3::Y).is_some() {
                 continue;
             }
@@ -809,17 +835,21 @@ fn see_through(
             }
             continue;
         }
-        if !solid(base, kits, at) {
+        if !solid(base, kits, at, detail) {
             continue;
         }
         let timber = kits
             .of(cube.kind)
             .is_some_and(|kit| kit.pattern == Pattern::Logs);
-        let runs = |step: IVec3| solid(base, kits, at + step) || solid(base, kits, at - step);
+        let runs = |step: IVec3| {
+            solid(base, kits, at + step, detail) || solid(base, kits, at - step, detail)
+        };
         let (runs_x, runs_z) = (runs(IVec3::X), runs(IVec3::Z));
         for face in faces {
             let beside = at + face;
-            if solid(base, kits, beside) || base.cube(beside).is_some_and(|c| c.kind.is_roof()) {
+            if solid(base, kits, beside, detail)
+                || base.cube(beside).is_some_and(|c| c.kind.is_roof())
+            {
                 continue;
             }
             // A wall's end, the wall running on behind it: a line in through it near its
@@ -829,9 +859,9 @@ fn see_through(
             // Carried on up into a roof's cube behind, as a gable is, it runs on too.
             let behind = at - face;
             let end = face.y == 0
-                && (solid(base, kits, behind)
+                && (solid(base, kits, behind, detail)
                     || (base.cube(behind).is_some_and(|c| c.kind.is_roof())
-                        && solid(base, kits, behind - IVec3::Y)));
+                        && solid(base, kits, behind - IVec3::Y, detail)));
             let across = IVec3::new(face.z, 0, face.x).abs().as_vec3();
             // A face down into the ground, or a footing's sides in it, is not seen.
             let floor_m = at.y as f32 * CELL_M;
@@ -878,7 +908,7 @@ fn see_through(
                 // Up its middle, or toward a wall beside it, where it meets that wall.
                 let side = offset.dot(across);
                 let toward = (across * side.signum()).round().as_ivec3();
-                if end && !solid(base, kits, at + toward) {
+                if end && !solid(base, kits, at + toward, detail) {
                     offset -= across * side;
                 }
                 // Up into a timber wall from under it, or down from over it, as over air a
@@ -895,7 +925,7 @@ fn see_through(
                 for &dir in &dirs {
                     let from = on_face - dir * RAY_START_M;
                     // How far it runs inside solid cubes, and which way it comes out.
-                    let Some((out_t, out_n)) = through_solid(base, kits, from, dir) else {
+                    let Some((out_t, out_n)) = through_solid(base, kits, from, dir, detail) else {
                         continue;
                     };
                     let inside = out_t - RAY_START_M;
@@ -960,7 +990,13 @@ fn samples() -> impl Iterator<Item = (f32, f32)> {
 
 /// Following a line from a point outside, where it leaves the solid cubes it enters, as a
 /// distance along it, and the face it leaves by; none if it never enters one.
-fn through_solid(base: &Base, kits: &Kits, from: Vec3, dir: Vec3) -> Option<(f32, Vec3)> {
+fn through_solid(
+    base: &Base,
+    kits: &Kits,
+    from: Vec3,
+    dir: Vec3,
+    detail: Detail,
+) -> Option<(f32, Vec3)> {
     let mut entered = false;
     let mut cell = (from / CELL_M).floor().as_ivec3();
     let step = IVec3::new(sign(dir.x), sign(dir.y), sign(dir.z));
@@ -1005,7 +1041,10 @@ fn through_solid(base: &Base, kits: &Kits, from: Vec3, dir: Vec3) -> Option<(f32
         let t = t_max[axis];
         cell[axis] += step[axis];
         t_max[axis] += delta[axis];
-        let now = solid(base, kits, cell);
+        // A wall runs on into a roof's cube it is carried up into, to the roof's deck.
+        let now = solid(base, kits, cell, detail)
+            || (base.cube(cell).is_some_and(|c| c.kind.is_roof())
+                && solid(base, kits, cell - IVec3::Y, detail));
         if now {
             entered = true;
         } else if entered {
@@ -1189,13 +1228,58 @@ fn pokes_out(
             };
             // A wall's own face standing up beside a roof is not in it.
             let inside = middle - t.n * 0.01;
-            let roof_cube = cube_at(inside).filter(|c| c.kind.is_roof()).or_else(|| {
-                cube_at(inside)
-                    .is_none()
-                    .then(|| cube_at(inside - Vec3::Y * CELL_M))
-                    .flatten()
-                    .filter(|c| c.kind.is_roof())
-            });
+            let cell = (inside / CELL_M).floor().as_ivec3();
+            // Dress of something standing beside the roof or on it, within a trim's reach of
+            // its cube and no lower than the roof cube: a chimney's quoins over the slope
+            // round it, a stack's corner uprights reaching a hair under its foot. Not a wall's
+            // under the roof, carried up into it, which is what pokes through it.
+            let dress_of_standing = |roof_at: IVec3| {
+                (-1..=1)
+                    .flat_map(|x| {
+                        (-1..=1).flat_map(move |z| (0..=1).map(move |y| IVec3::new(x, y, z)))
+                    })
+                    .map(|d| cell + d)
+                    .filter(|c| *c != roof_at && c.y >= roof_at.y)
+                    .any(|c| {
+                        // A roof cube something stands on is that thing to its deck.
+                        base.cube(c).is_some_and(|cube| {
+                            (!cube.kind.is_roof() && cube.is_in())
+                                || crate::layout::roofs::standing_on(base, c).is_some()
+                        }) && {
+                            let low = c.as_vec3() * CELL_M;
+                            let out = (low - middle).max(middle - (low + Vec3::splat(CELL_M)));
+                            out.max(Vec3::ZERO).max_element() <= TRIM_M
+                        }
+                    })
+            };
+            let roof_at = if cube_at(inside).is_some_and(|c| c.kind.is_roof()) {
+                Some(cell)
+            } else if cube_at(inside).is_none()
+                && base.cube(cell - IVec3::Y).is_some_and(|c| c.kind.is_roof())
+            {
+                Some(cell - IVec3::Y)
+            } else {
+                None
+            };
+            let roof_cube = roof_at
+                .filter(|&at| is_roof || !dress_of_standing(at))
+                .and_then(|at| base.cube(at))
+                // A wall carried down into a roof cube it stands on fills it to the deck: any
+                // of it within a hair of such a cube, as its relief stands out of it.
+                .filter(|_| {
+                    is_roof
+                        || ![-0.02f32, 0.02].iter().any(|&dx| {
+                            [-0.02f32, 0.02].iter().any(|&dz| {
+                                let at = ((inside + Vec3::new(dx, 0.0, dz)) / CELL_M)
+                                    .floor()
+                                    .as_ivec3();
+                                [at, at - IVec3::Y].iter().any(|&r| {
+                                    base.cube(r).is_some_and(|c| c.kind.is_roof())
+                                        && crate::layout::roofs::standing_on(base, r).is_some()
+                                })
+                            })
+                        })
+                });
             let in_roof = is_roof || roof_cube.is_some();
             // A roof's own pieces as far as they reach; a wall's into the roof's covering,
             // which closes over it, but not through it.
@@ -1210,8 +1294,11 @@ fn pokes_out(
             if in_roof && middle.y > top + allowed {
                 note(t.mesh, middle.y - top - allowed, middle, "over the roof");
             }
-        } else if is_roof {
-            // A roof's piece where no roof is, near or under it: out past its edges.
+        } else if is_roof
+            && !cube_at(middle - t.n * 0.01).is_some_and(|c| !c.kind.is_roof() && c.is_in())
+        {
+            // A roof's piece where no roof is, near or under it: out past its edges, but for
+            // its covering tucked into a wall beside it (D343).
             let reach = edge_reach(kit);
             let near_edge = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
                 .iter()
@@ -1302,7 +1389,10 @@ fn under_roof(
             .is_none_or(|c| c.fill == Fill::Open && !c.kind.is_roof())
     };
     for (at, cube) in base.cubes() {
-        if !cube.kind.is_roof() || !cube.is_built() || !solid(base, kits, at - IVec3::Y) {
+        if !cube.kind.is_roof()
+            || !shown(kits, &cube, detail)
+            || !solid(base, kits, at - IVec3::Y, detail)
+        {
             continue;
         }
         let bottom = at.y as f32 * CELL_M;
@@ -1351,6 +1441,164 @@ fn under_roof(
                             ),
                         });
                         continue 'faces;
+                    }
+                }
+            }
+        }
+    }
+    cast
+}
+
+/// How far apart lines are cast into the wedge under a wall standing on a roof, up from the
+/// roof's covering, in metres.
+const WEDGE_STEP_M: f32 = 0.08;
+/// How much deeper than the face of what stands on a roof its foot carried down may be met.
+const WEDGE_DEEPER_M: f32 = TRIM_M + 0.01;
+/// How far out of a roof cube's face its wedge's lines start: in the open just past it, short
+/// of the roof's caps on the squares beyond.
+const WEDGE_OUT_M: f32 = 0.005;
+
+/// Lines where a roof and a wall meet (D343, docs/building-plan.md): level ones in through
+/// every face of a roof cube something stands on, open beside it, between the roof's
+/// covering and the foot of what stands on it, where it is carried down to the roof's deck,
+/// so each meets it (a gap under it is `UnderRoof`); and plumb ones down past the face of a
+/// timber wall or post standing beside a roof, a few centimetres off it, from over the
+/// roof's covering to under its deck, where the covering is tucked into it, so each meets the
+/// roof (a slot past it into the room is `SeeThrough`). Returns how many were cast.
+fn junctions(
+    base: &Base,
+    kits: &Kits,
+    roofs: &crate::layout::roofs::Roofs,
+    drawn: &Drawn,
+    detail: Detail,
+    findings: &mut Vec<Finding>,
+) -> usize {
+    let grid = Grid::new(drawn);
+    let mut cast = 0;
+    let level = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
+    for (at, cube) in base.cubes() {
+        if !cube.kind.is_roof() || !shown(kits, &cube, detail) {
+            continue;
+        }
+        let thick = kits.of(cube.kind).map_or(0.03, |kit| kit.roof.thick);
+        let middle = (at.as_vec3() + Vec3::splat(0.5)) * CELL_M;
+        let over = crate::layout::roofs::standing_on(base, at).filter(|c| shown(kits, c, detail));
+        for face in level {
+            let n = face.as_vec3();
+            let beside = base.cube(at + face);
+            let along = Vec3::new(n.z.abs(), 0.0, n.x.abs());
+            if over.is_some() {
+                // Open beside it: not another roof cube something stands on, nor a wall.
+                let walled = beside.is_some_and(|c| {
+                    (!c.kind.is_roof() && c.is_in())
+                        || (c.kind.is_roof()
+                            && crate::layout::roofs::standing_on(base, at + face).is_some())
+                });
+                if walled {
+                    continue;
+                }
+                'wedge: for u in [0.25, 0.5, 0.75] {
+                    let on_face = middle + n * (CELL_M * 0.5) + along * (u - 0.5) * CELL_M;
+                    let inside = on_face - n * 0.02;
+                    let Some(deck) =
+                        roofs.top_under(inside.x, inside.z, (at.y + 1) as f32 * CELL_M)
+                    else {
+                        continue;
+                    };
+                    // How far in what stands on it is just over its foot here: the wedge
+                    // under it is closed as far in, or it stands nowhere here (a post's side).
+                    let foot = Vec3::new(on_face.x, (at.y + 1) as f32 * CELL_M + 0.06, on_face.z);
+                    let not_roof = |t: &Tri| {
+                        drawn.kinds[t.mesh as usize].is_none_or(|(kind, _)| !kind.is_roof())
+                    };
+                    let Some(reach) = grid.hit_where(
+                        drawn,
+                        foot + n * WEDGE_OUT_M,
+                        -n,
+                        0.0,
+                        WEDGE_OUT_M + CELL_M * 0.5,
+                        not_roof,
+                    ) else {
+                        continue;
+                    };
+                    let mut y = deck + thick + 0.02;
+                    while y < (at.y + 1) as f32 * CELL_M - 0.02 {
+                        let from = Vec3::new(on_face.x, y, on_face.z) + n * WEDGE_OUT_M;
+                        cast += 1;
+                        if grid
+                            .hit(drawn, from, -n, 0.0, reach + WEDGE_DEEPER_M)
+                            .is_none()
+                        {
+                            findings.push(Finding {
+                                by: 0.0,
+                                fault: Fault::UnderRoof,
+                                detail,
+                                at: Vec3::new(on_face.x, y, on_face.z),
+                                what: format!(
+                                    "roof cube {at} with a wall on it: open {:.0} cm over its deck, under the wall's foot, through its {face} face",
+                                    (y - deck) * 100.0
+                                ),
+                            });
+                            break 'wedge;
+                        }
+                        y += WEDGE_STEP_M;
+                    }
+                }
+                continue;
+            }
+            // A timber wall or post beside it, over a roof that is open to the sky. Not in the
+            // hull, which draws every cube whole, filling its cube to its faces.
+            if detail == Detail::Proxy {
+                continue;
+            }
+            let Some(wall) = beside.filter(|c| {
+                !c.kind.is_roof()
+                    && shown(kits, c, detail)
+                    && c.fill == Fill::Solid
+                    && matches!(c.shape, Shape::Whole | Shape::Post)
+                    && kits
+                        .of(c.kind)
+                        .is_some_and(|kit| kit.pattern != Pattern::Masonry)
+            }) else {
+                continue;
+            };
+            if base.cube(at + IVec3::Y).is_some_and(|c| c.kind.is_roof()) {
+                continue;
+            }
+            'slot: for u in [0.25, 0.5, 0.75] {
+                for off in [0.03, 0.08] {
+                    let on_face = middle + n * (CELL_M * 0.5) + along * (u - 0.5) * CELL_M;
+                    let inside = on_face - n * 0.02;
+                    let Some(deck) =
+                        roofs.top_over(inside.x, inside.z, at.y as f32 * CELL_M - 0.01)
+                    else {
+                        continue;
+                    };
+                    // Only where the wall stands as high as the roof and its covering there.
+                    let reach = |y: f32| {
+                        let p = Vec3::new(on_face.x, y, on_face.z) + n * off;
+                        base.cube((p / CELL_M).floor().as_ivec3())
+                            .is_some_and(|c| !c.kind.is_roof() && c.is_in())
+                    };
+                    if !reach(deck - 0.2) || !reach(deck + 0.4) {
+                        continue;
+                    }
+                    let from = Vec3::new(on_face.x, deck + 0.3, on_face.z) + n * off;
+                    cast += 1;
+                    if grid.hit(drawn, from, Vec3::NEG_Y, 0.0, 0.5).is_none() {
+                        findings.push(Finding {
+                            by: 0.0,
+                            fault: Fault::SeeThrough,
+                            detail,
+                            at: from,
+                            what: format!(
+                                "roof cube {at} against a {} cube at {}: a line down past its face, {:.0} cm off it, meets no roof",
+                                kind_name(kits, wall.kind),
+                                at + face,
+                                off * 100.0
+                            ),
+                        });
+                        break 'slot;
                     }
                 }
             }
@@ -1409,17 +1657,28 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
             .unwrap_or(0);
         pool[(at + 1) % pool.len()].kind()
     };
-    let mut cabin = |name: String, kinds: Vec<Kind>, other: Kind| {
+    let mut cabin = |name: String, kinds: Vec<Kind>, other: Kind, roof_left_on: bool| {
         if only.is_some_and(|only| !name.contains(only)) {
             return;
         }
-        out.push((name, crate::qa_cabin::cabin(kits, &kinds, other, &height)));
+        out.push((
+            name,
+            crate::qa_cabin::cabin(kits, &kinds, other, &height, roof_left_on),
+        ));
     };
     for kit in &walls {
         cabin(
             format!("{}: QA cabin", kit.id),
             vec![kit.kind()],
             other(kit),
+            false,
+        );
+        // Its storey laid round the first storey's roof left on (D343).
+        cabin(
+            format!("{}: QA cabin, its storey over its roof left on", kit.id),
+            vec![kit.kind()],
+            other(kit),
+            true,
         );
     }
     if let Some(first) = walls.first() {
@@ -1428,6 +1687,7 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
             format!("{}: QA cabin", ids.join(" with ")),
             walls.iter().map(|kit| kit.kind()).collect(),
             other(first),
+            false,
         );
     }
     // The rectangle under a gable, the commit check's, in each wall kind and each two mixed,
@@ -1489,6 +1749,32 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
                 continue;
             }
             out.push((name, on_ground(kits, &ops)));
+        }
+    }
+    // Where roofs and walls meet (D343): every case, in each wall kind under each roof.
+    let roofs: Vec<&crate::kit::Kit> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern == Pattern::Roof)
+        .collect();
+    for wall in &walls {
+        for roof in &roofs {
+            let block = wall.pattern == Pattern::Masonry;
+            // A chimney in a gable of another pattern: the stone's in a timber wall, the first
+            // timber's in a stone one.
+            let other = walls
+                .iter()
+                .find(|kit| {
+                    kit.pattern != wall.pattern && (block || kit.pattern == Pattern::Masonry)
+                })
+                .map(|kit| kit.kind());
+            for (row, ops) in crate::roof_walls::rows(wall.kind(), roof.kind(), other) {
+                let name = format!("{} with {}: roofs and walls: {row}", wall.id, roof.id);
+                if only.is_some_and(|only| !name.contains(only)) {
+                    continue;
+                }
+                out.push((name, on_ground(kits, &ops)));
+            }
         }
     }
     // The castle, of 140,000 cubes (`castle`), in the footings' stone with each kind of
@@ -1794,13 +2080,13 @@ mod tests {
             max: [0, 2, 0],
             cube: Some(crate::Cube::new(Kind(1), Fill::Solid)),
         });
-        assert!(!solid(&base, &kits, IVec3::new(0, 1, 0)));
+        assert!(!solid(&base, &kits, IVec3::new(0, 1, 0), Detail::Near));
         base.apply(crate::BuildOp::Fill {
             min: [1, 0, 0],
             max: [1, 2, 0],
             cube: Some(crate::Cube::new(Kind(1), Fill::Solid)),
         });
-        assert!(solid(&base, &kits, IVec3::new(0, 1, 0)));
+        assert!(solid(&base, &kits, IVec3::new(0, 1, 0), Detail::Near));
     }
 
     #[test]
@@ -1837,8 +2123,8 @@ mod tests {
                 }),
             });
         }
-        assert!(solid(&base, &kits, IVec3::new(0, 1, 0)));
-        assert!(!solid(&base, &kits, IVec3::new(0, 0, 0)));
+        assert!(solid(&base, &kits, IVec3::new(0, 1, 0), Detail::Near));
+        assert!(!solid(&base, &kits, IVec3::new(0, 0, 0), Detail::Near));
     }
 
     #[test]

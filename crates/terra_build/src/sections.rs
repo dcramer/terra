@@ -883,6 +883,39 @@ const SLIVER_M: f32 = 0.05;
 /// fill reaches its middle.
 fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
     let point_cube = |point: Vec3| (point / CELL_M).floor().as_ivec3();
+    // A wall carried down into a roof cube it stands on goes in with it, not the roof, and
+    // one the walls over and under fill with the one under (D343).
+    match *piece {
+        Piece::Gable {
+            cube,
+            carried: layout::Carried::Down,
+            ..
+        } => {
+            return piece_in(
+                base,
+                &Piece::Block {
+                    cube: cube + IVec3::Y,
+                },
+            );
+        }
+        Piece::Gable {
+            cube,
+            carried: layout::Carried::Through,
+            ..
+        } => {
+            return piece_in(
+                base,
+                &Piece::Block {
+                    cube: cube - IVec3::Y,
+                },
+            );
+        }
+        Piece::Curb { max, .. } => {
+            let at = point_cube(max.metres() + Vec3::new(-0.01, 0.01, -0.01));
+            return piece_in(base, &Piece::Block { cube: at });
+        }
+        _ => {}
+    }
     // A framed kind's core and frame go in with a cube's first step, before its infill is
     // finished (D236): the wattle woven on the frame, then daubed.
     if let Piece::Wattle { cube } = *piece {
@@ -2195,7 +2228,7 @@ fn draw_blocks(
     // the surface cut down to their tops, stairs as a stone a tread, posts as drums.
     let mut shaped: [BTreeSet<[i32; 3]>; 3] = Default::default();
     // A gable's cubes, with the roof's underside over each, which cuts them.
-    let mut gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = BTreeMap::new();
+    let mut gables: BTreeMap<[i32; 3], ([[i32; 3]; 3], layout::Carried)> = BTreeMap::new();
     // A framed kind's cubes whose core is in (D236).
     let mut cores: BTreeSet<[i32; 3]> = BTreeSet::new();
     for (_, piece, stage) in own.iter().chain(edge).copied() {
@@ -2207,8 +2240,12 @@ fn draw_blocks(
                 continue;
             }
             Piece::Block { cube } => cube,
-            Piece::Gable { cube, under } => {
-                gables.insert(cube.to_array(), *under);
+            Piece::Gable {
+                cube,
+                under,
+                carried,
+            } => {
+                gables.insert(cube.to_array(), (*under, *carried));
                 cube
             }
             _ => continue,
@@ -2222,8 +2259,17 @@ fn draw_blocks(
         };
         // A wall carried up into a roof's cube is the wall's whole cube cut at the roof,
         // whatever the roof's cube is cut to.
-        let cut = matches!(piece, Piece::Block { .. })
-            && base.cube(*cube).is_some_and(|c| c.shape.is_cut());
+        // One carried down into a roof's cube it stands on is cut from below at the deck, as a
+        // shape with a planed underside is, and drawn with them.
+        let cut = (matches!(piece, Piece::Block { .. })
+            && base.cube(*cube).is_some_and(|c| c.shape.is_cut()))
+            || matches!(
+                piece,
+                Piece::Gable {
+                    carried: layout::Carried::Down,
+                    ..
+                }
+            );
         if cut {
             shaped[set].insert(cube.to_array());
         } else {
@@ -2260,9 +2306,11 @@ fn draw_blocks(
             .map_or(crate::Shape::Whole, |c| c.shape)
     };
     let cut = |cube: IVec3, at: Vec3| {
-        let roof = gables
+        let [under_roof, roof] = gables
             .get(&cube.to_array())
-            .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at));
+            .map_or([f32::MIN, f32::MAX], |(under, carried)| {
+                layout::roofs::carried_cut(*carried, cube, under, at)
+            });
         let (u, v) = (
             (at.x / CELL_M - cube.x as f32).clamp(0.0, 1.0),
             (at.z / CELL_M - cube.z as f32).clamp(0.0, 1.0),
@@ -2278,7 +2326,7 @@ fn draw_blocks(
         } else {
             f32::MIN
         };
-        [low, roof.min(high)]
+        [low.max(under_roof), roof.min(high)]
     };
     // Most cubes are whole: their cut is never asked.
     let cut_at_all = |cube: IVec3| {
@@ -2639,7 +2687,10 @@ fn draw_blocks(
         let cut_down: BTreeSet<[i32; 3]> = shaped[set]
             .iter()
             .copied()
-            .filter(|&at| planed(shape_of(IVec3::from_array(at))))
+            .filter(|&at| {
+                planed(shape_of(IVec3::from_array(at)))
+                    || matches!(gables.get(&at), Some((_, layout::Carried::Down)))
+            })
             .collect();
         let over_a_cut = |at: IVec3| {
             let (under, over) = (at - IVec3::Y, at + IVec3::Y);
@@ -2831,7 +2882,9 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             Shape::Box,
         ),
         Piece::Board { min, max } => Some(boxed(min.metres(), max.metres())),
-        Piece::Blocking { .. } => piece.bounds().map(|(min, max)| boxed(min, max)),
+        Piece::Blocking { .. } | Piece::Curb { .. } => {
+            piece.bounds().map(|(min, max)| boxed(min, max))
+        }
         Piece::Beam {
             from,
             to,

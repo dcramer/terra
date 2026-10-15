@@ -63,6 +63,13 @@ pub fn draw_harmed(
             metres(kit, Material::Board),
             [1.0; 3],
         ),
+        Piece::Curb { min, max, under } => curb(
+            surfaces.of(Material::Board),
+            (min.metres(), max.metres()),
+            &under,
+            metres(kit, Material::Board),
+            [1.0; 3],
+        ),
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
         Piece::Beam { .. } => beam(piece, kit, plain, surfaces),
         Piece::Trim { .. } | Piece::Band { .. } | Piece::Corner { .. } => {
@@ -330,6 +337,161 @@ pub(crate) fn wedge(
         tri([foot[j], foot[i], head[i]]);
         tri([foot[j], head[i], head[j]]);
     }
+}
+
+/// A curb under what stands on a roof (`Piece::Curb`): a box from `min` to `max` across, its
+/// top level at `max`'s height, its bottom on the roof cube's deck (`under`), following it
+/// exactly as a gable's cut does, over a hip's or a valley's crease too: the deck is flat on
+/// each of eight triangles of the cube, its quarters split along the diagonals through its
+/// middle, so the bottom is those clipped to the curb and its sides break where they cross
+/// them.
+pub(crate) fn curb(
+    surface: &mut Surface,
+    (min, max): (Vec3, Vec3),
+    under: &[[i32; 3]; 3],
+    metres: [f32; 2],
+    colour: [f32; 3],
+) {
+    use crate::CELL_M;
+    use glam::{IVec3, Vec2};
+    let cube = IVec3::new(
+        libm::floorf((min.x + max.x) * 0.5 / CELL_M) as i32,
+        libm::roundf(max.y / CELL_M) as i32 - 1,
+        libm::floorf((min.z + max.z) * 0.5 / CELL_M) as i32,
+    );
+    let deck =
+        |p: Vec2| crate::layout::roofs::gable_cut(cube, under, Vec3::new(p.x, 0.0, p.y)).min(max.y);
+    let mut face = |t: [Vec3; 3], out: Vec3| {
+        let n = (t[1] - t[0]).cross(t[2] - t[0]);
+        if n.length_squared() < 1e-12 {
+            return;
+        }
+        let (t, n) = if n.dot(out) >= 0.0 {
+            (t, n.normalize())
+        } else {
+            ([t[0], t[2], t[1]], -n.normalize())
+        };
+        surface.textured(
+            t,
+            [n; 3],
+            t.map(|p| crate::mesh::planar(p, n, metres)),
+            colour,
+        );
+    };
+    let up = |p: Vec2, y: f32| Vec3::new(p.x, y, p.y);
+    // The top, looking up.
+    let corners = [
+        Vec2::new(min.x, min.z),
+        Vec2::new(max.x, min.z),
+        Vec2::new(max.x, max.z),
+        Vec2::new(min.x, max.z),
+    ];
+    face(
+        [
+            up(corners[0], max.y),
+            up(corners[1], max.y),
+            up(corners[2], max.y),
+        ],
+        Vec3::Y,
+    );
+    face(
+        [
+            up(corners[0], max.y),
+            up(corners[2], max.y),
+            up(corners[3], max.y),
+        ],
+        Vec3::Y,
+    );
+    // The bottom, looking down: each triangle the deck is flat on, clipped to the curb.
+    let at = |u: f32, v: f32| Vec2::new((cube.x as f32 + u) * CELL_M, (cube.z as f32 + v) * CELL_M);
+    for (i, k) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        let (u, v) = (i as f32 * 0.5, k as f32 * 0.5);
+        let [q00, q10, q11, q01] = [
+            at(u, v),
+            at(u + 0.5, v),
+            at(u + 0.5, v + 0.5),
+            at(u, v + 0.5),
+        ];
+        let halves = if (i == 0) == (k == 0) {
+            [[q00, q10, q11], [q00, q11, q01]]
+        } else {
+            [[q00, q10, q01], [q10, q11, q01]]
+        };
+        for half in halves {
+            let clipped = clip(&half, Vec2::new(min.x, min.z), Vec2::new(max.x, max.z));
+            for j in 1..clipped.len().saturating_sub(1) {
+                let t = [clipped[0], clipped[j], clipped[j + 1]].map(|p| up(p, deck(p)));
+                face(t, Vec3::NEG_Y);
+            }
+        }
+    }
+    // Each side, looking out, broken where it crosses the lines the deck bends along.
+    let middle = (min + max) * 0.5;
+    for s in 0..4 {
+        let (a, b) = (corners[s], corners[(s + 1) % 4]);
+        let local = |p: Vec2| (p.x / CELL_M - cube.x as f32, p.y / CELL_M - cube.z as f32);
+        let mut ts = vec![0.0, 1.0];
+        let (ua, va) = local(a);
+        let (ub, vb) = local(b);
+        let mut cross = |fa: f32, fb: f32| {
+            if (fa > 0.0) != (fb > 0.0) && (fa - fb).abs() > 1e-6 {
+                ts.push(fa / (fa - fb));
+            }
+        };
+        cross(ua - 0.5, ub - 0.5);
+        cross(va - 0.5, vb - 0.5);
+        cross(ua - va, ub - vb);
+        cross(ua + va - 1.0, ub + vb - 1.0);
+        ts.sort_by(f32::total_cmp);
+        ts.dedup_by(|x, y| (*x - *y).abs() < 1e-5);
+        let out = (a + b) * 0.5 - Vec2::new(middle.x, middle.z);
+        let out = if (b - a).x.abs() > (b - a).y.abs() {
+            Vec3::new(0.0, 0.0, out.y.signum())
+        } else {
+            Vec3::new(out.x.signum(), 0.0, 0.0)
+        };
+        for w in ts.windows(2) {
+            let (p, q) = (a.lerp(b, w[0]), a.lerp(b, w[1]));
+            let (pb, qb) = (up(p, deck(p)), up(q, deck(q)));
+            let (pt, qt) = (up(p, max.y), up(q, max.y));
+            face([pb, qb, qt], out);
+            face([pb, qt, pt], out);
+        }
+    }
+}
+
+/// A convex polygon in plan clipped to a rectangle from `low` to `high`.
+fn clip(polygon: &[glam::Vec2], low: glam::Vec2, high: glam::Vec2) -> Vec<glam::Vec2> {
+    let mut out = polygon.to_vec();
+    for (axis, bound, keep_above) in [
+        (0, low.x, true),
+        (0, high.x, false),
+        (1, low.y, true),
+        (1, high.y, false),
+    ] {
+        let inside = |p: glam::Vec2| {
+            if keep_above {
+                p[axis] >= bound - 1e-6
+            } else {
+                p[axis] <= bound + 1e-6
+            }
+        };
+        let input = std::mem::take(&mut out);
+        for i in 0..input.len() {
+            let (p, q) = (input[i], input[(i + 1) % input.len()]);
+            if inside(p) {
+                out.push(p);
+            }
+            if inside(p) != inside(q) {
+                let t = (bound - p[axis]) / (q[axis] - p[axis]);
+                out.push(p.lerp(q, t));
+            }
+        }
+        if out.len() < 3 {
+            return Vec::new();
+        }
+    }
+    out
 }
 
 /// A long member far off, as a plain box from one end to the other along its middle, so

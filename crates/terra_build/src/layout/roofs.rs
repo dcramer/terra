@@ -74,8 +74,15 @@ pub enum RoofPart {
     Hip,
     /// The lining of a valley.
     Valley,
-    /// Mortar where the roof meets a wall standing up beside it.
+    /// Where the roof rises to something standing on or beside it along a level line: an
+    /// apron, as under a chimney or along a lean-to's head.
     Flashing,
+    /// Where the roof meets something standing on or beside it along a sloping line: step
+    /// flashing over soakers, up a chimney's or a dormer cheek's sides.
+    Step,
+    /// Where the roof falls to something standing on or beside it along a level line: a
+    /// back gutter, above a chimney.
+    Gutter,
 }
 
 impl RoofPart {
@@ -138,6 +145,32 @@ struct Square {
     /// Its corners' heights, as [`CORNERS`], and its middle's, in metres.
     corners: [f32; 4],
     middle: f32,
+    /// Whether something not a roof's stands on it ([`standing_on`]): the covering runs on
+    /// under it, but no cap or edge of the roof is drawn there and its foot is flashed.
+    covered: bool,
+}
+
+/// The cube standing on a roof's cube, if one does: something not a roof's, in, with its
+/// foot on the roof cube's top (not an upper half or an upside-down shape hung over it). It
+/// is carried down into the roof's cube to the roof's deck, and the roof is flashed round
+/// its foot (docs/building-plan.md, where roofs and walls meet).
+pub(crate) fn standing_on(base: &Base, roof: IVec3) -> Option<Cube> {
+    base.cube(roof + IVec3::Y).filter(|over| {
+        !over.kind.is_roof()
+            && over.level() > 0
+            && super::drawn_fill(over) == Fill::Solid
+            && !over.shape.planed_under()
+            && !matches!(over.shape, Shape::InvertedStair(_))
+    })
+}
+
+/// Whether a roof cube is part of a roof's surface: in it, and with no roof cube over it
+/// that has anything of it in, which is the roof there instead.
+fn on_top(base: &Base, at: IVec3, cube: &Cube) -> bool {
+    cube.fill != Fill::Open
+        && !base
+            .cube(at + IVec3::Y)
+            .is_some_and(|over| over.kind.is_roof() && over.fill != Fill::Open && over.level() > 0)
 }
 
 /// What is beyond a side of a square.
@@ -261,11 +294,14 @@ impl Roofs {
             inside: Vec::new(),
             fingerprinted: std::cell::OnceCell::new(),
         };
-        // The top of every roof cube with nothing over it.
+        // The top of every roof cube with no roof over it, whatever else stands on it: the
+        // roof runs on under a wall standing on it, as a real roof's deck does under a
+        // chimney's or a dormer's cheek, so no wall's shape can open it.
         for &(at, cube) in cubes {
-            if cube.fill == Fill::Open || base.cube(at + IVec3::Y).is_some() {
+            if !on_top(base, at, &cube) {
                 continue;
             }
+            let covered = standing_on(base, at).is_some();
             for sub in [[0, 0], [1, 0], [0, 1], [1, 1]] {
                 let height = |du: f32, dv: f32| {
                     let (u, v) = ((sub[0] as f32 + du) * 0.5, (sub[1] as f32 + dv) * 0.5);
@@ -277,6 +313,7 @@ impl Roofs {
                     kind: cube.kind,
                     corners: CORNERS.map(|[dx, dz]| height(dx as f32, dz as f32)),
                     middle: height(0.5, 0.5),
+                    covered,
                 });
             }
         }
@@ -286,7 +323,9 @@ impl Roofs {
         // planes of the cube it runs on from; where two run on into the same square, the
         // higher, so eaves meeting round an inside corner make a valley.
         let real = roofs.squares.len();
-        let mut past: BTreeMap<[i32; 2], Square> = BTreeMap::new();
+        // By place, each roof's apart: a storey's roof's eaves over a roof under it, a
+        // storey up, are not that one's.
+        let mut past: BTreeMap<[i32; 2], Vec<Square>> = BTreeMap::new();
         for q in 0..real {
             let square = roofs.squares[q];
             let reach = kits.of(square.kind).map_or(EAVES_M, |kit| kit.eaves);
@@ -352,9 +391,14 @@ impl Roofs {
                     kind: square.kind,
                     corners,
                     middle,
+                    covered: false,
                 };
-                past.entry(place)
-                    .and_modify(|there| {
+                let here = past.entry(place).or_default();
+                match here
+                    .iter_mut()
+                    .find(|there| (there.middle - candidate.middle).abs() < 1.0)
+                {
+                    Some(there) => {
                         if candidate.middle > there.middle + 1e-4 {
                             there.cube = candidate.cube;
                             there.kind = candidate.kind;
@@ -363,11 +407,12 @@ impl Roofs {
                             there.corners[k] = there.corners[k].max(candidate.corners[k]);
                         }
                         there.middle = there.middle.max(candidate.middle);
-                    })
-                    .or_insert(candidate);
+                    }
+                    None => here.push(candidate),
+                }
             }
         }
-        roofs.squares.extend(past.into_values());
+        roofs.squares.extend(past.into_values().flatten());
         roofs.index();
         roofs.link(base);
         roofs.group();
@@ -409,7 +454,20 @@ impl Roofs {
                     let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32);
                     let probe = (a + b) * 0.5 + out * 0.05 + Vec3::Y * 0.05;
                     let cube = (probe / CELL_M).floor().as_ivec3();
-                    if base.cube(cube).is_some_and(|c| c.fill != Fill::Open) {
+                    // Or a hole in the roof, the roof going on beyond it (docs/building-voxels.md,
+                    // gap 5): its edge flashed round, as at something standing beside the
+                    // roof, and no eaves carried into it. Not past an eave's own squares.
+                    let real = [square.place[0].div_euclid(2), square.place[1].div_euclid(2)]
+                        == [square.cube.x, square.cube.z];
+                    let across = IVec3::new(step[0], 0, step[1]);
+                    let hole = real
+                        && (1..=HOLE_ACROSS).any(|k| {
+                            (-k - 1..=k + 1).any(|dy| {
+                                base.cube(cube + across * k + IVec3::Y * dy)
+                                    .is_some_and(|c| c.kind.is_roof() && c.fill != Fill::Open)
+                            })
+                        });
+                    if base.cube(cube).is_some_and(|c| c.fill != Fill::Open) || hole {
                         Beside::Against
                     } else {
                         Beside::Open
@@ -643,6 +701,130 @@ fn crease(first: &[Vec3; 3], second: &[Vec3; 3], p: Vec3, q: Vec3) -> Option<Roo
     })
 }
 
+/// Which flashing a line where the covering meets something standing is, by the line and
+/// the roof's triangle on its open side: a step up a sloping line, else an apron where the
+/// roof rises to it and a back gutter where it falls to it.
+fn flashing(open: &[Vec3; 3]) -> RoofPart {
+    let [middle, p, r] = *open;
+    if (p.y - r.y).abs() > 1e-4 {
+        RoofPart::Step
+    } else if middle.y > p.y + 1e-4 {
+        RoofPart::Gutter
+    } else {
+        RoofPart::Flashing
+    }
+}
+
+/// Whether a part is flashing of any sort, where the covering meets something standing.
+pub fn is_flashing(part: RoofPart) -> bool {
+    matches!(part, RoofPart::Flashing | RoofPart::Step | RoofPart::Gutter)
+}
+
+/// A line's ends, a flashing's pulled back where it meets another in an inside corner, both
+/// lying on the roof toward one another: the one more along the north and south butts the
+/// other's side, short of the corner by its width, so the two are not laid one in the other.
+/// Round an outside corner each lies on its own side and stops at the corner.
+fn flashing_butted(segment: &Segment, all: &[Segment], kit: &Kit) -> (Place, Place) {
+    let (from, to) = (segment.from.metres(), segment.to.metres());
+    if !is_flashing(segment.part) {
+        return (segment.from, segment.to);
+    }
+    let along = to - from;
+    let plan = along.with_y(0.0);
+    if plan.length() < 1e-4 || plan.z.abs() <= plan.x.abs() {
+        return (segment.from, segment.to);
+    }
+    let wide = kit
+        .roof
+        .parts
+        .get(&segment.part)
+        .or_else(|| kit.roof.parts.get(&RoofPart::Flashing))
+        .and_then(|part| kit.dress.made.as_deref()?.modules.get(&part.module))
+        .map_or(0.2, |module| module.size()[1]);
+    // The way onto the roof from the line, level.
+    let onto = (segment.sides[0].metres() - from)
+        .reject_from(along)
+        .with_y(0.0)
+        .normalize_or_zero();
+    let butted = |end: Vec3, other_end: Vec3| -> Vec3 {
+        let meets = all.iter().any(|other| {
+            if std::ptr::eq(other, segment) || !is_flashing(other.part) {
+                return false;
+            }
+            let (a, b) = (other.from.metres(), other.to.metres());
+            let way = (b - a).with_y(0.0).normalize_or_zero();
+            if way.dot(plan.normalize_or_zero()).abs() > 0.5 {
+                return false;
+            }
+            // It runs from this end out over this one's roof.
+            let away = if a.distance(end) < 0.01 {
+                way
+            } else if b.distance(end) < 0.01 {
+                -way
+            } else {
+                return false;
+            };
+            away.dot(onto) > 0.5
+        });
+        if meets {
+            end + (other_end - end).normalize_or_zero() * (wide * along.length() / plan.length())
+        } else {
+            end
+        }
+    };
+    (Place::near(butted(from, to)), Place::near(butted(to, from)))
+}
+
+/// How wide a flashing's board may lie across the roof from its line, in ticks, where the
+/// roof folds away under it within its modelled width (over a hip or a ridge beside what
+/// it flashes), so it lies on the roof rather than standing off it: as far as the roof keeps
+/// to the plane it lies on. None where the whole width lies on it.
+fn flashing_wide(roofs: &Roofs, segment: &Segment, kit: &Kit) -> Option<i32> {
+    let wide = kit
+        .roof
+        .parts
+        .get(&segment.part)
+        .or_else(|| kit.roof.parts.get(&RoofPart::Flashing))
+        .and_then(|part| kit.dress.made.as_deref()?.modules.get(&part.module))
+        .map(|module| module.size()[1])?;
+    let (from, to) = (segment.from.metres(), segment.to.metres());
+    let side = segment.sides[0].metres();
+    let n = planar_normal(from, to, side);
+    let onto = (side - from)
+        .reject_from(to - from)
+        .with_y(0.0)
+        .normalize_or_zero();
+    if onto == Vec3::ZERO || n.y < 0.2 {
+        return None;
+    }
+    // The roof's plane at a point level from a point of the line.
+    let plane = |p: Vec3, q: Vec3| p.y - (n.x * (q.x - p.x) + n.z * (q.z - p.z)) / n.y;
+    let mut reach = wide;
+    for t in [0.1, 0.5, 0.9] {
+        let p = from.lerp(to, t);
+        let mut d = FLASHING_STEP_M;
+        while d <= wide {
+            let q = p + onto * d;
+            let falls = roofs
+                .top_over(q.x, q.z, p.y - CELL_M)
+                .is_none_or(|top| top < plane(p, q) - FLASHING_LIFT_M);
+            if falls {
+                reach = reach.min(d - FLASHING_STEP_M);
+                break;
+            }
+            d += FLASHING_STEP_M;
+        }
+    }
+    (reach < wide - 1e-4).then(|| ticks(reach.max(FLASHING_NARROWEST_M)))
+}
+
+/// How finely a flashing's board is fitted to where the roof folds away under it.
+const FLASHING_STEP_M: f32 = 0.02;
+/// How far the roof may fall away under a flashing's board before it stands off it.
+const FLASHING_LIFT_M: f32 = 0.005;
+/// The narrowest a flashing's board is laid.
+const FLASHING_NARROWEST_M: f32 = 0.04;
+
 /// A line of roof before it is joined to those it runs on from.
 #[derive(Clone, Debug)]
 struct Segment {
@@ -680,26 +862,36 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     let ours = |q: usize| roofs.squares[q].kind == kit.kind() && near(q);
     let count = roofs.squares.len();
     let mut segments: Vec<Segment> = Vec::new();
+    // Creases under something standing on the roof: the frame under them runs on, as it
+    // carries what stands there, but their caps do not.
+    let mut hidden: Vec<Segment> = Vec::new();
     for q in (0..count).filter(|&q| ours(q)) {
         let triangles: [[Vec3; 3]; 4] = [0, 1, 2, 3].map(|side| roofs.triangle(q, side));
         let centroid = |t: &[Vec3; 3]| Place::near((t[0] + t[1] + t[2]) / 3.0);
+        let covered = roofs.squares[q].covered;
         // Its diagonals, between its own triangles.
         for side in 0..4 {
             let (a, b) = (&triangles[side], &triangles[(side + 1) % 4]);
             let (p, r) = (a[0], a[2]);
             if let Some(part) = crease(a, b, p, r) {
-                segments.push(Segment {
+                let segment = Segment {
                     part,
                     from: Place::near(p),
                     to: Place::near(r),
                     sides: [centroid(a), centroid(b)],
                     square: q,
-                });
+                };
+                if covered {
+                    hidden.push(segment);
+                } else {
+                    segments.push(segment);
+                }
             }
         }
         // Its sides: shared with the square beyond, or an edge of the roof.
         for (side, triangle) in triangles.iter().enumerate() {
             let (step, _, _) = SIDES[side];
+            let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32) * STEP_M;
             let (p, r) = (triangle[1], triangle[2]);
             let part = match roofs.beside[q][side] {
                 Beside::Square(other) => {
@@ -708,23 +900,42 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                         continue;
                     }
                     let theirs = roofs.triangle(other, (side + 2) % 4);
-                    let Some(part) = crease(triangle, &theirs, p, r) else {
-                        continue;
-                    };
-                    segments.push(Segment {
+                    let crease = crease(triangle, &theirs, p, r).map(|part| Segment {
                         part,
                         from: Place::near(p),
                         to: Place::near(r),
                         sides: [centroid(triangle), centroid(&theirs)],
                         square: q,
                     });
+                    match (covered, roofs.squares[other].covered) {
+                        (false, false) => segments.extend(crease),
+                        (true, true) => hidden.extend(crease),
+                        // Where something stands on one and not the other, the covering
+                        // runs on under its foot, flashed along it from the open side.
+                        (mine, _) => {
+                            hidden.extend(crease);
+                            let (open, toward, square) = if mine {
+                                (theirs, -out, other)
+                            } else {
+                                (*triangle, out, q)
+                            };
+                            segments.push(Segment {
+                                part: flashing(&open),
+                                from: Place::near(p),
+                                to: Place::near(r),
+                                sides: [centroid(&open), Place::near((p + r) * 0.5 + toward)],
+                                square,
+                            });
+                        }
+                    }
                     continue;
                 }
-                Beside::Against => RoofPart::Flashing,
+                // Under what stands on it, against what stands beside it: nothing shows.
+                Beside::Against if covered => continue,
+                Beside::Against => flashing(triangle),
                 Beside::Open if (p.y - r.y).abs() < 1e-4 => RoofPart::Eave,
                 Beside::Open => RoofPart::Verge,
             };
-            let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32) * STEP_M;
             segments.push(Segment {
                 part,
                 from: Place::near(p),
@@ -735,6 +946,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         }
     }
     let joined = ridges_a_cube_wide(join(segments));
+    let hidden = join(hidden);
     let r = &kit.roof;
     let (rafter, batten) = (r.rafter * 0.5, r.batten.1);
     // How far a beam drawn from the kit's rafter module reaches from its line: as it is
@@ -748,8 +960,13 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             let [high, wide] = module.size();
             rafter.max(high.max(wide) * 0.5)
         });
-    // The beams under the creases, then every long piece in its own stage.
-    for segment in &joined {
+    // The beams under the creases, under what stands on the roof too, then every long
+    // piece in its own stage.
+    let all: Vec<&Segment> = joined.iter().chain(&hidden).collect();
+    let every: Vec<Segment> = all.iter().map(|s| (*s).clone()).collect();
+    for (index, segment) in all.iter().enumerate() {
+        let segment: &Segment = segment;
+        let shown = index < joined.len();
         let cell = roofs.cell(segment.square, segment.part.stage());
         let seed = hash(&[
             segment.from.0[0] as u32,
@@ -774,7 +991,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             // end too, so its sawn ends are not in their planes; and where its crease meets
             // another, as a wing's ridge meets the main one at a T, short of that one's beam
             // by half its width, so it butts its side rather than running into it.
-            let met = [segment.from, segment.to].map(|end| crease_met(segment, end, &joined));
+            let met = [segment.from, segment.to].map(|end| crease_met(segment, end, &every));
             let short = met.map(|met| BEAM_SHORT_M + if met { beam_half } else { 0.0 });
             for (i, (mut from, mut to)) in beams.into_iter().enumerate() {
                 let along = (to - from).normalize_or_zero();
@@ -805,18 +1022,27 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                     cell: roofs.cell(segment.square, 1),
                     capped: [true; 2],
                     met: [false; 2],
+                    wide: None,
                 });
             }
         }
+        if !shown {
+            continue;
+        }
+        let (from, to) = flashing_butted(segment, &joined, kit);
+        let wide = is_flashing(segment.part)
+            .then(|| flashing_wide(&roofs, segment, kit))
+            .flatten();
         pieces.push(Piece::Roof {
             part: segment.part,
-            from: segment.from,
-            to: segment.to,
+            from,
+            to,
             sides: segment.sides,
             seed,
             cell,
             capped: [segment.from, segment.to].map(|end| !edge_met(segment, end, &joined)),
             met: [segment.from, segment.to].map(|end| crease_met(segment, end, &joined)),
+            wide,
         });
     }
     rafters(&roofs, &ours, batten + rafter, rafter, pieces);
@@ -833,8 +1059,21 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
     for q in (0..count).filter(|&q| ours(q)) {
         let eave = roofs.span[roofs.roof[q]].0;
         let corners = [0, 1, 2, 3].map(|k| Place::near(roofs.point(q, k)));
-        let open = roofs.beside[q].map(|b| !matches!(b, Beside::Square(_)));
+        let mut open = roofs.beside[q].map(|b| !matches!(b, Beside::Square(_)));
         let courses = (ticks(eave), ticks(rise).max(1));
+        // Tucked into whatever stands beside it, so a wall or a post thinner than its cube
+        // meets covering rather than a slot down past its face.
+        if !roofs.squares[q].covered {
+            for (side, open) in open.iter_mut().enumerate() {
+                if roofs.beside[q][side] != Beside::Against {
+                    continue;
+                }
+                if let Some(strip) = tuck(base, kit, &roofs, q, side, courses) {
+                    *open = false;
+                    pieces.push(strip);
+                }
+            }
+        }
         pieces.push(Piece::Covering {
             corners,
             middle: Place::near(roofs.middle(q)),
@@ -957,9 +1196,105 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 cell: roofs.cell(segment.square, 2),
                 capped,
                 met: [false; 2],
+                wide: None,
             });
         }
     }
+}
+
+/// How far the covering is tucked into what stands beside the roof, in metres: past any
+/// timber wall's or post's face in its cube (a log wall's is 10 cm in, a post's 11), short
+/// of the middle of a cube, so two roofs either side of a wall a cube thick never meet in it.
+pub const TUCK_M: f32 = 0.15;
+
+/// How many cubes across a hole in a roof may be and still be one, the roof going on past
+/// it: a smoke hole or a skylight. Wider, the roof's edges are its own, eaves and verges.
+const HOLE_ACROSS: i32 = 2;
+
+/// Whether a cube stands up beside a roof for its covering to be tucked into: something not
+/// a roof's, solid and in, filling its column's height (whole, or a post).
+fn stands_beside(base: &Base, at: IVec3) -> bool {
+    base.cube(at).is_some_and(|cube| {
+        !cube.kind.is_roof()
+            && cube.level() > 0
+            && super::drawn_fill(&cube) == Fill::Solid
+            && matches!(cube.shape, Shape::Whole | Shape::Post)
+    })
+}
+
+/// A strip of a square's covering carried on past a side something stands beside
+/// ([`TUCK_M`]), on the plane of the square's triangle there, as a roofer runs the covering
+/// up under a wall's flashing: only where what stands there is as high as the strip and its
+/// covering all along it. Where what stands there turns away at an end of the side (an
+/// outside corner) the strip's end is mitred back, and where it turns toward the roof (an
+/// inside corner) carried on into the corner, mitred, so the strips of two sides meet on
+/// the diagonal, neither in the other.
+fn tuck(
+    base: &Base,
+    kit: &Kit,
+    roofs: &Roofs,
+    q: usize,
+    side: usize,
+    courses: (i32, i32),
+) -> Option<Piece> {
+    let t = roofs.triangle(q, side);
+    let (a, b) = (t[1], t[2]);
+    let (step, _, _) = SIDES[side];
+    let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32);
+    let n = normal(&t);
+    let along = (b - a).with_y(0.0).normalize_or_zero();
+    let cell_of = |p: Vec3| (p / CELL_M).floor().as_ivec3();
+    let solid_at = |p: Vec3| stands_beside(base, cell_of(p));
+    // Each end: carried on (1) into an inside corner, mitred back (-1) round an outside
+    // one, or square (0) where the roof and what stands beside it run on together.
+    let end = |p: Vec3, away: Vec3| -> f32 {
+        let beyond = p + away * 0.05 + Vec3::Y * 0.02;
+        if !solid_at(beyond + out * 0.05) {
+            -1.0
+        } else if solid_at(beyond - out * 0.05) && solid_at(beyond + away * TUCK_M) {
+            1.0
+        } else {
+            0.0
+        }
+    };
+    let (ka, kb) = (end(a, -along), end(b, along));
+    // A far corner: out by the tuck, and along by it into a corner or back from one, on
+    // the plane.
+    let far = |p: Vec3, k: f32, way: Vec3| {
+        let d = out * TUCK_M + way * (k * TUCK_M);
+        p + d + Vec3::Y * (-(n.x * d.x + n.z * d.z) / n.y.max(0.2))
+    };
+    let (a2, b2) = (far(a, ka, -along), far(b, kb, along));
+    let corners = [a, b, b2, a2];
+    // As high and as low as what it is tucked into goes, all over it.
+    let r = &kit.roof;
+    let high = corners.iter().map(|p| p.y).fold(f32::MIN, f32::max) + r.thick + r.relief + 0.02;
+    let low = corners.iter().map(|p| p.y).fold(f32::MAX, f32::min) - 0.02;
+    let centre = corners.iter().sum::<Vec3>() / 4.0;
+    for p in [
+        a + out * 0.02 + along * 0.02,
+        b + out * 0.02 - along * 0.02,
+        a2.lerp(centre, 0.1),
+        b2.lerp(centre, 0.1),
+    ] {
+        let column = cell_of(p);
+        for y in libm::floorf(low / CELL_M) as i32..=libm::floorf(high / CELL_M) as i32 {
+            if !stands_beside(base, IVec3::new(column.x, y, column.z)) {
+                return None;
+            }
+        }
+    }
+    let middle = centre;
+    Some(Piece::Covering {
+        corners: corners.map(Place::near),
+        middle: Place::near(middle),
+        courses,
+        // Its edges all inside what it is tucked into, where none is seen, so none is closed
+        // down to the roof and far off its sheet is lifted plumb all over, as the square's
+        // side it runs on from is, and as the next strip's is where two meet in a corner.
+        open: [false; 4],
+        cell: roofs.cell(q, COVERING),
+    })
 }
 
 /// Whether a crease's end meets another crease, at its end or along it, as a wing's ridge
@@ -990,6 +1325,22 @@ fn crease_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
 /// should stop at.
 fn edge_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
     let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
+    // A crease's end at something standing on the roof dies into it under the flashing,
+    // uncapped: a cap there stood a knob against the wall's face.
+    let crease = matches!(
+        segment.part,
+        RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley
+    );
+    if crease
+        && all.iter().any(|other| {
+            let (a, b) = (other.from.metres(), other.to.metres());
+            let p = end.metres();
+            let t = ((p - a).dot(b - a) / (b - a).length_squared().max(1e-9)).clamp(0.0, 1.0);
+            is_flashing(other.part) && (a + (b - a) * t).distance(p) < 0.01
+        })
+    {
+        return true;
+    }
     if matches!(segment.part, RoofPart::Hip | RoofPart::Valley) {
         return all.iter().any(|other| {
             other.part == RoofPart::Eave && (near(other.from, end) || near(other.to, end))
@@ -1405,40 +1756,175 @@ fn rafters(
             cell: roofs.cell(segment.square, 1),
             capped: [true; 2],
             met: [false; 2],
+            wide: None,
         });
     }
 }
 
-/// A block kind's cubes carried up into the roof over its walls (`Piece::Gable`): every
-/// roof cube standing on one of its whole cubes, its surface cut at the roof's underside, as
-/// a gable end rises to its verges and a wall's top closes the wedge under its eaves.
+/// A block kind's cubes carried into the roof cubes they meet (`Piece::Gable`), each to the
+/// roof's deck: up into every roof cube standing on one of its whole cubes, as a gable end
+/// rises to its verges and a wall's top closes the wedge under its eaves, and down into
+/// every roof cube one of its cubes stands on, as a chimney or a dormer's cheek stands on
+/// the roof (docs/building-plan.md, where roofs and walls meet).
 pub(crate) fn gables(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece>) {
     for (at, cube) in scope.cubes_where(base, None, |cube| cube.kind.is_roof()) {
         if !cube.kind.is_roof() || cube.fill == Fill::Open {
             continue;
         }
-        let under_it = base.cube(at - IVec3::Y);
-        if !under_it.is_some_and(|c| {
+        let below = base.cube(at - IVec3::Y).is_some_and(|c| {
             c.kind == kit.kind() && super::drawn_fill(&c) == Fill::Solid && !c.shape.is_cut()
-        }) {
-            continue;
-        }
-        if let Some(under) = underside(at, cube) {
-            pieces.push(Piece::Gable { cube: at, under });
-        }
+        });
+        let above = on_top(base, at, &cube)
+            && standing_on(base, at).is_some_and(|over| over.kind == kit.kind());
+        let under = deck(at, cube);
+        let (low, high) = under
+            .iter()
+            .flatten()
+            .fold((i32::MAX, i32::MIN), |(l, h), &t| (l.min(t), h.max(t)));
+        let up = below && super::metres(high) > at.y as f32 * CELL_M + 0.02;
+        let down = above && super::metres(low) < (at.y + 1) as f32 * CELL_M - 0.02;
+        let carried = match (up, down) {
+            (true, true) => super::Carried::Through,
+            (true, false) => super::Carried::Up,
+            (false, true) => super::Carried::Down,
+            (false, false) => continue,
+        };
+        pieces.push(Piece::Gable {
+            cube: at,
+            under,
+            carried,
+        });
     }
 }
 
-/// The underside of a roof cube's roof over its corners, the middles of its sides and its
-/// middle, west to east and north to south, in ticks, if any of it is over the cube's
-/// bottom: what a wall carried up into it is cut at.
-pub(crate) fn underside(at: IVec3, cube: Cube) -> Option<[[i32; 3]; 3]> {
-    // Up to the roof's deck, the plane its covering lies on: the boards under the roof, its
-    // eaves and its verges are drawn on it, so the wall meets them in one straight line.
+/// Where a block kind's cube carried into a roof cube is cut over a point, lowest and
+/// highest, in metres: under the deck for one carried up, over it for one carried down,
+/// nowhere for one the walls over and under it fill.
+pub fn carried_cut(
+    carried: super::Carried,
+    cube: IVec3,
+    under: &[[i32; 3]; 3],
+    at: Vec3,
+) -> [f32; 2] {
+    match carried {
+        super::Carried::Up => [f32::MIN, gable_cut(cube, under, at)],
+        super::Carried::Down => [gable_cut(cube, under, at), f32::MAX],
+        super::Carried::Through => [f32::MIN, f32::MAX],
+    }
+}
+
+/// A roof cube's deck, the plane its covering lies on, over its corners, the middles of its
+/// sides and its middle, west to east and north to south, in ticks: the boards under the
+/// roof, its eaves and its verges are drawn on it, so a wall carried to it meets them in
+/// one straight line.
+pub(crate) fn deck(at: IVec3, cube: Cube) -> [[i32; 3]; 3] {
     let under = |u: f32, v: f32| ticks((at.y as f32 + surface(cube.shape, u, v)) * CELL_M);
-    let rows = [0.0, 0.5, 1.0].map(|v| [0.0, 0.5, 1.0].map(|u| under(u, v)));
+    [0.0, 0.5, 1.0].map(|v| [0.0, 0.5, 1.0].map(|u| under(u, v)))
+}
+
+/// A roof cube's deck ([`deck`]), if any of it is over the cube's bottom: what a wall
+/// carried up into it is cut at.
+pub(crate) fn underside(at: IVec3, cube: Cube) -> Option<[[i32; 3]; 3]> {
+    let rows = deck(at, cube);
     let highest = rows.iter().flatten().copied().max().unwrap_or(i32::MIN);
     (super::metres(highest) > at.y as f32 * CELL_M + 0.02).then_some(rows)
+}
+
+/// How far in from its cube's side a curb under a wall of logs keeps: to the logs' widest,
+/// less a hair, as eave blocking's face is (`runs`).
+const CURB_IN_M: f32 = 0.004;
+/// How far in from its cube's side a curb keeps where a wall's logs end at that side.
+const CURB_END_IN_M: f32 = 0.008;
+/// How far in from its cube's sides a curb under a shape of a timber kind keeps: behind the
+/// boards it is clad in.
+const CURB_SHAPE_IN_M: f32 = 0.02;
+
+/// A timber kind's walls, posts and shapes standing on roof cubes, each carried down into
+/// its roof cube by a curb of its boards cut to the roof's deck (`Piece::Curb`), as a
+/// dormer's cheek or a post stands on a sole on the roof: across a wall's run as wide as its
+/// logs, to its cube's side where the wall runs on, as narrow as a post under a post, and
+/// the whole cube under a shape.
+pub(crate) fn curbs(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece>) {
+    let same = |at: IVec3| {
+        base.cube(at).is_some_and(|c| {
+            c.kind == kit.kind() && c.level() > 0 && super::drawn_fill(&c) == Fill::Solid
+        })
+    };
+    // Half a member's widest across, less a hair: an upright's section stands either way.
+    let half_of = |role: Option<super::Role>| {
+        let (wide, high) = crate::timber::section(kit, role);
+        wide.max(high) * 0.5 - CURB_IN_M
+    };
+    // A wall's foot on the roof is its sill where the kit dresses one, wider than its logs.
+    let foot = kit
+        .dress
+        .member(super::Role::Foot)
+        .map_or(f32::MIN, |_| half_of(Some(super::Role::Foot)));
+    // A column of whole cubes alone is an upright of the wall's members (`runs::posts`), a
+    // post cube the kit's post.
+    // A kit that dresses its arrises with uprights stands one at each corner of a column.
+    let column = if kit.dress.member(super::Role::Arris).is_some() {
+        CELL_M * 0.5 - CURB_IN_M
+    } else {
+        half_of(None)
+    };
+    let (wall, post) = (half_of(None).max(foot), half_of(Some(super::Role::Post)));
+    for (at, cube) in scope.cubes_where(base, None, |cube| cube.kind.is_roof()) {
+        if !cube.kind.is_roof() || !on_top(base, at, &cube) {
+            continue;
+        }
+        let Some(over) = standing_on(base, at).filter(|over| over.kind == kit.kind()) else {
+            continue;
+        };
+        let under = deck(at, cube);
+        let lowest = under.iter().flatten().copied().min().unwrap_or(i32::MAX);
+        let top = (at.y + 1) as f32 * CELL_M;
+        if super::metres(lowest) >= top - 0.02 {
+            continue;
+        }
+        let standing = at + IVec3::Y;
+        let dirs = [IVec3::NEG_X, IVec3::X, IVec3::NEG_Z, IVec3::Z];
+        let runs_x = same(standing + IVec3::X) || same(standing - IVec3::X);
+        let runs_z = same(standing + IVec3::Z) || same(standing - IVec3::Z);
+        let through_x = same(standing + IVec3::X) && same(standing - IVec3::X);
+        let through_z = same(standing + IVec3::Z) && same(standing - IVec3::Z);
+        let alone = (over.shape == Shape::Post)
+            .then_some(post)
+            .or((over.shape == Shape::Whole && !runs_x && !runs_z).then_some(column));
+        // How far in from each side, west, east, north and south: a wall's faces across its
+        // run where it runs on through the cube both ways; the whole cube at its end, where
+        // its logs are sawn flush and a post or a corner's upright stands, and round a corner
+        // or a T, where they run through to its outer faces.
+        let inset = dirs.map(|d| {
+            let across = if d.x != 0 {
+                through_z && !runs_x
+            } else {
+                through_x && !runs_z
+            };
+            if let Some(half) = alone {
+                CELL_M * 0.5 - half
+            } else if over.shape.is_cut() {
+                // Behind a shape's cladding, which is laid on its cube's faces.
+                CURB_SHAPE_IN_M
+            } else if across {
+                CELL_M * 0.5 - wall
+            } else if same(standing + d) {
+                0.0
+            } else {
+                // Out of the planes of the logs' ends sawn flush with the cube's side, and of
+                // the daub a hair in from them.
+                CURB_END_IN_M
+            }
+        });
+        let low = at.as_vec3() * CELL_M;
+        let (x0, x1) = (low.x + inset[0], low.x + CELL_M - inset[1]);
+        let (z0, z1) = (low.z + inset[2], low.z + CELL_M - inset[3]);
+        pieces.push(Piece::Curb {
+            min: Place([ticks(x0), lowest, ticks(z0)]),
+            max: Place([ticks(x1), ticks(top), ticks(z1)]),
+            under,
+        });
+    }
 }
 
 /// How high a gable's cube may go at a point of it, in metres: the roof's underside over the
@@ -1902,7 +2388,7 @@ mod tests {
             .collect();
         assert!(tops.contains(&IVec3::new(0, 9, 3)), "{tops:?}");
         for piece in &pieces {
-            if let Piece::Gable { cube, under } = piece {
+            if let Piece::Gable { cube, under, .. } = piece {
                 assert!(base.cube(*cube).is_some_and(|c| c.kind.is_roof()));
                 let highest = super::super::metres(*under.iter().flatten().max().unwrap());
                 assert!(
@@ -1917,7 +2403,7 @@ mod tests {
         let deck = |z: f32| STOREY_M + z.min(4.0 - z);
         let mut tried = 0;
         for piece in &pieces {
-            let Piece::Gable { cube, under } = piece else {
+            let Piece::Gable { cube, under, .. } = piece else {
                 continue;
             };
             if cube.x != 0 {
@@ -2114,5 +2600,249 @@ mod tests {
                 );
             }
         }
+    }
+    /// The highest roof cube in a column.
+    fn top_of(base: &Base, x: i32, z: i32) -> IVec3 {
+        let y = base
+            .column(x, z)
+            .filter(|&y| {
+                base.cube(IVec3::new(x, y, z))
+                    .is_some_and(|c| c.kind.is_roof())
+            })
+            .max()
+            .expect("a roof over the column");
+        IVec3::new(x, y, z)
+    }
+
+    fn put(base: &mut Base, at: IVec3, cube: Cube) {
+        base.apply(BuildOp::Fill {
+            min: at.to_array(),
+            max: at.to_array(),
+            cube: Some(cube),
+        });
+    }
+
+    /// Every flashing piece: what it is and its ends.
+    fn flashings(pieces: &[Piece]) -> Vec<(RoofPart, Vec3, Vec3)> {
+        pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Roof { part, from, to, .. } if is_flashing(part) => {
+                    Some((part, from.metres(), to.metres()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_wall_standing_on_a_slope_leaves_the_roof_whole_under_it_and_is_flashed_round() {
+        // D343 as amended: a stack of wall standing on the north slope's middle. The roof
+        // is drawn the same under it, covering and frame, and its foot is flashed: an apron
+        // below it, where the roof rises to it, steps up its sides, a back gutter above it,
+        // where the roof falls to it.
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        let roof = top_of(&base, 4, 1);
+        for y in 1..=2 {
+            put(
+                &mut base,
+                roof + IVec3::Y * y,
+                Cube::new(Kind::PLAIN, Fill::Solid),
+            );
+        }
+        let pieces = laid(&base);
+        let under = pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Covering { cell, .. } if cell.cube == roof))
+            .count();
+        assert_eq!(under, 4, "the covering runs on under the wall");
+        let (x0, x1, z0, z1) = (2.0, 2.5, 0.5, 1.0);
+        let rafters_under = parts(&pieces, RoofPart::Rafter)
+            .iter()
+            .filter(|(a, b)| {
+                let mid = (*a + *b) * 0.5;
+                (x0 - 0.01..=x1 + 0.01).contains(&mid.x) && (0.0..=1.5).contains(&mid.z)
+            })
+            .count();
+        assert!(rafters_under > 0, "the frame carries the wall");
+        let flashed = flashings(&pieces);
+        let along = |want: RoofPart, on: &dyn Fn(Vec3, Vec3) -> bool| {
+            flashed.iter().any(|&(part, a, b)| part == want && on(a, b))
+        };
+        assert!(
+            along(RoofPart::Flashing, &|a, b| (a.z - z0).abs() < 1e-3
+                && (b.z - z0).abs() < 1e-3),
+            "an apron below: {flashed:?}"
+        );
+        assert!(
+            along(RoofPart::Gutter, &|a, b| (a.z - z1).abs() < 1e-3
+                && (b.z - z1).abs() < 1e-3),
+            "a back gutter above: {flashed:?}"
+        );
+        for x in [x0, x1] {
+            assert!(
+                along(RoofPart::Step, &|a, b| (a.x - x).abs() < 1e-3
+                    && (b.x - x).abs() < 1e-3),
+                "steps up its side at {x}: {flashed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_covering_is_tucked_into_a_wall_beside_the_roof() {
+        // A lean-to rising south to a wall two storeys high: its covering runs on past its
+        // high edge into the wall, under its own boards, so a wall thinner than its cube
+        // leaves no slot down past its face.
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 5])], Style::LeanTo);
+        base.apply(BuildOp::Fill {
+            min: [-2, 0, 6],
+            max: [11, 13, 6],
+            cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+        });
+        let pieces = laid(&base);
+        let face = 3.0;
+        let tucked: Vec<[Vec3; 4]> = pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Covering { corners, open, .. } if open == [false; 4] => {
+                    Some(corners.map(Place::metres))
+                }
+                _ => None,
+            })
+            .filter(|c| c.iter().any(|p| p.z > face + 0.01))
+            .collect();
+        assert!(!tucked.is_empty(), "no covering tucked into the wall");
+        let mut along = 0.0;
+        for corners in &tucked {
+            let deepest = corners.iter().map(|p| p.z).fold(f32::MIN, f32::max);
+            assert!(
+                (deepest - (face + TUCK_M)).abs() < 0.01,
+                "tucked to {deepest} into the wall at {face}"
+            );
+            let xs = corners.iter().map(|p| p.x);
+            along += xs.clone().fold(f32::MIN, f32::max) - xs.fold(f32::MAX, f32::min);
+        }
+        // Along the whole edge, from verge to verge.
+        assert!(along > 4.4, "{along}");
+    }
+
+    #[test]
+    fn a_hole_in_a_roof_is_flashed_round_and_takes_no_eaves() {
+        // Gap 5 of docs/building-voxels.md: a cube taken out of a slope, as a smoke hole.
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        let hole = top_of(&base, 4, 1);
+        base.apply(BuildOp::Fill {
+            min: hole.to_array(),
+            max: hole.to_array(),
+            cube: None,
+        });
+        let pieces = laid(&base);
+        let inside = |p: Vec3| (2.0..=2.5).contains(&p.x) && (0.5..=1.0).contains(&p.z);
+        for part in [RoofPart::Eave, RoofPart::Verge] {
+            assert!(
+                parts(&pieces, part)
+                    .iter()
+                    .all(|(a, b)| !inside((*a + *b) * 0.5)),
+                "{part:?} round the hole"
+            );
+        }
+        assert!(
+            pieces.iter().all(|p| match p {
+                Piece::Covering { middle, .. } => !inside(middle.metres()),
+                _ => true,
+            }),
+            "covering carried on into the hole: {:?}",
+            pieces
+                .iter()
+                .filter(|p| match p {
+                    Piece::Covering { middle, .. } => inside(middle.metres()),
+                    _ => false,
+                })
+                .collect::<Vec<_>>()
+        );
+        let round = flashings(&pieces)
+            .iter()
+            .filter(|(_, a, b)| inside(*a) && inside(*b))
+            .count();
+        assert!(round >= 4, "flashed on every side: {round}");
+    }
+
+    #[test]
+    fn a_wall_standing_on_a_roof_is_carried_down_to_its_deck() {
+        // R2: stone standing on a slope is the stone's cube cut at the roof's deck from
+        // below; a timber kind's foot a curb of its boards on the deck.
+        let stone = Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            ..Kit::default()
+        };
+        let timber = Kit {
+            id: 3,
+            pattern: Pattern::Logs,
+            ..Kit::default()
+        };
+        for kit in [&stone, &timber] {
+            let mut base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+            let roof = top_of(&base, 4, 1);
+            put(
+                &mut base,
+                roof + IVec3::Y,
+                Cube::new(kit.kind(), Fill::Solid),
+            );
+            let cube = base.cube(roof).unwrap();
+            let mut pieces = Vec::new();
+            if kit.pattern == Pattern::Masonry {
+                gables(&base, kit, Scope::ALL, &mut pieces);
+                assert!(
+                    pieces.iter().any(|p| matches!(
+                        p,
+                        Piece::Gable { cube: at, under, carried: super::super::Carried::Down }
+                            if *at == roof && *under == deck(roof, cube)
+                    )),
+                    "{pieces:?}"
+                );
+            } else {
+                curbs(&base, kit, Scope::ALL, &mut pieces);
+                let Some(Piece::Curb { min, max, under }) = pieces.first() else {
+                    panic!("no curb: {pieces:?}");
+                };
+                assert_eq!(*under, deck(roof, cube));
+                // Up to the foot of what stands on it.
+                assert_eq!(max.0[1], (roof.y + 1) * super::super::TICKS);
+                assert!(min.0[1] < max.0[1]);
+            }
+        }
+    }
+
+    #[test]
+    fn flashing_in_an_inside_corner_butts_and_does_not_lie_in_the_other() {
+        // A lean-to in the corner of two taller walls, south and east: the flashing along
+        // the east wall, running north and south, stops short of the corner by the south
+        // one's width, so the two boards are not laid one in the other.
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 5])], Style::LeanTo);
+        base.apply(BuildOp::Fill {
+            min: [-2, 0, 6],
+            max: [11, 13, 6],
+            cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+        });
+        base.apply(BuildOp::Fill {
+            min: [10, 0, -2],
+            max: [10, 13, 5],
+            cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+        });
+        let flashed = flashings(&laid(&base));
+        let east: Vec<_> = flashed
+            .iter()
+            .filter(|(_, a, b)| (a.x - 5.0).abs() < 1e-3 && (b.x - 5.0).abs() < 1e-3)
+            .collect();
+        assert!(!east.is_empty(), "{flashed:?}");
+        let reach = east
+            .iter()
+            .map(|(_, a, b)| a.z.max(b.z))
+            .fold(f32::MIN, f32::max);
+        assert!(
+            (reach - (3.0 - 0.2)).abs() < 0.01,
+            "the east flashing reaches {reach}: {east:?}"
+        );
     }
 }

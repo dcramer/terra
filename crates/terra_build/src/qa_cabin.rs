@@ -21,12 +21,15 @@ const Z0: i32 = 4;
 const Z1: i32 = 11;
 
 /// The finished cabin in kits' kinds: its walls, each thing laid in the next of `walls` as a
-/// mix lays them, the wall changed to `other`, on ground given in centimetres a column.
+/// mix lays them, the wall changed to `other`, on ground given in centimetres a column; with
+/// `roof_left_on`, its storey laid by the room tool round a roof over the first storey left
+/// on, standing on its eaves and gables (D343), as the film's storey may be built.
 pub fn cabin(
     kits: &Kits,
     walls: &[Kind],
     other: Kind,
     ground_cm: &dyn Fn([i32; 2]) -> i16,
+    roof_left_on: bool,
 ) -> Base {
     let wall = |n: usize| walls[n % walls.len()];
     let rules = kits.rules();
@@ -140,6 +143,13 @@ pub fn cabin(
     let ops = plans::carve(&base, &plans::brush(IVec3::new(X0, 2, 6), 2), footings());
     lay(&mut base, ops);
     build(&mut base, &cx, &blocks);
+    if roof_left_on {
+        let roof = kits.roof_for(wall(0)).unwrap_or(Kind::FIRST_ROOF);
+        let footprint = plans::room_footprint(&base, IVec3::new(8, 0, 7));
+        let ops = plans::roof(&base, &footprint, 0, Style::Gable, None, roof);
+        lay(&mut base, ops);
+        build(&mut base, &cx, &blocks);
+    }
     // A storey on it, a roof over the storey and a dormer on its south slope.
     let upper = wall(1);
     let ops = plans::room(
@@ -260,9 +270,13 @@ mod tests {
         );
         let logs = kits.0[0].kind();
         let hewn = kits.0[1].kind();
-        let base = cabin(&kits, &[logs], hewn, &|[x, z]| {
-            (-(x as f32) * 2.0 - z as f32) as i16
-        });
+        let base = cabin(
+            &kits,
+            &[logs],
+            hewn,
+            &|[x, z]| (-(x as f32) * 2.0 - z as f32) as i16,
+            false,
+        );
         // Everything laid is built: the film's fills leave nothing waiting.
         let waiting: Vec<_> = base
             .cubes()

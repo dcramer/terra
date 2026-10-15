@@ -297,6 +297,20 @@ impl Shape {
         matches!(self, Shape::Stair(_) | Shape::InvertedStair(_))
     }
 
+    /// Whether a roof's cube may be cut to it: the shapes a roof has, whole, half, a slope
+    /// and the corners of two (docs/building-voxels.md, gap 4). A stair, an upper half, a
+    /// post and those upside down are a wall's.
+    pub fn roofs(self) -> bool {
+        matches!(
+            self,
+            Shape::Whole
+                | Shape::Half
+                | Shape::Slope(_)
+                | Shape::OuterCorner(_)
+                | Shape::InnerCorner(_)
+        )
+    }
+
     /// Whether it is a cube cut to a shape, drawn apart from its kind's whole cubes.
     pub fn is_cut(self) -> bool {
         !matches!(self, Shape::Whole)

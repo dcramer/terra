@@ -41,6 +41,17 @@ use glam::{IVec3, Vec3};
 pub use roles::{Dir, End, Role};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Which way a wall is carried into a roof cube to the roof's deck (D241, D343).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Carried {
+    /// Up from a wall under it, to the deck: a gable, the wedge under an eave.
+    Up,
+    /// Down from a wall standing on it, to the deck.
+    Down,
+    /// Both: the walls over and under it are one kind, which fills it.
+    Through,
+}
+
 /// Which half of a log is kept, where it is split along its length.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Split {
@@ -195,11 +206,24 @@ pub enum Piece {
         deep: i32,
         seed: u32,
     },
-    /// A block kind's wall carried up into a roof cube standing on it (`roofs::gables`):
-    /// the roof cube's surface of the wall's stone, cut off at the roof's underside, whose
-    /// height in ticks at the cube's corners, the middles of its sides and its middle, west
-    /// to east and north to south, is `under`.
-    Gable { cube: IVec3, under: [[i32; 3]; 3] },
+    /// A block kind's wall carried into a roof cube (`roofs::gables`): up into one standing
+    /// on it, as a gable, or down into one it stands on: the roof cube's surface of the
+    /// wall's stone, cut at the roof's deck, whose height in ticks at the cube's corners, the
+    /// middles of its sides and its middle, west to east and north to south, is `under`.
+    Gable {
+        cube: IVec3,
+        under: [[i32; 3]; 3],
+        carried: Carried,
+    },
+    /// A timber kind's wall, post or shape standing on a roof cube carried down into it as
+    /// its builder stands it on the roof (`roofs::curbs`): a curb of its boards across from
+    /// `min` to `max`, from the roof cube's deck, `under` as a gable's is, up to `max`'s
+    /// height, the foot of what stands on it.
+    Curb {
+        min: Place,
+        max: Place,
+        under: [[i32; 3]; 3],
+    },
     /// A square of a roof's covering (`roofs`), half a cube across: its
     /// corners on the roof's top, north-west, north-east, south-east and south-west, and
     /// its middle; its courses' lower edges, the first's height and how far apart, in
@@ -228,6 +252,10 @@ pub enum Piece {
         /// Whether each end of a crease meets another crease there, as a hip's top meets
         /// the ridge or the other hips, rather than stopping in the open or at a joint.
         met: [bool; 2],
+        /// How far across the roof its module is laid, in ticks, where narrower than it is
+        /// modelled: a flashing's board where the roof folds away within its width, as over
+        /// a hip beside a chimney. None: as modelled.
+        wide: Option<i32>,
     },
 }
 
@@ -270,6 +298,7 @@ impl Piece {
                 let high = top.iter().copied().fold(max.0[1], i32::max);
                 Some((min.metres(), Place([max.0[0], high, max.0[2]]).metres()))
             }
+            Piece::Curb { min, max, .. } => Some((min.metres(), max.metres())),
             Piece::Beam {
                 from,
                 to,
@@ -315,7 +344,9 @@ impl Piece {
             | Piece::Plank { from, to, .. }
             | Piece::Beam { from, to, .. }
             | Piece::Roof { from, to, .. } => middle(from, to),
-            Piece::Board { min, max } | Piece::Blocking { min, max, .. } => middle(min, max),
+            Piece::Board { min, max }
+            | Piece::Blocking { min, max, .. }
+            | Piece::Curb { min, max, .. } => middle(min, max),
             Piece::Covering { middle, .. } => middle.0,
         };
         IVec3::from_array(point.map(|p| p.div_euclid(TICKS)))
@@ -342,6 +373,8 @@ impl Piece {
                 from.metres().y.min(to.metres().y) - metres(*high) * 0.5
             }
             Piece::Board { min, .. } | Piece::Blocking { min, .. } => min.metres().y,
+            // With what stands on it, the foot of which it is.
+            Piece::Curb { max, .. } => max.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
             // A cube's wattle before its daub, woven a layer ahead of it: in after the
             // blocks of the layer under it.
@@ -369,10 +402,8 @@ impl Piece {
                 part,
                 ..
             } => {
-                let last = matches!(
-                    part,
-                    roofs::RoofPart::Ridge | roofs::RoofPart::Hip | roofs::RoofPart::Flashing
-                );
+                let last = matches!(part, roofs::RoofPart::Ridge | roofs::RoofPart::Hip)
+                    || roofs::is_flashing(*part);
                 from.metres().y.min(to.metres().y)
                     + 20.0 * f32::from(cell.stage)
                     + if last { 10.0 } else { 0.0 }
@@ -1036,6 +1067,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
             floors::decks(&walls, kit, scope, &mut layout);
         }
         shapes::lay(&walls, kit, kits, scope, &mut layout);
+        roofs::curbs(base, kit, scope, &mut layout.pieces);
         sort(&mut layout);
         return layout;
     }
@@ -1079,6 +1111,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     shapes::lay(&walls, kit, kits, scope, &mut layout);
     // Last, as every log a roof comes down over is cut to it.
     runs::under_roofs(&walls, kits, kit, &mut layout);
+    roofs::curbs(base, kit, scope, &mut layout.pieces);
     layout
 }
 

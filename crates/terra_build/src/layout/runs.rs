@@ -401,11 +401,30 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
         let along = (to - from) / length;
         let across = Vec3::Y.cross(along).normalize_or(Vec3::X);
         let foot = from.y - radius;
+        // Where a log of a wall standing on a roof is over that roof (D343): its middle line
+        // in a cube that stands on a roof's cube, whose round foot dips into the roof's
+        // covering. The floor of that cube there, which the roof under it is not over.
+        // Its body's middle: a split log's half lies over or under its line.
+        let body = from.y
+            + match split {
+                Split::Whole => 0.0,
+                Split::Top => radius * 0.5,
+                Split::Bottom => -radius * 0.5,
+            };
+        let standing = |p: Vec3| {
+            let at = (p.with_y(body) / CELL_M).floor().as_ivec3();
+            (base.cube(at).is_some_and(|c| !c.kind.is_roof())
+                && base.cube(at - IVec3::Y).is_some_and(|c| c.kind.is_roof()))
+            .then_some(at.y as f32 * CELL_M)
+        };
+        // How low a roof over a point may be and still be one over the log: a little under
+        // its foot, but not one it stands on.
+        let lowest_roof = |p: Vec3| standing(p).map_or(foot - NEAR_ROOF_M, |floor| floor + 0.001);
         // The roof's underside over the log's middle line, of the lowest roof over it or
         // a little under its foot.
         let under = |at: f32| {
             let p = from + along * at;
-            roofs.under_over(p.x, p.z, foot - NEAR_ROOF_M)
+            roofs.under_over(p.x, p.z, lowest_roof(p))
         };
         // How far the roof's underside is over the log's foot, over its middle line and
         // either face, the lowest, so a log along the eaves, where the roof falls across it,
@@ -413,16 +432,23 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
         // it, as a wall built on a roof does.
         let clearance_at = |p: Vec3, foot: f32| -> Option<f32> {
             // A log carried up into a roof's cube is under that roof, never over it.
-            let in_roof = base
-                .cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3())
-                .is_some_and(|cube| cube.kind.is_roof());
+            let in_roof = standing(p).is_none()
+                && base
+                    .cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3())
+                    .is_some_and(|cube| cube.kind.is_roof());
             let (mut lowest, mut over, mut any) = (f32::MAX, !in_roof, false);
             let (mut least, mut most) = (f32::MAX, f32::MIN);
             for side in [-1.0, 0.0, 1.0] {
                 let q = p + across * reach * side;
-                let Some(top) = roofs.top_over(q.x, q.z, foot - NEAR_ROOF_M) else {
+                let Some(top) = roofs.top_over(q.x, q.z, lowest_roof(p)) else {
                     continue;
                 };
+                // A roof under the log's foot, the log not in a roof's cube, is one it stands
+                // over, not one over it: a storey's wall over a roof left on under the
+                // storey's own roof meets neither.
+                if !in_roof && top < foot - 1e-3 {
+                    continue;
+                }
                 any = true;
                 over &= foot >= top - 1e-3;
                 lowest = lowest.min(top - foot);
@@ -432,6 +458,41 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             // to cut to it there: it fits whole under the roof's deck or not at all. Where
             // it falls along it, as up a gable, its end is cut to the slope (`lean`).
             if most - least > 0.01 {
+                lowest -= 2.0 * radius;
+            }
+            // Where the roof falls along it to a wall it runs on into, the roof's edge against
+            // that wall (docs/building-voxels.md, gap 2), it has no end there to cut either:
+            // under the roof it stops where the roof comes down to its top, cut to the slope,
+            // the rest blocked to the roof, and runs on again in the wall.
+            let centre = (p.with_y(body + 1e-3) / CELL_M).floor().as_ivec3();
+            let step = IVec3::new(
+                libm::roundf(along.x) as i32,
+                0,
+                libm::roundf(along.z) as i32,
+            );
+            let against = base.cube(centre).is_some_and(|c| c.kind.is_roof())
+                && [step, -step].iter().any(|&d| {
+                    // A wall standing up beside the roof, not a gable's step under it, the roof
+                    // falling toward it.
+                    let toward = p + d.as_vec3() * 0.1;
+                    base.cube(centre + d).is_some_and(|c| {
+                        !c.kind.is_roof() && c.fill == Fill::Solid && c.is_in()
+                    }) && !base
+                        .cube(centre + d + IVec3::Y)
+                        .is_some_and(|c| c.kind.is_roof())
+                        // Nor one standing on the roof as it runs on under it.
+                        && !base
+                            .cube(centre + d - IVec3::Y)
+                            .is_some_and(|c| c.kind.is_roof())
+                        && matches!(
+                            (
+                                roofs.top_over(p.x, p.z, lowest_roof(p)),
+                                roofs.top_over(toward.x, toward.z, lowest_roof(p)),
+                            ),
+                            (Some(here), there) if there.is_none_or(|t| t < here - 1e-3)
+                        )
+                });
+            if against && lowest < 2.0 * radius {
                 lowest -= 2.0 * radius;
             }
             (any && !over).then_some(lowest)
@@ -861,9 +922,16 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
             // Its top cut to the roof's underside over each corner, a hair under it, those
             // of a row along the north and south a little lower still, as their sides are
             // set in.
+            let middle = (min.metres() + max.metres()) * 0.5;
             let under = |x: i32, z: i32| {
                 let p = Place([x, 0, z]).metres();
-                let roof = roofs.top_over(p.x, p.z, foot - NEAR_ROOF_M).unwrap_or(foot);
+                // A corner on the edge of a cube with no roof over it, as beside a chimney
+                // through the roof, takes the roof just inside it.
+                let inward = p + (middle - p).with_y(0.0).normalize_or_zero() * 0.02;
+                let roof = roofs
+                    .top_over(p.x, p.z, foot - NEAR_ROOF_M)
+                    .or_else(|| roofs.top_over(inward.x, inward.z, foot - NEAR_ROOF_M))
+                    .unwrap_or(foot);
                 ticks((roof - (inset - BLOCKING_SET_BACK_M) - BLOCKING_UNDER_M).max(stand))
             };
             let top = [

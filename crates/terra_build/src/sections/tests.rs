@@ -375,18 +375,23 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                         _ => None,
                     })
                     .collect();
-                let gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = pieces
+                let gables: BTreeMap<[i32; 3], ([[i32; 3]; 3], layout::Carried)> = pieces
                     .iter()
                     .filter_map(|p| match p {
-                        Piece::Gable { cube, under } => Some((cube.to_array(), *under)),
+                        Piece::Gable {
+                            cube,
+                            under,
+                            carried,
+                        } => Some((cube.to_array(), (*under, *carried))),
                         _ => None,
                     })
                     .collect();
                 let cut = |cube: IVec3, at: Vec3| {
-                    let high = gables
+                    gables
                         .get(&cube.to_array())
-                        .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at));
-                    [f32::MIN, high]
+                        .map_or([f32::MIN, f32::MAX], |(under, carried)| {
+                            layout::roofs::carried_cut(*carried, cube, under, at)
+                        })
                 };
                 let hides = |at: IVec3| {
                     base.cube(at).is_some_and(|cube| {
