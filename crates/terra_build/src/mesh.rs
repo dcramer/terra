@@ -176,6 +176,16 @@ impl Surface {
         self.shared.extend_from(&other.shared);
     }
 
+    /// Triangles with shared corners added: kept shared where it shares its corners, else
+    /// as loose triangles ([`Indexed::loose`]), their wear with them.
+    pub(crate) fn add(&mut self, made: Indexed) {
+        if self.sharing {
+            self.shared.append(made);
+        } else {
+            self.append(made.loose());
+        }
+    }
+
     /// A triangle with a normal and a place on its texture at each corner.
     /// Room for so many more corners of loose triangles.
     pub(crate) fn reserve(&mut self, corners: usize) {
@@ -249,6 +259,25 @@ pub(crate) fn worn(wear: &mut Vec<f32>, corners: usize) {
 impl Indexed {
     pub fn triangle_count(&self) -> usize {
         self.indices.len() / 3
+    }
+
+    /// Its triangles each with corners of their own, wear and all: the other way from
+    /// [`Surface::indexed`].
+    pub fn loose(&self) -> Surface {
+        let mut out = Surface::default();
+        out.reserve(self.indices.len());
+        let worn = !self.wear.is_empty();
+        for &i in &self.indices {
+            let i = i as usize;
+            out.positions.push(self.positions[i]);
+            out.normals.push(self.normals[i]);
+            out.colours.push(self.colours[i]);
+            out.uvs.push(self.uvs.get(i).copied().unwrap_or([0.0; 2]));
+            if worn {
+                out.wear.push(self.wear.get(i).copied().unwrap_or(0.0));
+            }
+        }
+        out
     }
 
     /// Its corners that are the same in every way (place, normal, colour, texture place, wear)
@@ -399,6 +428,56 @@ impl Indexed {
             })
             .collect()
     }
+}
+
+/// A simple polygon's triangles by ear clipping, as indices into its points; what is left
+/// when no ear is found, as of a polygon that crosses itself, a fan from its first point.
+pub(crate) fn ear_clip(points: &[glam::Vec2]) -> Vec<[usize; 3]> {
+    let twice_area: f32 = (0..points.len())
+        .map(|i| points[i].perp_dot(points[(i + 1) % points.len()]))
+        .sum();
+    let mut left: Vec<usize> = (0..points.len()).collect();
+    if twice_area < 0.0 {
+        left.reverse();
+    }
+    let cross =
+        |a: usize, b: usize, c: usize| (points[b] - points[a]).perp_dot(points[c] - points[a]);
+    let inside = |p: glam::Vec2, [a, b, c]: [usize; 3]| {
+        let (pa, pb, pc) = (points[a], points[b], points[c]);
+        (pb - pa).perp_dot(p - pa) >= 0.0
+            && (pc - pb).perp_dot(p - pb) >= 0.0
+            && (pa - pc).perp_dot(p - pc) >= 0.0
+    };
+    let mut out = Vec::new();
+    while left.len() > 3 {
+        let n = left.len();
+        let ear = (0..n).find(|&i| {
+            let t = [left[(i + n - 1) % n], left[i], left[(i + 1) % n]];
+            cross(t[0], t[1], t[2]) > 1e-12
+                && left.iter().filter(|&&k| !t.contains(&k)).all(|&k| {
+                    !inside(points[k], t) || points[k] == points[t[0]] || points[k] == points[t[2]]
+                })
+        });
+        let Some(i) = ear else {
+            // Collinear points left, or one crossing itself: a flat corner first, else a fan.
+            if let Some(i) = (0..n)
+                .find(|&i| cross(left[(i + n - 1) % n], left[i], left[(i + 1) % n]).abs() <= 1e-12)
+            {
+                left.remove(i);
+                continue;
+            }
+            for k in 1..n - 1 {
+                out.push([left[0], left[k], left[k + 1]]);
+            }
+            return out;
+        };
+        out.push([left[(i + n - 1) % n], left[i], left[(i + 1) % n]]);
+        left.remove(i);
+    }
+    if left.len() == 3 && cross(left[0], left[1], left[2]).abs() > 1e-12 {
+        out.push([left[0], left[1], left[2]]);
+    }
+    out
 }
 
 /// FNV-1a over a corner's numbers' bits: quick, and it needs no crate.
@@ -562,6 +641,71 @@ mod tests {
             .collect();
         assert_eq!(first, [0.0; 3]);
         assert_eq!(second, [1.0; 3]);
+    }
+
+    #[test]
+    fn shared_corners_made_loose_keep_their_wear() {
+        let mut made = Indexed::default();
+        let a = made.corner(Vec3::ZERO, Vec3::Y, [0.0; 2], [1.0; 3]);
+        let b = made.worn_corner(Vec3::X, Vec3::Y, [1.0, 0.0], [1.0; 3], 0.5);
+        let c = made.worn_corner(Vec3::Z, Vec3::Y, [0.0, 1.0], [1.0; 3], 1.0);
+        made.indices.extend([a, c, b]);
+        let loose = made.loose();
+        assert_eq!(loose.positions, [Vec3::ZERO, Vec3::Z, Vec3::X]);
+        assert_eq!(loose.wear, [0.0, 1.0, 0.5]);
+        // Into a surface that does not share its corners, after triangles with none worn.
+        let mut surface = Surface::default();
+        surface.textured([Vec3::Y; 3], [Vec3::Y; 3], [[0.0; 2]; 3], [1.0; 3]);
+        surface.add(made);
+        assert_eq!(surface.positions.len(), 6);
+        assert_eq!(surface.wear, [0.0, 0.0, 0.0, 0.0, 1.0, 0.5]);
+    }
+
+    #[test]
+    fn ear_clipping_covers_a_polygon_whatever_its_winding_or_points_in_a_line() {
+        use glam::Vec2;
+        let area = |p: &[Vec2]| {
+            (0..p.len())
+                .map(|i| p[i].perp_dot(p[(i + 1) % p.len()]))
+                .sum::<f32>()
+                .abs()
+                * 0.5
+        };
+        let covered = |p: &[Vec2]| {
+            ear_clip(p)
+                .iter()
+                .map(|&[a, b, c]| (p[b] - p[a]).perp_dot(p[c] - p[a]).abs() * 0.5)
+                .sum::<f32>()
+        };
+        let square = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]].map(Vec2::from);
+        let ell = [
+            [0.0, 0.0],
+            [2.0, 0.0],
+            [2.0, 1.0],
+            [1.0, 1.0],
+            [1.0, 2.0],
+            [0.0, 2.0],
+        ]
+        .map(Vec2::from);
+        // A rectangle with corners in a line along its foot, as a cut piece's section has.
+        let lined = [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+            [3.0, 0.0],
+            [3.0, 1.0],
+            [0.0, 1.0],
+        ]
+        .map(Vec2::from);
+        assert_eq!(ear_clip(&square).len(), 2);
+        assert_eq!(ear_clip(&ell).len(), 4);
+        for polygon in [square.to_vec(), ell.to_vec(), lined.to_vec()] {
+            let mut backwards = polygon.clone();
+            backwards.reverse();
+            for p in [polygon, backwards] {
+                assert!((covered(&p) - area(&p)).abs() < 1e-5, "{p:?}");
+            }
+        }
     }
 
     #[test]

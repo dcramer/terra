@@ -235,7 +235,7 @@ pub(crate) fn close(segments: &[(Vec3, Vec3)], outward: Vec3) -> Vec<[Vec3; 3]> 
                 filled.push([middle, points[i], points[(i + 1) % points.len()]]);
             }
         } else {
-            for [i, j, k] in ear_clip(&points) {
+            for [i, j, k] in crate::mesh::ear_clip(&points) {
                 filled.push([points[i], points[j], points[k]]);
             }
         }
@@ -301,56 +301,6 @@ pub(crate) fn close(segments: &[(Vec3, Vec3)], outward: Vec3) -> Vec<[Vec3; 3]> 
             }
         }
         done.push(triangle);
-    }
-    out
-}
-
-/// A simple polygon's triangles by ear clipping, as indices into its points; what is left
-/// when no ear is found, as of a polygon that crosses itself, a fan from its first point.
-fn ear_clip(points: &[glam::Vec2]) -> Vec<[usize; 3]> {
-    let twice_area: f32 = (0..points.len())
-        .map(|i| points[i].perp_dot(points[(i + 1) % points.len()]))
-        .sum();
-    let mut left: Vec<usize> = (0..points.len()).collect();
-    if twice_area < 0.0 {
-        left.reverse();
-    }
-    let cross =
-        |a: usize, b: usize, c: usize| (points[b] - points[a]).perp_dot(points[c] - points[a]);
-    let inside = |p: glam::Vec2, [a, b, c]: [usize; 3]| {
-        let (pa, pb, pc) = (points[a], points[b], points[c]);
-        (pb - pa).perp_dot(p - pa) >= 0.0
-            && (pc - pb).perp_dot(p - pb) >= 0.0
-            && (pa - pc).perp_dot(p - pc) >= 0.0
-    };
-    let mut out = Vec::new();
-    while left.len() > 3 {
-        let n = left.len();
-        let ear = (0..n).find(|&i| {
-            let t = [left[(i + n - 1) % n], left[i], left[(i + 1) % n]];
-            cross(t[0], t[1], t[2]) > 1e-12
-                && left.iter().filter(|&&k| !t.contains(&k)).all(|&k| {
-                    !inside(points[k], t) || points[k] == points[t[0]] || points[k] == points[t[2]]
-                })
-        });
-        let Some(i) = ear else {
-            // Collinear points left, or one crossing itself: a flat corner first, else a fan.
-            if let Some(i) = (0..n)
-                .find(|&i| cross(left[(i + n - 1) % n], left[i], left[(i + 1) % n]).abs() <= 1e-12)
-            {
-                left.remove(i);
-                continue;
-            }
-            for k in 1..n - 1 {
-                out.push([left[0], left[k], left[k + 1]]);
-            }
-            return out;
-        };
-        out.push([left[(i + n - 1) % n], left[i], left[(i + 1) % n]]);
-        left.remove(i);
-    }
-    if left.len() == 3 && cross(left[0], left[1], left[2]).abs() > 1e-12 {
-        out.push([left[0], left[1], left[2]]);
     }
     out
 }
@@ -1469,18 +1419,7 @@ pub(crate) fn put(surfaces: &mut Surfaces, material: Material, made: Indexed) {
     if made.indices.is_empty() {
         return;
     }
-    let out = surfaces.of(material);
-    if out.sharing {
-        out.shared.append(made);
-    } else {
-        for &i in &made.indices {
-            let i = i as usize;
-            out.positions.push(made.positions[i]);
-            out.normals.push(made.normals[i]);
-            out.colours.push(made.colours[i]);
-            out.uvs.push(made.uvs[i]);
-        }
-    }
+    surfaces.of(material).add(made);
 }
 
 #[cfg(test)]

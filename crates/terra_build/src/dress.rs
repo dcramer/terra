@@ -299,18 +299,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         }
         _ => return,
     }
-    let out = surfaces.of(material);
-    if out.sharing {
-        out.shared.append(made);
-    } else {
-        for &i in &made.indices {
-            let i = i as usize;
-            out.positions.push(made.positions[i]);
-            out.normals.push(made.normals[i]);
-            out.colours.push(made.colours[i]);
-            out.uvs.push(made.uvs[i]);
-        }
-    }
+    surfaces.of(material).add(made);
 }
 
 /// A way's unit vector.
@@ -720,7 +709,8 @@ impl Sweep {
                     [rel.dot(self.side), rel.dot(self.up)]
                 })
                 .collect();
-            for tri in ears(&flat) {
+            let points: Vec<glam::Vec2> = flat.iter().map(|&p| p.into()).collect();
+            for tri in crate::mesh::ear_clip(&points) {
                 // None across points in a line in the section, a sliver with no area there:
                 // where its end is cut back off the line, as a square end's part set into
                 // the wall is, it would lie in a face of the piece's own, its underside.
@@ -786,59 +776,6 @@ fn vertex_normal(normals: &[[f32; 2]], seg: usize, end: usize) -> [f32; 2] {
         }
         _ => own,
     }
-}
-
-/// Triangles filling a simple polygon, by clipping ears.
-fn ears(points: &[[f32; 2]]) -> Vec<[usize; 3]> {
-    let mut idx: Vec<usize> = (0..points.len()).collect();
-    let area: f32 = (0..points.len())
-        .map(|i| {
-            let (a, b) = (points[i], points[(i + 1) % points.len()]);
-            a[0] * b[1] - b[0] * a[1]
-        })
-        .sum();
-    let ccw = area > 0.0;
-    let cross = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| {
-        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-    };
-    let mut out = Vec::new();
-    while idx.len() > 3 {
-        let n = idx.len();
-        let mut clipped = false;
-        for i in 0..n {
-            let (ia, ib, ic) = (idx[(i + n - 1) % n], idx[i], idx[(i + 1) % n]);
-            let (a, b, c) = (points[ia], points[ib], points[ic]);
-            if (cross(a, b, c) > 1e-12) != ccw {
-                continue;
-            }
-            let inside = idx.iter().any(|&j| {
-                if j == ia || j == ib || j == ic {
-                    return false;
-                }
-                let p = points[j];
-                let (d1, d2, d3) = (cross(a, b, p), cross(b, c, p), cross(c, a, p));
-                if ccw {
-                    d1 > 0.0 && d2 > 0.0 && d3 > 0.0
-                } else {
-                    d1 < 0.0 && d2 < 0.0 && d3 < 0.0
-                }
-            });
-            if inside {
-                continue;
-            }
-            out.push([ia, ib, ic]);
-            idx.remove(i);
-            clipped = true;
-            break;
-        }
-        if !clipped {
-            break;
-        }
-    }
-    if idx.len() == 3 {
-        out.push([idx[0], idx[1], idx[2]]);
-    }
-    out
 }
 
 /// Corner stones up an upright edge of a cube, one a course in the courses it shows.
@@ -1491,14 +1428,7 @@ mod tests {
             [-0.05, -0.1],
         ];
         sweep.draw(&profile, [1.0, 1.0], 1, &mut made);
-        let mut surface = Surface::default();
-        for &i in &made.indices {
-            let i = i as usize;
-            surface.positions.push(made.positions[i]);
-            surface.normals.push(made.normals[i]);
-            surface.colours.push(made.colours[i]);
-            surface.uvs.push(made.uvs[i]);
-        }
+        let surface = made.loose();
         let folded = crate::inspect::self_overlap(&surface);
         assert!(folded < 1e-7, "{} cm² over itself", folded * 1e4);
     }
@@ -1567,21 +1497,5 @@ mod tests {
         let mut surface = Surface::default();
         mask(&mut surface, &kit, Material::Log, &Base::default());
         assert_eq!(surface.triangle_count(), 0);
-    }
-
-    #[test]
-    fn a_simple_polygon_is_filled_by_its_ears() {
-        let square = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-        assert_eq!(ears(&square).len(), 2);
-        // An L, six corners: four triangles.
-        let ell = [
-            [0.0, 0.0],
-            [2.0, 0.0],
-            [2.0, 1.0],
-            [1.0, 1.0],
-            [1.0, 2.0],
-            [0.0, 2.0],
-        ];
-        assert_eq!(ears(&ell).len(), 4);
     }
 }
