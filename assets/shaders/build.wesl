@@ -28,6 +28,9 @@ struct Layers {
     // For each layer: x its slot in the arrays, y its parallax depth (0 for none), z its
     // reflectance, w how many layers relief mapping steps through at the preset (0: none).
     table: array<vec4<f32>, 512>,
+    // The shared damage mask (D290, D305): x its slot, y whether it is drawn (else a damaged
+    // surface is darkened by what it has lost, as far off), z how much darker all but gone.
+    damage: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -111,6 +114,27 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * colour.rgb, 1.0);
     pbr_input.material.perceptual_roughness = arm.g;
+
+    // Damage (D305), every material alike: the shared mask's threshold says how much of its
+    // cube's health must be lost before each texel breaks, so hairline cracks open first,
+    // then widen and chip, then flakes go; broken, it is dark in the crack, rough, and its
+    // walls take the mask's normal. Where the mask is not drawn, darkened as far off.
+    let lost = clamp(in.uv_b.y, 0.0, 1.0);
+    var broken = 0.0;
+    var crack_n = vec2(0.5, 0.5);
+    if layers.damage.y > 0.5 {
+        let mask = i32(layers.damage.x);
+        let threshold = textureSampleBias(height_array, array_sampler, uv, mask, bias).r;
+        crack_n = textureSampleBias(normal_array, array_sampler, uv, mask, bias).rg;
+        broken = smoothstep(threshold - 0.03, threshold + 0.03, lost);
+        let deep = clamp((lost - threshold) * 4.0, 0.0, 1.0);
+        let shade = mix(1.0, 0.32 - 0.12 * deep, broken);
+        pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * shade, 1.0);
+        pbr_input.material.perceptual_roughness = mix(arm.g, 0.95, broken);
+    } else {
+        let shade = 1.0 - layers.damage.z * lost;
+        pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * shade, 1.0);
+    }
     pbr_input.material.metallic = arm.b;
     pbr_input.material.reflectance = vec3(entry.z);
 
@@ -129,7 +153,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.specular_occlusion = specular_occlusion;
 
     // The normal map's two stored components, its third made up from them.
-    var Nt = vec3(normal * 2.0 - 1.0, 0.0);
+    var Nt = vec3(mix(normal, crack_n, broken * 0.85) * 2.0 - 1.0, 0.0);
     Nt.z = sqrt(max(1.0 - dot(Nt.xy, Nt.xy), 0.0));
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
     pbr_input.clearcoat_N = pbr_input.N;

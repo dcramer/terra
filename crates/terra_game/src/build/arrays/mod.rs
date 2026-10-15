@@ -19,6 +19,7 @@
 //! `assets/materials`, whatever draws it.
 
 pub mod bc;
+pub mod damage;
 
 use bc::Codec;
 use bevy::{
@@ -66,6 +67,11 @@ pub struct BuildArrays {
     /// relief mapping steps through at the preset (none: flat but for its normal map).
     #[uniform(100)]
     pub table: [Vec4; MAX_LAYERS],
+    /// The shared damage mask (D290, D305): x its slot, y whether it is drawn (not at the
+    /// low preset, nor before it is made: then a damaged surface is darkened by what it
+    /// has lost, as far off), z how much darker a cube all but gone is.
+    #[uniform(100)]
+    pub damage: Vec4,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub colour: Handle<Image>,
@@ -209,12 +215,30 @@ pub struct Arrays {
     /// How many layers relief mapping steps through at the preset (`Quality::relief_layers`):
     /// none at the low preset, which draws every material flat but for its normal map.
     relief: f32,
+    /// The shared damage mask, being made and then written, in `DAMAGE_SLOT`.
+    damage: DamageMask,
+    /// Whether the mask is drawn at the preset (not at the low).
+    damage_detail: bool,
     /// Whether a file is there, by its path under `assets/`.
     exists: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     /// Texture sets made resident and let go, and how long the slowest took from asked to
     /// ready, for the log.
     pub made: usize,
     pub dropped: usize,
+}
+
+/// The slot of the arrays the shared damage mask is kept in.
+const DAMAGE_SLOT: u32 = 0;
+/// How much darker a damaged cube all but gone is where the mask is not drawn, as
+/// `terra_build::loss` darkens one far off.
+const DAMAGE_DARK: f32 = 0.34;
+
+/// The shared damage mask's way to its slot: its maps being made and compressed on a
+/// worker, then written, a frame or two from ready, then there.
+enum DamageMask {
+    Making(Task<[Vec<Vec<u8>>; 4]>),
+    Written(u8),
+    Ready,
 }
 
 /// The formats of the four arrays, compressed or not.
@@ -290,6 +314,7 @@ impl Arrays {
             },
             extension: BuildArrays {
                 table: [Vec4::ZERO; MAX_LAYERS],
+                damage: Vec4::new(DAMAGE_SLOT as f32, 0.0, DAMAGE_DARK, 0.0),
                 colour: images[0].clone(),
                 normal: images[1].clone(),
                 arm: images[2].clone(),
@@ -303,11 +328,23 @@ impl Arrays {
             capacity: FIRST_SLOTS,
             layers,
             slots: BTreeMap::new(),
-            free: (0..FIRST_SLOTS).rev().collect(),
+            // The first slot is the damage mask's, made once and kept.
+            free: (DAMAGE_SLOT + 1..FIRST_SLOTS).rev().collect(),
+            damage: DamageMask::Making(AsyncComputeTaskPool::get().spawn(async move {
+                let maps = damage::maps();
+                std::array::from_fn(|i| {
+                    bc::chain(&maps[i], SIDE)
+                        .iter()
+                        .enumerate()
+                        .map(|(level, pixels)| codecs[i].encode(pixels, SIDE >> level))
+                        .collect()
+                })
+            })),
             loading: BTreeMap::new(),
             uploads: Uploads::default(),
             table_dirty: true,
             relief: Quality::High.relief_layers(),
+            damage_detail: true,
             exists,
             made: 0,
             dropped: 0,
@@ -482,6 +519,38 @@ pub fn stream(
         arrays.relief = quality.relief_layers();
         arrays.table_dirty = true;
     }
+    // The damage mask: written once made, drawn once written, but not at the low preset.
+    let detail = *quality != Quality::Low;
+    if arrays.damage_detail != detail {
+        arrays.damage_detail = detail;
+        arrays.table_dirty = true;
+    }
+    match &mut arrays.damage {
+        DamageMask::Making(task) => {
+            if let Some(maps) = block_on(poll_once(task)) {
+                if let Ok(mut uploads) = arrays.uploads.0.lock() {
+                    for (i, levels) in maps.into_iter().enumerate() {
+                        uploads.push(Upload {
+                            image: arrays.images[i].id(),
+                            slot: DAMAGE_SLOT,
+                            codec: arrays.codecs[i],
+                            levels,
+                        });
+                    }
+                }
+                arrays.damage = DamageMask::Written(2);
+            }
+        }
+        DamageMask::Written(frames) => {
+            if *frames == 0 {
+                arrays.damage = DamageMask::Ready;
+                arrays.table_dirty = true;
+            } else {
+                *frames -= 1;
+            }
+        }
+        DamageMask::Ready => {}
+    }
     // Written last frame: ready now.
     for slot in arrays.slots.values_mut() {
         if slot.ready_in > 0 {
@@ -608,8 +677,10 @@ pub fn stream(
     if arrays.table_dirty {
         arrays.table_dirty = false;
         let table = arrays.table();
+        let drawn = arrays.damage_detail && matches!(arrays.damage, DamageMask::Ready);
         if let Some(mut material) = materials.get_mut(&arrays.material) {
             material.extension.table = table;
+            material.extension.damage.y = if drawn { 1.0 } else { 0.0 };
         }
     }
 }

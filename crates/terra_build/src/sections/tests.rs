@@ -741,6 +741,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
         // A wall's cube a metre up taken out, a roof's lowest cube taken out, and the
         // ground under it changed.
         let mut edits: Vec<Base> = Vec::new();
+        let mut harm: Option<(usize, IVec3)> = None;
         if let Some(wall) = base
             .cubes()
             .map(|(at, _)| at)
@@ -753,6 +754,20 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                 cube: None,
             });
             edits.push(edited);
+            // And harmed, which is kept beside the cubes, not in them (D305).
+            let mut harmed = base.clone();
+            let rules = kits.rules();
+            let damage = crate::ops::Op::Damage {
+                cubes: vec![wall.to_array()],
+                amount: 150,
+            };
+            if harmed
+                .act(&damage, &crate::ops::Context::free(&rules))
+                .is_ok()
+            {
+                harm = Some((edits.len(), wall));
+                edits.push(harmed);
+            }
         }
         if let Some((roof, _)) = base
             .cubes()
@@ -790,6 +805,17 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
                     let (laid_before, laid_after) = (laid(&before), laid(&after));
                     let keys_before = cluster_keys(&before, &laid_before, reach);
                     let keys_after = cluster_keys(&after, &laid_after, reach);
+                    // A part with a cube harmed in it is drawn again, worn.
+                    if let Some((edit, cube)) = harm
+                        && edit == which
+                        && IVec3::from_array(at)
+                            == cube.div_euclid(IVec3::splat(crate::cubes::SECTION))
+                    {
+                        assert_ne!(
+                            keys_before, keys_after,
+                            "base {index}: harmed, its keys the same"
+                        );
+                    }
                     let all = [true; CLUSTERS];
                     let mut drawing = Drawing::default();
                     let was = draw_parts(

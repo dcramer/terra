@@ -587,6 +587,15 @@ const FLECK_M: f32 = 0.07;
 /// they have lost: darker, and broken up in dark flecks that spread as more is lost, as a
 /// battered wall is scorched, split and chipped, in whatever material it is (D14): each
 /// corner by the cube it is part of, a little in from its face.
+/// How much of its health the cube a point of a surface belongs to has lost, from 0 to 1:
+/// the cube it lies in a little in from its face (`normal`).
+pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
+    let inside = at - normal * 0.02;
+    let cube = (inside / crate::CELL_M).floor().as_ivec3().to_array();
+    worn.get(&cube)
+        .map_or(0.0, |&quarters| f32::from(quarters.min(4)) / 4.0)
+}
+
 pub fn wear(surface: &mut crate::Surface, worn: &[([i32; 3], u8)]) {
     let worn: BTreeMap<[i32; 3], u8> = worn.iter().copied().collect();
     let shade = |at: glam::Vec3, normal: glam::Vec3| -> f32 {

@@ -107,6 +107,7 @@ Hard requirements, so that a new material is minutes of work and data only, and 
    - **One draw per pattern per section**, whatever the number of materials: every texture set is a layer of four texture arrays (colour, normal, occlusion-roughness-metal, height), each corner carries its layer, and one material draws them, with parallax per layer. A pack's own modelled-piece atlas, an override, is a draw of its own.
    - **A texture budget per material**: each texture set a layer of 1024 by 1024 with mipmaps, compressed (BC1 colour and ARM, BC5 normal, BC4 height) where the GPU can, about 3.4 MB a set.
    - **Residency**: a layer is on the GPU only while a laid section uses it, written into a slot of the arrays as it comes and the slot freed when it goes, a table from layer to slot read by the shader.
+   - **Damage is one mask for every material** (D305): a shared crack and chip mask, a layer of the arrays made once by rule, revealed by how much of its health each cube has lost (a corner's second texture place), with no work per material; plain darkening at the low preset and far off.
    - **A swap is a lookup** where no cube's solidity changes and the two materials' patterns lay the same shapes: the changed cubes' corners take the new layer in the meshes already drawn, on screen within one or two frames; otherwise the sections are laid again as now.
    - **Measured**: draws and frame time before and after on both GPUs; a village of a hundred materials against the same village in ten.
 7. **Wear or place, per role, by visual merit:**

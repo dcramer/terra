@@ -325,6 +325,7 @@ fn in_arrays(
     surfaces: &BTreeMap<(Kind, Material), Surface>,
     layers: &Layers,
     centre: Vec3,
+    worn: &BTreeMap<[i32; 3], u8>,
     used: &mut BTreeSet<u16>,
 ) -> (Option<Mesh>, Vec<(Kind, Material, Mesh)>) {
     let mut rest = Vec::new();
@@ -344,10 +345,16 @@ fn in_arrays(
         }
         used.insert(id);
         tangents.extend(part.tangents());
-        ids.extend(std::iter::repeat_n(
-            [f32::from(id), 0.0],
-            part.positions.len(),
-        ));
+        // Each corner's layer, and how much of its cube's health is lost, which reveals the
+        // shared damage mask (D290, D305).
+        ids.extend(part.positions.iter().zip(&part.normals).map(|(p, n)| {
+            let lost = if worn.is_empty() {
+                0.0
+            } else {
+                terra_build::loss::lost(worn, *p, *n)
+            };
+            [f32::from(id), lost]
+        }));
         all.append(part);
     }
     let mesh = mesh_of(all, centre, Uvs::Mapped).map(|mesh| {
@@ -403,6 +410,7 @@ pub(super) fn parts(
     }
     let plain = |surface: &Surface| mesh(surface, centre, Uvs::None).map(pack);
     let none = BTreeMap::new();
+    let worn: BTreeMap<[i32; 3], u8> = drawn.worn.iter().copied().collect();
     let count = drawn.near_by.len().max(drawn.mid_by.len());
     let parts: Vec<Option<Part>> = (0..count)
         .map(|c| {
@@ -412,12 +420,14 @@ pub(super) fn parts(
                     drawn.near_by.get(c).unwrap_or(&none),
                     layers,
                     centre,
+                    &worn,
                     &mut used,
                 );
                 let (mid_arrays, mid) = in_arrays(
                     drawn.mid_by.get(c).unwrap_or(&none),
                     layers,
                     centre,
+                    &worn,
                     &mut used,
                 );
                 let packs = |all: Vec<(Kind, Material, Mesh)>| {

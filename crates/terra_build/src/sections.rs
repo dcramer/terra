@@ -851,6 +851,10 @@ pub struct Drawn {
     pub shell: Surface,
     pub far: Surface,
     pub proxy: Surface,
+    /// Its damaged cubes and a cube round it, with the quarters of health each has lost
+    /// (`Laid::worn`): a textured surface near and a few metres off is worn by them as it
+    /// is drawn (D290's shared damage mask, in the game), the rest in its colours here.
+    pub worn: Vec<([i32; 3], u8)>,
 }
 
 /// Draws a laid section, as finely as `reach` asks and coarser: the game draws finer
@@ -1066,6 +1070,13 @@ pub fn cluster_keys(section: &Section, laid: &Laid, reach: Reach) -> Vec<u64> {
             {
                 at.hash(&mut hasher);
                 cube.word().hash(&mut hasher);
+            }
+            // And the damage its cubes have taken, kept beside them (D305), which wears it.
+            for (at, quarters) in &laid.worn {
+                let at = IVec3::from_array(*at);
+                if at.cmpge(near_low).all() && at.cmple(near_high).all() {
+                    (at, quarters).hash(&mut hasher);
+                }
             }
             hasher.finish()
         })
@@ -1365,10 +1376,22 @@ fn draw_details(
             drawn.next = next;
         }
         // Damaged cubes worn by how much of their health they have lost, every material
-        // alike (`loss`).
+        // alike (`loss`): in their colours far off, and near for what is drawn in no
+        // material's textures, or in a pack's pieces' atlas; a material's textured surface
+        // near reveals the shared damage mask instead, cracked and chipped (D290, D305).
         if !laid.worn.is_empty() {
-            for surface in built.iter_mut().flat_map(|slot| slot.values_mut()) {
-                crate::loss::wear(surface, &laid.worn);
+            let far = matches!(detail, Detail::Far | Detail::Proxy);
+            for slot in built.iter_mut() {
+                for (&(kind, material), surface) in slot.iter_mut() {
+                    let textured = section
+                        .kits
+                        .of(kind)
+                        .is_some_and(|kit| kit.textures.contains_key(&material));
+                    let masked = textured && !matches!(material, Material::Piece | Material::Trim);
+                    if far || !masked {
+                        crate::loss::wear(surface, &laid.worn);
+                    }
+                }
             }
         }
         match detail {
@@ -1379,6 +1402,7 @@ fn draw_details(
         }
     }
     plain(section, laid, &mut drawn);
+    drawn.worn = laid.worn.clone();
     drawn
 }
 
