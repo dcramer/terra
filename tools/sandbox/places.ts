@@ -103,12 +103,12 @@ export const PLACES: Record<string, Place> = {
     // The views the town logs as `Town vantage` (`play::town`), in the start's terms: the start
     // stands 330 m beside the town, out by its fields.
     views: [
-      ["street", "63.00,0.22,-374.58,40.70,0.96,-354.76"],
-      ["square", "20.94,1.11,-347.32,-11.74,0.90,-342.65"],
-      ["market", "-14.89,0.99,-346.09,3.92,0.76,-345.86"],
-      ["forge", "25.68,0.88,-351.56,29.82,0.01,-346.28"],
-      ["yard", "5.63,0.35,-382.04,10.47,-0.47,-375.88"],
-      ["above", "43.63,27.33,-323.67,0.00,-0.61,-345.04"],
+      ["street", "65.69,0.78,-341.81,37.51,0.93,-351.43"],
+      ["square", "17.22,1.12,-346.56,-9.88,0.91,-343.03"],
+      ["market", "-12.66,0.96,-346.54,3.92,0.76,-345.86"],
+      ["forge", "21.96,1.00,-350.80,26.11,0.06,-345.52"],
+      ["yard", "2.22,0.37,-379.81,7.06,-0.31,-373.65"],
+      ["above", "37.68,27.43,-322.45,0.00,-0.61,-345.04"],
     ],
     measured: ["street", "square", "market", "forge", "yard"],
     look: "town-market-day",
@@ -117,9 +117,9 @@ export const PLACES: Record<string, Place> = {
     // In along the main street from halfway out, across the square past the market and up the
     // other main street a way (the town's log gives it as `Town route`).
     route: {
-      at: "63.8,-373.7",
+      at: "65.3,-340.7",
       face: "0.0,-345.1",
-      through: "54.2,-366.5;45.5,-358.3;35.2,-352.3;23.5,-349.9;-6.6,-341.6;-29.3,-339.0;-40.7,-335.4;-51.9,-331.0",
+      through: "54.6,-346.0;43.3,-350.0;31.5,-351.5;19.8,-349.1;-5.5,-341.9;-25.6,-339.8;-37.2,-336.7;-47.9,-331.2",
     },
   },
 };
