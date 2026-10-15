@@ -1,0 +1,14 @@
+{
+  "subject": "monster called a Seawish, a sea creature of beaches: a big fish as tall as a man standing upright on its forked tail fin, its body a thick rounded tapering fish body with wet scales in deep sea green, darker on the back and paler green-grey on the belly. On top of its head grows a large thick mop of long olive and bright green kelp and seaweed fronds, wet and drooping, wider than its body, so that in water it would pass for a floating clump of seaweed. Two large round glossy black fish eyes on the front of its head, and a round gaping mouth lined with jagged white teeth and a red gullet. Two long pectoral fins held out to the sides like arms, ending in fin rays that grip; the right fin holds up a short straight sword of rusty pitted iron with a simple crossguard, as if salvaged from a shipwreck; the left fin stretched out",
+  "file": "Seawish",
+  "dims": [
+    1.58,
+    1.9,
+    1.2
+  ],
+  "turn": 90,
+  "into": "creatures",
+  "budget": 3000,
+  "faces": 20000,
+  "generator": "h3.1"
+}
