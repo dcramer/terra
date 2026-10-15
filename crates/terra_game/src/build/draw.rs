@@ -253,7 +253,7 @@ pub(super) fn kit_materials(
         for (material, texture) in &kit.textures {
             // Every other texture set is a layer of the texture arrays (D290); only a pack's
             // own pieces' atlas, read by their own UVs, is a material of its own.
-            if *material != Material::Piece {
+            if !matches!(material, Material::Piece | Material::Trim) {
                 continue;
             }
             let path = &texture.path;

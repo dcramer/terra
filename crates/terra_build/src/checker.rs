@@ -76,7 +76,7 @@ pub fn needs(kit: &Kit) -> Vec<Material> {
 /// Checks a kit: `exists` says whether a file under `assets/` is there, `items` names the
 /// items there are.
 pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Report {
-    let mut problems = Vec::new();
+    let mut problems = contract(kit);
     let mut fail = |problem: String| problems.push(problem);
     if kit.kind() == Kind::PLAIN || kit.kind() > Kind::LAST {
         fail(format!("its kind {} is not a kit's", kit.id));
@@ -322,7 +322,8 @@ fn raw(material: Material) -> Option<&'static str> {
         | Material::Covering
         | Material::Masonry
         | Material::Flashing
-        | Material::Piece => None,
+        | Material::Piece
+        | Material::Trim => None,
     }
 }
 
@@ -487,9 +488,14 @@ fn parts(kit: &Kit, fail: &mut dyn FnMut(String)) {
             fail(format!("its module {name} has nothing in it"));
             continue;
         }
-        if crate::modules::modelled(module) && !kit.textures.contains_key(&Material::Piece) {
+        let atlas = if module.shared {
+            Material::Trim
+        } else {
+            Material::Piece
+        };
+        if crate::modules::modelled(module) && !kit.textures.contains_key(&atlas) {
             fail(format!(
-                "its module {name} is modelled, and it has no Piece atlas to draw it in"
+                "its module {name} is modelled, and it has no {atlas:?} atlas to draw it in"
             ));
         }
         let per_metre = (module.triangles() as f32 / module.length).round() as usize;
@@ -555,6 +561,8 @@ pub fn check_all(
 ) -> BTreeMap<String, Report> {
     let mut reports = BTreeMap::new();
     let mut kinds: BTreeMap<u16, &str> = BTreeMap::new();
+    // Each model's contract, as the first piece made from it has it (D290, D303).
+    let mut models: BTreeMap<String, (String, [f32; 3])> = BTreeMap::new();
     for (name, kit) in kits {
         let mut report = check(kit, exists, items);
         if let Some(other) = kinds.insert(kit.id, name) {
@@ -562,9 +570,84 @@ pub fn check_all(
                 .problems
                 .push(format!("lays kind {}, as {other} does", kit.id));
         }
+        // A model is made to one size wherever it is used: no material fits it to its own
+        // box, which is the per-material offset the contract does away with.
+        for (piece, module) in kit.dress.made.iter().flat_map(|made| &made.modules) {
+            let Some(model) = &module.model else {
+                continue;
+            };
+            match models.get(model) {
+                Some((first, dims)) if !same_model_size(*dims, module.dims) => {
+                    report.problems.push(format!(
+                        "its piece {piece} makes {model} {:?}, where {first} makes it {dims:?}: one model, one size",
+                        module.dims
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    models.insert(model.clone(), (format!("{name}'s {piece}"), module.dims));
+                }
+            }
+        }
         reports.insert(name.clone(), report);
     }
     reports
+}
+
+/// Whether two sizes agree within the contract's tolerance: 2% or a centimetre, whichever
+/// is more (D303).
+fn same_size(a: [f32; 3], b: [f32; 3]) -> bool {
+    (0..3).all(|i| (a[i] - b[i]).abs() <= (a[i].abs() * 0.02).max(0.01))
+}
+
+/// Whether two pieces are one model at one size, however each lies: a board on its edge
+/// along a verge and flat as flashing is one board.
+fn same_model_size(a: [f32; 3], b: [f32; 3]) -> bool {
+    let sorted = |mut d: [f32; 3]| {
+        d.sort_by(f32::total_cmp);
+        d
+    };
+    same_size(sorted(a), sorted(b))
+}
+
+/// A kit's pieces against their contract (D290, D303): each modelled module states its real
+/// size and its model, and is that size from its origin; and every module names its ends.
+pub fn contract(kit: &Kit) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (name, module) in kit.dress.made.iter().flat_map(|made| &made.modules) {
+        if !module.sockets.contains_key("start") || !module.sockets.contains_key("end") {
+            problems.push(format!("its piece {name} has no start and end sockets"));
+        }
+        if !crate::modules::modelled(module) {
+            continue;
+        }
+        if module.model.is_none() || module.dims.iter().any(|d| *d <= 0.0) {
+            problems.push(format!("its modelled piece {name} states no model or size"));
+            continue;
+        }
+        let mut low = [f32::MAX; 3];
+        let mut high = [f32::MIN; 3];
+        for p in module.near.iter().flat_map(|mesh| &mesh.positions) {
+            for i in 0..3 {
+                low[i] = low[i].min(p[i]);
+                high[i] = high[i].max(p[i]);
+            }
+        }
+        let size = [0, 1, 2].map(|i| high[i] - low[i]);
+        if !same_size(size, module.dims) {
+            problems.push(format!(
+                "its piece {name} is {size:?}, not the {:?} its contract says",
+                module.dims
+            ));
+        }
+        if low[0].abs() > 0.01 {
+            problems.push(format!(
+                "its piece {name} starts {:.3} m from its origin along it, not at it",
+                low[0]
+            ));
+        }
+    }
+    problems
 }
 
 /// What a kit draws on a cabin five metres by four with a door and a window, of its kind,
@@ -675,6 +758,59 @@ mod tests {
             kits,
             items.kinds.into_iter().map(|item| item.name).collect(),
         )
+    }
+
+    #[test]
+    fn a_model_made_to_two_sizes_or_off_its_size_fails_its_contract() {
+        // D290, D303: one model is one size wherever it is used, and a piece is that size
+        // from its origin; no material fits a shared model to a box of its own.
+        let piece = |dims: [f32; 3], high: f32| crate::dress::Module {
+            length: dims[0],
+            dims,
+            model: Some("art/kits/boards/board/model.glb".into()),
+            sockets: [
+                ("start".to_string(), [0.0; 3]),
+                ("end".to_string(), [dims[0], 0.0, 0.0]),
+            ]
+            .into_iter()
+            .collect(),
+            near: vec![crate::dress::Stone {
+                positions: vec![[0.0, 0.0, 0.0], [dims[0], high, dims[2]]],
+                normals: vec![[0.0, 1.0, 0.0]; 2],
+                triangles: Vec::new(),
+                uvs: vec![[0.0, 0.0]; 2],
+            }],
+            ..Default::default()
+        };
+        let kit = |id: u16, dims: [f32; 3], high: f32| {
+            let mut kit = Kit {
+                id,
+                ..Kit::default()
+            };
+            let mut pieces = crate::dress::Pieces::default();
+            pieces.modules.insert("verge".into(), piece(dims, high));
+            kit.dress.made = Some(std::sync::Arc::new(pieces));
+            kit
+        };
+        assert!(contract(&kit(1, [2.0, 0.22, 0.03], 0.22)).is_empty());
+        assert!(
+            !contract(&kit(1, [2.0, 0.22, 0.03], 0.3)).is_empty(),
+            "off its size"
+        );
+        let kits = [
+            ("a".to_string(), kit(1, [2.0, 0.22, 0.03], 0.22)),
+            ("b".to_string(), kit(3, [2.0, 0.03, 0.22], 0.03)),
+            ("c".to_string(), kit(7, [2.0, 0.27, 0.03], 0.27)),
+        ];
+        let reports = check_all(&kits, &|_| true, &[]);
+        let model = |name: &str| {
+            reports[name]
+                .problems
+                .iter()
+                .any(|p| p.contains("one model, one size"))
+        };
+        assert!(!model("a") && !model("b"), "a board flat is the same board");
+        assert!(model("c"), "{:?}", reports["c"].problems);
     }
 
     #[test]

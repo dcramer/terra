@@ -940,13 +940,22 @@ const CAP_M: f32 = 0.1;
 /// each measured square to the roof, up a slope of 45 degrees, and a cap's worth more.
 fn roof_reach(kit: &crate::kit::Kit) -> f32 {
     let pieces = kit.dress.made.as_deref();
+    // Each piece as seated: over its covering where its part lies on it (D290).
     let tallest = kit
         .roof
         .parts
-        .values()
-        .filter_map(|part| pieces.and_then(|p| p.modules.get(&part.module)))
-        .flat_map(|module| module.near.iter().chain(&module.cap))
-        .flat_map(|mesh| mesh.positions.iter().map(|p| p[1]))
+        .iter()
+        .filter_map(|(&part, spec)| {
+            let module = pieces.and_then(|p| p.modules.get(&spec.module))?;
+            Some((crate::roofing::seated(kit, part), module))
+        })
+        .flat_map(|(lift, module)| {
+            module
+                .near
+                .iter()
+                .chain(&module.cap)
+                .flat_map(move |mesh| mesh.positions.iter().map(move |p| p[1] + lift))
+        })
         .fold(0.0, f32::max);
     (kit.roof.thick + kit.roof.relief).max(tallest) * std::f32::consts::SQRT_2 + CAP_M
 }

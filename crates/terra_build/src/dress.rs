@@ -43,6 +43,17 @@ pub struct Pieces {
 #[serde(deny_unknown_fields, default)]
 pub struct Module {
     pub length: f32,
+    /// Its contract (D290, D303): its real size, along (X), up (Y) and across (Z), in
+    /// metres, from its origin, its anchor, where the layout seats its line (a roof's deck or
+    /// covering, a wall's face); the model it was made from, if modelled, which is this size
+    /// wherever it is used; and its named sockets in its own frame (`start` and `end`).
+    pub dims: [f32; 3],
+    pub model: Option<String>,
+    pub sockets: BTreeMap<String, [f32; 3]>,
+    /// Whether it is its pattern's, shared by its materials and drawn in the pattern's atlas
+    /// (`Material::Trim`), rather than a material's own (`Material::Piece`); set as read.
+    #[serde(skip)]
+    pub shared: bool,
     /// Over a crease, how far either side its up turns from one plane's to the other's
     /// (`modules::Line::blend`).
     pub blend: f32,

@@ -31,7 +31,7 @@
         Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
     },
     dress: (
-        pieces: Some("data/kits/pieces/thatch.ron"),
+        own: Some("data/kits/pieces/thatch.ron"),
         masks: (weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
     ),
 )

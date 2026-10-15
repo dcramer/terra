@@ -13,7 +13,7 @@
         Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
     },
     dress: (
-        pieces: Some("data/kits/pieces/logs.ron"),
+        own: Some("data/kits/pieces/logs.ron"),
         masks: (weather: 0.3),
     ),
 )

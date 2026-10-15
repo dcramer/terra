@@ -88,14 +88,18 @@ pub fn draw_as(
                 return;
             };
             let (from, to) = (from.metres(), to.metres());
+            let seat = seat(part, spec.on_roof, from, to, sides.map(Place::metres));
             let line = Line {
                 from,
                 to,
-                seat: seat(part, spec.on_roof, from, to, sides.map(Place::metres)),
+                seat,
                 across: None,
                 capped,
                 seed,
                 blend: module.blend,
+                // Its anchor seated where its part sits (D290): on the covering for what
+                // lies on it, so one piece fits any covering's thickness.
+                lift: seated(kit, part),
             };
             // An eave's butts and a verge's boards are as long as modelled far off too: they
             // are the roof's edge, against the wall below and the sky, which the caps along
@@ -120,6 +124,26 @@ fn look(kit: &Kit, part: &Part) -> Look {
         tint: part.tint,
         shade: 0.14,
         repeat: kit.dress.repeat(),
+    }
+}
+
+/// Where a part's anchor is seated, the same for every material of the pattern (D290): on
+/// the covering (1) for a capping over a ridge or a hip, a verge's board and flashing, which
+/// lie on it; on the roof's deck (0) for a valley lined under it, an eave, rafters and battens.
+/// How far over the roof's deck, square to it, a part's anchor is seated: on the covering's
+/// top for what lies on it, standing `PROUD_M` off it as anything laid on a face does
+/// (docs/building-drawing.md); else on the deck.
+pub(crate) fn seated(kit: &Kit, part: RoofPart) -> f32 {
+    on_covering(part) * (kit.roof.thick + kit.roof.relief + PROUD_M)
+}
+
+/// How far a piece laid on the covering stands off it, so the two are never in one plane.
+const PROUD_M: f32 = 0.002;
+
+fn on_covering(part: RoofPart) -> f32 {
+    match part {
+        RoofPart::Ridge | RoofPart::Hip | RoofPart::Verge | RoofPart::Flashing => 1.0,
+        RoofPart::Valley | RoofPart::Eave | RoofPart::Rafter | RoofPart::Batten => 0.0,
     }
 }
 

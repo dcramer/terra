@@ -43,7 +43,7 @@
         variation: (thickness: 0.04, shade: 0.16, warmth: 0.06),
     ),
     textures: {
-        Piece: (path: "materials/wattle_pieces", metres: (1.0, 1.0)),
+        Trim: (path: "materials/wattle_pieces", metres: (1.0, 1.0)),
         Wattle: (path: "materials/wattle", metres: (0.9, 0.54)),
         Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),

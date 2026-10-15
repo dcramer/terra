@@ -747,6 +747,15 @@ def trim(ob, fraction):
     ob.data.update()
 
 
+def box(spec):
+    """A modelled piece's box from its contract (D290, D303): its real size (`dims`: along,
+    up and across, metres) and where its anchor is in it (`anchor`, from its low corner), the
+    anchor its origin, where the game seats its line. Its length, and its ranges up and across."""
+    length, high, deep = spec["dims"]
+    _, ay, az = spec["anchor"]
+    return length, (-ay, high - ay), (-az, deep - az)
+
+
 def modelled_mesh(name, spec):
     """A modelled piece laid, trimmed, unfolded and fitted, at its model's full detail (the
     high), and a copy cut to its budget (the low) the game draws, with the high to bake from."""
@@ -755,7 +764,7 @@ def modelled_mesh(name, spec):
     trim(high, spec.get("trim", 0.0))
     if spec.get("lies") in ("capping", "channel"):
         unfold(high)
-    fit(high, spec["length"], spec["y"], spec["z"])
+    fit(high, *box(spec))
     low = high.copy()
     low.data = high.data.copy()
     low.name = name
@@ -791,7 +800,7 @@ def taper_end(low, spec):
     return ob
 
 
-def bake_atlas(pairs, out_dir, size=4096):
+def bake_atlas(pairs, out_dir, size=2048):
     """The kit's modelled pieces baked, as games bake a low model from its high (Substance,
     Marmoset, Blender): each low unwrapped afresh into one atlas with the others, and its
     high's colour and the shape the low lost baked into it from the high (`color.jpg`,
@@ -913,8 +922,19 @@ def main():
             cap = taper_end(modelled[name], spec) if spec.get("end") == "taper" else None
         else:
             cap = cap_mesh(f"{name}_cap", spec, 7)
+        length = box(spec)[0] if name in modelled else spec["length"]
+        # Its contract (D290, D303): its real size from its origin, its model, its sockets.
+        if name in modelled:
+            dims = spec["dims"]
+        else:
+            points = made[0]
+            dims = [length] + [max(p[i] for p in points) - min(p[i] for p in points) for i in (1, 2)]
         lines.append(f'        "{name}": (')
-        lines.append(f"            length: {spec['length']:g},")
+        lines.append(f"            length: {length:g},")
+        lines.append("            dims: (" + ", ".join(f"{v:g}" for v in dims) + "),")
+        if name in modelled:
+            lines.append(f'            model: Some("{spec["model"]}"),')
+        lines.append(f'            sockets: {{"start": (0, 0, 0), "end": ({length:g}, 0, 0)}},')
         lines.append(f"            blend: {spec.get('blend', 0.0):g},")
         lines.append("            near: [" + ", ".join(near) + "],")
         lines.append("            far: [" + ", ".join(far) + "],")

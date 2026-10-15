@@ -1,0 +1,80 @@
+{
+ "about": "The roof pattern's shared pieces (D290, tools/kits): one board (on edge along a verge and an eave, flat as flashing), one valley every roof of the pattern lays, retextured by none, each to its contract: its real size (dims: along, up, across, metres) and where its anchor is in it (anchor: from its low corner), the anchor seated by the layout on the roof's deck or its covering (roofing::on_covering), so one piece fits any covering. A material's own pieces override these by name.",
+ "profiles": {},
+ "corners": {},
+ "atlas": "materials/roof_pieces",
+ "modules": {
+  "valley": {
+   "about": "An open valley lined with two weathered boards, modelled; unfolded flat so it lies in the crease. Anchored at its middle on the deck.",
+   "model": "art/kits/boards/valley/model.glb",
+   "lies": "channel",
+   "dims": [
+    1.5,
+    0.06,
+    0.44
+   ],
+   "anchor": [
+    0,
+    0,
+    0.22
+   ],
+   "budget": 500,
+   "blend": 0.05,
+   "trim": 0.04
+  },
+  "verge": {
+   "about": "A weathered pine bargeboard, modelled. Anchored a centimetre under its top edge on its inner face: seated on the covering, it stands that much proud of it.",
+   "model": "art/kits/boards/board/model.glb",
+   "lies": "board",
+   "dims": [
+    2.0,
+    0.22,
+    0.03
+   ],
+   "anchor": [
+    0,
+    0.21,
+    0
+   ],
+   "budget": 500,
+   "trim": 0.02,
+   "far": 0.45
+  },
+  "eave": {
+   "about": "A weathered pine fascia board, modelled. Anchored two centimetres over its top edge at its back: hung plumb from the deck's edge, under the covering.",
+   "model": "art/kits/boards/board/model.glb",
+   "lies": "board",
+   "dims": [
+    2.0,
+    0.22,
+    0.03
+   ],
+   "anchor": [
+    0,
+    0.24,
+    0.03
+   ],
+   "budget": 500,
+   "trim": 0.02,
+   "far": 0.45
+  },
+  "flashing": {
+   "about": "A weathered board laid along a wall the roof meets, under the wall's drip, modelled. Anchored at its foot by the wall, on the covering.",
+   "model": "art/kits/boards/board/model.glb",
+   "lies": "slab",
+   "dims": [
+    2.0,
+    0.03,
+    0.22
+   ],
+   "anchor": [
+    0,
+    0,
+    0.22
+   ],
+   "budget": 400,
+   "trim": 0.02,
+   "far": 0.45
+  }
+ }
+}

@@ -25,7 +25,7 @@
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
     },
     dress: (
-        pieces: Some("data/kits/pieces/slate.ron"),
+        own: Some("data/kits/pieces/slate.ron"),
         masks: (wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
     ),
 )

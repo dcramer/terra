@@ -21,7 +21,7 @@
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
     },
     dress: (
-        pieces: Some("data/kits/pieces/earth.ron"),
+        own: Some("data/kits/pieces/earth.ron"),
         roles: {
             Foot: Profile(name: "plinth", joints: false),
             Head: Profile(name: "lintel", extend: 0.12, joints: false, material: Some(Hewn)),

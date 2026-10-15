@@ -253,8 +253,10 @@ pub enum Joint {
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Dressing {
-    /// Its pieces' file under `assets/`, as `tools/kits/pieces.py` makes it.
+    /// Its pattern's pieces' file under `assets/`, as `tools/kits/pieces.py` makes it,
+    /// shared by every material of the pattern; and a material's own, over it by name (D290).
     pub pieces: Option<String>,
+    pub own: Option<String>,
     /// What each role is dressed with; a role not named is left as the cubes are.
     pub roles: BTreeMap<Role, Dress>,
     /// What its pieces' colour is multiplied by (sRGB): its dressed stone greyed towards the
@@ -373,6 +375,7 @@ impl Default for Dressing {
     fn default() -> Self {
         Dressing {
             pieces: None,
+            own: None,
             roles: BTreeMap::new(),
             tint: [1.0; 3],
             masks: Masks::default(),
@@ -406,16 +409,32 @@ impl Dressing {
         }
     }
 
-    /// Reads its pieces' file, `read` giving a file under `assets/` as text.
+    /// Reads its pieces' files, `read` giving a file under `assets/` as text: its
+    /// pattern's, shared, and its own over them, a profile, corner set or module of a name
+    /// its own having it in place of the pattern's.
     pub fn read(&mut self, read: &dyn Fn(&str) -> Result<String, String>) -> Result<(), String> {
-        let Some(path) = &self.pieces else {
-            return Ok(());
+        let file = |path: &str, shared: bool| -> Result<crate::dress::Pieces, String> {
+            let text = read(path)?;
+            let mut pieces: crate::dress::Pieces =
+                ron::from_str(&text).map_err(|why| format!("{path}: {why}"))?;
+            crate::modules::clean_all(&mut pieces);
+            for module in pieces.modules.values_mut() {
+                module.shared = shared;
+            }
+            Ok(pieces)
         };
-        let text = read(path)?;
-        let mut pieces: crate::dress::Pieces =
-            ron::from_str(&text).map_err(|why| format!("{path}: {why}"))?;
-        crate::modules::clean_all(&mut pieces);
-        self.made = Some(Arc::new(pieces));
+        let mut made = match &self.pieces {
+            Some(path) => Some(file(path, true)?),
+            None => None,
+        };
+        if let Some(path) = &self.own {
+            let own = file(path, false)?;
+            let all = made.get_or_insert_with(Default::default);
+            all.profiles.extend(own.profiles);
+            all.corners.extend(own.corners);
+            all.modules.extend(own.modules);
+        }
+        self.made = made.map(Arc::new);
         Ok(())
     }
 }

@@ -105,7 +105,7 @@ impl Layers {
         let mut out = Layers::default();
         for kit in &kits.0 {
             for (material, texture) in &kit.textures {
-                if *material == Material::Piece {
+                if matches!(material, Material::Piece | Material::Trim) {
                     continue;
                 }
                 let set = Set {
@@ -134,7 +134,7 @@ impl Layers {
     /// The layer a kind's material is drawn in, or the first kit's for no kind; none for a
     /// pieces' atlas or a material with no texture.
     pub fn get(&self, kind: Kind, material: Material) -> Option<u16> {
-        if material == Material::Piece {
+        if matches!(material, Material::Piece | Material::Trim) {
             return None;
         }
         self.by_kind

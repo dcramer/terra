@@ -64,6 +64,9 @@ pub struct Line {
     /// Over a crease, how far either side of it, in metres, the module's up turns from one
     /// plane's to the other's, so what stands high over it, a ridge's crown, stays whole.
     pub blend: f32,
+    /// How much further off what it lies on the module stands than modelled, square to it, in
+    /// metres: where its anchor is seated (a roof's covering, D290).
+    pub lift: f32,
 }
 
 /// Lays a modelled module along a line as a modular kit's piece is laid: copies at the length
@@ -548,8 +551,13 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
     // A modelled piece is in its kit's atlas, whatever it stands for; one made from
     // numbers in its material, its ends in theirs.
     if modelled(module) {
-        put(surfaces, Material::Piece, body);
-        put(surfaces, Material::Piece, ends);
+        let atlas = if module.shared {
+            Material::Trim
+        } else {
+            Material::Piece
+        };
+        put(surfaces, atlas, body);
+        put(surfaces, atlas, ends);
     } else {
         put(surfaces, look.material, body);
         if let Some(material) = look.ends {
@@ -987,6 +995,7 @@ pub fn modelled(module: &Module) -> bool {
 /// A point and a normal in a line's frame (along it, up, across) in the world.
 fn seat(line: &Line, axis: Vec3, q: Vec3, n: Vec3) -> (Vec3, Vec3) {
     let along = line.from + axis * q.x;
+    let q = Vec3::new(q.x, q.y + line.lift, q.z);
     match line.seat {
         Seat::Plane { up, out } => (
             along + up * q.y + out * q.z,
@@ -1091,6 +1100,7 @@ mod tests {
             capped: [false; 2],
             seed: 5,
             blend: 0.0,
+            lift: 0.0,
         };
         lay(&bar(), &line, &look(), false, &mut surfaces);
         let made = &surfaces.0[&Material::Board].shared;
@@ -1122,6 +1132,7 @@ mod tests {
             capped: [false; 2],
             seed: 3,
             blend: 0.0,
+            lift: 0.0,
         };
         let mut surfaces = Surfaces::sharing();
         lay(&module, &line, &look(), false, &mut surfaces);
@@ -1169,6 +1180,7 @@ mod tests {
             capped: [false; 2],
             seed: 1,
             blend: 0.0,
+            lift: 0.0,
         };
         let mut surfaces = Surfaces::sharing();
         lay(&bar(), &line, &look(), false, &mut surfaces);
@@ -1301,6 +1313,7 @@ mod tests {
                 capped,
                 seed: 7,
                 blend: 0.0,
+                lift: 0.0,
             };
             let mut surfaces = Surfaces::sharing();
             lay(&module, &line, &look(), false, &mut surfaces);

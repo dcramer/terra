@@ -65,8 +65,11 @@ pub enum Material {
     /// (D236).
     Wattle,
     /// A kit's modelled pieces (D251, D258): their own textures baked into one atlas, read
-    /// by each piece's own UVs.
+    /// by each piece's own UVs. A material's own pieces (its pack's).
     Piece,
+    /// A pattern's modelled pieces, shared by its materials (D290): their own textures baked
+    /// into the pattern's atlas, as `Piece`.
+    Trim,
 }
 
 /// Surfaces by what they are drawn in; the second, whether what is drawn into them may

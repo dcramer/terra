@@ -1,136 +1,123 @@
 {
-  "about": "The thatch roof's hand-made pieces (D251, D258, tools/kits): modules laid along the roof's lines, each modelled along +X, Y up from what it sits on, Z across, in metres. The covering under them is the roof cubes' surface in the reed, about 0.26 m thick (thatch.ron).",
-  "profiles": {},
-  "corners": {},
-  "atlas": "materials/thatch_pieces",
-  "modules": {
-    "ridge_script": {
-      "about": "A block ridge of sedge over the ridge and the hips: crowned, its lower edge cut in points, two liggers pegged along it; draped over the two slopes, rounded off where it stops at a gable.",
-      "kind": "mound",
-      "length": 1.0,
-      "step": 0.0625,
-      "variants": 2,
-      "base": 0.25,
-      "height": 0.15,
-      "half": 0.44,
-      "power": 2.2,
-      "points": 0.09,
-      "period": 0.25,
-      "drop": 0.05,
-      "lumpy": 0.012,
-      "rods": [
-        [0.395, -0.2],
-        [0.395, 0.2]
-      ],
-      "rod": 0.013,
-      "rod_sides": 4,
-      "across": 11,
-      "blend": 0.3,
-      "cap": "dome",
-      "reach": 0.2,
-      "pivot": [0.25, 0.0]
-    },
-    "verge_script": {
-      "about": "The verge rolled and bound: a bundle of reed over the covering's edge, pinched where it is tied every half metre, its ends rounded.",
-      "kind": "bundle",
-      "length": 1.0,
-      "step": 0.0625,
-      "variants": 2,
-      "y": 0.13,
-      "z": -0.05,
-      "radii": [0.21, 0.17],
-      "pinch": 0.1,
-      "period": 0.5,
-      "sides": 10,
-      "lumpy": 0.04,
-      "cap": "dome",
-      "reach": 0.15,
-      "pivot": [0.13, -0.05]
-    },
-    "valley": {
-      "about": "A swept valley: the reed carried round it in a shallow roll over the crease.",
-      "kind": "mound",
-      "length": 1.0,
-      "step": 0.1,
-      "variants": 1,
-      "base": 0.24,
-      "height": 0.06,
-      "half": 0.32,
-      "power": 1.6,
-      "drop": 0.03,
-      "lumpy": 0.01,
-      "blend": 0.2
-    },
-    "flashing": {
-      "about": "A fillet of lime mortar where the thatch meets a wall above it.",
-      "kind": "bundle",
-      "length": 1.0,
-      "step": 0.2,
-      "variants": 1,
-      "y": 0.27,
-      "z": -0.04,
-      "radii": [0.07, 0.09],
-      "pinch": 0.0,
-      "sides": 8,
-      "lumpy": 0.15
-    },
-    "rafter": {
-      "about": "A rafter or a ridge pole: a round pole in its bark.",
-      "kind": "pole",
-      "length": 1.0,
-      "step": 0.25,
-      "variants": 2,
-      "open": true,
-      "radius": 0.06,
-      "sides": 8,
-      "lumps": 0.06,
-      "cap": "flat"
-    },
-    "batten": {
-      "about": "A batten across the rafters: a riven lath the reed is tied to.",
-      "kind": "timber",
-      "length": 1.0,
-      "step": 1.0,
-      "variants": 1,
-      "open": true,
-      "y": [-0.036, -0.006],
-      "z": [0.0, 0.05],
-      "round": 0.006,
-      "per_corner": 2,
-      "cap": "flat"
-    },
-    "ridge": {
-      "about": "A block ridge of sedge, modelled (Tripo, from art/kits/thatch/ridge/concept.png): crowned, its lower edge cut in points, liggers and spars pegged over it; unfolded flat, so it drapes over a ridge or a hip.",
-      "model": "art/kits/thatch/ridge/model.glb",
-      "lies": "capping",
-      "length": 1.5,
-      "y": [0.2, 0.42],
-      "z": [-0.46, 0.46],
-      "budget": 1100,
-      "blend": 0.3,
-      "trim": 0.1,
-      "end": "taper",
-      "reach": 0.3
-    },
-    "verge": {
-      "about": "The verge rolled and bound, modelled: a bundle of reed tied every so often, bulging between its ties.",
-      "model": "art/kits/thatch/verge/model.glb",
-      "lies": "log",
-      "length": 1.5,
-      "y": [-0.08, 0.32],
-      "z": [-0.06, 0.22],
-      "budget": 800,
-      "trim": 0.06
-    },
-    "eave": {
-      "about": "The eave, modelled: the reed's butt ends trimmed into a thick, full, rounded lip, laid on the roof at its edge.",
-      "model": "art/kits/thatch/eave/model.glb",
-      "lies": "slab",
-      "length": 1.5,
-      "y": [0.0, 0.34],
-      "z": [-0.62, 0.06],
-      "budget": 800,
-      "trim": 0.06
-    }
+ "about": "The thatch roof's hand-made pieces (D251, D258, tools/kits): modules laid along the roof's lines, each modelled along +X, Y up from what it sits on, Z across, in metres. The covering under them is the roof cubes' surface in the reed, about 0.26 m thick (thatch.ron). Its own pieces over the roof pattern's (D290): its ridge beds 11 cm into the reed it is seated on; its verge, eave and flashing in place of the pattern's boards.",
+ "profiles": {},
+ "corners": {},
+ "atlas": "materials/thatch_pieces",
+ "modules": {
+  "valley": {
+   "about": "A swept valley: the reed carried round it in a shallow roll over the crease.",
+   "kind": "mound",
+   "length": 1.0,
+   "step": 0.1,
+   "variants": 1,
+   "base": 0.24,
+   "height": 0.06,
+   "half": 0.32,
+   "power": 1.6,
+   "drop": 0.03,
+   "lumpy": 0.01,
+   "blend": 0.2
+  },
+  "flashing": {
+   "about": "A fillet of lime mortar where the thatch meets a wall above it.",
+   "kind": "bundle",
+   "length": 1.0,
+   "step": 0.2,
+   "variants": 1,
+   "y": -0.04,
+   "z": -0.04,
+   "radii": [
+    0.07,
+    0.09
+   ],
+   "pinch": 0.0,
+   "sides": 8,
+   "lumpy": 0.15
+  },
+  "rafter": {
+   "about": "A rafter or a ridge pole: a round pole in its bark.",
+   "kind": "pole",
+   "length": 1.0,
+   "step": 0.25,
+   "variants": 2,
+   "open": true,
+   "radius": 0.06,
+   "sides": 8,
+   "lumps": 0.06,
+   "cap": "flat"
+  },
+  "batten": {
+   "about": "A batten across the rafters: a riven lath the reed is tied to.",
+   "kind": "timber",
+   "length": 1.0,
+   "step": 1.0,
+   "variants": 1,
+   "open": true,
+   "y": [
+    -0.036,
+    -0.006
+   ],
+   "z": [
+    0.0,
+    0.05
+   ],
+   "round": 0.006,
+   "per_corner": 2,
+   "cap": "flat"
+  },
+  "ridge": {
+   "about": "A block ridge of sedge, modelled (Tripo, from art/kits/thatch/ridge/concept.png): crowned, its lower edge cut in points, liggers and spars pegged over it; unfolded flat, so it drapes over a ridge or a hip.",
+   "model": "art/kits/thatch/ridge/model.glb",
+   "lies": "capping",
+   "dims": [
+    1.5,
+    0.22,
+    0.92
+   ],
+   "anchor": [
+    0,
+    0.11,
+    0.46
+   ],
+   "budget": 1100,
+   "blend": 0.3,
+   "trim": 0.1,
+   "end": "taper",
+   "reach": 0.3
+  },
+  "verge": {
+   "about": "The verge rolled and bound, modelled: a bundle of reed tied every so often, bulging between its ties.",
+   "model": "art/kits/thatch/verge/model.glb",
+   "lies": "log",
+   "dims": [
+    1.5,
+    0.4,
+    0.28
+   ],
+   "anchor": [
+    0,
+    0.39,
+    0.06
+   ],
+   "budget": 800,
+   "trim": 0.06
+  },
+  "eave": {
+   "about": "The eave, modelled: the reed's butt ends trimmed into a thick, full, rounded lip, laid on the roof at its edge.",
+   "model": "art/kits/thatch/eave/model.glb",
+   "lies": "slab",
+   "dims": [
+    1.5,
+    0.34,
+    0.68
+   ],
+   "anchor": [
+    0,
+    0,
+    0.62
+   ],
+   "budget": 800,
+   "trim": 0.06
   }
+ }
 }

@@ -13,8 +13,12 @@
 //             relief: how far its texture's height pushes each course out; tint; rafter and
 //             batten sizes; parts: the module of pieces each line and the frame is, in its
 //             material, with its ends' material and tint
-// textures    the texture sets every roof shares: rafters' ends, battens' boards, flashing's
-//             mortar; a pack adds its Covering, its rafters' Log and its pieces' atlas
+// textures    the texture sets every roof shares: its shared pieces' atlas (Trim), rafters'
+//             ends, battens' boards, flashing's mortar; a pack adds its Covering, its rafters'
+//             Log and its own pieces' atlas (Piece)
+// dress       its shared pieces (art/kits/roof): the board along a verge, an eave's fascia,
+//             the flashing, the valley's lining, each to its contract (size, anchor), seated
+//             on the deck or the covering by the layout, so one fits every covering
 // meets       a roof is drawn over what it rests on, which it neither caps nor ends against
 // toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
 (
@@ -31,18 +35,22 @@
         parts: {
             Ridge: (module: "ridge", material: Piece),
             Hip: (module: "ridge", material: Piece),
-            Valley: (module: "valley", material: Piece),
-            Eave: (module: "eave", material: Piece, tint: (0.58, 0.54, 0.5)),
-            Verge: (module: "verge", material: Piece, tint: (0.58, 0.54, 0.5)),
-            Flashing: (module: "flashing", material: Piece, tint: (0.62, 0.6, 0.58)),
+            Valley: (module: "valley", material: Trim),
+            Eave: (module: "eave", material: Trim, tint: (0.58, 0.54, 0.5)),
+            Verge: (module: "verge", material: Trim, tint: (0.58, 0.54, 0.5)),
+            Flashing: (module: "flashing", material: Trim, tint: (0.62, 0.6, 0.58)),
             Rafter: (module: "rafter", material: Log, ends: Some(LogEnd)),
             Batten: (module: "batten", material: Board, tint: (0.9, 0.9, 0.9)),
         },
     ),
     textures: {
+        Trim: (path: "materials/roof_pieces", metres: (1.0, 1.0)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
     },
+    dress: (
+        pieces: Some("data/kits/pieces/roof.ron"),
+    ),
     meets: Some((weight: 0, end: None, carries: None)),
 )

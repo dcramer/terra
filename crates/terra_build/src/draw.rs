@@ -92,6 +92,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
         capped: [true; 2],
         seed,
         blend: 0.0,
+        lift: 0.0,
     };
     let look = crate::modules::Look {
         material: Material::Log,
@@ -171,6 +172,7 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
             capped: [true; 2],
             seed: crate::layout::hash(&[seed, k as u32]),
             blend: 0.0,
+            lift: 0.0,
         };
         crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
     }
