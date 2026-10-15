@@ -49,49 +49,106 @@ pub struct Kinds {
 pub const SETTLEMENT: &str = "data/settlement.ron";
 
 /// What a settlement is built of, by role, as its data names the materials (D290): no
-/// code names one.
+/// code names one. Each role is one material or several, each building picking one by its
+/// seed, so a settlement of many materials is one of many looks (D182).
 #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settlement {
-    pub timber: String,
-    pub masonry: String,
-    pub beams: String,
-    pub cob: String,
-    pub framed: String,
+    pub timber: Vec<String>,
+    pub masonry: Vec<String>,
+    pub beams: Vec<String>,
+    pub cob: Vec<String>,
+    pub framed: Vec<String>,
 }
 
-impl Kinds {
-    /// A settlement's kinds from its file, `read` giving a file under `assets/`, `named` a
+/// A settlement's materials by role, as kinds, and the roof each wall kind takes: what each
+/// building picks its [`Kinds`] from.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Palette {
+    /// Timber, masonry, beams, cob and framed, in that order.
+    pub roles: [Vec<Kind>; 5],
+    pub roofs: std::collections::BTreeMap<Kind, Kind>,
+}
+
+/// What a building's kinds are picked from: one set for every building, or a palette each
+/// picks from by its seed.
+pub trait Picks {
+    fn pick(&self, seed: u32) -> Kinds;
+}
+
+impl Picks for Kinds {
+    fn pick(&self, _seed: u32) -> Kinds {
+        *self
+    }
+}
+
+impl Picks for &Palette {
+    fn pick(&self, seed: u32) -> Kinds {
+        self.choose(|r, of| (unit(hash(&[seed, 0x9a1e, r as u32])) * of as f32) as usize)
+    }
+}
+
+impl Palette {
+    /// A settlement's palette from its file, `read` giving a file under `assets/`, `named` a
     /// material's kind by its file's name, and `kits` the roof each takes.
     pub fn read(
         read: &dyn Fn(&str) -> Result<String, String>,
         named: &dyn Fn(&str) -> Option<Kind>,
         kits: &crate::kit::Kits,
-    ) -> Result<Kinds, String> {
+    ) -> Result<Palette, String> {
         let text = read(SETTLEMENT)?;
         let settlement: Settlement =
             ron::from_str(&text).map_err(|why| format!("{SETTLEMENT}: {why}"))?;
-        let kind =
-            |name: &str| named(name).ok_or_else(|| format!("{SETTLEMENT}: no material {name}"));
-        let roof = |kind: Kind| {
-            kits.roof_for(kind)
-                .ok_or_else(|| format!("{SETTLEMENT}: no roof over {kind:?}"))
+        let kinds = |names: &[String]| -> Result<Vec<Kind>, String> {
+            if names.is_empty() {
+                return Err(format!("{SETTLEMENT}: a role with no material"));
+            }
+            names
+                .iter()
+                .map(|name| named(name).ok_or_else(|| format!("{SETTLEMENT}: no material {name}")))
+                .collect()
         };
-        let (timber, masonry, beams) = (
-            kind(&settlement.timber)?,
-            kind(&settlement.masonry)?,
-            kind(&settlement.beams)?,
-        );
-        Ok(Kinds {
+        let roles = [
+            kinds(&settlement.timber)?,
+            kinds(&settlement.masonry)?,
+            kinds(&settlement.beams)?,
+            kinds(&settlement.cob)?,
+            kinds(&settlement.framed)?,
+        ];
+        let mut roofs = std::collections::BTreeMap::new();
+        for &kind in roles.iter().flatten() {
+            let roof = kits
+                .roof_for(kind)
+                .ok_or_else(|| format!("{SETTLEMENT}: no roof over {kind:?}"))?;
+            roofs.insert(kind, roof);
+        }
+        Ok(Palette { roles, roofs })
+    }
+
+    /// The first of each role's, as a building with no seed of its own takes.
+    pub fn first(&self) -> Kinds {
+        self.choose(|_, _| 0)
+    }
+
+    /// Each role's material, `which` saying which of a role's (by its number, of how many),
+    /// and the roof each of the first three takes.
+    fn choose(&self, which: impl Fn(usize, usize) -> usize) -> Kinds {
+        let role = |r: usize| {
+            let all = &self.roles[r];
+            all[which(r, all.len()).min(all.len() - 1)]
+        };
+        let roof = |kind: Kind| self.roofs.get(&kind).copied().unwrap_or(Kind::FIRST_ROOF);
+        let (timber, masonry, beams) = (role(0), role(1), role(2));
+        Kinds {
             timber,
             masonry,
             beams,
-            cob: kind(&settlement.cob)?,
-            framed: kind(&settlement.framed)?,
-            timber_roof: roof(timber)?,
-            masonry_roof: roof(masonry)?,
-            beams_roof: roof(beams)?,
-        })
+            cob: role(3),
+            framed: role(4),
+            timber_roof: roof(timber),
+            masonry_roof: roof(masonry),
+            beams_roof: roof(beams),
+        }
     }
 }
 
@@ -843,7 +900,8 @@ fn name(plan: Plan, scheme: Scheme, roofed: Roof) -> String {
 }
 
 /// The village's buildings from its seed: the same seed, the same village.
-pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
+pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
+    let kinds = picks.pick(seed);
     // Each house: its plan, scheme and roof, how wide its front, where its door is east of
     // the green's middle and how far from the street's middle, and which side it is on.
     const NORTH: f32 = std::f32::consts::PI;
@@ -936,6 +994,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     let mut buildings = Vec::new();
     for (index, &(plan, scheme, roofed, wide, at, facing)) in houses.iter().enumerate() {
         let seed = hash(&[seed, index as u32]);
+        let kinds = picks.pick(seed);
         // A little out of line, as a village is: a lean of a few degrees and a step either
         // way along the street.
         let lean = (unit(hash(&[seed, 1])) - 0.5) * 0.1;
@@ -1137,7 +1196,7 @@ const STREETS_APART_M: f32 = 36.0;
 /// every plan, scheme, roof and width the rules make in an order the seed shuffles, so
 /// three hundred are nearly every one of them once. Places in metres east and south of
 /// the town's middle, as [`village`] gives them.
-pub fn town(seed: u32, count: usize, kinds: Kinds) -> Vec<Building> {
+pub fn town(seed: u32, count: usize, picks: impl Picks + Copy) -> Vec<Building> {
     let choices = shuffled(seed);
     let per_street = PLOTS_A_SIDE * 2;
     let streets = count.div_ceil(per_street).max(1);
@@ -1158,7 +1217,7 @@ pub fn town(seed: u32, count: usize, kinds: Kinds) -> Vec<Building> {
             } else {
                 (middle + back, std::f32::consts::PI)
             };
-            put_up(seed, choice, [east, south], facing + lean, kinds)
+            put_up(seed, choice, [east, south], facing + lean, picks.pick(seed))
         })
         .collect()
 }
@@ -1176,7 +1235,7 @@ pub fn town_streets(count: usize) -> (Vec<f32>, f32) {
 /// Hamlets of houses spread over the land round a middle, out to `radius_m` and no nearer
 /// than a tenth of it, to measure bases seen far off (D185's `far`): `count` buildings, five
 /// to a hamlet along a lane of its own, each hamlet turned its own way.
-pub fn hamlets(seed: u32, count: usize, radius_m: f32, kinds: Kinds) -> Vec<Building> {
+pub fn hamlets(seed: u32, count: usize, radius_m: f32, picks: impl Picks + Copy) -> Vec<Building> {
     const PER_HAMLET: usize = 5;
     let choices = shuffled(seed ^ 0x5eed);
     let mut out = Vec::with_capacity(count);
@@ -1204,12 +1263,13 @@ pub fn hamlets(seed: u32, count: usize, radius_m: f32, kinds: Kinds) -> Vec<Buil
             middle[0] + east * c + south * s,
             middle[1] - east * s + south * c,
         ];
+        let seed_of = hash(&[seed, index as u32]);
         out.push(put_up(
-            hash(&[seed, index as u32]),
+            seed_of,
             choice,
             at,
             facing + turn,
-            kinds,
+            picks.pick(seed_of),
         ));
     }
     out
@@ -1358,6 +1418,58 @@ mod tests {
         assert!(plans.len() >= 5, "{plans:?}");
         assert_eq!(crowded(&all), None);
         assert!(every_building().len() >= 200, "{}", every_building().len());
+    }
+
+    #[test]
+    fn a_town_of_many_materials_builds_each_house_of_one_and_uses_every_one() {
+        // Six stones, each with its own roof; one of every other role.
+        let stones: Vec<Kind> = (10..16).map(Kind).collect();
+        let roofs = stones
+            .iter()
+            .map(|&k| (k, Kind(0x800 + k.0)))
+            .chain([
+                (KINDS.timber, KINDS.timber_roof),
+                (KINDS.beams, KINDS.beams_roof),
+            ])
+            .collect();
+        let palette = Palette {
+            roles: [
+                vec![KINDS.timber],
+                stones.clone(),
+                vec![KINDS.beams],
+                vec![KINDS.cob],
+                vec![KINDS.framed],
+            ],
+            roofs,
+        };
+        let all = town(7, 90, &palette);
+        let mut used = BTreeSet::new();
+        for building in &all {
+            let mut base = Base::default();
+            for &op in &building.ops {
+                base.apply(op);
+            }
+            let walls: BTreeSet<Kind> = base
+                .cubes()
+                .map(|(_, cube)| cube.kind)
+                .filter(|k| stones.contains(k))
+                .collect();
+            // A house is one stone throughout, and its roof the one that stone takes.
+            assert!(walls.len() <= 1, "{}: {walls:?}", building.name);
+            if let Some(&stone) = walls.first()
+                && building.scheme == Scheme::Masonry
+            {
+                assert!(
+                    base.cubes()
+                        .any(|(_, cube)| cube.kind == Kind(0x800 + stone.0)),
+                    "{}",
+                    building.name
+                );
+            }
+            used.extend(walls);
+        }
+        assert_eq!(used.len(), stones.len(), "{used:?}");
+        assert_eq!(palette.first().masonry, stones[0]);
     }
 
     #[test]

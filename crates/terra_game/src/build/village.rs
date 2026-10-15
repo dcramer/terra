@@ -191,11 +191,11 @@ pub(super) fn lay_scale(
     let started = Instant::now();
     let mut buildings: Vec<(Building, [f32; 2])> = Vec::new();
     if let Some(count) = options.town {
-        let town = terra_build::village::town(7, count, kinds);
+        let town = terra_build::village::town(7, count, &kinds);
         buildings.extend(town.into_iter().map(|b| (b, [0.0, -TOWN_NORTH_M])));
     }
     if let Some(count) = options.far {
-        let spread = terra_build::village::hamlets(7, count, FAR_M, kinds);
+        let spread = terra_build::village::hamlets(7, count, FAR_M, &kinds);
         buildings.extend(spread.into_iter().map(|b| (b, [0.0, 0.0])));
     }
     if options.castle {
@@ -206,7 +206,10 @@ pub(super) fn lay_scale(
                 scheme: terra_build::village::Scheme::Masonry,
                 at: [0.0, 0.0],
                 facing: 0.0,
-                ops: terra_build::castle::castle(kinds.masonry, kinds.beams, kinds.masonry_roof),
+                ops: {
+                    let first = kinds.first();
+                    terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
+                },
             },
             [0.0, -CASTLE_NORTH_M],
         ));

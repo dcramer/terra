@@ -752,7 +752,7 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
 
 /// The kinds a village is built of (`terra_build::village`): each role's material as the
 /// settlement's data names it, and the roof each takes (D290).
-pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> {
+pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Palette> {
     let assets = kit_assets();
     let read = |file: &str| {
         std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
@@ -764,7 +764,7 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> 
             .find(|(_, n)| n.as_str() == name)
             .map(|(k, _)| *k)
     };
-    terra_build::village::Kinds::read(&read, &named, kits)
+    terra_build::village::Palette::read(&read, &named, kits)
         .map_err(|why| error!("{why}"))
         .ok()
 }

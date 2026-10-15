@@ -1,10 +1,11 @@
 // What a settlement is built of (terra_build::village, D229, D290): each of its builders'
-// roles, a construction material by its file's name in data/kits. The roof over each of the
-// first three is that material's own (`roof_kind`). Another people's village names others.
+// roles, construction materials by their files' names in data/kits, each building picking
+// one of a role's by its seed; the roof over each of the first three is that material's own
+// (`roof_kind`). Another people's village names others.
 (
-    timber: "logs",
-    masonry: "stone",
-    beams: "hewn",
-    cob: "earth",
-    framed: "wattle",
+    timber: ["logs"],
+    masonry: ["stone"],
+    beams: ["hewn"],
+    cob: ["earth"],
+    framed: ["wattle"],
 )

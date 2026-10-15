@@ -33,7 +33,7 @@ fn main() -> ExitCode {
     let read = |path: &str| {
         std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
     };
-    let kinds = terra_build::village::Kinds::read(&read, &|name| Some(kind(name)), &kits)
+    let kinds = terra_build::village::Palette::read(&read, &|name| Some(kind(name)), &kits)
         .expect("the settlement's materials");
     let only: Option<String> = std::env::args().nth(1);
     let maps = Maps::default();
@@ -43,7 +43,7 @@ fn main() -> ExitCode {
     let mut edits: Vec<(String, usize, usize, usize, f32)> = Vec::new();
     let mut operations: Vec<f32> = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for building in terra_build::village::village(7, kinds) {
+    for building in terra_build::village::village(7, &kinds) {
         // One of each sort of building: the village repeats them.
         let sort = format!("{:?} {:?}", building.plan, building.scheme);
         if !seen.insert(sort)
@@ -57,7 +57,7 @@ fn main() -> ExitCode {
         for op in &building.ops {
             base.apply(*op);
         }
-        base.lay_footings(kinds.masonry, |column| {
+        base.lay_footings(kinds.first().masonry, |column| {
             -((column[0] + column[1]).rem_euclid(3) as i16) * 20
         });
         let progress = Progress::Whole;

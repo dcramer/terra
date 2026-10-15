@@ -1367,10 +1367,10 @@ fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
     let read = |path: &str| {
         std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
     };
-    let kinds = crate::village::Kinds::read(&read, &|name| Some(named(name)), &kits).unwrap();
+    let kinds = crate::village::Palette::read(&read, &|name| Some(named(name)), &kits).unwrap();
     // And a long hall of each kind of wall, five sections long, a cube taken out at its
     // end and one added there.
-    let mut bases: Vec<(String, Base)> = crate::village::town(3, 14, kinds)
+    let mut bases: Vec<(String, Base)> = crate::village::town(3, 14, &kinds)
         .into_iter()
         .map(|building| {
             let mut base = Base::default();

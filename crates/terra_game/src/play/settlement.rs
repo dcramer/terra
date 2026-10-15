@@ -147,7 +147,7 @@ fn found(
         return;
     };
     let seed = planet.seed().derive("village").0 as u32;
-    let buildings = terra_build::village::village(seed, kinds);
+    let buildings = terra_build::village::village(seed, &kinds);
     let Some((middle, east)) = site_for(&planet, &start, lair.0, &buildings) else {
         warn!("No dry ground for the village.");
         return;
