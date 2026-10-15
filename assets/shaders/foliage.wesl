@@ -54,6 +54,9 @@ struct Wind {
     // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
     // (D269); 0 for none.
     relief: f32,
+    // For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres
+    // (`dapple` in foliage_prepass.wesl, D359); 0 for none.
+    dapple: f32,
     climate: FoliageClimate,
 }
 
@@ -297,8 +300,14 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_TANGENTS)
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(world_from_local, vertex.tangent, vertex_in.instance_index);
-@if(VERTEX_COLORS)
+@if(VERTEX_COLORS) {
     out.color = vertex.color;
+    // A dappled shadow stand-in's offset from its lump's middle, turned into the world, for
+    // the shadow pass to find its rim as the sun sees it (`dapple`, D359).
+    if wind.dapple > 0.0 {
+        out.color = vec4<f32>(mesh_functions::mesh_normal_local_to_world(vertex.color.rgb, vertex_in.instance_index), 1.0);
+    }
+}
 @if(MOTION_VECTOR_PREPASS) {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(local, 1.0));

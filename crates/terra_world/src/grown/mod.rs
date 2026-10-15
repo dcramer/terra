@@ -279,6 +279,10 @@ pub struct FoliageExtension {
     /// and the map (D269); 0 and none for bark.
     #[uniform(100)]
     pub relief: f32,
+    /// For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres, and
+    /// its rim thinning as the sun's disc blurs it (`foliage_prepass.wesl`, D359); 0 for none.
+    #[uniform(100)]
+    pub dapple: f32,
     #[texture(102)]
     #[sampler(103)]
     pub leaf_normals: Option<Handle<Image>>,
@@ -464,6 +468,7 @@ impl Looks {
             leaf: Vec4::ZERO,
             parting,
             relief: 0.0,
+            dapple: 0.0,
             leaf_normals: None,
             climate: FoliageClimate::default(),
             climate_ground: None,

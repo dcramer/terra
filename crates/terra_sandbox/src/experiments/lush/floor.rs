@@ -826,6 +826,10 @@ impl Under {
     fn likes(self, here: &Here) -> f32 {
         let near = |d: f32, from: f32, to: f32| 1.0 - smoothstep(from, to, d);
         let broadleaf = 1.0 - smoothstep(0.2, 0.6, here.needles);
+        // The understorey's shrubs thin on a pine stand's needles but do not go (D359): gone
+        // there, the stand's floor read as a park's lawn between its boles, its undergrowth
+        // hiding a fifth of the view at eye height where a wild wood's hides a third to a half.
+        let understorey = 0.45 + 0.55 * broadleaf;
         // The middle layer is thickest where light comes down the side of something open,
         // a clearing's or a path's edge or a gap, and thinner in the deep shade.
         let edge = near(here.path, 2.0, 9.0);
@@ -842,7 +846,7 @@ impl Under {
                 (1.0 - smoothstep(0.3, 0.7, here.light)) * broadleaf * (0.3 + 0.7 * here.wet)
             }
             // The understorey, under the edge of the canopy.
-            Under::Hazel => between(-0.2, 0.8, here.light) * broadleaf,
+            Under::Hazel => between(-0.2, 0.8, here.light) * understorey,
             // Under the pines, on their needles.
             Under::Bilberry => smoothstep(0.3, 0.7, here.needles) * between(0.05, 1.0, here.light),
             // In the open and along the paths.
@@ -855,7 +859,7 @@ impl Under {
                 smoothstep(0.15, 0.6, here.light)
                     * smoothstep(2.0, 4.0, here.bark)
                     * (0.6 + 0.4 * edge)
-                    * (0.3 + 0.7 * broadleaf)
+                    * (0.5 + 0.5 * broadleaf)
             }
             // Fallen from the trees, round their feet and by the logs.
             Under::Branches => {
@@ -868,10 +872,10 @@ impl Under {
             }
             // Hazel stools under oaks, thickest in half shade at the edges.
             Under::Coppice => {
-                (0.45 + 0.55 * between(0.05, 1.1, here.light)) * broadleaf * (0.6 + 0.4 * edge)
+                (0.45 + 0.55 * between(0.05, 1.1, here.light)) * understorey * (0.6 + 0.4 * edge)
             }
             // Holly takes the deep shade under the oaks that little else does.
-            Under::Holly => (1.0 - smoothstep(0.55, 0.95, here.light)) * broadleaf,
+            Under::Holly => (1.0 - smoothstep(0.55, 0.95, here.light)) * understorey,
             // Young spruces come up in the gaps under the spruces, and few under the pines,
             // whose stands stay open under their high crowns, so a pine stand reads as pines
             // rather than a spruce thicket (D289).

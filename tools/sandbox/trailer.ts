@@ -125,6 +125,19 @@ function sandboxArgs(shot: Shot): string[] {
   ];
 }
 
+/// The player's jog, metres a second (play's movement.rs, JOG_SPEED).
+const JOG = 4.3;
+
+/// Why a run's route is too short for its film, or undefined: a player who reaches its last
+/// spot stands there idle for the rest of it, which on film reads as a figure not animated.
+function tooShort(shot: Shot): string | undefined {
+  const spots = [shot.player.at, ...shot.player.route.split(";")].map((s) => s.split(",").map(Number) as [number, number]);
+  const length = spots.slice(1).reduce((sum, [e, s], i) => sum + Math.hypot(e - spots[i][0], s - spots[i][1]), 0);
+  const needs = ((shot.lead_in ?? 1.5) + shot.seconds) * JOG;
+  if (length >= needs) return undefined;
+  return `its route is ${length.toFixed(0)} m, run in ${(length / JOG).toFixed(1)} s, but the film needs ${needs.toFixed(0)} m: the player would stand for its last ${((needs - length) / JOG).toFixed(1)} s`;
+}
+
 /// A sound bed of `seconds` from the game's own sounds and music, or undefined if it could
 /// not be made.
 function bedFor(layers: string[], seconds: number, file: string): string | undefined {
@@ -160,6 +173,8 @@ function renderShot(name: string, n: number) {
   const clip = clipOf(name);
   const stale = !existsSync(clip) || statSync(clip).mtimeMs < Math.max(statSync(file).mtimeMs, statSync(sandbox).mtimeMs);
   if (!render || !(stills || again || only || stale)) return;
+  const short = tooShort(shot);
+  if (short) console.log(`trailer: ${name}: ${short}; lengthen it in ${file}`);
   const warmup = shot.warmup ?? 360;
   const first = warmup + Math.round((shot.lead_in ?? 1.5) * 60);
   const frames = Math.round(shot.seconds * FPS);

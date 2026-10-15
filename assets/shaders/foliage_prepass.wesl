@@ -52,6 +52,9 @@ struct Wind {
     // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
     // (D269); 0 for none.
     relief: f32,
+    // For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres
+    // (`dapple` in foliage_prepass.wesl, D359); 0 for none.
+    dapple: f32,
     climate: FoliageClimate,
 }
 
@@ -203,6 +206,49 @@ fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
     }
 }
 
+fn hash3(p: vec3<f32>) -> f32 {
+    return fract(sin(dot(p, vec3<f32>(127.1, 311.7, 74.7))) * 43758.5453);
+}
+
+// Smooth noise in the world, 0 to 1 (foliage_fragment.wesl's `wander`).
+fn wander(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(hash3(i), hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(hash3(i + vec3<f32>(0.0, 1.0, 0.0)), hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(hash3(i + vec3<f32>(0.0, 0.0, 1.0)), hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(hash3(i + vec3<f32>(0.0, 1.0, 1.0)), hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+// A crown's solid shadow stand-in (`dapple` over 0, its offsets from its lumps' middles in the
+// world in its colour) casts the shade a crown does from tens of metres up, not a disc: broken
+// into gaps `dapple` metres across, as a pine's pads are tufts with sky between, and thinning
+// to nothing toward its rim as the sun sees it, as the sun's disc, half a degree across, blurs
+// a shade cast from 30 m into a penumbra a quarter of a metre wide and from 100 m nearly a
+// metre (D359). What is part shade is a share of the shadow map's texels, a different share
+// every frame, which the shadow's temporal filter and TAA average, as a masked material's
+// dithered opacity shadows it in Unreal.
+fn dapple(frag_coord: vec4<f32>, world: vec3<f32>, offset: vec3<f32>) {
+    if wind.dapple <= 0.0 {
+        return;
+    }
+    let toward_light = normalize(view.world_from_view[2].xyz);
+    let facing = abs(dot(normalize(offset), toward_light));
+    let p = world / wind.dapple;
+    let gaps = 0.65 * wander(p) + 0.35 * wander(p * 2.3 + vec3<f32>(7.1, 3.3, 5.9));
+    let shade = smoothstep(DAPPLE_GAPS.x, DAPPLE_GAPS.y, gaps) * smoothstep(DAPPLE_RIM.x, DAPPLE_RIM.y, facing);
+    if noise_at(frag_coord) > shade {
+        discard;
+    }
+}
+
+// Where a stand-in's noise turns from gap to shade, and how far in from its rim, as the cosine
+// of the sun's angle to its surface, its shade thins from whole to none.
+const DAPPLE_GAPS: vec2<f32> = vec2<f32>(0.36, 0.6);
+const DAPPLE_RIM: vec2<f32> = vec2<f32>(0.0, 0.75);
+
 @if(PREPASS_FRAGMENT)
 @fragment
 fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool) -> prepass_io::FragmentOutput {
@@ -219,6 +265,9 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
+    // A shadow pass emulating unclipped depth runs this variant.
+@if(VERTEX_COLORS)
+    dapple(in.position, in.world_position.xyz, in.color.rgb);
     near_fade(in.position, in.world_position.xyz);
     let leaf = (flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS) == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK;
     if leaf {
@@ -286,6 +335,8 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 fn fragment(in: prepass_io::VertexOutput) {
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
+@if(VERTEX_COLORS)
+    dapple(in.position, in.world_position.xyz, in.color.rgb);
 @if(VERTEX_UVS_A && VERTEX_UVS_B)
     bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
 @if(VERTEX_UVS_A && !VERTEX_UVS_B)

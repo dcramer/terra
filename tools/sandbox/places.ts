@@ -28,7 +28,7 @@ export type Place = {
 export const PLACES: Record<string, Place> = {
   lush: {
     about: "the lush forest: a tall conifer stand with oaks, on the yard's rolling ground (D301)",
-    args: ["--experiment", "walk", "--experiment", "lush", "--level", "yard"],
+    args: ["--experiment", "play", "--experiment", "lush", "--level", "yard"],
     views: [
       ["floor", "-56,1.7,-43,-72,1.0,-55"],
       ["edge", "0,1.8,250,0,5,200"],
@@ -43,6 +43,14 @@ export const PLACES: Record<string, Place> = {
     look: "sotf-forest-day",
     ground: false,
     forest: true,
+    // The trailer's run (2026-10-15, trailer/runs/forest.json): 250 m down the forest's own
+    // path, on its laid points, south-east through the tall pines toward the low sun of a
+    // morning, its shafts coming down through the mist to the runner.
+    route: {
+      at: "-154,-104.4",
+      face: "-128.6,-88.4",
+      through: "-128.6,-88.4;-102,-74;-79.1,-54.4;-59.7,-40.2;-36.5,-21.1;-14.9,-10.1;3.7,4.7;16.8,25;36.7,47.5",
+    },
   },
   lake: {
     about:

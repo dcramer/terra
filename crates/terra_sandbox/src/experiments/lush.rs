@@ -134,6 +134,9 @@ const BARK_FOR_M: f32 = 0.5;
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
 /// through many crowns, still comes through in places.
 const SHADOW_LUMP: f32 = 0.6;
+/// How wide the gaps in a solid shadow lump's shade are, in metres: a Scots pine's tufts with
+/// sky between (D359). Cast whole, a pad's lump drew a round black disc on the floor.
+const DAPPLE_M: f32 = 0.45;
 /// The render layer only the sun sees, which the stand-ins are on.
 const SUN_ONLY: usize = 1;
 /// Veteran oaks' modelled trunks: each model in `models/nature/forest` (near, and `_far`
@@ -251,6 +254,10 @@ pub struct FoliageExtension {
     /// and the map (D269); 0 and none for bark.
     #[uniform(100)]
     relief: f32,
+    /// For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres
+    /// (D359); 0 for none.
+    #[uniform(100)]
+    dapple: f32,
     #[texture(102)]
     #[sampler(103)]
     leaf_normals: Option<Handle<Image>>,
@@ -758,6 +765,7 @@ fn plant(
         leaf: Vec4::ZERO,
         parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
         relief: 0.0,
+        dapple: 0.0,
         leaf_normals: None,
         climate: default(),
         climate_ground: None,
@@ -859,12 +867,20 @@ fn plant(
         base: leaves_base,
         extension: shrinking(SHADOW_HANDOVER_M, [0.0, 0.0]),
     });
+    // The lumps cast a crown's broken, soft-rimmed shade, not discs (D359): alpha-tested, so
+    // the shadow pass runs the fragment shader that breaks them up.
     let shadow_lumps = materials.add(Foliage {
-        base: StandardMaterial::default(),
-        extension: shrinking(
-            [SHADOW_M[1] * (1.0 - SHADOW_END), SHADOW_M[1]],
-            SHADOW_HANDOVER_M,
-        ),
+        base: StandardMaterial {
+            alpha_mode: AlphaMode::Mask(0.5),
+            ..default()
+        },
+        extension: FoliageExtension {
+            dapple: DAPPLE_M,
+            ..shrinking(
+                [SHADOW_M[1] * (1.0 - SHADOW_END), SHADOW_M[1]],
+                SHADOW_HANDOVER_M,
+            )
+        },
     });
     // A far crown: its leaves' average colour, rough, lit through from behind a little.
     let mut far_crown = |colour: Color| {

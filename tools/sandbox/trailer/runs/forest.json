@@ -1,9 +1,9 @@
 {
-  "about": "Through the tall pine stand in the soft morning, the mist low between the trunks",
+  "about": "Down the forest's path through the tall pine stand toward the low morning sun, its shafts through the mist between the trunks",
   "place": "lush",
   "hour": 7.5,
   "seconds": 25,
-  "player": { "at": "-58,-39", "route": "-40,-69;-6,-80;30,-74;59,-54;77,-22" },
+  "player": { "at": "-154,-104.4", "route": "-128.6,-88.4;-102,-74;-79.1,-54.4;-59.7,-40.2;-36.5,-21.1;-14.9,-10.1;3.7,4.7;16.8,25;36.7,47.5", "tilt": 3 },
   "look": { "shutter": 90, "exposure_bias": 0.4 },
   "sound": ["birds:0.8", "wind:0.25"],
   "music": "calm"

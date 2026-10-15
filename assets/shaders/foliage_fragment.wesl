@@ -214,6 +214,9 @@ struct Wind {
     // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
     // (D269); 0 for none.
     relief: f32,
+    // For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres
+    // (`dapple` in foliage_prepass.wesl, D359); 0 for none.
+    dapple: f32,
     climate: FoliageClimate,
 }
 

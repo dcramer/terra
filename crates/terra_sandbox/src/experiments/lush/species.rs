@@ -801,17 +801,20 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
         // A pine self-prunes from the foot up, so its bole carries the stubs of every whorl
         // it shed: a dozen to twenty, closer toward the crown, most snapped short, a few
         // longer, each as thick as a branch of that whorl was (D309). Four to nine thin sticks
-        // read from a few metres as a clean redwood's bole.
+        // read from a few metres as a clean redwood's bole. Snapped stubs, not sticks (D359):
+        // most a hand or two long, a few to half a metre, tapering to a broken point and
+        // drooping, crooked; half of them up to a metre, level and of an even width, read as
+        // pencils pushed into the bole.
         for _ in 0..12 + dice.below(9) {
             let y = libm::sqrtf(dice.range(0.04, 0.96)) * base;
             let (at, r) = stem_at(y, 0);
             let out = round(dice.range(0.0, TAU));
-            let heading = (out + Vec3::Y * dice.range(-0.4, 0.15)).normalize();
+            let heading = (out + Vec3::Y * dice.range(-0.55, 0.05)).normalize();
             // Its drawn tip runs on a few of its widths past this (lush.rs, `rings`).
-            let length = if dice.unit() < 0.45 {
-                dice.range(0.08, 0.3)
+            let length = if dice.unit() < 0.7 {
+                dice.range(0.06, 0.25)
             } else {
-                dice.range(0.5, 1.1)
+                dice.range(0.3, 0.55)
             };
             let thick = (r * dice.range(0.07, 0.12)).max(0.03);
             let (p, rr, _) = line(
@@ -820,10 +823,10 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
                 heading,
                 length,
                 thick,
-                0.5,
+                0.75,
                 2,
-                0.1,
-                0.0,
+                0.2,
+                0.4,
                 0.0,
                 0.0,
             );
@@ -1151,9 +1154,14 @@ fn pine_crown(
         );
         let mut ends = vec![(points[points.len() - 1], directions[directions.len() - 1])];
         // Shoots along its outer half too, so its foliage runs in from its end, not a tuft
-        // on a bare spoke.
+        // on a bare spoke; on a long limb nearer the bole as well, so it is not a puffball on
+        // a bare stick (D359).
         if length > 2.5 {
             let (at, _, direction) = along(&points, &radii, dice.range(0.5, 0.7));
+            ends.push((at, direction));
+        }
+        if length > 3.5 {
+            let (at, _, direction) = along(&points, &radii, dice.range(0.28, 0.42));
             ends.push((at, direction));
         }
         // It forks toward its end, a pad on each fork.
@@ -1177,7 +1185,9 @@ fn pine_crown(
                     0.0,
                 );
                 ends.push((q[q.len() - 1], qd[qd.len() - 1]));
-                tree.limb(q, qr, 2);
+                // Drawn as far as its limb is, so the pad at its end never floats where the
+                // trunk's second level leaves its finer wood out (D359).
+                tree.limb(q, qr, 1);
             }
         }
         for (end, direction) in ends {
@@ -1200,7 +1210,9 @@ fn pad(dice: &mut Rng, tree: &mut Tree, end: Vec3, direction: Vec3, id: usize) {
     let fan = dice.range(2.6, 3.6);
     for _ in 0..shoots {
         let a = dice.range(-0.5, 0.5) * fan;
-        let rise = dice.range(0.2, 1.0);
+        // Most turned up, some level or hanging, so a pad's edge is a ragged fringe, not a
+        // dome (D359).
+        let rise = dice.range(-0.35, 0.95);
         let heading = ((ahead * libm::cosf(a) + side * libm::sinf(a)) * libm::cosf(rise)
             + Vec3::Y * libm::sinf(rise))
         .normalize();
@@ -1502,7 +1514,15 @@ mod tests {
                 .iter()
                 .enumerate()
                 .filter(|(i, l)| l.depth == 1 && !pine.dead.contains(i))
-                .map(|(_, l)| l.points[0].y)
+                .map(|(_, l)| l.points[0])
+                // Those that leave the bole, not the forks off them.
+                .filter(|foot| {
+                    pine.limbs.iter().filter(|l| l.depth == 0).any(|stem| {
+                        let (at, r) = by_height(&stem.points, &stem.radii, foot.y);
+                        Vec2::new(foot.x - at.x, foot.z - at.z).length() < r + 0.4
+                    })
+                })
+                .map(|foot| foot.y)
                 .collect();
             assert!(feet.len() >= 12, "{form:?}: {} limbs", feet.len());
             // A whorl leaves four to six limbs at one height; here none shares its height

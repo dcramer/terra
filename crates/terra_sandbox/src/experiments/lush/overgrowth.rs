@@ -29,11 +29,13 @@ pub(super) const OVERGROWTH: [Overgrowth; 3] = [
         moss: 0.4,
         moss_m: (1.2, 3.0),
     },
+    // A third of the pines ivied and half with mossy feet (D359): fewer read as every bole
+    // the same clean pole.
     Overgrowth {
-        ivy: 0.2,
-        ivy_m: (2.0, 7.0),
-        moss: 0.3,
-        moss_m: (1.0, 2.5),
+        ivy: 0.32,
+        ivy_m: (2.0, 8.0),
+        moss: 0.5,
+        moss_m: (1.0, 3.0),
     },
     Overgrowth {
         ivy: 0.0,
