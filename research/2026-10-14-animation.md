@@ -82,6 +82,21 @@ Kimodo's text encoder is Meta's Llama 3 8B, gated on Hugging Face, so a develope
 
 On a sheet side by side, dressed, the Kimodo runner is upright, its arms swing close to the body, its stride is a person's; Quaternius's hunches and pumps. The lean is still above a steady jog's, being a run-up to a leap, and the feet slide more because one cut stride does not loop and its travel was taken off at its average speed. A steady jog and run made for the purpose, cut at matching contacts and looped, with the travel taken off frame by frame, is the next step; then foot locking.
 
+## Second trial: a walk, jog and sprint made by Kimodo for us
+
+Kimodo-SOMA-RP-v1.1 run locally, its text encoder on the processor (about 16 GB of memory, 25 s to load; the gated Llama 3 weights from NousResearch's ungated copy, which Meta's licence allows to be redistributed), the motion model on the graphics card (about 3 GB). Each prompt held to a straight path on the ground at a set speed, six seconds, three samples: "A person walks forward at a steady, relaxed pace, arms swinging naturally" at 1.4 m/s, "A person jogs forward at a steady, comfortable pace" at 3.2 m/s, "A person runs forward fast at full speed" at 6 m/s. From each take, the stride from one left heel strike to the next (by Kimodo's contact labels) in the steady middle whose first and last poses match best: 0.45 to 1.3 degrees apart on average per joint for walks and jogs, 3 to 4.5 for sprints; one sprint had no clean stride. Each was retargeted as in the first trial, closed into a loop, and measured; the ruler's foot contact was corrected on the way (a foot is planted near its lowest only while moving back under the body: Kimodo's walk swings the foot within 6 cm of the ground, which the first rule took for a contact).
+
+| Clip on the base body | Hands | Elbow flare | Lean | Foot slide, worst moment |
+|---|---|---|---|---|
+| Walk, Quaternius | 0.12 | 0.15 | 12 deg | 8.0 cm |
+| Walk, Kimodo | 0.02 | 0.12 | 0.4 deg | 4.5 cm |
+| Jog, Quaternius | 0.43 | 0.27 | 28 deg | 3.2 cm |
+| Jog, Kimodo | 0.53 | 0.19 | 7.8 deg | 5.7 cm |
+| Sprint, Quaternius | 0.27 | 0.26 | 41 deg | 3.5 cm |
+| Sprint, Kimodo | 0.51 | 0.22 | 7.1 deg | 13.1 cm |
+
+On sheets side by side, dressed, the Kimodo walk and jog read as a person walking and jogging, upright, arms close; Quaternius's as stiff and hunched. The Kimodo sprint is upright and quick but its arms stay tucked at the chest and it leans less than a real sprint (10 to 20 degrees), a hard run more than a sprint: a prompt asking for driving arms is the next try. Feet slide about as much as Quaternius's, a few centimetres; foot locking in the game removes it from either.
+
 ## Not settled
 
-Kimodo's output on our skeleton, and how close a Kimodo or Mixamo run comes to the look we want, is unknown until tried. Prices for Cascadeur and the commercial terms of Rokoko Vision were not confirmed. The figure of 13 key poses for Overgrowth's whole character comes from a forum post.
+Prices for Cascadeur and the commercial terms of Rokoko Vision were not confirmed. The figure of 13 key poses for Overgrowth's whole character comes from a forum post.

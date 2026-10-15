@@ -14,8 +14,9 @@ plays them as made. For every clip and both bodies, over the clip's frames:
   flare          how far the elbows stand out from the shoulders, sideways, in arm lengths
   lean           the trunk's tilt forward from upright, pelvis to neck, in degrees
   shoulders      how far the shoulders rise above the clavicles' roots, in clavicle lengths
-  slide          how far a planted foot strays from where the clip's pace (pace.py) carries
-                 it, in centimetres a contact, worst foot; under 1 is planted
+  slide          how far a planted foot strays from where the clip's own planted speed
+                 carries it, in centimetres, worst moment of any contact; under 1 is planted.
+                 A foot is planted near its lowest while moving back under the body
 
 The base is right where it matches the mannequin's numbers, which are the clip's intent, except
 slide, which should be under 1 cm on both.
@@ -114,20 +115,35 @@ def measure(arm, body, action):
         trunk_up = (neck - hips).normalized()
         lean.append(math.degrees(math.atan2(-trunk_up.y, trunk_up.z)))
         feet.append([joint(arm, b) for b in FOOT])
-    # A contact: a run of frames with the foot near its lowest. Planted, it moves back by the
-    # pace; what it strays from that is slide.
-    slides = []
+    # A contact: a run of frames with the foot near its lowest and moving back under the body
+    # (the body faces -Y), as a planted foot does in a clip that runs in place; a foot swung low
+    # past the other is near its lowest too, but moving forward. Planted, it moves back at the
+    # clip's own speed, the middle of its planted feet's; what it strays from that is slide.
+    n = len(feet)
+    planted = []
     for side in range(len(FOOT)):
         low = min(at[side].z for at in feet)
+        back = [(feet[(k + 1) % n][side].y - feet[k][side].y) * fps for k in range(n)]
+        planted.append([feet[k][side].z < low + pace.LOW_M and back[k] > 0 for k in range(n)])
+    speeds = sorted((feet[(k + 1) % n][s].y - feet[k][s].y) * fps for s in range(len(FOOT)) for k in range(n) if planted[s][k])
+    speed = speeds[len(speeds) // 2] if speeds else clip_pace
+    slides = []
+    for side in range(len(FOOT)):
+        # Runs of planted frames, joined round the loop's seam.
+        start = next((k for k in range(n) if not planted[side][k]), None)
+        if start is None:
+            continue
         run = []
-        for k, at in enumerate(feet + feet[:1]):
-            if at[side].z < low + pace.LOW_M and k < len(feet):
+        for i in range(1, n + 1):
+            k = (start + i) % n
+            if planted[side][k]:
                 run.append(k)
                 continue
             if len(run) >= 3:
-                a, b = feet[run[0]][side], feet[run[-1]][side]
-                expected = Vector((0.0, clip_pace * (run[-1] - run[0]) / fps, 0.0))
-                slides.append(((b - a) - expected).length * 100)
+                a = feet[run[0]][side]
+                for j, f in enumerate(run[1:], 1):
+                    expected = a + Vector((0.0, speed * j / fps, 0.0))
+                    slides.append((feet[f][side] - expected).length * 100)
             run = []
     mid = lambda xs: sorted(xs)[len(xs) // 2]
     return {
