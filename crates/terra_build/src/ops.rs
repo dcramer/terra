@@ -101,16 +101,15 @@ pub enum Op {
     Regroup { cubes: Vec<[i32; 3]>, part: PartId },
     /// Harm cubes, as an attack does (D90, D193; `loss`): so much damage to each with
     /// anything in it; one left with no health is destroyed, and what then hangs from
-    /// nothing collapses into debris. Never refused for what it brings down.
+    /// nothing comes down with it, said in [`Done::fell`]. Never refused for what it brings
+    /// down.
     Damage { cubes: Vec<[i32; 3]>, amount: u16 },
     /// Mend damaged cubes, for a share of what they cost (`loss`).
     Repair { cubes: Vec<[i32; 3]> },
-    /// Gather the debris lying in a cube: what it gives back.
-    Gather { at: [i32; 3] },
     /// The ground under columns gives way, or rises (D193): sampled again as [`Op::Ground`]
-    /// is, but never refused; what it leaves hanging collapses into debris.
+    /// is, but never refused; what it leaves hanging comes down.
     Subside { samples: Vec<Sample> },
-    /// Puts back what harm, the ground giving way, a repair or gathering changed: the
+    /// Puts back what harm, the ground giving way or a repair changed: the
     /// inverse the server made of one of those, saying itself what it takes and gives, so
     /// not a player's to send (`loss::Patch`).
     Restore(Box<crate::loss::Patch>),
@@ -231,8 +230,6 @@ pub enum Refusal {
     NotDamaged(IVec3),
     /// It is damaged: mended before it is taken apart (`loss`).
     Damaged(IVec3),
-    /// No debris lies there.
-    NoDebris(IVec3),
 }
 
 impl Refusal {
@@ -277,7 +274,6 @@ impl Refusal {
             Refusal::Undermines(_) => "That would dig out from under what is built.".into(),
             Refusal::NotDamaged(_) => "It isn't damaged.".into(),
             Refusal::Damaged(_) => "It's damaged: repair it first.".into(),
-            Refusal::NoDebris(_) => "There's no rubble there.".into(),
         }
     }
 }
@@ -289,11 +285,14 @@ pub struct Done {
     pub gave: Bill,
     /// The operations that undo it, in order.
     pub undo: Vec<Op>,
-    /// What it destroyed or used up for good (`loss`): the share of what collapsed that its
-    /// debris does not give back, what a repair took.
+    /// What it destroyed or used up for good (`loss`): what went into what came down, what
+    /// a repair took.
     pub lost: Bill,
     /// What an undo brought back of what was lost.
     pub recovered: Bill,
+    /// The cubes that came down, destroyed or left hanging, as they were: what the game
+    /// bursts into fragments (D305).
+    pub fell: Vec<(IVec3, Cube)>,
 }
 
 /// A prop fitted, and what was paid for it.
@@ -312,8 +311,6 @@ pub(crate) struct Change {
     pub(crate) props: Vec<([i32; 3], Option<Fitted>)>,
     /// Cubes' damage set, none or nothing taking it away (`loss`).
     pub(crate) damage: Vec<(IVec3, Option<u16>)>,
-    /// Debris laid or taken away.
-    pub(crate) debris: Vec<([i32; 3], Option<crate::loss::Pile>)>,
     pub(crate) done: Done,
 }
 
@@ -349,12 +346,6 @@ impl Base {
             };
             // Drawn as worn as it is (`sections`).
             self.cubes.mark(at);
-        }
-        for (at, pile) in change.debris {
-            match pile {
-                Some(pile) => self.debris.insert(at, pile),
-                None => self.debris.remove(&at),
-            };
         }
         for (at, prop) in change.props {
             let marks: Vec<IVec3> =
@@ -392,6 +383,7 @@ impl Base {
                     done.gave.add(&step.gave);
                     done.lost.add(&step.lost);
                     done.recovered.add(&step.recovered);
+                    done.fell.extend(step.fell);
                     undo.push(step.undo);
                 }
                 Err(refusal) => {
@@ -435,8 +427,7 @@ impl Base {
             Op::Regroup { cubes, part } => self.regroup(cubes, *part, cx),
             Op::Damage { cubes, amount } => self.harm(cubes, *amount, cx),
             Op::Repair { cubes } => self.repair(cubes, cx),
-            Op::Gather { at } => self.gather(IVec3::from_array(*at)),
-            Op::Subside { samples } => self.subside(samples, cx),
+            Op::Subside { samples } => self.subside(samples),
             Op::Restore(patch) => self.restore(patch, cx),
         }
     }
@@ -675,13 +666,8 @@ impl Base {
             if cube.is_built() {
                 return Err(Refusal::AlreadyBuilt(at));
             }
-            // Debris lying in it is gathered first (`loss`), and lying on it, as nothing
-            // goes in under what rests on it.
-            if cx.world.in_the_way(at) || self.debris.contains_key(&at.to_array()) {
+            if cx.world.in_the_way(at) {
                 return Err(Refusal::InTheWay(at));
-            }
-            if self.debris.contains_key(&(at + IVec3::Y).to_array()) {
-                return Err(Refusal::InTheWay(at + IVec3::Y));
             }
             // A damaged cube is mended before more goes in, as before anything comes out.
             if self.damage.contains_key(&at.to_array()) {
@@ -763,10 +749,6 @@ impl Base {
             }
             if cx.world.holds_item(at) {
                 return Err(Refusal::Holds(vec![Holder::Item(at)]));
-            }
-            // Debris lies on it, as an item would.
-            if self.debris.contains_key(&(at + IVec3::Y).to_array()) {
-                return Err(Refusal::Holds(vec![Holder::Item(at + IVec3::Y)]));
             }
             // A damaged cube is mended before it comes out, so taking apart, which gives
             // back all that went in, is no way round a repair's cost (`loss`).

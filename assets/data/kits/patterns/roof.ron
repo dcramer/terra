@@ -23,7 +23,7 @@
 // toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
 (
     pattern: Roof,
-    toughness: (health: 200),
+    toughness: (health: 200, breaks: Bits),
     eaves: 0.5,
     timber: (
         profile: Round,

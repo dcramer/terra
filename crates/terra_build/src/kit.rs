@@ -622,15 +622,15 @@ impl KitCost {
 }
 
 /// How a kind stands up to harm (D193, [`crate::cost::Toughness`]): how much damage a cube
-/// takes before it is destroyed; the share of what went into a cube its debris gives back,
-/// and the share of its cost a repair from nothing takes, each (numerator, denominator) and
-/// a power of two no finer than a sixteenth, else the default half.
+/// takes before it is destroyed; the share of its cost a repair from nothing takes,
+/// (numerator, denominator), a power of two no finer than a sixteenth, else the default half;
+/// and how it breaks when it comes down (`fragments`, D305).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct KitToughness {
     pub health: u16,
-    pub salvage: (u64, u64),
     pub repair: (u64, u64),
+    pub breaks: crate::fragments::Breaks,
 }
 
 impl Default for KitToughness {
@@ -638,8 +638,8 @@ impl Default for KitToughness {
     fn default() -> Self {
         KitToughness {
             health: 400,
-            salvage: (1, 2),
             repair: (1, 2),
+            breaks: crate::fragments::Breaks::Lengths,
         }
     }
 }
@@ -659,7 +659,6 @@ impl KitToughness {
         };
         crate::cost::Toughness {
             health: self.health.max(1),
-            salvage: share(self.salvage),
             repair: share(self.repair),
         }
     }
@@ -1120,24 +1119,35 @@ mod tests {
     #[test]
     fn a_materials_toughness_is_its_patterns_unless_it_says_otherwise() {
         // D305: each pattern says how a cube of it stands up to harm, and a material may
-        // say otherwise; shares are half unless said.
+        // say otherwise; a repair's share is half unless said.
         let health = |name: &str| shipped(name).toughness.rules().health;
         let stone = shipped("stone.ron").toughness.rules();
-        assert_eq!(stone.salvage, Amount::new(1, 2));
+        assert_eq!(stone.repair, Amount::new(1, 2));
         assert!(health("stone.ron") > health("logs.ron"));
         assert!(health("logs.ron") > health("wattle.ron"));
         assert!(health("wattle.ron") > health("thatch.ron"));
+        // How each breaks: by its pattern, earth as its own file says.
+        use crate::fragments::Breaks;
+        let breaks = |name: &str| shipped(name).toughness.breaks;
+        assert_eq!(breaks("stone.ron"), Breaks::Chunks);
+        assert_eq!(breaks("logs.ron"), Breaks::Lengths);
+        assert_eq!(breaks("wattle.ron"), Breaks::Bits);
+        assert_eq!(breaks("thatch.ron"), Breaks::Bits);
+        assert_eq!(breaks("earth.ron"), Breaks::Crumbs);
         // A share that is not a power of two, or more than the whole, is taken as half.
         let odd = KitToughness {
             health: 0,
-            salvage: (1, 3),
             repair: (5, 4),
+            ..KitToughness::default()
         }
         .rules();
-        assert_eq!(
-            (odd.health, odd.salvage, odd.repair),
-            (1, Amount::new(1, 2), Amount::new(1, 2))
-        );
+        assert_eq!((odd.health, odd.repair), (1, Amount::new(1, 2)));
+        let third = KitToughness {
+            health: 10,
+            repair: (1, 3),
+            ..KitToughness::default()
+        };
+        assert_eq!(third.rules().repair, Amount::new(1, 2));
     }
 
     #[test]

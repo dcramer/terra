@@ -34,6 +34,7 @@ mod gains;
 mod harvest;
 pub(crate) mod held;
 mod hits;
+pub(crate) use hits::Shake;
 mod intent;
 pub(crate) mod interact;
 pub mod inventory;

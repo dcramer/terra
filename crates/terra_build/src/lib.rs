@@ -20,7 +20,7 @@
 //! - **Doors and shutters are props** ([`Prop`]) fitted into holes in built walls, their
 //!   leaves hung on the hole's sides ([`fitting`]).
 //! - **Cubes take damage and are repaired** ([`loss`], D193): one destroyed, what then
-//!   hangs from nothing collapses into debris that gives back part of what went in.
+//!   hangs from nothing comes down, bursting into fragments as the game draws it.
 //! - **Everything a player does is an operation** ([`ops::Op`]), checked by one pure
 //!   function against the state when it arrives, and undone by its inverse: nothing
 //!   floats, and nothing is taken while something rests on it ([`support`], D193).
@@ -40,11 +40,11 @@ pub mod castle;
 pub mod checker;
 pub mod cost;
 pub mod cubes;
-pub mod debris;
 pub mod draw;
 pub mod dress;
 mod example;
 pub mod fitting;
+pub mod fragments;
 pub mod ground;
 pub mod hull;
 pub mod inspect;
@@ -352,8 +352,6 @@ pub struct Base {
     /// How much damage each cube with anything in it has taken, where it has taken any
     /// (D193, `loss`).
     damage: BTreeMap<[i32; 3], u16>,
-    /// The debris lying where what collapsed fell, by the cube it lies in (`loss`).
-    debris: BTreeMap<[i32; 3], loss::Pile>,
     ground: Ground,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
@@ -393,8 +391,7 @@ impl Base {
                 + self.parts.len()
                 + self.replacing.len()
                 + self.props.len()
-                + self.damage.len()
-                + self.debris.len())
+                + self.damage.len())
                 * NODE
     }
 

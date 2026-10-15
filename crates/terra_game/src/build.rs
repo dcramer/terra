@@ -94,6 +94,8 @@ pub(super) struct Build {
     pub root: Entity,
     /// Its sections: what is drawn of each, and what is to be laid again.
     sections: store::Sections,
+    /// What came down since it was last burst into fragments (`loss`).
+    pub fallen: Vec<loss::Fallen>,
 }
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
@@ -426,6 +428,7 @@ impl Build {
             standing: None,
             root,
             sections: store::Sections::default(),
+            fallen: Vec::new(),
         }
     }
 
@@ -601,6 +604,26 @@ impl Build {
             .map(|&at| (at, self.base.cube(IVec3::from_array(at))))
             .collect();
         let done = self.base.act_all(ops, cx)?;
+        // What came down, for its fragments: what harm destroyed, and what hung from it.
+        if !done.fell.is_empty() {
+            let hit: BTreeSet<[i32; 3]> = ops
+                .iter()
+                .filter_map(|op| match op {
+                    Op::Damage { cubes, .. } => Some(cubes.iter().copied()),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            self.fallen.push(loss::Fallen {
+                destroyed: done
+                    .fell
+                    .iter()
+                    .map(|(at, _)| at.to_array())
+                    .filter(|at| hit.contains(at))
+                    .collect(),
+                fell: done.fell.clone(),
+            });
+        }
         // A change of material and nothing else: the drawing looks it up at once (D298).
         let mut repainted = Vec::new();
         let mut only_kind = true;

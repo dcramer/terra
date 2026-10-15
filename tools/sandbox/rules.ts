@@ -15,8 +15,8 @@
 //   as a hip, built a layer at a time a stage at a time, nothing floating; pictures of it
 //   half built and finished close up.
 // - Loss and repair (D193, D305): a log wall's first course knocked out, all of the wall
-//   over it comes down into debris and nothing floats, filmed as it falls; the debris
-//   gathered gives back its share; the stone room's wall damaged short of breaking, drawn
+//   over it comes down, breaking into fragments that fall and fade, and nothing floats,
+//   filmed as it falls; the stone room's wall damaged short of breaking, drawn
 //   worn, then mended with the hammer's repair, pictures of each.
 // - Timing: a single cube's change from the operation to its sections on screen (`Build:
 //   change on screen`, a median of several), the worst frame while building continuously,
@@ -36,8 +36,7 @@ let failures = 0;
 
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 type Part = { id: number; kind: string; cubes: number; built: number; done: boolean };
-type Pile = { at: number[]; cubes: number; props: number; gives: string };
-type Base = { cubes: number; planned: number; floating: number; damaged: number; debris: Pile[]; parts: Part[]; roofs: { cubes: number; built: number; stages: number[] }; player: number[] | null };
+type Base = { cubes: number; planned: number; floating: number; damaged: number; fragments: number; parts: Part[]; roofs: { cubes: number; built: number; stages: number[] }; player: number[] | null };
 type Spread = { median: number; p99: number; worst: number } | null;
 type Frames = { frames: number; frame: Spread; work: Spread; game: Spread; gpu: Spread };
 
@@ -350,26 +349,27 @@ async function main() {
     const last = await game.film("shots/rules-collapse-fall.png", 60);
     const hit = (await game.call("build.damage", { at: course[0], to: course[course.length - 1] })) as Answer & { fell: number; took_ms: number };
     check(hit.done, `the blow was refused: ${hit.refused}`);
+    await game.waitSeconds(0.5);
+    const flying = (await base()).fragments;
+    check(flying > 6, `${flying} fragments after the wall came down`);
     await game.filmed(last);
     await game.waitSeconds(2);
     await game.shot("shots/rules-collapse-1.png");
     const after = await base();
     check(after.floating === 0, `${after.floating} cubes float`);
-    check(after.debris.length >= 6, `${after.debris.length} piles of debris`);
     // Every cube of the wall over the course came down; its footings stand.
     for (const at of course) {
       check((await cube([at[0], at[1] + 1, at[2]])).kind === null, `the log over ${at} still stands`);
       check((await cube([at[0], at[1] - 1, at[2]])).kind !== null, `the footing under ${at} fell`);
     }
-    // Gathered, the debris is gone and what it gave back came to the pack.
-    const gathered = (await acts("build.gather")).filter((each) => each.done);
-    check(gathered.length === after.debris.length, `${gathered.length} of ${after.debris.length} piles gathered`);
-    check((await base()).debris.length === 0, "debris left after gathering it");
-    await game.waitSeconds(2);
+    // Settled, they shrink away and are gone.
+    for (let i = 0; i < 4; i++) await game.waitSeconds(2);
+    const gone = (await base()).fragments;
+    check(gone === 0, `${gone} fragments left after eight seconds`);
     await game.shot("shots/rules-collapse-2.png");
     await game.call("sandbox.release");
     check(before.cubes - after.cubes === hit.fell, `${before.cubes - after.cubes} cubes gone, ${hit.fell} said to fall`);
-    return `${hit.fell} cubes fell, worked out in ${hit.took_ms.toFixed(1)} ms, into ${after.debris.length} piles; gathered: ${gathered.map((each) => each.gave).join(", ")}`;
+    return `${hit.fell} cubes fell, worked out in ${hit.took_ms.toFixed(1)} ms; ${flying} fragments half a second on, none eight seconds on`;
   });
 
   await step("repair", async () => {

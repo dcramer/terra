@@ -18,7 +18,7 @@
 //             gives way before stone or logs
 (
     pattern: Masonry,
-    toughness: (health: 300),
+    toughness: (health: 300, breaks: Bits),
     framing: Some((
         wide: 0.18,
         proud: 0.03,

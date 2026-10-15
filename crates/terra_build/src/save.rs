@@ -97,9 +97,6 @@ pub struct Snapshot {
     /// How much damage each damaged cube has taken (`loss`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub damage: Vec<([i32; 3], u16)>,
-    /// The debris lying about, by the cube it lies in.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub debris: Vec<([i32; 3], crate::loss::Pile)>,
 }
 
 /// Why a snapshot could not be read.
@@ -139,11 +136,6 @@ impl Base {
                 .iter()
                 .map(|(&at, &damage)| (at, damage))
                 .collect(),
-            debris: self
-                .debris
-                .iter()
-                .map(|(&at, pile)| (at, pile.clone()))
-                .collect(),
         }
     }
 
@@ -177,8 +169,7 @@ impl Base {
         // cost comes to, where working with it could overflow, is refused.
         let bills = (snapshot.parts.iter().map(|(_, part)| &part.terms.per_step))
             .chain(snapshot.roofs.iter().map(|(_, roof)| &roof.per_stage))
-            .chain(snapshot.prop_paid.iter().map(|(_, paid)| paid))
-            .chain(snapshot.debris.iter().map(|(_, pile)| &pile.gives));
+            .chain(snapshot.prop_paid.iter().map(|(_, paid)| paid));
         if let Some(amount) = bills.filter_map(crate::Bill::out_of_bounds).next() {
             return Err(BadSnapshot::Amount(amount));
         }
@@ -198,7 +189,6 @@ impl Base {
                 .copied()
                 .filter(|&(_, damage)| damage > 0)
                 .collect(),
-            debris: snapshot.debris.iter().cloned().collect(),
             ..Base::default()
         };
         for sample in &snapshot.ground {
@@ -505,7 +495,6 @@ written_changes!(
         amount: u16
     },
     Repair { cubes: Vec<[i32; 3]> },
-    Gather { at: [i32; 3] },
     Subside { samples: Vec<Sample> };
     FitProp(Prop),
     Restore(Box<crate::loss::Patch>)

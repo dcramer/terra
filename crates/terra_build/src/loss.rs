@@ -1,6 +1,6 @@
-//! Loss and repair (D193, step 6 of docs/building-plan.md): cubes take damage, are
-//! destroyed, and what then hangs from nothing collapses into debris; debris is gathered
-//! for part of what went in; a damaged cube is repaired for a share of what it cost.
+//! Loss and repair (D193, D305, step 6 of docs/building-plan.md): cubes take damage, are
+//! destroyed, and what then hangs from nothing comes down; a damaged cube is repaired for a
+//! share of what it cost.
 //!
 //! - **Health is the kind's** ([`crate::cost::Toughness`], its kit's `toughness`, by its
 //!   pattern unless its material says otherwise). A cube's damage is kept beside the cubes,
@@ -12,64 +12,25 @@
 //! - **What collapses is found by a flood from the change** (`support::unjoined`), on the
 //!   same rule of joined as placing (D199), lowest first, so a hit costs what it brings
 //!   down and the cubes round it, not the base.
-//! - **Debris falls straight down** its column to what stops it, a cube that stays or the
-//!   ground, and lies there as a pile (a [`Pile`]) of what fell into it, giving back its
-//!   kinds' salvage share of what went into each cube, exactly. A pile is in the way of
-//!   building where it lies, and rests on its cube as an item does.
+//! - **What comes down is gone** from the base, said in [`Done::fell`] as it was, for the
+//!   game to burst into fragments that fall and fade (the developers on 2026-10-15). Nothing
+//!   of it is given back while building takes no real resources; what went in is lost.
 //! - **A damaged cube is mended before it comes out**: taking apart gives back all that
 //!   went in (D193), so it is no way round a repair's cost.
 //! - **The ground giving way** ([`Op::Subside`]) is sampled again as [`Op::Ground`] is but
 //!   never refused, and what it leaves hanging collapses as harm's does.
 
 use crate::cost::{Amount, Bill, Toughness};
-use crate::cubes::{Cube, Kind, PartId, Replacement};
-use crate::ground::{Ground, Sample, cube_cm};
+use crate::cubes::{Cube, PartId, Replacement};
+use crate::ground::Sample;
 use crate::ops::{Change, Context, Done, Op, Refusal};
 use crate::{Base, Part};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Debris lying in a cube: what fell into it and what gathering it gives back.
-#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Pile {
-    /// How many cubes of each kind fell into it, by kind.
-    pub kinds: Vec<(Kind, u32)>,
-    /// How many fitted doors and windows fell into it.
-    #[serde(default)]
-    pub props: u32,
-    /// What gathering it gives back.
-    pub gives: Bill,
-    /// The height it lies on, in centimetres in the base's own space: the ground's, or the
-    /// top of the cube under it.
-    pub floor_cm: i32,
-    /// The highest layer anything in it fell from, to draw it falling.
-    pub from: i32,
-}
-
-impl Pile {
-    /// How many cubes fell into it.
-    pub fn cubes(&self) -> u32 {
-        self.kinds.iter().map(|(_, count)| count).sum()
-    }
-
-    /// Another pile's debris added to this one.
-    fn add(&mut self, other: &Pile) {
-        for &(kind, count) in &other.kinds {
-            match self.kinds.iter_mut().find(|(each, _)| *each == kind) {
-                Some((_, mine)) => *mine += count,
-                None => self.kinds.push((kind, count)),
-            }
-        }
-        self.kinds.sort();
-        self.props += other.props;
-        self.gives.add(&other.gives);
-        self.from = self.from.max(other.from);
-    }
-}
-
-/// What puts a base back as it was before harm, the ground giving way, a repair or
-/// gathering: [`Op::Restore`]'s, made by the server as that act's inverse; and a patch's own
-/// inverse, as it is applied, so an undo is undone too.
+/// What puts a base back as it was before harm, the ground giving way or a repair:
+/// [`Op::Restore`]'s, made by the server as that act's inverse; and a patch's own inverse, as
+/// it is applied, so an undo is undone too.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Patch {
     /// Cubes put back where there is none, or taken away.
@@ -82,11 +43,6 @@ pub struct Patch {
     pub props: Vec<([i32; 3], Option<crate::ops::Fitted>)>,
     /// Cubes' damage set again, none as 0.
     pub damage: Vec<([i32; 3], u16)>,
-    /// Debris set again, or taken away.
-    pub debris: Vec<([i32; 3], Option<Pile>)>,
-    /// The debris as the act left it, which must be so still: what was gathered since is
-    /// not put back as cubes too.
-    pub expect: Vec<([i32; 3], Option<Pile>)>,
     /// The ground under columns set again, or forgotten.
     pub ground: Vec<([i32; 2], Option<i16>)>,
     pub took: Bill,
@@ -107,18 +63,6 @@ impl Base {
         self.damage
             .iter()
             .map(|(&at, &damage)| (IVec3::from_array(at), damage))
-    }
-
-    /// Every pile of debris, by the cube it lies in, sorted.
-    pub fn debris(&self) -> impl Iterator<Item = (IVec3, &Pile)> + '_ {
-        self.debris
-            .iter()
-            .map(|(&at, pile)| (IVec3::from_array(at), pile))
-    }
-
-    /// The debris lying in a cube.
-    pub fn pile(&self, at: IVec3) -> Option<&Pile> {
-        self.debris.get(&at.to_array())
     }
 
     /// What went into a cube: so many of its steps, on its part's terms.
@@ -180,21 +124,13 @@ impl Base {
         let lost = self.unjoined_without(&destroyed);
         let mut falling = destroyed;
         falling.extend(lost.iter().map(|at| at.to_array()));
-        let columns = falling.iter().map(|at| [at[0], at[2]]).collect();
-        self.collapse(
-            &falling,
-            &columns,
-            &self.ground,
-            cx,
-            &mut change,
-            &mut patch,
-        );
+        self.collapse(&falling, &mut change, &mut patch);
         change.done.undo = vec![Op::Restore(Box::new(patch))];
         Ok(change)
     }
 
     /// The ground under columns gives way, or rises ([`Op::Subside`]).
-    pub(crate) fn subside(&self, samples: &[Sample], cx: &Context) -> Result<Change, Refusal> {
+    pub(crate) fn subside(&self, samples: &[Sample]) -> Result<Change, Refusal> {
         let columns: BTreeSet<[i32; 2]> = samples.iter().map(|sample| sample.column).collect();
         if columns.is_empty() || columns.len() != samples.len() {
             return Err(Refusal::Malformed);
@@ -234,27 +170,15 @@ impl Base {
             .into_iter()
             .map(|at| at.to_array())
             .collect();
-        let mut columns: BTreeSet<[i32; 2]> = falling.iter().map(|at| [at[0], at[2]]).collect();
-        columns.extend(moved);
-        self.collapse(&falling, &columns, &ground, cx, &mut change, &mut patch);
+        self.collapse(&falling, &mut change, &mut patch);
         change.done.undo = vec![Op::Restore(Box::new(patch))];
         Ok(change)
     }
 
-    /// Takes cubes falling out of the base into debris, with props whose holes they were
-    /// part of, and lets debris lying on them or in `columns` fall too: the change, and
-    /// what puts it back.
-    fn collapse(
-        &self,
-        falling: &BTreeSet<[i32; 3]>,
-        columns: &BTreeSet<[i32; 2]>,
-        ground: &Ground,
-        cx: &Context,
-        change: &mut Change,
-        patch: &mut Patch,
-    ) {
-        let half = Toughness::default().salvage;
-        let mut piles: BTreeMap<[i32; 3], Pile> = BTreeMap::new();
+    /// Takes cubes coming down out of the base, with props whose holes they were part of:
+    /// the change, what puts it back, and what came down, said in [`Done::fell`]. What went
+    /// into them is lost.
+    fn collapse(&self, falling: &BTreeSet<[i32; 3]>, change: &mut Change, patch: &mut Patch) {
         let mut parts: BTreeMap<PartId, Part> = BTreeMap::new();
         let mut lost = Bill::default();
         let keep_part = |id: Option<PartId>, parts: &mut BTreeMap<PartId, Part>| {
@@ -272,6 +196,7 @@ impl Base {
             };
             patch.cubes.push((at, Some(cube)));
             change.cubes.push((place, None));
+            change.done.fell.push((place, cube));
             keep_part(cube.part, &mut parts);
             if let Some(to) = self.replacing(place) {
                 patch.replacing.push((at, to));
@@ -282,22 +207,10 @@ impl Base {
             }
             // Its damage goes with it, whatever this act did to it first.
             change.damage.push((place, None));
-            let toughness = cx.rules.toughness(cube.kind);
-            let went_in = self.put_in(&cube);
-            let back = went_in.share(toughness.salvage);
-            lost.add(&went_in.share(rest_of(toughness.salvage)));
-            let (rest, floor_cm) = self.rest(place, falling, ground);
-            let pile = piles.entry(rest.to_array()).or_default();
-            pile.add(&Pile {
-                kinds: vec![(cube.kind, 1)],
-                gives: back,
-                from: at[1],
-                ..Pile::default()
-            });
-            pile.floor_cm = floor_cm;
+            lost.add(&self.put_in(&cube));
         }
         patch.parts = parts.into_iter().collect();
-        // A door or window whose hole is broken falls with it.
+        // A door or window whose hole is broken comes down with it.
         for prop in self.props() {
             let broken = self
                 .hole_for(prop)
@@ -308,16 +221,7 @@ impl Base {
             let paid = self.prop_paid.get(&prop.min).cloned().unwrap_or_default();
             change.props.push((prop.min, None));
             patch.props.push((prop.min, Some((*prop, paid.clone()))));
-            lost.add(&paid.share(rest_of(half)));
-            let (rest, floor_cm) = self.rest(IVec3::from_array(prop.min), falling, ground);
-            let pile = piles.entry(rest.to_array()).or_default();
-            pile.add(&Pile {
-                props: 1,
-                gives: paid.share(half),
-                from: prop.max[1],
-                ..Pile::default()
-            });
-            pile.floor_cm = floor_cm;
+            lost.add(&paid);
         }
         // The ground under columns the fall leaves empty, which is forgotten with them.
         let mut ground_was: BTreeMap<[i32; 2], Option<i16>> =
@@ -331,70 +235,8 @@ impl Base {
             }
         }
         patch.ground = ground_was.into_iter().collect();
-        // Debris whose footing went falls on, to lie with what fell after it.
-        let mut moved: BTreeMap<[i32; 3], Option<Pile>> = BTreeMap::new();
-        for (&at, pile) in &self.debris {
-            let place = IVec3::from_array(at);
-            if !columns.contains(&[at[0], at[2]]) {
-                continue;
-            }
-            let under = place - IVec3::Y;
-            let held = (self.is_in(under) && !falling.contains(&under.to_array()))
-                || ground.reaches(place);
-            if held {
-                continue;
-            }
-            let (rest, floor_cm) = self.rest(place, falling, ground);
-            if rest == place {
-                continue;
-            }
-            moved.insert(at, None);
-            let into = piles.entry(rest.to_array()).or_default();
-            into.add(pile);
-            into.floor_cm = floor_cm;
-        }
-        // Each pile laid onto whatever already lies there.
-        for (at, pile) in piles {
-            let mut now = match moved.get(&at) {
-                Some(_) => Pile::default(),
-                None => self.debris.get(&at).cloned().unwrap_or_default(),
-            };
-            let floor_cm = pile.floor_cm;
-            now.add(&pile);
-            now.floor_cm = floor_cm;
-            moved.insert(at, Some(now));
-        }
-        for (at, pile) in moved {
-            patch.debris.push((at, self.debris.get(&at).cloned()));
-            patch.expect.push((at, pile.clone()));
-            change.debris.push((at, pile));
-        }
         patch.recovered = lost.clone();
         change.done.lost = lost;
-    }
-
-    /// Where something falling from a cube comes to rest, straight down its column: the
-    /// first cube with the ground in it or under it, or one standing on a cube that stays
-    /// in; and the height it lies on, in centimetres.
-    fn rest(&self, from: IVec3, falling: &BTreeSet<[i32; 3]>, ground: &Ground) -> (IVec3, i32) {
-        let cube = cube_cm();
-        let column = [from.x, from.z];
-        let height = i32::from(ground.height_cm(column));
-        let mut at = from;
-        // Never further than the base's deepest footing could be.
-        for _ in 0..4096 {
-            if ground.reaches(at) {
-                // On the ground: in the cube its surface is in.
-                let surface = IVec3::new(at.x, height.div_euclid(cube), at.z);
-                return (surface.max(at), height);
-            }
-            let under = at - IVec3::Y;
-            if self.is_in(under) && !falling.contains(&under.to_array()) {
-                return (at, at.y * cube);
-            }
-            at = under;
-        }
-        (at, at.y * cube)
     }
 
     /// Mends damaged cubes ([`Op::Repair`]).
@@ -424,31 +266,10 @@ impl Base {
         Ok(change)
     }
 
-    /// Gathers the debris lying in a cube ([`Op::Gather`]).
-    pub(crate) fn gather(&self, at: IVec3) -> Result<Change, Refusal> {
-        let pile = self.pile(at).ok_or(Refusal::NoDebris(at))?.clone();
-        let mut change = Change::default();
-        change.debris.push((at.to_array(), None));
-        change.done.gave = pile.gives.clone();
-        change.done.undo = vec![Op::Restore(Box::new(Patch {
-            debris: vec![(at.to_array(), Some(pile.clone()))],
-            expect: vec![(at.to_array(), None)],
-            took: pile.gives,
-            ..Patch::default()
-        }))];
-        Ok(change)
-    }
-
     /// Puts back what a [`Patch`] holds ([`Op::Restore`]): refused if a cube it puts back is
-    /// taken, one it takes away is gone, the debris is not as the act left it, or what it
-    /// takes is not to hand.
+    /// taken, one it takes away is gone, or what it takes is not to hand.
     pub(crate) fn restore(&self, patch: &Patch, cx: &Context) -> Result<Change, Refusal> {
         let mut change = Change::default();
-        for (at, pile) in &patch.expect {
-            if self.debris.get(at) != pile.as_ref() {
-                return Err(Refusal::NoDebris(IVec3::from_array(*at)));
-            }
-        }
         for &(at, cube) in &patch.cubes {
             let place = IVec3::from_array(at);
             match (cube, self.cube(place)) {
@@ -481,7 +302,6 @@ impl Base {
                 .iter()
                 .map(|&(at, damage)| (IVec3::from_array(at), Some(damage))),
         );
-        change.debris = patch.debris.clone();
         for &(column, height_cm) in &patch.ground {
             match height_cm {
                 Some(height_cm) => change.ground.push(Sample { column, height_cm }),
@@ -494,6 +314,7 @@ impl Base {
             recovered: patch.recovered.clone(),
             lost: patch.lost.clone(),
             undo: vec![Op::Restore(Box::new(self.inverse(patch)))],
+            ..Done::default()
         };
         Ok(change)
     }
@@ -548,20 +369,13 @@ impl Base {
             damage.insert(at, self.damage(IVec3::from_array(at)));
         }
         back.damage = damage.into_iter().collect();
-        back.debris = patch
-            .debris
-            .iter()
-            .map(|(at, _)| (*at, self.debris.get(at).cloned()))
-            .collect();
-        back.expect = patch.debris.clone();
         // The ground as it is under every column it sets, and under those it leaves empty.
         let mut ground: BTreeMap<[i32; 2], Option<i16>> = patch
             .ground
             .iter()
             .map(|&(column, _)| (column, self.ground.sample(column)))
             .collect();
-        for &[x, y, z] in &taken {
-            let _ = y;
+        for &[x, _, z] in &taken {
             if self.column(x, z).all(|y| taken.contains(&[x, y, z])) {
                 ground.insert([x, z], self.ground.sample([x, z]));
             }
@@ -583,10 +397,6 @@ const WORN_FLECKS: f32 = 0.5;
 const FLECK_DARK: f32 = 0.42;
 const FLECK_M: f32 = 0.07;
 
-/// Wears a drawn surface where its cubes are damaged, by how many quarters of their health
-/// they have lost: darker, and broken up in dark flecks that spread as more is lost, as a
-/// battered wall is scorched, split and chipped, in whatever material it is (D14): each
-/// corner by the cube it is part of, a little in from its face.
 /// How much of its health the cube a point of a surface belongs to has lost, from 0 to 1:
 /// the cube it lies in a little in from its face (`normal`).
 pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
@@ -596,6 +406,10 @@ pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -
         .map_or(0.0, |&quarters| f32::from(quarters.min(4)) / 4.0)
 }
 
+/// Wears a drawn surface where its cubes are damaged, by how many quarters of their health
+/// they have lost: darker, and broken up in dark flecks that spread as more is lost, as a
+/// battered wall is scorched, split and chipped, in whatever material it is (D14): each
+/// corner by the cube it is part of, a little in from its face.
 pub fn wear(surface: &mut crate::Surface, worn: &[([i32; 3], u8)]) {
     let worn: BTreeMap<[i32; 3], u8> = worn.iter().copied().collect();
     let shade = |at: glam::Vec3, normal: glam::Vec3| -> f32 {
@@ -644,11 +458,6 @@ fn unit(at: IVec3) -> f32 {
     hash = hash.wrapping_mul(0x2C1B_3C6D);
     hash ^= hash >> 12;
     (hash & 0xFFFF) as f32 / 65535.0
-}
-
-/// What is left of the whole once a share is taken.
-fn rest_of(share: Amount) -> Amount {
-    Amount::whole(1).minus(share).unwrap_or(Amount::ZERO)
 }
 
 #[cfg(test)]

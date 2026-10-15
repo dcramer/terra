@@ -188,15 +188,14 @@ function script(s: Script, set: KitSet) {
     s.wait(60);
   });
 
-  s.stage("collapse", "A corner knocked down and mended", () => {
+  s.stage("collapse", "A corner knocked down, built again and mended", () => {
     s.glide([-4.5, 3.6, 12.5], [2.6, 1.6, 5.2], 120);
     s.wait(30);
-    // Cracked, then its foot knocked out: what hangs from nothing falls into debris.
+    // Cracked, then its foot knocked out: what hangs from nothing breaks into fragments.
     s.call("build.damage", { at: [X0, 0, Z1 - 3], to: [X0, 4, Z1 - 1], amount: 30 });
     s.wait(90);
     s.call("build.damage", { at: [X0, 0, Z1 - 1], to: [X0 + 1, 3, Z1] });
-    s.wait(150);
-    s.wait(60);
+    s.wait(210);
     // Laid again where it fell, built, and the cracked wall mended.
     s.call("build.lay", { what: "wall", min: [X0, 0, Z1 - 1], max: [X0, 0, Z1], kind: set.other(0) });
     s.wait(20);

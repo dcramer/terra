@@ -684,8 +684,8 @@ fn everything_a_walker_stands_on_is_a_cube() {
     );
 }
 
-// Loss and repair (D193, step 6): what loses its support without being asked collapses
-// into debris that gives back part of its materials; nothing floats.
+// Loss and repair (D193, D305, step 6): what loses its support without being asked comes
+// down, and is said as it was for the game to burst into fragments; nothing floats.
 
 /// Something to hit: a stone room's walls eight cubes high, a floor across their tops,
 /// and logs standing out from one side, on level ground.
@@ -712,7 +712,7 @@ fn hall(base: &mut Base, cx: &Context) -> Vec<[i32; 3]> {
 }
 
 #[test]
-fn whatever_is_hit_nothing_is_left_floating_and_its_debris_gives_back_its_share() {
+fn whatever_is_hit_nothing_is_left_floating_and_what_came_down_is_said_as_it_was() {
     let rules = rules();
     let cx = Context::free(&rules);
     let mut base = Base::default();
@@ -724,19 +724,12 @@ fn whatever_is_hit_nothing_is_left_floating_and_its_debris_gives_back_its_share(
         }
         bill
     };
-    let debris = |base: &Base| {
-        let mut bill = Bill::default();
-        for (_, pile) in base.debris() {
-            bill.add(&pile.gives);
-        }
-        bill
-    };
     // Every cube of its walls in turn, from the bottom, hit hard enough to destroy it.
     for at in walls.iter().filter(|at| at[1] < 3) {
         if !base.is_in(IVec3::from_array(*at)) {
             continue;
         }
-        let (was, lying) = (value(&base), debris(&base));
+        let (was, before) = (value(&base), base.clone());
         let done = base
             .act(
                 &Op::Damage {
@@ -751,18 +744,18 @@ fn whatever_is_hit_nothing_is_left_floating_and_its_debris_gives_back_its_share(
             "{at:?} left {:?}",
             base.floating()
         );
-        // Half of what came down lies in its debris, the rest lost; nothing made or lost
-        // besides.
+        // What came down is every cube gone, as it was; what went into it is lost, nothing
+        // made or lost besides.
         let mut fell = was.clone();
         fell.take(&value(&base)).expect("less is in");
-        let mut gained = debris(&base);
-        gained.take(&lying).expect("more lies about");
-        assert_eq!(gained, fell.share(Amount::new(1, 2)), "{at:?}");
-        let mut accounted = gained.clone();
-        accounted.add(&done.lost);
-        assert_eq!(accounted, fell, "{at:?}");
+        assert_eq!(done.lost, fell, "{at:?}");
+        let gone = before.cubes().count() - base.cubes().count();
+        assert_eq!(done.fell.len(), gone, "{at:?}");
+        for (place, cube) in &done.fell {
+            assert_eq!(before.cube(*place), Some(*cube));
+            assert_eq!(base.cube(*place), None);
+        }
     }
-    assert!(base.debris().count() > 0);
 }
 
 #[test]
@@ -797,36 +790,4 @@ fn a_damaged_cube_is_mended_before_anything_more_goes_in_or_comes_out() {
     .unwrap();
     base.act(&fill([0, 0, 0]), &cx).unwrap();
     assert!(base.cube(at).unwrap().is_built());
-}
-
-#[test]
-fn debris_is_in_the_way_of_building_where_it_lies_until_gathered() {
-    let rules = rules();
-    let cx = Context::free(&rules);
-    let mut base = Base::default();
-    // A post two high and an arm out from its top, which falls when the arm's root goes,
-    // onto a plan laid on the ground under it.
-    let post = column(0, 0, 0, 1);
-    plan(&mut base, &cx, STONE, &post, Shape::Whole);
-    build(&mut base, &cx, &post);
-    let arm = [[1, 1, 0], [2, 1, 0]];
-    plan(&mut base, &cx, STONE, &arm, Shape::Whole);
-    build(&mut base, &cx, &arm);
-    plan(&mut base, &cx, STONE, &[[2, 0, 0]], Shape::Whole);
-    base.act(
-        &Op::Damage {
-            cubes: vec![[1, 1, 0]],
-            amount: u16::MAX,
-        },
-        &cx,
-    )
-    .unwrap();
-    let lying = IVec3::new(2, 0, 0);
-    assert!(base.pile(lying).is_some());
-    assert_eq!(
-        base.check(&fill([2, 0, 0]), &cx),
-        Err(Refusal::InTheWay(lying))
-    );
-    base.act(&Op::Gather { at: [2, 0, 0] }, &cx).unwrap();
-    base.act(&fill([2, 0, 0]), &cx).unwrap();
 }

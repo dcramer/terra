@@ -27,11 +27,11 @@
 //             along every step's nose, a log up every post (D193); dirt rising from the
 //             ground
 // meets       weight 2, ending against heavier kinds with an end board over its sawn ends
-// toughness  how much damage a cube takes before it is destroyed (D193); half of what
-//             went in back from its debris, half its cost to repair from nothing
+// toughness  how much damage a cube takes before it is destroyed (D193, D305); half its
+//             cost to repair from nothing; breaking into lengths (`fragments::Breaks`)
 (
     pattern: Logs,
-    toughness: (health: 400),
+    toughness: (health: 400, breaks: Lengths),
     diameter: 0.3,
     course: 0.25,
     longest: 4.0,

@@ -278,24 +278,21 @@ impl Terms {
 )]
 pub struct PropKind(pub u16);
 
-/// How a kind stands up to harm and what is left when it falls (D193, step 6 of
-/// docs/building-plan.md): how much damage a cube of it takes before it is destroyed, the
-/// share of what went into a cube that its debris gives back, and the share of its cost a
-/// repair takes for a cube brought back from nothing, a quarter of that for each quarter of
-/// its health it has lost. Shares are powers of two, so what they come to stays exact.
+/// How a kind stands up to harm (D193, D305): how much damage a cube of it takes before it is
+/// destroyed, and the share of its cost a repair takes for a cube brought back from nothing,
+/// a quarter of that for each quarter of its health it has lost. The share is a power of two,
+/// so what it comes to stays exact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Toughness {
     pub health: u16,
-    pub salvage: Amount,
     pub repair: Amount,
 }
 
 impl Default for Toughness {
-    /// A kind no kit says anything of: a hundred, and half back either way.
+    /// A kind no kit says anything of: a hundred, and half its cost to repair.
     fn default() -> Self {
         Toughness {
             health: 100,
-            salvage: Amount::new(1, 2),
             repair: Amount::new(1, 2),
         }
     }

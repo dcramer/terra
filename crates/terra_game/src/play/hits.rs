@@ -52,11 +52,32 @@ struct Spray {
     ichor: Handle<StandardMaterial>,
 }
 
-/// The view shaking: how much longer, and how far at the start.
+/// The view shaking: how much longer, how far at the start, and for how long in all. Blows
+/// shake it here; anything else that shakes the view, a collapse nearby (`build::loss`),
+/// kicks it ([`Shake::kick`]).
 #[derive(Resource, Default)]
-struct Shake {
+pub(crate) struct Shake {
     left: f32,
     reach: f32,
+    length: f32,
+}
+
+impl Shake {
+    /// Shakes the view so far, in metres, for so long, unless it is shaking harder.
+    pub(crate) fn kick(&mut self, reach: f32, seconds: f32) {
+        let now = if self.length > 0.0 {
+            self.reach * self.left / self.length
+        } else {
+            0.0
+        };
+        if reach > now {
+            *self = Shake {
+                left: seconds,
+                reach,
+                length: seconds,
+            };
+        }
+    }
 }
 
 /// The red at the edges of the view, and how much of it is left, out of one.
@@ -194,12 +215,7 @@ fn spray(
         } else {
             HIT_SHAKE_M
         };
-        if shake.left <= 0.0 || shake.reach < kick {
-            *shake = Shake {
-                left: SHAKE_S * 0.5,
-                reach: kick,
-            };
-        }
+        shake.kick(kick, SHAKE_S * 0.5);
     }
 }
 
@@ -235,10 +251,7 @@ fn hurt(
         }
         let how_bad = (0.4 + amount / 25.0).min(1.0);
         hurting.0 = hurting.0.max(how_bad);
-        *shake = Shake {
-            left: SHAKE_S,
-            reach: HURT_SHAKE_M * how_bad,
-        };
+        shake.kick(HURT_SHAKE_M * how_bad, SHAKE_S);
     }
 }
 
@@ -285,7 +298,7 @@ fn shake(time: Res<Time>, shaking: Res<Shake>, mut camera: Single<&mut Transform
     if shaking.left <= 0.0 {
         return;
     }
-    let fading = shaking.left / SHAKE_S;
+    let fading = shaking.left / shaking.length.max(1e-3);
     let t = time.elapsed_secs();
     let right = camera.right();
     let up = camera.up();

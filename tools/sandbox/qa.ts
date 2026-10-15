@@ -301,10 +301,10 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   // Each change from the call that made it to all its sections on screen, as the run said
   // it: the stage of the call said last before it.
   // Torn: sections of one change put on screen before the rest came back, so for a frame a
-  // piece is twice or missing where they meet. Debris: piles made on a worker, and how long
-  // after the collapse they were on screen.
+  // piece is twice or missing where they meet. Fragments: how many each fall made, and how
+  // long making them took.
   const edits: { stage: string; ms: number }[] = [];
-  const debris: number[] = [];
+  const debris: string[] = [];
   let torn = 0;
   let lastFrame = 0;
   for (const line of `${run.stdout}${run.stderr}`.split("\n")) {
@@ -312,12 +312,12 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
     if (call) lastFrame = Number(call[1]);
     const change = /Build: change on screen in ([\d.]+) ms/.exec(line);
     if (change) edits.push({ stage: stages.find((each) => lastFrame >= each.from && lastFrame <= each.to)?.name ?? "-", ms: Number(change[1]) });
-    const piles = /Build: debris drawn: \d+ piles, ([\d.]+) ms/.exec(line);
-    if (piles) debris.push(Number(piles[1]));
+    const made = /Build: fragments: (\d+) cubes came down, \d+ destroyed, (\d+) fragments made in ([\d.]+) ms/.exec(line);
+    if (made) debris.push(`${made[1]} cubes, ${made[2]} fragments in ${Number(made[3]).toFixed(1)} ms`);
     if (line.includes("sections shown before the rest")) torn++;
   }
   lines.push("", `Changes shown torn, a section before the rest of its change: ${torn}`);
-  if (debris.length) lines.push(`Debris on screen after the collapse: ${debris.map((ms) => `${ms.toFixed(0)} ms`).join(", ")}`);
+  if (debris.length) lines.push(`Falls broken into fragments: ${debris.join("; ")}`);
   if (edits.length) {
     lines.push("", "Edits to the screen, from the change to all its sections drawn:");
     for (const stage of [...stages.map((each) => each.name), "-"]) {

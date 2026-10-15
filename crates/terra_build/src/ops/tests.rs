@@ -29,13 +29,12 @@ fn rules() -> Rules {
             (THATCH, Terms::new(4, Bill::of("Thatch", Amount::new(1, 4)))),
         ]),
         props: BTreeMap::from([(DOOR, Bill::of("Door", Amount::whole(1)))]),
-        // Logs weaker than stone, a quarter back from their debris; thatch as any kind.
+        // Logs weaker than stone; thatch as any kind.
         toughness: BTreeMap::from([
             (
                 LOGS,
                 crate::Toughness {
                     health: 60,
-                    salvage: Amount::new(1, 4),
                     repair: Amount::new(1, 2),
                 },
             ),
@@ -43,7 +42,6 @@ fn rules() -> Rules {
                 STONE,
                 crate::Toughness {
                     health: 150,
-                    salvage: Amount::new(1, 2),
                     repair: Amount::new(1, 4),
                 },
             ),
@@ -1319,12 +1317,14 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
             }
         }
         25 => {
-            let piles: Vec<IVec3> = base.debris().map(|(at, _)| at).collect();
-            match pick(rng, &piles) {
-                Some(at) => Op::Gather { at: at.to_array() },
-                None => Op::Gather {
-                    at: somewhere(rng).to_array(),
+            // A blow that destroys whatever it hits.
+            let ins = with(&|cube| cube.is_in());
+            match pick(rng, &ins) {
+                Some(at) => Op::Damage {
+                    cubes: vec![at.to_array()],
+                    amount: u16::MAX,
                 },
+                None => fallback,
             }
         }
         26 => {
@@ -1383,12 +1383,9 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
     }
 }
 
-/// What is in a base: each cube's steps, each prop, and its debris.
+/// What is in a base: each cube's steps, each prop.
 fn value(base: &Base, rules: &Rules) -> Bill {
     let mut bill = Bill::default();
-    for (_, pile) in base.debris() {
-        bill.add(&pile.gives);
-    }
     for (_, cube) in base.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
         let terms = base.terms(&cube);
         let steps = u64::from(cube.level() / terms.step());
@@ -1621,7 +1618,7 @@ fn random_operations_keep_every_rule() {
                 }
             }
             check_rules(&base, &at);
-            // What is in, lies about, came out and was lost is what went in and was
+            // What is in, came out and was lost is what went in and was
             // brought back, exactly.
             let mut held = value(&base, &rules);
             held.add(&refunded);
@@ -1676,7 +1673,6 @@ fn random_operations_keep_every_rule() {
         "Close",
         "Damage",
         "Repair",
-        "Gather",
         "Subside",
     ];
     for name in every {
