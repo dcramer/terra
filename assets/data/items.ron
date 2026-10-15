@@ -26,6 +26,8 @@
 //                slot        Pack, Head, Body or Belt
 //                backpack    the backpack's size while it is worn
 //                protection  how much of a blow it takes, out of one
+//                warmth      how warm it keeps its wearer, in clo: a shirt and trousers
+//                            0.5, a winter coat 1, furs over wool 3 (climate.md, D153)
 //                holds       what it carries and how many, filling no cells (D118)
 (
     start: (
@@ -131,14 +133,14 @@
             name: "Leather cap",
             about: "Worn, takes a tenth of every blow",
             lasts: 60,
-            worn: (slot: "Head", protection: 0.1),
+            worn: (slot: "Head", protection: 0.1, warmth: 0.15),
         ),
         (
             name: "Leather coat",
             size: (2, 2),
             about: "Worn, takes a quarter of every blow",
             lasts: 80,
-            worn: (slot: "Body", protection: 0.25),
+            worn: (slot: "Body", protection: 0.25, warmth: 1.0),
         ),
         (
             name: "Quiver",

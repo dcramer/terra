@@ -12,6 +12,7 @@ use crate::planet::MainCamera;
 use bevy::light::{EnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
+use terra_world::climate::{ClimateSample, Sheltered};
 
 /// How much of the sky's light reaches inside a room.
 const INDOORS: f32 = 0.6;
@@ -56,7 +57,43 @@ struct Placed(BTreeMap<Entity, (u64, Vec<(IVec3, IVec3)>)>);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Placed>()
-        .add_systems(Update, (place, follow, inside).chain());
+        .add_systems(Update, (place, follow, inside, shelter).chain());
+}
+
+/// Whether a point is in a room closed and covered, by its probes, each a unit box
+/// stretched over its room.
+fn in_a_room<'a>(
+    rooms: impl IntoIterator<Item = (&'a GlobalTransform, &'a Indoors)>,
+    point: Vec3,
+) -> bool {
+    rooms.into_iter().any(|(room, probe)| {
+        if probe.going {
+            return false;
+        }
+        let local = room.affine().inverse().transform_point3(point);
+        local.abs().cmple(Vec3::splat(0.5)).all()
+    })
+}
+
+/// Shelters from the weather what feels the climate and stands in a room (D261): out of the
+/// wind, the rain and the sun, and a fire's warmth held in (`terra_world::climate`).
+fn shelter(
+    mut commands: Commands,
+    rooms: Query<(&GlobalTransform, &Indoors)>,
+    bodies: Query<(Entity, &GlobalTransform, Option<&Sheltered>), With<ClimateSample>>,
+) {
+    for (entity, at, sheltered) in &bodies {
+        // Chest high, so a body standing on a floor is in the room over it.
+        let chest = at.translation() + at.translation().normalize_or(Vec3::Y) * 1.2;
+        let now = Sheltered(if in_a_room(rooms.iter(), chest) {
+            1.0
+        } else {
+            0.0
+        });
+        if sheltered != Some(&now) {
+            commands.entity(entity).insert(now);
+        }
+    }
 }
 
 /// Places a probe in every room indoors, again whenever a base changes: a room that is new
@@ -197,14 +234,7 @@ fn inside(
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
-    // Each room's probe spans it, a unit box stretched over it.
-    let within = rooms.iter().any(|(room, probe)| {
-        if probe.going {
-            return false;
-        }
-        let local = room.affine().inverse().transform_point3(eye);
-        local.abs().cmple(Vec3::splat(0.5)).all()
-    });
+    let within = in_a_room(rooms.iter(), eye);
     if indoors.0 != within {
         indoors.0 = within;
     }
@@ -213,6 +243,28 @@ fn inside(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_body_in_a_room_is_in_it_and_one_outside_or_in_a_room_going_is_not() {
+        let probe = |going| Indoors {
+            room: [0; 6],
+            share: 1.0,
+            going,
+        };
+        let room = GlobalTransform::from(
+            Transform::from_xyz(10.0, 2.0, 0.0).with_scale(Vec3::new(4.0, 3.0, 6.0)),
+        );
+        let closed = [(&room, &probe(false))];
+        assert!(in_a_room(closed, Vec3::new(11.5, 3.0, 2.5)));
+        assert!(
+            !in_a_room(closed, Vec3::new(12.5, 3.0, 0.0)),
+            "past its wall"
+        );
+        assert!(!in_a_room(
+            [(&room, &probe(true))],
+            Vec3::new(10.0, 2.0, 0.0)
+        ));
+    }
 
     #[test]
     fn a_room_closing_dims_its_light_a_little_each_frame_not_at_once() {

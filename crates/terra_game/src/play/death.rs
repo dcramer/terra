@@ -114,8 +114,8 @@ fn live(
     }
 }
 
-/// How hard a player is working, which is what tires and starves them.
-fn effort(motion: &Motion, stance: &Stance) -> Effort {
+/// How hard a player is working, which is what tires, starves and warms them.
+pub(super) fn effort(motion: &Motion, stance: &Stance) -> Effort {
     let speed = motion.velocity.length();
     if stance.since_acting < 0.3 {
         Effort::Working

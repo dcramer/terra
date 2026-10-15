@@ -5837,6 +5837,7 @@ dependencies = [
  "serde",
  "serde_json",
  "terra_build",
+ "terra_climate",
  "terra_core",
  "terra_gen",
  "terra_items",

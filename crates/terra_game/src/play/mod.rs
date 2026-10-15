@@ -70,6 +70,7 @@ mod tool;
 mod torchlight;
 mod vitals;
 mod walker;
+mod warmth;
 mod wear;
 mod work;
 mod worn;
@@ -143,6 +144,7 @@ impl Plugin for GameplayPlugin {
         interact::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);
+        warmth::plugin(app);
         death::plugin(app);
         skills::plugin(app);
         creatures::plugin(app);
@@ -237,6 +239,7 @@ fn equip(
             facing: motion.facing,
         },
         body,
+        warmth::BodyHeat::default(),
         skills::Skills::default(),
         kit,
     ));

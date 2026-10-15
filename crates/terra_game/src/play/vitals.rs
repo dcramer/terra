@@ -34,6 +34,9 @@ pub struct Vitals {
     pub fed: f32,
     /// Seconds since stamina was last spent; it waits a moment before coming back.
     since_spent: f32,
+    /// Seconds since the body was last in danger from the cold or the heat; it heals only
+    /// once out of it (`warmth`).
+    since_exposed: f32,
 }
 
 impl Default for Vitals {
@@ -43,6 +46,7 @@ impl Default for Vitals {
             stamina: FULL,
             fed: 70.0,
             since_spent: 10.0,
+            since_exposed: 10.0,
         }
     }
 }
@@ -61,6 +65,9 @@ const HUNGRY: f32 = 30.0;
 /// Health back each second while fed, and lost each second while starving.
 const HEALING: f32 = 0.6;
 const STARVING: f32 = 1.5;
+/// Health lost each second for each degree a body is past the danger of the cold or the
+/// heat: at 33 °C, hypothermic, it is down in under two minutes (D153).
+const EXPOSED: f32 = 0.5;
 
 impl Vitals {
     /// Moves the body on by a moment of doing something. Returns whether it died.
@@ -81,12 +88,22 @@ impl Vitals {
             self.stamina = (self.stamina + STAMINA_BACK * slowed * dt).min(FULL);
         }
         self.fed = (self.fed - (HUNGER + if hard { HUNGER_HARD } else { 0.0 }) * dt).max(0.0);
+        self.since_exposed += dt;
         if self.fed <= 0.0 {
             self.health -= STARVING * dt;
-        } else if self.fed > HUNGRY {
+        } else if self.fed > HUNGRY && self.since_exposed > 1.0 {
             self.health = (self.health + HEALING * dt).min(FULL);
         }
         self.health <= 0.0
+    }
+
+    /// Takes what a moment so many degrees past the danger of the cold or the heat costs
+    /// (`terra_climate::body::danger`): health, and no healing while it lasts.
+    pub fn expose(&mut self, dt: f32, danger_c: f32) {
+        if danger_c != 0.0 {
+            self.health -= EXPOSED * danger_c.abs() * dt;
+            self.since_exposed = 0.0;
+        }
     }
 
     /// Spends stamina, if there is any to spend. Returns whether there was.
@@ -308,6 +325,32 @@ mod tests {
         let food = |name| items.food(items.kind(name));
         assert!(food("Cooked meat") > food("Meat"));
         assert_eq!(food("Wood"), 0.0);
+    }
+
+    #[test]
+    fn the_cold_wears_health_down_and_no_one_heals_in_it() {
+        let mut vitals = Vitals::default();
+        vitals.hurt(20.0);
+        let mut died = false;
+        for _ in 0..100 {
+            vitals.expose(0.1, -2.0);
+            died |= vitals.tick(0.1, Effort::Resting);
+        }
+        assert!((vitals.health - 70.0).abs() < 0.01, "{}", vitals.health);
+        assert!(!died);
+        for _ in 0..2000 {
+            vitals.expose(0.1, -2.0);
+            died |= vitals.tick(0.1, Effort::Resting);
+        }
+        assert!(died, "hypothermia kills in the end");
+        // Out of danger, it heals again.
+        let mut warm = Vitals::default();
+        warm.hurt(20.0);
+        warm.expose(0.1, 0.0);
+        for _ in 0..30 {
+            warm.tick(0.1, Effort::Resting);
+        }
+        assert!(warm.health > 80.0);
     }
 
     #[test]

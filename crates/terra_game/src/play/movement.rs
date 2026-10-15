@@ -9,6 +9,7 @@ use crate::build::{self, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_build::Walker;
+use terra_world::climate::ClimateSample;
 
 pub(super) const JOG_SPEED: f32 = 4.3;
 pub(super) const SPRINT_SPEED: f32 = 7.4;
@@ -30,6 +31,14 @@ const STRIDE_M: f32 = 0.4;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(FixedUpdate, walk.in_set(Sim::Act));
+}
+
+/// How fast the ground under a body lets it go, as a share of its pace on dry, bare ground:
+/// deep snow and mud slow it; frozen ground, wet as it is, is no mud.
+fn going(ground: &ClimateSample) -> f32 {
+    let frozen = ground.ice_m > 0.01;
+    let wet = if frozen { 0.0 } else { ground.ground_wetness };
+    terra_climate::body::going(ground.snow_depth_m, wet)
 }
 
 /// Whether walking from the feet to a place is stopped by a wall: ground rising there
@@ -89,12 +98,22 @@ fn walk(
             &Intent,
             Has<Downed>,
             Option<&super::tool::Builder>,
+            Option<&ClimateSample>,
         ),
         With<Player>,
     >,
 ) {
-    for (mut transform, mut motion, mut stance, mut vitals, view, intent, downed, builder) in
-        &mut players
+    for (
+        mut transform,
+        mut motion,
+        mut stance,
+        mut vitals,
+        view,
+        intent,
+        downed,
+        builder,
+        ground,
+    ) in &mut players
     {
         // Lying where you fell, you do not move.
         if downed {
@@ -139,7 +158,7 @@ fn walk(
             SPRINT_SPEED
         } else {
             JOG_SPEED
-        };
+        } * ground.map_or(1.0, going);
         // Ease into and out of a run rather than starting and stopping dead.
         let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
         let wish = if stance.dodging > 0.0 {
@@ -309,6 +328,20 @@ fn walk(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deep_snow_and_mud_slow_a_walker_and_frozen_ground_does_not() {
+        let mut ground = ClimateSample::default();
+        assert_eq!(going(&ground), 1.0);
+        ground.snow_depth_m = 0.3;
+        assert!((going(&ground) - 0.5).abs() < 1e-6);
+        ground.snow_depth_m = 0.0;
+        ground.ground_wetness = 1.0;
+        let mud = going(&ground);
+        assert!(mud < 0.9);
+        ground.ice_m = 0.1;
+        assert_eq!(going(&ground), 1.0, "frozen hard");
+    }
 
     #[test]
     fn a_hill_and_a_ledge_are_walked_up_and_a_wall_is_not() {

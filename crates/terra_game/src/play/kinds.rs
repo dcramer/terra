@@ -113,6 +113,9 @@ pub struct WornDef {
     pub backpack: Option<(u8, u8)>,
     #[serde(default)]
     pub protection: f32,
+    /// How warm it keeps its wearer, in clo (`warmth`).
+    #[serde(default)]
+    pub warmth: f32,
     #[serde(default)]
     pub holds: Option<(String, u32)>,
 }

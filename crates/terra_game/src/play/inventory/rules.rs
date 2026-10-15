@@ -28,6 +28,16 @@ pub fn protection(items: &Items, gear: &Equipment) -> f32 {
         .min(0.8)
 }
 
+/// How warm everything worn keeps its wearer together, in clo (`warmth`): broken, a thing
+/// still keeps out the cold.
+pub fn warmth(items: &Items, gear: &Equipment) -> f32 {
+    gear.iter()
+        .filter_map(|(_, worn)| worn)
+        .filter_map(|item| items.worn(item.kind))
+        .map(|worn| worn.warmth)
+        .sum()
+}
+
 /// For testing (--give): adds items by name, such as `stone`, `iron_axe` or
 /// `leather_coat`: tools go on the bar, and what is worn is put on. Names for the body
 /// are left alone.

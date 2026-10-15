@@ -28,6 +28,9 @@ use terra_build::{Base, CELL_M};
 
 /// Bright enough to show beside daylight, which is what the camera is exposed for.
 const FIRELIGHT_LUMENS: f32 = 500_000.0;
+/// The heat a fire gives off as radiation, in watts: a campfire's fifteen kilowatts, a
+/// third of it radiated, the rest carried up in its smoke (climate.md).
+const FIRE_HEAT_W: f32 = 5_000.0;
 /// Anything lower than this is walked over, not round.
 const STEP_OVER_M: f32 = 0.25;
 
@@ -560,6 +563,7 @@ pub fn place(
         Light::Fire => {
             prop.with_child((
                 Firelight,
+                terra_world::climate::Heat { watts: FIRE_HEAT_W },
                 glow(Color::srgb(1.0, 0.55, 0.22), FIRELIGHT_LUMENS, 16.0),
                 Transform::from_xyz(0.0, 0.7, 0.0),
             ));

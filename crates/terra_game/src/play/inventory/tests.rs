@@ -28,6 +28,21 @@ fn broken_leather_protects_no_more() {
     assert_eq!(protection(&items, &gear), packed);
 }
 
+/// A coat keeps its wearer warm as the items file says, broken or not.
+#[test]
+fn a_coat_keeps_its_wearer_warm() {
+    let mut items = Items::default();
+    let mut gear = Equipment::new(&SLOTS.map(|(slot, _)| slot));
+    let mut grid = bare_backpack();
+    assert_eq!(warmth(&items, &gear), 0.0);
+    let coat = items.make(items.kind("Leather coat"));
+    grid.insert(&items.catalogue, coat, None).unwrap();
+    wear(&items, &mut grid, &mut gear, coat.id).unwrap();
+    let warm = items.worn(coat.kind).unwrap().warmth;
+    assert!(warm > 0.5);
+    assert_eq!(warmth(&items, &gear), warm);
+}
+
 /// A cost, by item names.
 fn cost(items: &Items, named: &[(&str, u32)]) -> Vec<(ItemKind, u32)> {
     named

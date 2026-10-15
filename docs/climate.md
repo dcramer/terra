@@ -33,7 +33,7 @@ Each thing reads the quantities where it is:
   - Snow lies where precipitation fell below freezing, and melts with warmth and sun. Winter has snowy spells and thaws, lowlands may get rain, and mountaintops keep snow all year.
   - Water freezes after enough cold and thaws after enough warmth, so a lake can be walked on in a hard winter but not a mild one.
   - Rain wets the ground into mud.
-  - Snow and mud slow walking, and snow keeps tracks (D93).
+  - Snow and mud slow walking, and snow keeps tracks (D93). A foot of snow halves a walker's pace and wet mud takes a sixth off, frozen ground none (D328).
 - **Plants**, each by its niche ([biomes.md](biomes.md#biomes-from-rules-not-a-list)). Real plants follow warmth accumulated over days and the length of the day, and so do ours:
   - they grow when it is warm, wet and light enough;
   - they flower and fruit after enough warmth;
@@ -81,6 +81,7 @@ Probably an attribute of its own (D153): "if you're too cold it could increase s
   2. Hunger and thirst rising. These are the everyday cost that makes preparing worth it.
   3. Stamina costs.
   4. Clumsy hands and dizziness, which need tuning against work and combat.
+- **In code (D328):** a heat balance, as thermal comfort models make it (`terra_climate::body`): what the body makes by working (a met at rest, three walking or working, six sprinting) and takes from the sun and a fire, less what its skin loses through its clothing and the still air the wind thins, soaked clothing keeping half its warmth. Shivering makes up 100 W a square metre and sweating 220; past that the body is pushed from 37 °C, 0.03 °C for each watt not made up, and drifts there over five minutes of play. Nothing happens from 36 to 38 °C; past 35 and 39.5 health falls, half a point a second for each degree, and nothing heals. Clothing's warmth is each worn thing's `warmth` in clo (`items.ron`); a body under its gear has a tenth of one. Rain soaks a body through in about two minutes and it dries in four, faster by a fire; wading soaks it at once. A body says how it feels as it crosses each edge ("You are getting cold", "You are freezing"); there is no meter. Only players for now: recruits come with their work slowing (D169).
 
 ## Winter on the starter world
 
@@ -174,7 +175,7 @@ In code (D327): two maps a kilometre across round the camera, a 32 m cell a texe
 2. **The integrated state:** snow, warmth and chill per cell, kept by the day. Built (D315).
 3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at. Built (D327): `terra_world::climate`, kinds' years in `assets/data/plant_years.ron`, and `--date 10-15` (a day of an Earth calendar, as that share of the world's year) or `--date 40` (a day of the clock); the log says what the climate is at the camera once its maps are painted.
 4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill).
-5. **Body temperature** (D153), and snow and mud under a walker.
+5. **Body temperature** (D153), and snow and mud under a walker. Built (D328): the first of the effects, the stakes.
 
 ## Open questions
 
