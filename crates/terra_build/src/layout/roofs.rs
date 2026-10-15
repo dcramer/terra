@@ -757,7 +757,23 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             // A ridge's beam bears on the gables' inner faces, inside the roof; a hip's
             // and a valley's run on down to the eaves as the rafters do.
             let level = segment.part == RoofPart::Ridge;
-            for (from, to) in framed(base, from - down, to - down, level) {
+            let beams = framed(base, from - down, to - down, level);
+            let last = beams.len().saturating_sub(1);
+            // Its ends a little short of the line's, where the battens and rafters along it
+            // end too, so its sawn ends are not in their planes; and where its crease meets
+            // another, as a wing's ridge meets the main one at a T, short of that one's beam
+            // by half its width, so it butts its side rather than running into it.
+            let met = [segment.from, segment.to].map(|end| crease_met(segment, end, &joined));
+            let short = met.map(|met| BEAM_SHORT_M + if met { rafter } else { 0.0 });
+            for (i, (mut from, mut to)) in beams.into_iter().enumerate() {
+                let along = (to - from).normalize_or_zero();
+                let level = Vec3::new(along.x, 0.0, along.z).length().max(0.2);
+                if i == 0 {
+                    from += along * (short[0] / level);
+                }
+                if i == last {
+                    to -= along * (short[1] / level);
+                }
                 pieces.push(Piece::Roof {
                     part: RoofPart::Rafter,
                     from: Place::near(from),
@@ -865,6 +881,22 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
 /// hip's or a valley's foot at the eaves, where it is mitred to them (`roofing`) rather
 /// than capped square across the line and standing out past them. An eave meets nothing it
 /// should stop at.
+/// Whether a crease's end meets another crease, at its end or along it, as a wing's ridge
+/// meets the main ridge at a T, or a hip the ridge's end.
+fn crease_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
+    let crease =
+        |part: RoofPart| matches!(part, RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley);
+    let p = end.metres();
+    all.iter().any(|other| {
+        if std::ptr::eq(other, segment) || !crease(other.part) {
+            return false;
+        }
+        let (a, b) = (other.from.metres(), other.to.metres());
+        let t = ((p - a).dot(b - a) / (b - a).length_squared().max(1e-9)).clamp(0.0, 1.0);
+        (a + (b - a) * t).distance(p) < 0.01
+    })
+}
+
 fn edge_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
     let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
     if matches!(segment.part, RoofPart::Hip | RoofPart::Valley) {
@@ -1165,6 +1197,9 @@ const JOINT_CLEAR: i64 = 4 * super::TICKS as i64;
 fn gcd(a: i32, b: i32) -> i32 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
+
+/// How much shorter at each end than its crease the beam under a ridge, a hip or a valley is.
+const BEAM_SHORT_M: f32 = 0.006;
 
 /// The rafters: one up every slope along every cube's edge, from its foot at the eaves to
 /// the ridge, hip or valley it meets, under the battens.
@@ -1506,6 +1541,38 @@ mod tests {
         // Rafters along every cube's edge up each slope, nine a side from one gable's inner
         // face to the other's, none on a gable or out under a verge, and a beam under the ridge.
         assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 9 + 1);
+    }
+
+    #[test]
+    fn a_wings_ridge_beam_butts_the_main_ones_side() {
+        // A T: the wing's ridge meets the main ridge along it, the beams under them at one
+        // height, the wing's ending at the main one's side, not in it.
+        let (_, ops) = crate::roof_rows(&[Kind::PLAIN], false, &|_| ROOF)
+            .into_iter()
+            .find(|(row, _)| row == "T, gable roof")
+            .expect("a T under a gable");
+        let mut base = Base::default();
+        for op in ops {
+            base.apply(op);
+        }
+        let pieces = laid(&base);
+        let half = roof_kit().roof.rafter * 0.5;
+        let beams: Vec<(Vec3, Vec3)> = parts(&pieces, RoofPart::Rafter)
+            .into_iter()
+            .filter(|(a, b)| (a.y - b.y).abs() < 1e-3)
+            .collect();
+        let along_x = beams.iter().find(|(a, b)| (a.z - b.z).abs() < 1e-3);
+        let along_z = beams.iter().find(|(a, b)| (a.x - b.x).abs() < 1e-3);
+        let (Some(main), Some(wing)) = (along_x, along_z) else {
+            panic!("a beam under each ridge: {beams:?}");
+        };
+        for end in [wing.0, wing.1] {
+            let off = (end.z - main.0.z).abs();
+            assert!(
+                off > half,
+                "the wing's beam ends at {end}, in the main one at {main:?}"
+            );
+        }
     }
 
     #[test]

@@ -11,12 +11,12 @@ all	earth with hewn	UnderRoof	2
 all	earth with limewash	Coplanar	20
 all	earth with limewash	Inward	3
 all	earth with limewash	PokesOut	5
-all	earth with logs	Coplanar	9
+all	earth with logs	Coplanar	7
 all	earth with logs	Inward	3
 all	earth with logs	PokesOut	5
 all	earth with logs	SeeThrough	4
 all	earth with logs	UnderRoof	5
-all	earth with stone	Coplanar	7
+all	earth with stone	Coplanar	6
 all	earth with stone	Inward	3
 all	earth with stone	PokesOut	10
 all	earth with wattle	Coplanar	23
@@ -26,11 +26,10 @@ all	hewn	Coplanar	5
 all	hewn	PokesOut	2
 all	hewn with limewash	Coplanar	5
 all	hewn with limewash	PokesOut	2
-all	hewn with logs	Coplanar	3
+all	hewn with logs	Coplanar	1
 all	hewn with logs	PokesOut	2
 all	hewn with logs	SeeThrough	4
 all	hewn with logs	UnderRoof	5
-all	hewn with stone	Coplanar	1
 all	hewn with stone	PokesOut	2
 all	hewn with wattle	Coplanar	17
 all	hewn with wattle	PokesOut	2
@@ -40,15 +39,12 @@ all	limewash with logs	Coplanar	1
 all	limewash with logs	PokesOut	2
 all	limewash with logs	SeeThrough	4
 all	limewash with logs	UnderRoof	5
-all	limewash with stone	Coplanar	1
 all	limewash with stone	PokesOut	2
 all	limewash with wattle	Coplanar	17
 all	limewash with wattle	PokesOut	2
-all	logs	Coplanar	3
+all	logs	Coplanar	1
 all	logs	UnderRoof	5
-all	logs with stone	Coplanar	1
 all	logs with wattle	Coplanar	18
-all	stone	Coplanar	1
 all	stone with wattle	Coplanar	17
 all	wattle	Coplanar	18
 all	wattle	PokesOut	2
