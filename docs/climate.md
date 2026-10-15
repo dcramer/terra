@@ -1,6 +1,6 @@
 # Climate: seasons, weather and what they do
 
-Status: Leaning, 2026-10-12. Seasons exist, change play and are fundamentals rather than flags (D149, Decided); weather differs by world (D78); body temperature is its own attribute (D153). The rest proposes how they work. Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
+Status: Leaning, 2026-10-12; how it works decided 2026-10-14 (D312 to D314). Seasons exist, change play and are fundamentals rather than flags (D149, Decided); weather differs by world (D78); body temperature is its own attribute (D153). Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
 
 ## The rule: fundamentals, not seasons
 
@@ -109,18 +109,65 @@ Technology and magic can add to it, such as an instrument or a rite that tells f
 
 Since weather is worked out from the seed and the time, what is coming is already known to the game, so a forecast can be exactly right.
 
-## How it could work
+## How it works
 
-Technical, Leaning, and nothing is built until the design is agreed:
+Decided with the developers on 2026-10-14 (D312, D313); the code's shape is the agent's (D314). Nothing anywhere asks what season it is: it asks the quantities, at a place and a time.
 
-- **Weather is a function of the world's seed and its time.** Fronts are noise moving across the realm's world. Every client works out the same weather from the clock, so the server sends nothing but the time. Shared by a thousand players (D52), it costs nothing.
-- **Ground state is integrated from recent weather** at coarse resolution, again with nothing stored:
-  - snow depth;
-  - wetness;
-  - ice on water.
+### The quantities are fields
 
-  Players' fires and digging are edits on top, like any other.
-- **Each quantity is a field** that systems ask at a place and time, like the ground query. Survival, plants, creatures and the renderer all ask the same fields.
+Temperature, daylight, precipitation, wind and the air's wetness are functions of a place and a time, in a crate that does not depend on Bevy (D28), so every machine works out the same answer from the world's seed and its clock and the server sends only the time (D52):
+
+- **Temperature** is the theme's base, less about 6.5 °C a kilometre of height, plus the year's swing (lagging the sun by about a month, as real seasons do), the day's (warmest mid-afternoon), and the weather's.
+- **Daylight** is the sun's path for the date: the sun's declination swings with the year, so winter days are short and its sun low.
+- **Weather** is fronts of noise drifting across the world with the clock; whether what falls is rain or snow is the temperature's doing.
+- A world's theme is the numbers: its base climate, and how far each quantity swings and how fast. A temperate world swings in temperature, a monsoon world in rain; no code differs.
+
+### What the past leaves is integrated
+
+Snow, wet ground, ice, and the warmth and chill plants count are what recent weather left behind. Each is folded over the days before, on a coarse grid (tens of metres a cell), worked out when asked and kept by the day, never stored in the save:
+
+- snow: what fell below freezing, less what warmth and sun melted;
+- wetness: rain, less what dried;
+- ice on water: thicker after frost, thinner after thaw;
+- warmth (degree-days above a base since midwinter) and chill (cold days, and the day's length), the clocks plants keep.
+
+Players' fires, digging and building are edits on top, like any other.
+
+### Shared and seen (D312)
+
+What changes play is the same on every machine, worked out by the shared crate: the temperature where a body stands, snow depth, ice that holds a walker, wet ground, what a plant offers to gather. What only changes the look is each machine's own: exactly how far a leaf has turned, frost on a branch, breath in the air.
+
+### What grows where, and when (D313)
+
+- **A species carries its niche and its year, as data:** the climate it tolerates (the coldest winter it survives, the warmth it needs to grow, wetness, shade, soil) and when it leafs out, flowers, fruits, turns and drops its leaves, by the warmth and chill counted and the day's length. An oak turns once the day is under so many hours and chill passes so much; a pine barely changes.
+- **The world decides what grows where** by setting the climate fields against those niches (as [biomes.md](biomes.md#biomes-from-rules-not-a-list) proposes): where an oak's niche fits, oaks can grow, the best-fitting kinds most. A biome is what emerges, named afterwards; a world's theme says which families of species exist there at all. When a place's climate is not one a kind tolerates, that kind does not regrow there (D150), and another that fits does.
+- Each plant is its kind's year, shifted a little by its own seed and by height, so a stand turns over days, not all at once.
+
+### In ECS
+
+- **Things that care carry a sample** (`ClimateSample`: temperature, wind, wetness, sun, snow), refreshed by a system often near a player and rarely far off, so the cost follows what is near players, not the world's size (D127).
+- **Local things bend it**, as components: a fire's heat, a shelter's walls and roof (D261), the canopy's shade (the sky occlusion volume, D270), clothing's warmth.
+- **Small systems respond, each reading samples:** a body's temperature drifts toward its surroundings (D153); a creature acts within its own band, so sleeping through the cold emerges; snow and mud slow a walker; ice holds one once thick enough.
+- **Plants are not entities that tick:** there are far too many. A plant's state is a function of its cell's counted warmth and chill, its kind's year and its own seed, worked out when it is drawn or gathered.
+
+### Drawn from the same fields
+
+The world layer bakes small climate maps round the camera, as it bakes the cover map: how far each kind's leaves have turned and fallen, snow, wetness, frost. The shaders read them:
+
+- leaves take their kind's colour for the moment, and drop away card by card as they fall, as cards already thin with distance (D223), until a tree stands bare;
+- snow lies on surfaces facing up: the ground, the tops of branches and rocks, its edge broken by noise; wet ground and bark darken;
+- litter builds after the fall and grass browns, through the floor's own rules (D246);
+- the sun's path follows the date, the haze the air's wetness, breath shows in the cold.
+
+On the GPU this is a few texture reads; on the CPU a few cheap functions and a fold per cell per day.
+
+### Order of work
+
+1. **The fields:** temperature, daylight by the date, precipitation and fronts, in the shared crate, with tests; the sun's declination following the date.
+2. **The integrated state:** snow, warmth and chill per cell, kept by the day.
+3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at.
+4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill).
+5. **Body temperature** (D153), and snow and mud under a walker.
 
 ## Open questions
 
