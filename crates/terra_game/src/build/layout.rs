@@ -15,7 +15,7 @@ use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
@@ -92,6 +92,8 @@ pub(super) struct Laying {
     pub whole: sections::Whole,
     pub took_ms: f32,
     pub same: Vec<[i32; 3]>,
+    /// The sections (or groups) the change reaches, which wait to be cut from it.
+    pub reached: BTreeSet<[i32; 3]>,
 }
 
 /// What laying a section came to.
@@ -230,17 +232,22 @@ fn launch(
             // the whole base goes in is wanted.
             let last = sections.last_laid.clone().filter(|_| !in_order);
             let marked = sections.marked_since.clone();
+            let relit = sections.relit_since.clone();
             // The sections waiting only because their building changed, drawn already as
             // finely as they would be: the worker cuts each from the base laid again, a
             // few hundredths of a millisecond, and says which lay as they were, to be left
             // as drawn rather than merged again, so an edit waits only for the sections it
             // changed and the main thread cuts none of them.
-            let candidates: Vec<([i32; 3], u64)> = sections
-                .waiting
+            let candidates: BTreeMap<[i32; 3], u64> = sections
+                .drawn
                 .iter()
-                .filter(|(_, waiting)| !waiting.force && waiting.reach.is_none())
-                .filter_map(|(&at, _)| {
-                    let drawn = sections.drawn.get(&at)?;
+                .filter(|(at, _)| {
+                    sections
+                        .waiting
+                        .get(*at)
+                        .is_none_or(|waiting| !waiting.force && waiting.reach.is_none())
+                })
+                .filter_map(|(&at, drawn)| {
                     let distance =
                         store::distance_from(&frame, eye, at, sections.unit, drawn.bounds);
                     let wanted = reach(distance / scale.0, Some(drawn.reach));
@@ -252,6 +259,23 @@ fn launch(
             let maps = look.maps.clone();
             sections.laying = Some(pool.spawn(async move {
                 let started = Instant::now();
+                // As far as the change reaches, from the base as last laid
+                // (`sections::reach`); with nothing laid to go by, the whole of every
+                // building it marked; and the buildings where what goes in next is lit.
+                let mut reached: BTreeSet<[i32; 3]> = match &last {
+                    Some((before, _)) => sections::reach(before, &snapshot, &kits, &marked)
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                    None => sections::affected(&snapshot, &marked),
+                };
+                if !relit.is_empty() {
+                    reached.extend(sections::affected(&snapshot, &relit));
+                }
+                let reached: BTreeSet<[i32; 3]> = reached
+                    .into_iter()
+                    .map(|at| store::unit_of(at, unit))
+                    .collect();
                 let whole = match last {
                     Some((before, whole)) => whole.lay_again(&before, &snapshot, &kits, &marked),
                     None => sections::Whole::lay(&snapshot, &kits),
@@ -259,6 +283,7 @@ fn launch(
                 let took_ms = started.elapsed().as_secs_f32() * 1000.0;
                 let same = candidates
                     .into_iter()
+                    .filter(|(at, _)| reached.contains(at))
                     .filter(|&(at, key)| {
                         let laid = store::members(&snapshot, at, unit).into_iter().map(|at| {
                             let section = Section {
@@ -278,6 +303,7 @@ fn launch(
                     whole,
                     took_ms,
                     same,
+                    reached,
                 }
             }));
         }
@@ -293,8 +319,16 @@ fn launch(
             whole,
             took_ms,
             same,
+            reached,
         }) = laid
         {
+            for at in reached {
+                sections.waiting.entry(at).or_default();
+            }
+            sections.relit_since.clear();
+            if let Some(change) = sections.change.as_mut() {
+                change.waiting = sections.waiting.len();
+            }
             if let Some(change) = sections.change.as_mut() {
                 change.laid_ms = change.since.elapsed().as_secs_f32() * 1000.0;
             }

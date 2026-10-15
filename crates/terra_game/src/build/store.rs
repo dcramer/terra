@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use terra_build::Base;
-use terra_build::sections::{Reach, affected, drawable};
+use terra_build::sections::{Reach, drawable};
 
 /// A base's entity: where it stands, its sections its children.
 #[derive(Component)]
@@ -109,6 +109,9 @@ pub(super) struct Sections {
     /// only the buildings it marked (`Whole::lay_again`), not every one in the claim.
     pub last_laid: Option<(Arc<Base>, Arc<terra_build::sections::Whole>)>,
     pub marked_since: BTreeSet<[i32; 3]>,
+    /// The sections of cubes lit or no longer lit as what goes in next since the base was
+    /// last laid: the worker laying it again works out what they reach.
+    pub relit_since: BTreeSet<[i32; 3]>,
     /// When the oldest change not yet all on screen was noticed, to time how long a
     /// change takes to be seen.
     pub changed_at: Option<std::time::Instant>,
@@ -245,27 +248,17 @@ fn noticed(build: &mut Build) {
     for &at in &marked {
         wait(at, true);
     }
-    // As far as the change reaches, from the base as last laid (`sections::reach`); with
-    // nothing laid to go by, the whole of every building it marked.
-    let reached: BTreeSet<[i32; 3]> = match (&sections.last_laid, &build.kits) {
-        (Some((before, _)), Some(kits)) => {
-            terra_build::sections::reach(before, &build.base, kits, &marked)
-                .into_iter()
-                .flatten()
-                .collect()
-        }
-        _ => affected(&build.base, &marked),
-    };
-    for at in reached {
-        wait(at, false);
-    }
+    // How far the change reaches, and where what goes in next is lit, is worked out on the
+    // worker that lays the base again (`layout`), which sets those sections waiting too:
+    // the main thread only marks what changed.
     let relit: BTreeSet<[i32; 3]> = std::mem::take(&mut sections.relight)
         .into_iter()
         .map(|cube| terra_build::cubes::section_of(IVec3::from_array(cube)).to_array())
         .collect();
-    for at in affected(&build.base, &relit) {
+    for &at in &relit {
         wait(at, false);
     }
+    sections.relit_since.extend(relit);
     sections.change = Some(Change {
         since: std::time::Instant::now(),
         waiting: sections.waiting.len(),

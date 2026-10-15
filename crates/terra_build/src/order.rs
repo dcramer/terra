@@ -65,7 +65,7 @@ impl Base {
     /// metres, the base's own space). `None` once it is all built.
     pub fn next_in(&self, part: PartId, near: Vec3, one_at_a_time: bool) -> Option<Vec<[i32; 3]>> {
         let waiting: Vec<(IVec3, Cube)> = self
-            .cubes_of(part)
+            .unbuilt_of(part)
             .filter(|(_, cube)| {
                 cube.fill == Fill::Solid && !cube.is_built() && cube.pending == Pending::None
             })

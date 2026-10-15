@@ -361,6 +361,8 @@ pub struct Base {
     /// put, so what goes in next is found among them rather than among every cube: a
     /// castle's hundred and forty thousand were walked several times an edit (D308).
     in_parts: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
+    /// Each part's cubes not yet built, which what goes in next is among.
+    unbuilt: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
     pending: BTreeSet<[i32; 3]>,
     /// How many cubes of each kind it has, so which kits lay anything is known at once.
     kinds: BTreeMap<Kind, usize>,
@@ -619,11 +621,12 @@ impl Base {
             .room_cells()
             .filter(|(at, _)| at.y == wall_layer(0))
             .map(|(at, _)| IVec2::new(at.x, at.z));
-        let floors = self
-            .cubes
-            .iter()
-            .filter(|(at, cube)| at.y == floor_layer(0) && cube.fill != Fill::Open)
-            .map(|(at, _)| IVec2::new(at.x, at.z));
+        // Each column asked for its cube at the ground floor's layer, not every cube.
+        let floors = self.columns.keys().filter_map(|&[x, z]| {
+            self.cube(IVec3::new(x, floor_layer(0), z))
+                .is_some_and(|cube| cube.fill != Fill::Open)
+                .then_some(IVec2::new(x, z))
+        });
         rooms.chain(floors)
     }
 
@@ -869,6 +872,7 @@ impl Base {
     pub(crate) fn count_columns(&mut self) {
         self.columns.clear();
         self.in_parts.clear();
+        self.unbuilt.clear();
         self.pending.clear();
         self.kinds.clear();
         let cubes: Vec<(IVec3, Cube)> = self.cubes.iter().collect();
@@ -886,6 +890,9 @@ impl Base {
         *self.kinds.entry(cube.kind).or_default() += 1;
         if let Some(part) = cube.part {
             self.in_parts.entry(part).or_default().insert(at.to_array());
+            if !cube.is_built() {
+                self.unbuilt.entry(part).or_default().insert(at.to_array());
+            }
         }
         if cube.pending != Pending::None {
             self.pending.insert(at.to_array());
@@ -911,6 +918,14 @@ impl Base {
                 self.in_parts.remove(&part);
             }
         }
+        if let Some(part) = cube.part
+            && let Some(cubes) = self.unbuilt.get_mut(&part)
+        {
+            cubes.remove(&at.to_array());
+            if cubes.is_empty() {
+                self.unbuilt.remove(&part);
+            }
+        }
         if cube.pending != Pending::None {
             self.pending.remove(&at.to_array());
         }
@@ -919,6 +934,20 @@ impl Base {
     /// Every kind it has a cube of, in order.
     pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.kinds.keys().copied()
+    }
+
+    /// A part's cubes not yet built, in a fixed order: by `[x, y, z]`.
+    pub fn unbuilt_of(&self, part: PartId) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
+        self.unbuilt
+            .get(&part)
+            .into_iter()
+            .flatten()
+            .filter_map(move |&at| {
+                let at = IVec3::from_array(at);
+                self.cube(at)
+                    .filter(|cube| cube.part == Some(part))
+                    .map(|cube| (at, cube))
+            })
     }
 
     /// Every cube with work pending on it (to be carved, or changing kind), in a fixed

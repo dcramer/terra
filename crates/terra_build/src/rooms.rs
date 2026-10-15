@@ -26,7 +26,7 @@ const FACES: [IVec3; 6] = crate::support::FACES;
 
 /// How many cubes may change closing in between two looks at the rooms before they are
 /// flooded again from nothing: past this, letting go every room they touch is no cheaper.
-const CHANGES_KEPT: usize = 4096;
+const CHANGES_KEPT: usize = 1 << 16;
 
 /// The rooms of a base, worked out when first asked after a change; and, until then, the
 /// rooms last worked out and every cube whose closing in has changed since, to work them
