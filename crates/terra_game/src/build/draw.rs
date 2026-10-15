@@ -288,13 +288,13 @@ pub(super) struct Parts {
     parts: Vec<Option<Part>>,
     /// What each part was drawn from (`sections::cluster_keys`).
     keys: Vec<u64>,
-    plain: Option<Mesh>,
-    next: Vec<Mesh>,
-    shell: Option<Mesh>,
+    plain: Option<Staged>,
+    next: Vec<Staged>,
+    shell: Option<Staged>,
     /// A plan's ghosts, a mesh for each of their two shades.
-    ghosts: [Option<Mesh>; 2],
-    far: Option<Mesh>,
-    proxy: Option<Mesh>,
+    ghosts: [Option<Staged>; 2],
+    far: Option<Staged>,
+    proxy: Option<Staged>,
     centre: Vec3,
     /// A group's sections with anything in them, as a box in its base's own space.
     pub bounds: Option<(Vec3, Vec3)>,
@@ -304,10 +304,72 @@ pub(super) struct Parts {
 /// arrays one mesh a detail, each corner carrying its layer, and the layers they wear (D290);
 /// what the arrays do not hold, a pack's pieces' atlas, by kind and material.
 struct Part {
-    arrays: [Option<Mesh>; 2],
+    arrays: [Option<Staged>; 2],
     layers: Vec<u16>,
-    near: Vec<(Kind, Material, Mesh)>,
-    mid: Vec<(Kind, Material, Mesh)>,
+    near: Vec<(Kind, Material, Staged)>,
+    mid: Vec<(Kind, Material, Staged)>,
+}
+
+/// A mesh made on a worker, and, once it is put among the meshes ahead of being shown, its
+/// handle: a change is put on the GPU over a few frames, within a budget a frame, and only
+/// swapped in once all of it is there, as a streaming world uploads a chunk before it
+/// shows it (D308). A tower's fall put every section it reached on the GPU in the frame it
+/// was shown, 20 to 55 ms of Bevy preparing and placing meshes.
+pub(super) enum Staged {
+    Made(Box<Mesh>),
+    Put {
+        handle: Handle<Mesh>,
+        corners: usize,
+        bytes: usize,
+    },
+}
+
+impl Staged {
+    fn corners(&self) -> usize {
+        match self {
+            Staged::Made(mesh) => mesh.count_vertices(),
+            Staged::Put { corners, .. } => *corners,
+        }
+    }
+
+    fn bytes(&self) -> usize {
+        match self {
+            Staged::Made(mesh) => gpu_bytes(mesh),
+            Staged::Put { bytes, .. } => *bytes,
+        }
+    }
+
+    /// Puts it among the meshes, kept on the CPU too if `cpu`; how many corners it put.
+    fn put(&mut self, meshes: &mut Assets<Mesh>, cpu: bool) -> usize {
+        let Staged::Made(mesh) = self else {
+            return 0;
+        };
+        let mut mesh = *std::mem::replace(
+            mesh,
+            Box::new(Mesh::new(
+                PrimitiveTopology::TriangleList,
+                RenderAssetUsages::RENDER_WORLD,
+            )),
+        );
+        if cpu {
+            mesh.asset_usage |= RenderAssetUsages::MAIN_WORLD;
+        }
+        let (corners, bytes) = (mesh.count_vertices(), gpu_bytes(&mesh));
+        *self = Staged::Put {
+            handle: meshes.add(mesh),
+            corners,
+            bytes,
+        };
+        corners
+    }
+
+    fn handle(mut self, meshes: &mut Assets<Mesh>, cpu: bool) -> Handle<Mesh> {
+        self.put(meshes, cpu);
+        match self {
+            Staged::Put { handle, .. } => handle,
+            Staged::Made(_) => unreachable!("put above"),
+        }
+    }
 }
 
 /// A detail's surfaces as one mesh in the texture arrays, each corner carrying its layer
@@ -387,7 +449,7 @@ pub(super) fn parts(
     layers: &Layers,
     pack: bool,
 ) -> Parts {
-    let pack = |mesh: Mesh| if pack { packed(mesh) } else { mesh };
+    let pack = |mesh: Mesh| Staged::Made(Box::new(if pack { packed(mesh) } else { mesh }));
     // A surface whose colours came out near black, as a mask reading the real maps can make
     // it, is drawn black in any light: said once a run (`terra_build::inspect`).
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -405,38 +467,53 @@ pub(super) fn parts(
     let none = BTreeMap::new();
     let worn: BTreeMap<[i32; 3], u8> = drawn.worn.iter().copied().collect();
     let count = drawn.near_by.len().max(drawn.mid_by.len());
-    let parts: Vec<Option<Part>> = (0..count)
-        .map(|c| {
-            only.get(c).copied().unwrap_or(true).then(|| {
-                let mut used = BTreeSet::new();
-                let (near_arrays, near) = in_arrays(
-                    drawn.near_by.get(c).unwrap_or(&none),
-                    layers,
-                    centre,
-                    &worn,
-                    &mut used,
-                );
-                let (mid_arrays, mid) = in_arrays(
-                    drawn.mid_by.get(c).unwrap_or(&none),
-                    layers,
-                    centre,
-                    &worn,
-                    &mut used,
-                );
-                let packs = |all: Vec<(Kind, Material, Mesh)>| {
-                    all.into_iter()
-                        .map(|(kind, material, mesh)| (kind, material, pack(mesh)))
-                        .collect()
-                };
-                Part {
-                    arrays: [near_arrays.map(pack), mid_arrays.map(pack)],
-                    layers: used.into_iter().collect(),
-                    near: packs(near),
-                    mid: packs(mid),
-                }
-            })
+    let part = |c: usize| {
+        only.get(c).copied().unwrap_or(true).then(|| {
+            let mut used = BTreeSet::new();
+            let (near_arrays, near) = in_arrays(
+                drawn.near_by.get(c).unwrap_or(&none),
+                layers,
+                centre,
+                &worn,
+                &mut used,
+            );
+            let (mid_arrays, mid) = in_arrays(
+                drawn.mid_by.get(c).unwrap_or(&none),
+                layers,
+                centre,
+                &worn,
+                &mut used,
+            );
+            let packs = |all: Vec<(Kind, Material, Mesh)>| {
+                all.into_iter()
+                    .map(|(kind, material, mesh)| (kind, material, pack(mesh)))
+                    .collect()
+            };
+            Part {
+                arrays: [near_arrays.map(pack), mid_arrays.map(pack)],
+                layers: used.into_iter().collect(),
+                near: packs(near),
+                mid: packs(mid),
+            }
         })
-        .collect();
+    };
+    // A section's parts drawn again together are made into meshes side by side, a thread
+    // each: welding, tangents and packing are most of a near section's time on its worker,
+    // and the parts are apart (D308).
+    let parts: Vec<Option<Part>> = if (0..count)
+        .filter(|&c| only.get(c).copied().unwrap_or(true))
+        .count()
+        > 1
+    {
+        std::thread::scope(|scope| {
+            let made: Vec<_> = (0..count).map(|c| scope.spawn(move || part(c))).collect();
+            made.into_iter()
+                .map(|made| made.join().expect("a part's meshes are made"))
+                .collect()
+        })
+    } else {
+        (0..count).map(part).collect()
+    };
     let layers: BTreeSet<u16> = parts
         .iter()
         .flatten()
@@ -448,8 +525,10 @@ pub(super) fn parts(
         keys,
         plain: plain(&drawn.plain),
         next: drawn.next.0.values().filter_map(plain).collect(),
-        shell: mesh(&drawn.shell, centre, Uvs::Only),
-        ghosts: [false, true].map(|shade| ghost_mesh(&drawn.ghosts, shade, centre)),
+        shell: mesh(&drawn.shell, centre, Uvs::Only).map(|mesh| Staged::Made(Box::new(mesh))),
+        ghosts: [false, true].map(|shade| {
+            ghost_mesh(&drawn.ghosts, shade, centre).map(|mesh| Staged::Made(Box::new(mesh)))
+        }),
         far: plain(&drawn.far),
         proxy: plain(&drawn.proxy),
         centre,
@@ -732,8 +811,8 @@ const MATERIALS: [Material; 13] = [
     Material::Plain,
 ];
 
-/// How many corners are put on screen a frame, at most, beyond the first section: a
-/// section near is a few hundred thousand, far a few thousand.
+/// How many corners are put on the GPU a frame, at most, beyond the first section's
+/// meshes: a section near is a few hundred thousand, far a few thousand.
 const UPLOAD_CORNERS: usize = 200_000;
 
 /// How many frames a build's laid sections are held back for the rest sent out with them at
@@ -757,12 +836,13 @@ fn upload(
     mut meshes: ResMut<Assets<Mesh>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    (mut arrays, assets, time, mut last_kept, builders): (
+    (mut arrays, assets, time, mut last_kept, builders, frame): (
         Option<ResMut<Arrays>>,
         Res<AssetServer>,
         Res<Time<Real>>,
         Local<u64>,
         Query<&crate::play::Builder>,
+        Res<bevy::diagnostic::FrameCount>,
     ),
 ) {
     let all = options.scripted() && !options.bench;
@@ -835,7 +915,47 @@ fn upload(
         back.get(&done.root)
             .is_some_and(|&(out, newest)| change_back(done.generation, out, newest))
     };
-    let mut corners = 0;
+    // What is to be shown is first put on the GPU, oldest first, within a budget of corners
+    // a frame but always something; a build's change is swapped in once all of it was put
+    // in an earlier frame, so Bevy has prepared it, and the frame it is shown on only swaps
+    // entities. A scripted run puts and shows at once.
+    let frame = frame.0;
+    let cpu: BTreeMap<Entity, bool> = each(&mut site, &mut builds)
+        .map(|build| (build.root, build.by_cubes))
+        .collect();
+    let mut budget = UPLOAD_CORNERS;
+    let mut unput: BTreeSet<Entity> = BTreeSet::new();
+    for done in jobs.ready.iter_mut() {
+        let streams = streaming
+            .get(&done.root)
+            .is_some_and(|&generation| done.generation == generation);
+        let showing = complete.contains(&done.root)
+            || all_back(done)
+            || partial.contains(&done.root)
+            || streams;
+        if !showing || done.put_at.is_some() {
+            continue;
+        }
+        let put = match &mut done.outcome {
+            Outcome::Drawn { parts, .. } => {
+                let mut spend = if all { usize::MAX } else { budget.max(1) };
+                let put = parts.put(
+                    &mut meshes,
+                    cpu.get(&done.root).copied().unwrap_or(false),
+                    &mut spend,
+                );
+                budget = if all { budget } else { spend.min(budget) };
+                put
+            }
+            Outcome::Same => true,
+        };
+        if put {
+            done.put_at = Some(if all { frame.wrapping_sub(1) } else { frame });
+        }
+        if !streams && done.put_at.is_none_or(|at| at == frame) {
+            unput.insert(done.root);
+        }
+    }
     let mut rest = std::collections::VecDeque::new();
     let mut shown: BTreeSet<Entity> = BTreeSet::new();
     let (mut whole_shown, mut torn): (BTreeSet<Entity>, BTreeSet<Entity>) = Default::default();
@@ -849,22 +969,13 @@ fn upload(
             rest.push_back(done);
             continue;
         }
-        let size = match &done.outcome {
-            Outcome::Drawn { parts, .. } => parts.corners(),
-            Outcome::Same => 0,
-        };
-        // A change begun this frame is finished this frame, however big; another build's
-        // waits for the next once this frame's corners are spent, as does the rest of a base
-        // streaming in.
-        if !all
-            && (streams || !shown.contains(&done.root))
-            && corners > 0
-            && corners + size > UPLOAD_CORNERS
-        {
+        // Shown once all of it was put on the GPU in an earlier frame, with the rest of its
+        // change; a base streaming in, a section as it is put.
+        let put = done.put_at.is_some_and(|at| at != frame);
+        if !put || (!streams && unput.contains(&done.root)) {
             rest.push_back(done);
             continue;
         }
-        corners += size;
         shown.insert(done.root);
         if whole {
             whole_shown.insert(done.root);
@@ -958,11 +1069,11 @@ impl Parts {
 
     /// How many corners its meshes have.
     fn corners(&self) -> usize {
-        self.sum(Mesh::count_vertices)
+        self.sum(Staged::corners)
     }
 
     /// Something of each of its meshes, summed.
-    fn sum(&self, count: impl Fn(&Mesh) -> usize) -> usize {
+    fn sum(&self, count: impl Fn(&Staged) -> usize) -> usize {
         self.parts
             .iter()
             .flatten()
@@ -980,7 +1091,7 @@ impl Parts {
     }
 
     /// Something of each of its meshes but its parts', summed.
-    fn rest(&self, count: &dyn Fn(&Mesh) -> usize) -> usize {
+    fn rest(&self, count: &dyn Fn(&Staged) -> usize) -> usize {
         self.next.iter().map(count).sum::<usize>()
             + [
                 &self.plain,
@@ -994,6 +1105,45 @@ impl Parts {
             .flatten()
             .map(count)
             .sum::<usize>()
+    }
+
+    /// Puts its meshes among the meshes, its arrays' kept on the CPU too if `cpu`, until
+    /// `budget` corners are spent; whether all of them are put.
+    fn put(&mut self, meshes: &mut Assets<Mesh>, cpu: bool, budget: &mut usize) -> bool {
+        let mut all = true;
+        let mut put = |staged: &mut Staged, cpu: bool| {
+            if matches!(staged, Staged::Made(_)) {
+                if *budget == 0 {
+                    all = false;
+                } else {
+                    *budget = budget.saturating_sub(staged.put(meshes, cpu));
+                }
+            }
+        };
+        for part in self.parts.iter_mut().flatten() {
+            for staged in part.arrays.iter_mut().flatten() {
+                put(staged, cpu);
+            }
+            for (_, _, staged) in part.near.iter_mut().chain(part.mid.iter_mut()) {
+                put(staged, false);
+            }
+        }
+        for staged in self.next.iter_mut().chain(
+            [
+                &mut self.plain,
+                &mut self.shell,
+                &mut self.far,
+                &mut self.proxy,
+            ]
+            .into_iter()
+            .flatten(),
+        ) {
+            put(staged, false);
+        }
+        for staged in self.ghosts.iter_mut().flatten() {
+            put(staged, false);
+        }
+        all
     }
 }
 
@@ -1091,7 +1241,7 @@ fn show(
         }
     }
     let at = IVec3::from_array(done.section);
-    let rest_bytes = parts.rest(&gpu_bytes);
+    let rest_bytes = parts.rest(&Staged::bytes);
     let mut drawn = Drawn {
         entity: None,
         ticket: done.ticket,
@@ -1159,9 +1309,9 @@ fn show(
         }
         range
     };
-    let mut add = |mesh: Mesh, material: Shade, range: VisibilityRange| {
+    let mut add = |mesh: Staged, material: Shade, range: VisibilityRange, cpu: bool| {
         let range = ranged(range);
-        let mesh = meshes.add(mesh);
+        let mesh = mesh.handle(meshes, cpu);
         let mut spawned = commands.spawn((Mesh3d(mesh.clone()), range, placed, ChildOf(entity)));
         match material {
             Shade::Standard(material) => spawned.insert(MeshMaterial3d(material)),
@@ -1199,19 +1349,16 @@ fn show(
             let keep = build.by_cubes;
             let [near_arrays, mid_arrays] = new.arrays;
             for (mesh, mid) in [(near_arrays, false), (mid_arrays, true)] {
-                let Some(mut mesh) = mesh else {
+                let Some(mesh) = mesh else {
                     continue;
                 };
-                if keep {
-                    mesh.asset_usage |= RenderAssetUsages::MAIN_WORLD;
-                }
-                shown.gpu_bytes += gpu_bytes(&mesh);
+                shown.gpu_bytes += mesh.bytes();
                 let visible = if mid {
                     range(mid_from, MID_M)
                 } else {
                     range(None, NEAR_M)
                 };
-                let (id, handle) = add(mesh, Shade::Arrays(arrays.clone()), visible);
+                let (id, handle) = add(mesh, Shade::Arrays(arrays.clone()), visible, keep);
                 shown.entities.push(id);
                 if mid {
                     casters.push((drawn.parts.len(), handle.clone()));
@@ -1222,20 +1369,22 @@ fn show(
             }
         }
         for (kind, which, mesh) in new.near {
-            shown.gpu_bytes += gpu_bytes(&mesh);
+            shown.gpu_bytes += mesh.bytes();
             let (id, _) = add(
                 mesh,
                 Shade::Standard(material(kind, which)),
                 range(None, NEAR_M),
+                false,
             );
             shown.entities.push(id);
         }
         for (kind, which, mesh) in new.mid {
-            shown.gpu_bytes += gpu_bytes(&mesh);
+            shown.gpu_bytes += mesh.bytes();
             let (id, mesh) = add(
                 mesh,
                 Shade::Standard(material(kind, which)),
                 range(mid_from, MID_M),
+                false,
             );
             shown.entities.push(id);
             casters.push((drawn.parts.len(), mesh));
@@ -1252,6 +1401,7 @@ fn show(
                 mesh,
                 Shade::Standard(looks.next.clone()),
                 range(None, next_to),
+                false,
             )
             .0,
         );
@@ -1262,6 +1412,7 @@ fn show(
                 mesh,
                 Shade::Standard(looks.structure.clone()),
                 range(None, FAR_M),
+                false,
             )
             .0,
         );
@@ -1272,18 +1423,27 @@ fn show(
                 mesh,
                 Shade::Standard(looks.far.clone()),
                 range(far_from, FAR_M),
+                false,
             )
             .0,
         );
     }
     if let Some(mesh) = parts.proxy {
-        rest.push(add(mesh, Shade::Standard(looks.far.clone()), proxy_range(FAR_M)).0);
+        rest.push(
+            add(
+                mesh,
+                Shade::Standard(looks.far.clone()),
+                proxy_range(FAR_M),
+                false,
+            )
+            .0,
+        );
     }
     if let Some(mesh) = parts.shell {
         rest.push(
             commands
                 .spawn((
-                    Mesh3d(meshes.add(mesh)),
+                    Mesh3d(mesh.handle(meshes, false)),
                     MeshMaterial3d(looks.shell.clone()),
                     ghost_range(),
                     NotShadowCaster,
@@ -1299,7 +1459,7 @@ fn show(
             rest.push(
                 commands
                     .spawn((
-                        Mesh3d(meshes.add(mesh)),
+                        Mesh3d(mesh.handle(meshes, false)),
                         MeshMaterial3d(looks.ghost[shade].clone()),
                         placed,
                         ghost_range(),

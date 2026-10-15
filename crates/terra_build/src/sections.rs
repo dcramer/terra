@@ -1383,6 +1383,110 @@ pub fn draw_parts(
     keep: Option<&mut Drawing>,
     only: Option<&[bool]>,
 ) -> Drawn {
+    // Several parts drawn again are drawn side by side, a thread each, as a terrain mesher
+    // meshes its chunks: a storey's step draws every part of its section again after an
+    // edit, each part works only on the cubes round it, and what they draw is the same as
+    // drawn together.
+    let mut keep = keep;
+    let drawn = if let Some(only) = only
+        && matches!(reach, Reach::Near | Reach::Mid)
+        && last.is_some()
+        && only.iter().filter(|&&wanted| wanted).count() > 1
+    {
+        draw_side_by_side(section, laid, reach, last, keep.as_deref_mut(), only)
+    } else {
+        draw_together(section, laid, reach, last, keep.as_deref_mut(), only)
+    };
+    // The faces of the parts not drawn again carried on as they were, for the next edit.
+    if let (Some(keep), Some(last), Some(only)) = (keep, last, only) {
+        keep.faces.carry_on(&last.faces, &|cube| {
+            crate::cubes::section_of(cube) == section.at
+                && !only.get(cluster_of(cube)).copied().unwrap_or(true)
+        });
+    }
+    drawn
+}
+
+/// [`draw_parts`]'s parts each drawn alone on a thread of its own, and put together: each
+/// part's surfaces from the thread that drew it, and the section's own (the plan's ghosts
+/// and shell, the next piece, what is drawn plain) from the first, as every thread draws
+/// them the same; how each was drawn kept together, a part's own from its thread.
+fn draw_side_by_side(
+    section: &Section,
+    laid: &Laid,
+    reach: Reach,
+    last: Option<&Drawing>,
+    keep: Option<&mut Drawing>,
+    only: &[bool],
+) -> Drawn {
+    let kept = keep.is_some();
+    let chosen: Vec<usize> = (0..only.len()).filter(|&c| only[c]).collect();
+    let mut each: Vec<(usize, Drawn, Option<Drawing>)> = std::thread::scope(|scope| {
+        let threads: Vec<_> = chosen
+            .iter()
+            .map(|&c| {
+                scope.spawn(move || {
+                    let mut alone = vec![false; only.len()];
+                    alone[c] = true;
+                    let mut drawing = kept.then(Drawing::default);
+                    let drawn =
+                        draw_together(section, laid, reach, last, drawing.as_mut(), Some(&alone));
+                    (c, drawn, drawing)
+                })
+            })
+            .collect();
+        threads
+            .into_iter()
+            .map(|thread| thread.join().expect("a part is drawn"))
+            .collect()
+    });
+    let (_, mut drawn, first) = each.remove(0);
+    let mut drawings: Vec<(usize, Drawing)> = Vec::new();
+    if let Some(first) = first {
+        drawings.push((chosen[0], first));
+    }
+    for (c, mut part, drawing) in each {
+        for (to, from) in [
+            (&mut drawn.near_by, &mut part.near_by),
+            (&mut drawn.mid_by, &mut part.mid_by),
+        ] {
+            if let Some(surfaces) = from.get_mut(c) {
+                if to.len() <= c {
+                    to.resize_with(c + 1, BTreeMap::new);
+                }
+                to[c] = std::mem::take(surfaces);
+            }
+        }
+        if let Some(drawing) = drawing {
+            drawings.push((c, drawing));
+        }
+    }
+    if let Some(keep) = keep {
+        for (c, drawing) in drawings {
+            keep.ground = drawing.ground;
+            keep.roofs = drawing.roofs;
+            keep.faces.take_from(drawing.faces);
+            // Each part's pieces from the thread that drew it; the rest, kept on as they
+            // were, from any.
+            for (key, part) in drawing.pieces {
+                if key.2 == c || !keep.pieces.contains_key(&key) {
+                    keep.pieces.insert(key, part);
+                }
+            }
+        }
+    }
+    drawn
+}
+
+/// [`draw_parts`] on this thread.
+fn draw_together(
+    section: &Section,
+    laid: &Laid,
+    reach: Reach,
+    last: Option<&Drawing>,
+    keep: Option<&mut Drawing>,
+    only: Option<&[bool]>,
+) -> Drawn {
     // Only the details that can be seen while it is drawn for this reach: what it fades
     // into further off is made when the camera has gone far enough for it to be laid
     // again coarser, before that detail is seen. Past the far detail the game draws a

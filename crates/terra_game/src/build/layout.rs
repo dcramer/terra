@@ -84,6 +84,8 @@ pub(super) struct Done {
     /// The change it was laid for (`Sections::generation`).
     pub generation: u64,
     pub outcome: Outcome,
+    /// The frame its meshes were all put on the GPU, ahead of its being shown (`draw`).
+    pub put_at: Option<u32>,
 }
 
 /// A base laid again on a worker: how, how long it took, and the sections waiting that
@@ -111,6 +113,9 @@ pub(super) enum Outcome {
         again: Option<[f32; 4]>,
     },
 }
+
+/// A section of the base being built slower than this on its worker says why in the log.
+const SLOW_SECTION_MS: f32 = 30.0;
 
 const NEAR_LAY_M: f32 = 32.0;
 const NEAR_KEEP_M: f32 = 36.0;
@@ -353,6 +358,7 @@ fn launch(
                     ticket,
                     generation: sections.generation,
                     outcome: Outcome::Same,
+                    put_at: None,
                 });
             }
         }
@@ -529,6 +535,19 @@ fn launch(
                         !keeps,
                     );
                     let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+                    // A slow section says why: how much of it was drawn again, and from what.
+                    if keeps && took_ms > SLOW_SECTION_MS {
+                        info!(
+                            "Build: section {at:?} drawn {wanted:?} in {took_ms:.1} ms on its worker: {} of {} parts again, {} before, {}; cut {cut_ms:.1}, keyed {:.1}, drawn {:.1}, meshes {:.1}.",
+                            only.iter().filter(|&&o| o).count(),
+                            only.len(),
+                            if last.is_some() { "drawn" } else { "not drawn" },
+                            if same_reach { "as finely" } else { "at another detail" },
+                            keyed_ms - cut_ms,
+                            drawn_ms - keyed_ms,
+                            took_ms - drawn_ms,
+                        );
+                    }
                     Outcome::Drawn {
                         key,
                         reach: wanted,
@@ -596,6 +615,7 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
                     ticket: job.ticket,
                     generation: job.generation,
                     outcome,
+                    put_at: None,
                 });
             }
             None => jobs.running.push(job),

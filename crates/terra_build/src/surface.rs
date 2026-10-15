@@ -341,6 +341,25 @@ impl FaceCache {
     pub fn taken(&self) -> usize {
         self.taken
     }
+
+    /// Another's faces added, as a section's parts drawn apart are put together: a face
+    /// both hold was worked out from the same cubes, so either will do.
+    pub fn take_from(&mut self, other: FaceCache) {
+        self.taken += other.taken;
+        for (key, face) in other.faces {
+            self.faces.entry(key).or_insert(face);
+        }
+    }
+
+    /// The faces of the cubes `whose` says carried on from another, as they were, where
+    /// this holds none of theirs: those of a section's parts not drawn again.
+    pub fn carry_on(&mut self, from: &FaceCache, whose: &dyn Fn(IVec3) -> bool) {
+        for (key, face) in &from.faces {
+            if whose(key.1) {
+                self.faces.entry(*key).or_insert_with(|| face.clone());
+            }
+        }
+    }
 }
 
 /// A surface's faces as drawn last time, to take from, and this time, to keep: under a
@@ -1827,10 +1846,12 @@ pub fn draw_slots(
             }
         }
     }
+    // Only faces kept are kept for next time: a face worked out only for its neighbours'
+    // sake, beyond what is drawn, has its rims shaded without what lies past it.
     if let Some(caching) = caching.as_mut() {
         for face in faces
             .into_iter()
-            .filter(|face| face.data.signature.is_some())
+            .filter(|face| face.keeping && face.data.signature.is_some())
         {
             caching.new.taken += usize::from(!face.fresh);
             caching

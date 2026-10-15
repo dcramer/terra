@@ -96,9 +96,19 @@ impl Base {
     /// The places a cube is joined through, whatever is in them: its six faces, and a cube
     /// a layer up or down and over whose top runs on from its own along a ramp ([`ramp`]).
     pub fn joins(&self, at: IVec3) -> Vec<IVec3> {
-        let mut out: Vec<IVec3> = FACES.iter().map(|&step| at + step).collect();
+        let mut out = Vec::with_capacity(FACES.len());
+        self.each_join(at, &mut |next| out.push(next));
+        out
+    }
+
+    /// Each place a cube is joined through ([`Base::joins`]), handed to `each` in turn, so a
+    /// flood over thousands of cubes makes no list for each.
+    pub fn each_join(&self, at: IVec3, each: &mut dyn FnMut(IVec3)) {
+        for &step in &FACES {
+            each(at + step);
+        }
         let Some(here) = self.cube(at) else {
-            return out;
+            return;
         };
         for way in LEVEL_WAYS {
             let over = IVec3::new(way[0], 0, way[1]);
@@ -112,11 +122,10 @@ impl Base {
                 let (lower, upper) = (lower.unwrap_or(there.shape), upper.unwrap_or(there.shape));
                 // Either way round, the upper is `way` over from the lower.
                 if ramp(lower, upper, way) {
-                    out.push(other);
+                    each(other);
                 }
             }
         }
-        out
     }
 
     /// Every cube with something in it that is not joined to the ground, sorted: none,
@@ -174,36 +183,43 @@ impl Base {
         ground: &crate::Ground,
     ) -> Vec<IVec3> {
         use std::cmp::Reverse;
+        // Hashed, not ordered: a tower's fall floods thousands of cubes (D305).
+        type Set =
+            std::collections::HashSet<IVec3, std::hash::BuildHasherDefault<crate::mesh::Corners>>;
         let stays = |at: IVec3| !gone.contains(&at.to_array()) && self.is_in(at);
-        let mut joined: BTreeSet<[i32; 3]> = BTreeSet::new();
-        let mut lost: BTreeSet<[i32; 3]> = BTreeSet::new();
+        let mut joined = Set::default();
+        let mut lost = Set::default();
+        let mut seen = Set::default();
         for start in starts {
-            let key = start.to_array();
-            if !stays(start) || joined.contains(&key) || lost.contains(&key) {
+            if !stays(start) || joined.contains(&start) || lost.contains(&start) {
                 continue;
             }
-            let mut seen = BTreeSet::from([key]);
-            let mut frontier = std::collections::BinaryHeap::from([(Reverse(start.y), key)]);
+            seen.clear();
+            seen.insert(start);
+            let mut frontier =
+                std::collections::BinaryHeap::from([(Reverse(start.y), start.to_array())]);
             let mut found = false;
             while let Some((_, here)) = frontier.pop() {
                 let here = IVec3::from_array(here);
-                if ground.reaches(here) || joined.contains(&here.to_array()) {
+                if ground.reaches(here) || joined.contains(&here) {
                     found = true;
                     break;
                 }
-                for next in self.joins(here) {
-                    if stays(next) && seen.insert(next.to_array()) {
+                self.each_join(here, &mut |next| {
+                    if stays(next) && seen.insert(next) {
                         frontier.push((Reverse(next.y), next.to_array()));
                     }
-                }
+                });
             }
             if found {
-                joined.extend(seen);
+                joined.extend(seen.drain());
             } else {
-                lost.extend(seen);
+                lost.extend(seen.drain());
             }
         }
-        lost.into_iter().map(IVec3::from_array).collect()
+        let mut lost: Vec<IVec3> = lost.into_iter().collect();
+        lost.sort_by_key(|at| at.to_array());
+        lost
     }
 
     /// The cubes a prop's hole is made of, if it fits one: built cubes across its top,
