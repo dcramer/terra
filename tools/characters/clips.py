@@ -7,10 +7,13 @@ LIST defaults to art/animation/clips.txt, one clip name a line; OUT to the game'
 assets/models/character/mannequin.glb. The libraries (Universal Animation Library 1 and 2,
 version 3.0 and 2.2, both on one skeleton with Unreal's bone names) are read from
 art/animation/library/, where each developer keeps the copies bought from Quaternius
-(art/README.md); they are not committed. A clip in both is taken from the first library.
+(art/README.md); they are not committed. A clip in both is taken from the first library. A
+clip listed that no library has must be one we made (art/animation/made.json), which
+made_clips.py adds after this.
 """
 
 import glob
+import json
 import os
 import sys
 
@@ -27,6 +30,9 @@ listed = look.path(args[0]) if args else os.path.join(look.ART, "animation", "cl
 out = look.path(args[1]) if len(args) > 1 else look.FIGURE
 with open(listed) as f:
     wanted = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+# A clip we made that the libraries do not have (made.json) is added by made_clips.py after.
+with open(os.path.join(look.ART, "animation", "made.json")) as f:
+    made = json.load(f)
 
 look.reset()
 libraries = sorted(glob.glob(os.path.join(LIBRARY, "*.glb")))
@@ -49,9 +55,10 @@ for path in libraries:
         new = [o for o in new if o not in (arm, body)]
     for o in new:
         bpy.data.objects.remove(o)
-missing = [w for w in wanted if w not in found]
+missing = [w for w in wanted if w not in found and w not in made]
 if missing:
     raise SystemExit(f"not in the libraries: {', '.join(missing)}")
+wanted = [w for w in wanted if w in found]
 
 # Only the clips listed go into the file: the exporter writes every action it can bind.
 for a in list(bpy.data.actions):

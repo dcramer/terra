@@ -27,5 +27,44 @@
     "seed": 1,
     "still": true,
     "take": 0
+  },
+  "Talk_Loop": {
+    "prompt": "A person stands upright and relaxed, talking with someone in front of them, shifting their weight from one foot to the other, gesturing with one hand and then the other at waist height, and nodding as they speak.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 1,
+    "still": true,
+    "take": 1
+  },
+  "Hammer_Loop": {
+    "prompt": "A person repeatedly hammers something on a table in front of them with a hammer in their right hand.",
+    "speed": 0,
+    "seconds": 10,
+    "seed": 2,
+    "still": true,
+    "loop": [
+      2.5,
+      6
+    ],
+    "busy": true
+  },
+  "Lean_Loop": {
+    "prompt": "A person leans back against a wall with their arms crossed over their chest.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 2,
+    "still": true
+  },
+  "Chop_Loop": {
+    "prompt": "A person repeatedly chops wood with an axe held in both hands, swinging it from overhead down to the ground in front of them.",
+    "speed": 0,
+    "seconds": 10,
+    "seed": 1,
+    "still": true,
+    "loop": [
+      2.5,
+      6
+    ],
+    "busy": true
   }
 }

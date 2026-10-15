@@ -9,7 +9,9 @@
 //   node tools/characters/motion.ts Sprint_Loop --keep 2     # keep take 2
 //
 // An entry: prompt, speed (m/s, held along a straight path; 0 to stand), seconds, seed, take
-// (the one kept), and still, for a clip that stays where it stands, such as an idle. Kimodo is set up apart from the repository (README.md, "Made clips"), at
+// (the one kept), and still, for a clip that stays where it stands, such as an idle, with loop
+// (seconds, least and most) for how long a loop of it may be, and busy for one that works where
+// it stands (a hammer, an axe), looped in its busiest stretch. Kimodo is set up apart from the repository (README.md, "Made clips"), at
 // KIMODO_HOME, ~/.cache/terra-kimodo by default. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
@@ -29,7 +31,7 @@ const KIMODO = process.env.KIMODO_HOME ?? join(homedir(), ".cache", "terra-kimod
 const MODEL = "Kimodo-SOMA-RP-v1.1";
 const FPS = 30;
 
-type Entry = { prompt: string; speed: number; seconds: number; seed: number; take?: number; still?: boolean };
+type Entry = { prompt: string; speed: number; seconds: number; seed: number; take?: number; still?: boolean; loop?: [number, number]; busy?: boolean };
 
 /** A straight path along Kimodo's forward (+z) at `speed`, a point a frame: what holds a take
  * to the clip's speed. */

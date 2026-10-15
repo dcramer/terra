@@ -9,7 +9,9 @@ standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
 
   - the stride: from one left heel strike to the next, in the take's steady middle, whose first
     and last poses are nearest alike, so it loops with the smallest seam; or for a clip marked
-    "still", which stays where it stands (an idle), the two frames 2 to 5 seconds apart that are;
+    "still", which stays where it stands (an idle), the two frames 2 to 5 seconds apart that are,
+    or as far apart as its "loop" says (seconds, least and most), for a longer action, and for
+    one marked "busy", which works where it stands (a hammer, an axe), in its busiest stretch;
   - carried onto our skeleton as shipped retargeters do: each bone given the source bone's
     world rotation relative to its T-pose, on our bone's T-pose; the hips' travel scaled by leg
     length and taken off along the ground, so it runs in place as every game clip does;
@@ -56,45 +58,61 @@ for _side, _s in (("Left", "l"), ("Right", "r")):
 NO_ROLL = ("upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
 
 STEADY_S = 1.0      # the take's first second is its start, not its stride
-PLANTED_MPS = 0.6   # a foot slower than this over the ground, near its lowest, is planted
+PLANTED_MPS = 0.75  # a foot slower than this over the ground, near its lowest, is planted (a sprint's
+                    # planted foot still slides a little in the take)
 LOW_M = 0.05
 EASE = 4            # frames eased into the loop's seam
 
 
 def load_take(path):
+    """The take on its own skeleton, a key a frame, and its frame rate (Kimodo's 30), which is
+    not the scene's: its frames are counted by its own rate and keyed at the scene's."""
     before = set(bpy.data.objects)
     bpy.ops.import_anim.bvh(filepath=path, global_scale=0.01, rotate_mode="NATIVE", axis_forward="-Z", axis_up="Y", use_fps_scale=False)
-    return next(o for o in bpy.data.objects if o not in before)
+    with open(path) as f:
+        frame_time = next(float(line.split(":")[1]) for line in f if line.startswith("Frame Time:"))
+    return next(o for o in bpy.data.objects if o not in before), 1.0 / frame_time
 
 
-def still(src):
-    """For a clip that stays where it stands (an idle): the frames 2 to 5 seconds apart, after
-    the take's first second, whose poses best match, so it loops with the smallest seam."""
+def still(src, fps, loop=(2.0, 5.0), busy=False):
+    """For a clip that stays where it stands (an idle): the frames `loop` seconds apart (2 to 5
+    unless its entry says), after the take's first second, whose poses best match, so it loops
+    with the smallest seam. For one that works where it stands (`busy`: a hammer, an axe), only
+    among stretches that move at least half as much as the busiest: a take that stops working
+    and stands is stillest, so has the best seam, where it does nothing."""
     scene = bpy.context.scene
     action = src.animation_data.action
     start, end = (int(round(x)) for x in action.frame_range)
-    fps = scene.render.fps / scene.render.fps_base
     poses = []
     for f in range(start, end + 1):
         scene.frame_set(f)
         poses.append({s: src.pose.bones[s].matrix_basis.to_quaternion() for s in MAP})
+
+    def apart(p, q):
+        return sum(math.degrees(p[s].rotation_difference(q[s]).angle) for s in MAP) / len(MAP)
+
+    moved = [0.0]   # how far the pose has turned by each frame, summed
+    for k in range(1, len(poses)):
+        moved.append(moved[-1] + apart(poses[k - 1], poses[k]))
+    windows = [(a, b) for a in range(int(STEADY_S * fps), len(poses)) for b in range(a + int(loop[0] * fps), min(len(poses), a + int(loop[1] * fps) + 1))]
+    if busy and windows:
+        busiest = max((moved[b] - moved[a]) / (b - a) for a, b in windows)
+        windows = [(a, b) for a, b in windows if (moved[b] - moved[a]) / (b - a) >= busiest / 2]
     best = None
-    for a in range(int(STEADY_S * fps), len(poses)):
-        for b in range(a + int(2 * fps), min(len(poses), a + int(5 * fps) + 1)):
-            seam = sum(math.degrees(poses[a][s].rotation_difference(poses[b][s]).angle) for s in MAP) / len(MAP)
-            if best is None or seam < best[2]:
-                best = (start + a, start + b, seam)
+    for a, b in windows:
+        seam = apart(poses[a], poses[b])
+        if best is None or seam < best[2]:
+            best = (start + a, start + b, seam)
     if best is None:
-        raise SystemExit(f"{src.name} is too short to loop: it needs {STEADY_S + 2:.0f} seconds")
+        raise SystemExit(f"{src.name} is too short to loop: it needs {STEADY_S + loop[0]:.0f} seconds")
     return best
 
 
-def stride(src):
+def stride(src, fps):
     """The take's frames from one left heel strike to the next whose poses best match."""
     scene = bpy.context.scene
     action = src.animation_data.action
     start, end = (int(round(x)) for x in action.frame_range)
-    fps = scene.render.fps / scene.render.fps_base
     foot, poses = [], []
     for f in range(start, end + 1):
         scene.frame_set(f)
@@ -128,8 +146,9 @@ def without_roll(q):
     return q @ twist.inverted()
 
 
-def retarget(src, arm, name, f0, f1):
-    """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped."""
+def retarget(src, arm, name, f0, f1, k=1.0):
+    """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
+    frame of the take `k` frames of the action."""
     scene = bpy.context.scene
     src_rest = {s: world_rest(src, s) for s in MAP}
     dst_rest = {d: world_rest(arm, d) for d in MAP.values()}
@@ -169,15 +188,15 @@ def retarget(src, arm, name, f0, f1):
                 pb.rotation_mode = "QUATERNION"
                 pb.rotation_quaternion = without_roll(pb.rotation_quaternion)
             bpy.context.view_layer.update()
-            pb.keyframe_insert("rotation_quaternion", frame=f - f0)
+            pb.keyframe_insert("rotation_quaternion", frame=(f - f0) * k)
             if d == "pelvis":
-                pb.keyframe_insert("location", frame=f - f0)
+                pb.keyframe_insert("location", frame=(f - f0) * k)
     last = f1 - f0
     for fc in curves(action):
-        gap = fc.evaluate(0) - fc.evaluate(last)
-        for k in range(1, EASE + 1):
-            w = k / EASE
-            f = last - EASE + k
+        gap = fc.evaluate(0) - fc.evaluate(last * k)
+        for e in range(1, EASE + 1):
+            w = e / EASE
+            f = (last - EASE + e) * k
             fc.keyframe_points.insert(f, fc.evaluate(f) + gap * w * w * (3 - 2 * w), options={"REPLACE"})
     return action
 
@@ -207,19 +226,27 @@ def main():
     for name, path in takes.items():
         for pb in arm.pose.bones:
             pb.matrix_basis.identity()
-        src = load_take(path)
-        f0, f1, seam = still(src) if made.get(name, {}).get("still") else stride(src)
+        src, fps = load_take(path)
+        entry = made.get(name, {})
+        f0, f1, seam = still(src, fps, tuple(entry.get("loop", (2.0, 5.0))), entry.get("busy", False)) if entry.get("still") else stride(src, fps)
         old = bpy.data.actions.get(name)
         if old is not None:
             old.name = name + ".old"
-        action = retarget(src, arm, name, f0, f1)
+        # A clip that stays where it stands plays at the take's own pace: its frames, Kimodo's 30
+        # a second, keyed at the scene's, rounded so the loop is a whole number of frames, which
+        # the exporter samples. A stride keeps a key a frame, as made: the game plays it at the
+        # pace its feet set (pace.py), and fewer keys a stride would blur its contacts.
+        k = 1.0
+        if entry.get("still"):
+            k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
+        action = retarget(src, arm, name, f0, f1, k)
         bpy.data.objects.remove(src)
         ad.action = None
         if old is not None:
             bpy.data.actions.remove(old)
         if name not in names:
             names.append(name)
-        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, seam {seam:.2f} deg")
+        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, {(f1 - f0) / fps:.2f} s, seam {seam:.2f} deg")
     # Every clip a track of its own again, each strip where its action starts, as clips.py
     # lays them: the importer's own tracks start a frame late, which the export would keep.
     for t in list(ad.nla_tracks):

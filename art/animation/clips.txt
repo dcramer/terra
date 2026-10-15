@@ -27,3 +27,4 @@ Punch_Jab
 Punch_Cross
 Sword_Idle
 Sword_Attack
+Talk_Loop
