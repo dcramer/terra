@@ -5,103 +5,102 @@
 all	brick	Coplanar	10
 all	brick	PokesOut	11
 all	brick with earth	Coplanar	56
-all	brick with earth	PokesOut	62
-all	brick with hewn	Coplanar	55
+all	brick with earth	PokesOut	40
+all	brick with hewn	Coplanar	20
 all	brick with hewn	PokesOut	28
 all	brick with hewn	UnderRoof	355
 all	brick with limewash	Coplanar	59
-all	brick with limewash	PokesOut	46
+all	brick with limewash	PokesOut	28
 all	brick with logs	Coplanar	58
 all	brick with logs	PokesOut	10
 all	brick with logs	SeeThrough	4
 all	brick with logs	UnderRoof	105
 all	brick with stone	Coplanar	10
-all	brick with stone	PokesOut	19
+all	brick with stone	PokesOut	10
 all	brick with wattle	Coplanar	58
-all	brick with wattle	PokesOut	33
-all	earth	Coplanar	51
-all	earth	PokesOut	73
-all	earth with hewn	Coplanar	58
+all	brick with wattle	PokesOut	28
+all	earth	Coplanar	50
+all	earth	PokesOut	48
+all	earth with hewn	Coplanar	23
 all	earth with hewn	Inward	3
-all	earth with hewn	PokesOut	61
+all	earth with hewn	PokesOut	39
 all	earth with hewn	UnderRoof	369
 all	earth with limewash	Coplanar	62
 all	earth with limewash	Inward	3
-all	earth with limewash	PokesOut	79
+all	earth with limewash	PokesOut	39
 all	earth with logs	Coplanar	64
 all	earth with logs	Inward	3
-all	earth with logs	PokesOut	43
+all	earth with logs	PokesOut	21
 all	earth with logs	SeeThrough	4
 all	earth with logs	UnderRoof	119
 all	earth with stone	Coplanar	25
 all	earth with stone	Inward	3
-all	earth with stone	PokesOut	52
+all	earth with stone	PokesOut	26
 all	earth with wattle	Coplanar	67
 all	earth with wattle	Inward	3
-all	earth with wattle	PokesOut	66
-all	hewn	Coplanar	49
+all	earth with wattle	PokesOut	39
+all	hewn	Coplanar	14
 all	hewn	PokesOut	36
 all	hewn	UnderRoof	610
-all	hewn with limewash	Coplanar	73
-all	hewn with limewash	PokesOut	54
+all	hewn with limewash	Coplanar	47
+all	hewn with limewash	PokesOut	36
 all	hewn with limewash	UnderRoof	227
-all	hewn with logs	Coplanar	79
+all	hewn with logs	Coplanar	58
 all	hewn with logs	PokesOut	18
 all	hewn with logs	SeeThrough	4
 all	hewn with logs	UnderRoof	190
-all	hewn with stone	Coplanar	46
-all	hewn with stone	PokesOut	27
+all	hewn with stone	Coplanar	19
+all	hewn with stone	PokesOut	18
 all	hewn with stone	UnderRoof	48
-all	hewn with wattle	Coplanar	76
-all	hewn with wattle	PokesOut	41
+all	hewn with wattle	Coplanar	58
+all	hewn with wattle	PokesOut	36
 all	hewn with wattle	UnderRoof	227
 all	limewash	Coplanar	50
-all	limewash	PokesOut	40
+all	limewash	PokesOut	36
 all	limewash with logs	Coplanar	58
 all	limewash with logs	PokesOut	18
 all	limewash with logs	SeeThrough	4
 all	limewash with logs	UnderRoof	119
 all	limewash with stone	Coplanar	22
-all	limewash with stone	PokesOut	27
+all	limewash with stone	PokesOut	18
 all	limewash with wattle	Coplanar	64
-all	limewash with wattle	PokesOut	41
+all	limewash with wattle	PokesOut	36
 all	logs	Coplanar	60
-all	logs	PokesOut	14
+all	logs	PokesOut	10
 all	logs	UnderRoof	132
 all	logs with stone	Coplanar	21
-all	logs with stone	PokesOut	23
+all	logs with stone	PokesOut	10
 all	logs with wattle	Coplanar	64
-all	logs with wattle	PokesOut	37
+all	logs with wattle	PokesOut	28
 all	logs with wattle	UnderRoof	179
 all	stone	Coplanar	10
-all	stone	PokesOut	12
+all	stone	PokesOut	10
 all	stone with wattle	Coplanar	64
-all	stone with wattle	PokesOut	33
+all	stone with wattle	PokesOut	28
 all	wattle	Coplanar	58
-all	wattle	PokesOut	41
+all	wattle	PokesOut	36
 quick	brick with earth	Coplanar	5
-quick	brick with earth	PokesOut	2
-quick	brick with hewn	Coplanar	5
+quick	brick with earth	PokesOut	1
+quick	brick with hewn	Coplanar	2
 quick	brick with hewn	UnderRoof	12
 quick	brick with limewash	Coplanar	5
 quick	brick with logs	Coplanar	2
 quick	brick with logs	UnderRoof	12
 quick	brick with wattle	Coplanar	3
 quick	earth	Coplanar	3
-quick	earth	PokesOut	7
-quick	earth with hewn	Coplanar	4
-quick	earth with hewn	PokesOut	7
+quick	earth	PokesOut	5
+quick	earth with hewn	Coplanar	1
+quick	earth with hewn	PokesOut	5
 quick	earth with hewn	UnderRoof	12
 quick	earth with limewash	Coplanar	4
-quick	earth with limewash	PokesOut	7
+quick	earth with limewash	PokesOut	5
 quick	earth with logs	Coplanar	1
-quick	earth with logs	PokesOut	7
+quick	earth with logs	PokesOut	5
 quick	earth with logs	UnderRoof	12
 quick	earth with stone	Coplanar	3
-quick	earth with stone	PokesOut	7
+quick	earth with stone	PokesOut	5
 quick	earth with wattle	Coplanar	4
-quick	earth with wattle	PokesOut	7
-quick	hewn	Coplanar	3
+quick	earth with wattle	PokesOut	5
 quick	hewn	PokesOut	4
 quick	hewn	UnderRoof	32
 quick	hewn with limewash	Coplanar	1
