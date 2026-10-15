@@ -280,6 +280,8 @@ pub struct Measured {
     /// How many cells (stones, slates) the low places of its height part one copy of it
     /// into.
     pub cells: Option<usize>,
+    /// Its colour's mean brightness, 0 to 1 as stored (sRGB).
+    pub brightness: f32,
 }
 
 /// The share of a height map that is its joints, as damage parts it (`cells`, D305).
@@ -295,6 +297,7 @@ pub fn measure(colour: &Picture, arm: Option<&Picture>, height: Option<&Picture>
     let Some(luma) = Grey::of(colour, Channel::Luma) else {
         return out;
     };
+    out.brightness = luma.mean();
     let mut seams = luma.seams();
     let occlusion = arm.and_then(|arm| Grey::of(arm, Channel::Red));
     if let Some(arm) = arm {
@@ -391,6 +394,12 @@ pub mod limits {
     pub const ROUGHNESS: f32 = 0.25;
     pub const METAL: f32 = 0.1;
     pub const REFLECTANCE: [f32; 2] = [0.05, 0.6];
+    /// A detail texture's mean brightness as stored, grey about the middle so it brightens
+    /// and darkens without tinting (made 0.5 by `tools/textures detail`); its size, how many
+    /// metres a copy covers, a few times a metre; and its strength (D362).
+    pub const DETAIL_GREY: [f32; 2] = [0.42, 0.58];
+    pub const DETAIL_METRES: [f32; 2] = [0.1, 1.0];
+    pub const DETAIL_STRENGTH: [f32; 2] = [0.0, 1.5];
 }
 
 use limits::*;
@@ -454,7 +463,44 @@ pub fn check(
             maps(kit, material, texture, &m, &mut out);
         }
     }
+    details(kit, measured, &mut out);
     out
+}
+
+/// A material's detail textures (D362): each over a texture it has, grey about the middle,
+/// a few times a metre and not overdone.
+fn details(kit: &Kit, measured: &dyn Fn(&str) -> Option<Measured>, out: &mut Vec<String>) {
+    let within =
+        |value: f32, [low, high]: [f32; 2]| value.is_finite() && value >= low && value <= high;
+    for (material, detail) in &kit.details {
+        let mut fail =
+            |what: String| out.push(format!("{material:?}'s detail ({}): {what}", detail.path));
+        if !kit.textures.contains_key(material) {
+            fail(
+                "it has no texture to lay it over: take the detail out, or give the texture".into(),
+            );
+        }
+        if !within(detail.metres, DETAIL_METRES) {
+            fail(format!(
+                "a copy {} m across, where detail is laid {} to {} m: larger and it is no finer than the texture under it, smaller and it is noise. Set its metres",
+                detail.metres, DETAIL_METRES[0], DETAIL_METRES[1]
+            ));
+        }
+        if !within(detail.strength, DETAIL_STRENGTH) {
+            fail(format!(
+                "strength {}, past the {} to {} it reads well at: it would swamp the texture under it. Set its strength",
+                detail.strength, DETAIL_STRENGTH[0], DETAIL_STRENGTH[1]
+            ));
+        }
+        if let Some(m) = measured(&detail.path)
+            && !within(m.brightness, DETAIL_GREY)
+        {
+            fail(format!(
+                "its colour is {:.2} on average, not grey about the middle ({} to {}): it would tint every material it is laid on. Make it with `node tools/textures/textures.ts detail`",
+                m.brightness, DETAIL_GREY[0], DETAIL_GREY[1]
+            ));
+        }
+    }
 }
 
 /// The fields a pattern's materials never read, and why: baggage that would make a material's
@@ -1059,6 +1105,44 @@ mod tests {
         thatch.roof.relief = 0.5;
         let said = check(&thatch, &given, &|_| None).join("\n");
         assert!(said.contains("its courses stand out 50 cm"), "{said}");
+    }
+
+    #[test]
+    fn a_detail_that_tints_is_overdone_or_has_nothing_under_it_is_refused() {
+        // Stone's own: grey, laid over its walls, passes.
+        let (mut stone, given) = kit("stone");
+        let grey = |path: &str| {
+            path.contains("detail").then(|| Measured {
+                brightness: if path.contains("tinted") { 0.8 } else { 0.5 },
+                ..good()
+            })
+        };
+        let detail = stone
+            .details
+            .get(&Material::Masonry)
+            .cloned()
+            .expect("stone's walls have detail");
+        assert!(
+            !check(&stone, &given, &grey)
+                .iter()
+                .any(|s| s.contains("detail"))
+        );
+        stone.details.insert(
+            Material::Masonry,
+            crate::kit::Detail {
+                path: "materials/detail_tinted".into(),
+                strength: 3.0,
+                ..detail.clone()
+            },
+        );
+        stone.details.insert(Material::Covering, detail);
+        let said = check(&stone, &given, &grey).join("\n");
+        assert!(said.contains("not grey about the middle"), "{said}");
+        assert!(said.contains("strength 3, past"), "{said}");
+        assert!(
+            said.contains("Covering's detail (materials/detail_stone): it has no texture"),
+            "{said}"
+        );
     }
 
     #[test]

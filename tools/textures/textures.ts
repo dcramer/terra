@@ -11,6 +11,7 @@
 //                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
 //                                         [--exposed] [--soft f] [--wood-roughness r]
 //   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f] [--checks n]
+//   node tools/textures/textures.ts detail <name> <material> [--size px]
 //
 // Each writes assets/materials/<name>/, and adds or updates its line in that folder's
 // README.md, which says where every material came from.
@@ -1043,6 +1044,81 @@ function area(points: [number, number][]): number {
   return Math.abs(sum) / 2;
 }
 
+/** The share of a detail texture's side its high pass keeps: what is finer than about this
+ * is its grain, what is broader is the surface's own (D362). */
+export const DETAIL_PASS = 0.008;
+/** How far a detail texture's colour wanders from mid grey, and its normal's slopes from
+ * flat, on average (a standard deviation, 0 to 1): its pattern's `strength` scales both. */
+export const DETAIL_COLOUR = 0.07;
+export const DETAIL_SLOPE = 0.16;
+
+/** A picture's channels with their broad swells taken out, as a high pass does: each texel
+ * less the blur round it, the blur wrapping as the texture tiles. */
+function highPass(image: string, size: number, channels: 1 | 3): Float32Array {
+  const sigma = Math.max(1, size * DETAIL_PASS);
+  const raw = (blur: boolean) => {
+    const args = [image, "-resize", `${size}x${size}!`];
+    if (blur) args.push("-virtual-pixel", "tile", "-blur", `0x${sigma}`);
+    if (channels === 1) args.push("-colorspace", "gray");
+    return execFileSync("convert", [...args, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-"], { maxBuffer: 1 << 28 });
+  };
+  const [sharp, soft] = [raw(false), raw(true)];
+  const out = new Float32Array(sharp.length);
+  for (let i = 0; i < sharp.length; i++) out[i] = (sharp[i] - soft[i]) / 255;
+  return out;
+}
+
+/** How far values wander from nought: their root mean square. */
+export function spread(values: Float32Array, stride = 1, offset = 0): number {
+  let sum = 0;
+  let n = 0;
+  for (let i = offset; i < values.length; i += stride) {
+    sum += values[i] * values[i];
+    n++;
+  }
+  return Math.sqrt(sum / Math.max(1, n));
+}
+
+/** **detail**: a detail texture from a material already fetched (D362), the fine grain of
+ * wood or stone that a construction material's pattern lays over every material of it near:
+ * its colour's light and dark with the broad swells taken out, grey about the middle, and
+ * its normal map's slopes likewise, each brought to the same spread (`DETAIL_COLOUR`,
+ * `DETAIL_SLOPE`) whatever the scan, so a pattern's `strength` means the same for any; no
+ * height, a plain ARM map. It tiles as its source does. */
+function detail(name: string, source: string, size: number) {
+  const from = join(ROOT, "assets/materials", source);
+  for (const map of ["color.jpg", "normal.jpg"]) {
+    if (!existsSync(join(from, map))) throw new Error(`${source} has no ${map}: fetch it first`);
+  }
+  const out = join(ROOT, "assets/materials", name);
+  mkdirSync(out, { recursive: true });
+  const light = highPass(join(from, "color.jpg"), size, 1);
+  const gain = DETAIL_COLOUR / Math.max(1e-4, spread(light));
+  const colour = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < light.length; i++) {
+    const v = Math.round((0.5 + light[i] * gain) * 255);
+    colour.fill(Math.min(255, Math.max(0, v)), i * 3, i * 3 + 3);
+  }
+  save(colour, 3, size, size, join(out, "color.jpg"));
+  const slopes = highPass(join(from, "normal.jpg"), size, 3);
+  const k = DETAIL_SLOPE / Math.max(1e-4, (spread(slopes, 3, 0) + spread(slopes, 3, 1)) / 2);
+  const normal = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < size * size; i++) {
+    let [x, y] = [slopes[i * 3] * 2 * k, slopes[i * 3 + 1] * 2 * k];
+    const long = Math.hypot(x, y);
+    if (long > 0.95) [x, y] = [(x / long) * 0.95, (y / long) * 0.95];
+    const z = Math.sqrt(Math.max(0, 1 - x * x - y * y));
+    normal[i * 3] = Math.round((x * 0.5 + 0.5) * 255);
+    normal[i * 3 + 1] = Math.round((y * 0.5 + 0.5) * 255);
+    normal[i * 3 + 2] = Math.round((z * 0.5 + 0.5) * 255);
+  }
+  save(normal, 3, size, size, join(out, "normal.jpg"));
+  const arm = Buffer.alloc(16 * 16 * 3);
+  for (let i = 0; i < 256; i++) arm.set([255, 217, 0], i * 3);
+  save(arm, 3, 16, 16, join(out, "arm.jpg"));
+  console.log(`detail: ${name} from ${source}, ${size} px, colour x${gain.toFixed(2)}, slopes x${k.toFixed(2)}`);
+}
+
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
@@ -1095,6 +1171,9 @@ async function main() {
     });
   } else if (step === "ends" && name && rest.length) {
     await ends(name, rest, Number(values.size), Number(values.weather), Number(values.checks));
+  } else if (step === "detail" && name && rest.length === 1) {
+    detail(name, rest[0], Number(values.size));
+    record(name, `detail texture (D362): the fine grain of \`${rest[0]}\` (${credited(rest[0])?.replace(/\.$/, "") ?? "see its line"}), its broad swells taken out, its colour grey about the middle, by \`textures.ts detail\`.`);
   } else if (step === "material" && name && rest.length === 1) {
     material(name, resolve(rest[0]), values.tile!, Number(values.size), Number(values.strength), Number(values.roughness));
     record(name, `made from a generated image by \`textures.ts material\`.`);
@@ -1105,7 +1184,8 @@ async function main() {
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k] [--height]
   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n] [--cut a]
   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f] [--exposed] [--soft f] [--wood-roughness r]
-  node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f] [--checks n]`);
+  node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f] [--checks n]
+  node tools/textures/textures.ts detail <name> <material> [--size px]`);
     process.exit(values.help ? 0 : 2);
   }
 }

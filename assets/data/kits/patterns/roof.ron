@@ -15,6 +15,8 @@
 // textures    the texture sets every roof shares: its shared pieces' atlas (Trim), rafters'
 //             ends, battens' boards, flashing's mortar; a pack adds its Covering, its rafters'
 //             Log and its own pieces' atlas (Piece)
+// details     the fine grain laid over its textures near (D362): wood's on its boards; a
+//             pack adds its covering's, stone's or wood's, and its rafters'
 // dress       its shared pieces (art/kits/roof): the board along a verge, an eave's fascia,
 //             the flashing, the valley's lining, each to its contract (size, anchor), seated
 //             on the deck or the covering by the layout, so one fits every covering
@@ -53,6 +55,9 @@
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
+    },
+    details: {
+        Board: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
     },
     dress: (
         pieces: Some("data/kits/pieces/roof.ron"),

@@ -12,6 +12,7 @@
 // timber      the frame's oak
 // textures    the frame's atlas (Piece), the wattle core, the oak (Hewn), boards and logs'
 //             timber; a pack adds its Masonry (the infill) and Floor
+// details     the fine grain laid over its timber near (D362): wood's, every 40 cm
 // meets       the lightest (weight 1): every other kind runs through it, and it ends
 //             against them at its own end posts
 // toughness  how much damage a cube takes before it is destroyed (D193): wattle and daub
@@ -49,6 +50,11 @@
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
+    },
+    details: {
+        Hewn: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+        Board: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+        Log: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
     },
     dress: (
         pieces: Some("data/kits/pieces/wattle.ron"),

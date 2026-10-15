@@ -2,7 +2,8 @@
 //! and every PC game's lower presets do: an integrated GPU spends most of its frame
 //! shading pixels, so three fifths of the width and height is about a third of the work. The main camera
 //! draws into a picture that size, with its temporal anti-aliasing, sharpened (AMD's
-//! contrast-adaptive sharpening, as FidelityFX's upscaler finishes with), and a camera of
+//! contrast-adaptive sharpening, as FidelityFX's upscaler finishes with; at full size too,
+//! after TAA, `sharpen`), and a camera of
 //! its own shows it stretched over the screen, with the interface drawn over it at the
 //! screen's own size. At full size the main camera draws to the screen as it always has.
 //!
@@ -24,10 +25,37 @@ use bevy::{
 const SHOWN_LAYER: usize = 31;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostUpdate, follow).add_systems(
+    app.add_systems(PostUpdate, (follow, sharpen)).add_systems(
         PostUpdate,
         stand_with_the_camera.before(bevy::transform::TransformSystems::Propagate),
     );
+}
+
+/// The world's picture sharpened after its temporal anti-aliasing, as the preset says
+/// (`Quality::sharpening`, D362): TAA's blend of jittered frames is a filter about a pixel
+/// wide, which took more than half the finest detail out of a log's face a metre off
+/// (research/texture-detail-2026-10-15.md), so shipped games finish with a sharpening pass
+/// (FidelityFX's RCAS after its upscaler, Unreal's tonemapper sharpen); AMD's
+/// contrast-adaptive sharpening, which leaves edges already sharp alone.
+fn sharpen(
+    quality: Res<Quality>,
+    mut commands: Commands,
+    camera: Query<
+        (Entity, Option<&ContrastAdaptiveSharpening>),
+        (With<MainCamera>, Without<Presenter>),
+    >,
+) {
+    let strength = quality.sharpening();
+    for (entity, sharpening) in &camera {
+        if sharpening.is_some_and(|s| s.enabled && s.sharpening_strength == strength) {
+            continue;
+        }
+        commands.entity(entity).insert(ContrastAdaptiveSharpening {
+            enabled: true,
+            sharpening_strength: strength,
+            ..default()
+        });
+    }
 }
 
 /// The camera showing the picture stands where the main one does: Bevy measures what is
@@ -65,13 +93,13 @@ fn follow(
     mut scaled: Local<Option<Scaled>>,
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    mut camera: Query<(Entity, &mut RenderTarget), (With<MainCamera>, Without<Presenter>)>,
+    mut camera: Query<&mut RenderTarget, (With<MainCamera>, Without<Presenter>)>,
     window: Query<&Window, With<PrimaryWindow>>,
     picture: Option<Res<Picture>>,
     presenters: Query<Entity, With<Presenter>>,
     mut shown: Query<&mut Sprite, With<Shown>>,
 ) {
-    let Some((main, mut target)) = camera.iter_mut().next() else {
+    let Some(mut target) = camera.iter_mut().next() else {
         return;
     };
     let share = quality.render_scale();
@@ -99,7 +127,6 @@ fn follow(
         // Full size: drawn straight to the screen.
         if let Some(scaled) = scaled.take() {
             *target = scaled.shown_on;
-            commands.entity(main).remove::<ContrastAdaptiveSharpening>();
             for presenter in &presenters {
                 commands.entity(presenter).despawn();
             }
@@ -142,12 +169,7 @@ fn follow(
         commands.entity(presenter).despawn();
     }
     // Stretching softens, so the picture is sharpened first, at its own size, as
-    // FidelityFX's upscaler finishes by sharpening.
-    commands.entity(main).insert(ContrastAdaptiveSharpening {
-        enabled: true,
-        sharpening_strength: 0.5,
-        ..default()
-    });
+    // FidelityFX's upscaler finishes by sharpening (`sharpen`).
     commands.spawn((
         Name::new("Upscaled view"),
         Presenter,

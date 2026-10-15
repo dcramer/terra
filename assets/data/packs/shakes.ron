@@ -9,6 +9,9 @@
         Piece: (path: "materials/shakes_pieces", metres: (1.0, 1.0)),
         Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
     },
+    details: {
+        Covering: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+    },
     dress: (
         own: Some("data/kits/pieces/shakes.ron"),
         masks: (weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),

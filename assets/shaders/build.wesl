@@ -38,6 +38,11 @@ struct Layers {
     // joints, 2 along its grain, 3 a sawn end, 4 a shingle at a time), y its splits along
     // the grain or its end's pictures across.
     breaks: array<vec4<f32>, 512>,
+    // For each layer, its detail texture (D362): x the slot of its set and one (0: none), y
+    // and z how many copies of it a copy of the layer covers across and down, w how strongly.
+    detail: array<vec4<f32>, 512>,
+    // Where detail fades: x from how far, y by how far, in metres; z 1 where it is drawn.
+    near: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -309,6 +314,26 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         normal = mix(normal, under_normal, bare);
     }
 
+    // Detail (D362): its material's fine grain, wood's or stone's, a small texture tiled a
+    // few times a metre over it near and faded out a few metres off, finer than its own
+    // texels, as shipped games lay a detail map: its colour grey about the middle, so it
+    // brightens and darkens as Unity's detail albedo does (times 2 in sRGB, 4.59 in linear
+    // light), and its normal added to the surface's (the partial derivatives' sum, UDN).
+    var detail_n = vec2(0.0);
+    let fine = layers.detail[layer];
+    let fine_slot = i32(fine.x) - 1;
+    let reach = 1.0 - smoothstep(layers.near.x, layers.near.y, length(view.world_position - wp));
+    let fine_k = select(0.0, fine.w * reach, fine_slot >= 0 && layers.near.z > 0.5 && !missing);
+    if fine_k > 0.001 {
+        let fuv = uv * fine.yz;
+        let fdx = ddx * fine.yz;
+        let fdy = ddy * fine.yz;
+        let fine_colour = textureSampleGrad(colour_array, array_sampler, fuv, fine_slot, fdx, fdy).rgb;
+        let fine_normal = textureSampleGrad(normal_array, array_sampler, fuv, fine_slot, fdx, fdy).rg * 2.0 - 1.0;
+        colour = vec4(colour.rgb * mix(vec3(1.0), fine_colour * 4.59479, fine_k), colour.a);
+        detail_n = fine_normal * fine_k;
+    }
+
     // Its colour on average, for what is behind it where a piece of it has gone.
     let mean = pbr_input.material.base_color.rgb
         * textureSampleLevel(colour_array, array_sampler, uv, slot, 8.0).rgb;
@@ -502,7 +527,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.specular_occlusion = specular_occlusion;
 
     // The normal map's two stored components, its third made up from them.
-    var Nt = vec3(mix(normal, crack_n, broken * 0.85) * 2.0 - 1.0, 0.0);
+    var Nt = vec3(mix(normal, crack_n, broken * 0.85) * 2.0 - 1.0 + detail_n * (1.0 - broken), 0.0);
+    Nt = vec3(Nt.xy / max(1.0, length(Nt.xy) / 0.98), 0.0);
     Nt.z = sqrt(max(1.0 - dot(Nt.xy, Nt.xy), 0.0));
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
     pbr_input.clearcoat_N = pbr_input.N;

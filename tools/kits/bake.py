@@ -134,22 +134,30 @@ def bake_round(high, diameter, laid):
 def tiled(pixels, size, span, overlap, high_pass):
     """A bake `span` along cut to its first `span - overlap`, the rest cross-faded into its
     start so its two ends meet; each row's mean taken out of the channels `high_pass` names
-    (a member's taper and bow), then resampled `size` square."""
+    (a member's taper and bow), then resampled `size` square, each row read between the two
+    rows of the bake either side of it (the nearest row alone doubled every fifth one, a
+    stair in the grain, research/texture-detail-2026-10-15.md)."""
     import numpy as np
 
     rows = np.asarray(pixels, dtype=np.float32).reshape(size, size, 4)
     keep = (span - overlap) / span
     fade = overlap / span
     total = rows.shape[0]
+
+    def row_at(v):
+        src = min(max(v * total - 0.5, 0.0), total - 1.0)
+        low = int(src)
+        high = min(low + 1, total - 1)
+        t = src - low
+        return rows[low] * (1 - t) + rows[high] * t
+
     out_rows = []
     for y in range(size):
-        v = y / size * keep
-        src = v * total
-        row = rows[min(int(src), total - 1)]
+        v = (y + 0.5) / size * keep
+        row = row_at(v)
         if v < fade and fade > 0:
             t = v / fade
-            tail = rows[min(int((v + keep) * total), total - 1)]
-            row = tail * (1 - t) + row * t
+            row = row_at(v + keep) * (1 - t) + row * t
         out_rows.append(row)
     out = np.stack(out_rows)
     for channel, keep_mean in high_pass:
@@ -237,18 +245,39 @@ def bake(kind, name, colour_space="Non-Color", **settings):
 turn = None
 
 
-def save(image, file, high_pass=(), stretch=False):
+def delit(pixels, keep=0.2):
+    """The light a model's texture was painted in taken out of a round bake, as photogrammetry
+    de-lights a scan: each column round the member brought to the colour's mean brightness,
+    the columns' brightness smoothed round it first, so only the broad shading round the
+    member goes and its bark's and wood's own light and dark stay; `keep` of the shading
+    left. A Tripo log's texture is darkest underneath by six times (its light from above),
+    which drew a black band under every log of a wall over the game's own shading."""
+    import numpy as np
+
+    light = pixels[:, :, :3].mean(axis=(0, 2))
+    width = max(3, pixels.shape[1] // 12)
+    kernel = np.ones(width) / width
+    round_ = np.concatenate([light[-width:], light, light[:width]])
+    broad = np.convolve(round_, kernel, "same")[width:-width]
+    scale = np.power(light.mean() / np.maximum(broad, 1e-3), 1.0 - keep)
+    pixels[:, :, :3] = np.clip(pixels[:, :, :3] * scale[None, :, None], 0.0, 1.0)
+    return pixels
+
+
+def save(image, file, high_pass=(), stretch=False, light=False):
     global turn
     if round_bake:
         import numpy as np
 
         pixels = tiled(list(image.pixels), side, span, overlap, high_pass)
         if turn is None:
-            light = pixels[:, :, :3].mean(axis=(0, 2))
+            light_round = pixels[:, :, :3].mean(axis=(0, 2))
             width = side // 4
-            window = np.convolve(np.concatenate([light, light[:width]]), np.ones(width), "valid")[:side]
+            window = np.convolve(np.concatenate([light_round, light_round[:width]]), np.ones(width), "valid")[:side]
             turn = int(np.argmin(window)) + width // 2
         pixels = np.roll(pixels, -turn, axis=1)
+        if light:
+            pixels = delit(pixels)
         if stretch:
             low_, high_ = pixels[:, :, 0].min(), pixels[:, :, 0].max()
             pixels[:, :, :3] = (pixels[:, :, :3] - low_) / max(high_ - low_, 1e-6)
@@ -262,7 +291,7 @@ def save(image, file, high_pass=(), stretch=False):
 
 os.makedirs(out, exist_ok=True)
 colour = bake("DIFFUSE", "color", "sRGB", use_pass_direct=False, use_pass_indirect=False, use_pass_color=True)
-save(colour, "color.jpg")
+save(colour, "color.jpg", light=True)
 save(bake("NORMAL", "normal", normal_space="TANGENT"), "normal.jpg", [(0, 0.5), (1, 0.5)])
 roughness = bake("ROUGHNESS", "roughness")
 occlusion = bake("AO", "occlusion")

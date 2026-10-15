@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ambientCgFile, credit, keyOut, meanColour, outline, period, rim, tileNoise } from "./textures.ts";
+import { ambientCgFile, credit, keyOut, meanColour, outline, period, rim, spread, tileNoise } from "./textures.ts";
+
+test("a detail texture's spread is its values' root mean square, by channel", () => {
+  // Two channels interleaved: the first wanders by 0.3 either way, the second not at all.
+  const values = new Float32Array([0.3, 0, -0.3, 0, 0.3, 0, -0.3, 0]);
+  assert.ok(Math.abs(spread(values, 2, 0) - 0.3) < 1e-6);
+  assert.equal(spread(values, 2, 1), 0);
+});
 
 test("an ambientCG material's zip is named by its id and size as ambientCG names it", () => {
   assert.equal(ambientCgFile("Ground104", "2k"), "Ground104_2K-JPG");

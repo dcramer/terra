@@ -22,6 +22,8 @@
 //             (an atlas of `cells` by `cells`), Board trims, Floor a deck's boards each from
 //             one plank of its texture (`strips`), Hewn its squared members; a pack adds its
 //             Log face and Daub
+// details     the fine grain laid over its textures near (D362): wood's, tiled every 40 cm
+//             along the grain, on its logs, beams, boards and planks
 // dress       each exposed edge by its role (D215): a hewn plate along every wall's top, a
 //             hewn sill on what it stands on, hewn posts up every opening's sides, a log
 //             along every step's nose, a log up every post (D193); dirt rising from the
@@ -73,6 +75,12 @@
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
         Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+    },
+    details: {
+        Log: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+        Hewn: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+        Board: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
+        Floor: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
     },
     dress: (
         roles: {

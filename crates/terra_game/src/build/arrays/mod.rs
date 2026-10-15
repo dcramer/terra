@@ -1,7 +1,9 @@
 //! Construction materials drawn from texture arrays (D290, docs/proposals/construction-002.md):
 //! every texture set a material wears (its walls' stone, its floor's flags, its timber's
 //! bark) is a layer of four arrays, colour, normal, occlusion-roughness-metal and height,
-//! each at the texture budget ([`SIDE`]) and block compressed where the GPU can (`bc`); each
+//! its colour and normal at the preset's texture side (`Quality::texture_side`, 2048 at high),
+//! its occlusion-roughness-metal and height, which carry no fine detail, at [`SIDE`], each
+//! block compressed where the GPU can (`bc`: BC7, BC5, BC1, BC4); each
 //! corner of a section's mesh carries the layer it wears, so a section's surfaces are one
 //! draw whatever the number of materials in it, as 7 Days to Die's paints and Teardown's
 //! palettes are read from one texture by an index. A pack's own modelled pieces, read by
@@ -48,9 +50,26 @@ use terra_build::kit::Kits;
 use terra_build::{Kind, Material};
 use terra_world::quality::Quality;
 
-/// The texture budget: every texture set is this many texels square in the arrays, with its
-/// mipmaps down to 4 by 4.
+/// The side of a texture set's occlusion-roughness-metal and height in the arrays, and its
+/// colour's and normal's at the least, in texels, with their mipmaps down to 4 by 4.
 pub const SIDE: u32 = 1024;
+/// How many slots the arrays grow by at most at once: at 2048, 12 MiB a set, doubling past
+/// this would hold far more than is laid.
+const GROW_SLOTS: u32 = 8;
+
+/// Each array's side for a preset's texture side: colour and normal at it, the rest at
+/// [`SIDE`].
+fn sides(top: u32) -> [u32; 4] {
+    [top.max(SIDE), top.max(SIDE), SIDE, SIDE]
+}
+
+/// How each array's smaller copies are averaged: colour in linear light, normals kept unit.
+const MIPS: [bc::Mips; 4] = [
+    bc::Mips::Srgb,
+    bc::Mips::Normal,
+    bc::Mips::Linear,
+    bc::Mips::Linear,
+];
 /// How many layers the table holds, and how many slots the arrays grow to at most: 256 is
 /// the array layers every GPU wgpu runs on can hold.
 pub const MAX_LAYERS: usize = 512;
@@ -83,6 +102,15 @@ pub struct BuildArrays {
     /// time), y its splits along the grain or its end's pictures across.
     #[uniform(100)]
     pub breaks: [Vec4; MAX_LAYERS],
+    /// For each layer, its detail texture (D362, `kit::Detail`): x the slot of the set and
+    /// one, or none while it is not resident; y and z how many copies of it one copy of the
+    /// layer's covers across and down; w how strongly it shows.
+    #[uniform(100)]
+    pub detail: [Vec4; MAX_LAYERS],
+    /// Where detail fades: x from how far, y by how far, in metres; z 1 where the preset draws
+    /// it at all.
+    #[uniform(100)]
+    pub near: Vec4,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub colour: Handle<Image>,
@@ -118,6 +146,9 @@ pub struct Set {
     /// its cells are found; none, no cells.
     pub breaks: Vec4,
     pub share: f32,
+    /// Its detail texture (D362): the set's folder, how many copies of it one copy of this
+    /// covers across and down, and how strongly it shows.
+    pub detail: Option<(String, [f32; 2], f32)>,
 }
 
 /// The kits' texture sets numbered as layers, from 1 (0 is none): each kit's materials but
@@ -129,6 +160,8 @@ pub struct Layers {
     first: BTreeMap<Material, u16>,
     /// Each layer that wears down to another, and that other's layer.
     worn: BTreeMap<u16, u16>,
+    /// Each layer with a detail texture, and the detail's layer.
+    details: BTreeMap<u16, u16>,
 }
 
 impl Layers {
@@ -140,12 +173,21 @@ impl Layers {
                     continue;
                 }
                 let (breaks, share) = breaks(kit.damage.get(material), texture.cells);
+                let detail = kit.details.get(material).map(|detail| {
+                    let metres = detail.metres.max(0.01);
+                    (
+                        detail.path.clone(),
+                        texture.metres.map(|m| m / metres),
+                        detail.strength,
+                    )
+                });
                 let set = Set {
                     path: texture.path.clone(),
                     depth: kit.depth(*material),
                     reflectance: texture.reflectance,
                     breaks,
                     share,
+                    detail: detail.clone(),
                 };
                 let id = out.layer(set);
                 if id >= MAX_LAYERS {
@@ -159,9 +201,23 @@ impl Layers {
                         reflectance: texture.reflectance,
                         breaks,
                         share: 0.0,
+                        detail: None,
                     });
                     if under < MAX_LAYERS {
                         out.worn.insert(id as u16, under as u16);
+                    }
+                }
+                if let Some((path, _, _)) = detail {
+                    let fine = out.layer(Set {
+                        path,
+                        depth: 0.0,
+                        reflectance: texture.reflectance,
+                        breaks: Vec4::ZERO,
+                        share: 0.0,
+                        detail: None,
+                    });
+                    if fine < MAX_LAYERS {
+                        out.details.insert(id as u16, fine as u16);
                     }
                 }
                 out.by_kind.insert((kit.kind(), *material), id as u16);
@@ -182,10 +238,12 @@ impl Layers {
         }
     }
 
-    /// These layers and those they wear down to, which are made resident with them.
+    /// These layers and those they wear down to and their details, which are made resident
+    /// with them.
     pub fn with_worn(&self, ids: &[u16]) -> Vec<u16> {
         let mut out = ids.to_vec();
         out.extend(ids.iter().filter_map(|id| self.worn.get(id)));
+        out.extend(ids.iter().filter_map(|id| self.details.get(id)));
         out
     }
 
@@ -285,6 +343,11 @@ pub struct Arrays {
     pub material: Handle<BuildMaterial>,
     images: [Handle<Image>; 4],
     codecs: [Codec; 4],
+    /// Whether the GPU samples BC, and each array's side, by the preset (`sides`).
+    compressed: bool,
+    sides: [u32; 4],
+    /// Where detail fades, by the preset (`Quality::detail_fade_m`).
+    near: Vec4,
     /// Each set's cells, a byte a texel, unfiltered, one level.
     cells: Handle<Image>,
     capacity: u32,
@@ -331,12 +394,12 @@ fn formats(compressed: bool) -> ([TextureFormat; 4], [Codec; 4]) {
     if compressed {
         (
             [
-                TextureFormat::Bc1RgbaUnormSrgb,
+                TextureFormat::Bc7RgbaUnormSrgb,
                 TextureFormat::Bc5RgUnorm,
                 TextureFormat::Bc1RgbaUnorm,
                 TextureFormat::Bc4RUnorm,
             ],
-            [Codec::Bc1, Codec::Bc5, Codec::Bc1, Codec::Bc4],
+            [Codec::Bc7, Codec::Bc5, Codec::Bc1, Codec::Bc4],
         )
     } else {
         (
@@ -351,9 +414,28 @@ fn formats(compressed: bool) -> ([TextureFormat; 4], [Codec; 4]) {
     }
 }
 
-/// An array of `slots` layers in a format, with mipmaps, to be written layer by layer.
-fn array(format: TextureFormat, slots: u32, filtered: bool) -> Image {
-    sized(format, slots, filtered, SIDE, bc::levels(SIDE))
+/// An array of `slots` layers in a format, `side` square with mipmaps, to be written layer
+/// by layer.
+fn array(format: TextureFormat, slots: u32, filtered: bool, side: u32) -> Image {
+    sized(format, slots, filtered, side, bc::levels(side))
+}
+
+/// The shared damage mask's four maps at each array's side, each level compressed.
+fn damage_maps(sides: [u32; 4], codecs: [Codec; 4]) -> [Vec<Vec<u8>>; 4] {
+    let maps = damage::maps();
+    std::array::from_fn(|i| {
+        let side = sides[i];
+        let base = if side == SIDE {
+            maps[i].clone()
+        } else {
+            to_side(&maps[i], SIDE, SIDE, 4, side)
+        };
+        bc::chain(&base, side, MIPS[i])
+            .iter()
+            .enumerate()
+            .map(|(level, pixels)| codecs[i].encode(pixels, side >> level))
+            .collect()
+    })
 }
 
 /// As [`array`], `side` square with so many levels.
@@ -390,12 +472,14 @@ impl Arrays {
         images: &mut Assets<Image>,
         materials: &mut Assets<BuildMaterial>,
         compressed: bool,
+        quality: Quality,
         layers: Arc<Layers>,
         exists: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Arrays {
         let (formats, codecs) = formats(compressed);
+        let sides = sides(quality.texture_side());
         let images_of: [Handle<Image>; 4] =
-            std::array::from_fn(|i| images.add(array(formats[i], FIRST_SLOTS, i == 0)));
+            std::array::from_fn(|i| images.add(array(formats[i], FIRST_SLOTS, i == 0, sides[i])));
         let cells = images.add(sized(
             TextureFormat::Rgba8Unorm,
             FIRST_SLOTS,
@@ -417,6 +501,8 @@ impl Arrays {
                 damage: Vec4::new(DAMAGE_SLOT as f32, 0.0, DAMAGE_DARK, 0.0),
                 worn: [Vec4::ZERO; MAX_LAYERS / 4],
                 breaks: [Vec4::ZERO; MAX_LAYERS],
+                detail: [Vec4::ZERO; MAX_LAYERS],
+                near: near(quality),
                 colour: images[0].clone(),
                 normal: images[1].clone(),
                 arm: images[2].clone(),
@@ -428,26 +514,22 @@ impl Arrays {
             material,
             images,
             codecs,
+            compressed,
+            sides,
+            near: near(quality),
             cells,
             capacity: FIRST_SLOTS,
             layers,
             slots: BTreeMap::new(),
             // The first slot is the damage mask's, made once and kept.
             free: (DAMAGE_SLOT + 1..FIRST_SLOTS).rev().collect(),
-            damage: DamageMask::Making(AsyncComputeTaskPool::get().spawn(async move {
-                let maps = damage::maps();
-                std::array::from_fn(|i| {
-                    bc::chain(&maps[i], SIDE)
-                        .iter()
-                        .enumerate()
-                        .map(|(level, pixels)| codecs[i].encode(pixels, SIDE >> level))
-                        .collect()
-                })
-            })),
+            damage: DamageMask::Making(
+                AsyncComputeTaskPool::get().spawn(async move { damage_maps(sides, codecs) }),
+            ),
             loading: BTreeMap::new(),
             uploads: Uploads::default(),
             table_dirty: true,
-            relief: Quality::High.relief_layers(),
+            relief: quality.relief_layers(),
             damage_detail: true,
             damage_hidden: false,
             exists,
@@ -540,12 +622,76 @@ impl Arrays {
     pub fn set_bytes(&self) -> usize {
         self.codecs
             .iter()
-            .map(|codec| {
-                (0..bc::levels(SIDE))
-                    .map(|level| codec.bytes(SIDE >> level))
+            .zip(self.sides)
+            .map(|(codec, side)| {
+                (0..bc::levels(side))
+                    .map(|level| codec.bytes(side >> level))
                     .sum::<usize>()
             })
             .sum()
+    }
+
+    /// The colour and normal maps' side, in texels.
+    pub fn side(&self) -> u32 {
+        self.sides[0]
+    }
+
+    /// Each layer's detail, where its detail's set is resident.
+    fn detail(&self) -> [Vec4; MAX_LAYERS] {
+        let mut out = [Vec4::ZERO; MAX_LAYERS];
+        for (&layer, &fine) in &self.layers.details {
+            let (Some(set), Some(slot)) = (
+                self.layers.set(layer),
+                self.layers
+                    .set(fine)
+                    .and_then(|set| self.slots.get(&set.path))
+                    .filter(|slot| slot.ready_in == 0),
+            ) else {
+                continue;
+            };
+            let Some((_, scale, strength)) = &set.detail else {
+                continue;
+            };
+            if let Some(entry) = out.get_mut(usize::from(layer)) {
+                *entry = Vec4::new(slot.slot as f32 + 1.0, scale[0], scale[1], *strength);
+            }
+        }
+        out
+    }
+
+    /// The arrays made again at another side, when the preset's texture side changes: what
+    /// was resident is let go and read again at the new side as sections ask for it, as a
+    /// game's texture quality setting reloads its textures.
+    fn resize(
+        &mut self,
+        top: u32,
+        images: &mut Assets<Image>,
+        materials: &mut Assets<BuildMaterial>,
+    ) {
+        let (formats, codecs) = formats(self.compressed);
+        self.sides = sides(top);
+        self.images = std::array::from_fn(|i| {
+            images.add(array(formats[i], self.capacity, i == 0, self.sides[i]))
+        });
+        if let Some(mut material) = materials.get_mut(&self.material) {
+            material.extension.colour = self.images[0].clone();
+            material.extension.normal = self.images[1].clone();
+            material.extension.arm = self.images[2].clone();
+            material.extension.height = self.images[3].clone();
+        }
+        self.dropped += self.slots.len();
+        self.slots.clear();
+        self.loading.clear();
+        self.free = (DAMAGE_SLOT + 1..self.capacity).rev().collect();
+        if let Ok(mut uploads) = self.uploads.0.lock() {
+            uploads.clear();
+        }
+        let sides = self.sides;
+        self.damage = DamageMask::Making(
+            AsyncComputeTaskPool::get().spawn(async move { damage_maps(sides, codecs) }),
+        );
+        self.table_dirty = true;
+        info!("Build: texture arrays made again at {top} texels a side");
     }
 
     /// Each layer's worn set's slot and one, where it is resident, four layers an entry.
@@ -595,10 +741,17 @@ impl Arrays {
     }
 }
 
-/// A picture's RGBA bytes at the budget, `SIDE` square: averaged down where it is a whole
-/// multiple of it, else sampled between texels, wrapping, as it tiles.
-fn to_side(data: &[u8], width: u32, height: u32, channels: usize) -> Vec<u8> {
-    let (w, h, side) = (width as usize, height as usize, SIDE as usize);
+/// Where a preset fades detail, as the shader reads it (`BuildArrays::near`).
+fn near(quality: Quality) -> Vec4 {
+    quality
+        .detail_fade_m()
+        .map_or(Vec4::ZERO, |[from, by]| Vec4::new(from, by, 1.0, 0.0))
+}
+
+/// A picture's RGBA bytes `side` square: averaged down where it is a whole multiple of it,
+/// else sampled between texels, wrapping, as it tiles.
+fn to_side(data: &[u8], width: u32, height: u32, channels: usize, side: u32) -> Vec<u8> {
+    let (w, h, side) = (width as usize, height as usize, side as usize);
     let texel = |x: usize, y: usize, c: usize| -> f32 {
         if c < channels {
             f32::from(data[((y % h) * w + x % w) * channels + c])
@@ -673,6 +826,13 @@ pub fn stream(
         arrays.relief = quality.relief_layers();
         arrays.table_dirty = true;
     }
+    if arrays.near != near(*quality) {
+        arrays.near = near(*quality);
+        arrays.table_dirty = true;
+    }
+    if arrays.sides[0] != quality.texture_side().max(SIDE) {
+        arrays.resize(quality.texture_side(), &mut images, &mut materials);
+    }
     // The damage mask: written once made, drawn once written, but not at the low preset.
     let detail = *quality != Quality::Low;
     if arrays.damage_detail != detail {
@@ -686,7 +846,7 @@ pub fn stream(
                     for (i, levels) in maps.into_iter().enumerate() {
                         uploads.push(Upload {
                             image: arrays.images[i].id(),
-                            side: SIDE,
+                            side: arrays.sides[i],
                             slot: DAMAGE_SLOT,
                             codec: arrays.codecs[i],
                             levels,
@@ -714,6 +874,7 @@ pub fn stream(
         }
     }
     let codecs = arrays.codecs;
+    let sides = arrays.sides;
     let mut finished = Vec::new();
     for (path, loading) in &mut arrays.loading {
         match loading {
@@ -759,15 +920,16 @@ pub fn stream(
                                 None => [128u8, 128, 128, 255].repeat((CELLS * CELLS) as usize),
                             };
                         }
+                        let side = sides[i];
                         let base = match map {
-                            Some((data, w, h, channels)) => to_side(&data, w, h, channels),
+                            Some((data, w, h, channels)) => to_side(&data, w, h, channels, side),
                             // No height: flat.
-                            None => vec![0u8; (SIDE * SIDE * 4) as usize],
+                            None => vec![0u8; (side * side * 4) as usize],
                         };
-                        out[i] = bc::chain(&base, SIDE)
+                        out[i] = bc::chain(&base, side, MIPS[i])
                             .iter()
                             .enumerate()
-                            .map(|(level, pixels)| codecs[i].encode(pixels, SIDE >> level))
+                            .map(|(level, pixels)| codecs[i].encode(pixels, side >> level))
                             .collect();
                     }
                     Some(Encoded {
@@ -789,9 +951,9 @@ pub fn stream(
         let Some(encoded) = encoded else {
             continue;
         };
-        // A slot: a free one, else the arrays doubled.
+        // A slot: a free one, else the arrays grown, doubled up to so many more at once.
         if arrays.free.is_empty() {
-            let grown = (arrays.capacity * 2).min(MAX_SLOTS);
+            let grown = (arrays.capacity + arrays.capacity.min(GROW_SLOTS)).min(MAX_SLOTS);
             if grown == arrays.capacity {
                 warn!("Build: the texture arrays are full at {MAX_SLOTS} sets; {path} waits");
                 continue;
@@ -814,7 +976,7 @@ pub fn stream(
             for (i, levels) in encoded.maps.into_iter().enumerate() {
                 uploads.push(Upload {
                     image: arrays.images[i].id(),
-                    side: SIDE,
+                    side: arrays.sides[i],
                     slot,
                     codec: codecs[i],
                     levels,
@@ -861,6 +1023,8 @@ pub fn stream(
         let table = arrays.table();
         let worn = arrays.worn();
         let breaks = arrays.breaks();
+        let detail = arrays.detail();
+        let near = arrays.near;
         let drawn = arrays.damage_detail
             && !arrays.damage_hidden
             && matches!(arrays.damage, DamageMask::Ready);
@@ -868,6 +1032,8 @@ pub fn stream(
             material.extension.table = table;
             material.extension.worn = worn;
             material.extension.breaks = breaks;
+            material.extension.detail = detail;
+            material.extension.near = near;
             material.extension.damage.y = if drawn { 1.0 } else { 0.0 };
         }
     }
@@ -931,6 +1097,8 @@ fn write_layers(
         }
         written.0.insert(id, image.texture.clone());
     }
+    // An array made again at another side lets its old texture go.
+    written.0.retain(|id, _| gpu.get(*id).is_some());
     pending.retain(|upload| {
         let Some(image) = gpu.get(upload.image) else {
             return true;
@@ -940,11 +1108,7 @@ fn write_layers(
         }
         for (level, data) in upload.levels.iter().enumerate() {
             let side = upload.side >> level;
-            let (row, rows) = match upload.codec {
-                Codec::Raw(n) => (side * n as u32, side),
-                Codec::Bc1 | Codec::Bc4 => (side.div_ceil(4) * 8, side.div_ceil(4)),
-                Codec::Bc5 => (side.div_ceil(4) * 16, side.div_ceil(4)),
-            };
+            let (row, rows) = upload.codec.rows(side);
             queue.write_texture(
                 TexelCopyTextureInfo {
                     texture: &image.texture,
@@ -990,12 +1154,21 @@ pub fn setup(
 ) -> Option<Arrays> {
     let compressed = compressed(world);
     let uploads = world.get_resource::<Uploads>()?.clone();
+    let quality = world.get_resource::<Quality>().copied().unwrap_or_default();
     world.resource_scope(|world, mut images: Mut<Assets<Image>>| {
         let mut materials = world.get_resource_mut::<Assets<BuildMaterial>>()?;
-        let mut arrays = Arrays::new(&mut images, &mut materials, compressed, layers, exists);
+        let mut arrays = Arrays::new(
+            &mut images,
+            &mut materials,
+            compressed,
+            quality,
+            layers,
+            exists,
+        );
         arrays.uploads = uploads;
         info!(
-            "Build: texture arrays of {SIDE} texels a side, {}, {:.1} MiB a texture set.",
+            "Build: texture arrays of {} texels a side, {}, {:.1} MiB a texture set.",
+            arrays.side(),
             if compressed {
                 "BC compressed"
             } else {
@@ -1088,12 +1261,56 @@ mod tests {
     }
 
     #[test]
+    fn a_materials_detail_is_a_layer_of_its_own_made_resident_with_it_at_its_scale() {
+        let texture = |path: &str, metres: [f32; 2]| terra_build::kit::Texture {
+            path: path.into(),
+            metres,
+            depth: 0.0,
+            reflectance: 0.35,
+            strips: None,
+            cells: 1,
+            worn: None,
+        };
+        let detail = terra_build::kit::Detail {
+            path: "materials/grain".into(),
+            metres: 0.5,
+            strength: 0.8,
+        };
+        let kit = terra_build::kit::Kit {
+            id: 3,
+            textures: [
+                (Material::Masonry, texture("materials/stone", [2.0, 2.0])),
+                (Material::Floor, texture("materials/flags", [1.0, 1.5])),
+            ]
+            .into_iter()
+            .collect(),
+            details: [(Material::Masonry, detail)].into_iter().collect(),
+            ..Default::default()
+        };
+        let layers = Layers::of(&Kits(vec![kit]));
+        let wall = layers.get(Kind(3), Material::Masonry).unwrap();
+        let floor = layers.get(Kind(3), Material::Floor).unwrap();
+        let resident = layers.with_worn(&[wall]);
+        let grain = *resident
+            .iter()
+            .find(|&&id| id != wall)
+            .expect("its detail with it");
+        assert_eq!(layers.set(grain).unwrap().path, "materials/grain");
+        // A 2 m copy of the wall holds four of the half-metre detail each way.
+        let (_, scale, strength) = layers.set(wall).unwrap().detail.clone().unwrap();
+        assert_eq!((scale, strength), ([4.0, 4.0], 0.8));
+        // The floor has none, and brings none with it.
+        assert_eq!(layers.with_worn(&[floor]), vec![floor]);
+        assert!(layers.set(floor).unwrap().detail.is_none());
+    }
+
+    #[test]
     fn a_picture_twice_the_budget_is_averaged_down_and_tiles() {
         let side = SIDE as usize * 2;
         let data: Vec<u8> = (0..side * side)
             .flat_map(|i| [(i % 2 * 200) as u8, 50, 50, 255])
             .collect();
-        let out = to_side(&data, side as u32, side as u32, 4);
+        let out = to_side(&data, side as u32, side as u32, 4, SIDE);
         assert_eq!(out.len(), SIDE as usize * SIDE as usize * 4);
         assert!(out.chunks_exact(4).all(|p| p[0] == 100 && p[1] == 50));
     }

@@ -3,7 +3,7 @@
 //! be a layer of the texture arrays, is a material of its own (`draw::KitMaterials`). Read
 //! from its pictures it would sit on the GPU uncompressed and without mipmaps, 16 MiB a map
 //! at 2,048 square; so once it has loaded, each map is compressed on a worker with its
-//! mipmaps, in the arrays' formats (`arrays::bc`: BC1 colour and occlusion-roughness-metal,
+//! mipmaps, in the arrays' formats (`arrays::bc`: BC7 colour, BC1 occlusion-roughness-metal,
 //! BC5 normal, BC4 height), and its material made to read the compressed copy, as shipped
 //! games ship their textures compressed. Where the GPU samples no BC they stay as read.
 
@@ -31,10 +31,19 @@ enum Map {
 impl Map {
     fn format(self) -> (TextureFormat, Codec) {
         match self {
-            Map::Colour => (TextureFormat::Bc1RgbaUnormSrgb, Codec::Bc1),
+            Map::Colour => (TextureFormat::Bc7RgbaUnormSrgb, Codec::Bc7),
             Map::Normal => (TextureFormat::Bc5RgUnorm, Codec::Bc5),
             Map::Arm => (TextureFormat::Bc1RgbaUnorm, Codec::Bc1),
             Map::Height => (TextureFormat::Bc4RUnorm, Codec::Bc4),
+        }
+    }
+
+    /// How its smaller copies are averaged.
+    fn mips(self) -> bc::Mips {
+        match self {
+            Map::Colour => bc::Mips::Srgb,
+            Map::Normal => bc::Mips::Normal,
+            Map::Arm | Map::Height => bc::Mips::Linear,
         }
     }
 }
@@ -58,7 +67,7 @@ pub(super) struct Atlases {
 /// An RGBA picture's mipmaps, each compressed, as one image to sample.
 fn compressed(pixels: Vec<u8>, side: u32, map: Map, sampler: bevy::image::ImageSampler) -> Image {
     let (format, codec) = map.format();
-    let levels = bc::chain(&pixels, side);
+    let levels = bc::chain(&pixels, side, map.mips());
     let count = levels.len() as u32;
     let data: Vec<u8> = levels
         .iter()

@@ -57,6 +57,12 @@ pub struct Kit {
     /// Its materials' textures (D14): where each is, how many metres across it is, and how
     /// deep its parallax reads; a material with none is drawn in its plain colour.
     pub textures: BTreeMap<Material, Texture>,
+    /// The detail laid over each material's texture near (D362): a small texture of its fine
+    /// grain, wood's or stone's, tiled a few times a metre and faded out a few metres off,
+    /// so a face seen close has detail finer than its own texels, as shipped games lay a
+    /// detail map. Its pattern's, shared by every material of the pattern; a pack may give
+    /// its own or take one away (`None`), as earth's walls do stone's.
+    pub details: BTreeMap<Material, Detail>,
     pub colours: KitColours,
     /// What its cubes cost to build (D139).
     pub cost: KitCost,
@@ -855,6 +861,22 @@ pub struct Texture {
     pub worn: Option<String>,
 }
 
+/// A detail texture (see [`Kit::details`]): a texture set under `assets/` whose colour is
+/// grey about the middle and whose normal map is its fine relief alone
+/// (`tools/textures detail`), how many metres one copy covers, and how strongly it shows.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Detail {
+    pub path: String,
+    pub metres: f32,
+    #[serde(default = "full")]
+    pub strength: f32,
+}
+
+fn full() -> f32 {
+    1.0
+}
+
 fn one() -> u32 {
     1
 }
@@ -968,6 +990,7 @@ impl Default for Kit {
             timber: Timber::default(),
             roof: Roofing::default(),
             textures: BTreeMap::new(),
+            details: BTreeMap::new(),
             cost: KitCost::default(),
             toughness: KitToughness::default(),
             damage: BTreeMap::new(),
@@ -1305,6 +1328,7 @@ mod tests {
         assert_eq!(file.meets, Some(Meets::of(Pattern::Logs)));
         let pine = Kit {
             textures: BTreeMap::new(),
+            details: BTreeMap::new(),
             cost: KitCost::default(),
             overhang: 0.0,
             dress: Dressing::default(),

@@ -123,6 +123,36 @@ impl Quality {
         }
     }
 
+    /// The side of a construction material's colour and normal map, in texels, as a
+    /// game's texture quality setting gives it (D362): 2048 at high and medium, a texel a
+    /// pixel on a stone wall a metre off at 1080p; half that, a quarter of the memory, on
+    /// the integrated GPU's low, whose picture is drawn at three fifths the screen's size.
+    pub fn texture_side(self) -> u32 {
+        match self {
+            Quality::High | Quality::Medium => 2048,
+            Quality::Low => 1024,
+        }
+    }
+
+    /// How far off a construction material's detail texture is faded out, in metres, and
+    /// whether it is drawn at all (D362): not at the low preset, which draws relief flat too.
+    pub fn detail_fade_m(self) -> Option<[f32; 2]> {
+        match self {
+            Quality::High | Quality::Medium => Some([3.0, 8.0]),
+            Quality::Low => None,
+        }
+    }
+
+    /// How strongly the picture is sharpened after its temporal anti-aliasing, 0 to 1
+    /// (`upscale::sharpen`, D362): enough at full size to give back the finest detail TAA
+    /// blends away, as much as before where the low preset's picture is also stretched.
+    pub fn sharpening(self) -> f32 {
+        match self {
+            Quality::High | Quality::Medium => 0.6,
+            Quality::Low => 0.5,
+        }
+    }
+
     /// How far each level of detail reaches, as a share of the distances it is made for:
     /// buildings', trees' and plants' finer details give way sooner. It is the
     /// `detail::DetailScale` the preset sets (D230).

@@ -22,6 +22,8 @@
         Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
     },
+    // Earth is not stone: none of the block pattern's stone grain on its walls and floors.
+    details: { Masonry: None, Floor: None },
     dress: (
         own: Some("data/kits/pieces/earth.ron"),
         roles: {

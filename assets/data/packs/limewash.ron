@@ -10,6 +10,8 @@
     textures: {
         Masonry: (path: "materials/medieval_wall_01", metres: (2.0, 2.0), depth: 0.015),
     },
+    // Lime-wash is not bare stone: none of the block pattern's stone grain on its walls.
+    details: { Masonry: None },
     dress: (
         roles: { Head: Profile(extend: 0.22) },
         tint: (0.95, 0.92, 0.88),
