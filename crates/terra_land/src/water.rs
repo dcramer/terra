@@ -122,6 +122,13 @@ impl Waters {
                 *cell = None;
             }
         }
+        // A lake let go has no cells and no area, so nothing draws it.
+        for (lake, kept) in self.lakes.lakes.iter_mut().zip(&kept) {
+            if !kept {
+                lake.cells = 0;
+                lake.area_m2 = 0.0;
+            }
+        }
         self
     }
 
