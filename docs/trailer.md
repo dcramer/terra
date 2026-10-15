@@ -27,8 +27,9 @@ Each run is left as `~/.cache/terra-review/trailer/<name>.mp4`, with its own sou
 
 As Unreal's Movie Render Queue renders a sequence: each run is a scripted run stepped a sixtieth of a second a frame, warmed up where it starts (six seconds, so streaming, grass and the eye settle), every second frame kept, so the film plays at the game's speed however slowly it is drawn.
 
+- **The runner** runs empty-handed (the action bar's empty last slot taken in the warm-up): the held tools are untextured stand-ins still.
 - **The route** is longer than the run: at the jog's 4.3 m/s a 25 s film with its lead-in needs 114 m. A player who reaches the last spot stands idle, which on film reads as a figure that is not animated; the tool says so before it films a run whose route is short.
-- **The camera** is the game's: the boom behind and over the shoulder, nothing scripted. The route is smoothed into a spot every 4 m (centripetal Catmull-Rom), so the runner, and the camera with them, turn a little at a time, never swinging at a corner.
+- **The camera** is the game's: the boom behind and over the shoulder, nothing scripted. The route is smoothed into a spot every 4 m (centripetal Catmull-Rom), and the runner heads for the point of it 6 m ahead (pure pursuit, as games' path following steers), so the runner, and the camera with them, turn a little at a time, never swinging at a corner or at a spot.
 - **The look** (`--cine`, D357): the exposure held from the moment the run starts, so it does not pump between shade and open; the clock held at the hour, so shadows do not step; motion blur at a film's 180° shutter; a 2.39:1 letterbox. Depth of field is there (`look.aperture`) but off: at the follow distance it blurs the land, and the land is the point.
 - **The sound** is the game's own, made in code (`terra_sandbox --sound-bed`): each place's wind, birds, water, fire or the crowd's murmur, and a phrase of the game's music, mixed to a bed, since a scripted run is silent.
 

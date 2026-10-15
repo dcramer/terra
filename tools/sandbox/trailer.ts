@@ -99,6 +99,11 @@ function tilted(degrees: number): string[] {
   return ["--press", `${degrees > 0 ? "up" : "down"}@60-${60 + frames}`];
 }
 
+/// A trailer's runner runs empty-handed: the action bar's last slot, empty in the starting
+/// kit, taken early in the warm-up. The kit's first tool, the hammer, is in hand otherwise,
+/// and the held tools are untextured stand-ins, flat colour that read as a debug tint.
+const EMPTY_HANDED = ["--press", "8@60"];
+
 /// The sandbox's options for a run: its place's, the play experiment for the game's own
 /// player (never walk's test body), the hour, the date, where the player starts and the
 /// route, smoothed.
@@ -122,6 +127,7 @@ function sandboxArgs(shot: Shot): string[] {
     shot.player.face ?? route[0].map((v) => v.toFixed(1)).join(","),
     ...route.flatMap(([e, s]) => ["--route", `${e.toFixed(1)},${s.toFixed(1)}`]),
     ...tilted(shot.player.tilt ?? 0),
+    ...EMPTY_HANDED,
   ];
 }
 

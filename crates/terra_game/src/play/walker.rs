@@ -306,12 +306,18 @@ impl Detour {
     }
 }
 
-/// For scripted walks, such as benchmarks (`--route`): the player walks to each spot in
-/// turn, east and south of the start, turning toward it no faster than the arrow keys turn
+/// For scripted walks, such as benchmarks (`--route`): the player walks the route through
+/// its spots in turn, east and south of the start, turning no faster than the arrow keys turn
 /// the view, as someone playing would. Once at the last, they stand. Stopped by a trunk or
 /// a rock in the way, they head off to one side for a moment and on again, the other side
 /// and longer each try, and give a spot up for the next if it cannot be reached, so the walk
 /// keeps going however the world it crosses is laid out (D276).
+///
+/// The walk heads for the point of the route a few metres ahead of it (`pursued`), as a
+/// game's path following and a vehicle's pure pursuit steer, not for the next spot itself:
+/// made for each spot in turn, a walk a little off its line swung toward the spot as it came
+/// near and turned back at it, and a trailer's camera jumped sideways at every spot of a
+/// smoothed route, once a second.
 fn follow_route(
     time: Res<Time>,
     options: Res<Options>,
@@ -325,32 +331,69 @@ fn follow_route(
     if cine.is_some_and(|cine| !cine.rolling()) {
         return;
     }
-    let Some(&(east, south)) = options.route.get(*next) else {
-        return;
-    };
     let (transform, mut view, mut intent) = player.into_inner();
     let feet = transform.translation;
     let up = feet.normalize();
-    let to = (start.at(east, south) - feet).reject_from(up);
-    if to.length() < ROUTE_REACHED_M || detour.given_up() {
-        *next += 1;
-        if detour.given_up() {
+    let spot = |i: usize| {
+        let (east, south) = options.route[i];
+        start.at(east, south)
+    };
+    let away = |i: usize| (spot(i) - feet).reject_from(up).length();
+    // Spots inside the look-ahead are passed, all but the last, which is reached by standing
+    // on it; a spot given up is passed too.
+    while let Some(&(east, south)) = options.route.get(*next) {
+        let last = *next + 1 == options.route.len();
+        let reached = away(*next) < if last { ROUTE_REACHED_M } else { ROUTE_AHEAD_M };
+        if !reached && !detour.given_up() {
+            break;
+        }
+        if reached {
+            info!("Route: reached {east:.0},{south:.0}.");
+        } else {
             info!(
                 "Route: gave up {east:.0},{south:.0}, {:.0} m short.",
-                to.length()
+                away(*next)
             );
-        } else {
-            info!("Route: reached {east:.0},{south:.0}.");
         }
+        *next += 1;
         *detour = Detour::default();
+    }
+    if *next >= options.route.len() {
         return;
     }
+    let from = if *next > 0 { spot(*next - 1) } else { feet };
+    let to = pursued(feet, up, from, spot(*next), ROUTE_AHEAD_M);
     let wanted =
-        Quat::from_axis_angle(up, detour.turn(to.length(), time.delta_secs())) * to.normalize();
-    let turn = libm::atan2f(up.dot(view.forward.cross(wanted)), view.forward.dot(wanted));
-    let most = ROUTE_TURN * time.delta_secs();
-    view.forward = Quat::from_axis_angle(up, turn.clamp(-most, most)) * view.forward;
+        Quat::from_axis_angle(up, detour.turn(away(*next), time.delta_secs())) * to.normalize();
+    view.forward = turned_toward(view.forward, wanted, up, ROUTE_TURN * time.delta_secs());
     intent.keep_held(Action::Forward);
+}
+
+/// How far ahead along its route a route walk heads for, in metres: a few strides, past the
+/// next spot of a smoothed route (one every 4 m).
+const ROUTE_AHEAD_M: f32 = 6.0;
+
+/// The way, across the ground at `feet`, to the point `ahead` metres away on the leg of a
+/// route from `from` to `to`, the far one where the leg crosses that distance; to `to` if
+/// the leg is nearer or never comes that near.
+fn pursued(feet: Vec3, up: Vec3, from: Vec3, to: Vec3, ahead: f32) -> Vec3 {
+    let a = (from - feet).reject_from(up);
+    let b = (to - feet).reject_from(up);
+    let d = b - a;
+    // |a + t d| = ahead, the larger t in 0 to 1.
+    let (qa, qb, qc) = (d.dot(d), 2.0 * a.dot(d), a.dot(a) - ahead * ahead);
+    let disc = qb * qb - 4.0 * qa * qc;
+    if qa < 1e-6 || disc < 0.0 || b.length() <= ahead {
+        return b;
+    }
+    let t = ((-qb + libm::sqrtf(disc)) / (2.0 * qa)).clamp(0.0, 1.0);
+    a + d * t
+}
+
+/// `forward` turned about `up` toward `wanted`, by at most `most` radians.
+fn turned_toward(forward: Vec3, wanted: Vec3, up: Vec3, most: f32) -> Vec3 {
+    let turn = libm::atan2f(up.dot(forward.cross(wanted)), forward.dot(wanted));
+    Quat::from_axis_angle(up, turn.clamp(-most, most)) * forward
 }
 
 /// For testing, moves the player where a scripted run says, on the frame it says (--warp),
@@ -387,6 +430,67 @@ fn warp(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Walked at a jog down a smoothed route, a spot every 4 m, wandering a little either
+    /// side of a straight line, as a path's laid points do, the walk turns smoothly: never
+    /// more than a little a frame once it is on its way, and nowhere more at one spot than
+    /// between them. Heading for each spot in turn, it turned hardest as it came on each, and
+    /// the camera behind it jumped once a second.
+    #[test]
+    fn a_route_walk_turns_smoothly_past_its_spots() {
+        let up = Vec3::Y;
+        let spots: Vec<Vec3> = (1..60)
+            .map(|i| Vec3::new(0.35 * libm::sinf(i as f32 * 1.7), 0.0, -4.0 * i as f32))
+            .collect();
+        let dt = 1.0 / 60.0;
+        let mut feet = Vec3::new(0.8, 0.0, 0.0);
+        let mut forward = Vec3::NEG_Z;
+        let mut next = 0;
+        let mut turns = Vec::new();
+        for _ in 0..(60 * 40) {
+            while next + 1 < spots.len() && (spots[next] - feet).length() < ROUTE_AHEAD_M {
+                next += 1;
+            }
+            let from = if next > 0 { spots[next - 1] } else { feet };
+            let to = pursued(feet, up, from, spots[next], ROUTE_AHEAD_M);
+            let turned = turned_toward(forward, to.normalize(), up, ROUTE_TURN * dt);
+            turns.push(forward.angle_between(turned));
+            forward = turned;
+            feet += forward * 4.3 * dt;
+        }
+        let settled = &turns[120..];
+        let most = settled.iter().cloned().fold(0.0, f32::max);
+        assert!(
+            most < 0.15_f32.to_radians(),
+            "turned {:.2} degrees in a frame",
+            most.to_degrees()
+        );
+        // And it went the way, staying near its line.
+        assert!(feet.z < -150.0 && feet.x.abs() < 1.0, "ended at {feet}");
+    }
+
+    /// The point pursued is that far off on the route's leg, ahead of the walk, and the leg's
+    /// end when it is nearer than that.
+    #[test]
+    fn a_route_walk_heads_for_the_point_a_few_metres_on() {
+        let up = Vec3::Y;
+        let to = pursued(
+            Vec3::ZERO,
+            up,
+            Vec3::new(1.0, 0.0, 10.0),
+            Vec3::new(1.0, 0.0, -10.0),
+            6.0,
+        );
+        assert!((to.length() - 6.0).abs() < 1e-4 && to.z < 0.0, "{to}");
+        let near = pursued(
+            Vec3::ZERO,
+            up,
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 0.0, -3.0),
+            6.0,
+        );
+        assert!((near - Vec3::new(0.0, 0.0, -3.0)).length() < 1e-5, "{near}");
+    }
 
     /// A walk getting nearer goes straight; one stopped turns off to its left for a while,
     /// then heads for its spot again.
