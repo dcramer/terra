@@ -129,6 +129,8 @@ const SOFFIT_DROP_M: f32 = 0.004;
 const SQUARE_RECESS: f32 = 0.2;
 /// And a piece's whose part set in is all out of sight: a little past the diagonal.
 const BURIED_RECESS: f32 = 1.05;
+/// How far short of its square end a border stops.
+const BORDER_SHORT_M: f32 = 0.003;
 /// How far past a lintel's or a sill's back its reveal is sunk.
 const REVEAL_PAST_M: f32 = 0.06;
 /// How far a corner stone may run along a face it shares with the cube's other edge's
@@ -187,9 +189,21 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             let edge = layout::roles::Edge { role, side, other };
             let (from, to) = layout::roles::line(cube, edge);
             let at = |p: [i32; 3]| IVec3::from_array(p).as_vec3() * (CELL_M / TICKS as f32);
+            let (mut from, mut to) = (at(from), at(to));
+            // A border sunk into the floor it lies on, ended square where that floor ends
+            // in a face, stops a hair short of it, its end not in that face's plane.
+            if role == layout::Role::Border {
+                let along = (to - from).normalize_or_zero();
+                if ends[0] == End::Square {
+                    from += along * BORDER_SHORT_M;
+                }
+                if ends[1] == End::Square {
+                    to -= along * BORDER_SHORT_M;
+                }
+            }
             let sweep = Sweep {
-                from: at(from),
-                to: at(to),
+                from,
+                to,
                 side: unit(side),
                 up: Vec3::Y,
                 ends,
@@ -231,6 +245,12 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             let Some(profile) = pieces.profiles.get(name) else {
                 return;
             };
+            // On a shape cut in half cubes, a step a half cube deep: a nose modelled for a
+            // step a cube deep reaches back no further than its own, not on into the stone of
+            // the stair over it, through whose face its back would show.
+            let back = -CELL_M * 0.5;
+            let profile: Vec<[f32; 2]> = profile.iter().map(|&[x, y]| [x.max(back), y]).collect();
+            let profile = &profile;
             let (from, to) = (from.metres(), to.metres());
             let along = (to - from).normalize_or(Vec3::X);
             let side = unit(side);

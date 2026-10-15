@@ -377,6 +377,30 @@ fn level_cut(made: &mut Member, from: Vec3, axis: Vec3, height: f32) {
     }
 }
 
+/// A member cut plumb through a point, square to a level way: rings added where each line
+/// along it crosses that upright plane, and every point past it, that way, brought back onto it.
+fn plumb_cut(made: &mut Member, from: Vec3, axis: Vec3, at: Vec3, way: Vec3) {
+    let past = |p: Vec3| (p - at).dot(way);
+    if made.grid.iter().flatten().all(|p| past(*p) <= 0.0) {
+        return;
+    }
+    let mut places: Vec<f32> = Vec::new();
+    for i in 1..made.grid.len() {
+        for (p, q) in made.grid[i - 1].iter().zip(&made.grid[i]) {
+            let (a, b) = (past(*p), past(*q));
+            if a * b < 0.0 {
+                places.push((p.lerp(*q, a / (a - b)) - from).dot(axis));
+            }
+        }
+    }
+    places.sort_by(f32::total_cmp);
+    places.dedup_by(|a, b| (*a - *b).abs() < 2e-3);
+    rings_at(made, from, axis, &places);
+    for p in made.grid.iter_mut().flatten() {
+        *p -= way * past(*p).max(0.0);
+    }
+}
+
 fn rings_at(made: &mut Member, from: Vec3, axis: Vec3, places: &[f32]) {
     for &place in places {
         let along = |ring: &[Vec3]| {
@@ -1171,6 +1195,18 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     if (from.y - to.y).abs() > 0.05 {
         let cap = libm::ceilf(from.y.max(to.y) / crate::CELL_M - 1e-3) * crate::CELL_M;
         level_cut(&mut member, from, frame.axis, cap);
+        // And its foot cut plumb where its line meets the floor, at the flight's front, so
+        // its lower edge, a section's depth down the slope from its line, does not stand out
+        // in front of the flight.
+        let (low, high) = if from.y < to.y {
+            (from, to)
+        } else {
+            (to, from)
+        };
+        let way = (low - high).with_y(0.0).normalize_or_zero();
+        if way != Vec3::ZERO {
+            plumb_cut(&mut member, from, frame.axis, low, way);
+        }
     }
     let t = &kit.timber;
     let shade = 1.0 - t.variation.shade * 0.8 * random.unit();

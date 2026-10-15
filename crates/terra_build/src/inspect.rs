@@ -1195,7 +1195,10 @@ fn pokes_out(
             // back of each step.
             for p in t.p {
                 let cell = (p / CELL_M).floor().as_ivec3();
-                let ground = f32::from(base.ground().height_cm([cell.x, cell.z])) / 100.0;
+                // The ground as the layout sinks a plinth to it: where the base keeps no
+                // sample, as beside its cubes, from the samples beside the column.
+                let ground = crate::layout::roles::ground_ticks(base, [cell.x, cell.z]) as f32
+                    * (CELL_M / crate::layout::TICKS as f32);
                 if p.y < ground {
                     continue;
                 }
@@ -1838,6 +1841,22 @@ mod tests {
         assert_eq!(found(0.1, 0.2).len(), 1);
         // Under the ground, where a plinth is sunk to meet it, nothing is out.
         assert!(found(0.1, -0.2).is_empty());
+        // The ground 40 cm up under the cube, and none kept beside it, where no cube is: the
+        // ground there is as the layout takes it, from beside it, and the trim in it.
+        let mut raised = base.clone();
+        raised.sample_ground([crate::Sample {
+            column: [0, 0],
+            height_cm: 40,
+        }]);
+        let c = |x: f32, z: f32| Vec3::new(x, 0.3, z);
+        let drawn = Drawn {
+            tris: vec![tri([c(-0.1, -0.1), c(0.2, -0.1), c(-0.1, 0.2)], 0)],
+            meshes: vec!["plinth".into()],
+            kinds: vec![Some((Kind(2), Material::Dressed))],
+        };
+        let mut findings = Vec::new();
+        pokes_out(&raised, &kits, &roofs, &drawn, Detail::Near, &mut findings);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]

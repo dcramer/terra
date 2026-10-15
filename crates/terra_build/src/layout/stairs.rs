@@ -447,6 +447,50 @@ mod tests {
     }
 
     #[test]
+    fn a_stringers_foot_is_cut_plumb_at_the_flights_front() {
+        // Three stairs two cubes wide rising north, each cut to two steps on the cubes under
+        // it: the lowest nose so near the floor the stringer starts at the flight's front,
+        // and its lower edge, its depth down the slope from its line, is cut plumb there
+        // rather than standing out in front over whatever is below.
+        let mut base = Base::default();
+        for step in 0..3 {
+            if step > 0 {
+                base.apply(BuildOp::Fill {
+                    min: [0, 0, -step],
+                    max: [1, step - 1, -step],
+                    cube: Some(Cube::new(kit().kind(), Fill::Solid)),
+                });
+            }
+            base.apply(BuildOp::Fill {
+                min: [0, step, -step],
+                max: [1, step, -step],
+                cube: Some(Cube {
+                    shape: crate::Shape::Stair(crate::Facing::North),
+                    ..Cube::new(kit().kind(), Fill::Solid)
+                }),
+            });
+        }
+        let layout = lay(&base, &kit());
+        let mut stringers = 0;
+        for piece in layout
+            .pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Plank { from, to, .. } if from.0[1] != to.0[1]))
+        {
+            stringers += 1;
+            let mut surfaces = crate::mesh::Surfaces::default();
+            crate::draw::draw(piece, &kit(), None, &mut surfaces);
+            for p in surfaces.0.values().flat_map(|s| &s.positions) {
+                assert!(
+                    p.z <= crate::CELL_M + 1e-3,
+                    "{p} out in front of the flight"
+                );
+            }
+        }
+        assert_eq!(stringers, 2);
+    }
+
+    #[test]
     fn a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts() {
         // Four steps two cubes wide, rising north, each a cube higher.
         let mut base = Base::default();

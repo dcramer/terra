@@ -425,8 +425,11 @@ impl<'a> Roles<'a> {
                         push(Role::Foot, side, vertical);
                     }
                 } else if fv == Beyond::Same
-                    && self.solid(diagonal).is_some()
-                    && self.solid(diagonal + side.step()).is_some()
+                    && [diagonal, diagonal + side.step()]
+                        .iter()
+                        // A floor it borders, not a roof's slope it rises out of, as a
+                        // wall over a lean-to does.
+                        .all(|&at| self.solid(at).is_some_and(|kind| !kind.is_roof()))
                 {
                     push(Role::Border, side, vertical);
                 }
@@ -936,6 +939,17 @@ mod tests {
                 .iter()
                 .all(|e| e.cube.y == 1 && e.edge.side == Dir::South)
         );
+    }
+
+    #[test]
+    fn a_wall_over_a_lean_to_has_no_border_on_its_roof() {
+        // A wall three cubes high, a lean-to's roof cubes against its south face two cubes
+        // deep, standing on the stone under it: where the wall's face rises out of the
+        // roof, it meets the roof's slope, no floor it borders.
+        let mut base = base(&[([0, 0, 0], [3, 2, 0]), ([0, 0, 1], [3, 0, 2])]);
+        fill(&mut base, [0, 1, 1], [3, 1, 2], Kind::FIRST_ROOF);
+        let d = all(&base);
+        assert_eq!(count(&d, Role::Border), 0, "{d:?}");
     }
 
     #[test]

@@ -1499,6 +1499,70 @@ fn a_log_floor_in_a_stone_tower_stops_at_its_walls_faces() {
 }
 
 #[test]
+fn a_border_ending_where_its_floor_does_is_not_in_the_floors_face() {
+    // A stone wall with a floor of stone a storey high along its north face, as the castle's
+    // wall-walk along its curtain, the floor ending in a face at the west where the wall runs
+    // on: the border along the wall's foot is sunk into the floor's top, and its end there
+    // is not in the floor's end face.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    base.apply(BuildOp::Fill {
+        min: [0, 0, 0],
+        max: [5, 1, 2],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    base.apply(BuildOp::Fill {
+        min: [-2, 0, 3],
+        max: [5, 3, 3],
+        cube: Some(Cube::new(stone, Fill::Solid)),
+    });
+    let report = crate::inspect::inspect(&base, &kits, &rough(&kits));
+    let fighting: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.fault == crate::inspect::Fault::Coplanar)
+        .map(|f| format!("{:?} {}", f.detail, f.what))
+        .collect();
+    assert!(fighting.is_empty(), "{fighting:#?}");
+}
+
+#[test]
+fn a_stone_stairs_noses_keep_out_of_the_flight_over_them() {
+    // A flight of stone stairs two cubes wide rising north, each stair cut to two steps on
+    // the whole cubes under it: each step's nose lies on its tread and reaches back no
+    // further than the step does, not into the stone of the next stair up.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    for step in 0..3 {
+        if step > 0 {
+            base.apply(BuildOp::Fill {
+                min: [0, 0, -step],
+                max: [1, step - 1, -step],
+                cube: Some(Cube::new(stone, Fill::Solid)),
+            });
+        }
+        base.apply(BuildOp::Fill {
+            min: [0, step, -step],
+            max: [1, step, -step],
+            cube: Some(Cube {
+                shape: crate::Shape::Stair(crate::Facing::North),
+                ..Cube::new(stone, Fill::Solid)
+            }),
+        });
+    }
+    let report = crate::inspect::inspect(&base, &kits, &rough(&kits));
+    let buried: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.fault == crate::inspect::Fault::Buried)
+        .map(|f| format!("{:?} {}", f.detail, f.what))
+        .collect();
+    assert!(buried.is_empty(), "{buried:#?}");
+}
+
+#[test]
 fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
     // Town buildings of every kit and plan, two storeys and decks among them, each edited
     // a cube at a time: one taken out of it, one put on its top, one beside it on the

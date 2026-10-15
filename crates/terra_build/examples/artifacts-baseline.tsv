@@ -2,9 +2,3 @@
 # bases: the ratchet's baseline. `cargo xtask artifacts --record` (every base) and
 # `--quick --record` (the rectangles `cargo xtask check` inspects) write it.
 # set	kits	fault	count
-all	hewn with logs with stone	Buried	1
-all	stone	Buried	1
-all	stone with hewn	Coplanar	2
-all	stone with hewn	PokesOut	6
-all	stone with logs	Coplanar	2
-all	stone with logs	PokesOut	6
