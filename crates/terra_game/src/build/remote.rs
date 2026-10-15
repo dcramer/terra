@@ -34,6 +34,8 @@
 //!   start, to look at it or walk to it.
 //! - `build.look {from, at}`: holds the camera at a place in the base, in metres, looking at
 //!   another, as `sandbox.look` does in the world's terms (a film's camera, `--calls`).
+//! - `build.damage_drawn {drawn}`: draws damage, or not, everywhere, to compare what is not
+//!   damaged both ways (`cargo xtask artifacts --frames`).
 //! - `build.example {name}`: puts up an example building whole as the base, in place of what
 //!   is there: `castle`, to edit and time a base of 140,000 cubes (`cargo xtask qa castle`).
 //! - `build.material {kind}`: the material in the player's hammer, as Ctrl and the wheel
@@ -87,6 +89,7 @@ pub fn plugin(app: &mut App) {
     method(app, "build.point", point);
     method(app, "build.look", look);
     method(app, "build.example", example);
+    method(app, "build.damage_drawn", damage_drawn);
     method(app, "build.ground", ground);
     method(app, "build.material", material);
     method(app, "build.replace", replace);
@@ -260,6 +263,23 @@ fn point(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         "world": placed.to_array(),
         "from_start": start.local(placed).to_array(),
     }))
+}
+
+#[derive(Deserialize)]
+struct DamageDrawn {
+    drawn: bool,
+}
+
+/// Draws damage, or not, everywhere: a check compares what is not damaged both ways, which
+/// must look the same (`cargo xtask artifacts --frames`, undamaged).
+fn damage_drawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let DamageDrawn { drawn } = parse_some(params)?;
+    let mut arrays = world
+        .get_resource_mut::<super::arrays::Arrays>()
+        .ok_or_else(|| refused("nothing is drawn in the texture arrays"))?;
+    arrays.hide_damage(!drawn);
+    info!("Build: damage drawn: {drawn}");
+    Ok(json!({ "drawn": drawn }))
 }
 
 #[derive(Deserialize)]

@@ -301,6 +301,9 @@ pub struct Arrays {
     damage: DamageMask,
     /// Whether the mask is drawn at the preset (not at the low).
     damage_detail: bool,
+    /// Whether a check has hidden the damage drawing, to compare a frame with it and
+    /// without on what is not damaged (`build.damage_drawn`, `cargo xtask artifacts --frames`).
+    damage_hidden: bool,
     /// Whether a file is there, by its path under `assets/`.
     exists: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     /// Texture sets made resident and let go, and how long the slowest took from asked to
@@ -446,6 +449,7 @@ impl Arrays {
             table_dirty: true,
             relief: Quality::High.relief_layers(),
             damage_detail: true,
+            damage_hidden: false,
             exists,
             made: 0,
             dropped: 0,
@@ -456,6 +460,15 @@ impl Arrays {
     pub fn relayer(&mut self, layers: Arc<Layers>) {
         self.layers = layers;
         self.table_dirty = true;
+    }
+
+    /// Hides the damage drawing, or shows it again: a check's, to compare what is not
+    /// damaged with it and without.
+    pub fn hide_damage(&mut self, hidden: bool) {
+        if self.damage_hidden != hidden {
+            self.damage_hidden = hidden;
+            self.table_dirty = true;
+        }
     }
 
     /// Whether every layer of these is resident and written.
@@ -848,7 +861,9 @@ pub fn stream(
         let table = arrays.table();
         let worn = arrays.worn();
         let breaks = arrays.breaks();
-        let drawn = arrays.damage_detail && matches!(arrays.damage, DamageMask::Ready);
+        let drawn = arrays.damage_detail
+            && !arrays.damage_hidden
+            && matches!(arrays.damage, DamageMask::Ready);
         if let Some(mut material) = materials.get_mut(&arrays.material) {
             material.extension.table = table;
             material.extension.worn = worn;

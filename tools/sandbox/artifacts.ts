@@ -20,24 +20,62 @@
 //   piece went in is TAA trailing it (ghosting); the picture's brightness jumping in one
 //   frame where nothing went in is a room's light probe popping.
 //
+// - **undamaged**: a house of every wall kit, frozen ones too, built and never harmed, each
+//   pair seen held still with damage drawn and then hidden (`build.damage_drawn`, through
+//   `--calls`): the two pictures must agree, or damage is drawn where there is none, as a
+//   web of cracks drawn black on undamaged daub was.
+//
 // Each check prints its numbers against its limit, and saves its worst frame with what
 // changed marked red, in shots/artifacts/<quality>/sheet: so a person sees at a glance what
 // failed and where. Fails if any check is over its limit. Under WSL the runs are the Windows
 // build on the real GPU. Node 22.18 or later; no dependencies.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT, buildOffscreen, offscreenPath, offscreenRun } from "./client.ts";
 import { CHANGED, blur, changed, flicked, grey, jumped, mean, share, trailing } from "./frames.ts";
 import { readPng, writePng } from "./png.ts";
+import { readKits } from "./qa/script.ts";
+
+/// The undamaged check's run, its calls in a file the run reads (`--calls`): every wall
+/// kit's house, two to a view.
+function undamaged(): Run {
+  const walls = readKits().filter((kit) => kit.roof);
+  const calls: { frame: number; method: string; params?: unknown }[] = [];
+  walls.forEach((kit, i) => {
+    const x = i * 7;
+    calls.push({ frame: 5, method: "build.lay", params: { what: "room", min: [x, 0, 0], max: [x + 4, 0, 4], kind: kit.name, floor: "stone" } });
+    calls.push({ frame: 5, method: "build.opening", params: { tiles: [[x + 2, 0, 4]], door: false } });
+    calls.push({ frame: 5, method: "build.lay", params: { what: "roof", over: [x + 2, 0, 2], kind: kit.name, style: "Hip" } });
+  });
+  // The player in the middle of the row, so every house is near enough to build.
+  calls.push({ frame: 2, method: "play.warp", params: { at: [walls.length * 1.75, 6] } });
+  calls.push({ frame: 6, method: "build.fill", params: { steps: 100000 } });
+  calls.push({ frame: 7, method: "build.fill", params: { steps: 100000 } });
+  const shots: number[] = [];
+  for (let v = 0; v * 2 < walls.length; v++) {
+    const start = 200 + v * 120;
+    // Houses 2v and 2v+1, each 2.5 m wide and 3.5 m apart, from 4 m off their fronts.
+    const middle = v * 7 + 3;
+    calls.push({ frame: start, method: "build.look", params: { from: [middle, 2.0, 6.5], at: [middle, 1.3, 1.2] } });
+    calls.push({ frame: start + 81, method: "build.damage_drawn", params: { drawn: false } });
+    calls.push({ frame: start + 111, method: "build.damage_drawn", params: { drawn: true } });
+    shots.push(start + 80, start + 110);
+  }
+  const file = resolve(ROOT, "shots/artifacts/undamaged.calls.jsonl");
+  mkdirSync(resolve(ROOT, "shots/artifacts"), { recursive: true });
+  writeFileSync(file, calls.map((call) => JSON.stringify(call)).join("\n") + "\n");
+  const args = ["--experiment", "play", "--level", "yard", "--free-build", "--detail-sweep", "1-1@150-151", "--calls", offscreenPath(file)];
+  return { name: "houses", check: "undamaged", args, frames: [shots[0], shots.at(-1)!], shots };
+}
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : fallback;
 };
 const qualities = arg("--quality", "high,low").split(",");
-const only = arg("--checks", "still,sun,glide,going-up").split(",");
+const only = arg("--checks", "still,sun,glide,going-up,undamaged").split(",");
 
 const VILLAGE = ["--experiment", "play", "--level", "yard", "--village", "--time", "17"];
 const TOWN = ["--experiment", "play", "--level", "yard", "--radius", "30000", "--town", "40", "--time", "17"];
@@ -48,9 +86,14 @@ const GOING_UP = ["--experiment", "play", "--level", "yard", "--time", "17", "--
 const STOP = 200;
 const STILL = [240, 279];
 
-type Check = "still" | "sun" | "glide" | "going-up";
-type Run = { name: string; check: Check; args: string[]; frames: [number, number] };
+type Check = "still" | "sun" | "glide" | "going-up" | "undamaged";
+type Run = { name: string; check: Check; args: string[]; frames: [number, number]; shots?: number[] };
+// Undamaged: a house of every wall kit and its roof, built and never harmed, each pair seen
+// held still with damage drawn and then with it hidden (`build.damage_drawn`): the same
+// picture both ways, or damage is drawn where there is none, as a web of cracks drawn black
+// on undamaged daub was. Every kit, frozen ones too.
 const RUNS: Run[] = [
+  undamaged(),
   {
     name: "village",
     check: "still",
@@ -103,7 +146,7 @@ const RUNS: Run[] = [
 /// frames held still; how much may flicker for one frame on a moving camera; how much may
 /// flash in one frame, or still be changing three frames after a step; and how far the
 /// picture's brightness may jump in one frame.
-const LIMITS = { still: 0.3, sun: 0.5, glide: 0.3, flash: 0.3, trail: 0.3, jump: 4 };
+const LIMITS = { still: 0.3, sun: 0.5, glide: 0.3, flash: 0.3, trail: 0.3, jump: 4, undamaged: 0.1 };
 type Result = { what: string; frame: number; share: number; mask: Uint8Array; picture: string; limit: number };
 
 /// The frames a run saved, by number.
@@ -136,6 +179,12 @@ function analyse(run: Run, dir: string): Result[] {
     console.log(`artifacts: ${run.check} ${run.name}: ${what}: mean ${(total / Math.max(1, counted)).toFixed(3)}% a frame, worst ${best.share.toFixed(3)}% at frame ${best.frame} (limit ${limit}%)`);
     return best;
   };
+  if (run.check === "undamaged") {
+    // Each view drawn with damage and without, one after the other in the list; a change
+    // past the still noise between them is damage drawn on what is not damaged.
+    const b = g.map((x) => blur(x, 1));
+    return [worst("damage drawn where there is none", LIMITS.undamaged, (i) => (i % 2 === 1 ? changed(b[i - 1], b[i], CHANGED * 2) : undefined))];
+  }
   if (run.check === "still") {
     return [worst("changed while still", LIMITS.still, (i) => (i > 0 ? changed(g[i - 1], g[i]) : undefined))];
   }
@@ -209,7 +258,7 @@ for (const quality of qualities) {
         mkdirSync(dir, { recursive: true });
         const [command, words] = offscreenRun(`artifacts-${run.check}-${run.name}`, [
           "--clean", "--quality", quality, ...run.args,
-          "--shots", `${offscreenPath(dir)}/f@${run.frames[0]}-${run.frames[1]}`,
+          "--shots", `${offscreenPath(dir)}/f@${run.shots ? run.shots.join(",") : `${run.frames[0]}-${run.frames[1]}`}`,
         ]);
         return runCommand(command, words);
       }),
