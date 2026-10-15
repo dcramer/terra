@@ -47,7 +47,7 @@ export const PLACES: Record<string, Place> = {
   lake: {
     about:
       "the mountain lake (docs/demos.md §1): the 30 km world's mountains, the lake its query finds (--site lake), in early June with the peaks' snow",
-    args: ["--experiment", "walk", "--radius", "30000", "--site", "lake", "--date", "06-10"],
+    args: ["--experiment", "play", "--radius", "30000", "--site", "lake", "--date", "06-10"],
     // The start is the lake's shore nearest its deepest water, facing it: -south is over the
     // water, east to the right.
     views: [
@@ -66,14 +66,15 @@ export const PLACES: Record<string, Place> = {
     look: "mountain-lake-day",
     ground: true,
     forest: false,
-    // Round the shore to the right, the first spots of the walk `cargo xtask fields --site
-    // lake` prints; the bench's lake-walk follows the same.
-    route: { at: "0,0", face: "0,-200", through: "84,32;123,16;173,16;216,22;248,-3;275,-35;302,-67;340,-84;378,-100" },
+    // Up the east shore, on the edge of the water and the forest with the peaks ahead across the
+    // lake, as the developers asked (2026-10-15); spots of the shore walk `cargo xtask fields
+    // --site lake` prints.
+    route: { at: "216,22", face: "248,-3", through: "248,-3;275,-35;302,-67;340,-84;378,-100;410,-124;431,-165;445,-213" },
   },
   tundra: {
     about:
       "the tundra (docs/demos.md §2): the fell plateau its query finds 10.5 km north of the start (--site tundra), in early October, the heath's autumn colours and the first snow lying in the lees",
-    args: ["--experiment", "walk", "--radius", "30000", "--site", "tundra", "--date", "10-08"],
+    args: ["--experiment", "play", "--radius", "30000", "--site", "tundra", "--date", "10-08"],
     // The start faces the closed forest's edge, 1.9 km off: -south is toward it, the open
     // plateau and the fells with their snow behind.
     views: [
