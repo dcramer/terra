@@ -193,10 +193,11 @@ fn blend_at(
     lerp(layer(low.z), layer(high.z), t.z)
 }
 
-/// Starts working out what each cell sees once there are crowns.
+/// Starts working out what each cell sees once there are crowns, and again when they change,
+/// as a broadleaf's crown thins in the fall and fills in the spring (climate.md, D327).
 fn bake(mut commands: Commands, occluders: Option<Res<SkyOccluders>>) {
     let Some(occluders) = occluders else { return };
-    if !occluders.is_added() {
+    if !occluders.is_changed() {
         return;
     }
     let occluders = occluders.clone();
@@ -223,6 +224,7 @@ fn receive(
     options: Res<Options>,
     occluders: Option<Res<SkyOccluders>>,
     baking: Option<ResMut<Baking>>,
+    before: Option<Res<Baked>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let (Some(mut baking), Some(occluders)) = (baking, occluders) else {
@@ -235,6 +237,10 @@ fn receive(
     };
     let Some(seen) = ready else { return };
     commands.remove_resource::<Baking>();
+    // A volume worked out before, for crowns as they were, makes way for this one.
+    if let Some(before) = before {
+        commands.entity(before.entity).despawn();
+    }
     let size = Extent3d {
         width: seen.cells.x,
         height: seen.cells.y * 2,

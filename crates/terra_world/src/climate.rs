@@ -36,7 +36,9 @@ use bevy::{
 };
 use std::sync::Arc;
 use std::time::Instant;
-use terra_climate::{Cell, Fields, LeafYear, Past, PastCache, Place, WorldTime};
+/// The cache of the past by cell, for what reads the climate here.
+pub use terra_climate::PastCache;
+use terra_climate::{Cell, Fields, LeafYear, Past, Place, WorldTime};
 use terra_land::frame::Frame;
 
 /// The kinds' years, a layer of the leaves map each, in this order.
@@ -250,6 +252,14 @@ pub const GRASS_KIND: &str = "grass";
 /// The kind whose leaves colour the heath's dwarf-shrub ground past the trees.
 pub const HEATH_KIND: &str = "dwarf_birch";
 
+/// How much of the ground round the camera snow covers, 0 to 1: the sky's light bounces off
+/// it white (`skylight`).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct SnowCover(pub f32);
+
+/// Snow this deep covers the ground, as ground.wesl lays it.
+const COVERING_M: f32 = 0.1;
+
 /// Snow this deep is the ground map's brightest.
 pub const SNOW_FULL_M: f32 = 0.5;
 /// Texels to a side of the maps, and how wide each is: a cell of the past each.
@@ -295,6 +305,7 @@ struct Painted {
 pub fn plugin(app: &mut App) {
     app.register_type::<ClimateSample>()
         .init_resource::<ClimateMaps>()
+        .init_resource::<SnowCover>()
         .insert_resource(SampleCache(PastCache::new(SAMPLE_CELLS)))
         .add_systems(Startup, read_fields)
         .add_systems(Update, (sample, paint).after(crate::daylight::Ticking));
@@ -495,6 +506,7 @@ fn paint(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut images: ResMut<Assets<Image>>,
     mut maps: ResMut<ClimateMaps>,
+    mut snow: ResMut<SnowCover>,
 ) {
     let (Some(fields), Some(mut painting), Some(camera)) = (fields, painting, camera.iter().next())
     else {
@@ -506,6 +518,13 @@ fn paint(
         painting.task = None;
         painting.cache = Some(painted.cache);
         painting.painted = Some((painted.middle, painted.time));
+        let middle = ((TEXELS / 2) * TEXELS + TEXELS / 2) as usize * 4;
+        let depth = painted
+            .ground
+            .get(middle)
+            .map_or(0.0, |&byte| byte as f32 / 255.0)
+            * SNOW_FULL_M;
+        snow.set_if_neq(SnowCover((depth / COVERING_M).clamp(0.0, 1.0)));
         if let Some(mut image) = images.get_mut(&painting.ground) {
             image.data = Some(painted.ground);
         }

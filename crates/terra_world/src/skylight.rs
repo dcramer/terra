@@ -58,6 +58,10 @@ struct Painted {
     filtering: u32,
 }
 
+/// What snow lying round the camera gives back of the light, linear: it is the ground's bounce
+/// in the sky's light where it lies, as ground.wesl's snow is.
+const SNOW_BOUNCE: Vec3 = Vec3::new(0.74, 0.76, 0.8);
+
 /// Bevy filters a generated environment map into its diffuse and specular light every frame
 /// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only
 /// a few times a minute. So it is there only for this many frames after each painting, enough
@@ -143,6 +147,7 @@ fn paint(
     mut painted: ResMut<Painted>,
     mut open: ResMut<OpenSky>,
     sky_seen: crate::sky_occlusion::SkySeen,
+    snow: Option<Res<crate::climate::SnowCover>>,
     shaders: Option<Res<crate::loading::Shaders>>,
     screen: Option<Res<State<crate::loading::Screen>>>,
     mut images: ResMut<Assets<Image>>,
@@ -203,8 +208,11 @@ fn paint(
         shade: linear(light.shade),
         horizon: linear(sky.horizon),
         zenith: linear(sky.zenith),
-        // Sunlit ground, as bright beside the sky as the sun makes it.
-        ground: linear(tweaks.grass_lush).lerp(linear(tweaks.ground_low), 0.4)
+        // Sunlit ground, as bright beside the sky as the sun makes it; under snow, the
+        // snow's white (D327).
+        ground: linear(tweaks.grass_lush)
+            .lerp(linear(tweaks.ground_low), 0.4)
+            .lerp(SNOW_BOUNCE, snow.map_or(0.0, |snow| snow.0))
             * linear(tweaks.sun_color)
             * (tweaks.sun_illuminance * sun_height
                 / (std::f32::consts::PI * light.brightness.max(1.0))

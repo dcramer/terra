@@ -1085,7 +1085,16 @@ fn fragment(
     let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
     colour = mix(colour, SNOW * sparkle, snow);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);
-    pbr_input.N = normalize(mix(pbr_input.N, normalize(in.world_normal), snow));
+    // The snow's own surface: drifted in soft swells a metre or two across, and grained finer.
+    let geometric = normalize(in.world_normal);
+    let tangent = normalize(cross(geometric, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-4, 0.0, 0.0));
+    let bitangent = cross(geometric, tangent);
+    let swell = vec2<f32>(
+        noise(world * 0.6 + tangent * 0.4 + 7.0) - noise(world * 0.6 - tangent * 0.4 + 7.0),
+        noise(world * 0.6 + bitangent * 0.4 + 7.0) - noise(world * 0.6 - bitangent * 0.4 + 7.0),
+    ) * 0.9 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.12;
+    let drifted = normalize(geometric + tangent * swell.x + bitangent * swell.y);
+    pbr_input.N = normalize(mix(pbr_input.N, drifted, snow));
 }
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
     // The vertex's alpha is how much of the sky it sees: the sky's light is dimmed by it,
