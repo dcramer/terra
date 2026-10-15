@@ -256,7 +256,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             let light = dot(colour, vec3<f32>(0.333)) / 0.06;
             // Its year's colour at a blade's own brightness, darker as straw is than a lawn.
             let straw = grass.grass_autumn.rgb * 0.35;
-            colour = mix(colour, straw * clamp(light, 0.5, 1.6), browned);
+            // A cotton grass head, many times brighter than any blade, stays white.
+            let head = smoothstep(3.0, 6.0, light);
+            colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, head);
         }
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;

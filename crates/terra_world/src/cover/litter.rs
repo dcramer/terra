@@ -166,7 +166,7 @@ pub(super) fn lay(
             let (gi, gj) = (first.x + a, first.y + b);
             let h = |stream| hash(seed, gi, gj, stream);
             let at = Vec2::new(gi as f32 + h(1), gj as f32 + h(2)) * SPACING_M;
-            let [_, grass, _, _, litter, moss, needles, roots, _, heap] = samples.at(at);
+            let [_, grass, _, _, litter, moss, needles, roots, _, heap, _] = samples.at(at);
             let floor = (litter + needles).min(1.0);
             // Thicker against trunks, logs and rocks, where the duff is; thinner in grass
             // and on moss.

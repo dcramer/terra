@@ -30,6 +30,7 @@ impl CoverSource for HeathCover {
             grass: (meadow + blades).min(1.0),
             lush: wild.lush * (1.0 - heath.open) + 0.3 * heath.open,
             tall: (heath.sedge / heath.open.max(1e-3)).min(1.0) * heath.open * 0.8,
+            heath: heath.open,
             ..default()
         }
     }

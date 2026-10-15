@@ -85,6 +85,10 @@ pub struct Growing {
     /// settlement's street: packed grey-brown earth with stones worked up and mud in its
     /// hollows, not the planet's own soil, and straw dropped about its edges.
     pub trodden: f32,
+    /// How much of it a cover the ground draws itself holds, the heath past the trees
+    /// (`terra_land::heath`, the ground's land map): covered, as the bare-ground measure counts
+    /// it, though no blade grows there.
+    pub heath: f32,
 }
 
 impl Growing {

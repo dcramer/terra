@@ -503,6 +503,7 @@ impl Map {
             shade: 1.0 - here.light,
             // A forest's paths are its own floor worn, not a settlement's packed earth.
             trodden: 0.0,
+            heath: 0.0,
             // Litter heaps against trunks, logs and rocks, its edge wandering (D294).
             heap: 1.0 - smoothstep(0.0, 0.9, here.bark.min(here.lying) + wander * 0.25),
             // Tall meadow grass in patches where the sun reaches; in the shade, clumps of

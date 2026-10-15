@@ -189,8 +189,8 @@ pub(super) struct Samples {
 }
 
 /// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
-/// needles, roots, tall and heap.
-pub(super) const SAMPLED: usize = 10;
+/// needles, roots, tall, heap and heath.
+pub(super) const SAMPLED: usize = 11;
 
 impl Samples {
     pub(super) fn at(&self, at: Vec2) -> [f32; SAMPLED] {
@@ -261,6 +261,7 @@ pub fn square(
                 growing.roots,
                 growing.tall,
                 growing.heap,
+                growing.heath,
             ]);
         }
     }
@@ -323,6 +324,7 @@ pub fn square(
                 roots,
                 taller,
                 _,
+                heath,
             ] = samples.at(at);
             let cell = (((at - corner) / CELL_M).floor().as_ivec2())
                 .clamp(IVec2::ZERO, IVec2::splat(CELLS as i32 - 1));
@@ -332,7 +334,7 @@ pub fn square(
             }
             // Fallen leaves and needles, moss and duff cover the ground too (docs/biomes.md,
             // ground cover).
-            if super::Growing::floored(litter, moss, needles, roots) {
+            if super::Growing::floored(litter, moss, needles, roots) || heath > 0.5 {
                 built.covered[index] = true;
             }
             // Its rank decides whether it grows at all, and in which rings: the far rings
@@ -380,11 +382,21 @@ pub fn square(
             let tip =
                 deep.lerp(green, 0.5 + 0.5 * clump.hue).lerp(dry, dryness) * (0.85 + 0.3 * h(7));
             let local = Vec3::new(at.x - middle.x, rise, at.y - middle.y);
+            // In tall wet sedge, the heath's (tall and not lush: a meadow's tall grass is
+            // lush), now and then a cotton grass stem: straight, a little taller,
+            // its seed head a white tuft at the top.
+            let cotton = taller > 0.35 && lush < 0.35 && h(12) < 0.1 * taller;
+            let (tall, bend) = if cotton {
+                (tall * 1.3, 0.06)
+            } else {
+                (tall, 0.25 + 0.5 * h(8))
+            };
+            mesh.head = cotton.then_some(COTTON * (0.9 + 0.15 * h(13)));
             mesh.blade(
                 local,
                 Vec3::new(bend_way.x, 0.0, bend_way.y),
                 tall,
-                0.25 + 0.5 * h(8),
+                bend,
                 BLADE_WIDTH_M
                     * ring.widen
                     * (0.8 + 0.4 * h(9))
@@ -427,7 +439,13 @@ struct BladeMesh {
     /// Its colour, and in alpha how far it stands above its root.
     colours: Vec<[f32; 4]>,
     indices: Vec<u32>,
+    /// The next blade's seed head, if it carries one: its colour over its top fifth.
+    head: Option<Vec3>,
 }
+
+/// Cotton grass's seed head, linear: a white tuft, a little warm (199, 191, 177 sRGB in the
+/// tundra's photographs).
+const COTTON: Vec3 = Vec3::new(0.58, 0.52, 0.44);
 
 impl BladeMesh {
     /// A blade from `root`, `tall` metres, bending toward `way` by `bend` of its height,
@@ -454,12 +472,16 @@ impl BladeMesh {
         };
         let base = self.positions.len() as u32;
         let root_colour = tip * 0.32;
+        let head = self.head.take();
         let mut push = |point: Vec3, normal: Vec3, t: f32| {
             self.positions.push(point.to_array());
             self.normals.push(normal.to_array());
             self.to_root.push([root.x - point.x, root.z - point.z]);
             self.up_and_rank.push([t, rank]);
-            let colour = root_colour.lerp(tip, libm::powf(t, 0.8));
+            let colour = match head {
+                Some(head) if t > 0.8 => head,
+                _ => root_colour.lerp(tip, libm::powf(t, 0.8)),
+            };
             self.colours
                 .push([colour.x, colour.y, colour.z, point.y - root.y]);
         };
