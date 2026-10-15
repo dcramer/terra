@@ -267,8 +267,7 @@ fn follow_sky_and_wind(
 }
 
 /// Every lake of a grid as one surface, as many small pools are best drawn: each cell under a
-/// lake at its level, and each cell beside one at the highest level beside it, so the water's
-/// edge runs under the shore.
+/// lake at its level.
 fn pools_mesh(waters: &Waters) -> Mesh {
     let region = waters.region();
     let n = region.cells;
@@ -279,26 +278,12 @@ fn pools_mesh(waters: &Waters) -> Mesh {
     let (mut positions, mut normals, mut indices) = (Vec::new(), Vec::new(), Vec::new());
     for r in 0..n {
         for c in 0..n {
-            let level = waters
-                .lake_at(c, r)
-                .map(|l| waters.lake_radius_m(l))
-                .or_else(|| {
-                    let mut best: Option<f32> = None;
-                    // Two cells' margin round a pool, so its edge is where its water meets the
-                    // ground, never a cell's straight edge over ground lower than its level.
-                    for (dc, dr) in (-2i64..=2).flat_map(|dc| (-2i64..=2).map(move |dr| (dc, dr))) {
-                        let (cc, rr) = (c as i64 + dc, r as i64 + dr);
-                        if cc < 0 || rr < 0 || cc >= n as i64 || rr >= n as i64 {
-                            continue;
-                        }
-                        if let Some(l) = waters.lake_at(cc as usize, rr as usize) {
-                            let here = waters.lake_radius_m(l);
-                            best = Some(best.map_or(here, |b: f32| b.max(here)));
-                        }
-                    }
-                    best
-                });
-            let Some(radius) = level else { continue };
+            // Only the pools' own cells, no margin: past them the ground is the polygons' troughs
+            // and rims, and water reaching over a trough lower than its level would lie on it
+            // in a cell's straight-edged sheet.
+            let Some(radius) = waters.lake_at(c, r).map(|l| waters.lake_radius_m(l)) else {
+                continue;
+            };
             let base = positions.len() as u32;
             for (dc, dr) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
                 let p = corner(c + dc, r + dr, radius);

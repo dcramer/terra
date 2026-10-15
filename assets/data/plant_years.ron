@@ -108,7 +108,7 @@
         turns_under_hours: 14.0,
         turns: 1.0,
         drops: 0.9,
-        autumn: (0.72, 0.3, 0.1),
+        autumn: (0.56, 0.3, 0.16),
         // The heath's dwarf shrubs, and the berry bushes, which are bilberry.
         cards: ["berry"],
     ),

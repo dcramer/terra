@@ -1,0 +1,63 @@
+{
+  "name": "tundra-autumn-day",
+  "about": "Open low tundra in late summer and early autumn by day: twenty-nine photographs from Wikimedia Commons (CC0, CC BY, CC BY-SA and public domain, credited in research/2026-10-15-tundra-reference.md) of Alaska, Svalbard, Greenland, Nunavut, Lapland, Norway and the Russian north: dwarf shrubs turning red and rust, lichen, sedge, pools, snow patches and a few stunted spruce and larch at the forest's edge, each with a horizon, measured by band. The real place the tundra demo is judged against (D321).",
+  "sources": [
+    "https://commons.wikimedia.org/wiki/Category:Tundra",
+    "https://commons.wikimedia.org/wiki/Category:Tundra_of_Alaska",
+    "https://commons.wikimedia.org/wiki/Category:Tundra_of_Russia",
+    "https://commons.wikimedia.org/wiki/Category:Tundra_of_Norway",
+    "https://commons.wikimedia.org/wiki/Category:Tundra_lakes_and_ponds",
+    "https://commons.wikimedia.org/wiki/Category:Waldtundra",
+    "https://commons.wikimedia.org/wiki/Category:Landscapes_of_Svalbard"
+  ],
+  "frames": 29,
+  "measured": "2026-10-15",
+  "look": {
+    "mean": 0.4872104879560338,
+    "p5": 0.1229203515889114,
+    "p50": 0.4663156457065584,
+    "p95": 0.8837041514536849,
+    "dark": 0.02895653735632184,
+    "bright": 0.14357131691677308,
+    "redOverGreen": 1.046759794252159,
+    "blueOverGreen": 0.9499485750124642,
+    "contrast": 0.2429599109898532,
+    "litLitter": 0.2746950331257983,
+    "shadeRedOverGreen": 2.2921523266997097,
+    "shadeBlueOverGreen": 0.6757632245544701,
+    "middleBlueOverGreen": 0.7014615308843754,
+    "limeTop": 0.010715597062579822
+  },
+  "bands": {
+    "sky": {
+      "share": 0.3458367589931886,
+      "mean": 0.7772190981238745,
+      "blueOverGreen": 1.0940879020036174,
+      "saturation": 0.17718189104041604,
+      "contrast": 0.021920545738583902
+    },
+    "far": {
+      "share": 0.10000000000000005,
+      "mean": 0.4237772612593543,
+      "blueOverGreen": 0.8728684617960731,
+      "saturation": 0.3013605467384559,
+      "contrast": 0.19540606288288112
+    },
+    "middle": {
+      "share": 0.22198793036930609,
+      "mean": 0.37457548396998286,
+      "blueOverGreen": 0.7518436330896371,
+      "saturation": 0.4589016245396519,
+      "contrast": 0.2770443901934134
+    },
+    "near": {
+      "share": 0.33217531063750527,
+      "mean": 0.293164742217566,
+      "blueOverGreen": 0.6749002057584788,
+      "saturation": 0.5332471525800659,
+      "contrast": 0.39804058866561814
+    },
+    "farUnderSky": 0.45167419760236716,
+    "farBluerThanMiddle": 0.12102482870643634
+  }
+}

@@ -59,9 +59,11 @@ fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
 
 /// The heath a place holds.
 pub fn heath(ground: Ground) -> Heath {
-    // The heath takes the ground as the trees thin and the season cools past them: a
-    // meadow's grass in the forest's glades and warm valleys, the heath above and beyond.
-    let open = smoothstep(-1.5, 0.6, ground.colder_c) * (1.0 - ground.trees);
+    // The heath takes the ground as the season cools toward and past the tree line: a
+    // meadow's grass in the forest's glades and warm valleys, the heath above and beyond,
+    // under the forest-tundra's islands of trees too; a closed forest's own floor in the warm.
+    let warm_forest = ground.trees * (1.0 - smoothstep(-1.5, 0.0, ground.colder_c));
+    let open = smoothstep(-1.5, 0.6, ground.colder_c) * (1.0 - warm_forest);
     if open <= 0.0 {
         return Heath {
             wet: ground.wet,
@@ -81,7 +83,7 @@ pub fn heath(ground: Ground) -> Heath {
     let sedge = smoothstep(0.42, 0.68, w) * (1.0 - moss) * (1.0 - 0.6 * high_arctic);
     let damp = 1.0 - smoothstep(0.5, 0.75, w);
     // Dwarf shrubs want winter's snow over them: the lee most, level ground some.
-    let shrub = damp * smoothstep(-0.2, 0.7, lee - 0.6 * exposed + 0.1) * (1.0 - high_arctic) * 0.9;
+    let shrub = damp * smoothstep(-0.2, 0.7, lee - 0.6 * exposed + 0.1) * (1.0 - high_arctic) * 0.6;
     let lichen = (1.0 - smoothstep(0.35, 0.6, w))
         * (0.4 + 0.6 * smoothstep(-0.5, -4.0, ground.shelter_deg).max(high_arctic))
         * (1.0 - 0.5 * scoured);

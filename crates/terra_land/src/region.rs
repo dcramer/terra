@@ -76,6 +76,28 @@ impl Region {
         Some((column as usize, row as usize))
     }
 
+    /// Which way the ground faces in a direction, blended from the four cells round it, so it
+    /// turns smoothly from cell to cell.
+    pub fn normal_at(&self, direction: Vec3) -> Option<Vec3> {
+        let toward = self.middle.normalize();
+        let along = direction.dot(toward);
+        if along <= 0.0 {
+            return None;
+        }
+        let on_plane = direction * (self.middle.length() / along) - self.middle;
+        let at = Vec2::new(on_plane.dot(self.east), on_plane.dot(self.north));
+        let half = self.cells as f32 * 0.5;
+        let last = (self.cells - 1) as f32;
+        let fc = (at.x / self.cell_m + half - 0.5).clamp(0.0, last);
+        let fr = (half - at.y / self.cell_m - 0.5).clamp(0.0, last);
+        let (c, r) = (fc as usize, fr as usize);
+        let (c2, r2) = ((c + 1).min(self.cells - 1), (r + 1).min(self.cells - 1));
+        let (tc, tr) = (fc - c as f32, fr - r as f32);
+        let top = self.normal(c, r).lerp(self.normal(c2, r), tc);
+        let bottom = self.normal(c, r2).lerp(self.normal(c2, r2), tc);
+        Some(top.lerp(bottom, tr).normalize())
+    }
+
     /// The point on the ground at a cell's middle.
     pub fn point(&self, land: &Land, column: usize, row: usize) -> Vec3 {
         self.direction(column, row) * (land.radius_m() + self.height(column, row))

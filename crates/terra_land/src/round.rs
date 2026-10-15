@@ -140,9 +140,7 @@ impl Round {
         // relief of polygons and detail would turn the sun's melt from vertex to vertex.
         let up = point.normalize_or(Vec3::Y);
         let region = self.waters.region();
-        let normal = region
-            .cell_of(up)
-            .map_or(normal, |(c, r)| region.normal(c, r));
+        let normal = region.normal_at(up).unwrap_or(normal);
         let place = self.place(point, normal);
         self.snow
             .depth_caught_m(place.latitude, place.height_m, place.sunward, place.catch)
