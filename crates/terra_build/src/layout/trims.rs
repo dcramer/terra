@@ -14,7 +14,7 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
     let mut holes: BTreeSet<(i32, i32)> = BTreeSet::new();
     for (at, cube) in super::Scope::row_cubes(walls.base, axis, row) {
         let (_, along) = axis.row_of(at);
-        // A doorway with a door fitted is framed by the door's own frame.
+        // A hole with a door or shutters fitted is framed by their own frame.
         if super::drawn_fill(&cube) != Fill::Solid
             && walls.runs(at, axis)
             && !super::framed(walls.base, at)
@@ -304,6 +304,23 @@ mod tests {
         let before = lay(&base, &kit);
         // Two jambs, a head and a sill.
         assert_eq!(boards(&before), 4);
+        // Shutters fitted over it come with their own frame: the kit's boards round it go.
+        let mut fitted = base.clone();
+        let shutters = crate::Prop {
+            min: [0, 2, 2],
+            max: [0, 3, 2],
+            opens: [-1, 0, 0],
+            hang: crate::fitting::Hang::Shutters,
+            ..crate::Prop::default()
+        };
+        let rules = crate::Rules::default();
+        fitted
+            .act(
+                &crate::ops::Op::FitProp(shutters),
+                &crate::ops::Context::free(&rules),
+            )
+            .unwrap();
+        assert_eq!(boards(&lay(&fitted, &kit)), 0);
         // One cube a metre and a half up the north wall, carved out.
         base.apply(BuildOp::Fill {
             min: [3, 3, 0],

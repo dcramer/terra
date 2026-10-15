@@ -1077,7 +1077,7 @@ impl Base {
         }
         self.hole_for(prop).ok_or(Refusal::NoHole)?;
         // A pair of doors or shutters is two of one.
-        let took = cx.rules.prop(prop.kind).times(prop.leaves().len() as u64);
+        let took = cx.rules.prop(prop.kind).times(prop.leaf_count() as u64);
         if !cx.world.has(&took) {
             return Err(Refusal::Materials(took));
         }

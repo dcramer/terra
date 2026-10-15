@@ -38,12 +38,12 @@ pub struct FittingLook {
     pub dims: Vec3,
     /// The foot of its hinge, in its own space: its origin, as the contract has it.
     pub hinge: Vec3,
-    /// The kit whose material its frame is drawn in, by name: a door's frame
+    /// The kit whose material its frame is drawn in, by name: a door's or shutters' frame
     /// (`terra_build::fitting::Prop::frame`).
     pub frame: Option<String>,
 }
 
-/// The texture arrays' layers doors' frames wear, kept resident while any is drawn.
+/// The texture arrays' layers doors' and shutters' frames wear, kept resident while any is drawn.
 #[derive(Resource, Default)]
 struct FrameLayers(std::collections::BTreeSet<u16>);
 
@@ -63,13 +63,15 @@ fn keep_frame_layers(
     }
 }
 
-/// A door's frame drawn under `parent`, in its look's kit's material: in the texture
-/// arrays as sections are, the layers it wears added to `layers`.
+/// A door's or shutters' frame drawn under `parent`, on a wall whose face stands `face` out
+/// from its middle, in its look's kit's material: in the texture arrays as sections are, the
+/// layers it wears added to `layers`.
 #[allow(clippy::too_many_arguments)]
 fn spawn_frame(
     commands: &mut Commands,
     parent: Entity,
     prop: &Prop,
+    face: f32,
     look: &FittingLook,
     build_look: &super::BuildLook,
     rules: Option<&super::act::BuildRules>,
@@ -83,11 +85,12 @@ fn spawn_frame(
     let Some(kit) = build_look.kits.as_deref().and_then(|kits| kits.of(kind)) else {
         return;
     };
-    let surfaces: BTreeMap<_, _> = terra_build::fitting::frame_surfaces(prop, kit, foot(prop))
-        .0
-        .into_iter()
-        .map(|(material, surface)| ((kind, material), surface))
-        .collect();
+    let surfaces: BTreeMap<_, _> =
+        terra_build::fitting::frame_surfaces(prop, face, kit, foot(prop))
+            .0
+            .into_iter()
+            .map(|(material, surface)| ((kind, material), surface))
+            .collect();
     let mut used = std::collections::BTreeSet::new();
     let (in_arrays, rest) = super::draw::in_arrays(
         &surfaces,
@@ -143,6 +146,9 @@ struct Models {
 pub struct Fitted {
     pub owner: Option<Entity>,
     pub prop: Prop,
+    /// How far the face of the wall it is in stands out from the wall's middle, which its
+    /// frame is seated on (`fitting::wall_face`).
+    pub face: f32,
 }
 
 /// How far open it stands now, 0 shut to 1 open, as it swings toward where it is.
@@ -243,11 +249,11 @@ fn load(
     models.generation += 1;
 }
 
-/// Where a leaf's model goes, from its hinge, standing shut, in the base's own space less
-/// `origin`: its hinge socket on the leaf's hinge, in the middle of its thickness, running
-/// across the leaf, its front out for a door and the way it opens for shutters, stretched
-/// across and up from the leaf it is made as to the one this hole takes, as thick as it is
-/// made. Whether it is drawn mirrored, as the second of a pair is.
+/// Where a leaf's model goes, from the pin it turns on (`Leaf::pin`, behind its hinge face on
+/// a shutter's strap hinges), standing shut: its hinge socket on the leaf's hinge, in the
+/// middle of its thickness, running across the leaf, its front out for a door and the way it
+/// opens for shutters, stretched across and up from the leaf it is made as to the one this
+/// hole takes, as thick as it is made. Whether it is drawn mirrored, as the second of a pair is.
 fn placed(look: &FittingLook, leaf: &Leaf) -> (Transform, bool) {
     let pose = leaf.pose(0.0);
     let made = look.dims.max(Vec3::splat(1e-3));
@@ -266,7 +272,8 @@ fn placed(look: &FittingLook, leaf: &Leaf) -> (Transform, bool) {
     let mirrored = x.cross(Vec3::Y).dot(z) < 0.0;
     let turn_x = if mirrored { -x } else { x };
     let transform = Transform {
-        translation: pose.through * (leaf.thick * 0.5) - linear * look.hinge,
+        translation: leaf.hinge - leaf.pin() + pose.through * (leaf.thick * 0.5)
+            - linear * look.hinge,
         rotation: Quat::from_mat3(&Mat3::from_cols(turn_x, Vec3::Y, z)),
         scale: Vec3::new(if mirrored { -scale.x } else { scale.x }, scale.y, scale.z),
     };
@@ -280,18 +287,21 @@ fn foot(prop: &Prop) -> Vec3 {
     Vec3::new((low.x + high.x) * 0.5, low.y, (low.z + high.z) * 0.5)
 }
 
-/// Spawns a prop's leaves under `parent`, each on its hinge, turned `open` of the way.
+/// Spawns a prop's leaves under `parent`, on a wall whose face stands `face` out from its
+/// middle, each on its hinge's pin, turned `open` of the way.
+#[allow(clippy::too_many_arguments)]
 fn spawn_leaves(
     commands: &mut Commands,
     parent: Entity,
     prop: &Prop,
+    face: f32,
     model: &Model,
     look: &FittingLook,
     open: f32,
     material: Option<MeshMaterial3d<crate::build::draw::GhostMaterial>>,
 ) {
     let origin = foot(prop);
-    for leaf in prop.leaves() {
+    for leaf in prop.leaves(face) {
         let pose = leaf.pose(0.0);
         let axis = pose.across.cross(leaf.opens).normalize_or(Vec3::Y);
         let (at, mirrored) = placed(look, &leaf);
@@ -302,7 +312,7 @@ fn spawn_leaves(
                     axis,
                     swing: leaf.swing,
                 },
-                Transform::from_translation(leaf.hinge - origin)
+                Transform::from_translation(leaf.pin() - origin)
                     .with_rotation(Quat::from_axis_angle(axis, leaf.swing * open)),
                 Visibility::default(),
                 ChildOf(parent),
@@ -356,14 +366,21 @@ fn show(
     if changed.is_empty() {
         return;
     }
-    // What each changed base has fitted, by its lowest cube.
-    let mut wanted: BTreeMap<(Option<Entity>, [i32; 3]), Prop> = changed
+    // What each changed base has fitted, by its lowest cube, with the face of the wall it is
+    // in: the wall built in another material, its frame is seated on that one's.
+    let kits = build_look.kits.clone();
+    let face = |base: &terra_build::Base, prop: &Prop| {
+        kits.as_deref().map_or(terra_build::CELL_M * 0.5, |kits| {
+            terra_build::fitting::wall_face(base, prop, kits)
+        })
+    };
+    let mut wanted: BTreeMap<(Option<Entity>, [i32; 3]), (Prop, f32)> = changed
         .iter()
         .flat_map(|(&owner, build)| {
             build
                 .base
                 .props()
-                .map(move |prop| ((owner, prop.min), *prop))
+                .map(move |prop| ((owner, prop.min), (*prop, face(&build.base, prop))))
         })
         .collect();
     for (entity, mut fitted) in &mut drawn {
@@ -373,11 +390,12 @@ fn show(
         let key = (fitted.owner, fitted.prop.min);
         match wanted.get(&key) {
             // Only opened or shut: it swings there.
-            Some(prop)
+            Some((prop, face))
                 if Prop {
                     open: fitted.prop.open,
                     ..*prop
-                } == fitted.prop =>
+                } == fitted.prop
+                    && *face == fitted.face =>
             {
                 fitted.prop = *prop;
                 wanted.remove(&key);
@@ -385,7 +403,7 @@ fn show(
             _ => commands.entity(entity).despawn(),
         }
     }
-    for ((owner, _), prop) in wanted {
+    for ((owner, _), (prop, face)) in wanted {
         let (Some(model), Some(look)) = (models.ready.get(&prop.kind), looks.0.get(&prop.kind))
         else {
             continue;
@@ -397,7 +415,7 @@ fn show(
         let open = if prop.open { 1.0 } else { 0.0 };
         let mut entity = commands.spawn((
             Name::new(if door { "Door" } else { "Shutters" }),
-            Fitted { owner, prop },
+            Fitted { owner, prop, face },
             Swing(open),
             Transform::from_translation(foot(&prop)),
             Visibility::default(),
@@ -414,11 +432,12 @@ fn show(
             Interactable::Shutters
         }));
         let parent = entity.id();
-        spawn_leaves(&mut commands, parent, &prop, model, look, open, None);
+        spawn_leaves(&mut commands, parent, &prop, face, model, look, open, None);
         spawn_frame(
             &mut commands,
             parent,
             &prop,
+            face,
             look,
             &build_look,
             rules.as_deref(),
@@ -489,10 +508,17 @@ fn preview(
         ))
         .id();
     let ghost = MeshMaterial3d(look.looks.ghost());
+    let face = look
+        .kits
+        .as_deref()
+        .map_or(terra_build::CELL_M * 0.5, |kits| {
+            terra_build::fitting::wall_face(&site.build.base, &prop, kits)
+        });
     spawn_leaves(
         &mut commands,
         parent,
         &prop,
+        face,
         model,
         fitting,
         0.0,
@@ -613,7 +639,7 @@ mod tests {
     fn corners(look: &FittingLook, leaf: &Leaf, open: f32) -> Vec<Vec3> {
         let pose = leaf.pose(0.0);
         let axis = pose.across.cross(leaf.opens).normalize_or(Vec3::Y);
-        let hinge = Transform::from_translation(leaf.hinge)
+        let hinge = Transform::from_translation(leaf.pin())
             .with_rotation(Quat::from_axis_angle(axis, leaf.swing * open));
         let (at, _) = placed(look, leaf);
         let whole = hinge.to_matrix() * at.to_matrix();
@@ -661,7 +687,7 @@ mod tests {
             },
         ];
         for prop in props {
-            for leaf in prop.leaves() {
+            for leaf in prop.leaves(terra_build::CELL_M * 0.5) {
                 for open in [0.0, 0.5, 1.0] {
                     // Every corner drawn within the box a walker meets where the leaf
                     // stands, give or take how much thicker it is drawn.

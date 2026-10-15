@@ -1058,6 +1058,19 @@ impl Kit {
         self.diameter * 0.5
     }
 
+    /// How far a wall of it stands out from its middle to its outer face, in metres: where
+    /// a door's or shutters' frame is seated on it (`fitting`). As the asset contract has a
+    /// piece's real size from its kit's numbers: a course's member's half section, a round
+    /// log's crest or a beam's face (`timber::section`), which a log's bark and bow vary
+    /// about; a block wall's surface on its cubes' faces.
+    pub fn face(&self) -> f32 {
+        let half = crate::CELL_M * 0.5;
+        match self.pattern {
+            Pattern::Logs => (crate::timber::section(self, None).0 * 0.5).min(half),
+            Pattern::Masonry | Pattern::Roof => half,
+        }
+    }
+
     /// How deep a material of it reads by parallax, as a fraction of its texture's width:
     /// as its texture says, or a round log's bark by its timber's relief, which is drawn by
     /// its maps and not its points (D284).

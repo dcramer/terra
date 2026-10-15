@@ -897,7 +897,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             json!({
                 "kind": prop.kind.0,
                 "hang": format!("{:?}", prop.hang),
-                "leaves": prop.leaves().len(),
+                "leaves": prop.leaf_count(),
                 "min": prop.min,
                 "max": prop.max,
                 "open": prop.open,

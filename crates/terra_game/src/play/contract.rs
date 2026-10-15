@@ -154,9 +154,9 @@ fn check_shape(entry: &Entry, shape: &Shape) -> Vec<String> {
     wrong
 }
 
-/// A door or shutters hung in the hole it is made for, along a wall running east: each leaf
-/// as wide and high as the model, and its thickness within the wall's faces, or for
-/// shutters on its outer half.
+/// A door or shutters hung in the hole it is made for, along a wall running east a whole cube
+/// thick, the thickest any kit lays: each leaf as wide and high as the model, and its
+/// thickness within the wall's faces, or for shutters out from the face of its frame.
 fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String> {
     let opens = IVec3::Z;
     let prop = Prop {
@@ -169,7 +169,7 @@ fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String>
     };
     let middle = CELL_M * 0.5;
     let mut wrong = Vec::new();
-    for leaf in prop.leaves() {
+    for leaf in prop.leaves(middle) {
         let made = Vec2::new(entry.dims.x, entry.dims.y);
         // Made for the opening it fills, near enough that stretching it to fill the
         // opening keeps its look.
@@ -190,7 +190,10 @@ fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String>
         let (front, back) = (centre + entry.dims.z * 0.5, centre - entry.dims.z * 0.5);
         let (low, top) = match hang {
             Hang::Door => (-middle, middle),
-            Hang::Shutters => (0.0, middle + entry.dims.z),
+            Hang::Shutters => (
+                middle + terra_build::fitting::FRAME_PROUD_M,
+                middle + terra_build::fitting::FRAME_PROUD_M + entry.dims.z,
+            ),
         };
         if back < low - 1e-3 || front > top + 1e-3 {
             wrong.push(format!(
@@ -299,7 +302,7 @@ mod tests {
             opens: [0, 0, 1],
             hang: Hang::Door,
         }
-        .leaves()[0];
+        .leaves(CELL_M * 0.5)[0];
         let made = |thick: f32| entry(Anchor::Hinge, Vec3::new(leaf.width, leaf.height, thick));
         assert!(check_fit(&made(0.08), Hang::Door, hole).is_empty());
         assert_eq!(check_fit(&made(0.6), Hang::Door, hole).len(), 1);

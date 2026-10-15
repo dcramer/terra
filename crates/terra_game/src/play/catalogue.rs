@@ -313,8 +313,8 @@ pub struct Fitting {
     pub cost: Vec<(ItemKind, u32)>,
     /// The kind of prop it is, as the base keeps it.
     pub kind: PropKind,
-    /// The material its frame is drawn in, a kit's name: a door's comes with its frame
-    /// (`terra_build::fitting::Prop::frame`).
+    /// The material its frame is drawn in, a kit's name: a door or shutters come with their
+    /// frame (`terra_build::fitting::Prop::frame`).
     pub frame: Option<String>,
 }
 
@@ -550,15 +550,13 @@ mod tests {
     }
 
     #[test]
-    fn every_door_comes_with_a_frame_in_a_material_there_is() {
+    fn every_door_and_shutters_come_with_a_frame_in_a_material_there_is() {
         let (_, builds) = builds();
         let kits = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/data/kits");
-        let doors: Vec<_> = builds
-            .fittings()
-            .iter()
-            .filter(|f| f.hang == Hang::Door)
-            .collect();
-        assert!(!doors.is_empty());
+        let doors = builds.fittings();
+        for hang in [Hang::Door, Hang::Shutters] {
+            assert!(doors.iter().any(|f| f.hang == hang), "no {hang:?}");
+        }
         for door in doors {
             let frame = door
                 .frame

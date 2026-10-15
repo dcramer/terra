@@ -219,7 +219,11 @@ impl Base {
     }
 
     /// Where a walker going from one place to another ends up, kept out of the leaves of
-    /// every door and shutters near, as they stand (`fitting::push_off`).
+    /// every door and shutters near, as they stand (`fitting::push_off`). A door hangs in
+    /// its wall's middle whatever the wall; shutters are met as they hang on the thickest
+    /// wall, one whose face is its cubes' (stone's): on a thinner one, logs', they stand
+    /// within the wall's cubes, which stop a walker before them, so a walker keeps a few
+    /// centimetres further off a log wall's shutters than is drawn, never closer.
     fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker) -> Vec3 {
         let reach = walker.radius + 2.5;
         let near = |prop: &&crate::Prop| {
@@ -229,7 +233,9 @@ impl Base {
         };
         let leaves = self.props().filter(near).flat_map(|prop| {
             let open = if prop.open { 1.0 } else { 0.0 };
-            prop.leaves().into_iter().map(move |leaf| (leaf, open))
+            prop.leaves(CELL_M * 0.5)
+                .into_iter()
+                .map(move |leaf| (leaf, open))
         });
         let body = (from.y + walker.step_up, from.y + walker.height);
         crate::fitting::push_off(from, to, walker.radius, body, leaves)

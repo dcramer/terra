@@ -1957,6 +1957,38 @@ mod tests {
     }
 
     #[test]
+    fn a_walls_face_is_where_its_members_are_drawn() {
+        // Where a frame is seated on a wall (`Kit::face`), measured on the logs and beams
+        // drawn: half how wide each is across the wall level with its line, at its middle,
+        // over many seeds, is the face give or take its bark and unevenness.
+        for profile in [Profile::Round, Profile::Hewn] {
+            let kit = pinned(profile);
+            let reaches: Vec<f32> = (0..48)
+                .map(|seed| {
+                    let mut surfaces = Surfaces::default();
+                    draw(&log(seed, Split::Whole), &kit, &mut surfaces);
+                    // Half its width across the wall, so its bow one way or the other is
+                    // not counted as its face.
+                    let (low, high) = surfaces.0[&Material::Log]
+                        .positions
+                        .iter()
+                        .filter(|p| (p.x - 1.5).abs() < 0.1 && (p.y - 0.125).abs() < 0.03)
+                        .fold((f32::MAX, f32::MIN), |(low, high), p| {
+                            (low.min(p.z), high.max(p.z))
+                        });
+                    (high - low) * 0.5
+                })
+                .collect();
+            let mean = reaches.iter().sum::<f32>() / reaches.len() as f32;
+            assert!(
+                (mean - kit.face()).abs() < 0.012,
+                "{profile:?}: drawn out to {mean} on average, its face {}",
+                kit.face()
+            );
+        }
+    }
+
+    #[test]
     fn a_runs_logs_stay_within_its_cubes_and_the_wall_across() {
         // A cabin's logs, drawn: nothing past the cubes along a run, nor out of the
         // wall's cube across it by more than a log's bark and bow.

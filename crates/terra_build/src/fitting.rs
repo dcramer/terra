@@ -1,16 +1,22 @@
-//! How a door or shutters hang in the hole they are fitted into (D192, D207): their leaves,
-//! each hinged on a side of the hole, and where each stands shut, open or partway. Drawing
-//! and walking both read a prop's leaves from here, so what is seen is what stops a
-//! walker, whichever way it stands.
+//! How a door or shutters hang in the hole they are fitted into (D192, D207, D225): the
+//! frame each comes with, its leaves, each hinged on a side of the frame, and where each
+//! stands shut, open or partway. Drawing and walking both read a prop's leaves from here,
+//! so what is seen is what stops a walker, whichever way it stands.
 //!
-//! A door hangs in its hole's reveal, reaching a little behind its jambs and head as a
-//! real one closes against its stop, so it fills the hole whatever the kit lays round it,
-//! and swings a quarter turn into the room; a doorway two metres wide or more takes a pair,
-//! hinged either side, meeting in the middle. Shutters hang on the wall's outside face over
-//! the hole and fold back flat against the wall; a hole wider than a cube takes a pair. This
-//! is how real ones hang, and how Valheim's and Enshrouded's doors do.
+//! Each comes with its own frame, as shipped games' doors and windows do: jambs up the hole's
+//! sides, a head over it and a threshold or a sill under it, lining the reveal through the
+//! wall and reaching a little into the wall round it, so it fills the hole whatever the kit
+//! lays round it. The frame is seated on the wall's own face, which differs by kit (a log
+//! wall's round crests stand well in from its cubes' faces, a stone wall's are on them), as
+//! the kit's numbers give it ([`Kit::face`]), so what hangs on it is centred on that wall
+//! whatever it is built of. A door hangs inside its frame and swings a quarter turn into the
+//! room; a doorway 1.5 m wide or more takes a pair. Shutters hang on the frame's outer face,
+//! over the hole to the middle of its members all round, and fold back flat against it on
+//! strap hinges; a hole 0.75 m wide or more takes a pair. This is how real ones hang, and
+//! how Valheim's and Enshrouded's doors do.
 
-use crate::{CELL_M, Prop};
+use crate::kit::{Kit, Kits};
+use crate::{Base, CELL_M, Fill, Kind, Prop};
 use glam::{IVec3, Vec2, Vec3};
 
 /// How a prop hangs in its hole: as a door, or as shutters.
@@ -23,37 +29,37 @@ pub enum Hang {
     Shutters,
 }
 
-/// How far a door's frame, and shutters, reach past the hole's edges into the wall round
-/// it: so what is fitted fills its hole whatever stands round it, a log wall's courses or a
-/// stone wall's dressed jambs, with no gap to see through at any edge (the developers: they
-/// "can overlap w/ the voxels a bit").
+/// How far a frame reaches past the hole's edges into the wall round it: so what is fitted
+/// fills its hole whatever stands round it, a log wall's courses or a stone wall's dressed
+/// jambs, with no gap to see through at any edge (the developers: they "can overlap w/ the
+/// voxels a bit").
 pub const OVERLAP_M: f32 = 0.03;
-/// A door's frame (D225 as amended), as shipped games' doors come with theirs: jambs up the
-/// hole's sides and a head over it, squared timber this wide across its face, lining the
-/// hole's reveal through the wall and standing this far proud of each of its faces, on a
-/// threshold this high; the leaf hangs in it with this gap all round.
+/// A frame (D225 as amended): jambs up the hole's sides and a head over it, squared timber
+/// this wide across its face, lining the hole's reveal through the wall and standing this far
+/// proud of the wall's face on each side; under a door a threshold this high, under shutters
+/// a sill as deep as the head. A door's leaf hangs in it with this gap all round.
 pub const FRAME_FACE_M: f32 = 0.09;
 pub const FRAME_PROUD_M: f32 = 0.01;
 pub const THRESHOLD_M: f32 = 0.03;
 pub const LEAF_GAP_M: f32 = 0.004;
-/// How thick a door's leaf is, and a shutter's.
+/// How thick a door's leaf is, and a shutter's: as the shutters' models are made, which the
+/// model contract holds them to (`cargo xtask contract`).
 pub const DOOR_THICK_M: f32 = 0.06;
-pub const SHUTTER_THICK_M: f32 = 0.035;
-/// How far out from a wall's middle shutters hang: over the face of a log wall and its
-/// frame, where their hinges are nailed.
-const SHUTTER_OUT_M: f32 = 0.19;
-/// How far a door swings open, and shutters, in degrees.
+pub const SHUTTER_THICK_M: f32 = 0.05;
+/// How far a door swings open, and shutters, in degrees: shutters right back, flat against
+/// the frame and the wall beside it.
 const DOOR_SWING_DEGREES: f32 = 92.0;
-const SHUTTER_SWING_DEGREES: f32 = 168.0;
+const SHUTTER_SWING_DEGREES: f32 = 180.0;
 /// How wide a hole takes a pair of leaves rather than one, in metres: a door from 1.5 m,
-/// shutters from a metre.
+/// shutters from 0.75 m.
 const DOOR_PAIR_M: f32 = 1.5;
 const SHUTTER_PAIR_M: f32 = 0.75;
 
 /// One leaf of a door or of shutters, in the base's own space, in metres.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Leaf {
-    /// Its hinge's foot: on the edge it turns on, on its face toward the way it opens.
+    /// Its hinge's foot as it stands shut: on the edge it turns on, on its face toward the
+    /// way it opens.
     pub hinge: Vec3,
     /// Level, from the hinge across the leaf, as it stands shut.
     pub across: Vec3,
@@ -62,6 +68,10 @@ pub struct Leaf {
     pub width: f32,
     pub height: f32,
     pub thick: f32,
+    /// How far behind its hinge face the pin it turns on is: none for a door's, hung on
+    /// butts at its face; half its thickness for a shutter's, on strap hinges whose pintles
+    /// stand off the frame so it folds back flat on the face it closed against.
+    pub pivot: f32,
     /// How far it turns open, in radians.
     pub swing: f32,
     /// Whether it is a door's: its front looks out, away from the way it opens; a
@@ -79,16 +89,22 @@ pub struct Pose {
 }
 
 impl Leaf {
+    /// The pin it turns on, at its hinge's foot.
+    pub fn pin(&self) -> Vec3 {
+        self.hinge - self.opens * self.pivot
+    }
+
     /// Where it stands turned `open` of the way, 0 to 1.
     pub fn pose(&self, open: f32) -> Pose {
         let angle = self.swing * open.clamp(0.0, 1.0);
         let (sin, cos) = (libm::sinf(angle), libm::cosf(angle));
-        // Turned in the plane of `across` and `opens`: across toward opens, and the way
-        // through it, which starts as against `opens`, toward across.
+        // Turned about its pin in the plane of `across` and `opens`: across toward opens,
+        // and the way through it, which starts as against `opens`, toward across.
+        let through = -self.opens * cos + self.across * sin;
         Pose {
-            hinge: self.hinge,
+            hinge: self.pin() - through * self.pivot,
             across: self.across * cos + self.opens * sin,
-            through: -self.opens * cos + self.across * sin,
+            through,
         }
     }
 
@@ -129,77 +145,89 @@ impl Prop {
         (opens, along, low, high, depth)
     }
 
-    /// A door's frame, as boxes in the base's own space, each its low and high corners: a
-    /// jamb up each side and a head over the hole, their outer edges `OVERLAP_M` into the
-    /// wall past the hole's, through the wall's thickness and `FRAME_PROUD_M` proud of each
-    /// face; and a threshold between the jambs. None for shutters, which hang over the hole.
-    pub fn frame(&self) -> Vec<(Vec3, Vec3)> {
-        if self.hang != Hang::Door {
-            return Vec::new();
+    /// How many leaves it hangs: a pair in a hole wide enough, else one.
+    pub fn leaf_count(&self) -> usize {
+        let (_, along, low, high, _) = self.hole();
+        let pair = match self.hang {
+            Hang::Door => DOOR_PAIR_M,
+            Hang::Shutters => SHUTTER_PAIR_M,
+        };
+        if (high - low).dot(along) >= pair - 1e-3 {
+            2
+        } else {
+            1
         }
+    }
+
+    /// Its frame on a wall whose face stands `face` out from its middle ([`wall_face`]), as
+    /// boxes in the base's own space, each its low and high corners: a jamb up each side and
+    /// a head over the hole, their outer edges `OVERLAP_M` into the wall past the hole's,
+    /// through the wall's thickness and `FRAME_PROUD_M` proud of its face either side; and
+    /// between the jambs a door's threshold on the floor, or under shutters a sill reaching
+    /// down into the wall as the head reaches up.
+    pub fn frame(&self, face: f32) -> Vec<(Vec3, Vec3)> {
         let (opens, along, low, high, depth) = self.hole();
         let through = opens.abs();
         let (start, end) = (low.dot(along) - OVERLAP_M, high.dot(along) + OVERLAP_M);
         let top = high.y + OVERLAP_M;
-        let half = CELL_M * 0.5 + FRAME_PROUD_M;
+        let (bottom, sill) = match self.hang {
+            Hang::Door => (low.y, THRESHOLD_M),
+            Hang::Shutters => (low.y - OVERLAP_M, FRAME_FACE_M),
+        };
+        let half = face + FRAME_PROUD_M;
         let boxed = |a: f32, b: f32, y0: f32, y1: f32| {
             let one = along * a + through * (depth - half) + Vec3::Y * y0;
             let other = along * b + through * (depth + half) + Vec3::Y * y1;
             (one.min(other), one.max(other))
         };
+        let (inner_start, inner_end) = (start + FRAME_FACE_M, end - FRAME_FACE_M);
         vec![
-            boxed(start, start + FRAME_FACE_M, low.y, top),
-            boxed(end - FRAME_FACE_M, end, low.y, top),
-            boxed(
-                start + FRAME_FACE_M,
-                end - FRAME_FACE_M,
-                top - FRAME_FACE_M,
-                top,
-            ),
-            boxed(
-                start + FRAME_FACE_M,
-                end - FRAME_FACE_M,
-                low.y,
-                low.y + THRESHOLD_M,
-            ),
+            boxed(start, inner_start, bottom, top),
+            boxed(inner_end, end, bottom, top),
+            boxed(inner_start, inner_end, top - FRAME_FACE_M, top),
+            boxed(inner_start, inner_end, bottom, bottom + sill),
         ]
     }
 
-    /// Its leaves, as they hang in its hole: a door's inside its frame, `LEAF_GAP_M` clear of
-    /// the jambs, the head and the threshold all round, hinged on a jamb's inner face, in the
-    /// middle of the wall's thickness; shutters over the hole outside, reaching `OVERLAP_M`
-    /// past its edges. A pair meets in the middle.
-    pub fn leaves(&self) -> Vec<Leaf> {
+    /// Its leaves, as they hang in its frame on a wall whose face stands `face` out from its
+    /// middle: a door's inside the frame, `LEAF_GAP_M` clear of the jambs, the head and the
+    /// threshold all round, hinged on a jamb's inner face, in the middle of the wall's
+    /// thickness; shutters shut against the frame's outer face, over the hole to the middle
+    /// of its members all round, hinged on the jambs. A pair meets in the middle.
+    pub fn leaves(&self, face: f32) -> Vec<Leaf> {
         let (opens, along, low, high, depth) = self.hole();
         let door = self.hang == Hang::Door;
-        let (start, end, foot, top, thick, face, swing, pair) = if door {
-            let inset = OVERLAP_M - FRAME_FACE_M - LEAF_GAP_M;
+        // How far each leaf's edges stand in from the hole's, the frame's outer edges being
+        // `OVERLAP_M` out from them.
+        let inset = if door {
+            FRAME_FACE_M + LEAF_GAP_M
+        } else {
+            FRAME_FACE_M * 0.5
+        } - OVERLAP_M;
+        let (start, end) = (low.dot(along) + inset, high.dot(along) - inset);
+        let top = high.y - inset;
+        let (foot, thick, out, pivot, swing) = if door {
             (
-                low.dot(along) - inset,
-                high.dot(along) + inset,
                 low.y + THRESHOLD_M + LEAF_GAP_M,
-                high.y + inset,
                 DOOR_THICK_M,
                 // Its hinge face toward the room, its middle in the wall's middle.
                 DOOR_THICK_M * 0.5,
+                0.0,
                 DOOR_SWING_DEGREES,
-                DOOR_PAIR_M,
             )
         } else {
             (
-                low.dot(along) - OVERLAP_M,
-                high.dot(along) + OVERLAP_M,
-                low.y - OVERLAP_M,
-                high.y + OVERLAP_M,
+                low.y + inset,
                 SHUTTER_THICK_M,
-                SHUTTER_OUT_M + SHUTTER_THICK_M,
+                // Its back on the frame's outer face.
+                face + FRAME_PROUD_M + SHUTTER_THICK_M,
+                SHUTTER_THICK_M * 0.5,
                 SHUTTER_SWING_DEGREES,
-                SHUTTER_PAIR_M,
             )
         };
         let at = |b: f32| {
             let level = along * b + opens.abs() * depth;
-            Vec3::new(level.x, foot, level.z) + opens * face
+            Vec3::new(level.x, foot, level.z) + opens * out
         };
         let leaf = |hinge: f32, across: Vec3, width: f32| Leaf {
             hinge: at(hinge),
@@ -208,10 +236,11 @@ impl Prop {
             width,
             height: top - foot,
             thick,
+            pivot,
             swing: swing.to_radians(),
             door,
         };
-        if (high - low).dot(along) >= pair - 1e-3 {
+        if self.leaf_count() == 2 {
             let half = (end - start - if door { LEAF_GAP_M } else { 0.0 }) * 0.5;
             vec![leaf(start, along, half), leaf(end, -along, half)]
         } else {
@@ -220,16 +249,61 @@ impl Prop {
     }
 }
 
-/// A door's frame drawn: its boxes in a kit's material (squared timber's, `fragments`'),
-/// about `origin`, each face's texture laid along the member's length.
-pub fn frame_surfaces(prop: &Prop, kit: &crate::kit::Kit, origin: Vec3) -> crate::mesh::Surfaces {
+/// The kind of the wall a prop is fitted in: the kind most of the wall's cubes round its hole
+/// are, beside its sides, over it and under it; none where nothing stands round it.
+pub fn wall_kind(base: &Base, prop: &Prop) -> Option<Kind> {
+    let opens = prop.across_wall();
+    let along = IVec3::new(opens.z.abs(), 0, opens.x.abs());
+    let (low, high) = (IVec3::from_array(prop.min), IVec3::from_array(prop.max));
+    let mut round: Vec<IVec3> = Vec::new();
+    for y in low.y..=high.y {
+        round.push(IVec3::new(low.x, y, low.z) - along);
+        round.push(IVec3::new(high.x, y, high.z) + along);
+    }
+    for at in prop.cubes() {
+        if at.y == low.y {
+            round.push(at - IVec3::Y);
+        }
+        if at.y == high.y {
+            round.push(at + IVec3::Y);
+        }
+    }
+    let mut counts: std::collections::BTreeMap<Kind, usize> = Default::default();
+    for at in round {
+        if let Some(cube) = base.cube(at)
+            && cube.fill == Fill::Solid
+            && cube.kind != Kind::PLAIN
+            && !cube.kind.is_roof()
+        {
+            *counts.entry(cube.kind).or_default() += 1;
+        }
+    }
+    counts
+        .into_iter()
+        .max_by_key(|&(kind, count)| (count, std::cmp::Reverse(kind)))
+        .map(|(kind, _)| kind)
+}
+
+/// How far the face of the wall a prop is fitted in stands out from its middle, in metres,
+/// by its kit ([`Kit::face`]); a whole cube's half where its kind has no kit or nothing stands
+/// round it.
+pub fn wall_face(base: &Base, prop: &Prop, kits: &Kits) -> f32 {
+    wall_kind(base, prop)
+        .and_then(|kind| kits.of(kind))
+        .map_or(CELL_M * 0.5, Kit::face)
+}
+
+/// A frame drawn, on a wall whose face stands `face` out from its middle: its boxes in a
+/// kit's material (squared timber's, `fragments`'), about `origin`, each face's texture laid
+/// along the member's length.
+pub fn frame_surfaces(prop: &Prop, face: f32, kit: &Kit, origin: Vec3) -> crate::mesh::Surfaces {
     let material = crate::fragments::material(kit);
     let metres = kit
         .textures
         .get(&material)
         .map_or([1.0, 1.0], |texture| texture.metres);
     let mut surfaces = crate::mesh::Surfaces::sharing();
-    for (min, max) in prop.frame() {
+    for (min, max) in prop.frame(face) {
         let (min, max) = (min - origin, max - origin);
         let size = max - min;
         // Its length, the way its grain runs: the texture's first axis along it.
@@ -355,11 +429,79 @@ mod tests {
         }
     }
 
+    /// A wall's face a whole cube thick, stone's.
+    const CUBE_FACE: f32 = CELL_M * 0.5;
+
+    /// The shipped materials' kits, by name, as the game reads them.
+    fn shipped(name: &str) -> Kit {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        Kit::read_folder(&assets)
+            .unwrap()
+            .into_iter()
+            .find(|(named, _)| named == name)
+            .map(|(_, kit)| kit)
+            .unwrap_or_else(|| panic!("no {name} kit"))
+    }
+
+    /// The low and high ends of what a prop's leaves cover along its wall, shut, and their
+    /// foot and top.
+    fn covered(leaves: &[Leaf], along: Vec3) -> (f32, f32, f32, f32) {
+        let mut spans: Vec<(f32, f32)> = leaves
+            .iter()
+            .map(|leaf| {
+                let a = leaf.hinge.dot(along);
+                let b = (leaf.hinge + leaf.across * leaf.width).dot(along);
+                (a.min(b), a.max(b))
+            })
+            .collect();
+        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Each meeting the next, with no more than a door's gap between.
+        for pair in spans.windows(2) {
+            assert!(pair[1].0 <= pair[0].1 + LEAF_GAP_M + 1e-4, "{spans:?}");
+        }
+        let foot = leaves.iter().map(|l| l.hinge.y).fold(f32::MAX, f32::min);
+        let top = leaves
+            .iter()
+            .map(|l| l.hinge.y + l.height)
+            .fold(f32::MIN, f32::max);
+        (spans[0].0, spans[spans.len() - 1].1, foot, top)
+    }
+
+    /// Every hole a door fits, and every one shutters fit, in walls running east and south,
+    /// with the way along each wall.
+    fn holes() -> Vec<(Prop, Vec3)> {
+        let mut out = Vec::new();
+        for wide in 1..=4 {
+            for (hang, foot, highs) in [(Hang::Door, 0, 4..=5), (Hang::Shutters, 2, 2..=4)] {
+                for high in highs {
+                    let top = foot + high - 1;
+                    out.push((
+                        prop([2, foot, 3], [1 + wide, top, 3], [0, 0, 1], hang),
+                        Vec3::X,
+                    ));
+                    out.push((
+                        prop([3, foot, 2], [3, top, 1 + wide], [-1, 0, 0], hang),
+                        Vec3::Z,
+                    ));
+                }
+            }
+        }
+        out
+    }
+
+    /// A hole's low and high corners, in metres.
+    fn corners(prop: &Prop) -> (Vec3, Vec3) {
+        (
+            IVec3::from_array(prop.min).as_vec3() * CELL_M,
+            (IVec3::from_array(prop.max) + IVec3::ONE).as_vec3() * CELL_M,
+        )
+    }
+
     #[test]
     fn a_door_fills_its_hole_inside_the_frame_and_opens_a_quarter_turn_into_the_room() {
         // A doorway a metre wide and two high in a wall running east, the room south.
         let door = prop([2, 0, 0], [3, 3, 0], [0, 0, 1], Hang::Door);
-        let leaves = door.leaves();
+        let leaves = door.leaves(CUBE_FACE);
         assert_eq!(leaves.len(), 1);
         let leaf = leaves[0];
         // A metre less what the frame's jambs stand into the hole, and the gap either side.
@@ -374,198 +516,185 @@ mod tests {
         let open = leaf.middle(1.0);
         assert!(open.z > 0.25 + leaf.width * 0.4, "{open}");
         assert!((open.x - leaf.hinge.x).abs() < leaf.thick + 0.01);
+        // A door hangs in the wall's middle whatever the wall.
+        assert_eq!(door.leaves(0.15), leaves);
     }
 
     #[test]
-    fn shutters_fill_their_opening_with_no_gap_at_any_edge() {
-        // Every hole shutters fit, in walls running east and south, each leaf shut: what the
-        // leaves cover, across the wall and up it, measured against the opening's edges. No
-        // gap anywhere, and no more over than the overlap.
-        for hang in [Hang::Shutters] {
-            for wide in 1..=4 {
-                for high in 2..=4 {
-                    // In a wall running east opening south, and one running south opening
-                    // west.
-                    for (min, max, opens, along) in [
-                        ([2, 2, 3], [1 + wide, 1 + high, 3], [0, 0, 1], Vec3::X),
-                        ([3, 2, 2], [3, 1 + high, 1 + wide], [-1, 0, 0], Vec3::Z),
-                    ] {
-                        let hole = prop(min, max, opens, hang);
-                        let low = IVec3::from_array(hole.min).as_vec3() * CELL_M;
-                        let high_end =
-                            (IVec3::from_array(hole.max) + IVec3::ONE).as_vec3() * CELL_M;
-                        let (start, end) = (low.dot(along), high_end.dot(along));
-                        let mut spans: Vec<(f32, f32)> = Vec::new();
-                        let (mut foot, mut top) = (f32::MAX, f32::MIN);
-                        for leaf in hole.leaves() {
-                            let pose = leaf.pose(0.0);
-                            let a = pose.hinge.dot(along);
-                            let b = (pose.hinge + pose.across * leaf.width).dot(along);
-                            spans.push((a.min(b), a.max(b)));
-                            foot = foot.min(pose.hinge.y);
-                            top = top.max(pose.hinge.y + leaf.height);
-                        }
-                        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
-                        // Across: from before the opening's start to past its end, each
-                        // leaf meeting the next.
-                        let mut reach = spans[0].0;
+    fn a_frame_fills_its_hole_and_its_leaves_are_centred_in_it() {
+        for (fitted, along) in holes() {
+            let door = fitted.hang == Hang::Door;
+            let (low, high) = corners(&fitted);
+            let (start, end) = (low.dot(along), high.dot(along));
+            let frame = fitted.frame(CUBE_FACE);
+            assert_eq!(frame.len(), 4);
+            // Its outer edges past the hole's by the overlap, at both sides, the head and,
+            // under shutters, the sill.
+            let outer = |pick: &dyn Fn(&(Vec3, Vec3)) -> f32, most: bool| {
+                frame
+                    .iter()
+                    .map(pick)
+                    .fold(if most { f32::MIN } else { f32::MAX }, |a, b| {
+                        if most { a.max(b) } else { a.min(b) }
+                    })
+            };
+            let outer_low = outer(&|(min, _)| min.dot(along), false);
+            let outer_high = outer(&|(_, max)| max.dot(along), true);
+            let outer_top = outer(&|(_, max)| max.y, true);
+            let outer_foot = outer(&|(min, _)| min.y, false);
+            assert!((start - outer_low - OVERLAP_M).abs() < 1e-4);
+            assert!((outer_high - end - OVERLAP_M).abs() < 1e-4);
+            assert!((outer_top - high.y - OVERLAP_M).abs() < 1e-4);
+            let below = if door { 0.0 } else { OVERLAP_M };
+            assert!((low.y - outer_foot - below).abs() < 1e-4);
+            // The rebate: the inner faces of the jambs and head, and the sill's top.
+            let (jamb_a, jamb_b) = (outer_low + FRAME_FACE_M, outer_high - FRAME_FACE_M);
+            let head = outer_top - FRAME_FACE_M;
+            let sill = outer_foot + if door { THRESHOLD_M } else { FRAME_FACE_M };
+            let leaves = fitted.leaves(CUBE_FACE);
+            assert_eq!(leaves.len(), fitted.leaf_count());
+            let (left, right, foot, top) = covered(&leaves, along);
+            // A door the same gap inside its frame at either side, at the head and over the
+            // threshold; shutters over its opening to the middle of its members all round.
+            let margins = [left - jamb_a, jamb_b - right, head - top, foot - sill];
+            let want = if door {
+                LEAF_GAP_M
+            } else {
+                -FRAME_FACE_M * 0.5
+            };
+            for margin in margins {
+                assert!(
+                    (margin - want).abs() < 1e-4,
+                    "{fitted:?}: margins {margins:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shutters_are_centred_in_their_frame_and_seated_on_the_walls_face() {
+        // On logs, on hewn beams and on stone: each wall's face where its kit's numbers put
+        // it, and the shutters on it.
+        let faces: Vec<(String, f32)> = ["logs", "hewn", "stone"]
+            .into_iter()
+            .map(|name| (name.to_string(), shipped(name).face()))
+            .collect();
+        // A round log's crest stands well in from its cube's face, a squared beam's further
+        // in still; stone's is its cubes'.
+        assert!(faces[0].1 > 0.13 && faces[0].1 < 0.2, "{faces:?}");
+        assert!(faces[1].1 > 0.1 && faces[1].1 < faces[0].1, "{faces:?}");
+        assert!((faces[2].1 - CUBE_FACE).abs() < 1e-6, "{faces:?}");
+        for (name, face) in &faces {
+            for (shutters, along) in holes() {
+                if shutters.hang != Hang::Shutters {
+                    continue;
+                }
+                let opens = shutters.across_wall().as_vec3();
+                let middle = ((corners(&shutters).0 + corners(&shutters).1) * 0.5).dot(opens);
+                let out = |p: Vec3| p.dot(opens) - middle;
+                let frame = shutters.frame(*face);
+                // The frame through the wall, proud of its face either side by as much.
+                for (min, max) in &frame {
+                    let (a, b) = (out(*min), out(*max));
+                    let (back, front) = (a.min(b), a.max(b));
+                    assert!(
+                        (front - face - FRAME_PROUD_M).abs() < 1e-4
+                            && (back + face + FRAME_PROUD_M).abs() < 1e-4,
+                        "{name} {shutters:?}: frame {back}..{front}"
+                    );
+                }
+                // Centred along the wall and up it: the frame on the hole, the leaves on the
+                // frame.
+                let (low, high) = corners(&shutters);
+                let hole_middle = ((low + high) * 0.5).dot(along);
+                let frame_low = frame
+                    .iter()
+                    .map(|(min, _)| min.dot(along))
+                    .fold(f32::MAX, f32::min);
+                let frame_high = frame
+                    .iter()
+                    .map(|(_, max)| max.dot(along))
+                    .fold(f32::MIN, f32::max);
+                let frame_foot = frame.iter().map(|(min, _)| min.y).fold(f32::MAX, f32::min);
+                let frame_top = frame.iter().map(|(_, max)| max.y).fold(f32::MIN, f32::max);
+                assert!(((frame_low + frame_high) * 0.5 - hole_middle).abs() < 1e-4);
+                let leaves = shutters.leaves(*face);
+                let (left, right, foot, top) = covered(&leaves, along);
+                assert!(
+                    ((left + right) * 0.5 - hole_middle).abs() < 1e-4,
+                    "{name} {shutters:?}: across {left}..{right} about {hole_middle}"
+                );
+                assert!(
+                    ((foot + top) - (frame_foot + frame_top)).abs() < 2e-4,
+                    "{name} {shutters:?}: up {foot}..{top} in {frame_foot}..{frame_top}"
+                );
+                // Shut, each leaf's back on the frame's outer face, its front a leaf's
+                // thickness out.
+                for leaf in &leaves {
+                    let pose = leaf.pose(0.0);
+                    let back = out(pose.hinge + pose.through * leaf.thick);
+                    assert!(
+                        (back - face - FRAME_PROUD_M).abs() < 1e-4,
+                        "{name} {shutters:?}: its back {back} off a face at {face}"
+                    );
+                    assert!((out(pose.hinge) - back - leaf.thick).abs() < 1e-4);
+                    // Open, folded right back, flat on the same face beside the hole.
+                    let open = leaf.pose(1.0);
+                    for p in [open.hinge, open.hinge + open.across * leaf.width] {
+                        let near = out(p).min(out(p + open.through * leaf.thick));
                         assert!(
-                            reach <= start + 1e-4,
-                            "{hang:?} {wide}x{high}: a gap at its side"
+                            (near - face - FRAME_PROUD_M).abs() < 1e-4,
+                            "{name} {shutters:?}: open, its back at {near}"
                         );
-                        for (from, to) in &spans {
-                            assert!(
-                                *from <= reach + 1e-4,
-                                "{hang:?} {wide}x{high}: a gap between leaves"
-                            );
-                            reach = reach.max(*to);
-                        }
-                        assert!(
-                            reach >= end - 1e-4,
-                            "{hang:?} {wide}x{high}: a gap at its other side"
-                        );
-                        assert!(
-                            start - spans[0].0 <= OVERLAP_M + 1e-4
-                                && reach - end <= OVERLAP_M + 1e-4
-                        );
-                        // Up: from the sill, or a door's threshold, to past the head.
-                        let sill = if hang == Hang::Door {
-                            low.y + THRESHOLD_M
-                        } else {
-                            low.y
-                        };
-                        assert!(
-                            foot <= sill + 1e-4 && top >= high_end.y - 1e-4,
-                            "{hang:?} {wide}x{high}: a gap at the head or sill"
-                        );
-                        assert!(top - high_end.y <= OVERLAP_M + 1e-4);
                     }
+                    let beside = leaf.middle(1.0).dot(along);
+                    assert!(
+                        beside < left - 1e-3 || beside > right + 1e-3,
+                        "{name} {shutters:?}: open over the hole at {beside}"
+                    );
                 }
             }
         }
     }
 
-    /// Every hole a door fits, in walls running east and south.
-    fn doorways() -> Vec<(Prop, Vec3)> {
-        let mut out = Vec::new();
-        for wide in 1..=4 {
-            for high in 4..=5 {
-                out.push((
-                    prop([2, 0, 3], [1 + wide, high - 1, 3], [0, 0, 1], Hang::Door),
-                    Vec3::X,
-                ));
-                out.push((
-                    prop([3, 0, 2], [3, high - 1, 1 + wide], [-1, 0, 0], Hang::Door),
-                    Vec3::Z,
-                ));
-            }
-        }
-        out
-    }
-
     #[test]
-    fn a_doors_frame_fills_its_hole_and_its_leaf_is_centred_in_the_frame() {
-        for (door, along) in doorways() {
-            let low = IVec3::from_array(door.min).as_vec3() * CELL_M;
-            let high = (IVec3::from_array(door.max) + IVec3::ONE).as_vec3() * CELL_M;
-            let (start, end) = (low.dot(along), high.dot(along));
-            let frame = door.frame();
-            assert_eq!(frame.len(), 4);
-            // Its outer edges past the hole's by the overlap, at both sides and the head.
-            let outer_low = frame
-                .iter()
-                .map(|(min, _)| min.dot(along))
-                .fold(f32::MAX, f32::min);
-            let outer_high = frame
-                .iter()
-                .map(|(_, max)| max.dot(along))
-                .fold(f32::MIN, f32::max);
-            let outer_top = frame.iter().map(|(_, max)| max.y).fold(f32::MIN, f32::max);
-            assert!((start - outer_low - OVERLAP_M).abs() < 1e-4);
-            assert!((outer_high - end - OVERLAP_M).abs() < 1e-4);
-            assert!((outer_top - high.y - OVERLAP_M).abs() < 1e-4);
-            // The rebate: the inner faces of the jambs and head, and the threshold's top.
-            let (jamb_a, jamb_b) = (
-                start - OVERLAP_M + FRAME_FACE_M,
-                end + OVERLAP_M - FRAME_FACE_M,
-            );
-            let (sill, head) = (low.y + THRESHOLD_M, high.y + OVERLAP_M - FRAME_FACE_M);
-            let leaves = door.leaves();
-            let spans: Vec<(f32, f32)> = leaves
-                .iter()
-                .map(|leaf| {
-                    let a = leaf.hinge.dot(along);
-                    let b = (leaf.hinge + leaf.across * leaf.width).dot(along);
-                    (a.min(b), a.max(b))
-                })
-                .collect();
-            let left = spans.iter().map(|s| s.0).fold(f32::MAX, f32::min);
-            let right = spans.iter().map(|s| s.1).fold(f32::MIN, f32::max);
-            // The same gap at either side, at the head and over the threshold.
-            let margins = [
-                left - jamb_a,
-                jamb_b - right,
-                head - (leaves[0].hinge.y + leaves[0].height),
-                leaves[0].hinge.y - sill,
-            ];
-            for margin in margins {
-                assert!(
-                    (margin - LEAF_GAP_M).abs() < 1e-4,
-                    "{door:?}: margins {margins:?}"
-                );
-            }
-            // Through the wall, in its middle.
-            let middle = ((low + high) * 0.5).dot(door.across_wall().as_vec3().abs());
-            for leaf in &leaves {
-                let centre = leaf.middle(0.0).dot(leaf.opens.abs());
-                assert!((centre - middle).abs() < 1e-4);
-            }
-        }
-    }
-
-    #[test]
-    fn a_door_swings_about_its_hinge_without_crossing_its_frame_or_its_wall() {
-        for (door, along) in doorways() {
-            let frame = door.frame();
-            let cubes: Vec<IVec3> = door.cubes().collect();
-            let opens = door.across_wall().as_vec3();
-            for leaf in door.leaves() {
-                for step in 0..=20 {
-                    let open = step as f32 / 20.0;
-                    let pose = leaf.pose(open);
-                    // Points through the leaf's body, its edges and middle.
-                    for i in 0..=8 {
-                        for j in 0..=8 {
-                            for k in 0..=2 {
-                                let p = pose.hinge
-                                    + pose.across * (leaf.width * (0.01 + 0.98 * i as f32 / 8.0))
-                                    + Vec3::Y * (leaf.height * j as f32 / 8.0)
-                                    + pose.through * (leaf.thick * (0.05 + 0.9 * k as f32 / 2.0));
-                                for (min, max) in &frame {
-                                    let inside = p.cmpgt(*min + Vec3::splat(1e-3)).all()
-                                        && p.cmplt(*max - Vec3::splat(1e-3)).all();
-                                    assert!(
-                                        !inside,
-                                        "{door:?} open {open}: the leaf crosses its frame at {p}"
-                                    );
-                                }
-                                // Within the wall's thickness, only in the hole.
-                                let cube = (p / CELL_M).floor().as_ivec3();
-                                let in_wall = cubes.iter().any(|c| {
-                                    c.dot(opens.as_ivec3().abs())
-                                        == cube.dot(opens.as_ivec3().abs())
-                                });
-                                if in_wall {
+    fn a_leaf_swings_about_its_hinge_without_crossing_its_frame_or_its_wall() {
+        for face in [0.135, 0.155, CUBE_FACE] {
+            for (fitted, along) in holes() {
+                let frame = fitted.frame(face);
+                let opens = fitted.across_wall().as_vec3();
+                let (low, high) = corners(&fitted);
+                let middle = ((low + high) * 0.5).dot(opens);
+                for leaf in fitted.leaves(face) {
+                    for step in 0..=20 {
+                        let open = step as f32 / 20.0;
+                        let pose = leaf.pose(open);
+                        // Points through the leaf's body, its edges and middle.
+                        for i in 0..=8 {
+                            for j in 0..=8 {
+                                for k in 0..=2 {
+                                    let p = pose.hinge
+                                        + pose.across
+                                            * (leaf.width * (0.01 + 0.98 * i as f32 / 8.0))
+                                        + Vec3::Y * (leaf.height * j as f32 / 8.0)
+                                        + pose.through
+                                            * (leaf.thick * (0.05 + 0.9 * k as f32 / 2.0));
+                                    for (min, max) in &frame {
+                                        let inside = p.cmpgt(*min + Vec3::splat(1e-3)).all()
+                                            && p.cmplt(*max - Vec3::splat(1e-3)).all();
+                                        assert!(
+                                            !inside,
+                                            "{fitted:?} on {face} open {open}: the leaf crosses its frame at {p}"
+                                        );
+                                    }
+                                    // Within the wall's face, only in the hole.
                                     let a = p.dot(along);
-                                    let low =
-                                        IVec3::from_array(door.min).as_vec3().dot(along) * CELL_M;
-                                    let high = (IVec3::from_array(door.max) + IVec3::ONE)
-                                        .as_vec3()
-                                        .dot(along)
-                                        * CELL_M;
+                                    let in_hole =
+                                        a > low.dot(along) - 1e-3 && a < high.dot(along) + 1e-3;
+                                    let in_wall = (p.dot(opens) - middle).abs() < face - 1e-3;
                                     assert!(
-                                        a > low - 1e-3 && a < high + 1e-3,
-                                        "{door:?} open {open}: the leaf in the wall beside its hole at {p}"
+                                        in_hole || !in_wall,
+                                        "{fitted:?} on {face} open {open}: the leaf in the wall beside its hole at {p}"
                                     );
                                 }
                             }
@@ -579,7 +708,7 @@ mod tests {
     #[test]
     fn wide_holes_take_a_pair_meeting_in_the_middle() {
         let double = prop([0, 0, 4], [0, 3, 7], [1, 0, 0], Hang::Door);
-        let leaves = double.leaves();
+        let leaves = double.leaves(CUBE_FACE);
         assert_eq!(leaves.len(), 2);
         // Along Z, hinged at either end, meeting in the middle with the leaves' gap between.
         let ends: Vec<f32> = leaves
@@ -593,32 +722,15 @@ mod tests {
         );
         // Shutters over a window a metre wide take a pair; half a metre, one.
         let pair = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
-        assert_eq!(pair.leaves().len(), 2);
+        assert_eq!(pair.leaves(CUBE_FACE).len(), 2);
         let one = prop([2, 2, 0], [2, 3, 0], [0, 0, -1], Hang::Shutters);
-        assert_eq!(one.leaves().len(), 1);
-    }
-
-    #[test]
-    fn shutters_hang_outside_and_fold_back_against_the_wall() {
-        // A window in a wall running east, the outside north.
-        let shutters = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
-        for leaf in shutters.leaves() {
-            let shut = leaf.middle(0.0);
-            assert!(
-                shut.z < 0.25 - SHUTTER_OUT_M + 0.01,
-                "outside the wall: {shut}"
-            );
-            // Open, beside the window rather than over it, still close to the wall.
-            let open = leaf.middle(1.0);
-            assert!(open.x < 1.0 || open.x > 2.0, "{open}");
-            assert!(open.z < 0.0 && open.z > -0.4, "{open}");
-        }
+        assert_eq!(one.leaves(CUBE_FACE).len(), 1);
     }
 
     #[test]
     fn a_leaf_stops_a_walker_where_it_stands_and_only_there() {
         let door = prop([2, 0, 0], [3, 3, 0], [0, 0, 1], Hang::Door);
-        let leaf = door.leaves()[0];
+        let leaf = door.leaves(CUBE_FACE)[0];
         let body = (0.4, 1.8);
         // Shut, walking south through the doorway's middle stops short of it.
         let (from, to) = (Vec3::new(1.5, 0.0, -0.3), Vec3::new(1.5, 0.0, 0.3));
@@ -633,5 +745,33 @@ mod tests {
         assert!(stopped.x < leaf.hinge.x - 0.2, "{stopped}");
         // Shut, that walk is clear.
         assert_eq!(push_off(from, to, 0.25, body, [(leaf, 0.0)]), to);
+    }
+
+    #[test]
+    fn a_props_wall_is_the_kind_round_its_hole() {
+        // A window in a wall of logs, with a course of stone under it.
+        let (logs, stone) = (Kind(1), Kind(2));
+        let mut base = Base::default();
+        for x in 0..6 {
+            for y in 0..6 {
+                let kind = if y == 0 { stone } else { logs };
+                let fill = if (2..=3).contains(&x) && (2..=3).contains(&y) {
+                    Fill::Open
+                } else {
+                    Fill::Solid
+                };
+                base.apply(crate::BuildOp::Fill {
+                    min: [x, y, 0],
+                    max: [x, y, 0],
+                    cube: Some(crate::Cube::new(kind, fill)),
+                });
+            }
+        }
+        let window = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
+        assert_eq!(wall_kind(&base, &window), Some(logs));
+        let kits = Kits(vec![shipped("logs"), shipped("stone")]);
+        assert_eq!(wall_face(&base, &window, &kits), shipped("logs").face());
+        // Standing alone, it is on a cube's face.
+        assert_eq!(wall_face(&Base::default(), &window, &kits), CUBE_FACE);
     }
 }
