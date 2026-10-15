@@ -1012,7 +1012,7 @@ pub(super) fn lay(
     }
     let count = placed.len();
     // Each roof's rows to the east of the walls', a group a roof kind over the walls it
-    // takes (D241): shakes over logs, slate over stone, thatch over hewn timber; then logs
+    // takes (D241): shakes over logs, slate over stone, shakes over hewn timber; then logs
     // and stone mixed.
     let names = super::kit_names();
     let mut group = 0;

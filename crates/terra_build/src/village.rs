@@ -764,7 +764,7 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
 
 /// A stone house built by hand with a storey built over its roof (D226): a stone ground
 /// floor under a low roof of slate, its edge sloped and its top flat, and on that roof a
-/// storey of hewn timber under a gable of thatch, laid a cube at a time.
+/// storey of hewn timber under a gable of its roof, laid a cube at a time.
 fn storey_over_roof(kinds: Kinds) -> Vec<BuildOp> {
     let mut hand = ByHand(Vec::new());
     let (x, z) = ([-6, 5], [-8, -1]);

@@ -174,9 +174,23 @@ pub struct Whole {
     by_section: BTreeMap<[i32; 3], Vec<(usize, usize, Piece)>>,
     /// How many pieces each kit laid.
     counts: Vec<usize>,
+    /// The kinds of the kits it was laid by, in their order: a piece's kit by its place in
+    /// them. Kits read again while the game runs (a material added, taken out or edited)
+    /// may be others or in another order.
+    laid_by: Vec<Kind>,
 }
 
 impl Whole {
+    /// Whether it was laid by these kits, in this order, so its pieces' kits are theirs.
+    pub fn laid_by(&self, kits: &Kits) -> bool {
+        self.laid_by.len() == kits.0.len()
+            && self
+                .laid_by
+                .iter()
+                .zip(&kits.0)
+                .all(|(kind, kit)| *kind == kit.kind())
+    }
+
     /// About how many bytes its pieces take in memory.
     pub fn bytes(&self) -> usize {
         let pieces: usize = self.by_section.values().map(Vec::len).sum();
@@ -189,7 +203,10 @@ impl Whole {
     }
 
     fn lay_all(base: &Base, kits: &Kits) -> Whole {
-        let mut whole = Whole::default();
+        let mut whole = Whole {
+            laid_by: kits.0.iter().map(Kit::kind).collect(),
+            ..Whole::default()
+        };
         // A kit lays only its own kind's cubes: one whose kind the base has none of lays
         // nothing, and is not asked, so a hundred materials cost a base what its own do.
         let kinds = kinds_of(base);
@@ -225,6 +242,11 @@ impl Whole {
         kits: &Kits,
         marked: &BTreeSet<[i32; 3]>,
     ) -> Whole {
+        // Laid by other kits, read again since: its pieces' kits are not these, so the base
+        // is laid whole.
+        if !self.laid_by(kits) {
+            return Whole::lay(base, kits);
+        }
         layout::roofs::remembered(|| self.lay_part(before, base, kits, marked))
     }
 
@@ -271,6 +293,7 @@ impl Whole {
                 .filter(|(_, pieces)| !pieces.is_empty())
                 .collect(),
             counts: self.counts.clone(),
+            laid_by: self.laid_by.clone(),
         };
         // A group at a time, each a box no bigger than a piece's reach round the edit.
         let kinds = kinds_of(base);
@@ -465,6 +488,14 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         .iter()
         .map(|kit| kinds.contains(&kit.kind()))
         .collect();
+    // Each of the whole's kits as one of these, by its kind: where the kits were read again
+    // since it was laid, a kit taken out lays nothing and one added nothing until the base
+    // is laid again, which a change of kits asks for.
+    let kit_of: Vec<Option<usize>> = whole
+        .laid_by
+        .iter()
+        .map(|kind| kits.0.iter().position(|kit| kit.kind() == *kind))
+        .collect();
     let low = origin - IVec3::ONE;
     let high = origin + IVec3::splat(crate::cubes::SECTION);
     // So far through, one piece of the base is next, as a builder has one in hand: the
@@ -503,15 +534,18 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         let Some(pieces) = whole.by_section.get(&at.to_array()) else {
             continue;
         };
-        for (index, order, piece) in pieces {
-            if !present[*index] {
+        for (laid, order, piece) in pieces {
+            let Some(index) = kit_of.get(*laid).copied().flatten() else {
+                continue;
+            };
+            if !present[index] {
                 continue;
             }
             let placed = |piece: &Piece| {
                 (
-                    *index,
+                    index,
                     *order,
-                    (*index, piece.clone(), stage(*index, *order, piece)),
+                    (index, piece.clone(), stage(*laid, *order, piece)),
                 )
             };
             if at == section.at {

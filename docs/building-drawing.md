@@ -30,7 +30,7 @@ Measured on 2026-10-14, release builds, the machine shared with other agents' bu
 
 What can go wrong at each stage, and the check that finds it, is the next section.
 
-A **kit is data** (D136, D290): a material file in `assets/data/kits/`, a few lines naming its pattern (`assets/data/kits/patterns/`) and its reference pack (`assets/data/packs/`), its cost and weight, merged over them as it is read ([construction-002.md](proposals/construction-002.md#hundreds-of-materials)); its texture sets are folders in `assets/materials/`. A new wall material is a material file, a pack and its textures, and no code. `cargo xtask kits` checks every material; the game reads every one in the folder, and the kit sheet gives each wall kit its rows (`--sheet-rows stone`).
+A **kit is data** (D136, D290): a material file in `assets/data/kits/`, a few lines naming its pattern (`assets/data/kits/patterns/`) and its reference pack (`assets/data/packs/`), its cost and weight, merged over them as it is read ([construction-002.md](proposals/construction-002.md#hundreds-of-materials)); its texture sets are folders in `assets/materials/`. A new wall material is a material file, a pack and its textures, and no code. `cargo xtask kits` checks every material; the game reads every one in the folder, and again while it runs when one is added, taken out or saved (keeping them as they were while one does not read, and laying every base again by the new ones), and the kit sheet gives each wall kit its rows (`--sheet-rows stone`).
 
 ## Where junk comes from, and what keeps it out
 

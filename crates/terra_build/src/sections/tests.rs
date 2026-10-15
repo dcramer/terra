@@ -1692,3 +1692,50 @@ fn a_kit_whose_kind_a_base_lacks_lays_nothing_there() {
         }
     }
 }
+
+#[test]
+fn kits_read_again_with_one_taken_out_added_or_reordered_lay_and_draw_without_fault() {
+    // A material file added, taken out or edited while the game runs reads the kits again,
+    // while bases laid by the old ones are still being cut and drawn: each base's sections
+    // are cut from its whole laid by the old kits with the new, and laid again from it.
+    let kits = shipped();
+    let maps = Maps::default();
+    let mut fewer = kits.clone();
+    let gone = fewer.0.remove(1).kind();
+    let mut turned = kits.clone();
+    turned.0.reverse();
+    let mut more = kits.clone();
+    let mut added = kits.0[0].clone();
+    added.id = 999;
+    let new = added.kind();
+    more.0.insert(0, added);
+    for base in bases(&kits) {
+        let has_gone = base.cubes().any(|(_, cube)| cube.kind == gone);
+        let old = Whole::lay(&base, &kits);
+        for now in [&fewer, &turned, &more] {
+            let fresh = Whole::lay(&base, now);
+            let again = old.lay_again(&base, &base, now, &BTreeSet::new());
+            assert!(again.laid_by(now) && !old.laid_by(now));
+            for at in drawable(&base) {
+                let section = Section {
+                    base: &base,
+                    kits: now,
+                    maps: &maps,
+                    at: IVec3::from_array(at),
+                    progress: &Progress::Whole,
+                };
+                // Cut from the old whole with the new kits: no piece of a kit taken out,
+                // none yet of one added, and, where the kits only moved or the one taken
+                // out had no cubes there, what the new kits lay.
+                let stale = lay(&section, &old);
+                assert!(stale.pieces.iter().all(|p| now.0[p.0].kind() != new));
+                if !(std::ptr::eq(now, &fewer) && has_gone) {
+                    assert_eq!(stale.pieces, lay(&section, &fresh).pieces, "{at:?}");
+                }
+                draw(&section, &stale, Reach::Near);
+                // Laid again from it, as laid whole by the new kits.
+                assert_eq!(lay(&section, &again).pieces, lay(&section, &fresh).pieces);
+            }
+        }
+    }
+}
