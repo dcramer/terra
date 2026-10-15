@@ -274,6 +274,39 @@ impl Fragment {
     /// breaking says, thrown up and out a little: what is left of its fall.
     pub fn shatter(&self, breaks: Breaks, share: f32) -> Vec<Fragment> {
         let mut out = Vec::new();
+        // A block of cubes splits where it lands into halves of itself along each side
+        // longer than a cube, each whole still, to break again where it lands.
+        if self.size.max_element() > CELL_M * 1.2 {
+            let half = |side: f32| if side > CELL_M * 1.2 { 2 } else { 1 };
+            let halves = IVec3::new(half(self.size.x), half(self.size.y), half(self.size.z));
+            let part = self.size / halves.as_vec3();
+            for x in 0..halves.x {
+                for y in 0..halves.y {
+                    for z in 0..halves.z {
+                        let offset = (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * part
+                            - self.size * 0.5;
+                        let seed = hash(&[self.seed, (x | y << 2 | z << 4) as u32]);
+                        let r = |salt: u32| unit(&[seed, salt]);
+                        let out_from = (self.turn * offset).normalize_or_zero();
+                        let axis =
+                            Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
+                        out.push(Fragment {
+                            at: self.at + self.turn * offset,
+                            velocity: self.velocity.with_y(0.0) * 0.5
+                                + out_from * (1.0 + r(4))
+                                + Vec3::Y * (0.8 + r(5)),
+                            spin: axis * (2.0 + 3.0 * r(6)),
+                            size: part * 0.97,
+                            wait: 0.0,
+                            still: false,
+                            seed,
+                            ..*self
+                        });
+                    }
+                }
+            }
+            return out;
+        }
         pieces(
             self.kind,
             breaks,
@@ -407,37 +440,76 @@ pub fn burst(
         );
     }
     out.truncate(most);
+    // The cubes left hanging fall whole, a block of them together where there are more
+    // than there is room for: a tower comes down as chunks a metre or two across, solid,
+    // rather than as a lattice of every so many cubes.
     let left = most - out.len();
-    let every = hanging.len().div_ceil(left.max(1)).max(1);
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
-    for (index, (at, cube)) in hanging.iter().enumerate() {
+    let mut across = 1;
+    let mut blocks = group(&hanging, across);
+    while blocks.len() > left && across < MOST_ACROSS {
+        across += 1;
+        blocks = group(&hanging, across);
+    }
+    let every = blocks.len().div_ceil(left.max(1)).max(1);
+    for (index, block) in blocks.values().enumerate() {
         if index % every != 0 || out.len() >= most {
             continue;
         }
+        let (low, high) = block.iter().fold(
+            (IVec3::splat(i32::MAX), IVec3::splat(i32::MIN)),
+            |(low, high), (at, _)| (low.min(*at), high.max(*at)),
+        );
+        let (at, cube) = block[0];
         let seed = hash(&[at.x as u32, at.y as u32, at.z as u32]);
         let r = |salt: u32| unit(&[seed, salt]);
-        let middle = (at.as_vec3() + 0.5) * CELL_M;
+        // As full as its cubes are, a single cube part in standing on its foot.
+        let fill = if block.len() == 1 {
+            f32::from(cube.level()) / f32::from(FULL)
+        } else {
+            1.0
+        };
+        let cubes = (high - low + IVec3::ONE).as_vec3();
+        let foot = low.as_vec3() * CELL_M;
+        let size = Vec3::new(cubes.x, cubes.y * fill, cubes.z) * CELL_M;
+        let middle = foot + size * 0.5;
         let away = (middle - impact).with_y(0.0).normalize_or_zero();
         let axis = Vec3::new(r(1) - 0.5, 0.2 * r(2), r(3) - 0.5).normalize_or(Vec3::X);
-        let fill = f32::from(cube.level()) / f32::from(FULL);
         out.push(Fragment {
             kind: cube.kind,
             shape: Shape::Whole,
             at: middle,
             // The higher, the further it topples out from where it gave way.
-            velocity: away * (0.3 + 0.6 * r(4) + (0.07 * (at.y - lowest) as f32).min(1.5)),
+            velocity: away * (0.3 + 0.6 * r(4) + (0.07 * (low.y - lowest) as f32).min(1.5)),
             turn: Quat::IDENTITY,
-            spin: axis * (0.6 + 1.6 * r(5)),
-            // A hair smaller than its cube, so it never fights the cube drawn where it was
-            // for the frames before its section is drawn again.
-            size: Vec3::new(1.0, fill, 1.0) * CELL_M * 0.97,
-            wait: ((at.y - lowest) as f32 * STAGGER_S + 0.08 * r(6)).min(STAGGER_MOST_S),
+            spin: axis * (0.6 + 1.6 * r(5)) / cubes.max_element().sqrt(),
+            // A hair smaller than its cubes, so it never fights the cubes drawn where they
+            // were for the frames before their sections are drawn again.
+            size: size * 0.97,
+            wait: ((low.y - lowest) as f32 * STAGGER_S + 0.08 * r(6)).min(STAGGER_MOST_S),
             still: false,
             fill,
             seed,
         });
     }
     out
+}
+
+/// The most cubes along each side a block of cubes left hanging falls as one.
+const MOST_ACROSS: i32 = 4;
+
+/// Cubes grouped in blocks so many a side, by the block each is in.
+fn group<'a>(
+    cubes: &[&'a (IVec3, Cube)],
+    across: i32,
+) -> std::collections::BTreeMap<[i32; 3], Vec<&'a (IVec3, Cube)>> {
+    let mut blocks: std::collections::BTreeMap<[i32; 3], Vec<&(IVec3, Cube)>> =
+        std::collections::BTreeMap::new();
+    for cube in cubes {
+        let key = cube.0.div_euclid(IVec3::splat(across)).to_array();
+        blocks.entry(key).or_default().push(*cube);
+    }
+    blocks
 }
 
 impl Base {
@@ -641,16 +713,43 @@ mod tests {
     }
 
     #[test]
-    fn a_tower_coming_down_stays_within_the_budget() {
+    fn a_tower_coming_down_stays_within_the_budget_and_falls_solid() {
         let tower: Vec<(IVec3, Cube)> = (0..20)
             .flat_map(|y| (0..15).flat_map(move |x| (0..15).map(move |z| IVec3::new(x, y, z))))
             .map(|at| (at, cube(CubeShape::Whole)))
             .collect();
         let ring = |at: IVec3| at.y == 0;
         let parts = burst(&tower, &ring, &chunks, 1.0, 2000);
-        assert!(parts.len() <= 2000 && parts.len() > 1500, "{}", parts.len());
+        assert!(parts.len() <= 2000, "{}", parts.len());
         let high = parts.iter().map(|part| part.at.y).fold(0.0, f32::max);
         assert!(high > 9.0, "its top comes down too: {high}");
+        // What hung comes down in blocks that between them fill all of it, not as a
+        // lattice of every so many cubes.
+        let whole: f32 = parts
+            .iter()
+            .filter(|part| part.shape == Shape::Whole)
+            .map(|part| part.size.x * part.size.y * part.size.z)
+            .sum();
+        let hung = (19 * 15 * 15) as f32 * CELL_M * CELL_M * CELL_M;
+        assert!(whole > hung * 0.88, "{whole} of {hung}");
+    }
+
+    #[test]
+    fn a_block_landing_splits_into_halves_and_they_into_pieces() {
+        let block: Vec<(IVec3, Cube)> = (0..2)
+            .flat_map(|y| (0..2).flat_map(move |x| (0..2).map(move |z| IVec3::new(x, 10 + y, z))))
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect();
+        let parts = burst(&block, &|_| false, &chunks, 1.0, 2);
+        assert_eq!(parts.len(), 1, "two to a side, as one");
+        let halves = parts[0].shatter(Breaks::Chunks, 1.0);
+        assert_eq!(halves.len(), 8);
+        assert!(
+            halves.iter().all(|half| half.shape == Shape::Whole
+                && (half.size.x - CELL_M * 0.97 * 0.97).abs() < 0.01)
+        );
+        let pieces = halves[0].shatter(Breaks::Chunks, 1.0);
+        assert!(pieces.iter().all(|piece| piece.shape != Shape::Whole));
     }
 
     #[test]

@@ -34,10 +34,14 @@ const MOST_STEPS: u32 = 3;
 /// that takes, and how long one thrown off out of sight is kept at most.
 const REST_S: [f32; 2] = [1.6, 3.4];
 const FADE_S: f32 = 0.7;
+/// How quickly the oldest shrink away when newer need the room.
+const QUICK_FADE_S: f32 = 0.3;
 const OLDEST_S: f32 = 14.0;
 /// How long each kind's fragments are drawn out of sight when the game starts, so their
 /// pipelines are compiled before anything comes down.
 const WARM_S: f32 = 8.0;
+/// A step of the fragments longer than this, in milliseconds, is said in the log.
+const SLOW_MS: f32 = 2.0;
 /// Past how many metres from the view a fall makes fewer fragments, and how many fewer.
 const FAR_M: f32 = 60.0;
 const FAR_SHARE: f32 = 0.4;
@@ -89,10 +93,36 @@ struct Puff {
 struct Live {
     fragment: Fragment,
     root: Entity,
+    /// Its entity, once it is drawn: `PLACEHOLDER` until then.
     entity: Entity,
     still_s: f32,
     rest_s: f32,
+    /// How long it takes to shrink away: quicker when the oldest make room.
+    fade_s: f32,
     age_s: f32,
+}
+
+impl Live {
+    fn new(fragment: Fragment, root: Entity) -> Live {
+        Live {
+            fragment,
+            root,
+            entity: Entity::PLACEHOLDER,
+            still_s: 0.0,
+            rest_s: rest_for(&fragment),
+            fade_s: FADE_S,
+            age_s: 0.0,
+        }
+    }
+
+    /// Whether it is shrinking away, or gone.
+    fn fading(&self) -> bool {
+        self.still_s >= self.rest_s
+    }
+
+    fn gone(&self) -> bool {
+        self.still_s >= self.rest_s + self.fade_s
+    }
 }
 
 /// The material a fragment's mesh is drawn in: the texture arrays, or its kind's own where
@@ -127,6 +157,16 @@ fn budget(quality: Quality) -> (usize, usize, f32) {
         Quality::Low => (700, 8, 0.45),
         Quality::Medium => (1400, 16, 0.75),
         Quality::High => (fragments::MOST, 24, 1.0),
+    }
+}
+
+/// How many fragments are drawn anew a frame at a preset: a big fall's are spread over a
+/// few frames, while the sections it changed are laid again anyway.
+fn spawn_budget(quality: Quality) -> usize {
+    match quality {
+        Quality::Low => 150,
+        Quality::Medium => 300,
+        Quality::High => 500,
     }
 }
 
@@ -197,7 +237,7 @@ fn mesh_for(
 /// Where a fragment is in the world: its build's frame over where it is in the build's
 /// space, shrunk as it fades.
 fn placed(frame: &Transform, live: &Live) -> Transform {
-    let fade = ((live.still_s - live.rest_s) / FADE_S).clamp(0.0, 1.0);
+    let fade = ((live.still_s - live.rest_s) / live.fade_s).clamp(0.0, 1.0);
     let shrink = 1.0 - fade * fade * (3.0 - 2.0 * fade);
     let sink = Vec3::Y * live.fragment.size.y * 0.35 * fade;
     frame.mul_transform(
@@ -231,7 +271,6 @@ fn burst(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
     look: Res<BuildLook>,
-    arrays: Option<Res<Arrays>>,
     quality: Res<Quality>,
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut shards: ResMut<Shards>,
@@ -273,32 +312,12 @@ fn burst(
         let share = preset * if distance > FAR_M { FAR_SHARE } else { 1.0 };
         let destroyed = |at: IVec3| fallen.destroyed.contains(&at.to_array());
         let made = fragments::burst(&fallen.fell, &destroyed, &breaks, share, most);
-        // Room for them: the oldest go first.
-        let over = (shards.live.len() + made.len()).saturating_sub(most);
-        fade_oldest(&mut shards, over);
         let count = made.len();
-        for fragment in made {
-            let Some(drawn) = mesh_for(
-                &mut shards,
-                &look,
-                arrays.as_deref(),
-                &mut meshes,
-                fragment.kind,
-                fragment.shape,
-            ) else {
-                continue;
-            };
-            let mut live = Live {
-                fragment,
-                root,
-                entity: Entity::PLACEHOLDER,
-                still_s: 0.0,
-                rest_s: rest_for(&fragment),
-                age_s: 0.0,
-            };
-            live.entity = spawn(&mut commands, drawn, placed(&frame, &live));
-            shards.live.push(live);
-        }
+        // Moving at once, drawn a few hundred a frame (`step`), so a big fall's entities are
+        // not all made in one frame.
+        shards
+            .live
+            .extend(made.into_iter().map(|fragment| Live::new(fragment, root)));
         // Dust where it broke: a puff for every few cubes destroyed, more for what crumbles.
         let broke: Vec<&(IVec3, Cube)> = fallen
             .fell
@@ -348,13 +367,14 @@ fn fade_oldest(shards: &mut Shards, count: usize) {
         return;
     }
     let mut order: Vec<usize> = (0..shards.live.len())
-        .filter(|&i| shards.live[i].still_s < shards.live[i].rest_s)
+        .filter(|&i| !shards.live[i].fading())
         .collect();
     order.sort_by(|&a, &b| shards.live[b].age_s.total_cmp(&shards.live[a].age_s));
     for &i in order.iter().take(count) {
         let live = &mut shards.live[i];
         live.fragment.still = true;
-        live.still_s = live.still_s.max(live.rest_s);
+        live.still_s = live.rest_s;
+        live.fade_s = QUICK_FADE_S;
     }
 }
 
@@ -518,6 +538,7 @@ fn step(
     if shards.live.is_empty() {
         return;
     }
+    let began = Instant::now();
     let (most, most_puffs, preset) = budget(*quality);
     let mut by_root: BTreeMap<Entity, &Build> = BTreeMap::new();
     by_root.insert(site.root, &site.build);
@@ -538,7 +559,7 @@ fn step(
         for live in &mut shards.live {
             live.age_s += STEP_S;
             let Some(build) = by_root.get(&live.root) else {
-                live.still_s = live.rest_s + FADE_S;
+                live.still_s = live.rest_s + live.fade_s;
                 continue;
             };
             if live.fragment.still {
@@ -586,18 +607,10 @@ fn step(
                 if !pieces.is_empty() {
                     // What it broke into goes on; the whole is gone at once, hidden
                     // inside its pieces.
-                    live.still_s = live.rest_s + FADE_S;
+                    live.still_s = live.rest_s + live.fade_s;
                     live.fragment.still = true;
-                    for fragment in pieces {
-                        born.push(Live {
-                            fragment,
-                            root: live.root,
-                            entity: Entity::PLACEHOLDER,
-                            still_s: 0.0,
-                            rest_s: rest_for(&fragment),
-                            age_s: 0.0,
-                        });
-                    }
+                    let root = live.root;
+                    born.extend(pieces.into_iter().map(|fragment| Live::new(fragment, root)));
                 }
             } else if landing.hit.is_some_and(|hit| hit > 3.0)
                 && live.fragment.size.max_element() > 0.2
@@ -610,24 +623,28 @@ fn step(
             }
         }
     }
-    // What broke on landing: drawn where it is.
-    for mut live in born {
-        let Some(build) = by_root.get(&live.root) else {
-            continue;
-        };
-        let frame = build.frame;
-        let Some(drawn) = mesh_for(
-            &mut shards,
-            &look,
-            arrays.as_deref(),
-            &mut meshes,
-            live.fragment.kind,
-            live.fragment.shape,
-        ) else {
-            continue;
-        };
-        live.entity = spawn(&mut commands, drawn, placed(&frame, &live));
-        shards.live.push(live);
+    // What broke on landing: moving from now, drawn at the end with the rest.
+    shards.live.extend(born);
+    // Never far past the most: the oldest make room, and past half again as many the
+    // oldest of those not yet drawn are let go at once.
+    let over = shards
+        .live
+        .iter()
+        .filter(|live| !live.fading())
+        .count()
+        .saturating_sub(most);
+    fade_oldest(&mut shards, over);
+    while shards.live.len() > most + most / 2 {
+        match shards
+            .live
+            .iter()
+            .position(|live| live.entity == Entity::PLACEHOLDER)
+        {
+            Some(at) => {
+                shards.live.remove(at);
+            }
+            None => break,
+        }
     }
     for (at, kind, amount) in landed {
         let colour = dust_of(&look, kind);
@@ -642,14 +659,36 @@ fn step(
             at.normalize_or(Vec3::Y),
         );
     }
-    // Each where it is now; those shrunk away gone.
-    let mut kept = Vec::with_capacity(shards.live.len());
-    for live in shards.live.drain(..) {
-        let gone = live.still_s >= live.rest_s + FADE_S;
-        if gone {
-            if let Ok(mut entity) = commands.get_entity(live.entity) {
+    // Each where it is now, those not yet drawn drawn a few hundred a frame; those shrunk
+    // away gone.
+    let mut spawns = spawn_budget(*quality);
+    let mut live_now = std::mem::take(&mut shards.live);
+    let mut kept = Vec::with_capacity(live_now.len());
+    for mut live in live_now.drain(..) {
+        if live.gone() {
+            if live.entity != Entity::PLACEHOLDER
+                && let Ok(mut entity) = commands.get_entity(live.entity)
+            {
                 entity.despawn();
             }
+            continue;
+        }
+        if live.entity == Entity::PLACEHOLDER {
+            if spawns > 0
+                && let Some(build) = by_root.get(&live.root)
+                && let Some(drawn) = mesh_for(
+                    &mut shards,
+                    &look,
+                    arrays.as_deref(),
+                    &mut meshes,
+                    live.fragment.kind,
+                    live.fragment.shape,
+                )
+            {
+                spawns -= 1;
+                live.entity = spawn(&mut commands, drawn, placed(&build.frame, &live));
+            }
+            kept.push(live);
             continue;
         }
         if let (Some(build), Ok(mut transform)) =
@@ -665,6 +704,14 @@ fn step(
         kept.push(live);
     }
     shards.live = kept;
+    // A slow step said, so a trace can tell fragments from the rest of a frame.
+    let took = began.elapsed().as_secs_f32() * 1000.0;
+    if took > SLOW_MS {
+        info!(
+            "Build: fragments stepped: {} in {took:.1} ms ({steps} steps)",
+            shards.live.len()
+        );
+    }
 }
 
 /// Dust billows out, rises and thins away, each sprite facing the view.

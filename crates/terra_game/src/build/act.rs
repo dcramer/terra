@@ -348,13 +348,15 @@ impl Building<'_, '_> {
     /// Does operations to the base as one act, taking and giving back what they say, and
     /// keeping what undoes them. A refusal is told to the builder. Logged either way.
     pub fn act(&mut self, by: Option<Entity>, what: &str, ops: &[Op]) -> Result<Done, Refusal> {
+        let began = std::time::Instant::now();
         let done = self.apply(by, ops);
         match &done {
             Ok(done) => {
                 info!(
-                    "Build: {what}: done{}{}",
+                    "Build: {what}: done{}{} ({:.1} ms)",
                     describe(" taking ", &done.took),
-                    describe(" giving back ", &done.gave)
+                    describe(" giving back ", &done.gave),
+                    began.elapsed().as_secs_f32() * 1000.0
                 );
                 if let Some(by) = by
                     && let Ok(mut history) = self.histories.get_mut(by)
