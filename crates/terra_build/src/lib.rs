@@ -362,6 +362,8 @@ pub struct Base {
     /// castle's hundred and forty thousand were walked several times an edit (D308).
     in_parts: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
     pending: BTreeSet<[i32; 3]>,
+    /// How many cubes of each kind it has, so which kits lay anything is known at once.
+    kinds: BTreeMap<Kind, usize>,
     /// Every cube closed in, and which room it is in, worked out when asked (D261).
     rooms: rooms::Rooms,
 }
@@ -868,6 +870,7 @@ impl Base {
         self.columns.clear();
         self.in_parts.clear();
         self.pending.clear();
+        self.kinds.clear();
         let cubes: Vec<(IVec3, Cube)> = self.cubes.iter().collect();
         for (at, cube) in cubes {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
@@ -880,6 +883,7 @@ impl Base {
         let Some(cube) = cube else {
             return;
         };
+        *self.kinds.entry(cube.kind).or_default() += 1;
         if let Some(part) = cube.part {
             self.in_parts.entry(part).or_default().insert(at.to_array());
         }
@@ -893,6 +897,12 @@ impl Base {
         let Some(cube) = cube else {
             return;
         };
+        if let Some(count) = self.kinds.get_mut(&cube.kind) {
+            *count -= 1;
+            if *count == 0 {
+                self.kinds.remove(&cube.kind);
+            }
+        }
         if let Some(part) = cube.part
             && let Some(cubes) = self.in_parts.get_mut(&part)
         {
@@ -904,6 +914,11 @@ impl Base {
         if cube.pending != Pending::None {
             self.pending.remove(&at.to_array());
         }
+    }
+
+    /// Every kind it has a cube of, in order.
+    pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
+        self.kinds.keys().copied()
     }
 
     /// Every cube with work pending on it (to be carved, or changing kind), in a fixed

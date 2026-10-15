@@ -161,6 +161,9 @@ pub fn affected(base: &Base, marked: &BTreeSet<[i32; 3]>) -> BTreeSet<[i32; 3]> 
     out.extend(found);
     out
 }
+/// A piece as a laying files it: the kit it is of, by its place in the kits, where it
+/// comes in the order its kit's pieces go in, and the piece.
+type Filed = (usize, usize, Piece);
 
 /// A base laid whole, every kit's pieces, filed by the section that owns each: what its
 /// sections are cut from ([`lay`]). A change lays the base once, on a worker, rather than
@@ -170,8 +173,9 @@ pub fn affected(base: &Base, marked: &BTreeSet<[i32; 3]>) -> BTreeSet<[i32; 3]> 
 #[derive(Clone, Debug, Default)]
 pub struct Whole {
     /// Each section's pieces: the kit each is of, by its place in the kits, where it comes
-    /// in the order its kit's pieces go in, and the piece.
-    by_section: BTreeMap<[i32; 3], Vec<(usize, usize, Piece)>>,
+    /// in the order its kit's pieces go in, and the piece. Shared with the laying it was
+    /// kept from where an edit did not reach it.
+    by_section: BTreeMap<[i32; 3], std::sync::Arc<Vec<Filed>>>,
     /// How many pieces each kit laid.
     counts: Vec<usize>,
     /// The kinds of the kits it was laid by, in their order: a piece's kit by its place in
@@ -193,7 +197,7 @@ impl Whole {
 
     /// About how many bytes its pieces take in memory.
     pub fn bytes(&self) -> usize {
-        let pieces: usize = self.by_section.values().map(Vec::len).sum();
+        let pieces: usize = self.by_section.values().map(|pieces| pieces.len()).sum();
         pieces * size_of::<(usize, usize, Piece)>() + self.by_section.len() * 64
     }
 
@@ -218,11 +222,13 @@ impl Whole {
             let pieces = layout::lay_among(base, kit, kits).pieces;
             whole.counts.push(pieces.len());
             for (order, piece) in pieces.into_iter().enumerate() {
-                whole
-                    .by_section
-                    .entry(piece.section().to_array())
-                    .or_default()
-                    .push((index, order, piece));
+                std::sync::Arc::make_mut(
+                    whole
+                        .by_section
+                        .entry(piece.section().to_array())
+                        .or_default(),
+                )
+                .push((index, order, piece));
             }
         }
         whole
@@ -280,13 +286,15 @@ impl Whole {
                 .by_section
                 .iter()
                 .map(|(at, pieces)| {
-                    let kept: Vec<(usize, usize, Piece)> = match again.get(at) {
+                    let kept = match again.get(at) {
                         None => pieces.clone(),
-                        Some(&group) => pieces
-                            .iter()
-                            .filter(|(index, _, _)| !laid_in(group, &kits.0[*index]))
-                            .cloned()
-                            .collect(),
+                        Some(&group) => std::sync::Arc::new(
+                            pieces
+                                .iter()
+                                .filter(|(index, _, _)| !laid_in(group, &kits.0[*index]))
+                                .cloned()
+                                .collect(),
+                        ),
                     };
                     (*at, kept)
                 })
@@ -304,11 +312,13 @@ impl Whole {
                 }
                 let pieces = layout::lay_sections(base, kit, kits, sections).pieces;
                 for (order, piece) in pieces.into_iter().enumerate() {
-                    whole
-                        .by_section
-                        .entry(piece.section().to_array())
-                        .or_default()
-                        .push((index, order, piece));
+                    std::sync::Arc::make_mut(
+                        whole
+                            .by_section
+                            .entry(piece.section().to_array())
+                            .or_default(),
+                    )
+                    .push((index, order, piece));
                 }
             }
         }
@@ -318,7 +328,7 @@ impl Whole {
 
 /// Every kind a base has a cube of.
 fn kinds_of(base: &Base) -> BTreeSet<Kind> {
-    base.cubes().map(|(_, cube)| cube.kind).collect()
+    base.kinds().collect()
 }
 
 /// Runs the work of one base's section, every roof it asks for worked out once
@@ -412,12 +422,15 @@ pub fn reach(
 ) -> Vec<BTreeSet<[i32; 3]>> {
     let mut drawn: BTreeSet<[i32; 3]> = drawable(before);
     drawn.extend(drawable(after));
-    let near: BTreeSet<[i32; 3]> = round(marked.iter().copied().map(IVec3::from_array))
-        .intersection(&drawn)
-        .copied()
-        .collect();
+    let round_marks = |marked: &BTreeSet<[i32; 3]>| -> BTreeSet<[i32; 3]> {
+        round(marked.iter().copied().map(IVec3::from_array))
+            .intersection(&drawn)
+            .copied()
+            .collect()
+    };
+    let mut near = round_marks(marked);
     // The kits whose cubes are round the marks, before the edit or after.
-    let here = |kit: &Kit| {
+    let here = |kit: &Kit, near: &BTreeSet<[i32; 3]>| {
         [before, after].iter().any(|base| {
             near.iter().any(|&at| {
                 let low = IVec3::from_array(at) * crate::cubes::SECTION;
@@ -430,25 +443,30 @@ pub fn reach(
     };
     // A frame's members run the length of their wall, and are laid only as far round a
     // box as a member reaches from a post, so a framed building is laid again whole.
-    // Which way a log looks out of its room (D261) is worked out from the rooms, which an
-    // edit anywhere round a room opens or closes: where they changed, a log kind's building
-    // is laid again whole, as each of its logs may look out another way.
-    let rooms_changed = || {
-        before
-            .room_cells()
-            .map(|(at, _)| at)
-            .ne(after.room_cells().map(|(at, _)| at))
-    };
-    if kits.0.iter().any(|kit| kit.framing.is_some() && here(kit))
-        || (kits
-            .0
-            .iter()
-            .any(|kit| kit.pattern == Pattern::Logs && here(kit))
-            && rooms_changed())
+    if kits
+        .0
+        .iter()
+        .any(|kit| kit.framing.is_some() && here(kit, &near))
     {
         let mut whole = affected(before, marked);
         whole.extend(affected(after, marked));
         return vec![whole];
+    }
+    // Which way a log looks out of its room (D261) is worked out from the rooms beside its
+    // wall, which an edit anywhere round a room opens or closes: where a cube went into a
+    // room or out of one, its section is laid again as though marked, with the rows of logs
+    // along from it, as a log a wall's thickness from it may look out another way.
+    let logs_here = kits
+        .0
+        .iter()
+        .any(|kit| kit.pattern == Pattern::Logs && here(kit, &near));
+    let mut marked = marked.clone();
+    if logs_here {
+        let moved = rooms_moved(before, after);
+        if !moved.is_empty() {
+            marked.extend(moved);
+            near = round_marks(&marked);
+        }
     }
     let mut groups = vec![near.clone()];
     // A row of logs is jointed at places fixed along it (`layout::runs`), so an edit
@@ -457,7 +475,7 @@ pub fn reach(
     let along = kits
         .0
         .iter()
-        .filter(|kit| kit.pattern == Pattern::Logs && here(kit))
+        .filter(|kit| kit.pattern == Pattern::Logs && here(kit, &near))
         .map(layout::runs::reach_cubes)
         .max();
     if let Some(along) = along {
@@ -477,6 +495,45 @@ pub fn reach(
         }
     }
     groups
+}
+
+/// The sections of every cube in a room before an edit and not after, or after and not
+/// before: what a log looks out of may have changed there.
+fn rooms_moved(before: &Base, after: &Base) -> BTreeSet<[i32; 3]> {
+    let mut moved = BTreeSet::new();
+    let (mut a, mut b) = (
+        before.room_cells().map(|(at, _)| at).peekable(),
+        after.room_cells().map(|(at, _)| at).peekable(),
+    );
+    let mut note = |at: IVec3| {
+        moved.insert(crate::cubes::section_of(at).to_array());
+    };
+    loop {
+        match (a.peek().copied(), b.peek().copied()) {
+            (Some(x), Some(y)) if x == y => {
+                a.next();
+                b.next();
+            }
+            (Some(x), Some(y)) if x.to_array() < y.to_array() => {
+                note(x);
+                a.next();
+            }
+            (Some(_), Some(y)) => {
+                note(y);
+                b.next();
+            }
+            (Some(x), None) => {
+                note(x);
+                a.next();
+            }
+            (None, Some(y)) => {
+                note(y);
+                b.next();
+            }
+            (None, None) => break,
+        }
+    }
+    moved
 }
 
 /// How far a section's cubes are searched for the kinds whose kits may lay pieces in it.
@@ -519,7 +576,7 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         Progress::Fraction(fraction) => whole
             .by_section
             .values()
-            .flatten()
+            .flat_map(|pieces| pieces.iter())
             .filter(|(index, order, _)| *order == done(whole.counts[*index], *fraction))
             .min_by_key(|(index, _, piece)| (piece.anchor().y, *index))
             .map(|(index, _, _)| *index),
@@ -548,7 +605,7 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         let Some(pieces) = whole.by_section.get(&at.to_array()) else {
             continue;
         };
-        for (laid, order, piece) in pieces {
+        for (laid, order, piece) in pieces.iter() {
             let Some(index) = kit_of.get(*laid).copied().flatten() else {
                 continue;
             };
