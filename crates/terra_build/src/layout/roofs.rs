@@ -2026,4 +2026,93 @@ mod tests {
         let (up, inside) = roofs.place_of(Vec3::new(2.0, 4.99, 2.0 - 0.01)).unwrap();
         assert!(up > 0.9 && inside > 1.0, "{up} {inside}");
     }
+
+    /// How many edge pieces lie along each open side of each square of covering.
+    fn closings(base: &Base) -> Vec<(Vec3, Vec3, usize)> {
+        let pieces = laid(base);
+        let edges: Vec<(Vec3, Vec3)> = pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Roof { part, from, to, .. }
+                    if !matches!(
+                        part,
+                        RoofPart::Rafter
+                            | RoofPart::Batten
+                            | RoofPart::Ridge
+                            | RoofPart::Hip
+                            | RoofPart::Valley
+                    ) =>
+                {
+                    Some((from.metres(), to.metres()))
+                }
+                _ => None,
+            })
+            .collect();
+        // Whether a point lies on a piece's line, within a centimetre.
+        let on = |p: Vec3, (a, b): (Vec3, Vec3)| {
+            let t = ((p - a).dot(b - a) / (b - a).length_squared().max(1e-9)).clamp(0.0, 1.0);
+            (a + (b - a) * t).distance(p) < 0.01
+        };
+        let mut out = Vec::new();
+        for piece in &pieces {
+            let Piece::Covering { corners, open, .. } = piece else {
+                continue;
+            };
+            for side in 0..4 {
+                if !open[side] {
+                    continue;
+                }
+                let (p, r) = (corners[side].metres(), corners[(side + 1) % 4].metres());
+                let n = edges
+                    .iter()
+                    .filter(|&&line| on(p, line) && on(r, line) && on((p + r) * 0.5, line))
+                    .count();
+                out.push((p, r, n));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece() {
+        // docs/building-voxels.md, invariant 3: every side of a square of covering that does
+        // not carry on into the next is closed by exactly one edge piece, an eave, a verge or
+        // the flashing against what stands there, over every plan, style and edge a roof has.
+        let rect = [([0, 0, 0], [9, 0, 7])];
+        let l = [([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])];
+        let t = [([0, 0, 0], [13, 0, 7]), ([3, 0, 7], [10, 0, 15])];
+        let mut bases = Vec::new();
+        for style in [Style::Gable, Style::Hip, Style::LeanTo] {
+            bases.push((format!("rectangle {style:?}"), roofed(&rect, style)));
+        }
+        for style in [Style::Gable, Style::Hip] {
+            bases.push((format!("L {style:?}"), roofed(&l, style)));
+            bases.push((format!("T {style:?}"), roofed(&t, style)));
+        }
+        // A lean-to rising south to a wall two storeys high, and a gable whose verge is
+        // against a taller wall beyond its end: their edges against the walls are flashed.
+        let tall = |base: &mut Base, min: [i32; 3], max: [i32; 3]| {
+            base.apply(BuildOp::Fill {
+                min,
+                max,
+                cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+            });
+        };
+        let mut against = roofed(&[([0, 0, 0], [9, 0, 5])], Style::LeanTo);
+        tall(&mut against, [-2, 0, 6], [11, 13, 6]);
+        bases.push(("lean-to against a wall".into(), against));
+        let mut verge = roofed(&rect, Style::Gable);
+        tall(&mut verge, [-1, 0, -1], [-1, 13, 8]);
+        bases.push(("verge against a wall".into(), verge));
+        for (name, base) in &bases {
+            let sides = closings(base);
+            assert!(sides.len() > 20, "{name}: {}", sides.len());
+            for (p, r, n) in sides {
+                assert_eq!(
+                    n, 1,
+                    "{name}: the covering's side {p} to {r} closed {n} times"
+                );
+            }
+        }
+    }
 }

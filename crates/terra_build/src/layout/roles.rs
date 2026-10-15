@@ -1120,4 +1120,53 @@ mod tests {
         let logs = Roles::new(&base, LOGS, &kits);
         assert!(logs.dressed(IVec3::ZERO).is_empty());
     }
+
+    #[test]
+    fn every_edge_with_a_role_is_dressed_by_one_cube_only() {
+        // docs/building-voxels.md, invariant 2: a line where faces meet is dressed once, by
+        // the cube that owns it, whatever is round it. Here every way a kind's cubes meet
+        // along an edge but at one edge alone (that document's gap list): outside and inside
+        // corners, a T, a cross, a thick wall, a pier, steps, an overhang, a wall on a floor,
+        // holes of every sort, a notch at a foot and another kind standing on it and beside it.
+        let mut base = Base::default();
+        // A room with a floor, its walls holed by a door, a window and a carved cross.
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind: STONE,
+        });
+        let open = |base: &mut Base, min: [i32; 3], max: [i32; 3]| {
+            base.apply(BuildOp::Fill {
+                min,
+                max,
+                cube: Some(Cube::new(STONE, Fill::Open)),
+            });
+        };
+        open(&mut base, [4, 0, 0], [5, 3, 0]);
+        open(&mut base, [0, 2, 3], [0, 3, 4]);
+        open(&mut base, [9, 2, 3], [9, 2, 5]);
+        open(&mut base, [9, 1, 4], [9, 3, 4]);
+        open(&mut base, [2, 0, 7], [2, 1, 7]);
+        // A T and a cross inside it, a wall three thick and a pier, steps and an overhang.
+        fill(&mut base, [1, 0, 3], [8, 4, 3], STONE);
+        fill(&mut base, [5, 0, 1], [5, 4, 6], STONE);
+        fill(&mut base, [12, 0, 0], [14, 5, 6], STONE);
+        fill(&mut base, [17, 0, 2], [18, 5, 3], STONE);
+        for step in 0..4 {
+            fill(&mut base, [20 + step, 0, 0], [20 + step, step, 2], STONE);
+        }
+        fill(&mut base, [26, 0, 0], [26, 3, 0], STONE);
+        fill(&mut base, [26, 4, 0], [29, 4, 0], STONE);
+        // Logs standing on a stone wall and against its side.
+        fill(&mut base, [12, 6, 0], [14, 9, 0], LOGS);
+        fill(&mut base, [15, 0, 3], [17, 5, 3], LOGS);
+        let dressed = all(&base);
+        assert!(dressed.len() > 200, "{}", dressed.len());
+        let mut lines: BTreeMap<([i32; 3], [i32; 3]), &Dressed> = BTreeMap::new();
+        for d in &dressed {
+            if let Some(other) = lines.insert(line(d.cube, d.edge), d) {
+                panic!("one edge dressed twice: {other:?} and {d:?}");
+            }
+        }
+    }
 }

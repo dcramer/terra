@@ -1,6 +1,6 @@
 # Building: the technical design
 
-How walls, floors and roofs work in code. The design is [building.md](building.md), and the rules every piece follows are [proposals/construction-001.md](proposals/construction-001.md) (D192 to D194); the plan of work is [building-plan.md](building-plan.md) (D195); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
+How walls, floors and roofs work in code. The design is [building.md](building.md), and the rules every piece follows are [proposals/construction-001.md](proposals/construction-001.md) (D192 to D194); the plan of work is [building-plan.md](building-plan.md) (D195); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). The cube, who owns each face, edge and corner between cubes, the invariants that keep a building closed and every junction with its rule and its check are [building-voxels.md](building-voxels.md) (D348), not repeated here. Technical choices here are mine (D160); nothing in it changes a design decision.
 
 ## What it rests on
 
