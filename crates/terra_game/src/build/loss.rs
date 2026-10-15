@@ -52,7 +52,7 @@ const SHAKE_CUBES: f32 = 300.0;
 const SHAKE_REACH_M: f32 = 0.06;
 /// How long a puff of dust lasts, in seconds, and how wide it grows, in metres.
 const PUFF_S: f32 = 1.6;
-const PUFF_M: [f32; 2] = [0.4, 1.8];
+const PUFF_M: [f32; 2] = [0.7, 2.6];
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Shards>().add_systems(
@@ -137,7 +137,7 @@ enum Drawn {
 #[derive(Resource, Default)]
 struct Shards {
     live: Vec<Live>,
-    meshes: BTreeMap<(Kind, Shape), Option<(Handle<Mesh>, Drawn)>>,
+    meshes: BTreeMap<(Kind, Shape, u8), Option<(Handle<Mesh>, Drawn)>>,
     layers: BTreeSet<u16>,
     puff: Option<Handle<Mesh>>,
     dust: Option<Handle<Image>>,
@@ -192,21 +192,22 @@ fn dust_of(look: &BuildLook, kind: Kind) -> Color {
     Color::srgb(mix(light[0]), mix(light[1]), mix(light[2]))
 }
 
-/// The mesh and material a kind's fragments of a shape are drawn with, made the first time.
+/// The mesh and material a kind's fragments of a shape and size are drawn with
+/// (`Fragment::mesh`), made the first time.
 fn mesh_for(
     shards: &mut Shards,
     look: &BuildLook,
     arrays: Option<&Arrays>,
     meshes: &mut Assets<Mesh>,
     kind: Kind,
-    shape: Shape,
+    (shape, across, drawn_m): (Shape, u8, f32),
 ) -> Option<(Handle<Mesh>, Drawn)> {
-    if let Some(made) = shards.meshes.get(&(kind, shape)) {
+    if let Some(made) = shards.meshes.get(&(kind, shape, across)) {
         return made.clone();
     }
     let made = (|| {
         let kit = look.kits.as_deref()?.of(kind)?;
-        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, shape)
+        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, shape, drawn_m)
             .0
             .into_iter()
             .map(|(material, surface)| ((kind, material), surface))
@@ -230,7 +231,7 @@ fn mesh_for(
             .or_else(|| look.materials.get(Kind::PLAIN, material))?;
         Some((meshes.add(mesh), Drawn::Own(own.clone())))
     })();
-    shards.meshes.insert((kind, shape), made.clone());
+    shards.meshes.insert((kind, shape, across), made.clone());
     made
 }
 
@@ -439,10 +440,10 @@ fn dust_at(
         .dust
         .get_or_insert_with(|| images.add(dust_image()))
         .clone();
-    let alpha = (0.42 * amount).min(0.6);
+    let alpha = (0.6 * amount).clamp(0.3, 0.8);
     let linear = colour.to_linear();
     let material = materials.add(StandardMaterial {
-        base_color: Color::LinearRgba(linear * 0.8).with_alpha(alpha),
+        base_color: Color::LinearRgba(linear).with_alpha(alpha),
         base_color_texture: Some(image),
         unlit: true,
         alpha_mode: AlphaMode::Blend,
@@ -450,7 +451,7 @@ fn dust_at(
     });
     let wide = PUFF_M[0] + (PUFF_M[1] - PUFF_M[0]) * (amount / 1.4).min(1.0);
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
-    for sprite in 0..4u32 {
+    for sprite in 0..5u32 {
         let r = |salt: u32| {
             let h = (seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77))
                 .wrapping_mul(0x2C1B_3C6D);
@@ -504,15 +505,19 @@ fn step(
         // Each drawn once, out of sight under the ground and never culled, so its pipelines
         // are compiled before the first fall rather than leaving a hole for its first frames.
         let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
+        let sizes = [(Shape::Chunk, 0, 0.25), (Shape::Lump, 0, 0.25)]
+            .into_iter()
+            .chain((1..=4u8).map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)));
+        let sizes: Vec<_> = sizes.collect();
         for kit in &kits.0 {
-            for shape in Shape::ALL {
+            for &size in &sizes {
                 let made = mesh_for(
                     &mut shards,
                     &look,
                     arrays.as_deref(),
                     &mut meshes,
                     kit.kind(),
-                    shape,
+                    size,
                 );
                 if let Some(drawn) = made {
                     let at = Transform::from_translation(under).with_scale(Vec3::splat(0.01));
@@ -682,7 +687,7 @@ fn step(
                     arrays.as_deref(),
                     &mut meshes,
                     live.fragment.kind,
-                    live.fragment.shape,
+                    live.fragment.mesh(),
                 )
             {
                 spawns -= 1;

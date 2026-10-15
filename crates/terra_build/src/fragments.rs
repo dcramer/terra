@@ -199,6 +199,19 @@ pub struct Landing {
 }
 
 impl Fragment {
+    /// Which mesh it is drawn with: its shape, and for a whole cube or block how many cubes
+    /// across, so its material shows at its real size; and how big that mesh's texture is
+    /// worn for, in metres.
+    pub fn mesh(&self) -> (Shape, u8, f32) {
+        match self.shape {
+            Shape::Whole => {
+                let across = (self.size.max_element() / CELL_M).round().clamp(1.0, 4.0);
+                (self.shape, across as u8, across * CELL_M)
+            }
+            shape => (shape, 0, PIECE_M),
+        }
+    }
+
     /// How far its middle is above its lowest point, turned as it is: what rests on the
     /// floor.
     fn reach_down(&self) -> f32 {
@@ -398,7 +411,13 @@ pub fn burst(
     if fell.is_empty() || most == 0 {
         return Vec::new();
     }
-    let (broken, hanging): (Vec<_>, Vec<_>) = fell.iter().partition(|(at, _)| destroyed(*at));
+    type Fell<'a> = Vec<&'a (IVec3, Cube)>;
+    let (broken, hanging): (Fell, Fell) = fell.iter().partition(|(at, _)| destroyed(*at));
+    // A roof left hanging is a skin, not a block: it sheds its covering where it hangs, a
+    // little after what gave way, rather than falling as cubes.
+    let (shed, hanging): (Fell, Fell) = hanging
+        .into_iter()
+        .partition(|entry| entry.1.kind.is_roof());
     // Where it was hit: the middle of what broke, else of all of it.
     let of = |cubes: &[&(IVec3, Cube)]| {
         cubes
@@ -416,11 +435,12 @@ pub fn burst(
     // fragment each, every so many if there are more than that.
     let per = broken
         .iter()
+        .chain(&shed)
         .map(|(_, cube)| breaks(cube.kind).count() as usize)
         .max()
         .unwrap_or(1);
     let room = (most / 2).max(most.saturating_sub(hanging.len()));
-    let share = share.min(room as f32 / (broken.len() * per).max(1) as f32);
+    let share = share.min(room as f32 / ((broken.len() + shed.len()) * per).max(1) as f32);
     let mut out = Vec::new();
     for (at, cube) in &broken {
         let low = at.as_vec3() * CELL_M;
@@ -438,6 +458,33 @@ pub fn burst(
             1.2,
             &mut out,
         );
+    }
+    let lowest_shed = shed.iter().map(|(at, _)| at.y).min().unwrap_or(0);
+    for (at, cube) in &shed {
+        let low = at.as_vec3() * CELL_M;
+        let seed = hash(&[at.x as u32, at.y as u32, at.z as u32]);
+        let away = (low + CELL_M * 0.5 - impact)
+            .with_y(0.0)
+            .normalize_or_zero()
+            * 0.4;
+        let first = out.len();
+        pieces(
+            cube.kind,
+            breaks(cube.kind),
+            low,
+            1.0,
+            seed,
+            share,
+            away,
+            0.2,
+            &mut out,
+        );
+        let wait =
+            ((at.y - lowest_shed) as f32 * STAGGER_S + 0.1 * unit(&[seed, 99])).min(STAGGER_MOST_S);
+        for piece in &mut out[first..] {
+            piece.wait = wait;
+            piece.velocity *= 0.5;
+        }
     }
     out.truncate(most);
     // The cubes left hanging fall whole, a block of them together where there are more
@@ -546,9 +593,11 @@ impl Base {
     }
 }
 
-/// The material a kind's fragments are made of: its walls' own.
+/// The material a kind's fragments are made of: its walls' own; for timber, the wood its
+/// members split to, squared, rather than the bark that wraps them.
 pub fn material(kit: &Kit) -> Material {
     match kit.pattern {
+        Pattern::Logs if kit.textures.contains_key(&Material::Hewn) => Material::Hewn,
         Pattern::Logs => Material::Log,
         Pattern::Masonry => Material::Masonry,
         Pattern::Roof if kit.textures.contains_key(&Material::Covering) => Material::Covering,
@@ -556,22 +605,22 @@ pub fn material(kit: &Kit) -> Material {
     }
 }
 
-/// How much of a texture a fragment a metre across wears, as a share of its size: what a
-/// fragment of a usual size shows of its material.
-const TEXTURE_SHARE: f32 = 0.5;
+/// How big a piece usually is, in metres: the size its mesh wears its texture at.
+const PIECE_M: f32 = 0.25;
 /// How much darker a fragment is drawn than its material's face: broken stone in the dirt
 /// and shadow of its fall, not the dressed face of a wall.
 const FRAGMENT_SHADE: f32 = 0.72;
 
 /// A shape of fragment, a metre across, in a kind's material: a box with its twelve edges
-/// bevelled and its eight corners cut, which the game scales to each piece.
-pub fn surfaces(kit: &Kit, shape: Shape) -> Surfaces {
+/// bevelled and its eight corners cut, which the game scales to each piece; its texture as it
+/// would be on one `drawn_m` across ([`Fragment::mesh`]).
+pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
     let material = material(kit);
     let metres = kit
         .textures
         .get(&material)
         .map_or([1.0, 1.0], |texture| texture.metres)
-        .map(|m| m / TEXTURE_SHARE);
+        .map(|m| m / drawn_m.max(0.05));
     let colour = if material == Material::Masonry {
         kit.tint
     } else {
@@ -806,6 +855,23 @@ mod tests {
     }
 
     #[test]
+    fn a_roof_left_hanging_sheds_its_covering_rather_than_falling_as_cubes() {
+        let roof: Vec<(IVec3, Cube)> = (0..3)
+            .map(|x| {
+                (
+                    IVec3::new(x, 6 + x, 0),
+                    Cube::new(Kind::FIRST_ROOF, crate::Fill::Solid),
+                )
+            })
+            .collect();
+        let parts = burst(&roof, &|_| false, &|_| Breaks::Bits, 1.0, 2000);
+        assert!(!parts.is_empty());
+        assert!(parts.iter().all(|part| part.shape != Shape::Whole));
+        let latest = parts.iter().map(|part| part.wait).fold(0.0, f32::max);
+        assert!(latest > 0.0, "the higher a moment later");
+    }
+
+    #[test]
     fn each_way_of_breaking_is_its_own_table() {
         let sizes = |breaks: Breaks| breaks.look().pieces[0].most;
         // Logs break into lengths, longer than they are thick; stone into chunks.
@@ -844,7 +910,7 @@ mod tests {
             ..Kit::default()
         };
         for shape in Shape::ALL {
-            let drawn = surfaces(&stone, shape);
+            let drawn = surfaces(&stone, shape, 0.5);
             let surface = &drawn.0[&Material::Masonry];
             // Six faces and twelve edges of two triangles, eight corners of one.
             assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
