@@ -32,8 +32,16 @@ impl Progress {
 impl Base {
     /// Every cube of a part, in order.
     pub fn cubes_of(&self, part: PartId) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
-        self.cubes()
-            .filter(move |(_, cube)| cube.part == Some(part))
+        self.in_parts
+            .get(&part)
+            .into_iter()
+            .flatten()
+            .filter_map(move |&at| {
+                let at = IVec3::from_array(at);
+                self.cube(at)
+                    .filter(|cube| cube.part == Some(part))
+                    .map(|cube| (at, cube))
+            })
     }
 
     /// How far a part has gone.
@@ -107,7 +115,7 @@ impl Base {
         one_at_a_time: impl Fn(crate::Kind) -> bool,
     ) -> Option<crate::ops::Op> {
         let marked: Vec<(IVec3, Cube)> = self
-            .cubes()
+            .pending()
             .filter(|(_, cube)| cube.pending == Pending::Carve && cube.fill == Fill::Solid)
             .collect();
         let empty: Vec<[i32; 3]> = marked
@@ -145,7 +153,7 @@ impl Base {
     ) -> Option<crate::ops::Op> {
         use crate::ops::Op;
         let marked: Vec<(IVec3, Cube)> = self
-            .cubes()
+            .pending()
             .filter(|(_, cube)| cube.pending.changing() && cube.fill == Fill::Solid)
             .collect();
         let of = |pending: Pending, keep: &dyn Fn(&Cube) -> bool| -> Vec<(IVec3, Cube)> {

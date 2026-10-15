@@ -356,6 +356,11 @@ pub struct Base {
     ground: Ground,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
+    /// The cubes of each part, and every cube with work pending on it, kept as cubes are
+    /// put, so what goes in next is found among them rather than among every cube: a
+    /// castle's hundred and forty thousand were walked several times an edit (D308).
+    in_parts: BTreeMap<PartId, BTreeSet<[i32; 3]>>,
+    pending: BTreeSet<[i32; 3]>,
     /// Every cube closed in, and which room it is in, worked out when asked (D261).
     rooms: rooms::Rooms,
 }
@@ -720,6 +725,8 @@ impl Base {
         if closes(old) != closes(cube) {
             self.rooms.changed(at);
         }
+        self.unmark(at, old);
+        self.mark(at, cube);
         // The column's layers kept as cubes come and go, so an edit never walks them all.
         let column = [at.x, at.z];
         match (old.is_some(), cube.is_some()) {
@@ -858,9 +865,53 @@ impl Base {
     /// from a save.
     pub(crate) fn count_columns(&mut self) {
         self.columns.clear();
-        for (at, _) in self.cubes.iter() {
+        self.in_parts.clear();
+        self.pending.clear();
+        let cubes: Vec<(IVec3, Cube)> = self.cubes.iter().collect();
+        for (at, cube) in cubes {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
+            self.mark(at, Some(cube));
         }
+    }
+
+    /// A cube kept among its part's and those with work pending.
+    fn mark(&mut self, at: IVec3, cube: Option<Cube>) {
+        let Some(cube) = cube else {
+            return;
+        };
+        if let Some(part) = cube.part {
+            self.in_parts.entry(part).or_default().insert(at.to_array());
+        }
+        if cube.pending != Pending::None {
+            self.pending.insert(at.to_array());
+        }
+    }
+
+    /// A cube no longer kept among its part's or those with work pending.
+    fn unmark(&mut self, at: IVec3, cube: Option<Cube>) {
+        let Some(cube) = cube else {
+            return;
+        };
+        if let Some(part) = cube.part
+            && let Some(cubes) = self.in_parts.get_mut(&part)
+        {
+            cubes.remove(&at.to_array());
+            if cubes.is_empty() {
+                self.in_parts.remove(&part);
+            }
+        }
+        if cube.pending != Pending::None {
+            self.pending.remove(&at.to_array());
+        }
+    }
+
+    /// Every cube with work pending on it (to be carved, or changing kind), in a fixed
+    /// order: by `[x, y, z]`.
+    pub fn pending(&self) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
+        self.pending.iter().filter_map(|&at| {
+            let at = IVec3::from_array(at);
+            self.cube(at).map(|cube| (at, cube))
+        })
     }
 
     /// What fills a wall tile, read from its cubes: the quick tools' view of a storey's
