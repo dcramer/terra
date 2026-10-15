@@ -64,6 +64,9 @@ struct SaveFile {
     /// The hour of the day.
     #[serde(default)]
     hour: Option<f32>,
+    /// The day of the world's clock, which the sun's path and the climate follow.
+    #[serde(default)]
+    day: Option<i64>,
 }
 
 /// One change to the ground: a sphere dug out, or filled with a material, or a box dug
@@ -246,6 +249,9 @@ fn load(
     // The time of day, unless a scripted run set it.
     if let (Some(hour), None) = (save.hour, options.time) {
         clock.hour = hour;
+    }
+    if let Some(day) = save.day {
+        clock.day = day;
     }
 
     // The ground as it was dug and filled, replayed in order (D21).
@@ -676,6 +682,7 @@ fn gather(
             .collect(),
         claim_step: claim.step(),
         hour: Some(clock.hour),
+        day: Some(clock.day),
         ground: planet
             .operations()
             .into_iter()
@@ -831,6 +838,7 @@ mod tests {
         let north = up.cross(east);
 
         world.resource_mut::<Clock>().hour = 21.5;
+        world.resource_mut::<Clock>().day = 41;
         let mut planet = world.resource_mut::<Planet>();
         planet.apply(&Operation::Dig {
             centre: start + east * 4.0,
@@ -1065,6 +1073,7 @@ mod tests {
         stored: Vec<Vec<(String, (u8, u8))>>,
         claim: usize,
         hour: f32,
+        day: i64,
         ground: Vec<Operation>,
         people: Vec<(&'static str, String, Vec3)>,
     }
@@ -1115,6 +1124,7 @@ mod tests {
             stored: Vec::new(),
             claim: entity.get::<Claim>().unwrap().step(),
             hour: world.resource::<Clock>().hour,
+            day: world.resource::<Clock>().day,
             ground: world.resource::<Planet>().operations(),
             people: Vec::new(),
         };

@@ -1,9 +1,10 @@
 //! Day and night (game design 001, survival.md): a clock, the sun crossing the sky by it,
 //! and the light, sky and shade following how high the sun is.
 //!
-//! The sun keeps a real path over the start, as seen from a middle latitude in early
-//! summer: it rises in the east, stands high at noon and sets in the west, and the day is
-//! a little longer than the night. After it sets, the same light becomes the moon's,
+//! The sun keeps a real path over the start, as seen from a middle latitude on the date:
+//! it rises in the east, stands high at noon and sets in the west, and its path swings
+//! with the world's year (`terra_climate`, D315). The clock starts in late August, when the
+//! day is a little longer than the night. After it sets, the same light becomes the moon's,
 //! cool and dim, from the other side of the sky, so there is one light casting shadows.
 //! The stars turn with the sky. A new game starts in the morning, with the low warm
 //! light the art was made for.
@@ -54,44 +55,73 @@ const SUN_STEPS: f32 = 300.0;
 
 /// The hour a new game starts at: morning, the sun low in the east.
 pub const MORNING: f32 = 7.5;
-/// Where the start is on its world, and where the sun is in its year, which together
-/// shape the sun's path: how high it climbs and how long it is up.
+/// Where the start is on its world, which with the date shapes the sun's path: how high it
+/// climbs and how long it is up.
 const LATITUDE: f32 = 40.0_f32.to_radians();
-const DECLINATION: f32 = 10.0_f32.to_radians();
 
-/// The time of day, as an hour from 0 to 24, noon at 12.
+/// The world's climate (`assets/data/climate.ron`, D314). The sky follows its year; the
+/// rest of the climate is read from it as the climate's later steps come (climate.md).
+#[derive(Resource, Clone, Debug)]
+pub struct WorldClimate(pub terra_climate::Climate);
+
+impl WorldClimate {
+    pub const FILE: &str = "climate.ron";
+
+    /// How far north of the equator the sun stands on a day of the clock, in radians.
+    pub fn declination(&self, day: i64) -> f32 {
+        let year = &self.0.year;
+        terra_climate::declination(year.tilt_deg.to_radians(), year.phase(day))
+    }
+}
+
+/// The world's clock: the day since it started, and the hour, 0 to 24, noon at 12. Shared
+/// as a [`terra_climate::WorldTime`] (D52).
 #[derive(Resource, Reflect, Clone, Copy, Debug)]
 #[reflect(Resource)]
 pub struct Clock {
+    pub day: i64,
     pub hour: f32,
 }
 
 impl Default for Clock {
     fn default() -> Self {
-        Self { hour: MORNING }
+        Self {
+            day: 0,
+            hour: MORNING,
+        }
     }
 }
 
 impl Clock {
     /// Moves the clock on by so many seconds of play.
     pub fn advance(&mut self, seconds: f32) {
-        self.hour = (self.hour + seconds / DAY_SECONDS * 24.0).rem_euclid(24.0);
+        let hour = self.hour + seconds / DAY_SECONDS * 24.0;
+        self.day += libm::floorf(hour / 24.0) as i64;
+        self.hour = hour.rem_euclid(24.0);
+    }
+
+    /// The moment, as the climate counts it.
+    pub fn time(&self) -> terra_climate::WorldTime {
+        terra_climate::WorldTime::at(self.day, self.hour as f64)
     }
 }
 
-/// The sky over the start: which ways are east, north and up there.
+/// The sky over the start: which ways are east, north and up there, and how far north of
+/// the equator the sun stands on the date.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct SkyPath {
     east: Vec3,
     north: Vec3,
     up: Vec3,
+    declination: f32,
 }
 
 impl SkyPath {
-    /// The sky over a place, turned so the morning sun stands where the art put it.
-    pub fn over(up: Vec3) -> Self {
+    /// The sky over a place, turned so the morning sun stands where the art put it on a day
+    /// of so much declination: the clock's first day's.
+    pub fn over(up: Vec3, declination: f32) -> Self {
         let up = up.normalize();
-        let (x, y, _) = sun_local(MORNING);
+        let (x, y, _) = sun_local(MORNING, declination);
         let local = Vec2::new(x, y).normalize();
         let toward = SUN_DIRECTION.reject_from(up).normalize();
         let across = up.cross(toward);
@@ -99,12 +129,21 @@ impl SkyPath {
             east: toward * local.x - across * local.y,
             north: toward * local.y + across * local.x,
             up,
+            declination,
+        }
+    }
+
+    /// The sun's path on a day of so much declination, the sky turned as it was.
+    pub fn on(self, declination: f32) -> Self {
+        Self {
+            declination,
+            ..self
         }
     }
 
     /// The direction toward the sun at an hour.
     pub fn sun(&self, hour: f32) -> Vec3 {
-        let (x, y, z) = sun_local(hour);
+        let (x, y, z) = sun_local(hour, self.declination);
         (self.east * x + self.north * y + self.up * z).normalize()
     }
 
@@ -129,10 +168,10 @@ impl SkyPath {
     }
 }
 
-/// The sun at an hour, east, north and up over the start.
-fn sun_local(hour: f32) -> (f32, f32, f32) {
+/// The sun at an hour, east, north and up over the start, on a day of a declination.
+fn sun_local(hour: f32, declination: f32) -> (f32, f32, f32) {
     let angle = (hour - 12.0) / 24.0 * TAU;
-    let (sd, cd) = (libm::sinf(DECLINATION), libm::cosf(DECLINATION));
+    let (sd, cd) = (libm::sinf(declination), libm::cosf(declination));
     let (sl, cl) = (libm::sinf(LATITUDE), libm::cosf(LATITUDE));
     let (sh, ch) = (libm::sinf(angle), libm::cosf(angle));
     (-cd * sh, sd * cl - cd * ch * sl, sd * sl + cd * ch * cl)
@@ -322,13 +361,19 @@ fn moonlight(height: f32) -> f32 {
 pub fn plugin(app: &mut App) {
     app.init_resource::<Clock>()
         .init_resource::<Nightfall>()
+        .insert_resource(WorldClimate(crate::data::read(WorldClimate::FILE)))
         .register_type::<Clock>()
         .add_systems(Startup, set_clock)
         .add_systems(PostStartup, find_sky)
         // On the yard, the flat test level, the sun stands still.
         .add_systems(
             Update,
-            (tick.run_if(crate::shell::in_the_world), shine).chain(),
+            (
+                tick.run_if(crate::shell::in_the_world),
+                follow_the_date,
+                shine,
+            )
+                .chain(),
         );
 }
 
@@ -343,8 +388,23 @@ fn set_clock(options: Res<Options>, mut clock: ResMut<Clock>) {
     }
 }
 
-fn find_sky(mut commands: Commands, planet: Res<Planet>) {
-    commands.insert_resource(SkyPath::over(planet.start()));
+fn find_sky(
+    mut commands: Commands,
+    planet: Res<Planet>,
+    climate: Res<WorldClimate>,
+    clock: Res<Clock>,
+) {
+    let path = SkyPath::over(planet.start(), climate.declination(0));
+    commands.insert_resource(path.on(climate.declination(clock.day)));
+}
+
+/// The sun's path follows the date, moving on once a day, at midnight.
+fn follow_the_date(clock: Res<Clock>, climate: Res<WorldClimate>, path: Option<ResMut<SkyPath>>) {
+    let Some(mut path) = path else { return };
+    let declination = climate.declination(clock.day);
+    if path.declination != declination {
+        *path = path.on(declination);
+    }
 }
 
 fn tick(time: Res<Time>, mut clock: ResMut<Clock>) {
@@ -478,7 +538,7 @@ mod tests {
     use super::*;
 
     fn path() -> SkyPath {
-        SkyPath::over(Vec3::new(0.1, 1.0, 0.2))
+        SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))
     }
 
     #[test]
@@ -514,12 +574,12 @@ mod tests {
         );
         // At noon the sun is as far from overhead as the latitude, less its declination.
         let noon = path.height(12.0);
-        let highest = 90.0 - LATITUDE.to_degrees() + DECLINATION.to_degrees();
+        let highest = 90.0 - LATITUDE.to_degrees() + path.declination.to_degrees();
         assert!((noon - highest).abs() < 0.5, "noon {noon}, not {highest}");
         assert!(path.height(0.0) < -30.0, "midnight is dark");
         // As long up as the sunrise equation says: cos h = -tan latitude tan declination,
         // with h the hour angle from sunrise to noon. In summer, longer than the night.
-        let sunrise = libm::acosf(-libm::tanf(LATITUDE) * libm::tanf(DECLINATION));
+        let sunrise = libm::acosf(-libm::tanf(LATITUDE) * libm::tanf(path.declination));
         let day_tenths = sunrise / TAU * 2.0 * 240.0;
         let up = (0..240)
             .filter(|i| path.height(*i as f32 / 10.0) > 0.0)
@@ -584,7 +644,7 @@ mod tests {
 
     #[test]
     fn the_moon_stands_high_on_the_far_side_of_the_sky_from_the_sun() {
-        let path = SkyPath::over(Vec3::Y);
+        let path = SkyPath::over(Vec3::Y, climate().declination(0));
         for hour in [21.0, 23.5, 1.0, 3.0] {
             let moon = path.moon(hour);
             let up = libm::asinf(moon.dot(Vec3::Y));
@@ -599,8 +659,37 @@ mod tests {
 
     #[test]
     fn the_clock_goes_round() {
-        let mut clock = Clock { hour: 23.9 };
+        let mut clock = Clock { day: 3, hour: 23.9 };
         clock.advance(DAY_SECONDS / 24.0 * 0.2);
         assert!((clock.hour - 0.1).abs() < 1e-3);
+        assert_eq!(clock.day, 4);
+        assert_eq!(clock.time().day(), 4);
+        assert!((clock.time().hour() - 0.1).abs() < 1e-3);
+    }
+
+    fn climate() -> WorldClimate {
+        WorldClimate(crate::data::read(WorldClimate::FILE))
+    }
+
+    #[test]
+    fn the_clock_starts_on_the_sun_the_art_was_made_for_and_then_follows_the_year() {
+        // The art was made under a sun 10° north of the equator (D315).
+        let climate = climate();
+        let first = climate.declination(0);
+        assert!(
+            (first.to_degrees() - 10.0).abs() < 0.1,
+            "{}",
+            first.to_degrees()
+        );
+        // Through the year the noon sun climbs higher than that, at midsummer, and lower,
+        // at midwinter, and the morning sun stays where the art put it on the first day.
+        let year = climate.0.year;
+        let after = |phase: f64| {
+            let days = ((phase - year.start).rem_euclid(1.0) * year.days) as i64;
+            path().on(climate.declination(days)).height(12.0)
+        };
+        let first_noon = path().height(12.0);
+        assert!(after(0.5) > first_noon + 10.0, "{}", after(0.5));
+        assert!(after(0.0) < first_noon - 25.0, "{}", after(0.0));
     }
 }
