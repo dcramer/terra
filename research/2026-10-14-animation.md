@@ -71,6 +71,17 @@ For creatures, one shared set of parts, and each creature data that says which o
 - **Keyed poses on top,** three to six an action (wind-up, strike, recover, hurt, death), and the arms of the Worman and the Seawish borrowed from Quaternius's humanoid clips through a mask on the arm chains, so a knife or sword attack costs no new animation.
 - Measured by: the base's slip while the body crawls, foot slide for legs, bone stretch from springs (under 1%), settling time, and the body passing through itself.
 
+## First trial: a Kimodo run on our body
+
+Kimodo's text encoder is Meta's Llama 3 8B, gated on Hugging Face, so a developer's account has to accept Meta's licence and give a token before Kimodo makes anything new. Its bundled examples need neither. One, made from "A person runs forward and then leaps over an obstacle", was taken one stride long (frames 47 to 66, left foot to left foot, by its own contact labels, 3.9 m/s), turned into a BVH on its 77-joint skeleton with Kimodo's code, and carried onto our skeleton in Blender: each bone given the source bone's world rotation relative to its T-pose, on our bone's T-pose, the hips' travel scaled by leg length (0.99) and taken off along the ground so it runs in place.
+
+| Clip on the base body | Hands | Elbow flare | Lean | Foot slide |
+|---|---|---|---|---|
+| Quaternius's jog | 0.43 | 0.27 | 28 deg | 3.6 cm |
+| Kimodo's run-up stride | 0.32 | 0.22 | 16 deg | 5.8 cm |
+
+On a sheet side by side, dressed, the Kimodo runner is upright, its arms swing close to the body, its stride is a person's; Quaternius's hunches and pumps. The lean is still above a steady jog's, being a run-up to a leap, and the feet slide more because one cut stride does not loop and its travel was taken off at its average speed. A steady jog and run made for the purpose, cut at matching contacts and looped, with the travel taken off frame by frame, is the next step; then foot locking.
+
 ## Not settled
 
 Kimodo's output on our skeleton, and how close a Kimodo or Mixamo run comes to the look we want, is unknown until tried. Prices for Cascadeur and the commercial terms of Rokoko Vision were not confirmed. The figure of 13 key poses for Overgrowth's whole character comes from a forum post.
