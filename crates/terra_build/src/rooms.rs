@@ -9,19 +9,75 @@
 //! its column, and none of it opens onto a cube that has not: so the open sky and the open
 //! ground under a building are the outside, and the space under a floor that only footings
 //! ring is no room, as nothing built is under it (D194).
+//!
+//! After an edit only the rooms its cubes touch are flooded again (D308): every room the
+//! changed cubes or their columns border is let go, and the space round them flooded anew;
+//! the rest are kept as they were, so an edit to a castle costs what its rooms near it
+//! cost, not the castle.
 
+use crate::mesh::QuickMap;
 use crate::{Base, CELL_M, Cube};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// The six neighbours of a cube.
 const FACES: [IVec3; 6] = crate::support::FACES;
 
-/// The rooms of a base, worked out when first asked after a change: each cube closed in,
-/// and the room it is in.
+/// How many cubes may change closing in between two looks at the rooms before they are
+/// flooded again from nothing: past this, letting go every room they touch is no cheaper.
+const CHANGES_KEPT: usize = 4096;
+
+/// The rooms of a base, worked out when first asked after a change; and, until then, the
+/// rooms last worked out and every cube whose closing in has changed since, to work them
+/// out again from rather than from nothing.
 #[derive(Clone, Default)]
-pub(crate) struct Rooms(OnceLock<BTreeMap<[i32; 3], u32>>);
+pub(crate) struct Rooms {
+    found: OnceLock<Arc<Found>>,
+    last: Option<Arc<Found>>,
+    changed: Vec<IVec3>,
+}
+
+/// Rooms found: each cube closed in and the room it is in, each room's cubes and boxes,
+/// and the next room's number.
+#[derive(Debug, Default)]
+struct Found {
+    rooms: BTreeMap<[i32; 3], u32>,
+    cubes: BTreeMap<u32, Vec<[i32; 3]>>,
+    boxes: BTreeMap<u32, Vec<(IVec3, IVec3)>>,
+    next: u32,
+}
+
+impl Found {
+    /// A room of these cubes, under the next number.
+    fn add(&mut self, cubes: Vec<[i32; 3]>) {
+        let room = self.next;
+        self.next += 1;
+        for &at in &cubes {
+            self.rooms.insert(at, room);
+        }
+        self.boxes.insert(room, boxes_of(cubes.clone()));
+        self.cubes.insert(room, cubes);
+    }
+}
+
+impl Rooms {
+    /// A cube's closing in has changed: the rooms found are let go, kept to work the next
+    /// ones out from.
+    pub(crate) fn changed(&mut self, at: IVec3) {
+        if let Some(found) = self.found.take() {
+            self.last = Some(found);
+            self.changed.clear();
+        }
+        if self.last.is_some() {
+            self.changed.push(at);
+            if self.changed.len() > CHANGES_KEPT {
+                self.last = None;
+                self.changed.clear();
+            }
+        }
+    }
+}
 
 impl PartialEq for Rooms {
     /// Worked out from the cubes, so always the same where the cubes are.
@@ -38,14 +94,71 @@ impl std::fmt::Debug for Rooms {
 
 /// Whether a cube closes a room in: anything built, an opening in a wall too, which is
 /// built open.
-fn encloses(cube: &Cube) -> bool {
+pub(crate) fn encloses(cube: &Cube) -> bool {
     cube.is_built()
 }
 
+/// A room's cubes as boxes from one cube to another: rows east and west joined south of
+/// one another where they reach as far, then layers of the same box joined up.
+fn boxes_of(mut cubes: Vec<[i32; 3]>) -> Vec<(IVec3, IVec3)> {
+    // Rows east and west, on a layer and a line south.
+    cubes.sort_by_key(|&[x, y, z]| (y, z, x));
+    let mut rows: Vec<(i32, i32, i32, i32)> = Vec::new();
+    for [x, y, z] in cubes {
+        match rows.last_mut() {
+            Some((ry, rz, _, last)) if *ry == y && *rz == z && *last + 1 == x => *last = x,
+            _ => rows.push((y, z, x, x)),
+        }
+    }
+    // Rows reaching as far, one south of another, as one rectangle.
+    let mut open: BTreeMap<(i32, i32, i32), (i32, i32)> = BTreeMap::new();
+    let mut flat: Vec<(i32, [i32; 4])> = Vec::new();
+    for (y, z, first, last) in rows {
+        match open.get_mut(&(y, first, last)) {
+            Some((_, south)) if *south + 1 == z => *south = z,
+            _ => {
+                if let Some((north, south)) = open.insert((y, first, last), (z, z)) {
+                    flat.push((y, [first, last, north, south]));
+                }
+            }
+        }
+    }
+    flat.extend(
+        open.into_iter()
+            .map(|((y, first, last), (north, south))| (y, [first, last, north, south])),
+    );
+    // The same rectangle on layers one over another, as one box.
+    flat.sort_by_key(|&(y, rect)| (rect, y));
+    let mut stacked: Vec<([i32; 4], i32, i32)> = Vec::new();
+    for (y, rect) in flat {
+        match stacked.last_mut() {
+            Some((r, _, top)) if *r == rect && *top + 1 == y => *top = y,
+            _ => stacked.push((rect, y, y)),
+        }
+    }
+    stacked
+        .into_iter()
+        .map(|([x0, x1, z0, z1], y0, y1)| (IVec3::new(x0, y0, z0), IVec3::new(x1, y1, z1)))
+        .collect()
+}
+
 impl Base {
+    /// The rooms found: from the last ones and what changed since where there are both,
+    /// else from nothing.
+    fn found(&self) -> &Found {
+        self.rooms.found.get_or_init(|| {
+            let again = self
+                .rooms
+                .last
+                .as_ref()
+                .and_then(|last| self.find_again(last, &self.rooms.changed));
+            Arc::new(again.unwrap_or_else(|| self.find_rooms()))
+        })
+    }
+
     /// Every cube closed in and the room it is in.
     fn rooms(&self) -> &BTreeMap<[i32; 3], u32> {
-        self.rooms.0.get_or_init(|| self.find_rooms())
+        &self.found().rooms
     }
 
     /// How many cubes are in rooms.
@@ -55,11 +168,7 @@ impl Base {
 
     /// How many rooms there are.
     pub fn room_count(&self) -> usize {
-        self.rooms()
-            .values()
-            .copied()
-            .collect::<BTreeSet<u32>>()
-            .len()
+        self.found().cubes.len()
     }
 
     /// Whether a cube is in a room: closed in all round.
@@ -83,51 +192,8 @@ impl Base {
     /// and west joined south of one another where they reach as far, then layers of the same
     /// box joined up, sorted.
     pub fn indoors(&self) -> Vec<(IVec3, IVec3)> {
-        let mut rooms: BTreeMap<u32, Vec<[i32; 3]>> = BTreeMap::new();
-        for (&at, &room) in self.rooms() {
-            rooms.entry(room).or_default().push(at);
-        }
-        let mut boxes = Vec::new();
-        for mut cubes in rooms.into_values() {
-            // Rows east and west, on a layer and a line south.
-            cubes.sort_by_key(|&[x, y, z]| (y, z, x));
-            let mut rows: Vec<(i32, i32, i32, i32)> = Vec::new();
-            for [x, y, z] in cubes {
-                match rows.last_mut() {
-                    Some((ry, rz, _, last)) if *ry == y && *rz == z && *last + 1 == x => *last = x,
-                    _ => rows.push((y, z, x, x)),
-                }
-            }
-            // Rows reaching as far, one south of another, as one rectangle.
-            let mut open: BTreeMap<(i32, i32, i32), (i32, i32)> = BTreeMap::new();
-            let mut flat: Vec<(i32, [i32; 4])> = Vec::new();
-            for (y, z, first, last) in rows {
-                match open.get_mut(&(y, first, last)) {
-                    Some((_, south)) if *south + 1 == z => *south = z,
-                    _ => {
-                        if let Some((north, south)) = open.insert((y, first, last), (z, z)) {
-                            flat.push((y, [first, last, north, south]));
-                        }
-                    }
-                }
-            }
-            flat.extend(
-                open.into_iter()
-                    .map(|((y, first, last), (north, south))| (y, [first, last, north, south])),
-            );
-            // The same rectangle on layers one over another, as one box.
-            flat.sort_by_key(|&(y, rect)| (rect, y));
-            let mut stacked: Vec<([i32; 4], i32, i32)> = Vec::new();
-            for (y, rect) in flat {
-                match stacked.last_mut() {
-                    Some((r, _, top)) if *r == rect && *top + 1 == y => *top = y,
-                    _ => stacked.push((rect, y, y)),
-                }
-            }
-            boxes.extend(stacked.into_iter().map(|([x0, x1, z0, z1], y0, y1)| {
-                (IVec3::new(x0, y0, z0), IVec3::new(x1, y1, z1))
-            }));
-        }
+        let mut boxes: Vec<(IVec3, IVec3)> =
+            self.found().boxes.values().flatten().copied().collect();
         boxes.sort_by_key(|(low, high)| (low.to_array(), high.to_array()));
         boxes
     }
@@ -145,70 +211,199 @@ impl Base {
             .collect()
     }
 
+    /// Whether a cube closes a room in, and the lowest and highest layers of a column that
+    /// do, each asked of the base once.
+    fn closing(&self) -> Closing<'_> {
+        Closing {
+            base: self,
+            columns: Default::default(),
+        }
+    }
+
     /// Works out the rooms: the cubes not built with something built over and under them
     /// in their column, flooded face to face; a flood that reaches a cube with nothing built
     /// over or under it is the outside, and the rest each a room.
-    fn find_rooms(&self) -> BTreeMap<[i32; 3], u32> {
-        // Each column's layers that close a room in.
-        let mut walls: BTreeMap<[i32; 2], BTreeSet<i32>> = BTreeMap::new();
-        for (at, cube) in self.cubes() {
-            if encloses(&cube) {
-                walls.entry([at.x, at.z]).or_default().insert(at.y);
-            }
-        }
-        let closes = |at: IVec3| {
-            walls
-                .get(&[at.x, at.z])
-                .is_some_and(|layers| layers.contains(&at.y))
-        };
-        // Between the lowest and highest of a column, and not closing in itself.
-        let between = |at: IVec3| {
-            walls.get(&[at.x, at.z]).is_some_and(|layers| {
-                !layers.contains(&at.y)
-                    && layers.range(..at.y).next().is_some()
-                    && layers.range(at.y + 1..).next().is_some()
-            })
-        };
-        let mut seen: BTreeSet<[i32; 3]> = BTreeSet::new();
-        let mut rooms = BTreeMap::new();
-        let mut next_room = 0;
-        for (&[x, z], layers) in &walls {
-            let (Some(&low), Some(&high)) = (layers.first(), layers.last()) else {
+    fn find_rooms(&self) -> Found {
+        let closing = self.closing();
+        let mut seen: Seen = Default::default();
+        let mut found = Found::default();
+        for &[x, z] in self.columns.keys() {
+            let Some((low, high)) = closing.bounds([x, z]) else {
                 continue;
             };
             for y in low + 1..high {
                 let start = IVec3::new(x, y, z);
-                if closes(start) || !seen.insert(start.to_array()) {
-                    continue;
-                }
-                let mut space = vec![start.to_array()];
-                let mut frontier = vec![start];
-                let mut outside = false;
-                while let Some(at) = frontier.pop() {
-                    for step in FACES {
-                        let next = at + step;
-                        if closes(next) {
-                            continue;
-                        }
-                        if !between(next) {
-                            outside = true;
-                            continue;
-                        }
-                        if seen.insert(next.to_array()) {
-                            space.push(next.to_array());
-                            frontier.push(next);
-                        }
-                    }
-                }
-                if !outside {
-                    for at in space {
-                        rooms.insert(at, next_room);
-                    }
-                    next_room += 1;
+                if let Some(space) = closing.flood(start, &mut seen, &|_| false) {
+                    found.add(space);
                 }
             }
         }
-        rooms
+        found
+    }
+
+    /// Works out the rooms again after the cubes `changed` have changed closing in since
+    /// `last` was found: every room they or the cubes beside them are in is let go and its
+    /// space flooded again, the rest kept. `None` if a flood meets a room
+    /// kept, which only flooding from nothing can then settle.
+    fn find_again(&self, last: &Found, changed: &[IVec3]) -> Option<Found> {
+        let closing = self.closing();
+        // What may have changed: the space beside each changed cube. A change far up or
+        // down a column moves what is between its lowest and highest built only for the
+        // space running up or down to it, so beside it too.
+        let seeds: Vec<IVec3> = changed
+            .iter()
+            .flat_map(|&at| std::iter::once(at).chain(FACES.iter().map(move |&step| at + step)))
+            .collect();
+        let gone: BTreeSet<u32> = seeds
+            .iter()
+            .filter_map(|at| last.rooms.get(&at.to_array()).copied())
+            .collect();
+        let mut found = Found {
+            rooms: last.rooms.clone(),
+            cubes: last.cubes.clone(),
+            boxes: last.boxes.clone(),
+            next: last.next,
+        };
+        for room in &gone {
+            for at in found.cubes.remove(room).unwrap_or_default() {
+                found.rooms.remove(&at);
+            }
+            found.boxes.remove(room);
+        }
+        let kept = |at: IVec3| found.rooms.contains_key(&at.to_array());
+        let mut seen: Seen = Default::default();
+        let mut spaces = Vec::new();
+        let mut met_kept = false;
+        for &start in &seeds {
+            if kept(start) {
+                continue;
+            }
+            match closing.flood_checked(start, &mut seen, &kept) {
+                Flooded::Room(space) => spaces.push(space),
+                Flooded::Kept => {
+                    met_kept = true;
+                    break;
+                }
+                Flooded::Nothing => {}
+            }
+        }
+        if met_kept {
+            return None;
+        }
+        for space in spaces {
+            found.add(space);
+        }
+        Some(found)
+    }
+}
+
+/// The cubes flooded so far, and whether each is the outside: a flood stops when it meets
+/// the outside, so the cubes it got to are the outside too, which a later flood reaching
+/// them learns at once.
+type Seen = QuickMap<IVec3, bool>;
+
+/// What flooding from a cube came to: a room of these cubes, a room kept already, or
+/// nothing (the outside, or no space).
+enum Flooded {
+    Room(Vec<[i32; 3]>),
+    Kept,
+    Nothing,
+}
+
+/// A column's lowest and highest layers that close a room in, if any do.
+type Bounds = Option<(i32, i32)>;
+
+/// A base's cubes asked whether they close a room in, and its columns' lowest and highest
+/// cubes that do, each column asked once.
+struct Closing<'a> {
+    base: &'a Base,
+    columns: std::cell::RefCell<QuickMap<[i32; 2], Bounds>>,
+}
+
+impl Closing<'_> {
+    fn closes(&self, at: IVec3) -> bool {
+        self.base.cube(at).is_some_and(|cube| encloses(&cube))
+    }
+
+    /// The lowest and highest layers of a column that close a room in, if any do.
+    fn bounds(&self, column: [i32; 2]) -> Option<(i32, i32)> {
+        if let Some(&known) = self.columns.borrow().get(&column) {
+            return known;
+        }
+        let layers = self.base.columns.get(&column);
+        let closing = |y: &&i32| self.closes(IVec3::new(column[0], **y, column[1]));
+        let low = layers.and_then(|layers| layers.iter().find(closing).copied());
+        let high = layers.and_then(|layers| layers.iter().rev().find(closing).copied());
+        let bounds = low.zip(high);
+        self.columns.borrow_mut().insert(column, bounds);
+        bounds
+    }
+
+    /// Between the lowest and highest of its column that close a room in, and not closing
+    /// one in itself.
+    fn between(&self, at: IVec3) -> bool {
+        self.bounds([at.x, at.z])
+            .is_some_and(|(low, high)| low < at.y && at.y < high && !self.closes(at))
+    }
+
+    /// The space flooded from a cube face to face, if it is a room: `None` for a cube that
+    /// closes one in, one seen already, or a space that reaches the outside.
+    fn flood(
+        &self,
+        start: IVec3,
+        seen: &mut Seen,
+        kept: &dyn Fn(IVec3) -> bool,
+    ) -> Option<Vec<[i32; 3]>> {
+        match self.flood_checked(start, seen, kept) {
+            Flooded::Room(space) => Some(space),
+            _ => None,
+        }
+    }
+
+    /// As [`Closing::flood`], saying too whether it met a room kept; a flood stops at the
+    /// outside, as the rest of its space is the outside too.
+    fn flood_checked(
+        &self,
+        start: IVec3,
+        seen: &mut Seen,
+        kept: &dyn Fn(IVec3) -> bool,
+    ) -> Flooded {
+        if !self.between(start) || seen.contains_key(&start) {
+            return Flooded::Nothing;
+        }
+        seen.insert(start, false);
+        let mut space = vec![start.to_array()];
+        let mut frontier = vec![start];
+        let outside = |space: &[[i32; 3]], seen: &mut Seen| {
+            for &at in space {
+                seen.insert(IVec3::from_array(at), true);
+            }
+            Flooded::Nothing
+        };
+        while let Some(at) = frontier.pop() {
+            for step in FACES {
+                let next = at + step;
+                if self.closes(next) {
+                    continue;
+                }
+                if !self.between(next) {
+                    return outside(&space, seen);
+                }
+                if kept(next) {
+                    return Flooded::Kept;
+                }
+                match seen.get(&next) {
+                    Some(true) => return outside(&space, seen),
+                    Some(false) => {}
+                    None => {
+                        seen.insert(next, false);
+                        space.push(next.to_array());
+                        frontier.push(next);
+                    }
+                }
+            }
+        }
+        Flooded::Room(space)
     }
 }
 
@@ -363,5 +558,58 @@ mod tests {
         roof(&mut base, [0, 0, 0], [7, 0, 5]);
         assert!(!base.indoors().is_empty());
         assert!(base.contains(IVec3::new(3, 2, 2)));
+    }
+
+    /// Each cube in a room, named by the least cube of its room: the rooms as a partition,
+    /// whatever they are numbered.
+    fn partition(found: &super::Found) -> Vec<([i32; 3], [i32; 3])> {
+        let least: std::collections::BTreeMap<u32, [i32; 3]> = found
+            .cubes
+            .iter()
+            .map(|(&room, cubes)| (room, *cubes.iter().min().unwrap()))
+            .collect();
+        found
+            .rooms
+            .iter()
+            .map(|(&at, room)| (at, least[room]))
+            .collect()
+    }
+
+    #[test]
+    fn rooms_found_again_after_edits_are_the_rooms_found_from_nothing() {
+        // Two rooms side by side under one flat roof, a third over them.
+        let mut base = Base::default();
+        shell(&mut base, [0, -1, 0], [6, 6, 5]);
+        shell(&mut base, [6, -1, 0], [12, 6, 5]);
+        shell(&mut base, [0, 6, 0], [12, 11, 5]);
+        let _ = base.room_cubes();
+        // Cubes knocked out and put back at random through the walls, floors and roofs, and
+        // inside: holes open rooms to the outside and to each other, and close them again.
+        let mut random = crate::layout::Random(7);
+        let (mut again, mut asked, mut changes) = (0, 0, 0);
+        for step in 0..400 {
+            let at = [
+                (random.unit() * 14.0) as i32 - 1,
+                (random.unit() * 14.0) as i32 - 2,
+                (random.unit() * 8.0) as i32 - 1,
+            ];
+            let cube = if random.unit() < 0.5 { None } else { solid() };
+            fill(&mut base, at, at, cube);
+            if step % 3 != 0 {
+                continue;
+            }
+            changes += base.rooms.changed.len();
+            if let Some(last) = base.rooms.last.clone() {
+                let from_nothing = base.find_rooms();
+                if let Some(found) = base.find_again(&last, &base.rooms.changed) {
+                    assert_eq!(partition(&found), partition(&from_nothing), "step {step}");
+                    again += 1;
+                }
+                asked += 1;
+            }
+            let _ = base.room_cubes();
+        }
+        assert!(changes > 50, "{changes} changes");
+        assert!(asked > 50 && again * 10 > asked * 9, "{again} of {asked}");
     }
 }

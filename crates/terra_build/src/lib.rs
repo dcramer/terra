@@ -715,6 +715,10 @@ impl Base {
         if old == cube {
             return false;
         }
+        let closes = |cube: Option<Cube>| cube.is_some_and(|cube| rooms::encloses(&cube));
+        if closes(old) != closes(cube) {
+            self.rooms.changed(at);
+        }
         // The column's layers kept as cubes come and go, so an edit never walks them all.
         let column = [at.x, at.z];
         match (old.is_some(), cube.is_some()) {
@@ -761,7 +765,6 @@ impl Base {
     /// columns with no cubes is forgotten, and the walls and rooms are worked out.
     fn settle(&mut self) {
         self.parts.retain(|_, part| part.uses > 0);
-        self.work_out();
         let columns = &self.columns;
         let gone: Vec<[i32; 2]> = self
             .ground
@@ -793,7 +796,6 @@ impl Base {
             }
             changed |= self.set(at, cube);
         }
-        self.work_out();
         changed
     }
 
@@ -849,12 +851,6 @@ impl Base {
             }
         }
         changed
-    }
-
-    /// Forgets the rooms, to be worked out again when asked. The columns are kept up to
-    /// date cube by cube as cubes are put ([`Base::put`]).
-    fn work_out(&mut self) {
-        self.rooms = rooms::Rooms::default();
     }
 
     /// Works out the columns from every cube, for cubes come by other than being put, as
