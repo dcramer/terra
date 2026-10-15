@@ -137,6 +137,8 @@ const SHADOW_LUMP: f32 = 0.6;
 /// How wide the gaps in a solid shadow lump's shade are, in metres: a Scots pine's tufts with
 /// sky between (D359). Cast whole, a pad's lump drew a round black disc on the floor.
 const DAPPLE_M: f32 = 0.45;
+/// The floor's cards' reflectance (ferns and herbs): a third of a leaf's.
+const FLOOR_CARD_REFLECTANCE: f32 = 0.1;
 /// The render layer only the sun sees, which the stand-ins are on.
 const SUN_ONLY: usize = 1;
 /// Veteran oaks' modelled trunks: each model in `models/nature/forest` (near, and `_far`
@@ -832,11 +834,14 @@ fn plant(
     // The floor's and the middle layer's: greyed and darkened a little, so the ferns' and
     // herbs' pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
     // less, as backlit they glowed lime too (D268).
-    let floor_cards = materials.add(crown_material(
-        Vec3::ZERO,
-        Vec4::new(0.12, 0.1, 0.0, 0.0),
-        BEVY_THROUGH,
-    ));
+    // Their reflection a third of a leaf's (D359): a fern's frond drawn as one flat card,
+    // seen at a grazing angle toward a low sun, mirrored the bright haze round the sun whole
+    // and stood pale grey-white, where a real frond's ruffled pinnae shade one another.
+    let floor_cards = materials.add({
+        let mut floor = crown_material(Vec3::ZERO, Vec4::new(0.12, 0.1, 0.0, 0.0), BEVY_THROUGH);
+        floor.base.reflectance = FLOOR_CARD_REFLECTANCE;
+        floor
+    });
     // The middle layer's, greyed and darkened as the floor's, but shaded as a crown is: its
     // inside dark, its leaves lit through where the sun is behind them (`THICKET`, D269).
     let thicket_cards = materials.add(crown_material(Vec3::ZERO, THICKET, BEVY_THROUGH));

@@ -143,10 +143,12 @@ pub(super) fn ivy(
     // The mat round the foot, on the side the vines rise from.
     let from = dice.range(0.0, TAU);
     let reach = dice.range(0.5, 1.1);
-    for _ in 0..22 + dice.below(10) {
+    // Climbing ivy's leaves a hand across or less (D359): a card a third of a metre, each
+    // leaf the size of a dinner plate, read as a column of stickers up the bole.
+    for _ in 0..55 + dice.below(25) {
         let angle = from + dice.range(-reach, reach);
         let y = dice.range(0.05, 1.1);
-        let size = dice.range(0.28, 0.4);
+        let size = dice.range(0.14, 0.26);
         let lean = dice.range(0.0, 0.35);
         leaf_at(dice, y, angle, size, lean);
     }
@@ -162,9 +164,9 @@ pub(super) fn ivy(
         while y < top {
             let t = y / top.max(0.1);
             let (_, radius) = by_height(&trunk.points, &trunk.radii, y);
-            for _ in 0..1 + (dice.unit() < 0.6 - 0.4 * t) as u32 {
-                let size = dice.range(0.24, 0.36) * (1.0 - 0.3 * t);
-                let off = side * dice.range(0.03, 0.14) / radius.max(0.1);
+            for _ in 0..2 + dice.below(2) + (dice.unit() < 0.6 - 0.5 * t) as u32 {
+                let size = dice.range(0.1, 0.22) * (1.0 - 0.3 * t);
+                let off = side * dice.range(0.02, 0.2) / radius.max(0.1);
                 let lean = if dice.unit() < 0.5 {
                     dice.range(0.35, 0.7)
                 } else {
@@ -174,7 +176,7 @@ pub(super) fn ivy(
                 leaf_at(dice, at, angle + off, size, lean);
                 side = -side;
             }
-            let step = dice.range(0.08, 0.14) * (1.0 + 0.9 * t);
+            let step = dice.range(0.05, 0.09) * (1.0 + 0.9 * t);
             y += step;
             angle += drift * step + dice.range(-0.04, 0.04);
         }
