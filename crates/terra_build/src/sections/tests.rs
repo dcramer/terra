@@ -1803,3 +1803,62 @@ fn a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed(
     assert!(harmed > depth * 0.8, "{harmed}");
     assert!(whole < 0.005, "{whole}");
 }
+
+#[test]
+fn a_flight_of_stone_ramps_coping_runs_on_from_one_stone_to_the_next() {
+    // Three columns of stone, each a cube taller, each topped by a slope rising east: a ramp
+    // up a storey's flight, open both sides.
+    let kits = shipped();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    for x in 0..3 {
+        for y in 0..=x {
+            let shape = if y == x {
+                crate::Shape::Slope(crate::Facing::East)
+            } else {
+                crate::Shape::Whole
+            };
+            base.apply(BuildOp::Fill {
+                min: [x, y, 0],
+                max: [x, y, 0],
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(stone, Fill::Solid)
+                }),
+            });
+        }
+    }
+    let maps = Maps::default();
+    let whole = Whole::lay(&base, &kits);
+    let mut bands = Vec::new();
+    for at in drawable(&base) {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        let laid = lay(&section, &whole);
+        for placed in &laid.pieces {
+            if let Piece::Band {
+                role: layout::roles::Role::Crest,
+                cube,
+                ends,
+                ..
+            } = &placed.1
+            {
+                bands.push((cube.x, *ends));
+            }
+        }
+    }
+    // The coping up each side runs on from one stone to the next, squared only at the
+    // flight's foot and head: squared at every cube, it stepped at every stone.
+    use layout::roles::End;
+    assert_eq!(bands.len(), 6, "{bands:?}");
+    for (x, ends) in &bands {
+        let foot = if *x == 0 { End::Square } else { End::On };
+        let head = if *x == 2 { End::Square } else { End::On };
+        assert_eq!(*ends, [foot, head], "the stone at {x}");
+    }
+}

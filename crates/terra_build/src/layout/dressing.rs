@@ -405,7 +405,23 @@ fn shaped(
                 low[1] = cube.y * TICKS;
                 high[a] = back;
                 high[1] = (cube.y + 1) * TICKS;
-                band(Role::Crest, (low, high), side, [End::Square; 2]);
+                // Running on into the same slope's coping in the cube down the ramp from it
+                // and the one up it, a flight's; squared off where it stops. Squared at
+                // every cube, the part of each stone set into the ramp was cut back at both
+                // its ends, and the coping stepped at every stone.
+                let runs_on = |next: IVec3| {
+                    shape_at(next) == Some(this.shape)
+                        && open(next + side.step())
+                        && shape_at(next + side.step()) != Some(this.shape)
+                };
+                let on = |next: IVec3| if runs_on(next) { End::On } else { End::Square };
+                let step = rise.step() + IVec3::Y;
+                band(
+                    Role::Crest,
+                    (low, high),
+                    side,
+                    [on(cube - step), on(cube + step)],
+                );
             }
         }
         Shape::Post => {
