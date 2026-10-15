@@ -1224,6 +1224,48 @@ fn a_lintel_is_set_into_an_earth_wall_its_face_built_up_round_it() {
 }
 
 #[test]
+fn an_earth_windows_sill_is_drawn_once_where_its_rounding_pinches_it() {
+    // An earth wall's window, its arrises rounded broadly: at the sill's ends the rounding
+    // pinches the squares of its top into darts, which were split across the outside and
+    // laid a triangle over their neighbours.
+    let kits = shipped();
+    let earth = kits.of(named(&kits, "earth")).unwrap().clone();
+    let maps = Maps::default();
+    let mut base = Base::default();
+    for x in 0..10 {
+        base.apply(BuildOp::SetWall {
+            tile: [x, 0, 0],
+            panel: Some(if (4..=5).contains(&x) {
+                Panel::WINDOW
+            } else {
+                Panel::Solid
+            }),
+            kind: earth.kind(),
+        });
+    }
+    let pieces = lay_among(&base, &earth, &kits).pieces;
+    let mut sections: BTreeSet<[i32; 3]> = BTreeSet::new();
+    sections.extend(pieces.iter().map(|p| p.section().to_array()));
+    for at in &sections {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(*at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        if let Some(surface) = drawn
+            .near
+            .get(&(earth.kind(), crate::mesh::Material::Floor))
+        {
+            let over = crate::inspect::self_overlap(surface);
+            assert!(over < 1e-4, "{over} m² of the tops drawn twice");
+        }
+    }
+}
+
+#[test]
 fn an_openings_head_is_sunk_behind_its_lintels_underside() {
     // A stone wall along X with a window in it, under lintels on both faces whose
     // undersides lie in the plane of the opening's head: the head's face is sunk behind

@@ -1311,11 +1311,36 @@ pub fn draw_slots(
                     let middle = middle.with_y(clipped(point(i, j).lerp(point(i + 1, j + 1), 0.5)));
                     let along_02 = ((f[0] + f[2]) * 0.5).distance(middle);
                     let along_13 = ((f[1] + f[3]) * 0.5).distance(middle);
-                    let split = if along_13 + 1e-5 < along_02 {
+                    let mut split = if along_13 + 1e-5 < along_02 {
                         [[0, 1, 3], [1, 2, 3]]
                     } else {
                         [[0, 1, 2], [0, 2, 3]]
                     };
+                    // Where the rounding has pinched the square into a dart, seen square to
+                    // the face, along the diagonal from its reflex corner, which stays
+                    // inside it: the other would lay one triangle over its neighbours and
+                    // fold the other back.
+                    let flat2 = corners.map(|c| {
+                        let p = face.points[c as usize];
+                        glam::Vec2::new(p[a], p[b])
+                    });
+                    let turn = |k: usize| {
+                        let (p, q, r) = (flat2[(k + 3) % 4], flat2[k], flat2[(k + 1) % 4]);
+                        (q - p).perp_dot(r - q)
+                    };
+                    let turns = [0, 1, 2, 3].map(turn);
+                    let positive = turns.iter().filter(|t| **t > 0.0).count();
+                    if positive == 1 || positive == 3 {
+                        let odd = turns
+                            .iter()
+                            .position(|t| (*t > 0.0) == (positive == 1))
+                            .unwrap_or(0);
+                        split = if odd % 2 == 0 {
+                            [[0, 1, 2], [0, 2, 3]]
+                        } else {
+                            [[0, 1, 3], [1, 2, 3]]
+                        };
+                    }
                     for [x, y, z] in split {
                         triangle([corners[x], corners[y], corners[z]], &mut face);
                     }

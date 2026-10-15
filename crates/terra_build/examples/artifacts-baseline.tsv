@@ -4,23 +4,23 @@
 # set	kits	fault	count
 all	brick	Coplanar	10
 all	brick	PokesOut	1
-all	brick with earth	Coplanar	56
+all	brick with earth	Coplanar	47
 all	brick with earth	PokesOut	12
 all	brick with hewn	Coplanar	20
 all	brick with hewn	UnderRoof	345
-all	brick with limewash	Coplanar	56
+all	brick with limewash	Coplanar	47
 all	brick with logs	Coplanar	25
 all	brick with logs	SeeThrough	4
 all	brick with logs	UnderRoof	99
 all	brick with stone	Coplanar	10
 all	brick with wattle	Coplanar	26
-all	earth	Coplanar	50
+all	earth	Coplanar	38
 all	earth	PokesOut	14
 all	earth with hewn	Coplanar	23
 all	earth with hewn	Inward	3
 all	earth with hewn	PokesOut	5
 all	earth with hewn	UnderRoof	359
-all	earth with limewash	Coplanar	59
+all	earth with limewash	Coplanar	50
 all	earth with limewash	Inward	3
 all	earth with limewash	PokesOut	5
 all	earth with logs	Coplanar	30
@@ -37,7 +37,7 @@ all	earth with wattle	PokesOut	5
 all	hewn	Coplanar	14
 all	hewn	PokesOut	2
 all	hewn	UnderRoof	600
-all	hewn with limewash	Coplanar	41
+all	hewn with limewash	Coplanar	32
 all	hewn with limewash	PokesOut	2
 all	hewn with limewash	UnderRoof	227
 all	hewn with logs	Coplanar	21
@@ -50,7 +50,7 @@ all	hewn with stone	UnderRoof	48
 all	hewn with wattle	Coplanar	26
 all	hewn with wattle	PokesOut	2
 all	hewn with wattle	UnderRoof	227
-all	limewash	Coplanar	50
+all	limewash	Coplanar	38
 all	limewash	PokesOut	2
 all	limewash with logs	Coplanar	25
 all	limewash with logs	PokesOut	2
@@ -76,7 +76,7 @@ quick	brick with hewn	UnderRoof	12
 quick	brick with limewash	Coplanar	5
 quick	brick with logs	Coplanar	2
 quick	brick with logs	UnderRoof	12
-quick	earth	Coplanar	3
+quick	earth	Coplanar	2
 quick	earth	PokesOut	1
 quick	earth with hewn	Coplanar	1
 quick	earth with hewn	PokesOut	1
@@ -96,7 +96,7 @@ quick	hewn with logs	UnderRoof	32
 quick	hewn with stone	Coplanar	2
 quick	hewn with stone	UnderRoof	16
 quick	hewn with wattle	UnderRoof	16
-quick	limewash	Coplanar	3
+quick	limewash	Coplanar	2
 quick	limewash with logs	Coplanar	1
 quick	limewash with logs	UnderRoof	12
 quick	limewash with stone	Coplanar	3
