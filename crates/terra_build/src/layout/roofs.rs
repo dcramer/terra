@@ -779,7 +779,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             capped: [segment.from, segment.to].map(|end| !edge_met(segment, end, &joined)),
         });
     }
-    rafters(&roofs, &ours, batten + rafter, pieces);
+    rafters(&roofs, &ours, batten + rafter, rafter, pieces);
     // Battens and covering, a square at a time, the courses' lower edges level lines a
     // course's rise apart up from each roof's lowest edge.
     let texture = kit
@@ -1168,7 +1168,13 @@ fn gcd(a: i32, b: i32) -> i32 {
 
 /// The rafters: one up every slope along every cube's edge, from its foot at the eaves to
 /// the ridge, hip or valley it meets, under the battens.
-fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut Vec<Piece>) {
+fn rafters(
+    roofs: &Roofs,
+    ours: &dyn Fn(usize) -> bool,
+    below: f32,
+    half: f32,
+    pieces: &mut Vec<Piece>,
+) {
     let mut segments = Vec::new();
     for q in (0..roofs.squares.len()).filter(|&q| ours(q)) {
         let place = roofs.squares[q].place;
@@ -1245,11 +1251,19 @@ fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut
         let carries_on = roofs
             .top_over(beyond.x, beyond.z, top.y - CELL_M)
             .is_some_and(|h| h < top.y + below + CELL_M);
-        let (from, to) = if !carries_on && level != Vec3::ZERO {
-            *top -= step * (below * 2.0);
+        // Where it carries on over a ridge or a hip, laid under the roof square to it, it
+        // reached past the ridge's plumb line by as much as it is under the roof and as
+        // deep again, through the rafter of the slope beyond in the same plane: it stops
+        // where its foot's edge meets that line, against the beam under the crease.
+        let (from, to) = if level == Vec3::ZERO {
+            (segment.from, segment.to)
+        } else if carries_on {
+            let rise = step.y / Vec3::new(step.x, 0.0, step.z).length().max(1e-4);
+            *top -= step * ((below + half) * rise.abs());
             (Place::near(from), Place::near(to))
         } else {
-            (segment.from, segment.to)
+            *top -= step * (below * 2.0);
+            (Place::near(from), Place::near(to))
         };
         pieces.push(Piece::Roof {
             part: RoofPart::Rafter,
@@ -1492,6 +1506,39 @@ mod tests {
         // Rafters along every cube's edge up each slope, nine a side from one gable's inner
         // face to the other's, none on a gable or out under a verge, and a beam under the ridge.
         assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 9 + 1);
+    }
+
+    #[test]
+    fn a_rafter_stops_at_the_ridges_plumb_line_clear_of_its_pair() {
+        // Rafters either side of a ridge, along the same cube's edge, lie in one plane: one
+        // reaching past the ridge's plumb line would lie in the other.
+        let base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        let pieces = laid(&base);
+        let (a, _) = parts(&pieces, RoofPart::Ridge)[0];
+        let half = roof_kit().roof.rafter * 0.5;
+        let mut looked = 0;
+        for (from, to) in parts(&pieces, RoofPart::Rafter) {
+            if (from.z - to.z).abs() < 1e-3 {
+                continue;
+            }
+            let (top, foot) = if from.y > to.y {
+                (from, to)
+            } else {
+                (to, from)
+            };
+            let side = (foot.z - a.z).signum();
+            // Its edge under its top end: square to it, down, in its plane.
+            let axis = (top - foot).normalize();
+            let down = Vec3::X.cross(axis) * -side.signum();
+            let down = if down.y > 0.0 { -down } else { down };
+            let corner = top + down * half;
+            assert!(
+                (corner.z - a.z) * side > -1e-3,
+                "{from} {to}: its foot's edge at {corner}, past the ridge at {a}"
+            );
+            looked += 1;
+        }
+        assert!(looked > 10);
     }
 
     #[test]
