@@ -4,7 +4,9 @@
 //! exits, and says that it is waiting; every other unattended run takes the lock shared, so
 //! shots and films run side by side, and wait only while a benchmark holds it. Taking turns for
 //! every run cost the developers hours of queueing for no gain; only measuring needs the GPU
-//! alone. A run someone plays is never held back.
+//! alone. But a dozen at once filled the GPU's memory and crashed, so a shared run also takes
+//! one of a few slots (`gpu.slot-<n>` beside the lock, `TERRA_GPU_SLOTS` of them, three by
+//! default) and waits for one to be free. A run someone plays is never held back.
 //!
 //! The lock is the operating system's advisory lock on the whole file, so anything else can take
 //! the same turn: `flock ~/.cache/terra/gpu.lock <command>` for a measurement of one's own,
@@ -18,6 +20,10 @@ use std::sync::OnceLock;
 
 /// The lock, held for as long as the program runs.
 static TURN: OnceLock<File> = OnceLock::new();
+/// A shared run's slot, held for as long as it runs.
+static SLOT: OnceLock<File> = OnceLock::new();
+/// How many shared runs may draw at once by default: three heavy forests fit a 10 GB GPU.
+const SLOTS: usize = 3;
 
 /// Where the lock is: `TERRA_GPU_LOCK` if set, otherwise `terra/gpu.lock` in the user's
 /// cache folder. None where there is no such folder, and then no turn is taken.
@@ -49,6 +55,9 @@ pub fn take(alone: bool) {
     else {
         return;
     };
+    if !alone {
+        take_slot(&path);
+    }
     let free = if alone {
         file.try_lock().is_ok()
     } else {
@@ -79,6 +88,47 @@ pub fn take(alone: bool) {
         );
     }
     let _ = TURN.set(file);
+}
+
+/// Waits for one of the shared runs' slots, then holds it until this run ends.
+fn take_slot(lock: &std::path::Path) {
+    let slots = std::env::var("TERRA_GPU_SLOTS")
+        .ok()
+        .and_then(|n| n.parse::<usize>().ok())
+        .unwrap_or(SLOTS)
+        .max(1);
+    let mut files: Vec<File> = (0..slots)
+        .filter_map(|n| {
+            OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(lock.with_file_name(format!("gpu.slot-{n}")))
+                .ok()
+        })
+        .collect();
+    if files.is_empty() {
+        return;
+    }
+    let started = std::time::Instant::now();
+    let mut said = false;
+    loop {
+        if let Some(free) = files.iter().position(|file| file.try_lock().is_ok()) {
+            if said {
+                println!(
+                    "SANDBOX got a GPU slot after {:.0} s",
+                    started.elapsed().as_secs_f32()
+                );
+            }
+            let _ = SLOT.set(files.swap_remove(free));
+            return;
+        }
+        if !said {
+            println!("SANDBOX waiting for a GPU slot: {slots} runs are drawing");
+            said = true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
 }
 
 /// Whether the lock on a file is held by a forebear of this process: a script that took the
