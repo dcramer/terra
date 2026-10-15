@@ -240,10 +240,10 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
-const SNOW: vec3<f32> = vec3<f32>(0.74, 0.76, 0.8);
-// How much brighter a turned leaf is than the green one it was, as autumn's crowns read
-// lighter than summer's.
-const AUTUMN_LIGHT: f32 = 1.25;
+const SNOW: vec3<f32> = vec3<f32>(0.68, 0.72, 0.8);
+// How bright a turned leaf is against the green one it was: dead leaves are duller and darker
+// than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
+const AUTUMN_LIGHT: f32 = 0.8;
 
 // Where a plant stands in its kind's year, 0 early to 1 late: foliage.wesl's `hash`, so its
 // leaves fall and turn alike.
@@ -267,10 +267,31 @@ fn card_layer(uv: vec2<f32>) -> i32 {
     return wind.climate.layers[index / 4][index % 4];
 }
 
+// Smooth noise in clumps a hand or two across, stretched to about uniform from 0 to 1: where a
+// plant's leaves have fallen, those left lie in rounded clumps, not cubes. The same in the main
+// pass and the prepass.
+fn clump_hash(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+fn clumps(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(clump_hash(i), clump_hash(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(clump_hash(i + vec3<f32>(0.0, 1.0, 0.0)), clump_hash(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(clump_hash(i + vec3<f32>(0.0, 0.0, 1.0)), clump_hash(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(clump_hash(i + vec3<f32>(0.0, 1.0, 1.0)), clump_hash(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    let n = mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+    return clamp((n - 0.2) / 0.6, 0.0, 1.0);
+}
+
 // Leaves its kind's year says have fallen, on a plant whose cards carry no rank to fall by, as
 // a bush's or a fern's do not (foliage.wesl's `fallen` takes the crowns', and marks them
 // `ranked`, its second texture coordinate's y far below nothing): gone in clumps a hand or
-// two across, so it thins and stands bare (D327). The same in the
+// two across (`clumps`), so it thins and stands bare (D327). The same in the
 // main pass and the prepass, so depth and colour agree on what is left.
 fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
     if wind.climate.on == 0u || wind.bark > 0.5 || ranked {
@@ -285,7 +306,7 @@ fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
     // turns as one plant.
     let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(world), layer, 0.0);
     let on = mix(year.r, year.g, plant_share(floor(world / 3.0) * 1.7 + 0.3));
-    if on < 0.999 && plant_share(floor(world * 3.0) + 0.37) > on {
+    if on < 0.999 && clumps(world * 2.5 + 0.37) > on {
         discard;
     }
 }
@@ -306,7 +327,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         if layer >= 0 {
             let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(origin), layer, 0.0);
             let plant = mix(year.b, year.a, plant_share(origin * 1.7 + 0.3));
-            let leaf = clamp(plant * (0.7 + 0.6 * hash3(floor(world * 4.0))), 0.0, 1.0);
+            let leaf = clamp(plant * (0.7 + 0.6 * clumps(world * 3.0 + 11.0)), 0.0, 1.0);
             let grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));
             let autumn = wind.climate.autumn[layer].rgb;
             let tone = autumn * grey / max(dot(autumn, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4) * AUTUMN_LIGHT;
@@ -319,8 +340,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         colour *= mix(1.0, 0.6, wet);
         (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 0.55, wet * 0.6);
     }
-    // Snow stays on branches only while it is freezing; in a thaw it slides off.
-    let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * smoothstep(0.2, 0.7, weather.a);
+    // Snow lies on branches through a snowy spell, most in a frost; a thaw, the rain or a
+    // day above freezing takes it off, as the ground's snow going takes it.
+    let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * (0.55 + 0.45 * weather.a) * (1.0 - weather.b);
     let up = dot((*input).N, normalize(world));
     let snow = lying * smoothstep(0.3, 0.75, up) * smoothstep(0.25, 0.6, wander(world * 1.3));
     colour = mix(colour, SNOW, snow * 0.92);

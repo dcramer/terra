@@ -115,9 +115,9 @@ var land_sampler: sampler;
 
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
-// Lying snow, linear: a little short of fresh snow's albedo of 0.9, settled and dusted with
-// what falls from the trees.
-const SNOW: vec3<f32> = vec3<f32>(0.74, 0.76, 0.8);
+// Lying snow, linear: short of fresh snow's albedo of 0.9, settled and dusted with what falls
+// from the trees, and cool: the sun's warm light on it read peach.
+const SNOW: vec3<f32> = vec3<f32>(0.68, 0.72, 0.8);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
@@ -1105,7 +1105,7 @@ fn fragment(
     let swell = vec2<f32>(
         noise(world * 0.6 + tangent * 0.4 + 7.0) - noise(world * 0.6 - tangent * 0.4 + 7.0),
         noise(world * 0.6 + bitangent * 0.4 + 7.0) - noise(world * 0.6 - bitangent * 0.4 + 7.0),
-    ) * 0.9 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.12;
+    ) * 2.2 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.25;
     let drifted = normalize(geometric + tangent * swell.x + bitangent * swell.y);
     pbr_input.N = normalize(mix(pbr_input.N, drifted, snow));
 }

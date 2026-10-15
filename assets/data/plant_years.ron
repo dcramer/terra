@@ -23,12 +23,12 @@
 // November; warmth 100 by early May and 300 by June. Tuned by looking at a year of dates.
 [
     (
-        // Pedunculate oak: green into October, brown-gold by early November, bare by the
-        // end of it; out in leaf in May.
+        // Pedunculate oak: green into October, brown-gold by early November, most bare by
+        // the end of it; out in leaf in May.
         kind: "oak",
         flush: (from: 100.0, over: 120.0),
         turn: (from: 10.0, over: 70.0),
-        fall: (from: 80.0, over: 110.0),
+        fall: (from: 70.0, over: 90.0),
         turns_under_hours: 12.0,
         turns: 1.0,
         drops: 1.0,
@@ -58,6 +58,18 @@
         drops: 1.0,
         autumn: (0.7, 0.58, 0.2),
         cards: ["hazel"],
+    ),
+    (
+        // Bilberry, under the pines: crimson in autumn, its leaves gone by winter.
+        kind: "bilberry",
+        flush: (from: 80.0, over: 100.0),
+        turn: (from: 5.0, over: 50.0),
+        fall: (from: 70.0, over: 100.0),
+        turns_under_hours: 12.5,
+        turns: 1.0,
+        drops: 1.0,
+        autumn: (0.55, 0.14, 0.1),
+        cards: ["berry"],
     ),
     (
         // Bracken: rust-brown with the first chill, standing dead through the winter and

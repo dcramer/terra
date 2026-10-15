@@ -58,9 +58,11 @@ struct Painted {
     filtering: u32,
 }
 
-/// What snow lying round the camera gives back of the light, linear: it is the ground's bounce
-/// in the sky's light where it lies, as ground.wesl's snow is.
-const SNOW_BOUNCE: Vec3 = Vec3::new(0.74, 0.76, 0.8);
+/// What snow lying round the camera gives back of the light, linear: the ground's bounce in the
+/// sky's light where it lies, darker than its albedo, as what it lights faces it only in part
+/// and the snow in shade is shaded too; at its full albedo, shaded snow was a quarter darker
+/// than sunlit, against half in Sons of the Forest's winter.
+const SNOW_BOUNCE: Vec3 = Vec3::new(0.45, 0.47, 0.52);
 
 /// Bevy filters a generated environment map into its diffuse and specular light every frame
 /// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only
