@@ -238,12 +238,14 @@ fn launch(
                 .filter(|(_, waiting)| !waiting.force && waiting.reach.is_none())
                 .filter_map(|(&at, _)| {
                     let drawn = sections.drawn.get(&at)?;
-                    let middle = frame.transform_point(store::centre(IVec3::from_array(at)));
-                    let wanted = reach(middle.distance(eye) / scale.0, Some(drawn.reach));
+                    let distance =
+                        store::distance_from(&frame, eye, at, sections.unit, drawn.bounds);
+                    let wanted = reach(distance / scale.0, Some(drawn.reach));
                     (wanted == drawn.reach).then_some((at, drawn.key))
                 })
                 .collect();
             let progress = progress.clone();
+            let unit = sections.unit;
             let maps = look.maps.clone();
             sections.laying = Some(pool.spawn(async move {
                 let started = Instant::now();
@@ -255,14 +257,17 @@ fn launch(
                 let same = candidates
                     .into_iter()
                     .filter(|&(at, key)| {
-                        let section = Section {
-                            base: &snapshot,
-                            kits: &kits,
-                            maps: &maps,
-                            at: IVec3::from_array(at),
-                            progress: &progress,
-                        };
-                        sections::lay(&section, &whole).key() == key
+                        let laid = store::members(&snapshot, at, unit).into_iter().map(|at| {
+                            let section = Section {
+                                base: &snapshot,
+                                kits: &kits,
+                                maps: &maps,
+                                at: IVec3::from_array(at),
+                                progress: &progress,
+                            };
+                            sections::lay(&section, &whole).key()
+                        });
+                        store::group_key(laid) == key
                     })
                     .map(|(at, _)| at)
                     .collect();
@@ -324,11 +329,14 @@ fn launch(
             continue;
         }
         for &at in build.sections.waiting.keys() {
-            let middle = build
-                .frame
-                .transform_point(store::centre(IVec3::from_array(at)));
             // Measured against distances as the detail scale has them (D230).
-            let distance = middle.distance(eye) / scale.0;
+            let distance = store::distance_from(
+                &build.frame,
+                eye,
+                at,
+                build.sections.unit,
+                build.sections.drawn.get(&at).and_then(|drawn| drawn.bounds),
+            ) / scale.0;
             nearest.push((distance, build.root, at));
         }
     }
@@ -379,9 +387,56 @@ fn launch(
                 .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
             let force = waiting.force;
             let whole = whole.clone();
+            let unit = build.sections.unit;
             let task = pool.spawn(async move {
                 sections::remembered(|| {
                     let started = Instant::now();
+                    // A group of sections, of a base not being built: each laid and drawn
+                    // whole, and all of them put together, one drawing a detail.
+                    if unit > 1 {
+                        let members = store::members(&snapshot, at, unit);
+                        let laid: Vec<(Section, sections::Laid)> = members
+                            .iter()
+                            .map(|&member| {
+                                let section = Section {
+                                    base: &snapshot,
+                                    kits: &kits,
+                                    maps: &maps,
+                                    at: IVec3::from_array(member),
+                                    progress: &progress,
+                                };
+                                let laid = sections::lay(&section, &whole);
+                                (section, laid)
+                            })
+                            .collect();
+                        let key = store::group_key(laid.iter().map(|(_, laid)| laid.key()));
+                        if !force && previous == Some((key, wanted)) {
+                            return Outcome::Same;
+                        }
+                        let mut drawn = sections::Drawn::default();
+                        for (section, laid) in &laid {
+                            drawn.append(sections::draw_parts(
+                                section, laid, wanted, None, None, None,
+                            ));
+                        }
+                        let mut parts = draw::parts(
+                            drawn,
+                            store::unit_centre(at, unit),
+                            &[],
+                            Vec::new(),
+                            &layers,
+                            true,
+                        );
+                        parts.bounds = store::members_box(&members);
+                        return Outcome::Drawn {
+                            key,
+                            reach: wanted,
+                            parts: Box::new(parts),
+                            drawing: None,
+                            took_ms: started.elapsed().as_secs_f32() * 1000.0,
+                            again: None,
+                        };
+                    }
                     let section = Section {
                         base: &snapshot,
                         kits: &kits,

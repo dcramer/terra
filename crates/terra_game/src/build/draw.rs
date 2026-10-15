@@ -296,6 +296,8 @@ pub(super) struct Parts {
     far: Option<Mesh>,
     proxy: Option<Mesh>,
     centre: Vec3,
+    /// A group's sections with anything in them, as a box in its base's own space.
+    pub bounds: Option<(Vec3, Vec3)>,
 }
 
 /// A part of a section's near and middle detail as meshes: its surfaces in the texture
@@ -450,6 +452,7 @@ pub(super) fn parts(
         far: plain(&drawn.far),
         proxy: plain(&drawn.proxy),
         centre,
+        bounds: None,
     }
 }
 
@@ -1033,6 +1036,7 @@ fn show(
         reach,
         drawing,
         gpu_bytes: 0,
+        bounds: parts.bounds,
         parts: Vec::new(),
         rest: Vec::new(),
     };
@@ -1061,7 +1065,22 @@ fn show(
     let near = reach == Reach::Near;
     let mid_from = near.then_some(NEAR_M);
     let far_from = (reach >= Reach::Mid).then_some(MID_M);
+    // A group of sections is seen by how near its nearest point is, as its laying is
+    // (`store::distance_to`): stood beside a house, all of it is near.
+    let grouped = build.sections.unit > 1;
+    let ranged = move |mut range: VisibilityRange| {
+        if grouped {
+            range.use_aabb = true;
+            let shift = |r: std::ops::Range<f32>| {
+                (r.start - store::GROUP_SHIFT_M).max(0.0)..(r.end - store::GROUP_SHIFT_M).max(0.0)
+            };
+            range.start_margin = shift(range.start_margin.clone());
+            range.end_margin = shift(range.end_margin.clone());
+        }
+        range
+    };
     let mut add = |mesh: Mesh, material: Shade, range: VisibilityRange| {
+        let range = ranged(range);
         let mesh = meshes.add(mesh);
         let mut spawned = commands.spawn((
             Mesh3d(mesh.clone()),
@@ -1229,7 +1248,7 @@ fn show(
                 .spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d(looks.far.clone()),
-                    range(None, MID_M),
+                    ranged(range(None, MID_M)),
                     RenderLayers::layer(SUN_ONLY),
                     Transform::IDENTITY,
                     ChildOf(entity),
@@ -1258,10 +1277,9 @@ fn stream(
     for build in each(&mut site, &mut builds) {
         let frame = build.frame;
         let sections = &mut build.sections;
+        let unit = sections.unit;
         for (&at, drawn) in &sections.drawn {
-            let distance = frame
-                .transform_point(store::centre(IVec3::from_array(at)))
-                .distance(eye);
+            let distance = store::distance_from(&frame, eye, at, unit, drawn.bounds);
             let laying = sections.waiting.contains_key(&at)
                 || sections.tickets.get(&at) != Some(&drawn.ticket);
             let wanted = reach(distance / scale.0, Some(drawn.reach));
@@ -1295,11 +1313,15 @@ pub(super) fn aside(
     };
     for build in each(&mut site, &mut builds) {
         let frame = build.frame;
+        let unit = build.sections.unit;
+        let bounds: BTreeMap<[i32; 3], (Vec3, Vec3)> = build
+            .sections
+            .drawn
+            .iter()
+            .filter_map(|(&at, drawn)| Some((at, drawn.bounds?)))
+            .collect();
         let distance = |at: [i32; 3]| {
-            frame
-                .transform_point(store::centre(IVec3::from_array(at)))
-                .distance(eye)
-                / scale.0
+            store::distance_from(&frame, eye, at, unit, bounds.get(&at).copied()) / scale.0
         };
         let sections = &mut build.sections;
         let far: Vec<[i32; 3]> = sections

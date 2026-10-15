@@ -40,6 +40,9 @@ pub(super) struct Drawn {
     pub drawing: Option<Arc<terra_build::sections::Drawing>>,
     /// How many bytes its meshes take on the GPU.
     pub gpu_bytes: usize,
+    /// A group's sections with anything in them, as a box in its base's own space: what
+    /// its distance is measured to once it is drawn ([`distance_from`]).
+    pub bounds: Option<(Vec3, Vec3)>,
     /// Its near and middle detail a part at a time (`sections::CLUSTER`), each with what it
     /// was drawn from (`sections::cluster_keys`), its entities and their bytes on the GPU:
     /// an edit puts on screen again only the parts whose key changed.
@@ -112,6 +115,10 @@ pub(super) struct Sections {
     pub far_off: BTreeSet<[i32; 3]>,
     /// The base's far meshes, a cell of it each (`hlod`).
     pub cells: super::hlod::Cells,
+    /// How many sections a side it is laid and drawn by: one for the base being built, so
+    /// an edit lays again only what it reached; [`GROUP`] for every other, each group of
+    /// sections one drawing, one entity a detail, as an HLOD cluster is ([`unit_of`]).
+    pub unit: i32,
     /// The last change since it was noticed, until all it set waiting is on screen: when,
     /// how many sections it set waiting, and how many came back merged anew or the same,
     /// for `Build: change on screen` (research/building-audit.md).
@@ -163,7 +170,14 @@ pub(super) fn each<'a>(
 /// Notices which builds have changed since last looked at, works out again where they
 /// stand on the ground, and sets the sections their changes reach waiting to be laid.
 fn notice(planet: Res<Planet>, mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
-    for build in each(&mut site, &mut builds) {
+    for (index, build) in each(&mut site, &mut builds).enumerate() {
+        // The player's own base, the first, is the one edited: drawn a section at a time.
+        let unit = if index == 0 { 1 } else { GROUP };
+        if build.sections.unit != unit {
+            build.sections.unit = unit;
+            build.sections.everything = true;
+            build.sections.noticed = None;
+        }
         if build.sections.noticed == Some(build.revision) {
             continue;
         }
@@ -193,8 +207,9 @@ fn noticed(build: &mut Build) {
     sections.laying = None;
     let marked = build.base.take_dirty();
     sections.marked_since.extend(marked.iter().copied());
+    let unit = sections.unit;
     let mut wait = |at: [i32; 3], force: bool| {
-        let waiting = sections.waiting.entry(at).or_default();
+        let waiting = sections.waiting.entry(unit_of(at, unit)).or_default();
         waiting.force |= force;
     };
     if std::mem::take(&mut sections.everything) {
@@ -258,9 +273,135 @@ fn noticed(build: &mut Build) {
     });
 }
 
+/// How much further a group is taken to be than its nearest point: half a section's
+/// diagonal, so its details reach as far from what is drawn as a section's measured from
+/// its middle do.
+pub(super) const GROUP_SHIFT_M: f32 = 7.0;
+
+/// How many sections a side a base not being built is drawn by: a house is one or two such
+/// groups, so the town's entities are a few a house where they were a few a section.
+pub(super) const GROUP: i32 = 4;
+
+/// The group a section is drawn in, as the first section of it, for a base drawn `unit`
+/// sections a side; itself, drawn alone.
+pub(super) fn unit_of(at: [i32; 3], unit: i32) -> [i32; 3] {
+    if unit <= 1 {
+        return at;
+    }
+    // Groups straddle a base's middle rather than meet there: a base is laid about its
+    // origin, and a house there would be eight groups.
+    let shift = unit / 2;
+    at.map(|a| (a + shift).div_euclid(unit) * unit - shift)
+}
+
+/// The sections of a base in a group that have anything to draw.
+pub(super) fn members(base: &Base, key: [i32; 3], unit: i32) -> Vec<[i32; 3]> {
+    if unit <= 1 {
+        return vec![key];
+    }
+    drawable(base)
+        .into_iter()
+        .filter(|&at| unit_of(at, unit) == key)
+        .collect()
+}
+
+/// A group's box in its base's own space, in metres, low corner and high.
+pub(super) fn unit_box(key: [i32; 3], unit: i32) -> (Vec3, Vec3) {
+    let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
+    let low = IVec3::from_array(key).as_vec3() * side;
+    (low, low + Vec3::splat(side * unit.max(1) as f32))
+}
+
+/// How far a camera, in its base's own space, is from what is drawn of a group: from a
+/// section's middle, drawn alone, as its details' ranges are; from the nearest point of a
+/// group's box, as a group's are (`VisibilityRange::use_aabb`), so a house is drawn near
+/// wherever it is stood beside.
+pub(super) fn distance_to(eye: Vec3, key: [i32; 3], unit: i32) -> f32 {
+    if unit <= 1 {
+        return centre(IVec3::from_array(key)).distance(eye);
+    }
+    let (low, high) = unit_box(key, unit);
+    eye.clamp(low, high).distance(eye) + GROUP_SHIFT_M
+}
+
+/// Where what is drawn of a group is placed, in its base's own space: a section's middle,
+/// or the middle of a group's box.
+pub(super) fn unit_centre(key: [i32; 3], unit: i32) -> Vec3 {
+    if unit <= 1 {
+        return centre(IVec3::from_array(key));
+    }
+    let (low, high) = unit_box(key, unit);
+    (low + high) * 0.5
+}
+
+/// How far the camera is from what is drawn of a group, in metres, as [`distance_to`].
+/// A group drawn is measured to the box of its sections with anything in them, a house's
+/// own, rather than to the group's.
+pub(super) fn distance_from(
+    frame: &Transform,
+    eye: Vec3,
+    key: [i32; 3],
+    unit: i32,
+    bounds: Option<(Vec3, Vec3)>,
+) -> f32 {
+    let local = frame.compute_affine().inverse().transform_point3(eye);
+    match bounds {
+        Some((low, high)) if unit > 1 => local.clamp(low, high).distance(local) + GROUP_SHIFT_M,
+        _ => distance_to(local, key, unit),
+    }
+}
+
+/// The box of a group's members, in its base's own space.
+pub(super) fn members_box(members: &[[i32; 3]]) -> Option<(Vec3, Vec3)> {
+    let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
+    members.iter().fold(None, |sum, &at| {
+        let low = IVec3::from_array(at).as_vec3() * side;
+        let high = low + Vec3::splat(side);
+        Some(sum.map_or((low, high), |(a, b): (Vec3, Vec3)| {
+            (a.min(low), b.max(high))
+        }))
+    })
+}
+
+/// What a group of sections lays as, from what each of its members lays as: a section
+/// alone's own key.
+pub(super) fn group_key(keys: impl IntoIterator<Item = u64>) -> u64 {
+    keys.into_iter()
+        .fold(0u64, |sum, key| sum.rotate_left(17) ^ key)
+}
+
 /// The middle of a section, in its base's own space, in metres: where what is drawn of it
 /// is placed, and what its distance from the camera is measured to.
 pub(super) fn centre(at: IVec3) -> Vec3 {
     let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
     (at.as_vec3() + 0.5) * side
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_house_about_its_base_middle_is_one_group_measured_from_beside_its_wall() {
+        // A house's sections round its base's middle, two storeys: one group, not eight.
+        let house = [[-1, 0, -1], [0, 0, 0], [-1, 1, 0], [0, 1, -1]];
+        let groups: BTreeSet<[i32; 3]> = house.iter().map(|&at| unit_of(at, GROUP)).collect();
+        assert_eq!(groups.len(), 1);
+        // The base being built is drawn a section at a time.
+        assert_eq!(unit_of([5, 0, -3], 1), [5, 0, -3]);
+        // Stood a metre from its wall (a section is 8 m, so the house reaches x = 8), it is
+        // half a section further, as a section measured from its middle would be.
+        let bounds = members_box(&house);
+        let key = unit_of(house[0], GROUP);
+        let beside = Vec3::new(9.0, 1.0, 0.0);
+        let distance = distance_from(&Transform::IDENTITY, beside, key, GROUP, bounds);
+        assert!(
+            (distance - (1.0 + GROUP_SHIFT_M)).abs() < 1e-4,
+            "{distance}"
+        );
+        // Inside it, it is as near as can be.
+        let within = Vec3::new(1.0, 1.0, 1.0);
+        let inside = distance_from(&Transform::IDENTITY, within, key, GROUP, bounds);
+        assert!((inside - GROUP_SHIFT_M).abs() < 1e-4, "{inside}");
+    }
 }

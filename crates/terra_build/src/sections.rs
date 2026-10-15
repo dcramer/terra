@@ -910,6 +910,42 @@ pub struct Drawn {
     pub worn: Vec<([i32; 3], u8)>,
 }
 
+impl Drawn {
+    /// Another section's drawing added to this one's, surface by surface, so a group of
+    /// sections is drawn as one, as an HLOD cluster is: its parts each into the same part.
+    pub fn append(&mut self, other: Drawn) {
+        fn into(
+            to: &mut BTreeMap<(Kind, Material), Surface>,
+            from: BTreeMap<(Kind, Material), Surface>,
+        ) {
+            for (key, surface) in from {
+                to.entry(key).or_default().append(surface);
+            }
+        }
+        into(&mut self.near, other.near);
+        into(&mut self.mid, other.mid);
+        for (to, from) in [
+            (&mut self.near_by, other.near_by),
+            (&mut self.mid_by, other.mid_by),
+        ] {
+            for (part, surfaces) in from.into_iter().enumerate() {
+                if to.len() <= part {
+                    to.resize_with(part + 1, BTreeMap::new);
+                }
+                into(&mut to[part], surfaces);
+            }
+        }
+        self.plain.append(other.plain);
+        for (material, surface) in other.next.0 {
+            self.next.of(material).append(surface);
+        }
+        self.ghosts.extend(other.ghosts);
+        self.shell.append(other.shell);
+        self.far.append(other.far);
+        self.proxy.append(other.proxy);
+    }
+}
+
 /// Draws a laid section, as finely as `reach` asks and coarser: the game draws finer
 /// detail only for the sections near the camera. A plan's ghosts, the next part and the
 /// doors and windows come with the finest textured detail drawn.
