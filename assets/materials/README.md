@@ -2,7 +2,7 @@
 
 Where each material came from. Made by `cargo xtask textures` ([tools/textures](../../tools/textures/README.md)).
 
-- `bark_brown_02`: Poly Haven [Bark Brown 02](https://polyhaven.com/a/bark_brown_02), CC0, 2k. 1.00 m across. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping, as the lush forest's oaks and spruces wear it.
+- `bark_brown_02`: Poly Haven [Bark Brown 02](https://polyhaven.com/a/bark_brown_02), CC0, 2k. 1.00 m across. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping, as the lush forest's oaks and spruces wear it. `trunk_depth.jpg` is that drawn out to its full range (ImageMagick `-contrast-stretch 1.5%x1.5%`), which they are relief-mapped by (D309).
 - `birch_bark`: made from a generated image (art/textures/birch-bark.png) by `textures.ts material`. 1.00 m across.
 - `clay_floor_001`: Poly Haven [Clay Floor 001](https://polyhaven.com/a/clay_floor_001), CC0, 2k. 2.00 m across.
 - `flora`: a stack, in this order, 1024 pixels each, of `pine_bark` (Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across); `bark_brown_02` (Poly Haven [Bark Brown 02](https://polyhaven.com/a/bark_brown_02), CC0, 2k. 1.00 m across); `leaves` (made from a generated image (art/textures/leaves.png) by `textures.ts material`); `mossy_rock` (Poly Haven [Mossy Rock](https://polyhaven.com/a/mossy_rock), CC0, 2k. 3.00 m across); `lichen_rock` (Poly Haven [Lichen Rock](https://polyhaven.com/a/lichen_rock), CC0, 2k. 2.00 m across); `rock_boulder_dry` (Poly Haven [Rock Boulder Dry](https://polyhaven.com/a/rock_boulder_dry), CC0, 2k. 1.80 m across).
@@ -17,10 +17,10 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `logs_pieces`: the logs kit's modelled pieces (Tripo models of concepts pending the developers' approval, welded and cut to budget: the whole modelled log in art/kits/logs/log), unwrapped afresh into one atlas and baked from each model's full detail, colour and tangent-space normal, by `tools/kits/pieces.py`; its occlusion, roughness and metal plain.
 - `medieval_red_brick`: Poly Haven [Medieval Red Brick](https://polyhaven.com/a/medieval_red_brick), CC0, 2k. 2.00 m across.
 - `medieval_wall_01`: Poly Haven [Medieval Wall 01](https://polyhaven.com/a/medieval_wall_01), CC0, 2k. 2.00 m across.
-- `oak_bark`: Poly Haven [Bark Willow 02](https://polyhaven.com/a/bark_willow_02), CC0, 2k. 2.15 m across. Furrowed as an old oak's bark is; the lush forest's trunks. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping; maps recompressed.
+- `oak_bark`: Poly Haven [Bark Willow 02](https://polyhaven.com/a/bark_willow_02), CC0, 2k. 2.15 m across. Furrowed as an old oak's bark is; the lush forest's trunks. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping; maps recompressed. `trunk_depth.jpg` is that drawn out to its full range (ImageMagick `-contrast-stretch 1.5%x1.5%`), for the trunks (D309).
 - `packed_earth`: ambientCG [Ground 104](https://ambientcg.com/a/Ground104), CC0, 2k.
 - `patterned_clay_plaster`: Poly Haven [Patterned Clay Plaster](https://polyhaven.com/a/patterned_clay_plaster), CC0, 2k. 2.00 m across.
-- `pine_bark`: Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across.
+- `pine_bark`: Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across. `trunk_depth.jpg`, its depth drawn out to its full range (ImageMagick `-contrast-stretch 1.5%x1.5%`), is what the lush forest's trunks are relief-mapped by (D309).
 - `riet_01`: Poly Haven [Riet 01](https://polyhaven.com/a/riet_01), CC0, 2k. 2.50 m across.
 - `rock_boulder_dry`: Poly Haven [Rock Boulder Dry](https://polyhaven.com/a/rock_boulder_dry), CC0, 2k. 1.80 m across.
 - `rough_wood`: Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across.

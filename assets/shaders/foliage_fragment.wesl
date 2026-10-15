@@ -310,7 +310,12 @@ fn wander(p: vec3<f32>) -> f32 {
 // Moss has a body of its own (D294): cushions a few centimetres across that bulge and catch
 // the light, strands of lighter and darker green in them, darker down between, yellower where
 // it is thin.
-fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f32) {
+//
+// A band of moss round the foot of some trunks (D309), `band` the share of the tree's height
+// it reaches up to, `rise` the point's (0 for none): on all sides, thickest on the damp one,
+// its top edge given out in tongues and streaks up the furrows, as Sons of the Forest's
+// mossy boles are; and the rest of a trunk's moss as before.
+fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f32, band: f32, rise: f32) {
     let up = normalize(world);
     let facing_up = clamp(dot((*input).N, up), 0.0, 1.0);
     let low = 1.0 - smoothstep(0.3, 0.45, sky);
@@ -327,7 +332,10 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     let wet = 0.85 * facing_up * facing_up + 0.8 * low * (0.3 + 0.7 * damp_side) + 0.6 * crevice;
     // On what faces up, a root flare's broad top, in cushions with bark between, not a coat.
     let cushions = mix(1.0, smoothstep(0.35, 0.65, wander(world * 1.6 + 3.0) + 0.4 * (fine - 0.5)), facing_up);
-    let moss = smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share * cushions;
+    let tongues = band * (0.75 + 0.5 * (fine - 0.5) + 0.35 * damp_side + 0.4 * crevice);
+    let banded = smoothstep(0.0, 0.25 * band, tongues - rise) * step(0.0001, band);
+    let moss = max(smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share * cushions,
+        banded * smoothstep(0.15, 0.45, fine + 0.3 * damp_side + 0.3 * crevice) * cushions);
     // Cushions and the strands in them, their height in metres.
     let heap = wander(world * 16.0 + 2.0) * 0.6 + wander(world * 41.0) * 0.4;
     let hx = dpdx(heap * MOSS_CUSHION_M);
@@ -337,7 +345,8 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     let moss_colour = vec3<f32>(0.1, 0.13, 0.04) * (0.7 + 0.5 * wander(world * 6.0))
         * mix(0.45, 1.15, heap) * (0.8 + 0.4 * strands)
         * mix(vec3<f32>(1.0), vec3<f32>(1.25, 1.05, 0.6), thin);
-    colour = mix(colour, moss_colour, moss * 0.9);
+    // A band's moss is thick and lit, so brighter than the thin moss up a trunk's damp side.
+    colour = mix(colour, moss_colour * mix(1.0, MOSS_BAND_LIGHT, banded), moss * 0.9);
     let cushioned = bumped((*input).N, dpdx(world), dpdy(world), hx, hy);
     (*input).N = normalize(mix((*input).N, cushioned, moss));
     (*input).diffuse_occlusion *= vec3<f32>(mix(1.0, mix(0.6, 1.0, heap), moss));
@@ -352,6 +361,49 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
 
 // How high the moss's cushions heap on bark, in metres (D294).
 const MOSS_CUSHION_M: f32 = 0.012;
+
+// A moss band's height in its tag: the share of the tree's height times this (lush.rs,
+// `MOSS_BAND_SCALE`).
+const MOSS_BAND_SCALE: f32 = 1020.0;
+// How much lighter a band's moss is than a trunk's thin moss (D309).
+const MOSS_BAND_LIGHT: f32 = 2.2;
+
+// Bark's furrows and the faces of its plates turned from the sun shadowed by the plates round
+// them in direct light (D309): micro-shadowing, as HDRP does it (after Brinck and Maximov's
+// Uncharted 4 talk, 2016) and as the sunlit floor is (D294), from the bark's occlusion as the
+// cavity and its relief-mapped normal, on the sun's share of its light alone. Without it a
+// sunlit trunk's furrows were lit as its plates and its relief read as a fine print.
+fn bark_micro_shadow(input: ptr<function, PbrInput>, frag: vec4<f32>) {
+    if lights.n_directional_lights == 0u {
+        return;
+    }
+    let L = lights.directional_lights[0].direction_to_light;
+    let world = (*input).world_position;
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), world);
+    let n = (*input).world_normal;
+    let sunlit = fetch_directional_shadow(0u, world, n, view_z, frag.xy) * clamp(dot(n, L) * 3.0, 0.0, 1.0);
+    let ao = (*input).diffuse_occlusion.r;
+    let aperture = 2.0 * ao * ao;
+    let micro = clamp(abs(dot((*input).N, L)) + aperture - 1.0, 0.0, 1.0);
+    let keep = mix(1.0, micro, sunlit * BARK_SUN_SHARE);
+    let c = (*input).material.base_color;
+    (*input).material.base_color = vec4<f32>(c.rgb * keep, c.a);
+    // Out of the sun the furrows see less of the sky than the scan's occlusion says, the plates
+    // standing a few centimetres over them (D309): in the shade, which most bark is in, its
+    // relief read only as a fine print.
+    (*input).diffuse_occlusion *= vec3<f32>(mix(1.0, ao, BARK_CAVITY));
+}
+
+// How much of a sunlit trunk's light is the sun's, so how much of it its furrows lose (D309).
+const BARK_SUN_SHARE: f32 = 0.8;
+// How much more the bark's furrows are occluded from the sky than its scan's occlusion map
+// gives, as a share of it (D309).
+const BARK_CAVITY: f32 = 0.5;
 
 // A surface's normal bent by a height over it, from how the height and the position change
 // across the screen: Mikkelsen's "Bump Mapping Unparametrized Surfaces on the GPU" (2010).
@@ -556,7 +608,9 @@ fn unrepeated(in: VertexOutput, is_front: bool) -> PbrInput {
     mean *= in.color.rgb;
 }
 }
-    return pbr_input_from_standard_material(in, is_front);
+    // The blend, not the plain lookup: returning that left every grown trunk's bark one
+    // picture repeated up it, unflattened (D309).
+    return bark_kept(pa, pb, k, mean);
 }
 
 // One side of a triplanar projection without its repeat showing (D294): hex tiling, as
@@ -691,8 +745,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.base_color.a = min(a / max(sky, 0.05), 1.0);
     }
     if wind.bark > 0.5 {
+        // A grown trunk's band of moss, if it has one, from its mesh's tag (D309): how high
+        // it reaches, as a share of the tree's height, in its second byte; its height there
+        // from how far up the tree it is, which its sway's bend gives as its square.
+        var band = 0.0;
+        var rise = 1.0;
+@if(VERTEX_UVS_B) {
+        band = f32((mesh_functions::get_tag(in.instance_index) >> 8u) & 0xffu) / MOSS_BAND_SCALE;
+        rise = sqrt(max(in.uv_b.x, 0.0));
+}
         // 1 is bark with all its moss; up to 2, bark with less (D235).
-        weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0));
+        weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0), band, rise);
+        bark_micro_shadow(&pbr_input, in.position);
     }
     if wind.bark < 0.5 && (wind.leaf.x > 0.0 || wind.leaf.y > 0.0) {
         // Leaves greyed and darkened toward a forest's, as the pictures are brighter and

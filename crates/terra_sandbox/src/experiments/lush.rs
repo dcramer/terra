@@ -34,7 +34,7 @@ use bevy::{
     camera::visibility::{RenderLayers, VisibilityRange},
     image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     light::NotShadowCaster,
-    mesh::{Indices, PrimitiveTopology},
+    mesh::{Indices, MeshTag, PrimitiveTopology},
     pbr::{ExtendedMaterial, MaterialExtension, ParallaxMappingMethod},
     platform::collections::HashMap,
     prelude::*,
@@ -58,6 +58,7 @@ use terra_world::sky_occlusion::{self, SkyOccluders};
 mod far;
 mod floor;
 mod footing;
+mod overgrowth;
 mod shade;
 mod species;
 mod thicket;
@@ -97,23 +98,33 @@ const CARDS_DROP_M: [f32; 2] = [18.0, 110.0];
 /// Crowns' shadows hand over from their cards to solid lumps between these distances, for
 /// every tree alike (D234).
 const SHADOW_HANDOVER_M: [f32; 2] = [14.0, 26.0];
+/// The level of a grown tree's wood that is its near level's finest limbs alone (`wood`).
+const FINE: usize = 3;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
 const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
-/// The trees' barks (D247): the scan in `materials`, how many metres across its picture is,
-/// its tint, how deep its furrows are relief-mapped, and how much moss it grows. Three for
-/// oaks, two for pines, two for spruces, in that order. Each tint takes its scan to bark's
-/// real albedo, about 0.08 to 0.1 linear on average (sRGB 80 to 90) whatever the scan's own
-/// (D264): tinted as the scans came, under Khronos PBR Neutral (D254) trunks read near black.
+/// The trees' barks (D247): the scan in `materials`, how many metres across its picture is
+/// on a trunk `BARK_FOR_M` round, its tint, how deep its furrows are, in metres, and how much
+/// moss it grows. Three for oaks, two for pines, two for spruces, in that order. Each tint
+/// takes its scan to bark's real albedo, about 0.08 to 0.1 linear on average (sRGB 80 to 90)
+/// whatever the scan's own (D264): tinted as the scans came, under Khronos PBR Neutral (D254)
+/// trunks read near black. A pine's plates are a scan of 2 m laid over 3, so a big bole's
+/// plates are a hand across, as Sons of the Forest's are, not a fine weave (D309); furrows
+/// relief-mapped eight centimetres deep from a height drawn out to its full range
+/// (`trunk_depth.jpg`), where the scans' own spread a few millimetres either side (D309).
 #[allow(clippy::type_complexity)]
 const BARKS: [(&str, f32, (f32, f32, f32), f32, f32); 7] = [
-    ("oak_bark", 2.15, (0.68, 0.66, 0.63), 0.05, 1.0),
-    ("oak_bark", 1.5, (0.62, 0.61, 0.6), 0.06, 1.0),
+    ("oak_bark", 2.15, (0.68, 0.66, 0.63), 0.09, 1.0),
+    ("oak_bark", 1.5, (0.62, 0.61, 0.6), 0.08, 1.0),
     ("bark_brown_02", 1.0, (0.86, 0.82, 0.8), 0.05, 1.0),
-    ("pine_bark", 2.0, (0.84, 0.76, 0.7), 0.05, 0.35),
-    ("pine_bark", 2.0, (0.9, 0.8, 0.72), 0.05, 0.3),
+    ("pine_bark", 3.0, (0.84, 0.76, 0.7), 0.09, 0.35),
+    ("pine_bark", 3.0, (0.9, 0.8, 0.72), 0.09, 0.3),
     ("bark_brown_02", 1.0, (0.78, 0.77, 0.76), 0.04, 0.6),
-    ("pine_bark", 2.0, (0.74, 0.72, 0.7), 0.05, 0.6),
+    ("pine_bark", 2.0, (0.74, 0.72, 0.7), 0.06, 0.6),
 ];
+/// The radius of trunk a bark's metres are for: a stouter trunk's bark is coarser, its plates
+/// and ridges larger, as an older tree's are, to half as large again; a slender one's finer,
+/// to four fifths (D309). One scale on every trunk drew a great oak's furrows as a sapling's.
+const BARK_FOR_M: f32 = 0.5;
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
 /// through many crowns, still comes through in places.
 const SHADOW_LUMP: f32 = 0.6;
@@ -167,6 +178,9 @@ const LEAF: Vec4 = Vec4::new(0.0, 0.0, 1.8, 0.3);
 /// hazel, bramble and holly graded to living leaves' greens (D292); lit through less than a
 /// crown's, as backlit they glowed lime, and as dark inside as a crown.
 const THICKET: Vec4 = Vec4::new(0.0, 0.1, 0.8, 0.25);
+/// Ivy on the trunks (D309): darkened as the middle layer's leaves, lit through less, and
+/// darker where it sees less of the sky, but not as a crown's inside.
+const IVY: Vec4 = Vec4::new(0.0, 0.1, 0.5, 0.55);
 /// How much of the light through a leaf is Bevy's own diffuse transmission (D279): little, as it
 /// takes the open sky through every leaf, unshaded by the crowns, which washed the forest's
 /// middle distance teal; the light through a leaf is the foliage shader's, from the sun and
@@ -180,10 +194,11 @@ const FAR_CROWNS: [Color; 3] = [
     Color::srgb(0.13, 0.21, 0.12),
 ];
 /// Each kind's crown cards tinted, oak, pine and spruce (D247, D248); the conifers' as they
-/// read when the crowns' leaves were greyed and darkened (D292).
+/// read when the crowns' leaves were greyed and darkened (D292), the pine's a little greyer, a
+/// Scots pine's grey-green (D309).
 const CROWN_TINTS: [Vec3; 3] = [
     Vec3::new(0.92, 0.95, 0.85),
-    Vec3::new(1.16, 0.95, 1.05),
+    Vec3::new(1.12, 0.9, 1.02),
     Vec3::new(1.48, 1.36, 0.67),
 ];
 /// The atlas's oakbranch, pine and spruce pictures' average colour where they are leaf,
@@ -571,6 +586,11 @@ struct TreeModel {
     /// Whether its wood is a model rather than grown: then `wood[0]` near the camera and
     /// `wood[1]` beyond, in `bark` laid on from three sides (D264).
     modelled: bool,
+    /// Its near level's finest wood, drawn with it but casting no shadow (`wood`, D309).
+    fine: Option<Handle<Mesh>>,
+    /// The ivies it may wear, each up its trunk to its own height; none where its kind wears
+    /// none (D309).
+    ivy: Vec<Handle<Mesh>>,
 }
 
 /// The kinds of tree the forest grows, each grown once and drawn many times: what it is,
@@ -640,9 +660,9 @@ fn bark_material(
             metallic: 0.0,
             reflectance: 0.3,
             // The furrows read as cut into the trunk, not painted on it.
-            depth_map: Some(map("depth.jpg", false)),
+            depth_map: Some(map("trunk_depth.jpg", false)),
             parallax_depth_scale: relief,
-            parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
+            parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 5 },
             max_parallax_layer_count: 16.0,
             ..default()
         },
@@ -820,7 +840,8 @@ fn plant(
                     &wind,
                     name,
                     Color::srgb(r, g, b),
-                    relief,
+                    // From metres to the picture's repeats, which the relief is measured in.
+                    relief / metres,
                     moss,
                 ),
                 Vec2::splat(metres),
@@ -832,6 +853,33 @@ fn plant(
         Leaf::of(&cards, "pine"),
         Leaf::of(&cards, "spruce"),
     ];
+    // Ivy on the trunks (D309): the forest floor's ivy cards (litter.ron, D275), its own
+    // material, shaded as the middle layer's leaves are but lit through less, as ivy's leaves
+    // are thick, and less dark inside, as it lies on the outside of its trunk.
+    let litter = Cards::read_file(terra_world::cover::litter::FILE);
+    let ivy_leaves = [
+        Leaf::of(&litter, "ivy"),
+        Leaf::of(&litter, "ivydark"),
+        Leaf::of(&litter, "ivydark"),
+    ];
+    let ivy_material = materials.add(Foliage {
+        base: StandardMaterial {
+            base_color_texture: Some(assets.load(litter.atlas.clone())),
+            alpha_mode: AlphaMode::Mask(litter.cut),
+            cull_mode: None,
+            double_sided: false,
+            diffuse_transmission: BEVY_THROUGH,
+            perceptual_roughness: 0.7,
+            reflectance: terra_world::grown::LEAF_REFLECTANCE,
+            ..default()
+        },
+        extension: FoliageExtension {
+            leaf: IVY,
+            relief: terra_world::grown::RELIEF,
+            leaf_normals: Some(terra_world::grown::leaf_normals(&litter, &assets)),
+            ..wind.clone()
+        },
+    });
 
     let trees: Vec<TreeModel> = KINDS
         .iter()
@@ -852,7 +900,8 @@ fn plant(
                 Species::Spruce => (5 + kind % 2, leaf_of[2], CROWN_TINTS[2], &far_crowns[2]),
             };
             let (bark, bark_m) = barks[which].clone();
-            let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height, bark_m));
+            let bark_m = bark_m * (tree.trunk_m / BARK_FOR_M).clamp(0.8, 1.5);
+            let wood = [0, 1, 2, FINE].map(|detail| wood(&tree, detail, height, bark_m));
             // Every level of the crown, and its shadow, from one set of cards (D221).
             let mut cards = species::crown_cards(&mut dice, &tree, height, leaf);
             for card in cards.iter_mut().flatten() {
@@ -866,7 +915,7 @@ fn plant(
             info!(
                 "lush: tree {kind}, {species:?} {form:?}{}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
                 if young { " young" } else { "" },
-                wood[0].triangles(),
+                wood[0].triangles() + wood[FINE].triangles(),
                 wood[1].triangles(),
                 wood[2].triangles(),
                 near.triangles(),
@@ -883,10 +932,37 @@ fn plant(
                 mesh.generate_tangents().expect("the tubes have normals and texture places");
                 meshes.add(mesh)
             });
+            let [near_wood, mid_wood, far_wood, fine] = wood;
+            let wood = [near_wood, mid_wood, far_wood];
             let crown_near = meshes.add(near.mesh());
             shapes.remember(&wood[0], trunk);
             shapes.remember(&crown_near, seen);
+            // Its ivies, each climbing to its own height, from dice of their own so the tree
+            // itself grows as it did (D309).
+            let grows = overgrowth::Overgrowth::of(species);
+            let ivy = if young || grows.ivy <= 0.0 {
+                Vec::new()
+            } else {
+                (0..overgrowth::IVY_VARIANTS)
+                    .map(|variant| {
+                        let mut dice = seed
+                            .derive("ivy")
+                            .index((kind * overgrowth::IVY_VARIANTS + variant) as u64)
+                            .rng();
+                        let (low, high) = grows.ivy_m;
+                        let share = (variant as f32 + dice.unit()) / overgrowth::IVY_VARIANTS as f32;
+                        let top = low + (high - low) * share;
+                        let mut build = Build::default();
+                        for card in overgrowth::ivy(&mut dice, &tree, height, top, &ivy_leaves) {
+                            card.draw(&mut build, 1.0);
+                        }
+                        meshes.add(build.mesh())
+                    })
+                    .collect()
+            };
             TreeModel {
+                fine: Some(fine),
+                ivy,
                 wood,
                 crown_near,
                 crown_far: meshes.add(far.mesh()),
@@ -921,12 +997,17 @@ fn plant(
             &wind,
             name,
             Color::srgb(r, g, b),
-            relief,
+            relief / metres,
             moss,
         );
         if let Some(mut material) = materials.get_mut(&bark) {
             // From metres to the picture's repeats, as the shader projects it.
             material.base.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / metres));
+            // Not relief-mapped: its bark is read seven times a pixel, hex-tiled from three
+            // sides (D294), and a parallax search in each read made a veteran filling the view
+            // a 7.7 ms opaque pass, 16 to 17 ms a frame, on the RTX 3080 (D309). Its own
+            // modelled bulk and the bark's normals carry its relief.
+            material.base.depth_map = None;
         }
         let trunk = |file: String| -> Handle<Mesh> {
             assets.load(
@@ -975,6 +1056,8 @@ fn plant(
             bark,
             far: far_crowns[0].clone(),
             modelled: true,
+            fine: None,
+            ivy: Vec::new(),
         });
     }
     let veterans_kinds = first_veteran..trees.len();
@@ -1064,6 +1147,8 @@ fn plant(
     let mut by_species = [0; 3];
     // The nearest grown tree of each kind to the start, for scripted runs to look at.
     let mut nearest_of = [Vec2::splat(f32::MAX); 3];
+    let mut ivied = [(0, Vec2::splat(f32::MAX)); 3];
+    let mut banded = [(0, Vec2::splat(f32::MAX)); 3];
     let mut feet: HashMap<(i32, i32), Vec<Vec2>> = HashMap::default();
     // The trees as the floor sees them, for what grows under them (D246).
     let mut canopy = Crowns::default();
@@ -1156,6 +1241,23 @@ fn plant(
                 continue;
             }
             by_species[model.species as usize] += 1;
+            // What grows on it, by where it stands (D309).
+            let grows = overgrowth::Overgrowth::of(model.species);
+            let ivy =
+                (!model.ivy.is_empty() && overgrowth::chance(at, 1.0) < grows.ivy).then(|| {
+                    &model.ivy[(overgrowth::chance(at, 2.0) * model.ivy.len() as f32) as usize
+                        % model.ivy.len()]
+                });
+            let moss_tag =
+                if !model.young && !model.modelled && overgrowth::chance(at, 3.0) < grows.moss {
+                    let (low, high) = grows.moss_m;
+                    overgrowth::moss_tag(
+                        low + (high - low) * overgrowth::chance(at, 4.0),
+                        model.height,
+                    )
+                } else {
+                    0
+                };
             let foot = place.translation;
             let crown = place.rotation * (model.crown.0 * place.scale);
             canopy.add(Stand::of(
@@ -1231,6 +1333,32 @@ fn plant(
                         if level == 2 {
                             wood.insert(NotShadowCaster);
                         }
+                        // A band of moss round its foot, if this one has one (D309). Only a
+                        // grown tree's: a young one's tag is its fade (terra_world's parting).
+                        if moss_tag != 0 {
+                            wood.insert(MeshTag::new(moss_tag));
+                        }
+                    }
+                    if let Some(fine) = &model.fine {
+                        let mut twigs = tree.spawn((
+                            Mesh3d(fine.clone()),
+                            MeshMaterial3d(model.bark.clone()),
+                            detail(0, 0, size),
+                            NotShadowCaster,
+                        ));
+                        if moss_tag != 0 {
+                            twigs.insert(MeshTag::new(moss_tag));
+                        }
+                    }
+                    // Ivy up its trunk, if this one wears it, as far as its trunk's second
+                    // level is drawn (D309).
+                    if let Some(ivy) = ivy {
+                        tree.spawn((
+                            Mesh3d(ivy.clone()),
+                            MeshMaterial3d(ivy_material.clone()),
+                            detail(0, 1, size),
+                            NotShadowCaster,
+                        ));
                     }
                     // The crown thins card by card out to CARDS_DROP_M[1], then is two cards
                     // a clump, the same cards at the same size, then lumps (D223).
@@ -1268,6 +1396,17 @@ fn plant(
                     ));
                 });
             planted[young as usize] += 1;
+            // How many wear ivy and a band of moss, and the nearest of each to the start, for
+            // scripted runs to look at (D309).
+            for (worn, tally) in [(ivy.is_some(), &mut ivied), (moss_tag != 0, &mut banded)] {
+                let (count, nearest) = &mut tally[model.species as usize];
+                if worn {
+                    *count += 1;
+                    if at.length() < nearest.length() {
+                        *nearest = at;
+                    }
+                }
+            }
             let of = &mut nearest_of[model.species as usize];
             if !young && at.length() < of.length() {
                 *of = at;
@@ -1301,6 +1440,16 @@ fn plant(
         nearest_of[2].x,
         nearest_of[2].y
     );
+    for (what, tally) in [("ivy", &ivied), ("a band of moss", &banded)] {
+        let [oak, pine, spruce] = tally.map(|(count, at)| {
+            if count == 0 {
+                "0".to_string()
+            } else {
+                format!("{count} (the nearest at {:.1},{:.1})", at.x, at.y)
+            }
+        });
+        info!("lush: {what} on oaks {oak}, pines {pine}, spruces {spruce} (east, south).");
+    }
     info!(
         "lush: {} grown trees and {} young ones planted. The nearest stand at {:.1},{:.1} and \
          {:.1},{:.1} (east, south).",
@@ -1570,23 +1719,37 @@ struct Tree {
 /// trunk and great limbs; rounder near the camera. A conifer's many thin branches are few
 /// sided, and gone at the last level, where its needles hide them. `bark_m` is how much of
 /// a limb one repeat of its bark's picture covers, round it and along it.
+///
+/// The near level's finest wood, a broadleaf's twigs and a conifer's shoots and stubs, is a
+/// level of its own (`FINE`), drawn with the near level but casting no shadow: a shadow cannot
+/// dither, and a canopy's worth of twigs leaving the sun's view at once, where the near level
+/// gives way to the next, popped the light shafts through it (D309). The crown's shadow
+/// stand-in already casts their share.
 fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
     // Near the camera, round enough that no limb shows facets and a trunk's roots each have
     // sides to swell on (D264).
     let (deepest, sides) = match tree.species {
         Species::Oak => (
-            [3, 2, 1][detail],
-            [[36, 12, 7, 4], [14, 6, 4, 3], [7, 4, 3, 3]][detail],
+            [3, 2, 1, 3][detail],
+            [[36, 12, 7, 4], [14, 6, 4, 3], [7, 4, 3, 3], [36, 12, 7, 4]][detail],
         ),
         Species::Pine | Species::Spruce => (
-            [2, 1, 0][detail],
-            [[28, 6, 4, 3], [12, 4, 3, 3], [7, 3, 3, 3]][detail],
+            [2, 1, 0, 2][detail],
+            [[28, 6, 4, 3], [12, 4, 3, 3], [7, 3, 3, 3], [28, 6, 4, 3]][detail],
         ),
+    };
+    let finest = if detail == 0 || detail == FINE {
+        deepest
+    } else {
+        u32::MAX
     };
     let mut build = Build::default();
     let mut dead = Vec::new();
     for (i, limb) in tree.limbs.iter().enumerate() {
-        if limb.depth > deepest {
+        if limb.depth > deepest
+            || (detail == 0 && limb.depth == finest)
+            || (detail == FINE && limb.depth != finest)
+        {
             continue;
         }
         let from = build.positions.len();
@@ -1607,21 +1770,24 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
     // (D276). Carried in its vertices' colour, which tints the scan.
     if tree.species == Species::Pine {
         let (from, orange) = (tree.plates.x, tree.plates.y);
-        let plates = Vec3::ONE + (Vec3::new(1.12, 1.0, 0.86) - Vec3::ONE) * orange;
+        let plates = Vec3::ONE + (Vec3::new(1.2, 0.98, 0.78) - Vec3::ONE) * orange;
         for (at, colour) in build.positions.iter().zip(&mut build.colours) {
             let up = smoothstep(from, from + 0.35, at[1] / height);
-            let shade = Vec3::new(0.7, 0.72, 0.8).lerp(plates, up);
+            // Low on the bole the scan's orange taken to a grey-brown, its plates' red gone
+            // (D309): at (0.7, 0.72, 0.8) the whole stand read as redwoods.
+            let shade = Vec3::new(0.52, 0.72, 1.2).lerp(plates, up);
             colour[0] = shade.x;
             colour[1] = shade.y;
             colour[2] = shade.z;
         }
     }
-    // Dead wood weathered silver-grey.
+    // Dead wood weathered silver-grey, lighter than the living bark round it, so a pine's
+    // stubs show against its bole (D309).
     for range in dead {
         for colour in &mut build.colours[range] {
-            colour[0] = 0.74;
-            colour[1] = 0.76;
-            colour[2] = 0.84;
+            colour[0] = 1.15;
+            colour[1] = 1.18;
+            colour[2] = 1.28;
         }
     }
     build
@@ -1915,7 +2081,10 @@ fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
     };
     for tip in cards {
         let keep = 2.min(tip.len());
-        let grow = libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6) * 0.8;
+        // Two cards for all of a clump's, a little smaller than they cover together, as the
+        // clumps overlap: grown as far as the levels grow theirs, a crown of more clumps closed
+        // its shadow over the floor's flecks (D309).
+        let grow = libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6) * 0.7;
         for card in &tip[..keep] {
             card.draw(&mut build, grow);
         }
