@@ -132,6 +132,18 @@ A castle edit still waits about 300 ms on a worker before it is drawn: a row of 
 
 **A stone house going up** (`going-up`, the 5090, load 10): 122 changes, each on screen a median 17.3 ms after it was made, 21.4 ms at the 90th percentile and 240 ms at worst; the slowest section a median 11.1 ms on its worker. Frames 4.13 / 9.03 / 12.12 ms, no hitch, the game's own work 3.4 ms.
 
+**Later the same day** (D281's per-kit laying, faces keyed by Zobrist hashes, roofs worked out once a job), on a machine at load 32 to 90 throughout, so wall times move by half either way and the castle's are CPU time on one thread, back to back with the commit before:
+
+| | Before | After |
+|---|---|---|
+| One cube out of the castle, laid again | 120 to 205 ms of CPU | 60 to 115 ms: only log kits along the rows, a roof kit only near a roof, each roof worked out once, layouts gathering only their own kinds' cubes |
+| `going-up`, a section drawn again a part at a time in the game | 5.7 ms (cut 0.23, keyed 0.96, drawn 3.97, meshes 0.97), load 44 | 4.9 ms (0.22, 0.85, 3.26, 0.99), load 32 to 45 |
+| `going-up`, an edit on screen from being made (median) | 39 ms | 30 ms; about two frames of it are the pipeline (laid whole, then cut and drawn, then put on screen) |
+
+The 2 ms bar is not met: what is left is spread over the parts' block surfaces (their cubes' grid and faces, a third of the drawing), their pieces put together, the parts' keys and the meshes made.
+
+**The street walk on the same day** (`town300`, after D278's packing, Chrome trace, the 5090, load 34 to 54): the main schedule 12.5 ms a frame, `PostUpdate` 6.6 of it; 5,750 meshes and 16,384 entities; no one system over 1.3 ms, the costliest being the engine's per-entity work (CPU-culled visibility 0.9, the fixed schedule 1.2 with the walker's `walk` 0.5, UI layout 1.0, transforms, bounds, material specialisation and instance buffers a few tenths each), and on the render thread `render_system` 5.1 ms, 3.3 of it submitting. Bringing it under 6 ms is fewer entities and meshes for bases not being built, which D278's merging owns.
+
 **The street walk, system by system** (`town300`, Bevy's Chrome trace, the 5090, load 27 to 42): the game's update 14.4 ms a frame, the render thread's 12.9 ms, pipelined. What the main schedule spends a frame, the costliest first:
 
 | System | ms a frame | Worst |
