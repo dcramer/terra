@@ -89,13 +89,13 @@ fn look(burning: Burning) -> (Vec4, Vec4) {
     match burning {
         // Wood smoke from a hearth: blue-grey, thin, rising slowly and spreading wide.
         Burning::Hearth => (
-            Vec4::new(14.0, 0.9, 0.7, 4.5),
-            Vec4::new(0.42, 0.43, 0.46, 0.26),
+            Vec4::new(16.0, 1.0, 0.9, 5.5),
+            Vec4::new(0.62, 0.63, 0.66, 0.42),
         ),
         // A forge's coal and charcoal: darker, thicker, quicker.
         Burning::Forge => (
-            Vec4::new(10.0, 1.4, 0.8, 3.5),
-            Vec4::new(0.24, 0.23, 0.23, 0.4),
+            Vec4::new(11.0, 1.5, 1.0, 4.5),
+            Vec4::new(0.36, 0.35, 0.35, 0.55),
         ),
     }
 }
@@ -166,7 +166,7 @@ fn draw(
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: 1.0,
                 reflectance: 0.0,
-                diffuse_transmission: 0.5,
+                diffuse_transmission: 0.2,
                 ..default()
             },
             extension: SmokeExtension {

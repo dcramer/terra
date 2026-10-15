@@ -130,8 +130,8 @@ pub struct Firelight {
 /// cost the GPU (docs/demos.md's budget: 16 near).
 const LIT_HOMES: usize = 16;
 /// How bright a hearth's fire is within, in lumens, and how far it reaches.
-const FIRELIGHT_LUMENS: f32 = 60_000.0;
-const FIRELIGHT_M: f32 = 4.5;
+const FIRELIGHT_LUMENS: f32 = 400_000.0;
+const FIRELIGHT_M: f32 = 6.0;
 
 /// A forge's fire, whose smoke rises from it: the thing it is in the town.
 #[derive(Component)]
@@ -332,6 +332,79 @@ fn report(
     );
 }
 
+/// What grows in and round a town, as the world's ground cover asks it (`terra_world::cover`):
+/// its streets and square trodden to bare earth, as are the ways round its stalls and the
+/// thresholds of its doors; its yards worn thin by hens and feet; grass elsewhere as the
+/// planet grows it.
+struct TownCover {
+    middle: Vec3,
+    east: Vec3,
+    south: Vec3,
+    /// The town's middle in metres east and south of the start, for what it reaches.
+    at: Vec2,
+    square: Vec<Vec2>,
+    streets: Vec<(Vec<Vec2>, f32)>,
+    yards: Vec<[Vec2; 4]>,
+    doors: Vec<Vec2>,
+}
+
+/// How far round its middle the town's cover is its own.
+const COVER_REACH_M: f32 = 170.0;
+
+impl terra_world::cover::CoverSource for TownCover {
+    fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> terra_world::cover::Growing {
+        let offset = ground - self.middle;
+        let p = Vec2::new(offset.dot(self.east), offset.dot(self.south));
+        let wild = planet.cover(ground, ground.normalize());
+        let mut growing = terra_world::cover::Growing {
+            grass: wild.grass,
+            lush: wild.lush,
+            ..default()
+        };
+        // How far into a way a point is, by the nearest street or the square, a soft edge
+        // where the grass comes back.
+        let street = self
+            .streets
+            .iter()
+            .map(|(points, wide)| {
+                points
+                    .windows(2)
+                    .map(|pair| terra_build::town::point_segment(p, pair[0], pair[1]) - wide * 0.5)
+                    .fold(f32::MAX, f32::min)
+            })
+            .fold(f32::MAX, f32::min);
+        let square = if terra_build::town::inside(p, &self.square) {
+            -1.0
+        } else {
+            terra_build::town::segment_polygon(p, p, &self.square)
+        };
+        let door = self
+            .doors
+            .iter()
+            .map(|d| d.distance(p) - 1.2)
+            .fold(f32::MAX, f32::min);
+        let worn = street.min(square).min(door);
+        if worn < 0.0 {
+            growing.grass = 0.0;
+            growing.path = true;
+        } else if worn < 1.5 {
+            growing.grass *= worn / 1.5 * 0.7;
+        }
+        if self
+            .yards
+            .iter()
+            .any(|yard| terra_build::town::inside(p, yard))
+        {
+            growing.grass *= 0.35;
+        }
+        growing
+    }
+
+    fn reaches(&self, middle: Vec2, half: f32) -> bool {
+        middle.distance(self.at) < COVER_REACH_M + half
+    }
+}
+
 /// The catalogue item each thing in a town is drawn as, if it is drawn.
 fn item_of(kind: ThingKind) -> Option<&'static str> {
     match kind {
@@ -383,7 +456,9 @@ fn lay(
     mut meshes: ResMut<Assets<Mesh>>,
     mut clear: MessageWriter<ClearAround>,
     mut warp: ResMut<super::WarpTo>,
+    cover: Option<Res<terra_world::cover::CoverRules>>,
 ) {
+    let has_cover = cover.is_some();
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
@@ -502,7 +577,7 @@ fn lay(
         clear.write(ClearAround(door, 9.0));
         // Its hearth's light within, a little inside its door, at a fire's height.
         if town.homes.contains(&index) {
-            let within = frame.transform_point(Vec3::new(0.0, 0.9, -1.8));
+            let within = frame.transform_point(Vec3::new(0.0, 1.0, -1.1));
             commands.spawn((
                 Name::new(format!("Firelight of {}", building.name)),
                 Firelight { home: index },
@@ -654,6 +729,16 @@ fn lay(
         -along * 4.0,
         1.4,
     );
+    // A hen yard, and the smithy, from a few metres off.
+    for (name, kind, off) in [
+        ("yard", ThingKind::Yard, -7.0),
+        ("forge", ThingKind::Forge, 6.0),
+    ] {
+        if let Some(thing) = town.things.iter().find(|t| t.kind == kind) {
+            let eye = thing.place(Vec2::new(off * 0.5, off));
+            vantage(name, eye, 1.7, thing.at, 0.6);
+        }
+    }
     vantage(
         "above",
         along * low_a * 1.6 + across * 30.0,
@@ -663,15 +748,17 @@ fn lay(
     );
     if let Some(street) = town.streets.first() {
         let n = street.points.len();
-        vantage(
-            "street",
-            street.points[n * 2 / 3],
-            1.7,
-            street.points[1],
-            2.0,
+        // Down the street toward the square, from a little off its middle.
+        let (eye, toward) = (street.points[n / 2], street.points[n / 5]);
+        let aside = (toward - eye).normalize_or_zero().perp() * 1.2;
+        vantage("street", eye + aside, 1.7, toward, 1.8);
+        // Where to stand to walk in, as --at and --face take it.
+        let (from, toward) = (start.local(at(street.points[n / 2])), start.local(middle));
+        info!(
+            "Town arrival: --at {:.0},{:.0} --face {:.0},{:.0}",
+            from.x, from.z, toward.x, toward.z
         );
         if wanted.arrive {
-            let (from, toward) = (start.local(at(street.points[n / 2])), start.local(middle));
             warp.0 = Some(((from.x, from.z), Some((toward.x, toward.z))));
         }
         // A walk for a film: in along the main street from halfway out, across the square
@@ -693,6 +780,32 @@ fn lay(
         info!("Town route: {}", route.join(" "));
     }
 
+    // Its ground cover, unless the world grows its own.
+    if !has_cover {
+        let at2 = start.local(middle);
+        commands.insert_resource(terra_world::cover::CoverRules {
+            source: std::sync::Arc::new(TownCover {
+                middle,
+                east,
+                south,
+                at: Vec2::new(at2.x, at2.z),
+                square: town.square.outline.clone(),
+                streets: town
+                    .streets
+                    .iter()
+                    .map(|s| (s.points.clone(), s.wide))
+                    .collect(),
+                yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
+                doors: town
+                    .things
+                    .iter()
+                    .filter(|t| t.kind == ThingKind::Door)
+                    .map(|t| t.place(Vec2::new(0.0, 0.8)))
+                    .collect(),
+            }),
+            seed: planet.seed().derive("town cover"),
+        });
+    }
     let life = Life::new(town, plan, seed, DAY_SECONDS / 24.0);
     let local = start.local(middle);
     info!(
