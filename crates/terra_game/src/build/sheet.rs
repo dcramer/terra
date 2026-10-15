@@ -11,6 +11,10 @@
 //! Any model given with `--model` stands in a row after the sheet's, on the ground and lit
 //! as the game is, so a piece or an experiment is judged beside what is built.
 //!
+//! A material's preview (D349), every role and shape of its pattern in one place, is laid
+//! only when asked for by name, `--sheet-rows "<name>: preview"`, alone and west of the
+//! start, where `tools/kits/preview.ts` pictures it.
+//!
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
@@ -20,7 +24,7 @@ use crate::shell::Options;
 use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
-use terra_build::kit::{Pattern, Profile};
+use terra_build::kit::{Kit, Pattern, Profile};
 use terra_build::ops::Op;
 use terra_build::roofer::Style;
 use terra_build::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
@@ -938,6 +942,178 @@ fn gable_end(walls: Kind, roof: Kind) -> Vec<BuildOp> {
     with_roof(ops, &[([0, 0], [9, 7], Style::Gable, true)], roof)
 }
 
+/// Where a material's preview is laid, in metres east and south of the start: west of the
+/// sheet's rows, the same for every material, so the views `tools/kits/preview.ts` takes of
+/// it are fixed (its `ORIGIN`).
+const PREVIEW: [f32; 2] = [-40.0, 0.0];
+/// How far east of a wall material's preview house its platform stands, in metres (the
+/// views in `tools/kits/preview.ts` look at it there).
+const PREVIEW_ASIDE_M: f32 = 8.5;
+
+/// A material's preview (D349): every role and shape of its pattern in one place, as bases
+/// of cubes, what is then done to them, and how far east of the preview each stands. A wall
+/// material's house, with a doorway, windows, corners, its foot on the ground, a gable and a
+/// floor, a hole carved in its front and its front's east end damaged; beside it a platform
+/// reached by a flight of steps, its top, a slab over a wall with a window, and a wall
+/// part-built. A roof covering's L of stone walls under a hip with a gabled wing and a
+/// valley where they meet, its east end damaged and its wing's end not yet all laid.
+fn preview(
+    kit: &Kit,
+    stone: Kind,
+    roof: Kind,
+    rules: &terra_build::Rules,
+) -> Vec<(Vec<BuildOp>, Vec<Op>, f32)> {
+    // Only the acts the rules let through, as a player's would be, each tried in turn: a
+    // course of logs comes out of every cube it spans at once, so a cube may be empty before
+    // its count of steps is up.
+    wanted_preview(kit, stone, roof)
+        .into_iter()
+        .map(|(ops, acts, aside)| {
+            let mut base = Base::default();
+            for &op in &ops {
+                base.apply(op);
+            }
+            let cx = terra_build::ops::Context::free(rules);
+            let held = acts
+                .into_iter()
+                .filter(|act| base.act(act, &cx).is_ok())
+                .collect();
+            (ops, held, aside)
+        })
+        .collect()
+}
+
+/// What a material's preview would do to each base, before the rules have their say.
+fn wanted_preview(kit: &Kit, stone: Kind, roof: Kind) -> Vec<(Vec<BuildOp>, Vec<Op>, f32)> {
+    let kind = kit.kind();
+    let steps = usize::from(kit.cost.steps.max(1));
+    let damage = |cubes: Vec<[i32; 3]>, share: f32| Op::Damage {
+        cubes,
+        amount: (f32::from(kit.toughness.health) * share) as u16,
+    };
+    // Steps taken out of cubes, the highest first, a cube at a time.
+    let empty = |mut cubes: Vec<[i32; 3]>, times: usize| -> Vec<Op> {
+        cubes.sort_by_key(|at| -at[1]);
+        (0..times)
+            .flat_map(|_| cubes.clone())
+            .map(|at| Op::Empty { cubes: vec![at] })
+            .collect()
+    };
+    if kind.is_roof() {
+        let (rooms, parts) = terra_build::roof_plan("L", Style::Hip, Style::Gable);
+        let mut ops: Vec<BuildOp> = rooms
+            .iter()
+            .map(|&(min, max)| BuildOp::AddRoom {
+                min,
+                max,
+                kind: stone,
+            })
+            .collect();
+        ops.extend([4, 5].map(|x| wall([x, 0, 0], Panel::Door, stone)));
+        let ops = with_roof(ops, &parts, kind);
+        let mut base = Base::default();
+        for &op in &ops {
+            base.apply(op);
+        }
+        let covering: Vec<[i32; 3]> = base
+            .cubes()
+            .filter(|(_, cube)| cube.kind == kind)
+            .map(|(at, _)| at.to_array())
+            .collect();
+        let east = covering.iter().map(|at| at[0]).max().unwrap_or(0);
+        let south = covering.iter().map(|at| at[2]).max().unwrap_or(0);
+        let mut acts = vec![damage(
+            covering
+                .iter()
+                .copied()
+                .filter(|at| at[0] >= east - 1)
+                .collect(),
+            0.6,
+        )];
+        // The wing's end at its gable: its last two rows half laid, its last none.
+        acts.extend(empty(
+            covering
+                .iter()
+                .copied()
+                .filter(|at| at[2] >= south - 1)
+                .collect(),
+            steps / 2,
+        ));
+        acts.extend(empty(
+            covering
+                .iter()
+                .copied()
+                .filter(|at| at[2] == south)
+                .collect(),
+            steps - steps / 2,
+        ));
+        return vec![(ops, acts, 0.0)];
+    }
+    // The house's front, its south wall, with the doorway and a window in it.
+    let front = |xs: [i32; 2], ys: [i32; 2]| -> Vec<[i32; 3]> {
+        (xs[0]..=xs[1])
+            .flat_map(|x| (ys[0]..=ys[1]).map(move |y| [x, y, 7]))
+            .collect()
+    };
+    let mut cut = vec![Op::Carve {
+        cubes: front([7, 8], [2, 3]),
+    }];
+    cut.extend(empty(front([7, 8], [2, 3]), steps));
+    cut.push(damage(front([8, 9], [0, 1]), 0.5));
+    cut.push(damage(front([9, 9], [2, 2]), 0.8));
+    // The platform, and before it, beside its steps, a low wall going up: its top course not
+    // yet in, the one under it half in.
+    let mut platform = keen(kind, kit.pattern == Pattern::Masonry);
+    platform.push(BuildOp::Fill {
+        min: [0, 0, 7],
+        max: [3, 3, 7],
+        cube: Some(Cube::new(kind, Fill::Solid)),
+    });
+    let top = |y: i32| (0..=3).map(|x| [x, y, 7]).collect::<Vec<_>>();
+    let mut going_up = empty(top(3), steps);
+    going_up.extend(empty(top(2), steps.div_ceil(2)));
+    vec![
+        (house(kind, roof), cut, 0.0),
+        (platform, going_up, PREVIEW_ASIDE_M),
+    ]
+}
+
+/// Where a base laid at a place on the sheet stands: on the ground there, the yard being
+/// round, lifted onto its floor if it has one, else on footings in the ground.
+fn base_frame(at: Vec3, site: &Site, planet: &Planet, ops: &[BuildOp]) -> Transform {
+    let point = site.frame.transform_point(at);
+    let ground = point - point.normalize() * planet.distance(point);
+    let mut base = Base::default();
+    for &op in ops {
+        base.apply(op);
+    }
+    let frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
+    if base.floors().next().is_some() {
+        lifted(frame, &base, planet)
+    } else {
+        frame
+    }
+}
+
+/// Does `acts` to a laid base, as a player's operations would, and lights what is marked to
+/// be carved out and not yet begun, or changing and not yet in, as the next work.
+fn act(build: &mut Build, acts: &[Op], rules: &terra_build::Rules, name: &str) {
+    let cx = terra_build::ops::Context::free(rules);
+    if let Err(why) = build.base.act_all(acts, &cx) {
+        warn!("Kit sheet: {name}: {why:?}");
+    }
+    build.next = build
+        .base
+        .cubes()
+        .filter(|(_, cube)| {
+            (cube.pending == terra_build::Pending::Carve && cube.is_built())
+                || (cube.pending.changing() && !cube.is_built())
+        })
+        .map(|(at, _)| at.to_array())
+        .collect();
+    build.revision += 1;
+}
+
 /// Where a gable end row's west gable is seen from straight on, and what is looked at, in
 /// the house's own metres: eight metres out, level with the middle of the gable.
 const GABLE_END_VIEW: [Vec3; 2] = [Vec3::new(-8.0, 3.6, 2.0), Vec3::new(0.0, 3.6, 2.0)];
@@ -1139,7 +1315,11 @@ pub(super) fn lay(
         .map(|stone| acted_rows(laying, stone, &roof))
         .unwrap_or_default();
     let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
+    let wanted = &options.sheet_rows;
     for (index, row) in acted.iter().enumerate() {
+        if !wanted.is_empty() && !wanted.iter().any(|text| row.name.contains(text.as_str())) {
+            continue;
+        }
         let north = -FIRST_ROW_M - ROW_M * (count + index) as f32;
         let row_frame = frame_at(
             {
@@ -1152,40 +1332,14 @@ pub(super) fn lay(
             planet.apply(&slope(&row_frame));
         }
         for (column, acts) in row.columns.iter().enumerate() {
-            let east = STATE_M * column as f32;
-            let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
-            let ground = point - point.normalize() * planet.distance(point);
-            let mut base = Base::default();
-            for &op in &row.ops {
-                base.apply(op);
-            }
-            let frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
-            // Walls with no floor stand on footings in the ground instead.
-            let frame = if base.floors().next().is_some() {
-                lifted(frame, &base, &planet)
-            } else {
-                frame
-            };
             let label = format!("Kit sheet: {}, {column}", row.name);
+            let at = Vec3::new(STATE_M * column as f32, 0.0, north);
+            let frame = base_frame(at, &site, &planet, &row.ops);
             let mut build = Build::new(&mut commands, &look, frame, &label);
             build.kits = Some(kits.clone());
             build.by_cubes = true;
             build.replace_with(&row.ops, &mut commands, &planet, &mut meshes);
-            let cx = terra_build::ops::Context::free(&rules);
-            if let Err(why) = build.base.act_all(acts, &cx) {
-                warn!("Kit sheet: {}: {why:?}", row.name);
-            }
-            // What is marked to be carved out and not yet begun is lit, as the next work.
-            build.next = build
-                .base
-                .cubes()
-                .filter(|(_, cube)| {
-                    (cube.pending == terra_build::Pending::Carve && cube.is_built())
-                        || (cube.pending.changing() && !cube.is_built())
-                })
-                .map(|(at, _)| at.to_array())
-                .collect();
-            build.revision += 1;
+            act(&mut build, acts, &rules, row.name);
             commands.spawn((Name::new(label), Built(build)));
         }
         let (_, height) = ground_at(&planet, STATE_M, north);
@@ -1194,6 +1348,39 @@ pub(super) fn lay(
         info!(
             "Kit sheet: {}: --vantage {},{},{},{},{},{}",
             row.name, eye.x, eye.y, eye.z, at.x, at.y, at.z
+        );
+    }
+    // A material's preview (D349), only when asked for by name (`<name>: preview`), laid
+    // alone where `tools/kits/preview.ts` looks; the first asked for, as all are laid in one
+    // place.
+    let asked = |name: &str| {
+        let row = format!("{name}: preview");
+        wanted
+            .iter()
+            .any(|text| text.contains("preview") && row.contains(text.as_str()))
+    };
+    let previewed = kits.0.iter().find_map(|kit| {
+        let name = names.get(&kit.kind())?;
+        asked(name).then_some((name.clone(), kit))
+    });
+    if let (Some((name, kit)), Some(stone)) = (previewed, stone) {
+        for (part, (ops, acts, aside)) in preview(kit, stone, roof(kit.kind()), &rules)
+            .into_iter()
+            .enumerate()
+        {
+            let label = format!("Kit sheet: {name}: preview, {part}");
+            let at = Vec3::new(PREVIEW[0] + aside, 0.0, PREVIEW[1]);
+            let frame = base_frame(at, &site, &planet, &ops);
+            let mut build = Build::new(&mut commands, &look, frame, &label);
+            build.kits = Some(kits.clone());
+            build.by_cubes = true;
+            build.replace_with(&ops, &mut commands, &planet, &mut meshes);
+            act(&mut build, &acts, &rules, &label);
+            commands.spawn((Name::new(label), Built(build)));
+        }
+        info!(
+            "Kit sheet: {name}: preview at {},{} (tools/kits/preview.ts)",
+            PREVIEW[0], PREVIEW[1]
         );
     }
     let count = count + acted.len();
@@ -1218,5 +1405,54 @@ pub(super) fn lay(
             height + 1.0,
             north
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each base of a material's preview, laid and acted on: what a refused act leaves, as
+    /// a refusal undoes every act and the sheet would show the material only whole.
+    fn previewed(kit: &Kit, stone: Kind, roof: Kind, rules: &terra_build::Rules) -> Vec<Base> {
+        preview(kit, stone, roof, rules)
+            .iter()
+            .map(|(ops, acts, _)| {
+                let mut base = Base::default();
+                for &op in ops {
+                    base.apply(op);
+                }
+                if let Err(why) = base.act_all(acts, &terra_build::ops::Context::free(rules)) {
+                    panic!("material {}: {why:?}", kit.id);
+                }
+                base
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_materials_preview_is_carved_damaged_and_part_built() {
+        let kits = read_kits().expect("the shipped materials");
+        let stone = kits
+            .footing()
+            .map(|kit| kit.kind())
+            .expect("a footing kind");
+        let rules = kits.rules();
+        for kit in &kits.0 {
+            let roof = kits.roof_for(kit.kind()).unwrap_or(Kind::FIRST_ROOF);
+            let bases = previewed(kit, stone, roof, &rules);
+            assert!(
+                bases.iter().any(|base| base.damaged().next().is_some()),
+                "material {}: nothing damaged",
+                kit.id
+            );
+            assert!(
+                bases.iter().any(|base| base
+                    .cubes()
+                    .any(|(_, cube)| cube.kind == kit.kind() && !cube.is_built())),
+                "material {}: nothing part-built",
+                kit.id
+            );
+        }
     }
 }

@@ -7,9 +7,10 @@
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { release, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { command as previewCommand } from "./preview.ts";
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 const ASSETS = join(ROOT, "assets");
@@ -239,6 +240,7 @@ async function main() {
       tile: { type: "string" },
       "invert-height": { type: "boolean", default: false },
       "normalise-height": { type: "boolean", default: false },
+      preview: { type: "boolean" },
       "no-check": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
     },
@@ -262,6 +264,8 @@ async function main() {
                      and L long; its texture once round it by --metres along
   --invert-height    flip its height map, where the checker finds it inverted (joints bright)
   --normalise-height stretch its height map to the full range, where the checker finds it weak
+  --preview          make its preview sheet (tools/kits/preview.ts) even with no GPU here;
+                     made by default where a GPU draws it, else its command printed
   --no-check        skip the kit checker (for many at once; run cargo xtask kits after)`);
     process.exit(values.help ? 0 : 2);
   }
@@ -327,6 +331,22 @@ async function main() {
     }
     console.log(`${name}: material ${id}, ${values.pattern} pattern${under ? `, over ${under}` : ""}, ${fmt(metres)} m a copy, in ${((Date.now() - started) / 1000).toFixed(0)} s. Files: assets/data/kits/${name}.ron, assets/data/packs/${name}.ron, assets/materials/${name}/.`);
   });
+  // Its preview sheet (D349), for a developer to look over once: made here where a GPU
+  // draws it, else the command that makes it.
+  if (values.preview ?? drawsOnGpu()) {
+    execFileSync("node", [join(ROOT, "tools/kits/preview.ts"), name], { stdio: "inherit" });
+  } else {
+    console.log(`${name}: its preview sheet, every role and shape of its pattern at 10 m and 2 m, noon and evening: ${previewCommand(name)} (shots/preview/${name}.jpg)`);
+  }
+}
+
+/** Whether this machine draws the sandbox on a GPU: a Mac or Windows, or Linux with a GPU
+ * device and not under WSL, whose Linux builds draw on the CPU (slowly: the preview's
+ * command is printed there instead). */
+export function drawsOnGpu(): boolean {
+  if (process.platform === "darwin" || process.platform === "win32") return true;
+  const wsl = /microsoft/i.test(release()) || existsSync("/proc/sys/fs/binfmt_misc/WSLInterop");
+  return process.platform === "linux" && !wsl && existsSync("/dev/dri");
 }
 
 if (import.meta.main) {
