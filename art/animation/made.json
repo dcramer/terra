@@ -55,18 +55,20 @@
     "speed": 0,
     "seconds": 8,
     "seed": 2,
-    "still": true
+    "still": true,
+    "take": 2
   },
   "Chop_Loop": {
-    "prompt": "A person repeatedly chops wood with an axe held in both hands, swinging it from overhead down to the ground in front of them.",
+    "prompt": "A person repeatedly chops wood with an axe held in both hands.",
     "speed": 0,
     "seconds": 10,
-    "seed": 1,
+    "seed": 3,
     "still": true,
     "loop": [
       2.5,
       6
     ],
-    "busy": true
+    "busy": true,
+    "samples": 4
   }
 }

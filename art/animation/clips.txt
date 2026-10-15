@@ -29,3 +29,4 @@ Sword_Idle
 Sword_Attack
 Talk_Loop
 Hammer_Loop
+Lean_Loop
