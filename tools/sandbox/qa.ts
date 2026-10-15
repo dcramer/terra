@@ -55,6 +55,9 @@ const scenarios = readdirSync(SCENARIOS)
   .sort();
 const load = async (name: string) => (await import(pathToFileURL(resolve(SCENARIOS, `${name}.ts`)).href)).default as Scenario;
 const sets = readSets();
+/// The clips in the order a building goes up, and any other scenario after them.
+const ORDER = ["build-walls", "build-openings", "build-roof", "build-swap", "build-carve", "build-storey", "build-deck", "destroy"];
+const rank = (each: string) => (ORDER.includes(each) ? ORDER.indexOf(each) : ORDER.length);
 
 if (args.includes("--list")) {
   for (const name of scenarios) {
@@ -71,9 +74,12 @@ if (args.includes("--index")) {
   process.exit(0);
 }
 
-const name = args.find((arg, i) => !arg.startsWith("--") && !args[i - 1]?.startsWith("--"));
-if (!name || !scenarios.includes(name)) {
-  console.error(`usage: cargo xtask qa <scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace]\nscenarios: ${scenarios.join(", ")}`);
+const asked = args.find((arg, i) => !arg.startsWith("--") && !args[i - 1]?.startsWith("--"));
+const clips: string[] = [];
+for (const each of scenarios) if ((await load(each)).clip) clips.push(each);
+clips.sort((a, b) => rank(a) - rank(b));
+if (!asked || (asked !== "clips" && !scenarios.includes(asked))) {
+  console.error(`usage: cargo xtask qa clips|<scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace]\nclips: ${clips.join(", ")}\nothers: ${scenarios.filter((each) => !clips.includes(each)).join(", ")}`);
   process.exit(1);
 }
 const wanted = option("--set") ?? (sets.find((set) => set.name === "logs") ?? sets[0]).name;
@@ -83,18 +89,24 @@ if (!chosen.length) {
   process.exit(1);
 }
 const part = option("--part");
-const scenario = await load(name);
-const folder = resolve(OUT, name);
-mkdirSync(folder, { recursive: true });
+let name = "";
+let scenario: Scenario;
+let folder = "";
 
 if (!buildOffscreen()) process.exit(1);
 let failed = false;
 for (const set of chosen) {
-  try {
-    await film(set);
-  } catch (error) {
-    console.log(`FAIL  ${name} in ${set.name}: ${(error as Error).message}`);
-    failed = true;
+  for (const each of asked === "clips" ? clips : [asked]) {
+    name = each;
+    scenario = await load(each);
+    folder = resolve(OUT, each);
+    mkdirSync(folder, { recursive: true });
+    try {
+      await film(set);
+    } catch (error) {
+      console.log(`FAIL  ${name} in ${set.name}: ${(error as Error).message}`);
+      failed = true;
+    }
   }
 }
 index();
@@ -119,7 +131,8 @@ async function film(set: KitSet) {
   if (s.clipping.length) console.log(`  the camera is within 40 cm of a solid at frames ${spans(s.clipping)}`);
   const stage = part ? s.stages.find((each) => each.name === part) : undefined;
   if (part && !stage) throw new Error(`no stage ${part}; ${name} has ${s.stages.map((each) => each.name).join(", ")}`);
-  const [from, to] = stage ? [stage.from, stage.to] : [1, last];
+  // From the first stage: what a clip does before it, putting its building up, is not filmed.
+  const [from, to] = stage ? [stage.from, stage.to] : [s.stages[0]?.from ?? 1, last];
   const callsFile = resolve(folder, `${set.name}.calls.jsonl`);
   writeFileSync(callsFile, calls.map(({ frame, method, params }) => JSON.stringify({ frame, method, params })).join("\n") + "\n");
   const label = part ? `${set.name}-${part}` : set.name;
@@ -362,24 +375,27 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
 /// linking to the video, and how its frames held, at a glance.
 function index() {
   mkdirSync(OUT, { recursive: true });
-  const names = readdirSync(OUT).filter((each) => statSync(resolve(OUT, each)).isDirectory()).sort();
-  // The baseline's sets, and any frozen one filmed by name.
+  const made = readdirSync(OUT).filter((each) => statSync(resolve(OUT, each)).isDirectory() && scenarios.includes(each));
+  // The clips first, in the order a building goes up, then any other scenario filmed.
+  const names = made.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  // A row a set: the baseline's, and any frozen one filmed by name.
   const filmed = (set: string) => names.some((scenario) => existsSync(resolve(OUT, scenario, `${set}.json`)));
-  const columns = sets.filter((set) => inBaseline(set) || filmed(set.name)).map((set) => set.name);
+  const rows = sets.filter((set) => inBaseline(set) || filmed(set.name)).map((set) => set.name);
   const cell = (scenario: string, set: string) => {
     const json = resolve(OUT, scenario, `${set}.json`);
     if (!existsSync(json)) return "<td class=none>not filmed</td>";
     const made = JSON.parse(readFileSync(json, "utf8"));
     const t = made.trace;
-    const timing = t ? `median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>${t.edits ? `<br>edits to screen median ${t.edit_median.toFixed(0)} · worst ${t.edit_worst.toFixed(0)} ms · <span class=${t.torn ? "bad" : "good"}>${t.torn} torn</span>` : ""}` : "not traced";
+    const verdict = t ? `<b class=${t.p99 > BUDGET_MS ? "bad" : "good"}>p99 ${t.p99.toFixed(1)} ms ${t.p99 > BUDGET_MS ? "over" : "within"} ${BUDGET_MS.toFixed(1)}</b><br>` : "";
+    const timing = t ? `${verdict}median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>${t.edits ? `<br>edits to screen median ${t.edit_median.toFixed(0)} · worst ${t.edit_worst.toFixed(0)} ms · <span class=${t.torn ? "bad" : "good"}>${t.torn} torn</span>` : ""}` : "not traced";
     const refused = made.refusals?.length ? `<br><span class=bad>${made.refusals.length} refused</span>` : "";
     return `<td><a href="${scenario}/${set}.mp4"><img src="${scenario}/${set}.jpg" alt="${scenario} in ${set}"></a><br>${timing}${refused}<br><a href="${scenario}/${set}-720p.mp4">720p</a> · <a href="${scenario}/${set}.txt">trace</a> · ${made.made.slice(0, 16).replace("T", " ")}</td>`;
   };
   const html = `<!doctype html><meta charset=utf-8><title>QA films</title>
 <style>body{font:14px system-ui;background:#16181c;color:#ddd;margin:16px}table{border-collapse:collapse}td,th{padding:6px;vertical-align:top;border:1px solid #333}img{width:320px;display:block}a{color:#9cf}.bad{color:#f88}.good{color:#8f8}.none{color:#666}</style>
-<h1>QA films</h1><p>The latest film of each scenario in each set: click a sheet for its video. <code>cargo xtask qa &lt;scenario&gt; --set &lt;set&gt;</code> makes one again (tools/sandbox/README.md).</p>
-<table><tr><th></th>${columns.map((c) => `<th>${c}</th>`).join("")}</tr>
-${names.map((scenario) => `<tr><th>${scenario}</th>${columns.map((set) => cell(scenario, set)).join("")}</tr>`).join("\n")}
+<h1>QA films</h1><p>The latest clip of each stage in each set, a row a set: click a sheet for its video; its frames' 99th percentile against the ${BUDGET_MS.toFixed(1)} ms budget (D25). <code>cargo xtask qa clips --set &lt;set&gt;</code> makes a row again, <code>cargo xtask qa &lt;clip&gt; --set &lt;set&gt;</code> one clip (tools/sandbox/README.md).</p>
+<table><tr><th></th>${names.map((c) => `<th>${c}</th>`).join("")}</tr>
+${rows.map((set) => `<tr><th>${set}</th>${names.map((scenario) => cell(scenario, set)).join("")}</tr>`).join("\n")}
 </table>`;
   writeFileSync(resolve(OUT, "index.html"), html);
   console.log(`qa: ${relative(ROOT, resolve(OUT, "index.html"))}`);

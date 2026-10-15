@@ -120,8 +120,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "qa",
-        takes: "<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] | --list | --index",
-        does: "a QA film of building in a set: the same scripted film every time, a contact sheet and a real-time frame trace, in shots/qa/ (tools/sandbox)",
+        takes: "clips|<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] | --list | --index",
+        does: "QA clips of building and destruction in a set, the same every time, each with a real-time frame trace against the budget, in shots/qa/ (tools/sandbox)",
         group: "Look at things",
         run: |args| {
             let mut all = vec!["tools/sandbox/qa.ts"];

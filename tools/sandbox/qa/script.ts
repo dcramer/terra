@@ -291,6 +291,9 @@ export type Scenario = {
   about: string;
   /// The sandbox's options, beyond the film's own.
   sandbox: string[];
+  /// A clip: short, of one stage, in the default run (`cargo xtask qa clips`) and the index's
+  /// row for its set. What its timeline does before its first stage is not filmed.
+  clip?: boolean;
   /// Writes the timeline.
   script: (s: Script, set: KitSet) => void;
 };
