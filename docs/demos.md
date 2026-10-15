@@ -301,6 +301,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 **The layout:**
 - An extension of `terra_build::village`, as Emilien et al. lay villages and Ghost Recon Wildlands adapted them.
 - A square where the roads meet on the flattest ground. Streets out of it along the contours. Plots divided along each street, the buildings' doors to it. Yards, sheds and pens behind.
+- Packed, as Kingdom Come's Rattay and Kuttenberg are (D330): houses joined wall to wall along streets 4 to 5 m front to front, a passage every few to the yards behind, the square small and closed in by fronts, two storeys near it, the market's stalls in close rows. `cargo xtask town` measures it.
 - A town is a square's shape (long, triangular, a widened street) by its roads and slope, out of the 300 buildings. That makes dozens of towns a player can tell apart, by data in `settlement.ron`.
 
 **People's days** (D324):

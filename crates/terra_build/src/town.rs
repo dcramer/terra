@@ -36,8 +36,10 @@ use crate::{Base, CELL_M, STOREY_CUBES};
 use glam::Vec2;
 use std::collections::BTreeSet;
 
+mod enclosure;
 mod furnish;
 mod market;
+pub use enclosure::{Enclosure, enclosure};
 pub use furnish::{FURNISHING, Fence, FenceKind, Furnishing};
 pub use market::{Counter, Good, Market, Trade};
 
@@ -265,14 +267,29 @@ pub type Heights<'a> = &'a dyn Fn(Vec2) -> f32;
 pub const BUILDINGS: (usize, usize) = (30, 40);
 
 /// How wide a town's main streets are, and its others, in metres.
-const MAIN_WIDE_M: f32 = 5.0;
-const SIDE_WIDE_M: f32 = 4.0;
+const MAIN_WIDE_M: f32 = 3.8;
+const SIDE_WIDE_M: f32 = 3.3;
 /// How far a street's centre line steps, and how far it may turn at each step.
 const STEP_M: f32 = 6.0;
 const TURN: f32 = 0.11;
+/// How far out along a street from the square its houses are of two storeys where they can be.
+const TALL_WITHIN_M: f32 = 45.0;
+/// How many of the queue's next buildings a plot on the square tries before it moves on.
+const SQUARE_TRIES: usize = 12;
 /// How far apart two buildings stand at the least, and a building from a street's edge.
-const APART_M: f32 = 1.6;
-const OFF_STREET_M: f32 = 0.8;
+/// A town's houses stand joined along its ways, wall to wall as Kingdom Come's Rattay's and
+/// Kuttenberg's do, so a street is a few metres between closed fronts; every few a passage
+/// is left between two for the lane to the yards behind.
+const APART_M: f32 = 0.1;
+const OFF_STREET_M: f32 = 0.3;
+const PASSAGE_M: f32 = 1.8;
+/// How far apart the stalls in a market's row stand, middle to middle.
+const STALL_STEP_M: f32 = 3.2;
+/// How far out before a door the way to it is kept clear.
+const DOOR_WAY_M: f32 = 2.0;
+/// How far a house on the square stands back from its edge.
+const SQUARE_OFF_M: f32 = 0.6;
+const PASSAGE_EVERY: u32 = 3;
 /// The square's grid of path nodes, how far apart.
 const GRID_M: f32 = 4.0;
 /// How far behind a house its yard begins: a way along its back to the yard's gate.
@@ -450,7 +467,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
     let corner = |a: f32, u: f32| along * a + across * u;
     let outline = match shape {
         SquareShape::Long => {
-            let (long, wide) = (size(1, 34.0, 42.0) * 0.5, size(2, 20.0, 24.0) * 0.5);
+            let (long, wide) = (size(1, 28.0, 34.0) * 0.5, size(2, 18.0, 21.0) * 0.5);
             vec![
                 corner(-long, -wide),
                 corner(long, -wide),
@@ -460,7 +477,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
         }
         SquareShape::Triangle => {
             // Its base downhill, its point up the slope, its middle at the origin.
-            let (base, deep) = (size(1, 44.0, 50.0) * 0.5, size(2, 28.0, 32.0));
+            let (base, deep) = (size(1, 42.0, 46.0) * 0.5, size(2, 27.0, 30.0));
             vec![
                 corner(-base, -deep / 3.0),
                 corner(base, -deep / 3.0),
@@ -468,7 +485,7 @@ fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
             ]
         }
         SquareShape::Widened => {
-            let (long, wide) = (size(1, 54.0, 62.0) * 0.5, size(2, 13.0, 15.0) * 0.5);
+            let (long, wide) = (size(1, 44.0, 50.0) * 0.5, size(2, 12.0, 14.0) * 0.5);
             vec![
                 corner(-long, -wide),
                 corner(long, -wide),
@@ -723,7 +740,7 @@ impl Town {
                 && self.streets.iter().all(|street| {
                     from_street(quad, street) >= street.wide * 0.5 + OFF_STREET_M * 0.9
                 })
-                && polygons(quad, &self.square.outline) >= OFF_STREET_M * 0.9
+                && polygons(quad, &self.square.outline) >= SQUARE_OFF_M
                 && self
                     .things
                     .iter()
@@ -756,7 +773,7 @@ impl Town {
         // The trough beside it is laid with the town's furnishing (`furnish`).
         // The market: two rows of stalls facing each other across an aisle, along the
         // square on the side away from the well.
-        let line = middle - across * (well - middle).dot(across).signum() * (high_c - low_c) * 0.18;
+        let line = middle - across * (well - middle).dot(across).signum() * (high_c - low_c) * 0.1;
         let stalls = 4 + hash(&[seed, 11]) as usize % 4;
         let mut placed = 0;
         let mut slot = 0usize;
@@ -767,8 +784,8 @@ impl Town {
                 0.0
             } else {
                 let sign = if m % 2 == 1 { 1.0 } else { -1.0 };
-                sign * m.div_ceil(2) as f32 * 4.8
-            } + roll(20) * 2.0;
+                sign * m.div_ceil(2) as f32 * STALL_STEP_M
+            } + roll(20) * 1.0;
             slot += 1;
             let at = line + along * offset + across * row * 2.7;
             let facing = facing_of(across * -row);
@@ -783,6 +800,11 @@ impl Town {
                     .iter()
                     .all(|&stand| well_in(stall.place(stand), 0.5))
                 && self.things.iter().all(|other| match other.outline() {
+                    // A market's stalls stand in rows close beside each other, as Kingdom
+                    // Come's do; anything else keeps room to walk round.
+                    Some(theirs) if other.kind == ThingKind::Stall => {
+                        polygons(&ground, &theirs) >= 0.5
+                    }
                     Some(theirs) => polygons(&ground, &theirs) >= 2.2,
                     None => true,
                 });
@@ -903,42 +925,79 @@ impl Town {
         let mut smithy = false;
         let mut houses = 0;
         while houses < want && fronts.iter().any(|front| !front.done) {
+            let square_done = fronts.iter().all(|front| !front.grand || front.done);
             for f in 0..fronts.len() {
                 if houses >= want {
                     break;
                 }
-                if fronts[f].done {
+                // The square's edges are built up first, the streets' houses after.
+                if fronts[f].done || (!fronts[f].grand && !square_done) {
                     continue;
                 }
                 let first_street = f == outline.len();
                 let building_seed = hash(&[seed, 14, self.buildings.len() as u32]);
                 let kinds = picks.pick(building_seed);
-                let (choice, smithy_here) = if first_street && !smithy {
-                    ((Plan::Shed, Scheme::Timber, Roof::LeanTo, 6), true)
-                } else {
-                    // The square's edges take the larger houses where the queue has them.
-                    let (first, length) = (next % queue.len(), queue.len());
-                    if fronts[f].grand
-                        && let Some(look) = (0..6).find(|look| {
-                            let (plan, _, _, wide) = queue[(first + look) % length];
-                            matches!(plan, Plan::TwoStoreys | Plan::T) || wide >= 14
-                        })
-                    {
-                        queue.swap(first, (first + look) % length);
+                if first_street && !smithy {
+                    let choice = (Plan::Shed, Scheme::Timber, Roof::LeanTo, 6);
+                    match self.try_plot(f, &mut fronts, building_seed, choice, kinds, true) {
+                        Some(true) => smithy = true,
+                        Some(false) => fronts[f].at += 2.0,
+                        None => fronts[f].done = true,
                     }
-                    (queue[first], false)
-                };
-                match self.try_plot(f, &mut fronts, building_seed, choice, kinds, smithy_here) {
-                    Some(true) => {
-                        if smithy_here {
-                            smithy = true;
-                        } else {
+                    continue;
+                }
+                let (first, length) = (next % queue.len(), queue.len());
+                // The streets' first stretch out of the square, its busiest, is of houses of
+                // two storeys where the queue has them, so it is closed in as a town's is.
+                if !fronts[f].grand
+                    && fronts[f].at < TALL_WITHIN_M
+                    && let Some(look) = (0..6)
+                        .find(|look| matches!(queue[(first + look) % length].0, Plan::TwoStoreys))
+                {
+                    queue.swap(first, (first + look) % length);
+                }
+                if !fronts[f].grand {
+                    match self.try_plot(f, &mut fronts, building_seed, queue[first], kinds, false) {
+                        Some(true) => {
                             next += 1;
                             houses += 1;
                         }
+                        Some(false) => fronts[f].at += 2.0,
+                        None => fronts[f].done = true,
                     }
-                    Some(false) => {}
-                    None => fronts[f].done = true,
+                    continue;
+                }
+                // The square is closed in by house fronts, as a market square is: its edges
+                // take the larger houses where the queue has them, and where the next will
+                // not fit (by a street's mouth, at a corner, at an edge's end) a smaller one
+                // that does, before the plot moves on a metre.
+                if let Some(look) = (0..6).find(|look| {
+                    let (plan, _, _, wide) = queue[(first + look) % length];
+                    matches!(plan, Plan::TwoStoreys | Plan::T) || wide >= 14
+                }) {
+                    queue.swap(first, (first + look) % length);
+                }
+                let mut room = false;
+                let mut built = false;
+                for look in 0..SQUARE_TRIES.min(length) {
+                    let at = (first + look) % length;
+                    match self.try_plot(f, &mut fronts, building_seed, queue[at], kinds, false) {
+                        Some(true) => {
+                            queue.swap(first, at);
+                            built = true;
+                            break;
+                        }
+                        Some(false) => room = true,
+                        None => {}
+                    }
+                }
+                if built {
+                    next += 1;
+                    houses += 1;
+                } else if room {
+                    fronts[f].at += 1.0;
+                } else {
+                    fronts[f].done = true;
                 }
             }
         }
@@ -946,7 +1005,7 @@ impl Town {
 
     /// Tries the next plot along a front: the building put up, set where its own wings let
     /// its front stand back from the way, and kept if it is clear of everything. Nothing
-    /// when the front has no room left, false when this place did not fit.
+    /// when the front has no room left for it, false when this place did not fit.
     fn try_plot(
         &mut self,
         f: usize,
@@ -961,7 +1020,6 @@ impl Town {
         let probe = village::put_up(seed, choice, [0.0, 0.0], 0.0, kinds);
         let rects = ground_rects(&probe);
         if rects.is_empty() {
-            fronts[f].at += 2.0;
             return Some(false);
         }
         let low = rects.iter().map(|r| r.0).reduce(Vec2::min)?;
@@ -979,7 +1037,12 @@ impl Town {
         let (point, way) = along_line(&front.points, door_along)?;
         let outward = way.perp() * front.side;
         let back = if smithy { 2.6 } else { 0.0 };
-        let door = point + outward * (front.off + OFF_STREET_M + 0.2 + high.y.max(0.0) + back);
+        let off_way = if front.grand {
+            SQUARE_OFF_M
+        } else {
+            OFF_STREET_M
+        };
+        let door = point + outward * (front.off + off_way + 0.2 + high.y.max(0.0) + back);
         let facing = facing_of(-outward);
         let building = Building {
             at: door.to_array(),
@@ -987,12 +1050,43 @@ impl Town {
             ..probe
         };
         let ground = footprint(&building, &rects);
-        let gap = 0.6 + unit(hash(&[seed, 15])) * 1.6;
+        let gap = if hash(&[seed, 15]).is_multiple_of(PASSAGE_EVERY) {
+            PASSAGE_M
+        } else {
+            APART_M
+        };
         if !self.clear_for(&ground, APART_M) {
-            fronts[f].at += 2.0;
             return Some(false);
         }
-        fronts[f].at = door_along + to + gap.max(APART_M);
+        // Every door reached straight from the way, this one and those already built: with
+        // the houses joined, a neighbour's corner on a bend can otherwise close one off.
+        let way_in = |at: Vec2, facing: f32| {
+            (
+                place(at, facing, Vec2::new(0.0, 0.75)),
+                place(at, facing, Vec2::new(0.0, DOOR_WAY_M)),
+            )
+        };
+        let (a, b) = way_in(door, facing);
+        let doors: Vec<(Vec2, Vec2)> = self
+            .things
+            .iter()
+            .filter(|thing| thing.kind == ThingKind::Door)
+            .map(|thing| way_in(thing.at, thing.facing))
+            .collect();
+        if !self
+            .footprints
+            .iter()
+            .flatten()
+            .all(|quad| segment_polygon(a, b, quad) >= CLEAR_M)
+            || !ground.iter().all(|quad| {
+                doors
+                    .iter()
+                    .all(|&(a, b)| segment_polygon(a, b, quad) >= CLEAR_M)
+            })
+        {
+            return Some(false);
+        }
+        fronts[f].at = door_along + to + gap;
         let index = self.buildings.len();
         self.buildings.push(building);
         self.footprints.push(ground);
@@ -1224,6 +1318,47 @@ impl Town {
                 .all(|thing| point_segment(thing.at, a, b) >= GATHERED_M)
     }
 
+    /// Joins a node that reaches none of the streets' nodes (in a narrow street, the walk
+    /// slantwise to one passes too near the fronts) to the nearest street straight across
+    /// from it: a node there on the centre line, between that stretch's own two.
+    fn straight_across(
+        &self,
+        nodes: &mut Vec<(Vec2, On)>,
+        edges: &mut BTreeSet<[u32; 2]>,
+        node: u32,
+    ) {
+        let at = nodes[node as usize].0;
+        let mut best: Option<(f32, Vec2, u32, u32, usize)> = None;
+        for (index, (a, b)) in nodes
+            .iter()
+            .enumerate()
+            .zip(nodes.iter().enumerate().skip(1))
+            .filter_map(|((i, (p, on)), (j, (q, next)))| match (on, next) {
+                (On::Street(s), On::Street(t)) if s == t => Some((s, ((i, *p), (j, *q)))),
+                _ => None,
+            })
+            .map(|(&s, pair)| (s, pair))
+        {
+            let ((i, p), (j, q)) = (a, b);
+            let way = q - p;
+            let t = ((at - p).dot(way) / way.length_squared().max(1e-6)).clamp(0.0, 1.0);
+            let foot = p + way * t;
+            let d = foot.distance(at);
+            if d < 8.0 && best.is_none_or(|b| d < b.0) && self.walkable(at, foot) {
+                best = Some((d, foot, i as u32, j as u32, index));
+            }
+        }
+        if let Some((_, foot, i, j, street)) = best {
+            let new = nodes.len() as u32;
+            nodes.push((foot, On::Street(street)));
+            for (a, b) in [(new, i), (new, j), (new, node)] {
+                if a != b {
+                    edges.insert([a.min(b), a.max(b)]);
+                }
+            }
+        }
+    }
+
     /// Whether a point is clear to stand on.
     fn standable(&self, point: Vec2, margin: f32) -> bool {
         self.walkable(point, point)
@@ -1356,10 +1491,14 @@ impl Town {
                             let step = nodes.len() as u32;
                             nodes.push((out, On::Thing(index)));
                             edge(&mut edges, node, step);
-                            join(self, &nodes, &mut edges, step, 2);
+                            if join(self, &nodes, &mut edges, step, 2) == 0 {
+                                self.straight_across(&mut nodes, &mut edges, step);
+                            }
                         }
                         _ => {
-                            join(self, &nodes, &mut edges, node, 2);
+                            if join(self, &nodes, &mut edges, node, 2) == 0 {
+                                self.straight_across(&mut nodes, &mut edges, node);
+                            }
                         }
                     }
                     node

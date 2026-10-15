@@ -110,4 +110,15 @@ fn report(seed: u32, ground: &str, town: &Town, drawn: Option<&str>) {
         town.paths.edges.len(),
         drawn.map_or(String::new(), |out| format!("; drawn to {out}")),
     );
+    let e = town::enclosure(town);
+    println!(
+        "  enclosed: {:.1} m front to front across its streets (a tenth under {:.1}, a tenth over {:.1}); {:.0}% of their built-up sides fronted, {} gaps of {:.1} m at the middle; {:.0}% of the square's edge fronted",
+        e.between_fronts[0],
+        e.between_fronts[1],
+        e.between_fronts[2],
+        e.built_up * 100.0,
+        e.gaps,
+        e.gap,
+        e.square_fronted * 100.0,
+    );
 }

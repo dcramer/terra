@@ -12,8 +12,8 @@
     things: {
         "Door": [
             (at: (0.0, 0.0), from_stand: true, shared: true, does: ["Home"]),
-            (at: (1.3, 0.3), face: (0.0, 1.0), from_stand: true, does: ["Stand", "Chat"]),
-            (at: (-1.3, 0.3), face: (0.0, 1.0), from_stand: true, does: ["Stand"]),
+            (at: (1.3, -0.4), face: (0.0, 1.0), from_stand: true, does: ["Stand", "Chat"]),
+            (at: (-1.3, -0.4), face: (0.0, 1.0), from_stand: true, does: ["Stand"]),
         ],
         "Well": [
             (at: (0.0, 1.35), does: ["Draw", "Chat"]),
