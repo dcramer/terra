@@ -17,6 +17,7 @@ terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
+terra_land = { path = "crates/terra_land" }
 terra_sim = { path = "crates/terra_sim" }
 terra_voxel = { path = "crates/terra_voxel" }
 terra_world = { path = "crates/terra_world" }
@@ -37,6 +38,9 @@ ron = "0.12"
 # Smooth voxel meshing with seams between detail levels (D32). Apache-2.0, maintained,
 # and already proved in the toolchain spike (research/rust-stack-spike.md).
 transvoxel = "2.0"
+# PNG pictures written by tools without the engine (the field maps). The version Bevy's image
+# loading already builds.
+png = "0.18"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

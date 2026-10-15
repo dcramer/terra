@@ -1,0 +1,22 @@
+[package]
+name = "terra_land"
+description = "The land a world is made of, by its rules: its ground and its climate together (where a place is on the world, how its ground leans, lakes, what can grow there), and the field maps that show those rules. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+ron.workspace = true
+serde.workspace = true
+terra_climate.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+terra_voxel.workspace = true
+# The field maps' pictures. Already built for Bevy's image loading, the same version.
+png.workspace = true
+
+[lints]
+workspace = true

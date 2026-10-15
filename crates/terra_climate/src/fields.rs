@@ -42,7 +42,34 @@ pub struct Place {
     pub height_m: f32,
     /// Its latitude, in radians.
     pub latitude: f32,
+    /// How far the ground there leans toward the equator, in radians: its slope's angle
+    /// times the cosine of how far it faces from the equator, below 0 leaning toward the
+    /// pole (D323). Worked out by the world from its ground; the climate never reads terrain.
+    /// The sun strikes ground leaning so as it strikes level ground that much nearer the
+    /// equator, which is the old rule for a slope's sunlight: a sunny slope is warmer and its
+    /// snow goes sooner, a shaded one colder.
+    pub sunward: f32,
 }
+
+impl Place {
+    /// A place on level ground.
+    pub fn level(at: Vec3, height_m: f32, latitude: f32) -> Self {
+        Self {
+            at,
+            height_m,
+            latitude,
+            sunward: 0.0,
+        }
+    }
+}
+
+/// How much warmer the air by the ground is, in degrees Celsius, for each watt a square
+/// metre more sunlight the ground there takes than level ground would (D323). Sunny and
+/// shaded slopes in mountains differ by one to three degrees in the air near the ground, and
+/// more in the root zone, which is what a tree line follows (Körner, *Alpine Plant Life*,
+/// 2003, ch. 4): about a third of a kilowatt less sun on a summer noon's shaded slope, some
+/// two and a half degrees, and a tree line on it a hundred metres or so lower.
+const SLOPE_WARMS_C_PER_W_M2: f32 = 0.008;
 
 /// The climate's quantities at a place and a moment.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -62,6 +89,8 @@ pub struct Conditions {
     pub sun_height: f32,
     /// The sun's light on level ground, in watts a square metre.
     pub sunlight_w_m2: f32,
+    /// The sun's light on the ground as it leans there (`Place::sunward`).
+    pub ground_sunlight_w_m2: f32,
 }
 
 /// The wind at a place.
@@ -151,6 +180,7 @@ impl Fields {
             phase,
             daylight,
             sun: sun::Path::new(place.latitude, daylight.declination),
+            ground_sun: sun::Path::new(place.latitude.abs() - place.sunward, daylight.declination),
             base_c,
             threshold: upper_quantile(share),
             humidity: h.mean + swing(h.annual_swing, h.most_humid),
@@ -180,6 +210,9 @@ pub struct Day<'a> {
     pub phase: f32,
     pub daylight: Daylight,
     sun: sun::Path,
+    /// The sun's path as the ground there takes it: level ground's nearer the equator by how
+    /// far the ground leans toward it.
+    ground_sun: sun::Path,
     /// The day's temperature before its own swing and the weather's.
     base_c: f32,
     /// How far, in standard deviations, the fronts must rise for something to fall.
@@ -196,6 +229,7 @@ pub(crate) struct Weather {
     pub snow_share: f32,
     pub cloud: f32,
     pub sunlight_w_m2: f32,
+    pub ground_sunlight_w_m2: f32,
     sun_height: f32,
     /// The fronts here, in standard deviations, and the day's swing, -1 to 1.
     front: f32,
@@ -234,7 +268,35 @@ impl Day<'_> {
             humidity: humidity.clamp(0.05, 1.0),
             sun_height: weather.sun_height,
             sunlight_w_m2: weather.sunlight_w_m2,
+            ground_sunlight_w_m2: weather.ground_sunlight_w_m2,
         }
+    }
+
+    /// The sun's light on the ground as it leans, with the level sun's sine so and the sky so
+    /// cloudy: none while the sun is under the horizon, however the ground leans. A slope
+    /// facing east or west takes about level ground's light over a day, so only how far it
+    /// leans toward the equator counts.
+    fn ground_sunlight(&self, level_sine: f32, hour: f32, cloud: f32) -> f32 {
+        if level_sine <= 0.0 {
+            return 0.0;
+        }
+        sun::on_level(self.ground_sun.sine(hour), cloud)
+    }
+
+    /// The day's mean temperature as the climate's averages have it, before the weather: its
+    /// season's warmth, less the lapse with height, and what the ground's leaning toward or
+    /// away from the sun makes of a clear day.
+    pub fn mean_c(&self) -> f32 {
+        let samples = 24;
+        let slope: f32 = (0..samples)
+            .map(|k| {
+                let hour = (k as f32 + 0.5) * 24.0 / samples as f32;
+                let sine = self.sun.sine(hour);
+                self.ground_sunlight(sine, hour, 0.0) - sun::on_level(sine, 0.0)
+            })
+            .sum::<f32>()
+            / samples as f32;
+        self.base_c + SLOPE_WARMS_C_PER_W_M2 * slope
     }
 
     pub(crate) fn weather(&self, hour: f32) -> Weather {
@@ -260,15 +322,20 @@ impl Day<'_> {
         let cloud = smoothstep(-CLOUD_LEAD, 0.0, above);
         let daily = libm::cosf((hour - WARMEST_HOUR) / 24.0 * TAU);
         let t = &climate.temperature;
-        let temperature_c =
-            self.base_c + t.daily_swing_c * (1.0 - 0.5 * cloud) * daily + t.weather_swing_c * mass;
         let sine = self.sun.sine(hour);
+        let level = sun::on_level(sine, cloud);
+        let ground = self.ground_sunlight(sine, hour, cloud);
+        let temperature_c = self.base_c
+            + t.daily_swing_c * (1.0 - 0.5 * cloud) * daily
+            + t.weather_swing_c * mass
+            + SLOPE_WARMS_C_PER_W_M2 * (ground - level);
         Weather {
             temperature_c,
             precipitation_mm_per_hour: precipitation,
             snow_share: snow_share(temperature_c),
             cloud,
-            sunlight_w_m2: sun::on_level(sine, cloud),
+            sunlight_w_m2: level,
+            ground_sunlight_w_m2: ground,
             sun_height: libm::asinf(sine),
             front,
             daily,
@@ -356,6 +423,7 @@ pub(crate) mod tests {
             at: rng.unit_vector() * rng.range(0.0, 50_000.0),
             height_m: rng.range(0.0, 300.0),
             latitude: rng.range(-1.2, 1.2),
+            sunward: 0.0,
         }
     }
 
@@ -364,6 +432,7 @@ pub(crate) mod tests {
             at: Vec3::new(120.0, 2000.0, -40.0),
             height_m: 50.0,
             latitude: 40.0_f32.to_radians(),
+            sunward: 0.0,
         }
     }
 

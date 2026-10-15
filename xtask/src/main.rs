@@ -193,6 +193,26 @@ const TASKS: &[Task] = &[
         run: |args| cargo_example("terra_build", "town", args),
     },
     Task {
+        name: "fields",
+        takes: "[--radius 30000] [--at E,N] [--size 8000] [--cell 32] [--date 06-20] [--out shots/fields]",
+        does: "the field maps: a region of the world's land on a date as maps of its rules (height, slope, facing, the growing season and the tree line, snow, shelter) and their numbers, on the CPU, no GPU (D326)",
+        group: "Look at things",
+        run: |args| {
+            let mut cargo = vec![
+                "run",
+                "-q",
+                "--release",
+                "-p",
+                "terra_land",
+                "--bin",
+                "fields",
+                "--",
+            ];
+            cargo.extend(args.iter().map(String::as_str));
+            run("cargo", &cargo)
+        },
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",

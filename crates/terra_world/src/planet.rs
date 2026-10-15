@@ -24,13 +24,9 @@ use terra_core::{Ground, Operation, PlanetSpec, RayHit, Seed, Yield};
 use terra_gen::Noise;
 use terra_voxel::{GeneratedPlanet, VoxelPlanet};
 
-/// Height of the tallest hills, in metres.
-const RELIEF_M: f32 = 150.0;
-/// Rolling ground's swells and the bumps on them, in metres.
-const ROLLING_M: f32 = 6.0;
-const ROLLING_DETAIL_M: f32 = 1.1;
-/// Sea level relative to the planet's nominal radius, in metres.
-const SEA_LEVEL_M: f32 = -20.0;
+// The ground as generated is the land's (`terra_land::ground`), so the tools that map its
+// rules without the engine see the same ground.
+use terra_land::ground::{RELIEF_M, ROLLING_M, SEA_LEVEL_M};
 /// The camera starts here. The free camera treats +Y as up, so the pole is the one place
 /// on the planet where that matches the ground.
 const START: Vec3 = Vec3::Y;
@@ -73,11 +69,7 @@ pub struct Cover {
 impl Planet {
     pub fn new(spec: PlanetSpec) -> Self {
         Planet {
-            ground: Arc::new(VoxelPlanet::new(GeneratedPlanet::new(
-                spec,
-                RELIEF_M,
-                Some(SEA_LEVEL_M),
-            ))),
+            ground: Arc::new(VoxelPlanet::new(terra_land::ground::world(spec))),
             relief_m: RELIEF_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
         }
@@ -87,9 +79,7 @@ impl Planet {
     /// for the yard, the test level.
     pub fn smooth(spec: PlanetSpec) -> Self {
         Planet {
-            ground: Arc::new(VoxelPlanet::new(
-                GeneratedPlanet::new(spec, 0.0, None).smooth(),
-            )),
+            ground: Arc::new(VoxelPlanet::new(terra_land::ground::smooth(spec))),
             relief_m: 0.0,
             cover: Noise::new(spec.seed.derive("ground cover")),
         }
@@ -99,9 +89,7 @@ impl Planet {
     /// and smaller bumps on them, no sea, as the lush forest stands on.
     pub fn rolling(spec: PlanetSpec) -> Self {
         Planet {
-            ground: Arc::new(VoxelPlanet::new(
-                GeneratedPlanet::new(spec, ROLLING_M, None).with_detail_m(ROLLING_DETAIL_M),
-            )),
+            ground: Arc::new(VoxelPlanet::new(terra_land::ground::rolling(spec))),
             relief_m: ROLLING_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
         }

@@ -22,6 +22,7 @@ pub mod body;
 mod fields;
 mod past;
 mod plants;
+mod season;
 mod sun;
 mod theme;
 mod time;
@@ -32,6 +33,7 @@ pub use past::{
     step,
 };
 pub use plants::{LeafYear, Leaves, Ramp, SPREAD};
+pub use season::{GROWING_DAY_C, Season, TREE_LINE_DAYS, TREE_LINE_SEASON_C};
 pub use sun::{day_length_hours, declination, sun_height, sunlight};
 pub use theme::{Climate, Fronts, Humidity, Precipitation, Temperatures, Winds};
-pub use time::{HOURS, WorldTime, Year};
+pub use time::{Date, HOURS, WorldTime, Year};

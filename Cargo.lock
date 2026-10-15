@@ -5861,6 +5861,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_land"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "png",
+ "ron",
+ "serde",
+ "terra_climate",
+ "terra_core",
+ "terra_gen",
+ "terra_voxel",
+]
+
+[[package]]
 name = "terra_sandbox"
 version = "0.1.0"
 dependencies = [
@@ -5908,6 +5923,7 @@ dependencies = [
  "terra_climate",
  "terra_core",
  "terra_gen",
+ "terra_land",
  "terra_voxel",
 ]
 

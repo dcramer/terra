@@ -21,6 +21,7 @@ terra_build.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
+terra_land.workspace = true
 terra_voxel.workspace = true
 
 # macOS's App Nap throttles a run whose window is hidden, as scripted runs' are; the run

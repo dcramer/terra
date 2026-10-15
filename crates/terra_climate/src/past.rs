@@ -159,7 +159,7 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
         let snow = falls * weather.snow_share;
         past.snow_mm += snow;
         let melt = if t > 0.0 {
-            ((MELT_MM_PER_HOUR_C + MELT_PER_W_M2 * weather.sunlight_w_m2) * t * hours)
+            ((MELT_MM_PER_HOUR_C + MELT_PER_W_M2 * weather.ground_sunlight_w_m2) * t * hours)
                 .min(past.snow_mm)
         } else {
             0.0
@@ -320,6 +320,7 @@ mod tests {
             at: Vec3::new(10.0, 2000.0, 30.0),
             height_m: 0.0,
             latitude: 45.0_f32.to_radians(),
+            sunward: 0.0,
         }
     }
 
@@ -461,6 +462,7 @@ mod tests {
                     at: Vec3::new(k as f32 * 100.0, 2000.0, 0.0),
                     height_m: 0.0,
                     latitude: 0.7,
+                    sunward: 0.0,
                 };
                 (Cell::containing(p.at), p)
             })

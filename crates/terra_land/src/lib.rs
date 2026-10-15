@@ -1,0 +1,104 @@
+//! The land a world is made of, by its rules (docs/demos.md, D321 to D326): its generated
+//! ground and its climate taken together, which neither knows of the other. Where a place is
+//! on the world and how its ground leans ([`frame`]), what the climate is there by those
+//! ([`Land::place`]), and a region of it sampled on a grid, the field maps' and the site
+//! queries' ground ([`region`]).
+//!
+//! Plain Rust with no engine (D28): what is decided here (where the tree line runs, how deep
+//! the snow lies) changes play, so every machine works it out the same. `terra_world` draws
+//! it; `cargo xtask fields` maps it without the GPU (D326).
+
+pub mod frame;
+pub mod ground;
+pub mod maps;
+pub mod region;
+
+use frame::{Frame, START_LATITUDE};
+use glam::Vec3;
+use terra_climate::{Climate, Fields, Place};
+use terra_voxel::GeneratedPlanet;
+
+/// Where the planet's own start is, from its centre: the pole of the cube the ground is laid
+/// on, which the free camera takes as up.
+pub const PLANET_START: Vec3 = Vec3::Y;
+
+/// A world's land: its ground as generated, its climate, and the frame it turns in.
+#[derive(Clone, Debug)]
+pub struct Land {
+    pub ground: GeneratedPlanet,
+    pub fields: Fields,
+    pub frame: Frame,
+}
+
+impl Land {
+    /// The land of a ground and a climate, the world turned as the sky is over its start
+    /// (`frame`), the climate's fields from the ground's seed.
+    pub fn new(ground: GeneratedPlanet, climate: Climate) -> Self {
+        let year = climate.year;
+        let declination = terra_climate::declination(year.tilt_deg.to_radians(), year.phase(0));
+        let (frame, _, _) = Frame::turned_for(PLANET_START, START_LATITUDE, declination);
+        let fields = Fields::new(climate, ground.spec().seed);
+        Self {
+            ground,
+            fields,
+            frame,
+        }
+    }
+
+    pub fn radius_m(&self) -> f32 {
+        self.ground.spec().radius_m
+    }
+
+    /// The distance from the centre to the sea's surface; the nominal radius on a world with
+    /// no sea, which heights over the sea are then counted from.
+    pub fn sea_radius_m(&self) -> f32 {
+        self.ground.sea_radius_m().unwrap_or(self.radius_m())
+    }
+
+    /// The ground as generated in a direction from the centre.
+    pub fn surface(&self, direction: Vec3) -> Vec3 {
+        let direction = direction.normalize();
+        direction * (self.radius_m() + self.ground.height_m(direction))
+    }
+
+    /// A point as the climate takes it: how high over the sea, its latitude, and how the
+    /// ground there, facing `normal`, leans toward the sun (D323).
+    pub fn place(&self, at: Vec3, normal: Vec3) -> Place {
+        Place {
+            at,
+            height_m: at.length() - self.sea_radius_m(),
+            latitude: self.frame.latitude(at),
+            sunward: self.frame.sunward(at, normal),
+        }
+    }
+}
+
+/// The start's climate, as `assets/data/climate.ron` has it, for tools that run without the
+/// engine's loading.
+pub fn start_climate() -> Result<Climate, String> {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/data/climate.ron");
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    ron::from_str(&text).map_err(|e| format!("{path}: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_core::{PlanetSpec, Seed};
+
+    #[test]
+    fn the_start_climate_reads_and_its_start_is_at_the_starts_latitude() {
+        let land = Land::new(
+            ground::world(PlanetSpec {
+                seed: Seed(1),
+                radius_m: 30_000.0,
+            }),
+            start_climate().unwrap(),
+        );
+        let start = land.surface(PLANET_START);
+        let place = land.place(start, start.normalize());
+        assert!((place.latitude - START_LATITUDE).abs() < 1e-5);
+        assert_eq!(place.sunward, 0.0);
+        assert!((place.height_m - (start.length() - land.sea_radius_m())).abs() < 1e-3);
+    }
+}

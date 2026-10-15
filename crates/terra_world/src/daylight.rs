@@ -12,7 +12,7 @@
 //! How long a day is, and what night does besides being dark, are the developers' to
 //! say; the numbers here are a proposal (prototypes.md).
 
-use super::scene::{EXPOSURE_EV100, SUN_DIRECTION};
+use super::scene::EXPOSURE_EV100;
 use super::skylight::SkyLight;
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
@@ -54,10 +54,12 @@ const OPEN_AIR: f32 = 0.45;
 const SUN_STEPS: f32 = 300.0;
 
 /// The hour a new game starts at: morning, the sun low in the east.
-pub const MORNING: f32 = 7.5;
-/// Where the start is on its world, which with the date shapes the sun's path: how high it
-/// climbs and how long it is up.
-pub const LATITUDE: f32 = 40.0_f32.to_radians();
+pub const MORNING: f32 = terra_land::frame::MORNING;
+/// Where the planet's own start is on its world, which with the date shapes the sun's path:
+/// how high it climbs and how long it is up. Elsewhere a place's latitude is its own, from
+/// the world's frame (`terra_land::frame`): the sun is fixed in the sky, and a place further
+/// north sees it lower (docs/demos.md).
+pub const LATITUDE: f32 = terra_land::frame::START_LATITUDE;
 
 /// The world's climate (`assets/data/climate.ron`, D314). The sky follows its year; the
 /// rest of the climate is read from it as the climate's later steps come (climate.md).
@@ -107,29 +109,40 @@ impl Clock {
 }
 
 /// The sky over the start: which ways are east, north and up there, and how far north of
-/// the equator the sun stands on the date.
+/// the equator the sun stands on the date. The sun is fixed in the world's sky, whatever the
+/// place, so a place far from the start sees it at its own height: further north lower, as
+/// its latitude says (`terra_land::frame`). How high it stands, and the moon, are taken where
+/// the camera is (`seen_from`).
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct SkyPath {
     east: Vec3,
     north: Vec3,
     up: Vec3,
     declination: f32,
+    /// Up where the sky is seen from: the camera's.
+    seen_from: Vec3,
 }
 
 impl SkyPath {
     /// The sky over a place, turned so the morning sun stands where the art put it on a day
     /// of so much declination: the clock's first day's.
     pub fn over(up: Vec3, declination: f32) -> Self {
+        let (_, east, north) = terra_land::frame::Frame::turned_for(up, LATITUDE, declination);
         let up = up.normalize();
-        let (x, y, _) = sun_local(MORNING, declination);
-        let local = Vec2::new(x, y).normalize();
-        let toward = SUN_DIRECTION.reject_from(up).normalize();
-        let across = up.cross(toward);
         Self {
-            east: toward * local.x - across * local.y,
-            north: toward * local.y + across * local.x,
+            east,
+            north,
             up,
             declination,
+            seen_from: up,
+        }
+    }
+
+    /// The same sky seen from a place whose up is so.
+    pub fn seen_from(self, up: Vec3) -> Self {
+        Self {
+            seen_from: up.normalize_or(self.up),
+            ..self
         }
     }
 
@@ -143,7 +156,7 @@ impl SkyPath {
 
     /// The direction toward the sun at an hour.
     pub fn sun(&self, hour: f32) -> Vec3 {
-        let (x, y, z) = sun_local(hour, self.declination);
+        let (x, y, z) = sun_local(LATITUDE, hour, self.declination);
         (self.east * x + self.north * y + self.up * z).normalize()
     }
 
@@ -151,10 +164,9 @@ impl SkyPath {
     /// full moon is, but standing [`MOON_HEIGHT`] up rather than as far below the horizon as the
     /// sun is, so it lights the night from high, not along the ground from the east at dusk.
     pub fn moon(&self, hour: f32) -> Vec3 {
-        let across = (-self.sun(hour))
-            .reject_from(self.up)
-            .normalize_or(self.east);
-        (across * libm::cosf(MOON_HEIGHT) + self.up * libm::sinf(MOON_HEIGHT)).normalize()
+        let up = self.seen_from;
+        let across = (-self.sun(hour)).reject_from(up).normalize_or(self.east);
+        (across * libm::cosf(MOON_HEIGHT) + up * libm::sinf(MOON_HEIGHT)).normalize()
     }
 
     /// The axis the sky turns about, which points at the pole star.
@@ -162,20 +174,13 @@ impl SkyPath {
         (self.north * libm::cosf(LATITUDE) + self.up * libm::sinf(LATITUDE)).normalize()
     }
 
-    /// How high the sun is at an hour, in degrees above the horizon.
+    /// How high the sun is at an hour, in degrees above the horizon where it is seen from.
     pub fn height(&self, hour: f32) -> f32 {
-        libm::asinf(self.sun(hour).dot(self.up).clamp(-1.0, 1.0)).to_degrees()
+        libm::asinf(self.sun(hour).dot(self.seen_from).clamp(-1.0, 1.0)).to_degrees()
     }
 }
 
-/// The sun at an hour, east, north and up over the start, on a day of a declination.
-fn sun_local(hour: f32, declination: f32) -> (f32, f32, f32) {
-    let angle = (hour - 12.0) / 24.0 * TAU;
-    let (sd, cd) = (libm::sinf(declination), libm::cosf(declination));
-    let (sl, cl) = (libm::sinf(LATITUDE), libm::cosf(LATITUDE));
-    let (sh, ch) = (libm::sinf(angle), libm::cosf(angle));
-    (-cd * sh, sd * cl - cd * ch * sl, sd * sl + cd * ch * cl)
-}
+use terra_land::frame::sun_local;
 
 /// How the world is lit at a moment.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -371,6 +376,7 @@ pub fn plugin(app: &mut App) {
             (
                 tick.run_if(crate::shell::in_the_world),
                 follow_the_date,
+                seen_from_the_camera,
                 shine,
             )
                 .chain()
@@ -412,6 +418,22 @@ fn follow_the_date(clock: Res<Clock>, climate: Res<WorldClimate>, path: Option<R
     let declination = climate.declination(clock.day);
     if path.declination != declination {
         *path = path.on(declination);
+    }
+}
+
+/// The sky is seen from where the camera is: how high the sun stands there, and so the light,
+/// is its latitude's. Taken again once the camera has gone a twentieth of a degree round the
+/// world, so a walk does not mark the sky changed every frame.
+fn seen_from_the_camera(
+    camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
+    path: Option<ResMut<SkyPath>>,
+) {
+    let (Some(camera), Some(mut path)) = (camera, path) else {
+        return;
+    };
+    let up = camera.translation().normalize_or(path.up);
+    if up.dot(path.seen_from) < libm::cosf(0.05_f32.to_radians()) {
+        *path = path.seen_from(up);
     }
 }
 
@@ -544,6 +566,7 @@ fn shine(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene::SUN_DIRECTION;
 
     fn path() -> SkyPath {
         SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))

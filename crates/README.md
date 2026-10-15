@@ -10,6 +10,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_build` | Construction: half-metre cubes on a base's grid, the rooms they close in, roofs, and the kits that lay them ([docs/building-tech.md](../docs/building-tech.md)) | No | Exists |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
 | `terra_climate` | Climate ([docs/climate.md](../docs/climate.md), D314, D315): the world's clock in days, a world's climate as data, temperature, daylight, precipitation, wind and the air's wetness as fields of a place and a time, and the past the weather leaves (snow, wet ground, ice, warmth and chill) folded per cell | No | Exists |
+| `terra_land` | The land by its rules (D331): the world's ground as generated and its climate together, where a place is on the world (its latitude, how its ground leans), regions sampled on a grid, and the field maps, `cargo xtask fields` (D326) | No | Exists |
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_net` | Network messages and transport | No | Not created yet (track D) |
 | `terra_body` | Appearance data into joints and morph weights ([docs/characters.md](../docs/characters.md)) | No | Not created yet |

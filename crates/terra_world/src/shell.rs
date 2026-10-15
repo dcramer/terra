@@ -188,56 +188,9 @@ sctk_adwaita=off";
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
 
-/// A date to set the world's clock to (`--date`).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Date {
-    /// A day of the clock, counted from when it started.
-    Day(i64),
-    /// A share of the year after midwinter, from a day of an Earth calendar.
-    OfYear(f64),
-}
-
-/// Days of an Earth calendar's months, and how many days from the 1st of January midwinter
-/// (the 21st of December) comes.
-const MONTH_DAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-const MIDWINTER_DAY: u32 = 354;
-
-impl Date {
-    fn parse(text: &str) -> Result<Self, String> {
-        let wrong = || {
-            format!(
-                "--date wants a month and day such as 10-15, or a day of the clock such as 40, not `{text}`"
-            )
-        };
-        if let Ok(day) = text.parse::<i64>() {
-            return Ok(Date::Day(day));
-        }
-        let (month, day) = text.split_once('-').ok_or_else(wrong)?;
-        let (month, day) = (
-            month.parse::<usize>().map_err(|_| wrong())?,
-            day.parse::<u32>().map_err(|_| wrong())?,
-        );
-        if !(1..=12).contains(&month) || day == 0 || day > MONTH_DAYS[month - 1] {
-            return Err(wrong());
-        }
-        let of_year = MONTH_DAYS[..month - 1].iter().sum::<u32>() + day - 1;
-        let since = (of_year + 365 - MIDWINTER_DAY) % 365;
-        // The calendar day's middle, as the clock takes a day's.
-        Ok(Date::OfYear((since as f64 + 0.5) / 365.0))
-    }
-
-    /// The day of the clock it is, in a world of this year: the first from the clock's start
-    /// whose middle is that far through the year.
-    pub fn day(self, year: &terra_climate::Year) -> i64 {
-        match self {
-            Date::Day(day) => day,
-            Date::OfYear(share) => {
-                let ahead = (share - year.start).rem_euclid(1.0) * year.days - 0.5;
-                (ahead.round() as i64).rem_euclid(year.days.round() as i64)
-            }
-        }
-    }
-}
+/// A date to set the world's clock to (`--date`): the climate's, so tools without the engine read
+/// dates the same way.
+pub use terra_climate::Date;
 
 /// Which level the play experiment is on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

@@ -148,6 +148,7 @@ mod tests {
             at: Vec3::new(300.0, 1900.0, 200.0),
             height_m: 40.0,
             latitude: 40.0_f32.to_radians(),
+            sunward: 0.0,
         }
     }
 

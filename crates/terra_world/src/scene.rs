@@ -30,8 +30,9 @@ use bevy::{
     },
 };
 
-/// Direction from the scene toward the sun: low over the water.
-pub const SUN_DIRECTION: Vec3 = Vec3::new(0.74, 0.33, 0.58);
+/// Direction from the scene toward the sun: low over the water. The morning sun the art was lit
+/// under, which the world's frame is turned for (`terra_land::frame`).
+pub const SUN_DIRECTION: Vec3 = terra_land::frame::ART_SUN;
 const HORIZON: Color = Color::srgb(0.98, 0.85, 0.7);
 const ZENITH: Color = Color::srgb(0.24, 0.46, 0.84);
 /// The camera's exposure, as a photographer's EV at ISO 100: set for sunlit ground, as a

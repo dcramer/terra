@@ -37,6 +37,7 @@ use bevy::{
 use std::sync::Arc;
 use std::time::Instant;
 use terra_climate::{Cell, Fields, LeafYear, Past, PastCache, Place, WorldTime};
+use terra_land::frame::Frame;
 
 /// The kinds' years, a layer of the leaves map each, in this order.
 pub const YEARS_FILE: &str = "plant_years.ron";
@@ -48,17 +49,33 @@ pub struct ClimateFields {
     /// The kinds' years, as `plant_years.ron` lists them.
     pub years: Arc<Vec<LeafYear>>,
     sea_radius_m: f32,
+    /// The world's frame: where each place's latitude comes from.
+    pub frame: Frame,
+}
+
+/// The world's frame, turned as the sky is over the planet's own start (`daylight`).
+pub fn world_frame(planet: &Planet, climate: &terra_climate::Climate) -> Frame {
+    let year = climate.year;
+    let declination = terra_climate::declination(year.tilt_deg.to_radians(), year.phase(0));
+    Frame::turned_for(planet.start(), LATITUDE, declination).0
 }
 
 impl ClimateFields {
-    /// A point in the world as the climate takes it: how high over the sea, and the start's
-    /// latitude everywhere, as the sky has it (`daylight`): the planet is small, and one
-    /// season covers it (D149).
+    /// A point in the world as the climate takes it, on level ground: how high over the sea,
+    /// and its own latitude, from the world's frame. On the small planet that is the start's,
+    /// near enough, everywhere; on the 30 km world a degree is 524 m walked north.
     pub fn place(&self, at: Vec3) -> Place {
+        self.place_facing(at, at)
+    }
+
+    /// A point as the climate takes it, on ground facing `normal`, which leans it toward the
+    /// sun or away (D323).
+    pub fn place_facing(&self, at: Vec3, normal: Vec3) -> Place {
         Place {
             at,
             height_m: at.length() - self.sea_radius_m,
-            latitude: LATITUDE,
+            latitude: self.frame.latitude(at),
+            sunward: self.frame.sunward(at, normal),
         }
     }
 
@@ -223,6 +240,7 @@ fn read_fields(
         fields: Arc::new(Fields::new(climate.0.clone(), planet.seed())),
         years: Arc::new(years),
         sea_radius_m: planet.sea_radius_m(),
+        frame: world_frame(&planet, &climate.0),
     });
     let mut picture = |layers: u32, fill: [u8; 4]| {
         let mut image = Image::new_fill(
@@ -476,7 +494,10 @@ fn paint_maps(
     let mut leaves = vec![0u8; texels * 4 * kinds];
     let corner = corner(middle);
     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let day_hours = fields.fields.daylight(LATITUDE, time.day()).day_hours;
+    let latitude = fields
+        .frame
+        .latitude(planet.surface(start.at(middle.x, middle.y).normalize()));
+    let day_hours = fields.fields.daylight(latitude, time.day()).day_hours;
     for b in 0..TEXELS {
         for a in 0..TEXELS {
             let at = corner + (Vec2::new(a as f32, b as f32) + 0.5) * TEXEL_M;
@@ -567,6 +588,7 @@ mod tests {
             fields: Arc::new(Fields::new(climate, terra_gen::Seed(1))),
             years: Arc::new(crate::data::read(YEARS_FILE)),
             sea_radius_m: 2000.0,
+            frame: Frame::turned_for(Vec3::Y, LATITUDE, 0.17).0,
         }
     }
 

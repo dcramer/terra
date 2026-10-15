@@ -12,7 +12,7 @@ The developers, 2026-10-15: "I would like to see more biome demos. I would like 
 - **One world for all three.** They run on the 30 km world the building scenes already use (D13), in the start's climate (`assets/data/climate.ron`), each at the latitude and height where its climate falls.
   - On a world that size, a degree of latitude is 524 m. The fields put the start's climate at about 8 °C a year at 40°, and colder by about 1.5 °C for every kilometre walked north.
   - So the tundra lies about 11 km north of the start, and a mountain's tree line sits about 1.6 km above the sea there. These are estimates from `climate.ron`'s numbers; the field maps below give the exact ones.
-  - Today the start's latitude is a constant (`LATITUDE` in `terra_world/src/daylight.rs`). The demos need it read from where the camera stands.
+  - Each place's latitude is its own, from the world's frame (D331), and the sun's height is taken where the camera stands.
 - **A reference before anything** ([environment skill](../.agents/skills/environment/SKILL.md), D311):
   - frames of the target from first-party sources (Steam store screenshots and trailers, sampled every 2 s), and photographs where the real place is the target;
   - kept under `~/.cache/terra-review/refs/<name>/`, never committed;
@@ -151,7 +151,7 @@ The view is open: across the water, up the slopes. The lush forest's full densit
 Each step lands, passes `cargo xtask check` and is judged on its own.
 
 1. **The reference:** frames, photos, `mountain-lake-day`, and a research note of what they show. Done: `mountain-lake-day` (Far Cry 5) and `morskie-oko-day` (photographs), by band ([research](../research/2026-10-15-mountain-lake-reference.md)).
-2. **The field maps tool** and the latitude read from the camera. It shows what the start's climate puts at each height and latitude before anything is drawn.
+2. **The field maps tool** and the latitude read from the camera. It shows what the start's climate puts at each height and latitude before anything is drawn. Done (D331): `cargo xtask fields`; at 40° the tree line is at 1,668 m and on 20 June the snow line at 2,400 m, so a lake at about 1,150 m has the forest 500 m above it, and peaks need to rise past 2,400 m, or the date to be earlier, to keep snow on more than their north faces.
 3. **Mountain ground:** the mountain term, steep ground in the octree, rock, scree and gravel as ground layers; a `lake` place with its first views. Measured: chunks, meshing time, bench.
 4. **Lakes:** basins filled by Priority-Flood, a water surface per lake, `terra_core::Water` implemented, wading and swimming in lakes.
 5. **Water shading:** depth, shore band and foam, wind ripples, then the reduced reflection. Each is measured on the across-the-lake view.
