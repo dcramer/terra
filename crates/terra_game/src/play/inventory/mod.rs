@@ -58,6 +58,23 @@ pub const SLOTS: [(GearSlot, &str); 5] = [
 #[cfg(test)]
 const PACK: GearSlot = SLOTS[0].0;
 
+/// For tests: takes off the clothing a player starts in, into the backpack, so a test knows
+/// what they wear; the pack stays on.
+#[cfg(test)]
+pub(crate) fn undress(world: &mut World, player: Entity) {
+    world.resource_scope(|world, items: Mut<Items>| {
+        let mut player = world.entity_mut(player);
+        let mut backpack = player.take::<Backpack>().unwrap();
+        let mut gear = player.take::<Gear>().unwrap();
+        for (slot, _) in SLOTS.iter().filter(|(slot, _)| *slot != PACK) {
+            if gear.0.worn(*slot).is_some() {
+                take_off(&items, &mut backpack.0, &mut gear.0, *slot).unwrap();
+            }
+        }
+        player.insert((backpack, gear));
+    });
+}
+
 /// The slot of the character sheet called a name.
 fn slot_named(name: &str) -> GearSlot {
     SLOTS

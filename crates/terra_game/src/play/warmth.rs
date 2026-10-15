@@ -267,6 +267,9 @@ mod tests {
         let night = air(-8.0, 4.0);
         let bare = test_player(&mut world, ground);
         let dressed = test_player(&mut world, ground + Vec3::X * 3.0);
+        // Both from nothing on but the pack, the dressed one given a coat.
+        crate::play::inventory::undress(&mut world, bare);
+        crate::play::inventory::undress(&mut world, dressed);
         world.resource_scope(|world, mut items: Mut<Items>| {
             let mut player = world.entity_mut(dressed);
             let mut backpack = player.get::<Backpack>().unwrap().0.clone();

@@ -361,27 +361,11 @@ mod tests {
         assert_eq!(hurt[0].player, bitten);
     }
 
-    /// Takes off the clothing a player starts in, into the backpack, so a test knows what
-    /// protects them; the pack stays on.
-    fn undressed(world: &mut World, player: Entity) {
-        world.resource_scope(|world, items: Mut<Items>| {
-            let mut player = world.entity_mut(player);
-            let mut backpack = player.take::<Backpack>().unwrap();
-            let mut gear = player.take::<Gear>().unwrap();
-            for (slot, name) in inventory::SLOTS {
-                if name != "Pack" && gear.0.worn(slot).is_some() {
-                    inventory::take_off(&items, &mut backpack.0, &mut gear.0, slot).unwrap();
-                }
-            }
-            player.insert((backpack, gear));
-        });
-    }
-
     #[test]
     fn what_is_worn_takes_some_of_a_blow() {
-        let bare = health_lost(bitten(undressed));
+        let bare = health_lost(bitten(inventory::undress));
         let armoured = health_lost(bitten(|world, player| {
-            undressed(world, player);
+            inventory::undress(world, player);
             world.resource_scope(|world, mut items: Mut<Items>| {
                 let armour = items
                     .kinds()
