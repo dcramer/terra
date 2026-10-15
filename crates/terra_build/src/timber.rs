@@ -947,6 +947,7 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         step: t.step,
         // Rounded edges only as finely as the kit draws a round log: fewer far off.
         corner_steps: if t.sides < 12 { 1 } else { 3 },
+        tight: false,
     };
     let mut member = squared(frame, &look, split, random);
     member.daub = (
@@ -972,6 +973,9 @@ struct Squared {
     /// How far apart its rings are along it, and how many steps round each edge.
     step: f32,
     corner_steps: usize,
+    /// Laid side by side with others, as a deck's boards are: its sides straight, neither
+    /// waved nor drawn in at its ends, so they meet the next's along their length.
+    tight: bool,
 }
 
 /// A squared member along a frame: a rounded rectangle swept along it, its faces gently
@@ -1067,7 +1071,8 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
                 } else {
                     (q.x, q.y)
                 };
-                centre + frame.side * (x * end) + frame.up * (y * end)
+                let x = if look.tight { p.x } else { x * end };
+                centre + frame.side * x + frame.up * (y * end)
             })
             .collect();
         grid.push(ring);
@@ -1134,6 +1139,7 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
             PLANK_STEP_M
         },
         corner_steps: 1,
+        tight: true,
     };
     let member = squared(&frame, &look, Split::Whole, &mut random);
     let t = &kit.timber;

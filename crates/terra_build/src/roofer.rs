@@ -334,6 +334,19 @@ pub fn cubes(footprint: &BTreeSet<[i32; 2]>, layer: i32, height: &dyn Fn(Vec2) -
 /// The shape of a cube whose corners, north-west, north-east, south-east and south-west,
 /// are high or low, and how far up from the low corners' layer it sits: down one where no
 /// corner is high but its middle is, a ridge's whole cube under its flat top.
+/// The heights of a roof cube's top corners, north-west, north-east, south-east and
+/// south-west, in cubes over `layer`, as [`cubes`] laid it: none for a shape it never lays.
+pub fn corner_heights(at: IVec3, shape: Shape, layer: i32) -> Option<[i32; 4]> {
+    let low = at.y - layer;
+    if shape == Shape::Whole {
+        return Some([low + 1; 4]);
+    }
+    (0..16u8)
+        .map(|bits| [0, 1, 2, 3].map(|i| bits & (1 << i) != 0))
+        .find(|&high| shape_of(high, false) == (0, shape))
+        .map(|high| high.map(|h| low + i32::from(h)))
+}
+
 fn shape_of(high: [bool; 4], peak: bool) -> (i32, Shape) {
     use Facing::{East, North, South, West};
     match high {

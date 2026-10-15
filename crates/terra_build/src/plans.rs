@@ -7,16 +7,16 @@
 //! an opening. The hammer and the remote both lay through these, so they lay the same. The
 //! ground under a plan is filled in by whoever acts, from the planet.
 
-use std::collections::{BTreeMap, BTreeSet};
-use terra_build::ground::{cube_cm, footing as footing_cubes};
-use terra_build::ops::{Op, Planned};
-use terra_build::roofer::{self, Style};
-use terra_build::{
+use crate::ground::{cube_cm, footing as footing_cubes};
+use crate::ops::{Op, Planned};
+use crate::roofer::{self, Style};
+use crate::{
     Base, Facing, Fill, Kind, Panel, PartId, Pending, Rules, STOREY_CUBES, Shape, Terms,
     floor_layer, storey_of, wall_layer,
 };
+use std::collections::{BTreeMap, BTreeSet};
 
-use bevy::math::{IVec2, IVec3};
+use glam::{IVec2, IVec3};
 
 /// A plan of these cubes in a part, leaving out any already there; none if all are.
 fn plan(
@@ -247,7 +247,7 @@ pub fn flight(
 ) -> Vec<Op> {
     let mut parts = Numbers::of(base);
     // Up onto what is ahead of it, a deck or a floor, else a storey (D306).
-    let rise = terra_build::ground::flight_onto(base, foot, facing, wide)
+    let rise = crate::ground::flight_onto(base, foot, facing, wide)
         .unwrap_or((floor_over(foot) - foot.y + 1).max(1));
     let (forward, across) = (facing.step(), facing.turned(1).step());
     let columns: Vec<IVec3> = (0..rise)
@@ -278,7 +278,7 @@ pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) ->
     let mut from = foot.y;
     if let Some(footings) = footings.filter(|f| f.on_ground(base, foot)) {
         let (on, cubes) =
-            terra_build::ground::post_on_ground(base, [foot.x, foot.z], foot.y, footings.ground_cm);
+            crate::ground::post_on_ground(base, [foot.x, foot.z], foot.y, footings.ground_cm);
         from = on.min(top);
         ops.extend(plan(base, parts.next(), footings.kind, cubes));
     }
@@ -450,11 +450,11 @@ pub fn replace(base: &Base, cubes: &[IVec3], kind: Kind) -> Vec<Op> {
 
 /// A kind's family: its pattern, and whether it is framed. Two kinds of one family lay the
 /// same shapes from the same cubes, so one changes into the other in place (D298).
-pub fn family(kit: &terra_build::kit::Kit) -> u8 {
+pub fn family(kit: &crate::kit::Kit) -> u8 {
     let pattern = match kit.pattern {
-        terra_build::kit::Pattern::Logs => 0,
-        terra_build::kit::Pattern::Masonry => 1,
-        terra_build::kit::Pattern::Roof => 2,
+        crate::kit::Pattern::Logs => 0,
+        crate::kit::Pattern::Masonry => 1,
+        crate::kit::Pattern::Roof => 2,
     };
     pattern * 2 + u8::from(kit.framing.is_some())
 }
@@ -489,12 +489,12 @@ pub fn change(
     // The job done through on a copy, step by step, with everything to hand: the act checks
     // the steps again, with what the builder has, all or none.
     let mut copy = base.clone();
-    let cx = terra_build::ops::Context::free(rules);
+    let cx = crate::ops::Context::free(rules);
     let mut ops = marked.clone();
     if copy.act_all(&marked, &cx).is_err() {
         return marked;
     }
-    let near = bevy::math::Vec3::ZERO;
+    let near = glam::Vec3::ZERO;
     while let Some(op) = copy.next_change(near, &one_at_a_time) {
         if copy.act(&op, &cx).is_err() {
             return marked;
@@ -604,18 +604,86 @@ pub fn roof(
             cubes: flat.clone(),
         });
     }
-    // What is there once the flat roof's plan has gone.
-    let gone: BTreeSet<[i32; 3]> = flat.into_iter().collect();
-    let free = |at: IVec3| base.cube(at).is_none() || gone.contains(&at.to_array());
     let layer = wall_layer(storey) + STOREY_CUBES;
-    let plan = roofer::over(footprint, layer, style, along_x);
+    // A roof already planned or built over some of the footprint, as a dormer is laid into
+    // the roof over the storey: the two are one roof, the higher of the two at every point
+    // (a field's maximum, as the roofer joins a footprint's wings), so where the new rises
+    // out of the old it meets it in valleys rather than standing in it. Its cubes over this
+    // footprint, by column, the highest of each.
+    let mut existing: BTreeMap<[i32; 2], (IVec3, Shape, bool)> = BTreeMap::new();
+    for &[x, z] in footprint {
+        for y in (layer..layer + ROOF_REACH).rev() {
+            let at = IVec3::new(x, y, z);
+            if let Some(cube) = base.cube(at).filter(|cube| cube.kind.is_roof())
+                && roofer::corner_heights(at, cube.shape, layer).is_some()
+            {
+                let empty = cube.level() == 0 && !cube.is_built();
+                existing.insert([x, z], (at, cube.shape, empty));
+                break;
+            }
+        }
+    }
+    let mut old: BTreeMap<[i32; 2], i32> = BTreeMap::new();
+    for (&[x, z], &(at, shape, _)) in &existing {
+        let heights = roofer::corner_heights(at, shape, layer).unwrap_or_default();
+        for (corner, h) in [[x, z], [x + 1, z], [x + 1, z + 1], [x, z + 1]]
+            .into_iter()
+            .zip(heights)
+        {
+            let was = old.entry(corner).or_insert(h);
+            *was = (*was).max(h);
+        }
+    }
+    let new = roofer::field(footprint, style, along_x);
+    let joined = |p: glam::Vec2| {
+        let mine = new(p);
+        let (x, z) = (libm::floorf(p.x) as i32, libm::floorf(p.y) as i32);
+        let theirs = if p.x == x as f32 && p.y == z as f32 {
+            old.get(&[x, z]).map(|&h| h as f32)
+        } else {
+            let corners = [[x, z], [x + 1, z], [x + 1, z + 1], [x, z + 1]];
+            corners
+                .iter()
+                .map(|c| old.get(c).copied())
+                .collect::<Option<Vec<i32>>>()
+                .map(|h| h.iter().sum::<i32>() as f32 / 4.0)
+        };
+        theirs.map_or(mine, |theirs| mine.max(theirs))
+    };
+    let plan = roofer::cubes(footprint, layer, &joined);
+    // Where the roof there is to change, its cubes, planned with nothing in them yet, taken
+    // out of the plan for the new; a built one is kept, and the new laid round it.
+    let mut kept: BTreeSet<[i32; 2]> = BTreeSet::new();
+    let mut replaced: Vec<[i32; 3]> = Vec::new();
+    for &(at, shape) in &plan.roof {
+        if let Some(&(was, was_shape, empty)) = existing.get(&[at.x, at.z]) {
+            if (was, was_shape) == (at, shape) || !empty {
+                kept.insert([at.x, at.z]);
+            } else {
+                replaced.push(was.to_array());
+            }
+        }
+    }
+    if !replaced.is_empty() {
+        ops.push(Op::Unplan {
+            cubes: replaced.clone(),
+        });
+    }
+    // What is there once the flat roof's plan and the roof's replaced have gone.
+    let gone: BTreeSet<[i32; 3]> = flat.into_iter().chain(replaced).collect();
+    let free = |at: IVec3| base.cube(at).is_none() || gone.contains(&at.to_array());
     let mut parts = Numbers::of(base);
     // The gables, by the kind of the wall's top under each.
     let mut gables: BTreeMap<Kind, Vec<IVec3>> = BTreeMap::new();
     for at in plan.gables {
+        // The top of a wall under it: not a floor or a ceiling, which a roof's edge over a
+        // room, as a dormer's side over the storey's ceiling, stands on without a gable.
         let wall = (layer - STOREY_CUBES..layer)
             .rev()
-            .find_map(|y| base.cube(IVec3::new(at.x, y, at.z)));
+            .map(|y| IVec3::new(at.x, y, at.z))
+            .find(|&below| base.cube(below).is_some())
+            .filter(|&below| base.in_wall(below))
+            .and_then(|below| base.cube(below));
         if let Some(wall) = wall.filter(|wall| !wall.kind.is_roof())
             && free(at)
         {
@@ -642,7 +710,12 @@ pub fn roof(
         let cubes = cubes.into_iter().map(|at| (at, Shape::Whole)).collect();
         ops.extend(lay(parts.next(), wall, cubes));
     }
-    ops.extend(lay(parts.next(), kind, plan.roof));
+    let roof = plan
+        .roof
+        .into_iter()
+        .filter(|(at, _)| !kept.contains(&[at.x, at.z]))
+        .collect();
+    ops.extend(lay(parts.next(), kind, roof));
     ops
 }
 
@@ -748,7 +821,7 @@ pub fn hole(base: &Base, cube: IVec3) -> Option<(IVec3, IVec3)> {
     while let Some(at) = frontier.pop() {
         low = low.min(at);
         high = high.max(at);
-        for step in terra_build::support::FACES {
+        for step in crate::support::FACES {
             let next = at + step;
             if open(next) && seen.insert(next.to_array()) {
                 frontier.push(next);
@@ -765,9 +838,9 @@ pub fn hole(base: &Base, cube: IVec3) -> Option<(IVec3, IVec3)> {
 pub fn prop_for(
     base: &Base,
     cube: IVec3,
-    kind: terra_build::PropKind,
-    hang: terra_build::fitting::Hang,
-) -> Option<terra_build::Prop> {
+    kind: crate::PropKind,
+    hang: crate::fitting::Hang,
+) -> Option<crate::Prop> {
     let (min, max) = hole(base, cube)?;
     let size = max - min;
     // Across the wall: the hole's thin way, or across the wall's own run for a hole a
@@ -798,10 +871,10 @@ pub fn prop_for(
         if off >= 0.0 { across } else { -across }
     };
     let opens = match hang {
-        terra_build::fitting::Hang::Door => inward,
-        terra_build::fitting::Hang::Shutters => -inward,
+        crate::fitting::Hang::Door => inward,
+        crate::fitting::Hang::Shutters => -inward,
     };
-    Some(terra_build::Prop {
+    Some(crate::Prop {
         kind,
         min: min.to_array(),
         max: max.to_array(),
@@ -813,8 +886,8 @@ pub fn prop_for(
 
 /// How a hole whose lowest cube is `low` takes a prop: a doorway, from its storey's floor
 /// or over no wall, a door; a window, over a sill, shutters.
-pub fn hang_for(base: &Base, low: IVec3) -> terra_build::fitting::Hang {
-    use terra_build::fitting::Hang;
+pub fn hang_for(base: &Base, low: IVec3) -> crate::fitting::Hang {
+    use crate::fitting::Hang;
     if low.y == wall_layer(storey_of(low.y)) || !base.in_wall(low - IVec3::Y) {
         Hang::Door
     } else {
@@ -823,7 +896,7 @@ pub fn hang_for(base: &Base, low: IVec3) -> terra_build::fitting::Hang {
 }
 
 /// How wide and high a hole is, in cubes, along its wall.
-pub fn hole_size(prop: &terra_build::Prop) -> (i32, i32) {
+pub fn hole_size(prop: &crate::Prop) -> (i32, i32) {
     let size = IVec3::from_array(prop.max) - IVec3::from_array(prop.min) + IVec3::ONE;
     (size.x.max(size.z), size.y)
 }
@@ -848,8 +921,8 @@ pub fn wall_tiles(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use terra_build::ops::Context;
-    use terra_build::{Rules, State};
+    use crate::ops::Context;
+    use crate::{Rules, State};
 
     const LOGS: Kind = Kind(1);
     const STONE: Kind = Kind(2);
@@ -1028,16 +1101,16 @@ mod tests {
         );
         // The doorway takes a door, hung to swing into the room, north of its south wall;
         // the window a cube wide in the west wall, shutters to fold out to the west.
-        use terra_build::fitting::Hang;
+        use crate::fitting::Hang;
         let at = IVec3::new(5, 2, 7);
         assert_eq!(hang_for(&base, IVec3::new(4, 0, 7)), Hang::Door);
-        let door = prop_for(&base, at, terra_build::PropKind(0), Hang::Door).unwrap();
+        let door = prop_for(&base, at, crate::PropKind(0), Hang::Door).unwrap();
         assert_eq!((door.opens, hole_size(&door)), ([0, 0, -1], (2, 4)));
         assert_eq!(hang_for(&base, IVec3::new(0, 2, 3)), Hang::Shutters);
         let shutters = prop_for(
             &base,
             IVec3::new(0, 2, 3),
-            terra_build::PropKind(1),
+            crate::PropKind(1),
             Hang::Shutters,
         )
         .unwrap();
@@ -1162,6 +1235,69 @@ mod tests {
     }
 
     #[test]
+    fn a_dormer_laid_into_a_roof_is_one_roof_with_it_and_stands_on_no_gable_over_the_room() {
+        // A room under a gable along X, and a dormer laid into its south slope after, its
+        // own gable running north and south to the eaves, as the QA build film lays one.
+        let rules = Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        let ops = room(
+            &base,
+            IVec3::new(0, 0, 0),
+            IVec3::new(9, 0, 7),
+            LOGS,
+            LOGS,
+            None,
+        );
+        base.act_all(&ops, &cx).unwrap();
+        let footprint = room_footprint(&base, IVec3::new(4, 0, 4));
+        let ops = roof(&base, &footprint, 0, Style::Gable, None, SHAKES);
+        base.act_all(&ops, &cx).unwrap();
+        let dormer: BTreeSet<[i32; 2]> =
+            (3..=6).flat_map(|x| (4..=7).map(move |z| [x, z])).collect();
+        let ops = roof(&base, &dormer, 0, Style::Gable, Some(false), SHAKES);
+        base.act_all(&ops, &cx).unwrap();
+        // Every two roof cubes side by side meet at their shared corners: one surface, the
+        // dormer's slopes running down into the main roof\x27s in valleys, with no step
+        // between them where one stood in or over the other.
+        let layer = wall_layer(0) + STOREY_CUBES;
+        let corners: BTreeMap<[i32; 2], [i32; 4]> = base
+            .cubes()
+            .filter(|(_, c)| c.kind == SHAKES)
+            .map(|(at, c)| {
+                let heights = roofer::corner_heights(at, c.shape, layer).expect("a roof's shape");
+                ([at.x, at.z], heights)
+            })
+            .collect();
+        assert_eq!(corners.len(), 80, "one roof cube a column");
+        for (&[x, z], h) in &corners {
+            if let Some(east) = corners.get(&[x + 1, z]) {
+                assert_eq!([h[1], h[2]], [east[0], east[3]], "at [{x}, {z}] and east");
+            }
+            if let Some(south) = corners.get(&[x, z + 1]) {
+                assert_eq!(
+                    [h[3], h[2]],
+                    [south[0], south[1]],
+                    "at [{x}, {z}] and south"
+                );
+            }
+        }
+        // The dormer stands out of the slope: its ridge over the main roof near the eaves.
+        assert!(corners[&[4, 7]][2] > 1, "{:?}", corners[&[4, 7]]);
+        // Its sides over the room stand on the ceiling, not on walls carried up into it.
+        let walls_up = base
+            .cubes()
+            .filter(|(at, c)| {
+                c.kind == LOGS
+                    && at.y >= layer
+                    && (1..=8).contains(&at.x)
+                    && (1..=6).contains(&at.z)
+            })
+            .count();
+        assert_eq!(walls_up, 0);
+    }
+
+    #[test]
     fn a_brush_lays_changes_carves_and_takes_out_a_box_on_its_own_grid() {
         let rules = Rules::default();
         let cx = Context::free(&rules);
@@ -1225,7 +1361,7 @@ mod tests {
             assert_eq!(now.kind, EARTH);
             assert_eq!(
                 (now.shape, now.state, now.pending),
-                (was.shape, was.state, terra_build::Pending::None)
+                (was.shape, was.state, crate::Pending::None)
             );
         }
         let carving = carve(&base, &two, None);
@@ -1246,11 +1382,11 @@ mod tests {
             match op {
                 Op::LayPlan { kind, cubes, .. } => {
                     for planned in cubes {
-                        let cube = terra_build::Cube {
+                        let cube = crate::Cube {
                             shape: planned.shape,
-                            ..terra_build::Cube::new(kind, Fill::Solid)
+                            ..crate::Cube::new(kind, Fill::Solid)
                         };
-                        base.apply(terra_build::BuildOp::Fill {
+                        base.apply(crate::BuildOp::Fill {
                             min: planned.at,
                             max: planned.at,
                             cube: Some(cube),
@@ -1259,7 +1395,7 @@ mod tests {
                 }
                 Op::Unplan { cubes } => {
                     for at in cubes {
-                        base.apply(terra_build::BuildOp::Fill {
+                        base.apply(crate::BuildOp::Fill {
                             min: at,
                             max: at,
                             cube: None,
@@ -1302,7 +1438,7 @@ mod tests {
         assert_ne!(base.room(a_low), base.room(a_high));
         assert_ne!(base.room(a_low), base.room(b_low));
         // A well through the floor between one wing's storeys joins them in one room.
-        base.apply(terra_build::BuildOp::Fill {
+        base.apply(crate::BuildOp::Fill {
             min: [-24, 5, -20],
             max: [-21, 5, -17],
             cube: None,

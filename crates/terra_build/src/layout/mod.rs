@@ -15,6 +15,7 @@
 pub mod blocks;
 mod dressing;
 mod floors;
+pub(crate) use floors::post_in_deck;
 pub mod frames;
 pub mod roles;
 pub mod roofs;

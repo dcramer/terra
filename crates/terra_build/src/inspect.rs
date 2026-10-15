@@ -717,6 +717,10 @@ fn meets(from: Vec3, dir: Vec3, t: &Tri) -> Option<f32> {
 /// Whether a cube is a solid wall's, every part of it there to see: built, whole, a wall
 /// kind's, not glass or an opening.
 fn solid(base: &Base, kits: &Kits, at: IVec3) -> bool {
+    // A post's top in a deck, boarded over as the deck is (`layout::post_in_deck`).
+    if crate::layout::post_in_deck(base, kits, at).is_some() {
+        return true;
+    }
     base.cube(at).is_some_and(|cube| {
         cube.is_built()
             && cube.fill == Fill::Solid
@@ -819,8 +823,15 @@ fn see_through(
             // courses along a log wall seen from its end, which no view sees through.
             let mut dirs: Vec<Vec3> = vec![(-n + u_axis * 0.07 + v_axis * 0.04).normalize()];
             if slanting {
-                for t in [u_axis, -u_axis, v_axis, -v_axis] {
-                    dirs.push((-n + t * 0.6).normalize());
+                // Each a few degrees off the other way across too, so none runs in the
+                // plane of a seam across the face, as two boards laid tight meet in.
+                for (t, off) in [
+                    (u_axis, v_axis),
+                    (-u_axis, v_axis),
+                    (v_axis, u_axis),
+                    (-v_axis, u_axis),
+                ] {
+                    dirs.push((-n + t * 0.6 + off * 0.04).normalize());
                 }
             }
             'lines: for (u, v) in samples() {
@@ -1320,6 +1331,59 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
             }
         }
     }
+    // The QA build film's cabin as a player leaves it (`qa_cabin`): a storey over a roof,
+    // a dormer, a deck, a wall changed and a window carved, in each wall kit, the wall changed
+    // to the next of its pattern, and in all of them mixed.
+    let height = |[x, z]: [i32; 2]| (-(x as f32) * 4.0 - z as f32 * 2.0) as i16;
+    let other = |kit: &crate::kit::Kit| {
+        let like: Vec<&&crate::kit::Kit> = walls
+            .iter()
+            .filter(|other| other.pattern == kit.pattern)
+            .collect();
+        let pool: Vec<&crate::kit::Kit> = if like.len() > 1 {
+            like.into_iter().copied().collect()
+        } else {
+            walls.clone()
+        };
+        let at = pool
+            .iter()
+            .position(|other| other.id == kit.id)
+            .unwrap_or(0);
+        pool[(at + 1) % pool.len()].kind()
+    };
+    let mut cabin = |name: String, kinds: Vec<Kind>, other: Kind| {
+        if only.is_some_and(|only| !name.contains(only)) {
+            return;
+        }
+        out.push((name, crate::qa_cabin::cabin(kits, &kinds, other, &height)));
+    };
+    for kit in &walls {
+        cabin(
+            format!("{}: QA cabin", kit.id),
+            vec![kit.kind()],
+            other(kit),
+        );
+    }
+    if let Some(first) = walls.first() {
+        let ids: Vec<String> = walls.iter().map(|kit| kit.id.to_string()).collect();
+        cabin(
+            format!("{}: QA cabin", ids.join(" with ")),
+            walls.iter().map(|kit| kit.kind()).collect(),
+            other(first),
+        );
+    }
+    // The castle, of 140,000 cubes (`castle`), in the footings' stone with each kind of
+    // long members for its timber.
+    if let Some(stone) = kits.footing() {
+        for timber in walls.iter().filter(|kit| kit.pattern == Pattern::Logs) {
+            let name = format!("{} with {}: castle", stone.id, timber.id);
+            if only.is_some_and(|only| !name.contains(only)) {
+                continue;
+            }
+            let ops = crate::castle::castle(stone.kind(), timber.kind(), roof(stone.kind()));
+            out.push((name, on_ground(kits, &ops)));
+        }
+    }
     out
 }
 
@@ -1501,6 +1565,44 @@ mod tests {
         assert!(found(0.28).is_empty());
         // A wall's thickness behind: another face, not relief over it.
         assert!(found(0.0).is_empty());
+    }
+
+    #[test]
+    fn a_posts_top_in_a_deck_is_as_solid_as_the_deck() {
+        // A post two cubes high, a deck beside its top cube on its layer: the deck is laid
+        // over the post's top (`layout::post_in_deck`), so lines through the deck in by its
+        // side there are inside it, as by any other of its cubes. A kind laying decks.
+        let mut kit = crate::kit::Kit::default();
+        kit.textures.insert(
+            Material::Floor,
+            crate::kit::Texture {
+                path: "boards".into(),
+                metres: [1.0, 1.0],
+                depth: 0.0,
+                reflectance: crate::kit::matte(),
+                strips: None,
+                cells: 1,
+                worn: None,
+            },
+        );
+        let kits = Kits(vec![kit]);
+        let mut base = Base::default();
+        for (at, shape) in [
+            ([0, 0, 0], crate::Shape::Post),
+            ([0, 1, 0], crate::Shape::Post),
+            ([1, 1, 0], crate::Shape::Whole),
+        ] {
+            base.apply(crate::BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(crate::Cube {
+                    shape,
+                    ..crate::Cube::new(Kind(1), Fill::Solid)
+                }),
+            });
+        }
+        assert!(solid(&base, &kits, IVec3::new(0, 1, 0)));
+        assert!(!solid(&base, &kits, IVec3::new(0, 0, 0)));
     }
 
     #[test]

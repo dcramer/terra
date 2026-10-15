@@ -26,8 +26,17 @@ use std::collections::BTreeSet;
 /// a stone footing it runs onto.
 const BOARD_THICK_M: f32 = 0.04;
 const BOARD_PROUD_M: f32 = 0.008;
-/// The gap between boards side by side and end to end.
+/// The gap between a rim's beams. Boards are laid tight, side by side and end to end, as
+/// a floor under a room and a flat roof over one must be, their rounded edges marking the
+/// seams; each edge on an even tick, so two boards' sides meet exactly, neither in the other.
 const GAP_M: f32 = 0.006;
+
+/// A length in metres to the nearest even tick, so a board's middle between two such edges
+/// is on a tick.
+fn even(metres: f32) -> f32 {
+    let half = super::TICKS as f32 / CELL_M * 0.5;
+    libm::roundf(metres * half) / half
+}
 /// How thick a joist is, a rim joist and a ledger.
 const JOIST_WIDE_M: f32 = 0.07;
 /// How deep a joist is at least, where the layer leaves little room under the boards.
@@ -494,10 +503,12 @@ impl Deck<'_> {
         let (a_high, b_high) = (high.dot(along), high.dot(across));
         // Boards run on under a wall as far as its members' faces, where it stands on
         // something else beside the deck, as a footing.
-        let under_wall = ((CELL_M - self.kit.diameter) * 0.5).max(0.0);
+        let under_wall = even(((CELL_M - self.kit.diameter) * 0.5).max(0.0));
+        // Covered by what stands on it, but for a roof's cube, whose slope leaves the deck
+        // under it showing, as a dormer's eaves over a storey's ceiling do.
         let covered = |at: IVec3| {
             base.cube(at + IVec3::Y)
-                .is_some_and(|c| c.fill != Fill::Open)
+                .is_some_and(|c| c.fill != Fill::Open && !c.kind.is_roof())
         };
         // A cube beside the deck under a wall: the boards run on over it, under the wall.
         let wall_foot = |at: IVec3| {
@@ -505,13 +516,28 @@ impl Deck<'_> {
                 && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
                 && base.in_wall(at + IVec3::Y)
         };
+        // How far past a cube beside the deck its boards run: under a wall standing on it,
+        // or up to the face of a wall beside the deck on its layer, over the ledger there,
+        // so no slot is left along the wall between its logs and the boards.
+        let reach = |at: IVec3| {
+            if wall_foot(at) {
+                under_wall
+            } else if !region.contains(&at.to_array())
+                && base.in_wall(at)
+                && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
+            {
+                even(self.wall_face(at))
+            } else {
+                0.0
+            }
+        };
         let board_y = top + BOARD_PROUD_M - BOARD_THICK_M * 0.5;
         let point = |a: f32, b: f32, height: f32| {
             along.as_vec3() * a + across.as_vec3() * b + Vec3::Y * height
         };
         for b in b_low..=b_high {
             let mut row = Random(hash(&[0xdec, b as u32, y as u32, along_x as u32]));
-            let split = 0.5 + SPLIT * row.signed();
+            let split = even((0.5 + SPLIT * row.signed()) * CELL_M) / CELL_M;
             let runs = runs(a_low..=a_high, |a| {
                 region.contains(&cell(a, b).to_array()) && !covered(cell(a, b))
             });
@@ -519,11 +545,9 @@ impl Deck<'_> {
                 for &(first, last) in &runs {
                     // The outer board of a row along a wall runs on under it.
                     let beside = if board == 0 { b - 1 } else { b + 1 };
-                    let wider = if (first..=last).all(|a| wall_foot(cell(a, beside))) {
-                        under_wall
-                    } else {
-                        0.0
-                    };
+                    let wider = (first..=last)
+                        .map(|a| reach(cell(a, beside)))
+                        .fold(f32::MAX, f32::min);
                     let (from_m, to_m) = if board == 0 {
                         (
                             b as f32 * CELL_M + from * CELL_M - wider,
@@ -533,19 +557,9 @@ impl Deck<'_> {
                         ((b as f32 + from) * CELL_M, (b as f32 + to) * CELL_M + wider)
                     };
                     let middle = (from_m + to_m) * 0.5;
-                    let wide = to_m - from_m - GAP_M;
-                    let (start_out, end_out) = (
-                        if wall_foot(cell(first - 1, b)) {
-                            under_wall
-                        } else {
-                            0.0
-                        },
-                        if wall_foot(cell(last + 1, b)) {
-                            under_wall
-                        } else {
-                            0.0
-                        },
-                    );
+                    let wide = to_m - from_m;
+                    let (start_out, end_out) =
+                        (reach(cell(first - 1, b)), reach(cell(last + 1, b)));
                     // Joints over a joist, staggered from the boards beside it.
                     let seed = hash(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
                     let mut lengths = Random(seed);
@@ -560,10 +574,10 @@ impl Deck<'_> {
                         }
                         .clamp(1, most);
                         let end = (at + span - 1).min(last);
-                        let start_m = at as f32 * CELL_M + GAP_M * 0.5
-                            - if at == first { start_out } else { 0.0 };
-                        let end_m = (end + 1) as f32 * CELL_M - GAP_M * 0.5
-                            + if end == last { end_out } else { 0.0 };
+                        let start_m =
+                            at as f32 * CELL_M - if at == first { start_out } else { 0.0 };
+                        let end_m =
+                            (end + 1) as f32 * CELL_M + if end == last { end_out } else { 0.0 };
                         layout.pieces.push(Piece::Plank {
                             from: Place::near(point(start_m, middle, board_y)),
                             to: Place::near(point(end_m, middle, board_y)),
@@ -654,15 +668,22 @@ mod tests {
             .filter(|(at, _)| base.cube(*at + IVec3::Y).is_none())
             .map(|(at, _)| at.to_array())
             .collect();
-        // Over every cube of floor and flat roof not under a wall, its top nearly all
-        // boarded, but for the gaps between boards; nowhere else.
-        assert_eq!(cover.keys().copied().collect::<BTreeSet<_>>(), deck);
+        // Over every cube of floor and flat roof not under a wall, its top boarded whole,
+        // the boards laid tight; and over the walls beside a deck on its layer only as far as
+        // their logs' faces, so no slot runs along a wall; nowhere else.
+        let whole = CELL_M * CELL_M;
+        for at in &deck {
+            let area = cover.get(at).copied().unwrap_or(0.0);
+            assert!(area > whole * 0.98 && area < whole * 1.03, "{at:?}: {area}");
+        }
+        let face = (CELL_M - kit().diameter) * 0.5;
         for (at, area) in &cover {
-            let whole = CELL_M * CELL_M;
-            assert!(
-                *area > whole * 0.93 && *area < whole * 1.01,
-                "{at:?}: {area}"
-            );
+            if deck.contains(at) {
+                continue;
+            }
+            let at = IVec3::from_array(*at);
+            assert!(base.in_wall(at), "boarded off the deck at {at}");
+            assert!(*area <= CELL_M * (face + 0.01), "{at}: {area}");
         }
         // No board longer than a tree gives.
         assert!(

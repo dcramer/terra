@@ -36,7 +36,7 @@ mod light;
 mod loss;
 mod maps;
 mod memory;
-pub(crate) mod plans;
+pub(crate) use terra_build::plans;
 pub(crate) mod props;
 mod remote;
 mod sheet;

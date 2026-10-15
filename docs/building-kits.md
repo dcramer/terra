@@ -207,7 +207,7 @@ Each cube goes up in four steps of its fill, as its kit's cost says: its frame, 
 
 **Gables are walls.** A gable is wall cubes of any kind built up under the slope; a wall cube with a roof cube on it is carried up into it, cut at the roof's deck, the plane the covering lies on and the boards under it are drawn on, in one straight line with no gap or step: over a timber wall its courses carry on up, each log's ends cut to the slope over it; over a block kind its surface, sawn square at the cut, so a stone end wall is stone to the ridge; no cap, quoin or plate is dressed along the steps its cubes climb in. "Add a roof" lays a gable's walls with it, in the kind of each wall's top. A block kind's wall top under a roof takes no coping. The roof's frame stops inside the roof, at a gable's inner face: no batten, beam or rafter runs through a gable or out under its verge (D241). The kit sheet's "gable end" rows put every wall kind under every roof kind, each logging a vantage straight on to its gable.
 
-**Any shape.** A roof is whatever its cubes are: a gable, a hip, an L, T or U, a dormer on a slope, a roof against a taller wall, a storey built over or beside one with its own roof. A roof's cubes are no wall or floor, and a room under them is indoors.
+**Any shape.** A roof is whatever its cubes are: a gable, a hip, an L, T or U, a dormer on a slope (laid into a roof already there, the two one roof, the higher of the two at every point, so the dormer meets the slope in valleys), a roof against a taller wall, a storey built over or beside one with its own roof. A roof's cubes are no wall or floor, and a room under them is indoors.
 
 A ghost's covering is a plain sheet, without its courses, which costs a tenth as much to draw.
 
