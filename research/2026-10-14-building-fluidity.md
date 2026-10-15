@@ -25,6 +25,16 @@ Each film was read frame by frame where things change (contact sheets, and runs 
 - **Time from an edit to the screen** is 15 to 30 ms for a wall's course, but 50 to 200 ms in the storey and roof stages, where one section's near detail takes up to 70 ms to merge on a worker (`Build: change on screen` breaks it down); the castle's edits 60 to 90 ms, the tower's fall 500 to 740 ms.
 - **Building everything at once** (`build.fill` of a few thousand steps in one call) takes several seconds on the main thread: what goes in next is found afresh each step.
 
+## Partial states, frame by frame
+
+The developers saw "some weird partial thing" in the first films. Each partial state was cut from the films and checked against a live run replaying the same calls (`build.state` beside the picture):
+
+- **Walls rising** go in course by course across every wall, the lowest layer first (`next_work`), a stone wall's course a cube at a time from the nearest, so at most one course stands higher on the near side than the far while it is laid; a log wall's courses cross at the corners as they rise. As a real course is laid. Kept.
+- **Roofs** go in a row at a time from the eaves, each row through its frame, battens, covering and trims before the next. Kept.
+- **The loose blocks beside the footing** were the film's own: single cubes sunk a metre into falling ground and a cut block, which read as rubble. The film now lays a garden wall in metre boxes, a course below the ground and one over it, and a post at each end.
+- **A wall changing material** came out course by course from the top, leaving the roof over ghosts, then went in again from the bottom. The film now changes to a material of the wall's own pattern, which repaints in place at once, as Enshrouded's swap does (D298); a change of pattern still rebuilds.
+- **Door steps** leave a thin wedge of their last stair cube above falling ground in front of the bottom step: a stair cube's lower tread mostly buried. Not fixed (the kits' and stairs' drawing).
+
 ## Found, for the developers
 
 - **A knocked-out corner of a log wall cannot be built again** while the logs over it stay up: "Something is built over it". Stone can; logs, as laid, go in from below.

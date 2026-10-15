@@ -29,6 +29,7 @@
 // ffmpeg and ImageMagick. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
+import { cpus, loadavg } from "node:os";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -129,7 +130,7 @@ async function film(set: KitSet) {
   mkdirSync(frames, { recursive: true });
   const sandbox = [...scenario.sandbox, "--clean", "--calls", offscreenPath(callsFile)];
   const [command, words] = offscreenRun(`qa-film`, [...sandbox, "--shots", `${offscreenPath(frames)}/f@${from}-${to}/2`]);
-  const run = spawnSync(command, words, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 });
+  const run = runOffscreen(command, words);
   const said = `${run.stdout}${run.stderr}`;
   writeFileSync(resolve(folder, `${label}-film.log`), said);
   if (!said.includes("SANDBOX saved")) throw new Error(`the film did not finish:\n${said.split("\n").slice(-25).join("\n")}`);
@@ -238,6 +239,9 @@ function encode(frames: string, out: string, stages: Stage[], from: number, set:
     { stdio: "inherit" },
   );
   if (encoded.status !== 0) throw new Error("ffmpeg failed");
+  // A small copy beside it, quick to open and to send.
+  const small = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "slow", "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out.replace(/\.mp4$/, "-720p.mp4")], { stdio: "inherit" });
+  if (small.status !== 0) throw new Error("ffmpeg failed on the small copy");
 }
 
 /// Three frames of each stage, at its start, middle and end, labelled, in one picture under
@@ -278,7 +282,8 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   rmSync(csv, { force: true });
   const settle = 30;
   const [command, words] = offscreenRun(`qa-trace`, [...sandbox, "--bench", "--settle", String(settle), "--bench-frames", String(Math.max(100, last - settle)), "--frame-times", offscreenPath(csv)]);
-  const run = spawnSync(command, words, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 });
+  const load = loadavg()[0];
+  const run = runOffscreen(command, words);
   writeFileSync(resolve(folder, `${label}-trace.log`), `${run.stdout}${run.stderr}`);
   if (!existsSync(csv)) throw new Error(`the trace did not finish:\n${`${run.stdout}${run.stderr}`.split("\n").slice(-25).join("\n")}`);
   const rows = readFileSync(csv, "utf8")
@@ -291,7 +296,13 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
     const sorted = [...values].sort((a, b) => a - b);
     return { median: sorted[Math.floor(sorted.length / 2)] ?? 0, p99: sorted[Math.floor(sorted.length * 0.99)] ?? 0, worst: sorted.at(-1) ?? 0 };
   };
-  const lines: string[] = [`${name} in ${set.name}, in real time on ${/SANDBOX frames on ([^:]+?) at/.exec(run.stdout)?.[1] ?? "the GPU"}: frames against the ${BUDGET_MS.toFixed(1)} ms budget`, ""];
+  // A trace shares the machine: what else ran with it is said, as `cargo xtask bench` says it.
+  const busy = Math.max(load, loadavg()[0]) / cpus().length;
+  const lines: string[] = [
+    `${name} in ${set.name}, in real time on ${/SANDBOX frames on ([^:]+?) at/.exec(run.stdout)?.[1] ?? "the GPU"}: frames against the ${BUDGET_MS.toFixed(1)} ms budget`,
+    `the machine's load ${(busy * 100).toFixed(0)}% of its ${cpus().length} cores${busy > 0.5 ? ": busy, so these times are high" : ""}`,
+    "",
+  ];
   const row = (title: string, ms: number[]) => {
     const { median, p99, worst } = stat(ms);
     lines.push(`${title.padEnd(24)} median ${median.toFixed(1).padStart(5)}  p99 ${p99.toFixed(1).padStart(5)}  worst ${worst.toFixed(1).padStart(6)} ms  over ${ms.filter((m) => m > BUDGET_MS).length}  hitches ${ms.filter((m) => m > HITCH_MS).length}`);
@@ -354,7 +365,7 @@ function index() {
     const t = made.trace;
     const timing = t ? `median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>${t.edits ? `<br>edits to screen median ${t.edit_median.toFixed(0)} · worst ${t.edit_worst.toFixed(0)} ms · <span class=${t.torn ? "bad" : "good"}>${t.torn} torn</span>` : ""}` : "not traced";
     const refused = made.refusals?.length ? `<br><span class=bad>${made.refusals.length} refused</span>` : "";
-    return `<td><a href="${scenario}/${set}.mp4"><img src="${scenario}/${set}.jpg" alt="${scenario} in ${set}"></a><br>${timing}${refused}<br><a href="${scenario}/${set}.txt">trace</a> · ${made.made.slice(0, 16).replace("T", " ")}</td>`;
+    return `<td><a href="${scenario}/${set}.mp4"><img src="${scenario}/${set}.jpg" alt="${scenario} in ${set}"></a><br>${timing}${refused}<br><a href="${scenario}/${set}-720p.mp4">720p</a> · <a href="${scenario}/${set}.txt">trace</a> · ${made.made.slice(0, 16).replace("T", " ")}</td>`;
   };
   const html = `<!doctype html><meta charset=utf-8><title>QA films</title>
 <style>body{font:14px system-ui;background:#16181c;color:#ddd;margin:16px}table{border-collapse:collapse}td,th{padding:6px;vertical-align:top;border:1px solid #333}img{width:320px;display:block}a{color:#9cf}.bad{color:#f88}.good{color:#8f8}.none{color:#666}</style>
@@ -376,4 +387,14 @@ function spans(frames: number[]) {
     i = j + 1;
   }
   return out.join(", ");
+}
+
+/// A scripted run to its end. Windows will not replace a program still closing, such as the
+/// last run's, so a run that could not be copied is tried again, as `client.start` does.
+function runOffscreen(command: string, words: string[]) {
+  for (let attempt = 0; ; attempt++) {
+    const run = spawnSync(command, words, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 });
+    if (attempt >= 30 || !`${run.stdout}${run.stderr}`.includes("Could not copy the program")) return run;
+    spawnSync("sleep", ["2"]);
+  }
 }
