@@ -83,6 +83,15 @@ impl Footings<'_> {
         }
     }
 
+    /// Whether a foot rests on the ground, so a footing goes under it (D194, D306): on the
+    /// ground storey, or with nothing under it and its foot less than a cube over the ground
+    /// there or below it, as a post's or a flight's on a hillside a storey up is.
+    fn on_ground(&self, base: &Base, foot: IVec3) -> bool {
+        let ground = i32::from((self.ground_cm)([foot.x, foot.z]));
+        storey_of(foot.y) == 0
+            || (base.cube(foot - IVec3::Y).is_none() && foot.y * cube_cm() - ground < cube_cm())
+    }
+
     /// A footing's plan under columns, each from its top layer down to the ground.
     fn plan(
         &self,
@@ -226,7 +235,7 @@ fn floor_over(cube: IVec3) -> i32 {
 /// A flight of stairs or a ramp (D193), as one part, from its foot at `foot`, the first
 /// cube over the floor or ground it starts on, rising toward `facing` a cube a column up to
 /// the floor of the storey above, `wide` columns across: each column whole cubes under a
-/// stair or a slope. On the ground storey with footings, a footing under it first.
+/// stair or a slope. Where it rests on the ground, with footings, a footing under it first.
 pub fn flight(
     base: &Base,
     foot: IVec3,
@@ -243,7 +252,7 @@ pub fn flight(
         .flat_map(|i| (0..wide.max(1)).map(move |w| foot + forward * i + across * w + IVec3::Y * i))
         .collect();
     let mut ops = Vec::new();
-    if let Some(footings) = footings.filter(|_| storey_of(foot.y) == 0) {
+    if let Some(footings) = footings.filter(|f| f.on_ground(base, foot)) {
         let under = columns.iter().map(|top| ([top.x, top.z], foot.y - 1));
         ops.extend(footings.plan(base, parts.next(), under));
     }
@@ -258,11 +267,11 @@ pub fn flight(
 }
 
 /// A post (D193), as one part: a column of post cubes from `foot` up to the floor of the
-/// storey above, which it carries. On the ground storey with footings, a footing under it.
+/// storey above, which it carries. Where it rests on the ground, with footings, a footing under it.
 pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) -> Vec<Op> {
     let mut parts = Numbers::of(base);
     let mut ops = Vec::new();
-    if let Some(footings) = footings.filter(|_| storey_of(foot.y) == 0) {
+    if let Some(footings) = footings.filter(|f| f.on_ground(base, foot)) {
         ops.extend(footings.plan(base, parts.next(), [([foot.x, foot.z], foot.y - 1)]));
     }
     let cubes = (foot.y..=floor_over(foot)).map(|y| (foot.with_y(y), Shape::Post));
