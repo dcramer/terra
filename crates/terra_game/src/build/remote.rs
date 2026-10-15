@@ -434,12 +434,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     as_player(world, |building, player| {
         let base = &building.site.base;
         let ground = |column: [i32; 2]| building.ground_cm(column);
-        let blocks = building.rules.footed.clone();
-        let footings = building.rules.footing.map(|kind| plans::Footings {
-            kind,
-            ground_cm: &ground,
-            blocks: &blocks,
-        });
+        let footings = plans::Footings::of(building.rules.footing, &ground, &building.rules.footed);
         let (ops, room) = match lay.what.as_str() {
             "room" => (
                 plans::room(base, low, high, kind, floor, footings),
@@ -458,17 +453,14 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                         lay.along_x,
                     ),
                     None => (
-                        (low.x..=high.x)
-                            .flat_map(|x| (low.z..=high.z).map(move |z| [x, z]))
-                            .collect(),
-                        Some(lay.along_x.unwrap_or(high.x - low.x >= high.z - low.z)),
+                        plans::rectangle(low, high),
+                        Some(lay.along_x.unwrap_or(plans::ridge_along_x(low, high))),
                     ),
                 };
                 let storey = lay.over.map_or(low.y, |tile| tile[1]);
                 let roof = kits
                     .as_ref()
-                    .and_then(|kits| kits.roof_for(kind))
-                    .unwrap_or(terra_build::Kind::FIRST_ROOF);
+                    .map_or(terra_build::Kind::FIRST_ROOF, |kits| kits.roof_over(kind));
                 let style = lay.style.unwrap_or(Style::Gable);
                 (
                     plans::roof(base, &footprint, storey, style, along_x, roof),
@@ -478,11 +470,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             // From the foot cube `min`, up a storey toward `facing`.
             "flight" => {
                 let facing = lay.facing.unwrap_or_default();
-                let top = if lay.ramp.unwrap_or(false) {
-                    Shape::Slope(facing)
-                } else {
-                    Shape::Stair(facing)
-                };
+                let top = plans::flight_top(facing, lay.ramp.unwrap_or(false));
                 let wide = terra_build::cells(lay.wide.unwrap_or(1.0));
                 (
                     plans::flight(base, min, facing, wide, top, kind, footings),
@@ -540,12 +528,7 @@ fn opening(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         };
         let cubes = plans::opening_cubes(&tiles, panel);
         let ground = |column: [i32; 2]| building.ground_cm(column);
-        let blocks = building.rules.footed.clone();
-        let footings = building.rules.footing.map(|kind| plans::Footings {
-            kind,
-            ground_cm: &ground,
-            blocks: &blocks,
-        });
+        let footings = plans::Footings::of(building.rules.footing, &ground, &building.rules.footed);
         let ops = building.with_ground(plans::opening(&building.site.base, &cubes, footings));
         if ops.is_empty() {
             return Err(refused("it is open already"));
@@ -797,12 +780,7 @@ fn carve(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     as_player(world, |building, player| {
         let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
         let ground = |column: [i32; 2]| building.ground_cm(column);
-        let blocks = building.rules.footed.clone();
-        let footings = building.rules.footing.map(|kind| plans::Footings {
-            kind,
-            ground_cm: &ground,
-            blocks: &blocks,
-        });
+        let footings = plans::Footings::of(building.rules.footing, &ground, &building.rules.footed);
         let ops = building.with_ground(plans::carve(&building.site.base, &cubes, footings));
         if ops.is_empty() {
             return Err(refused("there is nothing there to carve"));

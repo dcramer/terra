@@ -71,30 +71,22 @@ fn build(
         };
         let room = {
             let ground_cm = |column: [i32; 2]| building.ground_cm(column);
-            let footings = Some(plans::Footings {
-                kind: stone,
-                ground_cm: &ground_cm,
-                blocks: &building.rules.footed,
-            });
+            let footings = plans::Footings::of(Some(stone), &ground_cm, &building.rules.footed);
             plans::room(&building.site.base, min, max, stone, stone, footings)
         };
         let laid = building.lay(Some(player), "lay a room", room, Some((min, max)));
-        let footprint = (min.x..=max.x)
-            .flat_map(|x| (min.z..=max.z).map(move |z| [x, z]))
-            .collect();
         let roof_kind = building
             .site
             .build
             .kits
             .as_ref()
-            .and_then(|kits| kits.roof_for(stone))
-            .unwrap_or(terra_build::Kind::FIRST_ROOF);
+            .map_or(terra_build::Kind::FIRST_ROOF, |kits| kits.roof_over(stone));
         let roof = plans::roof(
             &building.site.base,
-            &footprint,
+            &plans::rectangle(min, max),
             min.y,
             Style::Hip,
-            Some(max.x - min.x >= max.z - min.z),
+            Some(plans::ridge_along_x(min, max)),
             roof_kind,
         );
         let roofed = building.lay(Some(player), "lay a roof", roof, None);

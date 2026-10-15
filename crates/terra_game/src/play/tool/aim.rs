@@ -619,11 +619,7 @@ fn plan_work(
     };
     let ground = |column: [i32; 2]| building.ground_cm(column);
     let blocks = building.rules.footed.clone();
-    let footings = building.rules.footing.map(|kind| plans::Footings {
-        kind,
-        ground_cm: &ground,
-        blocks: &blocks,
-    });
+    let footings = plans::Footings::of(building.rules.footing, &ground, &blocks);
     let work = |building: &mut Building, doing: Doing, what: String, ops: Vec<Op>| {
         let ops = building.with_ground(ops);
         let check = building.check(Some(player), &ops);
@@ -655,14 +651,13 @@ fn plan_work(
                 // hand, or the walls' own roof.
                 Some(style) => {
                     let drawn = builder.footprint.is_empty();
-                    let footprint: std::collections::BTreeSet<[i32; 2]> = if drawn {
-                        (min.x..=max.x)
-                            .flat_map(|x| (min.z..=max.z).map(move |z| [x, z]))
-                            .collect()
+                    let footprint = if drawn {
+                        plans::rectangle(min, max)
                     } else {
                         builder.footprint.clone()
                     };
-                    let along_x = drawn.then_some((tiles.x >= tiles.y) != builder.room_turned);
+                    let along_x =
+                        drawn.then_some(plans::ridge_along_x(min, max) != builder.room_turned);
                     let roof = roof_kind(look, base, &footprint, corner.y, builder.material);
                     laying(
                         "lay a roof",
@@ -689,11 +684,7 @@ fn plan_work(
         (Kind::Flight(shapes), Target::Place { at }) => {
             let shape = &shapes[builder.variant()];
             let facing = builder.facing();
-            let top = if shape.ramp {
-                terra_build::Shape::Slope(facing)
-            } else {
-                terra_build::Shape::Stair(facing)
-            };
+            let top = plans::flight_top(facing, shape.ramp);
             Some(laying(
                 if shape.ramp {
                     "lay a ramp"
@@ -906,6 +897,5 @@ fn roof_kind(
         .map_or(material.unwrap_or(look.laying), |(kind, _)| *kind);
     look.kits
         .as_ref()
-        .and_then(|kits| kits.roof_for(walls))
-        .unwrap_or(terra_build::Kind::FIRST_ROOF)
+        .map_or(terra_build::Kind::FIRST_ROOF, |kits| kits.roof_over(walls))
 }

@@ -1163,7 +1163,7 @@ pub(super) fn lay(
         .iter()
         .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
         .map(|kit| kit.kind());
-    let roof = |walls: Kind| kits.roof_for(walls).unwrap_or(Kind::FIRST_ROOF);
+    let roof = |walls: Kind| kits.roof_over(walls);
     let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone, hewn, &roof)
         .into_iter()
         .enumerate()
@@ -1439,7 +1439,7 @@ mod tests {
             .expect("a footing kind");
         let rules = kits.rules();
         for kit in &kits.0 {
-            let roof = kits.roof_for(kit.kind()).unwrap_or(Kind::FIRST_ROOF);
+            let roof = kits.roof_over(kit.kind());
             let bases = previewed(kit, stone, roof, &rules);
             assert!(
                 bases.iter().any(|base| base.damaged().next().is_some()),

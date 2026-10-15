@@ -69,7 +69,21 @@ pub struct Footings<'a> {
     pub blocks: &'a BTreeSet<Kind>,
 }
 
-impl Footings<'_> {
+impl<'a> Footings<'a> {
+    /// Footings of a kind, if a base lays any, on the ground `ground_cm` samples, block
+    /// kinds' floors on their own kind: as the hammer, the remote and the scenes lay them.
+    pub fn of(
+        kind: Option<Kind>,
+        ground_cm: &'a dyn Fn([i32; 2]) -> i16,
+        blocks: &'a BTreeSet<Kind>,
+    ) -> Option<Self> {
+        kind.map(|kind| Footings {
+            kind,
+            ground_cm,
+            blocks,
+        })
+    }
+
     /// The footings under a floor of a kind: of the floor's kind where it is a block kind,
     /// as a stone floor stands on stone; else of their own.
     fn under(self, floor: Kind) -> Self {
@@ -933,6 +947,31 @@ pub fn fit(
         return Err(Misfit::Size(wide, high));
     }
     Ok(prop)
+}
+
+/// The columns of a rectangle of tiles from one corner to the other, as "add a roof" covers
+/// it.
+pub fn rectangle(min: IVec3, max: IVec3) -> BTreeSet<[i32; 2]> {
+    let (low, high) = (min.min(max), min.max(max));
+    (low.x..=high.x)
+        .flat_map(|x| (low.z..=high.z).map(move |z| [x, z]))
+        .collect()
+}
+
+/// Whether a roof over a rectangle runs its ridge east and west: along its longer side,
+/// east and west where it is square.
+pub fn ridge_along_x(min: IVec3, max: IVec3) -> bool {
+    let size = (max - min).abs();
+    size.x >= size.z
+}
+
+/// The top of a flight toward a way: a ramp's a slope, a stair's a stair.
+pub fn flight_top(facing: Facing, ramp: bool) -> Shape {
+    if ramp {
+        Shape::Slope(facing)
+    } else {
+        Shape::Stair(facing)
+    }
 }
 
 /// How wide and high a hole is, in cubes, along its wall.

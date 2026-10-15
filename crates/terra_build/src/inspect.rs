@@ -1376,7 +1376,7 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
         .iter()
         .filter(|kit| kit.pattern != Pattern::Roof)
         .collect();
-    let roof = |walls: Kind| kits.roof_for(walls).unwrap_or(Kind::FIRST_ROOF);
+    let roof = |walls: Kind| kits.roof_over(walls);
     let mut out = Vec::new();
     let mut add = |name: String, ops: Vec<crate::BuildOp>| {
         if only.is_some_and(|only| !name.contains(only)) {

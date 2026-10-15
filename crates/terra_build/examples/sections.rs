@@ -55,10 +55,7 @@ fn main() -> ExitCode {
     // Near detail's triangles and bytes by pattern and material, and the cubes drawn.
     let mut near_by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
     let mut block_cubes = 0usize;
-    let roof = |walls: terra_build::Kind| {
-        kits.roof_for(walls)
-            .unwrap_or(terra_build::Kind::FIRST_ROOF)
-    };
+    let roof = |walls: terra_build::Kind| kits.roof_over(walls);
     for (name, ops) in terra_build::bench_village(logs, stone, hewn, &roof) {
         if only
             .as_ref()

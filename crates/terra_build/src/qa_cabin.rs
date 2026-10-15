@@ -45,13 +45,7 @@ pub fn cabin(
         .map(|kit| (kit.kind(), plans::family(kit)))
         .collect();
     let blocks = |kind: Kind| kits.one_at_a_time(kind);
-    let footings = || {
-        footing.map(|kind| Footings {
-            kind,
-            ground_cm,
-            blocks: &footed,
-        })
-    };
+    let footings = || Footings::of(footing, ground_cm, &footed);
     let mut base = Base::default();
     // Each plan with the ground under its columns, as whoever lays it fills it in.
     let lay = |base: &mut Base, ops: Vec<Op>| {
@@ -158,7 +152,7 @@ pub fn cabin(
     );
     lay(&mut base, ops);
     build(&mut base, &cx, &blocks);
-    let roof = kits.roof_for(upper).unwrap_or(Kind::FIRST_ROOF);
+    let roof = kits.roof_over(upper);
     let footprint = plans::room_footprint(&base, IVec3::new(8, 1, 7));
     let ops = plans::roof(&base, &footprint, 1, Style::Gable, None, roof);
     lay(&mut base, ops);

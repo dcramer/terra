@@ -717,7 +717,14 @@ impl Kits {
     }
 
     /// The roof kind a roof over walls of a kind is laid in (D241): the kind itself if it is
-    /// a roof's, else its kit's `roof_kind`, else the first roof kit's.
+    /// a roof's, else its kit's `roof_kind`, else the first roof kit's, else the first roof
+    /// kind there can be.
+    pub fn roof_over(&self, kind: Kind) -> Kind {
+        self.roof_for(kind).unwrap_or(Kind::FIRST_ROOF)
+    }
+
+    /// The roof kind a roof over walls of a kind is laid in, if any kit has one: as
+    /// [`Kits::roof_over`], which falls back on the first roof kind.
     pub fn roof_for(&self, kind: Kind) -> Option<Kind> {
         if kind.is_roof() {
             return Some(kind);
