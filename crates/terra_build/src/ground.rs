@@ -359,8 +359,16 @@ impl Base {
                 }
                 let layer = at.y - k;
                 let top = column.with_y(layer);
+                // The last step, where the ground rises over a stair's lower tread, as on a
+                // slope falling away from the door: the stair would show only a thin wedge
+                // of its upper tread over it, so a whole cube is the step, its top the tread
+                // where a stair would be the last (D308's films).
+                let beyond = i32::from(height_cm([column.x + outward.x, column.z + outward.z]));
+                let last = k == MOST_STEPS || layer * cube_cm() + quarter - beyond <= NO_STEP_CM;
                 let shape = if k == 1 && tread - quarter - ground <= NO_STEP_CM {
                     Shape::Half
+                } else if last && ground >= layer * cube_cm() + quarter {
+                    Shape::Whole
                 } else {
                     Shape::Stair(toward)
                 };
@@ -380,7 +388,7 @@ impl Base {
                 }
                 taken.extend(cubes.iter().map(|(at, _)| at.to_array()));
                 out.extend(cubes);
-                if shape == Shape::Half {
+                if matches!(shape, Shape::Half | Shape::Whole) {
                     break;
                 }
                 tread = layer * cube_cm() + quarter;
@@ -586,7 +594,12 @@ mod tests {
         for x in [2, 3] {
             for z in 6..10 {
                 let column = in_column(x, z);
-                assert_eq!(column[0], (5 - z, rise), "{x} {z}");
+                // A stair, or where the ground rises over the last's lower tread a whole cube.
+                let buried = i32::from(ground([x, z])) >= (5 - z) * cube_cm() + cube_cm() / 2
+                    && (5 - z) * cube_cm() + cube_cm() / 2 - i32::from(ground([x, z + 1]))
+                        <= NO_STEP_CM;
+                let step = if buried { Shape::Whole } else { rise };
+                assert_eq!(column[0], (5 - z, step), "{x} {z}");
                 let ys: Vec<i32> = column.iter().map(|&(y, _)| y).collect();
                 assert!(ys.windows(2).all(|w| w[1] == w[0] - 1), "{ys:?}");
                 assert!(column[1..].iter().all(|&(_, shape)| shape == Shape::Whole));
@@ -604,7 +617,14 @@ mod tests {
             // Near the door, then away from it.
             let tops = [shape.top(0.5, 0.1), shape.top(0.5, 0.9)]
                 .map(|t| y * cube_cm() + (t * cube_cm() as f32) as i32);
-            assert_eq!(tops, [tread, tread - 25], "{z}");
+            if shape == Shape::Whole {
+                assert_eq!(tops, [tread, tread], "{z}");
+                // The last step: nothing further out.
+                assert!(in_column(2, z + 1).is_empty());
+                break;
+            } else {
+                assert_eq!(tops, [tread, tread - 25], "{z}");
+            }
             tread -= 50;
         }
         // On level ground a step down is all it needs: a half cube.
@@ -620,5 +640,43 @@ mod tests {
         assert!(laid.lay_door_steps(Kind(2), ground));
         assert!(!laid.lay_door_steps(Kind(2), ground));
         assert_eq!(laid.cube(IVec3::new(2, -1, 6)).map(|c| c.shape), Some(rise));
+    }
+
+    #[test]
+    fn a_flight_on_a_slope_ends_in_a_step_not_a_wedge_of_stair_over_the_ground() {
+        let base = with_door();
+        let (mut wholes, mut flights) = (0, 0);
+        // Ground falling away from the door at every slope from gentle to steep, from every
+        // depth below the threshold a step can start at.
+        for fall in (10..=60).step_by(5) {
+            for start in (25..=95).step_by(5) {
+                let ground = |[_, z]: [i32; 2]| (-start - fall * (z - 6).max(0)) as i16;
+                let steps = base.door_steps(&BTreeSet::new(), ground);
+                // Each column's step is its highest cube, the rest footings; the last step
+                // is the furthest from the door.
+                for x in [2, 3] {
+                    let Some(&(at, shape)) = steps
+                        .iter()
+                        .filter(|(at, _)| at.x == x)
+                        .max_by_key(|(at, _)| (at.z, at.y))
+                    else {
+                        continue;
+                    };
+                    flights += 1;
+                    let soil = i32::from(ground([at.x, at.z]));
+                    if let Shape::Stair(_) = shape {
+                        // Its lower tread, half way up the cube, clear of the ground.
+                        assert!(
+                            soil < at.y * cube_cm() + cube_cm() / 2,
+                            "{fall} {start} {at}"
+                        );
+                    }
+                    wholes += usize::from(shape == Shape::Whole);
+                }
+            }
+        }
+        assert!(flights > 200, "{flights}");
+        // Some slopes end in a whole cube set into the ground for the last step.
+        assert!(wholes > 0);
     }
 }
