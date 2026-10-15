@@ -1,0 +1,19 @@
+[package]
+name = "terra_climate"
+description = "Climate as fields of a place and a time (temperature, daylight, precipitation, wind, the air's wetness) and the past the weather leaves (snow, wet ground, ice, warmth and chill), from a world's seed and clock. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+serde.workspace = true
+terra_gen.workspace = true
+
+[dev-dependencies]
+ron.workspace = true
+
+[lints]
+workspace = true

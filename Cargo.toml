@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 terra_build = { path = "crates/terra_build" }
+terra_climate = { path = "crates/terra_climate" }
 terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
@@ -62,4 +63,7 @@ debug = false
 opt-level = 3
 
 [profile.dev.package.terra_core]
+opt-level = 3
+
+[profile.dev.package.terra_climate]
 opt-level = 3

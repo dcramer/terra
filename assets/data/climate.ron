@@ -1,0 +1,43 @@
+// The starting world's climate (climate.md, D149, D314): a temperate year with cold, snowy
+// spells and thaws in winter, rain through the year a little more in summer. Shares of the
+// year are counted from midwinter (0) through midsummer (0.5). Tuned by playing.
+(
+    year: (
+        days: 365.0,
+        tilt_deg: 23.44,
+        // Late August: the sun's path the art was made for (declination 10°, D315), with
+        // the summer's leaves and warmth.
+        start: 0.6768,
+    ),
+    temperature: (
+        // About 8 °C the year round at the start's 40° of latitude, -3 in winter, 20 in summer.
+        equator_c: 27.0,
+        pole_c: -18.0,
+        lapse_c_per_km: 6.5,
+        annual_swing_c: 13.0,
+        annual_lag_days: 30.0,
+        daily_swing_c: 5.0,
+        weather_swing_c: 4.0,
+    ),
+    precipitation: (
+        share: 0.12,
+        annual_swing: 0.15,
+        wettest: 0.55,
+        heaviest_mm_per_hour: 2.5,
+    ),
+    wind: (
+        mean_m_s: 4.0,
+        gustiness: 0.5,
+        prevailing_from_deg: 270.0,
+        turning_deg: 90.0,
+    ),
+    humidity: (
+        mean: 0.7,
+        annual_swing: 0.1,
+        most_humid: 0.0,
+    ),
+    fronts: (
+        size_m: 3000.0,
+        spell_days: 3.0,
+    ),
+)

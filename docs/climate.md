@@ -121,6 +121,7 @@ Temperature, daylight, precipitation, wind and the air's wetness are functions o
 - **Daylight** is the sun's path for the date: the sun's declination swings with the year, so winter days are short and its sun low.
 - **Weather** is fronts of noise drifting across the world with the clock; whether what falls is rain or snow is the temperature's doing.
 - A world's theme is the numbers: its base climate, and how far each quantity swings and how fast. A temperate world swings in temperature, a monsoon world in rain; no code differs.
+- **In code (D315):** `terra_climate`. The clock is days; the year's slow terms move on once a day, at midnight. The start's climate is `assets/data/climate.ron`, and its clock starts in late August, under the sun the art was lit by (10° north), with the summer's leaves.
 
 ### What the past leaves is integrated
 
@@ -130,6 +131,8 @@ Snow, wet ground, ice, and the warmth and chill plants count are what recent wea
 - wetness: rain, less what dried;
 - ice on water: thicker after frost, thinner after thaw;
 - warmth (degree-days above a base since midwinter) and chill (cold days, and the day's length), the clocks plants keep.
+
+In code (D315): cells are 32 m; a fold starts at the first midsummer at least half a year back, so warmth (above 5 °C) and chill (below 10 °C since midsummer) are exact and snow and ice start from none. A species' year is said in those counts.
 
 Players' fires, digging and building are edits on top, like any other.
 
@@ -163,8 +166,8 @@ On the GPU this is a few texture reads; on the CPU a few cheap functions and a f
 
 ### Order of work
 
-1. **The fields:** temperature, daylight by the date, precipitation and fronts, in the shared crate, with tests; the sun's declination following the date.
-2. **The integrated state:** snow, warmth and chill per cell, kept by the day.
+1. **The fields:** temperature, daylight by the date, precipitation and fronts, in the shared crate, with tests; the sun's declination following the date. Built (D315).
+2. **The integrated state:** snow, warmth and chill per cell, kept by the day. Built (D315).
 3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at.
 4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill).
 5. **Body temperature** (D153), and snow and mud under a walker.

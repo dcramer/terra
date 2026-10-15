@@ -22,6 +22,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 | Voxel terrain | Our own crate, ported from the parts of Voxel Tools we need (MIT-licensed) | Decided |
 | Terrain meshing | The `transvoxel` crate | Decided (D32) |
 | Simulation | Our own crate, `terra_sim`, on its own thread; parked with terraforming (D26, D60) | Parked |
+| Climate | Our own crate, `terra_climate`: fields of a place and a time, and the past the weather leaves, per cell ([climate.md](climate.md)) | Decided (D314, D315) |
 | Physics | Avian for rigid bodies; the player walks on voxel data directly | Leaning (D33) |
 | Networking | Our own messages over `renet`; Steam transport later | Leaning (D34) |
 | UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning (D35) |

@@ -5806,6 +5806,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_climate"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "ron",
+ "serde",
+ "terra_gen",
+]
+
+[[package]]
 name = "terra_core"
 version = "0.1.0"
 dependencies = [
@@ -5893,6 +5904,7 @@ dependencies = [
  "serde",
  "serde_json",
  "terra_build",
+ "terra_climate",
  "terra_core",
  "terra_gen",
  "terra_voxel",
