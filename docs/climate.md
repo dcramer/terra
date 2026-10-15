@@ -153,6 +153,7 @@ What changes play is the same on every machine, worked out by the shared crate: 
 - **Local things bend it**, as components: a fire's heat, a shelter's walls and roof (D261), the canopy's shade (the sky occlusion volume, D270), clothing's warmth.
 - **Small systems respond, each reading samples:** a body's temperature drifts toward its surroundings (D153); a creature acts within its own band, so sleeping through the cold emerges; snow and mud slow a walker; ice holds one once thick enough.
 - **Plants are not entities that tick:** there are far too many. A plant's state is a function of its cell's counted warmth and chill, its kind's year and its own seed, worked out when it is drawn or gathered.
+- **In code (D327):** a `ClimateSample` is taken again every half second within 48 m of a player, every 3 s within 200 m, every 20 s beyond, at most 0.6 ms of a frame. `Heat` is a fire's radiant watts, spread over a sphere round it; `Sheltered` (0 to 1) takes the wind to a tenth, keeps off what falls and the sun, and holds in a fire's heat; under the canopy the sun is cut by the sky hidden, and the rain and wind to two fifths where it is closed. The past at a place goes from its day's start to the next day's through the day, so snow builds and melts by the hour. A kind's year (`terra_climate::LeafYear`) is when its leaves come out (warmth), turn and fall (chill, once the day is shorter than its length), and how much of them turn and drop; a plant's seed makes it count up to a quarter faster or slower.
 
 ### Drawn from the same fields
 
@@ -165,11 +166,13 @@ The world layer bakes small climate maps round the camera, as it bakes the cover
 
 On the GPU this is a few texture reads; on the CPU a few cheap functions and a fold per cell per day.
 
+In code (D327): two maps a kilometre across round the camera, a 32 m cell a texel, painted on another thread when the camera has gone 128 m or the clock a quarter of an hour: the ground's (snow depth, its wetness, rain falling now, frost), and the leaves', a layer a kind in the years file's order, how many leaves it has and how far they have turned, each for a plant early and late in its kind's year, so a plant takes its place between by its seed.
+
 ### Order of work
 
 1. **The fields:** temperature, daylight by the date, precipitation and fronts, in the shared crate, with tests; the sun's declination following the date. Built (D315).
 2. **The integrated state:** snow, warmth and chill per cell, kept by the day. Built (D315).
-3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at.
+3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at. Built (D327): `terra_world::climate`, kinds' years in `assets/data/plant_years.ron`, and `--date 10-15` (a day of an Earth calendar, as that share of the world's year) or `--date 40` (a day of the clock); the log says what the climate is at the camera once its maps are painted.
 4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill).
 5. **Body temperature** (D153), and snow and mud under a walker.
 

@@ -57,7 +57,7 @@ const SUN_STEPS: f32 = 300.0;
 pub const MORNING: f32 = 7.5;
 /// Where the start is on its world, which with the date shapes the sun's path: how high it
 /// climbs and how long it is up.
-const LATITUDE: f32 = 40.0_f32.to_radians();
+pub const LATITUDE: f32 = 40.0_f32.to_radians();
 
 /// The world's climate (`assets/data/climate.ron`, D314). The sky follows its year; the
 /// rest of the climate is read from it as the climate's later steps come (climate.md).
@@ -373,18 +373,26 @@ pub fn plugin(app: &mut App) {
                 follow_the_date,
                 shine,
             )
-                .chain(),
+                .chain()
+                .in_set(Ticking),
         );
 }
 
-/// A scripted run may set the hour; otherwise it is the morning, or what a save says, or
-/// on the yard, noon.
-fn set_clock(options: Res<Options>, mut clock: ResMut<Clock>) {
+/// The clock moving on and the world lit for it: what reads the clock runs after.
+#[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Ticking;
+
+/// A scripted run may set the hour and the date; otherwise it is the morning of the clock's
+/// first day, or what a save says, or on the yard, noon.
+fn set_clock(options: Res<Options>, climate: Res<WorldClimate>, mut clock: ResMut<Clock>) {
     if options.yard() {
         clock.hour = 12.0;
     }
     if let Some(hour) = options.time {
         clock.hour = hour;
+    }
+    if let Some(date) = options.date {
+        clock.day = date.day(&climate.0.year);
     }
 }
 

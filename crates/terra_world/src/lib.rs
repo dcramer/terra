@@ -14,6 +14,7 @@
 
 pub mod air;
 pub mod audio;
+pub mod climate;
 pub mod cover;
 pub mod data;
 pub mod daylight;

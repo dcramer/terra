@@ -100,6 +100,24 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, (bake, receive, light, overhead).chain());
 }
 
+/// How much of the sky is open over any point, from 0 under a closed canopy to 1 in the open,
+/// from the same cells: what shades a body from the sun and shelters it from the rain and the
+/// wind (`climate`). Everywhere open until the volume is worked out, and where there is none.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct SkySeen<'w> {
+    occluders: Option<Res<'w, SkyOccluders>>,
+    baked: Option<Res<'w, Baked>>,
+}
+
+impl SkySeen<'_> {
+    pub fn open_at(&self, point: Vec3) -> f32 {
+        match (&self.occluders, &self.baked) {
+            (Some(o), Some(baked)) => open_at(o, &baked.seen, point),
+            _ => 1.0,
+        }
+    }
+}
+
 /// Follows how open the sky is over the camera, between the cells round it.
 fn overhead(
     mut commands: Commands,

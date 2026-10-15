@@ -63,6 +63,11 @@ pub struct Past {
     pub warmth: f32,
     /// Degree-days of daily mean below [`CHILL_BASE_C`] since midsummer.
     pub chill: f32,
+    /// How many days each count has run since it started again: which began more lately
+    /// tells a plant whether the leaves it dropped to the chill are still to come back to
+    /// the warmth (`plants`).
+    pub warmth_days: f32,
+    pub chill_days: f32,
 }
 
 impl Past {
@@ -74,6 +79,26 @@ impl Past {
     /// How wet the ground is, 0 dry to 1 as wet as it holds.
     pub fn ground_wetness(&self) -> f32 {
         self.ground_mm / GROUND_HOLDS_MM
+    }
+
+    /// Whether warmth has been counted since chill was: the part of the year after
+    /// midwinter, when what the chill took is still to come back.
+    pub fn warming(&self) -> bool {
+        self.warmth_days < self.chill_days
+    }
+
+    /// The past part of the way from one day's start to the next's: what lies on the ground
+    /// and is in it changes through the day rather than at midnight. The counts are the
+    /// earlier day's, as plants keep them by the day.
+    pub fn between(&self, next: &Past, t: f32) -> Past {
+        let t = t.clamp(0.0, 1.0);
+        let lerp = |a: f32, b: f32| a + (b - a) * t;
+        Past {
+            snow_mm: lerp(self.snow_mm, next.snow_mm),
+            ground_mm: lerp(self.ground_mm, next.ground_mm),
+            ice_m: lerp(self.ice_m, next.ice_m),
+            ..*self
+        }
     }
 
     fn fresh() -> Self {
@@ -118,9 +143,11 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
     let year = &fields.climate().year;
     if year.winters(day) != year.winters(day - 1) {
         past.warmth = 0.0;
+        past.warmth_days = 0.0;
     }
     if year.summers(day) != year.summers(day - 1) {
         past.chill = 0.0;
+        past.chill_days = 0.0;
     }
     let today = fields.day(place, day);
     let hours = 24.0 / SAMPLES as f32;
@@ -153,6 +180,8 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
     };
     past.warmth += (mean - WARMTH_BASE_C).max(0.0);
     past.chill += (CHILL_BASE_C - mean).max(0.0);
+    past.warmth_days += 1.0;
+    past.chill_days += 1.0;
     past
 }
 
@@ -449,5 +478,41 @@ mod tests {
         let cell = Cell::containing(Vec3::new(-1.0, 33.0, 64.0));
         assert_eq!((cell.x, cell.y, cell.z), (-1, 1, 2));
         assert_eq!(Cell::containing(cell.middle()), cell);
+    }
+
+    #[test]
+    fn warming_is_the_part_of_the_year_after_midwinter() {
+        // The plain world's year starts at midwinter: day 0's middle is just past it.
+        let fields = plain(5.0, 10.0, 0.0);
+        for (day, after_midwinter) in [(10, true), (150, true), (190, false), (360, false)] {
+            assert_eq!(
+                past(&fields, at(), day).warming(),
+                after_midwinter,
+                "day {day}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_day_goes_from_its_start_to_the_next_days() {
+        let (a, b) = (
+            Past {
+                snow_mm: 10.0,
+                ground_mm: 20.0,
+                warmth: 5.0,
+                ..Past::default()
+            },
+            Past {
+                snow_mm: 30.0,
+                ground_mm: 0.0,
+                warmth: 9.0,
+                ..Past::default()
+            },
+        );
+        assert_eq!(a.between(&b, 0.0), a);
+        let half = a.between(&b, 0.5);
+        assert_eq!((half.snow_mm, half.ground_mm), (20.0, 10.0));
+        assert_eq!(half.warmth, 5.0, "plants count by the day");
+        assert_eq!(a.between(&b, 1.0).snow_mm, 30.0);
     }
 }

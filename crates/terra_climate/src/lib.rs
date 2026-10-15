@@ -10,12 +10,18 @@
 //!   climate and the world's seed. The weather is fronts of noise drifting with the clock.
 //! - **The past**, [`past`] and [`PastCache`]: snow, wet ground, ice, and the warmth and
 //!   chill plants count, folded per [`Cell`] over the days before.
+//! - **Plants' years**, [`LeafYear`]: when a kind's leaves come out, turn and fall, by the
+//!   counts, as data; a plant's [`Leaves`] are worked out, never ticked.
+//! - **Bodies**, [`body`]: how warm the surroundings keep a body (D153), and how snow and
+//!   mud slow a walker.
 //!
 //! Pure and repeatable: no engine, no clock read, no system randomness, `libm` for its
 //! sines and exponentials (D28, D30), so every machine works out the same climate.
 
+pub mod body;
 mod fields;
 mod past;
+mod plants;
 mod sun;
 mod theme;
 mod time;
@@ -25,6 +31,7 @@ pub use past::{
     CELL_M, CHILL_BASE_C, Cell, GROUND_HOLDS_MM, Past, PastCache, WARMTH_BASE_C, fold_start, past,
     step,
 };
+pub use plants::{LeafYear, Leaves, Ramp, SPREAD};
 pub use sun::{day_length_hours, declination, sun_height, sunlight};
 pub use theme::{Climate, Fronts, Humidity, Precipitation, Temperatures, Winds};
 pub use time::{HOURS, WorldTime, Year};

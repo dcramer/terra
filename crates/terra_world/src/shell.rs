@@ -144,6 +144,12 @@ usage: terra_sandbox [options]
                         a claim that covers it; the sun stands at noon; nothing is saved
   --time <hour>         set the play experiment's clock to an hour of the day, 0 to 24,
                         such as 22 for night, for testing
+  --date <month-day|day>
+                        set the world's clock to a date, so its season can be seen: a
+                        day of an Earth calendar, such as 10-15 for mid October, taken as
+                        that share of the world's year after midwinter (21 December),
+                        or a day of the clock itself, such as 0, when it starts, in late
+                        August (docs/climate.md)
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
@@ -181,6 +187,57 @@ sctk_adwaita=off";
 /// and anything that eases in have settled.
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
+
+/// A date to set the world's clock to (`--date`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Date {
+    /// A day of the clock, counted from when it started.
+    Day(i64),
+    /// A share of the year after midwinter, from a day of an Earth calendar.
+    OfYear(f64),
+}
+
+/// Days of an Earth calendar's months, and how many days from the 1st of January midwinter
+/// (the 21st of December) comes.
+const MONTH_DAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const MIDWINTER_DAY: u32 = 354;
+
+impl Date {
+    fn parse(text: &str) -> Result<Self, String> {
+        let wrong = || {
+            format!(
+                "--date wants a month and day such as 10-15, or a day of the clock such as 40, not `{text}`"
+            )
+        };
+        if let Ok(day) = text.parse::<i64>() {
+            return Ok(Date::Day(day));
+        }
+        let (month, day) = text.split_once('-').ok_or_else(wrong)?;
+        let (month, day) = (
+            month.parse::<usize>().map_err(|_| wrong())?,
+            day.parse::<u32>().map_err(|_| wrong())?,
+        );
+        if !(1..=12).contains(&month) || day == 0 || day > MONTH_DAYS[month - 1] {
+            return Err(wrong());
+        }
+        let of_year = MONTH_DAYS[..month - 1].iter().sum::<u32>() + day - 1;
+        let since = (of_year + 365 - MIDWINTER_DAY) % 365;
+        // The calendar day's middle, as the clock takes a day's.
+        Ok(Date::OfYear((since as f64 + 0.5) / 365.0))
+    }
+
+    /// The day of the clock it is, in a world of this year: the first from the clock's start
+    /// whose middle is that far through the year.
+    pub fn day(self, year: &terra_climate::Year) -> i64 {
+        match self {
+            Date::Day(day) => day,
+            Date::OfYear(share) => {
+                let ahead = (share - year.start).rem_euclid(1.0) * year.days - 0.5;
+                (ahead.round() as i64).rem_euclid(year.days.round() as i64)
+            }
+        }
+    }
+}
 
 /// Which level the play experiment is on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -288,6 +345,8 @@ pub struct Options {
     pub glide: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
+    /// The date the world's clock is set to, if not its own (`--date`).
+    pub date: Option<Date>,
     /// Where the play experiment's player starts, east and south of the start in metres.
     pub start_at: Option<(f32, f32)>,
     /// What the play experiment's player starts facing, east and south of the start.
@@ -432,6 +491,7 @@ impl Options {
             glide: false,
             start_at: None,
             time: None,
+            date: None,
             start_facing: None,
             warps: Vec::new(),
             route: Vec::new(),
@@ -504,6 +564,7 @@ impl Options {
                         })?;
                     options.time = Some(hour);
                 }
+                "--date" => options.date = Some(Date::parse(&value("--date")?)?),
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
                 "--route" => options
@@ -1714,5 +1775,40 @@ mod tests {
                 .unwrap_err()
                 .contains("logs or plain")
         );
+    }
+
+    #[test]
+    fn a_date_is_a_day_of_the_clock_or_of_a_calendar() {
+        let year = terra_climate::Year {
+            days: 365.0,
+            tilt_deg: 23.44,
+            start: 0.6768,
+        };
+        assert_eq!(parse(&["--date", "40"]).unwrap().date, Some(Date::Day(40)));
+        assert_eq!(Date::Day(-3).day(&year), -3);
+        // Midwinter's day starts the year, its middle half a day on.
+        assert_eq!(
+            parse(&["--date", "12-21"]).unwrap().date,
+            Some(Date::OfYear(0.5 / 365.0))
+        );
+        let date = |text: &str| parse(&["--date", text]).unwrap().date.unwrap();
+        // Counted another way: the clock starts on the 25th of August, the 247th day after
+        // midwinter (10 in December, 31 in January and so on), 0.6768 of the way round.
+        assert_eq!(date("8-25").day(&year), 0);
+        assert_eq!(date("10-15").day(&year), 51);
+        assert_eq!(date("1-15").day(&year), 143);
+        // And a date a year on from the start comes before the year turns again.
+        for text in ["8-24", "3-1", "12-21", "12-20"] {
+            let day = date(text).day(&year);
+            assert!((0..365).contains(&day), "{text}: {day}");
+            let Date::OfYear(share) = date(text) else {
+                unreachable!()
+            };
+            let gap = (year.phase(day) as f64 - share).rem_euclid(1.0);
+            assert!(gap.min(1.0 - gap) < 1.5 / 365.0, "{text}: {day}");
+        }
+        for wrong in ["13-1", "2-30", "oct", "10-", "0-5"] {
+            assert!(parse(&["--date", wrong]).unwrap_err().contains("10-15"));
+        }
     }
 }

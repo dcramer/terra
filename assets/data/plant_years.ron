@@ -1,0 +1,96 @@
+#![enable(implicit_some)]
+// Each kind of plant's year (climate.md, D313, crates/terra_climate/src/plants.rs): when its
+// leaves come out, turn and fall, said in the counts the climate keeps for every place, not
+// in dates, so the same kind turns later on a hill and on a colder world. A new kind is an
+// entry here; the climate maps the shaders read hold one layer a kind, in this order.
+//
+// Each kind:
+//   kind               its name, as what grows names it
+//   flush              warmth (degree-days above 5 °C since midwinter) from which its
+//                      leaves come out, or grass greens again, and over how much more
+//   turn, fall         chill (degree-days below 10 °C since midsummer) from which its leaves
+//                      turn their autumn colour, and fall, and over how much more; counted
+//                      once the day is shorter than turns_under_hours, fully an hour on
+//   turns, drops       how much of its leaves turn, and fall: all of an oak's, a little of a
+//                      pine's needles
+//   wilts              for what browns in a drought: the ground's dryness, 1 less its
+//                      wetness, from which it does, and over how much more
+//
+// At the start, on the start's climate (assets/data/climate.ron, 40° north, near the sea),
+// the counts come to: chill about 15 by mid October, 60 by early November, 180 by late
+// November; warmth 100 by early May and 300 by June. Tuned by looking at a year of dates.
+[
+    (
+        // Pedunculate oak: green into October, brown-gold by early November, bare by the
+        // end of it; out in leaf in May.
+        kind: "oak",
+        flush: (from: 100.0, over: 120.0),
+        turn: (from: 10.0, over: 70.0),
+        fall: (from: 80.0, over: 110.0),
+        turns_under_hours: 12.0,
+        turns: 1.0,
+        drops: 1.0,
+    ),
+    (
+        // Birch: yellow first, bare first, and out in leaf first.
+        kind: "birch",
+        flush: (from: 60.0, over: 90.0),
+        turn: (from: 0.0, over: 50.0),
+        fall: (from: 50.0, over: 90.0),
+        turns_under_hours: 12.5,
+        turns: 1.0,
+        drops: 1.0,
+    ),
+    (
+        // Hazel, in the understorey: turns yellow with the oaks, drops a little before.
+        kind: "hazel",
+        flush: (from: 70.0, over: 100.0),
+        turn: (from: 10.0, over: 60.0),
+        fall: (from: 60.0, over: 100.0),
+        turns_under_hours: 12.0,
+        turns: 1.0,
+        drops: 1.0,
+    ),
+    (
+        // Bracken: rust-brown with the first chill, standing dead through the winter and
+        // flattened by its snow, new fronds in late spring.
+        kind: "bracken",
+        flush: (from: 120.0, over: 150.0),
+        turn: (from: 5.0, over: 50.0),
+        fall: (from: 300.0, over: 500.0),
+        turns_under_hours: 12.5,
+        turns: 1.0,
+        drops: 0.7,
+    ),
+    (
+        // Scots pine: its oldest needles yellow and drop in autumn, the rest stay.
+        kind: "pine",
+        flush: (from: 150.0, over: 200.0),
+        turn: (from: 20.0, over: 120.0),
+        fall: (from: 80.0, over: 200.0),
+        turns_under_hours: 12.0,
+        turns: 0.08,
+        drops: 0.1,
+    ),
+    (
+        // Norway spruce: nearly the same all year.
+        kind: "spruce",
+        flush: (from: 150.0, over: 200.0),
+        turn: (from: 40.0, over: 200.0),
+        fall: (from: 100.0, over: 300.0),
+        turns_under_hours: 12.0,
+        turns: 0.04,
+        drops: 0.05,
+    ),
+    (
+        // Grass: straw-coloured in the long cold, green again with the spring's warmth; it
+        // never drops.
+        kind: "grass",
+        flush: (from: 20.0, over: 130.0),
+        turn: (from: 60.0, over: 300.0),
+        fall: (from: 0.0, over: 1.0),
+        turns_under_hours: 12.0,
+        turns: 0.7,
+        drops: 0.0,
+    ),
+]

@@ -246,11 +246,11 @@ fn load(
     let (mut transform, mut vitals, mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
 
-    // The time of day, unless a scripted run set it.
+    // The time of day and the date, unless a scripted run set them.
     if let (Some(hour), None) = (save.hour, options.time) {
         clock.hour = hour;
     }
-    if let Some(day) = save.day {
+    if let (Some(day), None) = (save.day, options.date) {
         clock.day = day;
     }
 
