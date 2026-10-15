@@ -635,6 +635,11 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             *mesh = kept;
         }
     }
+    // Seated over a crease, a modelled piece's faces bend with it: two that meet at a
+    // corner, nearly in one plane as modelled, may come to lie in one, the one over the other.
+    if made && matches!(line.seat, Seat::Crease { .. }) {
+        unfold(&mut body);
+    }
     // A modelled piece is in its kit's atlas, whatever it stands for; one made from
     // numbers in its material, its ends in theirs.
     if modelled(module) {
@@ -652,6 +657,108 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         }
     }
 }
+
+/// Faces of a laid piece that meet at a corner and lie one over the other in one plane,
+/// looking the same way: the smaller cut back to what the larger leaves of it, its new
+/// corners' normals, atlas places and colours taken from its own.
+fn unfold(mesh: &mut Indexed) {
+    let key = |p: Vec3| (p * 1e4).round().as_ivec3().to_array();
+    let face = |m: &Indexed, t: usize| -> [Vec3; 3] {
+        [0, 1, 2].map(|k| m.positions[m.indices[t * 3 + k] as usize])
+    };
+    let count = mesh.indices.len() / 3;
+    let mut at: std::collections::HashMap<[i32; 3], Vec<usize>> = Default::default();
+    for t in 0..count {
+        for p in face(mesh, t) {
+            let list = at.entry(key(p)).or_default();
+            if list.last() != Some(&t) {
+                list.push(t);
+            }
+        }
+    }
+    let mut corners: Vec<_> = at.into_iter().collect();
+    corners.sort_by_key(|(k, _)| *k);
+    let mut gone = vec![false; count];
+    let mut added: Vec<u32> = Vec::new();
+    for (_, faces) in corners {
+        for x in 0..faces.len() {
+            for y in x + 1..faces.len() {
+                let (i, j) = (faces[x], faces[y]);
+                if gone[i] || gone[j] {
+                    continue;
+                }
+                let (fi, fj) = (face(mesh, i), face(mesh, j));
+                let normal = |f: &[Vec3; 3]| (f[1] - f[0]).cross(f[2] - f[0]);
+                let (ni, nj) = (normal(&fi), normal(&fj));
+                let (ai, aj) = (ni.length(), nj.length());
+                if ai < 1e-12 || aj < 1e-12 || ni.dot(nj) < 0.999 * ai * aj {
+                    continue;
+                }
+                // The larger as the plane, the smaller the one over it.
+                let (big, small, s) = if ai >= aj { (fi, fj, j) } else { (fj, fi, i) };
+                let n = normal(&big).normalize();
+                let d = n.dot(big[0]);
+                if small.iter().any(|p| (n.dot(*p) - d).abs() > COPLANAR_M) {
+                    continue;
+                }
+                let flat = flatten(n);
+                let (big_flat, small_flat) = (big.map(&flat), small.map(&flat));
+                if polygon_area(&clip_inside(&small_flat, &big_flat)) < 1e-6 {
+                    continue;
+                }
+                gone[s] = true;
+                let ids = [0, 1, 2].map(|k| mesh.indices[s * 3 + k] as usize);
+                let whole = (small_flat[1] - small_flat[0]).perp_dot(small_flat[2] - small_flat[0]);
+                for piece in outside(&small_flat, &big_flat) {
+                    let new: Vec<u32> = piece
+                        .iter()
+                        .map(|&q| {
+                            let wb =
+                                (q - small_flat[0]).perp_dot(small_flat[2] - small_flat[0]) / whole;
+                            let wc =
+                                (small_flat[1] - small_flat[0]).perp_dot(q - small_flat[0]) / whole;
+                            let w = [1.0 - wb - wc, wb, wc];
+                            let mix = |v: [Vec3; 3]| v[0] * w[0] + v[1] * w[1] + v[2] * w[2];
+                            let p = mix(ids.map(|c| mesh.positions[c]));
+                            let nn = mix(ids.map(|c| mesh.normals[c])).normalize_or(n);
+                            let uv =
+                                mix(ids.map(|c| Vec3::new(mesh.uvs[c][0], mesh.uvs[c][1], 0.0)));
+                            let colour = mix(ids.map(|c| Vec3::from_array(mesh.colours[c])));
+                            mesh.corner(p, nn, [uv.x, uv.y], colour.to_array())
+                        })
+                        .collect();
+                    for k in 1..new.len().saturating_sub(1) {
+                        let t = [new[0], new[k], new[k + 1]];
+                        let [a, b, c] = t.map(|v| mesh.positions[v as usize]);
+                        let f = (b - a).cross(c - a);
+                        if f.length_squared() < 1e-14 {
+                            continue;
+                        }
+                        let along: Vec3 = t.iter().map(|&v| mesh.normals[v as usize]).sum();
+                        if f.dot(along) >= 0.0 {
+                            added.extend(t);
+                        } else {
+                            added.extend([t[0], t[2], t[1]]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !gone.iter().any(|&g| g) {
+        return;
+    }
+    let old = std::mem::take(&mut mesh.indices);
+    for (t, chunk) in old.chunks_exact(3).enumerate() {
+        if !gone[t] {
+            mesh.indices.extend_from_slice(chunk);
+        }
+    }
+    mesh.indices.extend(added);
+}
+
+/// How far apart two faces of a laid piece may be and still lie in one plane, in metres.
+const COPLANAR_M: f32 = 0.0015;
 
 /// How far inside the edges a crease's module is mitred to it is cut, in metres: off the
 /// plane of the covering's own cut edge, which would fight its closing face.
@@ -1743,6 +1850,38 @@ mod tests {
             vec![0, 2500],
             "{capped:?}"
         );
+    }
+
+    #[test]
+    fn faces_of_a_laid_piece_folded_one_over_the_other_are_cut_back_to_cover_once() {
+        // Two faces meeting at a corner, the smaller lying over the larger in its plane, as
+        // a crease's bend leaves a crumple in a model: what is left covers their union once.
+        let mut mesh = Indexed::default();
+        for p in [
+            Vec3::ZERO,
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::ZERO,
+            Vec3::new(0.2, 0.0, 0.6),
+            Vec3::new(0.6, 0.0, 0.6),
+        ] {
+            mesh.corner(p, Vec3::Y, [0.0; 2], [1.0; 3]);
+        }
+        mesh.indices = vec![0, 1, 2, 3, 4, 5];
+        unfold(&mut mesh);
+        let faces: Vec<[Vec3; 3]> = mesh
+            .indices
+            .chunks(3)
+            .map(|t| [0, 1, 2].map(|k| mesh.positions[t[k] as usize]))
+            .collect();
+        let (twice, all) = twice_covered(&faces, Vec3::Y);
+        assert!(twice < 1e-6, "{twice}");
+        // Half a square, and of the other what lies past its diagonal x + z = 1: a triangle
+        // 0.2 along z = 0.6 and 0.1 off it.
+        assert!((all - (0.5 + 0.01)).abs() < 1e-4, "{all}");
+        for [a, b, c] in faces {
+            assert!((b - a).cross(c - a).y > 0.0);
+        }
     }
 
     #[test]

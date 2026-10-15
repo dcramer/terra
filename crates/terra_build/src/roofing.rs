@@ -287,9 +287,27 @@ impl Square {
         let texture = size(kit, Material::Covering);
         for (polygon, _) in self.facets() {
             let n = up(&polygon);
+            // Lifted plumb, as the courses are near, so the facets either side of a hip or a
+            // ridge meet over it rather than each lifted off its own way with a slit between;
+            // but along an edge no covering carries on past, square off the roof, so the
+            // sheet's edge leans out over the eave as the courses' butts do.
+            let h = r.thick + r.relief * 0.5;
+            let open_edge = |p: Vec3| {
+                (0..4).any(|side| {
+                    let (a, b) = (self.corners[side], self.corners[(side + 1) % 4]);
+                    self.open[side]
+                        && (p - a).cross(b - a).length() < 1e-4 * (b - a).length().max(1e-3)
+                })
+            };
             let lifted: Vec<Vec3> = polygon
                 .iter()
-                .map(|p| *p + n * (r.thick + r.relief * 0.5))
+                .map(|&p| {
+                    if open_edge(p) {
+                        p + n * h
+                    } else {
+                        p + Vec3::Y * (h / n.y.max(0.2))
+                    }
+                })
                 .collect();
             for i in 1..lifted.len() - 1 {
                 let corners = [lifted[0], lifted[i], lifted[i + 1]];
@@ -607,6 +625,53 @@ mod tests {
                 crest > top + r.thick * std::f32::consts::SQRT_2,
                 "{name}: {crest}"
             );
+        }
+    }
+
+    #[test]
+    fn far_off_a_roofs_sheet_closes_over_its_hips_and_ridge() {
+        // Five metres by four under a hip, drawn as far off: looking straight down anywhere
+        // over the roof, a hip's line included, the sheet is there; lifted off each facet
+        // square to it, it left a slit along every hip.
+        let kit = shipped("slate.ron");
+        let mut pieces = Vec::new();
+        let base = cabin(Style::Hip);
+        roofs::lay(
+            &base,
+            &kit,
+            &crate::kit::Kits(vec![kit.clone()]),
+            crate::layout::Scope::ALL,
+            &mut pieces,
+        );
+        let mut surfaces = Surfaces::default();
+        for piece in pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Covering { .. }))
+        {
+            draw_as(piece, &kit, None, true, &mut surfaces);
+        }
+        let sheet = &surfaces.0[&Material::Covering];
+        let flat = |p: Vec3| glam::Vec2::new(p.x, p.z);
+        let covered = |q: glam::Vec2| {
+            sheet.positions.chunks(3).any(|t| {
+                let [a, b, c] = [flat(t[0]), flat(t[1]), flat(t[2])];
+                let s = [
+                    (b - a).perp_dot(q - a),
+                    (c - b).perp_dot(q - b),
+                    (a - c).perp_dot(q - c),
+                ];
+                s.iter().all(|&v| v >= -1e-7) || s.iter().all(|&v| v <= 1e-7)
+            })
+        };
+        // Down each hip, from its foot at a corner of the eaves to the ridge's end.
+        for (corner, toward) in [
+            (glam::Vec2::new(-0.5, -0.5), glam::Vec2::new(2.0, 2.0)),
+            (glam::Vec2::new(5.5, 4.5), glam::Vec2::new(3.0, 2.0)),
+        ] {
+            for k in 6..40 {
+                let q = corner.lerp(toward, k as f32 / 40.0);
+                assert!(covered(q), "{q}");
+            }
         }
     }
 
