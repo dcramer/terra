@@ -41,3 +41,5 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-14,5d73d6b+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,town300,64.27,96.52,130.81,1,100.00,1200,11.5
 2026-10-14,d8e8cfe,NVIDIA GeForce RTX 5090,1920x1080 offscreen,release,town300,15.40,29.94,77.18,3,37.42,62,14.7
 2026-10-14,d8e8cfe+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,town300,78.91,115.73,541.51,1,99.92,1197,-50.1
+2026-10-14,2d00544,NVIDIA GeForce RTX 5090,1920x1080 offscreen,release,town300,7.88,27.53,53.48,3,9.17,6,4.7
+2026-10-14,2d00544+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,town300,56.31,73.72,117.88,1,100.00,1200,-9.9
