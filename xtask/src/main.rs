@@ -644,7 +644,8 @@ const SCENES: &[Scene] = &[
 
 /// Frames run before any are timed, so shaders are ready and the scene has settled.
 const BENCH_SETTLE: &str = "240";
-/// A run that has not finished in this long is stuck, and is ended.
+/// A run that has not finished in this long is stuck, and is ended; counted from when it has
+/// its turn on the GPU (D319), not while it waits for it.
 const BENCH_TIMEOUT_S: u64 = 300;
 /// How much slower than the last recorded result counts as a regression to look into.
 const SLOWER_BY: f32 = 0.10;
@@ -1037,9 +1038,21 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
             .filter_map(|line| worth_saying(&line).map(str::to_string))
             .collect::<Vec<String>>()
     });
+    // A run waiting its turn on the GPU (D319) is not stuck: its time starts once it has it.
+    let turn = std::sync::Arc::new(std::sync::Mutex::new((false, std::time::Instant::now())));
+    let turn_seen = turn.clone();
     let reader = std::thread::spawn(move || {
         let mut timing: Option<Timing> = None;
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if line.starts_with("SANDBOX waiting for the GPU") {
+                if let Ok(mut turn) = turn_seen.lock() {
+                    turn.0 = true;
+                }
+            } else if line.starts_with("SANDBOX got the GPU")
+                && let Ok(mut turn) = turn_seen.lock()
+            {
+                *turn = (false, std::time::Instant::now());
+            }
             if let Some(read) = parse_timing(&line) {
                 timing = Some(read);
             } else if let Some(said) = worth_saying(&line) {
@@ -1052,11 +1065,14 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
         }
         timing
     });
-    let started = std::time::Instant::now();
+    let stuck = || {
+        turn.lock()
+            .is_ok_and(|turn| !turn.0 && turn.1.elapsed().as_secs() > BENCH_TIMEOUT_S)
+    };
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) if started.elapsed().as_secs() > BENCH_TIMEOUT_S => {
+            Ok(None) if stuck() => {
                 println!("  stuck after {BENCH_TIMEOUT_S} s, so ended");
                 child.kill().ok();
                 child.wait().ok();
