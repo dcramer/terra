@@ -8,11 +8,21 @@
 
 Seen on the workbench (a contact sheet of `Jog_Fwd_Loop` and `Sprint_Loop`, the base body in coat, cap and small pack, eight moments from the side and the front): the body leans about 30 degrees forward, the head juts, the shoulders ride up, the elbows flare and the fists pump at chest height. It reads as an ape charging, not a traveller running. The jog and the sprint are the same clip played at two speeds.
 
-Measured, three causes:
+Measured, with `tools/characters/gait_check.py`, a ruler made for this, against the mannequin the clips were made on:
 
-1. **Not the copying.** Each clip is copied onto every body bone by bone (`tools/characters/export_character.py`), which is only safe if the bones rest alike. They do: every bone's rest frame in `base.glb` matches `mannequin.glb`'s to 0.0 degrees. Through the whole jog, in Blender, every bone of the base points within 0.0 degrees of the mannequin's, except the forearms, 3 to 5 degrees on average and 10 at worst, which is the twist step (`twist.py`) doing its job. In the game, over the remote protocol, the clavicles, upper arms, spine, head and pelvis turn exactly as the mannequin's.
-2. **Our body's proportions.** The same angles land on a different frame. The base's upper arm hangs from a clavicle about 12 cm long against the mannequin's 22 cm, so its shoulders sit 10 cm further in, under a much heavier torso. An arm swing made for the mannequin, copied angle for angle, jams the arms up against the chest and spreads the elbows. Shipped retargeting does not copy angles alone: Unreal's IK Retargeter maps chains and then brings the hands and feet to goals scaled to the target's own proportions.
-3. **The clip's own style.** The mannequin leans as far forward as the base does in the side view: Quaternius's jog is stylised, a hunched, pumping run. A natural run needs a natural source.
+| Clip | Body | Arms in torso | Hands (hips 0, neck 1) | Elbow flare | Lean | Shoulders | Foot slide |
+|---|---|---|---|---|---|---|---|
+| Walk | mannequin | 0% | 0.06 | 0.14 | 12 deg | 0.15 | 6.7 cm |
+| Walk | base | 0% | 0.12 | 0.15 | 12 deg | -0.08 | 8.0 cm |
+| Jog | mannequin | 0% | 0.43 | 0.25 | 25 deg | 0.36 | 2.8 cm |
+| Jog | base | 0% | 0.43 | 0.27 | 28 deg | -0.06 | 3.6 cm |
+| Sprint | mannequin | 0% | 0.23 | 0.24 | 39 deg | 0.43 | 1.8 cm |
+| Sprint | base | 0% | 0.27 | 0.26 | 41 deg | -0.06 | 5.4 cm |
+
+1. **The clip reaches our body faithfully.** Each clip is copied onto every body bone by bone (`tools/characters/export_character.py`), which is safe only if the bones rest alike, and they do: every rest frame in `base.glb` matches `mannequin.glb`'s to 0.0 degrees, and through the jog every bone points the same way within 0.0 degrees but the forearms, 3 to 5 degrees on average from the twist step. In the game, read over the remote protocol, the clavicles, upper arms, spine, head and pelvis turn exactly as the mannequin's. Hands, elbows and lean match within a few hundredths and degrees, and no arm goes into the torso (the test finds 33% when the arms are swung across the chest, so it does see it).
+2. **The clip is the fault.** Quaternius's jog leans the trunk 25 degrees and its sprint 39, with the hands pumping at the chest; a real runner leans about 5 to 10 degrees at a steady jog and 10 to 20 sprinting. Stylised motion reads as a cartoon on the slim mannequin and as wrong on a realistic, heavy body. A more natural source is the fix, not a different way of copying.
+3. **Our shoulders sit differently.** The base's shoulder joints sit below the clavicles' roots (-0.06 clavicle lengths), the mannequin's well above (0.36): its clavicle is about 12 cm long against the mannequin's 22, under a much heavier torso. It adds to the hunched look; it is the body's build, from its rig, and is for the body, not the clips.
+4. **Feet slide** 2 to 8 cm a contact on both bodies, the walk worst: the game's playback-rate matching cannot remove what is in the clip. Foot locking is the fix (below).
 
 Already known and still open (`research/skin-deformation.md`, `research/gear-every-clip.md`, D115): bent elbows and knees lose 20 to 35% of their volume, the feet reach lower than the mannequin's toes in walking and running, and the clips' unchanging joint translations are still to be stripped. The game plays one clip at a time with 180 ms crossfades, matched to speed only by its playback rate (`play/figure.rs`, `pace.rs`): no blend from walk to jog to sprint by speed, no foot IK, no lean (`research/bevy-character-capabilities.md`).
 
@@ -49,10 +59,9 @@ Learned physics controllers (DeepMimic to NVIDIA's MaskedMimic and ProtoMotions,
 
 For the run, in order, each judged by a number an agent reads, not by eye alone:
 
-1. **A locomotion ruler.** A sheet and a report per clip and body: foot slide (how far a planted toe moves, under 1 cm), the clip's speed against the body's, feet below or above the ground, arms inside the torso (hand and forearm points inside the body's hull), torso lean and shoulder height against a reference, pops across a blend. It extends the workbench and the rig check that already exist.
-2. **A retarget aware of proportions,** offline in the export step: after the bone-by-bone copy, bring each hand to where it sits relative to the shoulders and chest on the mannequin, scaled by our arm's length, and each foot to the ground, by IK, as Unreal's IK Retargeter does with chains and goals. Measured by the arms-inside-torso count and hand position against the mannequin's.
-3. **A natural run.** Try a Kimodo jog and run, and Mixamo's captured ones, retargeted by step 2, against Quaternius's on the ruler and on a sheet side by side.
-4. **In the game:** blend walk, jog and sprint by speed (the graph's blend nodes), then foot IK and locking, lean and stride warping, ported from Godot 4.6 and Holden's article (MIT).
+1. **A locomotion ruler.** Made: `tools/characters/gait_check.py`, above. Still to add: the clip's speed against the body's, feet below or above the ground, pops across a blend.
+2. **A natural run.** Try a Kimodo jog and run, and Mixamo's captured ones, retargeted onto our skeleton, against Quaternius's on the ruler (lean near a real runner's, hands lower, slide under 1 cm) and on a sheet side by side. A retarget that keeps hands and feet where the source body had them, as Unreal's IK Retargeter does, only if a source's proportions are far from ours.
+3. **In the game:** blend walk, jog and sprint by speed (the graph's blend nodes), then foot IK and locking, lean and stride warping, ported from Godot 4.6 and Holden's article (MIT).
 
 For creatures, one shared set of parts, and each creature data that says which of them it uses (D136):
 

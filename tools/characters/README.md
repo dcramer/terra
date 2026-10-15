@@ -21,6 +21,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `gear_check.py` | How much skin comes through each worn piece, through our clips; `--fix` records how far each part must move out to clear it (the clipping fixer, per morph) |
 | `build_bodies.sh` | Rebuilds every character asset the game loads from `art/`: the base, its gear, every morph, the skins, and the game's files |
 | `skin_piece.py` | What pieces made from the body's surface share: lining up a dressed model, the smooth cut, evening the edge, the bake of colour, normals and roughness, the turned-in rim (used by `shell_garment.py` and `bands.py`) |
+| `gait_check.py` | How a body moves through the locomotion clips against the mannequin they were made on: arms inside the torso, hand height, elbow flare, trunk lean, shoulder lift and foot slide, one line per clip and body (`tools/blender/run.sh tools/characters/gait_check.py`) |
 | `pace.py` | Each moving clip's own pace, the speed its planted feet move back, which the game plays it against so feet do not slide |
 | `lift.py` | The hips lifted by body size where a clip meets the floor: the mannequin measured once (run it on its own), each body's lift baked into its clips, each morph's kept for the game to mix |
 | `front_view.sh SHEET FRONT` | A turnaround sheet's front view, cut at the first clear gap after it, at 2048 square, as Tripo is given it to model |
