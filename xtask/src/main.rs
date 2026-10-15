@@ -912,6 +912,7 @@ fn worth_saying(line: &str) -> Option<&str> {
         "Builds drawn in view: ",
         "Builds' texture arrays: ",
         "frame parts, ",
+        "render world, median: ",
         "GPU passes, ",
         "triangles a frame, ",
         "drawn, medians: ",

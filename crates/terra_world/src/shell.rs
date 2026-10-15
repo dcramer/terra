@@ -929,9 +929,19 @@ impl Plugin for ShellPlugin {
         if self.0.offscreen && self.0.unattended() {
             app.add_systems(Startup, make_picture)
                 .add_systems(PostUpdate, draw_into_picture.before(CameraUpdateSystems));
+            let waits = RenderWaits::default();
+            app.insert_resource(waits.clone());
             app.sub_app_mut(RenderApp)
                 .init_resource::<InFlight>()
-                .add_systems(Render, wait_for_the_gpu.in_set(RenderSystems::Cleanup));
+                .insert_resource(waits)
+                .insert_resource(RenderBegan(Instant::now()))
+                .add_systems(
+                    Render,
+                    (
+                        render_began.in_set(RenderSystems::ExtractCommands),
+                        wait_for_the_gpu.in_set(RenderSystems::Cleanup),
+                    ),
+                );
         }
     }
 }
@@ -978,6 +988,21 @@ fn draw_into_picture(
 #[derive(Resource, Default)]
 struct InFlight(Option<Box<dyn FnOnce(&RenderDevice) + Send + Sync>>);
 
+/// For each frame of an offscreen run, how long the render world worked on it before it
+/// waited for the GPU, and how long it then waited, in ms: whether frames are held up by the
+/// CPU's side of rendering (preparing, queuing and recording what is drawn, which the render
+/// passes' own CPU times leave out) or by the GPU. Shared by both worlds.
+#[derive(Resource, Clone, Default)]
+pub struct RenderWaits(pub std::sync::Arc<std::sync::Mutex<Vec<[f32; 2]>>>);
+
+/// When the render world began its frame.
+#[derive(Resource)]
+struct RenderBegan(Instant);
+
+fn render_began(mut began: ResMut<RenderBegan>) {
+    began.0 = Instant::now();
+}
+
 /// Nothing is shown, so nothing holds the CPU back while the GPU catches up, as a window
 /// does by letting only a frame or two be in flight; without this a benchmark would time
 /// only the CPU. Like a window, each frame waits for the one before it to be drawn, so
@@ -986,7 +1011,9 @@ fn wait_for_the_gpu(
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
     mut in_flight: ResMut<InFlight>,
+    (began, waits): (Res<RenderBegan>, Res<RenderWaits>),
 ) {
+    let busy = began.0.elapsed();
     // Done once everything this frame submitted is.
     let drawn = queue.submit(std::iter::empty());
     let wait = move |device: &RenderDevice| {
@@ -996,8 +1023,15 @@ fn wait_for_the_gpu(
         };
         device.poll(until).ok();
     };
+    let waiting = Instant::now();
     if let Some(before) = in_flight.0.replace(Box::new(wait)) {
         before(&device);
+    }
+    if let Ok(mut waits) = waits.0.lock() {
+        waits.push([
+            busy.as_secs_f32() * 1000.0,
+            waiting.elapsed().as_secs_f32() * 1000.0,
+        ]);
     }
 }
 
@@ -1125,7 +1159,7 @@ fn scripted_run(
     ),
     (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
-    mut times: Local<Vec<String>>,
+    (mut times, render_waits): (Local<Vec<String>>, Option<Res<RenderWaits>>),
 ) {
     if !options.scripted() {
         return;
@@ -1311,6 +1345,18 @@ fn scripted_run(
                 median(&mut part_ms[1]),
                 median(&mut part_ms[2])
             );
+            // The render world's own side of the timed frames: a frame waiting little for
+            // the GPU is held up by the CPU, one waiting long by the GPU.
+            if let Some(waits) = render_waits.as_ref().and_then(|w| w.0.lock().ok()) {
+                let timed = waits.len().saturating_sub(frame_ms.len());
+                let (mut busy, mut waited): (Vec<f32>, Vec<f32>) =
+                    waits[timed..].iter().map(|[b, w]| (*b, *w)).unzip();
+                println!(
+                    "SANDBOX render world, median: busy {} before waiting {} for the GPU",
+                    median(&mut busy),
+                    median(&mut waited)
+                );
+            }
             // The costliest passes on the GPU, by their medians.
             let mut passes: Vec<(f32, &str)> = pass_ms
                 .iter_mut()
