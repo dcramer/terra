@@ -284,6 +284,7 @@ type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
 
 /// What the ground shader is told. Field order must match the struct in ground.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq)]
+#[bind_group_data(GroundKey)]
 pub struct GroundExtension {
     #[uniform(100)]
     radius_m: f32,
@@ -330,9 +331,9 @@ pub struct GroundExtension {
     /// Whether there is a cover map to read.
     #[uniform(100)]
     cover_on: u32,
-    /// Each layer at one size rather than two blended, at the low quality preset (D239).
-    #[uniform(100)]
-    one_size: u32,
+    /// Drawn as the low quality preset draws it (D239, D307): the shader built with
+    /// `GROUND_LOW`, two layers a pixel, one or two projections, flat colours far off.
+    cheap: bool,
     #[texture(104)]
     #[sampler(105)]
     cover_map: Option<Handle<Image>>,
@@ -404,9 +405,39 @@ impl GroundTextures {
     }
 }
 
+/// Which of the ground's shaders a material is drawn with: the low preset's is another
+/// build of it, so the high one's work is not even branched past.
+#[repr(C)]
+#[derive(Eq, PartialEq, Hash, Copy, Clone)]
+pub struct GroundKey {
+    cheap: bool,
+}
+
+impl From<&GroundExtension> for GroundKey {
+    fn from(ground: &GroundExtension) -> Self {
+        GroundKey {
+            cheap: ground.cheap,
+        }
+    }
+}
+
 impl MaterialExtension for GroundExtension {
     fn fragment_shader() -> ShaderRef {
         "shaders/ground.wesl".into()
+    }
+
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        if key.bind_group_data.cheap
+            && let Some(fragment) = descriptor.fragment.as_mut()
+        {
+            fragment.shader_defs.push("GROUND_LOW".into());
+        }
+        Ok(())
     }
 }
 
@@ -445,7 +476,7 @@ impl GroundExtension {
             normal: Some(textures.normal.clone()),
             cover_from_world: cover.from_world,
             cover_on: cover.image.is_some() as u32,
-            one_size: (quality == crate::quality::Quality::Low) as u32,
+            cheap: quality == crate::quality::Quality::Low,
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
             cover_more: Some(cover.more.clone().unwrap_or_default()),

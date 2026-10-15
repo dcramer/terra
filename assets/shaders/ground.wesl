@@ -53,8 +53,6 @@ struct Ground {
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
-    // Each layer at one size, at the low quality preset.
-    one_size: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -138,9 +136,9 @@ fn hash2(p: vec2<f32>) -> vec2<f32> {
 // texture moved and turned at random, and every point blends the three nearest copies,
 // weighted toward the nearest and toward whichever stands highest there, so the seams fall
 // between leaves and stones rather than across them. `turn` is how far a copy may be turned,
-// from none to any way, or `PLAIN` for one plain sample, as every layer is at the low preset.
+// from none to any way, or `PLAIN` for one plain sample.
 fn hex_tiled(uv: vec2<f32>, ddx: vec2<f32>, ddy: vec2<f32>, index: u32, turn: f32) -> Texel {
-    if ground.one_size != 0u || turn < 0.0 {
+    if turn < 0.0 {
         return fetch(uv, ddx, ddy, index);
     }
     // The triangle grid the hexagons' middles stand on, skewed to a square one.
@@ -318,6 +316,156 @@ fn micro_shadow(world: vec4<f32>, n: vec3<f32>, relief: vec3<f32>, height: f32, 
 // How much of the light on sunlit ground is the sun's, so how much of it the hollows lose.
 const SUN_SHARE: f32 = 0.85;
 
+// The low preset's ground (D307): what shipped games do on an integrated GPU. The layers'
+// shares are worked out first, as a splat map holds them, and only the two that show most
+// are sampled, blended by height (a "top two" splat, as Far Cry 5's and most open worlds'
+// terrain keep a few layers a texel rather than blending all); each is projected along
+// the one or two axes the surface faces most (biplanar mapping, Inigo Quilez, "Biplanar
+// mapping", 2020) rather than three; and past LOW_TEXTURED_M the layers are drawn as their
+// average colours, flat, which is what their smallest mips show there anyway.
+
+// Textures fade to flat colour between these distances from the camera.
+@if(GROUND_LOW)
+const LOW_TEXTURED_M: vec2<f32> = vec2<f32>(45.0, 75.0);
+
+// One projection of a layer: its colour, height and the surface's normal bent by its relief,
+// along axis 0 (x), 1 (y) or 2 (z), as `layer` lays each.
+@if(GROUND_LOW)
+fn projected(axis: u32, index: u32, p: vec3<f32>, dx: vec3<f32>, dy: vec3<f32>, n: vec3<f32>) -> Layer {
+    let side = select(vec3<f32>(-1.0), vec3<f32>(1.0), n >= vec3<f32>(0.0));
+    if axis == 0u {
+        let t = fetch(vec2<f32>(p.z * side.x, p.y), vec2<f32>(dx.z * side.x, dx.y), vec2<f32>(dy.z * side.x, dy.y), index);
+        let r = vec2<f32>(t.relief.x * side.x, t.relief.y) * RELIEF;
+        return Layer(t.colour, vec3<f32>(n.x, r.y + n.y, r.x + n.z), t.height);
+    }
+    if axis == 1u {
+        let t = fetch(vec2<f32>(p.x * side.y, p.z), vec2<f32>(dx.x * side.y, dx.z), vec2<f32>(dy.x * side.y, dy.z), index);
+        let r = vec2<f32>(t.relief.x * side.y, t.relief.y) * RELIEF;
+        return Layer(t.colour, vec3<f32>(r.x + n.x, n.y, r.y + n.z), t.height);
+    }
+    let t = fetch(vec2<f32>(-p.x * side.z, p.y), vec2<f32>(-dx.x * side.z, dx.y), vec2<f32>(-dy.x * side.z, dy.y), index);
+    let r = vec2<f32>(-t.relief.x * side.z, t.relief.y) * RELIEF;
+    return Layer(t.colour, vec3<f32>(r.x + n.x, r.y + n.y, n.z), t.height);
+}
+
+// A layer, biplanar: along the axis the surface faces most, and along the next only where
+// the surface turns toward it, within about 35 degrees of the diagonal between them, so
+// most of the ground takes one projection and none takes three.
+@if(GROUND_LOW)
+fn biplanar(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
+    var metres = 1.0;
+    if index < 4u {
+        metres = ground.layer_metres[index];
+    } else {
+        metres = ground.more_metres[index - 4u];
+    }
+    let k = 1.0 / (metres * scale);
+    let a = abs(n);
+    var major = 2u;
+    var next = select(1u, 0u, a.x > a.y);
+    if a.x >= a.y && a.x >= a.z {
+        major = 0u;
+        next = select(2u, 1u, a.y > a.z);
+    } else if a.y >= a.z {
+        major = 1u;
+        next = select(2u, 0u, a.x > a.z);
+    }
+    // Quilez's weights: each axis's share past the diagonal, 0.5773.
+    let w_major = clamp((a[major] - 0.5773) / 0.4227, 0.0, 1.0);
+    let w_next = clamp((a[next] - 0.5773) / 0.4227, 0.0, 1.0);
+    var drawn = projected(major, index, world * k, gx * k, gy * k, n);
+    if w_next > 0.0 {
+        let other = projected(next, index, world * k, gx * k, gy * k, n);
+        let share = w_next / max(w_major + w_next, 1.0e-4);
+        drawn = Layer(mix(drawn.colour, other.colour, share), mix(drawn.normal, other.normal, share), mix(drawn.height, other.height, share));
+    }
+    let average = textureSampleLevel(ground_color, ground_sampler, vec2<f32>(0.5), index, 16.0).rgb;
+    return Layer(drawn.colour * tint / max(average, vec3<f32>(0.02)), normalize(drawn.normal), drawn.height);
+}
+
+// The layers the low preset may draw, in the order they lie, bottom first, as the high
+// preset lays them one over another.
+@if(GROUND_LOW)
+const LOW_LAYERS: u32 = 9u;
+
+// The floor at the low preset: each layer's share where it shows, then the two that show
+// most sampled and settled by height, near the camera; flat colours farther off. `amounts`
+// are how much of each lies over what is under it, and `tints` its colour.
+@if(GROUND_LOW)
+fn low_floor(amounts: array<f32, 9>, tint_of: array<vec3<f32>, 9>, world: vec3<f32>, n: vec3<f32>) -> Layer {
+    var tints = tint_of;
+    let gx = dpdx(world);
+    let gy = dpdy(world);
+    // What shows of each, from the top down: its own amount of what the layers over it leave.
+    var shares: array<f32, 9>;
+    var left = 1.0;
+    for (var k = 0u; k < LOW_LAYERS; k++) {
+        let i = LOW_LAYERS - 1u - k;
+        shares[i] = amounts[i] * left;
+        left *= 1.0 - amounts[i];
+    }
+    var flat_colour = vec3<f32>(0.0);
+    var first = 0u;
+    var second = 0u;
+    var most = -1.0;
+    var next_most = -1.0;
+    for (var i = 0u; i < LOW_LAYERS; i++) {
+        flat_colour += tints[i] * shares[i];
+        if shares[i] > most {
+            second = first;
+            next_most = most;
+            first = i;
+            most = shares[i];
+        } else if shares[i] > next_most {
+            second = i;
+            next_most = shares[i];
+        }
+    }
+    let flat_layer = Layer(flat_colour, n, 0.5);
+    let textured = 1.0 - smoothstep(LOW_TEXTURED_M.x, LOW_TEXTURED_M.y, distance(world, view.world_position));
+    if textured <= 0.0 {
+        return flat_layer;
+    }
+    var drawn: Layer;
+    if next_most > 0.02 {
+        // The two as if they were all there is: the floor's litter, needles, grass and moss
+        // settled by height, the rest laid over, as the high preset lays each.
+        let under = min(first, second);
+        let top = max(first, second);
+        let lower = low_layer(under, tints[under], world, gx, gy, n);
+        let upper = low_layer(top, tints[top], world, gx, gy, n);
+        let amount = shares[top] / (most + next_most);
+        if top == 2u || top == 3u || top == 5u || top == 6u {
+            drawn = settle(lower, upper, amount);
+        } else {
+            drawn = over(lower, upper, amount);
+        }
+    } else {
+        drawn = low_layer(first, tints[first], world, gx, gy, n);
+    }
+    return over(flat_layer, drawn, textured);
+}
+
+// Layer `i` of LOW_LAYERS: which picture, at what size, moved by how much so no two show the
+// same place.
+@if(GROUND_LOW)
+fn low_layer(i: u32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
+    var index = array<u32, 9>(SOIL, ROCK, LITTER, NEEDLES, ROOTS, GRASS, MOSS, ROCK, SAND);
+    var scale = array<f32, 9>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6, 1.0);
+    var offset = array<f32, 9>(0.0, 37.0, 41.0, 29.0, 3.0, 11.0, 5.0, 0.0, 0.0);
+    var drawn = biplanar(index[i], scale[i], tint, world + offset[i], gx, gy, n);
+    if i == 0u {
+        // Trodden soil's light and dark drawn out, as the high preset's (D294).
+        drawn.colour = tint * pow(max(drawn.colour / max(tint, vec3<f32>(0.001)), vec3<f32>(0.0)), vec3<f32>(SOIL_CONTRAST));
+    }
+    if i == 2u {
+        // The fallen leaves' reds and yellows toned toward the tint, as the high preset's.
+        let light = dot(drawn.colour, vec3<f32>(0.333)) / dot(tint, vec3<f32>(0.333));
+        drawn.colour = mix(tint * light, drawn.colour, 0.3);
+    }
+    return drawn;
+}
+
 @fragment
 fn fragment(
     in: VertexOutput,
@@ -361,6 +509,10 @@ fn fragment(
             // The map is half a metre a texel: looked up a little way off, by noise, so what
             // it says frays and wanders rather than ending in smooth blobs.
             let warp = vec3<f32>(noise(world * 0.7 + 41.0), 0.0, noise(world * 0.7 + 83.0)) - vec3<f32>(0.5, 0.0, 0.5);
+            // Finer fraying, but not at the low preset.
+@if(GROUND_LOW)
+            let fine = vec3<f32>(0.0);
+@else
             let fine = vec3<f32>(noise(world * 2.3 + 7.0), 0.0, noise(world * 2.3 + 13.0)) - vec3<f32>(0.5, 0.0, 0.5);
             let at = (ground.cover_from_world * vec4<f32>(world + warp * 1.4 + fine * 0.4, 1.0)).xy;
             let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
@@ -374,6 +526,55 @@ fn fragment(
             needles = more.r * inside;
             roots = more.g * inside;
         }
+@if(GROUND_LOW) {
+        // The same layers and shares as below, drawn as `low_floor` says.
+        let n = normalize(in.world_normal);
+        let flat_ground = 1.0 - steep;
+        let litter_colour = vec3<f32>(0.068, 0.054, 0.036);
+        let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
+        let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
+        let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
+        let rooty = smoothstep(0.3, 0.75, roots + (fleck - 0.5) * 0.35 + (blotch - 0.5) * 0.3) * flat_ground;
+        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground;
+        let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
+        let mossy = smoothstep(0.25, 0.75, moss + (blotch - 0.5) * 0.5) * flat_ground;
+        let rock = smoothstep(0.2, 0.4, grows.b);
+        let ore = smoothstep(0.7, 0.9, grows.b);
+        let above_sea = from_centre - ground.sea_radius_m;
+        let undug = 1.0 - smoothstep(0.1, 0.3, grows.b);
+        let sandy = (1.0 - smoothstep(0.35, 1.5, above_sea + (blotch - 0.5) * 0.9)) * ground.cover * undug;
+        let amounts = array<f32, 9>(1.0, steep, leaves, needly, rooty, grass, mossy, rock, sandy);
+        let tints = array<vec3<f32>, 9>(
+            // Damp, packed patches darker and dry crumbs lighter, as the high preset's (D294).
+            mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch)
+                * mix(1.18, 0.62, smoothstep(0.3, 0.75, noise(world * 0.6 + 31.0) * 0.6 + noise(world * 2.1 + 47.0) * 0.4)),
+            ground.steep.rgb * (0.85 + 0.3 * blotch),
+            litter_colour * (0.85 + 0.3 * fleck),
+            needle_colour * (0.85 + 0.3 * fleck),
+            vec3<f32>(0.08, 0.058, 0.04) * (0.8 + 0.4 * blotch),
+            mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck),
+            vec3<f32>(0.056, 0.08, 0.026) * (0.8 + 0.4 * fleck),
+            mix(vec3<f32>(0.12, 0.1, 0.08) * (0.85 + 0.3 * blotch), vec3<f32>(0.24, 0.08, 0.04) * (0.8 + 0.4 * fleck), ore),
+            ground.sand.rgb,
+        );
+        let ground_is = low_floor(amounts, tints, world, n);
+        // The blades' shade and the broad swells, over all but dug rock and sand.
+        let shaded = (1.0 - 0.6 * smoothstep(0.1, 0.7, blades)) * (0.86 + 0.28 * swell);
+        let hollow = smoothstep(0.0, 0.6, ground_is.height);
+        colour = ground_is.colour * mix(0.8, 1.0, hollow) * mix(shaded, 1.0, 1.0 - (1.0 - rock) * (1.0 - sandy));
+        colour *= micro_shadow(in.world_position, n, ground_is.normal, ground_is.height, in.position);
+        pbr_input.diffuse_occlusion *= vec3<f32>(mix(0.6, 1.0, hollow));
+        // The shore, only near the sea.
+        if above_sea < 2.0 {
+            let lap = sin(globals.time * 0.9 + noise(world * 0.12) * 12.0) * 0.06;
+            colour *= mix(0.72, 1.0, smoothstep(0.05, 0.3, above_sea - lap) * undug + (1.0 - undug));
+            colour = mix(colour, ground.sea_deep.rgb, smoothstep(0.0, 4.5, -above_sea) * 0.92 * undug);
+            let foam_width = 0.07 + 0.05 * noise(world * 1.7 + globals.time * 0.25);
+            let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
+            colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover * undug);
+        }
+        pbr_input.N = ground_is.normal;
+} @else {
         let n = normalize(in.world_normal);
         let gx = dpdx(world);
         let gy = dpdy(world);
@@ -483,6 +684,7 @@ fn fragment(
         let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
         colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover * undug);
         pbr_input.N = ground_is.normal;
+}
     } else {
         colour = mix(colour, ground.steep.rgb, steep);
     }
