@@ -14,6 +14,7 @@
 
 pub mod air;
 pub mod audio;
+pub mod cache;
 pub mod cine;
 pub mod climate;
 pub mod cover;

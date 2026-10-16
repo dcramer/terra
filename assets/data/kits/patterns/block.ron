@@ -54,9 +54,9 @@
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
     },
     details: {
-        Masonry: (path: "materials/detail_stone", metres: 0.5, strength: 0.8),
-        Floor: (path: "materials/detail_stone", metres: 0.5, strength: 0.8),
-        Dressed: (path: "materials/detail_stone", metres: 0.5, strength: 0.8),
+        Masonry: (path: "materials/detail_stone", metres: 0.5, strength: 0.6),
+        Floor: (path: "materials/detail_stone", metres: 0.5, strength: 0.6),
+        Dressed: (path: "materials/detail_stone", metres: 0.5, strength: 0.6),
         Log: (path: "materials/detail_wood", metres: 0.4, strength: 0.8),
     },
     dress: (

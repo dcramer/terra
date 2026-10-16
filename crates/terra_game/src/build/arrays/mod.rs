@@ -22,6 +22,8 @@
 
 pub mod bc;
 
+mod cache;
+
 pub mod damage;
 
 use bc::Codec;
@@ -238,13 +240,20 @@ impl Layers {
         }
     }
 
-    /// These layers and those they wear down to and their details, which are made resident
-    /// with them.
+    /// These layers and those they wear down to, which are made resident with them.
     pub fn with_worn(&self, ids: &[u16]) -> Vec<u16> {
         let mut out = ids.to_vec();
         out.extend(ids.iter().filter_map(|id| self.worn.get(id)));
-        out.extend(ids.iter().filter_map(|id| self.details.get(id)));
         out
+    }
+
+    /// These layers' detail textures' layers (D362): made resident with them where the preset
+    /// draws detail, but never waited for, as a face is whole without its detail.
+    pub fn details_of(&self, ids: &[u16]) -> Vec<u16> {
+        ids.iter()
+            .filter_map(|id| self.details.get(id))
+            .copied()
+            .collect()
     }
 
     /// The layer a kind's material is drawn in, or the first kit's for no kind; none for a
@@ -310,6 +319,8 @@ struct Uploads(Arc<Mutex<Vec<Upload>>>);
 struct Encoded {
     maps: [Vec<Vec<u8>>; 4],
     cells: Vec<u8>,
+    /// Whether it was read from the cache, compressed before.
+    kept: bool,
 }
 
 enum Loading {
@@ -373,6 +384,8 @@ pub struct Arrays {
     /// ready, for the log.
     pub made: usize,
     pub dropped: usize,
+    /// Of those made resident, how many were read compressed from the cache (`cache`).
+    pub kept: usize,
 }
 
 /// The slot of the arrays the shared damage mask is kept in.
@@ -535,6 +548,7 @@ impl Arrays {
             exists,
             made: 0,
             dropped: 0,
+            kept: 0,
         }
     }
 
@@ -567,7 +581,11 @@ impl Arrays {
     /// Asks for these layers to be made resident, and marks them used now.
     pub fn want(&mut self, ids: &[u16], assets: &AssetServer, now: f32) {
         let layers = self.layers.clone();
-        for id in layers.with_worn(ids) {
+        let mut wanted = layers.with_worn(ids);
+        if self.near.z > 0.0 {
+            wanted.extend(layers.details_of(ids));
+        }
+        for id in wanted {
             let Some(set) = layers.set(id) else {
                 continue;
             };
@@ -903,6 +921,15 @@ pub fn stream(
                     .map(|handle| handle.as_ref().and_then(|h| images.get(h)).and_then(pixels))
                     .collect();
                 let task = AsyncComputeTaskPool::get().spawn(async move {
+                    // Compressed before and kept: read back (`cache`).
+                    let kept = cache::file(cache::key(&maps, sides, codecs, share));
+                    if let Some((maps, cells)) = kept.as_deref().and_then(cache::read) {
+                        return Some(Encoded {
+                            maps,
+                            cells,
+                            kept: true,
+                        });
+                    }
                     let mut out: [Vec<Vec<u8>>; 4] = Default::default();
                     let mut found = Vec::new();
                     for (i, map) in maps.into_iter().enumerate() {
@@ -932,9 +959,14 @@ pub fn stream(
                             .map(|(level, pixels)| codecs[i].encode(pixels, side >> level))
                             .collect();
                     }
+                    let stored = (out, found);
+                    if let Some(path) = &kept {
+                        cache::write(path, &stored);
+                    }
                     Some(Encoded {
-                        maps: out,
-                        cells: found,
+                        maps: stored.0,
+                        cells: stored.1,
+                        kept: false,
                     })
                 });
                 *loading = Loading::Encoding(task);
@@ -999,6 +1031,7 @@ pub fn stream(
             },
         );
         arrays.made += 1;
+        arrays.kept += usize::from(encoded.kept);
         debug!(
             "Build: a texture set resident in slot {slot} of {}",
             arrays.capacity
@@ -1167,14 +1200,18 @@ pub fn setup(
         );
         arrays.uploads = uploads;
         info!(
-            "Build: texture arrays of {} texels a side, {}, {:.1} MiB a texture set.",
+            "Build: texture arrays of {} texels a side, {}, {:.1} MiB a texture set; compressed sets kept in {}.",
             arrays.side(),
             if compressed {
                 "BC compressed"
             } else {
                 "uncompressed"
             },
-            arrays.set_bytes() as f32 / (1024.0 * 1024.0)
+            arrays.set_bytes() as f32 / (1024.0 * 1024.0),
+            cache::file(0)
+                .as_deref()
+                .and_then(std::path::Path::parent)
+                .map_or("nowhere".into(), |folder| folder.display().to_string())
         );
         Some(arrays)
     })
@@ -1261,7 +1298,7 @@ mod tests {
     }
 
     #[test]
-    fn a_materials_detail_is_a_layer_of_its_own_made_resident_with_it_at_its_scale() {
+    fn a_materials_detail_is_a_layer_of_its_own_at_its_scale() {
         let texture = |path: &str, metres: [f32; 2]| terra_build::kit::Texture {
             path: path.into(),
             metres,
@@ -1290,17 +1327,15 @@ mod tests {
         let layers = Layers::of(&Kits(vec![kit]));
         let wall = layers.get(Kind(3), Material::Masonry).unwrap();
         let floor = layers.get(Kind(3), Material::Floor).unwrap();
-        let resident = layers.with_worn(&[wall]);
-        let grain = *resident
-            .iter()
-            .find(|&&id| id != wall)
-            .expect("its detail with it");
+        // Made resident with it, but not what it waits for.
+        assert_eq!(layers.with_worn(&[wall]), vec![wall]);
+        let grain = *layers.details_of(&[wall]).first().expect("its detail");
         assert_eq!(layers.set(grain).unwrap().path, "materials/grain");
         // A 2 m copy of the wall holds four of the half-metre detail each way.
         let (_, scale, strength) = layers.set(wall).unwrap().detail.clone().unwrap();
         assert_eq!((scale, strength), ([4.0, 4.0], 0.8));
-        // The floor has none, and brings none with it.
-        assert_eq!(layers.with_worn(&[floor]), vec![floor]);
+        // The floor has none.
+        assert!(layers.details_of(&[floor]).is_empty());
         assert!(layers.set(floor).unwrap().detail.is_none());
     }
 

@@ -207,10 +207,11 @@ fn drawing(world: &mut World) -> (usize, usize, f32, usize) {
         let (held, resident) = arrays.bytes(images);
         bytes += held;
         info!(
-            "Builds' texture arrays: {resident} texture sets resident in {:.0} MiB with their room for more, {:.1} MiB a set, {} made resident and {} let go in the run; the pieces' atlases {:.0} MiB.",
+            "Builds' texture arrays: {resident} texture sets resident in {:.0} MiB with their room for more, {:.1} MiB a set, {} made resident ({} read compressed from the cache) and {} let go in the run; the pieces' atlases {:.0} MiB.",
             mib(held),
             mib(arrays.set_bytes()),
             arrays.made,
+            arrays.kept,
             arrays.dropped,
             mib(atlases)
         );

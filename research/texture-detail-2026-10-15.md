@@ -30,6 +30,50 @@ Sampling was not at fault: 16x anisotropic filtering on every array (one sampler
 - **Sharpening after TAA** at every preset, 0.6 at high.
 - **The bark rebaked** at 2,048 from the Tripo log's 4K maps, read between rows, its painted light taken out round it (`bake.py`'s `delit`, a fifth of it kept): now 67 to 99 of 255 round the log.
 
+- **Texture sets kept compressed** on disk once made (`arrays::cache`, in the user's cache folder, keyed by the pictures read and how they are stored), as an engine keeps cooked textures: BC7 at 2,048 takes a worker about 0.3 s a set even after it was sped up (one least-squares pass, steps found by projection, a table back to sRGB), on the same workers that lay sections, so the village's sections first reached the screen 4.2 s after starting rather than 2.4 s. Read back, they reach it in under 2 s.
+- **Detail strength** by what it reads as at 1 m: wood 0.8; stone 0.6 (0.8 read speckled); slate's covering 0.4, a cleft face smoother than rubble's.
+
 ## Results
 
-To follow in this note: stills, texel density, memory and frame time before and after.
+![Before and after at 1 m, high preset, 1:1 crops: logs, hewn timber, stone, slate](images/texture-detail-crops-2026-10-15.jpg)
+
+**Texel density** (texels a metre, the layer's; screen 1,037 px/m at 1 m, 519 at 2 m):
+
+| Surface | Before | After, high | Detail near, high |
+|---|---|---|---|
+| Stone wall (2 m copy) | 512 | 1,024 | 4,096 |
+| Flagstone floor (1.8 m) | 569 | 1,138 | 4,096 |
+| Log bark and worn wood (1 m round, 2 m along) | 1,090 x 512 | 2,180 x 1,024 | 5,120 |
+| Hewn beam (0.6 m) | 1,707 | 3,413 | 5,120 |
+| Slate (2.4 m) | 427 | 853 | 4,096 |
+| Shakes (3.2 by 1.6 m) | 320 x 640 | 640 x 1,280 | 5,120 |
+
+The low preset keeps the old density (1,024 layers, no detail): it draws at three fifths of the screen.
+
+**Sharpness**, the finest octave as a share of contrast in the middle of each still, before -> after, at 1, 2 and 5 m:
+
+| | 1 m | 2 m | 5 m |
+|---|---|---|---|
+| Logs, high | 12.3 -> 21.4 | 14.6 -> 20.2 | 15.4 -> 16.7 |
+| Hewn, high | 17.2 -> 32.7 | 14.5 -> 24.7 | 15.7 -> 18.9 |
+| Stone, high | 8.9 -> 26.2 | 14.6 -> 28.4 | 18.4 -> 22.1 |
+| Slate, high | 7.9 -> 16.8 | 10.8 -> 20.4 | 17.3 -> 22.7 |
+| Each at low | unchanged within 0.7 | | |
+
+**Texture memory**: a set 3.3 MiB before; 12 MiB at high, 4 MiB at low after. The village's arrays 139 MiB (18 sets in 32 slots) before; 312 MiB at high (20 sets in 24 slots, growing 8 at a time) and 120 MiB at low after. The pieces' atlases 48 -> 64 MiB (BC7). The budget: 12 MiB a set at high, the arrays under 400 MiB for a village of every baseline material.
+
+**Frame time**, `cargo xtask bench`, 1080p, three runs, a shared machine (median / 99th / worst, ms):
+
+| Scene | Before | After |
+|---|---|---|
+| village, RTX 5090, high | 4.52 / 5.88 / 9.29 | 4.35 / 6.20 / 10.09 |
+| town300, RTX 5090, high | 5.69 / 11.01 / 19.08 | 6.23 / 12.22 / 19.05 |
+| village, Radeon integrated, low | 30.43 / 32.38 / 44.54 | 30.36 / 34.86 / 49.28 |
+
+The GPU's own time did not move (village 2.34 -> 2.37 ms; the integrated GPU's opaque pass 15.1 -> 14.6 ms); contrast-adaptive sharpening costs 0.03 ms at high. The village measured steady, 25 s in, alternating builds: before 6.40 and 6.27 ms, after 5.82 and 6.33 ms. Everything holds the 13.3 ms budget; the integrated GPU's median stays under its 33.3 ms.
+
+## What is left
+
+- The quoins blow up one stone of the wall to a quoin's face; detail hides it near, but their own texel density is D215's to raise.
+- A log wall's outer face is mostly the worn wood, tinted warm by the timber's tint; whether that is the look the developers want is a design question, not detail.
+- The Tripo bark is still soft at its own scale (its finest octave 11% at 2,048); detail carries it near. A bark scan in its place would be sharper at every distance; D290 chose the modelled log's bark.

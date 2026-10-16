@@ -31,11 +31,7 @@ pub fn lock_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("TERRA_GPU_LOCK") {
         return Some(PathBuf::from(path));
     }
-    let cache = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))?;
-    Some(cache.join("terra").join("gpu.lock"))
+    Some(crate::cache::folder()?.join("gpu.lock"))
 }
 
 /// Takes the GPU's turn until this run ends: alone for a benchmark (`alone`), waiting until no

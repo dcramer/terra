@@ -46,10 +46,17 @@ fn to_srgb(l: f32) -> u8 {
     (c * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
+/// How many steps of linear light the table back to sRGB has.
+const SRGB_STEPS: usize = 16384;
+
 /// An RGBA picture `side` square and each smaller copy to 4 by 4, each pixel the mean of the
 /// four under it, averaged as `mips` says.
 pub fn chain(pixels: &[u8], side: u32, mips: Mips) -> Vec<Vec<u8>> {
     let linear: [f32; 256] = std::array::from_fn(|v| to_linear(v as u8));
+    // Back to sRGB by a table fine enough that its darkest steps are a fifth of a level.
+    let srgb: Vec<u8> = (0..SRGB_STEPS)
+        .map(|i| to_srgb(i as f32 / (SRGB_STEPS - 1) as f32))
+        .collect();
     let mut out = vec![pixels.to_vec()];
     let mut size = side as usize;
     for _ in 1..levels(side) {
@@ -73,7 +80,8 @@ pub fn chain(pixels: &[u8], side: u32, mips: Mips) -> Vec<Vec<u8>> {
                     Mips::Srgb => {
                         for c in 0..3 {
                             let sum: f32 = texel(c).iter().map(|&v| linear[usize::from(v)]).sum();
-                            next[at + c] = to_srgb(sum / 4.0);
+                            let at_step = (sum / 4.0 * (SRGB_STEPS - 1) as f32).round() as usize;
+                            next[at + c] = srgb[at_step.min(SRGB_STEPS - 1)];
                         }
                         let sum: u32 = texel(3).iter().map(|&v| u32::from(v)).sum();
                         next[at + 3] = ((sum + 2) / 4) as u8;
@@ -255,18 +263,40 @@ fn bc7_palette(a: End, b: End) -> [[i32; 4]; 16] {
 }
 
 /// Each pixel's nearest step on the line, and the block's squared error.
+/// The sixteen colours lie on one line, so the nearest to a pixel is the one nearest where
+/// the pixel falls along it: each pixel projected onto the line, and the step either side of
+/// that compared, as the line's colours are rounded off it.
 fn bc7_steps(px: &[[u8; 4]; 16], a: End, b: End) -> ([usize; 16], i64) {
     let palette = bc7_palette(a, b);
+    let (from, to) = (a.value(), b.value());
+    let d: [f32; 4] = std::array::from_fn(|c| (to[c] - from[c]) as f32);
+    let long = d.iter().map(|v| v * v).sum::<f32>();
     let mut steps = [0usize; 16];
     let mut total = 0i64;
     for (i, p) in px.iter().enumerate() {
+        let t = if long > 0.0 {
+            (0..4)
+                .map(|c| (f32::from(p[c]) - from[c] as f32) * d[c])
+                .sum::<f32>()
+                / long
+                * 64.0
+        } else {
+            0.0
+        };
+        let near = BC7_WEIGHTS.partition_point(|&w| (w as f32) < t).min(15);
         let mut best = (i64::MAX, 0);
-        for (k, q) in palette.iter().enumerate() {
-            let d: i64 = (0..4)
+        let first = near.saturating_sub(1);
+        for (k, q) in palette
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(near + 2 - first)
+        {
+            let e: i64 = (0..4)
                 .map(|c| i64::from(i32::from(p[c]) - q[c]).pow(2))
                 .sum();
-            if d < best.0 {
-                best = (d, k);
+            if e < best.0 {
+                best = (e, k);
             }
         }
         steps[i] = best.1;
@@ -294,7 +324,7 @@ fn bc7_block(px: &[[u8; 4]; 16]) -> [u8; 16] {
         });
         hi - lo
     });
-    for _ in 0..8 {
+    for _ in 0..4 {
         let next: [f32; 4] = std::array::from_fn(|i| (0..4).map(|j| cov[i][j] * axis[j]).sum());
         let len = next.iter().map(|v| v * v).sum::<f32>().sqrt();
         if len < 1e-6 {
@@ -302,10 +332,8 @@ fn bc7_block(px: &[[u8; 4]; 16]) -> [u8; 16] {
         }
         axis = next.map(|v| v / len);
     }
-    let along: Vec<f32> = p
-        .iter()
-        .map(|q| (0..4).map(|c| (q[c] - mean[c]) * axis[c]).sum())
-        .collect();
+    let along: [f32; 16] =
+        std::array::from_fn(|i| (0..4).map(|c| (p[i][c] - mean[c]) * axis[c]).sum());
     let lo = along.iter().copied().fold(f32::MAX, f32::min);
     let hi = along.iter().copied().fold(f32::MIN, f32::max);
     let end = |t: f32| {
@@ -316,7 +344,7 @@ fn bc7_block(px: &[[u8; 4]; 16]) -> [u8; 16] {
     let mut ends = (end(lo), end(hi));
     let (mut steps, mut error) = bc7_steps(px, ends.0, ends.1);
     // The ends fitted by least squares to the steps chosen, and the steps chosen again.
-    for _ in 0..2 {
+    for _ in 0..1 {
         if error == 0 {
             break;
         }
