@@ -35,7 +35,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use super::{WINDOWS_TARGET, on_wsl, output, root};
+use crate::windows::{WINDOWS_TARGET, on_wsl};
+use crate::{output, root};
 
 /// The locks Cargo 1.97 takes in a profile directory: `.cargo-lock` shared, the other two
 /// exclusive, for the length of a build. `cargo run` lets them go before the program starts.
