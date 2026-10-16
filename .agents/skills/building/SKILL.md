@@ -44,7 +44,7 @@ Every change: `cargo xtask check` (quick before a commit, full before a push).
 - **Geometry** (layout, roles, a shape, a junction): the module's tests; `cargo xtask artifacts <name>` for the scenes it touches, then `--quick --ratchet`; `cargo xtask fuzz` (seeds 0 to 200; `--seeds N` for more). A new scene goes in `scenes::registry` and nowhere else: the checks find it. A junction closed or opened changes `docs/building-voxels.json` (its rule, code, tests, registered cases) and `node tools/docs/docs.ts --render`; a fault found and not fixed is a numbered gap with its rule. Fixed faults: lower the baseline with `--record` (`cargo xtask artifacts --quick --record`, `cargo xtask artifacts --record`, `cargo xtask fuzz --record`) and say why in the commit.
 - **Look** (a texture, relief, a piece's model): `cargo xtask look <material>` first (D386: fixed vantages beside its reference and a grey card, its numbers against the pattern's targets, failing on a regression), `cargo xtask kits`, `cargo xtask texels <name>`, the kit sheet (`cargo xtask yard --kit-sheet --sheet-rows "<row>"`, then `--vantage` as it logs and `--shot`), a material's preview (`node tools/kits/preview.ts <name>`), and `cargo xtask artifacts --frames` on the GPU. Judge against [docs/art-style.md](../../../docs/art-style.md) and the material's reference.
 - **Performance**: `cargo xtask sections` (laying and merging against the 2 ms bar), `cargo xtask bench village going-up rising town300` (D185), `cargo xtask qa clips` traces; both load-aware (`--runs 3`).
-- **Material** (a new or changed file): `cargo xtask pack`, `cargo xtask kits`, `cargo xtask contract`, `cargo xtask look <material>`, and `cargo xtask artifacts <name>` for it, as a material outside the settlement is in no ratchet.
+- **Material** (a new or changed file): `cargo xtask pack`, `cargo xtask kits`, `cargo xtask look <material>`, and `cargo xtask artifacts <name>` for it, as a material outside the settlement is in no ratchet.
 - **Rules** (support, refusals, collapse): `cargo xtask rules` (tests with known failures, random operations, the drawing audit, live rules).
 
 ## Measuring
@@ -55,7 +55,7 @@ Every change: `cargo xtask check` (quick before a commit, full before a push).
 
 ## Debug views and the material bench
 
-- **Debug views** (D385, [development.md](../../../docs/development.md#buildings-debug-views)): F4 (Shift+F4 back) or the remote's `debug.view <name>` colours every building by texels, roles, detail, damage, shade, normals or plan, each with its legend. Look before measuring: most "is it the mesh, the shader or the load?" questions are one view.
+- **Debug views** (D385, [development.md](../../../docs/development.md#buildings-debug-views)): F4 (Shift+F4 back) or `cargo xtask remote debug.view <name>` on a run started with `--remote` colours every building by texels, roles, detail, damage, shade, normals or plan, each with its legend. Look before measuring: most "is it the mesh, the shader or the load?" questions are one view.
 - **The material bench** (`cargo xtask look <material>`, D386): for any change to how a material looks, before and after; its shots go to `shots/look/`. Judge by its numbers and the reference beside them, not by ad hoc stills.
 
 ## Report
