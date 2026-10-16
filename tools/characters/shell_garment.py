@@ -102,8 +102,9 @@ COVERAGE = {
     # metres on the base).
     "bodice": {"bones": ("spine_", "clavicle_", "pelvis"), "hem": 0.0, "neckline": (0.17, 0.11), "straps": (0.075, 0.125)},
     # Shoes to the ankle, boots up their shaft: `shaft`, the share of the way from the ankle to
-    # the knee they reach.
-    "feet_ankle": {"bones": ("foot_", "ball_", "calf_"), "hem": None, "shaft": 0.3},
+    # the knee they reach; `crease`, the two bones of the joint whose crease the piece lies
+    # close on (below).
+    "feet_ankle": {"bones": ("foot_", "ball_", "calf_"), "hem": None, "shaft": 0.3, "crease": ("foot_", "calf_")},
 }
 
 options, given = skin_piece.flags(look.args())
@@ -411,6 +412,23 @@ while queue:
             heapq.heappush(queue, (d + step, j))
 inv = mw.inverted()
 waist = joint("spine_01").z
+
+
+def in_crease(v):
+    """How far into the crease of COVER's `crease` joint a vertex lies, 0 to 1: 1 where its
+    weight is split evenly between the joint's two bones, where the skin folds as it bends.
+    There the piece lies close on the skin, as a boot's leather creases close on the instep:
+    standing off, it is what the skin folding toward it meets, and comes through (the shin of
+    the heavy body, in a crouch, through a boot standing 1.5 cm off the front of its ankle)."""
+    if not COVER.get("crease"):
+        return 0.0
+    a, b = COVER["crease"]
+    wa = sum(g.weight for g in v.groups if groups.get(g.group, "").startswith(a))
+    wb = sum(g.weight for g in v.groups if groups.get(g.group, "").startswith(b))
+    return 2 * min(wa, wb) / (wa + wb) if wa + wb > 0 else 0.0
+
+
+crease = [in_crease(v) for v in piece.data.vertices]
 for v in piece.data.vertices:
     i = v.index
     # Over another piece: never nearer the skin than it, its edge lying on it, not the skin.
@@ -418,6 +436,7 @@ for v in piece.data.vertices:
     above = on_skin[i].z - piece_delta[i][2] > waist
     most = max(CROSSED_M if above else BULK_M, lowest)
     out = min(max(lowest, piece_stand[i] + 0.004), most)
+    out = lowest + (out - lowest) * (1.0 - crease[i])
     # Above the waist only: an armhole or a neckline lies on the body, a hem hangs free.
     t = min(1.0, from_edge.get(i, math.inf) / TAPER_M) if above else 1.0
     out = lowest + (out - lowest) * t * t * (3 - 2 * t)
@@ -438,7 +457,8 @@ for _ in range(DRAPE_ROUNDS):
             moved.append(p)
             continue
         middle = sum((placed[j] for j, _ in near[i]), Vector()) / len(near[i])
-        held = min(1.0, from_edge.get(i, math.inf) / TAPER_M)
+        # Held at the edges, and in a crease, which it would fill again.
+        held = min(1.0, from_edge.get(i, math.inf) / TAPER_M) * (1.0 - crease[i])
         q = p.lerp(middle, DRAPE * held)
         off = (q - on_skin[i]).dot(normals[i])
         if off < least[i]:

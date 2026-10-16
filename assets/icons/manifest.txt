@@ -1,5 +1,6 @@
 arrow painted - - -
 berries painted - - -
+boots painted models/gear/boots.glb 312665b003f81226 -
 bow painted models/held/bow.glb 5158e7b9be852413 -
 cooked_meat painted - - -
 fibre painted - - -

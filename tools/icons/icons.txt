@@ -22,6 +22,7 @@ small_pack: a small leather backpack with straps and pockets
 large_pack: a large leather backpack with straps and pockets
 leather_coat: a plain fitted jacket of dark, matte, weathered brown leather with long sleeves and a plain closed front, no buttons
 trousers: plain trousers of rough dark grey-brown cloth, laid flat
+boots: a pair of plain soft ankle boots of dull, dark, matte, worn brown leather, creased at the ankle, no straps, buckles or laces, standing side by side
 quiver: a leather quiver holding a few arrows
 
 # Materials and food, which have no look yet

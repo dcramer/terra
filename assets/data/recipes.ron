@@ -19,6 +19,7 @@
     (station: "Workbench", cost: [("Wood", 1), ("Stone", 1)], makes: ("Arrow", 4), seconds: 4.0),
     (station: "Workbench", cost: [("Hide", 2), ("Fibre", 2)], makes: ("Quiver", 1), seconds: 5.0),
     (station: "Workbench", cost: [("Fibre", 4)], makes: ("Trousers", 1), seconds: 6.0),
+    (station: "Workbench", cost: [("Hide", 2), ("Fibre", 1)], makes: ("Boots", 1), seconds: 5.0),
     (station: "Workbench", cost: [("Hide", 4), ("Fibre", 2)], makes: ("Leather coat", 1), seconds: 8.0),
     (station: "Workbench", cost: [("Hide", 4), ("Fibre", 4)], makes: ("Large pack", 1), seconds: 8.0),
     (station: "Campfire", cost: [("Meat", 1)], makes: ("Cooked meat", 1), seconds: 10.0),

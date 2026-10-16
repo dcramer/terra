@@ -23,7 +23,7 @@
 //                hint     what the prompt says it is for; {press} and {hold} are the
 //                         use key, pressed or held
 //   worn       where it is worn and what it does there:
-//                slot        Pack, Head, Body or Belt
+//                slot        Pack, Head, Body, Legs, Feet or Belt
 //                backpack    the backpack's size while it is worn
 //                protection  how much of a blow it takes, out of one
 //                warmth      how warm it keeps its wearer, in clo: a shirt and trousers
@@ -31,7 +31,7 @@
 //                holds       what it carries and how many, filling no cells (D118)
 (
     start: (
-        wears: ["Small pack", "Leather coat", "Trousers"],
+        wears: ["Small pack", "Leather coat", "Trousers", "Boots"],
         // On the bar, in this order. A torch among them, so the first night can be got
         // through before a campfire makes more.
         tools: ["Hammer", "Stone axe", "Stone pickaxe", "Knife", "Torch"],
@@ -142,6 +142,13 @@
             about: "Worn, takes a tenth of every blow",
             lasts: 60,
             worn: (slot: "Legs", protection: 0.1, warmth: 0.3),
+        ),
+        (
+            name: "Boots",
+            size: (2, 2),
+            about: "Worn, takes a twentieth of every blow",
+            lasts: 60,
+            worn: (slot: "Feet", protection: 0.05, warmth: 0.1),
         ),
         (
             name: "Quiver",
