@@ -283,10 +283,14 @@ const SQUARE_TRIES: usize = 12;
 const APART_M: f32 = 0.1;
 const OFF_STREET_M: f32 = 0.3;
 const PASSAGE_M: f32 = 1.8;
+/// How far along a street from the square its first house stands: close, so the square's
+/// corners are closed by the streets' first houses.
+const STREET_FIRST_M: f32 = 0.5;
 /// How far apart the stalls in a market's row stand, middle to middle.
 const STALL_STEP_M: f32 = 3.2;
-/// How far out before a door the way to it is kept clear.
+/// How far out before a door the way to it is kept clear, and how far either side of it.
 const DOOR_WAY_M: f32 = 2.0;
+const DOOR_ABREAST_M: f32 = 1.0;
 /// How far a house on the square stands back from its edge.
 const SQUARE_OFF_M: f32 = 0.6;
 const PASSAGE_EVERY: u32 = 3;
@@ -882,11 +886,13 @@ impl Town {
         let want = BUILDINGS.0 + hash(&[seed, 12]) as usize % (BUILDINGS.1 - BUILDINGS.0 + 1);
         let mut queue: Vec<(Plan, Scheme, Roof, i32)> = village::every_building()
             .into_iter()
-            .filter(|(plan, ..)| {
+            // Houses, not sheds: a lean-to's one tall gable reads as a house half built
+            // among a town's fronts (the town review, round 4).
+            .filter(|(plan, _, roof, _)| {
                 matches!(
                     plan,
                     Plan::Rectangle | Plan::L | Plan::T | Plan::U | Plan::TwoStoreys
-                )
+                ) && *roof != Roof::LeanTo
             })
             .collect();
         for i in (1..queue.len()).rev() {
@@ -915,7 +921,7 @@ impl Town {
                     points: street.points.clone(),
                     side,
                     off: street.wide * 0.5,
-                    at: 4.0,
+                    at: STREET_FIRST_M,
                     done: false,
                     grand: false,
                 });
@@ -981,6 +987,11 @@ impl Town {
                 let mut built = false;
                 for look in 0..SQUARE_TRIES.min(length) {
                     let at = (first + look) % length;
+                    // Fronts flat to the square: a wing brought forward either side of a door
+                    // (an L, a U) makes a notch its crowd jams in.
+                    if matches!(queue[at].0, Plan::L | Plan::U) {
+                        continue;
+                    }
                     match self.try_plot(f, &mut fronts, building_seed, queue[at], kinds, false) {
                         Some(true) => {
                             queue.swap(first, at);
@@ -1060,30 +1071,35 @@ impl Town {
         }
         // Every door reached straight from the way, this one and those already built: with
         // the houses joined, a neighbour's corner on a bend can otherwise close one off.
+        // Each door's way in, out from it and across before it, room for two abreast: a
+        // door in a notch beside a neighbour's wing jammed those coming home.
         let way_in = |at: Vec2, facing: f32| {
-            (
-                place(at, facing, Vec2::new(0.0, 0.75)),
-                place(at, facing, Vec2::new(0.0, DOOR_WAY_M)),
-            )
+            [
+                (
+                    place(at, facing, Vec2::new(0.0, 0.75)),
+                    place(at, facing, Vec2::new(0.0, DOOR_WAY_M)),
+                ),
+                (
+                    place(at, facing, Vec2::new(-DOOR_ABREAST_M, 0.9)),
+                    place(at, facing, Vec2::new(DOOR_ABREAST_M, 0.9)),
+                ),
+            ]
         };
-        let (a, b) = way_in(door, facing);
+        let own = way_in(door, facing);
         let doors: Vec<(Vec2, Vec2)> = self
             .things
             .iter()
             .filter(|thing| thing.kind == ThingKind::Door)
-            .map(|thing| way_in(thing.at, thing.facing))
+            .flat_map(|thing| way_in(thing.at, thing.facing))
             .collect();
-        if !self
-            .footprints
-            .iter()
-            .flatten()
-            .all(|quad| segment_polygon(a, b, quad) >= CLEAR_M)
-            || !ground.iter().all(|quad| {
-                doors
-                    .iter()
-                    .all(|&(a, b)| segment_polygon(a, b, quad) >= CLEAR_M)
-            })
-        {
+        if !self.footprints.iter().flatten().all(|quad| {
+            own.iter()
+                .all(|&(a, b)| segment_polygon(a, b, quad) >= CLEAR_M)
+        }) || !ground.iter().all(|quad| {
+            doors
+                .iter()
+                .all(|&(a, b)| segment_polygon(a, b, quad) >= CLEAR_M)
+        }) {
             return Some(false);
         }
         fronts[f].at = door_along + to + gap;

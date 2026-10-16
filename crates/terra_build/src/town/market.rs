@@ -190,7 +190,9 @@ impl Market {
         let wanted = least + (roll(0) * (most - least + 1) as f32) as usize;
         let mut chosen: Vec<(String, Vec2)> = Vec::new();
         let mut across = 0.0;
-        for &k in &order {
+        // Round its goods twice, so a counter is laid full, as a market's are, a good shown
+        // again where the trade has fewer than fit.
+        for &k in order.iter().chain(&order) {
             if chosen.len() >= wanted.min(most) {
                 break;
             }
@@ -199,9 +201,11 @@ impl Market {
             if s.y > counter.deep {
                 continue;
             }
-            let width = across + s.x + counter.gap * chosen.len() as f32;
+            // What it takes along the counter, turned its little: a corner of it swings out.
+            let takes = s.x + 2.0 * s.y * TURN;
+            let width = across + takes + counter.gap * chosen.len() as f32;
             if width <= counter.wide {
-                across += s.x;
+                across += takes;
                 chosen.push((item.clone(), s));
             }
         }
@@ -214,9 +218,10 @@ impl Market {
             .map(|(n, (item, s))| {
                 let n = n as u32 + 1;
                 x += spare;
+                let takes = s.x + 2.0 * s.y * TURN;
                 let play = (roll(n * 3) - 0.5) * (spare - counter.gap).max(0.0) * 0.8;
-                let middle = x + s.x / 2.0 + play;
-                x += s.x;
+                let middle = x + takes / 2.0 + play;
+                x += takes;
                 let depth = (roll(n * 3 + 1) - 0.5) * (counter.deep - s.y).max(0.0) * 0.7;
                 let turn = (roll(n * 3 + 2) - 0.5) * 2.0 * TURN;
                 (item, Vec2::new(middle, depth), turn)
