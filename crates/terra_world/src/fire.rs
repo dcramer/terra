@@ -4,12 +4,15 @@
 //! soft cards, moved on the GPU from each card's seed, the time and the wind, on our own
 //! materials, with no particle library.
 //!
-//! As shipped games draw fire (research/2026-10-15-dragons-and-fire.md): a few large flame
-//! cards to a blaze, pivoted at its foot, rolling up and narrowing, their colour a glowing
-//! soot's by how hot (white-yellow at the root, orange, a dark red at the tips), added to
-//! the light; embers as sparks stretched along their flight, rising with the plume and
-//! carried downwind; smoke above as dark, lit cards, glowing from under where the fire is;
-//! and a few flickering point lights where the fire is greatest, not one a flame.
+//! As shipped games draw fire (research/2026-10-15-dragons-and-fire.md,
+//! research/2026-10-16-real-time-fire-rendering.md): a body sheet to a blaze where it burns
+//! and a few flamelets breaking off its top, eroded by noise scrolled up through them, their
+//! colour glowing soot's at its temperature (1050 to 1650 K: deep red, orange, a yellow
+//! heart, never white or pink by day), faded in where they meet what is behind; embers as
+//! sparks stretched along their flight, rising with the plume and carried downwind; smoke
+//! above as near-black lit cards paling as they climb, glowing from under where the fire is;
+//! heat haze over the flames; and a few point lights where the fire is greatest, flickering
+//! as a fire that size puffs, not one a flame.
 //!
 //! Every blaze is a slot of one buffer the GPU reads, so all flames are one draw, all
 //! embers another, all smoke a third, however many burn; how many slots, by the preset.
@@ -58,6 +61,21 @@ pub struct Blazes {
     pub jets: Vec<Jet>,
 }
 
+/// How a fire's light wavers at a time, for a light of its own number and so bright: as a
+/// fire that size puffs (1.5 / sqrt(D) Hz, D its width, taken from its light), up to 4 Hz,
+/// by a fifth either way for a small fire and less for a big one, whose many flames even
+/// out; and how far it bobs up and down, in metres.
+fn flicker(t: f32, k: f32, lumens: f32) -> (f32, f32) {
+    let wide = (lumens / LUMENS_A_METRE).sqrt().clamp(0.5, 8.0);
+    let hz = (1.5 / wide.sqrt()).min(4.0);
+    let reach = 0.22 - 0.14 * ((wide - 0.5) / 7.5);
+    let a = core::f32::consts::TAU * hz * t + k;
+    let wave = 0.55 * libm::sinf(a)
+        + 0.3 * libm::sinf(a * 2.31 + 1.3 * k)
+        + 0.15 * libm::sinf(a * 4.7 + 0.4);
+    (1.0 + reach * wave, 0.2 * libm::sinf(a * 0.7 + 2.0 * k))
+}
+
 /// How many blazes are drawn at most, by preset.
 pub fn slots(quality: Quality) -> usize {
     match quality {
@@ -67,10 +85,11 @@ pub fn slots(quality: Quality) -> usize {
     }
 }
 
-/// How many cards a blaze has of each: flames, embers, smoke.
-const FLAME_CARDS: usize = 9;
+/// How many cards a blaze has of each: flames, embers, smoke and heat haze.
+const FLAME_CARDS: usize = 3;
 const EMBER_CARDS: usize = 5;
 const SMOKE_CARDS: usize = 4;
+const HAZE_CARDS: usize = 1;
 /// How many cards a jet is, and how many jets are drawn.
 const JET_CARDS: usize = 360;
 const JETS: usize = 2;
@@ -109,7 +128,15 @@ pub struct FireExtension {
     uniform: FireUniform,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
+    /// The flames' flipbook (`tools/textures/flames.ts`): three simulated fires' heat frame by
+    /// frame, one a channel, linear.
+    #[texture(102)]
+    #[sampler(103)]
+    flipbook: Handle<Image>,
 }
+
+/// The flames' flipbook.
+const FLIPBOOK: &str = "textures/fire/flames.png";
 
 impl MaterialExtension for FireExtension {
     fn vertex_shader() -> ShaderRef {
@@ -165,7 +192,7 @@ pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtensi
 #[derive(Resource)]
 struct Drawn {
     slots: Handle<ShaderBuffer>,
-    fire: [Handle<FireMaterial>; 3],
+    fire: [Handle<FireMaterial>; 4],
     smoke: Handle<FireSmokeMaterial>,
     lights: Vec<Entity>,
     /// When each jet came on or went off, by the cards' clock.
@@ -221,16 +248,32 @@ fn setup(
     quality: Res<Quality>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut buffers: ResMut<Assets<ShaderBuffer>>,
+    assets: Res<AssetServer>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
 ) {
     let count = slots(*quality);
     let slots = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; count * 2]));
-    let fire = [0.0, 1.0, 2.0].map(|kind| {
+    // Heat, not colour: read as it is stored.
+    let flipbook: Handle<Image> = assets
+        .load_builder()
+        .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
+            settings.is_srgb = false;
+        })
+        .load(FLIPBOOK);
+    let fire = [0.0, 1.0, 2.0, 3.0].map(|kind| {
+        // The haze reads the opaque scene as Bevy copies it for transmissive materials, so it
+        // is drawn among them, blended over it.
+        let haze = kind == 3.0;
         fires.add(FireMaterial {
             base: StandardMaterial {
                 base_color: Color::WHITE,
-                alpha_mode: AlphaMode::Add,
+                alpha_mode: if haze {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Add
+                },
+                specular_transmission: if haze { 1.0 } else { 0.0 },
                 unlit: true,
                 ..default()
             },
@@ -240,6 +283,7 @@ fn setup(
                     ..default()
                 },
                 slots: slots.clone(),
+                flipbook: flipbook.clone(),
             },
         })
     });
@@ -271,6 +315,7 @@ fn setup(
     spawn("Fire: flames", cards(count, FLAME_CARDS), fire[0].clone());
     spawn("Fire: embers", cards(count, EMBER_CARDS), fire[1].clone());
     spawn("Fire: jets", cards(JETS, JET_CARDS), fire[2].clone());
+    spawn("Fire: haze", cards(count, HAZE_CARDS), fire[3].clone());
     commands.spawn((
         Name::new("Fire: smoke"),
         Mesh3d(meshes.add(cards(count, SMOKE_CARDS))),
@@ -444,16 +489,49 @@ fn light(
         match lit.get(i) {
             Some(&(at, lumens)) => {
                 let up = at.normalize_or(Vec3::Y);
-                let k = i as f32 * 1.7;
-                let waver =
-                    0.78 + 0.12 * libm::sinf(t * 9.0 + k) + 0.1 * libm::sinf(t * 23.0 + 2.0 * k);
+                let (waver, bob) = flicker(t, i as f32 * 1.7, lumens);
                 light.intensity = lumens * waver;
-                transform.translation = at + up * 1.5;
+                transform.translation = at + up * (1.5 + bob);
                 *visibility = Visibility::Inherited;
             }
             None => {
                 light.intensity = 0.0;
                 *visibility = Visibility::Hidden;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// How far a light wavers over ten seconds, and how many times a second it turns.
+    fn wavers(lumens: f32) -> (f32, f32) {
+        let samples: Vec<f32> = (0..10_000)
+            .map(|i| flicker(i as f32 * 0.001, 0.0, lumens).0)
+            .collect();
+        let (low, high) = samples
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), &w| (l.min(w), h.max(w)));
+        let turns = samples
+            .windows(3)
+            .filter(|w| (w[1] - w[0]) * (w[2] - w[1]) < 0.0)
+            .count();
+        (high - low, turns as f32 / 10.0)
+    }
+
+    #[test]
+    fn a_small_fires_light_flickers_quicker_and_further_than_a_big_ones() {
+        let (small_reach, small_turns) = wavers(LUMENS_A_METRE * 0.5);
+        let (big_reach, big_turns) = wavers(LUMENS_A_METRE * 40.0);
+        assert!(small_reach > big_reach * 1.5, "{small_reach} {big_reach}");
+        assert!(small_turns > big_turns * 1.5, "{small_turns} {big_turns}");
+        // Never out, never doubled.
+        for lumens in [LUMENS_A_METRE * 0.1, LUMENS_A_METRE * 100.0] {
+            for i in 0..1000 {
+                let (waver, _) = flicker(i as f32 * 0.01, 1.0, lumens);
+                assert!((0.6..=1.4).contains(&waver), "{waver}");
             }
         }
     }

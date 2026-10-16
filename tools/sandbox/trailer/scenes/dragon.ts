@@ -3,7 +3,8 @@
 // its breath sweeps along them; banking round to pass over the hall and the keep; hovering at
 // the keep to breathe into its windows and along its bond timbers, first from one corner then
 // from the other; the fire taking the hoardings, roofs and timber storeys; the towers and the
-// keep coming down when their bond timbers burn through. Places are in the castle's own
+// keep coming down as their bond timbers burn through, and what is left of the towers giving
+// way after them, so the stone comes down whole. Places are in the castle's own
 // metres: east, up and south of the middle of its gate on the south wall's outer face, the
 // ward to the north (-z), as `build.look` takes them. Frames are a sixtieth of a second each.
 // Where the camera follows the dragon, it looks where the dragon will be, worked out here as
@@ -235,19 +236,40 @@ function script(s: Script) {
   const towerTo = turn + Math.round(passes(round, [-24, 30, -30]) * 60);
   const hallFrom = turn + Math.round(passes(round, [-20, 40, -70]) * 60);
   const hallTo = turn + Math.round(passes(round, [40, 40, -40]) * 60);
-  s.mark("round", "A pass over the west wall and the hall's roof; the fire takes the castle", turn, at(34));
-  track(s, course, turn, hallFrom - 20, [-62, 12, 50], [-58, 16, 46], [-6, 12, -14], 0.6);
+  s.mark("round", "A pass over the west wall and the hall's roof; the fire takes the castle", turn, at(30));
+  // The low sun is to the east-north-east: every shot looks away from it, as one into it
+  // washed the castle out in a beige haze.
+  track(s, course, turn, hallFrom - 20, [18, 7, 46], [6, 9, 44], [-14, 14, -8], 0.5);
   sweep(s, towerFrom, towerTo, [-20.5, 14, -1], [-23, 10, -30]);
-  track(s, course, hallFrom - 19, hallTo + 40, [-50, 30, -84], [-42, 28, -78], [0, 14, -30], 0.55);
+  track(s, course, hallFrom - 19, hallTo + 40, [60, 22, -70], [54, 24, -62], [0, 14, -30], 0.5);
   sweep(s, hallFrom, hallTo, [-14, 14, -32], [12, 14, -32]);
-  cut(s, hallTo + 41, [-66, 10, 52], [-4, 12, -18]);
-  glide(s, hallTo + 42, [-60, 20, 48], [-2, 11, -18], Math.max(60, at(34) - hallTo - 42));
+  cut(s, hallTo + 41, [44, 8, 30], [-2, 11, -18]);
+  glide(s, hallTo + 42, [38, 14, 36], [-2, 11, -18], Math.max(60, at(30) - hallTo - 42));
 
-  // The towers and the keep come down; the dragon comes back over them, roars and goes off
-  // over the trees.
-  s.mark("falling", "The towers and the keep come down in fire and dust", at(34), at(48));
-  cut(s, at(34), [42, 3.5, 32], [0, 12, -19]);
-  glide(s, at(34) + 1, [48, 4.5, 40], [0, 11, -19], 840);
+  // The towers and the keep come down. The fire brings down what stands on their bond
+  // timbers as those burn through; what is left of each tower, its foot burnt out, then
+  // gives way, harmed as an attack harms (`build.damage`, D305), and the building's own
+  // destruction brings the stone down whole, in fragments and dust. Each in its own shot,
+  // the camera on it, looking away from the low sun; then the dragon comes back over the
+  // ruin, roars and goes off over the trees.
+  s.mark("falling", "The towers and the keep come down in fire and dust", at(30), at(48));
+  // The south-west tower: its top came down at about 26.7 s; its stump now.
+  cut(s, at(30), [2, 6, 24], [-20, 8, -2]);
+  glide(s, at(30) + 1, [-2, 7, 26], [-20, 7, -2], 239);
+  fell(s, at(31.2), SW);
+  // The south-east tower: its top comes down at about 34.1 s, its stump after it.
+  cut(s, at(34), [44, 6, 22], [20, 9, -2]);
+  glide(s, at(34) + 1, [46, 7, 26], [20, 8, -2], 149);
+  fell(s, at(35.6), SE);
+  // The keep, on its bond timbers over its burnt-out ground storey: down at about 37.7 s.
+  cut(s, at(36.5), [26, 17, 16], [0, 11, -20]);
+  glide(s, at(36.5) + 1, [28, 15, 20], [0, 9, -20], 299);
+  // Wide from the south: the north-west tower's top at about 42 s, then its stump and the
+  // north-east tower whole; the dragon over the ruin.
+  cut(s, at(41.5), [10, 8, 52], [-2, 8, -22]);
+  glide(s, at(41.5) + 1, [14, 10, 58], [-2, 9, -22], 389);
+  fell(s, at(43), NW);
+  fell(s, at(44.2), NE);
   course.hover(s, at(43), [14, 34, 6], [0, 10, -20]);
   s.frame = at(43.5);
   s.call("flight.roar", { seconds: 2.7 });
@@ -256,6 +278,26 @@ function script(s: Script) {
     [-40, 90, -300],
   ]);
   s.frame = at(48);
+}
+
+/// The flanking towers' corners, in cubes (`terra_build::scenes::burg`): each a ring 14 a
+/// side from there, a cube clear of the curtain all round.
+const TOWER = 14;
+const SW: [number, number] = [-48, -10];
+const SE: [number, number] = [34, -10];
+const NW: [number, number] = [-48, -76];
+const NE: [number, number] = [34, -76];
+
+/// A tower gives way: its foot, and the cube clear round it where its hoardings' bridges
+/// still join it to the curtain, harmed past mending, so all that stands on them comes down.
+function fell(s: Script, frame: number, [x, z]: [number, number]) {
+  s.frame = frame;
+  const [x0, x1, z0, z1] = [x - 1, x + TOWER, z - 1, z + TOWER];
+  s.call("build.damage", { at: [x0, 0, z0], to: [x1, 1, z1] });
+  s.call("build.damage", { at: [x0, 2, z0], to: [x0, 30, z1] });
+  s.call("build.damage", { at: [x1, 2, z0], to: [x1, 30, z1] });
+  s.call("build.damage", { at: [x0, 2, z0], to: [x1, 30, z0] });
+  s.call("build.damage", { at: [x0, 2, z1], to: [x1, 30, z1] });
 }
 
 export default {

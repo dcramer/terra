@@ -145,7 +145,7 @@ With the hammer in hand and nothing picked, aim at something damaged: its damage
 
 ### Collapse and fragments
 
-What loses its support without being asked, to an attack or the ground giving way, comes down (D193): what is destroyed bursts into fragments of its own material, stone into chunky blocks, logs into lengths and splinters, wattle and roofs into bits, earth crumbling, and what hung from it falls whole a moment later, the higher the later, breaking where it lands. The fragments bounce, roll off ledges and settle, with a puff of dust in the material's colour, the view shaking near a big collapse, then shrink away. Nobody can touch them and nothing is given back from them while building takes no real resources (D305). Nothing takes damage until attacks come (D90); until then the remote and a debug key (F9, on the cube aimed at) do it.
+What loses its support without being asked, to an attack or the ground giving way, comes down (D193): what is destroyed bursts into fragments of its own material, stone into chunky blocks, logs into lengths and splinters, wattle and roofs into bits, earth crumbling, and what hung from it falls whole a moment later, the higher the later, breaking where it lands. The fragments bounce, roll off ledges and settle, with a puff of dust in the material's colour, the view shaking near a big collapse, then shrink away. A big collapse, from 400 cubes at once, raises a cloud of dust as wide as the mass that fell, rolling out over its foot and up for seconds. Nobody can touch them and nothing is given back from them while building takes no real resources (D305). Nothing takes damage until attacks come (D90); until then the remote and a debug key (F9, on the cube aimed at) do it.
 
 ### Fire
 

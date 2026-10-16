@@ -38,7 +38,7 @@ pub(super) fn bake(section: &Section, built: BTreeMap<(Kind, Material), Surface>
                     to
                 }
             };
-            let texel = swatch.map_or(fallback(material), |swatch| swatch.at(uv));
+            let texel = swatch.map_or(fallback(material), |swatch| patch(swatch, uv));
             [0, 1, 2].map(|i| to_srgb(linear[i] * texel[i]))
         };
         let mut surface = surface;
@@ -54,6 +54,29 @@ pub(super) fn bake(section: &Section, built: BTreeMap<(Kind, Material), Surface>
         out.append(surface);
     }
     out
+}
+
+/// The colour round a corner, the mean of the swatch over the quarter of its tile about it:
+/// what a far face's corners, half a metre apart on a two-metre stone texture, stand for,
+/// as a texture's smaller copy averages it. One texel at each corner repeated the same few
+/// values every tile and blended them across each triangle into a quilt of dimples.
+fn patch(swatch: &crate::relief::Swatch, uv: [f32; 2]) -> [f32; 3] {
+    const ACROSS: usize = 4;
+    const STEP: f32 = 1.0 / 16.0;
+    let mut sum = [0.0f32; 3];
+    for j in 0..ACROSS {
+        for i in 0..ACROSS {
+            let at = [
+                uv[0] + (i as f32 - (ACROSS as f32 - 1.0) * 0.5) * STEP,
+                uv[1] + (j as f32 - (ACROSS as f32 - 1.0) * 0.5) * STEP,
+            ];
+            let texel = swatch.at(at);
+            for c in 0..3 {
+                sum[c] += texel[c];
+            }
+        }
+    }
+    sum.map(|c| c / (ACROSS * ACROSS) as f32)
 }
 
 /// How finely linear colour is turned back to sRGB when baked: finer than a byte.
@@ -103,5 +126,32 @@ pub(super) fn fallback(material: Material) -> [f32; 3] {
         Material::Covering => [0.16, 0.13, 0.11],
         Material::Plain => [0.6, 0.6, 0.6],
         _ => [0.22, 0.15, 0.1],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_far_corner_takes_the_stone_round_it_not_one_texel_of_it() {
+        // Stones and mortar a texel each, as a fine texture's swatch has them.
+        let checker: Vec<[f32; 3]> = (0..256)
+            .map(|i| {
+                if (i % 16 + i / 16) % 2 == 0 {
+                    [0.6; 3]
+                } else {
+                    [0.1; 3]
+                }
+            })
+            .collect();
+        let swatch = crate::relief::Swatch::new(16, 16, checker).unwrap();
+        // Corners half a metre apart on a two-metre tile, each a quarter of it on: one
+        // texel each would be all stone or all mortar; each is their mean instead.
+        for k in 0..8 {
+            let uv = [k as f32 * 0.25 + 0.01, (k % 3) as f32 * 0.25 + 0.01];
+            let c = patch(&swatch, uv)[0];
+            assert!((c - 0.35).abs() < 0.02, "{uv:?}: {c}");
+        }
     }
 }

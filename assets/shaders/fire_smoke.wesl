@@ -7,7 +7,7 @@
 
 import bevy_pbr::render::{
     mesh_view_bindings::view,
-    view_transformations::position_world_to_clip,
+    view_transformations::{position_world_to_clip, depth_ndc_to_view_z},
 };
 
 @if(PREPASS_PIPELINE)
@@ -21,6 +21,8 @@ import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
 };
+@if(DEPTH_PREPASS && !PREPASS_PIPELINE)
+import bevy_pbr::prepass::utils::prepass_depth;
 
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
@@ -131,15 +133,21 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let t = in.uv_b.x;
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
-    let alpha = density(in.uv, t, luck) * mix(0.55, 0.3, t);
+    var alpha = density(in.uv, t, luck) * mix(0.85, 0.35, t);
+    // Faded in over its last metre and a half in front of what is behind it.
+@if(DEPTH_PREPASS)
+    {
+        let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
+        alpha *= smoothstep(0.0, 1.5, behind);
+    }
     if alpha < 0.004 {
         discard;
     }
     var input = pbr_input_from_standard_material(in, is_front);
     // Burning timber's smoke: a dark brown-grey, thick and darker in its middle.
-    let shade = mix(1.0, 0.7, alpha);
+    let shade = mix(1.0, 0.55, alpha);
     // Young smoke from burning wood near black-brown, thinning to a paler grey as it climbs.
-    let grey = mix(vec3(0.07, 0.062, 0.055), vec3(0.24, 0.235, 0.23), smoothstep(0.1, 0.8, t));
+    let grey = mix(vec3(0.04, 0.036, 0.032), vec3(0.25, 0.23, 0.2), smoothstep(0.15, 0.85, t));
     input.material.base_color = vec4(grey * shade, alpha);
     // Lit from under by the fire, near its foot.
     let under = pow(1.0 - t, 7.0) * heat;

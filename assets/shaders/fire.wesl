@@ -3,24 +3,29 @@
 // Every corner of the mesh is at the origin; its first texture coordinate is the corner, its
 // second the slot and the card's place among the slot's.
 //
-// A flame card is born at its blaze's foot, rolls up and narrows as it rises, standing
-// upright and turned to the eye about the up; its shape a soft tongue broken by noise that
-// climbs it, its colour a glowing soot's by how hot that part of it is: white-yellow at the
-// root, orange, dark red at its tips, gone into nothing above. An ember is a spark thrown up
-// on the plume, slowing, carried downwind, stretched along its flight and winking out. A jet
-// is a stream of flame breathed out along a way, widening in a cone, hottest at the mouth,
-// rolling into dark red and soot at its end. All are light: added to what is behind them, in
-// the same units the sun's light is, so the camera's exposure takes them as it takes it.
+// A blaze's flame is a body sheet standing where it burns and flamelets breaking off its top
+// (research/2026-10-16-real-time-fire-rendering.md), upright and turned to the eye about the
+// up: its shape a mask eroded by gradient-noise turbulence scrolled up through it, as games'
+// procedural fire is drawn, its colour glowing soot's at the temperature of that part of it,
+// from 1050 K at its edges to 1650 K in a fierce one's heart (`soot`). An ember is a spark
+// thrown up on the plume, slowing, carried downwind, stretched along its flight and winking
+// out. A jet is a stream of flame breathed out along a way, widening in a cone, hottest at
+// the mouth. All are light, premultiplied over what is behind them and covering a little of
+// it as soot does, in the camera's exposure; faded in where they meet what stands behind.
 
 import bevy_pbr::render::{
     mesh_view_bindings::view,
-    view_transformations::position_world_to_clip,
+    view_transformations::{position_world_to_clip, depth_ndc_to_view_z},
 };
 
 @if(PREPASS_PIPELINE)
 import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
 @if(!PREPASS_PIPELINE)
 import bevy_pbr::render::forward_io::{Vertex, VertexOutput, FragmentOutput, decompress_vertex};
+@if(DEPTH_PREPASS && !PREPASS_PIPELINE)
+import bevy_pbr::prepass::utils::prepass_depth;
+@if(!PREPASS_PIPELINE)
+import bevy_pbr::render::mesh_view_bindings::{view_transmission_texture, view_transmission_sampler};
 
 struct Fire {
     // x which (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time.
@@ -34,18 +39,39 @@ struct Fire {
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> fire: Fire;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var<storage, read> slots: array<vec4<f32>>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102) var flipbook: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103) var flipbook_sampler: sampler;
 
-// A card's corner placed: where on screen, the corner across and up the card, and how far
-// through its life, how hot, its luck, and how bright.
+// The flipbook's frames, how many across its sheet, and how many it plays a second for a
+// flame two and a half metres tall (`tools/textures/flames.ts`).
+const FLIPBOOK_FRAMES: f32 = 64.0;
+const FLIPBOOK_COLUMNS: f32 = 8.0;
+const FLIPBOOK_FPS: f32 = 30.0;
+
+// A frame of the flipbook at a place on its card, x across and y up, kept a hair inside the
+// frame so its neighbours never bleed in.
+fn flipbook_at(frame: f32, x: f32, y: f32) -> vec4<f32> {
+    let column = frame % FLIPBOOK_COLUMNS;
+    let row = floor(frame / FLIPBOOK_COLUMNS);
+    let rows = FLIPBOOK_FRAMES / FLIPBOOK_COLUMNS;
+    let at = vec2((column + clamp(x, 0.01, 0.99)) / FLIPBOOK_COLUMNS, (row + 1.0 - clamp(y, 0.01, 0.99)) / rows);
+    return textureSampleLevel(flipbook, flipbook_sampler, at, 0.0);
+}
+
+// A card's corner placed: where on screen, the corner across and up the card, how far
+// through its life, how hot, its luck and what it is, and how tall it is, in metres.
 struct Out {
     clip: vec4<f32>,
     uv: vec2<f32>,
     life: vec4<f32>,
+    size: f32,
 };
 
-// How bright the hottest flame is, in the units the sun's light is in (a flame's luminance,
-// some thousands of nits), before the camera's exposure.
-const NITS: f32 = 9000.0;
+// How bright glowing soot is taken to be, on the luminances `soot` works from.
+const LUMINANCE: f32 = 1.0;
+// How far in front of what is behind it a card fades in, in metres, so it never shows a
+// straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
+const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.8);
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -64,23 +90,41 @@ fn fbm(p: vec2<f32>) -> f32 {
     return 0.55 * noise(p) + 0.3 * noise(p * 2.1 + 3.7) + 0.15 * noise(p * 4.3 + 9.1);
 }
 
-// A colour of glowing soot by how hot, 0 to 1: dark red, orange, yellow, near white.
-fn glow(t: f32) -> vec3<f32> {
-    let c = clamp(t, 0.0, 1.0);
-    let red = vec3(0.55, 0.06, 0.01);
-    let orange = vec3(1.0, 0.36, 0.05);
-    let yellow = vec3(1.0, 0.72, 0.28);
-    let white = vec3(1.0, 0.93, 0.78);
-    if c < 0.4 {
-        return mix(red * 0.3, red, c / 0.4);
-    }
-    if c < 0.7 {
-        return mix(red, orange, (c - 0.4) / 0.3);
-    }
-    if c < 0.9 {
-        return mix(orange, yellow, (c - 0.7) / 0.2);
-    }
-    return mix(yellow, white, (c - 0.9) / 0.1);
+// A gradient for a lattice point, and gradient noise from them, about -0.7 to 0.7: smoother
+// than value noise, without its blocky grain.
+fn gradient(p: vec2<f32>) -> vec2<f32> {
+    let q = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
+}
+
+fn gnoise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = dot(gradient(i), f);
+    let b = dot(gradient(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+    let c = dot(gradient(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+    let d = dot(gradient(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+
+// Glowing soot at a temperature, as the camera sees it: its colour from soot's emission at
+// that temperature (red, with green rising from 0.04 at 1000 K to 0.21 at 1600 K, never the
+// yellow or white of the 3000 K colours a wood flame has not got), its luminance from about
+// 50 nits at 1100 K to 1150 at 1400 and 5700 at 1650, a sunlit white's 0.005 to 0.6; then
+// kept under the tonemapper's knee per channel, as film shoulders it, with a white-hot lift
+// only where it is far brighter than the exposure, so a fire by day stays orange with a
+// yellow heart and never goes salmon pink.
+fn soot(kelvin: f32) -> vec3<f32> {
+    let g = clamp(0.042 + 0.000278 * (kelvin - 1000.0), 0.03, 0.26);
+    let slope = select(0.0105, 0.0064, kelvin > 1400.0);
+    let nits = exp(7.05 + (kelvin - 1400.0) * slope) * LUMINANCE;
+    let unit = 0.2126 + 0.7152 * g + 0.0722 * 0.02;
+    let exposed = vec3(1.0, g, 0.02) * (nits / unit) * view.exposure;
+    let kept = vec3(1.0) - exp(-exposed);
+    let lift = 0.5 * saturate((nits * view.exposure - 3.0) / 10.0);
+    return kept + (vec3(1.0) - kept) * lift;
 }
 
 fn nowhere() -> Out {
@@ -88,6 +132,7 @@ fn nowhere() -> Out {
     out.clip = vec4(0.0, 0.0, -1.0, 1.0);
     out.uv = vec2(0.0);
     out.life = vec4(0.0);
+    out.size = 0.0;
     return out;
 }
 
@@ -100,9 +145,12 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
         right = cross(vec3(1.0, 0.0, 0.0), to_eye);
     }
     right = normalize(right);
-    var card_up = up;
+    // Upright cards lean back to face an eye looking down on them, as they would show their
+    // edges otherwise: from over a burning roof, a wall of crossed edges.
+    let facing_eye = cross(to_eye, right);
+    var card_up = normalize(mix(up, facing_eye, smoothstep(0.3, 0.75, abs(dot(to_eye, up)))));
     if !upright {
-        card_up = cross(to_eye, right);
+        card_up = facing_eye;
     }
     let c = vec2(corner.x - 0.5, select(corner.y - 0.5, corner.y, upright));
     let turned = vec2(c.x * cos(spin) - c.y * sin(spin), c.x * sin(spin) + c.y * cos(spin));
@@ -185,25 +233,46 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     }
     let up = normalize(foot);
     let luck = fract(seed * 0.618 + phase * 3.71);
-    if kind == 0 {
-        // A flame tongue: lives as long as a fire that tall puffs (about 1.5 / sqrt(D) Hz).
-        let life_s = 0.45 + 0.35 * sqrt(tall) * (0.8 + 0.4 * luck);
-        let t = fract(time / life_s + phase + seed);
-        let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
-        let north = cross(east, up);
-        let sway = (vec2(noise(vec2(luck * 17.0, time * 1.3)), noise(vec2(luck * 29.0 + 5.0, time * 1.3))) - 0.5) * tall * 0.35 * t;
-        let lean = wind * 0.06 * tall * t;
-        // Spread over the blaze's metre, each card its own: some a wide body low down, some a
-        // tall tongue licking up.
-        let spot = (vec2(hash(vec2(luck * 9.1, seed)), hash(vec2(seed, luck * 7.7))) - 0.5) * 0.9;
-        let tongue = fract(luck * 4.7) > 0.45;
-        let w = tall * select(0.95, 0.5, tongue) * (1.0 - 0.35 * t) * (0.75 + 0.5 * fract(luck * 2.3));
-        let h = tall * select(0.6, 1.0, tongue) * (0.55 + 0.45 * t) * (0.8 + 0.4 * fract(luck * 6.1));
-        let at = foot + up * tall * 0.5 * pow(t, 0.9) + east * (sway.x + spot.x) + north * (sway.y + spot.y) + lean;
-        let world = card(at - up * h * 0.15, up, corner, w, h, true, (fract(luck * 3.3) - 0.5) * 0.5);
+    if kind == 3 {
+        // Heat haze: a card over the flame, from half its height to twice it, through which
+        // what is behind shimmers.
+        let w = tall * 1.5;
+        let h = tall * 1.6;
+        let world = card(foot + up * tall * 0.45, up, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
-        out.life = vec4(t, heat, luck, 1.0);
+        out.life = vec4(0.0, heat, luck, 4.0);
+        out.size = h;
+        return out;
+    }
+    if kind == 0 {
+        // A burning surface's flame (research/2026-10-16-real-time-fire-rendering.md): a few
+        // cards of a simulated fire's flipbook standing where it burns, a big one over the
+        // blaze and two smaller either side of it, each its own fire and its own moment. The
+        // flipbook's flame fills about the lower two thirds of its card, so the cards stand
+        // half again as tall as the flame. Its height breathes at the puffing rate of a fire
+        // that wide, 1.5 / sqrt(D) Hz.
+        let wide = clamp(tall * 0.8, 0.8, 2.8);
+        let puff_hz = 1.5 / sqrt(wide);
+        let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
+        let flame = tall * breathe;
+        let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+        let north = cross(east, up);
+        let lean = wind * 0.05 * flame;
+        var w = wide * 1.9;
+        var h = flame * 1.75;
+        var at = foot;
+        if phase > 0.01 {
+            let side = select(-1.0, 1.0, phase > 0.5);
+            w = wide * 1.2;
+            h = flame * 1.3;
+            at = foot + east * side * wide * (0.25 + 0.2 * luck) + north * (fract(luck * 3.1) - 0.5) * wide * 0.5;
+        }
+        let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(0.5, heat, luck, 1.0);
+        out.size = h;
         return out;
     }
     // An ember: only some blazes throw them, the hotter the more.
@@ -235,53 +304,59 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     return out;
 }
 
-fn shade(uv_in: vec2<f32>, life: vec4<f32>) -> vec4<f32> {
+fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
     let kind = i32(fire.kind.x + 0.5);
     let time = fire.kind.z;
     let t = life.x;
     let heat = life.y;
     let luck = life.z;
     let uv = uv_in;
-    var colour = vec3(0.0);
-    var alpha = 0.0;
+    // What it gives, already exposed, and how much of what is behind it it covers.
+    var light = vec3(0.0);
+    var cover = 0.0;
     if kind == 0 {
-        // A tongue: wide at its foot, narrowing to a point, its edge eaten by noise that climbs
-        // it and warped sideways, so it licks rather than standing as a tooth.
-        let x = (uv.x - 0.5) * 2.0;
-        let y = uv.y;
-        let warp = (noise(vec2(uv.y * 3.0 - time * 3.1, luck * 19.0)) - 0.5) * 0.5 * y;
-        let n = fbm(vec2((uv.x + warp) * 3.4 + luck * 11.0, uv.y * 2.6 - time * 3.2 - luck * 5.0));
-        let fine = noise(vec2((uv.x + warp) * 9.0 + luck * 3.0, uv.y * 7.0 - time * 5.0));
-        let width = (1.0 - y) * (0.7 + 0.3 * (1.0 - y)) + 0.04;
-        let edge = abs(x + warp * 2.0) / max(width, 0.02) + (n - 0.5) * 1.1 + (fine - 0.5) * 0.35 + y * 0.3;
-        let body = 1.0 - smoothstep(0.25, 1.05, edge);
-        let foot = smoothstep(0.0, 0.1, y);
-        let life = smoothstep(0.0, 0.12, t) * pow(1.0 - t, 1.2);
-        alpha = body * body * foot * life * 0.9;
-        let hot = (1.0 - y * 0.9) * (0.6 + 0.4 * heat) * (1.0 - 0.45 * t) + (n - 0.5) * 0.35 - abs(x) * 0.2;
-        colour = glow(hot) * (0.35 + 0.65 * heat);
+        // A simulated fire's frame from the flipbook (`tools/textures/flames.ts`): one of its
+        // three fires by the card's luck, mirrored for half of them, played at the rate a fire
+        // this tall moves (a flame's time goes as the root of its size, Froude's scaling),
+        // blended frame to frame. Its heat is how hot the soot there glows and how much of the
+        // card it covers.
+        let channel = u32(luck * 3.0) % 3u;
+        let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
+        let rate = FLIPBOOK_FPS * sqrt(2.5 / max(size, 0.5));
+        let f = fract(time * rate / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
+        let f0 = floor(f);
+        let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
+        let a = flipbook_at(f0, x, uv.y)[channel];
+        let b = flipbook_at(f1, x, uv.y)[channel];
+        let heat_here = mix(a, b, fract(f)) * smoothstep(0.0, 0.03, uv.y);
+        let alpha = smoothstep(0.07, 0.3, heat_here);
+        let kelvin = 950.0 + 720.0 * pow(heat_here, 0.8) * (0.7 + 0.3 * heat);
+        light = soot(kelvin) * alpha;
+        cover = alpha * 0.45 * smoothstep(0.15, 0.5, heat_here);
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
         let wink = 0.6 + 0.4 * sin(time * (9.0 + luck * 14.0) + luck * 50.0);
-        alpha = spark * pow(1.0 - t, 1.5) * wink;
-        colour = glow(0.85 - t * 0.4) * 1.6;
+        let alpha = spark * pow(1.0 - t, 1.5) * wink;
+        light = soot(1600.0 - t * 300.0) * alpha;
     } else {
-        // A puff of breath: rolling, broken by noise, white-hot near the mouth, orange as it
-        // opens, a dull red at its end as it burns out.
+        // A puff of breath: rolling, broken by noise, its hottest at the mouth, cooling to a
+        // dull red at its end as it burns out.
         let p = uv - 0.5;
         let n = fbm(uv * 3.0 + vec2(luck * 7.0 - time * 1.5, luck * 13.0 + time * 0.8));
         let fine = noise(uv * 8.0 + vec2(luck * 3.0, time * 2.0));
-        let body = 1.0 - smoothstep(0.1, 0.5, length(p) + (n - 0.5) * 0.45 + (fine - 0.5) * 0.15);
-        let life = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.8);
-        alpha = body * life * mix(0.9, 0.35, t);
-        colour = glow(1.1 - t * 1.0 + (n - 0.5) * 0.35) * (2.2 - t * 1.6);
+        let edge = length(p) + (n - 0.5) * 0.45 + (fine - 0.5) * 0.15;
+        let puff = 1.0 - smoothstep(0.1, 0.5, edge);
+        let fade = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.8);
+        let alpha = puff * fade * mix(0.9, 0.35, t);
+        let kelvin = min(mix(1680.0, 1150.0, t) + (0.35 - edge) * 200.0, 1720.0);
+        light = soot(kelvin) * alpha;
+        cover = alpha * 0.4;
     }
-    if alpha < 0.003 {
+    if max(light.r, cover) < 0.002 {
         discard;
     }
-    // Added to what is behind it, as light.
-    return vec4(colour * alpha * NITS * view.exposure, alpha);
+    return vec4(light, cover);
 }
 
 @vertex
@@ -295,7 +370,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // The card's life rides where a normal would.
     out.world_normal = placed.life.xyz;
     out.uv = placed.uv;
-    out.uv_b = vec2(placed.life.w, 0.0);
+    out.uv_b = vec2(placed.life.w, placed.size);
 }
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_in.instance_index;
@@ -314,10 +389,44 @@ fn fragment(in: VertexOutput) {
     discard;
 }
 
+// What is behind a heat haze card, shimmering: the opaque scene as Bevy copies it for
+// transmissive materials, read a few pixels off (0.2 to 0.5% of the screen's width) by
+// noise rising at a metre or two a second, as games draw heat haze; the most a third of the
+// way up the card, none at its edges.
+@if(!PREPASS_PIPELINE)
+fn haze(in: VertexOutput) -> vec4<f32> {
+    let time = fire.kind.z;
+    let heat = in.world_normal.y;
+    let rise = 1.5 / max(in.uv_b.y, 0.5);
+    let p = in.uv - vec2(0.5, 0.35);
+    let mask = (1.0 - smoothstep(0.15, 0.5, length(p * vec2(1.0, 0.75)))) * (0.4 + 0.6 * heat);
+    if mask < 0.01 {
+        discard;
+    }
+    let q = in.uv * vec2(5.0, 4.0) - vec2(0.0, time * rise * 4.0);
+    let off = vec2(gnoise(q), gnoise(q + vec2(5.2, 1.3))) * 0.006 * mask;
+    let screen = in.position.xy / view.viewport.zw;
+    let behind = textureSampleLevel(view_transmission_texture, view_transmission_sampler, screen + off, 0.0).rgb;
+    return vec4(behind, mask);
+}
+
 @if(!PREPASS_PIPELINE)
 @fragment
 fn fragment(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;
-    out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x));
+    if i32(fire.kind.x + 0.5) == 3 {
+        out.color = haze(in);
+        return out;
+    }
+    var colour = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y);
+    // Faded in over the last of its way in front of what is behind it (soft particles).
+@if(DEPTH_PREPASS)
+    {
+        let kind = i32(fire.kind.x + 0.5);
+        let soft = select(select(SOFT_M.z, SOFT_M.y, kind == 1), SOFT_M.x, kind == 0);
+        let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
+        colour *= smoothstep(0.0, soft, behind);
+    }
+    out.color = colour;
     return out;
 }

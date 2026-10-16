@@ -53,6 +53,12 @@ const SHAKE_REACH_M: f32 = 0.06;
 /// How long a puff of dust lasts, in seconds, and how wide it grows, in metres.
 const PUFF_S: f32 = 1.6;
 const PUFF_M: [f32; 2] = [0.7, 2.6];
+/// From how many cubes coming down at once a fall raises a cloud of dust, a puff in it for
+/// every so many, at most so many, and how long it lasts, in seconds.
+const CLOUD_CUBES: usize = 400;
+const CLOUD_EVERY: usize = 60;
+const CLOUD_MOST: usize = 24;
+const CLOUD_S: f32 = 6.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Shards>().add_systems(
@@ -84,6 +90,8 @@ struct Shard;
 #[derive(Component)]
 struct Puff {
     age: f32,
+    /// How long it lasts, in seconds.
+    life: f32,
     wide: f32,
     rise: Vec3,
     material: Handle<StandardMaterial>,
@@ -385,6 +393,24 @@ fn burst(
                 at.normalize_or(Vec3::Y),
             );
         }
+        // A big collapse raises a cloud as big as it (`cloud`).
+        if let Some((kind, puffs)) = cloud(&fallen.fell) {
+            let colour = dust_of(&look, kind);
+            let up = frame.rotation * Vec3::Y;
+            for (local, mut billow) in puffs {
+                billow.drift = frame.rotation * billow.drift;
+                billow_at(
+                    &mut commands,
+                    &mut shards,
+                    (&mut meshes, &mut materials, &mut images),
+                    most_puffs + CLOUD_MOST,
+                    frame.transform_point(local),
+                    colour,
+                    up,
+                    billow,
+                );
+            }
+        }
         // A big collapse near shakes the view.
         if let Some(eye) = eye
             && fallen.fell.len() >= 12
@@ -396,13 +422,61 @@ fn burst(
             }
         }
         info!(
-            "Build: fragments: {} cubes came down, {} destroyed, {count} fragments made in {:.1} ms, {} in all",
+            "Build: fragments: {} cubes came down round ({:.0}, {:.0}, {:.0}) in its base, {} destroyed, {count} fragments made in {:.1} ms, {} in all",
             fallen.fell.len(),
+            middle.x,
+            middle.y,
+            middle.z,
             fallen.destroyed.len(),
             began.elapsed().as_secs_f32() * 1000.0,
             shards.live.len()
         );
     }
+}
+
+/// The cloud of dust a big collapse raises, as a tower's fall does in films and in
+/// Battlefield's: rolling out from its foot and up for seconds, its puffs over the ground it
+/// covered, low, each about as wide as the mass that fell is across; what it is of, and each
+/// puff where it starts in the base and how it billows, its drift in the base's space.
+/// Nothing for a fall of fewer than [`CLOUD_CUBES`].
+fn cloud(fell: &[(IVec3, Cube)]) -> Option<(Kind, Vec<(Vec3, Billow)>)> {
+    if fell.len() < CLOUD_CUBES {
+        return None;
+    }
+    let (low, high) = fell.iter().fold(
+        (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+        |(low, high), (at, _)| {
+            let at = at.as_vec3() * CELL_M;
+            (low.min(at), high.max(at + CELL_M))
+        },
+    );
+    let across = (fell.len() as f32 * CELL_M * CELL_M * CELL_M).cbrt();
+    let count = (fell.len() / CLOUD_EVERY).clamp(4, CLOUD_MOST);
+    let foot = Vec3::new((low.x + high.x) * 0.5, low.y, (low.z + high.z) * 0.5);
+    let puffs = (0..count)
+        .map(|i| {
+            let r = |salt: u32| {
+                let h = ((i as u32).wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77))
+                    .wrapping_mul(0x2C1B_3C6D);
+                ((h >> 8) & 0xFFFF) as f32 / 65535.0
+            };
+            let local = Vec3::new(
+                low.x + (high.x - low.x) * r(1),
+                low.y + (high.y - low.y) * 0.35 * r(2) * r(2),
+                low.z + (high.z - low.z) * r(3),
+            );
+            let out = (local - foot).with_y(0.0).normalize_or(Vec3::X);
+            let billow = Billow {
+                alpha: 0.75,
+                wide: across * (0.9 + 0.8 * r(4)),
+                life: CLOUD_S * (0.75 + 0.5 * r(5)),
+                drift: out * across * 0.35 + Vec3::Y * (0.6 + 0.8 * r(6)),
+                stir: 2.0,
+            };
+            (local, billow)
+        })
+        .collect();
+    Some((fell[0].1.kind, puffs))
 }
 
 /// Sets the oldest fragments still not fading shrinking away, so many of them.
@@ -460,7 +534,7 @@ fn dust_image() -> Image {
 fn dust_at(
     commands: &mut Commands,
     shards: &mut Shards,
-    (meshes, materials, images): (
+    assets: (
         &mut Assets<Mesh>,
         &mut Assets<StandardMaterial>,
         &mut Assets<Image>,
@@ -471,7 +545,47 @@ fn dust_at(
     amount: f32,
     up: Vec3,
 ) {
-    if shards.puffs >= most || amount <= 0.0 {
+    if amount <= 0.0 {
+        return;
+    }
+    let billow = Billow {
+        alpha: (0.6 * amount).clamp(0.3, 0.8),
+        wide: PUFF_M[0] + (PUFF_M[1] - PUFF_M[0]) * (amount / 1.4).min(1.0),
+        life: PUFF_S,
+        drift: Vec3::ZERO,
+        stir: 1.0,
+    };
+    billow_at(commands, shards, assets, most, at, colour, up, billow);
+}
+
+/// How a puff billows: how thick it is at first, how wide it grows, in metres, how long it
+/// lasts, in seconds, the way it drifts as a whole and how much each sprite wanders and
+/// rises, in metres a second.
+struct Billow {
+    alpha: f32,
+    wide: f32,
+    life: f32,
+    drift: Vec3,
+    stir: f32,
+}
+
+/// A puff of dust billowing at a place, of a colour: five soft sprites facing the view.
+#[allow(clippy::too_many_arguments)]
+fn billow_at(
+    commands: &mut Commands,
+    shards: &mut Shards,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<StandardMaterial>,
+        &mut Assets<Image>,
+    ),
+    most: usize,
+    at: Vec3,
+    colour: Color,
+    up: Vec3,
+    billow: Billow,
+) {
+    if shards.puffs >= most {
         return;
     }
     shards.puffs += 1;
@@ -483,7 +597,7 @@ fn dust_at(
         .dust
         .get_or_insert_with(|| images.add(dust_image()))
         .clone();
-    let alpha = (0.6 * amount).clamp(0.3, 0.8);
+    let alpha = billow.alpha;
     let linear = colour.to_linear();
     let material = materials.add(StandardMaterial {
         base_color: Color::LinearRgba(linear).with_alpha(alpha),
@@ -492,7 +606,6 @@ fn dust_at(
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
-    let wide = PUFF_M[0] + (PUFF_M[1] - PUFF_M[0]) * (amount / 1.4).min(1.0);
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
     for sprite in 0..5u32 {
         let r = |salt: u32| {
@@ -500,12 +613,15 @@ fn dust_at(
                 .wrapping_mul(0x2C1B_3C6D);
             ((h >> 8) & 0xFFFF) as f32 / 65535.0
         };
-        let drift = Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 1.2 + up * (0.25 + 0.35 * r(3));
+        let drift = billow.drift
+            + (Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 1.2 + up * (0.25 + 0.35 * r(3)))
+                * billow.stir;
         commands.spawn((
             Name::new("Dust"),
             Puff {
                 age: 0.0,
-                wide: wide * (0.6 + 0.6 * r(4)),
+                life: billow.life,
+                wide: billow.wide * (0.6 + 0.6 * r(4)),
                 rise: drift,
                 material: material.clone(),
                 alpha,
@@ -847,7 +963,7 @@ fn puff(
     let eye = camera.map(|camera| camera.translation());
     for (entity, mut puff, mut transform) in &mut puffs {
         puff.age += time.delta_secs();
-        let through = (puff.age / PUFF_S).min(1.0);
+        let through = (puff.age / puff.life).min(1.0);
         if through >= 1.0 {
             commands.entity(entity).despawn();
             if puff.owner {
@@ -909,6 +1025,45 @@ pub(super) fn live(world: &World) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A solid block of stone cubes so many a side, standing on the ground at the origin.
+    fn block(side: i32, high: i32) -> Vec<(IVec3, Cube)> {
+        let cube = terra_build::Cube::new(terra_build::Kind(2), terra_build::Fill::Solid);
+        (0..side)
+            .flat_map(|x| (0..high).flat_map(move |y| (0..side).map(move |z| (x, y, z))))
+            .map(|(x, y, z)| (IVec3::new(x, y, z), cube))
+            .collect()
+    }
+
+    #[test]
+    fn a_fallen_towers_dust_is_a_cloud_as_wide_as_it_low_over_its_foot_and_a_wall_section_none() {
+        // A wall's top, a few dozen cubes: its own puffs only.
+        assert!(cloud(&block(3, 4)).is_none());
+        // A tower's top, 8 m across and 6 m high: a cloud lasting seconds, its puffs metres
+        // wide, over its footprint and low on what stood, drifting out and up.
+        let tower = block(16, 12);
+        let mass = (tower.len() as f32 * CELL_M.powi(3)).cbrt();
+        let (_, puffs) = cloud(&tower).expect("a tower's fall raises a cloud");
+        assert!(puffs.len() >= 8, "{}", puffs.len());
+        for (at, billow) in &puffs {
+            assert!(
+                (0.0..=8.0).contains(&at.x) && (0.0..=8.0).contains(&at.z),
+                "{at}"
+            );
+            assert!(at.y <= 6.0 * 0.35 + 1e-3, "{at}");
+            assert!(
+                billow.wide >= mass * 0.85 && billow.wide >= 3.0,
+                "{}",
+                billow.wide
+            );
+            assert!(billow.life >= 4.0, "{}", billow.life);
+            assert!(billow.drift.y > 0.0);
+        }
+        // A bigger fall, a bigger cloud.
+        let (_, more) = cloud(&block(24, 12)).unwrap();
+        let widest = |p: &[(Vec3, Billow)]| p.iter().map(|(_, b)| b.wide).fold(0.0, f32::max);
+        assert!(more.len() >= puffs.len() && widest(&more) > widest(&puffs));
+    }
 
     #[test]
     fn a_big_piece_lies_for_seconds_before_it_fades_and_a_small_one_briefly() {

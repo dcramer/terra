@@ -1,8 +1,8 @@
 //! Fire in the player's base (D377): its fire (`terra_build::fire`) stepped on its own tick,
 //! its harm sent as any harm is, through the base's acts, so what burns through brings down
 //! what it held, breaking into fragments as any loss does; what a fire reaches blackened;
-//! and what burns given to the world's drawing of fire (`terra_world::fire`) as blazes, a
-//! metre's cubes to a blaze, taller where more burns round it.
+//! and what burns given to the world's drawing of fire (`terra_world::fire`) as blazes, two
+//! metres' cubes a side to a blaze, taller where more burns round it.
 //!
 //! What sets a base alight is anything that breathes fire ([`BreathesFire`]): a cone of
 //! flame from its mouth, cast into the base as rays that heat what they meet, as a breath in
@@ -52,6 +52,9 @@ pub struct SiteFire {
     /// Game time not yet stepped, in seconds.
     owed_s: f32,
     blazes: Vec<Blaze>,
+    /// Where each breath's stream meets the base this frame, in the world: a flare drawn
+    /// there, as a flamethrower's stream splashes where it strikes.
+    splashes: Vec<Vec3>,
     /// How long the last ticks took, in milliseconds: the fire's own work, and its acts'.
     pub step_ms: f32,
     pub act_ms: f32,
@@ -63,6 +66,10 @@ pub struct SiteFire {
 /// reaches, in cubes.
 const RAYS: usize = 14;
 const SPLASH: i32 = 2;
+/// How far short of what a breath meets its splash is drawn, and how far past it the
+/// stream runs on into it, in metres; and the splash's flame, how tall.
+const SPLASH_BACK_M: f32 = 0.8;
+const SPLASH_TALL_M: f32 = 4.5;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SiteFire>()
@@ -105,17 +112,35 @@ fn breathe(
     blazes.jets.clear();
     let step = time.delta_secs();
     let to_base = site.frame.compute_affine().inverse();
-    let SiteFire { fire, burns, .. } = &mut *fire;
+    let SiteFire {
+        fire,
+        burns,
+        splashes,
+        ..
+    } = &mut *fire;
+    splashes.clear();
     let burns_as = |kind: Kind| burns.get(&kind).copied();
     for (breath, at) in &breathers {
         let from = at.translation();
         let way = breath.aim.map_or(at.forward().as_vec3(), |aim| {
             (aim - from).normalize_or(at.forward().as_vec3())
         });
+        let origin = to_base.transform_point3(from);
+        let ahead = to_base.transform_vector3(way).normalize_or_zero();
+        // The stream ends where its middle meets the base, and splashes there.
+        let struck = breath
+            .on
+            .then(|| site.base.raycast(origin, ahead, breath.reach_m))
+            .flatten();
+        if let Some(hit) = &struck {
+            splashes.push(from + way * (hit.distance - SPLASH_BACK_M).max(0.0));
+        }
         blazes.jets.push(Jet {
             from,
             way,
-            reach: breath.reach_m,
+            reach: struck
+                .as_ref()
+                .map_or(breath.reach_m, |hit| hit.distance + SPLASH_BACK_M),
             spread: breath.spread,
             on: breath.on,
         });
@@ -123,8 +148,6 @@ fn breathe(
             continue;
         }
         *turn = turn.wrapping_add(1);
-        let origin = to_base.transform_point3(from);
-        let ahead = to_base.transform_vector3(way).normalize_or_zero();
         let side = ahead.any_orthonormal_vector();
         let lift = ahead.cross(side);
         for ray in 0..RAYS {
@@ -239,10 +262,15 @@ fn burn(
     }
 }
 
+/// How many cubes a side of the base burn as one blaze.
+const BLAZE_CUBES: i32 = 4;
+
 /// How often the fire is said in the log while it burns, in frames that stepped it.
 const SAY_EVERY: u32 = 8;
 
-/// Each metre's cubes that burn as a blaze: at the middle of their open faces, as hot as
+/// Each two metres' cubes a side that burn as a blaze ([`BLAZE_CUBES`]), as games draw a big
+/// fire as a few large flames rather than many small ones, so no more than a few cards lie
+/// over any pixel: at the middle of their open faces, as hot as
 /// they burn on average, as tall as there is fire in it and round it.
 fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze> {
     #[derive(Default)]
@@ -266,7 +294,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
         }
         let at = middle + out.normalize_or_zero() * CELL_M * 0.5;
         let cell = cells
-            .entry(flame.at.div_euclid(IVec3::splat(2)).to_array())
+            .entry(flame.at.div_euclid(IVec3::splat(BLAZE_CUBES)).to_array())
             .or_default();
         cell.at += at;
         cell.count += 1.0;
@@ -286,7 +314,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
                 .sum::<f32>()
                 - cell.count;
             let heat = (cell.fierce / cell.count).clamp(0.0, 1.0);
-            let tall = (0.8 + 0.4 * cell.count.sqrt() + 0.12 * round) * (0.5 + 0.5 * heat);
+            let tall = (0.8 + 0.3 * cell.count.sqrt() + 0.25 * round.sqrt()) * (0.5 + 0.5 * heat);
             let local = cell.at / cell.count;
             let seed = (key[0].wrapping_mul(73_856_093)
                 ^ key[1].wrapping_mul(19_349_663)
@@ -311,8 +339,19 @@ fn blazes(
     mut fright: Local<Option<Entity>>,
     mut frights: Query<(&mut Transform, &mut crate::play::Frightful)>,
 ) {
-    if fire.is_changed() || drawn.blazes.len() != fire.blazes.len() {
-        drawn.blazes.clone_from(&fire.blazes);
+    let splashes = fire.splashes.len();
+    if fire.is_changed() || drawn.blazes.len() != fire.blazes.len() + splashes {
+        // The splashes first, so the drawing's cap never leaves them out.
+        drawn.blazes.clear();
+        drawn
+            .blazes
+            .extend(fire.splashes.iter().enumerate().map(|(i, &at)| Blaze {
+                at,
+                tall: SPLASH_TALL_M,
+                heat: 1.0,
+                seed: 0.37 + 0.21 * i as f32,
+            }));
+        drawn.blazes.extend_from_slice(&fire.blazes);
     }
     // A fire frightens what lives round it, the more of it burns the further off: from the
     // middle of its blazes, past their reach by as much again.
