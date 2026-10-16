@@ -851,7 +851,11 @@ fn fragment(
         var ground_is = low_floor(amounts, tints, world, n);
         // The heath past the trees, as its flat colours, over the soil it grows on.
         if heath.ground.z > 0.0 {
-            let shrub_colour = mix(SHRUB_GREEN, ground.heath_autumn.rgb * 0.45, kind_turned(world, ground.heath_layer));
+            // Seen from off, a shrub heath is its leaves and what shows between them, the
+            // lichen, stones and dead stems: lighter and greyer than its leaves alone, which
+            // left the middle distance a dark red trough under the near ground's blades.
+            let shrub_far = mix(ground.heath_autumn.rgb * 0.6, LICHEN * 0.7, 0.35);
+            let shrub_colour = mix(SHRUB_GREEN, shrub_far, kind_turned(world, ground.heath_layer));
             let sedge_colour = mix(SEDGE_GREEN, SEDGE_STRAW, smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer)));
             let tint = heath_flat(heath, shrub_colour, sedge_colour) * (0.85 + 0.3 * blotch);
             ground_is.colour = mix(ground_is.colour, tint, heath.ground.z * (1.0 - steep) * 0.9);

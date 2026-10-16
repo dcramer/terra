@@ -258,7 +258,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             let straw = grass.grass_autumn.rgb * 0.35;
             // A cotton grass head, many times brighter than any blade, stays white.
             let head = smoothstep(3.0, 6.0, light);
-            colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, head);
+            // A dwarf shrub's leaf (blades.rs, `SHRUBS`), far redder than any grass, keeps its
+            // own autumn colour.
+            let leaf = smoothstep(1.8, 2.3, colour.r / max(colour.g, 1e-4));
+            colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, max(head, leaf));
         }
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;

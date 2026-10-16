@@ -155,7 +155,7 @@ fn noise(p: vec3<f32>) -> f32 {
 
 // The ripples' height at a place: small cat's-paws running before the wind, and a finer set
 // across them, stretched along the wind so they read as its.
-fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>) -> f32 {
+fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>, off: f32) -> f32 {
     let t = globals.time;
     // Finer along the wind than across it, so the crests run across the wind, as they do:
     // the wind's way is one fixed direction over a lake, not the level one at each point.
@@ -164,8 +164,10 @@ fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>) -> f32 {
     // the two larger sets, near water read as blobs half a metre across.
     return noise(q * 1.2 - downwind * t * 1.0) * 0.32
         + noise(q * 3.4 - downwind * t * 1.9 + across * t * 0.4 + 11.0) * 0.28
-        + noise(q * 8.7 - downwind * t * 3.1 - across * t * 0.6 + 23.0) * 0.22
-        + noise(q * 21.0 - downwind * t * 4.6 + 37.0) * 0.18;
+        // The finer sets fade out with distance before they are under a pixel, or they
+        // shimmer as glitter.
+        + noise(q * 8.7 - downwind * t * 3.1 - across * t * 0.6 + 23.0) * 0.22 * (1.0 - smoothstep(12.0, 45.0, off))
+        + noise(q * 21.0 - downwind * t * 4.6 + 37.0) * 0.18 * (1.0 - smoothstep(4.0, 16.0, off));
 }
 
 // The reflection of what is on screen along a ray from a point of the water, and how much it
@@ -274,10 +276,10 @@ fn fragment(
     downwind = normalize(downwind);
     let across = cross(up, downwind);
     let local = world - lake.origin.xyz;
-    let here = ripples(local, downwind, across);
+    let here = ripples(local, downwind, across, distance);
     let slope = vec2<f32>(
-        ripples(local + downwind * 0.03, downwind, across) - here,
-        ripples(local + across * 0.03, downwind, across) - here,
+        ripples(local + downwind * 0.03, downwind, across, distance) - here,
+        ripples(local + across * 0.03, downwind, across, distance) - here,
     ) * 2.5;
     // Calm water still shivers a little; far off the ripples are under a pixel. A light wind
     // ruffles a lake in patches, cat's-paws a few tens of metres across drifting downwind,

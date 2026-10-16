@@ -89,6 +89,12 @@ pub struct Growing {
     /// (`terra_land::heath`, the ground's land map): covered, as the bare-ground measure counts
     /// it, though no blade grows there.
     pub heath: f32,
+    /// How much of what grows is the heath's dwarf shrubs (`terra_land::heath`): bearberry,
+    /// bilberry, dwarf birch and crowberry, drawn among the blades as short leafy shoots in
+    /// their autumn reds, rusts and golds rather than as grass.
+    pub shrub: f32,
+    /// How much of what grows is the heath's lichen, drawn as low pale cushions.
+    pub lichen: f32,
 }
 
 impl Growing {

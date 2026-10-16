@@ -189,8 +189,8 @@ pub(super) struct Samples {
 }
 
 /// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
-/// needles, roots, tall, heap and heath.
-pub(super) const SAMPLED: usize = 11;
+/// needles, roots, tall, heap, heath, shrub and lichen.
+pub(super) const SAMPLED: usize = 13;
 
 impl Samples {
     pub(super) fn at(&self, at: Vec2) -> [f32; SAMPLED] {
@@ -262,6 +262,8 @@ pub fn square(
                 growing.tall,
                 growing.heap,
                 growing.heath,
+                growing.shrub,
+                growing.lichen,
             ]);
         }
     }
@@ -325,6 +327,8 @@ pub fn square(
                 taller,
                 _,
                 heath,
+                shrub,
+                lichen,
             ] = samples.at(at);
             let cell = (((at - corner) / CELL_M).floor().as_ivec2())
                 .clamp(IVec2::ZERO, IVec2::splat(CELLS as i32 - 1));
@@ -366,6 +370,12 @@ pub fn square(
             {
                 continue;
             }
+            // On the heath a share of the blades are the dwarf shrubs' shoots, as much as the
+            // shrubs are of what grows there.
+            let pick = h(14) * grass.max(0.05);
+            let leafy = heath > 0.5 && pick < shrub;
+            // And a share are lichen's pale cushions, lower still.
+            let cushion = heath > 0.5 && !leafy && pick < shrub + lichen;
             let tall = (0.12 + 0.42 * libm::powf(grass, 0.7) * (0.6 + 0.4 * lush))
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
@@ -379,15 +389,46 @@ pub fn square(
                 (Vec2::new(libm::cosf(facing), libm::sinf(facing)) + away * 0.8).normalize_or(away);
             let dryness =
                 ((1.0 - lush) * 0.45 + clump.dry * 0.2 + (h(6) - 0.5) * 0.25).clamp(0.0, 1.0);
-            let tip =
-                deep.lerp(green, 0.5 + 0.5 * clump.hue).lerp(dry, dryness) * (0.85 + 0.3 * h(7));
+            let tip = if cushion {
+                // Cladonia's cream and grey-green (the tundra's photographs' lichen crops).
+                linear(0.64, 0.60, 0.48).lerp(linear(0.55, 0.56, 0.45), 0.5 + 0.5 * clump.hue)
+                    * (0.85 + 0.25 * h(7))
+            } else if leafy {
+                // A clump is one plant, one kind's colour, each shoot a little lighter or
+                // darker: the tundra's photographs' shrub crops.
+                let kind = ((clump.hue * 0.5 + 0.5) * SHRUBS.len() as f32) as usize;
+                let (r, g, b) = SHRUBS[kind.min(SHRUBS.len() - 1)];
+                linear(r, g, b) * (0.75 + 0.5 * h(7))
+            } else if heath > 0.5 {
+                // The heath's sedge in September: olive at the root of the year, straw and
+                // bronze where it has turned, not a meadow's green.
+                let sedge = linear(0.40, 0.39, 0.18).lerp(
+                    linear(0.64, 0.53, 0.30),
+                    (0.5 + 0.5 * clump.dry).clamp(0.0, 1.0),
+                );
+                sedge.lerp(linear(0.54, 0.42, 0.24), smoothstep(0.6, 0.9, h(6)))
+                    * (0.85 + 0.3 * h(7))
+            } else {
+                deep.lerp(green, 0.5 + 0.5 * clump.hue).lerp(dry, dryness) * (0.85 + 0.3 * h(7))
+            };
+            let (tall, leafy_width) = if cushion {
+                ((0.02 + 0.04 * h(15)) * clump.height, 3.2)
+            } else if leafy {
+                // Shoots a hand high or less, broad with leaves, leaning out.
+                ((0.05 + 0.11 * h(15)) * clump.height, 2.6)
+            } else {
+                (tall, 1.0)
+            };
             let local = Vec3::new(at.x - middle.x, rise, at.y - middle.y);
             // In tall wet sedge, the heath's (tall and not lush: a meadow's tall grass is
             // lush), now and then a cotton grass stem: straight, a little taller,
             // its seed head a white tuft at the top.
             let cotton = taller > 0.35 && lush < 0.35 && h(12) < 0.1 * taller;
+            let cotton = cotton && !leafy && !cushion;
             let (tall, bend) = if cotton {
                 (tall * 1.3, 0.06)
+            } else if leafy || cushion {
+                (tall, 0.5 + 0.35 * h(8))
             } else {
                 (tall, 0.25 + 0.5 * h(8))
             };
@@ -398,6 +439,7 @@ pub fn square(
                 tall,
                 bend,
                 BLADE_WIDTH_M
+                    * leafy_width
                     * ring.widen
                     * (0.8 + 0.4 * h(9))
                     * (1.0 + (1.0 - rank) * (1.0 - rank) * (1.0 - rank)),
@@ -442,6 +484,19 @@ struct BladeMesh {
     /// The next blade's seed head, if it carries one: its colour over its top fifth.
     head: Option<Vec3>,
 }
+
+/// The dwarf shrubs' autumn leaves, sRGB, from the tundra's photographs (the shrub, bilberry
+/// and red shrub crops): bearberry's crimson, bilberry's wine, dwarf birch's rust and gold, and
+/// crowberry's dark brown-olive. Each redder than green by over twice, linear, which the grass
+/// shader reads as a leaf it does not brown to straw.
+const SHRUBS: [(f32, f32, f32); 6] = [
+    (0.52, 0.11, 0.06),
+    (0.43, 0.10, 0.10),
+    (0.60, 0.26, 0.10),
+    (0.66, 0.33, 0.11),
+    (0.74, 0.46, 0.13),
+    (0.26, 0.16, 0.08),
+];
 
 /// Cotton grass's seed head, linear: a white tuft, a little warm (199, 191, 177 sRGB in the
 /// tundra's photographs).
@@ -525,6 +580,28 @@ impl BladeMesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_dwarf_shrubs_leaves_are_red_enough_that_the_grass_shader_keeps_them() {
+        // grass.wesl keeps a blade's colour, unbrowned to straw, from linear red over green
+        // 2.3; and grass, browned or not, stays under 1.8 of it.
+        let linear = |(r, g, b): (f32, f32, f32)| {
+            Vec3::from_array(Color::srgb(r, g, b).to_linear().to_f32_array_no_alpha())
+        };
+        for leaf in SHRUBS {
+            let c = linear(leaf);
+            assert!(c.x / c.y > 2.3, "{leaf:?}: {}", c.x / c.y);
+        }
+        for grass in [
+            (0.30, 0.45, 0.14),
+            (0.58, 0.53, 0.28),
+            (0.64, 0.53, 0.30),
+            (0.54, 0.42, 0.24),
+        ] {
+            let c = linear(grass);
+            assert!(c.x / c.y < 1.8, "{grass:?}: {}", c.x / c.y);
+        }
+    }
 
     #[test]
     fn thin_grass_grows_in_tussocks_and_thick_grass_evenly() {

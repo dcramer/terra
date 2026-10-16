@@ -1,15 +1,15 @@
 {
-  "about": "North across the rolling heath and its kettle ponds toward the snowy fells, the low morning sun from the east",
+  "about": "Across the rolling heath to a kettle pond under the snowy fells, the low morning sun from the side",
   "place": "tundra",
   "hour": 10.5,
   "seconds": 25,
   "player": {
-    "at": "-150,-25",
-    "route": "-150,15;-146,55;-152,95;-150,135"
+    "at": "-150,-78",
+    "route": "-150,-40;-146,-5;-151,30;-150,57"
   },
   "look": {
     "shutter": 90,
-    "exposure_bias": 0.2
+    "exposure_bias": 0.5
   },
   "sound": [
     "wind:0.9"

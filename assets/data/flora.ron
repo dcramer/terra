@@ -105,7 +105,7 @@
         (
             name: "Ore rock",
             models: ["Rock_1", "Rock_3", "Rock_4", "Rock_5", "Rock_7", "Rock_9"],
-            colours: [("*", (0.5, 0.36, 0.3), Firm, "lichen_rock")],
+            colours: [("*", (0.42, 0.38, 0.35), Firm, "lichen_rock")],
             sway: Still,
             grows: Rocks,
             size_above: 0.7,
