@@ -152,6 +152,22 @@ Every build shows frame times in the top-left corner, all the time (D77). The li
 
 The log is for what is worth reading: the engine's routine messages are filtered out (`RUST_LOG` overrides the filter), and once a minute it records frame times as median, 99th percentile and worst, with a warning whenever frames take over twice the budget. Software rendering skips the warning, since its times mean nothing.
 
+## Building's debug views
+
+F4 cycles what every building's surfaces are coloured by, and Shift+F4 goes back (D385, `crates/terra_game/src/build/views.rs`), as Unreal's view modes and Unity's draw modes do; a legend in the top right says what the view shows and how to read it. Look before measuring: most questions of how a building looks or where it is wrong are answered by one of these.
+
+| View | Shows |
+|---|---|
+| `texels` | Screen pixels a texel covers seen from a metre off, against a texel a pixel (D362): a texture's density wherever the camera is, stretched mapping as blue; hatched where it is blurred as seen now |
+| `roles` | Each cube's edges by their role (arris, jamb, crest, foot, sill and the rest), roof lines dashed by their part (eave, verge, ridge, hip, valley, flashing), faces tinted by what is beyond them; within 40 m |
+| `detail` | Each mesh by the detail it draws (near, middle, far, hull, cell), each section's or group's box by the detail it is laid for, and the base being built's parts |
+| `damage` | Each cube's health lost, where the damage drawing breaks a surface, and damaged cubes boxed |
+| `shade` | How much light a surface keeps after texture occlusion, SSAO and its corners' baked shade, tinted by what takes the most |
+| `normals` | The normal with its normal map in world axes, and each texture's tangent frame as ticks |
+| `plan` | What is built, a plan's ghosts and what goes in next, in three colours |
+
+Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off`, `next` and `back` too) and answers with its legend, so a view is shot headlessly (`shot` after it). Off, the views cost nothing: their shader code is compiled in only while one is on, and their systems do not run. Every preset draws them.
+
 ## Debug menu
 
 <a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. Not built.

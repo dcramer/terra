@@ -249,6 +249,7 @@ pub(super) fn show(
         ..
     } = parts;
     let coarse_shadows = quality != Quality::High;
+    let level = Level::of(detail);
     let mut put = |commands: &mut Commands, mesh: Staged, shade: Shade, shown: &mut OnScreen| {
         shown.gpu_bytes += mesh.bytes();
         let handle = mesh.handle(meshes, false);
@@ -256,6 +257,7 @@ pub(super) fn show(
         let mut spawned = commands.spawn((
             Mesh3d(handle.clone()),
             range(None, 0.0),
+            level,
             placed,
             ChildOf(root),
         ));
@@ -349,6 +351,7 @@ pub(super) fn show(
                     Mesh3d(mesh.handle(meshes, false)),
                     MeshMaterial3d(material),
                     shifted(range, further),
+                    Level::Every,
                     placed,
                     ChildOf(root),
                 ))

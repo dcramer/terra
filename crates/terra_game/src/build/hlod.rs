@@ -97,6 +97,7 @@ fn make(
                             Mesh3d(mesh.clone()),
                             MeshMaterial3d(look.looks.far.clone()),
                             draw::cell_range(),
+                            super::views::Level::Cell,
                             Transform::from_translation(*centre),
                             ChildOf(root),
                         ))

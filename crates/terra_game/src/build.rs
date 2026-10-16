@@ -43,6 +43,7 @@ pub(crate) mod props;
 mod remote;
 mod sheet;
 mod store;
+mod views;
 mod village;
 
 use draw::{KitMaterials, kit_materials};
@@ -488,6 +489,7 @@ pub fn plugin(app: &mut App) {
     memory::plugin(app);
     light::plugin(app);
     fire::plugin(app);
+    views::plugin(app);
     app.add_systems(
         Update,
         (

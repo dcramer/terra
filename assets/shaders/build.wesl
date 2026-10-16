@@ -23,6 +23,9 @@ import bevy_pbr::render::{
 import bevy_pbr::render::mesh_view_bindings::screen_space_ambient_occlusion_texture;
 @if(SCREEN_SPACE_AMBIENT_OCCLUSION)
 import bevy_pbr::ssao::utils::ssao_multibounce;
+// A debug view (D385, build/views.rs), compiled in only while one is on.
+@if(BUILD_VIEW)
+import super::build_views::{Seen, shown, BUILT};
 
 // Field order must match BuildArrays in crates/terra_game/src/build/arrays/mod.rs.
 struct Layers {
@@ -44,6 +47,9 @@ struct Layers {
     detail: array<vec4<f32>, 512>,
     // Where detail fades: x from how far, y by how far, in metres; z 1 where it is drawn.
     near: vec4<f32>,
+    // The debug view on (D385): x which (0 none), y texels across a copy of a layer's colour,
+    // z the screen pixels a texel should cover a metre off.
+    view: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -237,6 +243,16 @@ fn parallaxed_uv(depth_scale: f32, max_layers: f32, original_uv: vec2<f32>, Vt: 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
+    // How the texture and the world change across the pixel, for a debug view, taken before
+    // anything may be discarded.
+    var view_uv_d = vec4(0.0);
+    var view_p_dx = vec3(0.0);
+    var view_p_dy = vec3(0.0);
+@if(BUILD_VIEW) {
+    view_uv_d = vec4(dpdx(in.uv), dpdy(in.uv));
+    view_p_dx = dpdx(in.world_position.xyz);
+    view_p_dy = dpdy(in.world_position.xyz);
+}
     let layer = min(u32(round(in.uv_b.x)), 511u);
     let entry = layers.table[layer];
     // A set not resident yet (its slot below 0) is drawn plain, in its corners' colours,
@@ -565,6 +581,44 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     Nt.z = sqrt(max(1.0 - dot(Nt.xy, Nt.xy), 0.0));
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
     pbr_input.clearcoat_N = pbr_input.N;
+
+    // A debug view: the surface coloured by what it shows, unlit (D385, build_views.wesl).
+@if(BUILD_VIEW) {
+    if layers.view.x > 0.5 {
+        var seen: Seen;
+        seen.view = u32(layers.view.x + 0.5);
+        seen.uv = in.uv;
+        seen.uv_dx = view_uv_d.xy;
+        seen.uv_dy = view_uv_d.zw;
+        seen.position = wp;
+        seen.p_dx = view_p_dx;
+        seen.p_dy = view_p_dy;
+        seen.pixel = in.position.xy;
+        seen.side = select(layers.view.y, 0.0, missing);
+        seen.aim = layers.view.z;
+        seen.geometric = N;
+        seen.mapped = pbr_input.N;
+        seen.tangent = T;
+        seen.bitangent = B;
+        seen.framed = 1.0;
+        seen.lost = lost;
+        seen.broken = broken;
+        seen.masked = layers.damage.y;
+        seen.texture_occlusion = select(arm.r, 1.0, diffuse_occlusion.r < arm.r - 1e-4);
+        seen.screen_occlusion = select(1.0, diffuse_occlusion.r, diffuse_occlusion.r < arm.r - 1e-4);
+        var corners = 1.0;
+@if(VERTEX_COLORS) {
+        corners = min(dot(in.color.rgb, vec3(0.2126, 0.7152, 0.0722)), 1.0);
+}
+        // Where the damage is not drawn, a damaged surface is darkened instead.
+        seen.baked = corners * select(1.0 - layers.damage.z * lost, 1.0, layers.damage.y > 0.5);
+        seen.albedo = clamp(dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722)) * 2.0, 0.0, 1.0);
+        seen.flat = BUILT;
+        var shown_out: FragmentOutput;
+        shown_out.color = vec4(shown(seen), 1.0);
+        return shown_out;
+    }
+}
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

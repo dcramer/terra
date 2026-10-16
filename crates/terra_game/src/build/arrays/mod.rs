@@ -85,6 +85,7 @@ pub type BuildMaterial = ExtendedMaterial<StandardMaterial, BuildArrays>;
 
 /// What `shaders/build.wesl` is given. Field order must match the struct there.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[bind_group_data(ViewKey)]
 pub struct BuildArrays {
     /// For each layer: its slot, its parallax depth, its reflectance and how many layers
     /// relief mapping steps through at the preset (none: flat but for its normal map).
@@ -113,6 +114,11 @@ pub struct BuildArrays {
     /// it at all.
     #[uniform(100)]
     pub near: Vec4,
+    /// The debug view on (D385, `views`): x which, 0 none; y texels across a copy of a
+    /// layer's colour; z the screen pixels a texel should cover a metre off. While x is 0
+    /// the view's code is not compiled in at all (`ViewKey`).
+    #[uniform(100)]
+    pub view: Vec4,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub colour: Handle<Image>,
@@ -135,6 +141,37 @@ impl MaterialExtension for BuildArrays {
     /// So a covering's shingles that damage took are not in depth or shadow either (D305).
     fn prepass_fragment_shader() -> ShaderRef {
         "shaders/build_prepass.wesl".into()
+    }
+
+    /// With a debug view on, its code compiled in (`BUILD_VIEW`), so with none the shader is
+    /// as it is without them, costing nothing.
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        if key.bind_group_data.view
+            && let Some(fragment) = descriptor.fragment.as_mut()
+        {
+            fragment.shader_defs.push("BUILD_VIEW".into());
+        }
+        Ok(())
+    }
+}
+
+/// Whether a debug view is on, which the arrays' shader is specialised by.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ViewKey {
+    view: bool,
+}
+
+impl From<&BuildArrays> for ViewKey {
+    fn from(arrays: &BuildArrays) -> Self {
+        ViewKey {
+            view: arrays.view.x > 0.5,
+        }
     }
 }
 
@@ -521,6 +558,7 @@ impl Arrays {
                 breaks: [Vec4::ZERO; MAX_LAYERS],
                 detail: [Vec4::ZERO; MAX_LAYERS],
                 near: near(quality),
+                view: Vec4::ZERO,
                 colour: images[0].clone(),
                 normal: images[1].clone(),
                 arm: images[2].clone(),
@@ -561,6 +599,11 @@ impl Arrays {
     pub fn relayer(&mut self, layers: Arc<Layers>) {
         self.layers = layers;
         self.table_dirty = true;
+    }
+
+    /// How many texels across a copy of a layer's colour is.
+    pub fn colour_side(&self) -> u32 {
+        self.sides[0]
     }
 
     /// Hides the damage drawing, or shows it again: a check's, to compare what is not

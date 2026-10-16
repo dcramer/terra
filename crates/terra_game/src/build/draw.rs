@@ -11,6 +11,7 @@
 use super::arrays::{Arrays, BuildMaterial, Layers};
 use super::layout::{Done, Drawing, Jobs, Outcome, close, reach, suffices};
 use super::store::{self, Drawn, Section, each};
+use super::views::Level;
 use super::{Build, BuildLook, Built, Site};
 use crate::planet::MainCamera;
 use bevy::{
@@ -109,10 +110,10 @@ fn ghost_range() -> VisibilityRange {
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct GhostMaterial {
     #[uniform(0)]
-    colour: LinearRgba,
+    pub(super) colour: LinearRgba,
     /// How much an edge line and an outline add to how opaque it is.
     #[uniform(0)]
-    edge: f32,
+    pub(super) edge: f32,
     #[uniform(0)]
     rim: f32,
 }
@@ -155,6 +156,15 @@ impl Looks {
     /// The ghost a plan's pieces are drawn in, for anything else drawn as one.
     pub(super) fn ghost(&self) -> Handle<GhostMaterial> {
         self.ghost[0].clone()
+    }
+
+    /// Every ghost material a plan is drawn in: its pieces' two shades and its shell.
+    pub(super) fn ghosts(&self) -> [Handle<GhostMaterial>; 3] {
+        [
+            self.ghost[0].clone(),
+            self.ghost[1].clone(),
+            self.shell.clone(),
+        ]
     }
 
     pub fn new(
@@ -1468,16 +1478,18 @@ fn show(
         }
         range
     };
-    let mut add = |mesh: Staged, material: Shade, range: VisibilityRange, cpu: bool| {
-        let range = ranged(range);
-        let mesh = mesh.handle(meshes, cpu);
-        let mut spawned = commands.spawn((Mesh3d(mesh.clone()), range, placed, ChildOf(entity)));
-        match material {
-            Shade::Standard(material) => spawned.insert(MeshMaterial3d(material)),
-            Shade::Arrays(material) => spawned.insert(MeshMaterial3d(material)),
+    let mut add =
+        |mesh: Staged, material: Shade, range: VisibilityRange, cpu: bool, level: Level| {
+            let range = ranged(range);
+            let mesh = mesh.handle(meshes, cpu);
+            let mut spawned =
+                commands.spawn((Mesh3d(mesh.clone()), range, level, placed, ChildOf(entity)));
+            match material {
+                Shade::Standard(material) => spawned.insert(MeshMaterial3d(material)),
+                Shade::Arrays(material) => spawned.insert(MeshMaterial3d(material)),
+            };
+            (spawned.id(), mesh)
         };
-        (spawned.id(), mesh)
-    };
     let material = |kind: Kind, material: Material| {
         look.materials
             .get(kind, material)
@@ -1517,7 +1529,8 @@ fn show(
                 } else {
                     range(None, NEAR_M)
                 };
-                let (id, handle) = add(mesh, Shade::Arrays(arrays.clone()), visible, keep);
+                let level = if mid { Level::Mid } else { Level::Near };
+                let (id, handle) = add(mesh, Shade::Arrays(arrays.clone()), visible, keep, level);
                 shown.entities.push(id);
                 if mid {
                     casters.push((drawn.parts.len(), handle.clone()));
@@ -1534,6 +1547,7 @@ fn show(
                 Shade::Standard(material(kind, which)),
                 range(None, NEAR_M),
                 false,
+                Level::Near,
             );
             shown.entities.push(id);
         }
@@ -1544,6 +1558,7 @@ fn show(
                 Shade::Standard(material(kind, which)),
                 range(mid_from, MID_M),
                 false,
+                Level::Mid,
             );
             shown.entities.push(id);
             casters.push((drawn.parts.len(), mesh));
@@ -1561,6 +1576,7 @@ fn show(
                 Shade::Standard(looks.next.clone()),
                 range(None, next_to),
                 false,
+                Level::Every,
             )
             .0,
         );
@@ -1572,6 +1588,7 @@ fn show(
                 Shade::Standard(looks.structure.clone()),
                 range(None, FAR_M),
                 false,
+                Level::Every,
             )
             .0,
         );
@@ -1583,6 +1600,7 @@ fn show(
                 Shade::Standard(looks.far.clone()),
                 range(far_from, FAR_M),
                 false,
+                Level::Far,
             )
             .0,
         );
@@ -1594,6 +1612,7 @@ fn show(
                 Shade::Standard(looks.far.clone()),
                 proxy_range(FAR_M),
                 false,
+                Level::Hull,
             )
             .0,
         );
