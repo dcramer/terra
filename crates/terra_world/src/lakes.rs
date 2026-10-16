@@ -80,6 +80,9 @@ pub struct LakeExtension {
     north: Vec4,
     #[uniform(100)]
     skyline: [Vec4; SKYLINE_WAYS],
+    /// The waves the surface is made of (`trains`).
+    #[uniform(100)]
+    trains: [Vec4; TRAINS],
     /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
     /// draws, exposed as it is, rather than the painted sky's two colours.
     #[uniform(100)]
@@ -92,6 +95,62 @@ pub struct LakeExtension {
 
 /// How many ways out round the lake its skyline is taken in.
 const SKYLINE_WAYS: usize = 64;
+
+/// How many trains of waves make a lake's surface, the first `SWELL` of them long ones.
+const TRAINS: usize = 28;
+/// The longest train's length and the shortest's, in metres: from the swell a breeze leaves
+/// on a mountain lake down to the capillary ripples a gust raises.
+const LONGEST_M: f32 = 3.2;
+const SHORTEST_M: f32 = 0.035;
+
+/// The trains of waves a lake's surface is summed from, as Finch sums them ("Effective Water
+/// Simulation from Physical Models", GPU Gems, 2004): each a plane wave, its length from the
+/// longest to the shortest in even ratios, a little jittered so no two beat in step; how far
+/// it turns from the wind, the long ones more; and how fast it runs, by water's dispersion
+/// (gravity and, for ripples of a few centimetres, surface tension), so each length moves at
+/// its own speed and the pattern changes as it goes rather than sliding as one picture.
+/// Each is its wavenumber (radians a metre), angular frequency (radians a second), its turn
+/// from the wind (radians) and its phase.
+fn trains() -> [Vec4; TRAINS] {
+    let ratio = libm::powf(SHORTEST_M / LONGEST_M, 1.0 / (TRAINS - 1) as f32);
+    std::array::from_fn(|i| {
+        // A fixed scatter, the same every run, and uncorrelated from train to train: an even
+        // one (the golden ratio's multiples) turned the trains in step, and their crests
+        // crossed in a lattice.
+        let scatter = |salt: u32| scatter(i as u32 * 3 + salt);
+        let length = LONGEST_M * ratio.powi(i as i32) * (0.95 + 0.1 * scatter(0));
+        let k = std::f32::consts::TAU / length;
+        let spread = if i < SWELL { 1.4 } else { 1.7 };
+        Vec4::new(
+            k,
+            angular_frequency(k),
+            spread * (2.0 * scatter(1) - 1.0),
+            std::f32::consts::TAU * scatter(2),
+        )
+    })
+}
+
+/// A number from 0 to 1 for each whole number, by Wellons's lowbias32 hash.
+fn scatter(n: u32) -> f32 {
+    let mut x = n.wrapping_add(0x9e37_79b9);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x7feb_352d);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x846c_a68b);
+    x ^= x >> 16;
+    (x >> 8) as f32 / (1u32 << 24) as f32
+}
+
+/// How many of the trains are the swell, longer than 55 cm: always running, even on glassy
+/// water, where the shorter ones come with the wind's gusts.
+const SWELL: usize = 11;
+
+/// How fast a wave of so many radians a metre turns, radians a second, on deep water:
+/// ω² = gk + (σ/ρ)k³, gravity's term and surface tension's (water's 0.0728 N/m over 1000
+/// kg/m³), which takes over below about 1.7 cm.
+fn angular_frequency(k: f32) -> f32 {
+    (9.81 * k + 7.28e-5 * k * k * k).sqrt()
+}
 
 /// What the lakes mirror, taken once: the skyline round the start's lake.
 #[derive(Clone)]
@@ -132,6 +191,7 @@ impl LakeExtension {
             east: mirror.east.extend(0.0),
             north: mirror.north.extend(0.0),
             skyline: mirror.skyline,
+            trains: trains(),
             over_air: air.is_some() as u32,
             air,
         }
@@ -483,18 +543,18 @@ fn pools_mesh(waters: &Waters) -> Mesh {
     // the water ended in their straight edges wherever the ground past them was lower than
     // the cell said. A margin cell is the first pool's that reaches it, so no two layers of
     // water lie in one place.
-    let mut level: Vec<Option<f32>> = vec![None; n * n];
+    let mut level: Vec<Option<(f32, usize)>> = vec![None; n * n];
     for r in 0..n {
         for c in 0..n {
             if let Some(lake) = waters.lake_at(c, r) {
-                level[r * n + c] = Some(waters.lake_radius_m(lake));
+                level[r * n + c] = Some((waters.lake_radius_m(lake), lake));
             }
         }
     }
     let mut margin = level.clone();
     for r in 0..n {
         for c in 0..n {
-            let Some(radius) = waters.lake_at(c, r).map(|l| waters.lake_radius_m(l)) else {
+            let Some(pool) = level[r * n + c] else {
                 continue;
             };
             for (dc, dr) in [
@@ -513,22 +573,26 @@ fn pools_mesh(waters: &Waters) -> Mesh {
                 }
                 let at = rr as usize * n + cc as usize;
                 if margin[at].is_none() {
-                    margin[at] = Some(radius);
+                    margin[at] = Some(pool);
                 }
             }
         }
     }
-    let (mut positions, mut normals, mut indices) = (Vec::new(), Vec::new(), Vec::new());
+    let mut middles = vec![None; waters.lakes().len()];
+    let (mut positions, mut normals, mut uvs, mut indices) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for r in 0..n {
         for c in 0..n {
-            let Some(radius) = margin[r * n + c] else {
+            let Some((radius, pool)) = margin[r * n + c] else {
                 continue;
             };
+            let middle = *middles[pool].get_or_insert_with(|| region.offset(c, r));
             let base = positions.len() as u32;
             for (dc, dr) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
                 let p = corner(c + dc, r + dr, radius);
                 positions.push(p.to_array());
                 normals.push(p.normalize().to_array());
+                uvs.push(on_water(region, c + dc, r + dr, middle));
             }
             indices.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
         }
@@ -539,7 +603,16 @@ fn pools_mesh(waters: &Waters) -> Mesh {
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
     .with_inserted_indices(Indices::U32(indices))
+}
+
+/// Where a cell's north-west corner lies on its water, metres east and north of a point of
+/// that water, as its uv: what its waves are laid out on (lake.wesl), in numbers small enough
+/// that a ripple of a few centimetres keeps its phase, which the world's position, tens of
+/// kilometres from the planet's centre, rounds to millimetres.
+fn on_water(region: &terra_land::region::Region, c: usize, r: usize, middle: Vec2) -> [f32; 2] {
+    (region.offset(c, r) + Vec2::new(-0.5, 0.5) * region.cell_m - middle).to_array()
 }
 
 /// A lake's water as Bevy draws it: its cells and a cell's margin round them, so its edge runs
@@ -569,7 +642,12 @@ fn mesh(waters: &Waters, lake: usize) -> Mesh {
         let at = region.offset(c, r) + Vec2::new(-0.5, 0.5) * region.cell_m;
         (region.middle + region.east * at.x + region.north * at.y).normalize() * radius
     };
-    let (mut positions, mut normals, mut indices) = (Vec::new(), Vec::new(), Vec::new());
+    let middle = waters
+        .cells_of(lake)
+        .next()
+        .map_or(Vec2::ZERO, |(c, r)| region.offset(c, r));
+    let (mut positions, mut normals, mut uvs, mut indices) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for r in 0..n {
         for c in 0..n {
             if !under[r * n + c] {
@@ -580,6 +658,7 @@ fn mesh(waters: &Waters, lake: usize) -> Mesh {
                 let p = corner(c + dc, r + dr);
                 positions.push(p.to_array());
                 normals.push(p.normalize().to_array());
+                uvs.push(on_water(region, c + dc, r + dr, middle));
             }
             // North-west, south-east, north-east, then north-west, south-west, south-east:
             // counter-clockwise seen from above, so they face the sky.
@@ -592,12 +671,52 @@ fn mesh(waters: &Waters, lake: usize) -> Mesh {
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
     .with_inserted_indices(Indices::U32(indices))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn waves_run_at_water_speeds() {
+        // A deep-water wave 1.56 m long comes round once a second (c = √(gλ/2π)).
+        let period = std::f32::consts::TAU / angular_frequency(std::f32::consts::TAU / 1.56);
+        assert!((period - 1.0).abs() < 0.01, "{period}");
+        // Surface tension makes the slowest wave on water a ripple about 1.7 cm long, running
+        // at about 23 cm/s; longer and shorter ones both run faster.
+        let (length, speed) = (5..60)
+            .map(|mm| {
+                let k = std::f32::consts::TAU / (mm as f32 * 0.001);
+                (mm as f32 * 0.001, angular_frequency(k) / k)
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap();
+        assert!((0.016..0.019).contains(&length), "{length}");
+        assert!((speed - 0.231).abs() < 0.005, "{speed}");
+    }
+
+    #[test]
+    fn the_swell_is_the_long_trains_and_the_ripples_the_short() {
+        let trains = trains();
+        let length = |t: &Vec4| std::f32::consts::TAU / t.x;
+        for (i, train) in trains.iter().enumerate() {
+            assert_eq!(
+                i < SWELL,
+                length(train) > 0.55,
+                "train {i}, {} m",
+                length(train)
+            );
+            // Each runs by its own length's speed, so the pattern changes as it goes.
+            assert_eq!(train.y, angular_frequency(train.x));
+        }
+        assert!(trains.windows(2).all(|w| w[0].x < w[1].x), "longest first");
+        assert!(
+            length(&trains[TRAINS - 1]) < 0.05,
+            "down to a gust's ripples"
+        );
+    }
 
     #[test]
     fn a_lake_steams_in_the_calm_of_the_morning_and_not_after() {

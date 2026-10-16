@@ -8,8 +8,13 @@
 // where the depth buffer is imprecise (`DEPTH_FOG`, `DEPTH_FOG_FADE`); and foam where the
 // water is shallowest against what stands in it (`SHORE_FOAM`). Where Godot's version reads the
 // screen behind the water, ours blends over it, so shallow water shows the bed through it and
-// deep water is its own colour. The ripples, the sky they reflect and the glitter are our
-// sea's (water.wesl), turned by the wind.
+// deep water is its own colour. The waves are trains of plane waves summed, as Finch's
+// "Effective Water Simulation from Physical Models" (GPU Gems, 2004) sums them, each running at
+// its own speed by water's dispersion, as steep as Cox and Munk measured the sea's slopes by
+// the wind (1954), and filtered by the pixel's footprint, what a pixel cannot hold widening
+// the sun's glint and lifting the reflection, as Bruneton, Neyret and Holzschuch's ocean does
+// ("Real-time Realistic Ocean Lighting using Seamless Transitions from Geometry to BRDF",
+// 2010).
 //
 // MIT License. Copyright © 2023-present Zach Bernal and contributors. Permission is hereby
 // granted, free of charge, to any person obtaining a copy of this software and associated
@@ -69,6 +74,9 @@ struct Lake {
     east: vec4<f32>,
     north: vec4<f32>,
     skyline: array<vec4<f32>, 64>,
+    // The waves' trains (lakes.rs `trains`): each one's wavenumber (radians a metre), angular
+    // frequency (radians a second), turn from the wind and phase (radians), longest first.
+    trains: array<vec4<f32>, TRAINS>,
     // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
     over_air: u32,
 }
@@ -153,21 +161,55 @@ fn noise(p: vec3<f32>) -> f32 {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
-// The ripples' height at a place: small cat's-paws running before the wind, and a finer set
-// across them, stretched along the wind so they read as its.
-fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>, off: f32) -> f32 {
+// How many trains, the first SWELL of them the long ones (lakes.rs).
+const TRAINS: u32 = 28u;
+const SWELL: u32 = 11u;
+
+// The water's surface at a place: its slope east and north, its height (metres), and the mean
+// square slope of the waves too short for the pixel to show, which the light spreads instead.
+struct Surface {
+    slope: vec2<f32>,
+    height: f32,
+    unseen: f32,
+}
+
+// The waves at a place on the water (metres east and north), the pixel this many metres
+// across, downwind a level direction there, and each set's mean square slope, the swell's
+// and the wind's ripples', shared out evenly over its trains. A train shorter than four pixels
+// fades out before it is under one and a half, where it would only shimmer, its slope counted
+// as unseen roughness instead; the temporal antialiasing smooths what sparkle is left, as a
+// sun's glitter should.
+fn waves(at: vec2<f32>, pixel: f32, downwind: vec2<f32>, swell: f32, ripples: f32) -> Surface {
     let t = globals.time;
-    // Finer along the wind than across it, so the crests run across the wind, as they do:
-    // the wind's way is one fixed direction over a lake, not the level one at each point.
-    let q = p + lake.wind.xyz * dot(p, lake.wind.xyz) * 0.8;
-    // Wavelets on wavelets down to a few centimetres, as a breeze raises on a pool: with only
-    // the two larger sets, near water read as blobs half a metre across.
-    return noise(q * 1.2 - downwind * t * 1.0) * 0.32
-        + noise(q * 3.4 - downwind * t * 1.9 + across * t * 0.4 + 11.0) * 0.28
-        // The finer sets fade out with distance before they are under a pixel, or they
-        // shimmer as glitter.
-        + noise(q * 8.7 - downwind * t * 3.1 - across * t * 0.6 + 23.0) * 0.22 * (1.0 - smoothstep(12.0, 45.0, off))
-        + noise(q * 21.0 - downwind * t * 4.6 + 37.0) * 0.18 * (1.0 - smoothstep(4.0, 16.0, off));
+    var surface = Surface(vec2<f32>(0.0), 0.0, 0.0);
+    // The place bent a little by a slow noise, half a metre over some metres, so no train's
+    // crests run dead straight across the lake and none cross another's in a lattice, as
+    // real wave fields wander.
+    let bent = at + vec2<f32>(
+        noise(vec3<f32>(at * 0.13, t * 0.05)) - 0.5,
+        noise(vec3<f32>(at * 0.13 + 17.0, t * 0.05)) - 0.5,
+    ) * 1.2;
+    for (var i = 0u; i < TRAINS; i += 1u) {
+        let train = lake.trains[i];
+        let k = train.x;
+        let turn = train.z;
+        let way = vec2<f32>(
+            downwind.x * cos(turn) - downwind.y * sin(turn),
+            downwind.x * sin(turn) + downwind.y * cos(turn),
+        );
+        var share = ripples / f32(TRAINS - SWELL);
+        if i < SWELL {
+            share = swell / f32(SWELL);
+        }
+        // A train's mean square slope is half its steepness squared.
+        let steepness = sqrt(2.0 * share);
+        let phase = k * dot(way, bent) - train.y * t + train.w;
+        let seen = clamp((6.2831853 / k / pixel - 1.5) * 0.4, 0.0, 1.0);
+        surface.slope += way * (steepness * cos(phase) * seen);
+        surface.height += steepness / k * sin(phase);
+        surface.unseen += share * (1.0 - seen * seen);
+    }
+    return surface;
 }
 
 // The reflection of what is on screen along a ray from a point of the water, and how much it
@@ -286,29 +328,41 @@ fn fragment(
     let distance = length(to_eye);
     let toward_eye = to_eye / distance;
 
-    // The ripples by the wind: their slope along two level directions.
-    var downwind = lake.wind.xyz - up * dot(lake.wind.xyz, up);
+    // Where the pixel is on the water, metres east and north of a point of it (lakes.rs
+    // `on_water`), and how much water the pixel covers: taken first, as derivatives must be.
+    var at = vec2<f32>(dot(world - lake.origin.xyz, lake.east.xyz), dot(world - lake.origin.xyz, lake.north.xyz));
+@if(VERTEX_UVS_A)
+    {
+        at = in.uv;
+    }
+    let pixel = max(max(length(dpdx(at)), length(dpdy(at))), 1e-4);
+
+    // East and north here, and downwind among them.
+    let east = normalize(lake.east.xyz - up * dot(lake.east.xyz, up));
+    let north = cross(up, east);
+    var downwind = vec2<f32>(dot(lake.wind.xyz, east), dot(lake.wind.xyz, north));
     if length(downwind) < 1e-3 {
-        downwind = cross(up, vec3<f32>(0.3, 0.1, 0.9));
+        downwind = vec2<f32>(0.6, 0.8);
     }
     downwind = normalize(downwind);
-    let across = cross(up, downwind);
     let local = world - lake.origin.xyz;
-    let here = ripples(local, downwind, across, distance);
-    let slope = vec2<f32>(
-        ripples(local + downwind * 0.03, downwind, across, distance) - here,
-        ripples(local + across * 0.03, downwind, across, distance) - here,
-    ) * 2.5;
-    // Calm water still shivers a little; far off the ripples are under a pixel. A light wind
-    // ruffles a lake in patches, cat's-paws a few tens of metres across drifting downwind,
-    // with glassy water between that mirrors the shore unbroken, as a mountain lake in the
-    // morning calm is (Morskie Oko's photographs): the stiffer the wind, the more of it is
-    // ruffled, all of it in a breeze.
-    let paws = noise(local * 0.018 - downwind * globals.time * 0.03 + 5.0) * 0.65
-        + noise(local * 0.05 - downwind * globals.time * 0.05 + 19.0) * 0.35;
+    // A light wind ruffles a lake in patches, cat's-paws a few tens of metres across racing
+    // downwind as the gusts do and changing as they go, with glassy water between that mirrors
+    // the shore, as a mountain lake in the morning calm is (Morskie Oko's photographs): the
+    // stiffer the wind, the more of it is ruffled, all of it in a breeze.
+    let gusting = lake.wind.xyz * (1.5 + 4.0 * lake.wind.w) + up * 0.4;
+    let paws = noise(local * 0.018 - gusting * globals.time * 0.018 + 5.0) * 0.65
+        + noise(local * 0.05 - gusting * globals.time * 0.05 + 19.0) * 0.35;
     let ruffled = smoothstep(0.62 - 0.5 * lake.wind.w, 0.78 - 0.5 * lake.wind.w, paws);
-    let strength = (0.04 + (0.11 + 0.55 * lake.wind.w) * ruffled) / (1.0 + distance / 60.0);
-    let normal = normalize(up - (downwind * slope.x + across * slope.y) * strength);
+    // Glassy water still heaves a little with the swell the last breeze left, enough to waver
+    // the shore it mirrors; the ripples are as steep as Cox and Munk's sea by the wind, its
+    // mean square slope 0.003 + 0.00512 a metre a second of it (taken as a gust's, at least
+    // 1.5 m/s, in a cat's-paw), on the sea's 0.003 of swell, which a lake has less of.
+    let wind_m_s = 8.0 * lake.wind.w;
+    let swell = 0.0004 + 0.0012 * lake.wind.w;
+    let rippled = 0.0002 + ruffled * 0.00512 * max(wind_m_s, 1.5);
+    let face = waves(at, pixel, downwind, swell, rippled);
+    let normal = normalize(up - east * face.slope.x - north * face.slope.y);
     pbr_input.world_normal = normal;
     pbr_input.N = normal;
 
@@ -326,12 +380,16 @@ fn fragment(
     // noise, as games fade a shoreline by the depth behind it. Without it a pool's water, a
     // flat sheet on its own cells, ended in their straight edges over the moss a hand under its
     // level, mirroring the sky there as brightly as over its middle.
+    // The waterline rises and falls with the swell, so it laps at the shore, creeping up a
+    // gentle beach and back: the waves' height, a few millimetres, made a little more of, as
+    // the swash running up a shore is more than the wave.
+    let rise = face.height * 2.5;
     var edge = 1.0;
 @if(DEPTH_PREPASS)
     {
         let thick = under * max(dot(toward_eye, up), 0.02);
         let broken = noise(local * 0.9 + 31.0) * 0.6 + noise(local * 3.1 + 7.0) * 0.4;
-        edge = smoothstep(0.01, 0.07, thick + (broken - 0.5) * 0.05);
+        edge = smoothstep(0.01, 0.07, thick + rise + (broken - 0.5) * 0.05);
     }
     // Beer's law through that depth, sharpened as the original sharpens it, and faded to deep
     // with distance (DEPTH_FOG, DEPTH_FOG_FADE).
@@ -346,7 +404,8 @@ fn fragment(
 
     // Foam where the water is shallowest against the shore (SHORE_FOAM), broken by noise.
     let foam_noise = noise(local * 1.3 + vec3<f32>(globals.time * 0.15)) * 0.6 + noise(local * 3.7) * 0.4;
-    let foam = (1.0 - smoothstep(lake.foam_from, lake.foam_to, under)) * smoothstep(0.35, 0.75, foam_noise)
+    let washed = under + rise / max(dot(toward_eye, up), 0.1);
+    let foam = (1.0 - smoothstep(lake.foam_from, lake.foam_to, washed)) * smoothstep(0.35, 0.75, foam_noise)
         * (0.3 + 0.7 * lake.wind.w) * (1.0 - smoothstep(30.0, 80.0, distance));
     pbr_input.material.base_color = mix(pbr_input.material.base_color, vec4<f32>(0.85, 0.87, 0.84, 1.0), foam * 0.8);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, foam);
@@ -360,7 +419,11 @@ fn fragment(
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
-    let reflected = reflect(-toward_eye, normal);
+    // Waves too short for the pixel tilt toward the eye the facets that reflect into it, and
+    // those mirror higher, more of the sky: so a cat's-paw far off reads as a pale patch of the
+    // sky's grey on the shore's dark reflection, as it does on a lake.
+    let toward_level = normalize(toward_eye - up * dot(toward_eye, up) + up * 1e-4);
+    let reflected = reflect(-toward_eye, normalize(normal + toward_level * sqrt(face.unseen) * 0.6));
     // The sky it mirrors: the air's own, exposed, where the air is drawn; else the painted
     // sky's two colours at its brightness.
     var seen: vec3<f32>;
@@ -376,11 +439,15 @@ fn fragment(
     // leaves the screen.
     let found = on_screen(world, reflected, in.position.xy, distance);
     seen = mix(seen, found.rgb, found.a);
-    // The sun's glint off the ripples: a normalised Blinn-Phong lobe, as sharp as still water's.
+    // The sun's glint off the ripples: a normalised Blinn-Phong lobe, as sharp as still water's
+    // where the pixel sees every wave, widened by the slopes of those it cannot (Blinn-Phong's
+    // power as Beckmann's for the mean square slope, 2/m² − 2), so far off the glitter merges
+    // into the sun's broad path on the water rather than flickering.
     let sun = lights.directional_lights[0];
     let half_way = normalize(sun.direction_to_light + toward_eye);
     let lit = max(dot(normal, sun.direction_to_light), 0.0);
-    let glint = pow(max(dot(normal, half_way), 0.0), 600.0) * (608.0 / 25.13) * lit;
+    let power = 2.0 / (2.0 / 602.0 + face.unseen) - 2.0;
+    let glint = pow(max(dot(normal, half_way), 0.0), power) * ((power + 8.0) / 25.13) * lit;
     let glinting = sun.color.rgb * view.exposure * glint * mirror;
     out.color = vec4<f32>(out.color.rgb + (seen * mirror + glinting) * (1.0 - foam), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
