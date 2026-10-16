@@ -338,11 +338,29 @@ impl<'a> Colours<'a> {
             return index;
         }
         let linear = self.linear(kind, top);
-        let colour = linear.map(|c| to_srgb(c * SHADE));
+        let tint = self.tint(kind);
+        let mut colour = linear.map(|c| to_srgb(c * SHADE));
+        for (c, t) in colour.iter_mut().zip(tint) {
+            *c = (*c * t).clamp(0.0, 1.0);
+        }
         let index = self.list.len();
         self.list.push(colour);
         self.by_kind.insert((kind, top), index);
         index
+    }
+
+    /// What a kind's near detail multiplies its texture's colour by (sRGB), so its hull far
+    /// off is the colour it is near: a roof's covering, a block kind's earth or daub, a
+    /// timber kind's logs.
+    fn tint(&self, kind: Kind) -> [f32; 3] {
+        match self.kits.of(kind) {
+            Some(kit) => match kit.pattern {
+                Pattern::Roof => kit.roof.tint,
+                Pattern::Masonry => kit.tint,
+                Pattern::Logs => kit.timber.tint,
+            },
+            None => [1.0; 3],
+        }
     }
 
     /// A kind's material's mean colour, linear: its covering for a roof, its stone or its

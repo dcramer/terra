@@ -43,7 +43,7 @@ As Unreal's Movie Render Queue renders a sequence: each run is a scripted run st
 - **The look** (`--cine`, D357): the exposure held from the moment the run starts, so it does not pump between shade and open; the clock held at the hour, so shadows do not step; motion blur at a film's 180° shutter; a 2.39:1 letterbox. Depth of field is there (`look.aperture`) but off: at the follow distance it blurs the land, and the land is the point.
 - **The sound** is the game's own, made in code (`terra_sandbox --sound-bed`): each place's wind, birds, water, fire or the crowd's murmur, and a phrase of the game's music, mixed to a bed, since a scripted run is silent.
 
-`--cine` also takes a keyframed camera path (dolly, crane, orbit, push-in, a tracking shot, lens and focus per key; Sequencer's and Cinemachine's terms), built before the brief was simplified and tested without the GPU only. The trailer does not use it.
+`--cine` also takes a keyframed camera path (dolly, crane, orbit, push-in, a tracking shot, lens and focus per key; Sequencer's and Cinemachine's terms), and cuts within one shot: a key with `"cut": true` starts a take of its own, the anti-aliasing's history dropped and the frame drawn without motion blur on the cut, as a renderer's camera cut does. The trailer's runs do not use it; the settlement's time-lapse does (`tools/sandbox/timelapse/`, D381).
 
 ## What it costs in real time
 

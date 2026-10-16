@@ -198,9 +198,24 @@ pub struct Round {
     pub season_c: f32,
     pub air_c: f32,
     pub hour: f32,
+    /// How high the eye is over the ground, metres.
+    pub above_m: f32,
 }
 
 impl DriftKind {
+    /// How much of this kind is about at the eye's height over the ground, 0 to 1: what
+    /// drifts near the ground (motes, midges, leaves, down) lives in the few metres over it,
+    /// so an eye high over a meadow, a crane or a bird's-eye shot, has none of it round it;
+    /// flocks fly over whatever height the eye is at.
+    pub fn aloft(&self, above_m: f32) -> f32 {
+        if matches!(self.motion, Motion::Flock { .. }) {
+            return 1.0;
+        }
+        let low = self.box_m.1 + 1.0;
+        let high = self.box_m.1 * 2.0 + 4.0;
+        1.0 - ((above_m - low) / (high - low)).clamp(0.0, 1.0)
+    }
+
     /// How much of this kind is seen at a place, 0 to 1.
     pub fn amount(&self, round: &Round) -> f32 {
         let (low, high) = self.season_c;
@@ -223,7 +238,7 @@ impl DriftKind {
         let place = (self.woods * round.woods)
             .max(self.open * round.open)
             .max(self.water * round.water);
-        season * air * hours * place
+        season * air * hours * place * self.aloft(round.above_m)
     }
 }
 
@@ -446,7 +461,7 @@ fn sense(
     if *since <= 0.0 {
         *since = LOOK_EVERY_S;
         let ground = planet.ground_at(eye);
-        let round = round_at(
+        let mut round = round_at(
             &planet,
             climate.as_deref(),
             &clock,
@@ -454,6 +469,7 @@ fn sense(
             &obstacles,
             ground,
         );
+        round.above_m = (eye.length() - ground.length()).max(0.0);
         for (mut field, _) in &mut fields {
             field.wanted = drifts.kinds[field.kind].amount(&round);
         }
@@ -532,6 +548,7 @@ fn round_at(
         season_c,
         air_c,
         hour: clock.hour,
+        above_m: 0.0,
     }
 }
 
@@ -559,6 +576,7 @@ mod tests {
             season_c: 12.0,
             air_c: 14.0,
             hour: 7.5,
+            above_m: 1.7,
         }
     }
 
@@ -620,5 +638,30 @@ mod tests {
         assert!(at(from) < 0.05);
         assert!(at(from + 0.25) > 0.3 && at(from + 0.25) < 0.7);
         assert!(at(from + 1.0) > 0.95);
+    }
+
+    /// What drifts by the ground is round an eye at a walker's height and gone from one high
+    /// over the ground, as a crane's or a bird's-eye shot's; flocks fly over either.
+    #[test]
+    fn ground_drift_stays_by_the_ground_and_flocks_fly_over_any_eye() {
+        let high = Round {
+            above_m: 40.0,
+            woods: 0.0,
+            open: 1.0,
+            ..forest_morning()
+        };
+        let low = Round {
+            above_m: 1.7,
+            ..high
+        };
+        for kind in drifts().kinds {
+            if matches!(kind.motion, Motion::Flock { .. }) {
+                assert_eq!(kind.aloft(40.0), 1.0, "{}", kind.name);
+            } else {
+                assert_eq!(kind.amount(&high), 0.0, "{}", kind.name);
+                assert_eq!(kind.aloft(1.7), 1.0, "{}", kind.name);
+            }
+        }
+        assert!(kind("Dust motes").amount(&low) > 0.1);
     }
 }

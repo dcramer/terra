@@ -33,6 +33,7 @@ use crate::remote::CameraHold;
 use crate::shell::{Options, ScriptFrame, counting};
 use crate::start::Start;
 use bevy::{
+    anti_alias::taa::TemporalAntiAliasing,
     camera::Exposure,
     post_process::{
         auto_exposure::AutoExposure,
@@ -153,6 +154,11 @@ pub struct Key {
     /// The aperture in f-stops: any key giving one turns depth of field on.
     #[serde(default)]
     pub aperture: Option<f32>,
+    /// The camera cuts to this key rather than moving to it: a new set-up, as an editor's cut
+    /// between two takes in one sequence. The keys from it to the next cut are a path of their
+    /// own, eased as the shot says.
+    #[serde(default)]
+    pub cut: bool,
 }
 
 /// Whether the camera starts and ends at rest.
@@ -300,8 +306,20 @@ impl Shot {
         if !shot.holds_camera() {
             return Ok(shot);
         }
-        if shot.keys.windows(2).any(|pair| pair[1].t <= pair[0].t) {
+        // A cut may come at the time of the take before's last key, that take's end.
+        if shot
+            .keys
+            .windows(2)
+            .any(|pair| pair[1].t < pair[0].t || (pair[1].t == pair[0].t && !pair[1].cut))
+        {
             return Err("keys must come in order of time, each later than the last".into());
+        }
+        let takes = shot.keys.iter().filter(|k| k.cut).map(|k| shot.take(k.t));
+        if takes
+            .into_iter()
+            .any(|take| !take.iter().any(|k| k.look.is_some()))
+        {
+            return Err("a take after a cut says what the camera looks at (`look`)".into());
         }
         let at = shot.keys.iter().filter(|k| k.at.is_some()).count();
         let orbit = shot.keys.iter().filter(|k| k.orbit.is_some()).count();
@@ -461,8 +479,33 @@ impl Places<'_> {
 }
 
 impl Shot {
+    /// The keys of the set-up filming at `t`: from the last cut at or before it to the next.
+    pub fn take(&self, t: f32) -> &[Key] {
+        let first = self
+            .keys
+            .iter()
+            .rposition(|k| k.cut && k.t <= t)
+            .unwrap_or(0);
+        let end = self.keys[first + 1..]
+            .iter()
+            .position(|k| k.cut)
+            .map_or(self.keys.len(), |n| first + 1 + n);
+        &self.keys[first..end]
+    }
+
+    /// Whether the shot cuts between `from` and `to` seconds, so what the camera saw the
+    /// frame before is not what it sees now.
+    pub fn cuts_between(&self, from: f32, to: f32) -> bool {
+        self.keys.iter().any(|k| k.cut && k.t > from && k.t <= to)
+    }
+
     /// The camera at `t` seconds into the shot.
     pub fn framing(&self, t: f32, places: &Places) -> Framing {
+        let keys = if self.keys.is_empty() {
+            &[]
+        } else {
+            self.take(t)
+        };
         let ground = self.rig.ground;
         let around = self
             .rig
@@ -471,8 +514,7 @@ impl Shot {
             .unwrap_or(places.start.translation);
         // The camera's place channel, in the terms its keys use: a point in the world, a
         // bearing, distance and height round `around`, or an offset from the player.
-        let channel: Vec<(f32, Vec3)> = self
-            .keys
+        let channel: Vec<(f32, Vec3)> = keys
             .iter()
             .filter_map(|k| {
                 let value = match (k.at, k.orbit) {
@@ -485,15 +527,14 @@ impl Shot {
             })
             .collect();
         let placed = sample(&channel, t, self.ease).unwrap_or(Vec3::ZERO);
-        let eye = if self.keys.iter().any(|k| k.orbit.is_some()) {
+        let eye = if keys.iter().any(|k| k.orbit.is_some()) {
             around + places.turned(orbit_offset(placed.to_array()))
         } else if self.rig.follow {
             places.feet() + places.turned(placed)
         } else {
             placed
         };
-        let looks: Vec<(f32, Vec3)> = self
-            .keys
+        let looks: Vec<(f32, Vec3)> = keys
             .iter()
             .filter_map(|k| Some((k.t, places.target(k.look?, ground))))
             .collect();
@@ -507,10 +548,7 @@ impl Shot {
             target = eye + turned * ahead;
         }
         let scalar = |pick: fn(&Key) -> Option<f32>| -> Vec<(f32, f32)> {
-            self.keys
-                .iter()
-                .filter_map(|k| Some((k.t, pick(k)?)))
-                .collect()
+            keys.iter().filter_map(|k| Some((k.t, pick(k)?))).collect()
         };
         let lens_mm = sample(&scalar(|k| k.lens), t, self.ease).unwrap_or(LENS_MM);
         let aperture = sample(&scalar(|k| k.aperture), t, self.ease);
@@ -519,8 +557,7 @@ impl Shot {
             Some(Focus::Metres(m)) => Some(m),
             _ => None,
         });
-        let tracking = self
-            .keys
+        let tracking = keys
             .iter()
             .all(|k| !matches!(k.focus, Some(Focus::Metres(_))));
         let focus_m = if tracking {
@@ -548,6 +585,8 @@ pub struct Cine {
     watched_s: f32,
     /// The exposure held from when the shot rolled.
     held_ev100: Option<f32>,
+    /// The shot cut on this frame: the frame before is no history for this one.
+    cut: bool,
 }
 
 impl Cine {
@@ -581,6 +620,7 @@ pub fn plugin(app: &mut App) {
         t: None,
         watched_s: 0.0,
         held_ev100: None,
+        cut: false,
     })
     .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
     .add_systems(PreUpdate, roll.after(crate::shell::scripted_presses))
@@ -608,6 +648,10 @@ fn roll(
         cine.watched_s % length
     };
     let t = (seconds >= lead).then_some(seconds - lead);
+    let cut = matches!((cine.t, t), (Some(from), Some(to)) if cine.shot.cuts_between(from, to));
+    if cine.cut != cut {
+        cine.cut = cut;
+    }
     if cine.t != t {
         cine.t = t;
     }
@@ -626,7 +670,8 @@ fn film(
             &mut Transform,
             &mut Projection,
             Option<&mut DepthOfField>,
-            Has<MotionBlur>,
+            Option<&mut MotionBlur>,
+            Option<&mut TemporalAntiAliasing>,
         ),
         With<MainCamera>,
     >,
@@ -645,7 +690,7 @@ fn film(
         ground: &ground,
         player,
     };
-    let (entity, mut transform, mut projection, dof, blurred) = camera.into_inner();
+    let (entity, mut transform, mut projection, dof, blur, taa) = camera.into_inner();
     // The shot's own path, or the game's camera focused on the player.
     let focus = if shot.holds_camera() {
         let framing = shot.framing(cine.t.unwrap_or(0.0), &places);
@@ -686,11 +731,28 @@ fn film(
             }
         }
     }
-    if shot.look.shutter > 0.0 && !blurred {
-        commands.entity(entity).insert(MotionBlur {
-            shutter_angle: shot.look.shutter_angle(),
-            samples: 4,
-        });
+    // On a cut the anti-aliasing's history and the blur's motion are the last set-up's: the
+    // history is dropped and the frame drawn sharp, as a renderer's camera cut does.
+    if let Some(mut taa) = taa
+        && taa.reset != cine.cut
+    {
+        taa.reset = cine.cut;
+    }
+    let shutter = if cine.cut {
+        0.0
+    } else {
+        shot.look.shutter_angle()
+    };
+    match blur {
+        Some(mut blur) if blur.shutter_angle != shutter => blur.shutter_angle = shutter,
+        Some(_) => {}
+        None if shot.look.shutter > 0.0 => {
+            commands.entity(entity).insert(MotionBlur {
+                shutter_angle: shutter,
+                samples: 4,
+            });
+        }
+        None => {}
     }
 }
 
@@ -881,6 +943,34 @@ mod tests {
         let first = orbit.framing(0.0, &places).eye - centre;
         assert!(first.z < -19.9 && first.x.abs() < 1e-3, "{first}");
         assert!(orbit.framing(6.0, &places).eye.x > centre.x);
+    }
+
+    /// A cut starts a set-up of its own: up to it the camera keeps to the take before, from
+    /// it to the next, and nothing of one take's path bends the other's.
+    #[test]
+    fn a_cut_starts_a_take_of_its_own() {
+        let (start, ground) = flat_places();
+        let places = Places {
+            start: &start,
+            ground: &ground,
+            player: None,
+        };
+        let cut = shot(
+            r#"{"seconds": 10, "ease": "none", "keys": [
+                {"t": 0, "at": [0, 10, 0], "look": [0, 0, -20]},
+                {"t": 5, "at": [10, 10, 0]},
+                {"t": 5, "at": [100, 30, 0], "look": [100, 0, -20], "cut": true},
+                {"t": 10, "at": [120, 30, 0]}]}"#,
+        );
+        let east = |t: f32| cut.framing(t, &places).eye.x;
+        // Steady along each take: the second take's far keys do not pull the first's end.
+        assert!((east(2.5) - 5.0).abs() < 1e-3, "{}", east(2.5));
+        assert!((east(4.99) - 9.98).abs() < 1e-2, "{}", east(4.99));
+        assert!((east(5.0) - 100.0).abs() < 1e-3);
+        assert!((east(7.5) - 110.0).abs() < 1e-3, "{}", east(7.5));
+        assert!(cut.framing(7.5, &places).target.x > 99.0);
+        assert!(cut.cuts_between(4.98, 5.0) && !cut.cuts_between(5.0, 5.02));
+        assert!(!cut.cuts_between(0.0, 4.9));
     }
 
     /// Keys over the ground stand that high over the ground under them, and a tracking
