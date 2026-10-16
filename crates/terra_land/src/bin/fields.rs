@@ -219,6 +219,16 @@ fn run() -> Result<(), String> {
                 searched.cells,
                 searched.fit
             );
+            if let Some(water) = found.water {
+                println!(
+                    "FIELDS site {name}: by a lake, its shore {:.0} m off, {:.0} m east and {:.0} m north",
+                    water.length(),
+                    water.x,
+                    water.y
+                );
+            } else if want.water_m.is_some() {
+                println!("FIELDS site {name}: no lake beside any of the best places");
+            }
             clearings = want.clearings(&land, &found);
             Some(found.at_km)
         }

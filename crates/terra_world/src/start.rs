@@ -101,6 +101,15 @@ impl Found {
         }
     }
 
+    /// Where the flora grows round besides the start, if anywhere: a settlement's meadow, far
+    /// from the start, its flowers, herbs and the bushes at its edge (D381).
+    pub fn flora_middle(&self, planet: &Planet) -> Option<Vec3> {
+        match self {
+            Found::Settlement(site) => Some(planet.surface(site.toward)),
+            Found::Town(_) | Found::Lake(_) | Found::Tundra(_) => None,
+        }
+    }
+
     /// The forest it has cleared, if it is a settlement's: a town's fields.
     pub fn clearings(&self, land: &terra_land::Land) -> Vec<terra_land::town::Clearing> {
         match self {
@@ -208,6 +217,18 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
                 site.at_km.x,
                 site.at_km.y
             );
+            match site.water {
+                Some(water) => info!(
+                    "Site town: by a lake, its shore {:.0} m off, {:.0} m east and {:.0} m north",
+                    water.length(),
+                    water.x,
+                    water.y
+                ),
+                None if want.water_m.is_some() => {
+                    info!("Site town: no lake beside any of the best places")
+                }
+                None => {}
+            }
             if name == "town" {
                 Found::Town(site)
             } else {

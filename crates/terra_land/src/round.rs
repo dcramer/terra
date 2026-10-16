@@ -47,6 +47,10 @@ const LAKE_DEEPEST_M: f32 = 1.5;
 const LAKE_AREA_M2: f32 = 5_000.0;
 const POOL_AREA_M2: f32 = 8.0;
 
+/// A clearing's edge's trees stand at this share of the forest's height at its very edge,
+/// where the forest's own stand at least the first share of their kind's full height.
+const YOUNG_EDGE: (f32, f32) = (0.6, 0.45);
+
 impl Round {
     /// The land round a direction, `across_m` wide, its snow as it lies on `day`.
     pub fn new(land: Land, toward: Vec3, across_m: f32, day: i64) -> Self {
@@ -148,9 +152,19 @@ impl Round {
             .map_or(0.0, |(c, r)| self.drift.shelter_at_cell(c, r));
         let stand = woods::stand_in(&season, slope, footing, self.microsites.at(point, shelter));
         let kept: f32 = self.clearings.iter().map(|c| c.keeps(point)).product();
+        // A clearing's edge grows back young (D381): where the forest gives way to the
+        // fields its trees stand shorter, a mantle of young growth before the old stand, as a
+        // forest's edge is layered rather than a wall of its tallest trees. Not where the
+        // season already stunts them toward the tree line.
+        let young = if stand.stature >= YOUNG_EDGE.0 {
+            let grown: f32 = self.clearings.iter().map(|c| c.grown(point)).product();
+            YOUNG_EDGE.1 + (1.0 - YOUNG_EDGE.1) * grown
+        } else {
+            1.0
+        };
         Stand {
             density: stand.density * kept,
-            ..stand
+            stature: stand.stature * young,
         }
     }
 

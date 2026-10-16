@@ -46,6 +46,9 @@ pub struct TownSite {
     pub start: Vec3,
     /// Kilometres east and north of the planet's start.
     pub at_km: Vec2,
+    /// Where the nearest shore of a lake stands from its middle, metres east and north, as
+    /// the world draws its water, if the query asked for one (`MarketTown::water_m`).
+    pub water: Option<Vec2>,
 }
 
 /// What a market town's place must be (docs/demos.md §3).
@@ -81,6 +84,11 @@ pub struct MarketTown {
     /// How far from the planet's start to look, and the grid looked over, in metres.
     pub search_m: f32,
     pub step_m: f32,
+    /// A lake wanted beside it, its nearest shore between so many metres from the middle and
+    /// so many, and at least so big, in square metres, as the world draws its water (its
+    /// lakes found on its own ten-metre grid, `round::Round`), not the search's coarse one;
+    /// none if not asked.
+    pub water_m: Option<(f32, f32, f32)>,
 }
 
 impl MarketTown {
@@ -103,14 +111,20 @@ impl MarketTown {
         start_clearing_m: 170.0,
         search_m: 9000.0,
         step_m: 50.0,
+        water_m: None,
     };
 
     /// A settlement newly founded (D381): the same valley floor, but only its plots cleared
     /// of the forest, the trees standing a few dozen metres past its last houses in bays and
     /// tongues, as a clearing cut for a village is.
+    ///
+    /// By a lake if one is to be had among the best places (D381): its shore just past its
+    /// last houses, so the settlement looks over water to the forest and the range, as a
+    /// village is founded by water.
     pub const SETTLEMENT: MarketTown = MarketTown {
         clearing_m: 105.0,
         clearing_edge_m: 35.0,
+        water_m: Some((95.0, 450.0, 2_000.0)),
         ..MarketTown::DEMO
     };
 
@@ -118,7 +132,7 @@ impl MarketTown {
     /// world's start beside it.
     pub fn clearings(&self, land: &Land, site: &TownSite) -> Vec<Clearing> {
         let seed = land.ground.spec().seed.derive("fields");
-        vec![
+        let mut clearings = vec![
             Clearing::new(
                 land,
                 site.toward,
@@ -133,7 +147,19 @@ impl MarketTown {
                 self.clearing_edge_m,
                 seed.derive("start"),
             ),
-        ]
+        ];
+        // A settlement by a lake clears down to its shore (D381), so the water is seen from
+        // its houses and they from it, not hidden behind a belt of trees.
+        if let Some(water) = site.water {
+            clearings.push(Clearing::new(
+                land,
+                land.along(site.toward, water * 0.7),
+                water.length() * 0.5,
+                self.clearing_edge_m,
+                seed.derive("shore"),
+            ));
+        }
+        clearings
     }
 }
 
@@ -155,6 +181,9 @@ pub struct Clearing {
 const RAGGED: f32 = 0.22;
 const RAGGED_M: f32 = 160.0;
 
+/// How far past a clearing's edge its forest is young growth, in metres.
+const YOUNG_M: f32 = 30.0;
+
 impl Clearing {
     pub fn new(
         land: &Land,
@@ -175,16 +204,33 @@ impl Clearing {
     /// The share of its stand the clearing leaves a point on the ground: none inside it, all
     /// past its edge.
     pub fn keeps(&self, point: Vec3) -> f32 {
+        self.past(point, 0.0)
+    }
+
+    /// How grown the forest is at a point, 0 to 1: young growth where it starts at the
+    /// clearing's edge, full grown `YOUNG_M` past it (D381), as a forest's edge on fields is a
+    /// mantle of young trees before the old stand.
+    pub fn grown(&self, point: Vec3) -> f32 {
+        self.past(point, YOUNG_M)
+    }
+
+    /// How far a point is past the clearing's ragged edge, 0 inside it to 1 past its edge and
+    /// `further` metres more.
+    fn past(&self, point: Vec3, further: f32) -> f32 {
         let up = point.normalize_or(Vec3::Y);
         let distance = up.distance(self.middle) * self.world_m;
-        if distance > self.radius_m * (1.0 + RAGGED * 1.5) + self.edge_m {
+        if distance > self.radius_m * (1.0 + RAGGED * 1.5) + self.edge_m + further {
             return 1.0;
         }
         // The noise's spread is about 0.27 a sample (`woods::Microsites`).
         let wander =
             (self.ragged.fbm(up * self.world_m / RAGGED_M, 3, 2.1, 0.5) / 0.27).clamp(-1.5, 1.5);
         let edge = self.radius_m * (1.0 + RAGGED * wander);
-        smoothstep(edge - self.edge_m * 0.5, edge + self.edge_m * 0.5, distance)
+        smoothstep(
+            edge - self.edge_m * 0.5,
+            edge + self.edge_m * 0.5 + further,
+            distance,
+        )
     }
 }
 
@@ -197,7 +243,14 @@ pub struct Searched {
     pub no_forest: usize,
     pub no_peaks: usize,
     pub fit: usize,
+    /// Whether the place found is by a lake, as asked.
+    pub by_water: bool,
 }
+
+/// How many of the best places a search looks at again for a lake beside, and the grid it
+/// finds their water on, the world's own (`round::LAKE_CELL_M`).
+const WATER_TRIED: usize = 2_000;
+const WATER_CELL_M: f32 = 10.0;
 
 enum Verdict {
     Season,
@@ -407,10 +460,11 @@ impl Land {
                     ringed,
                     start: toward,
                     at_km: self.east_north_km(start, toward),
+                    water: None,
                 },
             ))
         });
-        let mut best: Option<(f32, TownSite)> = None;
+        let mut fits: Vec<(f32, TownSite)> = Vec::new();
         for verdict in verdicts.into_iter().flatten() {
             searched.cells += 1;
             match verdict {
@@ -420,17 +474,73 @@ impl Land {
                 Verdict::NoPeaks => searched.no_peaks += 1,
                 Verdict::Fit(score, site) => {
                     searched.fit += 1;
-                    if best.is_none_or(|(b, _)| score < b) {
-                        best = Some((score, site));
-                    }
+                    fits.push((score, site));
                 }
             }
         }
-        let best = best.map(|(_, site)| TownSite {
+        fits.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // By a lake if asked: the best few places looked at again as the world draws its
+        // water, the first with a lake's shore where it is wanted and none in its plots.
+        let watered = want.water_m.and_then(|wanted| {
+            let tried: Vec<&(f32, TownSite)> = fits.iter().take(WATER_TRIED).collect();
+            let found =
+                crate::maps::par_map(&tried, |(_, site)| self.lake_beside(site, want, wanted));
+            tried.iter().zip(found).find_map(|((_, site), water)| {
+                water.map(|water| TownSite {
+                    water: Some(water),
+                    ..*site
+                })
+            })
+        });
+        searched.by_water = watered.is_some();
+        let best = watered.or_else(|| fits.first().map(|(_, site)| *site));
+        let best = best.map(|site| TownSite {
             start: self.start_beside(&site, want),
             ..site
         });
         (best, searched)
+    }
+
+    /// Where a lake's nearest shore stands from a town's middle, metres east and north, if
+    /// one at least `wanted.2` square metres has it between `wanted.0` and `wanted.1` metres
+    /// off and no water lies within its reach: its lakes found as the world draws them, on its
+    /// own ten-metre grid (`round::Round`).
+    fn lake_beside(
+        &self,
+        site: &TownSite,
+        want: &MarketTown,
+        wanted: (f32, f32, f32),
+    ) -> Option<Vec2> {
+        let (near_m, far_m, least_m2) = wanted;
+        let waters =
+            crate::water::Waters::round(self, site.toward, far_m * 2.0 + 100.0, WATER_CELL_M);
+        let region = waters.region();
+        let n = region.cells;
+        // The sea's shore counts as a lake's, as the world draws its water.
+        let sea_m = self.ground.sea_radius_m().map(|r| r - self.radius_m());
+        let mut nearest: Option<Vec2> = None;
+        for row in 0..n {
+            for column in 0..n {
+                let lake = waters.lake_at(column, row);
+                let sea = sea_m.is_some_and(|sea| region.height(column, row) < sea);
+                if lake.is_none() && !sea {
+                    continue;
+                }
+                let at = region.offset(column, row);
+                let off = at.length();
+                if off < want.reach_m.min(near_m) {
+                    return None;
+                }
+                let big = sea || lake.is_some_and(|l| waters.lakes()[l].area_m2 >= least_m2);
+                if !big || off > far_m {
+                    continue;
+                }
+                if nearest.is_none_or(|n| off < n.length()) {
+                    nearest = Some(at);
+                }
+            }
+        }
+        nearest.filter(|at| at.length() >= near_m)
     }
 
     /// Where the world's start stands beside a town: of the ways out of it at `start_m`, the
@@ -447,6 +557,13 @@ impl Land {
         for w in 0..WAYS {
             let angle = w as f32 / WAYS as f32 * core::f32::consts::TAU;
             let way = Vec2::new(libm::cosf(angle), libm::sinf(angle));
+            // Away from its lake, so the start stands dry and the town is seen with its water.
+            if site
+                .water
+                .is_some_and(|water| way.dot(water.normalize_or_zero()) > 0.0)
+            {
+                continue;
+            }
             let at = self.along(site.toward, way * want.start_m);
             let middle = self.surface(at).length();
             if middle < sea + 3.0 {
@@ -549,6 +666,27 @@ mod tests {
         );
         let past = trees.iter().filter(|t| off(t, site.toward) > 600.0).count();
         assert!(past > 1000, "{past} trees past the fields");
+        // Its edge grows back young: the trees at the fields' edge stand shorter than the
+        // forest's past them.
+        let mean = |within: std::ops::Range<f32>| {
+            let statures: Vec<f32> = trees
+                .iter()
+                .filter(|t| within.contains(&off(t, site.toward)))
+                .map(|t| t.stature)
+                .collect();
+            assert!(
+                statures.len() > 20,
+                "{} trees in {within:?}",
+                statures.len()
+            );
+            statures.iter().sum::<f32>() / statures.len() as f32
+        };
+        let edge = mean(inner..want.clearing_m + want.clearing_edge_m * 0.3);
+        let forest = mean(600.0..900.0);
+        assert!(
+            edge < forest * 0.85,
+            "the edge's {edge}, the forest's {forest}"
+        );
         // The start stands out of the town, by its fields.
         let apart = (land.surface(site.start) - ground).length();
         assert!(
