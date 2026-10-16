@@ -100,7 +100,7 @@ function checkoutRoot() {
 }
 
 // The main checkout and any worktrees kept outside it.
-function roots() {
+export function roots() {
   const listed = git("worktree", "list", "--porcelain")
     .split("\n")
     .filter((l) => l.startsWith("worktree "))
@@ -112,7 +112,7 @@ function roots() {
 // Claude Code names each project's folder after the path a session started in, with
 // every other character replaced by "-". That can match other folders too, such as
 // "terra-old"; addTranscript checks the real path.
-function transcripts(roots) {
+export function transcripts(roots) {
   const projects = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
   if (!existsSync(projects)) return [];
   const prefixes = roots.map((root) => root.replace(/[^A-Za-z0-9]/g, "-"));

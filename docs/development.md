@@ -80,6 +80,14 @@ It runs as routine. A Claude Code hook starts it in the background when a sessio
 
 Worktree cleanup separates build files from source files (D259). On session or subagent start, the same hook runs `cargo xtask worktrees --prune` in the background at most once every 15 minutes, logging to the main checkout's `target/worktrees.log`. It deletes a worktree's build after one idle hour. Source worktrees still wait two days: only a subagent's whose commits are all on `main` and that has no changes or untracked files is removed. Locked worktrees, running sessions and unreadable Git states are kept. Process inspection uses `lsof`; if it is unavailable, automatic cleanup keeps the worktrees. Cargo locks also protect running builds. Idle counts from the last edit to source files, commit, checkout or any build file. An agent need not wait: once its work is pushed, `cargo xtask worktrees --done` deletes its worktree's build at once, and `cargo xtask seed` makes a later build there quick again. `cargo xtask worktrees` shows every worktree, its state and size, and what a prune would do to it. Only worktrees under `.claude/worktrees/` are ever cleared; the shared seed, the main checkout and its build are not.
 
+## Agents' context and models
+
+Output is a few percent of what a session costs; the rest is its context, read again every turn and written again whenever the cache misses it. So:
+
+- **Where the context goes** (D390). `node tools/token-stats/context.mjs [--days N] [--session ID]` reads your transcripts and prints, in under 60 lines, each session's peak and median context, every large cache write with its likely cause (a tool result, a subagent's first turn, an idle past the cache's life, compaction) and the tool results, files and commands that took the most ([tools/token-stats](../tools/token-stats/README.md#where-the-context-goes)). Run it before guessing why a day cost what it did.
+- **The nudge** (D390). When a session's or subagent's context passes 200k tokens, and again at each 100k more, a hook tells it once to finish its unit of work, hand off with a short summary and read by range or grep.
+- **Cheaper models for mechanical work** (D391). Two agents in `.claude/agents/` take work that needs no judgement: `finder`, on Haiku, finds code, docs and decisions and returns paths and lines; `runner`, on Sonnet, runs a given check, test, QA script or benchmark and reports its numbers and failures. Anything that decides, designs, debugs or reviews stays on the default model.
+
 ## Seeing and measuring
 
 Sound is on in the sandbox except in scripted runs, which print what they would have played instead, and under WSL, which usually has no sound device: pass `--sound` to try it there, or `--mute` anywhere ([audio.md](audio.md)).
@@ -216,7 +224,7 @@ The developers want tools that help refine each system (D71), and as many of the
 | [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
 | [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
 | [Docs check](../tools/docs/README.md) | `cargo xtask check` | Links and anchors resolve, every doc, note, spike and script is in its index, every decision file is well formed and the decisions index is their render |
-| [Token stats](../tools/token-stats/README.md) | a Claude Code hook | Claude tokens and Tripo credits per developer, on a public page |
+| [Token stats](../tools/token-stats/README.md) | a Claude Code hook; `node tools/token-stats/context.mjs` | Claude tokens and Tripo credits per developer, on a public page; where each session's context went (D390) |
 
 A new tool gets a line in `TASKS` in `xtask/src/main.rs` and a row here, so it is found the same way as the rest.
 

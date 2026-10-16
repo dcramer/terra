@@ -5,6 +5,7 @@ Records how many Claude tokens and Tripo credits each of us spends on Terra (D82
 - `worker/`: a Cloudflare Worker with a D1 database. It stores each message once, by the id the API gave it, with its person, conversation, day, model and input, output, cache-read and cache-write tokens, and keeps totals per person, day and model. It runs on Cloudflare's free plan, which costs nothing and stops rather than bills when a limit is reached. A year of five busy developers is a few hundred megabytes of the free 5 GB.
 - `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and the credits recorded for other services (below), and sends what it has not sent before. It needs Node 18 or later and nothing else.
 - `report.mjs --spend`: records the credits a task spent on another service, such as Tripo (below).
+- `context.mjs`: says where each session's context went, and nudges a session whose context has grown long ([below](#where-the-context-goes)).
 
 ## What counts, and counting once
 
@@ -14,7 +15,7 @@ A message's id is the only thing that identifies it. The same message turns up m
 
 ## Cost
 
-The page leads with what the tokens would cost at the API's list prices, with the [Tripo credits](#tripo-credits) added, per person and day, and `/json` has it per model too. It leaves out cache reads: they are most of the token count, the same context read again each turn, and little of the cost. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, the only kind Claude Code writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens.
+The page leads with what the tokens would cost at the API's list prices, with the [Tripo credits](#tripo-credits) added, per person and day, and `/json` has it per model too. It leaves out cache reads: they are most of the token count, the same context read again each turn, and little of the cost. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, which is what a session writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens. Subagents write the 5-minute kind, at 1.25 times the input price rather than 2, so their writes cost a little less than shown; `context.mjs` (below) says what share of the writes were of that kind.
 
 ## Tripo credits
 
@@ -61,6 +62,23 @@ By hand, from the repository:
 | `node tools/token-stats/report.mjs --full` | Send every message again; harmless |
 | `node tools/token-stats/report.mjs --stats` | Everyone's totals; add `--by-day` or `--by-model` |
 | `node tools/token-stats/report.mjs --cron` | Print a crontab line that sends hourly, if you want that too |
+
+## Where the context goes
+
+Output is a few percent of the cost; the rest is context, read from the cache every turn and written to it whenever something new is added or the cache has lost it. `context.mjs` says where it went (D390), reading the same transcripts as `report.mjs` and sending nothing:
+
+| Command | What it does |
+|---|---|
+| `node tools/token-stats/context.mjs` | Every session of this repository, its subagents included |
+| `… --days 2` | Only the API calls of the last two days |
+| `… --session <id>` | One session, by its id or the start of it, and its subagents |
+| `… <path>…` | These transcripts, or the `.jsonl` files under these folders, wherever they started |
+
+It prints at most 60 lines, cheap for an agent to read: each session's turns and peak and median context (input, cache read and cache write of one API call); the cache writes by likely cause; the largest writes, each with its cause; the tool results that took the most, by tool, by file read, by command (`cargo xtask <task>`, or the first word) and as images; what Claude Code added itself (skill listings, `CLAUDE.md`, hooks' output); and each subagent's first turn, the prefix it writes before doing anything.
+
+A call's cause is, in order: its transcript's **first turn**; **compaction** since the call before; **cache expired**, longer since the call before than the cache lives (an hour for a session, five minutes for a subagent), a long tool run counting as much as an idle wait, and the tool named; a **cache miss**, less than half the context before read back; otherwise **growth**, what was added since the call before (tool results, attachments, prompts, and that call's own output, thinking included), shared out by size. A transcript does not count the tokens of what it holds, so those sizes are estimates, four characters a token and images by their size; the report says how close they come to the writes measured. A message copied into a resumed session counts once.
+
+**The nudge.** After every tool call, `context.mjs --hook` (`.claude/settings.json`) reads the tail of the session's transcript, or a subagent's own, and when the last call's context has passed 200k tokens, and again at each 100k more, adds one line to what the model sees (`hookSpecificOutput.additionalContext`): finish the unit of work, hand off with a short summary, read by range or grep. Each threshold nudges once; after compaction shrinks the context, it nudges again when the context grows back past one. Why 200k: every turn reads the whole context again, and an idle hour writes it all again, at Opus 5.5's prices $0.04 and $1.60 a turn at 200k and growing with it, while a summary for a fresh session costs a few thousand tokens. It remembers the last threshold per session in `~/.cache/terra-token-stats/nudge/`, and takes about as long as Node takes to start, its own work under a millisecond.
 
 ## Deploying the worker
 
