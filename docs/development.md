@@ -4,13 +4,15 @@ How to set up a machine and work in the repository. The reasons behind these cho
 
 ## Set up
 
-Install [rustup](https://rustup.rs), clone the repository, then from its root:
+Clone the repository, then from its root:
 
 ```bash
-cargo xtask doctor
+make setup
 ```
 
-It reads the pinned compiler version from `rust-toolchain.toml`, installs nothing itself, and lists what is missing with the command that fixes each item. The first `cargo` command in the repository downloads the pinned compiler.
+It installs what Cargo cannot install for itself, when it is missing: rustup and the pinned compiler, Xcode's command line tools on macOS, and Bevy's libraries on Debian or Ubuntu (with `sudo`; under WSL also MinGW and the Windows target). It then points git at the hooks, builds the game and runs `cargo xtask doctor` (D387). Node it only checks for. `make` lists the everyday tasks, each a `cargo xtask` task; the Makefile stays that thin, and anything with logic goes in `xtask`.
+
+`cargo xtask doctor` reads the pinned compiler version from `rust-toolchain.toml`, installs nothing itself, and lists what is missing with the command that fixes each item. The first `cargo` command in the repository downloads the pinned compiler.
 
 | Platform | What you need beyond rustup |
 |---|---|

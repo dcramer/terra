@@ -32,13 +32,14 @@ How firm each of these is, and who decided it, is in [docs/decisions.md](docs/de
 | [tools](tools) | Team tooling outside the game. |
 | [spike](spike) | Throwaway experiments. |
 
-To play the current build, on the real GPU whatever the machine:
+To get a new machine ready and play, on the real GPU whatever the machine:
 
 ```bash
-cargo xtask play
+make setup   # once: installs Rust and what it needs, builds the game, checks the machine
+make play
 ```
 
-`cargo xtask play --fresh` starts a new game; `cargo xtask tools` lists the other tasks. To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
+`make` lists the everyday tasks, such as `make fresh` for a new game and `make update` for the latest; they run `cargo xtask` tasks, and `cargo xtask tools` lists all of those. More on setting up a machine is in [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
 
 ## Licence
 
