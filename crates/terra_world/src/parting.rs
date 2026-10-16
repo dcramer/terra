@@ -119,6 +119,23 @@ pub struct ObstructionFade {
     bounds: Option<Bounds>,
 }
 
+impl ObstructionFade {
+    /// Its middle in the world and how far round it it reaches, once its meshes are in.
+    pub fn round(&self) -> Option<(Vec3, f32)> {
+        self.bounds.as_ref().map(|b| (b.centre, b.reach))
+    }
+
+    /// Whether its leaves stand between two points: the line through the share of its box
+    /// they fill. What looks along the ground past a bush asks it (wildlife's sightlines).
+    pub fn hides(&self, from: Vec3, to: Vec3) -> bool {
+        self.bounds.as_ref().is_some_and(|b| {
+            let from = b.to_plant.transform_point3(from) - b.middle;
+            let to = b.to_plant.transform_point3(to) - b.middle;
+            crosses(from, to, b.half * LEAF_MASS)
+        })
+    }
+}
+
 /// A plant's box, in its own frame, and round it in the world.
 #[derive(Clone, Debug)]
 struct Bounds {

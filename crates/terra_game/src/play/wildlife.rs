@@ -18,8 +18,11 @@ use crate::start::Start;
 use bevy::{ecs::system::SystemParam, platform::collections::HashMap, prelude::*};
 use terra_gen::Seed;
 use terra_world::cover::CoverRules;
+use terra_world::daylight::{Clock, SkyPath};
 use terra_world::flora::{Obstacles, Trunk, Trunks};
+use terra_world::parting::ObstructionFade;
 use terra_world::sky_occlusion::SkyOccluders;
+use terra_world::spatial::SpatialHash;
 
 /// The land's cells are cubes this wide, a few tens of metres of ground in each.
 const CELL_M: f32 = 32.0;
@@ -79,6 +82,8 @@ const BARE_GRASS: f32 = 0.35;
 const LEAVES_HIDE: f32 = 0.85;
 /// Grass this tall hides a small animal in it.
 const HIDING_GRASS_M: f32 = 0.45;
+/// A spot in the sun shows what is on it so many times better than one in shade.
+const SUNLIT: f32 = 2.5;
 /// A kind met this near already is the less likely to be met again.
 const MEET_KNOWN_M: f32 = 120.0;
 /// Not where others of its kind already are this near.
@@ -94,6 +99,8 @@ const LAPSE_C_PER_M: f32 = 0.0065;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Cells>()
         .init_resource::<Perches>()
+        .init_resource::<Thickets>()
+        .add_systems(Update, file_thickets)
         .init_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
@@ -167,7 +174,7 @@ impl Place {
 /// The world round an animal, asked of its parts: the ground and its water, the trees, what
 /// covers the ground, and the land's seasons.
 #[derive(SystemParam)]
-pub struct Surroundings<'w> {
+pub struct Surroundings<'w, 's> {
     planet: Res<'w, Planet>,
     trunks: Res<'w, Trunks>,
     obstacles: Res<'w, Obstacles>,
@@ -177,6 +184,48 @@ pub struct Surroundings<'w> {
     /// The crowns of the trees, where a forest says them: leaves hide what is behind them.
     crowns: Option<Res<'w, SkyOccluders>>,
     perches: Res<'w, Perches>,
+    /// The bushes and young trees, filed by place: their leaves hide what is behind them.
+    thickets: Res<'w, Thickets>,
+    plants: Query<'w, 's, &'static ObstructionFade>,
+    /// Where the sun is, for what stands in its light.
+    sky: Option<Res<'w, SkyPath>>,
+    clock: Res<'w, Clock>,
+}
+
+/// The bushes and young trees whose leaves hide what is behind them (those the camera fades,
+/// `ObstructionFade`), filed by place once their meshes are in.
+#[derive(Resource)]
+pub struct Thickets(SpatialHash<Entity>);
+
+impl Default for Thickets {
+    fn default() -> Self {
+        Self(SpatialHash::new(16.0))
+    }
+}
+
+/// A thicket's leaves reach at most so far from where it is filed.
+const THICKET_REACH_M: f32 = 6.0;
+/// How far toward the sun a point is looked from for what shades it.
+const SUN_LOOKS_M: f32 = 60.0;
+
+/// Filed already among the thickets.
+#[derive(Component)]
+struct Filed;
+
+/// Files each new bush and young tree once its box is known.
+fn file_thickets(
+    mut commands: Commands,
+    mut thickets: ResMut<Thickets>,
+    plants: Query<(Entity, &ObstructionFade), Without<Filed>>,
+) {
+    for (plant, fade) in &plants {
+        if let Some((centre, reach)) = fade.round() {
+            if reach <= THICKET_REACH_M * 1.5 {
+                thickets.0.insert(centre, plant);
+            }
+            commands.entity(plant).insert(Filed);
+        }
+    }
 }
 
 /// Where birds sit up off the ground besides the trees: the ridges of a settlement's roofs,
@@ -185,7 +234,7 @@ pub struct Surroundings<'w> {
 #[derive(Resource, Default)]
 pub struct Perches(pub Vec<(Vec3, Vec3)>);
 
-impl Surroundings<'_> {
+impl Surroundings<'_, '_> {
     /// A spot on a ridge roughly the way given, between so near and so far across the ground:
     /// the one most that way, somewhere along it.
     pub fn perch(
@@ -240,7 +289,7 @@ pub struct Warmth(std::sync::Mutex<HashMap<IVec3, f32>>);
 /// A patch of ground whose growing season is taken as one, metres.
 const WARMTH_PATCH_M: f32 = 48.0;
 
-impl Surroundings<'_> {
+impl Surroundings<'_, '_> {
     /// The ground at or under a point.
     pub fn ground(&self, point: Vec3) -> Vec3 {
         self.planet.ground_at(point)
@@ -312,9 +361,46 @@ impl Surroundings<'_> {
         if self.obstacles.sweep(eye, way, length - 0.5, 0.15).is_some() {
             return false;
         }
+        let middle = eye + line * 0.5;
+        let in_a_thicket = self
+            .thickets
+            .0
+            .near(middle, length * 0.5 + THICKET_REACH_M)
+            .filter_map(|(_, plant)| self.plants.get(*plant).ok())
+            .any(|plant| plant.hides(eye, at));
+        if in_a_thicket || self.through_crowns(eye, at) {
+            return false;
+        }
+        // A sample of the ground costs a tenth of a millisecond: a few, over its middle.
+        const GROUND_SAMPLES: usize = 8;
+        !(1..GROUND_SAMPLES).any(|i| {
+            let point = eye + line * (i as f32 / GROUND_SAMPLES as f32);
+            self.planet.ground_at(point).length() > point.length() + 0.05
+        })
+    }
+
+    /// Whether a point stands in the sun: nothing standing and no crown between it and the
+    /// sun, which is up. Where nothing says where the sun is, it does.
+    pub fn sunlit(&self, at: Vec3) -> bool {
+        let Some(sky) = &self.sky else {
+            return true;
+        };
+        let sun = sky.sun(self.clock.hour);
+        if sun.dot(at.normalize_or(Vec3::Y)) < 0.02 {
+            return false;
+        }
+        let far = at + sun * SUN_LOOKS_M;
+        self.obstacles.sweep(at, sun, SUN_LOOKS_M, 0.05).is_none() && !self.through_crowns(at, far)
+    }
+
+    /// Whether the line between two points passes through the thick of a tree's crown.
+    fn through_crowns(&self, eye: Vec3, at: Vec3) -> bool {
+        let line = at - eye;
+        let length = line.length();
+        let way = line / length.max(1e-3);
         if let Some(wood) = &self.crowns {
             let south = wood.east.cross(wood.up);
-            let leaves = wood.crowns.iter().any(|crown| {
+            return wood.crowns.iter().any(|crown| {
                 // Into the crown's own frame, where it is a ball of one.
                 let into = |p: Vec3| {
                     let off = p - crown.middle;
@@ -335,16 +421,8 @@ impl Surroundings<'_> {
                 // Through its thick, not grazing the gaps at its edge.
                 (from + along * s).length() < LEAVES_HIDE * crown.closes.sqrt()
             });
-            if leaves {
-                return false;
-            }
         }
-        // A sample of the ground costs a tenth of a millisecond: a few, over its middle.
-        const GROUND_SAMPLES: usize = 8;
-        !(1..GROUND_SAMPLES).any(|i| {
-            let point = eye + line * (i as f32 / GROUND_SAMPLES as f32);
-            self.planet.ground_at(point).length() > point.length() + 0.05
-        })
+        false
     }
 
     /// How tall the grass stands at a point on the ground, as most of its blades do (the
@@ -684,7 +762,14 @@ fn meet(
         let eye = here + up * EYE_UP_M - ahead * EYE_BEHIND_M;
         if around.in_view(eye, spot + up * 0.3) {
             let place = around.place(spot);
-            let shows = (1.0 - 0.75 * place.shade.clamp(0.0, 1.0))
+            // In a patch of sunlight most of all, as a shaft through the trees picks one out.
+            let lit = if around.sunlit(spot + up * 0.3) {
+                SUNLIT
+            } else {
+                1.0
+            };
+            let shows = lit
+                * (1.0 - 0.75 * place.shade.clamp(0.0, 1.0))
                 * if place.bare { 1.5 } else { 0.6 }
                 * (1.0 - place.grass_m / HIDING_GRASS_M).clamp(0.1, 1.0)
                 / (1.0 + off / 6.0);
@@ -742,6 +827,7 @@ fn meet(
             } else {
                 None
             };
+            let crosses = crossing.is_some();
             let group = crossing.unwrap_or_else(|| {
                 put_group(
                     commands,
@@ -753,8 +839,18 @@ fn meet(
                     dice,
                 )
             });
+            let group_len = group.len();
             cells.met.extend(group);
-            debug!("Wildlife: {} {} met ahead.", count, bestiary.name(species));
+            info!(
+                "Wildlife: {} {} met ahead, {}.",
+                group_len,
+                bestiary.name(species),
+                if crosses {
+                    "crossing the way"
+                } else {
+                    "beside it"
+                }
+            );
         }
         cells.ways.insert(player, way);
     }

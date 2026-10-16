@@ -1385,6 +1385,8 @@ mod tests {
         world.init_resource::<terra_world::flora::Obstacles>();
         world.init_resource::<super::super::wildlife::Warmth>();
         world.init_resource::<super::super::wildlife::Perches>();
+        world.init_resource::<super::super::wildlife::Thickets>();
+        world.init_resource::<terra_world::daylight::Clock>();
         world
     }
 
