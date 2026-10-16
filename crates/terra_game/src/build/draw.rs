@@ -769,8 +769,10 @@ fn repaint(
         if build.sections.repaints.is_empty() {
             continue;
         }
-        let repaints = std::mem::take(&mut build.sections.repaints);
-        for repaint in repaints {
+        // Those whose layers are ready are looked up together, in one walk of what is
+        // drawn: a dozen made in a frame cost one walk, not a dozen.
+        let mut ready = Vec::new();
+        for repaint in std::mem::take(&mut build.sections.repaints) {
             // Each kind's layer for a material, old to new.
             let mut map: BTreeMap<(Kind, u16), u16> = BTreeMap::new();
             let mut wanted = Vec::new();
@@ -793,55 +795,85 @@ fn repaint(
                 continue;
             }
             *waited = 0;
-            let started = std::time::Instant::now();
             let to: BTreeMap<[i32; 3], Kind> =
                 repaint.cubes.iter().map(|&(at, _, to)| (at, to)).collect();
-            let (mut rewritten, mut touched) = (0usize, 0usize);
-            for (&at, drawn) in &build.sections.drawn {
-                let centre = store::centre(IVec3::from_array(at));
-                for handle in drawn.parts.iter().flat_map(|part| &part.arrays) {
-                    let Some(mut mesh) = meshes.get_mut(handle) else {
+            ready.push((repaint, to, map));
+        }
+        if ready.is_empty() {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        // The box round every cube repainted: a corner outside it is passed over at once.
+        let (low, high) = ready
+            .iter()
+            .flat_map(|(repaint, ..)| &repaint.cubes)
+            .map(|&(at, ..)| IVec3::from_array(at))
+            .fold((IVec3::MAX, IVec3::MIN), |(low, high), at| {
+                (low.min(at), high.max(at))
+            });
+        let (mut rewritten, mut touched) = (0usize, 0usize);
+        for (&at, drawn) in &build.sections.drawn {
+            let centre = store::centre(IVec3::from_array(at));
+            for handle in drawn.parts.iter().flat_map(|part| &part.arrays) {
+                let Some(mesh) = meshes.get(handle) else {
+                    continue;
+                };
+                let (
+                    Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)),
+                    Some(bevy::mesh::VertexAttributeValues::Float32x3(normals)),
+                ) = (
+                    mesh.attribute(Mesh::ATTRIBUTE_POSITION),
+                    mesh.attribute(Mesh::ATTRIBUTE_NORMAL),
+                )
+                else {
+                    continue;
+                };
+                let cubes: Vec<Option<[i32; 3]>> = positions
+                    .iter()
+                    .zip(normals)
+                    .map(|(p, n)| {
+                        let inside = centre + Vec3::from_array(*p)
+                            - Vec3::from_array(*n) * (0.04 * terra_build::CELL_M);
+                        let cube = (inside / terra_build::CELL_M).floor().as_ivec3();
+                        let cube = (cube.cmpge(low).all() && cube.cmple(high).all())
+                            .then_some(cube.to_array())?;
+                        ready
+                            .iter()
+                            .any(|(_, to, _)| to.contains_key(&cube))
+                            .then_some(cube)
+                    })
+                    .collect();
+                // Only a mesh with a corner to change is touched, so no other is sent to
+                // the GPU again.
+                if cubes.iter().all(Option::is_none) {
+                    continue;
+                }
+                let Some(mut mesh) = meshes.get_mut(handle) else {
+                    continue;
+                };
+                let Some(bevy::mesh::VertexAttributeValues::Float32x2(ids)) =
+                    mesh.attribute_mut(Mesh::ATTRIBUTE_UV_1)
+                else {
+                    continue;
+                };
+                for (id, cube) in ids.iter_mut().zip(&cubes) {
+                    let Some(cube) = cube else {
                         continue;
                     };
-                    let (
-                        Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)),
-                        Some(bevy::mesh::VertexAttributeValues::Float32x3(normals)),
-                    ) = (
-                        mesh.attribute(Mesh::ATTRIBUTE_POSITION),
-                        mesh.attribute(Mesh::ATTRIBUTE_NORMAL),
-                    )
-                    else {
-                        continue;
-                    };
-                    let cubes: Vec<Option<Kind>> = positions
-                        .iter()
-                        .zip(normals)
-                        .map(|(p, n)| {
-                            let inside = centre + Vec3::from_array(*p)
-                                - Vec3::from_array(*n) * (0.04 * terra_build::CELL_M);
-                            let cube = (inside / terra_build::CELL_M).floor().as_ivec3();
-                            to.get(&cube.to_array()).copied()
-                        })
-                        .collect();
-                    if cubes.iter().all(Option::is_none) {
-                        continue;
-                    }
-                    let Some(bevy::mesh::VertexAttributeValues::Float32x2(ids)) =
-                        mesh.attribute_mut(Mesh::ATTRIBUTE_UV_1)
-                    else {
-                        continue;
-                    };
-                    for (id, kind) in ids.iter_mut().zip(&cubes) {
-                        if let Some(kind) = kind
+                    // In the order they were made, so a cube changed twice ends as the last.
+                    for (_, to, map) in &ready {
+                        if let Some(kind) = to.get(cube)
                             && let Some(&new) = map.get(&(*kind, id[0] as u16))
                         {
                             id[0] = f32::from(new);
                             rewritten += 1;
                         }
                     }
-                    touched += 1;
                 }
+                touched += 1;
             }
+        }
+        for (repaint, ..) in &ready {
             info!(
                 "Build: repaint of {} cubes looked up in {:.2} ms, {:.1} ms after the change: {rewritten} corners in {touched} meshes take their new layers, on screen this frame; the sections laid again behind it.",
                 repaint.cubes.len(),

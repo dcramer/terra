@@ -20,7 +20,10 @@
 //! a streaming engine double-buffers what its workers build. Acts are swapped in in the
 //! order they were made, and anything that reads or changes the base first takes in every
 //! act still being worked out, so the result is the same as acting at once; a scripted run
-//! that is not a benchmark acts at once, so its films are the same frame for frame.
+//! that is not a benchmark acts at once, so its films are the same frame for frame. An act
+//! that pays for nothing does not wait for those before it: it is worked out after them on
+//! the acts' thread, against the base they leave there, so a dozen made in one frame cost
+//! the frame a dozen copies of nothing rather than a dozen waits.
 
 use super::{Applied, Site};
 use crate::planet::Planet;
@@ -133,8 +136,9 @@ struct InFlight {
     worked: Mutex<Receiver<Result<Applied, Refusal>>>,
 }
 
-/// Work for the thread acts are worked out on.
-type Job = Box<dyn FnOnce() + Send>;
+/// Work for the thread acts are worked out on, given the base as the last act left it
+/// there: after it if it was done, before it if it was refused.
+type Job = Box<dyn FnOnce(&mut Option<terra_build::Base>) + Send>;
 
 /// The thread acts are worked out on, started the first time one is: a thread of their
 /// own, so an act, a few milliseconds, never waits behind the section workers' longer jobs
@@ -146,8 +150,9 @@ fn actor() -> &'static Mutex<Sender<Job>> {
         std::thread::Builder::new()
             .name("acts".to_string())
             .spawn(move || {
+                let mut latest = None;
                 for job in jobs {
-                    job();
+                    job(&mut latest);
                 }
             })
             .expect("a thread for acts");
@@ -156,10 +161,12 @@ fn actor() -> &'static Mutex<Sender<Job>> {
 }
 
 /// Works something out on the acts' thread; what it comes to is read from the answer.
-fn on_actor<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Receiver<T> {
+fn on_actor<T: Send + 'static>(
+    work: impl FnOnce(&mut Option<terra_build::Base>) -> T + Send + 'static,
+) -> Receiver<T> {
     let (answer, worked) = channel();
-    let job: Job = Box::new(move || {
-        answer.send(work()).ok();
+    let job: Job = Box::new(move |latest| {
+        answer.send(work(latest)).ok();
     });
     if let Ok(actor) = actor().lock() {
         actor.send(job).ok();
@@ -448,8 +455,15 @@ impl Building<'_, '_> {
     /// Does operations to the base as one act, as [`Building::act`] does, but worked out on
     /// a worker against a copy of the base and swapped in when it is done; where acts are
     /// not deferred (`defers`), at once. Its outcome is logged and a refusal told, as at once.
+    /// An act that pays for nothing is worked out after any still out, against the base
+    /// they leave on the acts' thread, without waiting for them here: the same base it would
+    /// see were they taken in first, as nothing it is checked against changes when they are.
+    /// One that pays waits, as what the builder has depends on what those before it took.
     pub fn act_later(&mut self, by: Option<Entity>, what: &str, ops: Vec<Op>) {
-        self.settle_all();
+        let after = self.defers() && self.busy() && (by.is_none() || self.costs_nothing());
+        if !after {
+            self.settle_all();
+        }
         if !self.defers() {
             let _ = self.act(by, what, &ops);
             return;
@@ -458,15 +472,23 @@ impl Building<'_, '_> {
         let claim = self.claim_of(by);
         let pays = by.is_some() && around.stock.is_some();
         let rules = self.rules.rules.clone();
-        let base = self.site.base.clone();
+        let from = (!after).then(|| self.site.base.clone());
         let kits = self.site.kits.clone();
-        let worked = on_actor(move || {
+        let worked = on_actor(move |latest| {
+            let Some(base) = from.or_else(|| latest.take()) else {
+                return Err(Refusal::Malformed);
+            };
             let cx = Context {
                 rules: &rules,
                 claim: claim.as_ref(),
                 world: &around,
             };
-            super::work_out(base, kits, ops, &cx)
+            let worked = super::work_out(base.clone(), kits, ops, &cx);
+            *latest = Some(match &worked {
+                Ok(applied) => applied.base.clone(),
+                Err(_) => base,
+            });
+            worked
         });
         self.applying.0.push_back(InFlight {
             by,
