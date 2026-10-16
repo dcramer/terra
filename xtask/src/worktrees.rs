@@ -6,7 +6,9 @@
 //! `--done` to delete its own worktree's build at once, rather than leave it for the prune.
 //!
 //! Only worktrees under `.claude/worktrees/` are touched, never the one this runs in, never one
-//! locked, used by a running process, or used recently:
+//! locked, used by a running process, or used recently. The shared seed build every worktree's
+//! dependencies are linked from (`.git/terra-seed/`, D183) is not a worktree and is never
+//! touched, nor is the main checkout or its build:
 //! - a subagent's (`agent-…`) whose commits are all on `main` and that has no changes, untracked
 //!   files included, is removed with its branch once it has been idle two days;
 //! - any worktree's build folder is deleted after one idle hour, since it can be built again

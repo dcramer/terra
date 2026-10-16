@@ -344,8 +344,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "seed",
-        takes: "",
-        does: "in a new worktree, copy the main checkout's compiled dependencies in, so the first build is quick",
+        takes: "[--refresh]",
+        does: "keep the shared seed build current with origin/main and link its compiled dependencies into this worktree, so its first build is quick; fast-forwards the main checkout when it is clean (D183)",
         group: "This machine",
         run: seed::seed,
     },
@@ -2195,6 +2195,22 @@ fn doctor() -> bool {
         node_runs_typescript(&node),
         true,
         "install Node 22.18 or later (https://nodejs.org)",
+    );
+
+    println!("\nThe shared seed build and the main checkout (D183)");
+    let (current, state) = seed::status();
+    report.item(
+        &format!("the shared seed build: {state}"),
+        current,
+        false,
+        "cargo xtask seed   (builds it or brings it up to date; --refresh runs its builds again)",
+    );
+    let (current, state) = seed::main_status();
+    report.item(
+        &format!("the main checkout: {state}"),
+        current,
+        false,
+        "cargo xtask seed fast-forwards it once it is on main with no changes and nothing unpushed",
     );
 
     println!("\nArt tools");

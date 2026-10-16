@@ -28,6 +28,15 @@ The seed follows Cargo's locking. Cargo 1.97 holds `.cargo-lock` shared and `.ca
 
 **Hard links** (added 2026-10-13). On ext4, which cannot clone a file, each seed was 10.5 GB of real disk, and ten subagents working at once held over 130 GB. Hard-linking everything would be wrong: Cargo and rustc rewrite fingerprint and dep-info files in place, so a worktree's rebuild would change the main checkout's state. But rustc writes an `.rlib` or `.rmeta` to a temporary file and renames it into place, and LLD does the same for a proc-macro `.so`. Tested with Rust 1.97.1 by deleting a seeded dependency's fingerprint so it rebuilt under the same name: the `.rlib`, `.rmeta` and `.so` came out as new files and the main checkout's were unchanged, while the `.d` beside them was rewritten through the link. So the seed links those three kinds, about 98% of the size, and copies the rest. A link that fails, as across file systems, falls back to a copy. Even if a later rustc wrote one in place, it would be a rebuild of the same crate, version, features and compiler.
 
+## The shared seed (added 2026-10-16)
+
+Seeding from the main checkout only helped while that checkout had built recently. Often its build was missing, or behind main's `Cargo.lock`, and new worktrees built from nothing (10 to 20 minutes with many agents building at once). The seed now comes from a build of origin/main kept for this alone in `.git/terra-seed/`: its files are checked out through an index of its own, so it is not a worktree and no worktree tool lists or clears it. It is built again under a lock whenever origin/main's manifests change (D183). It is built by the commands agents run, since Cargo builds a dependency again for each set of features the packages chosen ask of it: clippy and the tests over the workspace, the kit and artifact examples, and the sandbox, with the Windows sandbox in debug and release under WSL.
+
+| Measured on the WSL machine (32 threads), Rust 1.97.1 | Time |
+|---|---|
+| The seed built from nothing, all seven builds, other work on the machine | 17 min |
+| A fresh worktree's first `cargo xtask check`, seeded from the main checkout's build (current that day) | 4 min 14 s |
+
 ## Claude Code's side
 
 - A `WorktreeCreate` hook replaces Claude Code's own `git worktree add` rather than adding to it, so it is not used.
