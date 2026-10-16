@@ -1,8 +1,8 @@
 //! Laying a base's sections on the workers (docs/building-plan.md, drawing; D211): a base
-//! changed is laid whole once on Bevy's async compute pool (`sections::Whole`); then the
-//! sections `store` sets waiting are cut from it and merged there, as many at once as it
-//! has threads, nearest the camera first; what comes back waits for `draw` to put it on
-//! screen, a few a frame. Nothing heavy is done on the main thread.
+//! changed is laid whole once on building's own threads (`sections::Whole`, [`builders`]);
+//! then the sections `store` sets waiting are cut from it and merged there, as many at once
+//! as it has threads, nearest the camera first; what comes back waits for `draw` to put it
+//! on screen, a few a frame. Nothing heavy is done on the main thread.
 //!
 //! A section laid as it was, its pieces the same, comes back as that alone and is left as
 //! it is drawn. A scripted run waits for every section, so its pictures are the same every
@@ -14,7 +14,7 @@ use super::{BuildLook, Built, Site};
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
-use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
+use bevy::tasks::{AsyncComputeTaskPool, Task, TaskPool, TaskPoolBuilder, block_on, poll_once};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
@@ -160,6 +160,22 @@ pub(super) fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
     }
 }
 
+/// Building's own threads, as many as Bevy's async compute pool has, for an edit's base laid
+/// again and its sections drawn: on that pool they queued behind the world's own streaming
+/// work (the ground, grass, the sky's occlusion), and an edit's few milliseconds of laying
+/// waited up to 200 ms for a thread. Shipped engines give such work a priority in one job
+/// system; Bevy's pools have none, so building has a pool of its own.
+pub(super) fn builders() -> &'static TaskPool {
+    static POOL: std::sync::OnceLock<TaskPool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| {
+        let threads = AsyncComputeTaskPool::try_get().map_or(2, |pool| pool.thread_num());
+        TaskPoolBuilder::new()
+            .num_threads(threads.max(2))
+            .thread_name("builds".to_string())
+            .build()
+    })
+}
+
 /// Whether a section drawn for one reach is drawn finely enough for another: as asked, or
 /// with the middle detail as well where only the near detail is asked for. A section is not
 /// laid again only to let its middle detail go; the next change to it does.
@@ -229,7 +245,7 @@ fn launch(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
 ) {
-    let pool = AsyncComputeTaskPool::get();
+    let pool = builders();
     // A scripted run sends everything at once and waits for it.
     let room = if options.scripted() && !options.bench {
         usize::MAX

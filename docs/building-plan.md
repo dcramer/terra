@@ -60,7 +60,7 @@ A layout is a pure function of a section of cubes and what reaches it (the whole
 | Plugin | Does |
 |---|---|
 | `store` | A base is an entity; its sections are child entities with a `Section` component; a change sets the sections it reaches waiting |
-| `layout` | Lays and merges waiting sections on the async compute pool, as many at once as it has threads, nearest the camera first |
+| `layout` | Lays and merges waiting sections on building's own threads (`builders`), as many at once as it has, nearest the camera first |
 | `draw` | Puts each section on screen a few a frame: a mesh per kind and material near, the plan's pieces as ghosts and the next part lit, far off one baked mesh and further a coarser one, with `VisibilityRange`; near detail only near the camera |
 | `models`, `maps` | Load each kit's door and window models (`pieces`), and the height and colour maps its pieces are made with on the CPU (`maps`) |
 | `props` | Doors and windows: entities fitted into holes, opening, shutting, lit within, and later broken and mended |
