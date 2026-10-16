@@ -97,7 +97,8 @@ fn leafy(dice: &mut Rng, tree: &Tree, leaf: &Card, tint: Vec3) -> Shrub {
 /// tree's nearest level, so its leaves stand at their own size a stride off rather than a
 /// few enlarged (D269); past that the trees' middle level, three of each clump enlarged.
 fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card) -> Shrub {
-    let mut near = grown_tree::crown(placed, tree, leaf, 0);
+    // Near, each card folded and drooping, so a bush a stride off is not planes of leaves.
+    let mut near = grown_tree::crown_folded(placed, leaf);
     let mut far = grown_tree::crown(placed, tree, leaf, 1);
     let shadow = grown_tree::shadow_cards(placed, tree, leaf);
     let mut wood = [
@@ -591,22 +592,23 @@ mod tests {
 
     const STOOLS: [Stool; 4] = [Stool::Vase, Stool::Fan, Stool::Rods, Stool::Overstood];
 
-    /// How long the leaves on each card of a build are in the world: a card is its cell's
-    /// outline scaled as the card is, so its size is the distance between two of its corners
-    /// over theirs in the atlas, and its leaves the card's share of that.
+    /// How long the leaves on each triangle of a build's cards are in the world: a card is
+    /// its cell's picture laid out as the card is, flat or folded, so its scale is the root of
+    /// a triangle's area in the world over its area in the atlas, and its leaves the card's
+    /// share of that.
     fn leaf_lengths(build: &Build, card: &Card) -> Vec<f32> {
-        let n = card.outline.len();
         let share = card
             .leaf
             .expect("a composed card says how long its leaves are");
         build
-            .positions
-            .chunks(n)
-            .zip(build.uvs.chunks(n))
-            .map(|(at, uv)| {
-                let world = Vec3::from(at[0]).distance(Vec3::from(at[n / 2]));
-                let atlas = Vec2::from(uv[0]).distance(Vec2::from(uv[n / 2]));
-                world / atlas * card.across * share
+            .indices
+            .chunks(3)
+            .filter_map(|t| {
+                let p = |i: u32| Vec3::from(build.positions[i as usize]);
+                let uv = |i: u32| Vec2::from(build.uvs[i as usize]);
+                let world = (p(t[1]) - p(t[0])).cross(p(t[2]) - p(t[0])).length();
+                let atlas = (uv(t[1]) - uv(t[0])).perp_dot(uv(t[2]) - uv(t[0])).abs();
+                (atlas > 1e-9).then(|| libm::sqrtf(world / atlas) * card.across * share)
             })
             .collect()
     }

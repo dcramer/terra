@@ -190,10 +190,12 @@ const LEAF: Vec4 = Vec4::new(0.0, 0.0, 1.8, 0.3);
 /// thick and waxy; lit through as a broadleaf's, a pine's crown seen against the sun glowed
 /// lime.
 const NEEDLES: Vec4 = Vec4::new(0.0, 0.0, 0.6, 0.3);
-/// The middle layer's leaves (D269): darkened as the floor's (D268) but not greyed, its
-/// hazel, bramble and holly graded to living leaves' greens (D292); lit through less than a
-/// crown's, as backlit they glowed lime, and as dark inside as a crown.
-const THICKET: Vec4 = Vec4::new(0.0, 0.1, 0.8, 0.25);
+/// The middle layer's leaves, shaded as the crowns' are (D359): their cards composed and
+/// graded as the crowns' (D292), neither greyed nor darkened and lit through as brightly, and
+/// as dark inside as a crown. Darkened by a tenth and lit through at less than half a crown's,
+/// as when the cards were paler (D269), the bushes beside a path read as flat dark fills a
+/// stride off, where the crowns' leaves glowed and caught the light one by one.
+const THICKET: Vec4 = Vec4::new(0.0, 0.0, 1.8, 0.25);
 /// Ivy on the trunks (D309): darkened as the middle layer's leaves, lit through less, and
 /// darker where it sees less of the sky, but not as a crown's inside.
 const IVY: Vec4 = Vec4::new(0.0, 0.1, 0.5, 0.55);

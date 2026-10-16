@@ -567,6 +567,15 @@ fn round(dice: &mut Rng, at: Vec2, spread: f32) -> Vec2 {
 }
 
 /// A tint for one variant: a little lighter or darker, greener or yellower.
+/// The middle layer's leaves tinted as the crowns' oak leaves are (`CROWN_TINTS`, D359): their
+/// cards are graded to living leaves' colour (D292), as the crowns' are. Tinted a third of
+/// that, as when the cards were pale (D268), a hazel's leaves were near black-green fills a
+/// stride off, no vein, gloss or turn of a leaf reading on them. A bramble's leaves a little
+/// darker, a holly's darker and bluer, as theirs are.
+const THICKET_TINT: Vec3 = Vec3::new(0.9, 0.93, 0.84);
+const BRAMBLE_TINT: Vec3 = Vec3::new(0.8, 0.84, 0.74);
+const HOLLY_TINT: Vec3 = Vec3::new(0.62, 0.72, 0.66);
+
 fn variant_tint(dice: &mut Rng, base: Vec3) -> Vec3 {
     let value = dice.range(0.82, 1.12);
     base * Vec3::new(
@@ -1252,7 +1261,7 @@ impl Lay<'_, '_, '_> {
                 Under::Hazel => {
                     // Young stools on the floor, a metre or two: rods, a vase, a fan, each
                     // with its stems showing, at the size their leaves are (D276).
-                    let tint = variant_tint(&mut dice, Vec3::new(0.34, 0.37, 0.34));
+                    let tint = variant_tint(&mut dice, THICKET_TINT);
                     let stool = [Stool::Rods, Stool::Vase, Stool::Fan][n as usize % 3];
                     let tallest = dice.range(1.3, 2.3);
                     let shrub = thicket::coppice(&mut dice, &card("hazel"), tint, stool, tallest);
@@ -1267,16 +1276,19 @@ impl Lay<'_, '_, '_> {
                         spread: 1.7,
                     };
                     let build = plants::bush(&mut dice, &def, &card("berry"), tint);
-                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
+                    // Shaded as the middle layer's leaves, not greyed as the floor's pictures
+                    // are: its card is composed from scanned leaves as theirs are (D359).
+                    let leaves = Look::Foliage(self.thicket.clone());
+                    Drawn::one(self.meshes.add(build.mesh(false)), leaves)
                 }
                 Under::Scrub => {
                     // Young oak scrub, darker than the oak spray's own lime.
-                    let tint = variant_tint(&mut dice, Vec3::new(0.4, 0.42, 0.37));
+                    let tint = variant_tint(&mut dice, THICKET_TINT);
                     let shrub = thicket::scrub(&mut dice, &card("oak"), tint);
                     self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Sapling => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.4, 0.42, 0.37));
+                    let tint = variant_tint(&mut dice, THICKET_TINT);
                     let leaves = if n % 2 == 0 { "oak" } else { "hazel" };
                     let shrub = thicket::sapling(&mut dice, &card(leaves), tint);
                     self.layered(shrub, self.bark.clone(), shadow_m)
@@ -1301,7 +1313,7 @@ impl Lay<'_, '_, '_> {
                     Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Coppice => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.34, 0.37, 0.34));
+                    let tint = variant_tint(&mut dice, THICKET_TINT);
                     let stool =
                         [Stool::Vase, Stool::Fan, Stool::Rods, Stool::Overstood][n as usize % 4];
                     let tallest = match stool {
@@ -1315,7 +1327,7 @@ impl Lay<'_, '_, '_> {
                 }
                 Under::Holly => {
                     // Dark, glossy, nearly black-green in the shade.
-                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.5, 0.44));
+                    let tint = variant_tint(&mut dice, HOLLY_TINT);
                     let shrub = thicket::holly(&mut dice, &card("holly"), tint);
                     self.layered(shrub, self.bark.clone(), shadow_m)
                 }
@@ -1326,7 +1338,7 @@ impl Lay<'_, '_, '_> {
                     self.layered(shrub, self.spruce_bark.clone(), shadow_m)
                 }
                 Under::Bramble => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.54, 0.46));
+                    let tint = variant_tint(&mut dice, BRAMBLE_TINT);
                     let shrub = thicket::bramble(&mut dice, &card("bramble"), tint);
                     self.layered(shrub, self.bark.clone(), shadow_m)
                 }

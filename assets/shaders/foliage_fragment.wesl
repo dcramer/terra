@@ -371,6 +371,15 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, 
         return;
     }
     let face = across * inverseSqrt(dot(across, across));
+    // Near, a card shades as the spray it is, turned its own way, not only as a piece of its
+    // crown's whole (D359): SpeedTree's and Unreal's foliage blend a crown's spherical normal
+    // toward each card's own close up, since a bush a few strides off whose every spray took
+    // the bush's normal read as one sheet of leaves of one tone. Far off the crown's alone, as
+    // a crown seen from below or across a clearing shades as one mass.
+    let crown = (*input).N;
+    let own = face * select(-1.0, 1.0, dot(face, crown) >= 0.0);
+    let near = 1.0 - smoothstep(NEAR_FACE_M.x, NEAR_FACE_M.y, distance(world, view.world_position));
+    (*input).N = normalize(mix(crown, own, NEAR_FACE * near));
     let dp2perp = cross(dp2, face);
     let dp1perp = cross(face, dp1);
     let t = dp2perp * duv1.x + dp1perp * duv2.x;
@@ -382,7 +391,6 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, 
     // Kept only if it is a direction: a frame of nothing gives no number at all.
     let length2 = dot(leant, leant);
     if length2 > 1.0e-8 && length2 < 1.0e8 {
-        let crown = (*input).N;
         (*input).N = leant * inverseSqrt(length2);
         // A leaf, or half of a folded one, turned from the crown's outward face sees less of
         // the open side the crown's light comes from, so it is a little darker in the sky's
@@ -395,6 +403,10 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, 
 
 // How much a leaf turned from its crown's face is darkened in the sky's light (D292).
 const LEAF_TILT_SHADE: f32 = 0.7;
+// How far a near card's normal is its own face's rather than its crown's, and from and to
+// what distance from the eye that gives way to the crown's alone, in metres (D359).
+const NEAR_FACE: f32 = 0.6;
+const NEAR_FACE_M: vec2<f32> = vec2<f32>(4.0, 14.0);
 
 // Each leaf's own gloss (D292): the atlas's roughness, kept in its normal map's alpha, the
 // waxy upper face of an oak or holly leaf glossier than its veins, a hazel's softer, every

@@ -198,3 +198,130 @@ pub fn card(build: &mut Build, card: &Card, place: &Placing) {
         build.indices.extend([base, base + i, base + i + 1]);
     }
 }
+
+/// A card folded along its stalk and drooping toward its tip, as a spray of leaves is held
+/// near: the picture's two halves either side of its pin turned up by `fold` radians about the
+/// line down the card through the pin, toward the side its normal is on, and its tip, the
+/// part above the pin, bent down by `droop` of its length at the end. A flat card a stride off
+/// is one plane every leaf on it lies in; SpeedTree's and Unreal's foliage fold and bend
+/// their near cards so the leaves on them face apart (D359). Drawn as a grid of three by three
+/// over the card's outline's bounds, eight triangles to the flat card's six.
+pub fn folded_card(build: &mut Build, card: &Card, place: &Placing, fold: f32, droop: f32) {
+    let own = |&(u, v): &(f32, f32)| (Vec2::new(u, v) - card.cell) / card.across;
+    let (low, high) = card.outline.iter().map(own).fold(
+        (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+        |(low, high), p| (low.min(p), high.max(p)),
+    );
+    let size = place.right.length().max(1e-6);
+    let across = place.right / size;
+    let mut facing = place.right.cross(place.down).normalize_or(place.normal);
+    if facing.dot(place.normal) < 0.0 {
+        facing = -facing;
+    }
+    let length = place.down.length();
+    let (us, vs) = (
+        [low.x, place.pin.x.clamp(low.x, high.x), high.x],
+        [low.y, ((low.y + high.y) * 0.5).min(place.pin.y), high.y],
+    );
+    let base = build.positions.len() as u32;
+    for &v in &vs {
+        for &u in &us {
+            let x = (u - place.pin.x) * size;
+            let y = v - place.pin.y;
+            // Toward the tip, above the pin, the bend grows with the square of the way out.
+            let out = (-y / place.pin.y.max(1e-3)).max(0.0);
+            let at = place.at
+                + across * x * libm::cosf(fold)
+                + facing * x.abs() * libm::sinf(fold)
+                + place.down * y
+                - Vec3::Y * droop * length * out * out;
+            let uv = card.cell + Vec2::new(u, v) * card.across;
+            build.vertex(at, place.normal, uv, place.sway, place.colour);
+        }
+    }
+    for row in 0..2u32 {
+        for col in 0..2u32 {
+            let a = base + row * 3 + col;
+            build.indices.extend([a, a + 3, a + 1, a + 1, a + 3, a + 4]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn square() -> Card {
+        Card {
+            cell: Vec2::ZERO,
+            across: 0.25,
+            outline: vec![(0.0, 0.0), (0.25, 0.0), (0.25, 0.25), (0.0, 0.25)],
+            colour: Vec3::ONE,
+            leaf: None,
+        }
+    }
+
+    fn place() -> Placing {
+        Placing {
+            pin: Vec2::new(0.5, 0.75),
+            at: Vec3::ZERO,
+            right: Vec3::X * 0.4,
+            down: Vec3::Z * 0.4,
+            normal: Vec3::Y,
+            sway: Vec2::ZERO,
+            colour: Vec3::ONE,
+        }
+    }
+
+    fn faces(build: &Build) -> Vec<Vec3> {
+        build
+            .indices
+            .chunks(3)
+            .map(|t| {
+                let p = |i: u32| Vec3::from(build.positions[i as usize]);
+                (p(t[1]) - p(t[0])).cross(p(t[2]) - p(t[0])).normalize()
+            })
+            .collect()
+    }
+
+    /// Folded, a card's two halves face apart by twice the fold, each turned up toward the
+    /// side its normal is on; unfolded it is the flat card's plane.
+    #[test]
+    fn a_folded_cards_halves_face_apart() {
+        let mut flat = Build::default();
+        folded_card(&mut flat, &square(), &place(), 0.0, 0.0);
+        assert!(
+            faces(&flat).iter().all(|f| f.y.abs() > 0.999),
+            "a flat card is not flat"
+        );
+        let mut build = Build::default();
+        folded_card(&mut build, &square(), &place(), 0.4, 0.0);
+        let faces = faces(&build);
+        let up = |f: &Vec3| if f.y < 0.0 { -*f } else { *f };
+        let left = faces.iter().map(up).filter(|f| f.x > 0.01).count();
+        let right = faces.iter().map(up).filter(|f| f.x < -0.01).count();
+        assert!(left > 0 && right > 0, "{faces:?}");
+        for f in faces.iter().map(up) {
+            assert!((f.angle_between(Vec3::Y) - 0.4).abs() < 1e-3, "{f}");
+        }
+        // Turned up: the edges stand above the stalk.
+        let edge = build
+            .positions
+            .iter()
+            .map(|p| p[1])
+            .fold(f32::MIN, f32::max);
+        assert!(edge > 0.05, "edges at {edge}");
+    }
+
+    /// A drooping card's tip hangs below its pin, and the part behind the pin does not.
+    #[test]
+    fn a_drooping_cards_tip_hangs() {
+        let mut build = Build::default();
+        folded_card(&mut build, &square(), &place(), 0.0, 0.2);
+        // The tip is the picture's top, v = 0, which lies toward -Z of the pin.
+        let tip = build.positions.iter().filter(|p| p[2] < -0.2).map(|p| p[1]);
+        let back = build.positions.iter().filter(|p| p[2] > 0.0).map(|p| p[1]);
+        assert!(tip.fold(f32::MAX, f32::min) < -0.05);
+        assert!(back.fold(f32::MIN, f32::max).abs() < 1e-5);
+    }
+}

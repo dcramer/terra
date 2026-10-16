@@ -4,7 +4,7 @@
 //! stand-in for its shadow. Ported from the lush forest spike's oak (research/lush-forest-
 //! spike.md), with the conifer's and birch's habits added.
 
-use super::build::{Build, Limb, Placing, card, lump, tube};
+use super::build::{Build, Limb, Placing, card, folded_card, lump, tube};
 use super::{Card, Habit, TreeDef};
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -666,6 +666,28 @@ pub fn crown(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card, detail: usize) ->
     }
     build
 }
+
+/// A crown's every card, as its nearest level, each folded along its stalk and drooping a
+/// little, by its own amount (`folded_card`): for a plant seen a stride off, a bush or a
+/// sapling, whose flat cards each read as one plane of leaves (D359).
+pub fn crown_folded(cards: &[Vec<Placing>], leaf: &Card) -> Build {
+    let mut build = Build::default();
+    for (i, set) in cards.iter().enumerate() {
+        for (k, place) in set.iter().enumerate() {
+            // Each card's own fold and droop, from where it is in the plant.
+            let roll = libm::sinf(i as f32 * 12.9898 + k as f32 * 78.233) * 43_758.547;
+            let roll = roll - libm::floorf(roll);
+            let fold = FOLD.0 + (FOLD.1 - FOLD.0) * roll;
+            let droop = DROOP.0 + (DROOP.1 - DROOP.0) * (1.0 - roll);
+            folded_card(&mut build, leaf, place, fold, droop);
+        }
+    }
+    build
+}
+
+/// How far a near plant's cards fold, in radians, and droop, as a share of their length.
+const FOLD: (f32, f32) = (0.3, 0.6);
+const DROOP: (f32, f32) = (0.05, 0.2);
 
 /// What a crown's shadow is cast from near the camera: the first two cards of every clump,
 /// or every other conifer spray, the crown's own, enlarged as the simpler levels are, so
