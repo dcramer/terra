@@ -641,9 +641,12 @@ impl Walls<'_> {
             .base
             .cube(at + IVec3::Y)
             .is_some_and(|cube| cube.fill != Fill::Open);
+        // Inside only where walls of the kind close it on every side: a deck beside it, as
+        // a storey's floor beside its wall's foot, hides none of it, nor does what stands on it
+        // narrower than its cube.
         let inside = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
             .iter()
-            .all(|&side| self.whole(at + side));
+            .all(|&side| self.whole(at + side) && self.walled(at + side));
         Some(match (covered, inside) {
             (false, _) => Cell::Deck,
             (true, true) => Cell::Inside,

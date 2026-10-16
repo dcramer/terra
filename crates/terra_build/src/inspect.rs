@@ -1069,14 +1069,15 @@ fn kind_name(kits: &Kits, kind: Kind) -> String {
     })
 }
 
-/// Lines down past the edge of a floor's boards beside a timber post on its layer, a column
-/// of its kind standing alone there, as up a lookout's corner (`layout::decked`,
-/// `layout::member_face`): the post stands back from its cube's faces, and the boards run on
-/// into its cube under it. Down from just over the boards, a few places
-/// along the edge round the members' middle, every half centimetre from the edge to a little
-/// past their narrowest face, each meets something within a cube: a slot left at the boards'
-/// level between their ends and the members shows the ground or the sky under the deck.
-/// Returns how many were cast.
+/// Lines down past the edge of a floor's boards beside a timber wall or post on its layer
+/// (`layout::decked`, `layout::member_face`): a wall's logs or beams, and a post standing
+/// alone as up a lookout's corner, stand back from their cube's faces, and the boards run on
+/// into its cube under them. Down from just over the boards, a few places along the edge
+/// round the members' middle, every half centimetre from the edge to a little past their
+/// narrowest face, each meets something within a cube: a slot left at the boards' level
+/// between their ends and the members shows the room, the ground or the sky under the deck.
+/// Nothing is left out but what a deck or an open flight beside it covers. Returns how many
+/// were cast.
 fn floor_edges(
     base: &Base,
     kits: &Kits,
@@ -1103,20 +1104,17 @@ fn floor_edges(
             {
                 continue;
             }
-            // A post: a column of the kind standing alone beside the deck, nothing but the
-            // deck round it on its layer.
+            // A post, a column of the kind standing alone beside the deck with nothing but the
+            // deck round it on its layer, stands back as a post does; else as its wall does.
             let alone = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
                 .iter()
                 .all(|&s| {
                     base.cube(beside + s).is_none()
                         || crate::layout::decked(base, kits, beside + s).is_some()
                 });
-            if !alone {
-                continue;
-            }
             let Some(face) = kits
                 .of(cube.kind)
-                .and_then(|kit| crate::layout::member_face(kit, true))
+                .and_then(|kit| crate::layout::member_face(kit, alone))
             else {
                 continue;
             };
@@ -2703,6 +2701,112 @@ mod tests {
                 .any(|f| f.fault == Fault::SeeThrough && f.what.contains("cube [0, 1, 0]")),
             "{found:?}"
         );
+    }
+
+    #[test]
+    fn a_slot_between_a_floors_boards_and_a_log_wall_beside_them_is_seen() {
+        // Upper floors in walls of round logs: their boards run on under the logs' round to
+        // where a log of the kit's thickness stands back, and a strip under their edge on to
+        // past a log bowed its furthest away. As drawn, a line down past the boards' edge
+        // meets something everywhere. Planted: in a room, the boards and strips run on under
+        // the north wall taken away, as boards once stopped short of a wall's foot, and the
+        // slot there is seen; on the junctions' floor round a stairwell, whose
+        // wall's logs bow away from it in places, the strips taken away, and the slots
+        // between the boards' ends and those logs are seen.
+        let logs = crate::kit::tests::shipped("logs.ron");
+        assert_eq!(logs.timber.profile, crate::kit::Profile::Round);
+        let (shakes, slate) = (
+            crate::kit::tests::shipped("shakes.ron"),
+            crate::kit::tests::shipped("slate.ron"),
+        );
+        let kits = Kits(vec![logs.clone(), shakes.clone(), slate.clone()]);
+        let edges = |base: &Base, keep: &dyn Fn(Vec3, Material) -> bool| {
+            let lines = Lines::of(base, &kits);
+            let planted = Drawn {
+                meshes: lines.drawn.meshes.clone(),
+                kinds: lines.drawn.kinds.clone(),
+                tris: lines
+                    .drawn
+                    .tris
+                    .iter()
+                    .filter(|t| {
+                        let middle = (t.p[0] + t.p[1] + t.p[2]) / 3.0;
+                        lines.drawn.kinds[t.mesh as usize]
+                            .is_none_or(|(_, material)| keep(middle, material))
+                    })
+                    .copied()
+                    .collect(),
+            };
+            let mut found = Vec::new();
+            floor_edges(base, &kits, &planted, Detail::Near, &mut found);
+            found
+        };
+        let mut room = Base::default();
+        let mut fill = |min: [i32; 3], max: [i32; 3]| {
+            room.apply(crate::BuildOp::Fill {
+                min,
+                max,
+                cube: Some(crate::Cube::new(logs.kind(), Fill::Solid)),
+            })
+        };
+        fill([0, 0, 0], [4, 2, 0]);
+        fill([0, 0, 4], [4, 2, 4]);
+        fill([0, 0, 1], [0, 2, 3]);
+        fill([4, 0, 1], [4, 2, 3]);
+        fill([1, 1, 1], [3, 1, 3]);
+        let found = edges(&room, &|_, _| true);
+        assert!(found.is_empty(), "{found:?}");
+        let found = edges(&room, &|middle, material| {
+            !(matches!(material, Material::Floor | Material::Board)
+                && middle.z < 0.5
+                && middle.y > 0.9)
+        });
+        assert!(
+            found
+                .iter()
+                .any(|f| f.fault == Fault::SeeThrough && f.what.contains(", 1, 0]")),
+            "{found:?}"
+        );
+        let (_, ops) = crate::junctions::junctions(logs.kind(), shakes.kind(), slate.kind())
+            .into_iter()
+            .find(|(row, _)| row.contains("stairwell"))
+            .expect("the junctions have a stairwell");
+        let stairwell = Base::from_shortcuts(&ops);
+        let found = edges(&stairwell, &|_, _| true);
+        assert!(found.is_empty(), "{found:?}");
+        // The strips: boards just under a floor's top, which nothing else is.
+        let found = edges(&stairwell, &|middle, material| {
+            let under = CELL_M - middle.y.rem_euclid(CELL_M);
+            !(material == Material::Board && under < 0.03)
+        });
+        assert!(
+            found.iter().any(|f| f.fault == Fault::SeeThrough),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_thick_wall_beside_a_floor_is_drawn_where_the_floor_meets_it() {
+        // The junctions' floor round a stairwell in hewn timber: its walls two cubes thick,
+        // a mass whose inside draws nothing. Where the floor meets the wall's foot, the wall's
+        // cubes beside it are walls drawn to their face, not the mass's inside, though
+        // whole cubes stand on every side of them: a line down past the boards' edge into
+        // them meets their beams, not the room under the floor.
+        let hewn = crate::kit::tests::shipped("hewn.ron");
+        let (shakes, slate) = (
+            crate::kit::tests::shipped("shakes.ron"),
+            crate::kit::tests::shipped("slate.ron"),
+        );
+        let kits = Kits(vec![hewn.clone(), shakes.clone(), slate.clone()]);
+        let (_, ops) = crate::junctions::junctions(hewn.kind(), shakes.kind(), slate.kind())
+            .into_iter()
+            .find(|(row, _)| row.contains("stairwell"))
+            .expect("the junctions have a stairwell");
+        let base = Base::from_shortcuts(&ops);
+        let lines = Lines::of(&base, &kits);
+        let mut found = Vec::new();
+        floor_edges(&base, &kits, &lines.drawn, Detail::Near, &mut found);
+        assert!(found.is_empty(), "{found:?}");
     }
 
     #[test]

@@ -20,7 +20,7 @@ use super::{Layout, Piece, Place, Random, Walls, hash, ticks};
 use crate::kit::{Kit, Kits, Pattern};
 use crate::{Base, CELL_M, Fill, Kind, Shape};
 use glam::{IVec3, Vec3};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How thick a board is, and how far its top stands over its cube's, clear of the relief of
 /// a stone footing it runs onto, and of the flats of a stone wall's border band lying on the
@@ -41,6 +41,20 @@ fn even(metres: f32) -> f32 {
 /// The narrowest board laid to fill under a wall beside one cube of a run: narrower, a
 /// board is no board, and what it would fill is under the wall's members' rounding.
 const FILLER_LEAST_M: f32 = 0.008;
+
+/// A strip under a deck's boards' edge beside a round-log wall, a plain board without a
+/// plank's wave: how far its top is under the deck's cube's top, along a wall across x and
+/// across z, in ticks; clear of an end board's top 5 mm under it, a crest log's flat top
+/// 7 mm under, a log's far box 1 cm under, and the boards' wavy undersides 3 cm under.
+const STRIP_UNDER: [i32; 2] = [6, 8];
+/// How thick a strip under a deck's boards' edge is, in ticks.
+const STRIP_THICK: i32 = 4;
+/// How much further than the boards a strip under their edge must reach to be laid.
+const STRIP_LEAST_M: f32 = 0.004;
+/// How far short of its cube's face a strip under a deck's boards stops where it ends.
+const STRIP_END_IN_M: f32 = 0.0031;
+/// How far back under the deck's own boards a strip under their edge starts.
+const STRIP_BACK_M: f32 = 0.0137;
 
 /// How far in from its cubes' face a deck's outer board stands at its open side.
 const BOARD_EDGE_IN_M: f32 = 0.003;
@@ -334,13 +348,7 @@ impl Deck<'_> {
         else {
             return 0.0;
         };
-        // Under a round log's round, to where it stands back: the boards there out of sight.
-        let under = if !alone && kit.timber.profile == crate::kit::Profile::Round {
-            0.0
-        } else {
-            BOARD_UNDER_MEMBER_M
-        };
-        member_face(kit, alone).map_or(0.0, |face| (face + under).min(CELL_M * 0.5))
+        member_face(kit, alone).map_or(0.0, |face| (face + BOARD_UNDER_MEMBER_M).min(CELL_M * 0.5))
     }
 
     fn lay(&self, layout: &mut Layout) {
@@ -834,6 +842,91 @@ impl Deck<'_> {
                 }
             }
         }
+        // Under the boards' edge beside a wall of round logs: the boards run on under the
+        // logs' round to where a log of the kit's thickness stands back, but a log bowed away
+        // from the deck stands back further, and down past the boards' end there, between the
+        // course over the deck and the one under it, the room under the deck shows. A strip
+        // a little under the boards, from under their edge to past a log bowed its furthest.
+        // One strip along each run of such cells, carried on into a wall's cube at a corner
+        // (under the strip along the other way) and stopped short of anything else; a plain
+        // board, without a plank's wave, out of the planes of everything round it.
+        let mut edges: BTreeMap<([i32; 3], [i32; 3]), f32> = BTreeMap::new();
+        for &at in region.iter() {
+            let at = IVec3::from_array(at);
+            if covered(at) || at.y != y {
+                continue;
+            }
+            for side in SIDES {
+                let beyond = at + side;
+                if region.contains(&beyond.to_array()) || self.walls.stair(beyond) {
+                    continue;
+                }
+                let reached = reach(beyond);
+                let depth = self.strip_depth(beyond);
+                if reached > 1e-3 && depth >= reached + STRIP_LEAST_M {
+                    edges.insert((side.to_array(), at.to_array()), depth);
+                }
+            }
+        }
+        for (&(side, at), &depth) in &edges {
+            let (side, at) = (IVec3::from_array(side), IVec3::from_array(at));
+            let along = IVec3::new(side.z.abs(), 0, side.x.abs());
+            let same = |cell: IVec3| {
+                edges
+                    .get(&(side.to_array(), cell.to_array()))
+                    .is_some_and(|&d| (d - depth).abs() < 1e-4)
+            };
+            if same(at - along) {
+                continue;
+            }
+            let mut last = at;
+            while same(last + along) {
+                last += along;
+            }
+            // Past an end: on into a wall's cube there, else a hair short of its cube's face.
+            let past = |cell: IVec3| {
+                if !region.contains(&cell.to_array()) && base.cube(cell).is_some() {
+                    depth * 0.5
+                } else {
+                    -STRIP_END_IN_M
+                }
+            };
+            let n = side.as_vec3();
+            let length = along.as_vec3();
+            let centre = |cell: IVec3| (cell.as_vec3() + Vec3::splat(0.5)) * CELL_M;
+            let start = centre(at) - length * (CELL_M * 0.5 + past(at - along));
+            let end = centre(last) + length * (CELL_M * 0.5 + past(last + along));
+            let under = super::metres(STRIP_UNDER[usize::from(side.x == 0)]);
+            // Its inner side under the deck's own boards, out of the plane of its cubes' faces.
+            let (inner, outer) = (
+                n * (CELL_M * 0.5 - STRIP_BACK_M),
+                n * (CELL_M * 0.5 + depth),
+            );
+            let low = (start + inner).with_y(top - under - super::metres(STRIP_THICK));
+            let high = (end + outer).with_y(top - under);
+            layout.pieces.push(Piece::Board {
+                min: Place::near(low.min(high)),
+                max: Place::near(low.max(high)),
+            });
+        }
+    }
+
+    /// How far a strip under a deck's boards runs into a round-log wall's cube beside it: past
+    /// where its logs stand back when bowed their furthest away, and a little more.
+    fn strip_depth(&self, beyond: IVec3) -> f32 {
+        let base = self.walls.base;
+        let Some(kit) = base
+            .cube(beyond)
+            .and_then(|cube| self.walls.kits.of(cube.kind))
+            .filter(|kit| {
+                kit.pattern == Pattern::Logs && kit.timber.profile == crate::kit::Profile::Round
+            })
+        else {
+            return 0.0;
+        };
+        member_face(kit, false).map_or(0.0, |face| {
+            (face + kit.timber.bend + BOARD_UNDER_MEMBER_M).min(CELL_M * 0.5)
+        })
     }
 }
 
