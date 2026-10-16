@@ -43,6 +43,8 @@ pub const EXPOSURE_EV100: f32 = 10.8;
 pub const SATURATION: f32 = 0.82;
 /// The volumetric haze's sky light by day; by night dimmer (`daylight`, D310).
 pub const HAZE_AMBIENT: f32 = 0.015;
+/// The haze's sky light's colour under the trees, through the leaves (D266).
+pub const HAZE_TINT: Vec3 = Vec3::new(0.55, 0.62, 0.5);
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((SkyPlugin, AutoExposurePlugin))
@@ -405,7 +407,7 @@ fn follow_quality(
                 // The sky's light in the haze: under trees it comes through leaves, greener and
                 // far dimmer than the open sky's, which laid a grey-blue veil over the spruces
                 // (D266). The haze glows where the sun lights it, in shafts.
-                ambient_color: Color::srgb(0.55, 0.62, 0.5),
+                ambient_color: Color::srgb(HAZE_TINT.x, HAZE_TINT.y, HAZE_TINT.z),
                 ambient_intensity: HAZE_AMBIENT,
                 // Each frame's march starts a little differently, for TAA to smooth.
                 jitter: 0.5,

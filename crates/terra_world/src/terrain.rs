@@ -81,8 +81,23 @@ fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
     );
 }
 
+/// Chunks this coarse and coarser split within `FAR_SPLIT` of their sizes on a world with
+/// mountains: 256 m chunks, from about half a kilometre off, so the walls across a valley are
+/// meshed at a third of the cell they were (D322) and their couloirs stand in the mesh.
+const FAR_FROM: u8 = 4;
+const FAR_SPLIT: f32 = 3.0;
+
 fn detail(planet: &Planet) -> Detail {
-    Detail::for_planet(planet.radius_m(), planet.relief_m())
+    let detail = Detail::for_planet(planet.radius_m(), planet.relief_m());
+    if planet.has_mountains() {
+        Detail {
+            far_from: FAR_FROM,
+            far_split: FAR_SPLIT,
+            ..detail
+        }
+    } else {
+        detail
+    }
 }
 
 /// The chunks a viewer at a place should see.

@@ -800,7 +800,9 @@ fn fragment(
         // terrain carries erosion detail in its normal maps, and darker in the gullies,
         // which see less sky; and its snow lies in the gullies, off the ribs, as a granite
         // wall's does in summer. It fades in past where the mesh holds the relief itself.
-        let ribbed = max(bare, steep) * smoothstep(150.0, 450.0, far_off) * (1.0 - under_woods);
+        // Its snowfields too: from across a valley a summer's snow lies in streaks down the
+        // gullies, not in the round patches the far mesh's vertices give it.
+        let ribbed = max(max(bare, steep), snow) * smoothstep(150.0, 450.0, far_off) * (1.0 - under_woods);
         var rib = 0.0;
         var rib_tilt = 0.0;
         if ribbed > 0.0 {
@@ -818,7 +820,7 @@ fn fragment(
             // A gully's sides face across the slope: the ribs' slope across, up to about 35
             // degrees, tilts the normal toward or away from `across_face`.
             rib_tilt = clamp(rise * 6.0, -0.7, 0.7) * ribbed;
-            snow *= mix(1.0, smoothstep(0.35, -0.35, rib), ribbed * steep);
+            snow *= mix(1.0, smoothstep(0.3, -0.45, rib), ribbed * mix(0.75, 1.0, steep));
         }
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);
@@ -1143,7 +1145,9 @@ fn fragment(
             let above = in.uv_b.y + (blotch - 0.5) * 0.7 + (fleck - 0.5) * 0.15;
             let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above);
             if shore > 0.0 {
-                let pebbles = vec3<f32>(grey, grey * 0.99, grey * 0.95) * 1.2 * (0.8 + 0.4 * fleck) * tones;
+                // Granite washed by the lake, a warm grey: the blue sky over the open shore
+                // lights it, and a neutral grey under it read violet.
+                let pebbles = vec3<f32>(grey * 1.1, grey, grey * 0.8) * 1.1 * (0.8 + 0.4 * fleck) * tones;
                 ground_is = over(ground_is, layer(GRAVEL, 0.7, pebbles, world + 67.0, gx, gy, n, 1.0), shore * (1.0 - steep));
                 ground_is = over(ground_is, layer(SCREE, 0.6, pebbles, world + 71.0, gx, gy, n, 1.0), shore * smoothstep(0.55, 0.8, blotch) * (1.0 - steep));
                 var slab = layer(ROCK, 1.0, granite, world + 89.0, gx, gy, n, 0.15);

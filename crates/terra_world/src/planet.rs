@@ -301,10 +301,32 @@ impl Planet {
                 -0.35,
                 0.35,
                 self.cover.fbm(point / 45.0 + 31.0, 2, 2.0, 0.5),
-            ),
+            ) * (1.0 - MOUNTAIN_STRAW * self.mountain_straw(point, normal)),
         }
     }
+
+    /// How much of a mountain meadow's grass is last year's straw, 0 to 1: under a short
+    /// growing season the old leaves stand in the tussocks among the new into high summer,
+    /// so a subalpine meadow reads olive and straw, not a lowland's fresh green; full from
+    /// the tree line's season, none from `LOWLAND_MEADOW_C` over it. Off a world with
+    /// mountains, none.
+    fn mountain_straw(&self, point: Vec3, normal: Vec3) -> f32 {
+        let Some(round) = self.round.as_ref() else {
+            return 0.0;
+        };
+        let place = round.land.place(point, normal);
+        let season = round
+            .seasons
+            .at(place.latitude, place.height_m, place.sunward);
+        let over = season.growing_mean_c - terra_climate::TREE_LINE_SEASON_C;
+        1.0 - smoothstep(0.0, LOWLAND_MEADOW_C, over)
+    }
 }
+
+/// How far a growing season warmer than the tree line's, in °C, a meadow is all fresh green;
+/// and how much of its lushness the straw takes at most.
+const LOWLAND_MEADOW_C: f32 = 10.0;
+const MOUNTAIN_STRAW: f32 = 0.8;
 
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);

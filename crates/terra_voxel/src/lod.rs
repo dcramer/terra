@@ -16,6 +16,11 @@ pub struct Detail {
     pub top: u8,
     /// A chunk splits when a viewer is closer to it than this many of its own sizes.
     pub split: f32,
+    /// From this level up, it splits within `far_split` of its sizes instead: far ground
+    /// meshed finer than near ground's rule would, where a range's walls a few kilometres
+    /// off need their gullies in the mesh, as engines raise a terrain's far LOD by distance.
+    pub far_from: u8,
+    pub far_split: f32,
     /// How far from the centre the surface can be, lowest and highest, in metres, with
     /// any digging included. Chunks wholly outside that shell hold no surface.
     pub shell: (f32, f32),
@@ -32,7 +37,20 @@ impl Detail {
         Self {
             top,
             split: 2.0,
+            far_from: u8::MAX,
+            far_split: 2.0,
             shell: (radius_m - relief_m - 64.0, radius_m + relief_m + 8.0),
+        }
+    }
+}
+
+impl Detail {
+    /// How many of its own sizes a chunk of a level splits within.
+    pub fn split_at(&self, level: u8) -> f32 {
+        if level >= self.far_from {
+            self.far_split
+        } else {
+            self.split
         }
     }
 }
@@ -120,7 +138,7 @@ fn split_near(
     let size = chunk_size_m(id.level);
     let near = viewers
         .iter()
-        .any(|&viewer| distance_to(id, viewer) < detail.split * size);
+        .any(|&viewer| distance_to(id, viewer) < detail.split_at(id.level) * size);
     if id.level == 0 || !near {
         leaves.insert(id);
         return;
@@ -313,6 +331,39 @@ mod tests {
             touching = Some(Sides::ALL[axis * 2 + usize::from(high)]);
         }
         touching
+    }
+
+    #[test]
+    fn far_ground_splits_further_out_with_a_far_split() {
+        let planet = planet();
+        let viewer = ground(Vec3::Y);
+        let near = detail();
+        let far = Detail {
+            far_from: 3,
+            far_split: 3.0,
+            ..near
+        };
+        let holds = |id: ChunkId| may_hold_surface(&planet, id);
+        let plain = chunks_around(&[viewer], &near, holds);
+        let finer = chunks_around(&[viewer], &far, holds);
+        assert!(
+            finer.len() > plain.len(),
+            "{} not over {}",
+            finer.len(),
+            plain.len()
+        );
+        // No coarse chunk is left whole nearer than the far split's reach; the near levels
+        // split as before.
+        for (id, _) in &finer {
+            if id.level >= far.far_from && id.level < far.top {
+                let size = chunk_size_m(id.level);
+                assert!(
+                    distance_to(*id, viewer) >= far.far_split * size - 1e-3,
+                    "{id:?}"
+                );
+            }
+        }
+        assert_eq!(near.split_at(2), far.split_at(2));
     }
 
     #[test]

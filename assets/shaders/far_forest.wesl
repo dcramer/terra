@@ -207,7 +207,9 @@ fn tree(p: vec2<f32>, size: vec2<f32>, kind: u32, luck: f32) -> Shape {
         s.inside = 1.0 - abs(p.x) / trunk;
         let across = clamp(p.x / trunk, -1.0, 1.0);
         s.normal = vec3<f32>(across, 0.0, sqrt(1.0 - across * across));
-        s.light = 0.6;
+        // Under a closed stand's canopy, in its shade, darkest at the foot: lit as the crowns,
+        // the long boles of a pine wood seen across a lake stood as a lit picket fence.
+        s.light = mix(0.22, 0.42, clamp(p.y / max(bole, 1.0), 0.0, 1.0));
         s.part = 1u;
     }
     // Undergrowth round the foot of every tree, one to three and a half metres high, across

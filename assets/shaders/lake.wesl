@@ -190,12 +190,27 @@ fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) 
         var step = SSR_FIRST_M + distance * SSR_FIRST_SHARE;
         var t = step * jitter;
         var before = 0.0;
+        var last = vec2<f32>(-1.0);
         for (var i = 0u; i < SSR_STEPS; i += 1u) {
             t += step;
             let seen = where_seen(world + ray * t, size);
             if seen.w < 0.0 {
+                // Out over the screen's top still in front of what is drawn at its edge: the
+                // ray goes on up into what stands there, the shore's trees overhead, out of
+                // the picture. Their colour at the edge stands for them, as screen-space
+                // reflections stretch the edge, rather than the open sky's, which drew a
+                // pale milky band along every shore under its forest. Where the edge is sky
+                // the ray finds sky.
+                if last.x >= 0.0 && last.y < 0.08 {
+                    let drawn = prepass_depth(vec4<f32>(last * size, 0.0, 1.0), 0u);
+                    if drawn > 0.0 {
+                        let colour = textureSampleLevel(view_transmission_texture, view_transmission_sampler, last, 0.0).rgb;
+                        found = vec4<f32>(colour, 0.85 * smoothstep(0.0, 0.05, min(last.x, 1.0 - last.x)));
+                    }
+                }
                 break;
             }
+            last = seen.xy;
             let behind = seen.z;
             if behind > 0.0 {
                 // Passed behind what is drawn there: halve back to where it meets it.
@@ -212,7 +227,9 @@ fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) 
                 let hit = where_seen(world + ray * far, size);
                 if hit.w >= 0.0 && hit.z < max(step, 1.0) * 1.5 {
                     let colour = textureSampleLevel(view_transmission_texture, view_transmission_sampler, hit.xy, 0.0).rgb;
-                    let edge = min(min(hit.x, 1.0 - hit.x), min(hit.y, 1.0 - hit.y));
+                    // Faded toward the screen's sides and foot, where what the ray meets
+                    // changes as the view turns; not toward its top, past which it goes on.
+                    let edge = min(min(hit.x, 1.0 - hit.x), 1.0 - hit.y);
                     found = vec4<f32>(colour, smoothstep(0.0, 0.05, edge));
                 }
                 break;

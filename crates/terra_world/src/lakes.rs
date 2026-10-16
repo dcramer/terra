@@ -161,7 +161,142 @@ impl LakeExtension {
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<LakeMaterial>::default())
         .add_systems(Startup, spawn)
-        .add_systems(Update, follow_sky_and_wind);
+        .add_plugins(MaterialPlugin::<MistMaterial>::default())
+        .add_systems(Update, (follow_sky_and_wind, mist_follows_the_morning));
+}
+
+/// The mist a lake steams on a calm morning (D371): the night's cold air over water still
+/// warm from the day before, banks a few metres deep drifting over it, thickest at dawn and
+/// burnt off by mid-morning, as Morskie Oko's and every mountain lake's morning mist is. Drawn
+/// as games lay mist banks over water: soft cards standing on it turned to the eye, fading
+/// where they meet what stands behind them (`mist.wesl`), lit by the sun and the sky.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct MistExtension {
+    /// Which way and how fast its drifts move, metres a second; and how thick it is, 0 to 1.
+    #[uniform(100)]
+    wind: Vec4,
+    /// A point near the lakes its noise is laid out from.
+    #[uniform(100)]
+    origin: Vec4,
+}
+
+impl MaterialExtension for MistExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/mist.wesl".into()
+    }
+    fn fragment_shader() -> ShaderRef {
+        "shaders/mist.wesl".into()
+    }
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/mist.wesl".into()
+    }
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/mist.wesl".into()
+    }
+}
+
+pub type MistMaterial = ExtendedMaterial<StandardMaterial, MistExtension>;
+
+/// The lakes' one mist material.
+#[derive(Resource)]
+struct LakeMist(Handle<MistMaterial>);
+
+/// Lakes this big and bigger steam: a pond's mist is too small to see from its shore.
+const MISTY_M2: f32 = 50_000.0;
+/// A bank's card every this many metres over the water, this wide and this tall at most,
+/// standing this far under the surface so its foot never shows.
+const MIST_EVERY_M: f32 = 40.0;
+const MIST_WIDE_M: (f32, f32) = (40.0, 75.0);
+const MIST_TALL_M: (f32, f32) = (5.0, 11.0);
+const MIST_FOOT_M: f32 = 1.5;
+
+/// A lake's mist banks as one mesh: a card standing on its water every `MIST_EVERY_M`, by
+/// the lake's own cells, its place and size jittered.
+fn mist_mesh(waters: &Waters, lake: usize) -> Option<Mesh> {
+    let region = waters.region();
+    let level = waters.lake_radius_m(lake);
+    let every = (MIST_EVERY_M / region.cell_m).round().max(1.0) as usize;
+    let (mut positions, mut normals, mut corners, mut sizes, mut indices) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut seed = terra_gen::Seed(0x5EED_0000 + lake as u64).rng();
+    for (c, r) in waters.cells_of(lake) {
+        if c % every != 0 || r % every != 0 {
+            continue;
+        }
+        let jitter = Vec2::new(seed.unit() - 0.5, seed.unit() - 0.5) * MIST_EVERY_M;
+        let at = region.offset(c, r) + jitter;
+        let foot = (region.middle + region.east * at.x + region.north * at.y).normalize()
+            * (level - MIST_FOOT_M);
+        let size = Vec2::new(
+            MIST_WIDE_M.0 + (MIST_WIDE_M.1 - MIST_WIDE_M.0) * seed.unit(),
+            MIST_TALL_M.0 + (MIST_TALL_M.1 - MIST_TALL_M.0) * seed.unit() + MIST_FOOT_M,
+        );
+        let base = positions.len() as u32;
+        for corner in [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]] {
+            positions.push(foot.to_array());
+            normals.push(foot.normalize().to_array());
+            corners.push(corner);
+            sizes.push(size.to_array());
+        }
+        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+    if positions.is_empty() {
+        return None;
+    }
+    Some(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, sizes)
+        .with_inserted_indices(Indices::U32(indices)),
+    )
+}
+
+/// How thick a lake's mist is, 0 to 1, at an hour of the place's own sun and in a wind of so
+/// much (0 still to 1 a stiff breeze): from before dawn to two hours after sunrise, thinning
+/// to nothing by mid-morning, and torn away by a breeze.
+fn mist_thickness(local_hour: f32, wind: f32) -> f32 {
+    let dawn = smoothstep(4.0, 5.5, local_hour) * (1.0 - smoothstep(7.5, 9.5, local_hour));
+    let calm = 1.0 - smoothstep(0.6, 1.1, wind);
+    dawn * calm
+}
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The lakes' mist as the morning goes, by the sun where the camera is (D363): thickest from
+/// dawn to an hour or two after, gone by mid-morning, thinned and torn by a wind, and drifting
+/// with it.
+fn mist_follows_the_morning(
+    clock: Option<Res<Clock>>,
+    path: Option<Res<crate::daylight::SkyPath>>,
+    look: Option<Res<LakeLook>>,
+    mist: Option<Res<LakeMist>>,
+    lakes: Res<Assets<LakeMaterial>>,
+    mut mists: ResMut<Assets<MistMaterial>>,
+) {
+    let (Some(clock), Some(path), Some(mist)) = (clock, path, mist) else {
+        return;
+    };
+    let wind = look
+        .and_then(|look| lakes.get(&look.0).map(|m| m.extension.wind))
+        .unwrap_or(Vec4::ZERO);
+    // Drifting a metre every few seconds in a light air, faster in a breeze.
+    let wanted = (wind.truncate() * (0.3 + 1.5 * wind.w))
+        .extend(mist_thickness(path.local_hour(clock.hour), wind.w));
+    if mists
+        .get(&mist.0)
+        .is_some_and(|m| m.extension.wind != wanted)
+        && let Some(mut m) = mists.get_mut(&mist.0)
+    {
+        m.extension.wind = wanted;
+    }
 }
 
 fn spawn(
@@ -171,6 +306,7 @@ fn spawn(
     sky: Option<Res<Sky>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<LakeMaterial>>,
+    mut mists: ResMut<Assets<MistMaterial>>,
 ) {
     let (Some(waters), Some(round)) = (planet.waters(), planet.round()) else {
         return;
@@ -210,9 +346,39 @@ fn spawn(
         extension: LakeExtension::new(sky.as_deref(), None, Vec4::ZERO, &mirror),
     });
     let mut drawn = 0;
+    let mist = mists.add(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        },
+        extension: MistExtension {
+            wind: Vec4::ZERO,
+            origin: waters.region().middle.extend(0.0),
+        },
+    });
+    let mut misty = 0;
     for (index, lake) in waters.lakes().iter().enumerate() {
         if lake.area_m2 < SMALLEST_M2 {
             continue;
+        }
+        if lake.area_m2 >= MISTY_M2
+            && let Some(banks) = mist_mesh(waters, index)
+        {
+            commands.spawn((
+                Name::new(format!("Lake {index} mist")),
+                Mesh3d(meshes.add(banks)),
+                MeshMaterial3d(mist.clone()),
+                NotShadowCaster,
+                bevy::light::NotShadowReceiver,
+                // Turned on the GPU, the cards reach past their feet' bounds.
+                bevy::camera::visibility::NoFrustumCulling,
+            ));
+            misty += 1;
         }
         commands.spawn((
             Name::new(format!("Lake {index}")),
@@ -223,7 +389,7 @@ fn spawn(
         drawn += 1;
     }
     info!(
-        "Lakes: {drawn} drawn of {} found round the start",
+        "Lakes: {drawn} drawn of {} found round the start, {misty} big enough to steam on a calm morning",
         waters.lakes().len()
     );
     // The patterned ground's pools, many and small, drawn as one surface, each at its level.
@@ -245,6 +411,7 @@ fn spawn(
         );
     }
     commands.insert_resource(LakeLook(look, mirror, peat));
+    commands.insert_resource(LakeMist(mist));
 }
 
 /// The sky the lakes reflect, as it changes, and the wind over them, from the climate where
@@ -423,4 +590,23 @@ fn mesh(waters: &Waters, lake: usize) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_indices(Indices::U32(indices))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lake_steams_in_the_calm_of_the_morning_and_not_after() {
+        let still = 0.1;
+        // Thick in the first hours of the morning, gone by mid-morning and all the day.
+        assert!(mist_thickness(6.5, still) > 0.9);
+        assert_eq!(mist_thickness(10.0, still), 0.0);
+        assert_eq!(mist_thickness(15.0, still), 0.0);
+        // Thinner as it burns off.
+        assert!(mist_thickness(8.5, still) < mist_thickness(7.0, still));
+        // A breeze tears it away.
+        assert!(mist_thickness(6.5, 0.9) < 0.6 * mist_thickness(6.5, still));
+        assert_eq!(mist_thickness(6.5, 1.2), 0.0);
+    }
 }

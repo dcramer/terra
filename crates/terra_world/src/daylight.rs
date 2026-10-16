@@ -517,15 +517,6 @@ fn shine(
             fog.density_factor = wanted;
         }
     }
-    // The volumetric haze's own sky light, likewise (D310).
-    let night_air = 1.0 - smoothstep(-12.0, 0.0, path.height(clock.hour));
-    for mut air in &mut volumetric {
-        let wanted =
-            super::scene::HAZE_AMBIENT * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
-        if (air.ambient_intensity - wanted).abs() > 1e-6 {
-            air.ambient_intensity = wanted;
-        }
-    }
     let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
     let dark = 1.0 - smoothstep(-12.0, 0.0, height);
     nightfall.set_if_neq(Nightfall(dark));
@@ -565,6 +556,24 @@ fn shine(
         .as_deref()
         .is_some_and(|scale| scale.0 < crate::air::HAZE_SCALE);
     let open = open.map_or(if far_seeing { 1.0 } else { 0.0 }, |open| open.0);
+    // The volumetric haze's own sky light, likewise (D310): under the trees the little that
+    // comes through the leaves, green; out in the open the whole sky's, its shade's colour,
+    // so mist over a lake glows pale in the morning seen with the sun behind, not hanging
+    // as a dark brown smear where no sunbeam crosses it.
+    let night_air = 1.0 - smoothstep(-12.0, 0.0, path.height(clock.hour));
+    for mut air in &mut volumetric {
+        let wanted = super::scene::HAZE_AMBIENT
+            * (1.0 + (OPEN_HAZE_GLOW - 1.0) * open)
+            * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
+        if (air.ambient_intensity - wanted).abs() > 1e-6 {
+            air.ambient_intensity = wanted;
+        }
+        let tint = super::scene::HAZE_TINT.lerp(light.shade, open);
+        let tint = colour(tint);
+        if air.ambient_color != tint {
+            air.ambient_color = tint;
+        }
+    }
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
@@ -632,6 +641,10 @@ fn day_warmth(canopy: f32, low: f32, afternoon: bool) -> Warmth {
         tint: -LOCUS_SLOPE * sun,
     }
 }
+
+/// How many times brighter the volumetric haze's sky light is out in the open than under
+/// the trees: the open sky lights mist from every side.
+const OPEN_HAZE_GLOW: f32 = 4.0;
 
 /// How many stops brighter the eye is set by day out in the open on a world whose views reach
 /// kilometres (D338). The day's exposures were tuned under the lush forest's canopy against

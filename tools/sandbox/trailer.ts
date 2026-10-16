@@ -158,8 +158,9 @@ const layersOf = (shot: Shot, from: number, to: number) => [
 ];
 
 /// A place needs about this much of the GPU's memory at 1080p (the lush forest's run took
-/// 4 to 5 GB); with less free, a shot sharing the GPU runs out and dies.
-const NEEDS_MB = 5000;
+/// 4 to 5 GB, the mountain lake's with the lush forest's pines 6); with less free, a shot
+/// sharing the GPU runs out and dies.
+const NEEDS_MB = 7000;
 
 /// Waits, up to half an hour, until an NVIDIA GPU has room for a shot; elsewhere, where
 /// nvidia-smi does not answer, at once.
