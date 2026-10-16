@@ -255,3 +255,51 @@ fn the_path_graph_is_one_and_every_walk_on_it_is_clear() {
         );
     }
 }
+
+#[test]
+fn builders_sites_stand_outside_every_building_facing_their_own() {
+    // D381: a settlement being built has places to work round each building, out of every
+    // building's ground and every thing's, each facing the wall it is by, so a builder
+    // there hammers at their own building and not a neighbour's or the air.
+    for mut town in towns() {
+        let before = town.things.len();
+        let laid = town.add_sites();
+        assert!(
+            laid >= town.buildings.len(),
+            "{laid} sites for {}",
+            town.buildings.len()
+        );
+        assert_eq!(town.things.len(), before + laid, "laid after the rest");
+        let mut sited = std::collections::BTreeSet::new();
+        for site in &town.things[before..] {
+            assert_eq!(site.kind, ThingKind::Site);
+            let own = site.building.expect("a site's building");
+            sited.insert(own);
+            assert!(
+                town.footprints
+                    .iter()
+                    .flatten()
+                    .all(|quad| !inside(site.at, quad)),
+                "a site in a building"
+            );
+            // A little ahead of it is its own building's ground.
+            let ahead = site.at + site.front() * 1.3;
+            assert!(
+                town.footprints[own].iter().any(|quad| inside(ahead, quad)),
+                "a site at {:?} facing {:?} of {} faces away from it: {:?}",
+                site.at,
+                site.front(),
+                town.buildings[own].name,
+                town.footprints[own]
+            );
+            assert!((site.node as usize) < town.paths.nodes.len());
+        }
+        for &home in &town.homes {
+            assert!(
+                sited.contains(&home),
+                "{} has no site",
+                town.buildings[home].name
+            );
+        }
+    }
+}

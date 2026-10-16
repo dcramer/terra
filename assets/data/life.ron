@@ -65,6 +65,10 @@
         "Pen": [
             (at: (0.0, 0.0), face: (0.0, -1.0), from_stand: true, does: ["Tend"]),
         ],
+        // A building going up, a builder's place facing its wall (D381).
+        "Site": [
+            (at: (0.0, 0.0), does: ["Build"]),
+        ],
         "Yard": [
             (at: (0.0, 0.0), face: (0.0, -1.0), does: ["Tend", "Play"]),
             // Washing in a tub in the yard, kneeling.
@@ -87,6 +91,7 @@
         "Guard": (clip: "Idle_Loop", stay: (30.0, 90.0), own: true),
         "Tend": (clip: "Fixing_Kneeling", stay: (8.0, 20.0), own: true),
         "Play": (clip: "Idle_Loop", stay: (0.1, 0.4)),
+        "Build": (clip: "Hammer_Loop", stay: (8.0, 14.0), run: true, first: true),
     },
     // The animals a town keeps: where each kind lives, how many to a yard or pen (for dogs,
     // in the town), how fast it walks and runs, how wide it is, and how long it stands,
@@ -164,6 +169,13 @@
             (from: 0.0, does: ["Home"]),
             (from: 7.5, does: ["Play"]),
             (from: 18.5, does: ["Home"]),
+        ]),
+        // Builders put up a settlement's buildings at their sites while they go up (D381);
+        // in a town already built they cut wood and talk.
+        (name: "builder", count: Fixed(12), day: [
+            (from: 0.0, does: ["Home"]),
+            (from: 5.5, does: ["Build", "Chat", "Stand"]),
+            (from: 19.5, does: ["Home"]),
         ]),
         (name: "townsfolk", count: Rest, day: [
             (from: 0.0, does: ["Home"]),

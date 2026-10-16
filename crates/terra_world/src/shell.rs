@@ -150,13 +150,15 @@ usage: terra_sandbox [options]
                         that share of the world's year after midwinter (21 December),
                         or a day of the clock itself, such as 0, when it starts, in late
                         August (docs/climate.md)
-  --site lake|tundra|town  start at a place the land's rules make, found by its query:
+  --site <place>        start at a place the land's rules make, found by its query:
                         lake, a mountain lake under the tree line with peaks a kilometre
                         over it, the start its shore, facing the water; tundra, level
                         ground past the trees over permafrost, facing the forest's edge;
                         town, level ground below the range for a market town, the forest
                         past its fields, the start beside it facing it (the town
-                        experiment lays the town there); on a world with mountains
+                        experiment lays the town there); settlement, the same place
+                        with only its plots cleared of the forest, for a settlement
+                        founded there (D381); on a world with mountains
                         (--radius 30000) (docs/demos.md)
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
@@ -177,6 +179,11 @@ usage: terra_sandbox [options]
   --going-up            on the yard, lay a stone house's plan beside the start, hold the
                         camera on it and build it a step every tenth of a second, as
                         the hammer does, to measure building as it happens
+  --timelapse <file>[@frame]
+                        with the town experiment: lay the town's plan and build it up as
+                        a time-lapse from that frame, its buildings a step at a time in the
+                        hammer's order and the clock through the day, as the file in
+                        assets/data/timelapse/ says (D381)
   --vantage <x,y,z,x,y,z[@frame]>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
@@ -304,6 +311,9 @@ pub struct Options {
     pub village: bool,
     /// On the yard: build a stone house a step at a time, the camera on it (`--going-up`).
     pub going_up: bool,
+    /// A settlement rising, its time-lapse's file and the frame it rolls on (`--timelapse`,
+    /// D381).
+    pub timelapse: Option<String>,
     /// On the yard: lay a town of so many buildings on a grid of streets, one base of a
     /// castle, or so many buildings in hamlets spread out to two kilometres, to measure
     /// building's drawing at scale (docs/development.md, measuring performance).
@@ -464,6 +474,7 @@ impl Options {
             village: false,
             going_up: false,
             town: None,
+            timelapse: None,
             castle: false,
             far: None,
             glide: false,
@@ -597,6 +608,7 @@ impl Options {
                 "--village" => options.village = true,
                 "--vantage-ground" => options.vantage_ground = true,
                 "--going-up" => options.going_up = true,
+                "--timelapse" => options.timelapse = Some(value("--timelapse")?),
                 "--town" => {
                     options.town = Some(
                         value("--town")?

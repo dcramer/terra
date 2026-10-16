@@ -76,6 +76,9 @@ pub struct Spot {
     pub taken: Option<usize>,
     /// The graph's node someone arrives by, before the last steps to it.
     pub node: u32,
+    /// Whether it can be gone to: a building site's only while its building goes up
+    /// ([`Life::set_open`]).
+    pub open: bool,
 }
 
 /// One of the town's people.
@@ -412,6 +415,7 @@ impl Life {
                     shared: plan.shared,
                     taken: None,
                     node: u32::MAX,
+                    open: true,
                 });
             }
         }
@@ -674,7 +678,7 @@ impl Life {
             .spots
             .iter()
             .enumerate()
-            .filter(|(_, spot)| spot.does.contains(&activity))
+            .filter(|(_, spot)| spot.open && spot.does.contains(&activity))
             .filter(|(i, spot)| {
                 spot.shared
                     || spot.taken.is_none()
@@ -728,6 +732,8 @@ impl Life {
         let mut order: Vec<usize> = does.to_vec();
         let first = (self.draw(person) * order.len() as f32) as usize % order.len().max(1);
         order.rotate_left(first);
+        // Work that comes and goes, before the rest, whenever there is some.
+        order.sort_by_key(|&a| !self.plan.activities[&self.activities[a]].first);
         // One that can be got to in time first, then any.
         for strict in [true, false] {
             for &activity in &order {
@@ -854,6 +860,54 @@ impl Life {
             && self.spots[spot].taken == Some(person)
         {
             self.spots[spot].taken = None;
+        }
+    }
+
+    /// Opens or closes a thing's spots, as a building site is open while its building goes up
+    /// (D381). Closed, whoever is there or on the way stops and thinks again, and no plan
+    /// keeps it; opened, whoever's hour would have them at it but is busy at something else
+    /// thinks again now rather than when that is done, as builders go to a new site.
+    pub fn set_open(&mut self, thing: usize, open: bool, hours: f64) {
+        let spots: Vec<usize> = (0..self.spots.len())
+            .filter(|&i| self.spots[i].thing == thing && self.spots[i].open != open)
+            .collect();
+        for &i in &spots {
+            self.spots[i].open = open;
+        }
+        for person in 0..self.people.len() {
+            let p = &self.people[person];
+            let rethink = if open {
+                let does = self.window_of(person, hours).2;
+                match p.state {
+                    State::Doing { activity, .. } => spots.iter().any(|&i| {
+                        !self.spots[i].does.contains(&activity)
+                            && self.spots[i].does.iter().any(|a| does.contains(a))
+                    }),
+                    _ => false,
+                }
+            } else {
+                p.spot.is_some_and(|i| spots.contains(&i))
+            };
+            if !open && p.planned.is_some_and(|plan| spots.contains(&plan.spot)) {
+                self.people[person].planned = None;
+            }
+            if !rethink {
+                continue;
+            }
+            let p = &mut self.people[person];
+            let activity = match p.state {
+                State::Doing { activity, .. } => Some(activity),
+                _ => p.going,
+            };
+            if let Some(activity) = activity {
+                p.state = State::Doing {
+                    activity,
+                    until: hours,
+                };
+            }
+            if !open {
+                self.release(person);
+            }
         }
     }
 
@@ -1040,8 +1094,9 @@ impl Life {
                 && hours >= plan.leave
             {
                 self.people[person].planned = None;
-                let free = self.spots[plan.spot].shared
-                    || self.spots[plan.spot].taken.is_none_or(|who| who == person);
+                let free = self.spots[plan.spot].open
+                    && (self.spots[plan.spot].shared
+                        || self.spots[plan.spot].taken.is_none_or(|who| who == person));
                 // Taken meanwhile: another place for something the window asks.
                 let chosen = if free {
                     Some((plan.activity, plan.spot))

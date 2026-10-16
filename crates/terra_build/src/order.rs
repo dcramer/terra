@@ -8,7 +8,8 @@
 //! These only choose; the operations they make are checked like any other, so what they
 //! choose may still be refused, and the refusal says why.
 
-use crate::cubes::{Cube, Fill, PartId, Pending};
+use crate::cubes::{Cube, Fill, Kind, PartId, Pending};
+use crate::ops::Op;
 use crate::{Base, CELL_M};
 use glam::{IVec3, Vec3};
 
@@ -233,6 +234,132 @@ impl Base {
                 .expect("no parts");
         }
         Base::from_cubes(cubes)
+    }
+}
+
+/// How many of a block kind's cubes, nearest the builder first, are offered as the one to go
+/// in next, so a cube the rules refuse (nothing under it yet) gives way to the next nearest.
+pub const BLOCKS_TRIED: usize = 24;
+
+/// One step of building, as the hammer takes it ([`Base::next_steps`]).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Step {
+    /// An opening being cut into what is built, as it was asked for last.
+    Carve(Op),
+    /// Cubes changing to another kind (D232): the old out, the swap, the new in.
+    Change(Op),
+    /// A step of a part put in: its cubes, and for a roof's the stage it puts on them, 0
+    /// its frame, 1 its battens, 2 its covering, 3 its trims (D241).
+    Put {
+        part: PartId,
+        kind: Kind,
+        cubes: Vec<[i32; 3]>,
+        stage: Option<u8>,
+    },
+}
+
+impl Step {
+    /// The operation that takes it.
+    pub fn op(&self) -> Op {
+        match self {
+            Step::Carve(op) | Step::Change(op) => op.clone(),
+            Step::Put { cubes, .. } => Op::Fill {
+                cubes: cubes.clone(),
+            },
+        }
+    }
+}
+
+impl Base {
+    /// What building would put in next for a builder at `near` (metres, the base's own
+    /// space), in the order to try them, the first the rules allow being the one taken: an
+    /// opening being carved first, then a change of kind, then of every part with something
+    /// still to go in within `reach_m` of the builder (or `aimed` at), the lowest first, on
+    /// a layer the part aimed at, then the part laid first, as a plan lays what holds the
+    /// rest up first, its footing before its floor (D194), then the nearest. A long member
+    /// goes in across its whole layer; a block kind (`one_at_a_time`) a cube at a time, the
+    /// nearest first; a roof a stage at a time. These only choose; each is checked as any
+    /// operation is.
+    pub fn next_steps(
+        &self,
+        near: Vec3,
+        reach_m: f32,
+        aimed: Option<PartId>,
+        one_at_a_time: impl Fn(Kind) -> bool,
+    ) -> Vec<Step> {
+        let mut parts: Vec<(i32, f32, PartId)> = self
+            .parts()
+            .filter_map(|(id, part)| {
+                let cubes = self.next_in(id, near, one_at_a_time(part.kind))?;
+                let at = IVec3::from_array(cubes[0]);
+                let distance = ((at.as_vec3() + 0.5) * CELL_M).distance(near);
+                (distance <= reach_m || Some(id) == aimed).then_some((at.y, distance, id))
+            })
+            .collect();
+        parts.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then((Some(b.2) == aimed).cmp(&(Some(a.2) == aimed)))
+                .then(a.2.cmp(&b.2))
+                .then(a.1.total_cmp(&b.1))
+        });
+        let mut steps = Vec::new();
+        if let Some(op) = self.next_carve(near, &one_at_a_time) {
+            steps.push(Step::Carve(op));
+        }
+        if let Some(op) = self.next_change(near, &one_at_a_time) {
+            steps.push(Step::Change(op));
+        }
+        for (_, _, id) in parts {
+            let Some(part) = self.part(id) else {
+                continue;
+            };
+            let kind = part.kind;
+            let layer = self.next_in(id, near, false).unwrap_or_default();
+            let goes_in: Vec<Vec<[i32; 3]>> = if one_at_a_time(kind) {
+                let middle = |at: &[i32; 3]| {
+                    ((IVec3::from_array(*at).as_vec3() + 0.5) * CELL_M).distance_squared(near)
+                };
+                let mut nearest = layer;
+                nearest.sort_by(|a, b| middle(a).total_cmp(&middle(b)));
+                nearest
+                    .into_iter()
+                    .take(BLOCKS_TRIED)
+                    .map(|at| vec![at])
+                    .collect()
+            } else {
+                vec![layer]
+            };
+            for cubes in goes_in {
+                let stage = kind.is_roof().then(|| {
+                    let cube = self
+                        .cube(IVec3::from_array(cubes[0]))
+                        .unwrap_or(Cube::planned(kind, None));
+                    crate::layout::roofs::stage_of(&cube).min(3)
+                });
+                steps.push(Step::Put {
+                    part: id,
+                    kind,
+                    cubes,
+                    stage,
+                });
+            }
+        }
+        steps
+    }
+
+    /// How far it is built, from 0 to 1: every cube to be built counted by how far in it
+    /// is, an opening not at all. 1 with nothing to build.
+    pub fn built_share(&self) -> f32 {
+        let (mut in_, mut all) = (0u64, 0u64);
+        for (_, cube) in self.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
+            in_ += u64::from(cube.level());
+            all += u64::from(crate::cubes::FULL);
+        }
+        if all == 0 {
+            1.0
+        } else {
+            in_ as f32 / all as f32
+        }
     }
 }
 

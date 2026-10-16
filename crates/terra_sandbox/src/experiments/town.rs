@@ -50,7 +50,8 @@ fn at_the_site(
     start: Res<Start>,
     mut wanted: ResMut<Wanted>,
 ) {
-    let Some(Found::Town(site)) = sited.as_deref().map(|sited| sited.0) else {
+    let Some(Found::Town(site) | Found::Settlement(site)) = sited.as_deref().map(|sited| sited.0)
+    else {
         return;
     };
     let at = start.local(planet.surface(site.toward));

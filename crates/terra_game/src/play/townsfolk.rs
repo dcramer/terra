@@ -431,6 +431,7 @@ fn place(
     market: Res<Market>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut folk: Query<(Entity, &Folk, &mut Transform, &mut Visibility)>,
+    rising: Option<Res<super::rising::Rising>>,
 ) {
     let eye = camera.single().ok().map(|c| market.local(c.translation()));
     for (entity, one, mut at, mut shown) in &mut folk {
@@ -440,6 +441,8 @@ fn place(
         let beyond = eye.is_some_and(|eye| eye.distance(person.at) > DRAWN_M);
         let hidden = matches!(market.life.shows(one.index), Shows::Hidden)
             || person.detail == Detail::Far
+            // In a settlement rising, nobody but its builders until their home is up.
+            || rising.as_ref().is_some_and(|r| !r.about(&market, one.index))
             || beyond;
         let wanted = if hidden {
             Visibility::Hidden

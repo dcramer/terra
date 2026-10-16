@@ -73,6 +73,9 @@ pub enum Found {
     /// A market town's place: the start beside it, out by its fields, facing it; the town is
     /// the layer above's to lay there.
     Town(terra_land::town::TownSite),
+    /// A settlement newly founded at a market town's place, only its plots cleared of the
+    /// forest (D381): the start beside it, facing it.
+    Settlement(terra_land::town::TownSite),
 }
 
 /// The place the land's rules made that the world starts at, if `--site` asked for one.
@@ -85,7 +88,7 @@ impl Found {
         match self {
             Found::Lake(site) => site.toward,
             Found::Tundra(site) => site.toward,
-            Found::Town(site) => site.toward,
+            Found::Town(site) | Found::Settlement(site) => site.toward,
         }
     }
 
@@ -93,7 +96,7 @@ impl Found {
     /// streets look out on grown trees whichever way.
     pub fn woods_middle(&self, planet: &Planet) -> Option<Vec3> {
         match self {
-            Found::Town(site) => Some(planet.surface(site.toward)),
+            Found::Town(site) | Found::Settlement(site) => Some(planet.surface(site.toward)),
             Found::Lake(_) | Found::Tundra(_) => None,
         }
     }
@@ -102,6 +105,9 @@ impl Found {
     pub fn clearings(&self, land: &terra_land::Land) -> Vec<terra_land::town::Clearing> {
         match self {
             Found::Town(site) => terra_land::town::MarketTown::DEMO.clearings(land, site),
+            Found::Settlement(site) => {
+                terra_land::town::MarketTown::SETTLEMENT.clearings(land, site)
+            }
             Found::Lake(_) | Found::Tundra(_) => Vec::new(),
         }
     }
@@ -120,7 +126,7 @@ impl Found {
                     Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up),
                 )
             }
-            Found::Town(site) => {
+            Found::Town(site) | Found::Settlement(site) => {
                 let at = planet.surface(site.start);
                 let up = at.normalize();
                 let facing = (planet.surface(site.toward) - at)
@@ -178,12 +184,16 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
             );
             Found::Tundra(site)
         }
-        "town" => {
-            let want = terra_land::town::MarketTown::DEMO;
+        "town" | "settlement" => {
+            let want = if name == "town" {
+                terra_land::town::MarketTown::DEMO
+            } else {
+                terra_land::town::MarketTown::SETTLEMENT
+            };
             let (site, searched) = land.market_town_searched(terra_land::PLANET_START, &want);
             let site = site.unwrap_or_else(|| {
                 panic!(
-                    "--site town: no place for a market town on this world ({searched:?}); it needs --radius 30000"
+                    "--site {name}: no place for a market town on this world ({searched:?}); it needs --radius 30000"
                 )
             });
             info!(
@@ -198,9 +208,13 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
                 site.at_km.x,
                 site.at_km.y
             );
-            Found::Town(site)
+            if name == "town" {
+                Found::Town(site)
+            } else {
+                Found::Settlement(site)
+            }
         }
-        other => panic!("--site {other}: the sites are lake, tundra and town"),
+        other => panic!("--site {other}: the sites are lake, tundra, town and settlement"),
     }
 }
 

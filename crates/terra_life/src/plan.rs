@@ -66,6 +66,10 @@ pub struct Activity {
     /// Got to at a run.
     #[serde(default)]
     pub run: bool,
+    /// Tried before the window's others whenever one of its places is open and free: work
+    /// that comes and goes, as a building site's while its building goes up (D381).
+    #[serde(default)]
+    pub first: bool,
 }
 
 /// How many of the town take a role.

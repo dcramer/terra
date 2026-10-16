@@ -19,6 +19,31 @@ impl Base {
     /// layer filled from the bottom up, a step at a time, until all of it is built.
     /// Fills are worked out against `rules`' terms, as the base built by them would be.
     pub fn operations(&self, rules: &Rules) -> Vec<Op> {
+        let mut ops = self.plan_operations();
+        // Each layer from the bottom, its cubes a step at a time until all are in.
+        let mut layers: BTreeMap<i32, Vec<([i32; 3], u8)>> = BTreeMap::new();
+        for (at, cube) in self.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
+            let steps = crate::cubes::FULL / rules.of(cube.kind).step();
+            layers.entry(at.y).or_default().push((at.to_array(), steps));
+        }
+        for cubes in layers.into_values() {
+            let most = cubes.iter().map(|&(_, steps)| steps).max().unwrap_or(0);
+            for step in 0..most {
+                let fill: Vec<[i32; 3]> = cubes
+                    .iter()
+                    .filter(|&&(_, steps)| step < steps)
+                    .map(|&(at, _)| at)
+                    .collect();
+                ops.push(Op::Fill { cubes: fill });
+            }
+        }
+        ops
+    }
+
+    /// The plan of this base, as builders lay it before they build: every kind its own
+    /// part, its cubes planned with the ground under them as sampled, its openings made
+    /// open. What [`Base::operations`] starts with, and a time-lapse lays first (D381).
+    pub fn plan_operations(&self) -> Vec<Op> {
         let mut by_kind: BTreeMap<Kind, Vec<Planned>> = BTreeMap::new();
         let mut openings = Vec::new();
         for (at, cube) in self.cubes() {
@@ -47,23 +72,6 @@ impl Base {
             .collect();
         if !openings.is_empty() {
             ops.push(Op::Open { cubes: openings });
-        }
-        // Each layer from the bottom, its cubes a step at a time until all are in.
-        let mut layers: BTreeMap<i32, Vec<([i32; 3], u8)>> = BTreeMap::new();
-        for (at, cube) in self.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
-            let steps = crate::cubes::FULL / rules.of(cube.kind).step();
-            layers.entry(at.y).or_default().push((at.to_array(), steps));
-        }
-        for cubes in layers.into_values() {
-            let most = cubes.iter().map(|&(_, steps)| steps).max().unwrap_or(0);
-            for step in 0..most {
-                let fill: Vec<[i32; 3]> = cubes
-                    .iter()
-                    .filter(|&&(_, steps)| step < steps)
-                    .map(|&(at, _)| at)
-                    .collect();
-                ops.push(Op::Fill { cubes: fill });
-            }
         }
         ops
     }

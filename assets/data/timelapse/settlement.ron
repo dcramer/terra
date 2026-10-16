@@ -1,0 +1,20 @@
+// A settlement built from a bare clearing into a market town in a day, as a city-builder's
+// time-lapse shows one (D381, play::rising): the claim stone set at the heart of it, then
+// every building of the town from the square out, each from its plan to its last trim by the
+// building system's own steps, its builders at its sites; each finished house's hearth
+// smoking and its household about, its yard, fences and torch there; the well, benches and
+// stalls as the settlement reaches them. Times are seconds after it rolls.
+#![enable(implicit_some)]
+(
+    about: "a market town rising from its clearing in a day",
+    seconds: 42.0,
+    // From early morning, the sun low and the mist about, to late afternoon.
+    hours: (6.7, 14.5),
+    claim: 0.6,
+    first: 1.5,
+    last: 27.0,
+    takes: (7.0, 13.0),
+    settled_after: 1.0,
+    common: (6.0, 30.0),
+    steps_a_frame: 400,
+)

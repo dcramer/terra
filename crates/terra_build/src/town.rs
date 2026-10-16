@@ -103,11 +103,14 @@ pub enum ThingKind {
     Cart,
     /// Room on the ground beside a stall for the bigger goods of its trade (D352).
     Goods,
+    /// Where builders stand to work on a building going up, facing its wall (D381): laid
+    /// only for a settlement being built, open while its building rises.
+    Site,
 }
 
 impl ThingKind {
     /// Every kind, in order.
-    pub const ALL: [ThingKind; 15] = [
+    pub const ALL: [ThingKind; 16] = [
         ThingKind::Door,
         ThingKind::Well,
         ThingKind::Stall,
@@ -123,6 +126,7 @@ impl ThingKind {
         ThingKind::Barrel,
         ThingKind::Cart,
         ThingKind::Goods,
+        ThingKind::Site,
     ];
 
     /// Its name, as data names it (`assets/data/life.ron`).
@@ -143,6 +147,7 @@ impl ThingKind {
             ThingKind::Barrel => "Barrel",
             ThingKind::Cart => "Cart",
             ThingKind::Goods => "Goods",
+            ThingKind::Site => "Site",
         }
     }
 
@@ -733,6 +738,64 @@ struct Front {
 }
 
 impl Town {
+    /// Where builders stand to put each building up (D381): a [`ThingKind::Site`] a little
+    /// out from the middle of every side of its ground that is not against another's, and
+    /// from each corner along the longer sides, facing the wall, arrived at by its door's
+    /// node. Laid only for a settlement being built (a time-lapse of one), after the rest of
+    /// the town, so every other thing keeps its place in the list. How many were laid.
+    pub fn add_sites(&mut self) -> usize {
+        const OUT_M: f32 = 1.1;
+        let before = self.things.len();
+        for (index, ground) in self.footprints.iter().enumerate() {
+            let Some(node) = self
+                .things
+                .iter()
+                .find(|t| t.kind == ThingKind::Door && t.building == Some(index))
+                .map(|t| t.node)
+            else {
+                continue;
+            };
+            for quad in ground {
+                let middle = quad.iter().copied().sum::<Vec2>() / 4.0;
+                for side in 0..4 {
+                    let (a, b) = (quad[side], quad[(side + 1) % 4]);
+                    let along = b - a;
+                    let length = along.length();
+                    if length < 1.5 {
+                        continue;
+                    }
+                    let centre = (a + b) * 0.5;
+                    let out = (centre - middle).normalize_or_zero();
+                    let mut places = vec![0.5];
+                    if length > 6.0 {
+                        places.extend([0.2, 0.8]);
+                    }
+                    for share in places {
+                        let at = a + along * share + out * OUT_M;
+                        let blocked = self
+                            .footprints
+                            .iter()
+                            .flatten()
+                            .any(|other| inside(at, other))
+                            || self
+                                .things
+                                .iter()
+                                .filter_map(Thing::outline)
+                                .any(|other| inside(at, &other));
+                        if blocked {
+                            continue;
+                        }
+                        let mut site =
+                            Thing::new(ThingKind::Site, at, facing_of(-out), Some(index));
+                        site.node = node;
+                        self.things.push(site);
+                    }
+                }
+            }
+        }
+        self.things.len() - before
+    }
+
     /// Whether a building's ground, where it would stand, keeps clear of everything there:
     /// other buildings, yards, the streets, the square and its things.
     fn clear_for(&self, ground: &[[Vec2; 4]], apart: f32) -> bool {
@@ -1895,6 +1958,7 @@ pub fn svg(town: &Town, heights: &dyn Fn(Vec2) -> f32, marks: &[Mark]) -> String
             ThingKind::Barrel => "#6b4a2b",
             ThingKind::Cart => "#9c7a4a",
             ThingKind::Goods => "#c9a227",
+            ThingKind::Site => "#ffffff",
         };
         match thing.outline() {
             Some(quad) => svg.push_str(&poly(&quad, &format!("fill=\"{colour}\" stroke=\"#222\""))),

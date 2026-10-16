@@ -13,6 +13,10 @@ use bevy::prelude::*;
 use terra_build::town::{FURNISHING, Fence, FenceKind};
 use terra_core::{Piece, Solid};
 
+/// A module of a town's fences, drawn.
+#[derive(Component)]
+pub struct TownFence;
+
 /// How far round its line a fence stops a body, and how tall it stands.
 const FENCE_REACH_M: f32 = 0.1;
 
@@ -59,6 +63,7 @@ pub fn lay(
         let stretch = fence.from.distance(fence.to) / module_m;
         let mut drawn = commands.spawn((
             Name::new(file),
+            TownFence,
             Transform::from_translation(foot)
                 .with_rotation(rotation)
                 .with_scale(Vec3::new(stretch, 1.0, 1.0)),

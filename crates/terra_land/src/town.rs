@@ -105,6 +105,15 @@ impl MarketTown {
         step_m: 50.0,
     };
 
+    /// A settlement newly founded (D381): the same valley floor, but only its plots cleared
+    /// of the forest, the trees standing a few dozen metres past its last houses in bays and
+    /// tongues, as a clearing cut for a village is.
+    pub const SETTLEMENT: MarketTown = MarketTown {
+        clearing_m: 105.0,
+        clearing_edge_m: 35.0,
+        ..MarketTown::DEMO
+    };
+
     /// The forest a town found by this query has cleared: its fields round it, and round the
     /// world's start beside it.
     pub fn clearings(&self, land: &Land, site: &TownSite) -> Vec<Clearing> {

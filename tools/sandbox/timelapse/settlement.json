@@ -1,0 +1,13 @@
+{
+  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): high on its north side, looking down across the plots to the forest's edge and the valley beyond, slowly round toward the west as the day goes by",
+  "seconds": 42,
+  "rig": { "around": [0, 0, -345] },
+  "keys": [
+    { "t": 0, "orbit": [24, 86, 36], "look": [0, 0, -330], "lens": 26 },
+    { "t": 21, "orbit": [0, 80, 34] },
+    { "t": 42, "orbit": [-24, 76, 32], "look": [0, 0, -332], "lens": 27 }
+  ],
+  "ease": "in-out",
+  "look": { "exposure": "auto", "hold_clock": true },
+  "player": { "hidden": true }
+}

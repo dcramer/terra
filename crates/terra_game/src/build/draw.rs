@@ -93,6 +93,11 @@ pub(super) fn cell_range() -> VisibilityRange {
 const LAY_M: f32 = 690.0;
 const DROP_M: f32 = 740.0;
 
+/// A mesh of a plan's ghosts or its shell, a section's child: what a build that shows no
+/// blueprint, such as a settlement rising in a time-lapse (D381), keeps out of sight.
+#[derive(Component)]
+pub(crate) struct PlanGhost;
+
 fn ghost_range() -> VisibilityRange {
     VisibilityRange::abrupt(0.0, GHOST_M)
 }
@@ -1559,6 +1564,7 @@ fn show(
                 .spawn((
                     Mesh3d(mesh.handle(meshes, false)),
                     MeshMaterial3d(looks.shell.clone()),
+                    PlanGhost,
                     ghost_range(),
                     NotShadowCaster,
                     placed,
@@ -1575,6 +1581,7 @@ fn show(
                     .spawn((
                         Mesh3d(mesh.handle(meshes, false)),
                         MeshMaterial3d(looks.ghost[shade].clone()),
+                        PlanGhost,
                         placed,
                         ghost_range(),
                         NotShadowCaster,

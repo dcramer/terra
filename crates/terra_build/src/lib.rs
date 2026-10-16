@@ -39,6 +39,7 @@ pub mod burg;
 pub mod castle;
 pub mod cells;
 pub mod checker;
+pub mod construct;
 pub mod cost;
 pub mod cubes;
 pub mod draw;

@@ -847,7 +847,8 @@ pub fn ray_box(
 fn keep_clear(
     site: Res<Site>,
     checked: Option<ResMut<CheckedFor>>,
-    mut props: Query<(&Prop, &mut Visibility)>,
+    // Only the player's: what a town placed is not in their base.
+    mut props: Query<(&Prop, &mut Visibility), Without<Theirs>>,
 ) {
     let Some(mut checked) = checked else { return };
     if checked.0 == site.revision {

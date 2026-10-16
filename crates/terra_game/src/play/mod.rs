@@ -55,6 +55,7 @@ pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
     looks as prop_looks,
 };
+pub(crate) mod rising;
 mod save;
 pub(crate) mod settlement;
 mod skills;
@@ -164,6 +165,7 @@ impl Plugin for GameplayPlugin {
         pooling::plugin(app);
         settlement::plugin(app);
         town::plugin(app);
+        rising::plugin(app);
         townsfolk::plugin(app);
         town_sound::plugin(app);
         town_animals::plugin(app);

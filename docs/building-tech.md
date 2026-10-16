@@ -91,6 +91,7 @@ On the Bevy side, in `terra_game` (D213; [building-plan.md](building-plan.md#dra
 - **A part's progress is its cubes' fill**, built from the bottom, as what each rests on is in (D194).
 - **The next piece** is the lowest not yet in, nearest the builder, so holding the key builds a wall up course by course, and two players can work from both ends.
 - **A roof's cubes go in a layer at a time from the eaves**, each in four steps: frame, battens, covering, trims (D241).
+- **Anyone else's building goes up by the same steps** (`terra_build::construct`, D381): the candidates the hammer picks from (`Base::next_steps`) are shared, so a settlement's time-lapse (`--timelapse`) or a bench builds as a player does, from its plan to its last trim.
 
 ## Buildings and indoors
 

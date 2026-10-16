@@ -238,13 +238,23 @@ fn place(
     planet: Res<Planet>,
     market: Res<Market>,
     mut beasts: Query<(&Beast, &mut Transform, &mut Visibility)>,
+    rising: Option<Res<super::rising::Rising>>,
 ) {
     for (beast, mut at, mut shown) in &mut beasts {
         let Some(animal) = market.animals.animals.get(beast.index) else {
             continue;
         };
-        if *shown != Visibility::Inherited {
-            *shown = Visibility::Inherited;
+        // In a settlement rising, a yard's animals come with its house (D381).
+        let wanted = if rising
+            .as_ref()
+            .is_some_and(|r| !r.is_up(super::rising::owner(&market.life.town, animal.at)))
+        {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        if *shown != wanted {
+            *shown = wanted;
         }
         let feet = market.ground(&planet, animal.at);
         let up = feet.normalize();

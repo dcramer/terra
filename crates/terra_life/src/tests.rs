@@ -307,3 +307,69 @@ fn a_town_started_settled_is_in_mid_flow_not_stood_still() {
         "walking: {settled} settled, {cold} cold"
     );
 }
+
+#[test]
+fn builders_go_to_a_building_while_it_goes_up_and_leave_when_it_is_done() {
+    // D381: a site's spots are closed until its building goes up; opened, builders busy at
+    // something else go to it and hammer there; closed, nobody stays.
+    let ground = |at: Vec2| at.x * 0.03;
+    let mut town = town(2, KINDS, &ground);
+    let first = town.things.len();
+    town.add_sites();
+    let mut life = Life::new(town, plan(), 2, SECONDS_AN_HOUR);
+    let sites: Vec<usize> = (first..life.town.things.len()).collect();
+    let viewer = square(&life);
+    let mut hours = 8.0;
+    for &site in &sites {
+        life.set_open(site, false, hours);
+    }
+    life.start_settled(hours, viewer);
+    let building = |life: &Life, person: usize| {
+        let spot = life.people[person].spot?;
+        let thing = &life.town.things[life.spots[spot].thing];
+        (thing.kind == ThingKind::Site)
+            .then_some(thing.building)
+            .flatten()
+    };
+    let at_sites = |life: &Life| {
+        (0..life.people.len())
+            .filter(|&p| life.activity(p) == Some("Build") && building(life, p).is_some())
+            .count()
+    };
+    let advance = |life: &mut Life, hours: &mut f64, minutes: f64| {
+        let steps = (minutes / 60.0 * SECONDS_AN_HOUR as f64 / STEP as f64) as u64;
+        for _ in 0..steps {
+            *hours += STEP as f64 / SECONDS_AN_HOUR as f64;
+            life.step(*hours, STEP, &[viewer]);
+        }
+    };
+    advance(&mut life, &mut hours, 10.0);
+    assert_eq!(at_sites(&life), 0, "nobody builds where nothing goes up");
+    // The building of the first home's sites opened.
+    let home = life.town.homes[0];
+    let its: Vec<usize> = sites
+        .iter()
+        .copied()
+        .filter(|&s| life.town.things[s].building == Some(home))
+        .collect();
+    for &site in &its {
+        life.set_open(site, true, hours);
+    }
+    advance(&mut life, &mut hours, 20.0);
+    let building_there = (0..life.people.len())
+        .filter(|&p| {
+            life.activity(p) == Some("Build")
+                && matches!(life.people[p].state, State::Doing { .. })
+                && building(&life, p) == Some(home)
+        })
+        .count();
+    assert!(
+        building_there >= 2,
+        "{building_there} building at the open site"
+    );
+    for &site in &its {
+        life.set_open(site, false, hours);
+    }
+    advance(&mut life, &mut hours, 2.0);
+    assert_eq!(at_sites(&life), 0, "nobody stays at a site closed");
+}

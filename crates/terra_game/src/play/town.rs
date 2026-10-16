@@ -215,9 +215,15 @@ fn burn(
     market: Res<Market>,
     mut hearths: Query<(&Hearth, &mut Smoke), Without<ForgeFire>>,
     mut forges: Query<(&ForgeFire, &mut Smoke), Without<Hearth>>,
+    rising: Option<Res<super::rising::Rising>>,
 ) {
     let life = &market.life;
     for (hearth, mut smoke) in &mut hearths {
+        // Rising, a hearth is lit once its house is up and lived in (D381).
+        if rising.as_ref().is_some_and(|r| !r.settled(hearth.home)) {
+            smoke.thickness = 0.0;
+            continue;
+        }
         let door = life
             .town
             .things
@@ -241,6 +247,13 @@ fn burn(
         }
     }
     for (forge, mut smoke) in &mut forges {
+        if rising
+            .as_ref()
+            .is_some_and(|r| !r.reached(&life.town, life.town.things[forge.thing].at))
+        {
+            smoke.thickness = 0.0;
+            continue;
+        }
         let worked = (0..life.people.len()).any(|p| {
             life.activity(p) == Some("Smith")
                 && matches!(life.people[p].state, terra_life::State::Doing { .. })
@@ -414,6 +427,7 @@ fn report(
 /// its streets and square trodden to bare earth, as are the ways round its stalls and the
 /// thresholds of its doors; its yards worn thin by hens and feet; grass elsewhere as the
 /// planet grows it.
+#[derive(Clone)]
 struct TownCover {
     middle: Vec3,
     east: Vec3,
@@ -527,6 +541,48 @@ impl terra_world::cover::CoverSource for TownOverWorld {
     }
 }
 
+/// A settlement rising's ground, worn as it is built (D381): its town's cover as it will
+/// be, the world's under it, and which building each door and yard is of.
+#[derive(Resource)]
+pub struct Wear {
+    world: Option<terra_world::cover::CoverRules>,
+    whole: TownCover,
+    doors: Vec<Option<usize>>,
+    yards: Vec<usize>,
+}
+
+impl Wear {
+    /// What grows with the doors of the buildings `started` worn round, and the yards of
+    /// those `up`.
+    pub fn rules(
+        &self,
+        planet: &Planet,
+        started: impl Fn(usize) -> bool,
+        up: impl Fn(usize) -> bool,
+    ) -> terra_world::cover::CoverRules {
+        let worn = TownCover {
+            doors: self
+                .whole
+                .doors
+                .iter()
+                .zip(&self.doors)
+                .filter(|(_, b)| b.is_some_and(&started))
+                .map(|(door, _)| *door)
+                .collect(),
+            yards: self
+                .whole
+                .yards
+                .iter()
+                .zip(&self.yards)
+                .filter(|(_, b)| up(**b))
+                .map(|(yard, _)| *yard)
+                .collect(),
+            ..self.whole.clone()
+        };
+        over_the_worlds(self.world.as_ref(), planet, worn)
+    }
+}
+
 /// The rules for what grows once a town is laid: its own, over the world's if it has any.
 fn over_the_worlds(
     world: Option<&terra_world::cover::CoverRules>,
@@ -567,7 +623,8 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         lay.run_if(resource_exists::<Wanted>)
-            .run_if(not(resource_exists::<Market>)),
+            .run_if(not(resource_exists::<Market>))
+            .in_set(Laid),
     )
     .add_systems(
         FixedUpdate,
@@ -586,6 +643,10 @@ pub fn plugin(app: &mut App) {
 /// the lens rather than brush it, where they would be faded out half seen.
 const VISITOR_M: f32 = 0.4;
 const LENS_M: f32 = 1.0;
+
+/// The town laid out, which what changes it after follows.
+#[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Laid;
 
 /// The town's people's tick, which what draws them follows.
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -612,7 +673,10 @@ fn lay(
     cover: Option<Res<terra_world::cover::CoverRules>>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut obstacles: Option<ResMut<super::flora::Obstacles>>,
+    (mut obstacles, rising): (
+        Option<ResMut<super::flora::Obstacles>>,
+        Option<Res<super::rising::Rising>>,
+    ),
 ) {
     let (Some(site), Some(look)) = (site, look) else {
         return;
@@ -646,7 +710,7 @@ fn lay(
         let ground = planet.ground_at(middle + east * at.x + south * at.y);
         ground.length() - radius + at.length_squared() / (2.0 * radius)
     };
-    let town = terra_build::town::town(wanted.seed, &palette, &heights);
+    let mut town = terra_build::town::town(wanted.seed, &palette, &heights);
     let at = |p: Vec2| planet.ground_at(middle + east * p.x + south * p.y);
 
     // The streets and the square, their plants cleared and kept off, trodden bare.
@@ -729,7 +793,9 @@ fn lay(
             &shape,
             &planet,
         );
-        clear.write(ClearAround(door, 9.0));
+        if rising.is_none() {
+            clear.write(ClearAround(door, 9.0));
+        }
         // Its hearth's light within, a little inside its door, at a fire's height.
         if town.homes.contains(&index) {
             let within = frame.transform_point(Vec3::new(0.0, 1.0, -1.1));
@@ -764,6 +830,22 @@ fn lay(
         }
         let label = format!("Town: {}", building.name);
         let mut built = Build::new(&mut commands, &look, frame, &label);
+        // A settlement rising (D381): the building as it will be, left to go up a step at
+        // a time from its plan, its doors and shutters fitted once it is up.
+        if rising.is_some() {
+            let whole = built.ready_to_rise(&building.ops, &mut commands, &planet, &mut meshes);
+            commands.spawn((
+                Name::new(format!("{label}, rising")),
+                Built(built),
+                super::rising::Rises {
+                    index,
+                    whole,
+                    planned: false,
+                    near: Vec3::ZERO,
+                },
+            ));
+            continue;
+        }
         if let Err(why) = built.put_up(&building.ops, &mut commands, &planet, &mut meshes) {
             warn!(
                 "Town: {}: not put up by the operations: {why}",
@@ -1066,29 +1148,48 @@ fn lay(
     // Its ground cover, over what the world grows round it if it grows its own.
     {
         let at2 = start.local(middle);
-        commands.insert_resource(over_the_worlds(
-            cover.as_deref(),
-            &planet,
-            TownCover {
-                middle,
-                east,
-                south,
-                at: Vec2::new(at2.x, at2.z),
-                square: town.square.outline.clone(),
-                streets: town
-                    .streets
-                    .iter()
-                    .map(|s| (s.points.clone(), s.wide))
-                    .collect(),
-                yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
+        let whole = TownCover {
+            middle,
+            east,
+            south,
+            at: Vec2::new(at2.x, at2.z),
+            square: town.square.outline.clone(),
+            streets: town
+                .streets
+                .iter()
+                .map(|s| (s.points.clone(), s.wide))
+                .collect(),
+            yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
+            doors: town
+                .things
+                .iter()
+                .filter(|t| t.kind == ThingKind::Door)
+                .map(|t| t.place(Vec2::new(0.0, 0.8)))
+                .collect(),
+        };
+        if rising.is_some() {
+            // Rising, a house's ground is worn once its plot is laid and its yard once it
+            // is up (`Wear`); the streets and the square are laid out from the first.
+            let wear = Wear {
+                world: cover.as_deref().cloned(),
                 doors: town
                     .things
                     .iter()
                     .filter(|t| t.kind == ThingKind::Door)
-                    .map(|t| t.place(Vec2::new(0.0, 0.8)))
+                    .map(|t| t.building)
                     .collect(),
-            },
-        ));
+                yards: town.yards.iter().map(|(b, _)| *b).collect(),
+                whole,
+            };
+            commands.insert_resource(wear.rules(&planet, |_| false, |_| false));
+            commands.insert_resource(wear);
+        } else {
+            commands.insert_resource(over_the_worlds(cover.as_deref(), &planet, whole));
+        }
+    }
+    // A settlement rising has its builders' places round every building (D381).
+    if rising.is_some() {
+        town.add_sites();
     }
     let life = Life::new(town, plan, seed, DAY_SECONDS / 24.0);
     let local = start.local(middle);
@@ -1145,6 +1246,7 @@ fn lived_hours(now: f64, seen: f64, lived: f64, step: f32) -> f64 {
 fn live(
     time: Res<Time>,
     clock: Res<Clock>,
+    rising: Option<Res<super::rising::Rising>>,
     mut market: ResMut<Market>,
     viewers: Query<&GlobalTransform, Or<(With<Viewpoint>, With<MainCamera>)>>,
     visitors: Query<
@@ -1169,7 +1271,13 @@ fn live(
     market.life.visitors = visitors;
     let step = time.delta_secs();
     let now = Market::hours(&clock);
-    let hours = lived_hours(now, market.clock_seen, market.lived, step);
+    // A time-lapse runs the sun through the day; its people keep the day's own pace from
+    // where it began, as they would be filmed (D381).
+    let hours = if rising.is_some() && market.lived.is_finite() {
+        market.lived + step as f64 * 24.0 / DAY_SECONDS as f64
+    } else {
+        lived_hours(now, market.clock_seen, market.lived, step)
+    };
     market.clock_seen = now;
     market.lived = hours;
     market.life.step(hours, step, &viewers);

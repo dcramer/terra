@@ -42,6 +42,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use terra_build::ops::{self, Context, Done, Op, Refusal};
+use terra_build::order::Step;
 use terra_build::{Amount, Bill, CELL_M, Kind, PartId, Rules, Sample, Walker};
 use terra_items::ItemKind;
 
@@ -49,8 +50,6 @@ use terra_items::ItemKind;
 pub const UNDO_S: f32 = 60.0;
 /// How far from the builder the next part to build is looked for, in metres.
 const NEAR_WORK_M: f32 = 14.0;
-/// How many of a block kind's cubes, nearest first, are tried for the one to go in next.
-const BLOCKS_TRIED: usize = 24;
 
 /// What building costs and how each kind goes in, from the kits and the catalogue.
 #[derive(Resource, Default, Clone)]
@@ -848,112 +847,67 @@ impl Building<'_, '_> {
         near: Vec3,
     ) -> Option<Work> {
         let base = &self.site.base;
-        let mut parts: Vec<(i32, f32, PartId)> = base
-            .parts()
-            .filter_map(|(id, part)| {
-                let cubes = base.next_in(id, near, self.blocks(part.kind))?;
-                let at = IVec3::from_array(cubes[0]);
-                let distance = ((at.as_vec3() + 0.5) * CELL_M).distance(near);
-                (distance <= NEAR_WORK_M || Some(id) == aimed).then_some((at.y, distance, id))
+        let steps = base.next_steps(near, NEAR_WORK_M, aimed, |kind| self.blocks(kind));
+        let name = |cubes: &[[i32; 3]]| {
+            let kind = base.cube(IVec3::from_array(cubes[0])).map(|cube| cube.kind);
+            kind.map_or("plain", |kind| self.rules.name(kind))
+                .to_string()
+        };
+        let candidates: Vec<(String, Vec<Op>)> = steps
+            .into_iter()
+            .map(|step| {
+                let what = match &step {
+                    Step::Carve(Op::Open { cubes }) => {
+                        format!("open {} carved cube{}", cubes.len(), plural(cubes))
+                    }
+                    Step::Carve(Op::Empty { cubes }) => format!(
+                        "carve {} cube{} out ({} up)",
+                        cubes.len(),
+                        plural(cubes),
+                        cubes[0][1]
+                    ),
+                    Step::Carve(_) => "carve".to_string(),
+                    Step::Change(Op::Empty { cubes }) => {
+                        format!("take {} out to change it", name(cubes))
+                    }
+                    Step::Change(Op::Swap { cubes }) => {
+                        format!("change {} cube{}", cubes.len(), plural(cubes))
+                    }
+                    Step::Change(Op::Fill { cubes }) => {
+                        format!("put {} in where it changed", name(cubes))
+                    }
+                    Step::Change(Op::Cancel { cubes }) => {
+                        format!("finish changing {} cube{}", cubes.len(), plural(cubes))
+                    }
+                    Step::Change(_) => "change".to_string(),
+                    Step::Put {
+                        part,
+                        kind,
+                        cubes,
+                        stage: Some(stage),
+                    } => format!(
+                        "put {}'s {} on part {} ({} cube{}, {} up)",
+                        self.rules.name(*kind),
+                        ["frame", "battens", "covering", "trims"][usize::from(*stage)],
+                        part.0,
+                        cubes.len(),
+                        plural(cubes),
+                        cubes[0][1]
+                    ),
+                    Step::Put {
+                        part, kind, cubes, ..
+                    } => format!(
+                        "put {} into part {} ({} cube{}, {} up)",
+                        self.rules.name(*kind),
+                        part.0,
+                        cubes.len(),
+                        plural(cubes),
+                        cubes[0][1]
+                    ),
+                };
+                (what, vec![step.op()])
             })
             .collect();
-        // Lowest first, as what a part rests on goes in before it; on a layer, the part
-        // aimed at, then the part laid first, as a plan lays what holds the rest up first,
-        // its footing before its floor (D194), then the nearest.
-        parts.sort_by(|a, b| {
-            a.0.cmp(&b.0)
-                .then((Some(b.2) == aimed).cmp(&(Some(a.2) == aimed)))
-                .then(a.2.cmp(&b.2))
-                .then(a.1.total_cmp(&b.1))
-        });
-        let mut candidates: Vec<(String, Vec<Op>)> = Vec::new();
-        // An opening being cut into what is built first, as it was asked for last.
-        if let Some(op) = base.next_carve(near, |kind| self.blocks(kind)) {
-            let what = match &op {
-                Op::Open { cubes } => format!("open {} carved cube{}", cubes.len(), plural(cubes)),
-                Op::Empty { cubes } => format!(
-                    "carve {} cube{} out ({} up)",
-                    cubes.len(),
-                    plural(cubes),
-                    cubes[0][1]
-                ),
-                _ => "carve".to_string(),
-            };
-            candidates.push((what, vec![op]));
-        }
-        // Cubes changing to another kind (D232): the old out, the swap, the new in.
-        if let Some(op) = base.next_change(near, |kind| self.blocks(kind)) {
-            let name = |cubes: &[[i32; 3]]| {
-                let kind = base.cube(IVec3::from_array(cubes[0])).map(|cube| cube.kind);
-                kind.map_or("plain", |kind| self.rules.name(kind))
-                    .to_string()
-            };
-            let what = match &op {
-                Op::Empty { cubes } => format!("take {} out to change it", name(cubes)),
-                Op::Swap { cubes } => format!("change {} cube{}", cubes.len(), plural(cubes)),
-                Op::Fill { cubes } => format!("put {} in where it changed", name(cubes)),
-                Op::Cancel { cubes } => {
-                    format!("finish changing {} cube{}", cubes.len(), plural(cubes))
-                }
-                _ => "change".to_string(),
-            };
-            candidates.push((what, vec![op]));
-        }
-        for (_, _, id) in parts {
-            let Some(part) = self.site.base.part(id) else {
-                continue;
-            };
-            let kind = part.kind;
-            let layer = self.site.base.next_in(id, near, false).unwrap_or_default();
-            // A block kind goes in a cube at a time, the nearest that can (D194); a long
-            // member across the whole layer.
-            let goes_in: Vec<Vec<[i32; 3]>> = if self.blocks(kind) {
-                let middle = |at: &[i32; 3]| {
-                    ((IVec3::from_array(*at).as_vec3() + 0.5) * CELL_M).distance_squared(near)
-                };
-                let mut nearest = layer;
-                nearest.sort_by(|a, b| middle(a).total_cmp(&middle(b)));
-                nearest
-                    .into_iter()
-                    .take(BLOCKS_TRIED)
-                    .map(|at| vec![at])
-                    .collect()
-            } else {
-                vec![layer]
-            };
-            for cubes in goes_in {
-                // A roof's cubes go up a stage at a time: frame, battens, covering, trims.
-                let stage = kind.is_roof().then(|| {
-                    let at = IVec3::from_array(cubes[0]);
-                    let cube = self
-                        .site
-                        .base
-                        .cube(at)
-                        .unwrap_or(terra_build::Cube::planned(kind, None));
-                    let next = terra_build::layout::roofs::stage_of(&cube);
-                    ["frame", "battens", "covering", "trims"][usize::from(next.min(3))]
-                });
-                let what = match stage {
-                    Some(stage) => format!(
-                        "put {}'s {stage} on part {} ({} cube{}, {} up)",
-                        self.rules.name(kind),
-                        id.0,
-                        cubes.len(),
-                        plural(&cubes),
-                        cubes[0][1]
-                    ),
-                    None => format!(
-                        "put {} into part {} ({} cube{}, {} up)",
-                        self.rules.name(kind),
-                        id.0,
-                        cubes.len(),
-                        plural(&cubes),
-                        cubes[0][1]
-                    ),
-                };
-                candidates.push((what, vec![Op::Fill { cubes }]));
-            }
-        }
         let mut first: Option<Work> = None;
         // What surrounds the base, worked out once for every candidate.
         let around = self.around(by);

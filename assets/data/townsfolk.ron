@@ -20,6 +20,7 @@
     // item (models/held/<item>.glb), so what someone is about shows from across the square.
     holds: {
         "Smith": "hammer",
+        "Build": "hammer",
         "Chop": "iron_axe",
         "Guard": "spear",
         "Browse": "basket",
@@ -70,6 +71,16 @@
                 (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
                 (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
                 (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.95),
+            ],
+        ),
+        "builder": (
+            bodies: ["strong", "male", "thin", "heavy"],
+            wears: [
+                (item: "shirt", dye: "Linen", colours: [(0.88, 0.87, 0.82), (0.74, 0.70, 0.60), (0.62, 0.62, 0.60), (0.52, 0.28, 0.20), (0.44, 0.44, 0.30)]),
+                (item: "smith_apron", dye: "Leather", colours: [(0.36, 0.27, 0.18), (0.42, 0.32, 0.20)], chance: 0.6),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.8),
             ],
         ),
         "elder": (

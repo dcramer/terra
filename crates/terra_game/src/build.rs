@@ -29,6 +29,7 @@ pub(crate) mod act;
 mod arrays;
 mod atlases;
 mod draw;
+pub(crate) use draw::PlanGhost;
 mod going_up;
 mod hlod;
 mod layout;
@@ -715,6 +716,25 @@ impl Build {
             }
             Err((op, why)) => Err(format!("{} ({op:?})", why.message())),
         }
+    }
+
+    /// Readies a building to go up as builders put it up (D381): what the shortcuts say it
+    /// is, its footings and door steps from the planet, kept as the whole it will be, and
+    /// the build left empty, drawn as far as each of its cubes is in.
+    pub(crate) fn ready_to_rise(
+        &mut self,
+        ops: &[BuildOp],
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) -> Base {
+        self.replace_with(ops, commands, planet, meshes);
+        let whole = std::mem::take(&mut self.base);
+        self.operations.clear();
+        self.by_cubes = true;
+        self.redraw_all();
+        self.refresh(planet);
+        whole
     }
 
     /// Does operations to the base as one act, checked against it as it is (D21): all of
