@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchors, brokenLinks, decisionTable, nextDecision, unindexed, unknownDecisions } from "./docs.ts";
+import { anchors, brokenLinks, decisionTable, missingTests, nextDecision, unindexed, unknownDecisions } from "./docs.ts";
 
 test("headings anchor as GitHub makes them, repeats numbered", () => {
   const a = anchors("# Worlds: the realms\n## Size\n## Size\n## What `it` asks, (D4)\n```\n# not a heading\n```\n");
@@ -51,4 +51,14 @@ test("citing a decision the table lacks is a fault, once per file", () => {
 
 test("an index must name every entry of its folder", () => {
   assert.deepEqual(unindexed("r/README.md", "[a](a.md)", ["a.md", "b.md"]), ["r/README.md: does not list b.md"]);
+});
+
+test("a contract page naming a test no crate defines, or one cut short, is a fault", () => {
+  const sources = "    #[test]\n    fn a_wall_is_closed_to_its_roof() {}\n";
+  const page =
+    "| row | `runs`: `a_wall_is_closed_to_its_roof`, `a_door_is_centred_in_its_frame`, `a_wall_is_closed…` | `roof_walls` `runs::under_roofs` |\n";
+  assert.deepEqual(missingTests("docs/v.md", page, sources), [
+    "docs/v.md: names the test a_door_is_centred_in_its_frame, which no crate defines",
+    "docs/v.md: names a test cut short, a_wall_is_closed…",
+  ]);
 });

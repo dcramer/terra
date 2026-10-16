@@ -1,6 +1,7 @@
 // Checks the repository's docs, run by `cargo xtask check`: links and anchors resolve, every
-// doc, note, spike and tool script is in its folder's index, and the decisions table is well
-// formed, with every decision a doc cites in it. Prints each fault; exits 1 if there are any.
+// doc, note, spike and tool script is in its folder's index, the decisions table is well
+// formed, with every decision a doc cites in it, and every test a contract page cites as its
+// proof exists. Prints each fault; exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
 //   node tools/docs/docs.ts --next    the next free decision number, here and on origin/main (`cargo xtask decision`)
@@ -91,6 +92,27 @@ export function unknownDecisions(file: string, text: string, ids: Set<string>): 
   return [...missing].map((d) => `${file}: cites ${d}, which is not in docs/decisions.md`);
 }
 
+/** Pages whose rows name the tests that prove them (D348): each test they name must exist. */
+const PROOF_PAGES = ["docs/building-voxels.md"];
+
+/**
+ * The tests a page names that no Rust source defines: every name in backticks of four words
+ * or more in snake case, as a test's is (a module's or a function's is shorter), and any cut
+ * short with an ellipsis, which names nothing.
+ */
+export function missingTests(file: string, markdown: string, sources: string): string[] {
+  const faults: string[] = [];
+  const seen = new Set<string>();
+  for (const [, name] of withoutFences(markdown).matchAll(/`([a-z][a-z0-9_]*…?)`/g)) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (name.endsWith("…")) faults.push(`${file}: names a test cut short, ${name}`);
+    else if (/^[a-z][a-z0-9]*(_[a-z0-9]+){3,}$/.test(name) && !new RegExp(`\\bfn ${name}\\s*\\(`).test(sources))
+      faults.push(`${file}: names the test ${name}, which no crate defines`);
+  }
+  return faults;
+}
+
 /** Entries of a folder that its index does not link or name. */
 export function unindexed(index: string, indexText: string, entries: string[]): string[] {
   return entries.filter((e) => !indexText.includes(e)).map((e) => `${index}: does not list ${e}`);
@@ -106,6 +128,12 @@ function check(): string[] {
   const faults: string[] = [];
   const docs = tracked.filter((f) => f.endsWith(".md"));
   for (const file of docs) faults.push(...brokenLinks(file, read(file)!, read));
+
+  const sources = tracked
+    .filter((f) => f.startsWith("crates/") && f.endsWith(".rs"))
+    .map((f) => read(f) ?? "")
+    .join("\n");
+  for (const page of PROOF_PAGES) faults.push(...missingTests(page, read(page) ?? "", sources));
 
   const table = decisionTable(read("docs/decisions.md")!);
   faults.push(...table.faults);
