@@ -1,0 +1,62 @@
+---
+name: building
+description: Work on Terra's construction (terra_build and the game's building): walls, floors, roofs, openings, decks and stairs of cubes, their materials, kits and dressed pieces, how they are drawn, damaged and taken down, and the checks that hold them. Covers the scope (D333), the agents' routine, which checks a change of geometry, look, performance or material must pass, where each concern lives in the code and data, how to measure, and what to report. Use for any task that changes or judges building, its kits or its checks, so a brief needs to say only the task.
+---
+
+# Building
+
+Read [docs/building-voxels.md](../../../docs/building-voxels.md) (the voxel contract, D348) before changing how cubes are laid or drawn, and [docs/building.md](../../../docs/building.md) for the rest. This page is the routine around the work; the docs are the rules.
+
+## Scope (D333)
+
+The baseline is **wood and stone, built by hand and destroyed, with infinite pretend resources**: logs, hewn timber and shakes; stone and slate. It must be flawless and fast before anything else. Earth, limewash, wattle and thatch are frozen (kept building and passing checks, not polished). No costs, storage, carrying or recruits, and no new materials, props, forests or logistics unless asked. A design question (how something should look or play) goes to the developers as a recommendation; a technical one is yours, recorded in `docs/decisions.md`.
+
+## Routine (D375)
+
+- Start: `cargo xtask seed` if the session started outside the worktree, then `git pull --rebase origin main`. Check the latest commits of anyone working in the same files.
+- Commits run the quick check, pushes the full one (`cargo xtask check`, with the artifacts and fuzz ratchets); never `--no-verify`. Pull and rebase before each push; run the checks again if anything came in.
+- Decision numbers from `cargo xtask decision`; log lines in `docs/decisions-log.md` (D376); a decision changed updates its row and every doc it touches in the same commit.
+- Finish: `git fetch` and `git branch -r --contains <commit>` to confirm it is on origin/main, then `cargo xtask worktrees --done`.
+
+## Where each concern lives
+
+| Concern | Where |
+|---|---|
+| Cubes, shapes, kinds, fill | `crates/terra_build/src/cubes.rs`; who owns each face and edge: the contract's §2 |
+| Patterns (block, coursed, frame, roof) | `assets/data/kits/patterns/*.ron`; their code is the layout below |
+| Materials and packs | `assets/data/kits/*.ron` over `assets/data/packs/*.ron`, textures in `assets/materials/`; read by `kit.rs`, checked by `packs.rs`; made by `cargo xtask pack` |
+| Roles (arris, crest, foot, quoin, jamb…) | `layout/roles.rs` |
+| Layout of pieces | `layout/`: `runs.rs` (coursed walls, under roofs), `blocks.rs` (stone openings, lintels), `trims.rs` (frames, end boards), `floors.rs` (floors, decks), `stairs.rs`, `shapes.rs`, `frames.rs`, `roofs/` (squares, lines, flashing, standing on roofs) |
+| Block surface | `surface.rs`, `surface/slots.rs` |
+| Timber members | `timber/` (cuts, planks, sweeps, harm) |
+| Roof covering | `roofing.rs` |
+| Dressed pieces | `dress/`, `modules.rs` |
+| Sections, detail levels, ghosts | `sections.rs`, `sections/` (far, ghosts, laying, blocks) |
+| Player's tools as operations | `plans.rs` → `ops.rs`; loss and collapse in `loss.rs` |
+| Scenes | `scenes/`: the registry (`registry.rs`) holds every scene the game ships or a check looks at; sheet, QA cabin, castle, burg, fuzz |
+| The contract | `docs/building-voxels.md`, its matrix data `docs/building-voxels.json` |
+| The mesh checker | `inspect.rs`, its families `junctions.rs` and `roof_walls.rs` |
+
+## Which checks, for which change
+
+Every change: `cargo xtask check` (quick before a commit, full before a push).
+
+- **Geometry** (layout, roles, a shape, a junction): the module's tests; `cargo xtask artifacts <name>` for the scenes it touches, then `--quick --ratchet`; `cargo xtask fuzz` (seeds 0 to 200; `--seeds N` for more). A new scene goes in `scenes::registry` and nowhere else: the checks find it. A junction closed or opened changes `docs/building-voxels.json` (its rule, code, tests, registered cases) and `node tools/docs/docs.ts --render`; a fault found and not fixed is a numbered gap with its rule. Fixed faults: lower the baseline with `--record` (`cargo xtask artifacts --quick --record`, `cargo xtask artifacts --record`, `cargo xtask fuzz --record`) and say why in the commit.
+- **Look** (a texture, relief, a piece's model): `cargo xtask kits`, `cargo xtask texels <name>`, the kit sheet (`cargo xtask yard --kit-sheet --sheet-rows "<row>"`, then `--vantage` as it logs and `--shot`), a material's preview (`node tools/kits/preview.ts <name>`), and `cargo xtask artifacts --frames` on the GPU. Judge against [docs/art-style.md](../../../docs/art-style.md) and the material's reference.
+- **Performance**: `cargo xtask sections` (laying and merging against the 2 ms bar), `cargo xtask bench village going-up rising town300` (D185), `cargo xtask qa clips` traces.
+- **Material** (a new or changed file): `cargo xtask pack`, `cargo xtask kits`, `cargo xtask contract`, and `cargo xtask artifacts <name>` for it, as a material outside the settlement is in no ratchet.
+- **Rules** (support, refusals, collapse): `cargo xtask rules` (tests with known failures, random operations, the drawing audit, live rules).
+
+## Measuring
+
+- Benchmarks on the real GPU (under WSL, the Windows build), release, offscreen 1920x1080; report the integrated GPU too. Software rendering numbers mean nothing.
+- A quiet machine: the bench prints the load and the GPU lock (D319); rerun what ran under load, or say it did. Repeat (`--runs 3` or more) and report the median with its spread, never one run.
+- Measure before tuning, change one thing, measure again; keep or revert.
+
+## Debug views and the material bench
+
+Not built yet (the workflow retro's first two items, research/building-workflow-retro-2026-10-16.md). When they land, list their keys and commands here.
+
+## Report
+
+Short, and only what the reader needs: what changed and why; the checks run and their numbers (artifacts and fuzz counts against the baseline, bench medians with spread and load); any baseline lowered or raised, with why; gaps opened or closed (by number); decisions added or changed; the commits on origin/main.
