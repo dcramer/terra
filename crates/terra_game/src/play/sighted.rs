@@ -31,6 +31,8 @@ const BODY_M: (f32, f32) = (0.32, 1.8);
 const SHOWS_OVER_GRASS: f32 = 0.4;
 /// A skeleton's span on the picture leaves out the fur round its bones: so much more.
 const FUR: f32 = 1.25;
+/// An animal's bones are within this of where it stands.
+const JOINTS_WITHIN_M: f32 = 3.0;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
@@ -99,7 +101,9 @@ fn watch(
                     skin.joints
                         .iter()
                         .filter_map(|&joint| joints.get(joint).ok())
-                        .map(|joint| joint.translation()),
+                        .map(|joint| joint.translation())
+                        // Not an armature's root left at its model's origin.
+                        .filter(|joint| joint.distance(root.translation()) < JOINTS_WITHIN_M),
                 );
             } else {
                 let (middle, half) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));

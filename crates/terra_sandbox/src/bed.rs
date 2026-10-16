@@ -16,10 +16,14 @@
 use bevy::audio::{Decodable, Source};
 use std::io::Write;
 use terra_game::play::music::Mood;
-use terra_world::audio::synth::{Chorus, RATE, Sound, Synth};
+use terra_world::audio::synth::{Chorus, Generated, RATE, Sound, Synth};
 
 /// How long a sound takes to come in and to go.
 const FADE_S: f32 = 1.5;
+/// The next phrase of music comes in so long before the last ends (each swells in over its
+/// first few seconds and rings out over its last), but no sooner than so far into it.
+const PHRASE_OVERLAP_S: f32 = 9.0;
+const PHRASE_LEAST_S: f32 = 8.0;
 
 /// One layer of the bed.
 #[derive(Clone, Debug, PartialEq)]
@@ -93,32 +97,50 @@ fn mix(layers: &[Layer], seconds: f32) -> Vec<f32> {
         let fades = layer.to_s.is_some();
         let length = last.saturating_sub(first);
         let fade = (FADE_S * RATE as f32) as usize;
-        let mut samples = decoder;
         // Music given an end plays phrase after phrase until it, each new from its own seed,
-        // so a film's music does not stop partway and leave its sound thin.
+        // so a film's music does not stop partway and leave its sound thin. A phrase rings out
+        // over its last seconds and the next swells in over its first: the next comes in over
+        // the last one's tail, as a cue's phrases overlap, not after its silence.
         let again = matches!(layer.sound, Sound::Music(_)) && fades;
-        let mut phrases = 0u64;
+        let next_at = |voice: &Generated| {
+            voice.total_duration().map(|d| {
+                ((d.as_secs_f32() - PHRASE_OVERLAP_S).max(PHRASE_LEAST_S) * RATE as f32) as usize
+            })
+        };
+        let mut due = next_at(&decoder);
+        let mut voices = vec![decoder];
+        let (mut phrases, mut age) = (0u64, 0usize);
         for i in 0..length {
-            let mut next = (
-                samples.next(),
-                (channels > 1).then(|| samples.next()).flatten(),
-            );
-            if next.0.is_none() && again && phrases < 64 {
+            let (mut left, mut right) = (0.0, 0.0);
+            voices.retain_mut(|voice| {
+                let Some(l) = voice.next() else {
+                    return false;
+                };
+                let r = if channels > 1 {
+                    voice.next().unwrap_or(l)
+                } else {
+                    l
+                };
+                left += l;
+                right += r;
+                true
+            });
+            age += 1;
+            let rung_out = due.is_some_and(|due| age >= due);
+            if again && phrases < 64 && (voices.is_empty() || rung_out) {
                 phrases += 1;
-                samples = Synth {
+                age = 0;
+                let voice = Synth {
                     sound: layer.sound,
                     seed: seed + phrases,
                 }
                 .decoder();
-                next = (
-                    samples.next(),
-                    (channels > 1).then(|| samples.next()).flatten(),
-                );
+                due = next_at(&voice);
+                voices.push(voice);
             }
-            let (Some(left), right) = next else {
+            if voices.is_empty() && !again {
                 break;
-            };
-            let right = right.unwrap_or(left);
+            }
             let envelope = if fades {
                 let edge = i.min(length - 1 - i) as f32 / fade.max(1) as f32;
                 edge.min(1.0)
@@ -244,10 +266,11 @@ mod tests {
         let ends = ends.expect("a phrase sounds") as f32 + 1.0;
         assert!(ends < 60.0, "a phrase is shorter than the test: {ends} s");
         let on = mix(&[parse_layer("calm:1@0-70").unwrap()], 70.0);
-        assert!(
-            loud(&on, ends + 1.0, 68.0) > 0.01,
-            "silent after its first phrase"
-        );
+        // Never long quiet: no stretch of three seconds without a note, past its coming in.
+        for s in 3..66 {
+            let s = s as f32;
+            assert!(loud(&on, s, s + 3.0) > 0.01, "quiet from {s} s");
+        }
     }
 
     #[test]

@@ -375,6 +375,31 @@ impl Patch {
 
 /// A mountain lake's shore stones lie this far from the start, as far as its grown trees.
 const SHORE_STONES_M: f32 = 650.0;
+/// A stone stands so much of its size over where its foot is put, sunk by a third and leaning.
+const STONE_STANDS: f32 = 0.7;
+/// A stone's top is never left between so far under the water and so far over it: just under,
+/// the water's edge fades it away over the stone (lake.wesl, as at a shore) and foams round
+/// it, a glassy lens on the lake (the review of 2026-10-16). It is raised to break the surface
+/// as a stone awash does, or let down to lie clear under it.
+const AWASH_M: (f32, f32) = (-0.18, 0.06);
+const BREAKS_M: f32 = 0.1;
+const UNDER_M: f32 = -0.25;
+
+/// A shore stone's size, standing on ground so far over the water (under it, below nothing),
+/// that keeps its top out of the band just round the surface; none if it would be too small.
+fn clear_of_the_surface(over: f32, size: f32) -> Option<f32> {
+    let top = over + size * STONE_STANDS;
+    if !(AWASH_M.0..AWASH_M.1).contains(&top) {
+        return Some(size);
+    }
+    let raised = (BREAKS_M - over) / STONE_STANDS;
+    let lowered = (UNDER_M - over) / STONE_STANDS;
+    if top > -0.1 && raised <= size * 1.8 {
+        Some(raised)
+    } else {
+        (lowered >= 0.15).then_some(lowered)
+    }
+}
 
 /// Asks for the plants within so many metres of a place to be cleared, for a village or
 /// a hollow set down after the plants grew.
@@ -888,6 +913,9 @@ fn plant(
                     + 0.45 * rng.unit().powi(2)
                     + at_the_edge
                         * (1.3 * rng.unit().powi(3) + if rng.unit() < 0.08 { 1.2 } else { 0.0 });
+                let Some(size) = clear_of_the_surface(over, size) else {
+                    return;
+                };
                 let model = pick(rng, &models[stone]);
                 let scale = size / model.height;
                 let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
@@ -1457,6 +1485,26 @@ fn clear_around(
 mod tests {
     use super::*;
     use terra_core::{Operation, PlanetSpec};
+
+    #[test]
+    fn no_shore_stone_ends_just_under_the_water() {
+        for over in [-0.7, -0.5, -0.35, -0.2, -0.1, 0.0, 0.2] {
+            for size in [0.2, 0.3, 0.45, 0.6, 0.9, 1.5] {
+                let Some(kept) = clear_of_the_surface(over, size) else {
+                    continue;
+                };
+                let top = over + kept * STONE_STANDS;
+                assert!(
+                    !(AWASH_M.0..AWASH_M.1).contains(&top),
+                    "a stone of {size} m at {over} m left its top at {top} m"
+                );
+                assert!(kept >= 0.15);
+            }
+        }
+        // Clear of the band, a stone is as it was.
+        assert_eq!(clear_of_the_surface(0.3, 0.4), Some(0.4));
+        assert_eq!(clear_of_the_surface(-0.7, 0.3), Some(0.3));
+    }
 
     /// Two triangles, each its own copy of the shared edge, as flat-shaded models are,
     /// folded along it by `fold` degrees.

@@ -45,6 +45,8 @@ const SENSE_M: f32 = 40.0;
 const WATCHES_WITHIN: f32 = 2.0;
 /// How much bigger or smaller one animal is than another of its kind, a share either way.
 const SIZES: f32 = 0.09;
+/// How fast one that does not fly from place to place flies when it takes wing to flee.
+const TAKES_WING_MPS: f32 = 11.0;
 
 /// Two numbers from 0 to 1 that are an animal's own, from where it was put out: its size,
 /// the beat its idle and grazing keep, its coat (`coats`).
@@ -598,7 +600,9 @@ fn think(
             (_, State::Fly { to, .. }) => {
                 let ground = around.ground(to);
                 creature.home = ground;
-                if to.length() - ground.length() > ROOSTS_OVER_M {
+                // Over the ground or the water's surface, whichever is higher.
+                let under = ground.length() + around.depth_m(ground).max(0.0);
+                if to.length() - under > ROOSTS_OVER_M {
                     // Into a crown: it sits there a while among the leaves.
                     State::Roost {
                         at: to,
@@ -815,7 +819,8 @@ fn refuge(
         }
         // Among trees a startled bird as often as not goes up into a crown.
         Refuge::Flies(near, far) => {
-            let up_a_tree = if dice.unit() < 0.5 {
+            // Not a swimmer, which comes down on the water.
+            let up_a_tree = if !matches!(about.moves, Moves::Swims(_)) && dice.unit() < 0.5 {
                 up_high(here, away, (near * 0.6, far), around, dice)
             } else {
                 None
@@ -933,9 +938,12 @@ fn flight(
         let turn = Quat::from_axis_angle(up, dice.range(-0.7, 0.7));
         let to = around.ground(here + turn * way * dice.range(near, far));
         let wet = matches!(about.moves, Moves::Swims(_));
-        if (around.depth_m(to) > 0.4) != wet {
+        let depth = around.depth_m(to);
+        if (depth > 0.4) != wet {
             continue;
         }
+        // A swimmer comes down on the water, not on the bed under it.
+        let to = if wet { to + to.normalize() * depth } else { to };
         let state = State::Fly {
             from: here,
             to,
@@ -993,6 +1001,8 @@ fn walk(
             State::Fly { from, to, along } => {
                 let speed = match about.moves {
                     Moves::Flies(mps) => mps,
+                    // A swimmer that takes to the air when startled, as a duck does.
+                    _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
                     _ => about.run_mps,
                 };
                 let length = (to - from).length().max(0.5);

@@ -59,7 +59,7 @@ const MEET_EVERY_S: (f32, f32) = (3.0, 6.0);
 const MEET_AHEAD_M: (f32, f32) = (28.0, 44.0);
 const MEET_ASIDE_M: (f32, f32) = (2.0, 10.0);
 /// Spots tried for a meeting, each side of the way.
-const MEET_TRIES: usize = 5;
+const MEET_TRIES: usize = 3;
 /// The camera follows so far behind and above the player, metres (play's camera): where a
 /// meeting's spot must be seen from.
 const EYE_BEHIND_M: f32 = 4.6;
@@ -110,7 +110,7 @@ struct Cells {
     looked: HashMap<IVec3, Vec<Entity>>,
     since_s: f32,
     /// Each player's place when last looked and how long until they next meet something.
-    ways: HashMap<Entity, (Vec3, f32)>,
+    ways: HashMap<Entity, Way>,
     meetings: u64,
     /// The animals met ahead and still about, apart from the cells' own.
     met: Vec<Entity>,
@@ -137,6 +137,8 @@ pub struct Place {
     /// is bare or short: a path, a street, grass grown thin.
     pub shade: f32,
     pub bare: bool,
+    /// How tall the grass on it stands, most of its blades (`grass_height`).
+    pub grass_m: f32,
 }
 
 impl Place {
@@ -285,6 +287,7 @@ impl Surroundings<'_> {
             trodden,
             shade,
             bare,
+            grass_m: growing.as_ref().map_or(0.0, grass_height),
         }
     }
 
@@ -328,7 +331,8 @@ impl Surroundings<'_> {
                 return false;
             }
         }
-        const GROUND_SAMPLES: usize = 24;
+        // A sample of the ground costs a tenth of a millisecond: a few, over its middle.
+        const GROUND_SAMPLES: usize = 8;
         !(1..GROUND_SAMPLES).any(|i| {
             let point = eye + line * (i as f32 / GROUND_SAMPLES as f32);
             self.planet.ground_at(point).length() > point.length() + 0.05
@@ -340,16 +344,11 @@ impl Surroundings<'_> {
     pub fn grass_m(&self, ground: Vec3) -> f32 {
         let local = self.start.local(ground);
         self.cover.as_ref().map_or(0.0, |cover| {
-            let g = cover
-                .source
-                .growing(&self.planet, ground, Vec2::new(local.x, local.z));
-            if g.path {
-                return 0.0;
-            }
-            (0.12 + 0.42 * libm::powf(g.grass.max(0.0), 0.7) * (0.6 + 0.4 * g.lush))
-                * (1.0 + 0.5 * g.tall)
-                * 0.85
-                * (g.grass > 0.05) as u8 as f32
+            grass_height(
+                &cover
+                    .source
+                    .growing(&self.planet, ground, Vec2::new(local.x, local.z)),
+            )
         })
     }
 
@@ -384,6 +383,14 @@ impl Surroundings<'_> {
         let over_sea = ground.length() - self.planet.sea_radius_m();
         start_warmth_c() - over_sea.max(0.0) * LAPSE_C_PER_M
     }
+}
+
+/// How tall grass grown so stands, as most of its blades do (`cover::blades`' measure).
+fn grass_height(g: &terra_world::cover::Growing) -> f32 {
+    if g.path || g.grass <= 0.05 {
+        return 0.0;
+    }
+    (0.12 + 0.42 * libm::powf(g.grass, 0.7) * (0.6 + 0.4 * g.lush)) * (1.0 + 0.5 * g.tall) * 0.85
 }
 
 /// The growing season's mean at sea level at the start's latitude, by the world's climate.
@@ -576,6 +583,24 @@ fn populate(
 /// A kind living about the land: its species, numbers to a hectare, group and niche.
 type Wild<'a> = (Species, f32, (u32, u32), &'a Niche);
 
+/// A player's way as the meetings follow it: where they were at the last look, how long until
+/// they next meet something, and the meeting being staged, if one is.
+struct Way {
+    last: Vec3,
+    left: f32,
+    staging: Option<Staging>,
+}
+
+/// A meeting being staged: a spot tried each look (each costs a millisecond or two, the ground
+/// and what grows on it asked), the best of each kind so far, and the dice it is rolled with.
+struct Staging {
+    dice: terra_gen::Rng,
+    tried: usize,
+    /// For each kind that fits, its best spot, the way aside from the player there, and how
+    /// well it shows: an index into the kinds about.
+    fits: Vec<(Vec3, Vec3, usize, f32)>,
+}
+
 /// Puts a group out ahead of each player on the move, now and then: at the spot beside their
 /// way that shows it best, of its niche, where none of its kind already is.
 fn meet(
@@ -592,92 +617,106 @@ fn meet(
         .ways
         .retain(|player, _| moving.iter().any(|(each, _)| each == player));
     for &(player, here) in moving {
-        let (last, mut left) = cells.ways.get(&player).copied().unwrap_or((here, 1.0));
+        let mut way = cells.ways.remove(&player).unwrap_or(Way {
+            last: here,
+            left: 1.0,
+            staging: None,
+        });
         let up = here.normalize_or(Vec3::Y);
-        let went = (here - last).reject_from(up);
-        if went.length() / LOOK_EVERY_S > MOVING_MPS {
-            left -= LOOK_EVERY_S;
+        let went = (here - way.last).reject_from(up);
+        way.last = here;
+        if went.length() / LOOK_EVERY_S <= MOVING_MPS {
+            cells.ways.insert(player, way);
+            continue;
         }
-        if left <= 0.0 && cells.met.len() < MET_MOST {
+        way.left -= LOOK_EVERY_S;
+        if way.left <= 0.0 && way.staging.is_none() && cells.met.len() < MET_MOST {
             cells.meetings += 1;
             let mut dice = seed.index(cells.meetings).rng();
-            left = dice.range(MEET_EVERY_S.0, MEET_EVERY_S.1);
-            let ahead = went.normalize_or_zero();
-            let side = ahead.cross(up);
-            let eye = here + up * EYE_UP_M - ahead * EYE_BEHIND_M;
-            // Spots each side of the way, each with the kinds whose niche it is and that are
-            // not about there already, weighed by how well it shows them: in view, near the
-            // way, in the light, on bare ground. A kind already met near is less likely
-            // again, so a walk by a wood and a lake meets both.
-            let mut fits: Vec<(Vec3, Vec3, &Wild, f32)> = Vec::new();
-            for sign in [1.0, -1.0] {
-                let aside = side * sign;
-                for _ in 0..MEET_TRIES {
-                    let off = dice.range(0.0, 1.0);
-                    let off = MEET_ASIDE_M.0 + off * off * (MEET_ASIDE_M.1 - MEET_ASIDE_M.0);
-                    let spot = around.ground(
-                        here + ahead * dice.range(MEET_AHEAD_M.0, MEET_AHEAD_M.1) + aside * off,
-                    );
-                    if !around.in_view(eye, spot + up * 0.3) {
-                        continue;
-                    }
-                    let place = around.place(spot);
-                    let grass = around.grass_m(spot);
-                    let shows = (1.0 - 0.75 * place.shade.clamp(0.0, 1.0))
-                        * if place.bare { 1.5 } else { 0.6 }
-                        * (1.0 - grass / HIDING_GRASS_M).clamp(0.1, 1.0)
-                        / (1.0 + off / 6.0);
-                    for kind in wild {
-                        let (species, per_ha, _, niche) = kind;
-                        if !place.fits(niche) {
-                            continue;
-                        }
-                        let (mut close, mut seen) = (false, 0);
-                        for (at, creature) in placed {
-                            if creature.species == *species {
-                                let apart = at.translation.distance(spot);
-                                close |= apart < MEET_APART_M;
-                                seen += (apart < MEET_KNOWN_M) as u32;
-                            }
-                        }
-                        if !close {
-                            // The best shown of a kind's spots stands for it.
-                            let weight = per_ha.sqrt() / (1.0 + seen as f32) * shows * shows;
-                            match fits.iter_mut().find(|(.., each, _)| each.0 == *species) {
-                                Some(best) if best.3 < weight => {
-                                    *best = (spot, aside, kind, weight)
-                                }
-                                Some(_) => {}
-                                None => fits.push((spot, aside, kind, weight)),
-                            }
-                        }
+            way.left = dice.range(MEET_EVERY_S.0, MEET_EVERY_S.1);
+            way.staging = Some(Staging {
+                dice,
+                tried: 0,
+                fits: Vec::new(),
+            });
+        }
+        let Some(mut staging) = way.staging.take() else {
+            cells.ways.insert(player, way);
+            continue;
+        };
+        let ahead = went.normalize_or_zero();
+        // A spot one side of the way and then the other, with the kinds whose niche it is and
+        // that are not about there already, weighed by how well it shows them: in view, near
+        // the way, in the light, on bare or short ground. A kind already met near is less
+        // likely again, so a walk by a wood and a lake meets both.
+        let aside = ahead.cross(up) * if staging.tried % 2 == 0 { 1.0 } else { -1.0 };
+        staging.tried += 1;
+        let dice = &mut staging.dice;
+        let off = dice.range(0.0, 1.0);
+        let off = MEET_ASIDE_M.0 + off * off * (MEET_ASIDE_M.1 - MEET_ASIDE_M.0);
+        let spot =
+            around.ground(here + ahead * dice.range(MEET_AHEAD_M.0, MEET_AHEAD_M.1) + aside * off);
+        let eye = here + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+        if around.in_view(eye, spot + up * 0.3) {
+            let place = around.place(spot);
+            let shows = (1.0 - 0.75 * place.shade.clamp(0.0, 1.0))
+                * if place.bare { 1.5 } else { 0.6 }
+                * (1.0 - place.grass_m / HIDING_GRASS_M).clamp(0.1, 1.0)
+                / (1.0 + off / 6.0);
+            for (index, &(species, per_ha, _, niche)) in wild.iter().enumerate() {
+                if !place.fits(niche) {
+                    continue;
+                }
+                let (mut close, mut seen) = (false, 0);
+                for (at, creature) in placed {
+                    if creature.species == species {
+                        let apart = at.translation.distance(spot);
+                        close |= apart < MEET_APART_M;
+                        seen += (apart < MEET_KNOWN_M) as u32;
                     }
                 }
-            }
-            let total: f32 = fits.iter().map(|(.., weight)| weight).sum();
-            let mut roll = dice.unit() * total;
-            let chosen = fits.iter().find(|(.., weight)| {
-                roll -= weight;
-                roll <= 0.0
-            });
-            if let Some(&(spot, aside, &(species, _, (fewest, most), _), _)) = chosen {
-                // Met as a group of the larger sort its kind keeps.
-                let count = (fewest + most).div_ceil(2)
-                    + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
-                let group = put_group(
-                    commands,
-                    (kinds, bestiary),
-                    around,
-                    species,
-                    (spot, aside * 2.0),
-                    count.min(most),
-                    &mut dice,
-                );
-                cells.met.extend(group);
-                debug!("Wildlife: {} {} met ahead.", count, bestiary.name(species));
+                if close {
+                    continue;
+                }
+                // The best shown of a kind's spots stands for it.
+                let weight = per_ha.sqrt() / (1.0 + seen as f32) * shows * shows;
+                match staging.fits.iter_mut().find(|fit| fit.2 == index) {
+                    Some(best) if best.3 < weight => *best = (spot, aside, index, weight),
+                    Some(_) => {}
+                    None => staging.fits.push((spot, aside, index, weight)),
+                }
             }
         }
-        cells.ways.insert(player, (here, left));
+        if staging.tried < MEET_TRIES * 2 {
+            way.staging = Some(staging);
+            cells.ways.insert(player, way);
+            continue;
+        }
+        let dice = &mut staging.dice;
+        let total: f32 = staging.fits.iter().map(|fit| fit.3).sum();
+        let mut roll = dice.unit() * total;
+        let chosen = staging.fits.iter().find(|fit| {
+            roll -= fit.3;
+            roll <= 0.0
+        });
+        if let Some(&(spot, aside, index, _)) = chosen {
+            let (species, _, (fewest, most), _) = wild[index];
+            // Met as a group of the larger sort its kind keeps.
+            let count = (fewest + most).div_ceil(2)
+                + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
+            let group = put_group(
+                commands,
+                (kinds, bestiary),
+                around,
+                species,
+                (spot, aside * 2.0),
+                count.min(most),
+                dice,
+            );
+            cells.met.extend(group);
+            debug!("Wildlife: {} {} met ahead.", count, bestiary.name(species));
+        }
+        cells.ways.insert(player, way);
     }
 }
 
@@ -791,6 +830,7 @@ mod tests {
             trodden: 0.0,
             shade: 0.0,
             bare: true,
+            grass_m: 0.0,
         }
     }
 

@@ -30,7 +30,7 @@ The developers, 2026-10-15: "we should add some small animals to all biomes, we 
 | Chaffinch | 8 °C and up, among trees; flits from place to place | Calls and flies off 10 to 30 m |
 | Brown hare | 9 °C and up, open ground and woods | Bolts, silent |
 | Red fox | 7 °C and up, woods and open ground | Barks and runs |
-| Mallard | 6 °C and up, open water | Quacks and swims off; dabbles, tail up |
+| Mallard | 6 °C and up, open water | Quacks and takes wing, coming down on the water 25 to 70 m off; dabbles, tail up |
 | Grey heron | 8 °C and up, the shore and the shallows, wading | Croaks and flies 50 to 110 m along the shore |
 | Mountain hare, in its autumn moult | up to 7.5 °C, open ground | Bolts |
 | Ptarmigan | up to 7.5 °C, open ground | Croaks and flushes 25 to 60 m |
