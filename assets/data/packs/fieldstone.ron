@@ -10,4 +10,12 @@
         tint: (0.91, 0.91, 0.91),
         masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
     ),
+    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // art/references/README.md).
+    reference: Some((
+        photo: "art/references/fieldstone.jpg",
+        source: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Stone_wall_old_farm_Dordogne.jpg/1920px-Stone_wall_old_farm_Dordogne.jpg",
+        licence: "CC0",
+        about: "A rubble stone wall of an old farm, Dordogne",
+    )),
 )

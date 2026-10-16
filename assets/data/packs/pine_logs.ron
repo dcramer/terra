@@ -20,4 +20,12 @@
         own: Some("data/kits/pieces/logs.ron"),
         masks: (weather: 0.5),
     ),
+    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // art/references/README.md).
+    reference: Some((
+        photo: "art/references/pine_logs.jpg",
+        source: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Grue_g%C3%A5rd_avrevet_kledning_med_t%C3%B8mmervegg_-_2.JPG/1920px-Grue_g%C3%A5rd_avrevet_kledning_med_t%C3%B8mmervegg_-_2.JPG",
+        licence: "CC0",
+        about: "An old Norwegian log house, its weathered walls bare",
+    )),
 )

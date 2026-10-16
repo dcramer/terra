@@ -5820,6 +5820,7 @@ dependencies = [
  "libm",
  "ron",
  "serde",
+ "serde_json",
  "terra_gen",
  "zune-core",
  "zune-jpeg",

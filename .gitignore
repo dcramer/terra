@@ -5,6 +5,8 @@ __pycache__/
 shots/
 # Local checkouts made by coding agents.
 .claude/worktrees/
+# Reference photographs not CC0, kept on the machine that fetched them (D386).
+*.local.jpg
 # Local secrets, such as the token stats key. Copy .env.example.
 .env
 # The save game `cargo xtask loop` plays through.

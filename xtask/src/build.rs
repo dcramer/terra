@@ -60,6 +60,7 @@ pub(crate) fn texels(args: &[String]) -> bool {
         "terra_build",
         "--example",
         "texels",
+        "--",
     ];
     cargo.extend(args.iter().map(String::as_str));
     run("cargo", &cargo)

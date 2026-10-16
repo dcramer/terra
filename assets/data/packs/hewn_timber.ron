@@ -31,4 +31,12 @@
         masks: (weather: 0.25),
     ),
     colours: (chinking: (0.66, 0.63, 0.58)),
+    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // art/references/README.md).
+    reference: Some((
+        photo: "art/references/hewn_timber.jpg",
+        source: "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ae/Morgan_Log_House_Montco_PA.jpg/1920px-Morgan_Log_House_Montco_PA.jpg",
+        licence: "CC0",
+        about: "Hewn logs chinked white, the Morgan Log House",
+    )),
 )

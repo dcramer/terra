@@ -20,6 +20,9 @@
 // burns       what it does in a fire (D377, terra_build::fire): the heat it catches at, how
 //             many seconds it burns and how hot; its frame burns, slower than logs, the daub
 //             between holding little
+// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+//             terra_build::look): its infill's texels a metre, sharpness, brightness against
+//             an 18% grey card, values' spread and stretch
 (
     pattern: Masonry,
     toughness: (health: 300, breaks: Bits),
@@ -66,5 +69,10 @@
     meets: Some((weight: 1, end: None, carries: None)),
     colours: (
         light: (0.74, 0.56, 0.37),
+    ),
+    // The bench's targets (D386): frozen (D333), so only its texel density for now.
+    look: (
+        surface: Masonry,
+        density: 500.0,
     ),
 )

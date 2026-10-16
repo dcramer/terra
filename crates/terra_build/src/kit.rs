@@ -94,6 +94,10 @@ pub struct Kit {
     /// A block kind framed in timber (D236, `layout::frames`): its cubes the infill, drawn as
     /// their surface, and a frame of its members laid over them by rule; left out, none.
     pub framing: Option<Framing>,
+    /// What the material bench holds it to (`cargo xtask look`, D386): its pattern's.
+    pub look: crate::look::Targets,
+    /// A photograph of the real material, which the bench shows it beside: its pack's.
+    pub reference: Option<crate::look::Reference>,
 }
 
 /// How a block kind's earth was packed, in its surface's shape (D236): lumps where it was
@@ -1041,6 +1045,8 @@ impl Default for Kit {
             framing: None,
             packed: None,
             tint: [1.0; 3],
+            look: crate::look::Targets::default(),
+            reference: None,
         }
     }
 }
@@ -1440,7 +1446,9 @@ pub(crate) mod tests {
         // its ends run past the corners and its role members, so tests lay plain logs
         // inside their cubes; and how it meets other kinds, which the default leaves to
         // its pattern, so a test's stone kit meets as stone, and the file says as logs; and
-        // the roof over it, which the file names; and how it breaks, which its pattern says.
+        // the roof over it, which the file names; and how it breaks, which its pattern says;
+        // and what the material bench holds it to and the photograph it is judged beside,
+        // its pattern's and its pack's (D386).
         let file = shipped("logs.ron");
         assert_eq!(file.meets, Some(Meets::of(Pattern::Logs)));
         let pine = Kit {
@@ -1452,6 +1460,8 @@ pub(crate) mod tests {
             meets: None,
             roof_kind: None,
             damage: BTreeMap::new(),
+            look: crate::look::Targets::default(),
+            reference: None,
             ..file
         };
         assert_eq!(pine, Kit::default());

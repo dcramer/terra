@@ -36,6 +36,10 @@
 //             deeper than a stone is thick, dark at their back)
 // burns       what it does in a fire (D377, terra_build::fire): None, stone does not burn; it
 //             blackens with soot and falls when what holds it does
+// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+//             terra_build::look): its walls' texels a metre, their sharpness from 1, 2 and 5 m,
+//             their brightness against an 18% grey card lit and in shade, their values'
+//             spread, and the most of each texture set drawn stretched
 (
     pattern: Masonry,
     toughness: (health: 600, breaks: Chunks),
@@ -84,5 +88,19 @@
     meets: Some((weight: 3, end: None, carries: Cap)),
     colours: (
         light: (0.62, 0.6, 0.56),
+    ),
+    // The bench's targets (D386), set from fieldstone's numbers on 2026-10-16 (texel density
+    // 1,024; sharpness 31.6, 32.7 and 29.4%; values 29 to 143; 1.15 and 1.58 of the card lit,
+    // 2.47 in shade), a little under them so a regression fails and a run's noise (about a
+    // point of sharpness) does not. A material of another brightness (lime, earth) gives its
+    // own `lit` and `shade` in its pack.
+    look: (
+        surface: Masonry,
+        density: 1000.0,
+        sharpness: (27.0, 28.0, 25.0),
+        lit: (0.9, 1.9),
+        shade: (1.8, 3.0),
+        values: (85.0, 150.0),
+        stretch: (smeared: 2.0, streaked: 0.5, roles: {Floor: (3.0, 2.0)}),
     ),
 )

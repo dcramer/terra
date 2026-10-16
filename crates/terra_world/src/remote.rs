@@ -34,6 +34,12 @@
 //! - `sandbox.said {since?, containing?, most?}`: what the run has said, from the line
 //!   numbered `since`, only lines containing some text if asked (`record`).
 //! - `sandbox.shot {path}`: saves a screenshot; the reply comes before the file does.
+//! - `sandbox.card {at, facing, size?, albedo?}`: stands a matte grey card, a reference of
+//!   known reflectance, the way a photographer holds one up to judge colour and exposure: its
+//!   middle at `at`, metres east, above the ground and south of the start, its face toward
+//!   `facing` (east, up, south), `size` metres square (half a metre unless told), its colour
+//!   `albedo` in linear light (0.18, an 18% grey card, unless told), rough, not metal. The
+//!   material bench stands them beside what it measures (`cargo xtask look`).
 //! - `sandbox.quit`: closes the sandbox.
 //! - `sandbox.whoami`: the token it was started with (`--remote-token`), so a script can
 //!   tell the run it started from another session's on the same port.
@@ -126,6 +132,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.frames", frames);
     method(app, "sandbox.said", said);
     method(app, "sandbox.shot", shot);
+    method(app, "sandbox.card", card);
     method(app, "sandbox.quit", quit);
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
@@ -770,6 +777,70 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let shot = crate::shell::screenshot(world.get_resource::<crate::shell::Picture>());
     world.spawn(shot).observe(save_to_disk(path.clone()));
     Ok(json!({ "path": path }))
+}
+
+#[derive(Deserialize)]
+struct Card {
+    at: [f32; 3],
+    facing: [f32; 3],
+    size: Option<f32>,
+    albedo: Option<f32>,
+}
+
+/// Stands a grey card (`sandbox.card`): a thin slab, so it casts a shadow and is lit only on
+/// the face it shows.
+fn card(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Card {
+        at,
+        facing,
+        size,
+        albedo,
+    } = parse_some(params)?;
+    let start = *world
+        .get_resource::<crate::start::Start>()
+        .ok_or_else(|| refused("there is no start to stand by"))?;
+    let planet = world
+        .get_resource::<crate::planet::Planet>()
+        .ok_or_else(|| refused("there is no ground to stand on"))?;
+    let ground = planet.ground_at(start.transform_point(Vec3::new(at[0], 0.0, at[2])));
+    let up = ground.normalize();
+    let middle = ground + up * at[1];
+    let facing = (start.rotation * Vec3::from_array(facing)).normalize_or_zero();
+    if facing == Vec3::ZERO {
+        return Err(refused(
+            "a card faces some way: `facing` is three numbers, not nothing",
+        ));
+    }
+    // A cuboid's thin side is its z: looking along the reverse of its facing puts +z, its face,
+    // toward it. Upright unless it faces up or down.
+    let hint = if facing.dot(up).abs() > 0.99 {
+        start.rotation * Vec3::Z
+    } else {
+        up
+    };
+    let rotation = Transform::IDENTITY.looking_to(-facing, hint).rotation;
+    let size = size.unwrap_or(0.5).clamp(0.01, 10.0);
+    let albedo = albedo.unwrap_or(0.18).clamp(0.0, 1.0);
+    let mesh = world
+        .resource_mut::<Assets<Mesh>>()
+        .add(Cuboid::new(size, size, 0.01));
+    let material = world
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial {
+            base_color: Color::linear_rgb(albedo, albedo, albedo),
+            perceptual_roughness: 1.0,
+            metallic: 0.0,
+            ..default()
+        });
+    let entity = world
+        .spawn((
+            Name::new(format!("grey card {:.0}%", albedo * 100.0)),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(middle).with_rotation(rotation),
+        ))
+        .id();
+    Ok(json!({ "entity": entity.to_bits(), "at": triple(middle) }))
 }
 
 #[derive(Deserialize)]

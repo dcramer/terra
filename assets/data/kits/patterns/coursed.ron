@@ -42,6 +42,10 @@
 // burns       what it does in a fire (D377, terra_build::fire): the heat it catches at (a
 //             second of a burning neighbour's full flame under it gives its heat), how many
 //             seconds it burns, and how hot; quicker than a real log wall, which burns for hours
+// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+//             terra_build::look): its logs' or beams' texels a metre, their sharpness from 1,
+//             2 and 5 m, their brightness against an 18% grey card lit and in shade, their
+//             values' spread, and the most of each texture set drawn stretched
 (
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
@@ -115,5 +119,19 @@
     colours: (
         light: (0.74, 0.56, 0.37),
         chinking: (0.66, 0.62, 0.58),
+    ),
+    // The bench's targets (D386), set from pine logs' and hewn timber's numbers on 2026-10-16
+    // (texel density 1,024 along a log, 3,413 a beam; sharpness 24.8, 27.2, 26.7% and 36.2,
+    // 37.3, 33.4%; values 15 to 107 and 24 to 130; 0.37 and 0.49 to 0.58 of the card lit, 0.71
+    // and 1.21 in shade), a little under the worse of them so a regression fails and a run's
+    // noise (about a point of sharpness) does not.
+    look: (
+        surface: Log,
+        density: 1000.0,
+        sharpness: (21.0, 23.0, 22.0),
+        lit: (0.3, 0.75),
+        shade: (0.55, 1.5),
+        values: (70.0, 140.0),
+        stretch: (smeared: 2.0, streaked: 0.5, roles: {Floor: (10.0, 0.5)}),
     ),
 )

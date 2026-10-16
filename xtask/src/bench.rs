@@ -1,6 +1,7 @@
 //! `cargo xtask bench` (D185): the scenes timed in release, offscreen at 1920x1080 on the
 //! real GPU, each judged against the frame budget and the last recorded result.
 
+use crate::load::{self, During, Load};
 use crate::scenes::{SCENES, Scene};
 use crate::windows::{on_wsl, windows_program};
 use crate::{output, root, run};
@@ -24,6 +25,12 @@ const BENCHMARKS_HEADER: &str =
 /// twice it), and its last third no slower than its first by more than this.
 const MOST_OVER_PCT: f32 = 1.0;
 const MOST_DRIFT_PCT: f32 = 15.0;
+/// The integrated GPU's target at the low preset (D239): 30 frames a second, a median under
+/// this.
+const INTEGRATED_MEDIAN_MS: f32 = 1000.0 / 30.0;
+/// The most a benchmark waits for a quiet machine over all its runs, so a machine that never
+/// quiets costs minutes, not hours: after it, runs go ahead and say they were busy.
+const MOST_WAITING: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// One timed run, as the sandbox prints it.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,11 +46,35 @@ struct Timing {
     over_pct: f32,
     hitches: u32,
     drift_pct: f32,
+    /// The kind of GPU it ran on as wgpu says it (`DiscreteGpu`, `IntegratedGpu`) and the
+    /// preset it drew at, from the run's own line; empty if it did not say.
+    device: String,
+    preset: String,
 }
 
 impl Timing {
-    /// What the scene missed of the budget's gates, if anything.
+    /// Whether it is held to the integrated GPU's target (D239) rather than the budget (D25).
+    fn integrated(&self) -> bool {
+        self.device == "IntegratedGpu"
+    }
+
+    /// The decision it is judged by.
+    fn judged_by(&self) -> &'static str {
+        if self.integrated() { "D239" } else { "D25" }
+    }
+
+    /// What the scene missed of its target, if anything: the integrated GPU's median at the
+    /// low preset (D239), or every gate of the frame budget (D25).
     fn misses(&self) -> Vec<String> {
+        if self.integrated() {
+            return if self.median_ms > INTEGRATED_MEDIAN_MS {
+                vec![format!(
+                    "median over {INTEGRATED_MEDIAN_MS:.1} ms, the integrated GPU's 30 fps"
+                )]
+            } else {
+                Vec::new()
+            };
+        }
         let mut missed = Vec::new();
         if self.budget_ms <= 0.0 {
             missed.push("the run did not say how it held to the budget".to_string());
@@ -138,7 +169,87 @@ fn parse_timing(line: &str) -> Option<Timing> {
         over_pct: 0.0,
         hitches: 0,
         drift_pct: 0.0,
+        device: String::new(),
+        preset: String::new(),
     })
+}
+
+/// Reads `SANDBOX drawn at the low preset on a IntegratedGpu GPU` as the preset and the kind
+/// of GPU.
+fn parse_drawn(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("SANDBOX drawn at the ")?;
+    let (preset, rest) = rest.split_once(" preset on a ")?;
+    let device = rest.strip_suffix(" GPU")?;
+    Some((preset.to_string(), device.to_string()))
+}
+
+/// One run of a scene: its frames, the load before it and how long it waited for a quiet
+/// machine, and the load while it ran.
+#[derive(Debug, Clone)]
+struct Run {
+    timing: Timing,
+    before: Option<Load>,
+    during: Option<During>,
+}
+
+impl Run {
+    /// Taken on a busy machine: it started busy, or was busy while it ran.
+    fn busy(&self) -> bool {
+        self.before.is_some_and(|load| !load.quiet()) || self.during.is_some_and(|d| d.busy())
+    }
+}
+
+/// How a scene's runs went, for its line in the table.
+struct Note {
+    /// The runs its result is taken from, of all it made.
+    runs: usize,
+    of: usize,
+    /// Their medians' lowest and highest, and that range as a percentage of the middle one.
+    low: f32,
+    high: f32,
+    spread_pct: f32,
+    /// How many of them held to the target.
+    holding: usize,
+    /// Whether they were taken on a busy machine.
+    busy: bool,
+}
+
+/// The runs a scene's result is taken from: the quiet ones when at least half are, so noise
+/// nobody chose is left out; otherwise all of them, which the table says were busy.
+fn chosen_runs(runs: &[Run]) -> (Vec<Timing>, bool) {
+    let quiet: Vec<Timing> = runs
+        .iter()
+        .filter(|run| !run.busy())
+        .map(|run| run.timing.clone())
+        .collect();
+    if !quiet.is_empty() && quiet.len() * 2 >= runs.len() {
+        (quiet, false)
+    } else {
+        (runs.iter().map(|run| run.timing.clone()).collect(), true)
+    }
+}
+
+/// How far apart the runs' medians are: their lowest and highest, and that range as a share
+/// of their middle one, in percent.
+fn spread(runs: &[Timing]) -> (f32, f32, f32) {
+    let medians: Vec<f32> = runs.iter().map(|t| t.median_ms).collect();
+    let low = medians.iter().copied().fold(f32::MAX, f32::min);
+    let high = medians.iter().copied().fold(0.0, f32::max);
+    let mut sorted = medians.clone();
+    sorted.sort_by(f32::total_cmp);
+    let middle = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
+    let pct = if middle > 0.0 {
+        100.0 * (high - low) / middle
+    } else {
+        0.0
+    };
+    (low, high, pct)
+}
+
+/// Whether a median is slower than the last recorded by more than chance: more than
+/// `SLOWER_BY`, and more than the runs' own spread.
+fn slower(change: f32, spread_pct: f32) -> bool {
+    change > SLOWER_BY.max(spread_pct / 100.0)
 }
 
 /// Several runs of a scene as one: the middle run's median, 99th percentile, share over
@@ -234,38 +345,90 @@ pub(crate) fn bench(args: &[String]) -> bool {
 
     let mut ok = true;
     let mut lines = Vec::new();
-    let mut busiest: Option<(f32, usize)> = None;
+    let mut waiting_left = MOST_WAITING;
     for scene in chosen {
-        let mut timed = Vec::new();
-        for run in 1..=runs {
-            let load = machine_load();
-            if let Some((now, cores)) = load
-                && busiest.is_none_or(|(most, _)| now > most)
-            {
-                busiest = Some((now, cores));
+        let mut timed: Vec<Run> = Vec::new();
+        // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the
+        // machine is quiet, up to as many again to stand in for runs taken while it was busy.
+        let mut attempt = 0;
+        while attempt < runs * 2 && timed.iter().filter(|run| !run.busy()).count() < runs {
+            let (before, waited) = load::wait_for_quiet(load::WAIT.min(waiting_left));
+            waiting_left = waiting_left.saturating_sub(waited);
+            let quiet = before.is_none_or(|load| load.quiet());
+            if attempt >= runs && !quiet {
+                println!("  the machine is still busy, so no more runs to stand in for busy ones");
+                break;
             }
-            let load = load.map_or(String::new(), |(load, cores)| {
-                format!(", machine load {load:.1} on {cores} cores")
+            attempt += 1;
+            let said = before.map_or(String::new(), |load| {
+                let waited = if waited.as_secs() > 0 {
+                    format!(", after waiting {} s for it to quieten", waited.as_secs())
+                } else {
+                    String::new()
+                };
+                format!(
+                    ", {}{}{waited}",
+                    load.describe(),
+                    if quiet { "" } else { ", busy" }
+                )
             });
-            println!("\n> {} {}/{runs}{load}", scene.name, run);
-            match time_scene(&program, &folder, scene) {
-                Some(timing) => timed.push(timing),
+            let extra = if attempt > runs {
+                " (standing in for a busy run)"
+            } else {
+                ""
+            };
+            println!("\n> {} {attempt}/{runs}{extra}{said}", scene.name);
+            let watch = load::Watch::start();
+            let timing = time_scene(&program, &folder, scene);
+            let during = watch.stop();
+            if let Some(during) = during {
+                println!(
+                    "  while it ran: processors {:.0}% busy on average, {:.0}% at most{}",
+                    during.mean_cpu_pct,
+                    during.most_cpu_pct,
+                    if during.busy() { ", busy" } else { "" }
+                );
+            }
+            match timing {
+                Some(timing) => timed.push(Run {
+                    timing,
+                    before,
+                    during,
+                }),
                 None => println!("  no frame times came out"),
             }
         }
-        let Some(timing) = combine(&timed) else {
+        let (used, busy) = chosen_runs(&timed);
+        let Some(timing) = combine(&used) else {
             ok = false;
             continue;
         };
+        let (low, high, spread_pct) = spread(&used);
+        // Whether the runs agree on the verdict: one that held and one that missed say the
+        // scene is near its target, whichever the middle run says.
+        let holding = used.iter().filter(|t| t.misses().is_empty()).count();
         let against = match last_recorded(&csv, &timing, build, scene.name) {
             Some((before, then)) => {
                 let change = timing.median_ms / before - 1.0;
-                let note = if change > SLOWER_BY { "  SLOWER" } else { "" };
+                let note = if slower(change, spread_pct) {
+                    "  SLOWER"
+                } else {
+                    ""
+                };
                 format!("{:+.0}% on {then}{note}", change * 100.0)
             }
             None => "nothing recorded".to_string(),
         };
-        lines.push((scene.name, timing.clone(), against));
+        let note = Note {
+            runs: used.len(),
+            of: timed.len(),
+            low,
+            high,
+            spread_pct,
+            holding,
+            busy,
+        };
+        lines.push((scene.name, timing.clone(), against, note));
         if record {
             let row = format!(
                 "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{},{:.2},{},{:.1}",
@@ -275,7 +438,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 timing.median_ms,
                 timing.p99_ms,
                 timing.worst_ms,
-                timed.len(),
+                used.len(),
                 timing.over_pct,
                 timing.hitches,
                 timing.drift_pct
@@ -283,29 +446,64 @@ pub(crate) fn bench(args: &[String]) -> bool {
             ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
         }
     }
-    if let Some((_, first, _)) = lines.first() {
+    if let Some((_, first, _, _)) = lines.first() {
         println!(
-            "\nFrame times on {} at {}, {build} build, commit {commit}, {runs} runs each:",
+            "\nFrame times on {} at {}, {build} build, commit {commit}, {runs} runs each, the middle run's:",
             first.gpu, first.size
         );
         println!(
-            "  {:11} {:>8} {:>8} {:>8} {:>6} {:>7} {:>6}  budget  against the last recorded",
-            "scene", "median", "99th", "worst", "over", "hitches", "drift"
+            "  {:11} {:>8} {:>19} {:>8} {:>8} {:>6} {:>7} {:>6}  {:15}  against the last recorded",
+            "scene",
+            "median",
+            "runs' medians",
+            "99th",
+            "worst",
+            "over",
+            "hitches",
+            "drift",
+            "verdict"
         );
-        for (name, timing, against) in &lines {
+        for (name, timing, against, note) in &lines {
             let missed = timing.misses();
+            let verdict = format!(
+                "{} {}",
+                if missed.is_empty() { "holds" } else { "MISSED" },
+                timing.judged_by()
+            );
+            let range = format!(
+                "{:.2}-{:.2} ±{:.0}%",
+                note.low,
+                note.high,
+                note.spread_pct / 2.0
+            );
             println!(
-                "  {name:11} {:>5.2} ms {:>5.2} ms {:>5.2} ms {:>5.1}% {:>7} {:>+5.0}%  {:6}  {against}",
+                "  {name:11} {:>5.2} ms {range:>19} {:>5.2} ms {:>5.2} ms {:>5.1}% {:>7} {:>+5.0}%  {verdict:15}  {against}",
                 timing.median_ms,
                 timing.p99_ms,
                 timing.worst_ms,
                 timing.over_pct,
                 timing.hitches,
                 timing.drift_pct,
-                if missed.is_empty() { "holds" } else { "MISSED" }
             );
             for miss in &missed {
                 println!("  {:11} {miss}", "");
+            }
+            if note.holding != 0 && note.holding != note.runs {
+                println!(
+                    "  {:11} near its target: {} of {} runs held",
+                    "", note.holding, note.runs
+                );
+            }
+            if note.busy {
+                println!(
+                    "  {:11} taken on a busy machine (fewer than half of {} runs quiet): read it as an upper bound",
+                    "", note.of
+                );
+            } else if note.runs < note.of {
+                println!(
+                    "  {:11} from the {} quiet runs of {}; the busy ones left out",
+                    "", note.runs, note.of
+                );
             }
             ok &= missed.is_empty();
         }
@@ -313,17 +511,18 @@ pub(crate) fn bench(args: &[String]) -> bool {
             "  The budget is {:.1} ms (D25: 75 fps on the developers' RTX 3080 at the high preset): \
              a scene holds to it with its 99th percentile under it, at most {MOST_OVER_PCT}% of \
              frames over, no hitch over twice it, and no more than {MOST_DRIFT_PCT}% slower by \
-             the end, on the machine it runs on.",
-            first.budget_ms
+             the end, on the machine it runs on. On an integrated GPU, at the low preset, a \
+             median under {INTEGRATED_MEDIAN_MS:.1} ms (D239). A median is SLOWER than the last \
+             recorded past {:.0}% or the runs' own spread, whichever is more; a run is busy \
+             when the processors were over {:.0}% busy (or the GPU {:.0}%) before it, after \
+             waiting for them, or over {:.0}% on average ({:.0}% at once) while it ran.",
+            first.budget_ms,
+            SLOWER_BY * 100.0,
+            load::QUIET_CPU_PCT,
+            load::QUIET_GPU_PCT,
+            load::BUSY_DURING_CPU_PCT,
+            load::BUSY_DURING_MOST_PCT,
         );
-        if let Some((load, cores)) = busiest
-            && load > cores as f32 / 2.0
-        {
-            println!(
-                "  The machine was busy with other work (load up to {load:.1} on {cores} cores): \
-                 numbers come out slower and less even than on a quiet machine."
-            );
-        }
         if record {
             println!("  Recorded in {BENCHMARKS}.");
         }
@@ -372,18 +571,6 @@ fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     Some((program, root()))
 }
 
-/// How busy the machine is: its load over the last minute, against its cores. A benchmark
-/// shares the machine, and other work on it makes frames slower and less even.
-fn machine_load() -> Option<(f32, usize)> {
-    let text = output("sysctl", &["-n", "vm.loadavg"])
-        .or_else(|| std::fs::read_to_string("/proc/loadavg").ok())?;
-    let load = text
-        .split_whitespace()
-        .find_map(|word| word.parse::<f32>().ok())?;
-    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    Some((load, cores))
-}
-
 /// Runs one scene once and reads its frame times, ending it if it takes too long.
 fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
     use std::io::{BufRead, BufReader};
@@ -430,6 +617,9 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
             }
             if let Some(read) = parse_timing(&line) {
                 timing = Some(read);
+            } else if let (Some(timing), Some((preset, device))) = (&mut timing, parse_drawn(&line))
+            {
+                (timing.preset, timing.device) = (preset, device);
             } else if let Some(said) = worth_saying(&line) {
                 println!("  {said}");
             } else if let (Some(timing), Some((budget, over, hitches, drift))) =
@@ -511,6 +701,8 @@ mod bench_tests {
             over_pct: 0.0,
             hitches: 0,
             drift_pct: 0.0,
+            device: "DiscreteGpu".into(),
+            preset: "high".into(),
         }
     }
 
@@ -553,6 +745,8 @@ mod bench_tests {
                     99th percentile 15.39 ms, worst 16.40 ms";
         let read = Timing {
             budget_ms: 0.0,
+            device: String::new(),
+            preset: String::new(),
             ..timing(7.51, 15.39, 16.40)
         };
         assert_eq!(parse_timing(line), Some(read));
@@ -585,5 +779,74 @@ mod bench_tests {
             Some((5.0, "ccc".to_string()))
         );
         assert_eq!(last_recorded(&csv, &now, "release", "yard"), None);
+    }
+
+    #[test]
+    fn the_integrated_gpu_is_held_to_its_median_not_the_budget() {
+        let line = "SANDBOX drawn at the low preset on a IntegratedGpu GPU";
+        assert_eq!(
+            parse_drawn(line),
+            Some(("low".to_string(), "IntegratedGpu".to_string()))
+        );
+        let integrated = |median_ms| Timing {
+            device: "IntegratedGpu".into(),
+            preset: "low".into(),
+            hitches: 4,
+            ..timing(median_ms, 45.0, 90.0)
+        };
+        // Over the 13.3 ms budget at every gate, but under 33.3 ms at the median: it holds.
+        assert!(integrated(30.0).misses().is_empty());
+        assert_eq!(integrated(34.0).misses().len(), 1);
+        assert_eq!(integrated(30.0).judged_by(), "D239");
+        assert_eq!(timing(5.0, 9.0, 20.0).judged_by(), "D25");
+    }
+
+    #[test]
+    fn busy_runs_are_left_out_when_enough_are_quiet() {
+        let quiet = Load {
+            cpu_pct: 10.0,
+            gpu_pct: Some(1.0),
+        };
+        let busy = Load {
+            cpu_pct: 90.0,
+            gpu_pct: Some(1.0),
+        };
+        let run = |median, before| Run {
+            timing: timing(median, 9.0, 12.0),
+            before: Some(before),
+            during: None,
+        };
+        let (used, was_busy) = chosen_runs(&[run(5.0, quiet), run(9.0, busy), run(5.2, quiet)]);
+        assert_eq!(used.len(), 2);
+        assert!(!was_busy);
+        // Mostly busy: every run is used, and said to be busy.
+        let (used, was_busy) = chosen_runs(&[run(5.0, quiet), run(9.0, busy), run(8.0, busy)]);
+        assert_eq!(used.len(), 3);
+        assert!(was_busy);
+        // A run quiet before it but busy while it ran is busy.
+        let during = Run {
+            during: Some(During {
+                mean_cpu_pct: 80.0,
+                most_cpu_pct: 95.0,
+            }),
+            ..run(5.0, quiet)
+        };
+        assert!(during.busy());
+    }
+
+    #[test]
+    fn slower_is_past_the_runs_own_spread() {
+        let runs = [
+            timing(5.0, 9.0, 9.0),
+            timing(6.0, 9.0, 9.0),
+            timing(5.5, 9.0, 9.0),
+        ];
+        let (low, high, pct) = spread(&runs);
+        assert_eq!((low, high), (5.0, 6.0));
+        assert!((pct - 100.0 / 5.5).abs() < 0.01);
+        // 12% slower than recorded: past 10%, but within an 18% spread, so not SLOWER.
+        assert!(!slower(0.12, pct));
+        assert!(slower(0.20, pct));
+        assert!(slower(0.12, 4.0));
     }
 }

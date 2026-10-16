@@ -1230,7 +1230,11 @@ fn scripted_run(
     ),
     (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
-    (mut times, render_waits): (Local<Vec<String>>, Option<Res<RenderWaits>>),
+    (mut times, render_waits, quality): (
+        Local<Vec<String>>,
+        Option<Res<RenderWaits>>,
+        Option<Res<crate::quality::Quality>>,
+    ),
 ) {
     if !options.scripted() {
         return;
@@ -1398,6 +1402,13 @@ fn scripted_run(
                 frame_ms[frames / 2].1,
                 frame_ms[frames * 99 / 100].1,
                 frame_ms[frames - 1].1
+            );
+            // What the run is judged by: the integrated GPU at the low preset by D239's
+            // median, everything else by D25's budget (`cargo xtask bench`).
+            println!(
+                "SANDBOX drawn at the {} preset on a {:?} GPU",
+                quality.map_or("high", |quality| quality.name()),
+                adapter.device_type
             );
             println!(
                 "SANDBOX against the {FRAME_BUDGET_MS:.1} ms budget: {:.2}% of frames over, {} hitches over {:.1} ms, the game's work in the last third {:+.1}% on the first",

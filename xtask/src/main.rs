@@ -5,6 +5,7 @@ mod bench;
 mod build;
 mod check;
 mod doctor;
+mod load;
 mod scenes;
 mod seed;
 mod windows;
@@ -157,7 +158,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "qa",
-        takes: "clips|<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] | --list | --index",
+        takes: "clips|<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] [--runs 3] | --list | --index",
         does: "QA clips of building and destruction in a set, the same every time, each with a real-time frame trace against the budget, in shots/qa/ (tools/sandbox)",
         group: "Look at things",
         run: |args| {
@@ -221,6 +222,13 @@ const TASKS: &[Task] = &[
         does: "find where building's textures are stretched or smeared, from the meshes: each kit's share of area drawn past 1.5:1 and 2.5:1, and where the worst is",
         group: "Play and check",
         run: texels,
+    },
+    Task {
+        name: "look",
+        takes: "<material>… | --all",
+        does: "the material bench (D386): a material shot from fixed vantages at noon, in shade and in the evening beside its reference photo and an 18% grey card, its texel density, sharpness, grey-card balance, value range and stretch against its pattern's targets; fails on a regression; shots/look/ (tools/kits)",
+        group: "Play and check",
+        run: |args| node("tools/kits/look.ts", args),
     },
     Task {
         name: "town",

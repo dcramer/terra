@@ -3,7 +3,7 @@
 // of kits, filmed the same every time, with a contact sheet and the same run timed in real
 // time, frame by frame, so hitches are measured and not only seen.
 //
-//   node tools/sandbox/qa.ts <scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace]
+//   node tools/sandbox/qa.ts <scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace] [--runs 3]
 //   node tools/sandbox/qa.ts --list      the scenarios, their stages, and the sets
 //   node tools/sandbox/qa.ts --index     write shots/qa/index.html again
 //
@@ -23,17 +23,21 @@
 // 3. The trace: the same calls on the same frames in a benchmark run, which lays sections on
 //    the workers as play does, every frame's time written (`--frame-times`): <set>-frames.csv,
 //    and in <set>.txt each stage's frames against the budget and the worst frames with what
-//    was done on them.
+//    was done on them. It is run `--runs` times (three), each after waiting a bounded time for
+//    a quiet machine and with the load sampled while it runs (load.ts, as `cargo xtask bench`
+//    does, D185); the middle run by its 99th percentile is the one written, beside every
+//    run's numbers, their spread, which were busy, and a verdict against D25's budget (or, on
+//    an integrated GPU, D239's median).
 //
 // shots/qa/index.html lists the latest of each. Runs on the Windows GPU from WSL. Needs
 // ffmpeg and ImageMagick. Node 22.18 or later; no dependencies.
 
-import { spawnSync } from "node:child_process";
-import { cpus, loadavg } from "node:os";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as game from "./client.ts";
+import * as load from "./load.ts";
 import { buildOffscreen, imageMagick, offscreenPath, offscreenRun, ROOT } from "./client.ts";
 import { type Call, type Known, type KitSet, inBaseline, readSets, type Scenario, Script, type Stage } from "./qa/script.ts";
 
@@ -43,6 +47,8 @@ const OUT = resolve(ROOT, "shots/qa");
 /// and a hitch: twice it, a dropped frame.
 const BUDGET_MS = 1000 / 75;
 const HITCH_MS = 2 * BUDGET_MS;
+/// The integrated GPU's target at the low preset (D239): a median under 33.3 ms.
+const INTEGRATED_MEDIAN_MS = 1000 / 30;
 
 const args = process.argv.slice(2);
 const option = (name: string) => {
@@ -79,7 +85,7 @@ const clips: string[] = [];
 for (const each of scenarios) if ((await load(each)).clip) clips.push(each);
 clips.sort((a, b) => rank(a) - rank(b));
 if (!asked || (asked !== "clips" && !scenarios.includes(asked))) {
-  console.error(`usage: cargo xtask qa clips|<scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace]\nclips: ${clips.join(", ")}\nothers: ${scenarios.filter((each) => !clips.includes(each)).join(", ")}`);
+  console.error(`usage: cargo xtask qa clips|<scenario> [--set <kit>|mixes|all] [--part <stage>] [--no-trace] [--runs 3]\nclips: ${clips.join(", ")}\nothers: ${scenarios.filter((each) => !clips.includes(each)).join(", ")}`);
   process.exit(1);
 }
 const wanted = option("--set") ?? (sets.find((set) => set.name === "logs") ?? sets[0]).name;
@@ -89,6 +95,9 @@ if (!chosen.length) {
   process.exit(1);
 }
 const part = option("--part");
+const runs = Math.max(1, Number(option("--runs") ?? 3) || 3);
+/// What is left of the most a command waits for a quiet machine over all its traces.
+let waitingLeft = load.MOST_WAITING_S;
 let name = "";
 let scenario: Scenario;
 let folder = "";
@@ -161,7 +170,7 @@ async function film(set: KitSet) {
 
   let trace: Trace | undefined;
   if (!args.includes("--no-trace")) {
-    trace = timeIt(set, sandbox, calls, s.stages, last, label);
+    trace = await timeIt(set, sandbox, calls, s.stages, last, label);
     console.log(`qa: traced (${seconds()})`);
   }
   writeFileSync(
@@ -292,42 +301,105 @@ function contactSheet(frames: string, out: string, stages: Stage[], from: number
   }
 }
 
-type Trace = { summary: { median: number; p99: number; worst: number; over: number; hitches: number; frames: number; torn: number; edits: number; edit_median: number; edit_worst: number } };
+type Summary = { median: number; p99: number; worst: number; over: number; hitches: number; frames: number; torn: number; edits: number; edit_median: number; edit_worst: number };
+type Trace = { summary: Summary & { runs: number; of: number; p99_low: number; p99_high: number; busy: boolean; judged: string; holds: boolean } };
+
+/// One run of the trace: its frames read, what the run said, and the machine's load.
+type TraceRun = { rows: { frame: number; ms: number; game: number; render: number; gpu: number }[]; said: string; csv: string; log: string; before?: load.Load; during?: load.During; busy: boolean };
+
+const stat = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return { median: sorted[Math.floor(sorted.length / 2)] ?? 0, p99: sorted[Math.floor(sorted.length * 0.99)] ?? 0, worst: sorted.at(-1) ?? 0 };
+};
 
 /// The same calls on the same frames in a benchmark run, every frame's time written, read
-/// against the budget stage by stage, its worst frames beside what was done on them.
-function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], last: number, label: string): Trace {
-  const csv = resolve(folder, `${label}-frames.csv`);
-  rmSync(csv, { force: true });
+/// against the budget stage by stage, its worst frames beside what was done on them; run
+/// `--runs` times on a machine as quiet as it gets, the middle run written.
+async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], last: number, label: string): Promise<Trace> {
   const settle = 30;
-  const [command, words] = offscreenRun(`qa-trace`, [...sandbox, "--bench", "--settle", String(settle), "--bench-frames", String(Math.max(100, last - settle)), "--frame-times", offscreenPath(csv)]);
-  const load = loadavg()[0];
-  const run = runOffscreen(command, words);
-  writeFileSync(resolve(folder, `${label}-trace.log`), `${run.stdout}${run.stderr}`);
-  if (!existsSync(csv)) throw new Error(`the trace did not finish:\n${`${run.stdout}${run.stderr}`.split("\n").slice(-25).join("\n")}`);
-  const rows = readFileSync(csv, "utf8")
-    .trim()
-    .split("\n")
-    .slice(1)
-    .map((line) => line.split(","))
-    .map(([frame, ms, game, render, gpu]) => ({ frame: Number(frame), ms: Number(ms), game: Number(game), render: Number(render), gpu: Number(gpu) }));
-  const stat = (values: number[]) => {
-    const sorted = [...values].sort((a, b) => a - b);
-    return { median: sorted[Math.floor(sorted.length / 2)] ?? 0, p99: sorted[Math.floor(sorted.length * 0.99)] ?? 0, worst: sorted.at(-1) ?? 0 };
+  const traced: TraceRun[] = [];
+  const quietRuns = () => traced.filter((run) => !run.busy).length;
+  // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the machine
+  // is quiet, up to as many again to stand in for runs taken while it was busy.
+  for (let attempt = 0; attempt < runs * 2 && quietRuns() < runs; ) {
+    const { load: before, waited } = await load.waitForQuiet(Math.min(load.WAIT_S, waitingLeft));
+    waitingLeft = Math.max(0, waitingLeft - waited);
+    if (attempt >= runs && !load.quiet(before)) {
+      console.log("  the machine is still busy, so no more runs to stand in for busy ones");
+      break;
+    }
+    attempt++;
+    const csv = resolve(folder, `${label}-frames-${attempt}.csv`);
+    rmSync(csv, { force: true });
+    const [command, words] = offscreenRun(`qa-trace`, [...sandbox, "--bench", "--settle", String(settle), "--bench-frames", String(Math.max(100, last - settle)), "--frame-times", offscreenPath(csv)]);
+    console.log(`qa: trace ${attempt}/${runs}${attempt > runs ? " (standing in for a busy run)" : ""}${before ? `, ${load.describe(before)}${load.quiet(before) ? "" : ", busy"}` : ""}${waited >= 1 ? `, after waiting ${waited.toFixed(0)} s for it to quieten` : ""}`);
+    const watching = load.watch();
+    const run = await runOffscreenAsync(command, words);
+    const during = await watching.stop();
+    const said = `${run.stdout}${run.stderr}`;
+    const log = resolve(folder, `${label}-trace-${attempt}.log`);
+    writeFileSync(log, said);
+    if (!existsSync(csv)) throw new Error(`the trace did not finish:\n${said.split("\n").slice(-25).join("\n")}`);
+    const rows = readFileSync(csv, "utf8")
+      .trim()
+      .split("\n")
+      .slice(1)
+      .map((line) => line.split(","))
+      .map(([frame, ms, game, render, gpu]) => ({ frame: Number(frame), ms: Number(ms), game: Number(game), render: Number(render), gpu: Number(gpu) }));
+    traced.push({ rows, said, csv, log, before, during, busy: !load.quiet(before) || load.busyDuring(during) });
+  }
+  if (!traced.length) throw new Error("no trace ran");
+  // The runs read: the quiet ones when at least half are, else all, said to be busy.
+  const quietOnes = traced.filter((run) => !run.busy);
+  const busy = !(quietOnes.length && quietOnes.length * 2 >= traced.length);
+  const used = busy ? traced : quietOnes;
+  // What is filmed: from the first stage, not a clip's building put up before it.
+  const from = stages[0]?.from ?? 0;
+  const filmedOf = (run: TraceRun) => run.rows.filter((r) => r.frame >= from);
+  const byP99 = [...used].sort((a, b) => stat(filmedOf(a).map((r) => r.ms)).p99 - stat(filmedOf(b).map((r) => r.ms)).p99);
+  const chosen = byP99[Math.floor(byP99.length / 2)];
+  // The middle run's files are the trace's; the others go.
+  for (const run of traced) {
+    if (run === chosen) {
+      renameSync(run.csv, resolve(folder, `${label}-frames.csv`));
+      renameSync(run.log, resolve(folder, `${label}-trace.log`));
+    } else {
+      rmSync(run.csv, { force: true });
+      rmSync(run.log, { force: true });
+    }
+  }
+  const { rows, said } = chosen;
+  const integrated = /SANDBOX drawn at the \w+ preset on a IntegratedGpu GPU/.test(said);
+  const judged = integrated ? "D239" : "D25";
+  const holdsRun = (run: TraceRun) => {
+    const { median, p99 } = stat(filmedOf(run).map((r) => r.ms));
+    return integrated ? median <= INTEGRATED_MEDIAN_MS : p99 <= BUDGET_MS;
   };
-  // A trace shares the machine: what else ran with it is said, as `cargo xtask bench` says it.
-  const busy = Math.max(load, loadavg()[0]) / cpus().length;
+  const p99s = load.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).p99));
+  const medians = load.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).median));
+  const filmed = filmedOf(chosen);
+  const all = stat(filmed.map((r) => r.ms));
+  const holds = holdsRun(chosen);
+  const holding = used.filter(holdsRun).length;
+  const target = integrated ? `median ${all.median.toFixed(1)} ms ${holds ? "within" : "over"} ${INTEGRATED_MEDIAN_MS.toFixed(1)} ms` : `p99 ${all.p99.toFixed(1)} ms ${holds ? "within" : "over"} the ${BUDGET_MS.toFixed(1)} ms budget`;
   const lines: string[] = [
-    `${name} in ${set.name}, in real time on ${/SANDBOX frames on ([^:]+?) at/.exec(run.stdout)?.[1] ?? "the GPU"}: frames against the ${BUDGET_MS.toFixed(1)} ms budget`,
-    `the machine's load ${(busy * 100).toFixed(0)}% of its ${cpus().length} cores${busy > 0.5 ? ": busy, so these times are high" : ""}`,
+    `${name} in ${set.name}, in real time on ${/SANDBOX frames on ([^:]+?) at/.exec(said)?.[1] ?? "the GPU"}: frames against the ${integrated ? `integrated GPU's ${INTEGRATED_MEDIAN_MS.toFixed(1)} ms median (D239)` : `${BUDGET_MS.toFixed(1)} ms budget (D25)`}`,
+    `verdict: ${holds ? "holds" : "MISSED"} ${judged}, ${target}; the middle of ${used.length} runs${used.length < traced.length ? ` (the ${used.length} quiet of ${traced.length})` : ""}, p99 ${p99s.low.toFixed(1)} to ${p99s.high.toFixed(1)} ms, medians ${medians.low.toFixed(1)} to ${medians.high.toFixed(1)} ms${holding !== 0 && holding !== used.length ? `; near its target: ${holding} of ${used.length} runs held` : ""}${busy ? "; taken on a busy machine, so read it as an upper bound" : ""}`,
+    "",
+    "runs:",
+    ...traced.map((run, i) => {
+      const { median, p99, worst } = stat(filmedOf(run).map((r) => r.ms));
+      const before = run.before ? `before: ${load.describe(run.before)}` : "before: load unknown";
+      const during = run.during ? `while it ran: processors ${run.during.mean.toFixed(0)}% busy, at most ${run.during.most.toFixed(0)}%` : "";
+      return `  ${i + 1}${run === chosen ? "*" : " "} median ${median.toFixed(1).padStart(5)}  p99 ${p99.toFixed(1).padStart(5)}  worst ${worst.toFixed(1).padStart(6)} ms  ${run.busy ? "BUSY" : "quiet"}  ${before}; ${during}`;
+    }),
+    "  (* the run written below)",
     "",
   ];
   const row = (title: string, ms: number[]) => {
     const { median, p99, worst } = stat(ms);
     lines.push(`${title.padEnd(24)} median ${median.toFixed(1).padStart(5)}  p99 ${p99.toFixed(1).padStart(5)}  worst ${worst.toFixed(1).padStart(6)} ms  over ${ms.filter((m) => m > BUDGET_MS).length}  hitches ${ms.filter((m) => m > HITCH_MS).length}`);
   };
-  // What is filmed: from the first stage, not a clip's building put up before it.
-  const filmed = rows.filter((r) => r.frame >= (stages[0]?.from ?? 0));
   row("filmed", filmed.map((r) => r.ms));
   for (const stage of stages) row(stage.name, rows.filter((r) => r.frame >= stage.from && r.frame <= stage.to).map((r) => r.ms));
   // Each change from the call that made it to all its sections on screen, as the run said
@@ -339,7 +411,7 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   const debris: string[] = [];
   let torn = 0;
   let lastFrame = 0;
-  for (const line of `${run.stdout}${run.stderr}`.split("\n")) {
+  for (const line of said.split("\n")) {
     const call = /Calls: frame (\d+)/.exec(line);
     if (call) lastFrame = Number(call[1]);
     const change = /Build: change on screen in ([\d.]+) ms/.exec(line);
@@ -368,9 +440,26 @@ function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Stage[], 
   }
   writeFileSync(resolve(folder, `${label}.txt`), lines.join("\n") + "\n");
   console.log(lines.join("\n"));
-  const all = stat(filmed.map((r) => r.ms));
   const edit = stat(edits.map((each) => each.ms));
-  return { summary: { ...all, over: filmed.filter((r) => r.ms > BUDGET_MS).length, hitches: filmed.filter((r) => r.ms > HITCH_MS).length, frames: filmed.length, torn, edits: edits.length, edit_median: edit.median, edit_worst: edit.worst } };
+  return {
+    summary: {
+      ...all,
+      over: filmed.filter((r) => r.ms > BUDGET_MS).length,
+      hitches: filmed.filter((r) => r.ms > HITCH_MS).length,
+      frames: filmed.length,
+      torn,
+      edits: edits.length,
+      edit_median: edit.median,
+      edit_worst: edit.worst,
+      runs: used.length,
+      of: traced.length,
+      p99_low: p99s.low,
+      p99_high: p99s.high,
+      busy,
+      judged,
+      holds,
+    },
+  };
 }
 
 /// shots/qa/index.html: the latest film of each scenario in each set, its contact sheet
@@ -388,7 +477,9 @@ function index() {
     if (!existsSync(json)) return "<td class=none>not filmed</td>";
     const made = JSON.parse(readFileSync(json, "utf8"));
     const t = made.trace;
-    const verdict = t ? `<b class=${t.p99 > BUDGET_MS ? "bad" : "good"}>p99 ${t.p99.toFixed(1)} ms ${t.p99 > BUDGET_MS ? "over" : "within"} ${BUDGET_MS.toFixed(1)}</b><br>` : "";
+    const holds = t?.holds ?? (t && t.p99 <= BUDGET_MS);
+    const spread = t?.runs > 1 ? ` (${t.p99_low.toFixed(1)}–${t.p99_high.toFixed(1)}, ${t.runs} runs${t.busy ? ", busy machine" : ""})` : "";
+    const verdict = t ? `<b class=${holds ? "good" : "bad"}>${t.judged === "D239" ? `median ${t.median.toFixed(1)} ms` : `p99 ${t.p99.toFixed(1)} ms`} ${holds ? "within" : "over"} ${t.judged === "D239" ? INTEGRATED_MEDIAN_MS.toFixed(1) : BUDGET_MS.toFixed(1)}</b>${spread}<br>` : "";
     const timing = t ? `${verdict}median ${t.median.toFixed(1)} · p99 ${t.p99.toFixed(1)} · worst ${t.worst.toFixed(0)} ms · <span class=${t.hitches ? "bad" : "good"}>${t.hitches} hitches</span>${t.edits ? `<br>edits to screen median ${t.edit_median.toFixed(0)} · worst ${t.edit_worst.toFixed(0)} ms · <span class=${t.torn ? "bad" : "good"}>${t.torn} torn</span>` : ""}` : "not traced";
     const refused = made.refusals?.length ? `<br><span class=bad>${made.refusals.length} refused</span>` : "";
     return `<td><a href="${scenario}/${set}.mp4"><img src="${scenario}/${set}.jpg" alt="${scenario} in ${set}"></a><br>${timing}${refused}<br><a href="${scenario}/${set}-720p.mp4">720p</a> · <a href="${scenario}/${set}.txt">trace</a> · ${made.made.slice(0, 16).replace("T", " ")}</td>`;
@@ -413,6 +504,24 @@ function spans(frames: number[]) {
     i = j + 1;
   }
   return out.join(", ");
+}
+
+/// A scripted run to its end without blocking, so the load can be sampled while it runs;
+/// tried again while Windows will not replace a program still closing, as `runOffscreen`.
+async function runOffscreenAsync(command: string, words: string[]): Promise<{ stdout: string; stderr: string }> {
+  for (let attempt = 0; ; attempt++) {
+    const run = await new Promise<{ stdout: string; stderr: string }>((done, fail) => {
+      const child = spawn(command, words, { cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT } });
+      const out: Buffer[] = [];
+      const err: Buffer[] = [];
+      child.stdout.on("data", (chunk) => out.push(chunk));
+      child.stderr.on("data", (chunk) => err.push(chunk));
+      child.on("error", fail);
+      child.on("close", () => done({ stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8") }));
+    });
+    if (attempt >= 30 || !`${run.stdout}${run.stderr}`.includes("Could not copy the program")) return run;
+    await new Promise((done) => setTimeout(done, 2000));
+  }
 }
 
 /// A scripted run to its end. Windows will not replace a program still closing, such as the

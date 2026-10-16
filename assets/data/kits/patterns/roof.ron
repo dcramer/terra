@@ -30,6 +30,11 @@
 //             shake at a time, the gaps between them the lowest share of its height map
 // burns       what it does in a fire (D377, terra_build::fire): None for slate; a covering
 //             of wood or straw says its own in its pack
+// look        what the material bench holds every covering of it to (`cargo xtask look`, D386,
+//             terra_build::look): its covering's texels a metre, its sharpness from 1, 2 and
+//             5 m, its brightness against an 18% grey card lit and in shade, its values'
+//             spread, and the most of each texture set drawn stretched, its own pieces'
+//             atlas, measured against itself, its own
 (
     pattern: Roof,
     toughness: (health: 200, breaks: Bits),
@@ -73,4 +78,22 @@
         pieces: Some("data/kits/pieces/roof.ron"),
     ),
     meets: Some((weight: 0, end: None, carries: None)),
+    // The bench's targets (D386), set from shakes' and slate's numbers on 2026-10-16 (texel
+    // density 640 and 853; sharpness 19.9, 19.8, 29.0% and 21.4, 26.9, 21.8%; values 5 to
+    // 120 and 11 to 70; 0.27 to 0.32 and 0.17 to 0.18 of the card lit, 0.43 and 0.35 on the
+    // slope away from the sun), a little under the worse of them; the own pieces' atlas
+    // (Piece), measured against itself, and the shared trims their own.
+    look: (
+        surface: Covering,
+        density: 600.0,
+        sharpness: (17.0, 17.0, 19.0),
+        lit: (0.13, 0.45),
+        shade: (0.28, 0.6),
+        values: (45.0, 140.0),
+        stretch: (
+            smeared: 2.0,
+            streaked: 0.5,
+            roles: {Covering: (18.0, 1.5), Piece: (45.0, 3.5), Trim: (3.5, 1.5)},
+        ),
+    ),
 )
