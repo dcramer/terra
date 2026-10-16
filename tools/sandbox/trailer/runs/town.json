@@ -1,9 +1,10 @@
 {
-  "about": "Down the paved main street into the market square on market morning, its people about their day",
+  "about": "Down the paved main street into the market square on market morning, the sun high enough to light the street, its people about their day",
   "place": "town",
-  "hour": 8.5,
+  "hour": 10.5,
   "seconds": 25,
-  "player": { "at": "65.3,-340.7", "route": "54.6,-346.0;43.3,-350.0;31.5,-351.5;19.8,-349.1;-5.5,-341.9;-25.6,-339.8;-37.2,-336.7;-47.9,-331.2" },
+  "player": { "at": "51.2,-346.4", "route": "39.6,-349.2;27.8,-350.8;16.0,-348.3;-4.4,-342.1;-21.9,-340.5;-33.8,-339.4;-45.4,-336.4" },
+  "look": { "exposure_bias": -0.35 },
   "sound": ["murmur:0.7", "fire:0.15", "birds:0.3"],
   "music": "village"
 }

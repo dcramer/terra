@@ -126,8 +126,10 @@ const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
 // straw dropped about their edges.
 const TRODDEN: vec3<f32> = vec3<f32>(0.15, 0.132, 0.108);
 const STRAW: vec3<f32> = vec3<f32>(0.34, 0.27, 0.13);
-// A settlement's paved streets and square (D350), linear: grey-brown setts of the local stone.
-const SETTS: vec3<f32> = vec3<f32>(0.15, 0.135, 0.112);
+// A settlement's paved streets and square (D350), linear: grey-brown setts of the local stone,
+// dulled by the dirt ground into them; Kingdom Come's sunlit streets measure about 0.25 sRGB,
+// near grey, where clean light stone (0.15 linear) stood at twice that in our frames.
+const SETTS: vec3<f32> = vec3<f32>(0.092, 0.088, 0.08);
 // Rime on the floor in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
@@ -936,12 +938,44 @@ fn fragment(
             // the packed earth, their edge broken, earth and mud between them where it thins.
             let paved = smoothstep(0.8, 0.95, trodden + (blotch - 0.5) * 0.12 + (fleck - 0.5) * 0.04) * flat_ground;
             if paved > 0.0 {
-                let laid = SETTS * (0.85 + 0.3 * blotch) * (0.92 + 0.16 * swell);
+                // A lived-in paving, as Kingdom Come's and The Witcher's streets are: earth
+                // trodden over it in broad patches and filling its joints everywhere, the stones'
+                // tops showing through (`settle` lays them by height, so the earth stays low), not
+                // a clean, regular pavement.
+                let dirt = smoothstep(0.3, 0.75, noise(world * 0.16 + 23.0) * 0.7 + noise(world * 0.7 + 29.0) * 0.3);
+                let shows = paved * mix(0.85, 0.35, dirt);
+                // Two layings, offset and a little differently sized, in patches a few metres
+                // across, so its two-metre repeat does not show as a grid; the stones each take
+                // the tint's hue, not the scan's, a little lighter or darker by patch.
+                let laid = SETTS * (0.8 + 0.4 * blotch) * (0.9 + 0.2 * swell) * (0.85 + 0.3 * noise(world * 0.45 + 13.0));
                 var setts = layer(COBBLES, 0.9, laid, world + 5.0, gx, gy, n, PLAIN);
+                let other = layer(COBBLES, 0.83, laid, world + vec3<f32>(0.7, 0.0, 1.3), gx, gy, n, PLAIN);
+                setts = over(setts, other, step(0.5, noise(world * 0.21 + 71.0)));
+                // The scan's joints are deep and dark; worn setts in packed earth are nearly
+                // flush, their joints full, so the tone and the relief are both softened.
+                let tone = dot(setts.colour, vec3<f32>(0.333)) / dot(laid, vec3<f32>(0.333));
+                setts.colour = laid * pow(max(tone, 0.0), 0.75);
+                setts.normal = normalize(mix(n, setts.normal, 0.55));
                 setts.colour *= mix(1.0, 0.6, wet);
-                ground_is = settle(ground_is, setts, paved);
+                ground_is = settle(ground_is, setts, shows);
+                // Where the dirt lies thickest, a film of trodden earth over the stones' tops
+                // too, so they show only faintly through it, as in Kingdom Come's market.
+                // Kingdom Come's market street is grey-brown trodden mud over its stones,
+                // about 0.25 sRGB in the sun, the stones barely showing; ours had every sett
+                // clean and lit at twice that. The mud is damp and dark, lies in broad patches
+                // and fills the low ground between, its own fine grain and none of the
+                // stones' relief.
+                var mud = earth;
+                mud.colour = earth.colour * 0.55;
+                mud.normal = normalize(mix(n, earth.normal, 0.5));
+                let film = paved * smoothstep(0.3, 0.55, dirt + (fleck - 0.5) * 0.15) * 0.92;
+                ground_is = over(ground_is, mud, film);
+                // Worn stone under dust is matt: the scan's gloss caught the low sun on each
+                // sett's top as a white fleck, in patches, as if wet.
+                pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.92, paved);
             }
-            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * (1.0 - smoothstep(0.55, 0.95, trodden)) * worn;
+            // Straw about a way's edges and the yards, and a little scattered over the paving.
+            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * mix(1.0, 0.35, smoothstep(0.55, 0.95, trodden)) * worn;
             if straw > 0.0 {
                 ground_is = settle(ground_is, layer(LITTER, 0.6, STRAW * (0.8 + 0.4 * fleck), world + 67.0, gx, gy, n, 1.0), straw);
             }
