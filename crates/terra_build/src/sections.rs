@@ -147,6 +147,10 @@ pub enum Reach {
     Far,
     Mid,
     Near,
+    /// So near that its middle detail is not seen: its near detail alone, as a voxel game
+    /// streams only the level of detail a chunk is seen at. The middle detail is made when
+    /// the camera has gone far enough for it to be laid again `Near`, before it is seen.
+    Close,
 }
 
 /// How finely a section is drawn.
@@ -558,6 +562,7 @@ fn draw_together(
     // again coarser, before that detail is seen. Past the far detail the game draws a
     // base's sections' proxies merged a cell at a time ([`proxy`]).
     let details: &[Detail] = match reach {
+        Reach::Close => &[Detail::Near],
         Reach::Near => &[Detail::Near, Detail::Mid],
         Reach::Mid => &[Detail::Mid, Detail::Far],
         Reach::Far => &[Detail::Far],

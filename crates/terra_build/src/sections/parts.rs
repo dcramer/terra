@@ -345,7 +345,7 @@ pub fn draw_parts(
     // drawn together.
     let mut keep = keep;
     let drawn = if let Some(only) = only
-        && matches!(reach, Reach::Near | Reach::Mid)
+        && matches!(reach, Reach::Close | Reach::Near | Reach::Mid)
         && last.is_some()
         && only.iter().filter(|&&wanted| wanted).count() > 1
     {

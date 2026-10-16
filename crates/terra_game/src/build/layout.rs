@@ -117,6 +117,11 @@ pub(super) enum Outcome {
 /// A section of the base being built slower than this on its worker says why in the log.
 const SLOW_SECTION_MS: f32 = 30.0;
 
+/// Near detail alone is laid from here and kept to here (`Reach::Close`): a near section's
+/// middle detail was 45% of what an edit put on the GPU (a stone section's 58,000 near
+/// corners and 45,000 middle ones), all of it unseen until the camera is 23.5 m off.
+const CLOSE_LAY_M: f32 = 14.0;
+const CLOSE_KEEP_M: f32 = 17.0;
 const NEAR_LAY_M: f32 = 32.0;
 const NEAR_KEEP_M: f32 = 36.0;
 const MID_LAY_M: f32 = 70.0;
@@ -136,9 +141,15 @@ const FAR_KEEP_M: f32 = 155.0;
 /// 127 m, laid from 140 m and let go past 155 m, beyond which a section is its hull alone.
 /// Held to 140 m, the middle detail of every section within it was most of the GPU's
 /// building memory.
-pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
+///
+/// Closer still, a section is laid with its near detail alone (`Reach::Close`) where the
+/// middle detail has nothing else to do (`close`): on the lower presets the sun casts every
+/// section's shadow from its middle detail (`draw::show`), so there it is always made.
+pub(super) fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
     let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
-    if distance < NEAR_LAY_M || (kept(Reach::Near) && distance < NEAR_KEEP_M) {
+    if close && (distance < CLOSE_LAY_M || (kept(Reach::Close) && distance < CLOSE_KEEP_M)) {
+        Reach::Close
+    } else if distance < NEAR_LAY_M || (kept(Reach::Near) && distance < NEAR_KEEP_M) {
         Reach::Near
     } else if distance < MID_LAY_M || (kept(Reach::Mid) && distance < MID_KEEP_M) {
         Reach::Mid
@@ -147,6 +158,19 @@ pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
     } else {
         Reach::Hull
     }
+}
+
+/// Whether a section drawn for one reach is drawn finely enough for another: as asked, or
+/// with the middle detail as well where only the near detail is asked for. A section is not
+/// laid again only to let its middle detail go; the next change to it does.
+pub(super) fn suffices(drawn: Reach, wanted: Reach) -> bool {
+    drawn == wanted || (drawn == Reach::Near && wanted == Reach::Close)
+}
+
+/// Whether sections near the camera are laid with their near detail alone: only at the high
+/// preset, where the near detail casts its own shadows.
+pub(super) fn close(quality: terra_world::quality::Quality) -> bool {
+    quality == terra_world::quality::Quality::High
 }
 
 pub fn plugin(app: &mut App) {
@@ -194,8 +218,10 @@ fn track(
 
 /// Sends the waiting sections nearest the camera to the workers, as many as they have
 /// threads for.
+#[allow(clippy::too_many_arguments)]
 fn launch(
     scale: Res<terra_world::detail::DetailScale>,
+    quality: Res<terra_world::quality::Quality>,
     mut jobs: ResMut<Jobs>,
     look: Res<BuildLook>,
     options: Res<Options>,
@@ -255,8 +281,8 @@ fn launch(
                 .filter_map(|(&at, drawn)| {
                     let distance =
                         store::distance_from(&frame, eye, at, sections.unit, drawn.bounds);
-                    let wanted = reach(distance / scale.0, Some(drawn.reach));
-                    (wanted == drawn.reach).then_some((at, drawn.key))
+                    let wanted = reach(distance / scale.0, Some(drawn.reach), close(*quality));
+                    suffices(drawn.reach, wanted).then_some((at, drawn.key))
                 })
                 .collect();
             let progress = progress.clone();
@@ -432,9 +458,9 @@ fn launch(
             let last = drawn_before
                 .and_then(|drawn| drawn.drawing.clone())
                 .filter(|_| keeps);
-            let wanted = waiting
-                .reach
-                .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
+            let wanted = waiting.reach.unwrap_or_else(|| {
+                reach(distance, previous.map(|(_, reach)| reach), close(*quality))
+            });
             let force = waiting.force;
             let whole = whole.clone();
             let unit = build.sections.unit;
@@ -691,5 +717,31 @@ impl Jobs {
             self.drawn_once = true;
         }
         self.idle = idle;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn near_detail_alone_is_laid_close_by_only_where_allowed_and_kept_a_little_further() {
+        assert_eq!(reach(10.0, None, true), Reach::Close);
+        assert_eq!(
+            reach(10.0, None, false),
+            Reach::Near,
+            "the lower presets keep the middle detail"
+        );
+        // Laid near a little further off, close kept a little further than it is laid.
+        assert_eq!(reach(15.0, None, true), Reach::Near);
+        assert_eq!(reach(15.0, Some(Reach::Close), true), Reach::Close);
+        // Past where it is kept, before the middle detail is seen (`draw::NEAR_M`, 25 m less
+        // its fade), laid near again.
+        assert_eq!(reach(18.0, Some(Reach::Close), true), Reach::Near);
+        // Drawn near, it need not be laid again only to let the middle detail go; drawn
+        // close, it must be laid again for the middle detail.
+        assert!(suffices(Reach::Near, Reach::Close));
+        assert!(!suffices(Reach::Close, Reach::Near));
+        assert!(suffices(Reach::Mid, Reach::Mid) && !suffices(Reach::Near, Reach::Mid));
     }
 }

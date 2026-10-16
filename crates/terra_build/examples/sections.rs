@@ -104,7 +104,7 @@ fn main() -> ExitCode {
                         .sum::<usize>()
                 };
                 let finest = match reach {
-                    Reach::Near => count(&drawn.near),
+                    Reach::Close | Reach::Near => count(&drawn.near),
                     Reach::Mid => count(&drawn.mid),
                     Reach::Far => drawn.far.triangle_count(),
                     Reach::Hull => drawn.proxy.triangle_count(),

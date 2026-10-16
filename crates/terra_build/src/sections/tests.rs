@@ -484,6 +484,11 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
     let mid_off = draw(&section, &laid, Reach::Mid);
     assert!(mid_off.near.is_empty() && !mid_off.mid.is_empty());
     assert!(mid_off.far.triangle_count() > 0 && mid_off.proxy.triangle_count() == 0);
+    // Close by, the near detail alone, the same as drawn near with its middle detail.
+    let close = draw(&section, &laid, Reach::Close);
+    assert!(close.mid.is_empty() && close.far.triangle_count() == 0);
+    let close_near: usize = close.near.values().map(Surface::triangle_count).sum();
+    assert_eq!(close_near, near);
 }
 
 #[test]

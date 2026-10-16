@@ -44,7 +44,7 @@ pub(super) fn held(build: &Build) -> Held {
         laid_by: {
             let mut by = [0; 4];
             for drawn in sections.drawn.values() {
-                by[3 - drawn.reach as usize] += 1;
+                by[3 - drawn.reach.min(Reach::Near) as usize] += 1;
             }
             by
         },
@@ -52,7 +52,7 @@ pub(super) fn held(build: &Build) -> Held {
             let mut by = [0; 5];
             for drawn in sections.drawn.values() {
                 let slot = match drawn.reach {
-                    Reach::Near => 0,
+                    Reach::Close | Reach::Near => 0,
                     Reach::Mid => 1,
                     Reach::Far => 2,
                     Reach::Hull => 3,

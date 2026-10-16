@@ -9,7 +9,7 @@
 //! near the camera and dropped when the camera leaves them.
 
 use super::arrays::{Arrays, BuildMaterial, Layers};
-use super::layout::{Done, Drawing, Jobs, Outcome, reach};
+use super::layout::{Done, Drawing, Jobs, Outcome, close, reach, suffices};
 use super::store::{self, Drawn, Section, each};
 use super::{Build, BuildLook, Built, Site};
 use crate::planet::MainCamera;
@@ -1403,7 +1403,7 @@ fn show(
     };
     drawn.entity = (!grouped).then_some(entity);
     // Each detail is seen from where the finer one drawn ends.
-    let near = reach == Reach::Near;
+    let near = reach >= Reach::Near;
     let mid_from = near.then_some(NEAR_M);
     let far_from = (reach >= Reach::Mid).then_some(MID_M);
     // A group is seen from its middle as far further as its sections reach, less half a
@@ -1623,6 +1623,7 @@ fn show(
 /// crosses, so one on the line is not laid over and over.
 fn stream(
     scale: Res<DetailScale>,
+    quality: Res<Quality>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
@@ -1638,8 +1639,8 @@ fn stream(
             let distance = store::distance_from(&frame, eye, at, unit, drawn.bounds);
             let laying = sections.waiting.contains_key(&at)
                 || sections.tickets.get(&at) != Some(&drawn.ticket);
-            let wanted = reach(distance / scale.0, Some(drawn.reach));
-            if wanted != drawn.reach && !laying {
+            let wanted = reach(distance / scale.0, Some(drawn.reach), close(*quality));
+            if !suffices(drawn.reach, wanted) && !laying {
                 sections.waiting.insert(
                     at,
                     store::Waiting {
