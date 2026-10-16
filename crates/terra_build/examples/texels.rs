@@ -14,8 +14,9 @@
 //! it stretched past 1.5:1 and past 2.5:1, and where the worst of it is, in the base's own
 //! metres, with which way those triangles face; then each modelled module as baked, before
 //! it is laid, so a stretch is told apart from one the laying makes. Every roof over every
-//! plan in each wall kind and every two kinds mixed, as `cargo xtask artifacts` lays them;
-//! a name given keeps only the bases whose names hold it, as `"1: rectangle"`. `--worst N`
+//! plan in each wall kind and every two kinds mixed, and every other scene of the registry
+//! (`terra_build::scenes::registry`), in every kit, as `cargo xtask artifacts` lays them;
+//! a name given keeps only the scenes whose names hold it, as `"logs: rectangle"`. `--worst N`
 //! lists N places.
 //!
 //! Glossary: a stretch of 1 is a texture drawn as it was made; real stone or timber drawn
@@ -62,10 +63,25 @@ fn main() -> ExitCode {
         .enumerate()
         .find(|(i, a)| !a.starts_with("--") && (*i == 0 || args[i - 1] != "--worst"))
         .map(|(_, a)| a.clone());
-    let cases = terra_build::inspect::cases(&kits, only.as_deref());
+    let materials = terra_build::scenes::registry::Materials {
+        kits: kits.clone(),
+        names: names
+            .iter()
+            .map(|(&id, name)| (terra_build::Kind(id), name.clone()))
+            .collect(),
+        village: None,
+    };
+    let cases: Vec<_> = terra_build::scenes::registry::registry(&materials)
+        .into_iter()
+        .filter(|scene| {
+            only.as_ref()
+                .is_none_or(|only| scene.name.contains(only.as_str()))
+        })
+        .collect();
     let name = |kind: terra_build::Kind| names.get(&kind.0).cloned().unwrap_or(kind.0.to_string());
     let mut tallies: BTreeMap<(String, String), Tally> = BTreeMap::new();
-    for (case, base) in &cases {
+    for scene in &cases {
+        let (case, base) = (&scene.name, &scene.base());
         let whole = sections::Whole::lay(base, &kits);
         let progress = Progress::Whole;
         for at in sections::drawable(base) {

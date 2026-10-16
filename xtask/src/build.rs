@@ -156,3 +156,13 @@ pub(crate) fn artifacts(args: &[String]) -> bool {
     cargo.extend(args.iter().map(String::as_str));
     run("cargo", &cargo)
 }
+
+/// The fuzz pass (`terra_build::scenes::fuzz`): small bases built at random from seeds, as
+/// a player builds, each through the mesh checker; a base with a fault shrunk to its fewest
+/// elements and printed as a test. `--seeds N` and `--from S` say which; `--ratchet` holds
+/// the check's seeds to the baseline, `--record` writes it.
+pub(crate) fn fuzz(args: &[String]) -> bool {
+    let mut all = vec!["--fuzz".to_string()];
+    all.extend(args.iter().cloned());
+    artifacts(&all)
+}

@@ -20,7 +20,8 @@ terra_gen.workspace = true
 # The kit checker reads a material's maps to check them as it is added (`packs`, D349).
 zune-jpeg.workspace = true
 zune-core.workspace = true
-# The material bench's numbers for its TypeScript side (`examples/look.rs`, D385).
+# The material bench's numbers for its TypeScript side (`examples/look.rs`, D385), and the
+# voxel contract's matrix, JSON the docs check reads too (`tests/contract.rs`, D348).
 serde_json = "1"
 
 [lints]

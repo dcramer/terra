@@ -1,13 +1,15 @@
 // Checks the repository's docs, run by `cargo xtask check`: links and anchors resolve, every
 // doc, note, spike and tool script is in its folder's index, the decisions table is well
 // formed, with every decision a doc cites in it, and every test a contract page cites as its
-// proof exists. Prints each fault; exits 1 if there are any.
+// proof exists, and a page's part rendered from a data file matches it. Prints each fault;
+// exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
 //   node tools/docs/docs.ts --next    the next free decision number, here and on origin/main (`cargo xtask decision`)
+//   node tools/docs/docs.ts --render  writes the parts of pages rendered from data files (the voxel contract's matrix)
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,6 +115,83 @@ export function missingTests(file: string, markdown: string, sources: string): s
   return faults;
 }
 
+/** Pages whose tables are written from a data file (D348): the page, and the file. */
+const RENDERED = [{ page: "docs/building-voxels.md", data: "docs/building-voxels.json" }];
+
+/** Where a rendered part of a page begins and ends. */
+const BEGIN = /^<!-- rendered from (\S+) by `node tools\/docs\/docs\.ts --render`: edit that, not this -->$/m;
+const END = "<!-- end of rendered -->";
+
+/** A contract's row, as its data file holds it. */
+interface Row {
+  junction: string;
+  rule: string;
+  code: string[];
+  tests: string[];
+  cases: string[];
+  also?: string;
+  status: string;
+}
+
+/**
+ * A contract's matrix as markdown: a heading a section, its rows' junction, the rule that
+ * closes it, the code that implements the rule, what proves it (its tests by module, then its
+ * registered cases, then anything else) and its status.
+ */
+export function renderMatrix(data: { sections: { title: string; intro?: string; rows: Row[] }[] }): string {
+  const out: string[] = [];
+  for (const section of data.sections) {
+    out.push(`### ${section.title}`, "");
+    if (section.intro) out.push(section.intro, "");
+    out.push("| Junction | What closes it | Code | Proved by | Status |", "|---|---|---|---|---|");
+    for (const row of section.rows) {
+      const modules = new Map<string, string[]>();
+      for (const test of row.tests) {
+        const at = test.lastIndexOf("::");
+        const module = test.slice(0, at);
+        modules.set(module, [...(modules.get(module) ?? []), test.slice(at + 2)]);
+      }
+      const proofs = [...modules].map(([module, names]) => `\`${module}\`: ${names.map((n) => `\`${n}\``).join(", ")}`);
+      if (row.cases.length) proofs.push(`the checker's ${row.cases.map((c) => `*${c}*`).join(", ")}`);
+      if (row.also) proofs.push(row.also);
+      const code = row.code.map((c) => `\`${c}\``).join(", ");
+      out.push(`| ${row.junction} | ${row.rule} | ${code} | ${proofs.join("; ") || "—"} | ${row.status} |`);
+    }
+    out.push("");
+  }
+  return out.join("\n");
+}
+
+/** A page with its rendered part written again from `render`, or undefined if it has none. */
+export function rendered(markdown: string, render: (data: string) => string): string | undefined {
+  const begin = markdown.match(BEGIN);
+  const end = markdown.indexOf(END);
+  if (!begin || begin.index === undefined || end < begin.index) return undefined;
+  const from = begin.index + begin[0].length;
+  return `${markdown.slice(0, from)}\n\n${render(begin[1])}\n${markdown.slice(end)}`;
+}
+
+/** Each rendered page written again from its data file; the faults, or the pages written. */
+function renderPages(read: (path: string) => string | undefined, write?: (path: string, text: string) => void): string[] {
+  const faults: string[] = [];
+  for (const { page, data } of RENDERED) {
+    const text = read(page) ?? "";
+    let again: string | undefined;
+    try {
+      again = rendered(text, () => renderMatrix(JSON.parse(read(data) ?? "")));
+    } catch (why) {
+      faults.push(`${data}: does not read: ${why}`);
+      continue;
+    }
+    if (again === undefined) faults.push(`${page}: has no part rendered from ${data}`);
+    else if (again !== text) {
+      if (write) write(page, again);
+      else faults.push(`${page}: differs from ${data}; edit the data, then run node tools/docs/docs.ts --render`);
+    }
+  }
+  return faults;
+}
+
 /** Entries of a folder that its index does not link or name. */
 export function unindexed(index: string, indexText: string, entries: string[]): string[] {
   return entries.filter((e) => !indexText.includes(e)).map((e) => `${index}: does not list ${e}`);
@@ -134,6 +213,7 @@ function check(): string[] {
     .map((f) => read(f) ?? "")
     .join("\n");
   for (const page of PROOF_PAGES) faults.push(...missingTests(page, read(page) ?? "", sources));
+  faults.push(...renderPages(read));
 
   const table = decisionTable(read("docs/decisions.md")!);
   faults.push(...table.faults);
@@ -180,6 +260,14 @@ function next(): number {
 
 if (import.meta.main && process.argv.includes("--next")) {
   console.log(`D${next()}`);
+} else if (import.meta.main && process.argv.includes("--render")) {
+  const read = (path: string) => (existsSync(join(ROOT, path)) ? readFileSync(join(ROOT, path), "utf8") : undefined);
+  const faults = renderPages(read, (path, text) => {
+    writeFileSync(join(ROOT, path), text);
+    console.log(`docs: wrote ${path}`);
+  });
+  for (const fault of faults) console.log(`  ${fault}`);
+  process.exit(faults.length ? 1 : 0);
 } else if (import.meta.main) {
   const faults = check();
   for (const fault of faults) console.log(`  ${fault}`);

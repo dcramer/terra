@@ -1465,31 +1465,26 @@ fn relief(kits: &Kits, side: usize, height: impl Fn(usize) -> u8) -> Maps {
 // runs (`SLOW_TESTS` in xtask).
 #[test]
 fn a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in() {
-    // The commit check's rectangle under a gable (`inspect::cases`, docs/building-voxels.md,
-    // gap 8) in logs, hewn timber and stone, and each two mixed: as a plan, its walls going
-    // up, its roof going on, damaged, and after a wall's lowest course is knocked out.
-    // What is in is closed on its own: a gable's courses go in with the roof's first
-    // stage, a door's posts with their first cube, a lintel left over air stops at its
+    // The rectangle under a gable (the registry's states, docs/building-voxels.md, gap 8)
+    // in the baseline's logs, hewn timber and stone, and each two mixed: as a plan, its
+    // walls going up, its roof going on, damaged, and after a wall's lowest course is
+    // knocked out. What is in is closed on its own: a gable's courses go in with the roof's
+    // first stage, a door's posts with their first cube, a lintel left over air stops at its
     // cube, and nothing the mesh checker finds.
-    let kits = shipped();
-    let ids: Vec<String> = ["logs", "hewn", "stone"]
-        .iter()
-        .map(|name| kits.of(named(&kits, name)).unwrap().id.to_string())
-        .collect();
-    let ours = |who: &str| {
-        who.split(" with ")
-            .all(|id| ids.iter().any(|ours| ours == id))
-    };
+    use crate::scenes::registry::{Family, Materials, registry};
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let materials = Materials::read(&assets, true).unwrap();
+    let kits = &materials.kits;
     let maps = Maps::default();
     let mut found = Vec::new();
     let mut states = 0;
-    for (name, base) in crate::inspect::cases(&kits, Some("rectangle under a gable")) {
-        let who = name.split(':').next().unwrap_or_default();
-        if !ours(who) {
+    for scene in registry(&materials) {
+        if scene.family != Family::States {
             continue;
         }
+        let (name, base) = (&scene.name, scene.base());
         states += 1;
-        let report = crate::inspect::inspect(&base, &kits, &maps);
+        let report = crate::inspect::inspect(&base, kits, &maps);
         found.extend(
             report
                 .findings
@@ -1942,15 +1937,22 @@ fn verges_meeting_at_an_apex_take_no_cap_there() {
     // Every roof kind over a gable: each verge's top meets the other verge and the ridge at
     // the apex, under the ridge's own cap; capped there too, the two verges' caps stood out
     // past the apex through each other. Their feet at the eaves stop in the open, capped.
-    let kits = shipped();
-    for (name, base) in crate::inspect::cases(&kits, Some("rectangle, gable roof")) {
-        if name.contains("with") {
+    use crate::scenes::registry::{Family, Materials, registry};
+    let materials = Materials {
+        kits: shipped(),
+        names: Default::default(),
+        village: None,
+    };
+    let kits = &materials.kits;
+    for scene in registry(&materials) {
+        if scene.family != Family::Plans || !scene.name.ends_with(": rectangle, gable roof") {
             continue;
         }
+        let (name, base) = (&scene.name, scene.base());
         let top = base.cubes().map(|(at, _)| at.y + 1).max().unwrap_or(0) as f32 * crate::CELL_M;
         let mut verges = 0;
         for kit in &kits.0 {
-            for piece in crate::layout::lay_among(&base, kit, &kits).pieces {
+            for piece in crate::layout::lay_among(&base, kit, kits).pieces {
                 let Piece::Roof {
                     part: crate::layout::roofs::RoofPart::Verge,
                     from,

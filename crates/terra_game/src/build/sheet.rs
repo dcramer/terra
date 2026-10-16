@@ -24,9 +24,9 @@ use crate::shell::Options;
 use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
-use terra_build::kit::{Kits, Pattern, Profile};
+use terra_build::kit::Kits;
 use terra_build::ops::Op;
-use terra_build::scenes::sheet::{acted_rows, gable_end, kit_rows, preview, roof_cube_rows, rows};
+use terra_build::scenes::sheet::{acted_rows, placed, preview};
 use terra_build::{Base, BuildOp, Kind};
 use terra_core::Operation;
 
@@ -106,10 +106,6 @@ fn act(build: &mut Build, acts: &[Op], rules: &terra_build::Rules, name: &str) {
 /// the house's own metres: eight metres out, level with the middle of the gable.
 const GABLE_END_VIEW: [Vec3; 2] = [Vec3::new(-8.0, 3.6, 2.0), Vec3::new(0.0, 3.6, 2.0)];
 
-/// A row of the sheet: its name, what builds it, how far east its group starts, and its
-/// place in its group.
-type Row = (String, Vec<BuildOp>, f32, usize);
-
 /// What the sheet lays its rows with.
 struct Laying<'a, 'w, 's, 'm> {
     commands: &'a mut Commands<'w, 's>,
@@ -169,7 +165,7 @@ pub(super) fn lay(
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
     let stone = kits.footing().map(|kit| kit.kind());
     let names = super::kit_names();
-    let (placed, count) = sheet_rows(&kits, &names);
+    let (placed, count) = placed(&kits, &names);
     let mut sheet = Laying {
         commands: &mut commands,
         meshes: &mut meshes,
@@ -220,148 +216,20 @@ pub(super) fn lay(
     }
 }
 
-/// Every row of the sheet but those of cubes in states of their own, each where it goes:
-/// the walls' rows, every further wall kit's, then each roof kind's rows to the east of
-/// them, a group a kind, the gable ends and where roofs and walls meet. And how many rows
-/// the walls' take, which the rows after them are laid north of.
-fn sheet_rows(
-    kits: &terra_build::kit::Kits,
-    names: &std::collections::BTreeMap<Kind, String>,
-) -> (Vec<Row>, usize) {
-    let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
-    let stone = kits.footing().map(|kit| kit.kind());
-    let hewn = kits
-        .0
-        .iter()
-        .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
-        .map(|kit| kit.kind());
-    let roof = |walls: Kind| kits.roof_over(walls);
-    let mut placed: Vec<Row> = rows(laying, stone, hewn, &roof)
-        .into_iter()
-        .enumerate()
-        .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
-        .collect();
-    // Every further wall kit's rows (D236), each by its file's name, after the rest: a kit
-    // added as a file is on the sheet with nothing else to do (D136).
-    if let Some(stone) = stone {
-        let further = kits.0.iter().map(|kit| kit.kind()).filter(|&kind| {
-            !kind.is_roof() && kind != laying && kind != stone && Some(kind) != hewn
-        });
-        for kind in further {
-            let Some(name) = names.get(&kind) else {
-                continue;
-            };
-            for (row_name, ops) in kit_rows(name, kind, stone, laying, roof(kind)) {
-                let row = placed.len();
-                placed.push((row_name, ops, 0.0, row));
-            }
-        }
-    }
-    let count = placed.len();
-    // Each roof's rows to the east of the walls', a group a roof kind over the walls it
-    // takes (D241): shakes over logs, slate over stone, shakes over hewn timber; then logs
-    // and stone mixed.
-    let mut group = 0;
-    for walls in [Some(laying), stone, hewn].into_iter().flatten() {
-        let covering = roof(walls);
-        let name = names
-            .get(&covering)
-            .cloned()
-            .unwrap_or_else(|| "roof".to_string());
-        group += 1;
-        for (row, (row_name, ops)) in roof_cube_rows(walls, covering).into_iter().enumerate() {
-            let east = ROOF_GROUP_M * group as f32;
-            placed.push((format!("{name}: {row_name}"), ops, east, row));
-        }
-    }
-    if let Some(stone) = stone {
-        group += 1;
-        for (row, (row_name, ops)) in terra_build::roof_rows(&[laying, stone], true, &roof)
-            .into_iter()
-            .enumerate()
-        {
-            let east = ROOF_GROUP_M * group as f32;
-            placed.push((format!("stone and logs: {row_name}"), ops, east, row));
-        }
-    }
-    let name = |kind: Kind| {
-        names
-            .get(&kind)
-            .cloned()
-            .unwrap_or_else(|| kind.0.to_string())
-    };
-    // Every wall kind's gable end under every roof kind, each seen straight on from its own
-    // vantage, so how walls are carried up to a roof is judged in every pairing.
-    group += 1;
-    let roof_kinds: Vec<Kind> = kits
-        .0
-        .iter()
-        .filter(|kit| kit.pattern == Pattern::Roof)
-        .map(|kit| kit.kind())
-        .collect();
-    let wall_kinds: Vec<Kind> = kits
-        .0
-        .iter()
-        .filter(|kit| kit.pattern != Pattern::Roof)
-        .map(|kit| kit.kind())
-        .collect();
-    let mut row = 0;
-    for &walls in &wall_kinds {
-        for &covering in &roof_kinds {
-            placed.push((
-                format!("gable end: {} under {}", name(walls), name(covering)),
-                gable_end(walls, covering),
-                ROOF_GROUP_M * group as f32,
-                row,
-            ));
-            row += 1;
-        }
-    }
-    // Where roofs and walls meet (D343), every case in each wall kind under its own roof,
-    // a group of its own: `--sheet-rows "roofs and walls"`, or one case by its name.
-    group += 1;
-    let mut row = 0;
-    for &walls in &wall_kinds {
-        let Some(kit) = kits.of(walls) else {
-            continue;
-        };
-        let block = kit.pattern == Pattern::Masonry;
-        let other = wall_kinds.iter().copied().find(|&kind| {
-            kits.of(kind).is_some_and(|other| {
-                other.pattern != kit.pattern && (block || other.pattern == Pattern::Masonry)
-            })
-        });
-        let covering = roof(walls);
-        for (case, ops) in terra_build::roof_walls::rows(walls, covering, other) {
-            placed.push((
-                format!(
-                    "roofs and walls: {} under {}: {case}",
-                    name(walls),
-                    name(covering)
-                ),
-                ops,
-                ROOF_GROUP_M * group as f32,
-                row,
-            ));
-            row += 1;
-        }
-    }
-    (placed, count)
-}
-
 /// A row laid, if it is one of those asked for, in its three states along it: built, going
 /// up and a blueprint, each where it always is; its vantage logged.
 fn lay_row(
     sheet: &mut Laying,
     planet: &Planet,
     wanted: &[String],
-    (name, ops, group_east, row): Row,
+    (name, ops, group, row): terra_build::scenes::sheet::Placed,
 ) {
     // Only the rows asked for, each where it always is.
     if !wanted.is_empty() && !wanted.iter().any(|text| name.contains(text.as_str())) {
         return;
     }
     let site = sheet.site;
+    let group_east = ROOF_GROUP_M * group as f32;
     let north = -FIRST_ROW_M - ROW_M * row as f32;
     for (column, shown) in [
         Shown::Built,

@@ -661,6 +661,147 @@ pub fn kit_rows(
     .collect()
 }
 
+/// A row of the sheet as it is placed: its name, what builds it, which group it is in (0,
+/// the walls', west of the roofs'), and its place in its group.
+pub type Placed = (String, Vec<BuildOp>, usize, usize);
+
+/// Every row of the sheet but those of cubes in states of their own ([`acted_rows`]) and the
+/// previews, each where it goes: the walls' rows, every further wall kit's, then each roof
+/// kind's rows in groups east of them, a group a kind, the gable ends and where roofs and
+/// walls meet. And how many rows the walls' take, which the rows after them are laid north
+/// of. `names` are the kits' files' names. The game lays these (`--kit-sheet`), and the
+/// scene registry (`super::registry`) holds each to the mesh checker.
+pub fn placed(
+    kits: &crate::kit::Kits,
+    names: &std::collections::BTreeMap<Kind, String>,
+) -> (Vec<Placed>, usize) {
+    use crate::kit::Profile;
+    let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
+    let stone = kits.footing().map(|kit| kit.kind());
+    let hewn = kits
+        .0
+        .iter()
+        .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
+        .map(|kit| kit.kind());
+    let roof = |walls: Kind| kits.roof_over(walls);
+    let mut placed: Vec<Placed> = rows(laying, stone, hewn, &roof)
+        .into_iter()
+        .enumerate()
+        .map(|(row, (name, ops))| (name.to_string(), ops, 0, row))
+        .collect();
+    // Every further wall kit's rows (D236), each by its file's name, after the rest: a kit
+    // added as a file is on the sheet with nothing else to do (D136).
+    if let Some(stone) = stone {
+        let further = kits.0.iter().map(|kit| kit.kind()).filter(|&kind| {
+            !kind.is_roof() && kind != laying && kind != stone && Some(kind) != hewn
+        });
+        for kind in further {
+            let Some(name) = names.get(&kind) else {
+                continue;
+            };
+            for (row_name, ops) in kit_rows(name, kind, stone, laying, roof(kind)) {
+                let row = placed.len();
+                placed.push((row_name, ops, 0, row));
+            }
+        }
+    }
+    let count = placed.len();
+    let name = |kind: Kind| {
+        names
+            .get(&kind)
+            .cloned()
+            .unwrap_or_else(|| kind.0.to_string())
+    };
+    // Each roof's rows east of the walls', a group a roof kind over the walls it takes
+    // (D241): shakes over logs, slate over stone, shakes over hewn timber; then logs and
+    // stone mixed.
+    let mut group = 0;
+    let mut grouped = Vec::new();
+    for walls in [Some(laying), stone, hewn].into_iter().flatten() {
+        // Once a kind, the first kit being the hewn one where there are few.
+        if grouped.contains(&walls) {
+            continue;
+        }
+        grouped.push(walls);
+        let covering = roof(walls);
+        group += 1;
+        for (row, (row_name, ops)) in roof_cube_rows(walls, covering).into_iter().enumerate() {
+            let row_name = format!("{}: {row_name}, over {}", name(covering), name(walls));
+            placed.push((row_name, ops, group, row));
+        }
+    }
+    if let Some(stone) = stone {
+        group += 1;
+        for (row, (row_name, ops)) in crate::roof_rows(&[laying, stone], true, &roof)
+            .into_iter()
+            .enumerate()
+        {
+            placed.push((format!("stone and logs: {row_name}"), ops, group, row));
+        }
+    }
+    // Every wall kind's gable end under every roof kind, each seen straight on from its own
+    // vantage, so how walls are carried up to a roof is judged in every pairing.
+    group += 1;
+    let of = |pattern: bool| -> Vec<Kind> {
+        kits.0
+            .iter()
+            .filter(|kit| (kit.pattern == Pattern::Roof) == pattern)
+            .map(|kit| kit.kind())
+            .collect()
+    };
+    let (roof_kinds, wall_kinds) = (of(true), of(false));
+    let mut row = 0;
+    for &walls in &wall_kinds {
+        for &covering in &roof_kinds {
+            placed.push((
+                format!("gable end: {} under {}", name(walls), name(covering)),
+                gable_end(walls, covering),
+                group,
+                row,
+            ));
+            row += 1;
+        }
+    }
+    // Where roofs and walls meet (D343), every case in each wall kind under its own roof,
+    // a group of its own: `--sheet-rows "roofs and walls"`, or one case by its name.
+    group += 1;
+    let mut row = 0;
+    for &walls in &wall_kinds {
+        let Some(kit) = kits.of(walls) else {
+            continue;
+        };
+        let covering = roof(walls);
+        for (case, ops) in crate::roof_walls::rows(walls, covering, other_pattern(kits, kit)) {
+            placed.push((
+                format!(
+                    "roofs and walls: {} under {}: {case}",
+                    name(walls),
+                    name(covering)
+                ),
+                ops,
+                group,
+                row,
+            ));
+            row += 1;
+        }
+    }
+    (placed, count)
+}
+
+/// The kind a chimney in a gable of `kit` is built of in the roofs-and-walls rows: of another
+/// pattern, the stone's in a timber wall and the first timber's in a stone one.
+pub fn other_pattern(kits: &crate::kit::Kits, kit: &Kit) -> Option<Kind> {
+    let block = kit.pattern == Pattern::Masonry;
+    kits.0
+        .iter()
+        .find(|other| {
+            other.pattern != Pattern::Roof
+                && other.pattern != kit.pattern
+                && (block || other.pattern == Pattern::Masonry)
+        })
+        .map(|other| other.kind())
+}
+
 /// A row whose three columns are each a state its cubes are in, rather than how far its
 /// pieces are in: the shortcuts' cubes, then each column's operations on them, drawn by what
 /// each cube holds.

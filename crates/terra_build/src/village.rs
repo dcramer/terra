@@ -880,21 +880,34 @@ fn name(plan: Plan, scheme: Scheme, roofed: Roof) -> String {
 /// them (`cargo xtask artifacts`, `cargo xtask rules`): each put up whole in its own cubes, on
 /// ground falling in steps of 20 cm, its footings laid in the palette's first masonry.
 pub fn each_sort(palette: &Palette) -> Vec<(Building, Base)> {
+    sorts(palette)
+        .into_iter()
+        .map(|building| {
+            let base = standing(&building, palette);
+            (building, base)
+        })
+        .collect()
+}
+
+/// One of each sort of the village's buildings (seed 7), not yet put up.
+pub fn sorts(palette: &Palette) -> Vec<Building> {
     let mut seen = BTreeSet::new();
     village(7, palette)
         .into_iter()
         .filter(|building| seen.insert(format!("{:?} {:?}", building.plan, building.scheme)))
-        .map(|building| {
-            let mut base = Base::default();
-            for op in &building.ops {
-                base.apply(*op);
-            }
-            base.lay_footings(palette.first().masonry, |column| {
-                -((column[0] + column[1]).rem_euclid(3) as i16) * 20
-            });
-            (building, base)
-        })
         .collect()
+}
+
+/// A building put up whole in its own cubes, as [`each_sort`] puts each up.
+pub fn standing(building: &Building, palette: &Palette) -> Base {
+    let mut base = Base::default();
+    for op in &building.ops {
+        base.apply(*op);
+    }
+    base.lay_footings(palette.first().masonry, |column| {
+        -((column[0] + column[1]).rem_euclid(3) as i16) * 20
+    });
+    base
 }
 
 /// The village's buildings from its seed: the same seed, the same village.

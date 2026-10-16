@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchors, brokenLinks, decisionTable, missingTests, nextDecision, unindexed, unknownDecisions } from "./docs.ts";
+import { anchors, brokenLinks, decisionTable, missingTests, nextDecision, renderMatrix, rendered, unindexed, unknownDecisions } from "./docs.ts";
 
 test("headings anchor as GitHub makes them, repeats numbered", () => {
   const a = anchors("# Worlds: the realms\n## Size\n## Size\n## What `it` asks, (D4)\n```\n# not a heading\n```\n");
@@ -61,4 +61,38 @@ test("a contract page naming a test no crate defines, or one cut short, is a fau
     "docs/v.md: names the test a_door_is_centred_in_its_frame, which no crate defines",
     "docs/v.md: names a test cut short, a_wall_is_closed…",
   ]);
+});
+
+test("a contract's matrix is rendered from its rows, tests grouped by module, then cases", () => {
+  const row = { junction: "A free end", rule: "Arris up it", code: ["layout::roles"], status: "Closed" };
+  const data = {
+    sections: [
+      {
+        title: "Walls",
+        rows: [
+          { ...row, tests: ["layout::roles::a_b_c_d", "layout::runs::e_f_g_h", "layout::roles::i_j_k_l"], cases: ["free end"], also: "by eye" },
+          { ...row, tests: [], cases: [] },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(renderMatrix(data).split("\n"), [
+    "### Walls",
+    "",
+    "| Junction | What closes it | Code | Proved by | Status |",
+    "|---|---|---|---|---|",
+    "| A free end | Arris up it | `layout::roles` | `layout::roles`: `a_b_c_d`, `i_j_k_l`; `layout::runs`: `e_f_g_h`; the checker's *free end*; by eye | Closed |",
+    "| A free end | Arris up it | `layout::roles` | — | Closed |",
+    "",
+  ]);
+});
+
+test("a page's rendered part is written again between its markers, the rest kept", () => {
+  const begin = "<!-- rendered from x.json by `node tools/docs/docs.ts --render`: edit that, not this -->";
+  const page = `# P\n${begin}\nold\n<!-- end of rendered -->\ntail\n`;
+  assert.equal(rendered(page, (data) => `from ${data}\n`), `# P\n${begin}\n\nfrom x.json\n\n<!-- end of rendered -->\ntail\n`);
+  assert.equal(
+    rendered("# no markers\n", () => ""),
+    undefined,
+  );
 });

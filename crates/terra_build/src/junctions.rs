@@ -1,6 +1,6 @@
 //! The junctions family (docs/building-voxels.md, gap 9): a small base for each junction of
 //! the voxel contract's matrix that no other inspected base has, in a wall kind under its
-//! roof, so the mesh checker's ratchet (`inspect::cases`) holds each one.
+//! roof, so the mesh checker's ratchet (`scenes::registry`) holds each one.
 
 use crate::roofer::Style;
 use crate::{BuildOp, Cube, Facing, Fill, Kind, STOREY_CUBES, Shape, roof_over};

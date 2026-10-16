@@ -12,7 +12,7 @@ mod windows;
 mod worktrees;
 
 use bench::bench;
-use build::{artifacts, contract, kits, rules, sections, texels};
+use build::{artifacts, contract, fuzz, kits, rules, sections, texels};
 use check::check;
 use doctor::doctor;
 use windows::{play, win, yard};
@@ -215,6 +215,13 @@ const TASKS: &[Task] = &[
         does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out; --frames, what only frames show, on the GPU: shimmer, acne, flashes during an edit, TAA trails, light probes popping",
         group: "Play and check",
         run: artifacts,
+    },
+    Task {
+        name: "fuzz",
+        takes: "[--seeds N] [--from S] [--ratchet|--record]",
+        does: "build small bases at random from seeds, as a player builds, and find junk in their meshes as artifacts does; each base with a fault shrunk to its fewest elements and printed as a test to paste. The full check holds seeds 0 to 200 to a baseline (--ratchet)",
+        group: "Play and check",
+        run: fuzz,
     },
     Task {
         name: "texels",

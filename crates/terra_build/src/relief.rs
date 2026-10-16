@@ -180,6 +180,38 @@ pub struct Maps {
 }
 
 impl Maps {
+    /// Height maps at their full range everywhere, a texel's noise, so every surface is
+    /// pushed as far out and in as its kit lets it: the worst case for a hole, which the mesh
+    /// checker inspects with (`cargo xtask artifacts`, its fuzz pass). `flat`, every height
+    /// the middle one instead.
+    pub fn worst(kits: &crate::kit::Kits, flat: bool) -> Maps {
+        const SIDE: usize = 256;
+        let heights: Vec<u8> = (0..SIDE * SIDE)
+            .map(|i| {
+                if flat {
+                    128
+                } else {
+                    ((i * 2_654_435_761) >> 13) as u8
+                }
+            })
+            .collect();
+        let relief = Arc::new(Relief::new(SIDE, SIDE, heights).expect("a full map"));
+        let swatch = Arc::new(Swatch::new(16, 16, vec![[0.4, 0.35, 0.3]; 256]).expect("a swatch"));
+        let mut maps = Maps::default();
+        for kit in &kits.0 {
+            for path in [shaped_by(kit), topped_by(kit), cored_by(kit)]
+                .into_iter()
+                .flatten()
+            {
+                maps.heights.insert(path.to_string(), relief.clone());
+            }
+            for texture in kit.textures.values() {
+                maps.colours.insert(texture.path.clone(), swatch.clone());
+            }
+        }
+        maps
+    }
+
     /// The height map that shapes a kit's pieces, once it has loaded: a block kind's
     /// stone, or a timber kind's bark.
     pub fn shape(&self, kit: &Kit) -> Option<&Relief> {

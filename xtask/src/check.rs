@@ -2,7 +2,7 @@
 //! only it runs: the tools' tests, the Blender scripts, and the shared crates kept free of
 //! Bevy (D28) and of the clock and the system's randomness.
 
-use crate::build::{artifacts, kits};
+use crate::build::{artifacts, fuzz, kits};
 use crate::{output, root, run};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,9 +24,9 @@ const SLOW_TESTS: &[&str] = &[
 ];
 
 /// The gate (D37). The full check, run by git before each push: formatting, lints, every test,
-/// and the checks of the kits, the foliage, the meshes' artifacts (a ratchet), the docs, the
+/// and the checks of the kits, the foliage, the meshes' artifacts and the fuzz pass (ratchets), the docs, the
 /// Blender scripts and the shared crates. `--quick`, run before each commit, leaves out the slow
-/// sweeps, the artifacts ratchet (a release build) and the Blender scripts' check.
+/// sweeps, the artifacts and fuzz ratchets (a release build) and the Blender scripts' check.
 pub(crate) fn check(args: &[String]) -> bool {
     let quick = match args {
         [] => false,
@@ -63,6 +63,7 @@ pub(crate) fn check(args: &[String]) -> bool {
         && kits()
         && run("node", &["tools/textures/foliage.ts"])
         && (quick || artifacts(&["--quick".into(), "--ratchet".into()]))
+        && (quick || fuzz(&["--ratchet".into()]))
         && run("node", &["tools/docs/docs.ts"])
         && (quick || blender_scripts())
         && shared_crates_avoid_bevy()
@@ -70,7 +71,7 @@ pub(crate) fn check(args: &[String]) -> bool {
     if passed && quick {
         println!(
             "\nThe quick check passed. The full check (`cargo xtask check`), which git runs \
-             before a push, adds {} slow tests, the artifacts ratchet and the Blender scripts' check.",
+             before a push, adds {} slow tests, the artifacts and fuzz ratchets and the Blender scripts' check.",
             SLOW_TESTS.len()
         );
     }

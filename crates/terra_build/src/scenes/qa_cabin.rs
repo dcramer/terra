@@ -184,7 +184,7 @@ pub fn cabin(
 /// Builds everything laid, as a builder standing by keeps filling: what is being carved
 /// out, what is changing kind, then every part a layer at a time from the bottom, a block
 /// kind a cube at a time where its layer at once is refused.
-fn build(base: &mut Base, cx: &Context, blocks: &dyn Fn(Kind) -> bool) {
+pub(crate) fn build(base: &mut Base, cx: &Context, blocks: &dyn Fn(Kind) -> bool) {
     let near = Vec3::ZERO;
     for _ in 0..100_000 {
         if let Some(op) = base.next_carve(near, blocks)

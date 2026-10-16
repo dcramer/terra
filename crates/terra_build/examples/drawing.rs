@@ -1,7 +1,10 @@
-//! The drawing audit, `cargo xtask rules` (research/building-audit.md): every building of
-//! the village (D229), in every kit the game ships with its dressed pieces, laid and drawn
-//! section by section as the game's workers do, checked for what a picture shows only by
-//! luck:
+//! The drawing audit, `cargo xtask rules` (research/building-audit.md): every scene the
+//! registry holds before a push (`terra_build::scenes::registry`, `Gate::Push`): one of each
+//! sort of the village's buildings (D229), the QA cabins, the junctions, roofs and walls and
+//! the rectangles (the kit sheet's only by name while gap 19 is open), in the building
+//! baseline's kits with their dressed pieces, laid and drawn section by section as the
+//! game's workers do, checked for what a picture shows only by luck (a name given keeps only
+//! the scenes whose names hold it):
 //!
 //! - **Laid twice, the same**: every section drawn twice at each detail gives the same
 //!   triangles, bit for bit.
@@ -23,7 +26,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 use terra_build::inspect;
-use terra_build::kit::{Kit, Kits};
+use terra_build::kit::Kits;
+use terra_build::scenes::registry::{Family, Gate, Materials, ratchet};
 
 use terra_build::relief::Maps;
 use terra_build::sections::{self, Progress, Reach, Section};
@@ -34,13 +38,8 @@ type Mesh = (String, Option<(Kind, Material)>, Surface);
 
 fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-    let (kits, names) = read_kits(&assets);
-    let kind = |name: &str| *names.get(name).unwrap_or_else(|| panic!("no kit {name}"));
-    let read = |path: &str| {
-        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
-    };
-    let kinds = terra_build::village::Palette::read(&read, &|name| Some(kind(name)), &kits)
-        .expect("the settlement's materials");
+    let materials = Materials::read(&assets, true).expect("the baseline's materials");
+    let (kits, names) = (&materials.kits, &materials.names);
     let only: Option<String> = std::env::args().nth(1);
     let maps = Maps::default();
     let mut ok = true;
@@ -48,18 +47,23 @@ fn main() -> ExitCode {
     let mut fights: BTreeMap<String, (usize, f32, String)> = BTreeMap::new();
     let mut edits: Vec<(String, usize, usize, usize, f32)> = Vec::new();
     let mut operations: Vec<f32> = Vec::new();
-    for (building, mut base) in terra_build::village::each_sort(&kinds) {
-        if only
-            .as_ref()
-            .is_some_and(|o| !building.name.contains(o.as_str()))
+    for scene in ratchet(&materials, Gate::Push) {
+        // The kit sheet's rows have faults the ratchet's baseline holds while the voxel
+        // contract's gap 19 is open; asked for by name, they are audited too.
+        let sheet = scene.family == Family::Sheet && only.is_none();
+        if sheet
+            || only
+                .as_ref()
+                .is_some_and(|o| !scene.name.contains(o.as_str()))
         {
             continue;
         }
+        let mut base = scene.base();
         let progress = Progress::Whole;
-        let whole = sections::Whole::lay(&base, &kits);
+        let whole = sections::Whole::lay(&base, kits);
         let mut meshes: Vec<Mesh> = Vec::new();
         for at in sections::drawable(&base) {
-            let here = section_of(&base, &kits, &maps, &progress, at);
+            let here = section_of(&base, kits, &maps, &progress, at);
             let laid = sections::lay(&here, &whole);
             for reach in [Reach::Near, Reach::Mid, Reach::Far] {
                 let (a, b) = (
@@ -69,7 +73,7 @@ fn main() -> ExitCode {
                 if bits(&a) != bits(&b) {
                     println!(
                         "FAIL  {}: section {at:?} drawn twice at {reach:?} differs",
-                        building.name
+                        scene.name
                     );
                     ok = false;
                 }
@@ -78,7 +82,7 @@ fn main() -> ExitCode {
             sections_drawn += 1;
             for (&(kind, material), surface) in &near.near {
                 meshes.push((
-                    format!("{}:{material:?}", name(&names, kind)),
+                    format!("{}:{material:?}", name(names, kind)),
                     Some((kind, material)),
                     surface.clone(),
                 ));
@@ -105,7 +109,7 @@ fn main() -> ExitCode {
             entry.0 += fight.pairs;
             if fight.area > entry.1 {
                 entry.1 = fight.area;
-                entry.2 = format!("{}, at {:.2}", building.name, fight.at);
+                entry.2 = format!("{}, at {:.2}", scene.name, fight.at);
             }
         }
         // One cube out of the middle of the front wall, a storey's middle up.
@@ -126,7 +130,7 @@ fn main() -> ExitCode {
             .map(|at| {
                 (
                     at,
-                    sections::lay(&section_of(&base, &kits, &maps, &progress, at), &whole).key(),
+                    sections::lay(&section_of(&base, kits, &maps, &progress, at), &whole).key(),
                 )
             })
             .collect();
@@ -139,25 +143,20 @@ fn main() -> ExitCode {
         });
         let marked = base.take_dirty();
         let waiting = sections::affected(&base, &marked);
-        let after_whole = sections::Whole::lay(&base, &kits);
+        let after_whole = sections::Whole::lay(&base, kits);
         let mut changed = 0;
         for &at in &waiting {
             if before.get(&at)
                 != Some(
-                    &sections::lay(
-                        &section_of(&base, &kits, &maps, &progress, at),
-                        &after_whole,
-                    )
-                    .key(),
+                    &sections::lay(&section_of(&base, kits, &maps, &progress, at), &after_whole)
+                        .key(),
                 )
             {
                 changed += 1;
-                let laid = sections::lay(
-                    &section_of(&base, &kits, &maps, &progress, at),
-                    &after_whole,
-                );
+                let laid =
+                    sections::lay(&section_of(&base, kits, &maps, &progress, at), &after_whole);
                 let _ = sections::draw(
-                    &section_of(&base, &kits, &maps, &progress, at),
+                    &section_of(&base, kits, &maps, &progress, at),
                     &laid,
                     Reach::Near,
                 );
@@ -166,27 +165,17 @@ fn main() -> ExitCode {
         let ms = started.elapsed().as_secs_f32() * 1000.0;
         for (&at, key) in &before {
             if !waiting.contains(&at)
-                && sections::lay(
-                    &section_of(&base, &kits, &maps, &progress, at),
-                    &after_whole,
-                )
-                .key()
+                && sections::lay(&section_of(&base, kits, &maps, &progress, at), &after_whole).key()
                     != *key
             {
                 println!(
                     "FAIL  {}: section {at:?} changed by an edit that did not set it waiting",
-                    building.name
+                    scene.name
                 );
                 ok = false;
             }
         }
-        edits.push((
-            building.name.clone(),
-            before.len(),
-            waiting.len(),
-            changed,
-            ms,
-        ));
+        edits.push((scene.name.clone(), before.len(), waiting.len(), changed, ms));
         // An operation checked and applied: the top of a wall's column out and in again,
         // timed over many.
         let rules = kits.rules();
@@ -210,7 +199,7 @@ fn main() -> ExitCode {
             if count == 0 {
                 println!(
                     "  ({}: its wall's top could not come out to time an operation)",
-                    building.name
+                    scene.name
                 );
             }
         }
@@ -252,38 +241,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// Every kit under `assets/data/kits` with its dressed pieces, and each one's kind by its
-/// file's name.
-fn read_kits(assets: &Path) -> (Kits, BTreeMap<String, Kind>) {
-    let read = |path: &str| {
-        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
-    };
-    let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
-        .expect("the kits")
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
-        .collect();
-    paths.sort();
-    let (mut kits, mut names) = (Vec::new(), BTreeMap::new());
-    for path in paths {
-        let stem = path.file_stem().unwrap().to_string_lossy().to_string();
-        let kit = Kit::read(
-            &format!("{}/{stem}.ron", terra_build::kit::MATERIALS),
-            &read,
-        )
-        .unwrap_or_else(|why| panic!("{stem}: {why}"));
-        names.insert(stem, kit.kind());
-        kits.push(kit);
-    }
-    (Kits(kits), names)
-}
-
-fn name(names: &BTreeMap<String, Kind>, kind: Kind) -> String {
-    names
-        .iter()
-        .find(|(_, k)| **k == kind)
-        .map_or(format!("{kind:?}"), |(n, _)| n.clone())
+/// A kind by its file's name.
+fn name(names: &BTreeMap<Kind, String>, kind: Kind) -> String {
+    names.get(&kind).cloned().unwrap_or(format!("{kind:?}"))
 }
 
 /// Every triangle of a section's drawing at a detail, as bits, to compare two drawings.
