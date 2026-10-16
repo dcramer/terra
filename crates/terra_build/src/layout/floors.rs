@@ -40,6 +40,12 @@ fn even(metres: f32) -> f32 {
 }
 /// How thick a joist is, a rim joist and a ledger.
 const JOIST_WIDE_M: f32 = 0.07;
+/// How far a rim run on into a wall of its kind is set in from the rim's face: behind the
+/// wall's sawn ends, flush or a hair short, out of their planes.
+const RUN_ON_IN_M: f32 = 0.009;
+/// How many ticks deeper at top and foot a rim run on into a wall is than the rim: past a
+/// board's wave (3 mm) and its ends' taper (6% of its depth, 7 mm), never in their planes.
+const RUN_ON_DEEPER: i32 = 6;
 /// How deep a joist is at least, where the layer leaves little room under the boards.
 const JOIST_LEAST_M: f32 = 0.1;
 /// How deep each beam of a rim on the ground is at most: a deeper rim is built up of beams
@@ -484,6 +490,54 @@ impl Deck<'_> {
                                 .collect()
                         }
                     };
+                    // A rim on what it rests on, ending at a wall of the deck's own kind rising
+                    // from the cube beyond, as a pier from the end of a thick wall's decked
+                    // top: that wall's members are narrower than its cube, so the rim runs on
+                    // into it to its middle, under them, as one board a little deeper than all
+                    // its beams, set in a little from the rim's face, behind the wall's sawn
+                    // ends, so no slot is left between the two; on a little into the rim, its
+                    // top and foot past the rim's however its boards wave and taper, so none of
+                    // its faces is in the plane of one of the rim's.
+                    if kind == Rim::Full {
+                        let low = courses
+                            .iter()
+                            .map(|&(height, deep)| height - (deep - GAP_M) * 0.5)
+                            .fold(f32::MAX, f32::min);
+                        let high = courses
+                            .iter()
+                            .map(|&(height, deep)| height + (deep - GAP_M) * 0.5)
+                            .fold(f32::MIN, f32::max);
+                        let ends = [
+                            (from - 1, from as f32 * CELL_M + start_in),
+                            (to + 1, (to + 1) as f32 * CELL_M - end_in),
+                        ];
+                        for (end, (k, rim_end)) in ends.into_iter().enumerate() {
+                            if self.walls.cell(at_of(k)) != Some(super::Cell::Wall) {
+                                continue;
+                            }
+                            let middle = (k as f32 + 0.5) * CELL_M;
+                            let into = (rim_end - middle).signum() * RUN_ON_IN_M * 2.0;
+                            let on = |k: f32| {
+                                side.abs().as_vec3() * (across_at - outward * RUN_ON_IN_M)
+                                    + runs_along.as_vec3() * k
+                                    + Vec3::Y * (low + high) * 0.5
+                            };
+                            layout.pieces.push(Piece::Plank {
+                                from: Place::near(on(middle)),
+                                to: Place::near(on(rim_end + into)),
+                                wide: ticks(JOIST_WIDE_M),
+                                high: ticks(high - low) + 2 * RUN_ON_DEEPER,
+                                seed: hash(&[
+                                    0x41c,
+                                    line as u32,
+                                    from as u32,
+                                    side.x as u32,
+                                    side.z as u32,
+                                    end as u32,
+                                ]),
+                            });
+                        }
+                    }
                     for (beam, (height, deep)) in courses.into_iter().enumerate() {
                         let on = |k: f32| {
                             side.abs().as_vec3() * across_at

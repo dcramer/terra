@@ -248,10 +248,11 @@ pub(super) fn corner_posts(
             let middle = corner + inward * (width * 0.5 - CORNER_POST_PROUD_M);
             let mut post = log(
                 // Its foot a hair into what it stands on and its top a hair under the courses',
-                // out of the planes of their feet and tops.
+                // out of the planes of their feet and tops; run on down where its corner
+                // shows in the cubes under it (`post_foot`).
                 Vec3::new(
                     middle.x,
-                    at.y as f32 * CELL_M - CORNER_POST_SUNK_M,
+                    post_foot(walls, at, edge) - CORNER_POST_SUNK_M,
                     middle.z,
                 ),
                 Vec3::new(
@@ -267,6 +268,52 @@ pub(super) fn corner_posts(
             layout.pieces.push(post);
         }
     }
+}
+
+/// How low a corner post's foot goes, in metres: the foot of the lowest cube of its edge, or
+/// further, down the cubes of the kind under it whose corner there no edge of theirs dresses
+/// and nothing covers, to the ground beside them. Such a corner is a wall's whose faces
+/// there look onto the ground, though the ground stands under part of them (a cell is in the
+/// ground when its middle is, `Roles::buried`), or onto the decked top of a solid mass of the
+/// kind beside it, which closes only its own cubes, as where a pier rises from the end of a
+/// thick wall's top: neither lays a course across the corner, and the post closes it.
+fn post_foot(walls: &Walls, at: IVec3, edge: super::roles::Edge) -> f32 {
+    let base = walls.base;
+    let (side, other) = (edge.side.step(), edge.other.step());
+    let open = |c: IVec3| {
+        base.cube(c)
+            .is_none_or(|cube| super::drawn_fill(&cube) != Fill::Solid)
+    };
+    let decked = |c: IVec3| walls.cell(c) == Some(super::Cell::Deck);
+    let shows = |c: IVec3| open(c) || decked(c);
+    let mut foot = at.y as f32 * CELL_M;
+    let mut below = at - IVec3::Y;
+    while walls.cell(below) == Some(super::Cell::Wall)
+        && shows(below + side)
+        && shows(below + other)
+        && !(decked(below + side) && decked(below + other))
+    {
+        // Down to the ground beside the corner, the lowest of it, where it stands in the cube.
+        let ground = [side, other, side + other]
+            .iter()
+            .map(|step| {
+                metres(super::roles::ground_ticks(
+                    base,
+                    [below.x + step.x, below.z + step.z],
+                ))
+            })
+            .fold(f32::MAX, f32::min);
+        let bottom = below.y as f32 * CELL_M;
+        if ground >= foot {
+            break;
+        }
+        foot = bottom.max(ground);
+        if ground > bottom {
+            break;
+        }
+        below -= IVec3::Y;
+    }
+    foot
 }
 
 /// How far a corner post stands out of the faces it covers: within an eighth of a cube
@@ -485,6 +532,31 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             let p = from + along * at;
             roofs.under_over(p.x, p.z, lowest_roof(p))
         };
+        // Where the roof falls along it to a wall it runs on into, the roof's edge against
+        // that wall (docs/building-voxels.md, gap 2): at a point in a roof's cube, a wall
+        // standing up beside it along the log, not a gable's step under it, the roof falling
+        // toward it.
+        let step = IVec3::new(
+            libm::roundf(along.x) as i32,
+            0,
+            libm::roundf(along.z) as i32,
+        );
+        let against = |p: Vec3| {
+            let lowest_roof = lowest_roof(p);
+            let centre = (p.with_y(body + 1e-3) / CELL_M).floor().as_ivec3();
+            roof_cube(centre)
+                && [step, -step].iter().any(|&d| {
+                    let toward = p + d.as_vec3() * 0.1;
+                    wall_beside(centre + d)
+                        && matches!(
+                            (
+                                roofs.top_over(p.x, p.z, lowest_roof),
+                                roofs.top_over(toward.x, toward.z, lowest_roof),
+                            ),
+                            (Some(here), there) if there.is_none_or(|t| t < here - 1e-3)
+                        )
+                })
+        };
         // How far the roof's underside is over the log's foot, over its middle line and
         // either face, the lowest, so a log along the eaves, where the roof falls across it,
         // is not laid through it: none where no roof is near, or the log stands clear over
@@ -518,31 +590,10 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             if most - least > 0.01 {
                 lowest -= 2.0 * radius;
             }
-            // Where the roof falls along it to a wall it runs on into, the roof's edge against
-            // that wall (docs/building-voxels.md, gap 2), it has no end there to cut either:
-            // under the roof it stops where the roof comes down to its top, cut to the slope,
-            // the rest blocked to the roof, and runs on again in the wall.
-            let centre = (p.with_y(body + 1e-3) / CELL_M).floor().as_ivec3();
-            let step = IVec3::new(
-                libm::roundf(along.x) as i32,
-                0,
-                libm::roundf(along.z) as i32,
-            );
-            let against = roof_cube(centre)
-                && [step, -step].iter().any(|&d| {
-                    // A wall standing up beside the roof, not a gable's step under it, the roof
-                    // falling toward it.
-                    let toward = p + d.as_vec3() * 0.1;
-                    wall_beside(centre + d)
-                        && matches!(
-                            (
-                                roofs.top_over(p.x, p.z, lowest_roof),
-                                roofs.top_over(toward.x, toward.z, lowest_roof),
-                            ),
-                            (Some(here), there) if there.is_none_or(|t| t < here - 1e-3)
-                        )
-                });
-            if against && lowest < 2.0 * radius {
+            // Where the roof falls along it to a wall it runs on into, it has no end there to
+            // cut either: under the roof it stops where the roof comes down to its top, the
+            // rest blocked to the roof (`eave_blocking`), and runs on again in the wall.
+            if lowest < 2.0 * radius && against(p) {
                 lowest -= 2.0 * radius;
             }
             (any && !over).then_some(lowest)
@@ -567,7 +618,9 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             joints: [joint(from), joint(to)],
             // A row along the north and south leaves the corners where a row along
             // the east and west crosses it to that one's blocking, so the two are
-            // never laid in one another.
+            // never laid in one another; but not where the roof falls along it to a
+            // wall it runs on into, where the crossing row's blocking, as wide as its
+            // own wall, leaves the space between that wall and the one beyond open.
             unfit: &|i| {
                 let p = (from + along * at(i)).with_y(foot + 0.01);
                 let cube = (p / CELL_M).floor().as_ivec3();
@@ -575,13 +628,17 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                     base.cube(c)
                         .is_some_and(|c| c.kind == kit.kind() && c.fill == crate::Fill::Solid)
                 };
-                let crossed =
-                    along.x.abs() < 0.5 && (ours(cube + IVec3::X) || ours(cube - IVec3::X));
+                let crossed = along.x.abs() < 0.5
+                    && (ours(cube + IVec3::X) || ours(cube - IVec3::X))
+                    && !against(p);
                 (!fits(i) && !crossed).then(|| at(i))
             },
             samples,
             outward: outside.map(|dir| dir.step().as_vec3()),
             fits: &fits_at,
+            against: &against,
+            stagger: END_STAGGER_M
+                * (libm::floorf(from.y / kit.course + 0.25) as i32).rem_euclid(2) as f32,
             carried: &|p: Vec3| {
                 let cube = (p / CELL_M).floor().as_ivec3();
                 let axis = if along.x.abs() > 0.5 {
@@ -635,6 +692,20 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             libm::roundf(rise * TICKS as f32) as i32
         };
         for (index, (a, b)) in spans.into_iter().enumerate() {
+            // An end cut where the roof's cube gives way to the wall's, as where a course
+            // left out under a roof falling to a wall runs on again in it, is a sawn end in
+            // the plane of the next course's: every other course a hair short there too,
+            // its blocking run on to meet it (`Dropped::stagger`).
+            let a = if a > 1e-4 && dropped.across_cubes(a) {
+                a + dropped.stagger
+            } else {
+                a
+            };
+            let b = if b < length - 1e-4 && dropped.across_cubes(b) {
+                b - dropped.stagger
+            } else {
+                b
+            };
             if b - a < 0.15 {
                 continue;
             }
@@ -666,7 +737,11 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 if rise <= 0 || here <= foot + 1e-3 || !inside {
                     return 0;
                 }
-                ticks((here - foot - SLOPE_SHORT_M).clamp(0.0, 2.0 * radius))
+                // Every other course a little further under it, so the cut ends of two
+                // courses one on the next, which overlap where they are scribed, are not in
+                // one plane.
+                let short = SLOPE_SHORT_M + dropped.stagger / END_STAGGER_M * SLOPE_STAGGER_M;
+                ticks((here - foot - short).clamp(0.0, 2.0 * radius))
             };
             let lifts = [lift_at(a, leans[0]), lift_at(b, leans[1])];
             let mut cut = log(
@@ -720,8 +795,23 @@ struct Dropped<'a> {
     outward: Option<Vec3>,
     /// Whether a log of its line with its foot so high fits under the roof at a point.
     fits: &'a dyn Fn(Vec3, f32) -> bool,
+    /// Whether the roof falls along it at a point to a wall it runs on into, where it is
+    /// left out under the roof with no end cut to it.
+    against: &'a dyn Fn(Vec3) -> bool,
     /// Whether a course of its run is laid in the cube a point is in.
     carried: &'a dyn Fn(Vec3) -> bool,
+    /// How much shorter it is where it is cut on a line between cubes: every other course
+    /// a hair, as at a free end (`END_STAGGER_M`).
+    stagger: f32,
+}
+
+impl Dropped<'_> {
+    /// Whether a place along it is on a line between cubes across it.
+    fn across_cubes(&self, t: f32) -> bool {
+        let k = if self.along.x.abs() > 0.5 { 0 } else { 2 };
+        let w = (self.from[k] + self.along[k] * t) / CELL_M;
+        (w - libm::roundf(w)).abs() < 1e-3
+    }
 }
 
 /// Where along a line something true at `inside` stops being so before `outside`, found by
@@ -761,7 +851,16 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
     // A little inside the member's width, a log's or a hewn beam's, so its sides are not in
     // the planes of the members' faces under it, and its foot a little into the course under
     // it.
-    let half = (crate::timber::section(kit, None).0 * 0.5).min(radius) - inset;
+    let wide = crate::timber::section(kit, None).0 * 0.5;
+    let half = wide.min(radius) - inset;
+    // Its face to the weather: all but flush with a round log's widest; behind a hewn
+    // beam's flat face as narrow as its seed makes one, and as far as its faces' lattice
+    // may move it out, so it is never in the plane of a beam's face under it.
+    let weather = if kit.timber.profile == crate::kit::Profile::Hewn {
+        wide * (1.0 - kit.timber.variation.thickness) - BLOCKING_OUT_M - metres(4)
+    } else {
+        radius - BLOCKING_OUT_M
+    };
     let reach = radius + kit.ragged();
     let foot = log.from.y - radius;
     // What the blocking stands on: the log's foot where it is left out, or the crest's top.
@@ -781,11 +880,13 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
                 tops.iter().copied().fold(f32::MIN, f32::max),
             )
         };
-        // Whether it falls across the log as the log measures it, over its widest; how
-        // low it comes over the blocking's width.
+        // Whether it falls across the log as the log measures it, over its widest, or along
+        // it to a wall the log runs on into, where the log is left out with no end cut to
+        // the roof; how low it comes over the blocking's width.
         let (lowest, highest) = spread(&tops);
         let (least, most) = spread(&tops[1..4]);
-        ((crest || highest - lowest > 0.01) && most > stand + MIN_BLOCKING_M).then_some(least)
+        ((crest || highest - lowest > 0.01 || (log.against)(p)) && most > stand + MIN_BLOCKING_M)
+            .then_some(least)
     };
     let at = |i: i32| i as f32 * step;
     let own_fits = |t: f32| (log.fits)(log.from + log.along * t, foot);
@@ -832,7 +933,15 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
             };
         }
         if own_fits(to) {
-            (edge(from, to, &|t| !own_fits(t)), Some(farther))
+            // Where the log stops on a line between cubes, every other course a hair short
+            // of it, run on that far to meet it.
+            let at = edge(from, to, &|t| !own_fits(t));
+            let at = if log.across_cubes(at) {
+                at + if farther { log.stagger } else { -log.stagger }
+            } else {
+                at
+            };
+            (at, Some(farther))
         } else if !lower_fits(to) {
             (edge(from, to, &lower_fits), Some(!farther))
         } else {
@@ -924,7 +1033,7 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
                         .outward
                         .is_some_and(|outward| outward.dot(log.across * side) > 0.5);
                     let reach = if out || log.outward.is_none() {
-                        radius - BLOCKING_OUT_M
+                        weather
                     } else {
                         half
                     };
@@ -1039,6 +1148,8 @@ const CROSSING_M: f32 = 0.005;
 const MIN_BLOCKING_M: f32 = 0.02;
 /// How far under the roof a log's slope cut lifted over its foot starts.
 const SLOPE_SHORT_M: f32 = 0.006;
+/// How much further under the roof every other course's slope cut is.
+const SLOPE_STAGGER_M: f32 = 0.004;
 
 /// A cube of ours with none beside it either way is a post: an upright log up each
 /// stack of them.
@@ -1759,6 +1870,123 @@ mod tests {
                     cubes.contains(&column),
                     "{from} {to} leaves its cubes at {p}"
                 );
+            }
+        }
+    }
+
+    /// The shipped coursed materials and the roof over them, as the game reads them.
+    fn shipped() -> Kits {
+        Kits(
+            ["logs.ron", "hewn.ron", "shakes.ron"]
+                .iter()
+                .map(|name| crate::kit::tests::shipped(name))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables() {
+        // A lean-to falling to a taller wall (`roof_walls`, a roof falling to a wall), in each
+        // shipped coursed material: at each gable's end under the roof's lowest cube, where
+        // the gable's course is left out under the roof and meets the blocking along the
+        // eave, lines in through the gable a centimetre apart, from the wall's top to the
+        // roof's underside, all meet something. Hewn beams' course stopped 4 cm short of the
+        // eave's blocking there (docs/building-voxels.md, a roof falling to a wall).
+        let kits = shipped();
+        let shakes = kits.0[2].kind();
+        for wall in [kits.0[0].kind(), kits.0[1].kind()] {
+            let (_, ops) = crate::roof_walls::rows(wall, shakes, None)
+                .into_iter()
+                .find(|(row, _)| row == "a roof falling to a wall")
+                .expect("the row");
+            let mut base = Base::default();
+            for op in ops {
+                base.apply(op);
+            }
+            let lines = crate::inspect::Lines::of(&base, &kits);
+            let roofs = Roofs::whole(&base, &kits, super::super::Scope::ALL);
+            let eave = crate::STOREY_CUBES as f32 * CELL_M;
+            for (x, out) in [(0, -1.0f32), (9, 1.0)] {
+                let face = (x as f32 + 0.5 + out * 0.5) * CELL_M;
+                let middle = (x as f32 + 0.5) * CELL_M;
+                for k in 0..50 {
+                    let z = 5.0 * CELL_M + 0.005 + k as f32 * 0.01;
+                    let under = roofs.under_over(middle, z, eave).expect("the roof");
+                    let mut y = eave + 0.01;
+                    while y < under - 0.03 {
+                        let from = Vec3::new(face + out * 0.3, y, z);
+                        assert!(
+                            lines.meets(from, Vec3::X * -out, 0.3 + CELL_M + 0.02),
+                            "kind {}: open under the roof at ({face}, {y:.3}, {z:.3})",
+                            wall.0
+                        );
+                        y += 0.01;
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it() {
+        // A wall two cubes thick and four long, its top decked, a pier rising from its west
+        // end, standing in the ground, as the QA cabin's garden wall: the pier's members are
+        // narrower than its cube, so the deck's rim runs on into it. Lines through the wall's
+        // thickness beside the pier, from the course under the deck to its boards, all meet
+        // something; a slot 10 to 15 cm wide was open there, the ground showing through.
+        let kits = shipped();
+        for kit in &kits.0[..2] {
+            let mut base = Base::default();
+            let cube = Some(Cube::new(kit.kind(), Fill::Solid));
+            for (min, max) in [([0, -2, 0], [3, -1, 1]), ([0, 0, 0], [0, 1, 1])] {
+                base.apply(BuildOp::Fill { min, max, cube });
+            }
+            let ring = base.ground_ring();
+            base.sample_ground(ring.into_iter().map(|column| crate::Sample {
+                column,
+                height_cm: -60,
+            }));
+            let lines = crate::inspect::Lines::of(&base, &kits);
+            // As closed as the rim along the deck's own cubes is at each height: the seams
+            // between its beams are the deck's, not this junction's.
+            let heights: Vec<f32> = (0..=36)
+                .map(|j| -0.45 + j as f32 * 0.01)
+                .filter(|&y| lines.meets(Vec3::new(0.75, y, -0.3), Vec3::Z, 1.6))
+                .collect();
+            assert!(heights.len() > 30, "the deck's rim");
+            for i in 0..=30 {
+                let x = 0.25 + i as f32 * 0.01;
+                for &y in &heights {
+                    assert!(
+                        lines.meets(Vec3::new(x, y, -0.3), Vec3::Z, 1.6),
+                        "kind {}: open beside the pier at ({x:.2}, {y:.2})",
+                        kit.id
+                    );
+                }
+            }
+            // A corner post over the pier's corners, where the kit dresses them, runs down
+            // past the deck beside it to the course under the deck, and at its free end, over
+            // the courses' ends, on to the ground, not stopping over the air where the ground
+            // falls under the cubes it stands in.
+            if kit.dress.member(Role::Arris).is_some() {
+                let laid = lay(&base, kit);
+                let feet: Vec<Vec3> = laid
+                    .pieces
+                    .iter()
+                    .filter_map(|piece| match piece {
+                        Piece::Log {
+                            from,
+                            role: Some(Role::Arris),
+                            ..
+                        } => Some(from.metres()),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(feet.len(), 4, "the pier's corner posts");
+                for foot in feet {
+                    let ground = if foot.x < 0.25 { -0.6 } else { -0.5 };
+                    assert!(foot.y <= ground, "a corner post's foot at {foot}");
+                }
             }
         }
     }

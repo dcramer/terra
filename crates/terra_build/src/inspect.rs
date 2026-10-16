@@ -241,6 +241,54 @@ pub fn black(surface: &Surface) -> Option<usize> {
     (all > 0 && dark * 4 > all).then_some(dark)
 }
 
+/// A base's near drawing, to cast lines at in a test: whether a junction is closed at
+/// every place across it, not only where the checker's few lines go.
+#[cfg(test)]
+pub(crate) struct Lines {
+    drawn: Drawn,
+    grid: Grid,
+}
+
+#[cfg(test)]
+impl Lines {
+    /// The base built whole, drawn near with no relief.
+    pub(crate) fn of(base: &Base, kits: &Kits) -> Lines {
+        let maps = Maps::default();
+        let whole = sections::Whole::lay(base, kits);
+        let progress = Progress::Cubes {
+            next: std::collections::BTreeSet::new(),
+        };
+        let mut drawn = Drawn::default();
+        for at in sections::drawable(base) {
+            let section = Section {
+                base,
+                kits,
+                maps: &maps,
+                at: IVec3::from_array(at),
+                progress: &progress,
+            };
+            let laid = sections::lay(&section, &whole);
+            let near = sections::draw(&section, &laid, Reach::Near);
+            for ((kind, material), surface) in &near.near {
+                drawn.add(
+                    String::new(),
+                    Some((*kind, *material)),
+                    surface,
+                    &mut Vec::new(),
+                    Detail::Near,
+                );
+            }
+        }
+        let grid = Grid::new(&drawn);
+        Lines { drawn, grid }
+    }
+
+    /// Whether a line from a point meets anything drawn within so far.
+    pub(crate) fn meets(&self, from: Vec3, dir: Vec3, far: f32) -> bool {
+        self.grid.hit(&self.drawn, from, dir, 0.0, far).is_some()
+    }
+}
+
 /// Inspects a base built whole, at every detail its sections are drawn at.
 pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
     let mut report = Report::default();
@@ -349,6 +397,43 @@ pub fn self_overlap(surface: &Surface) -> f32 {
     let mut drawn = Drawn::default();
     drawn.add(String::new(), None, surface, &mut Vec::new(), Detail::Near);
     overlaps(&drawn).values().map(|(_, area, _)| area).sum()
+}
+
+/// Two meshes fighting for the same pixels, as [`Fault::Coplanar`] and [`Fault::Doubled`]
+/// find them: triangles of each facing the same way in one plane, overlapping.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fight {
+    /// The two meshes' names, as given; the same twice for a mesh fighting itself.
+    pub meshes: [String; 2],
+    /// Whether it is the same triangle drawn twice.
+    pub doubled: bool,
+    /// Where they first fight, and how much they overlap, in square metres, in how many
+    /// pairs of triangles.
+    pub at: Vec3,
+    pub area: f32,
+    pub pairs: usize,
+}
+
+/// The fights among some meshes, each named and of a kind and material where it has one,
+/// measured as the mesh checker measures them, for a drawing audit of its own (`cargo xtask
+/// rules`), so the two never disagree.
+pub fn fights<'a>(
+    meshes: impl IntoIterator<Item = (String, Option<(Kind, Material)>, &'a Surface)>,
+) -> Vec<Fight> {
+    let mut drawn = Drawn::default();
+    for (name, kind, surface) in meshes {
+        drawn.add(name, kind, surface, &mut Vec::new(), Detail::Near);
+    }
+    overlaps(&drawn)
+        .into_iter()
+        .map(|((m, n, doubled), (at, area, pairs))| Fight {
+            meshes: [m, n].map(|i| drawn.meshes[i as usize].clone()),
+            doubled,
+            at,
+            area,
+            pairs,
+        })
+        .collect()
 }
 
 /// Pairs of triangles in one plane, facing the same way, that overlap.
@@ -2464,6 +2549,63 @@ mod tests {
             0,
         );
         assert!(overlap(&a, &b) < 1e-6, "{} cm²", overlap(&a, &b) * 1e4);
+    }
+
+    #[test]
+    fn faces_a_little_apart_or_tilted_far_out_do_not_fight_and_faces_in_one_plane_do() {
+        // The cases the drawing audit once counted as z-fighting and this checker did not
+        // (research/goals-review-2026-10-16.md, finding 6), planted: a log's daub stopping
+        // 2 mm behind its sawn end, which a 32-bit depth buffer keeps apart at any distance a
+        // building is seen from; and a deck's board 7 mm over a stone floor 30 m out, tilted
+        // so its plane carried on passes through the world's origin, as the floor's does, so
+        // comparing the planes' distances from the origin alone puts the two in one plane.
+        // And one that does fight: two faces in one plane, overlapping, as two lintels'
+        // undersides crossing at a corner.
+        let quad = |corners: [Vec3; 4]| {
+            let n = (corners[1] - corners[0])
+                .cross(corners[2] - corners[0])
+                .normalize();
+            Surface {
+                positions: [0, 1, 2, 0, 2, 3].map(|i| corners[i]).to_vec(),
+                normals: vec![n; 6],
+                colours: vec![[0.5; 3]; 6],
+                ..Surface::default()
+            }
+        };
+        let square = |x: f32, y: f32, z: f32, rise: f32| {
+            // Facing up, a metre across, its far edge `rise` higher than its near one.
+            quad([
+                Vec3::new(x, y, z),
+                Vec3::new(x, y, z + 1.0),
+                Vec3::new(x + 1.0, y + rise, z + 1.0),
+                Vec3::new(x + 1.0, y + rise, z),
+            ])
+        };
+        let fights = |a: &Surface, b: &Surface| {
+            fights([("a".to_string(), None, a), ("b".to_string(), None, b)])
+                .into_iter()
+                .filter(|fight| fight.meshes[0] != fight.meshes[1])
+                .count()
+        };
+        // 2 mm apart: none.
+        assert_eq!(
+            fights(&square(0.0, 0.0, 0.0, 0.0), &square(0.2, 0.002, 0.2, 0.0)),
+            0
+        );
+        // 7 mm over it, 30 m out, its plane through the origin: none.
+        let slope = 0.007 / 30.0;
+        assert_eq!(
+            fights(
+                &square(30.0, 0.0, 0.0, 0.0),
+                &square(30.2, 30.2 * slope, 0.2, slope)
+            ),
+            0
+        );
+        // In one plane, overlapping: one fight.
+        assert_eq!(
+            fights(&square(0.0, 0.0, 0.0, 0.0), &square(0.3, 0.0, 0.3, 0.0)),
+            1
+        );
     }
 
     #[test]
