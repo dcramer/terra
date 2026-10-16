@@ -17,5 +17,14 @@
     growth: 0.6,
     settled_after: 1.0,
     common: (10.0, 34.0),
+    // Before each building's door while it goes up: a stack of logs, a bucket of tools.
+    site: [
+        (item: "Log", at: (1.9, 1.5)),
+        (item: "Log", at: (1.9, 1.95)),
+        (item: "Log", at: (1.9, 2.4)),
+        (item: "Log", at: (1.9, 1.72), lift: 0.4),
+        (item: "Log", at: (1.9, 2.17), lift: 0.4),
+        (item: "ToolBucket", at: (-1.6, 1.6), turn: 25.0),
+    ],
     steps_a_frame: 400,
 )

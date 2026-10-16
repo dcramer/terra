@@ -855,6 +855,7 @@ fn lay(
                     whole,
                     planned: false,
                     near: Vec3::ZERO,
+                    dressed: Vec::new(),
                 },
             ));
             continue;

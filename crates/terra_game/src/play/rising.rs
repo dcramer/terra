@@ -61,9 +61,26 @@ pub struct Timelapse {
     /// When the things of no one building (the well, the benches, the stalls) come, from
     /// the nearest the square's middle to the furthest.
     pub common: (f32, f32),
+    /// What a building's site is dressed with from its plan being laid until it is up: its
+    /// materials and tools, before its door.
+    #[serde(default)]
+    pub site: Vec<SiteThing>,
     /// At most so many building steps a frame, across the whole settlement.
     #[serde(default = "Timelapse::most_steps")]
     pub steps_a_frame: u32,
+}
+
+/// A catalogue item a site is dressed with: by its file, where it lies in metres across the
+/// building's front and out from its door, how far up, and turned how far from its front.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct SiteThing {
+    pub item: String,
+    pub at: (f32, f32),
+    #[serde(default)]
+    pub lift: f32,
+    #[serde(default)]
+    pub turn: f32,
 }
 
 impl Timelapse {
@@ -266,6 +283,8 @@ pub struct Rises {
     pub whole: Base,
     pub planned: bool,
     pub near: Vec3,
+    /// What its site is dressed with while it goes up.
+    pub dressed: Vec<Entity>,
 }
 
 /// Something of the town kept out of sight until its building is up, or for one of no
@@ -281,7 +300,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             hold_the_hour.before(Ticking),
-            (prepare, build, reveal, hide_ghosts, wear)
+            (prepare, build, reveal, hide_ghosts, wear, report)
                 .chain()
                 .after(super::town::Laid)
                 .run_if(resource_exists::<Market>),
@@ -481,6 +500,39 @@ fn build(
             }
             clear.write(ClearAround(built.frame.translation, 9.0));
             open_sites(&mut market, index, true, hours);
+            // Its site's materials and tools, laid before its door while it goes up.
+            if let Some(site) = site.as_deref() {
+                let to_site = site.frame.compute_affine().inverse();
+                let building = &market.life.town.buildings[index];
+                let (door, facing) = (Vec2::from(building.at), building.facing);
+                for thing in &rising.lapse.site {
+                    let Some(item) = catalogue.item_from(&thing.item) else {
+                        warn!("Time-lapse: {} is not in the catalogue.", thing.item);
+                        continue;
+                    };
+                    let at = terra_build::town::place(door, facing, Vec2::from(thing.at));
+                    let point = to_site
+                        .transform_point3(market.middle + market.east * at.x + market.south * at.y);
+                    let way = terra_build::town::looking(facing + thing.turn.to_radians());
+                    let front =
+                        to_site.transform_vector3(market.east * way.x + market.south * way.y);
+                    let turn = libm::atan2f(front.x, front.z).to_degrees();
+                    if let Some(entity) = props::place(
+                        &mut commands,
+                        &models,
+                        site,
+                        &planet,
+                        &item,
+                        point.with_y(0.0),
+                        thing.lift,
+                        turn,
+                        false,
+                    ) {
+                        commands.entity(entity).insert(Theirs);
+                        rise.dressed.push(entity);
+                    }
+                }
+            }
         }
         let kits = built.kits.clone();
         let one_at_a_time = |kind| kits.as_deref().is_some_and(|k| k.one_at_a_time(kind));
@@ -514,6 +566,10 @@ fn build(
             rising.up[index] = true;
             rising.finished[index] = Some(t);
             open_sites(&mut market, index, false, hours);
+            // Its materials used and its tools taken away.
+            for entity in rise.dressed.drain(..) {
+                commands.entity(entity).despawn();
+            }
             info!("Time-lapse: building {index} up at {t:.1} s.");
         }
     }
@@ -530,6 +586,37 @@ fn open_sites(market: &mut Market, building: usize, open: bool, hours: f64) {
     for site in sites {
         market.life.set_open(site, open, hours);
     }
+}
+
+/// Says every few seconds how far the settlement has got, so a run is checked from its log
+/// (D69): buildings going up and up, builders at work at a site, and people about.
+fn report(rising: Res<Rising>, market: Res<Market>, mut said: Local<f32>) {
+    const EVERY_S: f32 = 5.0;
+    if !rising.prepared || rising.t < *said + EVERY_S {
+        return;
+    }
+    *said = rising.t;
+    let life = &market.life;
+    let building = (0..life.people.len())
+        .filter(|&p| {
+            life.activity(p) == Some("Build")
+                && matches!(life.people[p].state, terra_life::State::Doing { .. })
+        })
+        .count();
+    let about = (0..life.people.len())
+        .filter(|&p| {
+            rising.about(&market, p) && !matches!(life.shows(p), terra_life::Shows::Hidden)
+        })
+        .count();
+    let rising_now = (0..rising.times.len())
+        .filter(|&b| rising.times[b].is_some_and(|(start, _)| rising.t >= start) && !rising.up[b])
+        .count();
+    let up = rising.finished.iter().filter(|f| f.is_some()).count();
+    info!(
+        "Time-lapse at {:.0} s ({:.1}h): {rising_now} going up, {up} up, {building} builders at work, {about} people about.",
+        rising.t,
+        rising.lapse.hour(rising.t)
+    );
 }
 
 /// A building rising shows what stands of it, not a blueprint: its plan's ghosts are kept
