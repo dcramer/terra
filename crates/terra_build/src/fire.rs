@@ -379,10 +379,13 @@ impl Fire {
         self.owed.retain(|key, _| self.cells.contains_key(key));
         // Heat given this tick, by cube: gathered from every burning cube before any is
         // applied, so the order cubes are stepped in changes nothing.
-        let mut given: BTreeMap<[i32; 3], f32> = BTreeMap::new();
+        // Hashed, not sorted: each cube's heat is its own sum whatever the order, and this is the
+        // fire's busiest map, tens of thousands of entries a tick at its height.
+        let mut given: std::collections::HashMap<[i32; 3], f32> =
+            std::collections::HashMap::with_capacity(self.cells.len() * 8);
         let mut harm: BTreeMap<u16, Vec<[i32; 3]>> = BTreeMap::new();
         let mut destroyed = BTreeSet::new();
-        let lit: BTreeSet<[i32; 3]> = self
+        let lit: std::collections::HashSet<[i32; 3]> = self
             .cells
             .iter()
             .filter(|(_, cell)| cell.burning.is_some())
@@ -526,7 +529,7 @@ impl Fire {
         &self,
         base: &Base,
         burns: &dyn Fn(Kind) -> Option<Burns>,
-        given: &mut BTreeMap<[i32; 3], f32>,
+        given: &mut std::collections::HashMap<[i32; 3], f32>,
     ) {
         use crate::support::FACES;
         let solid = |at: IVec3| base.cube(at).is_some_and(|cube| cube.is_in());
