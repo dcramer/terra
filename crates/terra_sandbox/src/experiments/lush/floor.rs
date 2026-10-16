@@ -569,14 +569,16 @@ fn round(dice: &mut Rng, at: Vec2, spread: f32) -> Vec2 {
 }
 
 /// A tint for one variant: a little lighter or darker, greener or yellower.
-/// The middle layer's leaves tinted as the crowns' oak leaves are (`CROWN_TINTS`, D359): their
-/// cards are graded to living leaves' colour (D292), as the crowns' are. Tinted a third of
-/// that, as when the cards were pale (D268), a hazel's leaves were near black-green fills a
-/// stride off, no vein, gloss or turn of a leaf reading on them. A bramble's leaves a little
-/// darker, a holly's darker and bluer, as theirs are.
-const THICKET_TINT: Vec3 = Vec3::new(0.9, 0.93, 0.84);
-const BRAMBLE_TINT: Vec3 = Vec3::new(0.8, 0.84, 0.74);
-const HOLLY_TINT: Vec3 = Vec3::new(0.62, 0.72, 0.66);
+/// The middle layer's leaves tinted two thirds as bright as the crowns' oak leaves are
+/// (`CROWN_TINTS`, D359), their cards graded to living leaves' colour as the crowns' are
+/// (D292). Tinted a third, as when the cards were pale (D268), a hazel's leaves were near
+/// black-green fills a stride off; as bright as the crowns', in the trailer's low sun the
+/// bushes were the brightest things in the frame bar the mist, lime pom-poms, against the
+/// deep olive of Sons of the Forest's undergrowth (0.47 to 0.54 grey against 0.27). A
+/// bramble's leaves a little darker, a holly's darker and bluer, as theirs are.
+const THICKET_TINT: Vec3 = Vec3::new(0.6, 0.63, 0.56);
+const BRAMBLE_TINT: Vec3 = Vec3::new(0.55, 0.58, 0.5);
+const HOLLY_TINT: Vec3 = Vec3::new(0.45, 0.53, 0.47);
 
 fn variant_tint(dice: &mut Rng, base: Vec3) -> Vec3 {
     let value = dice.range(0.82, 1.12);

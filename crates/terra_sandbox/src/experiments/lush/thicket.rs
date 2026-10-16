@@ -116,6 +116,18 @@ fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card) -> 
     }
 }
 
+/// A broadleaf shrub's or sapling's leaves held in flat sprays along its shoots, out from its
+/// stem and drooping a little, not in balls, so it reads as layers with gaps between (D276).
+/// Drawn as clumps of cards round each spray, an oak scrub's and a sapling's crowns were
+/// domes of leaves with no gap, a topiary's pom-poms beside the path (D359).
+fn flat_sprays(dice: &mut Rng, tree: &mut Tree) {
+    for spray in &mut tree.sprays {
+        let out = Vec3::new(spray.at.x, 0.0, spray.at.z).normalize_or(Vec3::X);
+        let wander = Vec3::new(dice.range(-0.5, 0.5), 0.0, dice.range(-0.5, 0.5));
+        spray.along = Some((out + wander - Vec3::Y * dice.range(0.0, 0.35)).normalize());
+    }
+}
+
 /// A tree bowed over toward `axis`'s turn, more the higher a point is, as a stem arches
 /// under the weight of its leaves: `angle` at its top, none at its foot.
 fn bowed(tree: &mut Tree, axis: Vec3, angle: f32) {
@@ -185,13 +197,7 @@ pub(super) fn coppice(
         let pole = height * bare;
         let mut stem = grown_tree::grow(dice, &def, height - pole);
         stem.sprays.retain(|_| dice.unit() < keep);
-        // Hazel holds its leaves in flat sprays along its shoots, out from its stem and
-        // drooping a little, not in balls, so a stool reads as layers with gaps between.
-        for spray in &mut stem.sprays {
-            let out = Vec3::new(spray.at.x, 0.0, spray.at.z).normalize_or(Vec3::X);
-            let wander = Vec3::new(dice.range(-0.5, 0.5), 0.0, dice.range(-0.5, 0.5));
-            spray.along = Some((out + wander - Vec3::Y * dice.range(0.0, 0.35)).normalize());
-        }
+        flat_sprays(dice, &mut stem);
         if pole > 0.0 {
             // Its stem's foot no longer flares into roots up there.
             let r = stem.trunk_m;
@@ -236,6 +242,7 @@ pub(super) fn scrub(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
         let height = dice.range(0.9, 1.9);
         let mut stem = grown_tree::grow(dice, &def, height);
         stem.sprays.retain(|_| dice.unit() < 0.8);
+        flat_sprays(dice, &mut stem);
         let around = turn + k as f32 / stems as f32 * TAU + dice.range(-0.5, 0.5);
         let out = Vec3::new(libm::cosf(around), 0.0, libm::sinf(around));
         let lean = Quat::from_axis_angle(Vec3::Y.cross(out), dice.range(0.1, 0.5));
@@ -354,6 +361,7 @@ pub(super) fn sapling(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
     let def = def(Habit::Upright, "", 0.7, 0.014);
     let height = dice.range(2.2, 5.2);
     let mut tree = grown_tree::grow(dice, &def, height);
+    flat_sprays(dice, &mut tree);
     // Leaning a little toward the light it found.
     let out = dice.unit_vector().with_y(0.0).normalize_or(Vec3::X);
     moved(
