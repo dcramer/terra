@@ -8,6 +8,7 @@ The developers, 2026-10-15: "I would like to see more biome demos. I would like 
 
 - **Made by the world's rules, not by hand** (D8, D148, D313). Each demo is the same systems as the lush forest, reading the climate fields ([climate.md](climate.md)) and the species' niches. The sandbox experiment only picks the seed, the place, the date, the hour and the camera.
   - The place is found by a query on the fields ("a basin holding a lake, with ground 1 km above it within 3 km"), as `settlement::site_for` finds the village's level ground.
+  - Once found, it is pinned there (`--site lake@-15.34,1.68`, D393), so a later change to the land never moves a demo; the query stays as the check that the place still fits.
   - A tundra that only exists because someone painted it would fail the brief.
 - **One world for all three.** They run on the 30 km world the building scenes already use (D13), in the start's climate (`assets/data/climate.ron`), each at the latitude and height where its climate falls.
   - On a world that size, a degree of latitude is 524 m. The fields put the start's climate at about 8 °C a year at 40°, and colder by about 1.5 °C for every kilometre walked north.

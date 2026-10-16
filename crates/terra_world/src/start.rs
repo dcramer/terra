@@ -150,13 +150,20 @@ impl Found {
 }
 
 /// The place `--site` names, found by its query. Panics, saying why, if the land has no such
-/// place, as a scripted run should.
+/// place, as a scripted run should. `<name>@<east>,<north>` pins it (D393): the place its
+/// query finds nearest so many kilometres east and north of the planet's start, within 200 m,
+/// where a demo's place was first found, so a change to the land elsewhere never moves the
+/// demo, and one that spoils its place stops the run saying so.
 pub fn find_site(planet: &Planet, name: &str) -> Found {
     let climate: terra_climate::Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
     let land = terra_land::Land::new(planet.voxels().field().clone(), climate);
+    let (name, pinned_km) = terra_land::site::pinned(name).unwrap_or_else(|why| panic!("{why}"));
     match name {
         "lake" => {
-            let want = terra_land::site::MountainLake::DEMO;
+            let want = terra_land::site::MountainLake {
+                pinned_km,
+                ..terra_land::site::MountainLake::DEMO
+            };
             let (site, searched) = land.mountain_lake_searched(terra_land::PLANET_START, &want);
             let site = site.unwrap_or_else(|| {
                 panic!(
@@ -175,7 +182,10 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
             Found::Lake(site)
         }
         "tundra" => {
-            let want = terra_land::tundra::OpenTundra::DEMO;
+            let want = terra_land::tundra::OpenTundra {
+                pinned_km,
+                ..terra_land::tundra::OpenTundra::DEMO
+            };
             let (site, searched) = land.tundra_searched(terra_land::PLANET_START, &want);
             let site = site.unwrap_or_else(|| {
                 panic!(
@@ -194,10 +204,13 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
             Found::Tundra(site)
         }
         "town" | "settlement" => {
-            let want = if name == "town" {
-                terra_land::town::MarketTown::DEMO
-            } else {
-                terra_land::town::MarketTown::SETTLEMENT
+            let want = terra_land::town::MarketTown {
+                pinned_km,
+                ..if name == "town" {
+                    terra_land::town::MarketTown::DEMO
+                } else {
+                    terra_land::town::MarketTown::SETTLEMENT
+                }
             };
             let (site, searched) = land.market_town_searched(terra_land::PLANET_START, &want);
             let site = site.unwrap_or_else(|| {

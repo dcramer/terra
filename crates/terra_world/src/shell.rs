@@ -159,7 +159,10 @@ usage: terra_sandbox [options]
                         experiment lays the town there); settlement, the same place
                         with only its plots cleared of the forest, for a settlement
                         founded there (D381); on a world with mountains
-                        (--radius 30000) (docs/demos.md)
+                        (--radius 30000) (docs/demos.md); <place>@<east km>,<north km>
+                        pins it to the place its query finds there (D393), as the
+                        demos' places are, so a change to the land elsewhere never
+                        moves it
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
@@ -329,7 +332,7 @@ pub struct Options {
     pub date: Option<Date>,
     /// A place the land's rules make to start at, found by its query (`--site`): `lake`, a
     /// mountain lake under the tree line with peaks a kilometre over it, `tundra`, or `town`
-    /// (docs/demos.md).
+    /// (docs/demos.md), pinned to a spot with `@<east km>,<north km>` (D393).
     pub site: Option<String>,
     /// Where the play experiment's player starts, east and south of the start in metres.
     pub start_at: Option<(f32, f32)>,

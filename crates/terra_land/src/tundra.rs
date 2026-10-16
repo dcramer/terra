@@ -50,6 +50,12 @@ pub struct OpenTundra {
     /// How far from the planet's start to look, and the grid looked over, in metres.
     pub search_m: f32,
     pub step_m: f32,
+    /// Where a demo's place was found and stays, kilometres east and north of the planet's
+    /// start (`--site <name>@<east>,<north>`, D393): of the places that fit within
+    /// [`PINNED_WITHIN_KM`](crate::site::PINNED_WITHIN_KM) of it, the nearest is taken, so a change to the land that makes
+    /// a better place elsewhere does not move the demo, and one that spoils this place says so.
+    /// None to search everywhere.
+    pub pinned_km: Option<Vec2>,
 }
 
 impl OpenTundra {
@@ -64,6 +70,7 @@ impl OpenTundra {
         permafrost_below_c: -2.0,
         search_m: 30_000.0,
         step_m: 100.0,
+        pinned_km: None,
     };
 }
 
@@ -75,6 +82,8 @@ pub struct Searched {
     pub thawed: usize,
     pub too_rough: usize,
     pub no_forest: usize,
+    /// Fit, but too far from the query's pin to be the pinned place.
+    pub off_pin: usize,
     pub fit: usize,
 }
 
@@ -229,8 +238,12 @@ impl Land {
                 Verdict::Thawed => searched.thawed += 1,
                 Verdict::Rough => searched.too_rough += 1,
                 Verdict::NoForest => searched.no_forest += 1,
+                Verdict::Fit(_, site) if crate::site::off_pin(want.pinned_km, site.at_km) => {
+                    searched.off_pin += 1;
+                }
                 Verdict::Fit(score, site) => {
                     searched.fit += 1;
+                    let score = crate::site::pinned_score(want.pinned_km, site.at_km, score);
                     if best.is_none_or(|(b, _)| score < b) {
                         best = Some((score, site));
                     }

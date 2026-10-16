@@ -89,6 +89,12 @@ pub struct MarketTown {
     /// lakes found on its own ten-metre grid, `round::Round`), not the search's coarse one;
     /// none if not asked.
     pub water_m: Option<(f32, f32, f32)>,
+    /// Where a demo's place was found and stays, kilometres east and north of the planet's
+    /// start (`--site <name>@<east>,<north>`, D393): of the places that fit within
+    /// [`PINNED_WITHIN_KM`](crate::site::PINNED_WITHIN_KM) of it, the nearest is taken, so a change to the land that makes
+    /// a better place elsewhere does not move the demo, and one that spoils this place says so.
+    /// None to search everywhere.
+    pub pinned_km: Option<Vec2>,
 }
 
 impl MarketTown {
@@ -112,6 +118,7 @@ impl MarketTown {
         search_m: 9000.0,
         step_m: 50.0,
         water_m: None,
+        pinned_km: None,
     };
 
     /// A settlement newly founded (D381): the same valley floor, but only its plots cleared
@@ -242,6 +249,8 @@ pub struct Searched {
     pub too_rough: usize,
     pub no_forest: usize,
     pub no_peaks: usize,
+    /// Fit, but too far from the query's pin to be the pinned place.
+    pub off_pin: usize,
     pub fit: usize,
     /// Whether the place found is by a lake, as asked.
     pub by_water: bool,
@@ -472,8 +481,12 @@ impl Land {
                 Verdict::Rough => searched.too_rough += 1,
                 Verdict::NoForest => searched.no_forest += 1,
                 Verdict::NoPeaks => searched.no_peaks += 1,
+                Verdict::Fit(_, site) if crate::site::off_pin(want.pinned_km, site.at_km) => {
+                    searched.off_pin += 1;
+                }
                 Verdict::Fit(score, site) => {
                     searched.fit += 1;
+                    let score = crate::site::pinned_score(want.pinned_km, site.at_km, score);
                     fits.push((score, site));
                 }
             }

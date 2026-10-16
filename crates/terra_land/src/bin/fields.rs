@@ -21,7 +21,7 @@ use terra_land::woods::{self, Stand};
 use terra_land::{Land, PLANET_START, ground, start_climate};
 use terra_voxel::{Field, material};
 
-const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake|tundra|town] [--out shots/fields]
+const USAGE: &str = "cargo xtask fields [--radius 30000] [--seed 1] [--at <east km>,<north km>] [--size 8000] [--cell 32] [--date <month-day|day>] [--site lake|tundra|town[@<east km>,<north km>]] [--out shots/fields]
 
 A region of the world's land on a date as maps of its rules, on the CPU (docs/demos.md, D326):
 the ground's height, steepness and facing, the growing season's mean temperature with the tree
@@ -39,7 +39,8 @@ numbers and what the climate puts at each height and latitude; index.html to loo
              --at: lake, a basin under the tree line with peaks a kilometre over it; tundra, level
              ground past the trees over permafrost, the forest's edge in sight; town, level ground
              for a market town below the tree line, the forest past its fields and peaks over
-             it (docs/demos.md)
+             it (docs/demos.md); with @east,north only the place found within half a kilometre
+             of there, as a demo's place is pinned (D393), so it fails if the land has spoilt it
   --out      the folder to write into";
 
 /// How far upwind shelter is looked for, as Winstral's Sx takes it for drifting snow.
@@ -126,10 +127,21 @@ fn run() -> Result<(), String> {
     );
     // Ground a settlement found by its query has cleared of the forest for its fields.
     let mut clearings: Vec<terra_land::town::Clearing> = Vec::new();
-    let site = match args.site.as_deref() {
+    let (site_name, pinned_km) = match args.site.as_deref() {
+        Some(site) => {
+            let (name, pin) = terra_land::site::pinned(site)?;
+            (Some(name), pin)
+        }
+        None => (None, None),
+    };
+    let site = match site_name {
         None => None,
         Some("lake") => {
-            let (site, searched) = land.mountain_lake_searched(PLANET_START, &MountainLake::DEMO);
+            let want = MountainLake {
+                pinned_km,
+                ..MountainLake::DEMO
+            };
+            let (site, searched) = land.mountain_lake_searched(PLANET_START, &want);
             match site {
                 Some(site) => {
                     println!(
@@ -165,7 +177,10 @@ fn run() -> Result<(), String> {
             }
         }
         Some("tundra") => {
-            let want = terra_land::tundra::OpenTundra::DEMO;
+            let want = terra_land::tundra::OpenTundra {
+                pinned_km,
+                ..terra_land::tundra::OpenTundra::DEMO
+            };
             let (found, searched) = land.tundra_searched(PLANET_START, &want);
             let found =
                 found.ok_or_else(|| format!("no open tundra on this world: {searched:?}"))?;
@@ -187,10 +202,13 @@ fn run() -> Result<(), String> {
             Some(found.at_km)
         }
         Some(name @ ("town" | "settlement")) => {
-            let want = if name == "town" {
-                terra_land::town::MarketTown::DEMO
-            } else {
-                terra_land::town::MarketTown::SETTLEMENT
+            let want = terra_land::town::MarketTown {
+                pinned_km,
+                ..if name == "town" {
+                    terra_land::town::MarketTown::DEMO
+                } else {
+                    terra_land::town::MarketTown::SETTLEMENT
+                }
             };
             let (found, searched) = land.market_town_searched(PLANET_START, &want);
             let found =

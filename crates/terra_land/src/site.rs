@@ -44,6 +44,47 @@ pub struct MountainLake {
     /// How far from the planet's start to look, in metres, and the grid looked over.
     pub search_m: f32,
     pub step_m: f32,
+    /// Where a demo's place was found and stays, kilometres east and north of the planet's
+    /// start (`--site <name>@<east>,<north>`, D393): of the places that fit within
+    /// [`PINNED_WITHIN_KM`] of it, the nearest is taken, so a change to the land that makes
+    /// a better place elsewhere does not move the demo, and one that spoils this place says so.
+    /// None to search everywhere.
+    pub pinned_km: Option<Vec2>,
+}
+
+/// How near its pin a pinned place must be found, in kilometres: a cell or two of any query's
+/// grid. Of the places that fit there, the nearest the pin is taken, not the best, so a pinned
+/// place is the very cell (or the lake) it was while it still fits.
+pub const PINNED_WITHIN_KM: f32 = 0.2;
+
+/// A fitting place's score, lowest best: its query's own, or for a pinned query how far it is
+/// from the pin.
+pub fn pinned_score(pinned_km: Option<Vec2>, at_km: Vec2, score: f32) -> f32 {
+    pinned_km.map_or(score, |pin| pin.distance(at_km))
+}
+
+/// A site's name as `--site` gives it, and its pin if it has one: `lake` searches, and
+/// `lake@-15.34,1.68` pins the lake to the one its query finds there, kilometres east and north
+/// of the planet's start.
+pub fn pinned(site: &str) -> Result<(&str, Option<Vec2>), String> {
+    let Some((name, at)) = site.split_once('@') else {
+        return Ok((site, None));
+    };
+    let at: Vec<f32> = at
+        .split(',')
+        .filter_map(|v| v.trim().parse().ok())
+        .collect();
+    match at[..] {
+        [east, north] => Ok((name, Some(Vec2::new(east, north)))),
+        _ => Err(format!(
+            "--site {site}: a pin is kilometres east and north of the start, like lake@-15.34,1.68"
+        )),
+    }
+}
+
+/// Whether a place found at `at_km` is too far from a query's pin to be the pinned place.
+pub fn off_pin(pinned_km: Option<Vec2>, at_km: Vec2) -> bool {
+    pinned_km.is_some_and(|pin| pin.distance(at_km) > PINNED_WITHIN_KM)
 }
 
 impl MountainLake {
@@ -58,6 +99,7 @@ impl MountainLake {
         deepest_m: 8.0,
         search_m: 40_000.0,
         step_m: 100.0,
+        pinned_km: None,
     };
 }
 
@@ -68,6 +110,8 @@ pub struct Searched {
     pub wrong_size: usize,
     pub wrong_height: usize,
     pub no_peaks: usize,
+    /// Fit, but too far from the query's pin to be the pinned place.
+    pub off_pin: usize,
     pub fit: usize,
 }
 
@@ -156,6 +200,11 @@ impl Land {
                 searched.no_peaks += 1;
                 continue;
             }
+            let at_km = self.east_north_km(start, toward);
+            if off_pin(want.pinned_km, at_km) {
+                searched.off_pin += 1;
+                continue;
+            }
             searched.fit += 1;
             // Best: the peaks looming steepest over it, a point for every 5 degrees, as Rysy's
             // walls stand over Morskie Oko; the forest's climb nearest the middle of what is
@@ -173,9 +222,10 @@ impl Land {
                 area_m2: lake.area_m2,
                 deepest_m: lake.deepest_m,
                 highest_m,
-                at_km: self.east_north_km(start, toward),
+                at_km,
                 shore: shore(&region, &found, index as u32, (c, r)),
             };
+            let score = pinned_score(want.pinned_km, site.at_km, score);
             if best.is_none_or(|(b, _)| score < b) {
                 best = Some((score, site));
             }
@@ -439,6 +489,30 @@ mod tests {
                 .distance(site.toward)
                 < 1e-3
         );
+    }
+
+    #[test]
+    fn a_pinned_lake_is_the_one_found_there_and_none_where_none_fits() {
+        let land = land(30_000.0);
+        let (found, everywhere) = land.mountain_lake_searched(PLANET_START, &MountainLake::DEMO);
+        let found = found.expect("a mountain lake");
+        let pinned = |at_km: Vec2| {
+            let want = MountainLake {
+                pinned_km: Some(at_km),
+                ..MountainLake::DEMO
+            };
+            land.mountain_lake_searched(PLANET_START, &want)
+        };
+        // Pinned a little off where it was found, the same lake, to the cell.
+        let (again, _) = pinned(found.at_km + Vec2::new(0.03, -0.04));
+        let again = again.expect("the pinned lake");
+        assert!(again.toward.distance(found.toward) < 1e-6);
+        assert_eq!(again.level_m, found.level_m);
+        // Pinned where no lake fits, none, every fit counted off the pin.
+        let (none, searched) = pinned(found.at_km + Vec2::new(25.0, 25.0));
+        assert!(none.is_none());
+        assert_eq!(searched.fit, 0);
+        assert_eq!(searched.off_pin, everywhere.fit);
     }
 
     #[test]

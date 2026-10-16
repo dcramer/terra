@@ -254,7 +254,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "fields",
-        takes: "[--radius 30000] [--at E,N] [--size 8000] [--cell 32] [--date 06-20] [--site lake|tundra|town] [--out shots/fields]",
+        takes: "[--radius 30000] [--at E,N] [--size 8000] [--cell 32] [--date 06-20] [--site lake|tundra|town[@E,N]] [--out shots/fields]",
         does: "the field maps: a region of the world's land on a date as maps of its rules (height, slope, facing, the growing season and the tree line, snow, shelter) and their numbers, on the CPU, no GPU (D326)",
         group: "Look at things",
         run: |args| {

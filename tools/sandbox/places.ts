@@ -3,8 +3,11 @@
 // so `vantage.ts`, `film.ts` and the others take `--place <name>` rather than each keeping its
 // own copy for one forest. Views are a name and where the camera stands and what it looks at,
 // in metres east, up and south of the start (the sandbox's --vantage); with `ground` their
-// heights are over the ground under each point (--vantage-ground). Node 22.18 or later; no
-// dependencies.
+// heights are over the ground under each point (--vantage-ground). A place the land's rules
+// found is pinned where its query first found it (`--site <name>@<east km>,<north km>`, D393),
+// so a change to the land never moves a demo, and one that spoils its place stops the run
+// saying so; `cargo xtask fields --site <name>` runs the query unpinned to see where it would
+// put it now. Node 22.18 or later; no dependencies.
 
 export type Place = {
   /// What it is, for the tools' output.
@@ -54,8 +57,8 @@ export const PLACES: Record<string, Place> = {
   },
   lake: {
     about:
-      "the mountain lake (docs/demos.md §1): the 30 km world's mountains, the lake its query finds (--site lake), in early June with the peaks' snow",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "lake", "--date", "06-10"],
+      "the mountain lake (docs/demos.md §1): the 30 km world's mountains, the lake its query found, pinned (--site lake@-15.34,1.68: 1,317 m over the sea, 0.55 km²), in early June with the peaks' snow",
+    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-10"],
     // The start is the lake's shore nearest its deepest water, facing it: -south is over the
     // water, east to the right.
     views: [
@@ -81,8 +84,8 @@ export const PLACES: Record<string, Place> = {
   },
   tundra: {
     about:
-      "the tundra (docs/demos.md §2): the fell plateau its query finds 10.5 km north of the start (--site tundra), in early October, the heath's autumn colours and the first snow lying in the lees",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "tundra", "--date", "10-08"],
+      "the tundra (docs/demos.md §2): the fell plateau its query found 10.5 km north of the start, pinned (--site tundra@-15.54,10.52), in early October, the heath's autumn colours and the first snow lying in the lees",
+    args: ["--experiment", "play", "--radius", "30000", "--site", "tundra@-15.54,10.52", "--date", "10-08"],
     // The start faces the closed forest's edge, 1.9 km off: -south is toward it, the open
     // plateau and the fells with their snow behind.
     views: [
@@ -106,8 +109,8 @@ export const PLACES: Record<string, Place> = {
   },
   town: {
     about:
-      "the market town (docs/demos.md §3): where the land's rules make room for one on the 30 km world (--site town), a valley floor at the foot of the range, the forest past its fields, on market morning with its people and animals",
-    args: ["--experiment", "play", "--experiment", "town", "--radius", "30000", "--site", "town", "--mute"],
+      "the market town (docs/demos.md §3): where the land's rules made room for one on the 30 km world, pinned (--site town@2.22,2.12), a valley floor at the foot of the range, the forest past its fields, on market morning with its people and animals",
+    args: ["--experiment", "play", "--experiment", "town", "--radius", "30000", "--site", "town@2.22,2.12", "--mute"],
     // The views the town logs as `Town vantage` (`play::town`), in the start's terms: the start
     // stands 330 m beside the town, out by its fields.
     views: [
@@ -132,8 +135,8 @@ export const PLACES: Record<string, Place> = {
   },
   valley: {
     about:
-      "the valley floor where the land's rules make room for a town (--site town) with no town on it: level meadow with its rocks, the forest round its edges and the range's wall over it to the north, a hamlet by the start; where the dragon's castle stands (trailer/scenes/dragon.ts)",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "town", "--mute"],
+      "the valley floor where the land's rules made room for a town, pinned (--site town@2.22,2.12), with no town on it: level meadow with its rocks, the forest round its edges and the range's wall over it to the north, a hamlet by the start; where the dragon's castle stands (trailer/scenes/dragon.ts)",
+    args: ["--experiment", "play", "--radius", "30000", "--site", "town@2.22,2.12", "--mute"],
     // The start's own views: north up the meadow to the forest's edge and the range, and the
     // other three ways.
     views: [
