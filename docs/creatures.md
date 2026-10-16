@@ -20,6 +20,32 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - **Some can be tamed**, probably (D100): ridden as mounts, perhaps put to work or kept for what they give.
 - **Populations live in regions** and recover when left alone, as the ground heals outside claims (D94). Over-hunting empties a region for a while, not forever.
 
+### Small animals about the land
+
+The developers, 2026-10-15: "we should add some small animals to all biomes, we have already some, others we can generate." Each biome has a few kinds that belong there, found where their niche is, by rule (D380, D378):
+
+| Kind | Niche: growing season, places | When startled |
+|---|---|---|
+| Red squirrel | 7 °C and up, among trees | Scolds, runs up the nearest trunk and waits there until nobody is near |
+| Chaffinch | 8 °C and up, among trees; flits from place to place | Calls and flies off 10 to 30 m |
+| Brown hare | 9 °C and up, open ground and woods | Bolts, silent |
+| Red fox | 7 °C and up, woods and open ground | Barks and runs |
+| Mallard | 6 °C and up, open water | Quacks and swims off; dabbles, tail up |
+| Grey heron | 8 °C and up, the shore and the shallows, wading | Croaks and flies 50 to 110 m along the shore |
+| Mountain hare, in its autumn moult | up to 7.5 °C, open ground | Bolts |
+| Ptarmigan | up to 7.5 °C, open ground | Croaks and flushes 25 to 60 m |
+| Arctic fox | up to 7 °C, open ground | Barks and runs |
+| House sparrow | 5 °C and up, ground trodden by people | Chirps and flies a little way |
+| Dog | the town's, at its owner's heels (`terra_life::animals`) | — |
+
+So the lush forest has squirrels, chaffinches, hares and foxes; the mountain lake ducks and a heron, with the forest's kinds in its shore woods; the tundra mountain hares, ptarmigan and arctic foxes; the town sparrows on its streets and its dogs. A new land gets its animals where its climate and cover put them, with no list for any map.
+
+- **Variants** (D182): eight bodies, eleven kinds. The sparrow is the chaffinch's body, the mountain hare and the arctic fox the brown hare's and the red fox's, each textured again for its own coat. Seasons' coats, and hens and drakes, are textures of the same bodies.
+- **Found as you go**, as shipped open worlds' ambient wildlife is: the land is cells of 32 m, each looked at once as a player comes within 110 m and given what lives there from its own seed, the same walk meeting the same animals; let go once nobody is within 150 m (`play::wildlife`). Over-hunting a cell is not remembered yet. A player on the move meets something every few seconds besides: a group of a kind whose niche the place is, put 34 to 52 m ahead beside their way, past where it is drawn, so it comes into view as they near it and breaks from cover as they pass, as Red Dead Redemption 2 and Far Cry stage ambient encounters.
+- **Up a tree, into a crown:** a squirrel startled runs up the nearest trunk and waits; a bird among trees as often as not flies up into a crown, sits there a while and comes down or crosses to another.
+- **The life round the eye** (D379), cheap as shipped games make it: dust motes and midges that show only in the sun's shafts, a few leaves falling under the crowns, down blowing over the heath, flocks crossing the sky, each kind faded in where its place, season and hour are (`terra_world::drift`, `assets/data/drift.ron`); and fish rising on deep water, a ring on the lake's own waves and now and then a leap, most at dawn and dusk (`terra_world::rises`).
+- **Made by rule from their models** (`tools/creatures/animal.py`): two body plans, a four-legged runner and a bird, as Spore and Overgrowth animate many bodies with one set of rules ([research](../research/2026-10-14-animation.md)). A kind's skeleton is a few dozen points read off its model; every clip (idle, walk, run or bound, eat, sit, fly, swim, dabble, die) is worked out from a few numbers, its feet placed by inverse kinematics so they stay where they land. Birds are modelled with their wings spread and fold them to stand, the folded wing drawn smaller as a spread fan cannot close by turning alone.
+
 ## Monsters
 
 - **They form where magic pools.** The place decides the kind: a marsh makes marsh things, a ruin its own. The more it pools, the higher their rank.

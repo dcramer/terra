@@ -1,0 +1,43 @@
+{
+  "subject": "wild red fox of a European forest: slim orange-red body, white chin, throat and chest, white-tipped bushy tail, black-backed ears, black stockings",
+  "file": "Fox",
+  "plan": "quadruped",
+  "tripo_project": "0bffc27c-d89a-471a-8eea-c6bb7a17e60f",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": { "model": 30 },
+  "turn": 90,
+  "scale": 0.88,
+  "budget": 2800,
+  "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "bones": {
+    "Hips": [null, [0, 0.19, 0.42], [0, 0.08, 0.43]],
+    "Spine": ["Hips", [0, 0.08, 0.43], [0, -0.05, 0.44]],
+    "Chest": ["Spine", [0, -0.05, 0.44], [0, -0.18, 0.47]],
+    "Neck": ["Chest", [0, -0.18, 0.47], [0, -0.31, 0.57]],
+    "Head": ["Neck", [0, -0.31, 0.57], [0, -0.50, 0.53]],
+    "Ear.L": ["Head", [0.05, -0.35, 0.63], [0.10, -0.37, 0.73]],
+    "Tail1": ["Hips", [0, 0.22, 0.42], [0, 0.30, 0.32]],
+    "Tail2": ["Tail1", [0, 0.30, 0.32], [0, 0.37, 0.23]],
+    "Tail3": ["Tail2", [0, 0.37, 0.23], [0, 0.48, 0.15]],
+    "Shoulder.L": ["Chest", [0.05, -0.16, 0.48], [0.055, -0.22, 0.37]],
+    "UpperArm.L": ["Shoulder.L", [0.055, -0.22, 0.37], [0.06, -0.17, 0.26]],
+    "Forearm.L": ["UpperArm.L", [0.06, -0.17, 0.26], [0.06, -0.19, 0.07]],
+    "Paw.L": ["Forearm.L", [0.06, -0.19, 0.07], [0.06, -0.25, 0.005]],
+    "Thigh.L": ["Hips", [0.065, 0.19, 0.42], [0.07, 0.14, 0.27]],
+    "Shin.L": ["Thigh.L", [0.07, 0.14, 0.27], [0.07, 0.23, 0.14]],
+    "Foot.L": ["Shin.L", [0.07, 0.23, 0.14], [0.072, 0.15, 0.005]]
+  },
+  "legs": {
+    "Fore.L": ["UpperArm.L", "Forearm.L", "Paw.L"],
+    "Hind.L": ["Thigh.L", "Shin.L", "Foot.L"]
+  },
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 4.0, "tail": 3 },
+    "Walk": { "kind": "gait", "cycle": 0.6, "stride": 0.26, "lift": 0.06, "duty": 0.62, "bob": 0.006,
+              "phases": { "Hind.L": 0.0, "Fore.L": 0.25, "Hind.R": 0.5, "Fore.R": 0.75 }, "tail": 3 },
+    "Run": { "kind": "gait", "cycle": 0.375, "stride": 0.36, "lift": 0.09, "duty": 0.36, "bob": 0.025, "flex": 12, "fold": 75,
+             "phases": { "Hind.L": 0.0, "Hind.R": 0.1, "Fore.R": 0.5, "Fore.L": 0.6 }, "tail": 5 },
+    "Eat": { "kind": "graze", "seconds": 3.0, "crouch": 0.05, "root": 4, "spine": 10, "neck": 70, "head": 25 },
+    "Death": { "kind": "death", "seconds": 1.0 }
+  }
+}

@@ -72,6 +72,12 @@ fn sounds_like(cue: Cue, stations: &Stations) -> Like {
         Cue::Made => Clips("made"),
         Cue::Snort => Made("snort", Sound::Snort, 0.38, 5.0),
         Cue::Hiss => Made("hiss", Sound::Hiss, 0.44, 5.0),
+        Cue::Chatter => Made("chatter", Sound::Chatter, 0.55, 4.0),
+        Cue::Chirp => Made("chirp", Sound::Chirp, 0.22, 3.0),
+        Cue::Quack => Made("quack", Sound::Quack, 0.34, 6.0),
+        Cue::Croak => Made("croak", Sound::Croak, 0.5, 8.0),
+        Cue::Bark => Made("bark", Sound::Bark, 0.4, 8.0),
+        Cue::Wings => Made("wings", Sound::Wings, 0.42, 4.0),
         Cue::Bell => Clips("bell"),
         Cue::Click => Clips("click"),
         Cue::Open => Clips("open"),
@@ -557,6 +563,12 @@ mod tests {
             Cue::Made,
             Cue::Snort,
             Cue::Hiss,
+            Cue::Chatter,
+            Cue::Chirp,
+            Cue::Quack,
+            Cue::Croak,
+            Cue::Bark,
+            Cue::Wings,
             Cue::Bell,
             Cue::Click,
             Cue::Open,
@@ -594,8 +606,14 @@ mod tests {
             Cue::Click => 27,
             Cue::Open => 28,
             Cue::Close => 29,
+            Cue::Chatter => 30,
+            Cue::Chirp => 31,
+            Cue::Quack => 32,
+            Cue::Croak => 33,
+            Cue::Bark => 34,
+            Cue::Wings => 35,
         };
-        let mut listed = [false; 30];
+        let mut listed = [false; 36];
         for &cue in &cues {
             listed[place(cue)] = true;
         }

@@ -1205,6 +1205,7 @@ fn plant(
     mut mossy: ResMut<Assets<floor::Mossy>>,
     mut mossy_scans: ResMut<floor::MossyScans>,
     mut far_forest: ResMut<Assets<far::FarForest>>,
+    mut trunks: ResMut<terra_world::flora::Trunks>,
     parting: Option<Res<terra_world::parting::Parting>>,
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
@@ -1555,6 +1556,12 @@ fn plant(
                 };
             let foot = place.translation;
             let crown = place.rotation * (model.crown.0 * place.scale);
+            trunks.add(terra_world::flora::Trunk {
+                foot,
+                radius_m: model.trunk_m * wide,
+                height_m: model.height * scale,
+                solid: true,
+            });
             canopy.add(Stand::of(
                 at,
                 at + Vec2::new(crown.dot(east), crown.dot(south)),

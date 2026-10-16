@@ -78,6 +78,7 @@ mod vitals;
 mod walker;
 mod warmth;
 mod wear;
+mod wildlife;
 mod work;
 mod worn;
 mod zones;
@@ -154,6 +155,7 @@ impl Plugin for GameplayPlugin {
         death::plugin(app);
         skills::plugin(app);
         creatures::plugin(app);
+        wildlife::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
         hits::plugin(app);

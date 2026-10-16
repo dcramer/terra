@@ -72,8 +72,50 @@ struct Lake {
     // The waves' trains (waves.rs `trains`): each one's wavenumber (radians a metre), angular
     // frequency (radians a second), the way it runs and its phase (radians), longest first.
     trains: array<vec4<f32>, TRAINS>,
+    // The rings spreading where fish rise (rises.rs): each where it is from `origin`, and
+    // when it began by the clock, none when 0.
+    rises: array<vec4<f32>, RISES>,
     // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
     over_air: u32,
+}
+
+const RISES: u32 = 8u;
+// How long a ring spreads before it is gone, seconds (rises.rs RING_S).
+const RING_S: f32 = 6.0;
+
+// The slopes of the rings where fish rise (rises.rs): each a ring spreading from where a
+// fish broke the surface, a hump of water at its front with fine crests behind it, smoothing
+// and fading as it widens, as a rise's rings do. The crests too fine for the pixel are left
+// out, the hump kept, so a far ring still shows as a band of the mirror bent.
+fn rise_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, t: f32, pixel: f32) -> vec2<f32> {
+    var slope = vec2<f32>(0.0);
+    for (var i = 0u; i < RISES; i += 1u) {
+        let ring = lake.rises[i];
+        let age = t - ring.w;
+        if ring.w <= 0.0 || age < 0.0 || age > RING_S {
+            continue;
+        }
+        let off = local - ring.xyz;
+        let flat = vec2<f32>(dot(off, east), dot(off, north));
+        let d = length(flat);
+        if d < 1e-3 {
+            continue;
+        }
+        // Its front spreads fast at first and slows; behind it the water settles.
+        let front = 0.08 + 0.42 * age - 0.025 * age * age;
+        let x = d - front;
+        let wide = 0.05 + 0.035 * age;
+        let hump = exp(-x * x / (2.0 * wide * wide));
+        let fading = exp(-0.55 * age) * (1.0 - smoothstep(RING_S * 0.7, RING_S, age));
+        // The hump's slope, and the crests trailing it, 9 cm apart.
+        let wavelength = 0.09;
+        let fine = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.6, pixel);
+        let crests = sin((x / wavelength) * 6.283) * exp(-max(-x, 0.0) / (3.0 * wavelength))
+            * step(x, wide) * fine;
+        let magnitude = 0.35 * fading * (-x / wide * hump + 0.6 * crests * hump);
+        slope += flat / d * magnitude;
+    }
+    return slope;
 }
 
 // The air all round the camera, as Bevy's atmosphere works it out each frame, unexposed: what
@@ -270,6 +312,7 @@ fn fragment(
     for (var i = 0u; i < TRAINS; i += 1u) {
         wave_train(&face, lake.trains[i], i < SWELL, bent, pixel, downwind, spread, slopes, t);
     }
+    face.slope += rise_slopes(local, east, north, t, pixel);
     let normal = normalize(up - east * face.slope.x - north * face.slope.y);
     pbr_input.world_normal = normal;
     pbr_input.N = normal;

@@ -5,7 +5,9 @@
 // Each:
 //   name     what it is called
 //   model    its model, and the scale from the model's size to ours
-//   clips    its animations by what they show; one to eat with if it grazes
+//   clips    its animations by what they show; one to eat with if it grazes, one to fly with
+//            if it flies; and its walk's and run's own paces in metres a second, if they
+//            have them, so each plays as fast as it goes
 //   health   out of how much
 //   walk_mps, run_mps   its speeds
 //   body     the room it takes up on the ground, and how hard it is to shove
@@ -15,7 +17,17 @@
 //                       leash_m of home; attacks within attacks_within_m; a bite of bite
 //                       lands bite_at_s into an attack lasting attack_s, on anyone still
 //                       within bite_reach_m
-//   lives    where it is put in a world: in a herd of so many, or so many at a lair
+//   refuge   where a shy one goes when it flees: Runs away (the default), Climbs the nearest
+//            trunk until nobody is near, or Flies(near, far) off to somewhere it keeps to
+//   lives    where it is put in a world: in a herd of so many, or so many at a lair, or
+//            About(per_ha, group): about the land wherever its niche is, so many to a hectare
+//            of it, in groups of so many (play::wildlife)
+//   niche    for one About: the growing season's mean warmth it takes, in °C, and the places
+//            it keeps to: Woods, Open, Shore, Water, Trodden
+//   moves    Walks (the default), Flies(metres a second) from place to place, or Swims(feet_m)
+//            afloat, its feet so far under the surface
+//   wades_m  how deep a water it walks into
+//   seen_m   how far off it is drawn
 //   pools    whether it forms where magic pools (D103)
 //   stride   how far a step carries, as so far and so much more for each metre a second
 //   feet     what its steps sound like
@@ -25,6 +37,9 @@
 //   lies_s   how long its body lies after it falls
 //   zones    where a blow can land (D119): around the model's joints whose names contain
 //            `joint`, out to radius_m; the head takes the most from a blow, the legs least
+//
+// The small animals' models are made by tools/creatures/animal.py from art/creatures/, which
+// prints each clip's pace.
 [
     (
         name: "Deer",
@@ -92,6 +107,266 @@
             (joint: "Thorax", part: Body, radius_m: 0.2),
             (joint: "Abdomen", part: Body, radius_m: 0.28),
             (joint: "Leg", part: Legs, radius_m: 0.05),
+        ],
+    ),
+    (
+        name: "Red squirrel",
+        model: ("models/creatures/Squirrel.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.165, 1.196)),
+        health: 2.0,
+        walk_mps: 0.3,
+        run_mps: 3.0,
+        body: (radius: 0.05, weight: 0.1),
+        temper: Shy(flees_within_m: 9.0, flees_s: 4.0),
+        refuge: Climbs,
+        lives: About(per_ha: 1.6, group: (1, 2)),
+        niche: (warmth_c: (7.0, 30.0), haunts: [Woods]),
+        seen_m: 45.0,
+        stride: (0.25, 0.05),
+        feet: Skitter,
+        voice: Chatter,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 1)]),
+        lies_s: 120.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.03),
+            (joint: "Chest", part: Body, radius_m: 0.04),
+            (joint: "Hips", part: Body, radius_m: 0.04),
+            (joint: "Thigh", part: Legs, radius_m: 0.02),
+        ],
+    ),
+    (
+        name: "Chaffinch",
+        model: ("models/creatures/Chaffinch.glb", 1.0),
+        clips: (idle: "Idle", walk: "Hop", run: "Hop", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.23, 0.23)),
+        health: 1.0,
+        walk_mps: 0.3,
+        run_mps: 0.5,
+        body: (radius: 0.03, weight: 0.02),
+        temper: Shy(flees_within_m: 9.0, flees_s: 2.0),
+        refuge: Flies(10.0, 30.0),
+        moves: Flies(8.0),
+        lives: About(per_ha: 3.0, group: (1, 3)),
+        niche: (warmth_c: (8.0, 30.0), haunts: [Woods]),
+        seen_m: 35.0,
+        stride: (2.0, 0.0),
+        feet: Skitter,
+        voice: Chirp,
+        blood: Red,
+        lies_s: 60.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.02),
+            (joint: "Body", part: Body, radius_m: 0.035),
+        ],
+    ),
+    (
+        name: "House sparrow",
+        model: ("models/creatures/Sparrow.glb", 1.0),
+        clips: (idle: "Idle", walk: "Hop", run: "Hop", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.227, 0.227)),
+        health: 1.0,
+        walk_mps: 0.3,
+        run_mps: 0.5,
+        body: (radius: 0.03, weight: 0.02),
+        temper: Shy(flees_within_m: 4.0, flees_s: 2.0),
+        refuge: Flies(8.0, 22.0),
+        moves: Flies(8.0),
+        lives: About(per_ha: 14.0, group: (3, 6)),
+        niche: (warmth_c: (5.0, 30.0), haunts: [Trodden]),
+        seen_m: 35.0,
+        stride: (2.0, 0.0),
+        feet: Skitter,
+        voice: Chirp,
+        blood: Red,
+        lies_s: 60.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.02),
+            (joint: "Body", part: Body, radius_m: 0.035),
+        ],
+    ),
+    (
+        name: "Brown hare",
+        model: ("models/creatures/Hare.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.446, 1.825)),
+        health: 5.0,
+        walk_mps: 0.6,
+        run_mps: 4.5,
+        body: (radius: 0.12, weight: 0.3),
+        temper: Shy(flees_within_m: 20.0, flees_s: 4.0),
+        lives: About(per_ha: 1.0, group: (1, 2)),
+        niche: (warmth_c: (9.0, 30.0), haunts: [Open, Woods]),
+        seen_m: 90.0,
+        stride: (0.4, 0.1),
+        feet: Skitter,
+        voice: Silent,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 2), ("Hide", 1)]),
+        lies_s: 200.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.06),
+            (joint: "Chest", part: Body, radius_m: 0.09),
+            (joint: "Spine", part: Body, radius_m: 0.09),
+            (joint: "Hips", part: Body, radius_m: 0.09),
+            (joint: "Thigh", part: Legs, radius_m: 0.04),
+            (joint: "Arm", part: Legs, radius_m: 0.03),
+        ],
+    ),
+    (
+        name: "Mountain hare",
+        model: ("models/creatures/MountainHare.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.411, 1.684)),
+        health: 5.0,
+        walk_mps: 0.55,
+        run_mps: 4.2,
+        body: (radius: 0.11, weight: 0.3),
+        temper: Shy(flees_within_m: 12.0, flees_s: 4.0),
+        lives: About(per_ha: 1.2, group: (1, 2)),
+        niche: (warmth_c: (-6.0, 7.5), haunts: [Open]),
+        seen_m: 90.0,
+        stride: (0.4, 0.1),
+        feet: Skitter,
+        voice: Silent,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 2), ("Hide", 1)]),
+        lies_s: 200.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.06),
+            (joint: "Chest", part: Body, radius_m: 0.09),
+            (joint: "Spine", part: Body, radius_m: 0.09),
+            (joint: "Hips", part: Body, radius_m: 0.09),
+            (joint: "Thigh", part: Legs, radius_m: 0.04),
+            (joint: "Arm", part: Legs, radius_m: 0.03),
+        ],
+    ),
+    (
+        name: "Red fox",
+        model: ("models/creatures/Fox.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.633, 2.347)),
+        health: 10.0,
+        walk_mps: 0.9,
+        run_mps: 5.5,
+        body: (radius: 0.15, weight: 0.6),
+        temper: Shy(flees_within_m: 20.0, flees_s: 5.0),
+        lives: About(per_ha: 0.35, group: (1, 1)),
+        niche: (warmth_c: (7.0, 30.0), haunts: [Woods, Open]),
+        seen_m: 110.0,
+        stride: (0.45, 0.12),
+        feet: Skitter,
+        voice: Bark,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 1), ("Hide", 1)]),
+        lies_s: 240.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.08),
+            (joint: "Chest", part: Body, radius_m: 0.11),
+            (joint: "Spine", part: Body, radius_m: 0.11),
+            (joint: "Hips", part: Body, radius_m: 0.1),
+            (joint: "Thigh", part: Legs, radius_m: 0.04),
+            (joint: "Arm", part: Legs, radius_m: 0.03),
+        ],
+    ),
+    (
+        name: "Arctic fox",
+        model: ("models/creatures/ArcticFox.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.561, 2.08)),
+        health: 9.0,
+        walk_mps: 0.8,
+        run_mps: 5.0,
+        body: (radius: 0.14, weight: 0.5),
+        temper: Shy(flees_within_m: 16.0, flees_s: 5.0),
+        lives: About(per_ha: 0.3, group: (1, 1)),
+        niche: (warmth_c: (-6.0, 7.0), haunts: [Open]),
+        seen_m: 110.0,
+        stride: (0.45, 0.12),
+        feet: Skitter,
+        voice: Bark,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 1), ("Hide", 1)]),
+        lies_s: 240.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.07),
+            (joint: "Chest", part: Body, radius_m: 0.1),
+            (joint: "Spine", part: Body, radius_m: 0.1),
+            (joint: "Hips", part: Body, radius_m: 0.09),
+            (joint: "Thigh", part: Legs, radius_m: 0.04),
+            (joint: "Arm", part: Legs, radius_m: 0.03),
+        ],
+    ),
+    (
+        name: "Mallard",
+        model: ("models/creatures/Mallard.glb", 1.0),
+        clips: (idle: "Float", walk: "Swim", run: "Swim", eat: "Dabble", attack: "Float", death: "Death", fly: "Fly"),
+        health: 3.0,
+        walk_mps: 0.35,
+        run_mps: 1.2,
+        body: (radius: 0.15, weight: 0.3),
+        temper: Shy(flees_within_m: 12.0, flees_s: 6.0),
+        moves: Swims(0.1),
+        lives: About(per_ha: 4.0, group: (2, 5)),
+        niche: (warmth_c: (6.0, 30.0), haunts: [Water]),
+        seen_m: 120.0,
+        stride: (2.0, 0.0),
+        feet: Water,
+        voice: Quack,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 2)]),
+        lies_s: 200.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.05),
+            (joint: "Neck", part: Body, radius_m: 0.04),
+            (joint: "Body", part: Body, radius_m: 0.13),
+        ],
+    ),
+    (
+        name: "Grey heron",
+        model: ("models/creatures/Heron.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Walk", eat: "Strike", attack: "Strike", death: "Death", fly: "Fly", paces: (0.217, 0.217)),
+        health: 6.0,
+        walk_mps: 0.22,
+        run_mps: 0.6,
+        body: (radius: 0.15, weight: 0.5),
+        temper: Shy(flees_within_m: 25.0, flees_s: 3.0),
+        refuge: Flies(50.0, 110.0),
+        moves: Flies(8.5),
+        wades_m: 0.35,
+        lives: About(per_ha: 3.0, group: (1, 1)),
+        niche: (warmth_c: (8.0, 30.0), haunts: [Shore]),
+        seen_m: 160.0,
+        stride: (0.4, 0.0),
+        feet: Water,
+        voice: Croak,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 1)]),
+        lies_s: 200.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.06),
+            (joint: "Neck", part: Body, radius_m: 0.05),
+            (joint: "Body", part: Body, radius_m: 0.15),
+            (joint: "Shank", part: Legs, radius_m: 0.03),
+        ],
+    ),
+    (
+        name: "Ptarmigan",
+        model: ("models/creatures/Ptarmigan.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.208, 0.74)),
+        health: 2.0,
+        walk_mps: 0.3,
+        run_mps: 1.5,
+        body: (radius: 0.1, weight: 0.2),
+        temper: Shy(flees_within_m: 8.0, flees_s: 2.0),
+        refuge: Flies(25.0, 60.0),
+        moves: Flies(12.0),
+        lives: About(per_ha: 2.0, group: (2, 4)),
+        niche: (warmth_c: (-6.0, 7.5), haunts: [Open]),
+        seen_m: 70.0,
+        stride: (2.0, 0.0),
+        feet: Skitter,
+        voice: Croak,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 1)]),
+        lies_s: 200.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.04),
+            (joint: "Body", part: Body, radius_m: 0.1),
         ],
     ),
 ]

@@ -1,0 +1,36 @@
+{
+  "subject": "male common chaffinch, a small European songbird: rosy breast and cheeks, blue-grey crown, chestnut back, black wings with two white bars, made with its wings spread so they can be folded and beaten",
+  "file": "Chaffinch",
+  "plan": "bird",
+  "tripo_project": "28a9220f-3bb9-469b-9226-ceaa5ca7674d",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": { "model": 30 },
+  "turn": 0,
+  "scale": 0.157,
+  "budget": 1600,
+  "textures": { "colour": 512, "normal": 512, "roughness_metal": 256 },
+  "bones": {
+    "Body": [null, [0, -0.05, 0.22], [0, -0.18, 0.42]],
+    "Neck1": ["Body", [0, -0.18, 0.42], [0, -0.25, 0.50]],
+    "Head": ["Neck1", [0, -0.25, 0.50], [0, -0.47, 0.51]],
+    "Tail": ["Body", [0, 0.05, 0.25], [0, 0.45, 0.06]],
+    "Humerus.L": ["Body", [0.07, -0.12, 0.47], [0.18, -0.08, 0.60]],
+    "Forearm.L": ["Humerus.L", [0.18, -0.08, 0.60], [0.30, -0.05, 0.73]],
+    "Hand.L": ["Forearm.L", [0.30, -0.05, 0.73], [0.48, 0.0, 0.90]],
+    "Thigh.L": ["Body", [0.05, -0.08, 0.27], [0.055, -0.02, 0.22]],
+    "Shank.L": ["Thigh.L", [0.055, -0.02, 0.22], [0.06, -0.05, 0.12]],
+    "Tarsus.L": ["Shank.L", [0.06, -0.05, 0.12], [0.08, -0.10, 0.015]],
+    "Toes.L": ["Tarsus.L", [0.08, -0.10, 0.015], [0.08, -0.20, 0.005]]
+  },
+  "legs": {
+    "Leg.L": ["Thigh.L", "Shank.L", "Tarsus.L", "Toes.L"]
+  },
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 3.0 },
+    "Hop": { "kind": "gait", "cycle": 0.33, "stride": 0.22, "lift": 0.12, "duty": 0.45, "bob": 0.02, "peel": 15, "fold": 20, "nod": 4,
+             "phases": { "Leg.L": 0.0, "Leg.R": 0.0 } },
+    "Peck": { "kind": "graze", "seconds": 1.5, "neck": 40, "head": -20, "body": 35 },
+    "Fly": { "kind": "fly", "cycle": 1.0, "beats": 3, "flapping": 0.55, "bound": true, "up": -15, "down": 70, "body": 50, "neck": -30, "head": -10, "tuck": [-40, 100, -60] },
+    "Death": { "kind": "death", "seconds": 0.8, "lie": 0.3 }
+  }
+}

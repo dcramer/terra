@@ -18,9 +18,10 @@ use super::kinds::CutSkill;
 use super::lod::Detail;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
-use super::species::{Bestiary, Lives, Temper};
+use super::species::{Bestiary, Lives, Moves, Refuge, SpeciesDef, Temper};
 use super::tick::{Sim, Smoothed, Ticks};
 use super::told::Told;
+use super::wildlife::Surroundings;
 use super::{Downed, Player};
 use crate::loading::Loading;
 use crate::planet::Planet;
@@ -32,6 +33,7 @@ use bevy::{
 };
 use std::time::Duration;
 use terra_gen::{Rng, Seed};
+use terra_world::flora::Trunk;
 
 const BLEND: Duration = Duration::from_millis(200);
 /// How far off a creature notices a player, or keeps track of one it chases.
@@ -50,6 +52,27 @@ pub enum State {
     Return,
     /// Dead, and for how long.
     Dead(f32),
+    /// On the wing from one place to another, so far along the way (0 to 1).
+    Fly {
+        from: Vec3,
+        to: Vec3,
+        along: f32,
+    },
+    /// To a trunk and up it to so high, or down it to the ground.
+    Climb {
+        trunk: Trunk,
+        height: f32,
+    },
+    /// Holding still up a trunk, for at least so long more.
+    Perch {
+        trunk: Trunk,
+        left: f32,
+    },
+    /// Sitting up in a crown, a flier, for so long more.
+    Roost {
+        at: Vec3,
+        left: f32,
+    },
 }
 
 #[derive(Component)]
@@ -64,6 +87,9 @@ pub struct Creature {
     pub hurt: bool,
     /// The player it is chasing, biting or running from, if any.
     quarry: Option<Entity>,
+    /// How high up a trunk it is, and which way from the trunk it clings.
+    aloft: f32,
+    side: Vec3,
 }
 
 impl Creature {
@@ -100,6 +126,8 @@ impl Creature {
             facing: Vec3::X,
             hurt: false,
             quarry: None,
+            aloft: 0.0,
+            side: Vec3::X,
         }
     }
 }
@@ -113,9 +141,16 @@ pub struct Bitten {
 
 /// The animations of each species, ready to play.
 #[derive(Resource)]
-struct Kinds {
+pub(super) struct Kinds {
     models: Vec<(Species, Handle<Gltf>)>,
     ready: Vec<(Species, Handle<WorldAsset>, Handle<AnimationGraph>, Clips)>,
+}
+
+impl Kinds {
+    /// Whether every kind's model is in and its clips ready to play.
+    pub(super) fn ready(&self) -> bool {
+        !self.ready.is_empty()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +161,7 @@ struct Clips {
     eat: AnimationNodeIndex,
     attack: AnimationNodeIndex,
     death: AnimationNodeIndex,
+    fly: AnimationNodeIndex,
 }
 
 /// On a creature's animation player: whose it is, and what it plays.
@@ -155,11 +191,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                // The yard, the flat test level, has no creatures, and so no lair and
-                // no village beside it.
-                prepare
-                    .run_if(not(resource_exists::<Populated>))
-                    .run_if(crate::shell::in_the_world),
+                prepare.run_if(not(resource_exists::<Populated>)),
                 animate,
                 form.run_if(resource_exists::<Populated>),
             ),
@@ -205,6 +237,7 @@ fn prepare(
     bestiary: Res<Bestiary>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut dice: ResMut<Dice>,
+    options: Res<crate::shell::Options>,
 ) {
     if kinds
         .models
@@ -229,6 +262,7 @@ fn prepare(
             about.eat.as_ref().unwrap_or(&about.idle),
             &about.attack,
             &about.death,
+            about.fly.as_ref().unwrap_or(&about.run),
         ];
         let Some(clips) = names
             .iter()
@@ -250,10 +284,17 @@ fn prepare(
                 eat: nodes[3],
                 attack: nodes[4],
                 death: nodes[5],
+                fly: nodes[6],
             },
         ));
     }
     kinds.ready = ready;
+    // The yard, the flat test level, has no herds, and so no lair and no village beside it;
+    // a forest grown on it has its wildlife all the same (`wildlife`).
+    if options.yard() {
+        commands.insert_resource(Populated);
+        return;
+    }
 
     // Herds in the meadow, and those that keep a lair in a hollow further off, each as
     // many as its kind says.
@@ -351,18 +392,19 @@ fn form(
     }
 }
 
-fn spawn(
+/// Puts out a creature of a kind on the ground at a place, once its kind's model is ready.
+pub(super) fn spawn(
     commands: &mut Commands,
     (kinds, bestiary): (&Kinds, &Bestiary),
     planet: &Planet,
     species: Species,
     at: Vec3,
-) {
-    let Some((_, scene, graph, clips)) = kinds.ready.iter().find(|(each, ..)| *each == species)
-    else {
-        return;
-    };
+) -> Option<Entity> {
+    let (_, scene, graph, clips) = kinds.ready.iter().find(|(each, ..)| *each == species)?;
     let about = bestiary.get(species);
+    // Drawn as far as something its size is seen: a songbird some tens of metres, a heron
+    // across a lake (VisibilityRange, Bevy's distance culling, on each of its meshes).
+    let seen_m = about.seen_m();
     let feet = planet.ground_at(at);
     let up = feet.normalize();
     let facing = up.any_orthonormal_vector();
@@ -377,6 +419,8 @@ fn spawn(
                 facing,
                 hurt: false,
                 quarry: None,
+                aloft: 0.0,
+                side: Vec3::X,
             },
             bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
@@ -396,7 +440,20 @@ fn spawn(
             move |ready: On<WorldInstanceReady>,
                   mut commands: Commands,
                   children: Query<&Children>,
-                  players: Query<(), With<AnimationPlayer>>| {
+                  players: Query<(), With<AnimationPlayer>>,
+                  meshes: Query<(), With<Mesh3d>>| {
+                for mesh in children
+                    .iter_descendants(ready.entity)
+                    .filter(|&child| meshes.contains(child))
+                {
+                    commands
+                        .entity(mesh)
+                        .insert(bevy::camera::visibility::VisibilityRange {
+                            start_margin: 0.0..0.0,
+                            end_margin: seen_m..seen_m + 4.0,
+                            use_aabb: false,
+                        });
+                }
                 let Some(animator) = children
                     .iter_descendants(ready.entity)
                     .find(|&child| players.contains(child))
@@ -414,13 +471,16 @@ fn spawn(
                 ));
             },
         );
+    Some(creature)
 }
 
 /// Decides what each creature does next.
+#[allow(clippy::too_many_arguments)]
 fn think(
     time: Res<Time>,
     ticks: Res<Ticks>,
     bestiary: Res<Bestiary>,
+    around: Surroundings,
     players: Query<(Entity, &Transform), (With<Player>, Without<Downed>)>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
     mut bitten: MessageWriter<Bitten>,
@@ -437,15 +497,86 @@ fn think(
             continue;
         };
         let here = at.translation;
-        let (quarry, apart) = nearest(&awake, here).unzip();
+        let nearest_player = nearest(&awake, here);
+        let (quarry, apart) = nearest_player.unzip();
         creature.quarry = quarry;
         let player_up = quarry.is_some();
         let apart = apart.unwrap_or(f32::INFINITY);
         let from_home = (here - creature.home).length();
         let about = bestiary.get(creature.species);
         let temper = about.temper;
+        let away = nearest_player
+            .and_then(|(player, _)| players.get(player).ok())
+            .map(|(_, p)| {
+                (here - p.translation)
+                    .reject_from(here.normalize())
+                    .normalize_or_zero()
+            });
         let next = match (temper, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
+            // Gone where it went to be safe, it stays there while it plays out.
+            (_, State::Fly { from, to, along }) if along < 1.0 => State::Fly { from, to, along },
+            (_, State::Fly { to, .. }) => {
+                let ground = around.ground(to);
+                creature.home = ground;
+                if to.length() - ground.length() > ROOSTS_OVER_M {
+                    // Into a crown: it sits there a while among the leaves.
+                    State::Roost {
+                        at: to,
+                        left: dice.0.range(4.0, 16.0),
+                    }
+                } else {
+                    State::Idle(dice.0.range(1.0, 3.0))
+                }
+            }
+            (_, State::Roost { at, left }) if left > 0.0 => State::Roost {
+                at,
+                left: left - dt,
+            },
+            (_, State::Roost { .. }) => {
+                // Down to the ground again, or across to another crown.
+                let up = here.normalize();
+                let turn = Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU));
+                let way = turn * up.any_orthonormal_vector();
+                let crown = if dice.0.unit() < 0.5 {
+                    crown(here, way, (6.0, 25.0), &around, &mut dice.0)
+                } else {
+                    None
+                };
+                crown
+                    .or_else(|| flight(about, here, way, (4.0, 14.0), &around, &mut dice.0))
+                    .unwrap_or(State::Roost {
+                        at: here,
+                        left: 3.0,
+                    })
+            }
+            (Temper::Shy { flees_within_m, .. }, State::Perch { trunk, left }) => {
+                if player_up && apart < flees_within_m * 1.6 {
+                    State::Perch {
+                        trunk,
+                        left: left.max(2.0),
+                    }
+                } else if left > 0.0 {
+                    State::Perch {
+                        trunk,
+                        left: left - dt,
+                    }
+                } else {
+                    State::Climb { trunk, height: 0.0 }
+                }
+            }
+            (_, State::Climb { trunk, height }) => {
+                if height > 0.0 && creature.aloft >= height - 0.05 {
+                    State::Perch {
+                        trunk,
+                        left: dice.0.range(6.0, 14.0),
+                    }
+                } else if height <= 0.0 && creature.aloft <= 0.0 {
+                    State::Idle(dice.0.range(1.0, 3.0))
+                } else {
+                    State::Climb { trunk, height }
+                }
+            }
             (Temper::Shy { .. }, State::Flee(left)) if left > 0.0 => State::Flee(left - dt),
             (
                 Temper::Shy {
@@ -455,7 +586,8 @@ fn think(
                 _,
             ) if creature.hurt || (apart < flees_within_m && player_up) => {
                 creature.hurt = false;
-                State::Flee(flees_s)
+                let away = away.unwrap_or(creature.facing);
+                refuge(about, here, away, &around, &mut dice.0).unwrap_or(State::Flee(flees_s))
             }
             (
                 Temper::Hostile {
@@ -505,7 +637,8 @@ fn think(
             (_, State::Graze(left)) if left > 0.0 => State::Graze(left - dt),
             (_, State::Wander(to)) if (to - here).length() > 1.0 => State::Wander(to),
             _ => {
-                // Rest a while, graze if it can, or wander somewhere near home.
+                // Rest a while, graze if it can, or wander somewhere near home; one that flies
+                // flits to its next place rather than walking far.
                 let roll = dice.0.unit();
                 if roll < 0.4 {
                     State::Idle(dice.0.range(2.0, 5.0))
@@ -514,18 +647,148 @@ fn think(
                 } else {
                     let up = creature.home.normalize();
                     let turn = Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU));
-                    State::Wander(
-                        creature.home
-                            + turn * up.any_orthonormal_vector() * dice.0.range(2.0, 12.0),
-                    )
+                    let way = turn * up.any_orthonormal_vector();
+                    match about.moves {
+                        // Up into a crown now and then, among trees.
+                        Moves::Flies(_) if dice.0.unit() < 0.2 => {
+                            crown(here, way, (5.0, 20.0), &around, &mut dice.0)
+                                .unwrap_or(State::Idle(1.0))
+                        }
+                        Moves::Flies(_) if dice.0.unit() < 0.5 => {
+                            flight(about, here, way, (4.0, 14.0), &around, &mut dice.0)
+                                .unwrap_or(State::Idle(1.0))
+                        }
+                        Moves::Flies(_) => {
+                            State::Wander(creature.home + way * dice.0.range(0.8, 3.0))
+                        }
+                        _ => State::Wander(creature.home + way * dice.0.range(2.0, 12.0)),
+                    }
                 }
             }
         };
         if bestiary.hostile(creature.species) && !matches!(next, State::Chase | State::Attack(_)) {
             creature.hurt = false;
         }
+        if std::mem::discriminant(&next) != std::mem::discriminant(&creature.state) {
+            debug!(
+                "{} {:?} -> {:?}, the nearest player {:.1} m off",
+                bestiary.name(creature.species),
+                creature.state,
+                next,
+                apart
+            );
+        }
         creature.state = next;
     }
+}
+
+/// Where a shy creature goes when it is startled, by its kind's refuge: up the nearest trunk,
+/// away on the wing, or none, for one that runs.
+fn refuge(
+    about: &SpeciesDef,
+    here: Vec3,
+    away: Vec3,
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    match about.refuge {
+        Refuge::Runs => None,
+        Refuge::Climbs => {
+            let up = here.normalize();
+            around
+                .trunks(here, CLIMB_REACH_M)
+                .min_by(|a, b| {
+                    let apart = |t: &Trunk| (t.foot - here).reject_from(up).length();
+                    apart(a).total_cmp(&apart(b))
+                })
+                .map(|trunk| State::Climb {
+                    trunk,
+                    height: (trunk.height_m * dice.range(0.3, 0.55)).clamp(2.0, 9.0),
+                })
+        }
+        // Among trees a startled bird as often as not goes up into a crown.
+        Refuge::Flies(near, far) => {
+            let up_a_tree = if dice.unit() < 0.5 {
+                crown(here, away, (near * 0.6, far), around, dice)
+            } else {
+                None
+            };
+            up_a_tree.or_else(|| flight(about, here, away, (near, far), around, dice))
+        }
+    }
+}
+
+/// A flier is in a crown once it is so far over the ground.
+const ROOSTS_OVER_M: f32 = 1.5;
+
+/// A flight up into the crown of a tree roughly the way given, within so far: out from its
+/// trunk, two thirds of the way up it, where its branches are.
+fn crown(
+    here: Vec3,
+    way: Vec3,
+    (near, far): (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let up = here.normalize();
+    let trunk = around
+        .trunks(here, far)
+        .filter(|trunk| trunk.height_m > 6.0)
+        .filter(|trunk| {
+            let off = (trunk.foot - here).reject_from(up);
+            off.length() >= near && off.normalize_or_zero().dot(way) > -0.2
+        })
+        .max_by(|a, b| {
+            let lean = |t: &Trunk| (t.foot - here).reject_from(up).normalize_or_zero().dot(way);
+            lean(a).total_cmp(&lean(b))
+        })?;
+    let foot_up = trunk.foot.normalize();
+    let turn = Quat::from_axis_angle(foot_up, dice.range(0.0, std::f32::consts::TAU));
+    let side = turn * foot_up.any_orthonormal_vector();
+    let to = trunk.foot
+        + foot_up * trunk.height_m * dice.range(0.5, 0.75)
+        + side * (trunk.radius_m + dice.range(0.6, 2.2));
+    Some(State::Fly {
+        from: here,
+        to,
+        along: 0.0,
+    })
+}
+
+/// A flight from here to somewhere it keeps to, roughly the way given and within so far: the
+/// first of a few tries that lands where its niche is, or else as dry or wet as it lives.
+fn flight(
+    about: &SpeciesDef,
+    here: Vec3,
+    way: Vec3,
+    (near, far): (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let up = here.normalize();
+    let mut fallback = None;
+    for _ in 0..6 {
+        let turn = Quat::from_axis_angle(up, dice.range(-0.7, 0.7));
+        let to = around.ground(here + turn * way * dice.range(near, far));
+        let wet = matches!(about.moves, Moves::Swims(_));
+        if (around.depth_m(to) > 0.4) != wet {
+            continue;
+        }
+        let state = State::Fly {
+            from: here,
+            to,
+            along: 0.0,
+        };
+        if about
+            .niche
+            .as_ref()
+            .is_none_or(|niche| around.fits(niche, to))
+        {
+            return Some(state);
+        }
+        fallback.get_or_insert(state);
+    }
+    fallback
 }
 
 /// The nearest awake player a creature at a place can sense, and how far off across the
@@ -539,7 +802,14 @@ fn nearest(awake: &SpatialHash<Entity>, here: Vec3) -> Option<(Entity, f32)> {
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-/// Moves each creature over the ground by what it is doing.
+/// How far a startled climber looks for a trunk, and how fast it goes up one.
+const CLIMB_REACH_M: f32 = 14.0;
+const CLIMB_MPS: f32 = 2.2;
+/// How far from a trunk's bark a climber's middle is.
+const CLINGS_M: f32 = 0.06;
+
+/// Moves each creature by what it is doing: over the ground, afloat, on the wing or up a
+/// trunk.
 fn walk(
     time: Res<Time>,
     bestiary: Res<Bestiary>,
@@ -556,6 +826,84 @@ fn walk(
         let up = here.normalize();
         let about = bestiary.get(creature.species);
         let toward = |point: Vec3| (point - here).reject_from(up).normalize_or_zero();
+        let scale = at.scale;
+        match creature.state {
+            State::Fly { from, to, along } => {
+                let speed = match about.moves {
+                    Moves::Flies(mps) => mps,
+                    _ => about.run_mps,
+                };
+                let length = (to - from).length().max(0.5);
+                let along = (along + speed * dt / length).min(1.0);
+                // Up off the ground and down onto it again, as high over the way as a tenth of
+                // its length and never lower than the ground.
+                let s = along;
+                let lift = (length * 0.12).clamp(1.5, 14.0) * libm::sinf(std::f32::consts::PI * s);
+                let line = from.lerp(to, s);
+                let ground = planet.ground_at(line);
+                let high = (line.length() + lift)
+                    .max(ground.length() + 0.4 * libm::sinf(std::f32::consts::PI * s));
+                let point = line.normalize() * high;
+                let ahead = (to - from)
+                    .reject_from(point.normalize())
+                    .normalize_or(creature.facing);
+                creature.facing = ahead;
+                creature.state = State::Fly { from, to, along };
+                *at = Transform::from_translation(point)
+                    .looking_to(ahead, point.normalize())
+                    .with_scale(scale);
+                continue;
+            }
+            State::Climb { trunk, height } => {
+                let foot_up = trunk.foot.normalize();
+                let off = (here - trunk.foot).reject_from(foot_up);
+                let at_trunk = off.length() <= trunk.radius_m + CLINGS_M + 0.25;
+                if creature.aloft <= 0.0 && !at_trunk && height > 0.0 {
+                    // Across the ground to its foot first.
+                    let way = toward(trunk.foot);
+                    creature.facing = way;
+                    let next = planet.ground_at(here + way * about.run_mps * dt);
+                    *at = Transform::from_translation(next)
+                        .looking_to(way, next.normalize())
+                        .with_scale(scale);
+                    continue;
+                }
+                if creature.aloft <= 0.0 && height > 0.0 {
+                    creature.side = off.normalize_or(-creature.facing);
+                }
+                let climb = CLIMB_MPS * dt;
+                creature.aloft = if height > creature.aloft {
+                    (creature.aloft + climb).min(height)
+                } else {
+                    (creature.aloft - climb).max(0.0)
+                };
+                let going_up = height > creature.aloft || height > 0.0;
+                cling(&mut at, &creature, trunk, going_up);
+                if creature.aloft <= 0.0 && height <= 0.0 {
+                    // Down: on the ground again, facing away from the trunk.
+                    let ground =
+                        planet.ground_at(trunk.foot + creature.side * (trunk.radius_m + 0.3));
+                    creature.facing = creature.side;
+                    *at = Transform::from_translation(ground)
+                        .looking_to(creature.side, ground.normalize())
+                        .with_scale(scale);
+                }
+                continue;
+            }
+            State::Perch { trunk, .. } => {
+                cling(&mut at, &creature, trunk, true);
+                continue;
+            }
+            State::Roost { at: sits, .. } => {
+                if at.translation != sits {
+                    *at = Transform::from_translation(sits)
+                        .looking_to(creature.facing, sits.normalize())
+                        .with_scale(scale);
+                }
+                continue;
+            }
+            _ => {}
+        }
         let quarry = creature
             .quarry
             .and_then(|player| players.get(player).ok())
@@ -581,23 +929,54 @@ fn walk(
                 .normalize_or(direction);
         }
         let mut next = here + direction * speed * dt;
-        // Creatures keep out of the water.
-        let ground = planet.ground_at(next);
-        if ground.length() < planet.sea_radius_m() + 0.2 {
+        // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it.
+        let depth = |point: Vec3| planet.water_radius_m(point) - planet.ground_at(point).length();
+        let swims = matches!(about.moves, Moves::Swims(_));
+        let kept = if swims {
+            depth(next) > 0.3
+        } else if about.wades_m > 0.0 {
+            depth(next) < about.wades_m
+        } else {
+            depth(next) < -0.2
+        };
+        if !kept {
             next = here;
             if let State::Wander(_) = creature.state {
                 creature.state = State::Idle(1.0);
             }
         }
-        let ground = planet.ground_at(next);
-        *at = Transform::from_translation(ground)
-            .looking_to(creature.facing, ground.normalize())
-            .with_scale(at.scale);
+        let place = match about.moves {
+            // Afloat: on the water's surface, its feet under it.
+            Moves::Swims(feet_m) if depth(next) > 0.0 => {
+                next.normalize() * (planet.water_radius_m(next) - feet_m)
+            }
+            _ => planet.ground_at(next),
+        };
+        creature.aloft = 0.0;
+        *at = Transform::from_translation(place)
+            .looking_to(creature.facing, place.normalize())
+            .with_scale(scale);
     }
 }
 
-/// Plays the animation that fits what each creature is doing.
+/// A climber on a trunk at its height, belly to the bark, head up or down it.
+fn cling(at: &mut Transform, creature: &Creature, trunk: Trunk, head_up: bool) {
+    let up = trunk.foot.normalize();
+    let side = creature
+        .side
+        .reject_from(up)
+        .normalize_or(up.any_orthonormal_vector());
+    let point = trunk.foot + up * creature.aloft + side * (trunk.radius_m + CLINGS_M);
+    let along = if head_up { up } else { -up };
+    *at = Transform::from_translation(point)
+        .looking_to(along, side)
+        .with_scale(at.scale);
+}
+
+/// Plays the animation that fits what each creature is doing, its walk and run as fast as it
+/// goes over the clip's own pace, so its feet keep to the ground.
 fn animate(
+    bestiary: Res<Bestiary>,
     creatures: Query<&Creature>,
     mut animators: Query<(
         &mut Animates,
@@ -609,22 +988,33 @@ fn animate(
         let Ok(creature) = creatures.get(animates.creature) else {
             continue;
         };
+        let about = bestiary.get(creature.species);
         let clips = animates.clips;
-        let wanted = match creature.state {
-            State::Idle(_) => clips.idle,
-            State::Graze(_) => clips.eat,
-            State::Wander(_) | State::Return => clips.walk,
-            State::Flee(_) | State::Chase => clips.run,
-            State::Attack(_) => clips.attack,
-            State::Dead(_) => clips.death,
+        let paces = about.clips.paces;
+        let rate = |speed: f32, pace: Option<f32>| {
+            pace.map_or(1.0, |pace| (speed / pace.max(0.05)).clamp(0.4, 2.5))
         };
-        if animates.playing == Some(wanted) {
-            continue;
+        let (wanted, speed) = match creature.state {
+            State::Idle(_) | State::Perch { .. } | State::Roost { .. } => (clips.idle, 1.0),
+            State::Graze(_) => (clips.eat, 1.0),
+            State::Wander(_) | State::Return => {
+                (clips.walk, rate(about.walk_mps, paces.map(|p| p.0)))
+            }
+            State::Flee(_) | State::Chase => (clips.run, rate(about.run_mps, paces.map(|p| p.1))),
+            State::Climb { .. } => (clips.run, 1.0),
+            State::Fly { .. } => (clips.fly, 1.0),
+            State::Attack(_) => (clips.attack, 1.0),
+            State::Dead(_) => (clips.death, 1.0),
+        };
+        if animates.playing != Some(wanted) {
+            animates.playing = Some(wanted);
+            let playing = transitions.play(&mut player, wanted, BLEND);
+            if !matches!(creature.state, State::Dead(_) | State::Attack(_)) {
+                playing.repeat();
+            }
         }
-        animates.playing = Some(wanted);
-        let playing = transitions.play(&mut player, wanted, BLEND);
-        if !matches!(creature.state, State::Dead(_) | State::Attack(_)) {
-            playing.repeat();
+        if let Some(active) = player.animation_mut(wanted) {
+            active.set_speed(speed);
         }
     }
 }
@@ -732,6 +1122,8 @@ mod tests {
             facing: Vec3::X,
             hurt: false,
             quarry: None,
+            aloft: 0.0,
+            side: Vec3::X,
         };
         assert!(creature.unaware());
         creature.state = State::Flee(2.0);
@@ -752,6 +1144,8 @@ mod tests {
                     facing: Vec3::X,
                     hurt: false,
                     quarry: None,
+                    aloft: 0.0,
+                    side: Vec3::X,
                 },
                 Transform::from_translation(at),
             ))
@@ -765,6 +1159,15 @@ mod tests {
         world.insert_resource(Dice(Seed(1).derive("test").rng()));
         world.insert_resource(Bestiary::read(&Default::default()));
         world.init_resource::<Ticks>();
+        // What a creature asks of the world round it: the ground, its trees.
+        let planet = Planet::smooth(terra_core::PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        world.insert_resource(Start::choose(&planet, true));
+        world.insert_resource(planet);
+        world.init_resource::<terra_world::flora::Trunks>();
+        world.init_resource::<terra_world::flora::Obstacles>();
         world
     }
 
@@ -929,5 +1332,179 @@ mod tests {
         world.get_mut::<Creature>(spider).unwrap().hurt = true;
         world.run_system_once(think).unwrap();
         assert_eq!(state(&world, spider), State::Chase);
+    }
+
+    /// One of a kind, named, resting at home.
+    fn kind(world: &mut World, name: &str, home: Vec3) -> Entity {
+        let species = world.resource::<Bestiary>().named(name).unwrap();
+        world
+            .spawn((
+                Creature::resting(species, 2.0, home),
+                Transform::from_translation(home),
+            ))
+            .id()
+    }
+
+    #[test]
+    fn a_climber_startled_goes_up_the_nearest_trunk_and_down_once_nobody_is_near() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let near = Trunk {
+            foot: ground + Vec3::X * 3.0,
+            radius_m: 0.3,
+            height_m: 20.0,
+            solid: false,
+        };
+        let far = Trunk {
+            foot: ground + Vec3::NEG_X * 9.0,
+            ..near
+        };
+        let mut trunks = world.resource_mut::<terra_world::flora::Trunks>();
+        trunks.add(near);
+        trunks.add(far);
+        let squirrel = kind(&mut world, "Red squirrel", ground);
+        let player = test_player(&mut world, ground + Vec3::Z * 3.0);
+        world.run_system_once(think).unwrap();
+        let State::Climb { trunk, height } = state(&world, squirrel) else {
+            panic!("it should climb, not {:?}", state(&world, squirrel));
+        };
+        assert_eq!(trunk, near);
+        assert!(height > 1.0 && height < near.height_m);
+        // Up there, it waits while anyone is near, and comes down once they have gone.
+        world.get_mut::<Creature>(squirrel).unwrap().aloft = height;
+        world.run_system_once(think).unwrap();
+        assert!(matches!(state(&world, squirrel), State::Perch { .. }));
+        world.get_mut::<Creature>(squirrel).unwrap().state = State::Perch { trunk, left: 0.0 };
+        world.run_system_once(think).unwrap();
+        assert!(matches!(state(&world, squirrel), State::Perch { left, .. } if left > 0.0));
+        world.despawn(player);
+        world.get_mut::<Creature>(squirrel).unwrap().state = State::Perch { trunk, left: 0.0 };
+        world.run_system_once(think).unwrap();
+        assert_eq!(state(&world, squirrel), State::Climb { trunk, height: 0.0 });
+    }
+
+    #[test]
+    fn a_bird_startled_takes_wing_away_from_whoever_startled_it() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let bird = kind(&mut world, "Chaffinch", ground);
+        test_player(&mut world, ground + Vec3::X * 2.0);
+        world.run_system_once(think).unwrap();
+        let State::Fly { from, to, .. } = state(&world, bird) else {
+            panic!("it should fly, not {:?}", state(&world, bird));
+        };
+        assert_eq!(from, ground);
+        let species = world.get::<Creature>(bird).unwrap().species;
+        let Refuge::Flies(near, far) = world.resource::<Bestiary>().get(species).refuge else {
+            panic!("a chaffinch flies off");
+        };
+        let across = (to - from).reject_from(Vec3::Y).length();
+        assert!(across >= near * 0.9 && across <= far * 1.1, "{across}");
+        // Away: farther from the player than it was.
+        assert!(to.x < from.x, "{to} from {from}");
+    }
+
+    #[test]
+    fn a_bird_on_the_wing_flies_its_way_and_lands_there() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let bird = kind(&mut world, "Chaffinch", ground);
+        let to = ground + Vec3::Z * 12.0;
+        world.get_mut::<Creature>(bird).unwrap().state = State::Fly {
+            from: ground,
+            to,
+            along: 0.0,
+        };
+        let mut highest: f32 = 0.0;
+        for _ in 0..200 {
+            world
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_millis(16));
+            world.run_system_once(walk).unwrap();
+            world.run_system_once(think).unwrap();
+            let at = world.get::<Transform>(bird).unwrap().translation;
+            highest = highest.max(at.length() - 2000.0);
+            if !matches!(state(&world, bird), State::Fly { .. }) {
+                break;
+            }
+        }
+        assert!(highest > 1.0, "it rose off the ground: {highest}");
+        let at = world.get::<Transform>(bird).unwrap().translation;
+        assert!(at.distance(to) < 0.5, "landed at {at}, not {to}");
+        assert!(world.get::<Creature>(bird).unwrap().home().distance(to) < 0.1);
+    }
+
+    #[test]
+    fn a_bird_flown_into_a_crown_sits_there_and_later_leaves_it() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let bird = kind(&mut world, "Chaffinch", ground);
+        let up_there = ground + Vec3::Y * 12.0 + Vec3::X * 5.0;
+        world.get_mut::<Creature>(bird).unwrap().state = State::Fly {
+            from: ground,
+            to: up_there,
+            along: 1.0,
+        };
+        world.run_system_once(think).unwrap();
+        let State::Roost { at, left } = state(&world, bird) else {
+            panic!("it should sit in the crown, not {:?}", state(&world, bird));
+        };
+        assert_eq!(at, up_there);
+        assert!(left > 0.0);
+        // While it sits it stays where it is, off the ground.
+        world.run_system_once(walk).unwrap();
+        let sits = world.get::<Transform>(bird).unwrap().translation;
+        assert!(sits.distance(up_there) < 1e-3, "{sits}");
+        // Its home is the ground under it, where it comes down to.
+        let home = world.get::<Creature>(bird).unwrap().home();
+        assert!((home.length() - 2000.0).abs() < 0.1, "{home}");
+        world.get_mut::<Creature>(bird).unwrap().state = State::Roost {
+            at: up_there,
+            left: 0.0,
+        };
+        world.run_system_once(think).unwrap();
+        assert!(
+            matches!(state(&world, bird), State::Fly { from, .. } if from == up_there),
+            "{:?}",
+            state(&world, bird)
+        );
+    }
+
+    #[test]
+    fn a_startled_bird_among_trees_may_go_up_into_a_crown_away_from_the_player() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        for i in 0..8 {
+            let trunk = Trunk {
+                foot: ground + Vec3::new(-6.0 - i as f32 * 2.0, 0.0, (i % 3) as f32 * 3.0 - 3.0),
+                radius_m: 0.3,
+                height_m: 22.0,
+                solid: false,
+            };
+            world
+                .resource_mut::<terra_world::flora::Trunks>()
+                .add(trunk);
+        }
+        let mut crowns = 0;
+        for seed in 0..20 {
+            world.insert_resource(Dice(Seed(seed).derive("test").rng()));
+            let bird = kind(&mut world, "Chaffinch", ground);
+            let player = test_player(&mut world, ground + Vec3::X * 2.0);
+            world.run_system_once(think).unwrap();
+            let State::Fly { to, .. } = state(&world, bird) else {
+                panic!("it should fly, not {:?}", state(&world, bird));
+            };
+            assert!(to.x < ground.x, "away from the player: {to}");
+            if to.length() - 2000.0 > ROOSTS_OVER_M {
+                crowns += 1;
+                assert!(
+                    to.length() - 2000.0 > 22.0 * 0.45,
+                    "up among the branches: {to}"
+                );
+            }
+            world.despawn(bird);
+            world.despawn(player);
+        }
+        assert!(crowns > 3 && crowns < 17, "{crowns} of 20 went up a tree");
     }
 }

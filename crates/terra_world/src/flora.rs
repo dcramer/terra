@@ -248,6 +248,62 @@ impl Obstacles {
     }
 }
 
+/// A standing tree's trunk: where its foot is, how thick and how tall it is, and whether it
+/// stands among the [`Obstacles`] too, where a felled one is no longer found.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Trunk {
+    pub foot: Vec3,
+    pub radius_m: f32,
+    pub height_m: f32,
+    pub solid: bool,
+}
+
+/// Every standing tree near the start, filed by place, whatever planted it: the world's
+/// flora, the land's woods, a forest of the sandbox's. What lives in trees asks it: how wooded
+/// a place is, and a trunk to climb (creatures).
+#[derive(Resource)]
+pub struct Trunks(SpatialHash<Trunk>);
+
+impl Default for Trunks {
+    fn default() -> Self {
+        Self(SpatialHash::new(16.0))
+    }
+}
+
+impl Trunks {
+    pub fn add(&mut self, trunk: Trunk) {
+        self.0.insert(trunk.foot, trunk);
+    }
+
+    /// The trees standing within `reach` of a point, across the ground, the felled left out.
+    pub fn near<'a>(
+        &'a self,
+        at: Vec3,
+        reach: f32,
+        obstacles: &'a Obstacles,
+    ) -> impl Iterator<Item = Trunk> + 'a {
+        let up = at.normalize_or(Vec3::Y);
+        self.0
+            .near(at, reach)
+            .map(|(_, trunk)| *trunk)
+            .filter(move |trunk| (trunk.foot - at).reject_from(up).length() <= reach)
+            .filter(move |trunk| {
+                !trunk.solid
+                    || obstacles
+                        .solids_near(trunk.foot, 0.5)
+                        .any(|solid| solid.at.distance(trunk.foot) < 0.5)
+            })
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// A plant or rock, and how close a base may come before it is cleared away.
 #[derive(Component)]
 pub struct Growth {
@@ -337,6 +393,7 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .add_systems(Update, follow_wind)
         .init_resource::<Obstacles>()
+        .init_resource::<Trunks>()
         // The yard, the flat test level, has nothing growing on it.
         .add_systems(
             PostStartup,
@@ -544,7 +601,7 @@ fn plant(
     ticks: SystemChangeTick,
     start: Res<Start>,
     flora: Res<Flora>,
-    mut obstacles: ResMut<Obstacles>,
+    (mut obstacles, mut trunks): (ResMut<Obstacles>, ResMut<Trunks>),
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
     mut foliage: ResMut<Assets<grown::Foliage>>,
@@ -735,6 +792,12 @@ fn plant(
         let model = pick(rng, &models[kind]);
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
+        trunks.add(Trunk {
+            foot: point,
+            radius_m: trunk.1,
+            height_m: tall,
+            solid: true,
+        });
         // The tallest are great trees, which only an iron axe will fell (D96).
         let wood = flora.kinds()[kind].cuttable(tall);
         put(

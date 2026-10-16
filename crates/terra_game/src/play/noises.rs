@@ -151,6 +151,7 @@ fn step(
 struct Was {
     health: f32,
     alarmed: bool,
+    flying: bool,
 }
 
 /// Blows landing, creatures dying, a deer startled, a spider turning to attack.
@@ -161,15 +162,17 @@ fn creatures_heard(
     mut noise: MessageWriter<Noise>,
 ) {
     for (entity, creature, at, was) in &mut creatures {
-        // Running from someone, or going for them.
+        // Running from someone, or going for them, or up a tree out of reach.
         let alarmed = matches!(
             creature.state,
-            State::Flee(_) | State::Chase | State::Attack(_)
+            State::Flee(_) | State::Chase | State::Attack(_) | State::Climb { .. }
         );
+        let flying = matches!(creature.state, State::Fly { .. });
         let Some(mut was) = was else {
             commands.entity(entity).try_insert(Was {
                 health: creature.health,
                 alarmed,
+                flying,
             });
             continue;
         };
@@ -182,15 +185,30 @@ fn creatures_heard(
             };
             noise.write(Noise::at(cue, here));
         }
-        if alarmed && !was.alarmed && creature.alive() {
-            let cue = match bestiary.get(creature.species).voice {
-                Voice::Snort => Cue::Snort,
-                Voice::Hiss => Cue::Hiss,
-            };
+        let voice = match bestiary.get(creature.species).voice {
+            Voice::Snort => Some(Cue::Snort),
+            Voice::Hiss => Some(Cue::Hiss),
+            Voice::Chatter => Some(Cue::Chatter),
+            Voice::Chirp => Some(Cue::Chirp),
+            Voice::Quack => Some(Cue::Quack),
+            Voice::Croak => Some(Cue::Croak),
+            Voice::Bark => Some(Cue::Bark),
+            Voice::Silent => None,
+        };
+        // A call as it takes fright, and wings beating as it takes off.
+        let fled = (alarmed && !was.alarmed) || (flying && !was.flying);
+        if fled
+            && creature.alive()
+            && let Some(cue) = voice
+        {
             noise.write(Noise::at(cue, here));
+        }
+        if flying && !was.flying {
+            noise.write(Noise::at(Cue::Wings, here));
         }
         was.health = creature.health;
         was.alarmed = alarmed;
+        was.flying = flying;
     }
 }
 

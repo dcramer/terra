@@ -40,6 +40,18 @@ pub enum Sound {
     Hiss,
     /// A startled deer.
     Snort,
+    /// A squirrel scolding: a quick run of harsh chucks.
+    Chatter,
+    /// A small bird's alarm: two or three sharp falling notes.
+    Chirp,
+    /// A duck: a nasal buzz, falling, twice or three times.
+    Quack,
+    /// A heron's or a grouse's harsh call: a low rasp.
+    Croak,
+    /// A dog's or a fox's bark.
+    Bark,
+    /// Wings beating hard as a bird takes off.
+    Wings,
     /// A foot in shallow water.
     Splash,
     /// A phrase of music.
@@ -79,6 +91,12 @@ impl Decodable for Synth {
                 Sound::Whoosh => one_shot(0.3, whoosh(&mut dice)),
                 Sound::Hiss => one_shot(0.55, hiss(&mut dice)),
                 Sound::Snort => one_shot(0.4, snort(&mut dice)),
+                Sound::Chatter => one_shot(0.7, chatter(&mut dice)),
+                Sound::Chirp => one_shot(0.45, chirp(&mut dice)),
+                Sound::Quack => one_shot(0.75, quack(&mut dice)),
+                Sound::Croak => one_shot(0.5, croak(&mut dice)),
+                Sound::Bark => one_shot(0.3, bark(&mut dice)),
+                Sound::Wings => one_shot(0.6, wings(&mut dice)),
                 Sound::Splash => one_shot(0.32, splash(&mut dice)),
                 Sound::Music(phrase) => (
                     Box::new(music::play(phrase, dice)),
@@ -578,6 +596,104 @@ fn snort(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     }
 }
 
+fn chatter(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut band = Band::default();
+    let every = dice.range(0.065, 0.085);
+    move |t| {
+        // Chucks a few hundredths of a second long, a dozen a second, fading.
+        let within = (t % every) / 0.035;
+        let chuck = hump(within) * libm::expf(-t * 2.0);
+        let tone = libm::sinf(TAU * 1900.0 * t) * 0.5 + dice.noise();
+        (band.pass(tone, 2600.0, 0.6) * chuck * 0.4).clamp(-1.0, 1.0)
+    }
+}
+
+fn chirp(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let dice = *dice;
+    let notes = [0.0, 0.14, 0.28];
+    let high = 4800.0 + 600.0 * (dice.0 % 7) as f32 / 7.0;
+    move |t| {
+        notes
+            .iter()
+            .map(|&from| {
+                let u = t - from;
+                if !(0.0..0.06).contains(&u) {
+                    return 0.0;
+                }
+                // Each note falls half an octave in its few hundredths of a second.
+                let hz = high * (1.0 - 4.0 * u);
+                libm::sinf(TAU * hz * u) * hump(u / 0.06)
+            })
+            .sum::<f32>()
+            * 0.5
+    }
+}
+
+fn quack(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut nose = Band::default();
+    let mut throat = Band::default();
+    let pitch = dice.range(260.0, 320.0);
+    let mut phase = 0.0f32;
+    move |t| {
+        let calls = [0.0, 0.27, 0.5];
+        let (k, from) = calls
+            .iter()
+            .enumerate()
+            .rfind(|(_, from)| t >= **from)
+            .map_or((0, 0.0), |(i, from)| (i, *from));
+        let u = (t - from) / 0.2;
+        let hz = pitch * (1.0 - 0.25 * u.min(1.0)) * (1.0 - 0.06 * k as f32);
+        phase = (phase + hz / RATE as f32) % 1.0;
+        // A buzz of all its harmonics, shaped by the duck's nose and throat.
+        let buzz = 2.0 * phase - 1.0 + 0.1 * dice.noise();
+        let voiced = nose.pass(buzz, 1150.0, 0.5) + 0.6 * throat.pass(buzz, 2300.0, 0.7);
+        (voiced * hump(u.min(1.0)) * (1.0 - 0.2 * k as f32) * 0.8).clamp(-1.0, 1.0)
+    }
+}
+
+fn croak(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut band = Band::default();
+    let pitch = dice.range(110.0, 150.0);
+    let mut phase = 0.0f32;
+    move |t| {
+        // A rasp: a low buzz broken by the throat a few dozen times a second.
+        phase = (phase + pitch * (1.0 - 0.3 * t) / RATE as f32) % 1.0;
+        let buzz = if phase < 0.3 { 1.0 } else { -0.4 } + 0.4 * dice.noise();
+        let rattle = 0.55 + 0.45 * libm::sinf(TAU * 34.0 * t);
+        (band.pass(buzz, 700.0, 0.9) * rattle * hump(t / 0.5) * 0.9).clamp(-1.0, 1.0)
+    }
+}
+
+fn bark(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut mouth = Band::default();
+    let pitch = dice.range(340.0, 460.0);
+    let mut phase = 0.0f32;
+    move |t| {
+        let u = t / 0.3;
+        phase = (phase + pitch * (1.0 - 0.35 * u) / RATE as f32) % 1.0;
+        let voice = 2.0 * phase - 1.0 + 0.5 * dice.noise();
+        // Sharp on, falling away.
+        let shape = (u * 25.0).min(1.0) * libm::expf(-u * 4.0);
+        (mouth.pass(voice, 900.0, 0.8) * shape * 1.1).clamp(-1.0, 1.0)
+    }
+}
+
+fn wings(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut air = Smooth::default();
+    let beat = dice.range(14.0, 19.0);
+    move |t| {
+        // A burst of beats, each a rush of air, slowing and fading as it climbs away.
+        let stroke = 0.5 + 0.5 * libm::sinf(TAU * beat * t * (1.0 - 0.3 * t));
+        (air.low(dice.noise(), 1500.0) * stroke * stroke * libm::expf(-t * 4.0) * 2.0)
+            .clamp(-1.0, 1.0)
+    }
+}
+
 fn splash(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     let mut dice = *dice;
     let mut band = Band::default();
@@ -654,6 +770,12 @@ pub mod tests {
             Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
+            Sound::Chatter,
+            Sound::Chirp,
+            Sound::Quack,
+            Sound::Croak,
+            Sound::Bark,
+            Sound::Wings,
             Sound::Splash,
         ] {
             let (samples, _) = render(sound, 7, 6.0);
@@ -686,6 +808,12 @@ pub mod tests {
             Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
+            Sound::Chatter,
+            Sound::Chirp,
+            Sound::Quack,
+            Sound::Croak,
+            Sound::Bark,
+            Sound::Wings,
             Sound::Splash,
             Sound::Music(phrase),
         ];
@@ -698,7 +826,17 @@ pub mod tests {
                 | Sound::Fire
                 | Sound::Hum
                 | Sound::Murmur => {}
-                Sound::Whoosh | Sound::Hiss | Sound::Snort | Sound::Splash | Sound::Music(_) => {}
+                Sound::Whoosh
+                | Sound::Hiss
+                | Sound::Snort
+                | Sound::Chatter
+                | Sound::Chirp
+                | Sound::Quack
+                | Sound::Croak
+                | Sound::Bark
+                | Sound::Wings
+                | Sound::Splash
+                | Sound::Music(_) => {}
             }
             let decoder = Synth { sound, seed: 1 }.decoder();
             let length = decoder.total_duration();

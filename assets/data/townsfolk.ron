@@ -12,6 +12,7 @@
     // by the town but not drawn until it has a model.
     animals: {
         "Hen": (model: "models/creatures/Chicken.glb", idle: "Idle", walk: "Walk", rest: "Peck", pace: 0.375),
+        "Dog": (model: "models/creatures/Dog.glb", idle: "Idle", walk: "Walk", run: "Run", rest: "Sit", pace: 0.938),
     },
     // A body's mix: a template, and up to this much of one other template's morphs.
     mix: 0.45,

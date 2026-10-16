@@ -1,0 +1,112 @@
+// What drifts in the air round the eye (crates/terra_world/src/drift.rs, D379): each kind
+// a field of cards round the camera, faded in where its place, season and hour are.
+//
+//   count     how many at the high preset (a third fewer at medium, two thirds at low)
+//   look      Speck (a soft round), Leaf (a pointed oval with its midrib, tumbling) or Bird
+//   size_m    how big one is across
+//   colour    sRGB; glow how much brighter it is seen toward the sun, where the sun reaches
+//             it, as dust in a sunbeam
+//   opacity   how opaque one is at its middle
+//   motion    Hover(wander_m, sink_mps, carried), Swarm(swarms, radius_m, buzz),
+//             Fall(fall_mps, sway_m, spin_hz, carried), or Flock(flocks, speed_mps, spread_m,
+//             height_m over the eye, flap_hz, about: the share of its crossings it is seen on);
+//             carried is the share of the wind
+//   box_m     the box round the eye it fills: half its width, half its height
+//   woods, open, water   how much of it is seen among trees (five trunks within 12 m), in
+//             the open and within 12 m of water; the most of those the place is
+//   season_c  the growing season's mean warmth of the places it is found, °C (D313)
+//   air_c     the air's warmth it needs now, °C (insects fly from about 8)
+//   hours     the spans of the clock it is about, faded over half an hour at each end
+(
+    kinds: [
+        (
+            // Dust, pollen and spores hanging in the still air under the crowns, seen only
+            // in the sun's shafts.
+            name: "Dust motes",
+            count: 2400,
+            look: Speck,
+            size_m: 0.01,
+            colour: (0.92, 0.88, 0.78),
+            glow: 30.0,
+            opacity: 0.85,
+            motion: Hover(wander_m: 0.6, sink_mps: 0.004, carried: 0.04),
+            box_m: (11.0, 5.0),
+            woods: 1.0,
+            open: 0.2,
+            water: 0.35,
+            season_c: (-5.0, 40.0),
+            hours: [(4.5, 20.5)],
+        ),
+        (
+            // Midges dancing in small swarms over the path and the water, morning and
+            // evening, glinting where the sun catches them.
+            name: "Midges",
+            count: 900,
+            look: Speck,
+            size_m: 0.004,
+            colour: (0.55, 0.52, 0.45),
+            glow: 22.0,
+            opacity: 0.9,
+            motion: Swarm(swarms: 7, radius_m: 0.7, buzz: 1.6),
+            box_m: (16.0, 4.0),
+            woods: 0.7,
+            open: 0.35,
+            water: 1.0,
+            season_c: (6.0, 40.0),
+            air_c: 8.0,
+            hours: [(5.0, 11.0), (16.5, 21.5)],
+        ),
+        (
+            // A few dry leaves coming down under broadleaf and mixed crowns, turning over.
+            name: "Falling leaves",
+            count: 70,
+            look: Leaf,
+            size_m: 0.055,
+            colour: (0.42, 0.3, 0.12),
+            glow: 2.5,
+            opacity: 1.0,
+            motion: Fall(fall_mps: 0.7, sway_m: 0.45, spin_hz: 0.7, carried: 0.5),
+            box_m: (14.0, 7.0),
+            woods: 1.0,
+            open: 0.0,
+            water: 0.0,
+            season_c: (7.0, 40.0),
+            hours: [(0.0, 24.0)],
+        ),
+        (
+            // Crows, pigeons and gulls far off, crossing the sky in loose flocks now and
+            // then: dark shapes beating their wings against the bright sky.
+            name: "Birds overhead",
+            count: 30,
+            look: Bird,
+            size_m: 0.75,
+            colour: (0.06, 0.055, 0.05),
+            glow: 0.0,
+            opacity: 1.0,
+            motion: Flock(flocks: 3, speed_mps: 11.0, spread_m: 9.0, height_m: (22.0, 65.0), flap_hz: 3.2, about: 0.55),
+            box_m: (230.0, 100.0),
+            woods: 0.25,
+            open: 1.0,
+            water: 1.0,
+            season_c: (-10.0, 40.0),
+            hours: [(5.0, 20.0)],
+        ),
+        (
+            // Cotton grass and willow down blown over the heath in late summer.
+            name: "Down",
+            count: 160,
+            look: Speck,
+            size_m: 0.014,
+            colour: (0.95, 0.94, 0.9),
+            glow: 6.0,
+            opacity: 0.8,
+            motion: Hover(wander_m: 1.2, sink_mps: 0.02, carried: 0.7),
+            box_m: (20.0, 3.0),
+            woods: 0.0,
+            open: 1.0,
+            water: 0.6,
+            season_c: (-10.0, 8.0),
+            hours: [(0.0, 24.0)],
+        ),
+    ],
+)

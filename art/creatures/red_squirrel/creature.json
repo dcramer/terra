@@ -1,0 +1,45 @@
+{
+  "subject": "Eurasian red squirrel of a pine forest: slender russet-red body, cream-white belly, big bushy rust-red tail raised in a curve, tufted ears, long hind feet",
+  "file": "Squirrel",
+  "plan": "quadruped",
+  "tripo_project": "88d63d36-3ab2-4112-8a9e-7b933428e7d0",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": { "model": 30 },
+  "turn": 90,
+  "scale": 0.31,
+  "budget": 2000,
+  "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "bones": {
+    "Hips": [null, [0, 0.10, 0.28], [0, -0.03, 0.33]],
+    "Spine": ["Hips", [0, -0.03, 0.33], [0, -0.15, 0.35]],
+    "Chest": ["Spine", [0, -0.15, 0.35], [0, -0.24, 0.40]],
+    "Neck": ["Chest", [0, -0.24, 0.40], [0, -0.32, 0.45]],
+    "Head": ["Neck", [0, -0.32, 0.45], [0, -0.48, 0.41]],
+    "Ear.L": ["Head", [0.04, -0.36, 0.52], [0.05, -0.37, 0.62]],
+    "Tail1": ["Hips", [0, 0.17, 0.31], [0, 0.25, 0.42]],
+    "Tail2": ["Tail1", [0, 0.25, 0.42], [0, 0.27, 0.57]],
+    "Tail3": ["Tail2", [0, 0.27, 0.57], [0, 0.31, 0.72]],
+    "Tail4": ["Tail3", [0, 0.31, 0.72], [0, 0.41, 0.80]],
+    "Tail5": ["Tail4", [0, 0.41, 0.80], [0, 0.50, 0.68]],
+    "Shoulder.L": ["Chest", [0.05, -0.17, 0.38], [0.06, -0.16, 0.26]],
+    "UpperArm.L": ["Shoulder.L", [0.06, -0.16, 0.26], [0.07, -0.12, 0.16]],
+    "Forearm.L": ["UpperArm.L", [0.07, -0.12, 0.16], [0.08, -0.20, 0.05]],
+    "Paw.L": ["Forearm.L", [0.08, -0.20, 0.05], [0.087, -0.29, 0.01]],
+    "Thigh.L": ["Hips", [0.07, 0.10, 0.26], [0.10, 0.04, 0.15]],
+    "Shin.L": ["Thigh.L", [0.10, 0.04, 0.15], [0.12, 0.16, 0.05]],
+    "Foot.L": ["Shin.L", [0.12, 0.16, 0.05], [0.12, -0.01, 0.01]]
+  },
+  "legs": {
+    "Fore.L": ["UpperArm.L", "Forearm.L", "Paw.L"],
+    "Hind.L": ["Thigh.L", "Shin.L", "Foot.L"]
+  },
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 4.0 },
+    "Walk": { "kind": "gait", "cycle": 0.5, "stride": 0.16, "lift": 0.05, "duty": 0.6, "bob": 0.008,
+              "phases": { "Hind.L": 0.0, "Fore.L": 0.25, "Hind.R": 0.5, "Fore.R": 0.75 }, "tail": 4 },
+    "Run": { "kind": "gait", "cycle": 0.36, "stride": 0.55, "lift": 0.09, "duty": 0.38, "bob": 0.03, "flex": 16, "fold": 70,
+             "phases": { "Hind.L": 0.0, "Hind.R": 0.04, "Fore.L": 0.5, "Fore.R": 0.55 }, "tail": 8 },
+    "Eat": { "kind": "sit", "seconds": 3.0, "lean": 58, "drop": 0.05 },
+    "Death": { "kind": "death", "seconds": 1.0 }
+  }
+}

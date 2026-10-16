@@ -62,6 +62,14 @@ pub enum Cue {
     /// A startled deer; a spider about to strike.
     Snort,
     Hiss,
+    /// Small animals alarmed: a squirrel, a songbird, a duck, a heron or grouse, a fox or dog;
+    /// and a bird taking off.
+    Chatter,
+    Chirp,
+    Quack,
+    Croak,
+    Bark,
+    Wings,
     /// A settlement's bell.
     Bell,
     /// The interface: a click, a panel opened or closed.

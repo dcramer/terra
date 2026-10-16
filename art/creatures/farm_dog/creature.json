@@ -1,0 +1,43 @@
+{
+  "subject": "medium farm dog of a medieval market town, a rough working cur of herding type: short weathered tan-brown coat, paler chest, muzzle and paws, semi-erect ears, long low tail",
+  "file": "Dog",
+  "plan": "quadruped",
+  "tripo_project": "498ba76f-0156-45b3-806e-55018320e961",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": { "model": 30 },
+  "turn": 0,
+  "scale": 1.05,
+  "budget": 3000,
+  "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "bones": {
+    "Hips": [null, [0, 0.21, 0.40], [0, 0.10, 0.40]],
+    "Spine": ["Hips", [0, 0.10, 0.40], [0, -0.08, 0.40]],
+    "Chest": ["Spine", [0, -0.08, 0.40], [0, -0.22, 0.45]],
+    "Neck": ["Chest", [0, -0.22, 0.45], [0, -0.33, 0.52]],
+    "Head": ["Neck", [0, -0.33, 0.52], [0, -0.50, 0.50]],
+    "Tail1": ["Hips", [0, 0.23, 0.43], [0, 0.27, 0.32]],
+    "Tail2": ["Tail1", [0, 0.27, 0.32], [0, 0.35, 0.22]],
+    "Tail3": ["Tail2", [0, 0.35, 0.22], [0, 0.48, 0.175]],
+    "Shoulder.L": ["Chest", [0.05, -0.20, 0.47], [0.055, -0.27, 0.36]],
+    "UpperArm.L": ["Shoulder.L", [0.055, -0.27, 0.36], [0.055, -0.24, 0.23]],
+    "Forearm.L": ["UpperArm.L", [0.055, -0.24, 0.23], [0.055, -0.255, 0.06]],
+    "Paw.L": ["Forearm.L", [0.055, -0.255, 0.06], [0.055, -0.32, 0.007]],
+    "Thigh.L": ["Hips", [0.065, 0.21, 0.37], [0.07, 0.165, 0.28]],
+    "Shin.L": ["Thigh.L", [0.07, 0.165, 0.28], [0.071, 0.26, 0.14]],
+    "Foot.L": ["Shin.L", [0.071, 0.26, 0.14], [0.071, 0.20, 0.005]]
+  },
+  "legs": {
+    "Fore.L": ["UpperArm.L", "Forearm.L", "Paw.L"],
+    "Hind.L": ["Thigh.L", "Shin.L", "Foot.L"]
+  },
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 4.0, "tail": 4 },
+    "Walk": { "kind": "gait", "cycle": 0.55, "stride": 0.3, "lift": 0.06, "duty": 0.62, "bob": 0.006,
+              "phases": { "Hind.L": 0.0, "Fore.L": 0.25, "Hind.R": 0.5, "Fore.R": 0.75 }, "tail": 6 },
+    "Run": { "kind": "gait", "cycle": 0.42, "stride": 0.36, "lift": 0.08, "duty": 0.45, "bob": 0.012,
+             "phases": { "Hind.L": 0.0, "Fore.R": 0.0, "Hind.R": 0.5, "Fore.L": 0.5 }, "tail": 6 },
+    "Sit": { "kind": "sit", "seconds": 4.0, "paws": "down", "hold": true, "lean": 38, "drop": 0.10, "tuck": 0.08, "arch": 0, "tail_keep": 0.4 },
+    "Eat": { "kind": "graze", "seconds": 3.0, "crouch": 0.05, "root": 4, "spine": 10, "neck": 70, "head": 25 },
+    "Death": { "kind": "death", "seconds": 1.0 }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "subject": "rock ptarmigan of the fell tundra in early autumn, a plump grouse-like bird: mottled grey-brown and buff barred plumage, white wings and belly, white feathered feet, red comb, made with its wings spread",
+  "file": "Ptarmigan",
+  "plan": "bird",
+  "tripo_project": "69cfd34d-64b6-44f7-bc6f-a205b679964a",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": { "model": 30 },
+  "turn": 0,
+  "scale": 0.52,
+  "budget": 2000,
+  "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "bones": {
+    "Body": [null, [0, -0.02, 0.22], [0, -0.14, 0.40]],
+    "Neck1": ["Body", [0, -0.14, 0.40], [0, -0.20, 0.52]],
+    "Head": ["Neck1", [0, -0.20, 0.52], [0, -0.35, 0.52]],
+    "Tail": ["Body", [0, 0.08, 0.20], [0, 0.32, 0.10]],
+    "Humerus.L": ["Body", [0.07, -0.05, 0.42], [0.17, -0.03, 0.52]],
+    "Forearm.L": ["Humerus.L", [0.17, -0.03, 0.52], [0.30, -0.02, 0.62]],
+    "Hand.L": ["Forearm.L", [0.30, -0.02, 0.62], [0.49, 0.02, 0.78]],
+    "Thigh.L": ["Body", [0.06, -0.02, 0.24], [0.06, 0.0, 0.18]],
+    "Shank.L": ["Thigh.L", [0.06, 0.0, 0.18], [0.065, -0.02, 0.12]],
+    "Tarsus.L": ["Shank.L", [0.065, -0.02, 0.12], [0.065, -0.05, 0.02]],
+    "Toes.L": ["Tarsus.L", [0.065, -0.05, 0.02], [0.065, -0.13, 0.005]]
+  },
+  "legs": {
+    "Leg.L": ["Thigh.L", "Shank.L", "Tarsus.L", "Toes.L"]
+  },
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 4.0 },
+    "Walk": { "kind": "gait", "cycle": 0.5, "stride": 0.12, "lift": 0.05, "duty": 0.6, "bob": 0.008, "nod": 6, "roll": 3, "peel": 15, "fold": 30,
+              "phases": { "Leg.L": 0.0, "Leg.R": 0.5 } },
+    "Run": { "kind": "gait", "cycle": 0.25, "stride": 0.16, "lift": 0.06, "duty": 0.45, "bob": 0.01, "nod": 3, "roll": 2, "peel": 15, "fold": 30,
+             "phases": { "Leg.L": 0.0, "Leg.R": 0.5 } },
+    "Peck": { "kind": "graze", "seconds": 2.0, "neck": 45, "head": -15, "body": 35 },
+    "Fly": { "kind": "fly", "cycle": 1.0, "beats": 4, "flapping": 0.6, "up": -15, "down": 65, "body": 55, "neck": -25, "head": -10, "hold": 20, "tuck": [-40, 100, -60] },
+    "Death": { "kind": "death", "seconds": 1.0, "lie": 0.35 }
+  }
+}

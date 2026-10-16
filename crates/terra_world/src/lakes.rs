@@ -6,6 +6,7 @@
 use crate::air::AirPicture;
 use crate::daylight::Clock;
 use crate::planet::Planet;
+use crate::rises::{RISES, Rises};
 use crate::sky::Sky;
 use crate::waves::{self, TRAINS};
 use bevy::{
@@ -83,6 +84,10 @@ pub struct LakeExtension {
     /// The waves the surface is made of (`waves::trains`).
     #[uniform(100)]
     trains: [Vec4; TRAINS],
+    /// The rings spreading where fish rise (`rises`): each where it is from `origin`, and
+    /// when it began by the shader's clock, none when 0.
+    #[uniform(100)]
+    rises: [Vec4; RISES],
     /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
     /// draws, exposed as it is, rather than the painted sky's two colours.
     #[uniform(100)]
@@ -136,6 +141,7 @@ impl LakeExtension {
             north: mirror.north.extend(0.0),
             skyline: mirror.skyline,
             trains: waves::trains(),
+            rises: [Vec4::ZERO; RISES],
             over_air: air.is_some() as u32,
             air,
         }
@@ -166,7 +172,10 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<LakeMaterial>::default())
         .add_systems(Startup, spawn)
         .add_plugins(MaterialPlugin::<MistMaterial>::default())
-        .add_systems(Update, (follow_sky_and_wind, mist_follows_the_morning));
+        .add_systems(
+            Update,
+            (follow_sky_and_wind, follow_rises, mist_follows_the_morning),
+        );
 }
 
 /// The mist a lake steams on a calm morning (D371): the night's cold air over water still
@@ -442,7 +451,9 @@ fn follow_sky_and_wind(
     if !sky_changed && material.extension.wind == wind {
         return;
     }
-    let extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
+    let mut extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
+    // The rings spreading now stay.
+    extension.rises = material.extension.rises;
     if let Some(peat) = &look.2
         && let Some(mut material) = materials.get_mut(peat)
     {
@@ -450,6 +461,34 @@ fn follow_sky_and_wind(
     }
     if let Some(mut material) = materials.get_mut(&look.0) {
         material.extension = extension;
+    }
+}
+
+/// The rings where fish rise, told the lakes' material as each begins, from the point the
+/// lakes are laid out from.
+fn follow_rises(
+    look: Option<Res<LakeLook>>,
+    rises: Option<Res<Rises>>,
+    mut materials: ResMut<Assets<LakeMaterial>>,
+) {
+    let (Some(look), Some(rises)) = (look, rises) else {
+        return;
+    };
+    if !rises.is_changed() {
+        return;
+    }
+    let origin = look.1.origin;
+    let rings = rises.rings.map(|ring| {
+        if ring.w > 0.0 {
+            (ring.truncate() - origin).extend(ring.w)
+        } else {
+            Vec4::ZERO
+        }
+    });
+    if let Some(mut material) = materials.get_mut(&look.0)
+        && material.extension.rises != rings
+    {
+        material.extension.rises = rings;
     }
 }
 

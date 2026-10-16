@@ -236,6 +236,7 @@ fn plant(
     mut foliage: ResMut<Assets<grown::Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
     mut far: ResMut<Assets<FarWoods>>,
+    mut trunks: ResMut<crate::flora::Trunks>,
     parting: Option<Res<crate::parting::Parting>>,
     sited: Option<Res<crate::start::Sited>>,
 ) {
@@ -296,8 +297,15 @@ fn plant(
     let mut grown: HashMap<[u32; 3], Drawn> = HashMap::default();
     let mut drawn_as = [[0usize; 2]; 2];
     for tree in &near {
+        let planted = planted(tree);
+        trunks.add(crate::flora::Trunk {
+            foot: tree.at,
+            radius_m: (planted.height_m * 0.012).max(0.08),
+            height_m: planted.height_m,
+            solid: false,
+        });
         let mut entity = commands.spawn((Name::new("Woods tree"), Visibility::default()));
-        let drawn = conifers.draw(&mut entity, &planted(tree));
+        let drawn = conifers.draw(&mut entity, &planted);
         drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
         grown.insert(foot_key(tree.at), drawn);
     }
