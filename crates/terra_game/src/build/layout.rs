@@ -413,6 +413,13 @@ fn launch(
     if room == 0 {
         return;
     }
+    // A section with a job on a worker, or back and not yet on screen, waits for it: sent
+    // again at once, the answer still out would be dropped when it came back, and a storey
+    // filled a cube every few frames threw away three of every four sections drawn, their
+    // parts each drawn against what was on screen several changes before. As a voxel game
+    // remeshes a chunk edited while it meshes once that mesh is in, it is sent again once
+    // what is out is shown (`out_or_back`).
+    let busy = jobs.out_or_back();
     // The nearest waiting sections of every build laid whole.
     let mut nearest: Vec<(f32, Entity, [i32; 3])> = Vec::new();
     for build in each(&mut site, &mut builds) {
@@ -420,6 +427,9 @@ fn launch(
             continue;
         }
         for &at in build.sections.waiting.keys() {
+            if busy.contains(&(build.root, at)) {
+                continue;
+            }
             // Measured against distances as the detail scale has them (D230).
             let distance = store::distance_from(
                 &build.frame,
@@ -672,6 +682,23 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
 
 impl Jobs {
     /// The oldest change any section of a build still on a worker was laid for, if one is.
+    /// The sections with a job on a worker or an answer waiting to be shown, by build.
+    pub fn out_or_back(&self) -> BTreeSet<(Entity, [i32; 3])> {
+        self.running
+            .iter()
+            .map(|job| (job.root, job.section))
+            .chain(self.ready.iter().map(|done| (done.root, done.section)))
+            .collect()
+    }
+
+    /// Whether a build's newest change, `newest`, has a section still to come: waiting to be
+    /// sent again behind its answer to an older change, back and not yet shown.
+    pub fn to_come<T>(&self, root: Entity, newest: u64, waiting: &BTreeMap<[i32; 3], T>) -> bool {
+        self.ready.iter().any(|done| {
+            done.root == root && done.generation < newest && waiting.contains_key(&done.section)
+        })
+    }
+
     pub fn oldest_out(&self, root: Entity) -> Option<u64> {
         self.running
             .iter()
@@ -759,5 +786,40 @@ mod tests {
         assert!(suffices(Reach::Near, Reach::Close));
         assert!(!suffices(Reach::Close, Reach::Near));
         assert!(suffices(Reach::Mid, Reach::Mid) && !suffices(Reach::Near, Reach::Mid));
+    }
+
+    fn back(root: Entity, section: [i32; 3], generation: u64) -> Done {
+        Done {
+            root,
+            section,
+            ticket: 0,
+            generation,
+            outcome: Outcome::Same,
+            put_at: None,
+        }
+    }
+
+    #[test]
+    fn a_section_out_or_back_unshown_is_not_sent_again_and_holds_the_newest_change() {
+        let (house, shed) = (
+            Entity::from_raw_u32(1).unwrap(),
+            Entity::from_raw_u32(2).unwrap(),
+        );
+        let mut jobs = Jobs::default();
+        // Change 4 of the house back for one section, nothing of the shed.
+        jobs.ready.push_back(back(house, [0, 0, 0], 4));
+        let busy = jobs.out_or_back();
+        assert!(busy.contains(&(house, [0, 0, 0])));
+        assert!(!busy.contains(&(house, [1, 0, 0])) && !busy.contains(&(shed, [0, 0, 0])));
+        // Change 5 marks the same section again: change 5 has it to come, behind change 4's
+        // answer, so change 5 is not all back, whatever else of it is.
+        let waiting = BTreeMap::from([([0, 0, 0], ()), ([1, 0, 0], ())]);
+        assert!(jobs.to_come(house, 5, &waiting));
+        // Not the shed's, nor a change whose answer is its own newest (a section set waiting
+        // only to be drawn more finely is sent again once it is shown).
+        assert!(!jobs.to_come(shed, 5, &waiting));
+        assert!(!jobs.to_come(house, 4, &waiting));
+        // Nor once the section is no longer waiting.
+        assert!(!jobs.to_come(house, 5, &BTreeMap::from([([1, 0, 0], ())])));
     }
 }

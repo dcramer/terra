@@ -1018,9 +1018,17 @@ fn upload(
         }
         let out = jobs.oldest_out(build.root);
         back.insert(build.root, (out, build.sections.generation));
+        // A section waiting to be sent again for the newest change once its answer to an
+        // older one is shown (`layout::launch`) is still to come for it: the newest change
+        // is not all back until it is.
+        let to_come = jobs.to_come(
+            build.root,
+            build.sections.generation,
+            &build.sections.waiting,
+        );
         let held = jobs.held.entry(build.root).or_default();
         *held += 1;
-        if out.is_none() {
+        if out.is_none() && !to_come {
             complete.insert(build.root);
             build.sections.streaming = None;
         } else if *held > HOLD_FRAMES {
