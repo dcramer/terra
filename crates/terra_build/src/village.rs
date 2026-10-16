@@ -876,6 +876,27 @@ fn name(plan: Plan, scheme: Scheme, roofed: Roof) -> String {
     }
 }
 
+/// One of each sort of the village's buildings (`village`, seed 7), as the checks look at
+/// them (`cargo xtask artifacts`, `cargo xtask rules`): each put up whole in its own cubes, on
+/// ground falling in steps of 20 cm, its footings laid in the palette's first masonry.
+pub fn each_sort(palette: &Palette) -> Vec<(Building, Base)> {
+    let mut seen = BTreeSet::new();
+    village(7, palette)
+        .into_iter()
+        .filter(|building| seen.insert(format!("{:?} {:?}", building.plan, building.scheme)))
+        .map(|building| {
+            let mut base = Base::default();
+            for op in &building.ops {
+                base.apply(*op);
+            }
+            base.lay_footings(palette.first().masonry, |column| {
+                -((column[0] + column[1]).rem_euclid(3) as i16) * 20
+            });
+            (building, base)
+        })
+        .collect()
+}
+
 /// The village's buildings from its seed: the same seed, the same village.
 pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
     let kinds = picks.pick(seed);
@@ -1484,5 +1505,67 @@ mod tests {
             base.walls()
                 .any(|(tile, panel)| tile.y == 1 && panel == Panel::Door)
         );
+    }
+
+    // Slow, a minute or two: lays and draws one of each sort of the village's buildings, which
+    // the quick check before each commit skips and the full check runs (`SLOW_TESTS` in xtask).
+    #[test]
+    fn no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels() {
+        // One of each sort of the village's buildings, in the settlement's own materials as
+        // the game reads them, modelled pieces and all: none of their near meshes' faces lie
+        // in one plane over one another (`inspect::fights`, the checker's measure). The
+        // farmstead's lintels at a wall's end, the outside stair's stringers and the deck
+        // beside it, a doorway's posts on a footing, the lookout's rail, ridge caps cut to
+        // length and a verge under a higher roof's eave all did.
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let read = |path: &str| {
+            std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+        };
+        let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
+            .expect("the kits")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+            .collect();
+        paths.sort();
+        let mut names = std::collections::BTreeMap::new();
+        let mut kits = Vec::new();
+        for path in paths {
+            let stem = path.file_stem().unwrap().to_string_lossy().to_string();
+            let kit =
+                crate::kit::Kit::read(&format!("{}/{stem}.ron", crate::kit::MATERIALS), &read)
+                    .unwrap();
+            names.insert(stem, kit.kind());
+            kits.push(kit);
+        }
+        let kits = crate::kit::Kits(kits);
+        let palette = Palette::read(&read, &|name| names.get(name).copied(), &kits).unwrap();
+        let maps = crate::relief::Maps::default();
+        let progress = crate::sections::Progress::Whole;
+        for (building, base) in each_sort(&palette) {
+            let whole = crate::sections::Whole::lay(&base, &kits);
+            let mut meshes = Vec::new();
+            for at in crate::sections::drawable(&base) {
+                let section = crate::sections::Section {
+                    base: &base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: glam::IVec3::from_array(at),
+                    progress: &progress,
+                };
+                let laid = crate::sections::lay(&section, &whole);
+                let near = crate::sections::draw(&section, &laid, crate::sections::Reach::Near);
+                for (&(kind, material), surface) in &near.near {
+                    meshes.push((
+                        format!("{kind:?} {material:?}"),
+                        Some((kind, material)),
+                        surface.clone(),
+                    ));
+                }
+                meshes.push(("plain".to_string(), None, near.plain));
+            }
+            let fights = crate::inspect::fights(meshes.iter().map(|(n, k, s)| (n.clone(), *k, s)));
+            assert!(fights.is_empty(), "{}: {fights:?}", building.name);
+        }
     }
 }

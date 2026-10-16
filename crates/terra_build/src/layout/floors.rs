@@ -490,15 +490,15 @@ impl Deck<'_> {
                                 .collect()
                         }
                     };
-                    // A rim on what it rests on, ending at a wall of the deck's own kind rising
-                    // from the cube beyond, as a pier from the end of a thick wall's decked
-                    // top: that wall's members are narrower than its cube, so the rim runs on
+                    // A rim, on what it rests on or across joists' ends, ending at a wall of the
+                    // deck's own kind rising from the cube beyond, as a pier from the end of a
+                    // thick wall's decked top or a lookout's corner post: that wall's members are narrower than its cube, so the rim runs on
                     // into it to its middle, under them, as one board a little deeper than all
                     // its beams, set in a little from the rim's face, behind the wall's sawn
                     // ends, so no slot is left between the two; on a little into the rim, its
                     // top and foot past the rim's however its boards wave and taper, so none of
                     // its faces is in the plane of one of the rim's.
-                    if kind == Rim::Full {
+                    if kind != Rim::Ledger {
                         let low = courses
                             .iter()
                             .map(|&(height, deep)| height - (deep - GAP_M) * 0.5)
@@ -585,10 +585,15 @@ impl Deck<'_> {
         // something else beside the deck, as a footing.
         let under_wall = even(((CELL_M - self.kit.diameter) * 0.5).max(0.0));
         // Covered by what stands on it, but for a roof's cube, whose slope leaves the deck
-        // under it showing, as a dormer's eaves over a storey's ceiling do.
+        // under it showing, as a dormer's eaves over a storey's ceiling do, and a wall of the
+        // deck's own members standing on it, as a lookout's rail: they are narrower than its
+        // cube, so the boards run on under them, which stand on the boards.
         let covered = |at: IVec3| {
-            base.cube(at + IVec3::Y)
-                .is_some_and(|c| c.fill != Fill::Open && !c.kind.is_roof())
+            base.cube(at + IVec3::Y).is_some_and(|c| {
+                c.fill != Fill::Open
+                    && !c.kind.is_roof()
+                    && !(c.kind == self.kit.kind() && base.in_wall(at + IVec3::Y))
+            })
         };
         // A cube beside the deck under a wall: the boards run on over it, under the wall.
         // A wall of the deck's own logs, whose face is set in from its cube's by their round:
@@ -605,6 +610,10 @@ impl Deck<'_> {
         // or up to the face of a wall beside the deck on its layer, over the ledger there,
         // so no slot is left along the wall between its logs and the boards.
         let reach = |at: IVec3| {
+            // Not over a flight's top step beside it, whose tread is the deck's edge there.
+            if self.walls.stair(at) {
+                return 0.0;
+            }
             if wall_foot(at) {
                 under_wall
             } else if !region.contains(&at.to_array())
@@ -750,12 +759,16 @@ mod tests {
         let deck: BTreeSet<[i32; 3]> = base
             .cubes()
             .filter(|(at, _)| !base.in_wall(*at))
-            .filter(|(at, _)| base.cube(*at + IVec3::Y).is_none())
+            .filter(|(at, _)| {
+                base.cube(*at + IVec3::Y)
+                    .is_none_or(|over| over.kind == kit().kind() && base.in_wall(*at + IVec3::Y))
+            })
             .map(|(at, _)| at.to_array())
             .collect();
-        // Over every cube of floor and flat roof not under a wall, its top boarded whole,
-        // the boards laid tight; and over the walls beside a deck on its layer only as far as
-        // their logs' faces, so no slot runs along a wall; nowhere else.
+        // Over every cube of floor and flat roof, its top boarded whole, the boards laid
+        // tight, under a wall of its own logs standing on it too, which are narrower than
+        // its cube; and over the walls beside a deck on its layer only as far as their logs'
+        // faces, so no slot runs along a wall; nowhere else.
         let whole = CELL_M * CELL_M;
         for at in &deck {
             let area = cover.get(at).copied().unwrap_or(0.0);
@@ -804,6 +817,109 @@ mod tests {
         assert!((high.x - (7.0 * CELL_M + reach)).abs() < 0.01, "{high}");
         assert!((low.z - (CELL_M - reach)).abs() < 0.01, "{low}");
         assert!((high.z - (5.0 * CELL_M + reach)).abs() < 0.01, "{high}");
+    }
+
+    #[test]
+    fn a_lookouts_deck_is_closed_under_its_rail_and_beside_its_corner_posts() {
+        // A deck on posts at its corners with a rail of its own beams along one edge, the
+        // posts running up into the rail's corners, as the village's lookout: the rail's
+        // beams are narrower than its cubes, so the deck's boards run on under them, and the
+        // deck's rims, ending at the corner posts, run on into them. Lines up through the
+        // deck under the rail, and in through its side beside a corner post, all meet
+        // something; slots 4 to 12 cm wide were open there.
+        let hewn = crate::kit::tests::shipped("hewn.ron");
+        let kits = Kits(vec![hewn.clone()]);
+        let cube = |shape: Shape| {
+            Some(crate::Cube {
+                shape,
+                ..crate::Cube::new(hewn.kind(), Fill::Solid)
+            })
+        };
+        let mut base = Base::default();
+        let mut fill = |min: [i32; 3], max: [i32; 3], shape: Shape| {
+            base.apply(BuildOp::Fill {
+                min,
+                max,
+                cube: cube(shape),
+            })
+        };
+        for [x, z] in [[0, 0], [5, 0], [0, 3], [5, 3]] {
+            fill([x, 0, z], [x, 0, z], Shape::Post);
+        }
+        fill([0, 1, 0], [5, 1, 3], Shape::Whole);
+        fill([0, 2, 0], [5, 2, 0], Shape::Whole);
+        let lines = crate::inspect::Lines::of(&base, &kits);
+        // Up through the deck under the rail, its cubes but the corners'.
+        for i in 0..=200 {
+            let x = 0.55 + i as f32 * 0.0095;
+            for j in 0..=50 {
+                let z = 0.0 + j as f32 * 0.01;
+                assert!(
+                    lines.meets(Vec3::new(x, 0.3, z), Vec3::Y, 2.0),
+                    "open under the rail at ({x:.3}, {z:.3})"
+                );
+            }
+        }
+        // In through the deck's side beside the corner post, under its boards, as closed as
+        // the rim beside it.
+        let heights: Vec<f32> = (0..=45)
+            .map(|j| 0.5 + j as f32 * 0.01)
+            .filter(|&y| lines.meets(Vec3::new(1.25, y, -0.3), Vec3::Z, 0.6))
+            .collect();
+        assert!(heights.len() > 5, "the deck's rim");
+        for i in 0..=14 {
+            let x = 0.36 + i as f32 * 0.01;
+            for &y in &heights {
+                assert!(
+                    lines.meets(Vec3::new(x, y, -0.3), Vec3::Z, 0.6),
+                    "open beside the corner post at ({x:.2}, {y:.2})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_decks_boards_stop_at_a_flights_top_step_beside_it() {
+        // Stairs up beside a deck to its level, as the village's outside stair to an upper
+        // door: the deck's boards run on under a wall beside them, but not over the
+        // flight's top step, whose tread is the deck's edge there; run on over it, its
+        // boards lay in the plane of the tread's end.
+        let hewn = crate::kit::tests::shipped("hewn.ron");
+        let mut base = Base::default();
+        base.apply(BuildOp::SetFloor {
+            min: [0, 1, 0],
+            max: [3, 1, 3],
+            laid: true,
+            kind: hewn.kind(),
+        });
+        // A flight up from the south to the deck's south edge.
+        for (z, y) in [(5, 0), (4, 1)] {
+            base.apply(BuildOp::Fill {
+                min: [1, y, z],
+                max: [1, y, z],
+                cube: Some(crate::Cube {
+                    shape: Shape::Stair(crate::Facing::North),
+                    ..crate::Cube::new(hewn.kind(), Fill::Solid)
+                }),
+            });
+        }
+        let layout = lay(&base, &hewn);
+        let boards: Vec<_> = planks(&layout)
+            .into_iter()
+            .filter(|p| p.3 == ticks(BOARD_THICK_M))
+            .collect();
+        assert!(!boards.is_empty());
+        for (from, to, wide, _) in &boards {
+            // A board's reach across, along z: none past the deck's south face, z = 2.
+            let half = super::super::metres(*wide) * 0.5;
+            let south = from.z.max(to.z)
+                + if (from.x - to.x).abs() > 1e-3 {
+                    half
+                } else {
+                    0.0
+                };
+            assert!(south <= 2.0 + 1e-3, "a board reaching z = {south}");
+        }
     }
 
     #[test]

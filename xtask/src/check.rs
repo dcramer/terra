@@ -19,6 +19,8 @@ const SLOW_TESTS: &[&str] = &[
     "sections::tests::a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest",
     "sections::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in",
     "sections::tests::every_junction_case_is_drawn_without_a_fault",
+    // One of each sort of the village's buildings laid and drawn whole.
+    "village::tests::no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels",
 ];
 
 /// The gate (D37). The full check, run by git before each push: formatting, lints, every test,

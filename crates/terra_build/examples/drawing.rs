@@ -18,7 +18,7 @@
 //! check fails.
 
 use glam::IVec3;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -48,24 +48,13 @@ fn main() -> ExitCode {
     let mut fights: BTreeMap<String, (usize, f32, String)> = BTreeMap::new();
     let mut edits: Vec<(String, usize, usize, usize, f32)> = Vec::new();
     let mut operations: Vec<f32> = Vec::new();
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    for building in terra_build::village::village(7, &kinds) {
-        // One of each sort of building: the village repeats them.
-        let sort = format!("{:?} {:?}", building.plan, building.scheme);
-        if !seen.insert(sort)
-            || only
-                .as_ref()
-                .is_some_and(|o| !building.name.contains(o.as_str()))
+    for (building, mut base) in terra_build::village::each_sort(&kinds) {
+        if only
+            .as_ref()
+            .is_some_and(|o| !building.name.contains(o.as_str()))
         {
             continue;
         }
-        let mut base = Base::default();
-        for op in &building.ops {
-            base.apply(*op);
-        }
-        base.lay_footings(kinds.first().masonry, |column| {
-            -((column[0] + column[1]).rem_euclid(3) as i16) * 20
-        });
         let progress = Progress::Whole;
         let whole = sections::Whole::lay(&base, &kits);
         let mut meshes: Vec<Mesh> = Vec::new();

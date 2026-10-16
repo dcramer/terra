@@ -46,10 +46,12 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
                 } else {
                     0.0
                 };
+                // Else a hair into what it stands on, as a corner post is, out of the plane of
+                // a sill's or a split log's foot laid on the same.
                 let under = if solid(along, low - 1) {
                     kit.course * 0.5 + POST_PAST_M
                 } else {
-                    0.0
+                    super::runs::CORNER_POST_SUNK_M
                 };
                 let mut post = super::runs::log(
                     axis.point(row, middle, low as f32 * CELL_M - under),
@@ -343,6 +345,40 @@ mod tests {
     use super::*;
     use crate::{BuildOp, Cube, DOOR_HEIGHT_M, Panel, STOREY_CUBES};
     use glam::Vec3;
+
+    #[test]
+    fn a_jamb_post_with_nothing_of_its_kind_under_it_stands_a_hair_into_what_it_stands_on() {
+        // A doorway at the foot of a wall standing on nothing of its kind, as on a stone
+        // footing: the posts up its sides stand a hair into what is under them, as a corner
+        // post does, out of the plane of the foot's sill laid on the same; standing on it,
+        // the two feet fought where they met (the village's squared timber L-shaped house).
+        let kit = crate::kit::tests::shipped("hewn.ron");
+        let mut base = crate::Base::default();
+        for x in 0..6 {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 0],
+                panel: Some(if x == 2 { Panel::Door } else { Panel::Solid }),
+                kind: kit.kind(),
+            });
+        }
+        let feet: Vec<f32> = lay(&base, &kit)
+            .pieces
+            .iter()
+            .filter_map(|piece| match piece {
+                Piece::Log {
+                    from,
+                    to,
+                    role: Some(super::super::roles::Role::Jamb),
+                    ..
+                } => Some(from.metres().y.min(to.metres().y)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(feet.len(), 2, "a post up each side: {feet:?}");
+        for foot in feet {
+            assert!(foot < -0.005, "a post's foot at {foot}");
+        }
+    }
 
     #[test]
     fn a_door_cuts_the_courses_it_crosses_and_is_framed() {

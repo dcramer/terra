@@ -253,6 +253,53 @@ mod tests {
     }
 
     #[test]
+    fn a_lintel_over_an_opening_at_a_walls_end_turns_its_corner_and_runs_on_past_none() {
+        // A window at a stone wall's free end, as the village's U-shaped farmstead has: the
+        // lintels over it on the wall's two faces and its end meet at the end's corners,
+        // where nothing of the wall runs on for them to bear on. Each turns its corner, mitred
+        // out to the next; one stopping square there ran on past the corner into the air
+        // (13 cm) and through the other, both their undersides in one plane.
+        let mut base = Base::default();
+        for x in 0..4 {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 0],
+                panel: Some(if x == 0 { Panel::WINDOW } else { Panel::Solid }),
+                kind: kit().kind(),
+            });
+        }
+        let kit = dressed();
+        let pieces = lay(&base, &kit, &Kits(vec![kit.clone()]), Scope::ALL);
+        let heads: Vec<(IVec3, Dir, [End; 2])> = pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Trim {
+                    cube,
+                    role: Role::Head,
+                    side,
+                    ends,
+                    ..
+                } => Some((cube, side, ends)),
+                _ => None,
+            })
+            .collect();
+        // The wall's end face's, and the two faces' along it.
+        let end_face: Vec<_> = heads.iter().filter(|h| h.1 == Dir::West).collect();
+        assert!(!end_face.is_empty(), "{heads:?}");
+        for (_, _, ends) in &end_face {
+            assert_eq!(*ends, [End::Out, End::Out], "{heads:?}");
+        }
+        let along: Vec<_> = heads
+            .iter()
+            .filter(|h| matches!(h.1, Dir::North | Dir::South))
+            .collect();
+        assert_eq!(along.len(), 2, "{heads:?}");
+        for (_, _, ends) in along {
+            // Its west end turns the corner; its east end is borne on the wall past it.
+            assert_eq!(*ends, [End::Out, End::Square], "{heads:?}");
+        }
+    }
+
+    #[test]
     fn a_window_in_stone_has_a_lintel_a_sill_and_jamb_stones_and_no_timber_lintel() {
         let mut base = Base::default();
         for x in 0..6 {

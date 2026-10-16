@@ -320,7 +320,7 @@ fn post_foot(walls: &Walls, at: IVec3, edge: super::roles::Edge) -> f32 {
 /// (D192).
 const CORNER_POST_PROUD_M: f32 = 0.03;
 /// How far a corner post's foot is let into what it stands on.
-const CORNER_POST_SUNK_M: f32 = 0.012;
+pub(super) const CORNER_POST_SUNK_M: f32 = 0.012;
 
 /// How wide a post up an opening's side is, where the kit dresses jambs with one.
 pub(super) fn post_width(kit: &Kit) -> Option<f32> {

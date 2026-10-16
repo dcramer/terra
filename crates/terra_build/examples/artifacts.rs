@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     }) else {
         return ExitCode::FAILURE;
     };
-    let cases: Vec<(String, terra_build::Base)> = if quick {
+    let mut cases: Vec<(String, terra_build::Base)> = if quick {
         QUICK
             .iter()
             .flat_map(|family| inspect::cases(&scope, Some(family)))
@@ -55,6 +55,16 @@ fn main() -> ExitCode {
     } else {
         inspect::cases(&scope, only.as_deref())
     };
+    // And one of each sort of the village's buildings, in the settlement's own materials, in
+    // every set: the shipped scene the game builds most of.
+    let Some(village) = village(&assets, &kits, &names) else {
+        return ExitCode::FAILURE;
+    };
+    cases.extend(
+        village
+            .into_iter()
+            .filter(|(name, _)| quick || only.as_ref().is_none_or(|only| name.contains(only))),
+    );
     let started = std::time::Instant::now();
     // Every base on a thread of its own, as many at once as there are cores.
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
@@ -220,8 +230,9 @@ fn main() -> ExitCode {
 /// The bases `--quick` inspects, the ratchet `cargo xtask check` runs before a push (D287):
 /// each kit's and each two kits' rectangle under a gable; and in each kit, the QA cabin, the
 /// junctions family and the roofs-and-walls family, whose bases are the proof of rows of the
-/// voxel contract's junction matrix (docs/building-voxels.md). Not the castle, nor every
-/// roof over every plan, which `cargo xtask artifacts --ratchet` inspects.
+/// voxel contract's junction matrix (docs/building-voxels.md); and the village's buildings,
+/// which every set holds (`village`). Not the castle, nor every roof over every plan, which
+/// `cargo xtask artifacts --ratchet` inspects.
 const QUICK: [&str; 4] = [
     "rectangle, gable roof",
     ": QA cabin",
@@ -329,6 +340,50 @@ mod baseline {
         println!("artifacts: ratchet holds ({set})");
         ExitCode::SUCCESS
     }
+}
+
+/// One of each sort of the village's buildings in the settlement's materials
+/// (`village::each_sort`), each named by the wall kinds it is built of, as a kit's bases are:
+/// "2 with 3: village, a masonry and timber house of two storeys under a gable".
+fn village(
+    assets: &Path,
+    kits: &Kits,
+    names: &std::collections::BTreeMap<u16, String>,
+) -> Option<Vec<(String, terra_build::Base)>> {
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+    };
+    let named = |name: &str| {
+        names
+            .iter()
+            .find(|(_, file)| file.as_str() == name)
+            .and_then(|(&id, _)| kits.0.iter().find(|kit| kit.id == id))
+            .map(|kit| kit.kind())
+    };
+    let palette = match terra_build::village::Palette::read(&read, &named, kits) {
+        Ok(palette) => palette,
+        Err(why) => {
+            println!("artifacts: the village's materials: {why}");
+            return None;
+        }
+    };
+    Some(
+        terra_build::village::each_sort(&palette)
+            .into_iter()
+            .map(|(building, base)| {
+                let walls: std::collections::BTreeSet<u16> = base
+                    .kinds()
+                    .filter(|kind| !kind.is_roof())
+                    .map(|kind| kind.0)
+                    .collect();
+                let ids: Vec<String> = walls.iter().map(u16::to_string).collect();
+                (
+                    format!("{}: village, {}", ids.join(" with "), building.name),
+                    base,
+                )
+            })
+            .collect(),
+    )
 }
 
 /// The building baseline's kits (D333): the wall materials the settlement is built of

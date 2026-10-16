@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// How far under the top of its highest cube a stringer's head is cut level.
+const STRINGER_UNDER_M: f32 = 0.004;
+
 /// A deck's plank (`layout::floors`): a board, a joist or a rim beam, sawn square, its face
 /// in the kit's `Floor` material, drawn from one board of it where the texture is of boards
 /// side by side, a little lighter or darker by its seed; its sawn ends in `LogEnd`.
@@ -54,9 +57,11 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let mut member = squared(&frame, &look, Split::Whole, &mut random);
     // A sloping one, a flight's stringer, cut level at the top of the cube its higher end
     // is in, as a carpenter cuts a stringer's head level with the deck it hangs from, its
-    // square end against the rim and nothing of it standing over the boards.
+    // square end against the rim and nothing of it standing over the boards; a hair under
+    // it, out of the plane of a tread flush with the cube's top over it.
     if (from.y - to.y).abs() > 0.05 {
-        let cap = libm::ceilf(from.y.max(to.y) / crate::CELL_M - 1e-3) * crate::CELL_M;
+        let cap =
+            libm::ceilf(from.y.max(to.y) / crate::CELL_M - 1e-3) * crate::CELL_M - STRINGER_UNDER_M;
         level_cut(&mut member, from, frame.axis, cap);
         // And its foot cut plumb where its line meets the floor, at the flight's front, so
         // its lower edge, a section's depth down the slope from its line, does not stand out

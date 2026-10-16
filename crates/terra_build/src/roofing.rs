@@ -234,8 +234,9 @@ const HIP_CLEAR_M: f32 = 0.6;
 const CREST_BLEND: f32 = 1.0;
 
 /// How far out a verge's board, seated square to its roof, stands past the plane its line
-/// is in: off the plane of the eave's board it laps over at its foot.
-const VERGE_PROUD_M: f32 = 0.004;
+/// is in: off the plane of the eave's board it laps over at its foot, and of a higher
+/// roof's eave board carried out over it along the same line, whose face stands 4 mm out.
+const VERGE_PROUD_M: f32 = 0.008;
 
 /// How far under the roof's deck its boards are drawn, plumb: more than two planes need to
 /// be apart not to fight (`inspect`), less than anything seated under the deck reaches.

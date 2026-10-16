@@ -608,9 +608,16 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         }
     }
     // Seated over a crease, a modelled piece's faces bend with it: two that meet at a
-    // corner, nearly in one plane as modelled, may come to lie in one, the one over the other.
-    if made && matches!(line.seat, Seat::Crease { .. }) {
-        unfold(&mut body);
+    // corner, nearly in one plane as modelled, may come to lie in one, the one over the other;
+    // and cut to length and joined to its cap, two of its layers may meet in one.
+    if made {
+        body.append(std::mem::take(&mut ends));
+        // A face cut back may still lie over another: again, until none does.
+        for _ in 0..UNFOLD_PASSES {
+            if !unfold(&mut body) {
+                break;
+            }
+        }
     }
     // A modelled piece is in its kit's atlas, whatever it stands for; one made from
     // numbers in its material, its ends in theirs.
@@ -630,21 +637,31 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
     }
 }
 
-/// Faces of a laid piece that meet at a corner and lie one over the other in one plane,
-/// looking the same way: the smaller cut back to what the larger leaves of it, its new
-/// corners' normals, atlas places and colours taken from its own.
-fn unfold(mesh: &mut Indexed) {
-    let key = |p: Vec3| (p * 1e4).round().as_ivec3().to_array();
+/// Faces of a laid piece that lie one over the other in one plane, looking the same way,
+/// meeting at a corner or not: the smaller cut back to what the larger leaves of it, its new
+/// corners' normals, atlas places and colours taken from its own. Whether any was.
+fn unfold(mesh: &mut Indexed) -> bool {
     let face = |m: &Indexed, t: usize| -> [Vec3; 3] {
         [0, 1, 2].map(|k| m.positions[m.indices[t * 3 + k] as usize])
     };
     let count = mesh.indices.len() / 3;
+    // Faces near one another, by the cells of a small grid their bounds reach: those that
+    // meet at a corner, and those that come to lie over one another where the piece is
+    // cut, bent or joined to its cap, though they share none.
     let mut at: std::collections::HashMap<[i32; 3], Vec<usize>> = Default::default();
     for t in 0..count {
-        for p in face(mesh, t) {
-            let list = at.entry(key(p)).or_default();
-            if list.last() != Some(&t) {
-                list.push(t);
+        let f = face(mesh, t);
+        let low = (f[0].min(f[1]).min(f[2]) / UNFOLD_CELL_M)
+            .floor()
+            .as_ivec3();
+        let high = (f[0].max(f[1]).max(f[2]) / UNFOLD_CELL_M)
+            .floor()
+            .as_ivec3();
+        for x in low.x..=high.x {
+            for y in low.y..=high.y {
+                for z in low.z..=high.z {
+                    at.entry([x, y, z]).or_default().push(t);
+                }
             }
         }
     }
@@ -718,7 +735,7 @@ fn unfold(mesh: &mut Indexed) {
         }
     }
     if !gone.iter().any(|&g| g) {
-        return;
+        return false;
     }
     let old = std::mem::take(&mut mesh.indices);
     for (t, chunk) in old.chunks_exact(3).enumerate() {
@@ -727,10 +744,17 @@ fn unfold(mesh: &mut Indexed) {
         }
     }
     mesh.indices.extend(added);
+    true
 }
 
 /// How far apart two faces of a laid piece may be and still lie in one plane, in metres.
 const COPLANAR_M: f32 = 0.0015;
+
+/// How wide the cells faces of a laid piece are filed by to find those over one another.
+const UNFOLD_CELL_M: f32 = 0.05;
+
+/// How many times at most a laid piece's faces over one another are cut back.
+const UNFOLD_PASSES: usize = 4;
 
 /// How far inside the edges a crease's module is mitred to it is cut, in metres: off the
 /// plane of the covering's own cut edge, which would fight its closing face.
@@ -1934,7 +1958,7 @@ mod tests {
             mesh.corner(p, Vec3::Y, [0.0; 2], [1.0; 3]);
         }
         mesh.indices = vec![0, 1, 2, 3, 4, 5];
-        unfold(&mut mesh);
+        assert!(unfold(&mut mesh));
         let faces: Vec<[Vec3; 3]> = mesh
             .indices
             .chunks(3)
@@ -1948,6 +1972,44 @@ mod tests {
         for [a, b, c] in faces {
             assert!((b - a).cross(c - a).y > 0.0);
         }
+    }
+
+    #[test]
+    fn faces_of_a_laid_piece_over_one_another_with_no_corner_shared_are_cut_back_too() {
+        // A modelled ridge cut to length and joined to its cap, as over the village's
+        // houses: two of its shingles' faces come to lie in one plane, the one over the
+        // other, sharing no corner; and a face cut back once may still lie over a third.
+        // What is left covers their union once.
+        let mut mesh = Indexed::default();
+        for p in [
+            // A large face, and two smaller ones over it, apart from its corners, the second
+            // over the first too.
+            Vec3::ZERO,
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.1, 0.0, 0.1),
+            Vec3::new(0.1, 0.0, 0.5),
+            Vec3::new(0.5, 0.0, 0.1),
+            Vec3::new(0.15, 0.0, 0.15),
+            Vec3::new(0.15, 0.0, 0.3),
+            Vec3::new(0.3, 0.0, 0.15),
+        ] {
+            mesh.corner(p, Vec3::Y, [0.0; 2], [1.0; 3]);
+        }
+        mesh.indices = (0..9).collect();
+        for _ in 0..UNFOLD_PASSES {
+            if !unfold(&mut mesh) {
+                break;
+            }
+        }
+        let faces: Vec<[Vec3; 3]> = mesh
+            .indices
+            .chunks(3)
+            .map(|t| [0, 1, 2].map(|k| mesh.positions[t[k] as usize]))
+            .collect();
+        let (twice, all) = twice_covered(&faces, Vec3::Y);
+        assert!(twice < 1e-6, "{twice}");
+        assert!((all - 0.5).abs() < 1e-4, "{all}");
     }
 
     #[test]

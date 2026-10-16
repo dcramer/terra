@@ -170,9 +170,24 @@ fn across_openings(
                     if !scope.reaches(cube, cube) {
                         continue;
                     }
+                    // Each end stops square, borne on the wall past it, but where the wall
+                    // ends there over the opening and the lintel turns its own outside corner
+                    // onto the next face's: mitred out to that one, as a coping is, not run
+                    // on past the corner into the air and through the other.
+                    let end = |toward: i32| {
+                        let turned = Edge {
+                            side: Dir::of(u_axis, toward),
+                            ..edge
+                        };
+                        if roles.edges(cube).contains(&turned) {
+                            End::Out
+                        } else {
+                            End::Square
+                        }
+                    };
                     let ends = [
-                        if along == start { End::Square } else { End::On },
-                        if along == u { End::Square } else { End::On },
+                        if along == start { end(-1) } else { End::On },
+                        if along == u { end(1) } else { End::On },
                     ];
                     pieces.push(Piece::Trim {
                         cube,

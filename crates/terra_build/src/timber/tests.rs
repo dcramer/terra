@@ -326,6 +326,29 @@ fn a_walls_sawn_ends_differ_from_one_another_and_some_are_greyed() {
 }
 
 #[test]
+fn a_stringers_head_is_cut_level_under_the_top_of_the_cube_it_reaches() {
+    // A flight's stringer, up from the ground to the top of a storey: its head cut level
+    // under the top of its highest cube, out of the plane of a tread laid flush with that
+    // top, as the village's outside stair to an upper door has; cut in that plane, the
+    // two fought for 58 cm².
+    let kit = pinned(Profile::Hewn);
+    let ticks = |m: f32| crate::layout::ticks(m);
+    let stringer = Piece::Plank {
+        from: Place::near(Vec3::new(0.0, 0.1, 0.0)),
+        to: Place::near(Vec3::new(0.0, 3.0, 2.9)),
+        wide: ticks(0.07),
+        high: ticks(0.32),
+        seed: 5,
+    };
+    let mut surfaces = Surfaces::default();
+    plank(&stringer, &kit, &mut surfaces);
+    let all = surfaces.0[&Material::Floor].indexed();
+    let top = all.positions.iter().fold(f32::MIN, |m, p| m.max(p.y));
+    assert!(top < 3.0 - 0.002, "its head at {top}");
+    assert!(top > 3.0 - 0.02, "its head at {top}, short of the deck");
+}
+
+#[test]
 fn a_plank_drawn_from_one_board_of_its_texture_is_not_smeared_down_its_sides() {
     let mut kit = pinned(Profile::Hewn);
     kit.textures.insert(
