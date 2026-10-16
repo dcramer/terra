@@ -188,7 +188,7 @@ def game_clips():
 def fit_textures(flags):
     """Scales every image down to the budget a `--textures=PIXELS` flag in `flags` names, as
     games keep their source art large and give each kind of asset a texture budget: the game's
-    files take a body's maps at 2048 and gear's at 1024 (docs/decisions.md, D188). No flag,
+    files take a body's maps at 2048 and gear's at 1024 (docs/decisions/D188.md). No flag,
     no change."""
     size = next((int(f.split("=", 1)[1]) for f in flags if f.startswith("--textures=")), None)
     if size is None:

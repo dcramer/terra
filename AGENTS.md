@@ -26,7 +26,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The stack is in
 
 ## Before doing anything
 
-Read `docs/README.md`, then `docs/decisions.md`. Before building a component, read its doc in `docs/` and `docs/development.md`.
+Read `docs/README.md`, then `docs/decisions.md`, the index of decisions; before building on one, read it in full (`docs/decisions/Dnnn.md`, or `cargo xtask decision D28`). Before building a component, read its doc in `docs/` and `docs/development.md`.
 
 ## Routine
 
@@ -39,13 +39,13 @@ Every agent and lead session follows it (D375; [development.md](docs/development
 
 ## Decisions
 
-- `docs/decisions.md` is the source of truth. Don't contradict a live decision; raise it instead.
+- `docs/decisions/`, a file per decision indexed by `docs/decisions.md`, is the source of truth. Don't contradict a live decision; raise it instead.
 - **Decided** is our current answer. **Leaning** is a working assumption. **Open** is not chosen. **Superseded** rows are kept only so their numbers resolve.
 - Design decisions (what the game is: gameplay, art, scope) belong to the developers. Give a recommendation, mark it Open, and don't build on it. When a developer thinks out loud, that is input, not a decision, unless they say it is settled.
 - Technical decisions (engine, architecture, tooling, workflow) are yours: decide, record the reason, and keep going. The developers can overrule.
-- **Say who decided.** The By column is Developers or Agent. An agent's decision is soft: another agent may change it with a reason and a log line, without asking; a developer's decision is changed only by the developers. A choice that other work will build on gets a row, even a small one; one left only in chat or code didn't happen.
+- **Say who decided.** By is Developers or Agent. An agent's decision is soft: another agent may change it with a reason and a log line, without asking; a developer's decision is changed only by the developers. A choice that other work will build on gets a decision, even a small one; one left only in chat or code didn't happen.
 - **Revisit what proves wrong.** Nothing decided is fixed for good. When a decision, or something built on one, turns out wrong or inefficient, say so with the evidence and change it: an agent's decision directly, with a reason and a log line; a developer's by raising it with them and a recommendation.
-- When a decision is made or changes, update its row and every doc it affects in the same change, and add a line at the end of [docs/decisions-log.md](docs/decisions-log.md). A new decision takes the next free number (`cargo xtask decision` prints it; when two agents take one at once, the check names the duplicate and whoever pushes second renumbers), goes in its area's section, with the Owner column saying Design or Tech, the By column saying who made it, and the developers' own words in the Why column. `cargo xtask check` checks the table's shape and that every decision cited exists.
+- When a decision is made or changes, update its file and every doc it affects in the same change, run `node tools/docs/docs.ts --render` (it writes the index; never edit `docs/decisions.md`'s table by hand), and add a line at the end of [docs/decisions-log.md](docs/decisions-log.md). A new decision takes the next free number (`cargo xtask decision` prints it; when two agents take one at once, the rebase stops on the file both added and whoever pushes second renumbers) as `docs/decisions/Dnnn.md`, shaped like the others: its Area an index heading, Owner Design or Tech, By who made it, and the developers' own words under `## Why`. `cargo xtask check` checks each file's shape, that the index is their render, and that every decision cited exists.
 
 ## How we work
 

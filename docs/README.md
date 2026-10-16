@@ -6,7 +6,7 @@ Working title: **Terra**. First and foremost, we are building an extremely ambit
 
 | Looking for | Go to |
 |---|---|
-| What is decided, and who decided it | [decisions.md](decisions.md), by area; [its log](decisions-log.md) says what changed when |
+| What is decided, and who decided it | [decisions.md](decisions.md), the index by area; each decision in full in [decisions/](decisions/D1.md), or `cargo xtask decision D28`; [the log](decisions-log.md) says what changed when |
 | How a part of the game works and why | The design docs below |
 | A design being weighed | [proposals](proposals/README.md) |
 | What we tried, measured or surveyed | [research](../research/README.md), dated notes; [benchmarks.csv](../research/benchmarks.csv) for frame times |
@@ -20,7 +20,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 
 | Doc | What it covers |
 |---|---|
-| [decisions.md](decisions.md) | What is settled, what is a working assumption, what is open. Source of truth. |
+| [decisions.md](decisions.md) | What is settled, what is a working assumption, what is open: the index of `decisions/`, a file per decision, which are the source of truth. Written by `node tools/docs/docs.ts --render`; edit the files, not it. |
 | [decisions-log.md](decisions-log.md) | One line per decision added or changed, newest last. Git merges it by union, so agents adding lines at once never conflict. |
 
 **The game as a whole**
@@ -85,10 +85,10 @@ Findings, surveys and measurements live in [research](../research), not here. Th
 
 ## How we keep these useful
 
-- **decisions.md wins.** If another doc disagrees with it, the other doc is wrong; fix it.
+- **The decisions win.** If another doc disagrees with one in [decisions/](decisions.md), the other doc is wrong; fix it.
 - **Every claim has a status.** *Decided* means don't reopen without a reason. *Leaning* means a working assumption that is untested or unconfirmed. *Open* means nobody has chosen yet.
 - **Change the doc in the same change as the thing it describes.** A decision made in chat that isn't written here didn't happen.
 - **Keep them short.** These describe intent and constraints, not implementation. Code explains itself.
-- **Say each thing once.** A decision's row says what and why in a few sentences and links its doc; the doc says how the system works; a tool's README has its commands and files; a skill has the steps and links the README rather than copying it; a research note is what was found on its date and isn't rewritten. Everywhere else cites the decision or links the place.
-- **Checked, not trusted.** `cargo xtask check` fails on a dead link or heading, a doc, note, spike or script missing from its index, and a malformed or unknown decision ([tools/docs](../tools/docs/README.md)).
+- **Say each thing once.** A decision's file says what and why in a few sentences and links its doc; the doc says how the system works; a tool's README has its commands and files; a skill has the steps and links the README rather than copying it; a research note is what was found on its date and isn't rewritten. Everywhere else cites the decision or links the place.
+- **Checked, not trusted.** `cargo xtask check` fails on a dead link or heading, a doc, note, spike or script missing from its index, a malformed or unknown decision, and a decisions index that isn't its files ([tools/docs](../tools/docs/README.md)).
 - **Record why.** A decision without its reason gets relitigated.

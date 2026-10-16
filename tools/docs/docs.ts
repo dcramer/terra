@@ -1,12 +1,13 @@
 // Checks the repository's docs, run by `cargo xtask check`: links and anchors resolve, every
-// doc, note, spike and tool script is in its folder's index, the decisions table is well
-// formed, with every decision a doc cites in it, and every test a contract page cites as its
-// proof exists, and a page's part rendered from a data file matches it. Prints each fault;
-// exits 1 if there are any.
+// doc, note, spike and tool script is in its folder's index, every decision file
+// (docs/decisions/Dnnn.md) is well formed, with every decision a tracked file cites among them,
+// every test a contract page cites as its proof exists, and a page's part rendered from data
+// matches it. Prints each fault; exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
-//   node tools/docs/docs.ts --next    the next free decision number, here and on origin/main (`cargo xtask decision`)
-//   node tools/docs/docs.ts --render  writes the parts of pages rendered from data files (the voxel contract's matrix)
+//   node tools/docs/docs.ts --next         the next free decision number, here and on origin/main (`cargo xtask decision`)
+//   node tools/docs/docs.ts --show D28 …   those decisions in full, with their log lines (`cargo xtask decision D28 …`)
+//   node tools/docs/docs.ts --render       writes the parts of pages rendered from data (the voxel matrix, the decisions index)
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -54,31 +55,143 @@ export function brokenLinks(file: string, markdown: string, read: (path: string)
 
 const STATUS = /^(Decided|Leaning|Open|Rejected|Superseded by D\d+(, D\d+)*)$/;
 
-/** The decisions table's rows that are malformed, and the decision numbers they hold. */
-export function decisionTable(markdown: string): { faults: string[]; ids: Set<string> } {
+/** The index's areas, in order, each a heading of docs/decisions.md and a decision's Area. */
+export const AREAS = [
+  { title: "The game as a whole", intro: "What we are building, its tenets, scope and players." },
+  { title: "Worlds and realms", intro: "Ground, water, weather, seasons, life and how realms join." },
+  { title: "The player and survival", intro: "Needs, death, the body, the map and options." },
+  { title: "Items and crafting", intro: "Equipment, packs, tools, stations and icons." },
+  { title: "Lore, magic, combat and growth", intro: "Essences, ranks, skills, fighting, creatures and threats." },
+  { title: "People and the tribe", intro: "NPCs, factions, claims, recruits and outposts." },
+  { title: "Building", intro: "How structures are planned, built, drawn and coded." },
+  { title: "Art, characters and sound", intro: "The look, models, bodies and gear, textures and audio." },
+  { title: "Engine and code", intro: "Rust and Bevy, terrain, shared state, networking and the game's model." },
+  { title: "Tools and workflow", intro: "Checks, developer tools, languages and the repository." },
+];
+const GONE = { title: "Superseded and rejected", intro: "Kept so their numbers still resolve. They no longer bind anything." };
+
+/** One decision, as its file docs/decisions/Dnnn.md holds it. */
+export interface Decision {
+  id: string;
+  topic: string;
+  area: string;
+  owner: string;
+  by: string;
+  status: string;
+  decision: string;
+  why: string;
+}
+
+/**
+ * A decision file read: line 1 `# Dnnn: Topic`, then `Area: … · Owner: … · By: … · Status: …`,
+ * then the decision, then optionally `## Why` and the reason. Its faults, if it isn't one.
+ */
+export function parseDecision(file: string, text: string): { decision?: Decision; faults: string[] } {
   const faults: string[] = [];
-  const topics = new Map<string, string>();
-  const twice: string[] = [];
-  for (const line of markdown.split("\n")) {
-    if (!/^\| D\d+ \|/.test(line)) continue;
-    const cells = line.slice(1, -1).split(" | ").map((c) => c.trim());
-    const [id, topic, owner, by, status] = cells;
-    const fault = (what: string) => faults.push(`docs/decisions.md: ${id} ${what}`);
-    if (!line.endsWith("|") || cells.length !== 7) fault(`has ${cells.length} cells, not 7 (a | in its text?)`);
-    // Two agents took the same number at once; the second to push renumbers its own.
-    const first = topics.get(id);
-    if (first !== undefined) twice.push(`${id} is in the table twice, "${first}" and "${topic}"`);
-    else topics.set(id, topic);
-    if (owner !== "Design" && owner !== "Tech") fault(`has Owner "${owner}", not Design or Tech`);
-    if (!STATUS.test(status ?? "")) fault(`has Status "${status}"`);
-    const nobody = /^(Open|Rejected|Superseded)/.test(status ?? "");
-    if (nobody ? by !== "—" : by !== "Developers" && by !== "Agent")
-      fault(`has By "${by}": Developers or Agent, or — when Open, Rejected or Superseded`);
+  const fault = (what: string) => faults.push(`${file}: ${what}`);
+  const shape = text.match(/^# (D\d+): (.+)\n\nArea: (.+) · Owner: (.+) · By: (.+) · Status: (.+)\n\n([\s\S]+?)\n(?:\n## Why\n\n([\s\S]+?)\n)?$/);
+  if (!shape) {
+    fault("is not `# Dnnn: Topic`, a blank line, `Area: … · Owner: … · By: … · Status: …`, a blank line, the decision, then optionally `## Why` and the reason");
+    return { faults };
   }
-  const ids = new Set(topics.keys());
-  for (const what of twice)
-    faults.push(`docs/decisions.md: ${what}: renumber the one you added to D${nextDecision(ids)}, the next free number`);
-  return { faults, ids };
+  const [, id, topic, area, owner, by, status, decision, why = ""] = shape;
+  if (basename(file) !== `${id}.md`) fault(`is headed ${id}; a decision's file is named for its number`);
+  if (owner !== "Design" && owner !== "Tech") fault(`has Owner "${owner}", not Design or Tech`);
+  if (!STATUS.test(status)) fault(`has Status "${status}": Decided, Leaning, Open, Rejected or Superseded by Dn`);
+  const nobody = /^(Open|Rejected|Superseded)/.test(status);
+  if (nobody ? by !== "—" : by !== "Developers" && by !== "Agent")
+    fault(`has By "${by}": Developers or Agent, or — when Open, Rejected or Superseded`);
+  const gone = /^(Rejected|Superseded)/.test(status);
+  if (!AREAS.some((a) => a.title === area) && !(gone && area === "—"))
+    fault(`has Area "${area}": one of docs/decisions.md's headings, or — when Rejected or Superseded`);
+  return { decision: { id, topic, area, owner, by, status, decision, why }, faults };
+}
+
+/** The decision files, from their names and texts: the decisions, and the faults of those that aren't. */
+export function readDecisions(files: { name: string; text: string }[]): { decisions: Decision[]; faults: string[] } {
+  const decisions: Decision[] = [];
+  const faults: string[] = [];
+  for (const { name, text } of files) {
+    const file = `docs/decisions/${name}`;
+    if (!/^D\d+\.md$/.test(name)) {
+      faults.push(`${file}: is not a decision; the folder holds only Dnnn.md files`);
+      continue;
+    }
+    const read = parseDecision(file, text);
+    faults.push(...read.faults);
+    if (read.decision) decisions.push(read.decision);
+  }
+  return { decisions, faults };
+}
+
+/**
+ * A decision's gist for the index: its first sentence (after one that only points at other
+ * decisions, as "Amends D270."), or when that is long, as much of it as ends at a clause (a
+ * comma, colon, semicolon, dash or bracket outside code) or else a word, links as their text.
+ */
+export function gist(decision: string, limit = GIST): string {
+  let text = decision.split("\n\n")[0].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+  const first = /^.+?[.!?](?=\s+[A-Z*`"(]|$)/;
+  const pointer = text.match(first)?.[0] ?? "";
+  if (pointer.length < 40 && /\bD\d+\b/.test(pointer) && pointer.length < text.length) text = text.slice(pointer.length).trimStart();
+  let sentence = text.match(first)?.[0] ?? text;
+  // A sentence of a word or two ("None.") takes the next with it when both fit.
+  while (sentence.length < 24 && sentence.length < text.length) {
+    const more = text.slice(sentence.length).match(/^\s*.+?[.!?](?=\s+[A-Z*`"(]|$)/)?.[0];
+    if (!more || sentence.length + more.length > limit) break;
+    sentence += more;
+  }
+  if (sentence.length <= limit) return sentence;
+  let depth = 0;
+  let code = false;
+  let cut = -1;
+  for (let i = 0; i < limit; i++) {
+    const c = sentence[i];
+    if (c === "`") code = !code;
+    else if (code) continue;
+    else if (c === "(") {
+      if (depth === 0 && i > 0) cut = i;
+      depth++;
+    } else if (c === ")") depth--;
+    else if (depth === 0 && (/[,;:]/.test(c) || sentence.startsWith(" —", i)) && sentence[i + 1] === " ") cut = i;
+  }
+  if (cut < limit * 0.6) cut = sentence.lastIndexOf(" ", limit);
+  let short = sentence.slice(0, cut).replace(/[\s,;:—]+$/, "");
+  if ((short.match(/`/g) ?? []).length % 2) short += "`";
+  if ((short.match(/(?<!\*)\*(?!\*)/g) ?? []).length % 2) short += "*";
+  if ((short.match(/\*\*/g) ?? []).length % 2) short += "**";
+  return `${short}…`;
+}
+
+/** How long a gist may be, in characters: short enough to keep the index near 60 KB (D389). */
+const GIST = 56;
+
+/** A cell's text with its pipes escaped, so the row keeps its cells. */
+const cell = (text: string) => text.replace(/\|/g, "\\|");
+
+/** The index of decisions.md: per area its heading and a row per decision, the gone ones last. */
+export function renderIndex(decisions: Decision[]): string {
+  const out: string[] = [];
+  const number = (d: Decision) => Number(d.id.slice(1));
+  const sorted = [...decisions].sort((a, b) => number(a) - number(b));
+  const gone = (d: Decision) => /^(Rejected|Superseded)/.test(d.status);
+  for (const area of [...AREAS, GONE]) {
+    const rows = sorted.filter((d) => (area === GONE ? gone(d) : !gone(d) && d.area === area.title));
+    out.push(`## ${area.title}`, "", area.intro, "", "| # | Topic | Owner | By | Status | Gist |", "|---|---|---|---|---|---|");
+    for (const d of rows)
+      out.push(`| [${d.id}](decisions/${d.id}.md) | ${cell(d.topic)} | ${d.owner} | ${d.by} | ${d.status} | ${cell(gist(d.decision))} |`);
+    out.push("");
+  }
+  return out.join("\n");
+}
+
+/** What a decision fault or a stale index tells someone who edited docs/decisions.md by hand. */
+const EDIT_THE_FILE = "decisions live in docs/decisions/Dnnn.md; edit that and run `node tools/docs/docs.ts --render`";
+
+/** Table rows in docs/decisions.md outside its rendered index: someone wrote a decision into the page. */
+export function strayRows(markdown: string): string[] {
+  const outside = markdown.replace(/<!-- rendered from [\s\S]*?<!-- end of rendered -->/, "");
+  return outside.split("\n").some((line) => line.startsWith("|")) ? [`docs/decisions.md: has a table outside its index; ${EDIT_THE_FILE}`] : [];
 }
 
 /** The next free decision number: one past the highest in use. */
@@ -88,10 +201,13 @@ export function nextDecision(ids: Iterable<string>): number {
   return highest + 1;
 }
 
-/** Decision numbers a text cites that the table does not have. */
+/** The tracked files whose citations of decisions are checked: docs, code, data and scripts. */
+const CITES = /(\.(md|rs|ts|mjs|toml|json|ron|wgsl|wesl|py|sh|yml|yaml|txt)|Makefile)$/;
+
+/** Decision numbers a text cites that have no file. */
 export function unknownDecisions(file: string, text: string, ids: Set<string>): string[] {
   const missing = new Set([...text.matchAll(/\bD(\d{1,3})\b/g)].map((m) => `D${m[1]}`).filter((d) => !ids.has(d)));
-  return [...missing].map((d) => `${file}: cites ${d}, which is not in docs/decisions.md`);
+  return [...missing].map((d) => `${file}: cites ${d}, which has no docs/decisions/${d}.md`);
 }
 
 /** Pages whose rows name the tests that prove them (D348): each test they name must exist. */
@@ -115,8 +231,25 @@ export function missingTests(file: string, markdown: string, sources: string): s
   return faults;
 }
 
-/** Pages whose tables are written from a data file (D348): the page, and the file. */
-const RENDERED = [{ page: "docs/building-voxels.md", data: "docs/building-voxels.json" }];
+/**
+ * Pages whose tables are written from data (D348, D389): the page, how its part is written from
+ * what `read` gives, and what to tell someone whose page differs from it.
+ */
+const RENDERED: { page: string; render: (read: (path: string) => string | undefined) => string; stale: string }[] = [
+  {
+    page: "docs/building-voxels.md",
+    render: (read) => renderMatrix(JSON.parse(read("docs/building-voxels.json") ?? "")),
+    stale: "differs from docs/building-voxels.json; edit the data, then run node tools/docs/docs.ts --render",
+  },
+  { page: "docs/decisions.md", render: () => renderIndex(decisionFiles().decisions), stale: EDIT_THE_FILE },
+];
+
+/** The decision files on disk, read. */
+function decisionFiles(): { decisions: Decision[]; faults: string[] } {
+  const dir = join(ROOT, "docs/decisions");
+  const names = existsSync(dir) ? readdirSync(dir).sort() : [];
+  return readDecisions(names.map((name) => ({ name, text: readFileSync(join(dir, name), "utf8") })));
+}
 
 /** Where a rendered part of a page begins and ends. */
 const BEGIN = /^<!-- rendered from (\S+) by `node tools\/docs\/docs\.ts --render`: edit that, not this -->$/m;
@@ -172,21 +305,21 @@ export function rendered(markdown: string, render: (data: string) => string): st
 }
 
 /** Each rendered page written again from its data file; the faults, or the pages written. */
-function renderPages(read: (path: string) => string | undefined, write?: (path: string, text: string) => void): string[] {
+export function renderPages(read: (path: string) => string | undefined, write?: (path: string, text: string) => void): string[] {
   const faults: string[] = [];
-  for (const { page, data } of RENDERED) {
+  for (const { page, render, stale } of RENDERED) {
     const text = read(page) ?? "";
     let again: string | undefined;
     try {
-      again = rendered(text, () => renderMatrix(JSON.parse(read(data) ?? "")));
+      again = rendered(text, () => render(read));
     } catch (why) {
-      faults.push(`${data}: does not read: ${why}`);
+      faults.push(`${page}: its data does not read: ${why}`);
       continue;
     }
-    if (again === undefined) faults.push(`${page}: has no part rendered from ${data}`);
+    if (again === undefined) faults.push(`${page}: has no rendered part (its markers are gone); ${stale}`);
     else if (again !== text) {
       if (write) write(page, again);
-      else faults.push(`${page}: differs from ${data}; edit the data, then run node tools/docs/docs.ts --render`);
+      else faults.push(`${page}: ${stale}`);
     }
   }
   return faults;
@@ -215,9 +348,10 @@ function check(): string[] {
   for (const page of PROOF_PAGES) faults.push(...missingTests(page, read(page) ?? "", sources));
   faults.push(...renderPages(read));
 
-  const table = decisionTable(read("docs/decisions.md")!);
-  faults.push(...table.faults);
-  for (const file of docs) if (file !== "docs/decisions.md") faults.push(...unknownDecisions(file, read(file)!, table.ids));
+  const decisions = decisionFiles();
+  faults.push(...decisions.faults, ...strayRows(read("docs/decisions.md") ?? ""));
+  const ids = new Set(decisions.decisions.map((d) => d.id));
+  for (const file of tracked.filter((f) => CITES.test(f))) faults.push(...unknownDecisions(file, read(file) ?? "", ids));
 
   const inFolder = (folder: string, pattern: RegExp) =>
     tracked.filter((f) => dirname(f) === folder && pattern.test(basename(f)) && basename(f) !== "README.md").map((f) => basename(f));
@@ -241,25 +375,63 @@ function check(): string[] {
   return faults;
 }
 
+/** The decision numbers a listing of docs/decisions/ or an index's rows hold. */
+export function decisionIds(text: string): string[] {
+  return [...text.matchAll(/^(?:\| \[?)?(D\d+)(?:\.md|\b)/gm)].map((m) => m[1]);
+}
+
 /** The next free decision number here and on origin/main, fetched first, for `cargo xtask decision`. */
 function next(): number {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  const tables = [readFileSync(join(ROOT, "docs/decisions.md"), "utf8")];
+  const ids = readdirSync(join(ROOT, "docs/decisions")).flatMap(decisionIds);
   try {
     git("fetch", "-q", "origin", "main");
   } catch {
     console.error("docs: could not fetch origin; going by the origin/main this repository has");
   }
   try {
-    tables.push(git("show", "origin/main:docs/decisions.md"));
+    ids.push(...decisionIds(git("ls-tree", "--name-only", "origin/main", "docs/decisions/").replaceAll("docs/decisions/", "")));
+    ids.push(...decisionIds(git("show", "origin/main:docs/decisions.md")));
   } catch {
     console.error("docs: there is no origin/main to compare with");
   }
-  return Math.max(...tables.map((t) => nextDecision(decisionTable(t).ids)));
+  return nextDecision(ids);
+}
+
+/**
+ * Decisions in full, each followed by the log's lines that name it (`D12`, or a range
+ * `D9 to D18` it falls in), for `cargo xtask decision D28 D198`.
+ */
+export function show(ids: string[], read: (id: string) => string | undefined, log: string): string {
+  const lines = log.split("\n").filter((line) => line.startsWith("- "));
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = raw.toUpperCase().replace(/^(\d)/, "D$1");
+    const n = Number(id.slice(1));
+    const text = read(id);
+    if (text === undefined) {
+      out.push(`${id}: there is no docs/decisions/${id}.md`, "");
+      continue;
+    }
+    const named = lines.filter(
+      (line) =>
+        new RegExp(`\\b${id}\\b`).test(line) ||
+        [...line.matchAll(/\bD(\d+) to D(\d+)\b/g)].some(([, a, b]) => Number(a) <= n && n <= Number(b)),
+    );
+    out.push(text.trimEnd(), "", named.length ? `## Log\n\n${named.join("\n")}` : "## Log\n\nNo lines.", "");
+  }
+  return out.join("\n");
 }
 
 if (import.meta.main && process.argv.includes("--next")) {
   console.log(`D${next()}`);
+} else if (import.meta.main && process.argv.includes("--show")) {
+  const ids = process.argv.slice(process.argv.indexOf("--show") + 1);
+  const read = (id: string) => {
+    const file = join(ROOT, "docs/decisions", `${id}.md`);
+    return existsSync(file) ? readFileSync(file, "utf8") : undefined;
+  };
+  console.log(show(ids, read, readFileSync(join(ROOT, "docs/decisions-log.md"), "utf8")));
 } else if (import.meta.main && process.argv.includes("--render")) {
   const read = (path: string) => (existsSync(join(ROOT, path)) ? readFileSync(join(ROOT, path), "utf8") : undefined);
   const faults = renderPages(read, (path, text) => {

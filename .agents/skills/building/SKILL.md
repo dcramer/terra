@@ -9,13 +9,13 @@ Read [docs/building-voxels.md](../../../docs/building-voxels.md) (the voxel cont
 
 ## Scope (D333)
 
-The baseline is **wood and stone, built by hand and destroyed, with infinite pretend resources**: logs, hewn timber and shakes; stone and slate. It must be flawless and fast before anything else. Earth, limewash, wattle and thatch are frozen (kept building and passing checks, not polished). No costs, storage, carrying or recruits, and no new materials, props, forests or logistics unless asked. A design question (how something should look or play) goes to the developers as a recommendation; a technical one is yours, recorded in `docs/decisions.md`.
+The baseline is **wood and stone, built by hand and destroyed, with infinite pretend resources**: logs, hewn timber and shakes; stone and slate. It must be flawless and fast before anything else. Earth, limewash, wattle and thatch are frozen (kept building and passing checks, not polished). No costs, storage, carrying or recruits, and no new materials, props, forests or logistics unless asked. A design question (how something should look or play) goes to the developers as a recommendation; a technical one is yours, recorded in `docs/decisions/`.
 
 ## Routine (D375)
 
 - Start: `cargo xtask seed` if the session started outside the worktree, then `git pull --rebase origin main`. Check the latest commits of anyone working in the same files.
 - Commits run the quick check, pushes the full one (`cargo xtask check`, with the artifacts and fuzz ratchets); never `--no-verify`. Pull and rebase before each push; run the checks again if anything came in.
-- Decision numbers from `cargo xtask decision`; log lines in `docs/decisions-log.md` (D376); a decision changed updates its row and every doc it touches in the same commit.
+- Decision numbers from `cargo xtask decision`; log lines in `docs/decisions-log.md` (D376); a decision changed updates its file (`docs/decisions/Dnnn.md`, then `node tools/docs/docs.ts --render`) and every doc it touches in the same commit.
 - Finish: `git fetch` and `git branch -r --contains <commit>` to confirm it is on origin/main, then `cargo xtask worktrees --done`.
 
 ## Where each concern lives
