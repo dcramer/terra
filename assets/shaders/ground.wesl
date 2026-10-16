@@ -55,11 +55,10 @@ struct Ground {
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
-    // The same for the climate's maps (climate.rs, D327), which painting of them it is, and
+    // The same for the climate's maps (climate.rs, D327), and
     // the leaves map's layer for the broadleaves whose leaves fall on the floor, or -1.
     climate_from_world: mat4x4<f32>,
     climate_on: u32,
-    climate_painting: u32,
     fallen_layer: i32,
     // The heath past the trees round the land's middle (planet.rs `LandMap`): the middle's
     // direction and the planet's radius, east and the map's width, north and whether there is

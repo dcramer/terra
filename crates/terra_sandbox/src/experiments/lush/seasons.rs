@@ -15,7 +15,8 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, (follow_climate, follow_leaves));
 }
 
-/// Every one of the forest's foliage materials reads the climate's maps again when painted.
+/// Every one of the forest's foliage materials reads the climate's maps again when painted,
+/// changed only if what it is told of them has (as `terra_world::grown`'s are).
 pub(super) fn follow_climate(
     maps: Option<Res<ClimateMaps>>,
     fields: Option<Res<ClimateFields>>,
@@ -29,15 +30,28 @@ pub(super) fn follow_climate(
     let atlas: Handle<Image> = assets.load(cards.atlas.clone());
     let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
     let other = FoliageClimate::from_maps(&maps, None, None);
-    for (_, material) in materials.iter_mut() {
-        let extension: &mut FoliageExtension = &mut material.extension;
-        extension.climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
-            of_atlas
-        } else {
-            other
-        };
-        extension.climate_ground = maps.ground.clone();
-        extension.climate_leaves = maps.leaves.clone();
+    let stale: Vec<_> = materials
+        .iter()
+        .filter_map(|(id, material)| {
+            let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
+                of_atlas
+            } else {
+                other
+            };
+            let extension: &FoliageExtension = &material.extension;
+            (extension.climate != climate
+                || extension.climate_ground != maps.ground
+                || extension.climate_leaves != maps.leaves)
+                .then_some((id, climate))
+        })
+        .collect();
+    for (id, climate) in stale {
+        if let Some(mut material) = materials.get_mut(id) {
+            let extension: &mut FoliageExtension = &mut material.extension;
+            extension.climate = climate;
+            extension.climate_ground = maps.ground.clone();
+            extension.climate_leaves = maps.leaves.clone();
+        }
     }
 }
 

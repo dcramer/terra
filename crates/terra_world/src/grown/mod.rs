@@ -248,8 +248,10 @@ impl Cards {
 
 pub type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
 
-/// What the foliage shader is told: which way the wind blows, level with the ground, and
-/// how hard. Field order must match the struct in foliage.wesl.
+/// What the foliage shader is told: which way the wind blows, level with the ground, until
+/// the world has a wind, and how much a plant sways in it; the world's wind itself (D255) is
+/// in the buffer every foliage and grass material shares (`crate::parting`), so no material
+/// changes when it does. Field order must match the struct in foliage.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct FoliageExtension {
     #[uniform(100)]
@@ -302,17 +304,17 @@ const CELLS: usize = 16;
 /// How many kinds' autumn colours a shader is told.
 const AUTUMNS: usize = 8;
 
-/// What the foliage shader is told of the climate (climate.md, D327): where its maps are,
-/// whether there are any and which painting, how wide the atlas's cells are, which kind's
-/// layer of the leaves map each cell's card is (-1 for a card no kind's year names), and each
-/// layer's autumn colour, linear. Field order must match the struct in the foliage shaders.
+/// What the foliage shader is told of the climate (climate.md, D327): whether there are maps,
+/// how wide the atlas's cells are, which kind's layer of the leaves map each cell's card is
+/// (-1 for a card no kind's year names), and each layer's autumn colour, linear. Where the
+/// maps lie, which moves with the camera, is in the buffer every foliage material shares
+/// (`crate::parting`), so moving on changes no material. Field order must match the struct
+/// in the foliage shaders.
 /// A plant's leaves fall card by card and turn their kind's colour; snow lies on what faces
 /// up; wet bark darkens.
 #[derive(bevy::render::render_resource::ShaderType, Reflect, Debug, Clone, Copy, PartialEq)]
 pub struct FoliageClimate {
-    pub from_world: Mat4,
     pub on: u32,
-    pub painting: u32,
     pub across: f32,
     pub layers: [IVec4; CELLS / 4],
     pub autumn: [Vec4; AUTUMNS],
@@ -321,9 +323,7 @@ pub struct FoliageClimate {
 impl Default for FoliageClimate {
     fn default() -> Self {
         Self {
-            from_world: Mat4::IDENTITY,
             on: 0,
-            painting: 0,
             across: 0.25,
             layers: [IVec4::splat(-1); CELLS / 4],
             autumn: [Vec4::splat(0.2); AUTUMNS],
@@ -340,9 +340,7 @@ impl FoliageClimate {
         cards: Option<&Cards>,
     ) -> Self {
         let mut climate = Self {
-            from_world: maps.from_world,
             on: maps.ground.is_some() as u32,
-            painting: maps.painting,
             ..Self::default()
         };
         if let (Some(fields), Some(cards)) = (years, cards) {
@@ -804,26 +802,13 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .insert_resource(Cards::read())
-        .add_systems(Update, (follow_climate, follow_wind));
+        .add_systems(Update, follow_climate);
 }
 
-/// Every grown plant's material sways with the world's wind (D255), from the climate.
-fn follow_wind(
-    wind: Option<Res<crate::wind::WorldWind>>,
-    mut materials: ResMut<Assets<Foliage>>,
-    mut own: Local<crate::wind::OwnSway<Foliage>>,
-) {
-    let Some(wind) = wind.filter(|wind| wind.is_changed()) else {
-        return;
-    };
-    for (id, material) in materials.iter_mut() {
-        let sway = own.of(id, material.extension.strength);
-        material.extension.direction = wind.toward;
-        material.extension.strength = sway * wind.strength;
-    }
-}
-
-/// Every grown plant's material reads the climate's maps again each time they are painted.
+/// Every grown plant's material reads the climate's maps again each time they are painted,
+/// and is changed only if what it is told of them has: the maps are painted again in place,
+/// and a changed material has every plant drawn with it specialized again, some 20 ms of the
+/// render thread over two frames.
 fn follow_climate(
     maps: Option<Res<crate::climate::ClimateMaps>>,
     fields: Option<Res<crate::climate::ClimateFields>>,
@@ -837,15 +822,27 @@ fn follow_climate(
     let atlas: Handle<Image> = assets.load(cards.atlas.clone());
     let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
     let other = FoliageClimate::from_maps(&maps, None, None);
-    for (_, material) in materials.iter_mut() {
-        let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
-            of_atlas
-        } else {
-            other
-        };
-        material.extension.climate = climate;
-        material.extension.climate_ground = maps.ground.clone();
-        material.extension.climate_leaves = maps.leaves.clone();
+    let stale: Vec<_> = materials
+        .iter()
+        .filter_map(|(id, material)| {
+            let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
+                of_atlas
+            } else {
+                other
+            };
+            let extension = &material.extension;
+            (extension.climate != climate
+                || extension.climate_ground != maps.ground
+                || extension.climate_leaves != maps.leaves)
+                .then_some((id, climate))
+        })
+        .collect();
+    for (id, climate) in stale {
+        if let Some(mut material) = materials.get_mut(id) {
+            material.extension.climate = climate;
+            material.extension.climate_ground = maps.ground.clone();
+            material.extension.climate_leaves = maps.leaves.clone();
+        }
     }
 }
 

@@ -25,14 +25,12 @@ import bevy_pbr::render::{
 @group(0) @binding(1) var<uniform> globals: Globals;
 
 // Field order must match FoliageExtension in grown/mod.rs and lush.rs.
-// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): where its maps are
-// round the camera, whether there are any and which painting, how wide the card atlas's cells
-// are, which kind's layer of the leaves map each cell's card is (-1 none), and each layer's
-// autumn colour, linear.
+// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): whether there are
+// maps, how wide the card atlas's cells are, which kind's layer of the leaves map each cell's
+// card is (-1 none), and each layer's autumn colour, linear. Where the maps lie is in the
+// shared buffer (`parting.climate_from_world`).
 struct FoliageClimate {
-    from_world: mat4x4<f32>,
     on: u32,
-    painting: u32,
     across: f32,
     layers: array<vec4<i32>, 4>,
     autumn: array<vec4<f32>, 8>,
@@ -70,6 +68,11 @@ struct Parting {
     eye: vec4<f32>,
     subject: vec4<f32>,
     bodies: array<vec4<f32>, 32>,
+    // The world's wind (wind.rs, D255): which way it blows, and in w how hard, or -1 until
+    // there is one.
+    wind: vec4<f32>,
+    // From a point in the world to its place on the climate's maps (climate.rs, D327).
+    climate_from_world: mat4x4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
@@ -97,7 +100,7 @@ fn card_layer(uv: vec2<f32>) -> i32 {
 // How many leaves a plant standing at `origin` has, of its kind's: between its kind's early
 // and late, by where it stands (climate.md: a stand turns over days).
 fn leaves_on(origin: vec3<f32>, layer: i32) -> f32 {
-    let at = clamp((wind.climate.from_world * vec4<f32>(origin, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    let at = clamp((parting.climate_from_world * vec4<f32>(origin, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
     let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, layer, 0.0);
     return mix(year.r, year.g, hash(origin * 1.7 + 0.3));
 }
@@ -206,12 +209,15 @@ fn gusts(downwind: f32, crosswind: f32, time: f32) -> f32 {
 }
 
 fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
-    let downwind = dot(world, wind.direction);
-    let crosswind = dot(world, cross(wind.direction, normalize(world)));
+    // The world's wind, with how much this plant sways in it; its own way until there is one.
+    let blowing = parting.wind.w >= 0.0;
+    let direction = select(wind.direction, parting.wind.xyz, blowing);
+    let downwind = dot(world, direction);
+    let crosswind = dot(world, cross(direction, normalize(world)));
     let gust = sin(time * 0.9 - downwind * 0.07 + crosswind * 0.03) * 0.6
         + sin(time * 1.9 - downwind * 0.23 - crosswind * 0.11) * 0.4;
     let strength = gusts(downwind, crosswind, time);
-    let bend = wind.direction * (0.45 + gust) * strength * weights.x * 0.25;
+    let bend = direction * (0.45 + gust) * strength * weights.x * 0.25;
     let flutter = vec3<f32>(
         // Its phase from where it is at the scale of a branch, not of a leaf: from each
         // vertex's own place, a card's corners shook apart and every card wobbled like jelly
@@ -223,7 +229,7 @@ fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     // A card is a cluster of leaves, which rustles, not bounces: at 0.05 every clump in a crown
     // shook by its own few centimetres several times a second, three quarters of all the motion
     // a still view of a crown showed (D282).
-    return (bend + flutter) * wind.strength;
+    return (bend + flutter) * wind.strength * select(1.0, parting.wind.w, blowing);
 }
 
 @vertex

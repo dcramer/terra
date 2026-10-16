@@ -35,12 +35,10 @@ struct Grass {
     // The share of blades the second ring keeps and where the rest are gone; the same for
     // the third.
     thinning: vec4<f32>,
-    // The climate's maps round the camera (climate.rs, D327): from a point in the world to
-    // its place on them, whether there are any, which painting it is, and grass's layer in
-    // the leaves map, or -1.
-    climate_from_world: mat4x4<f32>,
+    // The climate's maps round the camera (climate.rs, D327): whether there are any, and
+    // grass's layer in the leaves map, or -1. Where they lie is in the shared buffer
+    // (`parting.climate_from_world`).
     climate_on: u32,
-    climate_painting: u32,
     grass_layer: i32,
     // The colour grass browns to, linear, as its year says.
     grass_autumn: vec4<f32>,
@@ -55,6 +53,11 @@ struct Parting {
     eye: vec4<f32>,
     subject: vec4<f32>,
     bodies: array<vec4<f32>, 32>,
+    // The world's wind (wind.rs, D255): which way it blows, and in w how hard, or -1 until
+    // there is one.
+    wind: vec4<f32>,
+    // From a point in the world to its place on the climate's maps (climate.rs, D327).
+    climate_from_world: mat4x4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
@@ -76,7 +79,7 @@ const SNOW_FULL_M: f32 = 0.5;
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
 fn climate_place(world: vec3<f32>) -> vec2<f32> {
-    return clamp((grass.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    return clamp((parting.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
 // How deep the snow lies over a blade's root, as ground.wesl lays it, so the blades sink
@@ -167,7 +170,9 @@ fn gusts(downwind: f32, crosswind: f32, time: f32) -> f32 {
 }
 
 fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
-    let direction = grass.wind.xyz;
+    // The world's wind, with how much the grass sways in it; its own way until there is one.
+    let blowing = parting.wind.w >= 0.0;
+    let direction = select(grass.wind.xyz, parting.wind.xyz, blowing);
     let downwind = dot(world, direction);
     let crosswind = dot(world, cross(direction, normalize(world)));
     let gust = sin(time * 0.9 - downwind * 0.07 + crosswind * 0.03) * 0.6
@@ -179,7 +184,7 @@ fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
         sin(time * 3.3 + world.y * 1.7 + world.x * 0.9),
         sin(time * 3.7 + world.z * 2.1 + world.y * 1.3),
     ) * weights.y * 0.04 * (0.5 + 0.5 * strength);
-    return (bend + flutter) * grass.wind.w;
+    return (bend + flutter) * grass.wind.w * select(1.0, parting.wind.w, blowing);
 }
 
 // How much a vertex this far up its blade moves: with the blade, and on its own.

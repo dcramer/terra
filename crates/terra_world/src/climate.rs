@@ -188,7 +188,10 @@ const UNDER_LEAVES: f32 = 0.4;
 const SAMPLE_CELLS: usize = 4096;
 const MAP_CELLS: usize = 4096;
 
-/// What the shaders read of the climate round the camera.
+/// What the shaders read of the climate round the camera. Its pictures are painted again in
+/// place, the same images at the same size, which Bevy writes into the textures already
+/// bound, so a material reading them changes only when what it is told of them does: a
+/// changed material has everything drawn with it specialized again.
 #[derive(Resource, Clone)]
 pub struct ClimateMaps {
     /// What lies on and falls on the ground: snow depth in red, a texel's full brightness
@@ -201,9 +204,6 @@ pub struct ClimateMaps {
     pub leaves: Option<Handle<Image>>,
     /// From a point in the world to its place on the maps, x and y from 0 to 1.
     pub from_world: Mat4,
-    /// How many times the maps have been painted: a material that reads them is prepared
-    /// again when it changes, so it draws from the new pictures.
-    pub painting: u32,
     /// The leaves map's layer of the broadleaves whose fallen leaves lie on the forest floor
     /// (`FALLEN_KIND`), and of grass (`GRASS_KIND`), or -1 if there is none.
     pub fallen_layer: i32,
@@ -221,7 +221,6 @@ impl Default for ClimateMaps {
             ground: None,
             leaves: None,
             from_world: Mat4::IDENTITY,
-            painting: 0,
             fallen_layer: -1,
             grass_layer: -1,
             heath_layer: -1,
@@ -535,7 +534,6 @@ fn paint(
             ground: Some(painting.ground.clone()),
             leaves: Some(painting.leaves.clone()),
             from_world: from_world(&start, painted.middle),
-            painting: maps.painting.wrapping_add(1),
             fallen_layer: ClimateMaps::layer_of(&fields, FALLEN_KIND),
             grass_layer: ClimateMaps::layer_of(&fields, GRASS_KIND),
             heath_layer: ClimateMaps::layer_of(&fields, HEATH_KIND),

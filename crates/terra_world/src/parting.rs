@@ -9,8 +9,12 @@
 //! The foliage and grass shaders read one small buffer that every one of their materials
 //! shares ([`Parting`]): the main camera's eye, the point it follows ([`CameraSubject`]),
 //! and the bodies nearest it that part plants ([`PartsPlants`]), each where it stands this
-//! frame and stood the last, so motion vectors follow a plant pushed aside. It is written
-//! in place each frame; no material changes.
+//! frame and stood the last, so motion vectors follow a plant pushed aside; and the world's
+//! wind (`crate::wind`, D255) and where the climate's maps lie (`crate::climate`, D327), as
+//! games keep such globals in one buffer every plant's shader reads (Unreal's material
+//! parameter collections, D374). It is written in place each frame; no material changes. A
+//! changed material has every plant drawn with it specialized again, some 20 ms of the render
+//! thread over two frames each time the wind turned or the maps moved on.
 
 use crate::planet::MainCamera;
 use bevy::{
@@ -65,9 +69,26 @@ impl FromWorld for Parting {
 }
 
 /// The buffer's length in vec4s: the eye, the subject, then four for each body (its feet
-/// and head now, its feet and head a frame ago; the feet's w is its radius).
+/// and head now, its feet and head a frame ago; the feet's w is its radius), then the wind,
+/// then where the climate's maps lie.
 const fn layout_len() -> usize {
-    2 + 4 * PUSHERS
+    CLIMATE + 4
+}
+
+/// Where the wind is in the buffer: which way it blows, and in w how hard as a share of the
+/// climate's mean (`WorldWind::strength`), or -1 until the world has one, when each
+/// material's own way is kept.
+const WIND: usize = 2 + 4 * PUSHERS;
+
+/// Where the climate's maps lie (`ClimateMaps::from_world`, D327), a column at a time: it
+/// moves with the camera, so it is kept here rather than in each material that reads them.
+const CLIMATE: usize = WIND + 1;
+
+/// The wind as the buffer holds it.
+fn wind_entry(wind: Option<&crate::wind::WorldWind>) -> [f32; 4] {
+    wind.map_or([0.0, 0.0, 0.0, -1.0], |wind| {
+        wind.toward.extend(wind.strength).into()
+    })
 }
 
 pub fn plugin(app: &mut App) {
@@ -294,10 +315,12 @@ fn write(
     bodies: Query<(Entity, &GlobalTransform, &PartsPlants)>,
     mut last: Local<HashMap<Entity, [Vec4; 2]>>,
     mut buffers: ResMut<Assets<ShaderBuffer>>,
+    wind: Option<Res<crate::wind::WorldWind>>,
+    maps: Option<Res<crate::climate::ClimateMaps>>,
 ) {
     let Some(camera) = camera else { return };
     let (eye, subject) = *camera;
-    let data = contents(
+    let mut data = contents(
         eye.translation(),
         subject.and_then(|subject| subject.0),
         bodies
@@ -305,6 +328,9 @@ fn write(
             .map(|(entity, at, body)| (entity, at.translation(), *body)),
         &mut last,
     );
+    data[WIND] = wind_entry(wind.as_deref());
+    let from_world = maps.map_or(Mat4::IDENTITY, |maps| maps.from_world);
+    data[CLIMATE..CLIMATE + 4].copy_from_slice(&from_world.to_cols_array_2d());
     if let Some(mut buffer) = buffers.get_mut(&parting.0) {
         *buffer = ShaderBuffer::new(data, default());
     }
@@ -452,5 +478,23 @@ mod tests {
         assert_eq!(second[0][3], 0.0, "no subject");
         assert_eq!(Vec4::from(second[4]), Vec4::from(first[2]));
         assert!(Vec4::from(second[2]).distance(Vec4::from(first[2])) > 0.49);
+    }
+
+    #[test]
+    fn the_wind_is_written_after_the_bodies_or_marked_absent() {
+        // The bodies' last entry, the nearest's head a frame ago, comes before the wind.
+        assert_eq!(WIND, 2 + 4 * (PUSHERS - 1) + 3 + 1);
+        assert_eq!(CLIMATE, WIND + 1);
+        assert_eq!(layout_len(), CLIMATE + 4);
+        assert!(
+            wind_entry(None)[3] < 0.0,
+            "no wind yet: the materials' own way"
+        );
+        let wind = crate::wind::WorldWind {
+            toward: Vec3::Z,
+            strength: 1.7,
+            speed_m_s: 9.0,
+        };
+        assert_eq!(wind_entry(Some(&wind)), [0.0, 0.0, 1.0, 1.7]);
     }
 }

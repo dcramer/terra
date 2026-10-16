@@ -22,7 +22,6 @@ struct Litter {
     // The climate's ground map round the camera, as grass.wesl reads it (D327).
     climate_from_world: mat4x4<f32>,
     climate_on: u32,
-    climate_painting: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

@@ -141,8 +141,11 @@ pub struct BareGround {
 }
 
 /// What the grass shader is told. Field order must match the struct in grass.wesl.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq)]
 pub struct GrassExtension {
+    /// The way the wind blows until the world has one, and how much the grass sways in it:
+    /// the world's wind itself (D255) comes in the buffer shared with the foliage
+    /// (`crate::parting`), so the material never changes when it does.
     #[uniform(100)]
     pub wind: Vec4,
     #[uniform(100)]
@@ -154,15 +157,12 @@ pub struct GrassExtension {
     /// (`crate::parting`, D271).
     #[storage(101, read_only)]
     pub parting: Handle<ShaderBuffer>,
-    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): where it is,
-    /// whether there is any, which painting, and grass's layer of the leaves map, or -1. The
-    /// blades sink under snow, brown in the long cold and take rime in a frost.
-    #[uniform(100)]
-    pub climate_from_world: Mat4,
+    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): whether there
+    /// is any, and grass's layer of the leaves map, or -1; where it lies is in the shared
+    /// buffer (`crate::parting`). The blades sink under snow, brown in the long cold and take
+    /// rime in a frost.
     #[uniform(100)]
     pub climate_on: u32,
-    #[uniform(100)]
-    pub climate_painting: u32,
     #[uniform(100)]
     pub grass_layer: i32,
     /// The colour grass browns to, linear (its year's `autumn`).
@@ -179,9 +179,7 @@ pub struct GrassExtension {
 impl GrassExtension {
     /// Reads the climate's maps as they are now painted.
     pub fn read_climate(&mut self, maps: &crate::climate::ClimateMaps) {
-        self.climate_from_world = maps.from_world;
         self.climate_on = maps.ground.is_some() as u32;
-        self.climate_painting = maps.painting;
         self.grass_layer = maps.grass_layer;
         self.grass_autumn = maps.autumn_of(maps.grass_layer);
         self.climate_ground = maps.ground.clone();
@@ -243,7 +241,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<BareGround>()
         .add_systems(
             Update,
-            (grow, measure, follow_climate, follow_wind)
+            (grow, measure, follow_climate)
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
@@ -346,9 +344,7 @@ fn grow(
                 fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
                 thinning: blades::thinning(density),
                 parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
-                climate_from_world: Mat4::IDENTITY,
                 climate_on: 0,
-                climate_painting: 0,
                 grass_layer: -1,
                 grass_autumn: Vec4::splat(0.2),
                 climate_ground: None,
@@ -373,7 +369,6 @@ fn grow(
                 fade: Vec4::new(litter::FADE_M[0], litter::FADE_M[1], 0.0, 0.0) * detail.0,
                 climate_from_world: Mat4::IDENTITY,
                 climate_on: 0,
-                climate_painting: 0,
                 climate_ground: None,
             },
         });
@@ -604,31 +599,24 @@ fn follow_climate(
     if !maps.is_changed() && !meadow.is_added() {
         return;
     }
-    if let Some(mut grass) = materials.get_mut(&meadow.material) {
-        grass.extension.read_climate(&maps);
+    // Changed only if what they are told has: the maps are painted again in place.
+    if let Some(grass) = materials.get(&meadow.material) {
+        let mut read = grass.extension.clone();
+        read.read_climate(&maps);
+        if read != grass.extension
+            && let Some(mut grass) = materials.get_mut(&meadow.material)
+        {
+            grass.extension = read;
+        }
     }
-    if let Some(mut litter) = litters.get_mut(&meadow.litter) {
-        litter.extension.read_climate(&maps);
-    }
-}
-
-/// The grass sways with the world's wind (D255), from the climate.
-fn follow_wind(
-    wind: Option<Res<crate::wind::WorldWind>>,
-    meadow: Option<Res<Meadow>>,
-    mut materials: ResMut<Assets<GrassMaterial>>,
-    mut own: Local<crate::wind::OwnSway<GrassMaterial>>,
-) {
-    let (Some(wind), Some(meadow)) = (wind, meadow) else {
-        return;
-    };
-    if !wind.is_changed() && !meadow.is_added() {
-        return;
-    }
-    let id = meadow.material.id();
-    if let Some(mut grass) = materials.get_mut(&meadow.material) {
-        let sway = own.of(id, grass.extension.wind.w);
-        grass.extension.wind = wind.toward.extend(sway * wind.strength);
+    if let Some(litter) = litters.get(&meadow.litter) {
+        let mut read = litter.extension.clone();
+        read.read_climate(&maps);
+        if read != litter.extension
+            && let Some(mut litter) = litters.get_mut(&meadow.litter)
+        {
+            litter.extension = read;
+        }
     }
 }
 

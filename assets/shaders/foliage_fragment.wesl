@@ -187,14 +187,12 @@ const FLOOR_LIGHT: f32 = 0.2;
 const BOUNCE: vec3<f32> = vec3<f32>(0.28, 0.3, 0.2);
 
 // Field order must match FoliageExtension in grown/mod.rs and lush.rs.
-// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): where its maps are
-// round the camera, whether there are any and which painting, how wide the card atlas's cells
-// are, which kind's layer of the leaves map each cell's card is (-1 none), and each layer's
-// autumn colour, linear.
+// What the climate does to foliage (grown/mod.rs's FoliageClimate, D327): whether there are
+// maps, how wide the card atlas's cells are, which kind's layer of the leaves map each cell's
+// card is (-1 none), and each layer's autumn colour, linear. Where the maps lie is in the
+// shared buffer (`parting.climate_from_world`).
 struct FoliageClimate {
-    from_world: mat4x4<f32>,
     on: u32,
-    painting: u32,
     across: f32,
     layers: array<vec4<i32>, 4>,
     autumn: array<vec4<f32>, 8>,
@@ -257,7 +255,7 @@ fn plant_share(p: vec3<f32>) -> f32 {
 }
 
 fn climate_place(world: vec3<f32>) -> vec2<f32> {
-    return clamp((wind.climate.from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
+    return clamp((parting.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
 // Which kind's layer of the leaves map a card is, by its atlas cell (foliage.wesl's).
@@ -606,6 +604,11 @@ struct Parting {
     eye: vec4<f32>,
     subject: vec4<f32>,
     bodies: array<vec4<f32>, 32>,
+    // The world's wind (wind.rs, D255): which way it blows, and in w how hard, or -1 until
+    // there is one.
+    wind: vec4<f32>,
+    // From a point in the world to its place on the climate's maps (climate.rs, D327).
+    climate_from_world: mat4x4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)

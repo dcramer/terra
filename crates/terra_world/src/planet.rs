@@ -441,15 +441,13 @@ pub struct GroundExtension {
     #[sampler(107)]
     cover_more: Option<Handle<Image>>,
     /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point
-    /// in the world to its place on the maps, whether there are maps, which painting of them
-    /// this is (so the ground is prepared again with the new pictures), and the leaves map's
-    /// layer for the broadleaves whose fallen leaves lie on it, or -1.
+    /// in the world to its place on the maps, whether there are maps, and the leaves map's
+    /// layer for the broadleaves whose fallen leaves lie on it, or -1. The maps are painted
+    /// again in place, so the material changes only when these do.
     #[uniform(100)]
     climate_from_world: Mat4,
     #[uniform(100)]
     climate_on: u32,
-    #[uniform(100)]
-    climate_painting: u32,
     #[uniform(100)]
     fallen_layer: i32,
     #[texture(108)]
@@ -666,7 +664,6 @@ impl GroundExtension {
             cover_more: Some(cover.more.clone().unwrap_or_default()),
             climate_from_world: climate.from_world,
             climate_on: climate.ground.is_some() as u32,
-            climate_painting: climate.painting,
             fallen_layer: climate.fallen_layer,
             // Bevy's fallback pictures, of the right shape, until there are maps.
             climate_ground: climate.ground.clone(),

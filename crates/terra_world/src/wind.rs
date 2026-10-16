@@ -1,7 +1,8 @@
 //! The one wind (D255) from the climate (docs/demos.md §2, step 4): which way it blows and how
 //! hard where the camera is, as `terra_climate`'s fields say, taken again every few seconds of
-//! the clock, and handed to everything that sways: the grass, the grown plants and trees, the
-//! flora and the lakes' ripples. Its strength is the climate's speed over its mean, so the
+//! the clock, and handed to everything that sways: the grass and the grown plants and trees
+//! read it from the buffer they share (`crate::parting`), written in place, so it never
+//! changes their materials; the flora and the lakes' ripples are told it in theirs. Its strength is the climate's speed over its mean, so the
 //! sway the art was tuned at (1) is the climate's mean wind, a calm spell stills it and a
 //! gale bends it twice as far.
 
@@ -86,7 +87,7 @@ fn blown_snow(
 }
 
 /// Takes the wind where the camera is, from the climate, every few seconds of the clock; the
-/// resource changes only when the wind has, so materials are touched only then.
+/// resource changes only when the wind has, so the materials that hold it are touched only then.
 fn follow(
     mut commands: Commands,
     fields: Option<Res<ClimateFields>>,
