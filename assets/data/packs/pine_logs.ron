@@ -1,9 +1,10 @@
-// Pine logs' reference pack (D262, D290): the modelled log's bark (`pine_log`, baked round
-// the Tripo log in art/kits/logs by tools/kits/bake.py), a metre round by two along, worn
-// to wood weathered silver (`log_wood`, Poly Haven's `rough_wood`) toward each log's sawn
+// Pine logs' reference pack (D262, D290): pine bark in patches over bare wood (`log_bark`,
+// Poly Haven's `pine_bark` scanned at 4K, at half its size, over `rough_wood`, made by
+// `textures.ts blend`; sharper than the Tripo log's baked bark it replaced, D362), a metre
+// round by two along, worn to wood weathered silver (`log_wood`, Poly Haven's `rough_wood`) toward each log's sawn
 // ends, on its top and on its face out of the room it walls, by each point's wear; mud daub
-// (`clay_floor_001`) in the grooves; ends run a little past the corners; the upper logs
-// weathered grey; a log's face reflecting a third as much as the matte default, its bark's
+// (`clay_floor_001`) in a thin line between the courses; ends run a little past the corners;
+// the upper logs weathered grey; a log's face reflecting a third as much as the matte default, its bark's
 // and checked wood's microshadows not in its maps, so the sky's blue does not sheen it.
 // Its pieces' file holds the modelled whole log, which a material takes in place of the
 // generated ones by naming it in `timber.module`.
@@ -11,12 +12,12 @@
     overhang: 0.06,
     textures: {
         Piece: (path: "materials/logs_pieces", metres: (1.0, 1.0)),
-        Log: (path: "materials/pine_log", metres: (1.0, 2.0), worn: Some("materials/log_wood"), reflectance: 0.1),
+        Log: (path: "materials/log_bark", metres: (1.0, 2.0), worn: Some("materials/log_wood"), reflectance: 0.1),
         Daub: (path: "materials/clay_floor_001", metres: (0.5, 0.5)),
         Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
     },
     dress: (
         own: Some("data/kits/pieces/logs.ron"),
-        masks: (weather: 0.15),
+        masks: (weather: 0.5),
     ),
 )

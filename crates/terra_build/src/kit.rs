@@ -361,7 +361,8 @@ pub struct Masks {
     pub weather: f32,
     /// How much a roof's covering is greened by moss and lichen toward its eaves, where the
     /// rain runs off and lingers, as a fraction, and what they multiply its colour by
-    /// (sRGB): greener and darker on shakes, paler on slate.
+    /// (sRGB): greener and darker on shakes, paler on slate. On timber, toward its foot,
+    /// where the splash keeps it damp (D262 as amended).
     pub moss: f32,
     pub moss_tint: [f32; 3],
     /// How much a block kind's lifts differ in shade, as a fraction either way, and how tall
@@ -503,6 +504,11 @@ pub struct Timber {
     /// as a fraction of the member's half width, and how tall it is, in metres; a hewn
     /// beam's fills the gap between it and the course below.
     pub daub: (f32, f32),
+    /// How tall the line of chinking shows between one course and the next, in metres
+    /// (D178 as amended): a wall's logs scribed to sit tight on the ones below, never thinner
+    /// there than the kit's log, the daub set back in the groove so only this much of it
+    /// shows, a beam a course high less it; none, a full scribe.
+    pub joint: f32,
     /// What its face's and its ends' colours are multiplied by (sRGB).
     pub tint: [f32; 3],
     pub end_tint: [f32; 3],
@@ -610,6 +616,18 @@ pub struct Variation {
     /// How much lighter and darker it is in long patches along it, so no member is one
     /// flat colour and its texture's repeat is broken up.
     pub mottle: f32,
+    /// How far each member may have weathered, by its seed, from 0 (fresh, brown) to 1 (grey
+    /// silver): its colour cooled and paled so far and as much more of its bark worn to bare
+    /// wood, as logs of one wall were felled and laid at different times (D262 as amended).
+    pub age: f32,
+    /// How dark the stains along it are at most, sap run and mild rot where water sat, in
+    /// patches a few tens of centimetres long, and what they darken toward (sRGB).
+    pub stain: f32,
+    pub stain_tint: [f32; 3],
+    /// How much lichen flecks its face to the weather and its top, at most, and what it
+    /// multiplies the colour by there (sRGB): pale grey-green.
+    pub lichen: f32,
+    pub lichen_tint: [f32; 3],
 }
 
 /// A long member's section.
@@ -918,7 +936,8 @@ impl Default for Timber {
             uneven: 0.035,
             swell: 0.02,
             relief: 0.022,
-            daub: (0.7, 0.05),
+            daub: (0.7, 0.02),
+            joint: 0.015,
             tint: [1.0, 0.92, 0.8],
             end_tint: [0.58, 0.5, 0.42],
             groove: 0.4,
@@ -934,9 +953,14 @@ impl Default for Variation {
     fn default() -> Self {
         Variation {
             thickness: 0.06,
-            shade: 0.16,
-            warmth: 0.05,
+            shade: 0.2,
+            warmth: 0.08,
             mottle: 0.1,
+            age: 1.0,
+            stain: 0.35,
+            stain_tint: [0.7, 0.62, 0.55],
+            lichen: 0.5,
+            lichen_tint: [1.08, 1.14, 1.0],
         }
     }
 }
@@ -1121,14 +1145,14 @@ impl Kit {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     pub(crate) fn assets() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
     }
 
-    fn shipped(name: &str) -> Kit {
+    pub(crate) fn shipped(name: &str) -> Kit {
         let read = |path: &str| {
             std::fs::read_to_string(assets().join(path)).map_err(|why| format!("{path}: {why}"))
         };

@@ -40,9 +40,11 @@ const PLANK_STEP_M: f32 = 0.4;
 /// How far in from where it is laid to the daub under a log stops.
 const DAUB_IN_M: f32 = 0.002;
 
-/// A hewn member's half width, as a fraction of its kit's log, and half height, of a course.
+/// A hewn member's half width, as a fraction of its kit's log.
 const HEWN_WIDE: f32 = 0.45;
-const HEWN_HIGH: f32 = 0.39;
+/// How far a wall's log reaches past where it meets the next course, in metres, so the two
+/// sit into each other along their scribed faces and no line of light shows between.
+const SCRIBE_M: f32 = 0.005;
 
 /// How wide and how high a member laid for a role is as this code draws it, before its seed
 /// varies it a little, in metres: what a layout needs to set what rests on it, or what it
@@ -58,7 +60,9 @@ pub fn section(kit: &Kit, role: Option<crate::layout::Role>) -> (f32, f32) {
     let diameter = kit.diameter * scale;
     match profile {
         Profile::Round => (diameter * 1.03, diameter * 1.03),
-        Profile::Hewn => (diameter * HEWN_WIDE * 2.0, kit.course * HEWN_HIGH * 2.0),
+        // What rests on a beam is set a hair into its flat bed, not on it, so the two faces
+        // are not drawn in one plane.
+        Profile::Hewn => (diameter * HEWN_WIDE * 2.0, hewn_high(kit) * 2.0),
     }
 }
 
@@ -243,6 +247,7 @@ pub(crate) fn member(
         (t.tint[1] * shade).clamp(0.0, 1.0),
         (t.tint[2] * shade * (1.0 - warmth)).clamp(0.0, 1.0),
     ];
+    let age = weathered(&mut made, kit, &frame, outside.unwrap_or(WEATHER), seed);
     sweep(surfaces.of(Material::Log), &made, colour);
     // Its ends, the cut face's picture across each, turned by the seed, each end a picture
     // of its own where the kit has several.
@@ -294,7 +299,7 @@ pub(crate) fn member(
             low.min(top),
             low.max(top),
             metres,
-            kit.colours.chinking,
+            chinked(kit, seed, age),
         );
     }
 }
@@ -326,6 +331,79 @@ impl Frame {
     }
 }
 
+/// A member weathered its own way (D262 as amended, the developers: "id like them more
+/// varied and we want to focus on a degree of realism per our art style"): its seed's age,
+/// how far from fresh brown toward grey silver its colour has gone and how much more of its
+/// bark is worn to bare wood; dark stains in patches along it, sap run and mild rot; and
+/// lichen flecking its face to the weather and its top. All by the kit's `variation`, none
+/// where it gives none. Gives its age, 0 to 1.
+fn weathered(made: &mut Member, kit: &Kit, frame: &Frame, weather: Vec3, seed: u32) -> f32 {
+    let v = &kit.timber.variation;
+    let mut random = Random(layout::hash(&[seed, 0x77e1]));
+    // Each log its own age, from fresh to as grey as the kit lets it go.
+    let age = (v.age * random.unit()).clamp(0.0, 1.0);
+    if v.age <= 0.0 && v.stain <= 0.0 && v.lichen <= 0.0 {
+        return age;
+    }
+    let phases = [
+        random.unit() * TAU,
+        random.unit() * TAU,
+        random.unit() * TAU,
+    ];
+    let weather_flat = weather.with_y(0.0).normalize_or_zero();
+    // Cooler and paler as it greys, toward silver: most of the kit's warm tint undone and a
+    // little lighter, so an old log's wood is grey where a young one's is brown, never blue.
+    let tint = kit.timber.tint;
+    let mean = (tint[0] + tint[1] + tint[2]) / 3.0;
+    let silver: [f32; 3] = std::array::from_fn(|c| {
+        1.0 + (libm::powf(mean / tint[c].max(0.05), 0.75) * 1.06 - 1.0) * age
+    });
+    let stain_tint = v.stain_tint;
+    let lichen_tint = v.lichen_tint;
+    let mut hue = Vec::with_capacity(made.grid.len());
+    for ring in &made.grid {
+        let centre = ring.iter().copied().sum::<Vec3>() / ring.len().max(1) as f32;
+        let metres = (centre - frame.from).dot(frame.axis);
+        // Stains in patches a few tens of centimetres long, darkest at their middles.
+        let s = 0.55 * libm::sinf(metres * 2.3 + phases[0])
+            + 0.45 * libm::sinf(metres * 5.9 + phases[1]);
+        let stained = v.stain * smoothstep(0.35, 0.95, s);
+        let mut out = Vec::with_capacity(ring.len());
+        for (j, p) in ring.iter().enumerate() {
+            let outward = (*p - centre).normalize_or_zero();
+            let to = outward.dot(weather_flat).max(0.0);
+            let up = outward.y.max(0.0);
+            // Lichen in flecks a hand across, on the face the weather beats on and the top.
+            let fleck = libm::sinf(metres * 11.0 + j as f32 * 1.7 + phases[2])
+                * libm::sinf(metres * 7.3 - j as f32 * 0.9 + phases[0]);
+            let lichen = v.lichen * (0.7 * to + 0.5 * up).min(1.0) * smoothstep(0.2, 0.7, fleck);
+            out.push([0, 1, 2].map(|c| {
+                let k = silver[c] * (1.0 + (stain_tint[c] - 1.0) * stained);
+                k * (1.0 + (lichen_tint[c] - 1.0) * lichen)
+            }));
+        }
+        hue.push(out);
+    }
+    made.hue = hue;
+    // An older log has lost more of its bark where the weather gets at it, none more
+    // underneath, where nothing does.
+    for ring in &mut made.wear {
+        for w in ring {
+            *w = (*w * (1.0 + age * *w)).min(1.0);
+        }
+    }
+    age
+}
+
+/// The daub's colour under a member: the kit's chinking, a little lighter or darker by the
+/// member's seed, as each course was daubed in its own batch, and dried paler where the
+/// member above has weathered most.
+fn chinked(kit: &Kit, seed: u32, age: f32) -> [f32; 3] {
+    let mut random = Random(layout::hash(&[seed, 0xd0b]));
+    let shade = 1.0 + kit.timber.variation.shade * 0.7 * random.signed() + 0.08 * age;
+    kit.colours.chinking.map(|v| (v * shade).clamp(0.0, 1.0))
+}
+
 /// A member made: its rings of points along it, each with where it falls on the face's
 /// texture, how far across the end grain's picture its ends reach, and how deep and tall
 /// the daub under it is.
@@ -342,6 +420,9 @@ struct Member {
     /// How worn each point's face is to what its texture wears down to (`Texture::worn`),
     /// ring by ring. Empty for none.
     wear: Vec<Vec<f32>>,
+    /// What each point's colour is multiplied by for its weathering (`weathered`), ring by
+    /// ring. Empty for none.
+    hue: Vec<Vec<[f32; 3]>>,
     /// Which points are on a break (`break_up`), shaded by their own flat faces with hard
     /// edges rather than smoothed round, ring by ring. Empty for none.
     cut: Vec<Vec<bool>>,
@@ -802,6 +883,8 @@ fn round(
     let mut own = Random(random.0 ^ 0x5bd1_e995);
     let mottle_phase = [own.unit() * TAU, own.unit() * TAU, own.unit() * TAU];
     let level = frame.axis.y.abs() < 0.5;
+    let rests = walled && level;
+    let rest = kit.course * 0.5 + SCRIBE_M;
     // Knots where branches were trimmed off: each a low swell, dark at its heart, along it
     // and round it where its seed says, none in the sawn ends.
     let count = (frame.length * t.knots + own.unit()).floor() as usize;
@@ -884,7 +967,7 @@ fn round(
         let centre = frame.from
             + frame.axis * (frame.length * along)
             + frame.side * (bow * arc)
-            + frame.up * (sag * arc);
+            + frame.up * (if rests { 0.0 } else { sag } * arc);
         let butt = if thick_first {
             1.0 - 2.0 * along
         } else {
@@ -919,9 +1002,17 @@ fn round(
                 knot += high * w * fade;
                 ring_tone[j] *= 1.0 - 0.5 * w * w;
             }
-            let r = radius * (1.0 + taper * butt) * swell * uneven * end + knot;
-            // Scribed a little flatter top and bottom, to sit on the log below.
-            let height = sin * r * 0.94;
+            let body = radius * (1.0 + taper * butt) * swell * uneven;
+            // A wall's log rests on the one below and carries the one above (D178 as
+            // amended): never thinner there than the kit's log, so it reaches them for all
+            // its taper, and scribed flat where it meets them, a course apart.
+            let r = if rests { body.max(kit.radius()) } else { body } * end + knot;
+            let height = if rests {
+                (sin * r).clamp(-rest, rest)
+            } else {
+                // Scribed a little flatter top and bottom, to sit on the log below.
+                sin * r * 0.94
+            };
             let (across, height) = if on_cut(height, split) {
                 let plain = radius * (1.0 + taper * butt) * end;
                 (cos * plain, 0.0)
@@ -960,15 +1051,35 @@ fn round(
         grid,
         uvs,
         grain: [0.47, 0.47],
-        daub: (kit.radius() * t.daub.0, t.daub.1),
+        daub: (daub_depth(kit), t.daub.1),
         tone,
         wear,
+        hue: Vec::new(),
         cut: Vec::new(),
     }
 }
 
 /// B: a hewn beam, squared by the axe: flat faces a little wavy, scalloped where the adze
 /// bit, its edges rounded and uneven, a little less tall than a course so daub shows.
+/// A hewn member's half height: half a course less its joint, so the daub between courses
+/// shows as a line `joint` tall.
+fn hewn_high(kit: &Kit) -> f32 {
+    ((kit.course - kit.timber.joint.max(0.0)) * 0.5).max(0.01)
+}
+
+/// How far out from a wall's middle the daub in a round log's groove stands: where the
+/// groove between two logs of the kit's size, a course apart, is `joint` tall, so that much
+/// of it shows; the kit's own `daub` share of the log where the logs do not meet.
+fn daub_depth(kit: &Kit) -> f32 {
+    let r = kit.radius();
+    let half = (kit.course - kit.timber.joint.max(0.0)) * 0.5;
+    if half < r {
+        libm::sqrtf(r * r - half * half)
+    } else {
+        r * kit.timber.daub.0
+    }
+}
+
 fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
     let t = &kit.timber;
     let metres = kit
@@ -977,7 +1088,10 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         .map_or([1.0, 1.0], |texture| texture.metres);
     let thickness = 1.0 + t.variation.thickness * random.signed();
     let half_wide = kit.diameter * HEWN_WIDE * thickness;
-    let half_high = kit.course * HEWN_HIGH * (1.0 + t.variation.thickness * 0.3 * random.signed());
+    // Every course the same height, its beds fitted to the next (D178 as amended); the
+    // draw kept, so the seed's other choices are as they were.
+    let _ = random.unit();
+    let half_high = hewn_high(kit);
     let chamfer = match t.notch {
         Notch::Saddle => 0.02,
         Notch::Flush => 0.008,
@@ -995,11 +1109,15 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         // Rounded edges only as finely as the kit draws a round log: fewer far off.
         corner_steps: if t.sides < 12 { 1 } else { 3 },
         tight: false,
+        bedded: true,
     };
     let mut member = squared(frame, &look, split, random);
+    // Its daub set back from the face of the thinnest beam its seed could give, and as tall
+    // as the line between this beam and the next, so it shows there and nowhere in front of
+    // either.
     member.daub = (
-        half_wide * t.daub.0,
-        (kit.course - 2.0 * half_high + 0.02).max(t.daub.1),
+        kit.diameter * HEWN_WIDE * (1.0 - t.variation.thickness) * t.daub.0,
+        kit.course - 2.0 * half_high + 0.004,
     );
     member
 }
@@ -1023,6 +1141,9 @@ struct Squared {
     /// Laid side by side with others, as a deck's boards are: its sides straight, neither
     /// waved nor drawn in at its ends, so they meet the next's along their length.
     tight: bool,
+    /// Laid in courses, one on the next, as a wall's beams are: its top and bottom flat, so
+    /// it beds on the one below with only its joint between (D178 as amended).
+    bedded: bool,
 }
 
 /// A squared member along a frame: a rounded rectangle swept along it, its faces gently
@@ -1119,6 +1240,11 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
                     (q.x, q.y)
                 };
                 let x = if look.tight { p.x } else { x * end };
+                let y = if look.bedded && !on_cut(p.y, split) {
+                    p.y
+                } else {
+                    y
+                };
                 centre + frame.side * x + frame.up * (y * end)
             })
             .collect();
@@ -1136,6 +1262,7 @@ fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> 
         daub: (0.0, 0.0),
         tone: Vec::new(),
         wear: Vec::new(),
+        hue: Vec::new(),
         cut: Vec::new(),
     }
 }
@@ -1187,6 +1314,7 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         },
         corner_steps: 1,
         tight: true,
+        bedded: false,
     };
     let mut member = squared(&frame, &look, Split::Whole, &mut random);
     // A sloping one, a flight's stringer, cut level at the top of the cube its higher end
@@ -1271,9 +1399,20 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
     let grid = &member.grid;
     let rows = grid.len();
     let columns = grid[0].len();
-    let colour_at = |r: usize, c: usize| match member.tone.get(r).and_then(|ring| ring.get(c)) {
-        Some(&k) => colour.map(|v| (v * k).clamp(0.0, 1.0)),
-        None => colour,
+    let colour_at = |r: usize, c: usize| {
+        let k = member
+            .tone
+            .get(r)
+            .and_then(|ring| ring.get(c))
+            .copied()
+            .unwrap_or(1.0);
+        let hue = member
+            .hue
+            .get(r)
+            .and_then(|ring| ring.get(c))
+            .copied()
+            .unwrap_or([1.0; 3]);
+        [0, 1, 2].map(|i| (colour[i] * k * hue[i]).clamp(0.0, 1.0))
     };
     let wear_at = |r: usize, c: usize| {
         member
@@ -1531,6 +1670,106 @@ mod tests {
         }
     }
 
+    /// The most of a line between two courses that shows anything behind the logs, in
+    /// metres (D178 as amended): what a builder's chinking or a scribe's moss would be.
+    const MOST_GAP_M: f32 = 0.02;
+
+    /// Where a ray from `origin` along `way` first meets a triangle, as how far along it.
+    fn hit(origin: Vec3, way: Vec3, [a, b, c]: [Vec3; 3]) -> Option<f32> {
+        let (e1, e2) = (b - a, c - a);
+        let p = way.cross(e2);
+        let det = e1.dot(p);
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let s = origin - a;
+        let u = s.dot(p) / det;
+        let q = s.cross(e1);
+        let v = way.dot(q) / det;
+        let t = e2.dot(q) / det;
+        (u >= -1e-6 && v >= -1e-6 && u + v <= 1.0 + 1e-6 && t > 0.0).then_some(t)
+    }
+
+    #[test]
+    fn courses_of_a_wall_sit_tight_showing_no_more_than_a_thin_line_between() {
+        // Two courses of a wall, many seeds each, round logs and hewn beams, looked at square
+        // on from both sides: every 5 cm along, the tallest run of rays a millimetre apart
+        // up the line between them that meet the daub, or nothing, before either member. "why do the logs have big gaps between them? thats not how you'd
+        // build w/ logs irl" (the developers, 2026-10-15).
+        // Every shipped coursed material, and pine scribed full.
+        let logs = crate::kit::tests::shipped("logs.ron");
+        let mut scribed = logs.clone();
+        scribed.timber.joint = 0.0;
+        for kit in [logs, crate::kit::tests::shipped("hewn.ron"), scribed] {
+            let (profile, joint) = (kit.timber.profile, kit.timber.joint);
+            let mut worst = 0.0f32;
+            for seed in 0..16 {
+                let mut surfaces = Surfaces::default();
+                for (n, y) in [0.125, 0.375].into_iter().enumerate() {
+                    let piece = Piece::Log {
+                        from: Place::near(Vec3::new(0.0, y, 0.25)),
+                        to: Place::near(Vec3::new(3.0, y, 0.25)),
+                        split: Split::Whole,
+                        seed: seed * 7 + n as u32,
+                        chinking: Some((0, crate::layout::ticks(3.0))),
+                        lean: [0, 0],
+                        lift: [0, 0],
+                        role: None,
+                        outside: None,
+                    };
+                    draw(&piece, &kit, &mut surfaces);
+                }
+                // Each triangle, and whether it is the daub's.
+                let triangles: Vec<([Vec3; 3], bool)> = [Material::Log, Material::Daub]
+                    .into_iter()
+                    .flat_map(|material| {
+                        let all = surfaces.0[&material].indexed();
+                        all.indices
+                            .chunks_exact(3)
+                            .map(|t| {
+                                (
+                                    [0, 1, 2].map(|k| all.positions[t[k] as usize]),
+                                    material == Material::Daub,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                for step in 0..=48 {
+                    let x = 0.3 + step as f32 * 0.05;
+                    let near: Vec<&([Vec3; 3], bool)> = triangles
+                        .iter()
+                        .filter(|(t, _)| {
+                            let lo = t.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+                            let hi = t.iter().map(|p| p.x).fold(f32::MIN, f32::max);
+                            lo <= x && x <= hi
+                        })
+                        .collect();
+                    for side in [1.0f32, -1.0] {
+                        let mut run = 0.0f32;
+                        for k in 0..=250 {
+                            let y = 0.125 + k as f32 * 0.001;
+                            let origin = Vec3::new(x, y, 0.25 + side);
+                            let way = Vec3::new(0.0, 0.0, -side);
+                            // What it meets first: a member, or the daub between, or nothing.
+                            let first = near
+                                .iter()
+                                .filter_map(|(t, daub)| hit(origin, way, *t).map(|d| (d, *daub)))
+                                .min_by(|a, b| a.0.total_cmp(&b.0));
+                            let stopped = matches!(first, Some((_, false)));
+                            run = if stopped { 0.0 } else { run + 0.001 };
+                            worst = worst.max(run);
+                        }
+                    }
+                }
+            }
+            assert!(
+                worst <= MOST_GAP_M.max(joint) + 0.002,
+                "{profile:?} with a joint of {joint} m: a line {worst} m tall shows between courses"
+            );
+        }
+    }
+
     #[test]
     fn a_seed_gives_the_same_log_on_every_machine_and_another_seed_another() {
         let (round, hewn) = (pinned(Profile::Round), pinned(Profile::Hewn));
@@ -1542,9 +1781,9 @@ mod tests {
         assert_eq!(
             sums,
             [
-                0xa1ea_b741_3e3f_3a37,
-                0x0422_b06f_8ea0_fcee,
-                0x7791_36f7_9c91_a57f
+                0x8534_2bbd_ef45_a122,
+                0xcb16_b69c_89d4_cf4c,
+                0x5ece_288a_9a84_250d
             ],
             "drawn differently from the machine these were taken on (D30)"
         );

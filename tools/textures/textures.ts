@@ -863,6 +863,9 @@ function blend(
       const hw = wood.height[i] / 255;
       const hb = bark.height[i] / 255;
       height[i] = Math.round(255 * (hw * 0.4 * (1 - m) + (0.45 + 0.55 * hb) * m));
+      // Occluded as low as it lies, as an occlusion map baked from the height would be: the
+      // bare wood between the bark's plates, and the plates' own furrows, in shade.
+      arm[i * 3] = Math.round(arm[i * 3] * (0.6 + 0.4 * (height[i] / 255)));
       // Normals blended, then tilted by the bark's lip, OpenGL's way up (green up the image).
       const n = [0, 1, 2].map((c) => ((wood.normal[i * 3 + c] * (1 - m) + bark.normal[i * 3 + c] * m) / 255) * 2 - 1);
       n[0] -= gx * lip;

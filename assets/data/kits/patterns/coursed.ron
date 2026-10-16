@@ -15,9 +15,13 @@
 //             squared by the axe), its notch (Saddle, ends stacked a little ragged; Flush),
 //             points round its section and rings along it (sides, step), taper, bend,
 //             uneven, swell, the bark's relief by its height map, the daub under it (how far
-//             out as a fraction of its half width, how tall), its face's and ends' tints, the
+//             out as a fraction of its half width, how tall), the line of daub that shows
+//             between courses (joint, metres: the logs scribed tight, D178; 0 a full scribe),
+//             its face's and ends' tints, the
 //             groove's shade (D262), knots a metre, whether it weathers where exposed, and
-//             how much each member differs by its seed (variation)
+//             how much each member differs by its seed (variation: its thickness, shade,
+//             warmth and mottle; how far it has greyed toward silver, its stains, the
+//             lichen on its weather face, D262)
 // textures    the texture sets its members wear (assets/materials): LogEnd the sawn ends
 //             (an atlas of `cells` by `cells`), Board trims, Floor a deck's boards each from
 //             one plank of its texture (`strips`), Hewn its squared members; a pack adds its
@@ -62,13 +66,24 @@
         uneven: 0.035,
         swell: 0.02,
         relief: 0.022,
-        daub: (0.7, 0.05),
+        daub: (0.7, 0.02),
+        joint: 0.015,
         tint: (1.0, 0.92, 0.8),
         end_tint: (0.58, 0.5, 0.42),
         groove: 0.4,
         knots: 0.8,
         exposed: true,
-        variation: (thickness: 0.06, shade: 0.16, warmth: 0.05, mottle: 0.1),
+        variation: (
+            thickness: 0.06,
+            shade: 0.2,
+            warmth: 0.08,
+            mottle: 0.1,
+            age: 1.0,
+            stain: 0.35,
+            stain_tint: (0.7, 0.62, 0.55),
+            lichen: 0.5,
+            lichen_tint: (1.08, 1.14, 1.0),
+        ),
     ),
     textures: {
         LogEnd: (path: "materials/log_ends", metres: (1.0, 1.0), cells: 2),
@@ -90,7 +105,7 @@
             Nose: Member(profile: Round, scale: 1.1, material: Log),
             Post: Member(profile: Round, scale: 0.9, material: Log),
         },
-        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46)),
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), moss: 0.5, moss_tint: (0.72, 0.84, 0.5)),
     ),
     meets: Some((weight: 2, end: Board, carries: None)),
     colours: (

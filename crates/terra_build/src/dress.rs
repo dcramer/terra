@@ -903,40 +903,52 @@ fn corner(
                 _ => [p.x, p.z],
             }
         };
+        // Each face at the wall texture's own scale, never larger (D362): the inside of
+        // one of the wall's larger stones, laid again mirrored beside itself as far as the
+        // face reaches, so a face larger than the stone is the same rock carried on, not
+        // one stone blown up to it (two and a half times, before).
         let centre_of = (low + high) * 0.5;
-        let extent = high - low;
-        let cut = |face: usize| -> ([f32; 2], [f32; 2], f32) {
+        let scale = 1.0 / metres[0].max(0.01);
+        let cut = |face: usize| -> Tiling {
             let middle = flat(face, centre_of);
-            let span = match face {
-                0 => extent.x.max(extent.y),
-                1 => extent.z.max(extent.y),
-                _ => extent.x.max(extent.z),
-            };
+            let (a, b) = (flat(face, low), flat(face, high));
+            let origin = [a[0].min(b[0]), a[1].min(b[1])];
             match stones {
                 Some(stones) => {
                     let (centre, radius) =
-                        stones[hash(&[stone_seed, 11 + face as u32]) as usize % stones.len()];
-                    (centre, middle, radius * 1.8 / span)
+                        pick_stone(stones, hash(&[stone_seed, 11 + face as u32]));
+                    let half = (radius * STONE_INSIDE).max(MIN_TILE_M * 0.5 * scale);
+                    Tiling {
+                        centre,
+                        middle,
+                        origin,
+                        scale,
+                        tile: 2.0 * half / scale,
+                    }
                 }
-                None => (shift, middle, 1.0 / metres[0]),
+                None => Tiling {
+                    centre: shift,
+                    middle,
+                    origin,
+                    scale,
+                    tile: f32::INFINITY,
+                },
             }
         };
         let cuts = [cut(0), cut(1), cut(2)];
         let first = out.positions.len() as u32;
-        for (p, n) in bevelled_box(low, high, set.bevel) {
-            let face = face_of(n);
-            let (centre, middle, scale) = cuts[face];
-            let t = flat(face, p);
-            let uv = [
-                centre[0] + (t[0] - middle[0]) * scale,
-                centre[1] + (t[1] - middle[1]) * scale,
-            ];
-            out.corner(
-                at + turned * p,
-                (turned * n).normalize_or(Vec3::Y),
-                uv,
-                colour,
-            );
+        let triangles = bevelled_box(low, high, set.bevel);
+        for corners in triangles.chunks_exact(3) {
+            let face = face_of(corners[0].1);
+            let tiling = &cuts[face];
+            for (p, n, uv) in tiling.lay(corners, |p| flat(face, p)) {
+                out.corner(
+                    at + turned * p,
+                    (turned * n).normalize_or(Vec3::Y),
+                    uv,
+                    colour,
+                );
+            }
         }
         let count = out.positions.len() as u32 - first;
         for t in (0..count).step_by(3) {
@@ -948,6 +960,147 @@ fn corner(
             }
         }
     }
+}
+
+/// How much of a stone's inside, from its middle to its nearest joint, half a corner stone's
+/// face's copy of it spans: a square whose corners stay within the stone (under 1/sqrt 2),
+/// so no joint shows in the face.
+const STONE_INSIDE: f32 = 0.68;
+/// The least a face's copy of its stone covers, in metres: a smaller stone is drawn larger
+/// than its wall's, so a face is not cut into slivers.
+const MIN_TILE_M: f32 = 0.12;
+
+/// One of a wall's larger stones for a seed: among those at least half the largest's size.
+fn pick_stone(stones: &[crate::cells::Stone], seed: u32) -> crate::cells::Stone {
+    let largest = stones.iter().map(|s| s.1).fold(0.0, f32::max);
+    let large: Vec<_> = stones.iter().filter(|s| s.1 >= largest * 0.5).collect();
+    *large[seed as usize % large.len().max(1)]
+}
+
+/// How a corner stone's face wears its stone: at the wall's own scale (`scale`, texture a
+/// metre), the stone's inside, `tile` metres across, laid from the face's corner and again
+/// mirrored beside itself, so the texture runs on unbroken and nothing is drawn larger than
+/// the wall draws it.
+struct Tiling {
+    centre: [f32; 2],
+    middle: [f32; 2],
+    /// Where the face's copies start, its corner: as few as cover it.
+    origin: [f32; 2],
+    scale: f32,
+    tile: f32,
+}
+
+impl Tiling {
+    /// A face's triangle, cut where its copies of the stone meet, each piece's corners
+    /// with their texture places: positions, normals and places, three a triangle.
+    fn lay(
+        &self,
+        corners: &[(Vec3, Vec3)],
+        flat: impl Fn(Vec3) -> [f32; 2],
+    ) -> Vec<(Vec3, Vec3, [f32; 2])> {
+        let n = corners[0].1;
+        // Each corner's place in tiles, from the face's corner.
+        let at = |p: Vec3| -> [f32; 2] {
+            let t = flat(p);
+            [0, 1].map(|i| (t[i] - self.origin[i]) / self.tile)
+        };
+        let mut out = Vec::new();
+        if !self.tile.is_finite() {
+            // No stones: the wall's texture at its own size, as it runs.
+            for &(p, _) in corners {
+                let t = flat(p);
+                let uv = [0, 1].map(|i| self.centre[i] + (t[i] - self.middle[i]) * self.scale);
+                out.push((p, n, uv));
+            }
+            return out;
+        }
+        let points: Vec<(Vec3, [f32; 2])> = corners.iter().map(|&(p, _)| (p, at(p))).collect();
+        let lo = [0, 1].map(|i| {
+            points
+                .iter()
+                .map(|q| q.1[i])
+                .fold(f32::MAX, f32::min)
+                .floor() as i32
+        });
+        let hi = [0, 1].map(|i| {
+            points
+                .iter()
+                .map(|q| q.1[i])
+                .fold(f32::MIN, f32::max)
+                .ceil() as i32
+        });
+        for i in lo[0]..hi[0] {
+            for j in lo[1]..hi[1] {
+                let mut poly = points.clone();
+                for (axis, edge, keep_above) in [
+                    (0, i, true),
+                    (0, i + 1, false),
+                    (1, j, true),
+                    (1, j + 1, false),
+                ] {
+                    poly = clip(&poly, axis, edge as f32, keep_above);
+                    if poly.len() < 3 {
+                        break;
+                    }
+                }
+                if poly.len() < 3 {
+                    continue;
+                }
+                for k in 1..poly.len() - 1 {
+                    for &(p, t) in [&poly[0], &poly[k], &poly[k + 1]] {
+                        out.push((p, n, self.place(t, [i, j])));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The texture's place for a point `t` tiles in, in tile `cell`: mirrored in every
+    /// other tile each way, so neighbouring copies meet on the same texels.
+    fn place(&self, t: [f32; 2], cell: [i32; 2]) -> [f32; 2] {
+        let half = self.tile * 0.5 * self.scale;
+        [0, 1].map(|i| {
+            let mut f = t[i] - cell[i] as f32;
+            if cell[i].rem_euclid(2) == 1 {
+                f = 1.0 - f;
+            }
+            self.centre[i] - half + f * 2.0 * half
+        })
+    }
+}
+
+/// A convex polygon cut by a line of tiles, keeping the side above or below it.
+fn clip(
+    poly: &[(Vec3, [f32; 2])],
+    axis: usize,
+    edge: f32,
+    keep_above: bool,
+) -> Vec<(Vec3, [f32; 2])> {
+    let inside = |q: &(Vec3, [f32; 2])| {
+        if keep_above {
+            q.1[axis] >= edge
+        } else {
+            q.1[axis] <= edge
+        }
+    };
+    let mut out = Vec::new();
+    for k in 0..poly.len() {
+        let (a, b) = (&poly[k], &poly[(k + 1) % poly.len()]);
+        if inside(a) {
+            out.push(*a);
+        }
+        if inside(a) != inside(b) {
+            let s = (edge - a.1[axis]) / (b.1[axis] - a.1[axis]);
+            let mut t = [
+                a.1[0] + (b.1[0] - a.1[0]) * s,
+                a.1[1] + (b.1[1] - a.1[1]) * s,
+            ];
+            t[axis] = edge;
+            out.push((a.0 + (b.0 - a.0) * s, t));
+        }
+    }
+    out
 }
 
 /// A box from `low` to `high` with its twelve edges bevelled by `bevel` and its eight
@@ -1149,6 +1302,9 @@ pub(crate) fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
     lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z)
 }
 
+/// How high moss climbs a timber wall from the ground, in metres, its top wandering.
+const TIMBER_MOSS_M: f32 = 0.7;
+
 /// A corner's shade by the kit's masks: dirt and damp rising unevenly from the ground,
 /// outside edges worn lighter by their normal's turn, a block kind's lifts and its storey's
 /// top paler, dry under the eaves, and, for timber, grey higher up.
@@ -1195,6 +1351,14 @@ fn masked(
         let rise = masks.dirt * (0.6 + 0.8 * noise.at(p, 0.45, 3));
         let dirt = three_halves((1.0 - height / rise).clamp(0.0, 1.0));
         c = c.lerp(Vec3::from_array(masks.dirt_tint), dirt);
+    }
+    // Timber's foot, where the splash keeps it damp: moss in blotches, thinning upward.
+    if timber && masks.moss > 0.0 && height < TIMBER_MOSS_M * 1.4 {
+        let rise = TIMBER_MOSS_M * (0.6 + 0.8 * noise.at(p, 0.5, 41));
+        let low = (1.0 - height / rise).clamp(0.0, 1.0);
+        let blotch = ((noise.at(p, 0.22, 43) - 0.35) / 0.4).clamp(0.0, 1.0);
+        let moss = (masks.moss * low * blotch).clamp(0.0, 0.85);
+        c = c.lerp(c * Vec3::from_array(masks.moss_tint), moss);
     }
     if masks.wear > 0.0 {
         let a = normal.abs();
@@ -1554,7 +1718,11 @@ mod tests {
         draw(&piece, &kit, Some(&wall), &mut surfaces);
         let stone = &surfaces.0[&Material::Masonry];
         assert!(!stone.positions.is_empty(), "in the wall's own material");
-        assert!(stone.triangle_count() <= crate::checker::CORNER_STONE);
+        assert!(
+            stone.triangle_count() <= crate::checker::CORNER_STONE,
+            "{}",
+            stone.triangle_count()
+        );
         // Its size the pattern's numbers: so long along each face less its joint, out by
         // its proud, a course high less its joints.
         let (low, high) = stone.positions.iter().fold(
@@ -1580,6 +1748,29 @@ mod tests {
         for uv in &stone.uvs {
             let inside = crate::cells::standing(&cells, *uv, &|_| 0.0, 2.0, 0.0);
             assert!(inside > 1.0, "{uv:?} is {inside} texels inside a stone");
+        }
+        // And no face drawn larger than the wall draws its texture, two metres a copy: each
+        // triangle's metres along its texture's two ways no more than two a copy.
+        let all = stone.indexed();
+        for t in all.indices.chunks_exact(3) {
+            let [p, q, r] = [0, 1, 2].map(|k| all.positions[t[k] as usize]);
+            let [a, b, c] = [0, 1, 2].map(|k| all.uvs[t[k] as usize]);
+            let (d1, d2) = ([b[0] - a[0], b[1] - a[1]], [c[0] - a[0], c[1] - a[1]]);
+            let det = d1[0] * d2[1] - d1[1] * d2[0];
+            // Its faces; a bevel's slant is its arris's, a centimetre or two across.
+            let n = (q - p).cross(r - p);
+            if det.abs() < 1e-9 || n.length() < 1e-7 || n.normalize().abs().max_element() < 0.99 {
+                continue;
+            }
+            let ju = ((q - p) * d2[1] - (r - p) * d1[1]) / det;
+            let jv = ((r - p) * d1[0] - (q - p) * d2[0]) / det;
+            for way in [ju, jv] {
+                assert!(
+                    way.length() <= 2.0 * 1.02,
+                    "drawn {} metres a copy",
+                    way.length()
+                );
+            }
         }
     }
 

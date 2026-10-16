@@ -154,12 +154,12 @@ async function make(name: string, source: string, values: Record<string, any>): 
   const [kind, ...rest] = source.split(":");
   const what = rest.join(":");
   if (kind === "polyhaven") {
-    textures("fetch", what, "--name", name, "--size", "1k");
+    textures("fetch", what, "--name", name, "--size", "4k");
     const info = await (await fetch(`https://api.polyhaven.com/info/${what}`)).json();
     return { metres: info.dimensions ? info.dimensions[0] / 1000 : undefined };
   }
   if (kind === "ambientcg") {
-    textures("fetch", `ambientcg:${what}`, "--name", name, "--size", "1k");
+    textures("fetch", `ambientcg:${what}`, "--name", name, "--size", "4k");
     return {};
   }
   if (kind === "image") {

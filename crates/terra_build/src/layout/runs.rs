@@ -708,9 +708,10 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
     } else {
         BLOCKING_SET_BACK_M + CROSSING_M
     };
-    // A little inside the log's width, so its sides are not in the planes of the members'
-    // faces under it, and its foot a little into the course under it.
-    let half = radius - inset;
+    // A little inside the member's width, a log's or a hewn beam's, so its sides are not in
+    // the planes of the members' faces under it, and its foot a little into the course under
+    // it.
+    let half = (crate::timber::section(kit, None).0 * 0.5).min(radius) - inset;
     let reach = radius + kit.ragged();
     let foot = log.from.y - radius;
     // What the blocking stands on: the log's foot where it is left out, or the crest's top.

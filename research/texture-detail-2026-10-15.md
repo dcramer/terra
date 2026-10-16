@@ -72,8 +72,17 @@ The low preset keeps the old density (1,024 layers, no detail): it draws at thre
 
 The GPU's own time did not move (village 2.34 -> 2.37 ms; the integrated GPU's opaque pass 15.1 -> 14.6 ms); contrast-adaptive sharpening costs 0.03 ms at high. The village measured steady, 25 s in, alternating builds: before 6.40 and 6.27 ms, after 5.82 and 6.33 ms. Everything holds the 13.3 ms budget; the integrated GPU's median stays under its 33.3 ms.
 
+## Second pass: bark, corner stones, tight courses, variety
+
+As the lead and the developers asked, the same day.
+
+- **Bark.** The Tripo bark rebaked at 2,048 kept a sixth of a scan's fine relief at its own scale, so it was compared on the preview at 1, 2 and 5 m with Poly Haven's `pine_bark` fetched at 4K (through `cargo xtask pack`, which was fetching scans at 1K: now 4K, fitted to 2,048) and laid in patches over bare wood (`textures.ts blend`, its occlusion now from its height, so the kit checker reads its proud bark rightly). The scan in patches was sharper at every distance and read more like real bark (finest octave of its colour 40% against the bake's 11%, its normal 51% against 9%); it replaced the bake, which is gone. The shader's wear to silvered wood on tops, ends and the weather side is unchanged.
+- **Corner stones.** Measured by `cargo xtask texels`, now reading the real height maps (with a flat stand-in it saw no stones, so no corner stones): stone's walls 15.2% of their area drawn past 1.5:1 and 10.7% past 2.5:1, all of it quoins and jamb stones blowing one stone up to a face; after, 0.2% and 0.0%. A face now wears the inside of one of the wall's larger stones at the wall's own scale, laid again mirrored beside itself, cut where copies meet; a test holds every face at the wall's scale and every corner of it inside a stone.
+- **Tight courses** (the developers: "why do the logs have big gaps between them?"). Logs tapered and thinned to 13 cm against a half course of 12.5 cm and sagged up to 1.5 cm, and the daub stood in front 5 cm tall, so a band up to 6.7 cm showed between courses. Now a wall's log is never thinner where it rests than the kit's log, scribed flat a course apart and a few millimetres into the next, not sagging; the daub set back so a line `joint` tall shows (1.5 cm pine, 1.6 cm hewn, beds flat); a test casts rays at two courses of every shipped coursed material, 16 seeds, both faces, and holds what shows between to 2 cm.
+- **Variety** (the developers: "id like them more varied and we want to focus on a degree of realism per our art style"), against photographs of old Norwegian log buildings: each log its own age by its seed, its colour from the kit's warm brown toward grey silver and more of its bark lost where the weather reaches; stains in patches; lichen on its weather face and top; moss up its foot; the upper courses greyed (`masks.weather` 0.5); the daub a little lighter or darker course by course. All in the coursed pattern's data (`timber.variation`, `masks.moss`). It reads, but stays warmer than the photographs, whose wood is mostly grey: the warm tint is the developers' to change.
+
+Frame time with all of it (`cargo xtask bench`, RTX 5090, high, median / p99 ms): village 4.73 / 6.90 (3.17 million triangles, 3.04 before, the corner stones' faces cut where their copies meet), town300 6.09 / 13.03 under the 13.3 budget. Texture memory unchanged: 312 MiB in the arrays for the village's 20 sets.
+
 ## What is left
 
-- The quoins blow up one stone of the wall to a quoin's face; detail hides it near, but their own texel density is D215's to raise.
-- A log wall's outer face is mostly the worn wood, tinted warm by the timber's tint; whether that is the look the developers want is a design question, not detail.
-- The Tripo bark is still soft at its own scale (its finest octave 11% at 2,048); detail carries it near. A bark scan in its place would be sharper at every distance; D290 chose the modelled log's bark.
+- Log walls still read warmer than real weathered cabins, mostly grey; the timber's warm tint is the developers' to change.

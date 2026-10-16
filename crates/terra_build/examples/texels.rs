@@ -49,7 +49,7 @@ fn main() -> ExitCode {
     let Some((kits, names)) = read_kits(&assets) else {
         return ExitCode::FAILURE;
     };
-    let maps = stand_in_maps(&kits);
+    let maps = stand_in_maps(&kits, &assets);
     let args: Vec<String> = std::env::args().skip(1).collect();
     let worst = args
         .iter()
@@ -270,9 +270,9 @@ fn read_kits(assets: &Path) -> Option<(Kits, BTreeMap<u16, String>)> {
 
 /// Flat height maps: relief moves points along their normals, which stretches no texture,
 /// so it is left out to measure the mapping alone.
-fn stand_in_maps(kits: &Kits) -> Maps {
+fn stand_in_maps(kits: &Kits, assets: &Path) -> Maps {
     const SIDE: usize = 64;
-    let relief = Arc::new(Relief::new(SIDE, SIDE, vec![128; SIDE * SIDE]).expect("a full map"));
+    let flat = Arc::new(Relief::new(SIDE, SIDE, vec![128; SIDE * SIDE]).expect("a full map"));
     let swatch = Arc::new(Swatch::new(16, 16, vec![[0.4, 0.35, 0.3]; 256]).expect("a swatch"));
     let mut maps = Maps::default();
     for kit in &kits.0 {
@@ -280,11 +280,29 @@ fn stand_in_maps(kits: &Kits) -> Maps {
             .into_iter()
             .flatten()
         {
-            maps.heights.insert(path.to_string(), relief.clone());
+            // The real height where there is one: a block's corner stones are cut from the
+            // stones it parts its wall into (`dress::corner`), which a flat map has none of.
+            let relief = height(&assets.join(path).join("height.jpg"))
+                .map(Arc::new)
+                .unwrap_or_else(|| flat.clone());
+            maps.heights.insert(path.to_string(), relief);
         }
         for texture in kit.textures.values() {
             maps.colours.insert(texture.path.clone(), swatch.clone());
         }
     }
     maps
+}
+
+/// A height map as the game reads it (its first channel), decoded from its JPEG.
+fn height(path: &Path) -> Option<Relief> {
+    use zune_core::bytestream::ZCursor;
+    use zune_core::colorspace::ColorSpace;
+    use zune_core::options::DecoderOptions;
+    let bytes = std::fs::read(path).ok()?;
+    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::Luma);
+    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(ZCursor::new(&bytes[..]), options);
+    let data = decoder.decode().ok()?;
+    let (width, height) = decoder.dimensions()?;
+    Relief::new(width, height, data)
 }
