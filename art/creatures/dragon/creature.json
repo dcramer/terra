@@ -1,0 +1,16 @@
+{
+  "subject": "great dragon of the wyvern build, as Skyrim's: two strong hind legs, the wings its forelimbs with a clawed thumb at the wrist and four fingers spanning a dark red-brown membrane, long neck, long tail, horned head; scaled hide in dark umber and bronze-green, a paler ribbed belly, bone-ivory horns and claws",
+  "file": "Dragon",
+  "into": "creatures",
+  "tripo_project": "bfa420c8-b873-4abe-b419-6c49c1fdff79",
+  "generator": "h3.1",
+  "faces": 50000,
+  "model": "model.glb is Tripo's export (export --format glb) of a model from concept.png, unrigged; tools/creatures/dragon.py cuts its mouth open, lines it and adds teeth, straightens its tail, lengthens its wings from their roots by 12%, and skins it on a skeleton of our own",
+  "size_m": { "length": 13.0, "span_at_rest": 16.6, "span_gliding": 17.8, "height_at_rest": 6.75 },
+  "origin": "the body's centre of mass, between the wing roots and the hips; front +Z, +Y up",
+  "triangles": 48710,
+  "textures": { "colour": 2048, "normal": 2048, "roughness_metal": 2048 },
+  "sockets": { "Mouth": "an empty under the Head joint at the front of the mouth, its axes the model's: the breath goes along its +Z" },
+  "clips": { "Fly": 1.1, "Glide": 3.0, "Hover": 0.9, "Breathe": 2.0, "FlyBreathe": 2.2, "Roar": 2.7 },
+  "credits": { "model": 45 }
+}
