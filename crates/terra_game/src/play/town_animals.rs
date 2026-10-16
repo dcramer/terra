@@ -270,6 +270,7 @@ fn animate(
     market: Res<Market>,
     beasts: Query<&Beast>,
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
+    rising: Option<Res<super::rising::Rising>>,
 ) {
     for (mut plays, mut player, mut transitions) in &mut players {
         let Ok(beast) = beasts.get(plays.beast) else {
@@ -293,7 +294,7 @@ fn animate(
             transitions.play(&mut player, wanted, BLEND).repeat();
         }
         if let Some(active) = player.animation_mut(wanted) {
-            active.set_speed(rate);
+            active.set_speed(rate * rising.as_ref().map_or(1.0, |r| r.lapse.pace));
         }
     }
 }

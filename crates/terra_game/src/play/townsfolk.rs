@@ -480,8 +480,11 @@ fn animate(
     market: Option<Res<Market>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     folk: Query<(&Folk, &GlobalTransform)>,
+    rising: Option<Res<super::rising::Rising>>,
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
+    // A time-lapse's people live faster than the film, their clips with them (D381).
+    let lived = rising.as_ref().map_or(1.0, |r| r.lapse.pace);
     let (Some(market), Some(ready)) = (market, &figure.ready) else {
         return;
     };
@@ -536,7 +539,7 @@ fn animate(
         }
         let every = plays.every as f32;
         if let Some(active) = player.animation_mut(wanted) {
-            active.set_speed(rate.clamp(SLOWEST_RATE, FASTEST_RATE) * every);
+            active.set_speed(rate.clamp(SLOWEST_RATE, FASTEST_RATE) * every * lived);
         }
     }
 }

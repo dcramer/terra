@@ -61,6 +61,17 @@ pub struct Timelapse {
     /// When the things of no one building (the well, the benches, the stalls) come, from
     /// the nearest the square's middle to the furthest.
     pub common: (f32, f32),
+    /// How many times faster than the film its people live their day: a time-lapse shows
+    /// people hurrying about, and builders must keep up with the work; 1 by default.
+    #[serde(default = "Timelapse::steady")]
+    pub pace: f32,
+    /// How many builders its people have, if not as many as the life's plan says.
+    #[serde(default)]
+    pub builders: Option<u32>,
+    /// How long before a building's plan is laid its builders are called to its sites, in
+    /// seconds: they walk at their own day's pace, far slower than the work goes on.
+    #[serde(default)]
+    pub gather: f32,
     /// What a building's site is dressed with from its plan being laid until it is up: its
     /// materials and tools, before its door.
     #[serde(default)]
@@ -283,6 +294,8 @@ pub struct Rises {
     pub whole: Base,
     pub planned: bool,
     pub near: Vec3,
+    /// Whether its builders have been called to its sites.
+    pub called: bool,
     /// What its site is dressed with while it goes up.
     pub dressed: Vec<Entity>,
 }
@@ -488,7 +501,16 @@ fn build(
         let Some((start, takes)) = rising.times.get(index).copied().flatten() else {
             continue;
         };
-        if t < start || rising.up[index] {
+        if rising.up[index] {
+            continue;
+        }
+        // Its builders called to it a while before its plan is laid, since they walk to it
+        // at their own day's pace while the time-lapse runs the work on far faster.
+        if !rise.called && t >= start - rising.lapse.gather {
+            rise.called = true;
+            open_sites(&mut market, index, true, hours);
+        }
+        if t < start {
             continue;
         }
         let rules = built
@@ -509,7 +531,6 @@ fn build(
                 continue;
             }
             clear.write(ClearAround(built.frame.translation, 9.0));
-            open_sites(&mut market, index, true, hours);
             // Its site's materials and tools, laid before its door while it goes up.
             if let Some(site) = site.as_deref() {
                 let to_site = site.frame.compute_affine().inverse();
@@ -659,8 +680,11 @@ fn wear(
     wear: Option<Res<Wear>>,
     planet: Res<Planet>,
     rises: Query<&Rises>,
+    market: Res<Market>,
 ) {
     const EVERY_S: f32 = 4.0;
+    // How far past its furthest plot laid a street is trodden out.
+    const WAY_PAST_M: f32 = 12.0;
     let Some(wear) = wear else { return };
     let planned: Vec<usize> = rises
         .iter()
@@ -678,11 +702,17 @@ fn wear(
     );
     let up = rising.up.clone();
     let times = rising.times.clone();
-    commands.insert_resource(wear.rules(
-        &planet,
-        |b| planned.contains(&b),
-        |b| times.get(b).copied().flatten().is_some() && up.get(b).copied().unwrap_or(false),
-    ));
+    commands.insert_resource(
+        wear.rules(
+            &planet,
+            |b| planned.contains(&b),
+            |b| times.get(b).copied().flatten().is_some() && up.get(b).copied().unwrap_or(false),
+            planned
+                .iter()
+                .map(|&b| Vec2::from(market.life.town.buildings[b].at).length() + WAY_PAST_M)
+                .fold(0.0, f32::max),
+        ),
+    );
 }
 
 /// Shows what waited, once its building is up and settled, or the settlement has reached

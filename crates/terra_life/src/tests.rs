@@ -309,6 +309,72 @@ fn a_town_started_settled_is_in_mid_flow_not_stood_still() {
 }
 
 #[test]
+fn builders_keep_at_work_while_a_settlement_goes_up_a_building_after_another() {
+    // D381: in a time-lapse each building's sites are open some twenty seconds of play, the
+    // homes nearest the square first; builders go from one to the next and are mostly at work.
+    let ground = |at: Vec2| at.x * 0.03;
+    let mut town = town(2, KINDS, &ground);
+    let first = town.things.len();
+    town.add_sites();
+    let mut life = Life::new(town, plan(), 2, SECONDS_AN_HOUR);
+    let viewer = square(&life);
+    let mut hours = 7.0;
+    let sites: Vec<usize> = (first..life.town.things.len()).collect();
+    for &site in &sites {
+        life.set_open(site, false, hours);
+    }
+    life.start_settled(hours, viewer);
+    let mut order: Vec<usize> = (0..life.town.buildings.len()).collect();
+    order.sort_by(|&a, &b| {
+        let d = |i: usize| Vec2::from(life.town.buildings[i].at).length();
+        d(a).total_cmp(&d(b))
+    });
+    const PACE: f32 = 3.0;
+    let open_s = 30.0;
+    let every_s = 0.6;
+    let builders: Vec<usize> = (0..life.people.len())
+        .filter(|&p| life.role(p) == "builder")
+        .collect();
+    let mut at_work = Vec::new();
+    let steps = (45.0 / STEP) as usize;
+    for n in 0..steps {
+        let t = n as f32 * STEP;
+        for (rank, &building) in order.iter().enumerate() {
+            let opens = rank as f32 * every_s;
+            for (when, open) in [(opens, true), (opens + open_s, false)] {
+                if (t - when).abs() < STEP * 0.5 {
+                    for &site in &sites {
+                        if life.town.things[site].building == Some(building) {
+                            life.set_open(site, open, hours);
+                        }
+                    }
+                }
+            }
+        }
+        // Its people live three times as fast as the film runs, as a time-lapse's do.
+        hours += (STEP * PACE) as f64 / SECONDS_AN_HOUR as f64;
+        life.step(hours, STEP * PACE, &[viewer]);
+        if n % 50 == 0 && t > 15.0 {
+            at_work.push(
+                builders
+                    .iter()
+                    .filter(|&&p| {
+                        life.activity(p) == Some("Build")
+                            && matches!(life.people[p].state, State::Doing { .. })
+                    })
+                    .count(),
+            );
+        }
+    }
+    let mean = at_work.iter().sum::<usize>() as f32 / at_work.len() as f32;
+    assert!(
+        mean >= builders.len() as f32 * 0.5,
+        "{mean} of {} builders at work: {at_work:?}",
+        builders.len()
+    );
+}
+
+#[test]
 fn builders_go_to_a_building_while_it_goes_up_and_leave_when_it_is_done() {
     // D381: a site's spots are closed until its building goes up; opened, builders busy at
     // something else go to it and hammer there; closed, nobody stays.

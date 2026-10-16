@@ -446,10 +446,12 @@ struct TownCover {
     paved: bool,
 }
 
-/// How thick a settlement's cleared meadow grows at least (`TownCover::meadow_m`).
+/// How thick and how green a settlement's cleared meadow grows at least
+/// (`TownCover::meadow_m`).
 const MEADOW_GRASS: f32 = 0.8;
+const MEADOW_LUSH: f32 = 0.65;
 /// How trodden an unpaved way is: packed earth, under where the ground shader lays setts.
-const UNPAVED: f32 = 0.7;
+const UNPAVED: f32 = 0.5;
 /// How far round its middle a settlement rising has cleared a meadow: to the forest's
 /// edge (`MarketTown::SETTLEMENT`).
 const MEADOW_M: f32 = 125.0;
@@ -476,7 +478,12 @@ impl terra_world::cover::CoverSource for TownCover {
             } else {
                 wild.grass
             },
-            lush: wild.lush,
+            // A cleared meadow grazed and trodden green, not left to last year's straw.
+            lush: if p.length() < self.meadow_m {
+                wild.lush.max(MEADOW_LUSH)
+            } else {
+                wild.lush
+            },
             ..default()
         };
         // How far into a way a point is, by the nearest street or the square, a soft edge
@@ -580,15 +587,31 @@ pub struct Wear {
 }
 
 impl Wear {
-    /// What grows with the doors of the buildings `started` worn round, and the yards of
-    /// those `up`.
+    /// What grows with the doors of the buildings `started` worn round, the yards of those
+    /// `up`, and the streets trodden out from the square as far as `reach_m`, where the
+    /// settlement has got to.
     pub fn rules(
         &self,
         planet: &Planet,
         started: impl Fn(usize) -> bool,
         up: impl Fn(usize) -> bool,
+        reach_m: f32,
     ) -> terra_world::cover::CoverRules {
         let worn = TownCover {
+            streets: self
+                .whole
+                .streets
+                .iter()
+                .map(|(points, wide)| {
+                    let near: Vec<Vec2> = points
+                        .iter()
+                        .copied()
+                        .take_while(|p| p.length() <= reach_m)
+                        .collect();
+                    (near, *wide)
+                })
+                .filter(|(points, _)| points.len() >= 2)
+                .collect(),
             doors: self
                 .whole
                 .doors
@@ -716,7 +739,7 @@ fn lay(
     let plan = std::fs::read_to_string(terra_world::data::path("life.ron"))
         .map_err(|why| why.to_string())
         .and_then(|text| Plan::parse(&text));
-    let plan = match plan {
+    let mut plan = match plan {
         Ok(plan) => plan,
         Err(why) => {
             error!("Town: {why}");
@@ -724,6 +747,12 @@ fn lay(
             return;
         }
     };
+    // A settlement rising has as many builders as its time-lapse asks (D381).
+    if let Some(builders) = rising.as_ref().and_then(|r| r.lapse.builders) {
+        for role in plan.roles.iter_mut().filter(|r| r.name == "builder") {
+            role.count = terra_life::plan::Count::Fixed(builders);
+        }
+    }
     let place = site_for(&planet, &start, wanted.near, wanted.within);
     let middle = planet.ground_at(start.at(place.x, place.y));
     let up = middle.normalize();
@@ -791,15 +820,18 @@ fn lay(
             }
         }
     }
-    commands.spawn((
-        Name::new("Town streets and square"),
-        Footprint {
-            frame,
-            cell_m: CELL_M,
-            ground,
-            ..default()
-        },
-    ));
+    // Rising, its ways are trodden out as it grows (`Wear`), not cleared from the first.
+    if rising.is_none() {
+        commands.spawn((
+            Name::new("Town streets and square"),
+            Footprint {
+                frame,
+                cell_m: CELL_M,
+                ground,
+                ..default()
+            },
+        ));
+    }
 
     // The buildings, each stood on the ground where its door is, by the shortcuts.
     let seed = wanted.seed;
@@ -870,6 +902,7 @@ fn lay(
                     whole,
                     planned: false,
                     near: Vec3::ZERO,
+                    called: false,
                     dressed: Vec::new(),
                 },
             ));
@@ -1212,7 +1245,7 @@ fn lay(
                 yards: town.yards.iter().map(|(b, _)| *b).collect(),
                 whole,
             };
-            commands.insert_resource(wear.rules(&planet, |_| false, |_| false));
+            commands.insert_resource(wear.rules(&planet, |_| false, |_| false, 0.0));
             commands.insert_resource(wear);
         } else {
             commands.insert_resource(over_the_worlds(cover.as_deref(), &planet, whole));
@@ -1300,10 +1333,12 @@ fn live(
         })
         .collect();
     market.life.visitors = visitors;
-    let step = time.delta_secs();
+    // A time-lapse runs the sun through the day, and its people their own day a few times
+    // faster than the film, as a time-lapse shows people hurrying about (D381).
+    let pace = rising.as_ref().map_or(1.0, |r| r.lapse.pace);
+    let step = time.delta_secs() * pace;
     let now = Market::hours(&clock);
-    // A time-lapse runs the sun through the day; its people keep the day's own pace from
-    // where it began, as they would be filmed (D381).
+
     let hours = if rising.is_some() && market.lived.is_finite() {
         market.lived + step as f64 * 24.0 / DAY_SECONDS as f64
     } else {

@@ -689,7 +689,14 @@ impl Life {
             .filter(|(_, spot)| !rules.inside || spot.thing == p.home || !home_has_spot)
             .map(|(i, spot)| {
                 let distance = spot.at.distance(p.at);
-                (i, 1.0 / (1.0 + distance / 30.0).powi(2), distance)
+                // Work that comes and goes is taken nearest first, as a builder goes on to
+                // the next site along rather than across the town.
+                let falloff = if rules.first { 6.0 } else { 30.0 };
+                (
+                    i,
+                    1.0 / (1.0 + distance / falloff).powi(4 - 2 * usize::from(!rules.first) as i32),
+                    distance,
+                )
             })
             .collect();
         // Those near enough to get to in time, if any are.
