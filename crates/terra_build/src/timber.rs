@@ -240,7 +240,9 @@ pub(crate) fn member(
         break_up(&mut made, &frame, harm, chunks, seed);
     }
     let t = &kit.timber;
-    let shade = 1.0 - t.variation.shade * random.unit();
+    // Lighter and darker by its seed about the kit's tint, not only darker, which left a
+    // wall's logs a fifth of the light under their tint on average (D373).
+    let shade = 1.0 + t.variation.shade * (random.unit() - 0.5);
     let warmth = t.variation.warmth * random.signed();
     let colour = [
         (t.tint[0] * shade * (1.0 + warmth)).clamp(0.0, 1.0),
@@ -918,21 +920,24 @@ fn round(
     let last = at.len() - 1;
     let mut grid = Vec::with_capacity(at.len());
     let mut uvs = Vec::with_capacity(at.len());
-    // What its shade round it is, the same all along it: toward the grooves, where it meets
-    // the logs above and below, in shade, most under it, where the sky does not reach; its
-    // top bleached by the sun a little, as its underside is not.
+    // What its shade round it is, the same all along it: toward the groove over it, where the
+    // log above overhangs it; its top bleached by the sun a little, as its underside is not.
+    // Its underside's shade, where the sky does not reach, is every kit's (`dress::underside`,
+    // D320): shaded here too, the two stacked with the screen's occlusion and crushed a log
+    // wall's lower halves to black in the shade (D373).
     let shade: Vec<[f32; 3]> = round
         .iter()
         .map(|&[sin, cos, ..]| {
             let mut k = 1.0;
             if level {
                 if walled {
-                    let under = smoothstep(0.3, 0.92, -sin);
                     let over = smoothstep(0.5, 0.95, sin);
-                    k *= 1.0 - t.groove * (under + 0.6 * over);
+                    k *= 1.0 - t.groove * 0.6 * over;
                 }
                 k *= 1.0 + 0.5 * t.groove * sin;
             }
+            // A share of the light, laid on a colour as on screen (D373).
+            let k = crate::light_share(k);
             [k, libm::sinf(2.0 * cos), libm::cosf(2.0 * cos)]
         })
         .collect();
@@ -1800,7 +1805,10 @@ mod tests {
 
     #[test]
     fn logs_vary_in_thickness_and_shade_by_seed_within_the_kits_bounds() {
-        let kit = pinned(Profile::Round);
+        let mut kit = pinned(Profile::Round);
+        // Its shade alone varying by seed, not its warmth, mottle or weathering.
+        let v = &mut kit.timber.variation;
+        (v.warmth, v.mottle, v.age, v.stain, v.lichen) = (0.0, 0.0, 0.0, 0.0, 0.0);
         let mut thickest: f32 = 0.0;
         let mut thinnest = f32::MAX;
         let mut shades = Vec::new();
@@ -1833,7 +1841,12 @@ mod tests {
         let (light, dark) = shades
             .iter()
             .fold((0.0f32, 1.0f32), |(l, d), s| (l.max(*s), d.min(*s)));
-        assert!(light - dark > v.shade * 0.5 && light - dark <= v.shade + 1e-3);
+        // Darker by up to the kit's shade, as a share of the lightest, the same corner of each.
+        let spread = 1.0 - dark / light;
+        assert!(
+            spread > v.shade * 0.5 && spread <= v.shade + 1e-3,
+            "{dark} to {light}"
+        );
     }
 
     #[test]
@@ -1875,7 +1888,9 @@ mod tests {
             lightness(0.12, 1.0),
         );
         assert!(under < top && top < side, "{under} {top} {side}");
-        assert!(under < side * 0.75, "{under} {side}");
+        // Its underside shaded by the sun not bleaching it, no more: the shade where the sky
+        // does not reach is every kit's (`dress::underside`), and stacked crushed it (D373).
+        assert!(under > side * 0.8, "{under} {side}");
         // Each end within one cell of the atlas, and across seeds every cell drawn.
         let mut cells = std::collections::BTreeSet::new();
         for seed in 0..16 {

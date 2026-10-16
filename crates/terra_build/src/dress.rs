@@ -1381,7 +1381,7 @@ fn masked(
 /// the logs' grooves are shaded (D262).
 fn underside(normal: Vec3) -> f32 {
     let t = ((-normal.y - UNDER_FROM) / (1.0 - UNDER_FROM)).clamp(0.0, 1.0);
-    1.0 - UNDERSIDE * t * t * (3.0 - 2.0 * t)
+    crate::light_share(1.0 - UNDERSIDE * t * t * (3.0 - 2.0 * t))
 }
 
 /// Faces within about 55 degrees of straight down are shaded, the most `UNDERSIDE` darker.
@@ -1586,7 +1586,7 @@ pub fn sheltered(surface: &mut Surface, roofs: &crate::layout::roofs::Roofs) {
             return;
         };
         let near = 1.0 - ((top - p.y) / SHELTER_REACH_M).clamp(0.0, 1.0);
-        let k = 1.0 - SHELTERED * up * (0.4 + 0.6 * near);
+        let k = crate::light_share(1.0 - SHELTERED * up * (0.4 + 0.6 * near));
         *c = c.map(|v| v * k);
     };
     for ((p, n), c) in surface
@@ -1901,15 +1901,17 @@ mod tests {
     fn a_face_looking_down_is_shaded_as_its_occlusion_would_be_and_a_side_is_not() {
         let masks = Masks::default();
         let mut noise = Noise::default();
+        // In light, as drawn: the colour, as on screen, made linear.
         let mut at = |normal: Vec3| {
-            masked(
+            let c = masked(
                 &masks,
                 (false, false),
                 Vec3::new(0.0, 2.0, 0.0),
                 normal,
                 0.0,
                 &mut noise,
-            )[1]
+            )[1];
+            libm::powf((c + 0.055) / 1.055, 2.4)
         };
         let (down, side, up) = (at(-Vec3::Y), at(Vec3::X), at(Vec3::Y));
         assert!(
@@ -1917,6 +1919,8 @@ mod tests {
             "{side} {up}"
         );
         assert!(down < 0.6, "a soffit as lit as a wall: {down}");
+        // Two thirds of its light taken at most, as drawn, not nine tenths (D373).
+        assert!(down > 0.3, "a soffit crushed to black: {down}");
         // A log's lower flank, half way down, by a fifth at most: it sees the sky too.
         let flank = at(Vec3::new(1.0, -1.0, 0.0).normalize());
         assert!(flank > 0.8, "{flank}");

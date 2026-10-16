@@ -28,11 +28,9 @@ pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// sixteenth, so every shadow was near black (D216). Under trees the shade is darker than open
 /// ground's: 1.6 left it three stops brighter than Sons of the Forest's (D286).
 const SKY_LIGHT_GAIN: f32 = 1.2;
-/// By night, how much of the day's saturation is left, how much cooler the grade is, and how
-/// much toward magenta, which the leaves' green bounce otherwise tints (D302, D310).
+/// By night, how much of the day's saturation is left, as an eye loses colour in the dark
+/// (D302); its white balance stays neutral (D370).
 const NIGHT_SATURATION: f32 = 0.45;
-const NIGHT_COOL: f32 = 0.12;
-const NIGHT_TINT: f32 = 0.04;
 /// By night, how bright the haze is against the day's, and its colour, the moon's (D310).
 const NIGHT_HAZE: f32 = 0.15;
 const MOON_HAZE: Vec3 = Vec3::new(0.32, 0.38, 0.52);
@@ -505,8 +503,8 @@ fn shine(
     // canopy lets through and dimmed by the shade it hangs in, so trees fade into it with
     // distance as they do in a real forest, before any of their levels of detail change.
     // The hour in the air (D244): the mist thickest at dawn, burning off by midday and
-    // gathering a little toward evening; and the grade warm while the sun is low, cooler at
-    // noon, so a morning and an evening do not look alike.
+    // gathering a little toward evening, so a morning and an evening do not look alike; the
+    // light, not a grade, warms as the sun goes low (D370).
     let hour = path.local_hour(clock.hour);
     let morning = 1.0 - smoothstep(7.0, 11.5, hour);
     let evening = smoothstep(16.0, 19.5, hour);
@@ -517,29 +515,14 @@ fn shine(
             fog.density_factor = wanted;
         }
     }
-    let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
     let dark = 1.0 - smoothstep(-12.0, 0.0, height);
     nightfall.set_if_neq(Nightfall(dark));
-    // How closed a canopy is measured over the eye: none where nothing measures one.
-    let canopy = open
-        .as_deref()
-        .map_or(0.0, |open| 1.0 - smoothstep(0.55, 0.98, open.0));
     for mut grade in &mut grading {
-        // The day's warmth goes with the sun (D302): left on, it turned the moon's blue light
-        // to brown, and the night read as a dim dusk.
+        // The grade's white balance is left neutral (`scene`) at every hour and everywhere, as
+        // a camera balanced for daylight (D65) sees (D370): a grey card in the noon sun stays
+        // grey, the sky's shade is blue, the low sun warm and the light through leaves green,
+        // all by the light itself. By night colour fades, as an eye's does in the dark (D302).
         let day = smoothstep(-4.0, 2.0, height);
-        // By night colour fades and cools, as an eye sees by moonlight and as games draw it: the
-        // light under the moon is the leaves' green bounce, and it read green and murky.
-        // In the open a grey card stays grey at noon (D369).
-        let warmth = day_warmth(canopy, low, hour > 12.0);
-        let warm = warmth.temperature * day - NIGHT_COOL * (1.0 - day);
-        if (grade.global.temperature - warm).abs() > 1e-4 {
-            grade.global.temperature = warm;
-        }
-        let tint = warmth.tint * day + NIGHT_TINT * (1.0 - day);
-        if (grade.global.tint - tint).abs() > 1e-4 {
-            grade.global.tint = tint;
-        }
         let saturation =
             super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
         if (grade.global.post_saturation - saturation).abs() > 1e-4 {
@@ -610,38 +593,6 @@ fn shine(
     }
 }
 
-/// The day's grade under a closed canopy: the picture a touch warmer, as tuned against Sons of
-/// the Forest's frames (D286), as a camera balancing the leaves' green light would. In the open
-/// a grey card at noon stays grey, as a camera balanced for daylight sees it (D369).
-const CANOPY_WARM: f32 = 0.02;
-/// And while the sun is low, warmer, in the afternoon twice the morning's (D244), along the
-/// daylight locus so it reads amber rather than pink (D369).
-const LOW_SUN_WARM: f32 = 0.012;
-/// How far the daylight locus falls in CIE y as it falls in x, toward bluer white points:
-/// from 6,500 K to 7,500 K, x 0.3127 to 0.2990 and y 0.3290 to 0.3150.
-const LOCUS_SLOPE: f32 = 1.02;
-
-/// The grade's white balance by day, as Bevy's `temperature` and `tint`: how far the white
-/// point is taken from D65 in CIE x (warmer for more) and y (more magenta for more).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct Warmth {
-    temperature: f32,
-    tint: f32,
-}
-
-/// The day's white balance with so closed a canopy over the eye (0 to 1), the sun so `low`
-/// (0 high, 1 at the horizon), in the afternoon or not. The canopy's warmth moves the white
-/// point in x alone, as tuned, leaning magenta against the leaves' green; the low sun's moves
-/// it along the daylight locus. Moved in x alone in the open it turned a grey card pink at
-/// noon and the sky-lit shade lilac (D369).
-fn day_warmth(canopy: f32, low: f32, afternoon: bool) -> Warmth {
-    let sun = LOW_SUN_WARM * low * if afternoon { 1.0 } else { 0.5 };
-    Warmth {
-        temperature: CANOPY_WARM * canopy + sun,
-        tint: -LOCUS_SLOPE * sun,
-    }
-}
-
 /// How many times brighter the volumetric haze's sky light is out in the open than under
 /// the trees: the open sky lights mist from every side.
 const OPEN_HAZE_GLOW: f32 = 4.0;
@@ -668,27 +619,6 @@ fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
 mod tests {
     use super::*;
     use crate::scene::SUN_DIRECTION;
-
-    #[test]
-    fn the_open_air_at_noon_is_graded_neutral_and_the_low_sun_amber_not_pink() {
-        // A grey card in the open with the sun high: the white point left at D65.
-        assert_eq!(day_warmth(0.0, 0.0, true), Warmth::default());
-        // Under a closed canopy the picture is warmer.
-        assert!(day_warmth(1.0, 0.0, true).temperature > 0.0);
-        // A low sun warms it by moving the white point toward a bluer daylight, as from D65
-        // (CIE x 0.3127, y 0.3290) toward D75 (0.2990, 0.3149): within a few degrees of that
-        // line, not along x alone, which tints pink.
-        let low = day_warmth(0.0, 1.0, true);
-        let moved = Vec2::new(-low.temperature, low.tint);
-        let locus = Vec2::new(0.2990 - 0.3127, 0.3149 - 0.3290);
-        assert!(moved.length() > 0.0);
-        assert!(
-            moved.angle_to(locus).abs() < 5_f32.to_radians(),
-            "{moved} against {locus}"
-        );
-        // And more in the evening than the morning.
-        assert!(low.temperature > day_warmth(0.0, 1.0, false).temperature);
-    }
 
     fn path() -> SkyPath {
         SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))

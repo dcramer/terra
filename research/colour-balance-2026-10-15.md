@@ -2,7 +2,41 @@
 
 **Question.** The developers, about log walls: "you can adjust the look. i dont want them to be literally grey but yeah they're a bit warm, maybe everything is?" Is the whole picture warm, by how much, and where does it come from: the sun's colour (D212), the sky's light, the grade (D244, D286, D302), the tone mapping, or the materials?
 
-**Answer.** Everything was warm, and mostly from the grade. At noon in the open a matte 18% grey came out pink, red over blue 1.33 to 1.52 in linear light, and five sixths of that was the grade's constant warmth of 0.02 in CIE x, added under the forest's canopy (D286) but applied everywhere. Moved in x alone, off the daylight locus, it tints pink rather than amber, and it turned the sky-lit shade lilac. The sun's key added a little; the sky, the atmosphere and the tone mapping (Khronos PBR Neutral, hue-preserving on greys) nothing to speak of. Fixed by D369; the wood's own tints toned down under D262. The open question, whether places should carry a warm grade as the reference games do, is D370.
+**Answer.** Everything was warm, and mostly from the grade. At noon in the open a matte 18% grey came out pink, red over blue 1.33 to 1.52 in linear light, and five sixths of that was the grade's constant warmth of 0.02 in CIE x, added under the forest's canopy (D286) but applied everywhere. Moved in x alone, off the daylight locus, it tints pink rather than amber, and it turned the sky-lit shade lilac. The sun's key added a little; the sky, the atmosphere and the tone mapping (Khronos PBR Neutral, hue-preserving on greys) nothing to speak of. First fixed in the open only (D369); the developers then chose a neutral grade everywhere and at every hour, the colour from the light (D370, "is real life a 'warm grade'? we want close to real life"), which is what the game now does. The wood's own tints were toned down under D262. Log walls in shade read near black for another reason, shade factors laid on sRGB colours as if they were light, and stacked (D373, below).
+
+## The neutral grade (D370), measured
+
+With the grade's white balance left at D65 everywhere, the colour comes from the light. The direct sun is the sunlit face less the sky-lit face of the same 18% grey, its colour temperature by McCamy's formula from CIE xy:
+
+| Where, when | 18% grey, sRGB | What it says |
+|---|---|---|
+| Open, noon, sunlit face | 137,134,133 | direct sun 5,600 K (x 0.330, y 0.345) |
+| Open, noon, face in the sky's shade | 42,52,68 | blue sky, 15,000 K |
+| Open, 18:00 (sun 6° up), sunlit face | 188,141,115 | direct sun 3,000 K, on the Planckian locus |
+| Open, 18:00, 60% grey in shade | 115,119,158 | the dusk sky, 14,700 K, a touch magenta |
+| Under the canopy, noon (lush forest's path) | 129,126,118 (139,125,116 with the old grade) | the 60% grey 0.95 red over green: a little green |
+| Under the canopy, 17:30 | 55,65,66 (67,63,60) | sky and leaves, blue-green |
+
+That is what a camera on its daylight setting records: the noon sun a little warm of D65, shade blue, the low sun amber, light through leaves a little green. Night keeps D302's loss of colour (the eye's in the dark) but no cooling grade; its blue is the moon's key.
+
+The forest's look changes with it. The looks check (D356) on the lush forest: red over green 1.074 to 0.896 against Sons of the Forest's 1.095, shade red over green 1.014 to 0.588 against 1.261, 14 to 13 of 18 holding. Sons of the Forest, like Far Cry 5 for the lake, is a warm-graded game, so its frames are no longer the forest's colour target; they want measuring again against photographs of real forests.
+
+## Log walls in shade (D373)
+
+A log wall's north face on the yard at noon, with the grey cubes standing in its shade, measured 0.21 of the 18% grey in luminance; the brightest band of a log only 0.32. Tried one at a time:
+
+| What | Wall against the 18% grey |
+|---|---|
+| As it was | 0.21 |
+| The room's light probes removed | 0.21 (no change: the probe does not reach the outer face) |
+| Screen-space occlusion off | 0.17 (it darkened the grey cube beside the wall more than the wall) |
+| Shade laid on as light (`light_share`) | 0.25 |
+| And a log's underside shaded once, by D320's rule, not again by its groove | 0.26 |
+| And each log's seed shade either side of its tint | 0.35 |
+
+The cause: a building's colours are sRGB and made linear to be drawn, so a shade of 0.35 (D320's underside) laid on a colour took 90% of the light, not 65%; the groove's shade (D262) stacked on it at the same place; and each log's seed shade only ever darkened, a fifth of the light on average. The wood's tint (D262) is not it: it lightened the logs a little. What is left is the bark texture: its occlusion (0.71 on average) stacks a height-made occlusion and the bark's lip on the scans' own (0.82), and the lip is in its colour too (`textures.ts blend`), for its next making.
+
+In the village, a log gable in deep shade under its verge, where the 18% grey itself reads sRGB 30,40,56, went from about 0.2 of the grey to 0.33 (sRGB 17,17,19): dark wood with its grain, in a deep shade.
 
 ## How it was measured
 
@@ -53,7 +87,7 @@ At a low sun the atmosphere's own reddening (Bevy's transmittance on the sun) gi
 
 ## What changed
 
-**The grade (D369).** The day's 0.02 warmth now applies only under a canopy measured closed over the eye (`OpenOverhead`, which only the lush forest measures), where D286 tuned it and where it offsets the leaves' green light, as a camera balancing it would; the low sun's warmth (D244) moves the white point along the daylight locus (tint at -1.02 times temperature, from D65 to D75), so it reads amber. At noon in the village's street the 18% grey went from 82,69,67 (R/B 1.52) to 74,71,70 (1.11, the ground's bounce), and the 60% grey in the shade at 16:30 from lilac 157,151,189 to sky blue 142,154,191.
+**The grade (D369, since superseded by D370, above).** The day's 0.02 warmth now applies only under a canopy measured closed over the eye (`OpenOverhead`, which only the lush forest measures), where D286 tuned it and where it offsets the leaves' green light, as a camera balancing it would; the low sun's warmth (D244) moves the white point along the daylight locus (tint at -1.02 times temperature, from D65 to D75), so it reads amber. At noon in the village's street the 18% grey went from 82,69,67 (R/B 1.52) to 74,71,70 (1.11, the ground's bounce), and the 60% grey in the shade at 16:30 from lilac 157,151,189 to sky blue 142,154,191.
 
 The looks check (D356) on the same views, before and after, on the Windows GPU:
 
@@ -70,8 +104,8 @@ The looks check (D356) on the same views, before and after, on the Windows GPU:
 
 ## Recommended next (not done here)
 
-- **The village's ground** is the warmest large thing in view: trodden dirt at 119 to 136, 71 to 87, 36 to 54 lit at noon, red over blue 6 to 11 in linear light. Real packed earth is a greyer brown. The world's ground belongs to the world work (D370).
-- **The lake** measures cooler than Far Cry 5's valleys with the grade neutral. Its sky and teal water, not a grade, are what to change, if the developers keep D370 as recommended.
+- **The village's ground** is the warmest large thing in view: trodden dirt at 119 to 136, 71 to 87, 36 to 54 lit at noon, red over blue 6 to 11 in linear light. Real packed earth is a greyer brown. The world's ground belongs to the world work.
+- **The lake** measures cooler than Far Cry 5's valleys with the grade neutral. Its sky and teal water, not a grade, are what to change, now that the grade is neutral (D370).
 - **Logs in shade are near black**: a log gable in the noon shade measured 13,12,13 after (21,11,9 before). Worth measuring against a real log wall's shade: the logs' low reflectance (0.1) and dark grooves may take too much light.
 
 Stills: `shots/colour-balance.jpg` in the session that made them (the village's street, a log house and the grey reference, noon and 16:30, before and after).

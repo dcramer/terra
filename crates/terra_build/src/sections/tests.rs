@@ -2473,7 +2473,9 @@ fn a_logs_top_under_a_roof_is_shaded_and_one_open_to_the_sky_is_not() {
                     if p.y > 2.5 || (n.y > 0.8) != up || (!up && n.y.abs() > 0.2) {
                         continue;
                     }
-                    sum += (c[0] + c[1] + c[2]) / 3.0;
+                    // In light, as drawn: the colour made linear.
+                    let light = |v: f32| libm::powf((v + 0.055) / 1.055, 2.4);
+                    sum += (light(c[0]) + light(c[1]) + light(c[2])) / 3.0;
                     count += 1;
                 }
             }

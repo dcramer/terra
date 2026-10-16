@@ -98,6 +98,14 @@ use std::sync::Arc;
 /// The grid: the size of one cube, in metres. Everything else here is given in metres and
 /// turned into cubes with [`cells`], so this is the one number to change.
 pub const CELL_M: f32 = 0.5;
+/// What a share of the light, an occlusion's or a shade's, multiplies a colour by: colours
+/// here are as on screen (sRGB) and made linear to be drawn, which takes them about to their
+/// 2.2th power, so a shade of a third laid on as a third took nine tenths of the light, and
+/// stacked shades crushed a log wall in the shade to black (D373).
+pub fn light_share(share: f32) -> f32 {
+    libm::powf(share.max(0.0), 1.0 / 2.2)
+}
+
 /// Height of one storey, in metres.
 pub const STOREY_M: f32 = 3.0;
 /// Height of one storey, in cubes.
