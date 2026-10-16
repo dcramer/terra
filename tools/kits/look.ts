@@ -10,15 +10,18 @@
 // tools/kits/preview.ts) and two scripted runs on the real GPU shoot fixed vantages of it: at
 // noon, its wall (a roof's covering) square on from 1, 2 and 5 m, an outside corner (a roof's
 // hip or valley), an opening (a roof's verge and eaves), its roof (a gable, or the whole) and
-// the whole from 12 m; the same wall in the shade; and in the evening its sunlit face again.
-// An 18% grey card stands beside each face measured, in the same light (`sandbox.card`).
-// Then:
+// the whole from 12 m; the same wall in the shade, and again with the light view on (D385,
+// every surface an 18% grey lit as it is); and in the evening its sunlit face again. An 18%
+// grey card stands beside each face measured, in the same light and in the 2 m shot's frame
+// (`sandbox.card`), so the same exposure lights both: the eye adapts to each view. Then:
 //
 // - texel density: its surface's colour texels a metre at the high preset (from its data);
 // - sharpness: the finest octave's share of contrast in the middle of the 1, 2 and 5 m shots;
 // - colour balance: the grey card's red over blue in linear light, noon, shade and evening,
 //   which at noon is the light's neutrality (D370), and the surface's brightness against the
-//   card in the same light, lit and in shade;
+//   card in the same frame, lit and in shade;
+// - the sky's light: in shade with the light view on, the surface's red over blue against the
+//   card's (as blue as the card: it takes the same sky) and its brightness against the card's;
 // - value range: its surface's 5th to 95th percentile of brightness at 2 m at noon;
 // - stretch: each texture set's share of area drawn past 1.5:1 and 2.5:1 (`cargo xtask texels`).
 //
@@ -41,24 +44,41 @@ type Vec3 = [number, number, number];
 
 /** A view: what it shows, its eye and what it looks at in the preview's own metres (east, up
  * from the ground, south, as `--vantage-ground` takes them), and what is measured in it: the
- * material's `surface`, square on, at a `distance`, or a grey `card`. */
-export type View = { name: string; eye: Vec3; at: Vec3; measure?: "surface" | "card"; distance?: number };
-/** A light: the hour it is shot at, and its views; shade is shot at noon on the face away from
- * the sun. */
-export type Light = { name: "noon" | "shade" | "evening"; hour: number; views: View[] };
+ * material's `surface`, square on, at a `distance`, its grey card in the 2 m view; or, with
+ * the light view on (`debug`, D385), its `light` alone, every surface an 18% grey, against the
+ * card beside it. */
+export type View = { name: string; eye: Vec3; at: Vec3; measure?: "surface" | "light"; distance?: number; debug?: string };
 /** A grey card stood beside a face, as `sandbox.card` takes it. */
 export type Card = { at: Vec3; facing: Vec3 };
+/** A light: the hour it is shot at, its views, and the grey card in its 2 m view; shade is
+ * shot at noon on the face away from the sun. */
+export type Light = { name: "noon" | "shade" | "evening"; hour: number; views: View[]; card: Card };
 
 /** The distances the surface is measured from. */
 export const DISTANCES = [1, 2, 5];
 /** The middle of a shot measured, in pixels of the 1920x1080 frame: at 1 m it is 37 by 25 cm
  * of the face, at 5 m 1.85 by 1.23 m. */
 export const CROP = { width: 384, height: 256 };
-/** The middle of a card's shot measured: well inside the half-metre card a metre off. */
+/** How wide the frame is a metre off, in metres, at the game's field of view: 1920 pixels. */
+export const FRAME_M = 1.85;
+/** The middle of the card measured, in pixels: well inside the half-metre card 2 m off. */
 export const CARD_CROP = 120;
+/** How far along the face from the point measured its card stands, in metres, and how far
+ * out from it: in the 2 m view's frame, where the same exposure lights both (the eye adapts
+ * to each view, so a card in a view of its own was up to a stop and a quarter off), and
+ * outside the 5 m view's measured middle; out of it clear of a roof's covering, whose
+ * shingles stand proud of the slope the point measured lies on. */
+export const CARD_ALONG_M = 1.3;
+export const CARD_OUT_M = 0.25;
 /** How far the 18% card's red over blue may be from one at noon (D370: a neutral grade, the
  * noon sun a little warm of D65; measured 1.04 when it was decided). */
 export const NEUTRAL: [number, number] = [0.9, 1.15];
+/** How far a surface's red over blue in the light view may be from its card's, in shade: a
+ * surface lit by the same sky is as blue as the card (stone 0.96, roofs 0.92 to 0.94, log
+ * walls 0.81 to 0.89 on 2026-10-16: the darker a surface, the bluer the tone curve's toe
+ * leaves it). One lit by a neutral light where the card takes the blue sky reads 2 or more.
+ * Not a material's to choose, so not in its targets. */
+export const SKY_TINT: [number, number] = [0.75, 1.2];
 
 /** The views square on to a face, `normal` its outward way, at each of `DISTANCES`. */
 function square(target: Vec3, normal: Vec3): View[] {
@@ -72,16 +92,35 @@ function square(target: Vec3, normal: Vec3): View[] {
   }));
 }
 
-/** A card's view: a metre out from its face. */
-function cardView(card: Card): View {
-  const n = unit(card.facing);
-  return { name: "18% grey card", eye: [card.at[0] + n[0], card.at[1] + n[1], card.at[2] + n[2]], at: card.at, measure: "card" };
+/** The 2 m view of a face again with the light view on: its light alone. */
+function lightAlone(target: Vec3, normal: Vec3): View {
+  const view = square(target, normal).find((each) => each.distance === 2)!;
+  return { ...view, name: "light alone, 2 m", measure: "light", debug: "light" };
+}
+
+/** The card beside a face: `along` the face from the point measured, facing out of it. */
+function beside(target: Vec3, normal: Vec3, along: Vec3): Card {
+  const [n, a] = [unit(normal), unit(along)];
+  return { at: [0, 1, 2].map((i) => target[i] + a[i] * CARD_ALONG_M + n[i] * CARD_OUT_M) as Vec3, facing: normal };
 }
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(...v);
   return [v[0] / l, v[1] / l, v[2] / l];
 };
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/** Where the middle of a card is in a view's 1920x1080 frame, in pixels from its top left, as
+ * the camera looks from its eye at what it looks at, upright. */
+export function onScreen(view: View, point: Vec3): [number, number] {
+  const forward = unit([0, 1, 2].map((i) => view.at[i] - view.eye[i]) as Vec3);
+  const right = unit(cross(forward, [0, 1, 0]));
+  const up = cross(right, forward);
+  const to = [0, 1, 2].map((i) => point[i] - view.eye[i]) as Vec3;
+  const pixels = 1920 / (FRAME_M * dot(to, forward));
+  return [960 + dot(to, right) * pixels, 540 - dot(to, up) * pixels];
+}
 
 // A wall material's preview (crates/terra_build/src/scenes/sheet.rs, `preview`): a house 5 m
 // east by 4 m south, its walls 3 m, its front (south) with a window, the doorway, a carved hole
@@ -90,34 +129,34 @@ const unit = (v: Vec3): Vec3 => {
 // On the yard the noon sun stands in the south-south-west and the evening's (18:00) low in the
 // north-west, so the platform's front is measured lit at noon and the house's north wall in
 // shade at noon and lit in the evening.
-const WALL_NOON_CARD: Card = { at: [13.6, 0.75, 3.05], facing: [0, 0, 1] };
-const WALL_NORTH_CARD: Card = { at: [-1.0, 1.5, -0.05], facing: [0, 0, -1] };
+const PLATFORM: [Vec3, Vec3] = [[11.5, 0.75, 3.0], [0, 0, 1]];
+const NORTH_WALL: [Vec3, Vec3] = [[3.5, 1.5, 0], [0, 0, -1]];
 const WALL_GABLE: View = { name: "gable and eaves, 5 m", eye: [-5, 3.5, 2], at: [0, 3.5, 2] };
 const WALL_LIGHTS: Light[] = [
   {
     name: "noon",
     hour: 12,
     views: [
-      ...square([11.5, 0.75, 3.0], [0, 0, 1]),
+      ...square(...PLATFORM),
       { name: "corner, 2 m", eye: [-1.41, 1.5, 5.41], at: [0, 1.5, 4] },
       { name: "openings, 2 m", eye: [1.75, 1.4, 6], at: [1.75, 1.3, 4] },
       WALL_GABLE,
       { name: "whole, 12 m", eye: [6.25, 5, 14], at: [6.25, 1.5, 2] },
-      cardView(WALL_NOON_CARD),
     ],
+    card: beside(...PLATFORM, [1, 0, 0]),
   },
-  { name: "shade", hour: 12, views: [...square([3.5, 1.5, 0], [0, 0, -1]), cardView(WALL_NORTH_CARD)] },
+  { name: "shade", hour: 12, views: [...square(...NORTH_WALL), lightAlone(...NORTH_WALL)], card: beside(...NORTH_WALL, [1, 0, 0]) },
   {
     name: "evening",
     hour: 18,
     views: [
-      ...square([3.5, 1.5, 0], [0, 0, -1]),
+      ...square(...NORTH_WALL),
       { name: "corner, 2 m", eye: [-1.41, 1.5, -1.41], at: [0, 1.5, 0] },
       { name: "opening, 2 m", eye: [1.5, 1.5, -2], at: [1.5, 1.5, 0] },
       WALL_GABLE,
       { name: "whole, 12 m", eye: [-6, 5, -9], at: [3, 1.5, 2] },
-      cardView(WALL_NORTH_CARD),
     ],
+    card: beside(...NORTH_WALL, [1, 0, 0]),
   },
 ];
 
@@ -127,48 +166,51 @@ const WALL_LIGHTS: Light[] = [
 // its slopes at 45 degrees. The wing's west slope is measured lit at noon, the main roof's
 // north slope in shade at noon and lit in the evening, each with a card at its pitch.
 const S = Math.SQRT1_2;
-const ROOF_WEST_CARD: Card = { at: [-1.5, 4, 5.75], facing: [-S, S, 0] };
-const ROOF_NORTH_CARD: Card = { at: [-1.5, 4, 1], facing: [0, S, -S] };
+const WEST_SLOPE: [Vec3, Vec3] = [[1, 4, 5.75], [-S, S, 0]];
+const NORTH_SLOPE: [Vec3, Vec3] = [[3, 4, 1], [0, S, -S]];
 const ROOF_LIGHTS: Light[] = [
   {
     name: "noon",
     hour: 12,
     views: [
-      ...square([1, 4, 5.75], [-S, S, 0]),
+      ...square(...WEST_SLOPE),
       { name: "valley, 2 m", eye: [6.5, 3.6, 6.5], at: [4.5, 3.0, 4.5] },
       { name: "verge, ridge's end, 3 m", eye: [2, 4.4, 10.5], at: [2, 3.6, 7.5] },
       { name: "hip and eaves, 5 m", eye: [10, 5, -2], at: [5, 3.5, 2] },
       { name: "whole, 12 m", eye: [12, 7, 14], at: [3.5, 2.5, 4] },
-      cardView(ROOF_WEST_CARD),
     ],
+    card: beside(...WEST_SLOPE, [0, 0, 1]),
   },
-  { name: "shade", hour: 12, views: [...square([3, 4, 1], [0, S, -S]), cardView(ROOF_NORTH_CARD)] },
+  { name: "shade", hour: 12, views: [...square(...NORTH_SLOPE), lightAlone(...NORTH_SLOPE)], card: beside(...NORTH_SLOPE, [1, 0, 0]) },
   {
     name: "evening",
     hour: 18,
     views: [
-      ...square([3, 4, 1], [0, S, -S]),
+      ...square(...NORTH_SLOPE),
       { name: "hip, 2 m", eye: [-1.2, 5.5, -1.2], at: [0.6, 4.2, 0.6] },
       { name: "eaves, 2 m", eye: [3, 2.6, -2], at: [3, 3.0, 0] },
       { name: "verge, 5 m", eye: [-4, 5, 7], at: [1, 3.5, 6] },
       { name: "whole, 12 m", eye: [-6, 7, -9], at: [3, 2.5, 3] },
-      cardView(ROOF_NORTH_CARD),
     ],
+    card: beside(...NORTH_SLOPE, [1, 0, 0]),
   },
 ];
 
 /** A material's lights and views by its pattern (`Logs`, `Masonry` or `Roof`, as its kit says). */
 export const lights = (pattern: string): Light[] => (pattern === "Roof" ? ROOF_LIGHTS : WALL_LIGHTS);
-/** The cards a material's runs stand. */
-export const cards = (pattern: string): Card[] => (pattern === "Roof" ? [ROOF_WEST_CARD, ROOF_NORTH_CARD] : [WALL_NOON_CARD, WALL_NORTH_CARD]);
+/** The cards a material's runs stand: each light's, once. */
+export const cards = (pattern: string): Card[] => [...new Map(lights(pattern).map((light) => [JSON.stringify(light.card), light.card])).values()];
 
 /** How many frames the first view is held, while the preview is laid and its textures made
  * resident, and each after it, for the camera's detail and the frames' blend to settle. */
 export const FIRST = 300;
 export const HOLD = 120;
+/** The frames a debug view is first on and off again, to compile its shaders early. */
+export const WARM = [10, 20];
 
-/** One hour's run: the sandbox's arguments, the calls standing its cards, and the frame each
- * view is shot on. Points are moved from the preview's metres to the start's. */
+/** One hour's run: the sandbox's arguments, the calls standing its cards and turning a debug
+ * view on for a view that asks for one (off again for the next), and the frame each view is
+ * shot on. Points are moved from the preview's metres to the start's. */
 export function run(material: string, pattern: string, hour: number, calls: string, prefix: string) {
   const views = lights(pattern).filter((light) => light.hour === hour).flatMap((light) => light.views);
   const place = (p: Vec3) => [p[0] + ORIGIN[0], p[1], p[2] + ORIGIN[1]];
@@ -180,8 +222,19 @@ export function run(material: string, pattern: string, hour: number, calls: stri
     ...views.flatMap((view, i) => ["--vantage", `${[...place(view.eye), ...place(view.at)].map((n) => +n.toFixed(3)).join(",")}@${starts[i]}`]),
     "--shots", `${prefix}@${frames.join(",")}`,
   ];
-  const stand = cards(pattern).map((card) => JSON.stringify({ frame: 5, method: "sandbox.card", params: { at: place(card.at), facing: card.facing } }));
-  return { args, views, frames, calls: stand.join("\n") + "\n" };
+  const lines: { frame: number; method: string; params: object }[] = cards(pattern).map((card) => ({ frame: 5, method: "sandbox.card", params: { at: place(card.at), facing: card.facing } }));
+  // A debug view's shaders are compiled the first time it is on, in the background, which
+  // took longer than a view is held: so each is on for a few frames first, while the first
+  // view is held, and kept compiled.
+  for (const name of new Set(views.flatMap((view) => (view.debug ? [view.debug] : [])))) {
+    lines.push({ frame: WARM[0], method: "debug.view", params: { name } }, { frame: WARM[1], method: "debug.view", params: { name: "off" } });
+  }
+  views.forEach((view, i) => {
+    if (!view.debug) return;
+    lines.push({ frame: Math.max(starts[i], WARM[1] + 1), method: "debug.view", params: { name: view.debug } });
+    if (i + 1 < views.length) lines.push({ frame: starts[i + 1], method: "debug.view", params: { name: "off" } });
+  });
+  return { args, views, frames, calls: lines.map((line) => JSON.stringify(line)).join("\n") + "\n" };
 }
 
 // --- Measuring a picture -------------------------------------------------------------------
@@ -192,10 +245,11 @@ const toLinear = (v: number) => {
 };
 const LINEAR = Float64Array.from({ length: 256 }, (_, i) => toLinear(i));
 
-/** The middle `width` by `height` of a picture. */
-export function crop(picture: Picture, width: number, height: number): Picture {
-  const x0 = Math.floor((picture.width - width) / 2);
-  const y0 = Math.floor((picture.height - height) / 2);
+/** The middle `width` by `height` of a picture, or round a point of it, kept inside it. */
+export function crop(picture: Picture, width: number, height: number, round?: [number, number]): Picture {
+  const [cx, cy] = round ?? [picture.width / 2, picture.height / 2];
+  const x0 = Math.min(Math.max(0, Math.floor(cx - width / 2)), picture.width - width);
+  const y0 = Math.min(Math.max(0, Math.floor(cy - height / 2)), picture.height - height);
   const rgba = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) rgba.set(picture.rgba.subarray(((y0 + y) * picture.width + x0) * 4, ((y0 + y) * picture.width + x0 + width) * 4), y * width * 4);
   return { width, height, rgba };
@@ -281,6 +335,7 @@ export type Targets = {
   sharpness: [number, number, number];
   lit: [number, number];
   shade: [number, number];
+  sky: [number, number];
   values: [number, number];
   stretch: { smeared: number; streaked: number; roles: Record<string, [number, number]> };
 };
@@ -290,9 +345,13 @@ export type Measured = {
   density?: [number, number];
   sharpness: (number | undefined)[];
   values?: { p5: number; p50: number; p95: number };
-  /** The surface against its card, lit at noon and in the evening, and in shade. */
+  /** The surface against its card in the same frame, lit at noon and in the evening, and in
+   * shade. */
   lit: (number | undefined)[];
   shade?: number;
+  /** In shade with the light view on, every surface an 18% grey: the surface's red over blue
+   * over its card's, and its brightness against the card's. */
+  sky?: { tint: number; light: number };
   /** Each card's red over blue in linear light, and its colour as seen, by light. */
   cards: Record<string, { redOverBlue: number; seen: Vec3 } | undefined>;
   stretch?: Map<string, [number, number]>;
@@ -331,6 +390,15 @@ export function judge(measured: Measured, targets: Targets): Line[] {
   });
   if (measured.shade === undefined) missing("against the grey card, shade", range(targets.shade));
   else lines.push({ what: "against the grey card, shade", value: measured.shade.toFixed(2), target: range(targets.shade), ok: within(measured.shade, targets.shade) });
+  // The light alone in shade: as blue as the card beside it, and as much of the sky's light
+  // as its occlusion leaves it.
+  if (!measured.sky) {
+    missing("sky's tint, light alone, shade", range(SKY_TINT));
+    missing("sky's light, light alone, shade", range(targets.sky));
+  } else {
+    lines.push({ what: "sky's tint, light alone, shade", value: measured.sky.tint.toFixed(2), target: range(SKY_TINT), ok: within(measured.sky.tint, SKY_TINT) });
+    lines.push({ what: "sky's light, light alone, shade", value: measured.sky.light.toFixed(2), target: range(targets.sky), ok: within(measured.sky.light, targets.sky) });
+  }
   for (const light of ["noon", "shade", "evening"]) {
     const card = measured.cards[light];
     // Only the noon card has a target: the shade is meant blue and the evening amber.
@@ -450,11 +518,17 @@ function measure(material: Material, shots: Map<View, string>, stretch: Map<stri
     return file && existsSync(file) ? readPng(file) : undefined;
   };
   const surface = (light: string, distance: number) => shotOf(light, (view) => view.measure === "surface" && view.distance === distance);
-  const card = (light: string) => {
-    const picture = shotOf(light, (view) => view.measure === "card");
-    return picture && linearMean(crop(picture, CARD_CROP, CARD_CROP));
-  };
   const middle = (picture: Picture) => crop(picture, CROP.width, CROP.height);
+  // The middle of a light's 2 m shot and of the card in it: in the same frame, so the same
+  // exposure.
+  const pair = (light: string, measure: View["measure"]) => {
+    const lit = all.find((each) => each.name === light);
+    const view = lit?.views.find((each) => each.measure === measure && each.distance === 2);
+    const file = view && shots.get(view);
+    if (!lit || !view || !file || !existsSync(file)) return undefined;
+    const picture = readPng(file);
+    return { surface: linearMean(middle(picture)), card: linearMean(crop(picture, CARD_CROP, CARD_CROP, onScreen(view, lit.card.at))) };
+  };
   const sharpness = DISTANCES.map((d) => {
     const picture = surface("noon", d);
     if (!picture) return undefined;
@@ -462,18 +536,19 @@ function measure(material: Material, shots: Map<View, string>, stretch: Map<stri
     return finestOctave(luma(part), part.width, part.height);
   });
   const against = (light: string) => {
-    const picture = surface(light, 2);
-    const grey = card(light);
-    return picture && grey ? linearMean(middle(picture)).luminance / grey.luminance : undefined;
+    const seen = pair(light, "surface");
+    return seen && seen.surface.luminance / seen.card.luminance;
   };
   const noon = surface("noon", 2);
   const values = noon && luma(middle(noon)).map((v) => v * 255);
   const cards: Measured["cards"] = {};
   for (const light of ["noon", "shade", "evening"]) {
-    const grey = card(light);
+    const grey = pair(light, "surface")?.card;
     const toSrgb = (l: number) => Math.round(255 * (l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055));
     cards[light] = grey && { redOverBlue: grey.rgb[0] / grey.rgb[2], seen: grey.rgb.map(toSrgb) as Vec3 };
   }
+  const alone = pair("shade", "light");
+  const redOverBlue = (rgb: Vec3) => rgb[0] / rgb[2];
   const roles = new Set(material.roles);
   return {
     density: material.surface?.density,
@@ -481,6 +556,7 @@ function measure(material: Material, shots: Map<View, string>, stretch: Map<stri
     values: values && { p5: percentile(values, 5), p50: percentile(values, 50), p95: percentile(values, 95) },
     lit: [against("noon"), against("evening")],
     shade: against("shade"),
+    sky: alone && { tint: redOverBlue(alone.surface.rgb) / redOverBlue(alone.card.rgb), light: alone.surface.luminance / alone.card.luminance },
     cards,
     stretch: stretch && new Map([...stretch].filter(([role]) => roles.has(role))),
   };

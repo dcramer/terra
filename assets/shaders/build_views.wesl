@@ -17,6 +17,10 @@ const DAMAGE: u32 = 4u;
 const SHADE: u32 = 5u;
 const NORMALS: u32 = 6u;
 const PLAN: u32 = 7u;
+// The light alone: not a colour of `shown`'s, but the surface lit as an 18% grey, as a grey
+// card is (`sandbox.card`), its own colours left out; each shader lights it itself.
+const LIGHT_ALONE: u32 = 8u;
+const GREY_CARD: f32 = 0.18;
 
 // What a pixel of a surface is, for a view.
 struct Seen {

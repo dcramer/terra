@@ -27,11 +27,16 @@ pub struct Targets {
     /// The least finest octave, as a percentage of its contrast, of its surface seen square
     /// on from 1, 2 and 5 m at noon.
     pub sharpness: [f32; 3],
-    /// Its surface's brightness against the grey card stood by it in the same light, in
-    /// linear light, least and most: lit (noon and evening), and in shade (noon, the face
-    /// away from the sun). A wall at 0.2 of the card in shade reads near black (D373).
+    /// Its surface's brightness against the grey card stood by it in the same light and the
+    /// same frame, in linear light, least and most: lit (noon and evening), and in shade
+    /// (noon, the face away from the sun). A wall at 0.2 of the card in shade reads near black
+    /// (D373).
     pub lit: [f32; 2],
     pub shade: [f32; 2],
+    /// In shade with the light view on (D385), every surface an 18% grey lit as it is: its
+    /// brightness against the card's, least and most, the sky's light its occlusion leaves it.
+    /// Its red over blue is held to the card's for every material alike (look.ts `SKY_TINT`).
+    pub sky: [f32; 2],
     /// The spread of its surface's values at 2 m at noon, its 95th percentile less its 5th,
     /// least and most: too little is flat, too much is noise or a black crush.
     pub values: [f32; 2],
@@ -47,6 +52,7 @@ impl Default for Targets {
             sharpness: [0.0; 3],
             lit: [0.0, f32::MAX],
             shade: [0.0, f32::MAX],
+            sky: [0.0, f32::MAX],
             values: [0.0, 255.0],
             stretch: Stretch::default(),
         }
@@ -184,6 +190,14 @@ mod tests {
                 Pattern::Roof => Material::Covering,
             };
             assert_eq!(look.surface, expected, "{name}");
+            // A pattern held to a brightness in shade is held to the sky's light too, so a
+            // surface that stops taking it fails the bench (D386).
+            if look.shade[1] < f32::MAX {
+                assert!(
+                    look.sky[0] > 0.0 && look.sky[1] < f32::MAX,
+                    "{name}: its pattern sets a shade target but no sky target"
+                );
+            }
             if let Some(reference) = &kit.reference {
                 assert_eq!(reference.problem(), None, "{name}");
             }

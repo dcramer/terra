@@ -25,7 +25,7 @@ import bevy_pbr::render::mesh_view_bindings::screen_space_ambient_occlusion_text
 import bevy_pbr::ssao::utils::ssao_multibounce;
 // A debug view (D385, build/views.rs), compiled in only while one is on.
 @if(BUILD_VIEW)
-import super::build_views::{Seen, shown, BUILT};
+import super::build_views::{Seen, shown, BUILT, LIGHT_ALONE, GREY_CARD};
 
 // Field order must match BuildArrays in crates/terra_game/src/build/arrays/mod.rs.
 struct Layers {
@@ -560,6 +560,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
     pbr_input.material.metallic = arm.b;
     pbr_input.material.reflectance = vec3(entry.z);
+    // The light view (D385): an 18% grey lit as it is, as the grey card beside it.
+@if(BUILD_VIEW) {
+    if u32(layers.view.x + 0.5) == LIGHT_ALONE {
+        pbr_input.material.base_color = vec4(vec3(GREY_CARD), 1.0);
+        pbr_input.material.emissive = vec4(0.0);
+    }
+}
 
     // Occlusion: the least of the texture's and the screen's, as StandardMaterial's.
     var diffuse_occlusion = vec3(arm.r);
@@ -582,9 +589,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
     pbr_input.clearcoat_N = pbr_input.N;
 
-    // A debug view: the surface coloured by what it shows, unlit (D385, build_views.wesl).
+    // A debug view: the surface coloured by what it shows, unlit (D385, build_views.wesl);
+    // but the light view, lit below.
 @if(BUILD_VIEW) {
-    if layers.view.x > 0.5 {
+    if layers.view.x > 0.5 && u32(layers.view.x + 0.5) != LIGHT_ALONE {
         var seen: Seen;
         seen.view = u32(layers.view.x + 0.5);
         seen.uv = in.uv;

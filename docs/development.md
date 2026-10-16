@@ -162,11 +162,12 @@ cargo xtask look logs slate       # several
 cargo xtask look --all            # the building baseline's (D333)
 ```
 
-The kit sheet lays the material's preview alone and two scripted runs shoot fixed vantages of it: at noon its wall (a roof's covering) square on from 1, 2 and 5 m, a corner, an opening, its roof and the whole from 12 m; the same wall in the shade; and in the evening its sunlit face again. An 18% grey card stands beside each face measured, in the same light (`sandbox.card`). It prints, against its pattern's targets (`look` in `assets/data/kits/patterns/*.ron`), and fails on any it misses:
+The kit sheet lays the material's preview alone and two scripted runs shoot fixed vantages of it: at noon its wall (a roof's covering) square on from 1, 2 and 5 m, a corner, an opening, its roof and the whole from 12 m; the same wall in the shade, and again in the `light` view; and in the evening its sunlit face again. An 18% grey card stands beside each face measured, in the same light and in the 2 m shot's frame (`sandbox.card`): the eye adapts to each view, so a card shot in a view of its own was up to a stop and a quarter off the wall it was held against. It prints, against its pattern's targets (`look` in `assets/data/kits/patterns/*.ron`), and fails on any it misses:
 
 - **texel density**: its surface's colour texels a metre at the high preset;
 - **sharpness**: the finest octave's share of contrast in the middle of the 1, 2 and 5 m shots (a sharp scan a quarter or more; TAA's blur and a stretched or upscaled texture take it down);
 - **grey-card balance**: the card's red over blue in linear light (held near 1 at noon, D370; blue in shade and amber in the evening are the light's), and the surface's brightness against the card, lit and in shade (a wall at 0.2 of the card in shade reads near black);
+- **the sky's light**: in shade in the `light` view, every surface an 18% grey lit as it is, the surface's red over blue against the card's, held to 0.75 to 1.2 for every material (a surface that took a neutral light where the card takes the blue sky would read 2 or more), and its brightness against the card's, what its occlusion leaves it;
 - **value range**: its 5th to 95th percentile of brightness at 2 m at noon;
 - **stretch**: each texture set's share of area drawn past 1.5:1 and 2.5:1 (`cargo xtask texels`).
 
@@ -191,8 +192,9 @@ F4 cycles what every building's surfaces are coloured by, and Shift+F4 goes back
 | `shade` | How much light a surface keeps after texture occlusion, SSAO and its corners' baked shade, tinted by what takes the most |
 | `normals` | The normal with its normal map in world axes, and each texture's tangent frame as ticks |
 | `plan` | What is built, a plan's ghosts and what goes in next, in three colours |
+| `light` | The light alone, as Unreal's Lighting Only: every surface an 18% grey lit as it is, its normal map and occlusion kept, its colours (and so its corners' baked shade) left out, to read against a grey card beside it (`sandbox.card`): in shade as blue as the card. A warm material in the blue shade reads near neutral; this view says whether that is its colour or its light |
 
-Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off`, `next` and `back` too) and answers with its legend, so a view is shot headlessly (`shot` after it). Off, the views cost nothing: their shader code is compiled in only while one is on, and their systems do not run. Every preset draws them.
+Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off`, `next` and `back` too) and answers with its legend, so a view is shot headlessly (`shot` after it). Off, the views cost nothing: their shader code is compiled in only while one is on, and their systems do not run; so the first time one is on its shaders compile in the background, a few seconds in which buildings are not drawn, and a scripted run turns a view on early to compile it (as the material bench does). Every preset draws them.
 
 ## Debug menu
 

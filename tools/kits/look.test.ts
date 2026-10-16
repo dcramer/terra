@@ -1,7 +1,7 @@
 // node --test tools/kits/look.test.ts
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { DISTANCES, FIRST, HOLD, finestOctave, judge, lights, type Measured, parseTexels, percentile, run, type Targets } from "./look.ts";
+import { CARD_CROP, CARD_OUT_M, CROP, DISTANCES, FIRST, FRAME_M, HOLD, finestOctave, judge, lights, type Measured, onScreen, parseTexels, percentile, run, type Targets } from "./look.ts";
 import { ORIGIN } from "./preview.ts";
 
 /** A picture of values made by a rule, a pixel at a time. */
@@ -38,19 +38,60 @@ test("percentiles", () => {
   assert.equal(percentile(values, 95), 95);
 });
 
-test("every light measures its surface square on from 1, 2 and 5 m, and a grey card", () => {
+test("every light measures its surface square on from 1, 2 and 5 m, its card in the 2 m frame", () => {
   for (const pattern of ["Logs", "Masonry", "Roof"]) {
     for (const light of lights(pattern)) {
+      const what = `${pattern} ${light.name}`;
       const surfaces = light.views.filter((view) => view.measure === "surface");
-      assert.deepEqual(surfaces.map((view) => view.distance), DISTANCES, `${pattern} ${light.name}`);
+      assert.deepEqual(surfaces.map((view) => view.distance), DISTANCES, what);
       for (const view of surfaces) {
         const apart = Math.hypot(...view.eye.map((e, i) => e - view.at[i]));
-        assert.ok(Math.abs(apart - view.distance!) < 1e-6, `${pattern} ${light.name} ${view.name}`);
+        assert.ok(Math.abs(apart - view.distance!) < 1e-6, `${what} ${view.name}`);
       }
-      assert.equal(light.views.filter((view) => view.measure === "card").length, 1, `${pattern} ${light.name}`);
+      // The card faces the way its face does, a few centimetres out of it.
+      const normal = light.card.facing;
+      const at = surfaces[0].at;
+      const out = light.card.at.map((c, i) => c - at[i]).reduce((sum, d, i) => sum + d * normal[i], 0) / Math.hypot(...normal);
+      assert.ok(Math.abs(out - CARD_OUT_M) < 1e-6, what);
+      // Whole in the 2 m frame, so it shares its exposure, and clear of each shot's middle,
+      // which is what the surface is measured on.
+      const half = CARD_CROP / 2;
+      for (const view of surfaces) {
+        const [x, y] = onScreen(view, light.card.at);
+        const clear = Math.abs(x - 960) - half > CROP.width / 2 || Math.abs(y - 540) - half > CROP.height / 2;
+        assert.ok(clear, `${what} ${view.name}: the card at ${x.toFixed(0)},${y.toFixed(0)} is in the middle measured`);
+        if (view.distance === 2) assert.ok(x - half > 0 && x + half < 1920 && y - half > 0 && y + half < 1080, `${what}: the card is out of the 2 m frame`);
+      }
     }
     assert.deepEqual(lights(pattern).map((light) => light.name), ["noon", "shade", "evening"]);
+    // The shade's 2 m view again with the light view on.
+    const alone = lights(pattern)[1].views.filter((view) => view.measure === "light");
+    assert.equal(alone.length, 1, pattern);
+    assert.equal(alone[0].debug, "light");
+    assert.deepEqual(alone[0].eye, lights(pattern)[1].views.find((view) => view.distance === 2)!.eye);
   }
+});
+
+test("a point straight ahead is the frame's middle, and one along the face to its side", () => {
+  const view = { name: "2 m", eye: [0, 1, -2] as [number, number, number], at: [0, 1, 0] as [number, number, number] };
+  assert.deepEqual(onScreen(view, [0, 1, 0]), [960, 540]);
+  // Looking south, east is to the left; a metre 2 m off is 1920 / (FRAME_M * 2) pixels.
+  const [x, y] = onScreen(view, [1, 1.5, 0]);
+  assert.ok(Math.abs(x - (960 - 1920 / (FRAME_M * 2))) < 1e-6 && Math.abs(y - (540 - 0.5 * 1920 / (FRAME_M * 2))) < 1e-6, `${x},${y}`);
+});
+
+test("the shade's run turns the light view on for its view and off for the next", () => {
+  const noon = run("stone", "Masonry", 12, "calls.jsonl", "x");
+  const calls = noon.calls.trim().split("\n").map((line) => JSON.parse(line));
+  const at = noon.views.findIndex((view) => view.debug === "light");
+  const starts = noon.args.filter((_, i) => noon.args[i - 1] === "--vantage").map((v) => Number(v.split("@")[1]));
+  const on = calls.findLast((call) => call.method === "debug.view" && call.params.name === "light");
+  // On first for a few frames while the first view is held, so its shaders are compiled.
+  assert.ok(calls.some((call) => call.method === "debug.view" && call.params.name === "light" && call.frame < FIRST - 100));
+  assert.equal(on.frame, starts[at]);
+  if (at + 1 < starts.length) assert.ok(calls.some((call) => call.method === "debug.view" && call.params.name === "off" && call.frame === starts[at + 1]));
+  // And only it: the evening's run has none.
+  assert.ok(!run("stone", "Masonry", 18, "calls.jsonl", "x").calls.includes("debug.view"));
 });
 
 test("an hour's run shoots its lights' views, each once held, and stands its cards first", () => {
@@ -69,8 +110,8 @@ test("an hour's run shoots its lights' views, each once held, and stands its car
   assert.deepEqual(first.slice(0, 3), [noon.views[0].eye[0] + ORIGIN[0], noon.views[0].eye[1], noon.views[0].eye[2] + ORIGIN[1]]);
   assert.equal(noon.args[noon.args.indexOf("--time") + 1], "12");
   assert.equal(noon.args[noon.args.indexOf("--sheet-rows") + 1], "logs: preview");
-  const cards = noon.calls.trim().split("\n").map((line) => JSON.parse(line));
-  assert.ok(cards.length >= 2 && cards.every((call) => call.method === "sandbox.card" && call.frame < 10));
+  const cards = noon.calls.trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.method === "sandbox.card");
+  assert.ok(cards.length >= 2 && cards.every((call) => call.frame < 10));
   const evening = run("logs", "Logs", 18, "calls.jsonl", "x");
   assert.ok(evening.views.every((view) => lights("Logs").find((light) => light.name === "evening")!.views.includes(view)));
 });
@@ -81,6 +122,7 @@ const targets: Targets = {
   sharpness: [15, 15, 12],
   lit: [0.3, 1.5],
   shade: [0.25, 1.5],
+  sky: [0.6, 1.1],
   values: [30, 160],
   stretch: { smeared: 2, streaked: 0.5, roles: { Piece: [45, 4] } },
 };
@@ -90,6 +132,7 @@ const good: Measured = {
   values: { p5: 40, p50: 90, p95: 150 },
   lit: [0.6, 0.7],
   shade: 0.4,
+  sky: { tint: 0.95, light: 0.75 },
   cards: { noon: { redOverBlue: 1.04, seen: [97, 95, 95] }, shade: { redOverBlue: 0.32, seen: [28, 38, 54] }, evening: { redOverBlue: 2.3, seen: [140, 109, 96] } },
   stretch: new Map([
     ["Log", [0.8, 0]],
@@ -103,6 +146,10 @@ test("a material within every target holds; each one missed fails alone", () => 
   assert.deepEqual(fails({ ...good, density: [2048, 512] }), ["texel density"]);
   assert.deepEqual(fails({ ...good, sharpness: [20, 10, 14] }), ["sharpness, 2 m"]);
   assert.deepEqual(fails({ ...good, shade: 0.2 }), ["against the grey card, shade"]);
+  // A surface in shade lit by a neutral light, not the blue sky the card takes, fails, as one
+  // too dark or too bright in the sky's light does.
+  assert.deepEqual(fails({ ...good, sky: { tint: 1.0 / 0.38, light: 0.75 } }), ["sky's tint, light alone, shade"]);
+  assert.deepEqual(fails({ ...good, sky: { tint: 0.95, light: 0.3 } }), ["sky's light, light alone, shade"]);
   assert.deepEqual(fails({ ...good, values: { p5: 80, p50: 90, p95: 100 } }), ["value range, 2 m noon"]);
   // The noon card is held neutral (D370); the shade's blue and the evening's amber are the light's.
   assert.deepEqual(fails({ ...good, cards: { ...good.cards, noon: { redOverBlue: 1.4, seen: [140, 120, 110] } } }), ["grey card red/blue, noon"]);

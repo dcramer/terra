@@ -15,6 +15,9 @@
 //!   takes the most.
 //! - **normals**: the normal as the normal map makes it, and each texture's tangent frame.
 //! - **plan**: what is built, a plan's ghosts and what goes in next, in three colours.
+//! - **light**: the light alone, as Unreal's Lighting Only view: every surface an 18% grey
+//!   lit as it is, its normal map and occlusion kept, so its light reads against a grey card
+//!   stood beside it (`sandbox.card`; the material bench's sky check, D386).
 //!
 //! Off, nothing of it runs or is compiled in: the construction materials' shader takes the
 //! view's code only while one is on (`arrays::ViewKey`), and every system here waits on it.
@@ -69,10 +72,11 @@ pub enum View {
     Shade,
     Normals,
     Plan,
+    Light,
 }
 
 impl View {
-    pub const ALL: [View; 8] = [
+    pub const ALL: [View; 9] = [
         View::Off,
         View::Texels,
         View::Roles,
@@ -81,6 +85,7 @@ impl View {
         View::Shade,
         View::Normals,
         View::Plan,
+        View::Light,
     ];
 
     /// Its name, as the remote's `debug.view` takes it.
@@ -94,6 +99,7 @@ impl View {
             View::Shade => "shade",
             View::Normals => "normals",
             View::Plan => "plan",
+            View::Light => "light",
         }
     }
 
@@ -123,6 +129,7 @@ impl View {
             View::Shade => "Occlusion and shade",
             View::Normals => "Normals and tangents",
             View::Plan => "Plan and what stands",
+            View::Light => "Light alone",
         }
     }
 
@@ -163,6 +170,12 @@ impl View {
                  frame. Ticks that turn or flip across a face are a mapping fault."
             }
             View::Plan => "What is built, a plan's ghosts not yet in, and what goes in next.",
+            View::Light => {
+                "Every surface an 18% grey, lit as it is, its normal map and occlusion kept \
+                 and its colours left out: the light it takes, to read against a grey card \
+                 beside it (sandbox.card). In shade it is as blue as the card; in the sun, \
+                 warm."
+            }
         }
     }
 
@@ -238,6 +251,11 @@ impl View {
                 (BUILT, "built: in"),
                 (GHOST, "plan: not yet in"),
                 (NEXT, "what goes in next"),
+            ]),
+            View::Light => named(&[
+                ([0.18, 0.18, 0.18], "an 18% grey, as a grey card"),
+                ([0.12, 0.16, 0.26], "in shade: lit by the blue sky"),
+                ([0.3, 0.26, 0.2], "in the sun: its warm light"),
             ]),
         }
     }

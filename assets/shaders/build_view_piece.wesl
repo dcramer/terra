@@ -6,11 +6,11 @@
 
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
-    pbr_functions::alpha_discard,
+    pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     forward_io::{VertexOutput, FragmentOutput},
     mesh_view_bindings::view,
 };
-import super::build_views::{Seen, shown};
+import super::build_views::{Seen, shown, LIGHT_ALONE, GREY_CARD};
 
 @if(SCREEN_SPACE_AMBIENT_OCCLUSION)
 import bevy_pbr::render::mesh_view_bindings::screen_space_ambient_occlusion_texture;
@@ -31,7 +31,17 @@ var<uniform> piece: PieceView;
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
-    let pbr_input = pbr_input_from_standard_material(in, is_front);
+    var pbr_input = pbr_input_from_standard_material(in, is_front);
+    // The light view: an 18% grey lit as it is, as the grey card beside it, cut out as drawn.
+    if u32(piece.view.x + 0.5) == LIGHT_ALONE {
+        _ = alpha_discard(pbr_input.material.flags, pbr_input.material.alpha_cutoff, pbr_input.material.base_color);
+        pbr_input.material.base_color = vec4(vec3(GREY_CARD), 1.0);
+        pbr_input.material.emissive = vec4(0.0);
+        var lit: FragmentOutput;
+        lit.color = apply_pbr_lighting(pbr_input);
+        lit.color = main_pass_post_lighting_processing(pbr_input, lit.color);
+        return lit;
+    }
     var seen: Seen;
     seen.view = u32(piece.view.x + 0.5);
     var uv = vec2(0.0);

@@ -178,7 +178,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Crease-aware normals | Normals smooth across curves, split at creases over about 50 degrees | Working: the clean-up shades them so |
 | No shimmer | Mipmaps and anisotropic filtering for every model's and material's textures | Working |
 | Ground | Soil, grass, rock and sand textures, triplanar, blended by what grows and tinted by the planet (D190) | Working on the voxel terrain |
-| Sky light | The shade lit by the sky above and the ground's bounce below, from a cube map painted from the sky (D190) | Working |
+| Sky light | The shade lit by the sky above and the ground's bounce below, from a cube map painted from the sky (D190) | Working; buildings take it as a grey card does, held so on the material bench (D386: in shade, an 18% grey wall as blue as the card) |
 | Haze and layered distance | Bevy's physical atmosphere's aerial perspective, its distances scaled 18 times so a few hundred metres read as many kilometres (D212) | Working |
 | Sky | Bevy's physical atmosphere (Hillaire's model, as Unreal's), with our clouds, stars and moon drawn over it, and the dusk and night in chosen colours, since it goes dark at sunset (D212) | Working |
 | Distance past the world | Far trees as billboards merged a square at a time, drawn and lit by the shader; past them, ridges of far land in the sky below the horizon, each paler in the air's own horizon colour; out of the trees, a thinner haze in the horizon's colour (D273) | Working in the lush forest |

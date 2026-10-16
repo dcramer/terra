@@ -155,7 +155,7 @@ const COMMANDS: Record<string, Command> = {
   },
   "debug.view": {
     usage: "debug.view NAME",
-    help: "colour the buildings by a debug view, with its legend on screen (F4 in the game): texels, roles, detail, damage, shade, normals, plan, off, or next or back along them",
+    help: "colour the buildings by a debug view, with its legend on screen (F4 in the game): texels, roles, detail, damage, shade, normals, plan, light, off, or next or back along them",
     run: async ({ positionals: [name] }) => print(await call("debug.view", { name: name ?? "next" })),
   },
   shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
