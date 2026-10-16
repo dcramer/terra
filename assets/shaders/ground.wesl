@@ -1148,7 +1148,7 @@ fn fragment(
             if shore > 0.0 {
                 // Granite washed by the lake, a warm grey: the blue sky over the open shore
                 // lights it, and a neutral grey under it read violet.
-                let pebbles = vec3<f32>(grey * 1.2, grey * 1.03, grey * 0.78) * 1.2 * (0.8 + 0.4 * fleck) * tones;
+                let pebbles = vec3<f32>(grey * 1.3, grey * 1.06, grey * 0.72) * 1.2 * (0.8 + 0.4 * fleck) * tones;
                 ground_is = over(ground_is, layer(GRAVEL, 0.7, pebbles, world + 67.0, gx, gy, n, 1.0), shore * (1.0 - steep));
                 ground_is = over(ground_is, layer(SCREE, 0.6, pebbles, world + 71.0, gx, gy, n, 1.0), shore * smoothstep(0.55, 0.8, blotch) * (1.0 - steep));
                 var slab = layer(ROCK, 1.0, granite, world + 89.0, gx, gy, n, 0.15);

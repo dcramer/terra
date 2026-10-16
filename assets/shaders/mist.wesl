@@ -114,9 +114,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let drift = local - mist.wind.xyz * globals.time;
     // The bank's stuff: broad drifts tens of metres across, torn finer, the same every way
     // round (the world's axes are not the lake's level here).
-    let broad = noise(drift * 0.022);
+    let broad = noise(drift * 0.012);
     let fine = noise(drift * 0.085 + 17.0);
-    let stuff = smoothstep(0.45, 0.85, broad * 0.65 + fine * 0.35);
+    let stuff = smoothstep(0.4, 0.8, broad * 0.7 + fine * 0.3);
     // Thickest low over the water, thinning all the way up the card, its top torn by the
     // fine noise; soft over a third of its width each side, so no card's edge shows where
     // the banks overlap.
@@ -134,7 +134,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let level = 1.0 - abs(dot(to_eye / distance, up));
     // Far off, the many banks along the eye's way stack: thinned there, so the far shore's
     // feet are veiled, not walled off.
-    let stacked = mix(1.0, 0.45, smoothstep(300.0, 900.0, distance));
+    let stacked = mix(1.0, 0.5, smoothstep(300.0, 900.0, distance));
     var alpha = stuff * profile * mist.wind.w * smoothstep(NEAR_M.x, NEAR_M.y, distance) * level * level * stacked;
 @if(DEPTH_PREPASS)
     {

@@ -385,6 +385,9 @@ fn spawn(
             Mesh3d(meshes.add(mesh(waters, index))),
             MeshMaterial3d(look.clone()),
             NotShadowCaster,
+            // Light in the water scatters: the shore's trees' shadows fall on its bed, seen
+            // through it, not drawn hard on its surface as black cracks.
+            bevy::light::NotShadowReceiver,
         ));
         drawn += 1;
     }
