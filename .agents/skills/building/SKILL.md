@@ -55,7 +55,8 @@ Every change: `cargo xtask check` (quick before a commit, full before a push).
 
 ## Debug views and the material bench
 
-Not built yet (the workflow retro's first two items, research/building-workflow-retro-2026-10-16.md). When they land, list their keys and commands here.
+- **Debug views** (D385, [development.md](../../../docs/development.md#buildings-debug-views)): F4 (Shift+F4 back) or the remote's `debug.view <name>` colours every building by texels, roles, detail, damage, shade, normals or plan, each with its legend. Look before measuring: most "is it the mesh, the shader or the load?" questions are one view.
+- **The material bench** (the workflow retro's item 2, research/building-workflow-retro-2026-10-16.md) is not built yet; when it lands, add its command here: it replaces judging a material by ad hoc stills.
 
 ## Report
 
