@@ -28,8 +28,8 @@ const FASTEST_RATE: f32 = 1.6;
 const LOOKS: &str = "townsfolk.ron";
 /// How far above a seat's top the hips rest, as `people` seats a sitter.
 const HIPS_ABOVE_SEAT_M: f32 = 0.08;
-/// A log's top, where someone sits on it as a bench.
-const LOG_TOP_M: f32 = 0.45;
+/// A bench's seat, where someone sits on it.
+const LOG_TOP_M: f32 = 0.46;
 
 /// A role's look: the bodies it is shaped as, and what it wears; on a woman's body (the
 /// `female` template), what `women` says, where it says anything.
@@ -680,7 +680,7 @@ fn seat(
                 if thing.kind != ThingKind::Bench {
                     continue;
                 }
-                // The log's top, under where they sit along it.
+                // The bench's seat, under where they sit along it.
                 let along = (spot.at - thing.at).dot(Vec2::new(
                     libm::cosf(thing.facing),
                     -libm::sinf(thing.facing),

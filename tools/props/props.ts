@@ -6,7 +6,7 @@
 // Node 22.18 or later, which runs TypeScript directly; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -121,6 +121,13 @@ export type Prop = {
   // Another prop whose concept it is drawn after, so the pieces of a kit share one stone,
   // one wood and one grade (docs/art-style.md, "One kit, one grade").
   reference?: string;
+  // Copies of it with its one strongly coloured cloth dyed another colour (sRGB), each its
+  // own file in its folder, made after refine by dye.py: a stall's awning in other dyes, so a
+  // market is not one stall over and over. Its own file may be one, dyed its own colour.
+  dyes?: Record<string, [number, number, number]>;
+  // With dyes, how much the rest is greyed and darkened (0.75 a quarter darker), for wood
+  // painted fresh that stands out in the weather.
+  weather?: number;
 };
 
 export function readProp(text: string, name: string): Prop {
@@ -232,6 +239,14 @@ function refine(name: string, prop: Prop) {
     args.push(`--grade=${colour.join(",")}`);
   }
   run(BLENDER, [join(HERE, "refine.py"), ...args]);
+  const folder = join(ROOT, "assets", "models", prop.into ?? "props");
+  const refined = join(folder, `${prop.file}.glb`);
+  const kept = join(OUT, `${name}-undyed.glb`);
+  if (prop.dyes) copyFileSync(refined, kept);
+  for (const [file, colour] of Object.entries(prop.dyes ?? {})) {
+    const args = [join(HERE, "dye.py"), kept, join(folder, `${file}.glb`), colour.join(",")];
+    run(BLENDER, prop.weather ? [...args, `${prop.weather}`] : args);
+  }
 }
 
 /** Every prop, tool and village model from the front, labelled, on one sheet. */

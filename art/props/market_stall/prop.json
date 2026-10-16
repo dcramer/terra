@@ -1,7 +1,45 @@
 {
   "subject": "empty village market stall seen from its customers' side: an open frame of four squared weathered oak posts with pegged corner braces, a plain counter of thick oak planks at waist height across its whole front over a boarded front panel, and above it a gently sloping awning of faded red and cream striped linen canvas stretched over a light timber frame, its front hem scalloped; nothing at all on the counter or under it",
   "file": "MarketStall",
-  "dims": [2.6, 2.9, 2],
-  "sockets": { "counter": [0, 0.86, 0.33], "lantern": [-0.95, 1.98, 0.92] },
-  "budget": 2500
+  "dims": [
+    2.6,
+    2.9,
+    2
+  ],
+  "sockets": {
+    "counter": [
+      0,
+      0.86,
+      0.33
+    ],
+    "lantern": [
+      -0.95,
+      1.98,
+      0.92
+    ]
+  },
+  "budget": 2500,
+  "dyes": {
+    "MarketStall": [
+      0.62,
+      0.2,
+      0.15
+    ],
+    "MarketStallBlue": [
+      0.3,
+      0.38,
+      0.55
+    ],
+    "MarketStallGreen": [
+      0.32,
+      0.42,
+      0.26
+    ],
+    "MarketStallOchre": [
+      0.72,
+      0.56,
+      0.24
+    ]
+  },
+  "weather": 0.75
 }

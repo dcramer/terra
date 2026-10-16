@@ -1,0 +1,7 @@
+{
+  "subject": "rough village bench of split oak: a long thick slab seat with its bark edge left on, on four splayed round legs pegged through it, worn smooth and grey on top from sitting, dark with weather underneath",
+  "file": "Bench",
+  "dims": [1.8, 0.46, 0.4],
+  "sockets": { "seat": [0, 0.46, 0] },
+  "budget": 800
+}

@@ -158,7 +158,7 @@ impl ThingKind {
             ThingKind::Stall => across(1.3, 0.0, 1.0),
             ThingKind::Forge => across(1.3, -0.77, 0.77),
             ThingKind::Block => across(0.3, -0.3, 0.3),
-            ThingKind::Bench => across(0.85, -0.22, 0.22),
+            ThingKind::Bench => across(0.9, -0.2, 0.2),
             ThingKind::Trough => across(1.0, -0.35, 0.35),
             ThingKind::Barrel => across(0.29, -0.29, 0.29),
             ThingKind::Cart => across(0.7, -1.35, 1.35),

@@ -14,6 +14,9 @@
     // The lantern some stalls hang at the front of their awning (its `lantern` socket), and
     // the share of stalls that do.
     lantern: ("Lantern", 0.6),
+    // The stall's looks, its awning dyed madder, woad, weld or green (tools/props, `dyes`),
+    // one drawn for each stall, neighbours never alike.
+    stalls: ["MarketStall", "MarketStallBlue", "MarketStallGreen", "MarketStallOchre"],
     trades: [
         (
             name: "greengrocer",

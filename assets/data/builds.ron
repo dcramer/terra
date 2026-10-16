@@ -146,6 +146,9 @@
         ])),
         (name: "Market stall", tab: Hidden, kind: Items([
             (name: "Market stall", file: "MarketStall", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Market stall, blue", file: "MarketStallBlue", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Market stall, green", file: "MarketStallGreen", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Market stall, ochre", file: "MarketStallOchre", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
             (name: "Stall lantern", file: "Lantern", dims: (0.216, 0.528, 0.235), cost: [("Wood", 1), ("Iron", 1)]),
         ])),
         // A town's furnishing (terra_build::town, D346): its trough, barrels, carts and the
@@ -204,6 +207,7 @@
         (name: "Seat", tab: Furniture, kind: Items([
             (name: "Chair", file: "Chair", dims: (0.55, 0.95, 0.67), cost: [("Wood", 2)], rest: Sit),
             (name: "Stool", file: "Stool", dims: (0.49, 0.5, 0.49), cost: [("Wood", 1)], rest: Sit),
+            (name: "Bench", file: "Bench", dims: (1.8, 0.46, 0.4), cost: [("Wood", 3)], rest: Sit),
         ])),
         (name: "Table", tab: Furniture, kind: Items([
             (name: "Round table", file: "RoundTable", dims: (1.18, 0.75, 1.19), cost: [("Wood", 3)]),

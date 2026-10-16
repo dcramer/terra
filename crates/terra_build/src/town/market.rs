@@ -21,6 +21,10 @@ pub struct Market {
     /// The catalogue item a stall hangs at its awning's front, and the share that do.
     pub lantern: (String, f32),
     pub trades: Vec<Trade>,
+    /// The stall's own looks, catalogue items' files alike but for their awnings' dye, one
+    /// drawn for each stall by the seed so neighbours differ; the first is the stall.
+    #[serde(default)]
+    pub stalls: Vec<String>,
 }
 
 /// How goods are laid along a stall's counter: across how much of it, how deep it is from
@@ -79,6 +83,28 @@ impl Market {
             ));
         }
         Ok(market)
+    }
+
+    /// Which of the stall's looks each of the town's stalls is, as (the stall's index among
+    /// its things, the look's file): drawn by the seed, never the same as the stall before it
+    /// in its row where there are two looks or more.
+    pub fn looks(&self, town: &Town, seed: u32) -> Vec<(usize, String)> {
+        let mut last = usize::MAX;
+        stalls(town)
+            .enumerate()
+            .filter_map(|(n, (index, _))| {
+                let count = self.stalls.len();
+                if count == 0 {
+                    return None;
+                }
+                let mut pick = hash(&[seed, 63, n as u32]) as usize % count;
+                if pick == last && count > 1 {
+                    pick = (pick + 1) % count;
+                }
+                last = pick;
+                Some((index, self.stalls[pick].clone()))
+            })
+            .collect()
     }
 
     /// The trade each of the town's stalls takes, as (the stall's index among its things,
@@ -470,6 +496,22 @@ mod tests {
             shown >= 8,
             "only {shown} goods on the ground beside the stalls of eight towns"
         );
+    }
+
+    #[test]
+    fn neighbouring_stalls_wear_different_awnings() {
+        let mut market = market();
+        market.stalls = vec!["A".into(), "B".into(), "C".into()];
+        for seed in 1..6 {
+            let town = flat_town(seed);
+            let looks = market.looks(&town, seed);
+            assert_eq!(looks.len(), stalls(&town).count());
+            for pair in looks.windows(2) {
+                assert_ne!(pair[0].1, pair[1].1, "town {seed}: {looks:?}");
+            }
+            let kinds: std::collections::BTreeSet<_> = looks.iter().map(|(_, l)| l).collect();
+            assert!(kinds.len() >= 2, "town {seed}: {looks:?}");
+        }
     }
 
     #[test]

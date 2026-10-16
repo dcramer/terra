@@ -554,7 +554,8 @@ fn item_of(kind: ThingKind) -> Option<&'static str> {
         ThingKind::Well => Some("Well"),
         ThingKind::Stall => Some("MarketStall"),
         ThingKind::Forge => Some("Forge"),
-        ThingKind::Bench | ThingKind::Block => Some("Log"),
+        ThingKind::Bench => Some("Bench"),
+        ThingKind::Block => Some("Log"),
         ThingKind::Trough => Some("Trough"),
         ThingKind::Barrel => Some("Barrel"),
         ThingKind::Cart => Some("HandCart"),
@@ -581,8 +582,10 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-/// How wide a player or the camera is to the town's walkers.
+/// How wide a player is to the town's walkers; and the camera, wider, so they keep out of
+/// the lens rather than brush it, where they would be faded out half seen.
 const VISITOR_M: f32 = 0.4;
+const LENS_M: f32 = 1.0;
 
 /// The town's people's tick, which what draws them follows.
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -801,8 +804,19 @@ fn lay(
     // The things of its day, placed as a player places an item, but the town's.
     let to_site = site.frame.compute_affine().inverse();
     let mut placed = 0;
-    for thing in &town.things {
-        let Some(file) = item_of(thing.kind) else {
+    // Each stall's look, its awning's dye drawn by the seed (`market.ron`'s `stalls`).
+    let looks: std::collections::HashMap<usize, String> =
+        std::fs::read_to_string(terra_world::data::path("market.ron"))
+            .ok()
+            .and_then(|text| terra_build::town::Market::parse(&text).ok())
+            .map(|market| market.looks(&town, wanted.seed).into_iter().collect())
+            .unwrap_or_default();
+    for (index, thing) in town.things.iter().enumerate() {
+        let Some(file) = looks
+            .get(&index)
+            .map(String::as_str)
+            .or_else(|| item_of(thing.kind))
+        else {
             continue;
         };
         let Some(item) = builds.item_from(file) else {
@@ -1022,6 +1036,31 @@ fn lay(
             })
             .collect();
         info!("Town route: {}", route.join(" "));
+        // Where the square and its market are, in the terms a route takes, to plan one by.
+        let spot = |p: Vec2| {
+            let l = start_terms(&start, at(p));
+            format!("{:.1},{:.1}", l.x, l.y)
+        };
+        let marked = |kind: ThingKind| {
+            town.things
+                .iter()
+                .filter(|t| t.kind == kind)
+                .map(|t| spot(t.at))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        info!(
+            "Town square: corners {}; well {}; stalls {}; benches {}",
+            town.square
+                .outline
+                .iter()
+                .map(|&p| spot(p))
+                .collect::<Vec<_>>()
+                .join(" "),
+            marked(ThingKind::Well),
+            marked(ThingKind::Stall),
+            marked(ThingKind::Bench),
+        );
     }
 
     // Its ground cover, over what the world grows round it if it grows its own.
@@ -1108,7 +1147,10 @@ fn live(
     clock: Res<Clock>,
     mut market: ResMut<Market>,
     viewers: Query<&GlobalTransform, Or<(With<Viewpoint>, With<MainCamera>)>>,
-    visitors: Query<&GlobalTransform, Or<(With<super::Player>, With<MainCamera>)>>,
+    visitors: Query<
+        (&GlobalTransform, Has<MainCamera>),
+        Or<(With<super::Player>, With<MainCamera>)>,
+    >,
 ) {
     let viewers: Vec<Vec2> = viewers
         .iter()
@@ -1118,10 +1160,10 @@ fn live(
     // so nobody walks through a player or into the lens.
     let visitors = visitors
         .iter()
-        .map(|seen| terra_life::orca::Body {
+        .map(|(seen, lens)| terra_life::orca::Body {
             at: market.local(seen.translation()),
             velocity: Vec2::ZERO,
-            radius: VISITOR_M,
+            radius: if lens { LENS_M } else { VISITOR_M },
         })
         .collect();
     market.life.visitors = visitors;
