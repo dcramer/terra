@@ -11,7 +11,7 @@
 // or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ROOT } from "./client.ts";
 import { place } from "./places.ts";
@@ -54,13 +54,24 @@ const run = spawnSync(resolve(ROOT, "target/release/terra_sandbox"), ["--offscre
   maxBuffer: 64 * 1024 * 1024,
 });
 if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
-  console.error(`${run.stdout}${run.stderr}`.split("\n").slice(-20).join("\n"));
+  // The whole log beside the film, and its errors here: a run that dies early, as one out of
+  // the GPU's memory does, ends with nothing but its shutdown's warnings.
+  const log = `${run.stdout}${run.stderr}`;
+  writeFileSync(`${out}.log`, log);
+  const errors = log.split("\n").filter((l) => /ERROR|panicked/.test(l));
+  console.error([...new Set(errors)].slice(0, 10).join("\n"));
+  console.error(log.split("\n").slice(-20).join("\n"));
+  console.error(`film: the run failed; its log is ${out}.log`);
   process.exit(1);
 }
 console.log(`film: ${Math.floor((last - first) / 2) + 1} frames drawn in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 // How far a route's walker got, so a film whose walker stalled or gave up a point says so.
 const route = `${run.stdout}${run.stderr}`.split("\n").filter((l) => l.includes("Route: ")).map((l) => l.slice(l.indexOf("Route: ") + 7));
 if (route.length) console.log(`film: route ${route.join(" ")}`);
+// How far a time-lapse's settlement got as it ran (D381), so one whose builders idled says so.
+for (const line of `${run.stdout}${run.stderr}`.split("\n").filter((l) => l.includes("Time-lapse at "))) {
+  console.log(`film: ${line.slice(line.indexOf("Time-lapse at "))}`);
+}
 
 const encode = spawnSync(
   "ffmpeg",

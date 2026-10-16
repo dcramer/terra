@@ -169,7 +169,7 @@ fn eased(share: f32) -> f32 {
 
 /// How far round the square's middle a settlement rising has cleared its ground of
 /// stones and brush, to the forest's edge (`MarketTown::SETTLEMENT`).
-const CLEARED_M: f32 = 95.0;
+const CLEARED_M: f32 = 120.0;
 
 /// A time-lapse under way.
 #[derive(Resource)]
@@ -413,7 +413,12 @@ fn prepare(
     // The clearing a meadow, its loose stones and brush cleared for the plots.
     clear.write(ClearAround(market.middle, CLEARED_M));
     // Nobody builds where nothing is going up yet.
-    let hours = Market::hours(&clock);
+    // The hour its people live at, their day's own pace, not the sun's (`town::live`).
+    let hours = if market.lived.is_finite() {
+        market.lived
+    } else {
+        Market::hours(&clock)
+    };
     let sites: Vec<usize> = (0..market.life.town.things.len())
         .filter(|&i| market.life.town.things[i].kind == ThingKind::Site)
         .collect();
@@ -447,7 +452,12 @@ fn build(
         return;
     }
     let t = rising.t;
-    let hours = Market::hours(&clock);
+    // The hour its people live at, their day's own pace, not the sun's (`town::live`).
+    let hours = if market.lived.is_finite() {
+        market.lived
+    } else {
+        Market::hours(&clock)
+    };
     // The claim stone, at the heart of it.
     if !rising.claimed
         && let Some(when) = rising.lapse.claim

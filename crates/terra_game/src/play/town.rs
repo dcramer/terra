@@ -441,13 +441,18 @@ struct TownCover {
     /// Within so far of its middle a meadow, grass all over but where it is worn: the
     /// clearing a settlement rising has cut (D381); none for a town of old.
     meadow_m: f32,
+    /// Whether its ways are paved with setts, as an old town's are; a settlement rising's are
+    /// packed earth.
+    paved: bool,
 }
 
 /// How thick a settlement's cleared meadow grows at least (`TownCover::meadow_m`).
 const MEADOW_GRASS: f32 = 0.8;
+/// How trodden an unpaved way is: packed earth, under where the ground shader lays setts.
+const UNPAVED: f32 = 0.7;
 /// How far round its middle a settlement rising has cleared a meadow: to the forest's
 /// edge (`MarketTown::SETTLEMENT`).
-const MEADOW_M: f32 = 100.0;
+const MEADOW_M: f32 = 125.0;
 
 /// How far inside a street's or the square's edge its paving starts.
 const PAVING_EDGE_M: f32 = 0.35;
@@ -502,12 +507,22 @@ impl terra_world::cover::CoverSource for TownCover {
             growing.path = true;
             // Paved with setts (the ground shader's from 0.85, D350), packed earth at the very
             // edge of a way where the paving gives out and straw and dung collect.
-            growing.trodden = if -worn > PAVING_EDGE_M { 1.0 } else { 0.75 };
+            growing.trodden = if !self.paved {
+                // A settlement new-founded: its ways packed earth, not yet paved.
+                UNPAVED
+            } else if -worn > PAVING_EDGE_M {
+                1.0
+            } else {
+                0.75
+            };
         } else if worn < 1.5 {
             growing.grass *= worn / 1.5 * 0.7;
             growing.trodden = 0.6 * (1.0 - worn / 1.5);
-            // Duff gathers where the grass comes back, along a way's edge.
-            growing.roots = 0.35 * (1.0 - worn / 1.5);
+            // Duff gathers where the grass comes back along an old way's edge, not yet along a
+            // new one's.
+            if self.paved {
+                growing.roots = 0.35 * (1.0 - worn / 1.5);
+            }
         }
         if self
             .yards
@@ -1181,6 +1196,7 @@ fn lay(
                 .map(|t| t.place(Vec2::new(0.0, 0.8)))
                 .collect(),
             meadow_m: if rising.is_some() { MEADOW_M } else { 0.0 },
+            paved: rising.is_none(),
         };
         if rising.is_some() {
             // Rising, a house's ground is worn once its plot is laid and its yard once it

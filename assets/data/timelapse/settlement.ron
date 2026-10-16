@@ -9,14 +9,14 @@
     about: "a market town rising from its clearing in a day",
     seconds: 42.0,
     // From early morning, the sun low and the mist about, to late afternoon.
-    hours: (6.5, 13.0),
+    hours: (6.9, 13.5),
     claim: 0.6,
     first: 1.5,
     last: 31.0,
     takes: (8.0, 14.0),
     growth: 0.6,
     settled_after: 1.0,
-    common: (10.0, 34.0),
+    common: (22.0, 36.0),
     // Before each building's door while it goes up: a stack of logs, a bucket of tools.
     site: [
         (item: "Log", at: (1.9, 1.5)),
