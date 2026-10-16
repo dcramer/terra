@@ -51,6 +51,7 @@ pub mod start;
 pub mod terrain;
 pub mod tick;
 pub mod upscale;
+pub mod waves;
 pub mod wind;
 pub mod woods;
 pub mod world;

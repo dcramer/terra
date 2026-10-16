@@ -4,10 +4,10 @@
 //! boujie_water_shader, MIT), rippled by the climate's wind and reflecting the sky.
 
 use crate::air::AirPicture;
-use crate::climate::ClimateFields;
 use crate::daylight::Clock;
-use crate::planet::{MainCamera, Planet};
+use crate::planet::Planet;
 use crate::sky::Sky;
+use crate::waves::{self, TRAINS};
 use bevy::{
     asset::RenderAssetUsages,
     light::NotShadowCaster,
@@ -80,7 +80,7 @@ pub struct LakeExtension {
     north: Vec4,
     #[uniform(100)]
     skyline: [Vec4; SKYLINE_WAYS],
-    /// The waves the surface is made of (`trains`).
+    /// The waves the surface is made of (`waves::trains`).
     #[uniform(100)]
     trains: [Vec4; TRAINS],
     /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
@@ -95,62 +95,6 @@ pub struct LakeExtension {
 
 /// How many ways out round the lake its skyline is taken in.
 const SKYLINE_WAYS: usize = 64;
-
-/// How many trains of waves make a lake's surface, the first `SWELL` of them long ones.
-const TRAINS: usize = 28;
-/// The longest train's length and the shortest's, in metres: from the swell a breeze leaves
-/// on a mountain lake down to the capillary ripples a gust raises.
-const LONGEST_M: f32 = 3.2;
-const SHORTEST_M: f32 = 0.035;
-
-/// The trains of waves a lake's surface is summed from, as Finch sums them ("Effective Water
-/// Simulation from Physical Models", GPU Gems, 2004): each a plane wave, its length from the
-/// longest to the shortest in even ratios, a little jittered so no two beat in step; how far
-/// it turns from the wind, the long ones more; and how fast it runs, by water's dispersion
-/// (gravity and, for ripples of a few centimetres, surface tension), so each length moves at
-/// its own speed and the pattern changes as it goes rather than sliding as one picture.
-/// Each is its wavenumber (radians a metre), angular frequency (radians a second), its turn
-/// from the wind (radians) and its phase.
-fn trains() -> [Vec4; TRAINS] {
-    let ratio = libm::powf(SHORTEST_M / LONGEST_M, 1.0 / (TRAINS - 1) as f32);
-    std::array::from_fn(|i| {
-        // A fixed scatter, the same every run, and uncorrelated from train to train: an even
-        // one (the golden ratio's multiples) turned the trains in step, and their crests
-        // crossed in a lattice.
-        let scatter = |salt: u32| scatter(i as u32 * 3 + salt);
-        let length = LONGEST_M * ratio.powi(i as i32) * (0.95 + 0.1 * scatter(0));
-        let k = std::f32::consts::TAU / length;
-        let spread = if i < SWELL { 1.4 } else { 1.7 };
-        Vec4::new(
-            k,
-            angular_frequency(k),
-            spread * (2.0 * scatter(1) - 1.0),
-            std::f32::consts::TAU * scatter(2),
-        )
-    })
-}
-
-/// A number from 0 to 1 for each whole number, by Wellons's lowbias32 hash.
-fn scatter(n: u32) -> f32 {
-    let mut x = n.wrapping_add(0x9e37_79b9);
-    x ^= x >> 16;
-    x = x.wrapping_mul(0x7feb_352d);
-    x ^= x >> 15;
-    x = x.wrapping_mul(0x846c_a68b);
-    x ^= x >> 16;
-    (x >> 8) as f32 / (1u32 << 24) as f32
-}
-
-/// How many of the trains are the swell, longer than 55 cm: always running, even on glassy
-/// water, where the shorter ones come with the wind's gusts.
-const SWELL: usize = 11;
-
-/// How fast a wave of so many radians a metre turns, radians a second, on deep water:
-/// ω² = gk + (σ/ρ)k³, gravity's term and surface tension's (water's 0.0728 N/m over 1000
-/// kg/m³), which takes over below about 1.7 cm.
-fn angular_frequency(k: f32) -> f32 {
-    (9.81 * k + 7.28e-5 * k * k * k).sqrt()
-}
 
 /// What the lakes mirror, taken once: the skyline round the start's lake.
 #[derive(Clone)]
@@ -191,7 +135,7 @@ impl LakeExtension {
             east: mirror.east.extend(0.0),
             north: mirror.north.extend(0.0),
             skyline: mirror.skyline,
-            trains: trains(),
+            trains: waves::trains(),
             over_air: air.is_some() as u32,
             air,
         }
@@ -477,39 +421,19 @@ fn spawn(
     commands.insert_resource(LakeMist(mist));
 }
 
-/// The sky the lakes reflect, as it changes, and the wind over them, from the climate where
-/// the camera is, taken again every few seconds of the clock.
+/// The sky the lakes reflect, as it changes, and the wind over them where the camera is
+/// (`wind::WorldWind`).
 fn follow_sky_and_wind(
     look: Option<Res<LakeLook>>,
     sky: Option<Res<Sky>>,
     air: Option<Res<AirPicture>>,
-    fields: Option<Res<ClimateFields>>,
-    clock: Option<Res<Clock>>,
-    camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
+    wind: Option<Res<crate::wind::WorldWind>>,
     mut materials: ResMut<Assets<LakeMaterial>>,
-    mut last: Local<Option<(f64, Vec4)>>,
 ) {
-    // Without the world's clock, as in the icon baker and the workbench, there is no lake to follow.
-    let (Some(look), Some(clock)) = (look, clock) else {
+    let Some(look) = look else {
         return;
     };
-    let now = clock.time().0;
-    let wind = match (&fields, &camera) {
-        (Some(fields), Some(camera)) if last.is_none_or(|(when, _)| (now - when).abs() > 0.002) => {
-            let at = camera.translation();
-            let weather = fields.fields.at(fields.place(at), clock.time());
-            let up = at.normalize_or(Vec3::Y);
-            // The wind blows from its bearing, clockwise from north.
-            let (north, east) = (fields.frame.north(at), fields.frame.east(at));
-            let from = north * libm::cosf(weather.wind.from) + east * libm::sinf(weather.wind.from);
-            let toward = (-from).reject_from(up).normalize_or_zero();
-            let strength = (weather.wind.speed_m_s / 8.0).clamp(0.0, 1.0);
-            let wind = toward.extend(strength);
-            *last = Some((now, wind));
-            wind
-        }
-        _ => last.map_or(Vec4::ZERO, |(_, wind)| wind),
-    };
+    let wind = waves::over_water(wind.as_deref());
     let sky_changed = sky.as_ref().is_some_and(|sky| sky.is_changed())
         || air.as_ref().is_some_and(|air| air.is_changed());
     let Some(material) = materials.get(&look.0) else {
@@ -678,45 +602,6 @@ fn mesh(waters: &Waters, lake: usize) -> Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn waves_run_at_water_speeds() {
-        // A deep-water wave 1.56 m long comes round once a second (c = √(gλ/2π)).
-        let period = std::f32::consts::TAU / angular_frequency(std::f32::consts::TAU / 1.56);
-        assert!((period - 1.0).abs() < 0.01, "{period}");
-        // Surface tension makes the slowest wave on water a ripple about 1.7 cm long, running
-        // at about 23 cm/s; longer and shorter ones both run faster.
-        let (length, speed) = (5..60)
-            .map(|mm| {
-                let k = std::f32::consts::TAU / (mm as f32 * 0.001);
-                (mm as f32 * 0.001, angular_frequency(k) / k)
-            })
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .unwrap();
-        assert!((0.016..0.019).contains(&length), "{length}");
-        assert!((speed - 0.231).abs() < 0.005, "{speed}");
-    }
-
-    #[test]
-    fn the_swell_is_the_long_trains_and_the_ripples_the_short() {
-        let trains = trains();
-        let length = |t: &Vec4| std::f32::consts::TAU / t.x;
-        for (i, train) in trains.iter().enumerate() {
-            assert_eq!(
-                i < SWELL,
-                length(train) > 0.55,
-                "train {i}, {} m",
-                length(train)
-            );
-            // Each runs by its own length's speed, so the pattern changes as it goes.
-            assert_eq!(train.y, angular_frequency(train.x));
-        }
-        assert!(trains.windows(2).all(|w| w[0].x < w[1].x), "longest first");
-        assert!(
-            length(&trains[TRAINS - 1]) < 0.05,
-            "down to a gust's ripples"
-        );
-    }
 
     #[test]
     fn a_lake_steams_in_the_calm_of_the_morning_and_not_after() {
