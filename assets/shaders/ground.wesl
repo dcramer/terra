@@ -175,6 +175,8 @@ const HEX_PER_REPEAT: f32 = 1.4;
 const SOIL_CONTRAST: f32 = 1.7;
 // A layer sampled once, plainly, where its repeat does not show: small patches of it.
 const PLAIN: f32 = -1.0;
+// How far a patch of a settlement's setts is turned, at most, as a share of a full turn.
+const SETT_TURN: f32 = 0.06;
 
 // A layer as drawn: its colour, the surface's normal bent by its relief, and how high it
 // stands, 0 to 1, for blending by height and darkening its hollows.
@@ -953,8 +955,11 @@ fn fragment(
                 // across, so its two-metre repeat does not show as a grid; the stones each take
                 // the tint's hue, not the scan's, a little lighter or darker by patch.
                 let laid = SETTS * (0.8 + 0.4 * blotch) * (0.9 + 0.2 * swell) * (0.85 + 0.3 * noise(world * 0.45 + 13.0));
-                var setts = layer(COBBLES, 0.9, laid, world + 5.0, gx, gy, n, PLAIN);
-                let other = layer(COBBLES, 0.83, laid, world + vec3<f32>(0.7, 0.0, 1.3), gx, gy, n, PLAIN);
+                // Laid in hexagon patches a metre or so across, each shifted and turned a little,
+                // as a street relaid piece by piece over the years is: the scan's even grid
+                // read as tiles from across the square (the town review, round 8).
+                var setts = layer(COBBLES, 0.9, laid, world + 5.0, gx, gy, n, SETT_TURN);
+                let other = layer(COBBLES, 0.83, laid, world + vec3<f32>(0.7, 0.0, 1.3), gx, gy, n, SETT_TURN);
                 setts = over(setts, other, step(0.5, noise(world * 0.21 + 71.0)));
                 // The scan's joints are deep and dark; worn setts in packed earth are nearly
                 // flush, their joints full, so the tone and the relief are both softened.
@@ -973,14 +978,14 @@ fn fragment(
                 var mud = earth;
                 mud.colour = earth.colour * 0.55;
                 mud.normal = normalize(mix(n, earth.normal, 0.5));
-                let film = paved * smoothstep(0.3, 0.55, dirt + (fleck - 0.5) * 0.15) * 0.92;
+                let film = paved * smoothstep(0.22, 0.5, dirt + (fleck - 0.5) * 0.15) * 0.92;
                 ground_is = over(ground_is, mud, film);
                 // Worn stone under dust is matt: the scan's gloss caught the low sun on each
                 // sett's top as a white fleck, in patches, as if wet.
                 pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.92, paved);
             }
             // Straw about a way's edges and the yards, and a little scattered over the paving.
-            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * mix(1.0, 0.35, smoothstep(0.55, 0.95, trodden)) * worn;
+            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * mix(1.0, 0.55, smoothstep(0.55, 0.95, trodden)) * worn;
             if straw > 0.0 {
                 ground_is = settle(ground_is, layer(LITTER, 0.6, STRAW * (0.8 + 0.4 * fleck), world + 67.0, gx, gy, n, 1.0), straw);
             }

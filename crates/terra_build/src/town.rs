@@ -285,6 +285,8 @@ const SQUARE_TRIES: usize = 12;
 const APART_M: f32 = 0.1;
 const OFF_STREET_M: f32 = 0.3;
 const PASSAGE_M: f32 = 1.8;
+/// How far from the square's corners its fronts begin and end.
+const SQUARE_CORNER_M: f32 = 0.8;
 /// How far along a street from the square its first house stands: close, so the square's
 /// corners are closed by the streets' first houses.
 const STREET_FIRST_M: f32 = 0.5;
@@ -912,7 +914,7 @@ impl Town {
                 points: vec![a, b],
                 side,
                 off: 0.0,
-                at: 3.0,
+                at: SQUARE_CORNER_M,
                 done: false,
                 grand: true,
             });
@@ -1053,7 +1055,10 @@ impl Town {
             (low.x, high.x)
         };
         let door_along = front.at - from;
-        if door_along + to > length - 2.0 {
+        // The square's corners built close, its fronts running on to them; a street keeps
+        // a little room at its end.
+        let end = if front.grand { SQUARE_CORNER_M } else { 2.0 };
+        if door_along + to > length - end {
             return None;
         }
         let (point, way) = along_line(&front.points, door_along)?;

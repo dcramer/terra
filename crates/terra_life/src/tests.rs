@@ -236,7 +236,8 @@ fn walkers_go_round_a_visitor_standing_in_their_way() {
     let hour = |n: u64| 9.0 + n as f64 * STEP as f64 / SECONDS_AN_HOUR as f64;
     let mut first = life(3);
     let viewer = square(&first);
-    first.start(9.0);
+    // Started as the game starts a town, its day already going, so people are on their way.
+    first.start_settled(9.0, viewer);
     let mut way = None;
     for n in 0..steps {
         first.step(hour(n), STEP, &[viewer]);
@@ -255,7 +256,7 @@ fn walkers_go_round_a_visitor_standing_in_their_way() {
         velocity: Vec2::ZERO,
         radius: 0.3,
     }];
-    life.start(9.0);
+    life.start_settled(9.0, viewer);
     let (mut closest, mut passed) = (f32::MAX, 0);
     for n in 0..steps {
         life.step(hour(n), STEP, &[viewer]);
