@@ -109,8 +109,6 @@ impl Shapes<'_, '_> {
     }
 }
 
-/// Shows what the tool would act on.
-#[allow(clippy::too_many_arguments)]
 /// Shows the door or shutters the hammer would fit as a ghost in the hole aimed at, while
 /// it can be fitted there.
 pub(super) fn preview_fit(
@@ -131,6 +129,9 @@ pub(super) fn preview_fit(
     }
 }
 
+/// Shows what the tool would act on: the film over the walls, room or opening it would
+/// lay, climbing as work goes on; outlines of the cubes it touches and the items it would
+/// pick up; and an item's ghost where it would stand, with the grid it snaps to.
 pub(super) fn highlight(
     mut commands: Commands,
     mut shapes: Shapes,
@@ -145,139 +146,9 @@ pub(super) fn highlight(
     mut gizmos: Gizmos,
 ) {
     let kind = &builder.picked(&builds).kind;
-    let refused = matches!(
-        builder.target,
-        Target::Ground { fits: false, .. }
-            | Target::Ground { adds: false, .. }
-            | Target::Ground { clear: false, .. }
-            | Target::Ground { item: Some(_), .. }
-            | Target::Wall { fits: false, .. }
-            | Target::Spot {
-                blocked: Some(_),
-                ..
-            }
-    ) || builder.short.is_some()
-        || builder.unclaimed.is_some()
-        || (matches!(kind, Kind::Window(_) | Kind::Door)
-            && matches!(builder.target, Target::Wall { .. })
-            && builder.run.is_empty());
-    let look = match (kind, builder.target) {
-        (Kind::Move, Target::Prop(_)) => 1,
-        _ if refused => 2,
-        (Kind::Remove, _) => 2,
-        (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
-        _ => 0,
-    };
+    let look = look_of(&builder, kind);
     let colour = [BUILD_COLOUR, OPENING_COLOUR, REFUSED_COLOUR][look];
-    let in_world = |corners: [Vec3; 4]| corners.map(|corner| site.frame.transform_point(corner));
-    let outline = |gizmos: &mut Gizmos, [a, b, c, d]: [Vec3; 4], colour: Color| {
-        gizmos.linestrip([a, b, c, d, a], colour);
-    };
-    let boxed = |gizmos: &mut Gizmos, half: Vec3, stood: &Transform, colour: Color| {
-        for height in [0.02, half.y * 2.0] {
-            let corner =
-                |x: f32, z: f32| stood.transform_point(Vec3::new(x * half.x, height, z * half.z));
-            outline(
-                gizmos,
-                [
-                    corner(-1.0, -1.0),
-                    corner(1.0, -1.0),
-                    corner(1.0, 1.0),
-                    corner(-1.0, 1.0),
-                ],
-                colour,
-            );
-        }
-    };
-
-    // The rectangles to cover with film, in the base's own space.
-    let quads: Vec<[Vec3; 4]> = match (kind, builder.target) {
-        // A window or door that will not fit: the cell aimed at, in red.
-        (Kind::Window(_) | Kind::Door, Target::Wall { tile, .. }) if builder.run.is_empty() => {
-            vec![site.base.corners(tile)]
-        }
-        (Kind::Window(shapes), Target::Wall { .. }) => {
-            opening(&site.base, &builder.run, shapes[builder.variant()].2)
-                .into_iter()
-                .collect()
-        }
-        (Kind::Door, Target::Wall { .. }) => opening(&site.base, &builder.run, Panel::Door)
-            .into_iter()
-            .collect(),
-        // An opening to close, or a stretch of wall to build or take away.
-        (Kind::Remove, Target::Wall { open: true, .. }) => builder
-            .run
-            .first()
-            .and_then(|&cell| site.base.filling(cell))
-            .and_then(|panel| opening(&site.base, &builder.run, panel))
-            .into_iter()
-            .collect(),
-        (_, Target::Wall { .. }) => bounds(&site.base, &builder.run).into_iter().collect(),
-        (_, Target::Ground { corner, tiles, .. }) => {
-            // Its storey's floor, above or below the base's (D143). A roof, from the top
-            // of its storey's walls as high as it would rise.
-            let (bottom, height) = match kind {
-                // Its cubes climb a cube a cube from the walls' tops (D241).
-                Kind::Roof(shapes) => {
-                    let shape = &shapes[builder.variant()];
-                    let across = tiles.min_element() as f32 * CELL_M;
-                    let rise = match shape.style {
-                        Some(terra_build::roofer::Style::LeanTo) => {
-                            tiles.max_element() as f32 * CELL_M
-                        }
-                        Some(_) => across * 0.5,
-                        None => 0.0,
-                    };
-                    ((corner.y + 1) as f32 * STOREY_M, rise.max(0.1))
-                }
-                // A floor: the layer of cubes under its storey.
-                Kind::Floor => (corner.y as f32 * STOREY_M - CELL_M, CELL_M),
-                _ => (corner.y as f32 * STOREY_M, STOREY_M),
-            };
-            let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(bottom);
-            let high = low + Vec3::new(tiles.x as f32 * CELL_M, height, tiles.y as f32 * CELL_M);
-            let at = |x: bool, y: bool, z: bool| {
-                Vec3::new(
-                    if x { high.x } else { low.x },
-                    if y { high.y } else { low.y },
-                    if z { high.z } else { low.z },
-                )
-            };
-            vec![
-                [
-                    at(false, false, false),
-                    at(true, false, false),
-                    at(true, true, false),
-                    at(false, true, false),
-                ],
-                [
-                    at(false, false, true),
-                    at(true, false, true),
-                    at(true, true, true),
-                    at(false, true, true),
-                ],
-                [
-                    at(false, false, false),
-                    at(false, false, true),
-                    at(false, true, true),
-                    at(false, true, false),
-                ],
-                [
-                    at(true, false, false),
-                    at(true, false, true),
-                    at(true, true, true),
-                    at(true, true, false),
-                ],
-                [
-                    at(false, true, false),
-                    at(true, true, false),
-                    at(true, true, true),
-                    at(false, true, true),
-                ],
-            ]
-        }
-        _ => Vec::new(),
-    };
+    let quads = quads(&site.base, &builder, kind);
     // While a wall or room is being built, a stronger film climbs it; while one is being
     // taken apart, the film drains away.
     let filling = drawn.filling;
@@ -298,45 +169,20 @@ pub(super) fn highlight(
                     positions.extend([*a, *b, c, *a, c, d].map(|corner| corner + offset));
                 }
             }
-            let normals = vec![Vec3::Y; positions.len()];
-            let mesh = meshes.add(
-                Mesh::new(
-                    PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::RENDER_WORLD,
-                )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
-            );
+            let mesh = meshes.add(film_mesh(positions));
             let material = drawn.ghost_looks[look].clone();
             shapes.show(filling, mesh, material, site.frame);
         }
         _ => shapes.hide(filling),
     }
-
-    // The cubes work on the base would touch: blue to build, amber to open or fit, red to
-    // take apart or where it is refused.
-    if let Some(planned) = builder.planned.as_ref() {
-        let colour = match (&planned.work.check, planned.doing) {
-            (Err(_), _) | (_, Doing::TakeApart) => REFUSED_COLOUR,
-            (_, Doing::Fit) => OPENING_COLOUR,
-            _ => BUILD_COLOUR,
-        };
-        let placed = matches!(builder.target, Target::Place { .. });
-        for cube in touched(&planned.work.ops, placed).into_iter().take(400) {
-            let low = cube.as_vec3() * CELL_M;
-            let middle = site.frame.transform_point(low + Vec3::splat(CELL_M * 0.5));
-            gizmos.cube(
-                Transform::from_translation(middle)
-                    .with_rotation(site.frame.rotation)
-                    .with_scale(Vec3::splat(CELL_M * 1.02)),
-                colour,
-            );
-        }
-    }
-
+    outline_touched(&mut gizmos, &site, &builder);
     // Outlines are drawn afresh every frame; the film only when something changes.
     for quad in &quads {
-        outline(&mut gizmos, in_world(*quad), colour);
+        outline(
+            &mut gizmos,
+            quad.map(|corner| site.frame.transform_point(corner)),
+            colour,
+        );
     }
     // A box round an item that would be picked up or taken away.
     if let Target::Prop(entity) = builder.target
@@ -344,7 +190,6 @@ pub(super) fn highlight(
     {
         boxed(&mut gizmos, prop.half, transform, colour);
     }
-
     let ghost = drawn.ghost;
     match (builder.item(&builds), builder.target) {
         (
@@ -357,54 +202,9 @@ pub(super) fn highlight(
             },
         ) => {
             let stood = props::standing(&site, &planet, at, lift, builder.turn, indoors);
-            // The grid the item is snapping to, drawn on the floor or ground round it:
-            // tile edges strongly, the steps between them faintly, fading with distance.
+            // The grid the item is snapping to, drawn on the floor or ground round it.
             if builder.snapping {
-                let reach = 6;
-                let onto = |east: i32, south: i32| {
-                    let on_grid =
-                        ((at / GRID_M).round() + IVec3::new(east, 0, south).as_vec3()) * GRID_M;
-                    let point = site.frame.transform_point(on_grid.with_y(at.y + 0.03));
-                    if indoors {
-                        point
-                    } else {
-                        planet.ground_at(point) + point.normalize() * 0.05
-                    }
-                };
-                let points: Vec<Vec<Vec3>> = (-reach..=reach)
-                    .map(|east| (-reach..=reach).map(|south| onto(east, south)).collect())
-                    .collect();
-                // Fainter the further a stretch of line is from the item.
-                let strength = |line: i32, along: i32| {
-                    let far = ((line * line + along * along) as f32).sqrt() / reach as f32;
-                    (1.0 - far).max(0.0) * 0.9
-                };
-                let tiles_every = (CELL_M / GRID_M).round() as i32;
-                let centre = (at / GRID_M).round().as_ivec3();
-                for line in -reach..=reach {
-                    for along in -reach..reach {
-                        let (i, j) = ((line + reach) as usize, (along + reach) as usize);
-                        let fade = strength(line, along);
-                        let weight = |coordinate: i32| {
-                            if coordinate.rem_euclid(tiles_every) == 0 {
-                                1.0
-                            } else {
-                                0.4
-                            }
-                        };
-                        // A line running south, and one running east.
-                        gizmos.line(
-                            points[i][j],
-                            points[i][j + 1],
-                            Color::WHITE.with_alpha(fade * weight(centre.x + line)),
-                        );
-                        gizmos.line(
-                            points[j][i],
-                            points[j + 1][i],
-                            Color::WHITE.with_alpha(fade * weight(centre.z + line)),
-                        );
-                    }
-                }
+                snapping_grid(&mut gizmos, &site, &planet, at, indoors);
             }
             // The item's own footprint, and whatever is in its way.
             if let Some(model) = models.of(item) {
@@ -452,22 +252,243 @@ pub(super) fn highlight(
             positions.extend([a, b, c, a, c, d].map(|corner| corner + offset));
         }
     }
-    let normals = vec![Vec3::Y; positions.len()];
     film.insert((
-        Mesh3d(
-            meshes.add(
-                Mesh::new(
-                    PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::RENDER_WORLD,
-                )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
-            ),
-        ),
+        Mesh3d(meshes.add(film_mesh(positions))),
         MeshMaterial3d(drawn.looks[look].clone()),
         site.frame,
         Visibility::Visible,
     ));
+}
+
+/// How what the tool would do is shown: 0 to build, 1 to open, fit or move, 2 to take
+/// apart or where it is refused.
+fn look_of(builder: &Builder, kind: &Kind) -> usize {
+    let refused = matches!(
+        builder.target,
+        Target::Ground { fits: false, .. }
+            | Target::Ground { adds: false, .. }
+            | Target::Ground { clear: false, .. }
+            | Target::Ground { item: Some(_), .. }
+            | Target::Wall { fits: false, .. }
+            | Target::Spot {
+                blocked: Some(_),
+                ..
+            }
+    ) || builder.short.is_some()
+        || builder.unclaimed.is_some()
+        || (matches!(kind, Kind::Window(_) | Kind::Door)
+            && matches!(builder.target, Target::Wall { .. })
+            && builder.run.is_empty());
+    match (kind, builder.target) {
+        (Kind::Move, Target::Prop(_)) => 1,
+        _ if refused => 2,
+        (Kind::Remove, _) => 2,
+        (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
+        _ => 0,
+    }
+}
+
+/// The rectangles to cover with film, in the base's own space: the opening a window or door
+/// would be cut as, the stretch of wall, or the box a room, floor or roof would fill.
+fn quads(base: &Base, builder: &Builder, kind: &Kind) -> Vec<[Vec3; 4]> {
+    match (kind, builder.target) {
+        // A window or door that will not fit: the cell aimed at, in red.
+        (Kind::Window(_) | Kind::Door, Target::Wall { tile, .. }) if builder.run.is_empty() => {
+            vec![base.corners(tile)]
+        }
+        (Kind::Window(shapes), Target::Wall { .. }) => {
+            opening(base, &builder.run, shapes[builder.variant()].2)
+                .into_iter()
+                .collect()
+        }
+        (Kind::Door, Target::Wall { .. }) => opening(base, &builder.run, Panel::Door)
+            .into_iter()
+            .collect(),
+        // An opening to close, or a stretch of wall to build or take away.
+        (Kind::Remove, Target::Wall { open: true, .. }) => builder
+            .run
+            .first()
+            .and_then(|&cell| base.filling(cell))
+            .and_then(|panel| opening(base, &builder.run, panel))
+            .into_iter()
+            .collect(),
+        (_, Target::Wall { .. }) => bounds(base, &builder.run).into_iter().collect(),
+        (_, Target::Ground { corner, tiles, .. }) => {
+            // Its storey's floor, above or below the base's (D143). A roof, from the top
+            // of its storey's walls as high as it would rise.
+            let (bottom, height) = match kind {
+                // Its cubes climb a cube a cube from the walls' tops (D241).
+                Kind::Roof(shapes) => {
+                    let shape = &shapes[builder.variant()];
+                    let across = tiles.min_element() as f32 * CELL_M;
+                    let rise = match shape.style {
+                        Some(terra_build::roofer::Style::LeanTo) => {
+                            tiles.max_element() as f32 * CELL_M
+                        }
+                        Some(_) => across * 0.5,
+                        None => 0.0,
+                    };
+                    ((corner.y + 1) as f32 * STOREY_M, rise.max(0.1))
+                }
+                // A floor: the layer of cubes under its storey.
+                Kind::Floor => (corner.y as f32 * STOREY_M - CELL_M, CELL_M),
+                _ => (corner.y as f32 * STOREY_M, STOREY_M),
+            };
+            let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(bottom);
+            let high = low + Vec3::new(tiles.x as f32 * CELL_M, height, tiles.y as f32 * CELL_M);
+            box_sides(low, high)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// A box's four sides and its top, each as its four corners.
+fn box_sides(low: Vec3, high: Vec3) -> Vec<[Vec3; 4]> {
+    let at = |x: bool, y: bool, z: bool| {
+        Vec3::new(
+            if x { high.x } else { low.x },
+            if y { high.y } else { low.y },
+            if z { high.z } else { low.z },
+        )
+    };
+    vec![
+        [
+            at(false, false, false),
+            at(true, false, false),
+            at(true, true, false),
+            at(false, true, false),
+        ],
+        [
+            at(false, false, true),
+            at(true, false, true),
+            at(true, true, true),
+            at(false, true, true),
+        ],
+        [
+            at(false, false, false),
+            at(false, false, true),
+            at(false, true, true),
+            at(false, true, false),
+        ],
+        [
+            at(true, false, false),
+            at(true, false, true),
+            at(true, true, true),
+            at(true, true, false),
+        ],
+        [
+            at(false, true, false),
+            at(true, true, false),
+            at(true, true, true),
+            at(false, true, true),
+        ],
+    ]
+}
+
+/// A film's triangles as a mesh, every normal up.
+fn film_mesh(positions: Vec<Vec3>) -> Mesh {
+    let normals = vec![Vec3::Y; positions.len()];
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+}
+
+fn outline(gizmos: &mut Gizmos, [a, b, c, d]: [Vec3; 4], colour: Color) {
+    gizmos.linestrip([a, b, c, d, a], colour);
+}
+
+/// An item's box as it stands, outlined at its foot and its top.
+fn boxed(gizmos: &mut Gizmos, half: Vec3, stood: &Transform, colour: Color) {
+    for height in [0.02, half.y * 2.0] {
+        let corner =
+            |x: f32, z: f32| stood.transform_point(Vec3::new(x * half.x, height, z * half.z));
+        outline(
+            gizmos,
+            [
+                corner(-1.0, -1.0),
+                corner(1.0, -1.0),
+                corner(1.0, 1.0),
+                corner(-1.0, 1.0),
+            ],
+            colour,
+        );
+    }
+}
+
+/// The cubes work on the base would touch: blue to build, amber to open or fit, red to take
+/// apart or where it is refused.
+fn outline_touched(gizmos: &mut Gizmos, site: &Site, builder: &Builder) {
+    let Some(planned) = builder.planned.as_ref() else {
+        return;
+    };
+    let colour = match (&planned.work.check, planned.doing) {
+        (Err(_), _) | (_, Doing::TakeApart) => REFUSED_COLOUR,
+        (_, Doing::Fit) => OPENING_COLOUR,
+        _ => BUILD_COLOUR,
+    };
+    let placed = matches!(builder.target, Target::Place { .. });
+    for cube in touched(&planned.work.ops, placed).into_iter().take(400) {
+        let low = cube.as_vec3() * CELL_M;
+        let middle = site.frame.transform_point(low + Vec3::splat(CELL_M * 0.5));
+        gizmos.cube(
+            Transform::from_translation(middle)
+                .with_rotation(site.frame.rotation)
+                .with_scale(Vec3::splat(CELL_M * 1.02)),
+            colour,
+        );
+    }
+}
+
+/// The grid an item is snapping to, drawn on the floor or ground round where it would stand:
+/// tile edges strongly, the steps between them faintly, fading with distance.
+fn snapping_grid(gizmos: &mut Gizmos, site: &Site, planet: &Planet, at: Vec3, indoors: bool) {
+    let reach = 6;
+    let onto = |east: i32, south: i32| {
+        let on_grid = ((at / GRID_M).round() + IVec3::new(east, 0, south).as_vec3()) * GRID_M;
+        let point = site.frame.transform_point(on_grid.with_y(at.y + 0.03));
+        if indoors {
+            point
+        } else {
+            planet.ground_at(point) + point.normalize() * 0.05
+        }
+    };
+    let points: Vec<Vec<Vec3>> = (-reach..=reach)
+        .map(|east| (-reach..=reach).map(|south| onto(east, south)).collect())
+        .collect();
+    // Fainter the further a stretch of line is from the item.
+    let strength = |line: i32, along: i32| {
+        let far = ((line * line + along * along) as f32).sqrt() / reach as f32;
+        (1.0 - far).max(0.0) * 0.9
+    };
+    let tiles_every = (CELL_M / GRID_M).round() as i32;
+    let centre = (at / GRID_M).round().as_ivec3();
+    for line in -reach..=reach {
+        for along in -reach..reach {
+            let (i, j) = ((line + reach) as usize, (along + reach) as usize);
+            let fade = strength(line, along);
+            let weight = |coordinate: i32| {
+                if coordinate.rem_euclid(tiles_every) == 0 {
+                    1.0
+                } else {
+                    0.4
+                }
+            };
+            // A line running south, and one running east.
+            gizmos.line(
+                points[i][j],
+                points[i][j + 1],
+                Color::WHITE.with_alpha(fade * weight(centre.x + line)),
+            );
+            gizmos.line(
+                points[j][i],
+                points[j + 1][i],
+                Color::WHITE.with_alpha(fade * weight(centre.z + line)),
+            );
+        }
+    }
 }
 
 /// The cubes operations on the base would touch, for outlining; none for a whole plan
