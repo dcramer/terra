@@ -36,6 +36,10 @@ Seeding from the main checkout only helped while that checkout had built recentl
 |---|---|
 | The seed built from nothing, all seven builds, other work on the machine | 17 min |
 | A fresh worktree's first `cargo xtask check`, seeded from the main checkout's build (current that day) | 4 min 14 s |
+| Seeding a fresh worktree from the shared seed: 7.3 GB linked, 0.5 GB copied | 3 s |
+| Then its first `cargo xtask check`, which compiled no dependency | 3 min 57 s |
+| `cargo xtask check --quick` (before each commit), built, no change / after editing a test in `terra_build` | 59 s / 75 s |
+| `cargo xtask check` (before each push), built | 1 min 43 s |
 
 ## Claude Code's side
 
