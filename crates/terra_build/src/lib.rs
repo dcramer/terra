@@ -543,6 +543,12 @@ impl Base {
         let column = [at.x, at.z];
         match (old.is_some(), cube.is_some()) {
             (false, true) => {
+                // A column first built on keeps its own ground from then on, as it stands
+                // now, so what holds it never moves with a sample beside it (D367).
+                if !self.columns.contains_key(&column) && self.ground.sample(column).is_none() {
+                    let height = self.ground.height_cm(column);
+                    self.ground.set(column, Some(height));
+                }
                 Arc::make_mut(self.columns.entry(column).or_default()).insert(at.y);
             }
             (true, false) => {

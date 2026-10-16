@@ -676,25 +676,10 @@ impl<'a> Roles<'a> {
     }
 }
 
-/// The ground's height under a column of a base, in ticks of its grid: its sample, or
-/// where it has none (a base keeps samples only under its cubes, D206), the mean of those
-/// beside it, square on before diagonally, or the base's level.
+/// The ground's height under a column of a base, in ticks of its grid, as
+/// `Ground::height_cm` gives it (D367).
 pub fn ground_ticks(base: &Base, column: [i32; 2]) -> i32 {
-    let ground = base.ground();
-    let [x, z] = column;
-    let mean = |offsets: &[[i32; 2]]| {
-        let found: Vec<i32> = offsets
-            .iter()
-            .filter_map(|[dx, dz]| ground.sample([x + dx, z + dz]).map(i32::from))
-            .collect();
-        (!found.is_empty()).then(|| found.iter().sum::<i32>().div_euclid(found.len() as i32))
-    };
-    let cm = ground
-        .sample(column)
-        .map(i32::from)
-        .or_else(|| mean(&[[1, 0], [-1, 0], [0, 1], [0, -1]]))
-        .or_else(|| mean(&[[1, 1], [-1, 1], [1, -1], [-1, -1]]))
-        .unwrap_or(i32::from(crate::ground::LEVEL_CM));
+    let cm = i32::from(base.ground().height_cm(column));
     (cm * TICKS).div_euclid(crate::ground::cube_cm())
 }
 

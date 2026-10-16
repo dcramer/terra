@@ -62,9 +62,28 @@ impl Ground {
         self.heights.get(&column).copied()
     }
 
-    /// The height under a column, in centimetres: its sample, or the base's level.
+    /// The height under a column, in centimetres: its sample, or where it has none the mean
+    /// of those beside it, square on before diagonally, or the base's level. The one answer
+    /// for what holds (`support`, `loss`) and what is dressed (`layout::roles`). A column
+    /// with a cube always has a sample of its own (`Base::put` keeps one as it is first
+    /// built on), so what holds never takes a neighbour's; only the ground beside a
+    /// building, which only dressing asks of, does (D367).
     pub fn height_cm(&self, column: [i32; 2]) -> i16 {
-        self.sample(column).unwrap_or(LEVEL_CM)
+        let [x, z] = column;
+        let mean = |offsets: &[[i32; 2]]| {
+            let (mut sum, mut count) = (0i32, 0i32);
+            for [dx, dz] in offsets {
+                if let Some(height) = self.sample([x + dx, z + dz]) {
+                    sum += i32::from(height);
+                    count += 1;
+                }
+            }
+            (count > 0).then(|| sum.div_euclid(count) as i16)
+        };
+        self.sample(column)
+            .or_else(|| mean(&[[1, 0], [-1, 0], [0, 1], [0, -1]]))
+            .or_else(|| mean(&[[1, 1], [-1, 1], [1, -1], [-1, -1]]))
+            .unwrap_or(LEVEL_CM)
     }
 
     /// Whether the ground reaches a cube: it passes through it, or the cube is below it.
@@ -418,6 +437,72 @@ impl Base {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_column_with_no_sample_takes_its_neighbours_ground() {
+        let mut base = crate::Base::default();
+        base.sample_ground([
+            super::Sample {
+                column: [1, 0],
+                height_cm: -100,
+            },
+            super::Sample {
+                column: [-1, 0],
+                height_cm: -50,
+            },
+            super::Sample {
+                column: [1, -1],
+                height_cm: 400,
+            },
+        ]);
+        let ground = base.ground();
+        // The square neighbours' mean, the diagonal left out while any square one is there.
+        assert_eq!(ground.height_cm([0, 0]), -75);
+        // Only a diagonal one beside it: that one's.
+        assert_eq!(ground.height_cm([2, -2]), 400);
+        // Nothing near: the base's level.
+        assert_eq!(ground.height_cm([9, 9]), super::LEVEL_CM);
+        // What is dressed reads the same ground.
+        assert_eq!(
+            crate::layout::roles::ground_ticks(&base, [0, 0]),
+            -75 * crate::layout::TICKS / super::cube_cm()
+        );
+    }
+
+    #[test]
+    fn a_plan_laid_beside_a_column_does_not_change_its_ground() {
+        use crate::ops::{Context, Op, Planned};
+        let rules = crate::Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = crate::Base::default();
+        // A cube on a column no plan sampled, its ground level as it is first built on.
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(crate::Cube::new(crate::Kind(1), crate::Fill::Solid)),
+        });
+        assert_eq!(base.ground().sample([0, 0]), Some(super::LEVEL_CM));
+        assert!(base.floating().is_empty());
+        // A plan beside it on ground a metre and a half down, square on either side.
+        for x in [-1, 1] {
+            let plan = Op::LayPlan {
+                part: None,
+                kind: crate::Kind(1),
+                cubes: vec![Planned {
+                    at: [x, -3, 0],
+                    shape: crate::Shape::Whole,
+                }],
+                ground: vec![super::Sample {
+                    column: [x, 0],
+                    height_cm: -150,
+                }],
+            };
+            base.act(&plan, &cx).unwrap();
+        }
+        // Its ground is its own, so the cube on it still stands.
+        assert_eq!(base.ground().height_cm([0, 0]), super::LEVEL_CM);
+        assert!(base.floating().is_empty());
+    }
+
     use super::*;
     use crate::{BuildOp, Panel};
 
