@@ -2,7 +2,8 @@
 // shaped as (templates of models/character/templates.json, each mixed with a little of
 // another), and what it wears, each item's main material dyed one of a few colours. Someone's
 // look is drawn from these by their seed, so a role reads at a glance by what it wears and
-// no two people of it are alike. Colours are sRGB: undyed wool and linen, madder, woad,
+// no two people of it are alike: a woman's body (the `female` template) wears `women` where a
+// role gives it, each garment by its `chance`, and of a `group` (a shirt or a coat) one. Colours are sRGB: undyed wool and linen, madder, woad,
 // weld, walnut and oak-gall browns, as a market town's would be.
 #![enable(implicit_some)]
 (
@@ -20,20 +21,35 @@
         "Smith": "hammer",
         "Chop": "iron_axe",
         "Guard": "spear",
+        "Browse": "basket",
     },
     roles: {
         "trader": (
             bodies: ["male", "female", "female", "heavy"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.46, 0.18, 0.12), (0.22, 0.30, 0.46), (0.52, 0.42, 0.20)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.30, 0.26, 0.20), (0.36, 0.33, 0.27)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.46, 0.18, 0.12), (0.22, 0.30, 0.46), (0.52, 0.42, 0.20), (0.32, 0.36, 0.24), (0.40, 0.32, 0.22)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.6),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "bodice", dye: "Wool", colours: [(0.30, 0.26, 0.22), (0.40, 0.34, 0.26), (0.34, 0.38, 0.26), (0.48, 0.22, 0.16), (0.26, 0.30, 0.40)]),
+                (item: "skirt", dye: "Wool", colours: [(0.46, 0.38, 0.28), (0.56, 0.42, 0.22), (0.38, 0.42, 0.28), (0.60, 0.30, 0.18), (0.32, 0.36, 0.46), (0.68, 0.52, 0.22), (0.42, 0.34, 0.30)]),
+                (item: "apron", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.8),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.85),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
             ],
         ),
         "smith": (
             bodies: ["strong", "heavy"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.20, 0.15, 0.11)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.18, 0.17, 0.16)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)]),
+                (item: "smith_apron", dye: "Leather", colours: [(0.26, 0.19, 0.13), (0.32, 0.23, 0.15)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.18, 0.17, 0.16), (0.26, 0.24, 0.20)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.30, 0.28, 0.26), (0.40, 0.33, 0.25)], chance: 0.8),
             ],
         ),
         "guard": (
@@ -41,58 +57,118 @@
             wears: [
                 (item: "leather_coat", dye: "Leather", colours: [(0.30, 0.10, 0.08)]),
                 (item: "trousers", dye: "Cloth", colours: [(0.20, 0.20, 0.22)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
                 (item: "quiver", dye: "Leather", colours: [(0.32, 0.22, 0.14)]),
             ],
         ),
         "woodcutter": (
             bodies: ["strong", "male", "thin"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.30, 0.34, 0.20), (0.36, 0.28, 0.18)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.32, 0.27, 0.19)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.30, 0.34, 0.20), (0.36, 0.28, 0.18)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.7),
             ],
         ),
         "elder": (
             bodies: ["thin", "heavy", "female", "female"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.34, 0.32, 0.30), (0.26, 0.22, 0.30)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.28, 0.27, 0.25)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.34, 0.32, 0.30), (0.26, 0.22, 0.30)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.8),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "bodice", dye: "Wool", colours: [(0.30, 0.26, 0.22), (0.40, 0.34, 0.26), (0.34, 0.38, 0.26), (0.48, 0.22, 0.16), (0.26, 0.30, 0.40)]),
+                (item: "skirt", dye: "Wool", colours: [(0.30, 0.28, 0.26), (0.36, 0.30, 0.26), (0.26, 0.28, 0.32)]),
+                (item: "apron", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.3),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 1.0),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
             ],
         ),
         "washer": (
-            bodies: ["female", "female", "heavy"],
+            bodies: ["female", "female", "female"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.60, 0.55, 0.45), (0.50, 0.30, 0.25)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.48, 0.44, 0.36)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.46, 0.18, 0.12), (0.22, 0.30, 0.46), (0.52, 0.42, 0.20), (0.32, 0.36, 0.24), (0.40, 0.32, 0.22)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.5),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "bodice", dye: "Wool", colours: [(0.30, 0.26, 0.22), (0.40, 0.34, 0.26), (0.34, 0.38, 0.26), (0.48, 0.22, 0.16), (0.26, 0.30, 0.40)]),
+                (item: "skirt", dye: "Wool", colours: [(0.46, 0.38, 0.28), (0.56, 0.42, 0.22), (0.38, 0.42, 0.28), (0.60, 0.30, 0.18), (0.32, 0.36, 0.46), (0.68, 0.52, 0.22), (0.42, 0.34, 0.30)]),
+                (item: "apron", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 1.0),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 1.0),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
             ],
         ),
         "carter": (
             bodies: ["male", "strong", "heavy"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.38, 0.28, 0.17)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.30, 0.27, 0.22)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.38, 0.28, 0.17)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.6),
                 (item: "large_pack", dye: "Pack", colours: [(0.42, 0.36, 0.25)]),
             ],
         ),
         "farmer": (
             bodies: ["male", "female", "strong", "thin", "female"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.42, 0.38, 0.26), (0.32, 0.36, 0.24), (0.44, 0.32, 0.20)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.36, 0.32, 0.24), (0.30, 0.28, 0.23)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.42, 0.38, 0.26), (0.32, 0.36, 0.24), (0.44, 0.32, 0.20)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.6),
                 (item: "small_pack", dye: "Pack", colours: [(0.45, 0.38, 0.26), (0.36, 0.30, 0.22)]),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "bodice", dye: "Wool", colours: [(0.30, 0.26, 0.22), (0.40, 0.34, 0.26), (0.34, 0.38, 0.26), (0.48, 0.22, 0.16), (0.26, 0.30, 0.40)]),
+                (item: "skirt", dye: "Wool", colours: [(0.46, 0.38, 0.28), (0.56, 0.42, 0.22), (0.38, 0.42, 0.28), (0.60, 0.30, 0.18), (0.32, 0.36, 0.46), (0.68, 0.52, 0.22), (0.42, 0.34, 0.30)]),
+                (item: "apron", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.7),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.85),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "small_pack", dye: "Pack", colours: [(0.45, 0.38, 0.26)], chance: 0.4),
             ],
         ),
         "child": (
             bodies: ["thin", "male", "female"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.55, 0.30, 0.20), (0.35, 0.42, 0.55), (0.55, 0.50, 0.30), (0.40, 0.45, 0.30)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.40, 0.36, 0.28)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)]),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)], chance: 0.6),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.3),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "skirt", dye: "Wool", colours: [(0.46, 0.38, 0.28), (0.56, 0.42, 0.22), (0.38, 0.42, 0.28), (0.60, 0.30, 0.18), (0.32, 0.36, 0.46), (0.68, 0.52, 0.22), (0.42, 0.34, 0.30)]),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.5),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)], chance: 0.6),
             ],
         ),
         "townsfolk": (
             bodies: ["male", "female", "female", "heavy", "thin", "strong", "female", "female"],
             wears: [
-                (item: "leather_coat", dye: "Leather", colours: [(0.44, 0.20, 0.14), (0.24, 0.30, 0.42), (0.50, 0.42, 0.24), (0.32, 0.36, 0.24), (0.40, 0.32, 0.22), (0.30, 0.24, 0.30)]),
-                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30)]),
+                (item: "shirt", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.72, 0.68, 0.58), (0.62, 0.56, 0.44), (0.56, 0.60, 0.62)], group: "top"),
+                (item: "leather_coat", dye: "Leather", colours: [(0.46, 0.18, 0.12), (0.22, 0.30, 0.46), (0.52, 0.42, 0.20), (0.32, 0.36, 0.24), (0.40, 0.32, 0.22)], group: "top"),
+                (item: "trousers", dye: "Cloth", colours: [(0.34, 0.30, 0.24), (0.28, 0.26, 0.22), (0.42, 0.38, 0.30), (0.30, 0.32, 0.30)]),
+                (item: "boots", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
+                (item: "cap", dye: "Wool", colours: [(0.40, 0.33, 0.25), (0.46, 0.40, 0.30), (0.36, 0.38, 0.30), (0.50, 0.30, 0.20), (0.30, 0.34, 0.44), (0.62, 0.48, 0.24), (0.44, 0.44, 0.42)], chance: 0.5),
+            ],
+            women: [
+                (item: "shift", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)]),
+                (item: "bodice", dye: "Wool", colours: [(0.30, 0.26, 0.22), (0.40, 0.34, 0.26), (0.34, 0.38, 0.26), (0.48, 0.22, 0.16), (0.26, 0.30, 0.40)]),
+                (item: "skirt", dye: "Wool", colours: [(0.46, 0.38, 0.28), (0.56, 0.42, 0.22), (0.38, 0.42, 0.28), (0.60, 0.30, 0.18), (0.32, 0.36, 0.46), (0.68, 0.52, 0.22), (0.42, 0.34, 0.30)]),
+                (item: "apron", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.6),
+                (item: "coif", dye: "Linen", colours: [(0.80, 0.76, 0.66), (0.74, 0.70, 0.60), (0.84, 0.82, 0.76), (0.70, 0.66, 0.56)], chance: 0.85),
+                (item: "shoes", dye: "Leather", colours: [(0.30, 0.22, 0.16), (0.36, 0.27, 0.18), (0.24, 0.19, 0.15)]),
             ],
         ),
     },

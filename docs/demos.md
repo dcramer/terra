@@ -430,7 +430,7 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
    *Measured at 10:00 by band (`look.ts`): the far land's contrast is 0.33 in the street view and 0.15 in the square's, against `town-market-day`'s 0.32, where the small planet's empty horizon gave 0.10. How far the far land stands under the sky is the reference's down the street (0.48 against 0.48) and less in the square (0.35), where the sunlit range fills it. The sky is a little darker and much less saturated than the reference's (0.60 against 0.69; saturation 0.13 against 0.22), and the near ground is far brighter (0.39 to 0.60 against 0.23), from the pale setts in sun.*
 
 **What remains for the town**, each with what it waits on:
-- **Heads and feet:** every body is bald and barefoot. Hair is the characters plan's phase 5 and the developers' question 3 there; headwear and shoes are garments for the character pipeline.
+- **Hair:** the men bare-headed are bald (caps on half of them, coifs on most women, shoes and boots on all, D365). Hair is the characters plan's phase 5 and the developers' question 3 there.
 - **Goats, dogs and an ox with its cart:** their life is built; their models are Tripo's at about 75 credits each, past the hundred the developers approve.
 - **The people's cost:** the far tier's vertex animation, merged outfits and fewer joints, until `town-day` holds 13.3 ms at the p99 with the crowd.
 - **Things of a town:** chimney stacks on stone and hewn houses; signs and lanterns at the stalls.

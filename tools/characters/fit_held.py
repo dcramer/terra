@@ -9,7 +9,9 @@ hand, positive raises it. Body-independent: a hand socket is the same on every b
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
 
-    tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe torch
+    tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe torch basket
+
+A thing carried hanging by a handle (a market basket, in HUNG) is made from its prop instead.
 
 Reads the tool models in assets/models/tools: free ones (THIRD_PARTY.md), and ours where no
 free one exists, a pickaxe and a torch, made by tools/props standing on their handles; writes
@@ -17,6 +19,7 @@ assets/models/held/<item>.glb, the item named as in the game's catalogue
 in lower case with `_` for spaces. Each item's numbers are in TOOLS.
 """
 
+import math
 import os
 import sys
 
@@ -48,6 +51,14 @@ TOOLS = {
     "torch": ("Torch.glb", 0.55, 0.1, None, 35),
 }
 
+# Things carried hanging from the hand by a handle over their top, as a basket is, from the
+# props in assets/models/props (tools/props): the prop, and how far out from the leg it hangs.
+# The hand's socket in a hanging arm has +Z up the arm, +Y forward and +X out from the body,
+# so the thing hangs down -Z from its handle's top, its long way forward along +Y.
+HUNG = {
+    "basket": ("MarketBasket.glb", 0.05),
+}
+
 
 # The free models' material names, by the role each part plays.
 ROLES = {"DarkWood": "Wood", "LightWood": "Wood", "Steel": "Metal", "LightSteel": "Metal", "Grey": "Metal",
@@ -68,8 +79,43 @@ def one(objects, name):
     return ob
 
 
+def hung(item):
+    """A thing hung from the hand by its handle: its handle's top at the origin, its long way
+    along glTF's +Y and its top up glTF's +Z (Blender's -Y), its own materials kept."""
+    source, out = HUNG[item]
+    look.reset()
+    bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, "props", source))
+    objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    for o in list(bpy.context.scene.objects):
+        if o.type != "MESH":
+            bpy.data.objects.remove(o)
+    ob = one(objects, item)
+    pts = [ob.matrix_world @ v.co for v in ob.data.vertices]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    # The handle's top, the middle of what is within 2 cm of the highest point; gripped a
+    # finger's width below it.
+    top = [p for p in pts if p.z > hi.z - 0.02]
+    grip = sum(top, Vector()) / len(top) - Vector((0, 0, 0.015))
+    # Blender's model: up +Z, its long way along X (glTF's), its front -Y. Its long way turned
+    # to Blender's Y, then the whole tipped so up is Blender's -Y (glTF's +Z) and Y Blender's Z.
+    long_y = Matrix.Rotation(math.radians(90), 4, "Z") if hi.x - lo.x > hi.y - lo.y else Matrix()
+    tip = Matrix.Rotation(math.radians(90), 4, "X")
+    ob.data.transform(Matrix.Translation((out, 0, 0)) @ tip @ long_y @ Matrix.Translation(-grip))
+    ob["carry_tilt"] = 0
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    path = os.path.join(OUT, f"{item}.glb")
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True,
+                              export_image_format="JPEG", export_jpeg_quality=85)
+    print("HELD", item, f"hung from its handle, {out} m out from the leg")
+
+
 os.makedirs(OUT, exist_ok=True)
 for item in look.args():
+    if item in HUNG:
+        hung(item)
+        continue
     source, length, held_from_end, head, carry_tilt = TOOLS[item]
     look.reset()
     bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, "tools", source))

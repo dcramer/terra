@@ -16,8 +16,22 @@ made by Tripo, as one outer surface. This:
 
     tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-outfit/model.glb leather_coat Leather chest
 
+        [--shape=MORPH] [--over=ITEM,...] [--under=ITEM,...]
+
 The slot (D64) says where on the body the piece can be: a chest piece never reaches the thighs,
 whatever colour Tripo gave the dressed model's shorts.
+
+--shape=MORPH: the dressed model is of a morph of the base (the female, drawn from her own
+sheet): the piece is built on the base's skin moved by that morph (tools/characters/out/
+MORPH.npz), lined up with and baked from the model there, then taken back off, so the game's file
+is the base's like every other and carry_gear.py puts the morph back.
+--over=ITEM: worn over pieces made before (a bodice over a shift, boots over trousers): it
+stands at least OVER_M outside them wherever it covers them, so the two layers never cross.
+--under=ITEM: where those pieces, made from the same dressed model, cover this one (a shirt
+under a smith's apron), it keeps to the skin and its colour is taken from the other side of the
+body, front for back, so it does not wear the other piece painted on it.
+--plain: it is one plain cloth (a linen shirt): whatever the dressed model paints on it much
+lighter or darker than most of it (another piece's strap or tie) is filled from round it.
 
 Writes tools/characters/out/gear/<body>/<item>.glb (look.GEAR_MADE) and prints SHELL lines.
 """
@@ -61,6 +75,8 @@ TAPER_M = 0.02         # over this far in from its edge above the waist, the pie
                        # to OFFSET_M, so an armhole or neckline lies on the body as a real one does
 RIM_M = 0.0015         # the rim turned in from the edge stops this far off the skin
 COVERED = 1.0          # a patch wholly under the piece is hidden; part-covered ones stay, or a band of skin vanishes below a hem or rim
+OVER_M = 0.004         # a piece worn over another stands at least this far outside it
+UNDER_M = 0.12         # another piece this far out from the skin covers this one
 # What each kind of piece covers: the bones whose skin it covers, and the heights of its
 # hems, as shares of the way from one joint to the next (0 at the first, 1 at the second):
 # a chest piece's hem from the hips joint toward the knee, a sleeve from the shoulder toward
@@ -75,11 +91,28 @@ COVERAGE = {
     "feet": {"bones": ("foot_", "ball_"), "hem": None},
     # A cap: the crown, down this share of the way from the top of the head to the neck.
     "head_cap": {"bones": ("Head",), "hem": None, "crown": 0.45},
+    # A coif or hood: the crown down to the hairline at the front, over the ears at the sides
+    # and to the nape at the back (`nape`, the share at the back), the face left open.
+    "head_coif": {"bones": ("Head",), "hem": None, "crown": 0.3, "nape": 0.95},
+    # A shirt tucked in, its hem at the hips joint.
+    "chest_long_sleeves_tucked": {"bones": ("spine_", "clavicle_", "pelvis", "upperarm_", "lowerarm_"), "hem": 0.0},
+    # A bodice: the body from the hips to a scoop neckline, with straps over the shoulders and
+    # armholes cut round them (`neckline`: how far below the neck joint the scoop falls at the
+    # front and at the back; `straps`: how far from the middle a strap starts and ends, in
+    # metres on the base).
+    "bodice": {"bones": ("spine_", "clavicle_", "pelvis"), "hem": 0.0, "neckline": (0.17, 0.11), "straps": (0.075, 0.125)},
+    # Shoes to the ankle, boots up their shaft: `shaft`, the share of the way from the ankle to
+    # the knee they reach.
+    "feet_ankle": {"bones": ("foot_", "ball_", "calf_"), "hem": None, "shaft": 0.3},
 }
 
-body_path, dressed_path, item, role, coverage = (look.args() + ["Cloth", "chest_sleeveless"])[:5]
+options, given = skin_piece.flags(look.args())
+body_path, dressed_path, item, role, coverage = (given + ["Cloth", "chest_sleeveless"])[:5]
 COVER = COVERAGE[coverage]
 body_name = look.body_name(body_path)
+SHAPE = options.get("shape") or None
+OVER = [x for x in options.get("over", "").split(",") if x]
+UNDER = [x for x in options.get("under", "").split(",") if x]
 
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))
@@ -100,6 +133,16 @@ bpy.ops.mesh.remove_doubles(threshold=1e-5)
 bpy.ops.object.mode_set(mode="OBJECT")
 patch_of = patches.of(body) or {}
 mw = body.matrix_world
+# The base's skin, where what the piece covers is said; and, for a morph's dressed model, the
+# skin moved by that morph, where the piece is built and baked.
+base_pts = [mw @ v.co for v in body.data.vertices]
+base_np = np.array([tuple(p) for p in base_pts])
+delta = skin_piece.morph_delta(SHAPE, base_np)
+if SHAPE:
+    inv_mw = mw.inverted()
+    for v in body.data.vertices:
+        v.co = inv_mw @ (base_pts[v.index] + Vector(delta[v.index]))
+    body.data.update()
 skin_pts = [mw @ v.co for v in body.data.vertices]
 skin_nrm = [(mw.to_3x3() @ v.normal).normalized() for v in body.data.vertices]
 skin = BVHTree.FromPolygons(skin_pts, [tuple(p.vertices) for p in body.data.polygons])
@@ -134,6 +177,9 @@ def colour_at(ob, pixels, face_index, point):
 
 
 dressed_image, dressed_pixels = image_of(dressed)
+# What it is worn over and under, as they stand on this skin.
+over_trees = [skin_piece.made(body_name, o, base_np, delta)[0] for o in OVER]
+under_trees = [skin_piece.made(body_name, u, base_np, delta)[0] for u in UNDER]
 
 # 2. Mark the skin the piece covers, by its coverage; and how far the dressed surface stands
 # off it there, for the piece's bulk.
@@ -160,23 +206,67 @@ LIMBS = ("upperarm_", "lowerarm_", "thigh_", "calf_", "hand_", "foot_", "Head", 
 # A piece with a hem goes down as far as its hem, whatever moves the skin there.
 uncovered_limbs = tuple(b for b in LIMBS if not b.startswith(COVER["bones"])
                         and not (COVER["hem"] is not None and b == "thigh_"))
-head_top = max(p.z for p in skin_pts)
+head_top = max(p.z for p in base_pts)
 neck = joint("neck_01").z if "neck_01" in arm.data.bones else head_top - 0.3
-crown_z = head_top - (head_top - neck) * COVER["crown"] if COVER.get("crown") else -math.inf
+head_y = joint("Head").y
+middle_x = joint("pelvis").x
+
+
+def crown_z(p):
+    """How low a piece on the head reaches at the base's skin point `p`: its crown share at the
+    front, its nape share at the back (+Y), blended across the head."""
+    if not COVER.get("crown"):
+        return -math.inf
+    back = COVER.get("nape", COVER["crown"])
+    t = min(1.0, max(0.0, (p.y - head_y + 0.09) / 0.18))
+    share = COVER["crown"] + (back - COVER["crown"]) * t * t * (3 - 2 * t)
+    return head_top - (head_top - neck) * share
+
+
+ankle = (joint("foot_l").z + joint("foot_r").z) / 2
+shaft_z = ankle + (knee - ankle) * COVER["shaft"] if COVER.get("shaft") else -math.inf
+shoulder_z = (joint("clavicle_l").z + joint("clavicle_r").z) / 2
+
+
+def cut_away(p):
+    """Whether a bodice's neckline or armholes leave the base's skin point `p` bare."""
+    if not COVER.get("neckline"):
+        return False
+    front, back = COVER["neckline"]
+    inner, outer = COVER["straps"]
+    x = abs(p.x - middle_x)
+    if x > outer:
+        return p.z > shoulder_z - 0.09
+    if x < inner:
+        return p.z > neck - (front if p.y < joint("spine_03").y else back)
+    return False
+
+
+least = np.zeros(len(skin_pts))   # how far out it must stand, over what it is worn over
+hidden = np.zeros(len(skin_pts))  # 1 where a piece made from the same model covers it
 for i, v in enumerate(body.data.vertices):
     bone = main_bone(v)
-    if skin_pts[i].z < crown_z:
+    b = base_pts[i]
+    if b.z < crown_z(b) or cut_away(b):
         continue
-    covered = bone.startswith(COVER["bones"]) or (COVER["hem"] is not None and bone.startswith("thigh_") and skin_pts[i].z > hem_z)
-    if not covered or (bone.startswith("pelvis") and skin_pts[i].z < hem_z):
+    covered = bone.startswith(COVER["bones"]) or (COVER["hem"] is not None and bone.startswith("thigh_") and b.z > hem_z)
+    if not covered or (bone.startswith("pelvis") and b.z < hem_z):
+        continue
+    if bone.startswith("calf_") and b.z > shaft_z:
         continue
     if any(groups.get(g.group, "").startswith(uncovered_limbs) and g.weight > LIMB_SHARE for g in v.groups):
         continue
     mark[i] = 1.0
     p, n = skin_pts[i], skin_nrm[i]
+    # Under another piece it keeps to the skin: the dressed surface there is the other piece's.
+    hidden[i] = float(any(tree.ray_cast(p + n * 0.001, n, UNDER_M)[0] is not None for tree in under_trees))
     hit = dressed_tree.ray_cast(p - n * LOOK_M, n, 2 * LOOK_M)
-    if hit[0] is not None:
+    if hit[0] is not None and not hidden[i]:
         stand[i] = max(0.0, (hit[0] - p).dot(n))
+    for tree in over_trees:
+        found = tree.ray_cast(p - n * 0.002, n, LOOK_M + 0.002)
+        if found[0] is not None:
+            least[i] = max(least[i], (found[0] - p).dot(n) + OVER_M)
 print("SHELL", item, coverage, f"marks {int(mark.sum())} of {len(mark)} vertices")
 edges = np.array([tuple(e.vertices) for e in body.data.edges])
 for _ in range(SMOOTH_ROUNDS):
@@ -241,6 +331,9 @@ stand_l = bm.verts.layers.float.new("stand")
 normal_l = [bm.verts.layers.float.new(f"normal_{k}") for k in "xyz"]
 body_l = bm.verts.layers.int.new("body_vertex")
 field_l = bm.verts.layers.float.new("field")
+least_l = bm.verts.layers.float.new("least")
+hidden_l = bm.verts.layers.float.new("hidden")
+delta_l = [bm.verts.layers.float.new(f"delta_{k}") for k in "xyz"]
 field = np.array([sum(marked[f.index] for f in v.link_faces) / max(1, len(v.link_faces)) for v in bm.verts])
 for _ in range(CUT_SMOOTH_ROUNDS):
     total, count = np.zeros(len(field)), np.zeros(len(field))
@@ -255,6 +348,10 @@ for v in bm.verts:
         v[normal_l[k]] = skin_nrm[v.index][k]
     v[body_l] = v.index
     v[field_l] = field[v.index]
+    v[least_l] = least[v.index]
+    v[hidden_l] = hidden[v.index]
+    for k in range(3):
+        v[delta_l[k]] = delta[v.index][k]
 for v in skin_piece.cut(bm, field_l, 0.5, CUT_CLEAR):
     v[body_l] = -1
 # The edge evened out along itself, each round put back on the skin.
@@ -279,9 +376,13 @@ def layer(name):
 
 piece_stand = layer("stand")
 piece_normal = np.stack([layer(f"normal_{k}") for k in "xyz"], axis=1)
+piece_least = layer("least")
+piece_delta = np.stack([layer(f"delta_{k}") for k in "xyz"], axis=1)
 under = {int(i) for i in layer("body_vertex") if i >= 0}
-for name in ("stand", "normal_x", "normal_y", "normal_z", "body_vertex", "field"):
+for name in ("stand", "normal_x", "normal_y", "normal_z", "body_vertex", "field", "least", "delta_x", "delta_y", "delta_z"):
     attrs.remove(attrs[name])
+if not UNDER:
+    attrs.remove(attrs["hidden"])
 on_skin = [mw @ v.co for v in piece.data.vertices]
 normals = [Vector(n).normalized() for n in piece_normal]
 # How far each vertex is from the piece's edge, along the piece.
@@ -312,11 +413,14 @@ inv = mw.inverted()
 waist = joint("spine_01").z
 for v in piece.data.vertices:
     i = v.index
-    most = CROSSED_M if on_skin[i].z > waist else BULK_M
-    out = min(max(OFFSET_M, piece_stand[i] + 0.004), most)
+    # Over another piece: never nearer the skin than it, its edge lying on it, not the skin.
+    lowest = max(OFFSET_M, float(piece_least[i]))
+    above = on_skin[i].z - piece_delta[i][2] > waist
+    most = max(CROSSED_M if above else BULK_M, lowest)
+    out = min(max(lowest, piece_stand[i] + 0.004), most)
     # Above the waist only: an armhole or a neckline lies on the body, a hem hangs free.
-    t = min(1.0, from_edge.get(i, math.inf) / TAPER_M) if on_skin[i].z > waist else 1.0
-    out = OFFSET_M + (out - OFFSET_M) * t * t * (3 - 2 * t)
+    t = min(1.0, from_edge.get(i, math.inf) / TAPER_M) if above else 1.0
+    out = lowest + (out - lowest) * t * t * (3 - 2 * t)
     v.co = inv @ (on_skin[i] + normals[i] * out)
 piece.data.update()
 
@@ -348,10 +452,18 @@ print(f"SHELL {item} draped: {sum((placed[i] - on_skin[i]).dot(normals[i]) for i
 # 4. Weights: the vertex groups came with the copy of the body, so each vertex keeps its own.
 
 # 5. Its colour, surface and roughness, baked from the dressed model onto a new unwrap.
-skin_piece.bake(piece, dressed, item, role, TEXTURE, LOOK_M)
+skin_piece.bake(piece, dressed, item, role, TEXTURE, LOOK_M, under="hidden" if UNDER else None, plain="plain" in options)
+if UNDER:
+    attrs.remove(attrs["hidden"])
+
+# Built on a morph's skin, taken back onto the base's, as every look is kept.
+if SHAPE:
+    for v in piece.data.vertices:
+        v.co = inv @ (placed[v.index] - Vector(piece_delta[v.index]))
+    piece.data.update()
 
 # A rim turned in from the edge to just off the skin.
-skin_piece.rim(piece, lambda i: inv @ (on_skin[i] + normals[i] * RIM_M))
+skin_piece.rim(piece, lambda i: inv @ (on_skin[i] - Vector(piece_delta[i]) + normals[i] * RIM_M))
 
 # The patches it hides.
 covered_by = {}

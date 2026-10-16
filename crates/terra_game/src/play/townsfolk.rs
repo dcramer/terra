@@ -31,19 +31,53 @@ const HIPS_ABOVE_SEAT_M: f32 = 0.08;
 /// A log's top, where someone sits on it as a bench.
 const LOG_TOP_M: f32 = 0.45;
 
-/// A role's look: the bodies it is shaped as, and what it wears.
+/// A role's look: the bodies it is shaped as, and what it wears; on a woman's body (the
+/// `female` template), what `women` says, where it says anything.
 #[derive(Deserialize, Clone, Debug)]
 struct Look {
     bodies: Vec<String>,
     wears: Vec<Garment>,
+    #[serde(default)]
+    women: Vec<Garment>,
 }
 
-/// Something worn, by item id, its main material's role, and the colours it is dyed.
+/// Something worn, by item id, its main material's role, and the colours it is dyed; how
+/// likely someone of the role is to wear it, and the group of things only one of which is
+/// worn (a coat or a shirt), each by their seed.
 #[derive(Deserialize, Clone, Debug)]
 struct Garment {
     item: String,
     dye: String,
     colours: Vec<(f32, f32, f32)>,
+    #[serde(default = "always")]
+    chance: f32,
+    #[serde(default)]
+    group: Option<String>,
+}
+
+fn always() -> f32 {
+    1.0
+}
+
+/// What someone wears of a list, by their seed: each garment by its chance, and of each
+/// group the one their seed draws.
+fn worn(list: &[Garment], seed: u32) -> Vec<(usize, &Garment)> {
+    list.iter()
+        .enumerate()
+        .filter(|&(n, garment)| {
+            if draw(seed, 40 + n as u32) >= garment.chance {
+                return false;
+            }
+            let Some(group) = &garment.group else {
+                return true;
+            };
+            let members: Vec<usize> = (0..list.len())
+                .filter(|&m| list[m].group.as_ref() == Some(group))
+                .collect();
+            let pick = (draw(seed, 60) * members.len() as f32) as usize;
+            members.get(pick.min(members.len() - 1)) == Some(&n)
+        })
+        .collect()
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -311,10 +345,13 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
             }
         }
         shape.height = person.scale;
-        let wears: Vec<character::Clothing> = look
-            .wears
-            .iter()
-            .enumerate()
+        let list = if first == "female" && !look.women.is_empty() {
+            &look.women
+        } else {
+            &look.wears
+        };
+        let wears: Vec<character::Clothing> = worn(list, seed)
+            .into_iter()
             .map(|(n, garment)| {
                 let (r, g, b) = pick(&garment.colours, draw(seed, 10 + n as u32))
                     .copied()
@@ -716,6 +753,41 @@ mod tests {
     }
 
     #[test]
+    fn of_a_group_one_is_worn_and_each_by_its_chance() {
+        let garment = |item: &str, chance: f32, group: Option<&str>| Garment {
+            item: item.into(),
+            dye: "Cloth".into(),
+            colours: vec![(0.5, 0.5, 0.5)],
+            chance,
+            group: group.map(Into::into),
+        };
+        let list = [
+            garment("shirt", 1.0, Some("top")),
+            garment("leather_coat", 1.0, Some("top")),
+            garment("trousers", 1.0, None),
+            garment("cap", 0.0, None),
+        ];
+        let mut coats = 0;
+        for seed in 0..200 {
+            let items: Vec<&str> = worn(&list, seed)
+                .iter()
+                .map(|(_, g)| g.item.as_str())
+                .collect();
+            let tops = items
+                .iter()
+                .filter(|i| ["shirt", "leather_coat"].contains(i))
+                .count();
+            assert_eq!(tops, 1, "{items:?}");
+            assert!(
+                items.contains(&"trousers") && !items.contains(&"cap"),
+                "{items:?}"
+            );
+            coats += items.contains(&"leather_coat") as usize;
+        }
+        assert!((60..140).contains(&coats), "{coats} of 200 in a coat");
+    }
+
+    #[test]
     fn every_role_in_the_plan_has_a_look_of_garments_there_are() {
         let looks: Looks = ron::from_str(
             &std::fs::read_to_string(crate::model_files::asset("data/townsfolk.ron")).unwrap(),
@@ -741,7 +813,7 @@ mod tests {
             for body in &look.bodies {
                 assert!(appearance::Appearance::template(body).is_some(), "{body}");
             }
-            for garment in &look.wears {
+            for garment in look.wears.iter().chain(&look.women) {
                 let file = character::look(&garment.item);
                 assert!(
                     crate::model_files::asset(&file).exists(),

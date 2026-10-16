@@ -28,11 +28,25 @@ cd "$root"
 blender=tools/blender/run.sh here=tools/characters out=tools/characters/out
 base=base-male
 
-# Worn looks made on the base: item, how it is made, and what it is made from.
+# Worn looks made on the base: item, its main material's role, how it is made (a coverage of
+# shell_garment.py, or a kind of hung_garment.py for what hangs: a skirt, an apron), what it is
+# made from, and its options, in order, since a piece worn over another is made after it.
+# `--shape=female`: made from a dressed model of the female (her morph's offsets, from step 2).
 garments=(
   "leather_coat Leather chest_long_sleeves art/gear/dressed-male-outfit/model.glb"
   "trousers Cloth legs_long art/gear/dressed-male-outfit/model.glb"
+  "smith_apron Leather smith_apron art/gear/dressed-male-smith/model.glb --over=trousers"
+  "shirt Linen chest_long_sleeves_tucked art/gear/dressed-male-smith/model.glb --over=trousers --under=smith_apron --plain"
+  "cap Wool head_cap art/gear/dressed-male-smith/model.glb --plain"
+  "boots Leather feet_ankle art/gear/dressed-male-smith/model.glb --over=trousers"
+  "shift Linen chest_long_sleeves art/gear/dressed-female-kirtle/model.glb --shape=female --plain"
+  "bodice Wool bodice art/gear/dressed-female-kirtle/model.glb --shape=female --over=shift --plain"
+  "coif Linen head_coif art/gear/dressed-female-kirtle/model.glb --shape=female --plain"
+  "shoes Leather feet art/gear/dressed-female-kirtle/model.glb --shape=female"
+  "skirt Wool skirt art/gear/dressed-female-kirtle/model.glb --shape=female --over=shift,bodice --plain"
+  "apron Linen apron art/gear/dressed-female-kirtle/model.glb --shape=female --over=skirt,shift,bodice"
 )
+hung=(skirt apron smith_apron)
 rigid=(small_pack large_pack quiver)
 # Morphs: a design kept in art/characters/base-male/morphs/NAME/model.glb, or a rigged body.
 designed=(heavy thin strong)
@@ -51,9 +65,24 @@ echo "== 1. the base"
 $here/finish_character.sh $base 1.80
 
 echo "== 2. its gear"
+# A piece drawn on the female needs her morph's offsets first: her body registered onto the
+# base (make_morph.sh does it again in step 3, with every look carried onto her).
+if printf "%s\n" "${garments[@]}" | grep -q -- "--shape=female"; then
+  for r in "${rigged[@]}"; do
+    read -r m body height <<<"$r"
+    [[ $m == female ]] || continue
+    $here/finish_character.sh "$body" "$height" > "$out/build-$m-shape.log" 2>&1
+    $blender $here/morph.py "$out/$base-game.glb" "$out/$body-game.glb" "$m" | grep -E "^MORPH|Error" || true
+  done
+fi
 for g in "${garments[@]}"; do
-  read -r item role coverage dressed <<<"$g"
-  $blender $here/shell_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" | grep -E "^SHELL .*hides|EXPORTED|Error" || true
+  read -r item role coverage dressed flags <<<"$g"
+  # shellcheck disable=SC2086
+  if printf "%s\n" "${hung[@]}" | grep -qx "$coverage"; then
+    $blender $here/hung_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" ${flags:-} | grep -E "^HUNG .*(hides|vertices)|EXPORTED|Error" || true
+  else
+    $blender $here/shell_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" ${flags:-} | grep -E "^SHELL .*hides|EXPORTED|Error" || true
+  fi
 done
 $blender $here/fit_gear.py "$out/$base-game.glb" "${rigid[@]}" | grep -E "^FIT|FITTED|Error" || true
 # The base is fixed as a morph is (make_morph.sh): its looks carried onto it, pushed clear

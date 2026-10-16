@@ -40,6 +40,7 @@ from mathutils import Vector
 from mathutils.kdtree import KDTree
 
 import look
+import skin_piece
 
 base_path, look_path, out_path = look.args()[:3]
 rest = [a for a in look.args()[3:]]
@@ -160,6 +161,10 @@ def carried(o, delta):
     """How far each vertex of `o` moves under the base's morph `delta` (world space)."""
     mw = o.matrix_world
     P = np.array([tuple(mw @ v.co) for v in o.data.vertices])
+    if o.get("hung"):
+        # A skirt or apron hangs off the skin (hung_garment.py): it moves as the skin round it
+        # does, evened out over it, so its hem does not tear between the shins.
+        return skin_piece.follow(P, V, delta, [tuple(e.vertices) for e in o.data.edges])
     near = [kd.find(Vector(p)) for p in P]
     dist = np.array([n[2] for n in near])
     under = np.array([n[1] for n in near])

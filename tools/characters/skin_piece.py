@@ -15,11 +15,107 @@ their edge, so a piece keeps moving as the skin under it does.
 """
 
 import math
+import os
 
 import bmesh
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
+
+import look
+
+
+def flags(argv):
+    """A script's `--name=value` options, by name, and its other arguments in order."""
+    named = {a[2:].split("=", 1)[0]: (a.split("=", 1)[1] if "=" in a else "") for a in argv if a.startswith("--")}
+    return named, [a for a in argv if not a.startswith("--")]
+
+
+def kd_of(points):
+    tree = KDTree(len(points))
+    for i, p in enumerate(points):
+        tree.insert(Vector(p), i)
+    tree.balance()
+    return tree
+
+
+def morph_delta(name, points):
+    """The morph `name` (tools/characters/out/NAME.npz, make_morph.sh) at each of `points`, the
+    base body's skin in world space, matched by position as carry_gear.py matches it; nothing
+    moves for no morph. A piece is drawn for a morph (a skirt on the female) by building it on
+    the base's skin moved by this, then taking it back off (`follow`)."""
+    points = np.asarray(points, dtype=np.float64)
+    if not name:
+        return np.zeros_like(points)
+    with np.load(os.path.join(look.OUT, f"{name}.npz")) as data:
+        at, delta = data["points"], data["delta"]
+    tree = kd_of(at)
+    return delta[[tree.find(Vector(p))[1] for p in points]]
+
+
+def follow(P, V, delta, edges=None, near=12, rounds=8):
+    """How far each of the points `P` moves when the skin `V` moves by `delta`: as the skin near
+    it moves, the `near` nearest skin points weighted by closeness, then evened out along the
+    piece's `edges`. For a piece that hangs off the skin, such as a skirt, whose hem is nearest
+    now one shin and now the other: taken vertex by vertex from the one skin point nearest, the
+    hem would tear between them."""
+    P = np.asarray(P, dtype=np.float64)
+    tree = kd_of(V)
+    moved = np.zeros_like(P)
+    for i, p in enumerate(P):
+        found = tree.find_n(Vector(p), near)
+        w = np.array([1.0 / max(d, 1e-3) for _, _, d in found])
+        moved[i] = (delta[[j for _, j, _ in found]] * w[:, None]).sum(axis=0) / w.sum()
+    if edges is not None and len(edges):
+        edges = np.asarray(edges)
+        for _ in range(rounds):
+            total, count = moved.copy(), np.ones(len(P))
+            np.add.at(total, edges[:, 0], moved[edges[:, 1]])
+            np.add.at(total, edges[:, 1], moved[edges[:, 0]])
+            np.add.at(count, edges[:, 0], 1)
+            np.add.at(count, edges[:, 1], 1)
+            moved = total / count[:, None]
+    return moved
+
+
+def made(body_name, item, V=None, delta=None):
+    """A piece made on this body before (tools/characters/out/gear/BODY/ITEM.glb) as a BVH tree
+    and its points, world space, for what is made over or under it; moved with the skin `V` by a
+    morph's `delta` when given. Nothing of it is left in the scene."""
+    before = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(look.GEAR_MADE, body_name, f"{item}.glb"))
+    new = [o for o in bpy.context.scene.objects if o not in before]
+    pts, faces = [], []
+    for o in new:
+        # Its skinned meshes: the importer also makes shapes to draw the bones with.
+        if o.type != "MESH" or not any(m.type == "ARMATURE" for m in o.modifiers):
+            continue
+        base = len(pts)
+        pts += [tuple(o.matrix_world @ v.co) for v in o.data.vertices]
+        faces += [tuple(base + i for i in p.vertices) for p in o.data.polygons]
+    for o in new:
+        bpy.data.objects.remove(o)
+    pts = np.array(pts)
+    if delta is not None and delta.any():
+        tree = kd_of(V)
+        pts = pts + delta[[tree.find(Vector(p))[1] for p in pts]]
+    return BVHTree.FromPolygons([Vector(p) for p in pts], faces), pts
+
+
+def mirrored(source):
+    """A copy of `source` turned front to back (its Y negated), its faces kept facing out: where
+    a piece is covered by another made from the same dressed model (a shirt under a smith's
+    apron), its own colour is taken from the other side of the body, where nothing covers it."""
+    copy = source.copy()
+    copy.data = source.data.copy()
+    copy.name = source.name + "_mirrored"
+    bpy.context.scene.collection.objects.link(copy)
+    copy.data.transform(Matrix.Scale(-1, 4, (0, 1, 0)))
+    copy.data.flip_normals()
+    copy.data.update()
+    return copy
 
 
 def line_up(path, skin, top, match):
@@ -140,11 +236,13 @@ def fill_gaps(image, mask):
 # How rough each material is at least, on average over its piece: generated models make leather
 # and cloth glossier than worn ones, and a glossy dark garment mirrors the sky (blue, then purple
 # under the game's grade) wherever it is seen. Each is lifted toward 1 as a whole, keeping its grain.
-ROUGHNESS = {"Leather": 0.7, "Cloth": 0.85, "Harness": 0.7}
+ROUGHNESS = {"Leather": 0.7, "Cloth": 0.85, "Harness": 0.7, "Linen": 0.85, "Wool": 0.9}
 # The colour each material is graded to on average, in sRGB, its variation kept: leather a dark,
 # muted brown, little saturated, which stays brown in the forest's shade, where a redder or more
 # saturated one turned mauve and an ochre one read as suede in the sun (D329).
 GRADE = {"Leather": (0.30, 0.24, 0.19)}
+# A plain cloth's texture is its own within this of its hue, and this share of its lightness (`bake`, plain).
+PLAIN = (0.06, 0.5, 1.6)
 
 
 def grade(image, mask, target):
@@ -176,21 +274,38 @@ def roughen(image, mask, least):
     return mean, least
 
 
-def bake(piece, source, name, role, size, reach):
+def _pixels(image):
+    w, h = image.size
+    px = np.empty(w * h * 4, np.float32)
+    image.pixels.foreach_get(px)
+    return px.reshape(h, w, 4)
+
+
+def bake(piece, source, name, role, size, reach, under=None, plain=False, unwrap=True, behind=None):
     """Gives `piece` a new unwrap and a material named `role`, its colour, normals and roughness
     baked from `source` (a model of the base person wearing it, lined up with the body) at
-    `size` pixels, looking `reach` out and in from the piece. Returns the material."""
-    for layer in list(piece.data.uv_layers):
-        piece.data.uv_layers.remove(layer)
-    piece.data.uv_layers.new(name="UVMap")
-    bpy.ops.object.select_all(action="DESELECT")
-    piece.select_set(True)
-    bpy.context.view_layer.objects.active = piece
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    with bpy.context.temp_override(active_object=piece, object=piece, edit_object=piece):
-        bpy.ops.uv.smart_project(island_margin=0.01)
-    bpy.ops.object.mode_set(mode="OBJECT")
+    `size` pixels, looking `reach` out and in from the piece. Returns the material. With
+    `unwrap` false it keeps the unwrap the piece has (a hung skirt's, laid out as its grid);
+    `behind`, for such an unwrap, gives the texture column on the other side of the body from
+    a column (0 to 1), where a plain cloth's covered part is taken from before any patch.
+
+    `under` names a float attribute on the piece's vertices, 1 where something else made from
+    the same model covers it (a skirt under an apron): there each map is baked from the model
+    turned front to back (`mirrored`), so the piece shows its own cloth there and not the
+    other piece's, blended across the attribute's edge. `plain`: the piece is one plain cloth,
+    so what the model paints on it far from the colour of most of it is refilled (PLAIN)."""
+    if unwrap:
+        for layer in list(piece.data.uv_layers):
+            piece.data.uv_layers.remove(layer)
+        piece.data.uv_layers.new(name="UVMap")
+        bpy.ops.object.select_all(action="DESELECT")
+        piece.select_set(True)
+        bpy.context.view_layer.objects.active = piece
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        with bpy.context.temp_override(active_object=piece, object=piece, edit_object=piece):
+            bpy.ops.uv.smart_project(island_margin=0.01)
+        bpy.ops.object.mode_set(mode="OBJECT")
     colour = blank(f"{name}_colour", size)
     mat = bpy.data.materials.new(role)
     mat.use_nodes = True
@@ -209,17 +324,118 @@ def bake(piece, source, name, role, size, reach):
     scene.cycles.samples = 1
     scene.render.bake.use_pass_direct = False
     scene.render.bake.use_pass_indirect = False
-    scene.render.bake.use_selected_to_active = True
     scene.render.bake.cage_extrusion = 2 * reach
     scene.render.bake.max_ray_distance = 4 * reach
     scene.render.bake.margin = 16
-    bpy.ops.object.select_all(action="DESELECT")
-    source.select_set(True)
-    piece.select_set(True)
-    bpy.context.view_layer.objects.active = piece
-    bpy.ops.object.bake(type="DIFFUSE")
-    written = baked(colour)
+    mirror = mirrored(source) if under else None
+    share = None
+    if under:
+        # Where the piece is covered, as an image on its unwrap: the attribute baked as light.
+        mask = blank(f"{name}_under", size, data=True)
+        node = nodes.new("ShaderNodeTexImage")
+        node.image = mask
+        nodes.active = node
+        attr = nodes.new("ShaderNodeAttribute")
+        attr.attribute_name = under
+        link = mat.node_tree.links.new(attr.outputs["Fac"], bsdf.inputs["Emission Color"])
+        bsdf.inputs["Emission Strength"].default_value = 1.0
+        scene.render.bake.use_selected_to_active = False
+        bpy.ops.object.select_all(action="DESELECT")
+        piece.select_set(True)
+        bpy.context.view_layer.objects.active = piece
+        bpy.ops.object.bake(type="EMIT")
+        share = np.clip(_pixels(mask)[..., 0], 0.0, 1.0)
+        mat.node_tree.links.remove(link)
+        bsdf.inputs["Emission Strength"].default_value = 0.0
+        nodes.remove(attr)
+        nodes.remove(node)
+        bpy.data.images.remove(mask)
+        print(f"BAKED {name}: {float((share > 0.5).mean()):.0%} of its texture is under another piece, taken from the other side")
+    scene.render.bake.use_selected_to_active = True
+
+    def from_sources(kind, image):
+        """Bakes `kind` into `image` from the model, and where the piece is covered, from the
+        model turned about. Returns where the bake wrote."""
+        bpy.ops.object.select_all(action="DESELECT")
+        source.select_set(True)
+        piece.select_set(True)
+        bpy.context.view_layer.objects.active = piece
+        bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+        if mirror is None:
+            return baked(image)
+        first = _pixels(image).copy()
+        image.pixels.foreach_set(np.zeros(first.size, np.float32))
+        bpy.ops.object.select_all(action="DESELECT")
+        mirror.select_set(True)
+        piece.select_set(True)
+        bpy.context.view_layer.objects.active = piece
+        bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+        second = _pixels(image)
+        # The other side where the piece is covered and the turned model was hit; the first
+        # bake elsewhere, and wherever the turned one found nothing.
+        t = share * (second[..., 3] > 0.5)
+        mixed = first * (1.0 - t[..., None]) + second * t[..., None]
+        mixed[..., 3] = np.maximum(first[..., 3], second[..., 3] * (share > 0.5))
+        image.pixels.foreach_set(mixed.ravel())
+        return mixed[..., 3] > 0.5
+
+    written = from_sources("DIFFUSE", colour)
     print(f"BAKED {name} covers {written.mean():.0%} of its texture; the rest padded")
+    patch = None
+    if plain:
+        # One plain cloth: what is far from the colour of most of it is another piece painted
+        # on it by the dressed model (a strap, a tie, an apron's edge). Its own cloth's colour is
+        # the one most of it is near (a mode, not a mean: half a shirt can be painted with an
+        # apron), told apart by hue more than lightness, which a fold's shade changes; what is
+        # not its own is laid over, in every map, with a patch of its own cloth repeated.
+        rgb = _pixels(colour)[..., :3]
+
+        def other(colours, c):
+            size = np.linalg.norm(colours, axis=-1) + 1e-4
+            hue = np.linalg.norm(colours / size[..., None] - c / np.linalg.norm(c), axis=-1)
+            light = size / np.linalg.norm(c)
+            return (hue > PLAIN[0]) | (light < PLAIN[1]) | (light > PLAIN[2])
+
+        found = rgb[written]
+        sample = found[np.random.default_rng(0).choice(len(found), min(400, len(found)), replace=False)]
+        few = found[:: max(1, len(found) // 20000)]
+        middle = sample[int(np.argmin([other(few, c).sum() for c in sample]))]
+        foreign = written & other(rgb, middle)
+        own = written & ~foreign
+        # The patch: the square of its own cloth, wholly its own, nearest its colour.
+        side = size // 32
+        best = None
+        for y in range(0, size - side, side // 2):
+            for x in range(0, size - side, side // 2):
+                if own[y:y + side, x:x + side].all():
+                    off = float(np.linalg.norm(rgb[y:y + side, x:x + side].mean(axis=(0, 1)) - middle))
+                    if best is None or off < best[0]:
+                        best = (off, y, x)
+        patch = (best[1], best[2], side, foreign, own) if best is not None else (None, None, side, foreign, own)
+        print(f"BAKED {name} plain: colour {tuple(round(float(c), 2) for c in middle)}, {foreign.sum() / max(1, written.sum()):.1%} of it another piece's paint, "
+              + (f"laid over with its own cloth from {best[1]},{best[2]}" if best else "no clean patch of its own to lay over it"))
+
+    def lay_over(image):
+        """Where the piece is not its own cloth, a patch of its own repeated (`plain`)."""
+        if patch is None:
+            return
+        y0, x0, side, where, own = patch
+        px = _pixels(image)
+        where = where.copy()
+        if behind is not None:
+            # The same cloth on the other side of the body, where that is its own.
+            other = np.array([min(size - 1, max(0, int(round(behind((x + 0.5) / size) * size - 0.5)))) for x in range(size)])
+            take = where & own[:, other]
+            px[take] = px[:, other][take]
+            where &= ~take
+        if y0 is not None:
+            tile = px[y0:y0 + side, x0:x0 + side]
+            reps = (size + side - 1) // side
+            tiled = np.tile(tile, (reps, reps, 1))[:size, :size]
+            px[where] = tiled[where]
+        image.pixels.foreach_set(px.ravel())
+
+    lay_over(colour)
     if role in GRADE:
         print(f"BAKED {name} colour {grade(colour, written, GRADE[role])} graded to {GRADE[role]} for {role}")
     fill_gaps(colour, written)
@@ -231,7 +447,8 @@ def bake(piece, source, name, role, size, reach):
         node = nodes.new("ShaderNodeTexImage")
         node.image = image
         nodes.active = node
-        bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+        from_sources(kind, image)
+        lay_over(image)
         if kind == "ROUGHNESS" and role in ROUGHNESS:
             was, now = roughen(image, written, ROUGHNESS[role])
             print(f"BAKED {name} roughness {was:.2f}, at least {now:.2f} for {role}")
@@ -244,6 +461,8 @@ def bake(piece, source, name, role, size, reach):
         else:
             mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs["Roughness"])
     nodes.active = tex
+    if mirror is not None:
+        bpy.data.objects.remove(mirror)
     return mat
 
 
