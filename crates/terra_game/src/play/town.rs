@@ -397,9 +397,11 @@ fn report(
         .filter(|(s, at)| s.thickness > 0.3 && at.translation().distance(eye.translation()) < 200.0)
         .count();
     info!(
-        "TOWN at {:02}:{:02}: {} of {} people out, {walking} walking; in front of the eye {} within 30 m and {} within 100 m; {animals} animals within 30 m; {columns} smoke columns within 200 m; {} lights lit",
+        "TOWN at {:02}:{:02} (its day at {:02}:{:02}): {} of {} people out, {walking} walking; in front of the eye {} within 30 m and {} within 100 m; {animals} animals within 30 m; {columns} smoke columns within 200 m; {} lights lit",
         clock.hour as u32,
         ((clock.hour.fract()) * 60.0) as u32,
+        (market.lived.rem_euclid(24.0)) as u32,
+        (market.lived.fract() * 60.0) as u32,
         out.len(),
         life.people.len(),
         within(30.0),
@@ -1065,7 +1067,11 @@ fn lay(
     if !wanted.lived_in {
         life.people.clear();
     }
-    life.start(Market::hours(&clock));
+    // Its day as if it had been going on since the night, not everyone stood where the hour
+    // first puts them (`Life::start_settled`).
+    let outline = &life.town.square.outline;
+    let square = outline.iter().copied().sum::<Vec2>() / outline.len().max(1) as f32;
+    life.start_settled(Market::hours(&clock), square);
     let mut animals = Animals::new(&life, life.plan.animals.clone(), seed);
     if !wanted.lived_in {
         animals.animals.clear();
@@ -1084,10 +1090,13 @@ fn lay(
 }
 
 /// The hour the town's day is at: the clock's `now` while it runs, and while it stands where
-/// it was last seen, the day's own pace on from `lived` by `step` seconds.
+/// it was last seen (`seen`), the day's own pace on from `lived` by `step` seconds.
 fn lived_hours(now: f64, seen: f64, lived: f64, step: f32) -> f64 {
-    if now == seen && lived.is_finite() {
-        lived + step as f64 * 24.0 / DAY_SECONDS as f64
+    let pace = step as f64 * 24.0 / DAY_SECONDS as f64;
+    // Held, or as good as: it moved less than half the day's pace (a held clock is set
+    // again each frame and need not read the same to the last bit).
+    if lived.is_finite() && (now - seen).abs() < pace * 0.5 {
+        lived + pace
     } else {
         now
     }

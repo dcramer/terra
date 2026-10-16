@@ -272,3 +272,37 @@ fn walkers_go_round_a_visitor_standing_in_their_way() {
         "a walker came within {closest} m of the visitor"
     );
 }
+
+/// How many of the town's people are out walking, over the next few minutes from `hours`.
+fn walking_after(life: &mut Life, hours: f64) -> f32 {
+    let viewer = square(life);
+    let (mut walking, mut seen) = (0usize, 0usize);
+    for n in 0..1500u64 {
+        let at = hours + n as f64 * STEP as f64 / SECONDS_AN_HOUR as f64;
+        life.step(at, STEP, &[viewer]);
+        if n % 50 == 0 {
+            walking += life
+                .people
+                .iter()
+                .filter(|p| matches!(p.state, State::Walking { .. }))
+                .count();
+            seen += 1;
+        }
+    }
+    walking as f32 / seen as f32
+}
+
+#[test]
+fn a_town_started_settled_is_in_mid_flow_not_stood_still() {
+    let mut cold = life(2);
+    cold.start(8.5);
+    let cold = walking_after(&mut cold, 8.5);
+    let mut settled = life(2);
+    let viewer = square(&settled);
+    settled.start_settled(8.5, viewer);
+    let settled = walking_after(&mut settled, 8.5);
+    assert!(
+        settled > cold * 2.0 && settled >= 3.0,
+        "walking: {settled} settled, {cold} cold"
+    );
+}

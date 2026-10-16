@@ -16,6 +16,8 @@ use terra_build::town::{self, On, ThingKind, Town};
 /// How near the nearest viewer someone is ticked in full, and at all (D145's distances).
 pub const FULL_M: f32 = 64.0;
 pub const REDUCED_M: f32 = 256.0;
+/// How long before it is wanted a town's day is begun, when it is started settled.
+pub const SETTLE_H: f64 = 8.0;
 /// How often someone ticked at reduced detail thinks, in steps; they still move every step.
 const THINK_EVERY: u64 = 8;
 /// A body's radius on the ground, an adult's.
@@ -856,6 +858,23 @@ impl Life {
     }
 
     /// Everyone placed where the clock says they are, as for someone come into view.
+    /// The town at `hours` as if its day had been going on: begun [`SETTLE_H`] before and run
+    /// on to then, a tenth of a second a step, a viewer at `viewer` (the square's middle sees
+    /// the whole town within [`REDUCED_M`]). Started cold, everyone stands at a spot for the
+    /// hour's whole stay and the same choice holds them there, so for hours hardly anyone
+    /// walks: at 08:30, 5 walking of 146 started cold, 12 in a day run on from midnight, as
+    /// many when settled from 00:30 (it costs about a second, once).
+    pub fn start_settled(&mut self, hours: f64, viewer: Vec2) {
+        let from = hours - SETTLE_H;
+        self.start(from);
+        let step = 0.1f32;
+        let steps = (SETTLE_H * self.seconds_an_hour as f64 / step as f64) as u64;
+        for n in 0..steps {
+            let at = from + n as f64 * step as f64 / self.seconds_an_hour as f64;
+            self.step(at, step, &[viewer]);
+        }
+    }
+
     pub fn start(&mut self, hours: f64) {
         self.started = hours;
         for person in 0..self.people.len() {

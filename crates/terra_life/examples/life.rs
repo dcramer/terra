@@ -147,7 +147,12 @@ fn day(
     }
     let roles: Vec<String> = roles.iter().map(|(r, n)| format!("{n} {r}")).collect();
     println!("  roles: {}", roles.join(", "));
-    life.start(from);
+    // From the night, a day as it starts; from later, as the game starts a town then.
+    if from > 0.0 {
+        life.start_settled(from, viewer);
+    } else {
+        life.start(from);
+    }
     let mut watch = Watch::default();
     let steps = (span * SECONDS_AN_HOUR as f64 / STEP_S as f64) as u64;
     let started = Instant::now();
