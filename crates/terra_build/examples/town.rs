@@ -112,7 +112,7 @@ fn report(seed: u32, ground: &str, town: &Town, drawn: Option<&str>) {
     );
     let e = town::enclosure(town);
     println!(
-        "  enclosed: {:.1} m front to front across its streets (a tenth under {:.1}, a tenth over {:.1}); {:.0}% of their built-up sides fronted, {} gaps of {:.1} m at the middle; {:.0}% of the square's edge fronted",
+        "  enclosed: {:.1} m front to front across its streets (a tenth under {:.1}, a tenth over {:.1}); {:.0}% of their built-up sides fronted, {} gaps of {:.1} m at the middle; {:.0}% of the square's edge fronted; {} houses of two storeys",
         e.between_fronts[0],
         e.between_fronts[1],
         e.between_fronts[2],
@@ -120,5 +120,9 @@ fn report(seed: u32, ground: &str, town: &Town, drawn: Option<&str>) {
         e.gaps,
         e.gap,
         e.square_fronted * 100.0,
+        town.buildings
+            .iter()
+            .filter(|b| b.name.contains("two storeys"))
+            .count(),
     );
 }

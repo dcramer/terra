@@ -274,6 +274,8 @@ const STEP_M: f32 = 6.0;
 const TURN: f32 = 0.11;
 /// How far out along a street from the square its houses are of two storeys where they can be.
 const TALL_WITHIN_M: f32 = 45.0;
+/// The share of those that are of two storeys, the rest the queue's next.
+const TALL_SHARE: f32 = 0.7;
 /// How many of the queue's next buildings a plot on the square tries before it moves on.
 const SQUARE_TRIES: usize = 12;
 /// How far apart two buildings stand at the least, and a building from a street's edge.
@@ -957,7 +959,8 @@ impl Town {
                 // two storeys where the queue has them, so it is closed in as a town's is.
                 if !fronts[f].grand
                     && fronts[f].at < TALL_WITHIN_M
-                    && let Some(look) = (0..6)
+                    && unit(hash(&[building_seed, 16])) < TALL_SHARE
+                    && let Some(look) = (0..length)
                         .find(|look| matches!(queue[(first + look) % length].0, Plan::TwoStoreys))
                 {
                     queue.swap(first, (first + look) % length);
@@ -977,10 +980,18 @@ impl Town {
                 // take the larger houses where the queue has them, and where the next will
                 // not fit (by a street's mouth, at a corner, at an edge's end) a smaller one
                 // that does, before the plot moves on a metre.
-                if let Some(look) = (0..6).find(|look| {
-                    let (plan, _, _, wide) = queue[(first + look) % length];
-                    matches!(plan, Plan::TwoStoreys | Plan::T) || wide >= 14
-                }) {
+                let tall = unit(hash(&[building_seed, 16])) < TALL_SHARE;
+                if let Some(look) = (0..length)
+                    .find(|look| {
+                        tall && matches!(queue[(first + look) % length].0, Plan::TwoStoreys)
+                    })
+                    .or_else(|| {
+                        (0..6).find(|look| {
+                            let (plan, _, _, wide) = queue[(first + look) % length];
+                            matches!(plan, Plan::T) || wide >= 14
+                        })
+                    })
+                {
                     queue.swap(first, (first + look) % length);
                 }
                 let mut room = false;
