@@ -539,46 +539,15 @@ fn step(
     mut meshes: ResMut<Assets<Mesh>>,
     (mut materials, mut images): (ResMut<Assets<StandardMaterial>>, ResMut<Assets<Image>>),
 ) {
-    // Every kind's fragments made ready before anything comes down, and the layers they
-    // wear kept resident, so the first fall is drawn in its material from its first frame.
-    if !shards.warmed
-        && let Some(kits) = look.kits.clone()
-    {
-        shards.warmed = true;
-        // Each drawn once, out of sight under the ground and never culled, so its pipelines
-        // are compiled before the first fall rather than leaving a hole for its first frames.
-        let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
-        let sizes = [(Shape::Chunk, 0, 0.25), (Shape::Lump, 0, 0.25)]
-            .into_iter()
-            .chain((1..=4u8).map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)));
-        let sizes: Vec<_> = sizes.collect();
-        for kit in &kits.0 {
-            for &size in &sizes {
-                let made = mesh_for(
-                    &mut shards,
-                    &look,
-                    arrays.as_deref(),
-                    &mut meshes,
-                    kit.kind(),
-                    size,
-                );
-                if let Some(drawn) = made {
-                    let at = Transform::from_translation(under).with_scale(Vec3::splat(0.01));
-                    let entity = spawn(&mut commands, drawn, at);
-                    commands.entity(entity).insert(NoFrustumCulling);
-                    shards.warming.push(entity);
-                }
-            }
-        }
-    }
-    if !shards.warming.is_empty() {
-        shards.warm_s += time.delta_secs();
-        if shards.warm_s > WARM_S {
-            for entity in shards.warming.drain(..) {
-                commands.entity(entity).despawn();
-            }
-        }
-    }
+    warm(
+        &mut commands,
+        time.delta_secs(),
+        &site,
+        &look,
+        arrays.as_deref(),
+        &mut shards,
+        &mut meshes,
+    );
     if let Some(arrays) = arrays.as_mut() {
         let layers: Vec<u16> = shards.layers.iter().copied().collect();
         arrays.want(&layers, &assets, real.elapsed_secs());
@@ -593,8 +562,107 @@ fn step(
     for built in &builds {
         by_root.insert(built.root, &built.0);
     }
-    let breaks = breaks_of(&look);
-    shards.behind = (shards.behind + time.delta_secs()).min(STEP_S * MOST_STEPS as f32);
+    let (steps, landed) = fall(
+        &mut shards,
+        &by_root,
+        &planet,
+        &look,
+        time.delta_secs(),
+        (most, preset),
+    );
+    keep_within(&mut shards, most);
+    for (at, kind, amount) in landed {
+        let colour = dust_of(&look, kind);
+        dust_at(
+            &mut commands,
+            &mut shards,
+            (&mut meshes, &mut materials, &mut images),
+            most_puffs,
+            at,
+            colour,
+            amount,
+            at.normalize_or(Vec3::Y),
+        );
+    }
+    draw_where_they_are(
+        &mut commands,
+        &mut shards,
+        &by_root,
+        &mut transforms,
+        &look,
+        arrays.as_deref(),
+        &mut meshes,
+        spawn_budget(*quality),
+    );
+    // A slow step said, so a trace can tell fragments from the rest of a frame.
+    let took = began.elapsed().as_secs_f32() * 1000.0;
+    if took > SLOW_MS {
+        info!(
+            "Build: fragments stepped: {} in {took:.1} ms ({steps} steps)",
+            shards.live.len()
+        );
+    }
+}
+
+/// Every kind's fragments made ready before anything comes down, and the layers they wear
+/// kept resident, so the first fall is drawn in its material from its first frame; those
+/// drawn to warm up gone once they have been.
+fn warm(
+    commands: &mut Commands,
+    delta_s: f32,
+    site: &Site,
+    look: &BuildLook,
+    arrays: Option<&Arrays>,
+    shards: &mut ResMut<Shards>,
+    meshes: &mut ResMut<Assets<Mesh>>,
+) {
+    if !shards.warmed
+        && let Some(kits) = look.kits.clone()
+    {
+        shards.warmed = true;
+        // Each drawn once, out of sight under the ground and never culled, so its pipelines
+        // are compiled before the first fall rather than leaving a hole for its first frames.
+        let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
+        let sizes = [(Shape::Chunk, 0, 0.25), (Shape::Lump, 0, 0.25)]
+            .into_iter()
+            .chain((1..=4u8).map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)));
+        let sizes: Vec<_> = sizes.collect();
+        for kit in &kits.0 {
+            for &size in &sizes {
+                let made = mesh_for(shards, look, arrays, meshes, kit.kind(), size);
+                if let Some(drawn) = made {
+                    let at = Transform::from_translation(under).with_scale(Vec3::splat(0.01));
+                    let entity = spawn(commands, drawn, at);
+                    commands.entity(entity).insert(NoFrustumCulling);
+                    shards.warming.push(entity);
+                }
+            }
+        }
+    }
+    if !shards.warming.is_empty() {
+        shards.warm_s += delta_s;
+        if shards.warm_s > WARM_S {
+            for entity in shards.warming.drain(..) {
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
+/// Every fragment moved on by as many fixed steps as the time behind asks, each landing on
+/// the terrain and the base's cubes; a whole cube landing hard broken into pieces, as many
+/// as `most` and the `preset` share leave room for. How many steps were taken, and where
+/// something landed hard enough to raise dust: the place, its kind and how much.
+fn fall(
+    shards: &mut Shards,
+    by_root: &BTreeMap<Entity, &Build>,
+    planet: &Planet,
+    look: &BuildLook,
+    delta_s: f32,
+    (most, preset): (usize, f32),
+) -> (u32, Vec<(Vec3, Kind, f32)>) {
+    let breaks = breaks_of(look);
+    shards.behind = (shards.behind + delta_s).min(STEP_S * MOST_STEPS as f32);
     let mut steps = 0;
     let mut born: Vec<Live> = Vec::new();
     let mut landed: Vec<(Vec3, Kind, f32)> = Vec::new();
@@ -684,15 +752,19 @@ fn step(
     }
     // What broke on landing: moving from now, drawn at the end with the rest.
     shards.live.extend(born);
-    // Never far past the most: the oldest make room, and past half again as many the
-    // oldest of those not yet drawn are let go at once.
+    (steps, landed)
+}
+
+/// Never far past the most: the oldest make room, and past half again as many the oldest of
+/// those not yet drawn are let go at once.
+fn keep_within(shards: &mut Shards, most: usize) {
     let over = shards
         .live
         .iter()
         .filter(|live| !live.fading())
         .count()
         .saturating_sub(most);
-    fade_oldest(&mut shards, over);
+    fade_oldest(shards, over);
     while shards.live.len() > most + most / 2 {
         match shards
             .live
@@ -705,22 +777,20 @@ fn step(
             None => break,
         }
     }
-    for (at, kind, amount) in landed {
-        let colour = dust_of(&look, kind);
-        dust_at(
-            &mut commands,
-            &mut shards,
-            (&mut meshes, &mut materials, &mut images),
-            most_puffs,
-            at,
-            colour,
-            amount,
-            at.normalize_or(Vec3::Y),
-        );
-    }
-    // Each where it is now, those not yet drawn drawn a few hundred a frame; those shrunk
-    // away gone.
-    let mut spawns = spawn_budget(*quality);
+}
+
+/// Each where it is now, those not yet drawn drawn `spawns` a frame; those shrunk away gone.
+#[allow(clippy::too_many_arguments)]
+fn draw_where_they_are(
+    commands: &mut Commands,
+    shards: &mut Shards,
+    by_root: &BTreeMap<Entity, &Build>,
+    transforms: &mut Query<&mut Transform, With<Shard>>,
+    look: &BuildLook,
+    arrays: Option<&Arrays>,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    mut spawns: usize,
+) {
     let mut live_now = std::mem::take(&mut shards.live);
     let mut kept = Vec::with_capacity(live_now.len());
     for mut live in live_now.drain(..) {
@@ -736,16 +806,16 @@ fn step(
             if spawns > 0
                 && let Some(build) = by_root.get(&live.root)
                 && let Some(drawn) = mesh_for(
-                    &mut shards,
-                    &look,
-                    arrays.as_deref(),
-                    &mut meshes,
+                    shards,
+                    look,
+                    arrays,
+                    meshes,
                     live.fragment.kind,
                     live.fragment.mesh(),
                 )
             {
                 spawns -= 1;
-                live.entity = spawn(&mut commands, drawn, placed(&build.frame, &live));
+                live.entity = spawn(commands, drawn, placed(&build.frame, &live));
             }
             kept.push(live);
             continue;
@@ -763,14 +833,6 @@ fn step(
         kept.push(live);
     }
     shards.live = kept;
-    // A slow step said, so a trace can tell fragments from the rest of a frame.
-    let took = began.elapsed().as_secs_f32() * 1000.0;
-    if took > SLOW_MS {
-        info!(
-            "Build: fragments stepped: {} in {took:.1} ms ({steps} steps)",
-            shards.live.len()
-        );
-    }
 }
 
 /// Dust billows out, rises and thins away, each sprite facing the view.
