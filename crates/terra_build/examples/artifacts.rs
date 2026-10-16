@@ -9,9 +9,10 @@
 //! two kits' mixed, are kept in `artifacts-baseline.tsv` beside this file. `--ratchet` fails
 //! if any count is above its baseline, so no change adds junk unnoticed, and says which have
 //! dropped; `--record` writes the counts as the new baseline, to commit as fixes land.
-//! `--quick` inspects only each kit's and each two kits' rectangle under a gable, about a
-//! sixteenth of the bases, which `cargo xtask check` ratchets on every commit; the whole set
-//! is `cargo xtask artifacts --ratchet`.
+//! `--quick` inspects each kit's and each two kits' rectangle under a gable, and each kit's
+//! QA cabin, junctions and roofs and walls, the bases the voxel contract's rows cite, which
+//! `cargo xtask check` ratchets before every push; the whole set, with every roof over every
+//! plan and the castle, is `cargo xtask artifacts --ratchet`.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -34,11 +35,11 @@ fn main() -> ExitCode {
         .iter()
         .find(|a| !a.starts_with("--"))
         .cloned()
-        .or_else(|| quick.then(|| QUICK.to_string()));
+        .filter(|_| !quick);
     // The bases of the building baseline's materials (D333), those the settlement is built
     // of and the roofs they take, unless a name asks for others; a frozen kit is still read,
     // so a base of it can be asked for by name.
-    let named = only.is_some() && !quick;
+    let named = only.is_some();
     let Some(scope) = (if named {
         Some(kits.clone())
     } else {
@@ -46,7 +47,14 @@ fn main() -> ExitCode {
     }) else {
         return ExitCode::FAILURE;
     };
-    let cases = inspect::cases(&scope, only.as_deref());
+    let cases: Vec<(String, terra_build::Base)> = if quick {
+        QUICK
+            .iter()
+            .flat_map(|family| inspect::cases(&scope, Some(family)))
+            .collect()
+    } else {
+        inspect::cases(&scope, only.as_deref())
+    };
     let started = std::time::Instant::now();
     // Every base on a thread of its own, as many at once as there are cores.
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
@@ -172,10 +180,10 @@ fn main() -> ExitCode {
         }
     }
     let total: usize = counts.iter().flatten().sum();
-    let set = if only.is_none() {
-        "all"
-    } else if quick {
+    let set = if quick {
         "quick"
+    } else if only.is_none() {
+        "all"
     } else {
         ""
     };
@@ -209,8 +217,17 @@ fn main() -> ExitCode {
     }
 }
 
-/// The bases `--quick` inspects: each kit's and each two kits' rectangle under a gable.
-const QUICK: &str = "rectangle, gable roof";
+/// The bases `--quick` inspects, the ratchet `cargo xtask check` runs before a push (D287):
+/// each kit's and each two kits' rectangle under a gable; and in each kit, the QA cabin, the
+/// junctions family and the roofs-and-walls family, whose bases are the proof of rows of the
+/// voxel contract's junction matrix (docs/building-voxels.md). Not the castle, nor every
+/// roof over every plan, which `cargo xtask artifacts --ratchet` inspects.
+const QUICK: [&str; 4] = [
+    "rectangle, gable roof",
+    ": QA cabin",
+    ": junction, ",
+    ": roofs and walls: ",
+];
 
 /// The kits a base is of, by their files' names, from its name: "stone", "logs with stone".
 fn group(case: &str, names: &std::collections::BTreeMap<u16, String>) -> String {
@@ -263,7 +280,7 @@ mod baseline {
         let mut all = read();
         all.insert(set.to_string(), counts.clone());
         let mut text = String::from(
-            "# The faults `cargo xtask artifacts` finds in building's meshes, of each kind in each kit's\n# bases: the ratchet's baseline. `cargo xtask artifacts --record` (every base) and\n# `--quick --record` (the rectangles `cargo xtask check` inspects) write it.\n# set\tkits\tfault\tcount\n",
+            "# The faults `cargo xtask artifacts` finds in building's meshes, of each kind in each kit's\n# bases: the ratchet's baseline. `cargo xtask artifacts --record` (every base) and\n# `--quick --record` (the bases `cargo xtask check` inspects) write it.\n# set\tkits\tfault\tcount\n",
         );
         for (set, counts) in &all {
             for ((kits, fault), count) in counts {

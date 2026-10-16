@@ -5,9 +5,10 @@
 //!
 //! - **Laid twice, the same**: every section drawn twice at each detail gives the same
 //!   triangles, bit for bit.
-//! - **No z-fighting**: no two triangles of a section's near meshes face the same way in the
-//!   same plane (within 2 mm) and overlap by more than a square centimetre, whatever kinds
-//!   or materials they are of. Reported by the pair of materials that meet.
+//! - **No z-fighting**: no two triangles of a section's near meshes face the same way in one
+//!   plane and overlap, whatever kinds or materials they are of, measured as the mesh
+//!   checker measures it (`inspect::fights`, within a millimetre, never pressed against a
+//!   face turned to meet them). Reported by the pair of materials that meet, and fails.
 //! - **One edit, only what it must**: a cube taken out of a wall marks its section and its
 //!   neighbours on an edge; the sections set waiting (`sections::affected`), those whose
 //!   pieces change and must be merged again, and that no other section changed.
@@ -16,15 +17,20 @@
 //! section edges are `terra_build`'s own tests (`sections::tests`). Exits non-zero when a
 //! check fails.
 
-use glam::{IVec3, Vec2, Vec3};
+use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
+use terra_build::inspect;
 use terra_build::kit::{Kit, Kits};
+
 use terra_build::relief::Maps;
 use terra_build::sections::{self, Progress, Reach, Section};
-use terra_build::{Base, BuildOp, Kind, Surface};
+use terra_build::{Base, BuildOp, Kind, Material, Surface};
+
+/// A mesh a section draws near: its name, its kind and material where it has one, and it.
+type Mesh = (String, Option<(Kind, Material)>, Surface);
 
 fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -62,6 +68,7 @@ fn main() -> ExitCode {
         });
         let progress = Progress::Whole;
         let whole = sections::Whole::lay(&base, &kits);
+        let mut meshes: Vec<Mesh> = Vec::new();
         for at in sections::drawable(&base) {
             let here = section_of(&base, &kits, &maps, &progress, at);
             let laid = sections::lay(&here, &whole);
@@ -80,26 +87,36 @@ fn main() -> ExitCode {
             }
             let near = sections::draw(&here, &laid, Reach::Near);
             sections_drawn += 1;
-            let mut labelled: Vec<(String, &Surface)> = near
-                .near
-                .iter()
-                .map(|((kind, material), surface)| {
-                    (format!("{}:{material:?}", name(&names, *kind)), surface)
-                })
-                .collect();
-            labelled.push(("plain".into(), &near.plain));
-            let (count, found) = z_fights(&labelled);
-            triangles += count;
-            for (pair, area, place) in found {
-                let entry = fights.entry(pair).or_insert((0, 0.0, String::new()));
-                entry.0 += 1;
-                if area > entry.1 {
-                    *entry = (
-                        entry.0,
-                        area,
-                        format!("{}, section {at:?}, at {place}", building.name),
-                    );
-                }
+            for (&(kind, material), surface) in &near.near {
+                meshes.push((
+                    format!("{}:{material:?}", name(&names, kind)),
+                    Some((kind, material)),
+                    surface.clone(),
+                ));
+            }
+            meshes.push(("plain".into(), None, near.plain));
+        }
+        triangles += meshes
+            .iter()
+            .map(|(_, _, s)| s.triangle_count())
+            .sum::<usize>();
+        // Measured over the building's sections together, as the mesh checker measures it
+        // (`inspect::fights`), so the two agree: a piece pressed against a face in the next
+        // section is as unseen as one pressed against a face in its own.
+        let all = meshes
+            .iter()
+            .map(|(name, kind, surface)| (name.clone(), *kind, surface));
+        for fight in inspect::fights(all) {
+            let mut pair = fight.meshes.clone();
+            pair.sort();
+            let what = if fight.doubled { ", drawn twice" } else { "" };
+            let entry = fights
+                .entry(format!("{} / {}{what}", pair[0], pair[1]))
+                .or_insert((0, 0.0, String::new()));
+            entry.0 += fight.pairs;
+            if fight.area > entry.1 {
+                entry.1 = fight.area;
+                entry.2 = format!("{}, at {:.2}", building.name, fight.at);
             }
         }
         // One cube out of the middle of the front wall, a storey's middle up.
@@ -224,6 +241,8 @@ fn main() -> ExitCode {
     );
     if fights.is_empty() {
         println!("  none");
+    } else {
+        ok = false;
     }
     for (pair, (count, area, place)) in &fights {
         println!(
@@ -307,135 +326,6 @@ fn bits(drawn: &sections::Drawn) -> Vec<u32> {
     out
 }
 
-/// A triangle, its label, its plane and its corners.
-struct Tri {
-    label: usize,
-    normal: Vec3,
-    d: f32,
-    corners: [Vec3; 3],
-}
-
-/// Pairs of triangles facing the same way in the same plane that overlap: how many
-/// triangles were looked at, and each pair's materials, overlap in square metres and where.
-fn z_fights(surfaces: &[(String, &Surface)]) -> (usize, Vec<(String, f32, String)>) {
-    let mut tris = Vec::new();
-    for (label, (_, surface)) in surfaces.iter().enumerate() {
-        let all = surface.indexed();
-        for t in all.indices.chunks_exact(3) {
-            let corners = [0, 1, 2].map(|i| all.positions[t[i] as usize]);
-            let cross = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
-            if cross.length() < 1e-7 {
-                continue;
-            }
-            let normal = cross.normalize();
-            tris.push(Tri {
-                label,
-                normal,
-                d: normal.dot(corners[0]),
-                corners,
-            });
-        }
-    }
-    // Into bins by plane, then by where they are in it, a quarter metre a cell.
-    let mut bins: BTreeMap<([i32; 3], i32), Vec<usize>> = BTreeMap::new();
-    for (i, tri) in tris.iter().enumerate() {
-        let n = (tri.normal * 50.0).round().as_ivec3().to_array();
-        bins.entry((n, (tri.d / 0.002).round() as i32))
-            .or_default()
-            .push(i);
-    }
-    let mut found = Vec::new();
-    let mut checked: BTreeSet<(usize, usize)> = BTreeSet::new();
-    for ((n, d), members) in &bins {
-        // Their neighbours a step of the plane's offset away too.
-        let mut near: Vec<usize> = members.clone();
-        for step in [-1, 1] {
-            if let Some(more) = bins.get(&(*n, d + step)) {
-                near.extend(more);
-            }
-        }
-        let axis = tris[members[0]].normal.abs().max_position();
-        let flat = |p: Vec3| match axis {
-            0 => Vec2::new(p.y, p.z),
-            1 => Vec2::new(p.x, p.z),
-            _ => Vec2::new(p.x, p.y),
-        };
-        let mut cells: BTreeMap<[i32; 2], Vec<usize>> = BTreeMap::new();
-        for &i in &near {
-            let pts = tris[i].corners.map(flat);
-            let (lo, hi) = (
-                pts[0].min(pts[1]).min(pts[2]),
-                pts[0].max(pts[1]).max(pts[2]),
-            );
-            for x in (lo.x / 0.25).floor() as i32..=(hi.x / 0.25).floor() as i32 {
-                for y in (lo.y / 0.25).floor() as i32..=(hi.y / 0.25).floor() as i32 {
-                    cells.entry([x, y]).or_default().push(i);
-                }
-            }
-        }
-        for list in cells.values() {
-            for (k, &a) in list.iter().enumerate() {
-                for &b in &list[k + 1..] {
-                    let pair = (a.min(b), a.max(b));
-                    if a == b || !checked.insert(pair) {
-                        continue;
-                    }
-                    let (ta, tb) = (&tris[a], &tris[b]);
-                    if ta.normal.dot(tb.normal) < 0.9995 || (ta.d - tb.d).abs() > 0.002 {
-                        continue;
-                    }
-                    let area = overlap(ta.corners.map(flat), tb.corners.map(flat));
-                    if area > 1e-4 {
-                        let mut labels =
-                            [surfaces[ta.label].0.clone(), surfaces[tb.label].0.clone()];
-                        labels.sort();
-                        let middle = (ta.corners[0] + ta.corners[1] + ta.corners[2]) / 3.0;
-                        found.push((
-                            format!("{} / {}", labels[0], labels[1]),
-                            area,
-                            format!("{middle:.2}"),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-    (tris.len(), found)
-}
-
-/// The area two triangles in a plane share: one clipped by the other.
-fn overlap(a: [Vec2; 3], b: [Vec2; 3]) -> f32 {
-    let wind = |t: [Vec2; 3]| (t[1] - t[0]).perp_dot(t[2] - t[0]);
-    let b = if wind(b) < 0.0 { [b[0], b[2], b[1]] } else { b };
-    let mut poly: Vec<Vec2> = a.to_vec();
-    for i in 0..3 {
-        let (p, q) = (b[i], b[(i + 1) % 3]);
-        let inside = |v: Vec2| (q - p).perp_dot(v - p) >= -1e-6;
-        let mut next = Vec::new();
-        for j in 0..poly.len() {
-            let (s, e) = (poly[j], poly[(j + 1) % poly.len()]);
-            match (inside(s), inside(e)) {
-                (true, true) => next.push(e),
-                (true, false) => next.push(cut(s, e, p, q)),
-                (false, true) => {
-                    next.push(cut(s, e, p, q));
-                    next.push(e);
-                }
-                (false, false) => {}
-            }
-        }
-        poly = next;
-        if poly.len() < 3 {
-            return 0.0;
-        }
-    }
-    let mut area = 0.0;
-    for j in 0..poly.len() {
-        area += poly[j].perp_dot(poly[(j + 1) % poly.len()]);
-    }
-    (area * 0.5).abs()
-}
-
 /// A section of a base to lay and draw.
 fn section_of<'a>(
     base: &'a Base,
@@ -451,11 +341,4 @@ fn section_of<'a>(
         at: IVec3::from_array(at),
         progress,
     }
-}
-
-/// Where the segment from `s` to `e` crosses the line through `p` and `q`.
-fn cut(s: Vec2, e: Vec2, p: Vec2, q: Vec2) -> Vec2 {
-    let (r, d) = (e - s, q - p);
-    let t = (p - s).perp_dot(d) / r.perp_dot(d);
-    s + r * t
 }
