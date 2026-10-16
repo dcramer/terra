@@ -26,7 +26,7 @@ const CELL_M: f32 = 32.0;
 const POPULATE_M: f32 = 110.0;
 const RELEASE_M: f32 = 150.0;
 /// At most so many cells new to a look are looked into by it.
-const FRESH_A_LOOK: usize = 6;
+const FRESH_A_LOOK: usize = 3;
 /// How often the cells round each player are looked at.
 const LOOK_EVERY_S: f32 = 0.25;
 /// At most so many wild animals about at once, for every player together.

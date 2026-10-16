@@ -197,7 +197,7 @@
         walk_mps: 0.3,
         run_mps: 0.8,
         body: (radius: 0.06, weight: 0.3),
-        temper: Shy(flees_within_m: 5.0, flees_s: 2.0),
+        temper: Shy(flees_within_m: 8.0, flees_s: 2.0),
         refuge: Flies(10.0, 30.0),
         moves: Flies(10.0),
         lives: About(per_ha: 10.0, group: (4, 9)),
