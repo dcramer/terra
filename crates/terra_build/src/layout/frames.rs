@@ -219,96 +219,253 @@ impl Out {
     }
 }
 
-/// A face's members: its plates, girts, posts, rails and braces.
-fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut Out) {
-    let f = framer.framing;
-    let (dir, layer) = plane;
-    let w = f.wide;
-    let has = |y: i32, u: i32| cells.contains(&(y, u));
-    // Where on the face a point is: so far along it and so high, its middle as deep as a
-    // member's.
-    let face_m = (layer + i32::from(dir.sign() > 0)) as f32 * CELL_M;
-    let normal = dir.step().as_vec3();
-    let axis = along(dir);
-    let at = |u: f32, y: f32| {
-        let mut p = axis * u + Vec3::Y * y;
-        p[dir.axis()] = face_m;
-        p + normal * (f.proud - f.deep * 0.5)
-    };
-    // How far in from a row's end at a boundary its members stop, by how it ends: at a corner
-    // post's side, at an opening's frame's side, at an end post's side or at the end.
-    let inset = |end: End, post: bool| match end {
-        End::Outside => f.corner - f.proud,
-        End::Opening => w - INTO_M,
-        End::Inside | End::Meet if post => w,
-        End::Inside | End::Meet => 0.0,
-    };
-    // The runs of each row: (y, first, last, how its low and high ends end).
-    let mut rows: Vec<(i32, i32, i32, End, End)> = Vec::new();
-    for &(y, u) in cells {
-        match rows.last_mut() {
-            Some(run) if run.0 == y && run.2 + 1 == u => run.2 = u,
-            _ => rows.push((y, u, u, End::Meet, End::Meet)),
+/// A run of a face's row: its row, its first and last cells, and how its low and high ends
+/// end.
+type Run = (i32, i32, i32, End, End);
+
+/// A post standing across rows: the boundary it stands on, which side of it (-1 inside a
+/// row's low end, 1 inside its high end, 0 across it), and how far along the face it reaches.
+type Crossing = (i32, i32, f32, f32);
+
+/// One plane of a framed kind's faces, worked out once for its members to be laid on it.
+struct Face<'a> {
+    framer: &'a Framer<'a>,
+    f: &'a Framing,
+    plane: Plane,
+    cells: &'a BTreeSet<(i32, i32)>,
+    /// The runs of each row.
+    rows: Vec<Run>,
+    /// The storeys of this face that are gables, by the layer each starts on: one with a
+    /// column stopping under a roof short of the storey's top.
+    gables: BTreeSet<i32>,
+}
+
+impl<'a> Face<'a> {
+    fn new(framer: &'a Framer<'a>, plane: Plane, cells: &'a BTreeSet<(i32, i32)>) -> Self {
+        let mut face = Face {
+            framer,
+            f: framer.framing,
+            plane,
+            cells,
+            rows: Vec::new(),
+            gables: BTreeSet::new(),
+        };
+        // The runs of each row: (y, first, last, how its low and high ends end).
+        for &(y, u) in cells {
+            match face.rows.last_mut() {
+                Some(run) if run.0 == y && run.2 + 1 == u => run.2 = u,
+                _ => face.rows.push((y, u, u, End::Meet, End::Meet)),
+            }
         }
-    }
-    for run in &mut rows {
-        run.3 = framer.end(cube_of(plane, run.1 - 1, run.0));
-        run.4 = framer.end(cube_of(plane, run.2 + 1, run.0));
-    }
-    // The storeys of this face that are gables, by the layer each starts on: one with a
-    // column stopping under a roof short of the storey's top.
-    let gables: BTreeSet<i32> = cells
-        .iter()
-        .filter(|&&(y, u)| !has(y + 1, u) && framer.gabled(cube_of(plane, u, y)))
-        .map(|&(y, _)| y.div_euclid(STOREY_CUBES) * STOREY_CUBES)
-        .collect();
-    let in_gable = |y: i32| gables.contains(&(y.div_euclid(STOREY_CUBES) * STOREY_CUBES));
-    // A gable's row ending under its roof ends in the open, with no post.
-    for run in &mut rows {
-        if in_gable(run.0) {
-            for (end, u) in [(&mut run.3, run.1 - 1), (&mut run.4, run.2 + 1)] {
-                if framer.roof(cube_of(plane, u, run.0)) {
-                    *end = End::Outside;
+        for run in &mut face.rows {
+            run.3 = framer.end(cube_of(plane, run.1 - 1, run.0));
+            run.4 = framer.end(cube_of(plane, run.2 + 1, run.0));
+        }
+        face.gables = cells
+            .iter()
+            .filter(|&&(y, u)| !face.has(y + 1, u) && framer.gabled(cube_of(plane, u, y)))
+            .map(|&(y, _)| y.div_euclid(STOREY_CUBES) * STOREY_CUBES)
+            .collect();
+        // A gable's row ending under its roof ends in the open, with no post.
+        let gables = face.gables.clone();
+        let in_gable = |y: i32| gables.contains(&(y.div_euclid(STOREY_CUBES) * STOREY_CUBES));
+        for run in &mut face.rows {
+            if in_gable(run.0) {
+                for (end, u) in [(&mut run.3, run.1 - 1), (&mut run.4, run.2 + 1)] {
+                    if framer.roof(cube_of(plane, u, run.0)) {
+                        *end = End::Outside;
+                    }
                 }
             }
         }
+        face
     }
-    let row_of = |y: i32, u: i32| {
-        rows.iter()
+
+    fn has(&self, y: i32, u: i32) -> bool {
+        self.cells.contains(&(y, u))
+    }
+
+    /// Where on the face a point is: so far along it and so high, its middle as deep as a
+    /// member's.
+    fn at(&self, u: f32, y: f32) -> Vec3 {
+        let (dir, layer) = self.plane;
+        let face_m = (layer + i32::from(dir.sign() > 0)) as f32 * CELL_M;
+        let normal = dir.step().as_vec3();
+        let mut p = along(dir) * u + Vec3::Y * y;
+        p[dir.axis()] = face_m;
+        p + normal * (self.f.proud - self.f.deep * 0.5)
+    }
+
+    /// How far in from a row's end at a boundary its members stop, by how it ends: at a
+    /// corner post's side, at an opening's frame's side, at an end post's side or at the end.
+    fn inset(&self, end: End, post: bool) -> f32 {
+        let (f, w) = (self.f, self.f.wide);
+        match end {
+            End::Outside => f.corner - f.proud,
+            End::Opening => w - INTO_M,
+            End::Inside | End::Meet if post => w,
+            End::Inside | End::Meet => 0.0,
+        }
+    }
+
+    fn in_gable(&self, y: i32) -> bool {
+        self.gables
+            .contains(&(y.div_euclid(STOREY_CUBES) * STOREY_CUBES))
+    }
+
+    fn row_of(&self, y: i32, u: i32) -> Option<Run> {
+        self.rows
+            .iter()
             .find(|run| run.0 == y && run.1 <= u && u <= run.2)
             .copied()
-    };
-    // How high the roof's underside is over a point along the face, from a row up: over the
-    // top of the column there, if a roof's cube is over it, or the roof's cube on the row.
-    let roof_at = |u: f32, y: i32| -> Option<f32> {
+    }
+
+    /// How high the roof's underside is over a point along the face, from a row up: over the
+    /// top of the column there, if a roof's cube is over it, or the roof's cube on the row.
+    fn roof_at(&self, u: f32, y: i32) -> Option<f32> {
         let column = libm::floorf(u / CELL_M) as i32;
         let mut top = y;
-        if has(top, column) {
-            while has(top + 1, column) {
+        if self.has(top, column) {
+            while self.has(top + 1, column) {
                 top += 1;
             }
             top += 1;
         }
-        let over = cube_of(plane, column, top);
-        let cube = framer.base.cube(over).filter(|cube| cube.kind.is_roof())?;
+        let over = cube_of(self.plane, column, top);
+        let cube = self
+            .framer
+            .base
+            .cube(over)
+            .filter(|cube| cube.kind.is_roof())?;
         let under = super::roofs::underside(over, cube)?;
-        Some(super::roofs::gable_cut(over, &under, at(u, 0.0)))
-    };
-    // How far a gable's member at a height may run out along it toward the roof from a point,
-    // the way given: until the roof comes down to it.
-    let out_to_roof = |from: f32, toward: f32, height: f32, y: i32| -> f32 {
+        Some(super::roofs::gable_cut(over, &under, self.at(u, 0.0)))
+    }
+
+    /// How far a gable's member at a height may run out along it toward the roof from a
+    /// point, the way given: until the roof comes down to it.
+    fn out_to_roof(&self, from: f32, toward: f32, height: f32, y: i32) -> f32 {
         let mut u = from;
         while (u - from).abs() < CELL_M * 3.0
-            && roof_at(u + toward * 0.02, y).is_some_and(|h| h > height + 0.01)
+            && self
+                .roof_at(u + toward * 0.02, y)
+                .is_some_and(|h| h > height + 0.01)
         {
             u += toward * 0.02;
         }
         u
-    };
+    }
+
+    /// A rail's line, and whether it sits under it.
+    fn rail(&self, line: i32) -> Option<bool> {
+        let r = line.rem_euclid(STOREY_CUBES);
+        (r != 0 && self.f.rails.contains(&r)).then_some(r * 2 < STOREY_CUBES)
+    }
+
+    /// What lies across a boundary between rows at a cell, into the row under the line: a
+    /// member over or under the line, as far into that row.
+    fn below_reach(&self, line: i32, u: i32) -> f32 {
+        let w = self.f.wide;
+        let (under, over) = (self.has(line - 1, u), self.has(line, u));
+        if !under {
+            return 0.0;
+        }
+        if !over || line.rem_euclid(STOREY_CUBES) == 0 {
+            return w;
+        }
+        match self.rail(line) {
+            Some(true) => w,
+            _ => 0.0,
+        }
+    }
+
+    /// The same, into the row over the line.
+    fn above_reach(&self, line: i32, u: i32) -> f32 {
+        let w = self.f.wide;
+        let (under, over) = (self.has(line - 1, u), self.has(line, u));
+        if !over {
+            return 0.0;
+        }
+        let beyond = self.framer.hole(cube_of(self.plane, u, line - 1));
+        if !under || line.rem_euclid(STOREY_CUBES) == 0 {
+            return if beyond { w - INTO_M } else { w };
+        }
+        match self.rail(line) {
+            Some(false) => w,
+            _ => 0.0,
+        }
+    }
+
+    /// A member from one point on the face to another, as wide as the frame's members.
+    fn beam(&self, (from, to): (Vec3, Vec3), wide: f32, out: &mut Out) {
+        out.beam(from, to, self.plane.0, wide, self.f.deep);
+    }
+
+    /// A member along a boundary between rows, from cell `first` to `last`, its run's ends as
+    /// given, so high: jointed every LONGEST cubes along the grid; `post` says whether an end
+    /// post stands at an inside or meeting end, which rails stop at.
+    fn level(
+        &self,
+        line_y: f32,
+        (first, last): (i32, i32),
+        ends: (End, End),
+        post: bool,
+        out: &mut Out,
+    ) {
+        let w = self.f.wide;
+        let start = first as f32 * CELL_M + self.inset(ends.0, post);
+        let end = (last + 1) as f32 * CELL_M - self.inset(ends.1, post);
+        let mut cut = start;
+        let joints = (first.div_euclid(LONGEST) + 1..=last.div_euclid(LONGEST))
+            .map(|n| (n * LONGEST) as f32 * CELL_M)
+            .filter(|&joint| joint > start + 0.3 && joint < end - 0.3);
+        for joint in joints.chain(std::iter::once(end)) {
+            self.beam((self.at(cut, line_y), self.at(joint, line_y)), w, out);
+            cut = joint;
+        }
+    }
+}
+
+/// A face's members: its plates, girts, posts, rails and braces.
+fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut Out) {
+    let face = Face::new(framer, plane, cells);
+    let (crossing, studs) = face_posts(&face, out);
+    let lines: BTreeSet<i32> = cells.iter().flat_map(|&(y, _)| [y, y + 1]).collect();
+    plates(&face, &lines, out);
+    rails(&face, &lines, (&crossing, &studs), out);
+    if face.f.braces == Braces::Ends {
+        let walls: Vec<_> = face
+            .rows
+            .iter()
+            .copied()
+            .filter(|run| !face.in_gable(run.0))
+            .collect();
+        braces(
+            framer,
+            plane,
+            cells,
+            &walls,
+            &|line| face.rail(line),
+            &|u, y| face.at(u, y),
+            out,
+        );
+        gable_braces(&face, &studs, out);
+    }
+}
+
+/// A face's posts, each up a run of rows a storey at most, between what lies across their
+/// ends: at each row's ends inside the wall, and every bay; a gable's studs where the wall's
+/// posts stand. The posts standing across each row, and a gable's studs by the storey they
+/// stand on, with where each is along the face and how high it reaches.
+#[allow(clippy::type_complexity)]
+fn face_posts(
+    face: &Face,
+    out: &mut Out,
+) -> (BTreeMap<i32, Vec<Crossing>>, BTreeMap<i32, Vec<(f32, f32)>>) {
+    let (f, w) = (face.f, face.f.wide);
     // Posts on each row, by where they stand (a boundary along the face, and which side of it
     // they are on: -1 inside a row's low end, 1 inside its high end, 0 across it), as rows.
     let mut post_rows: BTreeMap<(i32, i32), BTreeSet<i32>> = BTreeMap::new();
-    for &(y, first, last, low, high) in &rows {
+    for &(y, first, last, low, high) in &face.rows {
         // A face a cube wide, a wall's end or a pier, is its corner posts' and its
         // openings' frames alone.
         if first == last {
@@ -316,12 +473,12 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
         }
         // A gable's studs stand where the wall's posts do, on its widest row, wherever the
         // row holds both cubes either side of one.
-        if in_gable(y) {
+        if face.in_gable(y) {
             let band = y.div_euclid(STOREY_CUBES) * STOREY_CUBES;
-            let under = (1..=STOREY_CUBES).find_map(|d| row_of(band - d, first));
-            if let Some((_, first0, last0, ..)) = under.or_else(|| row_of(band, first)) {
+            let under = (1..=STOREY_CUBES).find_map(|d| face.row_of(band - d, first));
+            if let Some((_, first0, last0, ..)) = under.or_else(|| face.row_of(band, first)) {
                 for b in first0 + 2..=last0 - 1 {
-                    if b.rem_euclid(f.bay.max(1)) == 0 && has(y, b - 1) && has(y, b) {
+                    if b.rem_euclid(f.bay.max(1)) == 0 && face.has(y, b - 1) && face.has(y, b) {
                         post_rows.entry((b, 0)).or_default().insert(y);
                     }
                 }
@@ -340,43 +497,7 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
             }
         }
     }
-    // A rail's line, and whether it sits under it.
-    let rail = |line: i32| {
-        let r = line.rem_euclid(STOREY_CUBES);
-        (r != 0 && f.rails.contains(&r)).then_some(r * 2 < STOREY_CUBES)
-    };
-    // What lies across a boundary between rows at a cell: a member over or under the line,
-    // as far into the row above (+) or below (-) it.
-    let below_reach = |line: i32, u: i32| -> f32 {
-        // Into the row under the line.
-        let (under, over) = (has(line - 1, u), has(line, u));
-        if !under {
-            return 0.0;
-        }
-        if !over || line.rem_euclid(STOREY_CUBES) == 0 {
-            return w;
-        }
-        match rail(line) {
-            Some(true) => w,
-            _ => 0.0,
-        }
-    };
-    let above_reach = |line: i32, u: i32| -> f32 {
-        let (under, over) = (has(line - 1, u), has(line, u));
-        if !over {
-            return 0.0;
-        }
-        let beyond = framer.hole(cube_of(plane, u, line - 1));
-        if !under || line.rem_euclid(STOREY_CUBES) == 0 {
-            return if beyond { w - INTO_M } else { w };
-        }
-        match rail(line) {
-            Some(false) => w,
-            _ => 0.0,
-        }
-    };
-    // Posts, each up a run of rows a storey at most, between what lies across their ends.
-    let mut crossing: BTreeMap<i32, Vec<(i32, i32, f32, f32)>> = BTreeMap::new();
+    let mut crossing: BTreeMap<i32, Vec<Crossing>> = BTreeMap::new();
     let mut studs: BTreeMap<i32, Vec<(f32, f32)>> = BTreeMap::new();
     for (&(b, side), ys) in &post_rows {
         let u_cell = if side > 0 { b - 1 } else { b };
@@ -394,22 +515,27 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
         };
         let u_mid = (u_low + u_high) * 0.5;
         for (y0, y1) in spans {
-            let foot = y0 as f32 * CELL_M + above_reach(y0, u_cell).max(above_reach(y0, b - 1));
+            let foot = y0 as f32 * CELL_M
+                + face
+                    .above_reach(y0, u_cell)
+                    .max(face.above_reach(y0, b - 1));
             let mut top = (y1 + 1) as f32 * CELL_M
-                - below_reach(y1 + 1, u_cell).max(below_reach(y1 + 1, b - 1));
+                - face
+                    .below_reach(y1 + 1, u_cell)
+                    .max(face.below_reach(y1 + 1, b - 1));
             // A gable's stud cut off under the roof.
             let roofed = [u_low, u_high]
                 .into_iter()
-                .filter_map(|u| roof_at(u, y1))
+                .filter_map(|u| face.roof_at(u, y1))
                 .reduce(f32::min);
-            if in_gable(y1)
+            if face.in_gable(y1)
                 && let Some(roof) = roofed
             {
                 top = roof - 0.01;
             }
             if top - foot > 0.05 {
-                out.beam(at(u_mid, foot), at(u_mid, top), dir, w, f.deep);
-                if in_gable(y0) && y0.rem_euclid(STOREY_CUBES) == 0 && side == 0 {
+                face.beam((face.at(u_mid, foot), face.at(u_mid, top)), w, out);
+                if face.in_gable(y0) && y0.rem_euclid(STOREY_CUBES) == 0 && side == 0 {
                     studs.entry(y0).or_default().push((u_mid, top));
                 }
             }
@@ -421,35 +547,23 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
             }
         }
     }
-    // A member along a boundary between rows, from cell `first` to `last`, its run's ends
-    // as given, so high: jointed every LONGEST cubes along the grid; `post` says whether an
-    // end post stands at an inside or meeting end, which rails stop at.
-    let level =
-        |line_y: f32, first: i32, last: i32, ends: (End, End), post: bool, out: &mut Out| {
-            let start = first as f32 * CELL_M + inset(ends.0, post);
-            let end = (last + 1) as f32 * CELL_M - inset(ends.1, post);
-            let mut cut = start;
-            let joints = (first.div_euclid(LONGEST) + 1..=last.div_euclid(LONGEST))
-                .map(|n| (n * LONGEST) as f32 * CELL_M)
-                .filter(|&joint| joint > start + 0.3 && joint < end - 0.3);
-            for joint in joints.chain(std::iter::once(end)) {
-                out.beam(at(cut, line_y), at(joint, line_y), dir, w, f.deep);
-                cut = joint;
-            }
-        };
-    // Plates and girts: along the foot of each row's cells not over another row, the top of
-    // those under none, and doubled where a storey stands on another. Not over or under an
-    // opening, whose frame is there.
-    let lines: BTreeSet<i32> = cells.iter().flat_map(|&(y, _)| [y, y + 1]).collect();
-    for &line in &lines {
+    (crossing, studs)
+}
+
+/// Plates and girts: along the foot of each row's cells not over another row, the top of
+/// those under none, and doubled where a storey stands on another. Not over or under an
+/// opening, whose frame is there.
+fn plates(face: &Face, lines: &BTreeSet<i32>, out: &mut Out) {
+    let (framer, plane, w) = (face.framer, face.plane, face.f.wide);
+    for &line in lines {
         // Cells along the line with a plate: (u, its middle's height).
         let mut plated: Vec<(i32, f32, End, End)> = Vec::new();
-        for &(y, first, last, low, high) in &rows {
+        for &(y, first, last, low, high) in &face.rows {
             if (y != line && y + 1 != line) || first == last {
                 continue;
             }
             for u in first..=last {
-                let (under, over) = (has(line - 1, u), has(line, u));
+                let (under, over) = (face.has(line - 1, u), face.has(line, u));
                 let middle = if y == line && !under {
                     // A sill plate, unless an opening is under it.
                     if framer.hole(cube_of(plane, u, line - 1)) {
@@ -458,14 +572,14 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
                     line as f32 * CELL_M + w * 0.5
                 } else if y + 1 == line && !over {
                     if framer.hole(cube_of(plane, u, line))
-                        || (in_gable(y)
+                        || (face.in_gable(y)
                             && line.rem_euclid(STOREY_CUBES) != 0
                             && framer.roof(cube_of(plane, u, line)))
                     {
                         continue;
                     }
                     // Under a gable the wall's plate is its girt, across the wall's width.
-                    if in_gable(line)
+                    if face.in_gable(line)
                         && line.rem_euclid(STOREY_CUBES) == 0
                         && framer.roof(cube_of(plane, u, line))
                     {
@@ -500,32 +614,46 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
             let (last, _, _, high) = plated[j];
             let girt = (middle - line as f32 * CELL_M).abs() < 1e-4;
             if girt {
-                let start = first as f32 * CELL_M + inset(low, false);
-                let end = (last + 1) as f32 * CELL_M - inset(high, false);
-                out.beam(at(start, middle), at(end, middle), dir, w * 2.0, f.deep);
+                let start = first as f32 * CELL_M + face.inset(low, false);
+                let end = (last + 1) as f32 * CELL_M - face.inset(high, false);
+                face.beam((face.at(start, middle), face.at(end, middle)), w * 2.0, out);
             } else {
-                level(middle, first, last, (low, high), false, out);
+                face.level(middle, (first, last), (low, high), false, out);
             }
             i = j + 1;
         }
     }
-    // Rails: across a run of cells with a row either side of their line, between the posts.
-    for &line in &lines {
-        let Some(under_line) = rail(line) else {
+}
+
+/// Rails: across a run of cells with a row either side of their line, between the posts.
+#[allow(clippy::type_complexity)]
+fn rails(
+    face: &Face,
+    lines: &BTreeSet<i32>,
+    (crossing, studs): (
+        &BTreeMap<i32, Vec<Crossing>>,
+        &BTreeMap<i32, Vec<(f32, f32)>>,
+    ),
+    out: &mut Out,
+) {
+    let w = face.f.wide;
+    for &line in lines {
+        let Some(under_line) = face.rail(line) else {
             continue;
         };
         let middle = line as f32 * CELL_M + if under_line { -w * 0.5 } else { w * 0.5 };
         let row = if under_line { line - 1 } else { line };
-        let us: Vec<i32> = cells
+        let us: Vec<i32> = face
+            .cells
             .iter()
             .filter(|&&(y, u)| {
                 // A gable's along its own row, which the roof stops, not the other.
-                let across = if in_gable(row) {
+                let across = if face.in_gable(row) {
                     y == row
                 } else {
-                    y == line && has(line - 1, u)
+                    y == line && face.has(line - 1, u)
                 };
-                across && row_of(row, u).is_some_and(|run| run.1 < run.2)
+                across && face.row_of(row, u).is_some_and(|run| run.1 < run.2)
             })
             .map(|&(_, u)| u)
             .collect();
@@ -539,22 +667,22 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
             // How the rail's own row ends at each end: as that row's run, or, where the row
             // goes on past (the other row stops at an opening), at that opening's frame.
             let end_of = |u: i32, high: bool| -> End {
-                match row_of(row, u) {
+                match face.row_of(row, u) {
                     Some(run) if high && run.2 == u => run.4,
                     Some(run) if !high && run.1 == u => run.3,
                     _ => End::Opening,
                 }
             };
-            let mut start = first as f32 * CELL_M + inset(end_of(first, false), true);
-            let mut end = (last + 1) as f32 * CELL_M - inset(end_of(last, true), true);
+            let mut start = first as f32 * CELL_M + face.inset(end_of(first, false), true);
+            let mut end = (last + 1) as f32 * CELL_M - face.inset(end_of(last, true), true);
             // A gable's runs out to its roof.
-            if in_gable(row) {
+            if face.in_gable(row) {
                 let top = middle + w * 0.5;
                 if end_of(first, false) == End::Outside {
-                    start = out_to_roof(first as f32 * CELL_M, -1.0, top, row);
+                    start = face.out_to_roof(first as f32 * CELL_M, -1.0, top, row);
                 }
                 if end_of(last, true) == End::Outside {
-                    end = out_to_roof((last + 1) as f32 * CELL_M, 1.0, top, row);
+                    end = face.out_to_roof((last + 1) as f32 * CELL_M, 1.0, top, row);
                 }
             }
             // Split at every post standing across its line, in the rows either side.
@@ -568,7 +696,7 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
                     .collect()
             };
             let other = across(if under_line { line } else { line - 1 });
-            let mut stops: Vec<(f32, f32)> = if in_gable(row) {
+            let mut stops: Vec<(f32, f32)> = if face.in_gable(row) {
                 // A gable's studs that reach it, cut off under the roof as they are.
                 let band = row.div_euclid(STOREY_CUBES) * STOREY_CUBES;
                 studs
@@ -587,72 +715,68 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
             };
             stops.sort_by(|a, b| a.0.total_cmp(&b.0));
             // No sliver of a rail between a gable's stud and its roof.
-            let shortest = if in_gable(row) { 0.15 } else { 0.0 };
+            let shortest = if face.in_gable(row) { 0.15 } else { 0.0 };
             stops.push((end, end));
             for (low, high) in stops {
                 if low - start > shortest {
-                    out.beam(at(start, middle), at(low, middle), dir, w, f.deep);
+                    face.beam((face.at(start, middle), face.at(low, middle)), w, out);
                 }
                 start = high;
             }
             i = j + 1;
         }
     }
-    if f.braces == Braces::Ends {
-        let walls: Vec<_> = rows
+}
+
+/// A gable's braces: at each end, from the girt up to the outer stud, along the roof and
+/// under it, and under its lowest rail.
+fn gable_braces(face: &Face, studs: &BTreeMap<i32, Vec<(f32, f32)>>, out: &mut Out) {
+    let (f, w, dir) = (face.f, face.f.wide, face.plane.0);
+    for (&foot, standing) in studs {
+        let bottom = foot as f32 * CELL_M + w;
+        let rail_under = f
+            .rails
+            .iter()
+            .filter(|&&r| r * 2 < STOREY_CUBES)
+            .map(|&r| (foot + r) as f32 * CELL_M - w)
+            .reduce(f32::min);
+        let low = standing
             .iter()
             .copied()
-            .filter(|run| !in_gable(run.0))
-            .collect();
-        braces(framer, plane, cells, &walls, &rail, &at, out);
-        // A gable's: at each end, from the girt up to the outer stud, along the roof and
-        // under it, and under its lowest rail.
-        for (&foot, standing) in &studs {
-            let bottom = foot as f32 * CELL_M + w;
-            let rail_under = f
-                .rails
-                .iter()
-                .filter(|&&r| r * 2 < STOREY_CUBES)
-                .map(|&r| (foot + r) as f32 * CELL_M - w)
-                .reduce(f32::min);
-            let low = standing
-                .iter()
-                .copied()
-                .reduce(|a, b| if b.0 < a.0 { b } else { a });
-            let high = standing
-                .iter()
-                .copied()
-                .reduce(|a, b| if b.0 > a.0 { b } else { a });
-            for (stud, toward) in [(low, -1.0f32), (high, 1.0)] {
-                let Some((u, stud_top)) = stud else {
-                    continue;
-                };
-                let side = u + toward * w * 0.5;
-                let eaves = out_to_roof(side, toward, bottom, foot);
-                let run = (eaves - side).abs();
-                let rise = stud_top - bottom;
-                if run < 0.5 || rise * 0.4 < f.brace {
-                    continue;
-                }
-                let mut up = rise * 0.6;
-                if let Some(rail) = rail_under {
-                    up = up.min(rail - bottom);
-                }
-                if up < 0.25 {
-                    continue;
-                }
-                let along = side + toward * run * up / rise;
-                // Thinner than what it runs into both ways, and as proud of the infill as
-                // most of its depth (as `braces`).
-                let shift = dir.step().as_vec3() * (BRACE_CROSS_M * toward.signum());
-                out.beam(
-                    at(along, bottom) + shift,
-                    at(side, bottom + up) + shift,
-                    dir,
-                    f.brace,
-                    f.deep - BRACE_BACK_M * 2.0,
-                );
+            .reduce(|a, b| if b.0 < a.0 { b } else { a });
+        let high = standing
+            .iter()
+            .copied()
+            .reduce(|a, b| if b.0 > a.0 { b } else { a });
+        for (stud, toward) in [(low, -1.0f32), (high, 1.0)] {
+            let Some((u, stud_top)) = stud else {
+                continue;
+            };
+            let side = u + toward * w * 0.5;
+            let eaves = face.out_to_roof(side, toward, bottom, foot);
+            let run = (eaves - side).abs();
+            let rise = stud_top - bottom;
+            if run < 0.5 || rise * 0.4 < f.brace {
+                continue;
             }
+            let mut up = rise * 0.6;
+            if let Some(rail) = rail_under {
+                up = up.min(rail - bottom);
+            }
+            if up < 0.25 {
+                continue;
+            }
+            let along = side + toward * run * up / rise;
+            // Thinner than what it runs into both ways, and as proud of the infill as most
+            // of its depth (as `braces`).
+            let shift = dir.step().as_vec3() * (BRACE_CROSS_M * toward.signum());
+            out.beam(
+                face.at(along, bottom) + shift,
+                face.at(side, bottom + up) + shift,
+                dir,
+                f.brace,
+                f.deep - BRACE_BACK_M * 2.0,
+            );
         }
     }
 }
