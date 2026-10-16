@@ -11,7 +11,10 @@
 // timber      its lintels' and sills' timber, where a role takes timber (D200)
 // textures    the texture sets its pieces wear unless a pack says otherwise: Dressed for its
 //             dressed stone, Log and LogEnd for timber; a pack adds its Masonry (the walls
-//             and footings) and Floor (floors and walls' tops)
+//             and footings) and Floor (floors and walls' tops). Its dressed stone (copings,
+//             sills, lintels, plinths) is the material's own wall, as its quoins are, unless
+//             its pack gives a Dressed of its own: this one is only the fallback for a
+//             material with neither (`Kit::read`)
 // details     the fine grain laid over its textures near (D362): stone's, tiled every half
 //             metre, on its walls, floors and dressed stone; wood's on its timber
 // dress       the profiles every block material shares (tools/kits/pieces.py, art/kits/block):

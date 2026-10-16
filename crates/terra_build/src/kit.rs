@@ -1060,7 +1060,24 @@ impl Kit {
         kit.dress
             .read(read)
             .map_err(|why| format!("{path}: {why}"))?;
+        let own =
+            crate::layers::own_textures(&text, read).map_err(|why| format!("{path}: {why}"))?;
+        kit.dress_in_own_stone(&own);
         Ok(kit)
+    }
+
+    /// A block material's dressed stone (copings, sills, lintels, plinths) cut from its own
+    /// wall, as its quoins are (D215 as amended, D290: shared pieces wear the material's
+    /// bake): a dressed set its own lines or packs give, else its wall's; the pattern's
+    /// shared dressed stone only for one with neither, so a new stone never wears another's
+    /// trims. `own` is the texture roles its lines and packs give (`layers::own_textures`).
+    fn dress_in_own_stone(&mut self, own: &[String]) {
+        if self.pattern != Pattern::Masonry || own.iter().any(|role| role == "Dressed") {
+            return;
+        }
+        if let Some(wall) = self.textures.get(&Material::Masonry).cloned() {
+            self.textures.insert(Material::Dressed, wall);
+        }
     }
 
     /// Every material's file under `assets/` (`MATERIALS`), by its name (its file's stem), in
@@ -1176,6 +1193,38 @@ pub(crate) mod tests {
         let mut kit = Kit::read(&format!("{MATERIALS}/{name}"), &read).unwrap();
         kit.dress.made = None;
         kit
+    }
+
+    #[test]
+    fn a_block_materials_dressed_stone_is_its_own_wall_unless_it_gives_one() {
+        let read = |path: &str| match path {
+            "data/kits/new_stone.ron" => {
+                Ok("(id: 30, pattern: \"block\", pack: \"new_stone\")".to_string())
+            }
+            "data/kits/cut_stone.ron" => {
+                Ok("(id: 31, pattern: \"block\", pack: \"cut_stone\")".to_string())
+            }
+            "data/packs/new_stone.ron" => Ok("(textures: {Masonry: (path: \"materials/dark\", \
+                 metres: (2.0, 2.0)), Floor: (path: \"materials/flags\", metres: (1.0, 1.0))})"
+                .to_string()),
+            "data/packs/cut_stone.ron" => Ok("(pack: \"new_stone\", textures: {Dressed: \
+                 (path: \"materials/ashlar\", metres: (0.8, 0.8))})"
+                .to_string()),
+            _ => {
+                std::fs::read_to_string(assets().join(path)).map_err(|why| format!("{path}: {why}"))
+            }
+        };
+        let dressed = |name: &str| {
+            let kit = Kit::read(&format!("{MATERIALS}/{name}.ron"), &read).unwrap();
+            kit.textures[&Material::Dressed].path.clone()
+        };
+        // A new stone's copings and sills are cut from its own dark wall, not another's pale.
+        assert_eq!(dressed("new_stone"), "materials/dark");
+        // One whose pack gives its own dressed stone wears that.
+        assert_eq!(dressed("cut_stone"), "materials/ashlar");
+        // A material of another pattern keeps its pattern's sets as they are.
+        let roof = shipped("shakes.ron");
+        assert!(!roof.textures.contains_key(&Material::Dressed));
     }
 
     /// Every Rust file of a crate's source, outside its tests.
