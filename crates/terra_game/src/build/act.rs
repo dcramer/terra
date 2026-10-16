@@ -727,24 +727,27 @@ impl Building<'_, '_> {
         self.stores.pay(claim, near, &mut carried, cost, times)
     }
 
-    /// The ground's height under columns of the base, sampled from the planet.
+    /// The ground's height under columns of the base, sampled from the planet, each once.
     pub fn ground_under(&self, columns: impl IntoIterator<Item = [i32; 2]>) -> Vec<Sample> {
         let mut seen = BTreeSet::new();
         columns
             .into_iter()
             .filter(|column| seen.insert(*column))
-            .map(|column| {
-                let middle = Vec3::new(
-                    (column[0] as f32 + 0.5) * CELL_M,
-                    0.0,
-                    (column[1] as f32 + 0.5) * CELL_M,
-                );
-                let height = -self
-                    .planet
-                    .distance(self.site.frame.transform_point(middle));
-                Sample::metres(column, height)
-            })
+            .map(|column| self.ground_at(column))
             .collect()
+    }
+
+    /// The ground's height under the middle of a column of the base, from the planet.
+    fn ground_at(&self, column: [i32; 2]) -> Sample {
+        let middle = Vec3::new(
+            (column[0] as f32 + 0.5) * CELL_M,
+            0.0,
+            (column[1] as f32 + 0.5) * CELL_M,
+        );
+        let height = -self
+            .planet
+            .distance(self.site.frame.transform_point(middle));
+        Sample::metres(column, height)
     }
 
     /// Says something to a player, as a notice.
@@ -760,23 +763,7 @@ impl Building<'_, '_> {
 
     /// Plans with the ground under their cubes sampled into them (construction-001, gap 3).
     pub fn with_ground(&self, ops: Vec<Op>) -> Vec<Op> {
-        ops.into_iter()
-            .map(|op| match op {
-                Op::LayPlan {
-                    part, kind, cubes, ..
-                } => {
-                    let ground =
-                        self.ground_under(cubes.iter().map(|cube| [cube.at[0], cube.at[2]]));
-                    Op::LayPlan {
-                        part,
-                        kind,
-                        cubes,
-                        ground,
-                    }
-                }
-                op => op,
-            })
-            .collect()
+        terra_build::plans::with_ground(ops, |column| self.ground_at(column))
     }
 
     /// Lays plans at once, for nothing: for a room set into the ground (a block of tiles),

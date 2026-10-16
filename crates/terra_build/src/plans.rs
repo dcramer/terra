@@ -462,6 +462,35 @@ pub fn replace(base: &Base, cubes: &[IVec3], kind: Kind) -> Vec<Op> {
     }]
 }
 
+/// Plans with the ground under their cubes sampled into them (construction-001, gap 3), as
+/// whoever lays them fills it in: `sample` gives each column a plan stands on once, in the
+/// order its cubes first reach it. The hammer samples the planet, the QA cabin a height
+/// map.
+pub fn with_ground(ops: Vec<Op>, sample: impl Fn([i32; 2]) -> crate::Sample) -> Vec<Op> {
+    ops.into_iter()
+        .map(|op| match op {
+            Op::LayPlan {
+                part, kind, cubes, ..
+            } => {
+                let mut seen = BTreeSet::new();
+                let ground = cubes
+                    .iter()
+                    .map(|cube| [cube.at[0], cube.at[2]])
+                    .filter(|column| seen.insert(*column))
+                    .map(&sample)
+                    .collect();
+                Op::LayPlan {
+                    part,
+                    kind,
+                    cubes,
+                    ground,
+                }
+            }
+            op => op,
+        })
+        .collect()
+}
+
 /// A kind's family: its pattern, and whether it is framed. Two kinds of one family lay the
 /// same shapes from the same cubes, so one changes into the other in place (D298).
 pub fn family(kit: &crate::kit::Kit) -> u8 {

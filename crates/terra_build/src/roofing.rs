@@ -1006,7 +1006,7 @@ mod tests {
 
     /// The castle (`castle`), its towers' hips, its keep's and hall's gables.
     fn castle() -> Base {
-        Base::from_shortcuts(&crate::castle::castle(
+        Base::from_shortcuts(&crate::scenes::castle::castle(
             Kind::PLAIN,
             Kind::PLAIN,
             Kind::FIRST_ROOF,

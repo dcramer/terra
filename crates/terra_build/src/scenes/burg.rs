@@ -17,7 +17,7 @@
 //!   **sheds** under split shakes along the east and west walls.
 //!
 //! Laid out in its own cubes with the gate's middle at the origin on the south wall's outer
-//! face, the ward to the north (-Z), as a village's buildings and [`crate::castle`] are.
+//! face, the ward to the north (-Z), as a village's buildings and [`super::castle`] are.
 
 use crate::roofer::{self, Style};
 use crate::{Base, BuildOp, Cube, Fill, Kind};

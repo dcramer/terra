@@ -1665,7 +1665,7 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
         }
         out.push((
             name,
-            crate::qa_cabin::cabin(kits, &kinds, other, &height, roof_left_on),
+            crate::scenes::qa_cabin::cabin(kits, &kinds, other, &height, roof_left_on),
         ));
     };
     for kit in &walls {
@@ -1787,7 +1787,8 @@ pub fn cases(kits: &Kits, only: Option<&str>) -> Vec<(String, Base)> {
             if only.is_some_and(|only| !name.contains(only)) {
                 continue;
             }
-            let ops = crate::castle::castle(stone.kind(), timber.kind(), roof(stone.kind()));
+            let ops =
+                crate::scenes::castle::castle(stone.kind(), timber.kind(), roof(stone.kind()));
             out.push((name, on_ground(kits, &ops)));
         }
     }

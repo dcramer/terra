@@ -6,8 +6,8 @@
 //! a roof left on, a roof against a wall on every side and in a corner, shapes and posts on
 //! and through a roof, and a roof going up under walls standing on it.
 
-use crate::example::{Plan, plan, roof_over};
 use crate::roofer::Style;
+use crate::scenes::example::{Plan, plan, roof_over};
 use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, STOREY_CUBES, Shape};
 use glam::IVec3;
 

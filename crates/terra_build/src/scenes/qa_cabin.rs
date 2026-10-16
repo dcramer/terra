@@ -52,30 +52,11 @@ pub fn cabin(
     let mut base = Base::default();
     // Each plan with the ground under its columns, as whoever lays it fills it in.
     let lay = |base: &mut Base, ops: Vec<Op>| {
-        for op in ops {
-            let op = match op {
-                Op::LayPlan {
-                    part, kind, cubes, ..
-                } => {
-                    let mut seen = BTreeSet::new();
-                    let ground = cubes
-                        .iter()
-                        .map(|cube| [cube.at[0], cube.at[2]])
-                        .filter(|column| seen.insert(*column))
-                        .map(|column| Sample {
-                            column,
-                            height_cm: ground_cm(column),
-                        })
-                        .collect();
-                    Op::LayPlan {
-                        part,
-                        kind,
-                        cubes,
-                        ground,
-                    }
-                }
-                op => op,
-            };
+        let sample = |column| Sample {
+            column,
+            height_cm: ground_cm(column),
+        };
+        for op in plans::with_ground(ops, sample) {
             let _ = base.act(&op, &cx);
         }
     };
