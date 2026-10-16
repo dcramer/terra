@@ -24,7 +24,7 @@ use crate::shell::Options;
 use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
-use terra_build::kit::{Pattern, Profile};
+use terra_build::kit::{Kits, Pattern, Profile};
 use terra_build::ops::Op;
 use terra_build::scenes::sheet::{acted_rows, gable_end, kit_rows, preview, roof_cube_rows, rows};
 use terra_build::{Base, BuildOp, Kind};
@@ -106,6 +106,43 @@ fn act(build: &mut Build, acts: &[Op], rules: &terra_build::Rules, name: &str) {
 /// the house's own metres: eight metres out, level with the middle of the gable.
 const GABLE_END_VIEW: [Vec3; 2] = [Vec3::new(-8.0, 3.6, 2.0), Vec3::new(0.0, 3.6, 2.0)];
 
+/// A row of the sheet: its name, what builds it, how far east its group starts, and its
+/// place in its group.
+type Row = (String, Vec<BuildOp>, f32, usize);
+
+/// What the sheet lays its rows with.
+struct Laying<'a, 'w, 's, 'm> {
+    commands: &'a mut Commands<'w, 's>,
+    meshes: &'a mut ResMut<'m, Assets<Mesh>>,
+    site: &'a Site,
+    look: &'a BuildLook,
+    kits: &'a Arc<Kits>,
+}
+
+impl Laying<'_, '_, '_, '_> {
+    /// A base standing at `frame`, named `label`, drawn in the sheet's kits.
+    fn put(&mut self, frame: Transform, label: &str) -> Build {
+        let mut build = Build::new(self.commands, self.look, frame, label);
+        build.kits = Some(self.kits.clone());
+        build
+    }
+}
+
+/// How high the ground is at a place, in the start's own space, the yard being round: what
+/// a vantage near it needs to stand on it.
+fn ground_at(site: &Site, planet: &Planet, east: f32, north: f32) -> (Vec3, f32) {
+    let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
+    let ground = point - point.normalize() * planet.distance(point);
+    (
+        ground,
+        site.frame
+            .compute_affine()
+            .inverse()
+            .transform_point3(ground)
+            .y,
+    )
+}
+
 /// Lays the sheet once the site is there.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lay(
@@ -131,28 +168,75 @@ pub(super) fn lay(
     };
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
     let stone = kits.footing().map(|kit| kit.kind());
-    // How high the ground is at a place, in the start's own space, the yard being round:
-    // what a vantage near it needs to stand on it.
-    let ground_at = |planet: &Planet, east: f32, north: f32| {
-        let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
-        let ground = point - point.normalize() * planet.distance(point);
-        (
-            ground,
-            site.frame
-                .compute_affine()
-                .inverse()
-                .transform_point3(ground)
-                .y,
-        )
+    let names = super::kit_names();
+    let (placed, count) = sheet_rows(&kits, &names);
+    let mut sheet = Laying {
+        commands: &mut commands,
+        meshes: &mut meshes,
+        site: &site,
+        look: &look,
+        kits: &kits,
     };
-    // The walls' rows, then each kind's roof rows to the east of them, a group a kind.
+    for row in placed {
+        lay_row(&mut sheet, &planet, &options.sheet_rows, row);
+    }
+    // Rows of cubes in states of their own, after them.
+    let roof = |walls: Kind| kits.roof_over(walls);
+    let acted = stone
+        .map(|stone| acted_rows(laying, stone, &roof))
+        .unwrap_or_default();
+    let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
+    let wanted = &options.sheet_rows;
+    for (index, row) in acted.iter().enumerate() {
+        if !wanted.is_empty() && !wanted.iter().any(|text| row.name.contains(text.as_str())) {
+            continue;
+        }
+        let north = -FIRST_ROW_M - ROW_M * (count + index) as f32;
+        lay_acted(&mut sheet, &mut planet, (&options, &rules), row, north);
+    }
+    lay_preview(&mut sheet, &planet, (wanted, &rules), &names, stone);
+    let count = count + acted.len();
+    // Models to judge beside the sheet, each in a row of its own after it.
+    for (index, path) in options.models.iter().enumerate() {
+        let (east, north) = (0.0, -FIRST_ROW_M - ROW_M * (count + index) as f32);
+        let (ground, height) = ground_at(&site, &planet, east, north);
+        commands.spawn((
+            Name::new(format!("Kit sheet: model {path}")),
+            frame_at(ground, &site.frame),
+            Visibility::default(),
+            bevy::world_serialization::WorldAssetRoot(
+                assets.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
+            ),
+        ));
+        info!(
+            "Kit sheet: model {path}: --vantage {},{},{},{},{},{}",
+            east + 2.0,
+            height + 2.2,
+            north + 7.0,
+            east + 2.0,
+            height + 1.0,
+            north
+        );
+    }
+}
+
+/// Every row of the sheet but those of cubes in states of their own, each where it goes:
+/// the walls' rows, every further wall kit's, then each roof kind's rows to the east of
+/// them, a group a kind, the gable ends and where roofs and walls meet. And how many rows
+/// the walls' take, which the rows after them are laid north of.
+fn sheet_rows(
+    kits: &terra_build::kit::Kits,
+    names: &std::collections::BTreeMap<Kind, String>,
+) -> (Vec<Row>, usize) {
+    let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
+    let stone = kits.footing().map(|kit| kit.kind());
     let hewn = kits
         .0
         .iter()
         .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
         .map(|kit| kit.kind());
     let roof = |walls: Kind| kits.roof_over(walls);
-    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone, hewn, &roof)
+    let mut placed: Vec<Row> = rows(laying, stone, hewn, &roof)
         .into_iter()
         .enumerate()
         .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
@@ -160,7 +244,6 @@ pub(super) fn lay(
     // Every further wall kit's rows (D236), each by its file's name, after the rest: a kit
     // added as a file is on the sheet with nothing else to do (D136).
     if let Some(stone) = stone {
-        let names = super::kit_names();
         let further = kits.0.iter().map(|kit| kit.kind()).filter(|&kind| {
             !kind.is_roof() && kind != laying && kind != stone && Some(kind) != hewn
         });
@@ -178,7 +261,6 @@ pub(super) fn lay(
     // Each roof's rows to the east of the walls', a group a roof kind over the walls it
     // takes (D241): shakes over logs, slate over stone, shakes over hewn timber; then logs
     // and stone mixed.
-    let names = super::kit_names();
     let mut group = 0;
     for walls in [Some(laying), stone, hewn].into_iter().flatten() {
         let covering = roof(walls);
@@ -202,6 +284,12 @@ pub(super) fn lay(
             placed.push((format!("stone and logs: {row_name}"), ops, east, row));
         }
     }
+    let name = |kind: Kind| {
+        names
+            .get(&kind)
+            .cloned()
+            .unwrap_or_else(|| kind.0.to_string())
+    };
     // Every wall kind's gable end under every roof kind, each seen straight on from its own
     // vantage, so how walls are carried up to a roof is judged in every pairing.
     group += 1;
@@ -220,12 +308,6 @@ pub(super) fn lay(
     let mut row = 0;
     for &walls in &wall_kinds {
         for &covering in &roof_kinds {
-            let name = |kind: Kind| {
-                names
-                    .get(&kind)
-                    .cloned()
-                    .unwrap_or_else(|| kind.0.to_string())
-            };
             placed.push((
                 format!("gable end: {} under {}", name(walls), name(covering)),
                 gable_end(walls, covering),
@@ -250,12 +332,6 @@ pub(super) fn lay(
             })
         });
         let covering = roof(walls);
-        let name = |kind: Kind| {
-            names
-                .get(&kind)
-                .cloned()
-                .unwrap_or_else(|| kind.0.to_string())
-        };
         for (case, ops) in terra_build::roof_walls::rows(walls, covering, other) {
             placed.push((
                 format!(
@@ -270,112 +346,128 @@ pub(super) fn lay(
             row += 1;
         }
     }
-    for (name, ops, group_east, row) in placed {
-        // Only the rows asked for, each where it always is.
-        let wanted = &options.sheet_rows;
-        if !wanted.is_empty() && !wanted.iter().any(|text| name.contains(text.as_str())) {
-            continue;
+    (placed, count)
+}
+
+/// A row laid, if it is one of those asked for, in its three states along it: built, going
+/// up and a blueprint, each where it always is; its vantage logged.
+fn lay_row(
+    sheet: &mut Laying,
+    planet: &Planet,
+    wanted: &[String],
+    (name, ops, group_east, row): Row,
+) {
+    // Only the rows asked for, each where it always is.
+    if !wanted.is_empty() && !wanted.iter().any(|text| name.contains(text.as_str())) {
+        return;
+    }
+    let site = sheet.site;
+    let north = -FIRST_ROW_M - ROW_M * row as f32;
+    for (column, shown) in [
+        Shown::Built,
+        Shown::Plan(if group_east > 0.0 {
+            ROOF_GOING_UP
+        } else {
+            GOING_UP
+        }),
+        Shown::Plan(0.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let east = group_east + STATE_M * column as f32;
+        // On the ground there, the yard being round.
+        let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
+        let ground = point - point.normalize() * planet.distance(point);
+        let mut base = Base::default();
+        for &op in &ops {
+            base.apply(op);
         }
-        let north = -FIRST_ROW_M - ROW_M * row as f32;
-        for (column, shown) in [
-            Shown::Built,
-            Shown::Plan(if group_east > 0.0 {
-                ROOF_GOING_UP
-            } else {
-                GOING_UP
-            }),
-            Shown::Plan(0.0),
-        ]
-        .into_iter()
-        .enumerate()
+        let frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
+        // Walls with no floor stand on footings in the ground instead.
+        let frame = if base.floors().next().is_some() {
+            lifted(frame, &base, planet)
+        } else {
+            frame
+        };
+        // A gable end's own vantage, straight on to the built house's gable, through its
+        // frame, as the yard is round.
+        if column == 0 && name.starts_with("gable end:") {
+            let start = site.frame.compute_affine().inverse();
+            let [eye, at] =
+                GABLE_END_VIEW.map(|p| start.transform_point3(frame.transform_point(p)));
+            info!(
+                "Kit sheet: {name}: straight on: --vantage {},{},{},{},{},{}",
+                eye.x, eye.y, eye.z, at.x, at.y, at.z
+            );
+        }
+        let label = format!("Kit sheet: {name}, {shown:?}");
+        let mut build = sheet.put(frame, &label);
+        build.shown = shown;
+        build.replace_with(&ops, sheet.commands, planet, sheet.meshes);
+        sheet.commands.spawn((Name::new(label), Built(build)));
+    }
+    let (_, height) = ground_at(site, planet, group_east + STATE_M, north);
+    info!(
+        "Kit sheet: {name}: --vantage {},{},{},{},{},{}",
+        group_east + STATE_M + 2.0,
+        height + 9.0,
+        north + 22.0,
+        group_east + STATE_M + 2.0,
+        height + 0.5,
+        north + 1.5
+    );
+}
+
+/// A row whose columns are each a state its cubes are in, `north` of the start, on ground
+/// sloping away where it asks for it on the yard; its vantage logged.
+fn lay_acted(
+    sheet: &mut Laying,
+    planet: &mut ResMut<Planet>,
+    (options, rules): (&Options, &terra_build::Rules),
+    row: &terra_build::scenes::sheet::Acted,
+    north: f32,
+) {
+    let site = sheet.site;
+    let row_frame = frame_at(
         {
-            let east = group_east + STATE_M * column as f32;
-            // On the ground there, the yard being round.
-            let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
-            let ground = point - point.normalize() * planet.distance(point);
-            let mut base = Base::default();
-            for &op in &ops {
-                base.apply(op);
-            }
-            let frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
-            // Walls with no floor stand on footings in the ground instead.
-            let frame = if base.floors().next().is_some() {
-                lifted(frame, &base, &planet)
-            } else {
-                frame
-            };
-            // A gable end's own vantage, straight on to the built house's gable, through
-            // its frame, as the yard is round.
-            if column == 0 && name.starts_with("gable end:") {
-                let start = site.frame.compute_affine().inverse();
-                let [eye, at] =
-                    GABLE_END_VIEW.map(|p| start.transform_point3(frame.transform_point(p)));
-                info!(
-                    "Kit sheet: {name}: straight on: --vantage {},{},{},{},{},{}",
-                    eye.x, eye.y, eye.z, at.x, at.y, at.z
-                );
-            }
-            let label = format!("Kit sheet: {name}, {shown:?}");
-            let mut build = Build::new(&mut commands, &look, frame, &label);
-            build.kits = Some(kits.clone());
-            build.shown = shown;
-            build.replace_with(&ops, &mut commands, &planet, &mut meshes);
-            commands.spawn((Name::new(label), Built(build)));
-        }
-        let (_, height) = ground_at(&planet, group_east + STATE_M, north);
-        info!(
-            "Kit sheet: {name}: --vantage {},{},{},{},{},{}",
-            group_east + STATE_M + 2.0,
-            height + 9.0,
-            north + 22.0,
-            group_east + STATE_M + 2.0,
-            height + 0.5,
-            north + 1.5
-        );
+            let point = site.frame.transform_point(Vec3::new(0.0, 0.0, north));
+            point - point.normalize() * planet.distance(point)
+        },
+        &site.frame,
+    );
+    if row.sloped && options.yard() {
+        planet.apply(&slope(&row_frame));
     }
-    // Rows of cubes in states of their own, after them.
-    let acted = stone
-        .map(|stone| acted_rows(laying, stone, &roof))
-        .unwrap_or_default();
-    let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
-    let wanted = &options.sheet_rows;
-    for (index, row) in acted.iter().enumerate() {
-        if !wanted.is_empty() && !wanted.iter().any(|text| row.name.contains(text.as_str())) {
-            continue;
-        }
-        let north = -FIRST_ROW_M - ROW_M * (count + index) as f32;
-        let row_frame = frame_at(
-            {
-                let point = site.frame.transform_point(Vec3::new(0.0, 0.0, north));
-                point - point.normalize() * planet.distance(point)
-            },
-            &site.frame,
-        );
-        if row.sloped && options.yard() {
-            planet.apply(&slope(&row_frame));
-        }
-        for (column, acts) in row.columns.iter().enumerate() {
-            let label = format!("Kit sheet: {}, {column}", row.name);
-            let at = Vec3::new(STATE_M * column as f32, 0.0, north);
-            let frame = base_frame(at, &site, &planet, &row.ops);
-            let mut build = Build::new(&mut commands, &look, frame, &label);
-            build.kits = Some(kits.clone());
-            build.by_cubes = true;
-            build.replace_with(&row.ops, &mut commands, &planet, &mut meshes);
-            act(&mut build, acts, &rules, row.name);
-            commands.spawn((Name::new(label), Built(build)));
-        }
-        let (_, height) = ground_at(&planet, STATE_M, north);
-        let corner = Vec3::new(STATE_M, height, north);
-        let (eye, at) = (corner + row.view[0], corner + row.view[1]);
-        info!(
-            "Kit sheet: {}: --vantage {},{},{},{},{},{}",
-            row.name, eye.x, eye.y, eye.z, at.x, at.y, at.z
-        );
+    for (column, acts) in row.columns.iter().enumerate() {
+        let label = format!("Kit sheet: {}, {column}", row.name);
+        let at = Vec3::new(STATE_M * column as f32, 0.0, north);
+        let frame = base_frame(at, site, planet, &row.ops);
+        let mut build = sheet.put(frame, &label);
+        build.by_cubes = true;
+        build.replace_with(&row.ops, sheet.commands, planet, sheet.meshes);
+        act(&mut build, acts, rules, row.name);
+        sheet.commands.spawn((Name::new(label), Built(build)));
     }
-    // A material's preview (D349), only when asked for by name (`<name>: preview`), laid
-    // alone where `tools/kits/preview.ts` looks; the first asked for, as all are laid in one
-    // place.
+    let (_, height) = ground_at(site, planet, STATE_M, north);
+    let corner = Vec3::new(STATE_M, height, north);
+    let (eye, at) = (corner + row.view[0], corner + row.view[1]);
+    info!(
+        "Kit sheet: {}: --vantage {},{},{},{},{},{}",
+        row.name, eye.x, eye.y, eye.z, at.x, at.y, at.z
+    );
+}
+
+/// A material's preview (D349), only when asked for by name (`<name>: preview`), laid alone
+/// where `tools/kits/preview.ts` looks; the first asked for, as all are laid in one place.
+fn lay_preview(
+    sheet: &mut Laying,
+    planet: &Planet,
+    (wanted, rules): (&[String], &terra_build::Rules),
+    names: &std::collections::BTreeMap<Kind, String>,
+    stone: Option<Kind>,
+) {
+    let kits = sheet.kits.clone();
     let asked = |name: &str| {
         let row = format!("{name}: preview");
         wanted
@@ -386,49 +478,26 @@ pub(super) fn lay(
         let name = names.get(&kit.kind())?;
         asked(name).then_some((name.clone(), kit))
     });
-    if let (Some((name, kit)), Some(stone)) = (previewed, stone) {
-        for (part, (ops, acts, aside)) in preview(kit, stone, roof(kit.kind()), &rules)
-            .into_iter()
-            .enumerate()
-        {
-            let label = format!("Kit sheet: {name}: preview, {part}");
-            let at = Vec3::new(PREVIEW[0] + aside, 0.0, PREVIEW[1]);
-            let frame = base_frame(at, &site, &planet, &ops);
-            let mut build = Build::new(&mut commands, &look, frame, &label);
-            build.kits = Some(kits.clone());
-            build.by_cubes = true;
-            build.replace_with(&ops, &mut commands, &planet, &mut meshes);
-            act(&mut build, &acts, &rules, &label);
-            commands.spawn((Name::new(label), Built(build)));
-        }
-        info!(
-            "Kit sheet: {name}: preview at {},{} (tools/kits/preview.ts)",
-            PREVIEW[0], PREVIEW[1]
-        );
+    let (Some((name, kit)), Some(stone)) = (previewed, stone) else {
+        return;
+    };
+    for (part, (ops, acts, aside)) in preview(kit, stone, kits.roof_over(kit.kind()), rules)
+        .into_iter()
+        .enumerate()
+    {
+        let label = format!("Kit sheet: {name}: preview, {part}");
+        let at = Vec3::new(PREVIEW[0] + aside, 0.0, PREVIEW[1]);
+        let frame = base_frame(at, sheet.site, planet, &ops);
+        let mut build = sheet.put(frame, &label);
+        build.by_cubes = true;
+        build.replace_with(&ops, sheet.commands, planet, sheet.meshes);
+        act(&mut build, &acts, rules, &label);
+        sheet.commands.spawn((Name::new(label), Built(build)));
     }
-    let count = count + acted.len();
-    // Models to judge beside the sheet, each in a row of its own after it.
-    for (index, path) in options.models.iter().enumerate() {
-        let (east, north) = (0.0, -FIRST_ROW_M - ROW_M * (count + index) as f32);
-        let (ground, height) = ground_at(&planet, east, north);
-        commands.spawn((
-            Name::new(format!("Kit sheet: model {path}")),
-            frame_at(ground, &site.frame),
-            Visibility::default(),
-            bevy::world_serialization::WorldAssetRoot(
-                assets.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
-            ),
-        ));
-        info!(
-            "Kit sheet: model {path}: --vantage {},{},{},{},{},{}",
-            east + 2.0,
-            height + 2.2,
-            north + 7.0,
-            east + 2.0,
-            height + 1.0,
-            north
-        );
-    }
+    info!(
+        "Kit sheet: {name}: preview at {},{} (tools/kits/preview.ts)",
+        PREVIEW[0], PREVIEW[1]
+    );
 }
 
 #[cfg(test)]
