@@ -10,7 +10,7 @@
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
 use super::flora_kinds::Cuttable;
-use super::flora_kinds::{Flora, FloraDef, Grows, MATERIALS, Sway};
+use super::flora_kinds::{Cut, Flora, FloraDef, Grows, MATERIALS, Sway};
 use super::footprint::Footprint;
 use super::grown;
 use super::models::{Part, read_model};
@@ -314,6 +314,9 @@ pub struct Growth {
     pub obstacle: Option<Vec3>,
     /// How far up from its foot to aim for it, in metres.
     pub middle_m: f32,
+    /// Whether it grows low and soft, a flower, herb or fern, in no one's way: what a meadow
+    /// mown out of the forest keeps ([`MowAround`]).
+    low: bool,
 }
 
 impl Growth {
@@ -326,6 +329,7 @@ impl Growth {
             cut,
             obstacle,
             middle_m,
+            low: false,
         }
     }
 }
@@ -375,6 +379,9 @@ impl Patch {
 
 /// A mountain lake's shore stones lie this far from the start, as far as its grown trees.
 const SHORE_STONES_M: f32 = 650.0;
+/// A lake's shore is a mountain lake's, strewn with stones, from the first height over the
+/// sea, fully by the second, in metres.
+const MOUNTAIN_SHORE_M: (f32, f32) = (250.0, 500.0);
 /// A stone stands so much of its size over where its foot is put, sunk by a third and leaning.
 const STONE_STANDS: f32 = 0.7;
 /// A stone's top is never left between so far under the water and so far over it: just under,
@@ -406,6 +413,15 @@ fn clear_of_the_surface(over: f32, size: f32) -> Option<f32> {
 #[derive(Message, Clone, Copy)]
 pub struct ClearAround(pub Vec3, pub f32);
 
+/// Asks for the plants within so many metres of a place to be cleared but what grows low and
+/// soft, flowers, herbs and ferns: a meadow cut out of the forest for a settlement, its trees,
+/// bushes, logs and stones taken away and its flowers left (D381).
+#[derive(Message, Clone, Copy)]
+pub struct MowAround(pub Vec3, pub f32);
+
+/// What grows lower than this, in no one's way, a mown meadow keeps.
+const LOW_M: f32 = 0.9;
+
 /// When what grows is planted, and when it is cleared away for what is built or dug. Whatever
 /// keeps a [`Footprint`] up to date does it before these.
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -427,9 +443,17 @@ pub fn plugin(app: &mut App) {
                 .in_set(FloraSystems::Plant),
         )
         .add_message::<ClearAround>()
+        .add_message::<MowAround>()
         .add_systems(
             Update,
-            (make_way, clear_new, clear_around, follow_digs, regrown)
+            (
+                make_way,
+                clear_new,
+                clear_around,
+                mow_around,
+                follow_digs,
+                regrown,
+            )
                 .chain()
                 .in_set(FloraSystems::Clear),
         );
@@ -628,7 +652,7 @@ fn plant(
     tweaks: Res<Tweaks>,
     footprints: Query<(Entity, &Footprint)>,
     ticks: SystemChangeTick,
-    start: Res<Start>,
+    (start, sited): (Res<Start>, Option<Res<crate::start::Sited>>),
     flora: Res<Flora>,
     (mut obstacles, mut trunks): (ResMut<Obstacles>, ResMut<Trunks>),
     mut meshes: ResMut<Assets<Mesh>>,
@@ -765,11 +789,18 @@ fn plant(
         }
         planted += 1;
         solid_things.extend(stops);
+        // A herb, fern or flower: cut as a plant, low and in no one's way.
+        let low = stops.is_none()
+            && model.height * transform.scale.y < LOW_M
+            && cut
+                .as_ref()
+                .is_none_or(|cut| matches!(cut.what, Cut::Plant));
         let growth = Growth {
             clearance_m,
             cut,
             obstacle: stops.map(|(at, _)| at),
             middle_m: (model.height * transform.scale.y * 0.4).min(1.4),
+            low,
         };
         match &model.look {
             Drawn::Mesh(mesh) => {
@@ -902,7 +933,15 @@ fn plant(
                 if !(-0.7..bare + 0.4).contains(&over) {
                     return;
                 }
-                let chance = 0.6 * (1.0 - smoothstep(bare - 0.3, bare + 0.4, over));
+                // A mountain lake's, scoured by its ice; a lowland lake in the forest, as a
+                // settlement's by the valley floor, has soft shores, not a field of boulders
+                // through its shallows (D381).
+                let mountain = smoothstep(
+                    MOUNTAIN_SHORE_M.0,
+                    MOUNTAIN_SHORE_M.1,
+                    point.length() - planet.sea_radius_m(),
+                );
+                let chance = 0.6 * mountain * (1.0 - smoothstep(bare - 0.3, bare + 0.4, over));
                 if rng.unit() > chance {
                     return;
                 }
@@ -931,29 +970,6 @@ fn plant(
         );
     }
 
-    // Bushes and leafy plants, in the grass.
-    scatter(seed.derive("bushes"), 230.0, 5.5, |rng, x, z| {
-        let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.normal(point));
-        if rng.unit() > 0.3 * cover.grass {
-            return;
-        }
-        // Some bear berries, the first food to be found.
-        let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
-            return;
-        };
-        let model = pick(rng, &models[kind]);
-        let tall = size(rng, kind);
-        let scale = tall / model.height;
-        let fibre = flora.kinds()[kind].cuttable(tall);
-        put(
-            &model,
-            standing(rng, point, 0.1, scale, 0.05),
-            1.2,
-            fibre,
-            None,
-        );
-    });
     // Past the trees the heath's own cover grows (below), not the woods' ferns and herbs,
     // even where a pool's edge leaves its map a little meadow.
     let on_heath = |point: Vec3| {
@@ -974,52 +990,90 @@ fn plant(
             .any(|&off| round.heath.at(point + off).open > 0.5)
         })
     };
-    scatter(seed.derive("plants"), 150.0, 3.2, |rng, x, z| {
-        let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.normal(point));
-        if rng.unit() > 0.28 * cover.grass || on_heath(point) {
-            return;
-        }
-        let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
-            return;
+    // Round the start, and round a settlement the world starts beside, whose meadow lies
+    // far from the start (D381): its flowers and herbs, and the bushes at its forest's edge.
+    let mut patches = vec![(ground, seed, 1.0)];
+    if let Some(middle) = sited.and_then(|sited| sited.flora_middle(&planet)) {
+        let up = middle.normalize();
+        let east = up.cross(Vec3::X).normalize();
+        let patch = Patch {
+            middle,
+            east,
+            north: east.cross(up),
         };
-        let model = pick(rng, &models[kind]);
-        let tall = size(rng, kind);
-        let scale = tall / model.height;
-        let fibre = flora.kinds()[kind].cuttable(tall);
-        put(
-            &model,
-            standing(rng, point, 0.15, scale, 0.02),
-            0.6,
-            fibre,
-            None,
-        );
-    });
-    // Flowers, in drifts.
-    scatter(seed.derive("flowers"), 130.0, 1.5, |rng, x, z| {
-        let point = ground.ground(&planet, x, z);
-        let drift = smoothstep(0.05, 0.22, blooms.fbm(point / 22.0, 2, 2.0, 0.5));
-        if rng.unit() > 0.75 * drift {
-            return;
-        }
-        let cover = planet.cover(point, planet.normal(point));
-        if cover.grass < 0.5 || on_heath(point) {
-            return;
-        }
-        let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
-            return;
-        };
-        let model = pick(rng, &models[kind]);
-        let tall = size(rng, kind);
-        let scale = tall / model.height;
-        put(
-            &model,
-            standing(rng, point, 0.15, scale, 0.02),
-            0.5,
-            flora.kinds()[kind].cuttable(tall),
-            None,
-        );
-    });
+        patches.push((patch, seed.derive("settlement"), 1.5));
+    }
+    for &(ground, seed, reach) in &patches {
+        // Bushes and leafy plants, in the grass.
+        scatter(seed.derive("bushes"), 230.0 * reach, 5.5, |rng, x, z| {
+            let point = ground.ground(&planet, x, z);
+            let cover = planet.cover(point, planet.normal(point));
+            if rng.unit() > 0.3 * cover.grass {
+                return;
+            }
+            // Some bear berries, the first food to be found.
+            let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
+                return;
+            };
+            let model = pick(rng, &models[kind]);
+            let tall = size(rng, kind);
+            let scale = tall / model.height;
+            let fibre = flora.kinds()[kind].cuttable(tall);
+            put(
+                &model,
+                standing(rng, point, 0.1, scale, 0.05),
+                1.2,
+                fibre,
+                None,
+            );
+        });
+        scatter(seed.derive("plants"), 150.0 * reach, 3.2, |rng, x, z| {
+            let point = ground.ground(&planet, x, z);
+            let cover = planet.cover(point, planet.normal(point));
+            if rng.unit() > 0.28 * cover.grass || on_heath(point) {
+                return;
+            }
+            let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
+                return;
+            };
+            let model = pick(rng, &models[kind]);
+            let tall = size(rng, kind);
+            let scale = tall / model.height;
+            let fibre = flora.kinds()[kind].cuttable(tall);
+            put(
+                &model,
+                standing(rng, point, 0.15, scale, 0.02),
+                0.6,
+                fibre,
+                None,
+            );
+        });
+        // Flowers, in drifts.
+        scatter(seed.derive("flowers"), 130.0 * reach, 1.5, |rng, x, z| {
+            let point = ground.ground(&planet, x, z);
+            let drift = smoothstep(0.05, 0.22, blooms.fbm(point / 22.0, 2, 2.0, 0.5));
+            if rng.unit() > 0.75 * drift {
+                return;
+            }
+            let cover = planet.cover(point, planet.normal(point));
+            if cover.grass < 0.5 || on_heath(point) {
+                return;
+            }
+            let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
+                return;
+            };
+            let model = pick(rng, &models[kind]);
+            let tall = size(rng, kind);
+            let scale = tall / model.height;
+            put(
+                &model,
+                standing(rng, point, 0.15, scale, 0.02),
+                0.5,
+                flora.kinds()[kind].cuttable(tall),
+                None,
+            );
+        });
+    }
 
     // The heath's dwarf shrubs past the trees, where its dwarf-shrub community holds the ground
     // (`terra_land::heath`), in clumps, a few among the lichen and sedge.
@@ -1459,6 +1513,25 @@ fn follow_digs(
         .collect();
     let footprints: Vec<Footprint> = footprints.iter().cloned().collect();
     regrow(&mut meadow, &planet, footprints, squares);
+}
+
+/// Mows a meadow: clears what grows but the low plants.
+fn mow_around(
+    mut asked: MessageReader<MowAround>,
+    mut obstacles: ResMut<Obstacles>,
+    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+) {
+    for &MowAround(at, radius) in asked.read() {
+        let up = at.normalize();
+        for (growth, transform, mut visibility) in &mut growth {
+            if !growth.low && (transform.translation - at).reject_from(up).length() < radius {
+                visibility.set_if_neq(Visibility::Hidden);
+                if let Some(stood) = growth.obstacle {
+                    obstacles.remove(stood);
+                }
+            }
+        }
+    }
 }
 
 /// Clears plants where something has been set down since they grew.

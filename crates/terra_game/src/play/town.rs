@@ -467,6 +467,11 @@ struct TownCover {
     /// The ground of each building going up in a settlement rising (D381).
     plots: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
+    /// How far each plot, and the square, is worn yet, 0 to 1: a settlement rising's ground is
+    /// trodden over a few seconds of its time-lapse as its builders come and go (D381), not all
+    /// at once; a plot not given one is worn through.
+    plots_worn: Vec<f32>,
+    square_worn: f32,
     /// Within so far of its middle a meadow, grass all over but where it is worn: the
     /// clearing a settlement rising has cut (D381); none for a town of old.
     meadow_m: f32,
@@ -483,9 +488,12 @@ const MEADOW_LUSH: f32 = 0.65;
 const UNPAVED: f32 = 0.5;
 /// How far round a plot going up its ground is trodden.
 const PLOT_WORN_M: f32 = 1.8;
-/// How far round its middle a settlement rising has cleared a meadow: to the forest's
-/// edge (`MarketTown::SETTLEMENT`).
-const MEADOW_M: f32 = 125.0;
+/// How far round its middle a settlement rising has cleared a meadow at most: to the forest's
+/// edge and down to its lake (`MarketTown::SETTLEMENT`).
+const MEADOW_M: f32 = 260.0;
+/// Its meadow is where the forest's clearings keep less than this share of its stand: the
+/// ground it has cleared, toward its edge bracken and shrubs coming back.
+const MEADOW_KEPT: f32 = 0.6;
 
 /// How far inside a street's or the square's edge its paving starts.
 const PAVING_EDGE_M: f32 = 0.35;
@@ -494,6 +502,14 @@ const PAVING_EDGE_M: f32 = 0.35;
 const HOUSE_WORN_M: f32 = 9.0;
 /// Within how far of a door it is worn as bare as a yard.
 const HOUSE_BARE_M: f32 = 4.5;
+
+/// How far ground being worn, `worn` 0 to 1 of the way, is trodden and how far its grass has
+/// given out: the treading comes first and the grass goes after it, as feet wear a meadow to
+/// earth, so the ground between is never bare soil.
+fn treading(worn: f32) -> (f32, f32) {
+    let w = worn.clamp(0.0, 1.0);
+    (libm::sqrtf(w), w * w)
+}
 
 /// Smooth value noise from 0 to 1 over a place, a unit a cell: the drifts of a meadow's mix.
 fn patch(p: Vec2) -> f32 {
@@ -516,19 +532,34 @@ fn patch(p: Vec2) -> f32 {
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
 
+impl TownCover {
+    /// How much of the forest's stand the clearings round a settlement rising keep at a
+    /// point: 0 in its meadow, 1 in the forest; 1 for a town of old, which has none of its own.
+    fn forest_kept(&self, planet: &Planet, ground: Vec3, p: Vec2) -> f32 {
+        if p.length() >= self.meadow_m {
+            return 1.0;
+        }
+        planet.round().map_or(0.0, |round| {
+            round.clearings.iter().map(|c| c.keeps(ground)).product()
+        })
+    }
+}
+
 impl terra_world::cover::CoverSource for TownCover {
     fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> terra_world::cover::Growing {
         let offset = ground - self.middle;
         let p = Vec2::new(offset.dot(self.east), offset.dot(self.south));
         let wild = planet.cover(ground, ground.normalize());
+        let kept = self.forest_kept(planet, ground, p);
+        let meadow = kept < MEADOW_KEPT;
         let mut growing = terra_world::cover::Growing {
-            grass: if p.length() < self.meadow_m {
+            grass: if meadow {
                 wild.grass.max(MEADOW_GRASS)
             } else {
                 wild.grass
             },
             // A cleared meadow grazed and trodden green, not left to last year's straw.
-            lush: if p.length() < self.meadow_m {
+            lush: if meadow {
                 wild.lush.max(MEADOW_LUSH)
             } else {
                 wild.lush
@@ -537,10 +568,10 @@ impl terra_world::cover::CoverSource for TownCover {
         };
         // A meadow is a mix (D381): taller grass in drifts, greener and drier patches, and
         // toward the forest's edge bracken and low shrubs coming back into the clearing.
-        if p.length() < self.meadow_m {
+        if meadow {
             growing.tall = (patch(p / 9.0) - 0.35).max(0.0) * 1.5;
             growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
-            let edge = ((p.length() - (self.meadow_m - 35.0)) / 35.0).clamp(0.0, 1.0);
+            let edge = (kept / MEADOW_KEPT).clamp(0.0, 1.0);
             growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
         }
         // How far into a way a point is, by the nearest street or the square, a soft edge
@@ -569,6 +600,8 @@ impl terra_world::cover::CoverSource for TownCover {
             .map(|d| d.distance(p) - 1.2)
             .fold(f32::MAX, f32::min);
         let worn = street.min(square).min(door);
+        // The square laid only so far yet: the meadow as it was, worn toward its laid ground.
+        let unworn = (square <= street.min(door) && self.square_worn < 1.0).then_some(growing);
         if worn < 0.0 {
             growing.grass = 0.0;
             growing.path = true;
@@ -591,6 +624,15 @@ impl terra_world::cover::CoverSource for TownCover {
                 growing.roots = 0.35 * (1.0 - worn / 1.5);
             }
         }
+        if let Some(before) = unworn {
+            // Trodden first, the grass giving out after, so earth comes through the grass and
+            // never the bare soil between.
+            let (tread, thin) = treading(self.square_worn);
+            growing.grass = before.grass + (growing.grass - before.grass) * thin;
+            growing.trodden = before.trodden + (growing.trodden - before.trodden) * tread;
+            growing.roots = before.roots + (growing.roots - before.roots) * thin;
+            growing.path = growing.path && thin > 0.5;
+        }
         if self
             .yards
             .iter()
@@ -604,14 +646,23 @@ impl terra_world::cover::CoverSource for TownCover {
         }
         // A plot laid for a building going up, trodden to earth round its footings as
         // builders work about it (D381): not the blades cut away from a lawn.
-        if self.plots.iter().any(|plot| {
-            terra_build::town::inside(p, plot)
-                || (0..4).any(|i| {
-                    terra_build::town::point_segment(p, plot[i], plot[(i + 1) % 4]) < PLOT_WORN_M
-                })
-        }) {
-            growing.grass *= 0.3;
-            growing.trodden = growing.trodden.max(0.35);
+        let plot_worn = self
+            .plots
+            .iter()
+            .enumerate()
+            .filter(|(_, plot)| {
+                terra_build::town::inside(p, &plot[..])
+                    || (0..4).any(|i| {
+                        terra_build::town::point_segment(p, plot[i], plot[(i + 1) % 4])
+                            < PLOT_WORN_M
+                    })
+            })
+            .map(|(i, _)| self.plots_worn.get(i).copied().unwrap_or(1.0))
+            .fold(0.0f32, f32::max);
+        if plot_worn > 0.0 {
+            let (tread, thin) = treading(plot_worn);
+            growing.grass *= 1.0 - 0.6 * thin;
+            growing.trodden = growing.trodden.max(0.45 * tread);
         }
         // Round every house, where the town clears what grows (`ClearAround` at its door),
         // the ground is worn by feet going about it, not left the planet's bare soil.
@@ -626,6 +677,12 @@ impl terra_world::cover::CoverSource for TownCover {
     fn reaches(&self, middle: Vec2, half: f32) -> bool {
         middle.distance(self.at) < COVER_REACH_M + half
     }
+
+    /// A settlement's cleared meadow is grass all over but where it is worn, the land's bare
+    /// patches too; an old town's ground is the land's.
+    fn sows(&self) -> bool {
+        self.meadow_m > 0.0
+    }
 }
 
 /// A town's cover within its reach, and past it what the world grows, on a world that grows
@@ -637,7 +694,16 @@ struct TownOverWorld {
 
 impl terra_world::cover::CoverSource for TownOverWorld {
     fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> terra_world::cover::Growing {
-        if at.distance(self.town.at) < COVER_REACH_M {
+        // A settlement rising's own cover is its meadow and its ways; the forest round it is
+        // the world's, its needles, litter and moss (D381).
+        let theirs = if self.town.meadow_m > 0.0 {
+            let offset = ground - self.town.middle;
+            let p = Vec2::new(offset.dot(self.town.east), offset.dot(self.town.south));
+            self.town.forest_kept(planet, ground, p) < MEADOW_KEPT
+        } else {
+            at.distance(self.town.at) < COVER_REACH_M
+        };
+        if theirs {
             self.town.growing(planet, ground, at)
         } else {
             self.world.growing(planet, ground, at)
@@ -646,6 +712,10 @@ impl terra_world::cover::CoverSource for TownOverWorld {
 
     fn reaches(&self, middle: Vec2, half: f32) -> bool {
         self.town.reaches(middle, half) || self.world.reaches(middle, half)
+    }
+
+    fn sows(&self) -> bool {
+        self.town.sows()
     }
 }
 
@@ -662,16 +732,17 @@ pub struct Wear {
 }
 
 impl Wear {
-    /// What grows with the plots of the buildings `started` trodden, the doors and yards of
-    /// those `up` worn round, and the streets trodden out from the square as far as `reach_m`,
-    /// where the settlement has got to.
+    /// What grows with the plots of the buildings `started` trodden (each as far as
+    /// `started` says, 0 to 1), the doors and yards of those `up` worn round, the streets
+    /// trodden out from the square as far as `reach_m`, where the settlement has got to, and
+    /// the square as far as `square` says.
     pub fn rules(
         &self,
         planet: &Planet,
-        started: impl Fn(usize) -> bool,
+        started: impl Fn(usize) -> Option<f32>,
         up: impl Fn(usize) -> bool,
         reach_m: f32,
-        square: bool,
+        square: f32,
     ) -> terra_world::cover::CoverRules {
         let worn = TownCover {
             streets: self
@@ -707,14 +778,16 @@ impl Wear {
             plots: self
                 .plots
                 .iter()
-                .filter(|(b, _)| started(*b))
+                .filter(|(b, _)| started(*b).is_some())
                 .map(|(_, plot)| *plot)
                 .collect(),
-            square: if square {
+            plots_worn: self.plots.iter().filter_map(|(b, _)| started(*b)).collect(),
+            square: if square > 0.0 {
                 self.whole.square.clone()
             } else {
                 Vec::new()
             },
+            square_worn: square.clamp(0.0, 1.0),
             ..self.whole.clone()
         };
         over_the_worlds(self.world.as_ref(), planet, worn)
@@ -1323,6 +1396,8 @@ fn lay(
                 .filter(|t| t.kind == ThingKind::Door)
                 .map(|t| t.place(Vec2::new(0.0, 0.8)))
                 .collect(),
+            plots_worn: Vec::new(),
+            square_worn: 1.0,
             meadow_m: if rising.is_some() { MEADOW_M } else { 0.0 },
             paved: rising.is_none(),
         };
@@ -1346,7 +1421,7 @@ fn lay(
                     .collect(),
                 whole,
             };
-            commands.insert_resource(wear.rules(&planet, |_| false, |_| false, 0.0, false));
+            commands.insert_resource(wear.rules(&planet, |_| None, |_| false, 0.0, 0.0));
             commands.insert_resource(wear);
         } else {
             commands.insert_resource(over_the_worlds(cover.as_deref(), &planet, whole));
@@ -1487,6 +1562,59 @@ mod tests {
             high = high.max(v);
         }
         assert!(low < 0.2 && high > 0.8, "{low} {high}");
+    }
+
+    /// D381: a plot and the square are trodden over a few seconds as the settlement rises,
+    /// the meadow giving way to earth by how far each is worn, not all at once.
+    #[test]
+    fn a_plot_and_the_square_are_trodden_by_how_far_they_are_worn() {
+        use terra_world::cover::CoverSource;
+        let planet = Planet::new(terra_core::PlanetSpec {
+            seed: terra_gen::Seed(1),
+            radius_m: 2000.0,
+        });
+        let middle = planet.start();
+        let up = middle.normalize();
+        let east = up.any_orthonormal_vector();
+        let south = east.cross(up);
+        let plot = [
+            Vec2::new(10.0, 10.0),
+            Vec2::new(16.0, 10.0),
+            Vec2::new(16.0, 16.0),
+            Vec2::new(10.0, 16.0),
+        ];
+        let square = vec![
+            Vec2::new(-8.0, -8.0),
+            Vec2::new(8.0, -8.0),
+            Vec2::new(8.0, 8.0),
+            Vec2::new(-8.0, 8.0),
+        ];
+        let cover = |plot_worn: f32, square_worn: f32| TownCover {
+            middle,
+            east,
+            south,
+            at: Vec2::ZERO,
+            square: square.clone(),
+            streets: Vec::new(),
+            yards: Vec::new(),
+            plots: vec![plot],
+            doors: Vec::new(),
+            plots_worn: vec![plot_worn],
+            square_worn,
+            meadow_m: 0.0,
+            paved: false,
+        };
+        let at = |cover: &TownCover, p: Vec2| {
+            let ground = planet.ground_at(middle + east * p.x + south * p.y);
+            cover.growing(&planet, ground, p)
+        };
+        let (begun, worn) = (cover(0.2, 0.2), cover(1.0, 1.0));
+        for p in [Vec2::new(13.0, 13.0), Vec2::ZERO] {
+            let (a, b) = (at(&begun, p), at(&worn, p));
+            assert!(b.trodden > a.trodden, "{p}: {} {}", a.trodden, b.trodden);
+            assert!(b.grass <= a.grass, "{p}: {} {}", a.grass, b.grass);
+        }
+        assert!(at(&worn, Vec2::ZERO).path && !at(&begun, Vec2::ZERO).path);
     }
 
     #[test]

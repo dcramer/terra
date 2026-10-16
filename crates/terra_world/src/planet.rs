@@ -428,7 +428,8 @@ pub struct GroundExtension {
     /// to its place on the map.
     #[uniform(100)]
     cover_from_world: Mat4,
-    /// Whether there is a cover map to read.
+    /// Whether there is a cover map to read: 1 its grass the most the land's may grow, 2 the
+    /// ground's own (`GroundCoverMap::sows`).
     #[uniform(100)]
     cover_on: u32,
     /// Drawn as the low quality preset draws it (D239, D307): the shader built with
@@ -530,6 +531,9 @@ pub struct GroundCoverMap {
     /// From a point in the world to the map: its x and y are where on the picture, from 0
     /// to 1.
     pub from_world: Mat4,
+    /// Whether its grass is the ground's own, not only a limit on the land's
+    /// (`CoverSource::sows`).
+    pub sows: bool,
 }
 
 /// The ground's textures (D14): real soil, grass, rock and sand, each tinted by the
@@ -657,7 +661,11 @@ impl GroundExtension {
             color: Some(textures.color.clone()),
             normal: Some(textures.normal.clone()),
             cover_from_world: cover.from_world,
-            cover_on: cover.image.is_some() as u32,
+            cover_on: match (&cover.image, cover.sows) {
+                (None, _) => 0,
+                (Some(_), false) => 1,
+                (Some(_), true) => 2,
+            },
             cheap: quality == crate::quality::Quality::Low,
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),

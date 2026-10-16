@@ -1,13 +1,102 @@
 {
-  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): low over its north side, looking south across the plots, the morning sun to the left, the forest's edge beyond and the valley and the sky past it, slowly round from the north-west to the north-east as the settlement grows, near enough that every building is drawn in full",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; a crane up and back over the finished town to its lake, the forest's edge and the range, the morning sun to the right",
   "seconds": 42,
-  "rig": { "around": [0, 0, -345] },
   "keys": [
-    { "t": 0, "orbit": [-30, 76, 31], "look": [23, 0, -305], "lens": 22 },
-    { "t": 21, "orbit": [0, 80, 34], "look": [0, 0, -303], "lens": 22 },
-    { "t": 42, "orbit": [28, 84, 38], "look": [-16, 0, -312], "lens": 21 }
+    {
+      "t": 0,
+      "at": [
+        -32,
+        18,
+        -326
+      ],
+      "look": [
+        4,
+        0,
+        -364
+      ],
+      "lens": 22
+    },
+    {
+      "t": 14,
+      "at": [
+        -22,
+        22,
+        -336
+      ],
+      "look": [
+        8,
+        0,
+        -370
+      ],
+      "lens": 22
+    },
+    {
+      "t": 14,
+      "at": [
+        -40,
+        24,
+        -318
+      ],
+      "look": [
+        0,
+        0,
+        -378
+      ],
+      "lens": 22,
+      "cut": true
+    },
+    {
+      "t": 28,
+      "at": [
+        30,
+        27,
+        -314
+      ],
+      "look": [
+        35,
+        0,
+        -382
+      ],
+      "lens": 22
+    },
+    {
+      "t": 28,
+      "at": [
+        -38,
+        26,
+        -302
+      ],
+      "look": [
+        12,
+        0,
+        -382
+      ],
+      "lens": 21,
+      "cut": true
+    },
+    {
+      "t": 42,
+      "at": [
+        6,
+        34,
+        -314
+      ],
+      "look": [
+        38,
+        0,
+        -412
+      ],
+      "lens": 21
+    }
   ],
-  "ease": "in-out",
-  "look": { "exposure": "hold", "exposure_bias": 0.1, "hold_clock": true },
-  "player": { "hidden": true }
+  "ease": "none",
+  "look": {
+    "exposure": "hold",
+    "exposure_bias": 0.1,
+    "hold_clock": true,
+    "detail": 1.35
+  },
+  "player": {
+    "hidden": true
+  }
 }

@@ -16,7 +16,7 @@
     takes: (8.0, 14.0),
     growth: 0.6,
     settled_after: 1.0,
-    gather: 20.0,
+    gather: 12.0,
     pace: 3.0,
     builders: 22,
     common: (22.0, 36.0),

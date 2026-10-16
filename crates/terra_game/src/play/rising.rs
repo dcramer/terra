@@ -13,13 +13,14 @@
 
 use super::catalogue::Builds;
 use super::daylight::{Clock, Ticking};
-use super::flora::ClearAround;
+use super::flora::{ClearAround, MowAround};
 use super::props::{self, Models, Theirs};
 use super::town::{DoorTorch, Firelight, ForgeFire, Hearth, Market, Wear};
 use super::town_fences::TownFence;
 use crate::build::{Built, PlanGhost, Site};
 use crate::planet::Planet;
 use crate::shell::{Options, ScriptFrame};
+use crate::start::Start;
 use bevy::prelude::*;
 use serde::Deserialize;
 use std::path::Path;
@@ -316,6 +317,7 @@ pub fn plugin(app: &mut App) {
             (
                 prepare,
                 build,
+                super::scaffold::scaffold,
                 reveal,
                 hide_ghosts,
                 wear,
@@ -369,7 +371,8 @@ fn prepare(
     mut market: ResMut<Market>,
     clock: Res<Clock>,
     rises: Query<&Rises>,
-    mut clear: MessageWriter<ClearAround>,
+    start: Option<Res<Start>>,
+    mut mow: MessageWriter<MowAround>,
     waiting: Query<
         (Entity, &GlobalTransform),
         Or<(
@@ -406,6 +409,25 @@ fn prepare(
     rising.up = times.iter().map(Option::is_none).collect();
     rising.finished = vec![None; count];
     rising.times = times;
+    // Where it all is, from the start as a shot's keys say it (east, south), and when each
+    // building goes up: what a camera over it is planned from.
+    if let Some(start) = start.as_deref() {
+        let from_start = |at: Vec2| {
+            let world = market.middle + market.east * at.x + market.south * at.y;
+            let local = start.local(world);
+            (local.x, local.z)
+        };
+        let (e, s) = from_start(Vec2::ZERO);
+        info!("Time-lapse: the square's middle {e:.0} east, {s:.0} south of the start.");
+        for (index, time) in rising.times.iter().enumerate() {
+            if let Some((from, takes)) = time {
+                let (e, s) = from_start(Vec2::from(town.buildings[index].at));
+                info!(
+                    "Time-lapse: building {index} at {e:.0} east, {s:.0} south, from {from:.1} s for {takes:.1} s."
+                );
+            }
+        }
+    }
     rising.reach = town
         .things
         .iter()
@@ -432,7 +454,7 @@ fn prepare(
         }
     }
     // The clearing a meadow, its loose stones and brush cleared for the plots.
-    clear.write(ClearAround(market.middle, CLEARED_M));
+    mow.write(MowAround(market.middle, CLEARED_M));
     // Nobody builds where nothing is going up yet.
     // The hour its people live at, their day's own pace, not the sun's (`town::live`).
     let hours = if market.lived.is_finite() {
@@ -518,7 +540,9 @@ fn build(
             rise.called = true;
             open_sites(&mut market, index, true, hours);
         }
-        if t < start {
+        // Its plot pegged out as its builders are called, so they gather at a plan laid on
+        // the ground, its materials stacked, not on bare grass; its first course at its start.
+        if t < start - rising.lapse.gather {
             continue;
         }
         let rules = built
@@ -572,6 +596,9 @@ fn build(
                     }
                 }
             }
+        }
+        if t < start {
+            continue;
         }
         let kits = built.kits.clone();
         let one_at_a_time = |kind| kits.as_deref().is_some_and(|k| k.one_at_a_time(kind));
@@ -633,13 +660,13 @@ fn open_sites(market: &mut Market, building: usize, open: bool, hours: f64) {
 fn keep_clear(
     rising: Res<Rising>,
     market: Res<Market>,
-    mut clear: MessageWriter<ClearAround>,
+    mut mow: MessageWriter<MowAround>,
     mut last: Local<f32>,
 ) {
     const EVERY_S: f32 = 1.0;
     if rising.prepared && (rising.t - *last).abs() >= EVERY_S {
         *last = rising.t;
-        clear.write(ClearAround(market.middle, CLEARED_M));
+        mow.write(MowAround(market.middle, CLEARED_M));
     }
 }
 
@@ -706,7 +733,11 @@ fn wear(
     rises: Query<&Rises>,
     market: Res<Market>,
 ) {
-    const EVERY_S: f32 = 4.0;
+    // How often the ground is worn again while a plot or the square is being trodden, and
+    // otherwise once a new plot is laid; how long, in the film's seconds, a plot or the square
+    // takes to be trodden from meadow to earth, so it does not come all at once (D381).
+    const EVERY_S: f32 = 0.25;
+    const TRODDEN_S: f32 = 3.0;
     // How far past its furthest plot laid a street is trodden out.
     const WAY_PAST_M: f32 = 12.0;
     let Some(wear) = wear else { return };
@@ -715,7 +746,19 @@ fn wear(
         .filter(|r| r.planned)
         .map(|r| r.index)
         .collect();
-    if planned.len() == rising.worn.1 || rising.t < rising.worn.0 + EVERY_S {
+    let t = rising.t;
+    let starts: Vec<Option<f32>> = rising
+        .times
+        .iter()
+        .map(|w| w.map(|(from, _)| from))
+        .collect();
+    let since = |b: usize| starts.get(b).copied().flatten().map(|from| t - from);
+    let common = rising.lapse.common.0;
+    let treading = planned
+        .iter()
+        .any(|&b| since(b).is_some_and(|s| s < TRODDEN_S + EVERY_S))
+        || (t >= common && t < common + TRODDEN_S + EVERY_S);
+    if (planned.len() == rising.worn.1 && !treading) || t < rising.worn.0 + EVERY_S {
         return;
     }
     rising.worn = (rising.t, planned.len());
@@ -726,17 +769,22 @@ fn wear(
     );
     let up = rising.up.clone();
     let times = rising.times.clone();
+    let trodden = |b: usize| {
+        planned
+            .contains(&b)
+            .then(|| since(b).map_or(1.0, |s| (s / TRODDEN_S).clamp(0.0, 1.0)))
+    };
     commands.insert_resource(
         wear.rules(
             &planet,
-            |b| planned.contains(&b),
+            trodden,
             |b| times.get(b).copied().flatten().is_some() && up.get(b).copied().unwrap_or(false),
             planned
                 .iter()
                 .map(|&b| Vec2::from(market.life.town.buildings[b].at).length() + WAY_PAST_M)
                 .fold(0.0, f32::max),
-            // The square laid out once its market comes.
-            rising.t >= rising.lapse.common.0,
+            // The square laid out once its market comes, trodden over a few seconds.
+            ((t - common) / TRODDEN_S).clamp(0.0, 1.0),
         ),
     );
 }

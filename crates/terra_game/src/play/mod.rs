@@ -60,6 +60,7 @@ pub use props::{
 };
 pub(crate) mod rising;
 mod save;
+mod scaffold;
 pub(crate) mod settlement;
 mod sighted;
 mod skills;

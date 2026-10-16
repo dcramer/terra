@@ -125,6 +125,9 @@ const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
 // streets are in Kingdom Come's and The Witcher's frames, not the planet's warm soil; and the
 // straw dropped about their edges.
 const TRODDEN: vec3<f32> = vec3<f32>(0.15, 0.132, 0.108);
+// Ground trodden lightly, a new settlement's plots and ways (D381): turned earth still brown
+// with its soil, not yet ground to a street's grey dust.
+const TURNED: vec3<f32> = vec3<f32>(0.105, 0.08, 0.055);
 const STRAW: vec3<f32> = vec3<f32>(0.34, 0.27, 0.13);
 // A settlement's paved streets and square (D350), linear: grey-brown setts of the local stone,
 // dulled by the dirt ground into them; Kingdom Come's sunlit streets measure about 0.25 sRGB,
@@ -720,7 +723,10 @@ fn fragment(
             let at = (ground.cover_from_world * vec4<f32>(world + warp * 1.4 + fine * 0.4, 1.0)).xy;
             let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
             let map = textureSampleLevel(cover_map, cover_sampler, at, 0.0);
-            grows.r = mix(grows.r, min(grows.r, map.r), inside);
+            // The map's grass the most the land's may grow, or, where its cover sows a meadow
+            // (`CoverSource::sows`), the ground's own over the land's bare patches.
+            let sown = select(min(grows.r, map.r), map.r, ground.cover_on == 2u);
+            grows.r = mix(grows.r, sown, inside);
             grows.g = mix(grows.g, map.g, inside);
             litter = map.b * inside;
             moss = map.a * inside;
@@ -933,7 +939,7 @@ fn fragment(
         // hollows, and straw dropped about its edges and in the yards.
         let worn = smoothstep(0.08, 0.55, trodden + (blotch - 0.5) * 0.35) * flat_ground;
         if worn > 0.0 {
-            let packed = TRODDEN * (0.82 + 0.36 * blotch) * (0.9 + 0.2 * swell);
+            let packed = mix(TURNED, TRODDEN, smoothstep(0.45, 0.8, trodden)) * (0.82 + 0.36 * blotch) * (0.9 + 0.2 * swell);
             var earth = layer(SOIL, 0.7, packed, world + 13.0, gx, gy, n, 1.0);
             let grain = dot(earth.colour, vec3<f32>(0.333)) / dot(packed, vec3<f32>(0.333));
             earth.colour = packed * pow(max(grain, 0.0), 1.25);

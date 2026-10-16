@@ -119,6 +119,15 @@ pub trait CoverSource: Send + Sync + 'static {
     fn reaches(&self, _middle: Vec2, _half: f32) -> bool {
         true
     }
+
+    /// Whether the grass this says grows is the ground's own, where it says more grows than
+    /// the land's rules: a meadow cleared, sown and grazed, as a settlement's is (D381). The
+    /// ground otherwise takes the lower of the land's grass (the terrain mesh's, which knows
+    /// its rock, slope and bare patches) and this, so a cover may thin the land's grass but not
+    /// grow it where the land is bare.
+    fn sows(&self) -> bool {
+        false
+    }
 }
 
 /// The world's rules for what covers the ground. The layer above inserts it; without it
