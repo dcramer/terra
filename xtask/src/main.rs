@@ -357,6 +357,13 @@ const TASKS: &[Task] = &[
         run: worktrees::worktrees,
     },
     Task {
+        name: "decision",
+        takes: "",
+        does: "the next free decision number, here and on origin/main after a fetch (docs/decisions.md)",
+        group: "This machine",
+        run: |_| run("node", &["tools/docs/docs.ts", "--next"]),
+    },
+    Task {
         name: "tools",
         takes: "",
         does: "this list",

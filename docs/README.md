@@ -6,7 +6,7 @@ Working title: **Terra**. First and foremost, we are building an extremely ambit
 
 | Looking for | Go to |
 |---|---|
-| What is decided, and who decided it | [decisions.md](decisions.md), by area; its log says what changed when |
+| What is decided, and who decided it | [decisions.md](decisions.md), by area; [its log](decisions-log.md) says what changed when |
 | How a part of the game works and why | The design docs below |
 | A design being weighed | [proposals](proposals/README.md) |
 | What we tried, measured or surveyed | [research](../research/README.md), dated notes; [benchmarks.csv](../research/benchmarks.csv) for frame times |
@@ -21,6 +21,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | Doc | What it covers |
 |---|---|
 | [decisions.md](decisions.md) | What is settled, what is a working assumption, what is open. Source of truth. |
+| [decisions-log.md](decisions-log.md) | One line per decision added or changed, newest last. Git merges it by union, so agents adding lines at once never conflict. |
 
 **The game as a whole**
 

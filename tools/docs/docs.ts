@@ -3,6 +3,7 @@
 // formed, with every decision a doc cites in it. Prints each fault; exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
+//   node tools/docs/docs.ts --next    the next free decision number, here and on origin/main (`cargo xtask decision`)
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -53,22 +54,35 @@ const STATUS = /^(Decided|Leaning|Open|Rejected|Superseded by D\d+(, D\d+)*)$/;
 /** The decisions table's rows that are malformed, and the decision numbers they hold. */
 export function decisionTable(markdown: string): { faults: string[]; ids: Set<string> } {
   const faults: string[] = [];
-  const ids = new Set<string>();
+  const topics = new Map<string, string>();
+  const twice: string[] = [];
   for (const line of markdown.split("\n")) {
     if (!/^\| D\d+ \|/.test(line)) continue;
     const cells = line.slice(1, -1).split(" | ").map((c) => c.trim());
-    const [id, , owner, by, status] = cells;
+    const [id, topic, owner, by, status] = cells;
     const fault = (what: string) => faults.push(`docs/decisions.md: ${id} ${what}`);
     if (!line.endsWith("|") || cells.length !== 7) fault(`has ${cells.length} cells, not 7 (a | in its text?)`);
-    if (ids.has(id)) fault("is in the table twice");
-    ids.add(id);
+    // Two agents took the same number at once; the second to push renumbers its own.
+    const first = topics.get(id);
+    if (first !== undefined) twice.push(`${id} is in the table twice, "${first}" and "${topic}"`);
+    else topics.set(id, topic);
     if (owner !== "Design" && owner !== "Tech") fault(`has Owner "${owner}", not Design or Tech`);
     if (!STATUS.test(status ?? "")) fault(`has Status "${status}"`);
     const nobody = /^(Open|Rejected|Superseded)/.test(status ?? "");
     if (nobody ? by !== "—" : by !== "Developers" && by !== "Agent")
       fault(`has By "${by}": Developers or Agent, or — when Open, Rejected or Superseded`);
   }
+  const ids = new Set(topics.keys());
+  for (const what of twice)
+    faults.push(`docs/decisions.md: ${what}: renumber the one you added to D${nextDecision(ids)}, the next free number`);
   return { faults, ids };
+}
+
+/** The next free decision number: one past the highest in use. */
+export function nextDecision(ids: Iterable<string>): number {
+  let highest = 0;
+  for (const id of ids) highest = Math.max(highest, Number(id.slice(1)));
+  return highest + 1;
 }
 
 /** Decision numbers a text cites that the table does not have. */
@@ -119,7 +133,26 @@ function check(): string[] {
   return faults;
 }
 
-if (import.meta.main) {
+/** The next free decision number here and on origin/main, fetched first, for `cargo xtask decision`. */
+function next(): number {
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  const tables = [readFileSync(join(ROOT, "docs/decisions.md"), "utf8")];
+  try {
+    git("fetch", "-q", "origin", "main");
+  } catch {
+    console.error("docs: could not fetch origin; going by the origin/main this repository has");
+  }
+  try {
+    tables.push(git("show", "origin/main:docs/decisions.md"));
+  } catch {
+    console.error("docs: there is no origin/main to compare with");
+  }
+  return Math.max(...tables.map((t) => nextDecision(decisionTable(t).ids)));
+}
+
+if (import.meta.main && process.argv.includes("--next")) {
+  console.log(`D${next()}`);
+} else if (import.meta.main) {
   const faults = check();
   for (const fault of faults) console.log(`  ${fault}`);
   console.log(faults.length ? `docs: ${faults.length} faults` : "docs: ok");

@@ -4,3 +4,6 @@
 *.png binary
 *.glb binary
 *.bin binary
+# The decisions log is only ever appended to: two agents adding lines at once both keep theirs,
+# with no conflict, as changelogs commonly merge.
+docs/decisions-log.md merge=union

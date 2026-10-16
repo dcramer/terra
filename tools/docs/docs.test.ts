@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchors, brokenLinks, decisionTable, unindexed, unknownDecisions } from "./docs.ts";
+import { anchors, brokenLinks, decisionTable, nextDecision, unindexed, unknownDecisions } from "./docs.ts";
 
 test("headings anchor as GitHub makes them, repeats numbered", () => {
   const a = anchors("# Worlds: the realms\n## Size\n## Size\n## What `it` asks, (D4)\n```\n# not a heading\n```\n");
@@ -31,11 +31,16 @@ test("a decision row needs its seven cells, a known owner, status and who decide
   assert.deepEqual(faults, [
     'docs/decisions.md: D4 has By "Agent": Developers or Agent, or — when Open, Rejected or Superseded',
     "docs/decisions.md: D5 has 8 cells, not 7 (a | in its text?)",
-    "docs/decisions.md: D1 is in the table twice",
     'docs/decisions.md: D1 has Owner "Art", not Design or Tech',
     'docs/decisions.md: D1 has Status "Done"',
     'docs/decisions.md: D1 has By "Someone": Developers or Agent, or — when Open, Rejected or Superseded',
+    'docs/decisions.md: D1 is in the table twice, "Team" and "Again": renumber the one you added to D6, the next free number',
   ]);
+});
+
+test("the next free decision number is one past the highest, gaps left alone", () => {
+  assert.equal(nextDecision(["D1", "D12", "D3"]), 13);
+  assert.equal(nextDecision([]), 1);
 });
 
 test("citing a decision the table lacks is a fault, once per file", () => {
