@@ -36,6 +36,8 @@ use terra_gen::{Rng, Seed};
 use terra_world::flora::Trunk;
 
 const BLEND: Duration = Duration::from_millis(200);
+/// A creature casts a shadow from so wide a body, in metres of its radius.
+const CASTS_SHADOW_FROM_M: f32 = 0.2;
 /// How far off a creature notices a player, or keeps track of one it chases.
 const SENSE_M: f32 = 40.0;
 
@@ -405,6 +407,10 @@ pub(super) fn spawn(
     // Drawn as far as something its size is seen: a songbird some tens of metres, a heron
     // across a lake (VisibilityRange, Bevy's distance culling, on each of its meshes).
     let seen_m = about.seen_m();
+    // A small animal is a few of the sun's shadow texels across, so it shadowed itself whole
+    // and was lit by the blue sky alone: a grey pigeon or heron in the sun read cobalt (the
+    // review of 2026-10-16). Only those big enough to resolve cast a shadow.
+    let casts = about.body.radius >= CASTS_SHADOW_FROM_M;
     let feet = planet.ground_at(at);
     let up = feet.normalize();
     let facing = up.any_orthonormal_vector();
@@ -446,13 +452,15 @@ pub(super) fn spawn(
                     .iter_descendants(ready.entity)
                     .filter(|&child| meshes.contains(child))
                 {
-                    commands
-                        .entity(mesh)
-                        .insert(bevy::camera::visibility::VisibilityRange {
-                            start_margin: 0.0..0.0,
-                            end_margin: seen_m..seen_m + 4.0,
-                            use_aabb: false,
-                        });
+                    let mut mesh = commands.entity(mesh);
+                    mesh.insert(bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: seen_m..seen_m + 4.0,
+                        use_aabb: false,
+                    });
+                    if !casts {
+                        mesh.insert(bevy::light::NotShadowCaster);
+                    }
                 }
                 let Some(animator) = children
                     .iter_descendants(ready.entity)

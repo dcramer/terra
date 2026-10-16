@@ -112,7 +112,7 @@ fn rise_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, t: f32, pixe
         let fine = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.6, pixel);
         let crests = sin((x / wavelength) * 6.283) * exp(-max(-x, 0.0) / (3.0 * wavelength))
             * step(x, wide) * fine;
-        let magnitude = 0.35 * fading * (-x / wide * hump + 0.6 * crests * hump);
+        let magnitude = 0.6 * fading * (-x / wide * hump + 0.6 * crests * hump);
         slope += flat / d * magnitude;
     }
     return slope;
