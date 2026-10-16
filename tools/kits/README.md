@@ -22,9 +22,9 @@ Which materials the game has is the developers' choice (D236): make one only whe
 ```bash
 cargo xtask pack river_cobble --from polyhaven:river_small_rocks --title "River cobble" --pattern block
 cargo xtask pack cut_sandstone --from ambientcg:Bricks076C --metres 2 --pattern block
-cargo xtask pack plastered_timber --from image:art/textures/plaster.png --pattern frame
-cargo xtask pack oak_shingles --from model:art/kits/shingles/patch/model.glb --metres 1.5 --pattern roof
-cargo xtask pack oak_logs --from model:art/kits/oak/log/model.glb --round 0.3,2 --metres 2 --pattern coursed
+cargo xtask pack wattle_panels --from image:art/textures/wattle.png --pattern frame
+cargo xtask pack split_shakes --from image:art/textures/shakes.png --metres 1.5 --pattern roof
+cargo xtask pack thick_logs --from model:art/kits/logs/log/model.glb --round 0.3,2 --metres 2 --pattern coursed
 ```
 
 Every pattern works from one command. A material is made for one face, and laid over a reference pack for the rest its pattern needs (`under`): a stone (`block`) needs nothing more; a wood (`coursed`) is laid over the pine logs' pack, its daub, sawn ends and modelled log; a roof covering (`roof`) over the shakes', its battens, rafters and ridge. `--under <pack>` lays it over another, `--under none` over nothing. A run that fails anywhere, the source, the set's check or the kit checker, leaves nothing behind: the files it made are taken away and those it changed (the credits) put back as they were, so a failure never breaks a later check.

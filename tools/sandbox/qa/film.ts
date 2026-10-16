@@ -3,31 +3,8 @@
 // Places are the base's cubes, half a metre each, east, up a storey and south of the claim
 // stone for plans, and metres for the camera.
 
-import { roofOff } from "./lib/cabin.ts";
+import { C, CUT, DOOR, POSTS, SANDBOX, WINDOW, X0, X1, Z0, Z1, roofOff } from "./lib/cabin.ts";
 import type { KitSet, Scenario, Script, Step, Vec3 } from "./script.ts";
-
-/// The cabin's corner tiles: five metres east to west and four north to south.
-const [X0, X1, Z0, Z1] = [4, 13, 4, 11];
-/// Its middle on the ground, in metres.
-const C: Vec3 = [4.5, 0, 4];
-const DOOR = [
-  [8, 0, Z1],
-  [9, 0, Z1],
-];
-const WINDOW = [
-  [X1, 0, 7],
-  [X1, 0, 8],
-];
-const CUT = [
-  [8, 0, Z0],
-  [9, 0, Z0],
-];
-const POSTS = [
-  [17, 0, 5],
-  [22, 0, 5],
-  [17, 0, 10],
-  [22, 0, 10],
-];
 
 /// The first frame of a step matching, or the end.
 const first = (steps: Step[], test: (what: string) => boolean, or: number) => steps.find((step) => test(step.what))?.frame ?? or;
@@ -214,4 +191,4 @@ function script(s: Script, set: KitSet) {
   });
 }
 
-export default { about: "a cabin built as a player builds one, in a set: claim, plan, footings, walls, openings, roof, a wall changed, a window carved, a storey, a deck, a corner knocked down and mended", sandbox: ["--experiment", "play", "--free-build", "--time", "10", "--at", "0,3", "--face", "-8,14"], script } satisfies Scenario;
+export default { about: "a cabin built as a player builds one, in a set: claim, plan, footings, walls, openings, roof, a wall changed, a window carved, a storey, a deck, a corner knocked down and mended", sandbox: SANDBOX, script } satisfies Scenario;

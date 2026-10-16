@@ -4,6 +4,7 @@
 // read from assets/data/kits/, so one added is filmed with no code.
 
 import type { KitSet, Scenario, Script, Vec3 } from "./script.ts";
+import { SANDBOX } from "./lib/cabin.ts";
 
 const CORNER: Vec3 = [2.5, 1.2, 4.5];
 
@@ -42,6 +43,6 @@ function script(s: Script, set: KitSet) {
 
 export default {
   about: "a corner of wall changed in place to every wall kit in turn and back, the speed of each change timed",
-  sandbox: ["--experiment", "play", "--free-build", "--time", "10", "--at", "0,3", "--face", "-8,14"],
+  sandbox: SANDBOX,
   script,
 } satisfies Scenario;

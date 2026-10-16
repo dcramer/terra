@@ -3,6 +3,7 @@
 // and a wall of it carved by each brush (D226, D231).
 
 import type { KitSet, Scenario, Script } from "./script.ts";
+import { SANDBOX } from "./lib/cabin.ts";
 
 const FACINGS = ["North", "East", "South", "West"];
 const SHAPES: unknown[] = [
@@ -68,6 +69,6 @@ function script(s: Script, set: KitSet) {
 
 export default {
   about: "every cube shape of a set's kit in all four facings, and a wall carved by each brush",
-  sandbox: ["--experiment", "play", "--free-build", "--time", "10", "--at", "0,3", "--face", "-8,14"],
+  sandbox: SANDBOX,
   script,
 } satisfies Scenario;

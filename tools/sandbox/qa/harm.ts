@@ -2,10 +2,11 @@
 // cracks under blows; a freestanding wall's foot is knocked out and the wall above comes
 // down, breaking into fragments of its material that fall, settle and shrink away; a house's
 // walls go and its roof comes down; a tower falls; the ground gives way under a corner; the
-// cracked wall mended. Places as in
-// build.ts: the base's cubes for what is done, metres for the camera.
+// cracked wall mended. Places are the base's cubes for what is done, as in
+// qa/lib/cabin.ts, and metres for the camera.
 
 import type { KitSet, Scenario, Script, Vec3 } from "./script.ts";
+import { SANDBOX } from "./lib/cabin.ts";
 
 /// A kind's health by its pattern (D305: its pattern's file; a material may say otherwise).
 const HEALTH: Record<string, number> = { block: 600, coursed: 400, frame: 300 };
@@ -110,6 +111,6 @@ function script(s: Script, set: KitSet) {
 
 export default {
   about: "harm in a set: cracks, a wall's foot knocked out, a roof losing its walls, a tower brought down, the ground giving way, fragments falling and fading, and a wall mended",
-  sandbox: ["--experiment", "play", "--free-build", "--time", "10", "--at", "0,3", "--face", "-8,14"],
+  sandbox: SANDBOX,
   script,
 } satisfies Scenario;
