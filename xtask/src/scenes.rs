@@ -114,6 +114,28 @@ pub(crate) const SCENES: &[Scene] = &[
         frames: "1800",
     },
     Scene {
+        name: "rising",
+        about: "a settlement of some sixty buildings rising as a time-lapse at the town's place (--timelapse, D381), each built by the hammer's steps, its builders at their sites, seen from its bird's-eye drift: what building at a settlement's scale costs as it happens",
+        args: &[
+            "--experiment",
+            "play",
+            "--experiment",
+            "town",
+            "--radius",
+            SCALE_RADIUS,
+            "--site",
+            "settlement",
+            "--mute",
+            "--press",
+            "8@60",
+            "--timelapse",
+            "settlement.ron@120",
+            "--cine",
+            "tools/sandbox/timelapse/settlement.json@120",
+        ],
+        frames: "2400",
+    },
+    Scene {
         name: "town300",
         about: "three hundred buildings of every kit, plan and roof on a grid of streets, walked down a street through its middle at a run (docs/building-plan.md)",
         args: &[

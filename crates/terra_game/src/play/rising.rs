@@ -313,7 +313,15 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             hold_the_hour.before(Ticking),
-            (prepare, build, reveal, hide_ghosts, wear, report)
+            (
+                prepare,
+                build,
+                reveal,
+                hide_ghosts,
+                wear,
+                keep_clear,
+                report,
+            )
                 .chain()
                 .after(super::town::Laid)
                 .run_if(resource_exists::<Market>),
@@ -616,6 +624,22 @@ fn open_sites(market: &mut Market, building: usize, open: bool, hours: f64) {
         .collect();
     for site in sites {
         market.life.set_open(site, open, hours);
+    }
+}
+
+/// Keeps the clearing clear: what grows near the camera is grown as it comes near (litter,
+/// brush and stones streamed in), after the clearing was first cleared, so it is cleared
+/// again every few seconds.
+fn keep_clear(
+    rising: Res<Rising>,
+    market: Res<Market>,
+    mut clear: MessageWriter<ClearAround>,
+    mut last: Local<f32>,
+) {
+    const EVERY_S: f32 = 1.0;
+    if rising.prepared && (rising.t - *last).abs() >= EVERY_S {
+        *last = rising.t;
+        clear.write(ClearAround(market.middle, CLEARED_M));
     }
 }
 

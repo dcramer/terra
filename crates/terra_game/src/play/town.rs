@@ -584,7 +584,7 @@ impl terra_world::cover::CoverSource for TownCover {
                 })
         }) {
             growing.grass *= 0.3;
-            growing.trodden = growing.trodden.max(0.5);
+            growing.trodden = growing.trodden.max(0.35);
         }
         // Round every house, where the town clears what grows (`ClearAround` at its door),
         // the ground is worn by feet going about it, not left the planet's bare soil.
@@ -635,9 +635,9 @@ pub struct Wear {
 }
 
 impl Wear {
-    /// What grows with the doors of the buildings `started` worn round, the yards of those
-    /// `up`, and the streets trodden out from the square as far as `reach_m`, where the
-    /// settlement has got to.
+    /// What grows with the plots of the buildings `started` trodden, the doors and yards of
+    /// those `up` worn round, and the streets trodden out from the square as far as `reach_m`,
+    /// where the settlement has got to.
     pub fn rules(
         &self,
         planet: &Planet,
@@ -666,7 +666,7 @@ impl Wear {
                 .doors
                 .iter()
                 .zip(&self.doors)
-                .filter(|(_, b)| b.is_some_and(&started))
+                .filter(|(_, b)| b.is_some_and(&up))
                 .map(|(door, _)| *door)
                 .collect(),
             yards: self
@@ -680,7 +680,7 @@ impl Wear {
             plots: self
                 .plots
                 .iter()
-                .filter(|(b, _)| started(*b) && !up(*b))
+                .filter(|(b, _)| started(*b))
                 .map(|(_, plot)| *plot)
                 .collect(),
             square: if square {
