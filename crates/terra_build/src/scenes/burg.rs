@@ -20,7 +20,7 @@
 //! face, the ward to the north (-Z), as a village's buildings and [`super::castle`] are.
 
 use crate::roofer::{self, Style};
-use crate::{Base, BuildOp, Cube, Fill, Kind};
+use crate::{Base, BuildOp, Cube, Fill, Kind, STOREY_CUBES};
 use std::collections::BTreeSet;
 
 /// What the castle is built of: stone, squared timber, round logs and a covering of wood, the
@@ -48,7 +48,7 @@ const LACING: i32 = 11;
 /// The keep's side, its stone's height, and its lacing.
 const KEEP: i32 = 18;
 const KEEP_STONE: i32 = 30;
-const KEEP_LACING: i32 = 11;
+const KEEP_LACING: i32 = 5;
 
 type Box3 = ([i32; 3], [i32; 3]);
 /// A roof to put up once the walls stand: its footprint, the storey under it, its style, which
@@ -123,9 +123,17 @@ impl Plan {
         self.ring([x0, z0, x1, z1], 0, stone - 1, wall, m.stone);
         for y in (5..stone - 1).step_by(6) {
             if y == lacing {
-                // The bond timbers, through the walls all round; the storey over them open
-                // down to the floor under, a hall two storeys high, so they face its air.
+                // The bond timbers, through the walls all round. Over the ground storey they
+                // carry its floor, so the storey under them, its door at the foot, is a room a
+                // fire fills; higher, the storey over them is open down to the floor under, a
+                // hall two storeys high, so they face its air.
                 self.ring([x0, z0, x1, z1], y, y, wall, m.beams);
+                if y == STOREY_CUBES - 1 {
+                    self.solid(
+                        ([x0 + wall, y, z0 + wall], [x1 - wall, y, z1 - wall]),
+                        m.beams,
+                    );
+                }
             } else {
                 self.solid(
                     ([x0 + wall, y, z0 + wall], [x1 - wall, y, z1 - wall]),

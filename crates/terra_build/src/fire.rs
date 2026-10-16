@@ -100,7 +100,7 @@ const SOOTS: f32 = 60.0;
 /// How much faster a cube burns for each face it shares with a burning one.
 const FEEDS: f32 = 0.25;
 /// How much of its fuel burnt timber carrying stone has burnt when it gives way under it.
-const CRUSHED: f32 = 0.6;
+const CRUSHED: f32 = 0.4;
 /// The heat a burning cube that comes down gives what it lands on, and the cubes beside
 /// that, as a brand does; and how far it is looked for under it, in cubes.
 const BRAND: f32 = 2.5;
@@ -608,7 +608,7 @@ const GAS_REACH: i32 = 8;
 const GAS_COVER: i32 = 8;
 const GAS_MOST: usize = 2500;
 const GAS_LEAST: usize = 64;
-const HOT_GAS: f32 = 20.0;
+const HOT_GAS: f32 = 30.0;
 
 /// How fiercely a fire burns with so much of its fuel left of what it had: growing at
 /// first, then full, then dying to embers.

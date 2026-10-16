@@ -157,7 +157,7 @@ function track(s: Script, course: Course, from: number, to: number, a: Vec3, b: 
 
 /// The keep: the middle of its foot, how high its bond timbers run, and its faces.
 const KEEP: Vec3 = [0, 0, -19.75];
-const BAND = 5.6;
+const BAND = 2.7;
 const KEEP_HALF = 4.5;
 
 function script(s: Script) {
@@ -171,83 +171,83 @@ function script(s: Script) {
   cut(s, 1300, [-44, 26, -74], [0, 12, -24]);
   cut(s, 1450, [34, 10, 22], [6, 14, -14]);
   cut(s, 1600, [48, 5, 52], [0, 11, -18]);
-  const spawn: Vec3 = [-170, 55, 110];
+  const spawn: Vec3 = [-130, 48, 80];
   s.frame = 400;
   s.call("flight.spawn", { kind: "Dragon", at: spawn, facing: [0, 20, 0], base: true });
   const course = new Course(spawn);
 
   // 0-5 s: the castle standing in the morning light, the camera drifting in.
-  s.mark("standing", "The castle standing in the morning", at(0), at(5));
-  glide(s, at(0), [41, 6, 44], [0, 11, -18], 300);
+  s.mark("standing", "The castle standing in the morning", at(0), at(4.5));
+  glide(s, at(0), [41, 6, 44], [0, 11, -18], 270);
 
   // The first pass, in over the trees from the south-west and east along the south wall over
   // its hoardings and the gatehouse, the camera low by the south-east tower looking back
-  // along the wall at it; the hoardings catch as the breath sweeps along them, then it passes
-  // over the camera and the camera turns with it.
-  const first = course.fly(s, at(1), [
-    [-95, 36, 60],
-    [-50, 22, 6],
-    [0, 20, -0.5],
-    [40, 24, -5],
-    [70, 32, -30],
-    [55, 38, -64],
-    [18, 38, -72],
-    [-2, 34, -44],
-    [9, 28, -12],
-    [20, 22, -3],
-  ], [0, 8, -20], 28);
-  const wallFrom = at(1) + Math.round(passes(first, [-34, 22, 3]) * 60);
-  const wallTo = at(1) + Math.round(passes(first, [28, 23, -3]) * 60);
-  s.mark("first-pass", "The dragon comes in over the trees and strafes the south wall", at(5), wallTo + 60);
-  cut(s, at(5), [36, 3, 13], [-30, 14, 1]);
-  glide(s, at(5) + 1, [33, 3.5, 12], [-24, 15, 1], wallFrom - at(5) - 30);
-  sweep(s, wallFrom, wallTo, [-24, 10, 1.6], [24, 10, 1.6]);
-  track(s, course, wallTo - 50, wallTo + 60, [33, 3.5, 12], [31, 4, 14], [10, 14, -2], 0.35);
-
-  // The second pass: banking round the north-east, over the hall and down over the keep's
-  // roof, breathing; the camera high over the north-west following it.
-  const hallFrom = at(1) + Math.round(passes(first, [18, 38, -72]) * 60);
-  const keepTo = at(1) + Math.round(passes(first, [-2, 34, -44]) * 60) + 30;
-  const hovering = at(1) + Math.round(first.seconds * 60);
-  s.mark("second-pass", "It banks round and passes over the hall and the keep, breathing on their roofs", wallTo + 60, hovering);
-  track(s, course, wallTo + 61, hovering - 30, [-46, 28, -84], [-40, 26, -76], [0, 14, -30], 0.55);
-  sweep(s, hallFrom, keepTo, [12, 14, -60], [0, 22, -21]);
-
-  // The hover, off the keep's south-east corner: into its door and windows, then along its
-  // bond timbers on its south and east faces.
-  s.mark("hover", "It hovers at the keep and breathes into it and along its bond timbers", hovering - 30, hovering + 420);
-  cut(s, hovering - 30, [36, 9, 24], [10, 16, -10]);
-  glide(s, hovering - 29, [30, 10, 30], [6, 15, -12], 440);
+  // along the wall at it; the hoardings catch as the breath sweeps along them; it passes
+  // over the camera, the camera turning with it, and banks round to hover off the keep's
+  // south-east corner.
   const k = KEEP;
-  sweep(s, hovering + 10, hovering + 130, [k[0] - 1, 1.5, k[2] + KEEP_HALF], [k[0] + 3, 5, k[2] + KEEP_HALF]);
-  sweep(s, hovering + 140, hovering + 270, [k[0] - KEEP_HALF, BAND, k[2] + KEEP_HALF], [k[0] + KEEP_HALF, BAND, k[2] + KEEP_HALF]);
-  sweep(s, hovering + 280, hovering + 400, [k[0] + KEEP_HALF, BAND, k[2] + KEEP_HALF], [k[0] + KEEP_HALF, BAND, k[2] - KEEP_HALF]);
+  const first = course.fly(s, at(0.5), [
+    [-70, 30, 40],
+    [-40, 21, 5],
+    [0, 20, -0.5],
+    [34, 24, -4],
+    [44, 28, -22],
+    [30, 26, -24],
+    [19, 21, -12],
+  ], [k[0], 6, k[2]], 26);
+  const wallFrom = at(0.5) + Math.round(passes(first, [-30, 21, 3]) * 60);
+  const wallTo = at(0.5) + Math.round(passes(first, [28, 23, -3]) * 60);
+  const hovering = at(0.5) + Math.round(first.seconds * 60);
+  s.mark("first-pass", "The dragon comes in over the trees and strafes the south wall", at(4.5), wallTo + 50);
+  cut(s, at(4.5), [36, 3, 13], [-30, 14, 1]);
+  glide(s, at(4.5) + 1, [33, 3.5, 12], [-24, 15, 1], Math.max(30, wallFrom - at(4.5) - 30));
+  sweep(s, wallFrom, wallTo, [-24, 10, 1.6], [24, 10, 1.6]);
+  track(s, course, wallTo - 50, wallTo + 50, [33, 3.5, 12], [31, 4, 14], [10, 14, -2], 0.35);
 
-  // A last pass west over the south-west tower's top and along the west wall's hoardings,
-  // then round over the north, the camera wide from the south-west, the castle all ablaze.
-  const turn = hovering + 420;
+  // The hover, off the keep's south-east corner: into its door and its ground storey's
+  // windows, then along its bond timbers on its south and east faces; the ground storey
+  // under them fills with fire. The camera close, the dragon and the keep in the frame.
+  s.mark("hover", "It hovers at the keep and breathes into its foot, through its door and along its bond timbers", wallTo + 50, hovering + 480);
+  cut(s, wallTo + 50, [38, 7, 20], [12, 15, -10]);
+  glide(s, wallTo + 51, [32, 8, 26], [8, 13, -12], hovering + 160 - wallTo - 51);
+  // Closer, from behind and beside it, its breath going into the keep's foot.
+  cut(s, hovering + 190, [33, 25, 4], [4, 4, -16]);
+  glide(s, hovering + 191, [30, 23, 10], [4, 4, -16], 290);
+  sweep(s, hovering + 10, hovering + 190, [k[0] - 1, 0.8, k[2] + KEEP_HALF], [k[0] + 2, 2, k[2] + KEEP_HALF]);
+  sweep(s, hovering + 200, hovering + 330, [k[0] - KEEP_HALF, BAND, k[2] + KEEP_HALF], [k[0] + KEEP_HALF, BAND, k[2] + KEEP_HALF]);
+  sweep(s, hovering + 340, hovering + 470, [k[0] + KEEP_HALF, BAND, k[2] + KEEP_HALF], [k[0] + KEEP_HALF, BAND, k[2] - KEEP_HALF]);
+
+  // A pass west over the gatehouse, the south-west tower and the west wall's hoardings, then
+  // round over the north and down over the hall's roof; the camera high over the north-west
+  // following it, then wide from the south-west with the castle ablaze.
+  const turn = hovering + 480;
   const round = course.fly(s, turn, [
-    [26, 30, 18],
+    [24, 30, 16],
     [-6, 30, 22],
     [-21, 28, 2],
     [-24, 30, -30],
-    [-30, 42, -80],
-    [20, 50, -95],
-    [55, 46, -40],
-    [40, 40, 10],
+    [-20, 40, -70],
+    [10, 34, -64],
+    [40, 40, -40],
+    [55, 46, 10],
   ]);
   const towerFrom = turn + Math.round(passes(round, [-6, 30, 22]) * 60);
   const towerTo = turn + Math.round(passes(round, [-24, 30, -30]) * 60);
-  s.mark("round", "A last pass over the burning west wall; the fire takes the castle", turn, at(36));
-  cut(s, turn, [-66, 10, 52], [-6, 12, -18]);
-  glide(s, turn + 1, [-60, 22, 48], [-4, 11, -18], at(36) - turn);
+  const hallFrom = turn + Math.round(passes(round, [-20, 40, -70]) * 60);
+  const hallTo = turn + Math.round(passes(round, [40, 40, -40]) * 60);
+  s.mark("round", "A pass over the west wall and the hall's roof; the fire takes the castle", turn, at(34));
+  track(s, course, turn, hallFrom - 20, [-62, 12, 50], [-58, 16, 46], [-6, 12, -14], 0.6);
   sweep(s, towerFrom, towerTo, [-20.5, 14, -1], [-23, 10, -30]);
+  track(s, course, hallFrom - 19, hallTo + 40, [-50, 30, -84], [-42, 28, -78], [0, 14, -30], 0.55);
+  sweep(s, hallFrom, hallTo, [-14, 14, -32], [12, 14, -32]);
+  cut(s, hallTo + 41, [-66, 10, 52], [-4, 12, -18]);
+  glide(s, hallTo + 42, [-60, 20, 48], [-2, 11, -18], Math.max(60, at(34) - hallTo - 42));
 
   // The towers and the keep come down; the dragon comes back over them, roars and goes off
   // over the trees.
-  s.mark("falling", "The towers and the keep come down in fire and dust", at(37), at(48));
-  cut(s, at(37), [40, 3.5, 30], [0, 12, -19]);
-  glide(s, at(37) + 1, [46, 4, 38], [0, 11, -19], 660);
+  s.mark("falling", "The towers and the keep come down in fire and dust", at(34), at(48));
+  cut(s, at(34), [42, 3.5, 32], [0, 12, -19]);
+  glide(s, at(34) + 1, [48, 4.5, 40], [0, 11, -19], 840);
   course.hover(s, at(43), [14, 34, 6], [0, 10, -20]);
   s.frame = at(43.5);
   s.call("flight.roar", { seconds: 2.7 });
