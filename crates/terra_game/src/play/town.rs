@@ -88,6 +88,11 @@ pub struct Market {
     pub life: Life,
     /// Its animals: hens, goats, dogs.
     pub animals: Animals,
+    /// The hour its people's day is at, and the clock's when it was last seen: the clock's
+    /// own while it runs; while it is held (a trailer's shot keeps the sun where it is), on
+    /// at the day's pace, so its people still go on to what they do next.
+    pub lived: f64,
+    pub clock_seen: f64,
 }
 
 impl Market {
@@ -1073,7 +1078,19 @@ fn lay(
         up,
         life,
         animals,
+        lived: f64::NAN,
+        clock_seen: f64::NAN,
     });
+}
+
+/// The hour the town's day is at: the clock's `now` while it runs, and while it stands where
+/// it was last seen, the day's own pace on from `lived` by `step` seconds.
+fn lived_hours(now: f64, seen: f64, lived: f64, step: f32) -> f64 {
+    if now == seen && lived.is_finite() {
+        lived + step as f64 * 24.0 / DAY_SECONDS as f64
+    } else {
+        now
+    }
 }
 
 /// The town's people a tick on, the camera and every viewpoint their viewers.
@@ -1099,8 +1116,11 @@ fn live(
         })
         .collect();
     market.life.visitors = visitors;
-    let hours = Market::hours(&clock);
     let step = time.delta_secs();
+    let now = Market::hours(&clock);
+    let hours = lived_hours(now, market.clock_seen, market.lived, step);
+    market.clock_seen = now;
+    market.lived = hours;
     market.life.step(hours, step, &viewers);
     let market = &mut *market;
     market.animals.step(&market.life, step, &viewers);
@@ -1108,6 +1128,21 @@ fn live(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_held_clock_leaves_the_day_going_at_its_pace() {
+        // Running: the clock's hour.
+        assert_eq!(super::lived_hours(8.6, 8.5, 8.5, 1.0), 8.6);
+        // Held at 8.5: on by the day's pace, a minute of play an hour's 2 minutes of the day.
+        let on = super::lived_hours(8.5, 8.5, 8.5, 60.0);
+        assert!(
+            (on - (8.5 + 60.0 * 24.0 / DAY_SECONDS as f64)).abs() < 1e-9,
+            "{on}"
+        );
+        assert!(on > 8.5);
+        // Before anything is seen, the clock's.
+        assert_eq!(super::lived_hours(8.5, f64::NAN, f64::NAN, 1.0), 8.5);
+    }
+
     use super::*;
     use terra_build::village::{Kinds, Plan, Scheme};
 
