@@ -266,12 +266,13 @@ fn where_seen(point: vec3<f32>, size: vec2<f32>) -> vec4<f32> {
 }
 
 // The reflection's march: its first step, so long and a share of the water's distance more;
-// each next step longer by this much; and how many, together reaching about 3 km from water
-// near the eye.
+// each next step longer by this much; and how many, together reaching past 10 km from water
+// near the eye: at 3 km, where the peaks across a lake stand, the first steps' 1.22 had
+// spent its 32 and the water mirrored the forest under them but not them.
 const SSR_FIRST_M: f32 = 0.6;
 const SSR_FIRST_SHARE: f32 = 0.01;
-const SSR_GROWTH: f32 = 1.22;
-const SSR_STEPS: u32 = 32u;
+const SSR_GROWTH: f32 = 1.25;
+const SSR_STEPS: u32 = 36u;
 
 @fragment
 fn fragment(

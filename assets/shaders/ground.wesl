@@ -790,7 +790,9 @@ fn fragment(
             + noise(vec3<f32>(dot(world, across_face) * 0.37, dot(world, up) * 0.03, 29.0)) * 0.3;
         let stained = 1.0 - 0.45 * smoothstep(0.5, 0.8, streaks) * (1.0 - smoothstep(0.55, 0.85, flatness));
         let tones = 0.8 + 0.4 * noise(world * 0.004 + 53.0);
-        let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 1.3;
+        // Granite as the Tatras' walls are seen across a valley, a mid grey under the snow,
+        // not the pale slab 1.3 times as bright read as.
+        let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.95;
         let granite = vec3<f32>(grey, grey, grey * 0.97) * (0.85 + 0.3 * blotch) * stained * tones;
         let scree_tint = vec3<f32>(grey, grey, grey * 0.96) * 1.25 * (0.85 + 0.3 * fleck) * tones;
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
@@ -1147,7 +1149,7 @@ fn fragment(
             if shore > 0.0 {
                 // Granite washed by the lake, a warm grey: the blue sky over the open shore
                 // lights it, and a neutral grey under it read violet.
-                let pebbles = vec3<f32>(grey * 1.1, grey, grey * 0.8) * 1.1 * (0.8 + 0.4 * fleck) * tones;
+                let pebbles = vec3<f32>(grey * 1.2, grey * 1.03, grey * 0.78) * 1.2 * (0.8 + 0.4 * fleck) * tones;
                 ground_is = over(ground_is, layer(GRAVEL, 0.7, pebbles, world + 67.0, gx, gy, n, 1.0), shore * (1.0 - steep));
                 ground_is = over(ground_is, layer(SCREE, 0.6, pebbles, world + 71.0, gx, gy, n, 1.0), shore * smoothstep(0.55, 0.8, blotch) * (1.0 - steep));
                 var slab = layer(ROCK, 1.0, granite, world + 89.0, gx, gy, n, 0.15);

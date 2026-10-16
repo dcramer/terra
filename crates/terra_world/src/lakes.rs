@@ -207,7 +207,7 @@ const MISTY_M2: f32 = 50_000.0;
 /// standing this far under the surface so its foot never shows.
 const MIST_EVERY_M: f32 = 40.0;
 const MIST_WIDE_M: (f32, f32) = (40.0, 75.0);
-const MIST_TALL_M: (f32, f32) = (5.0, 11.0);
+const MIST_TALL_M: (f32, f32) = (3.0, 13.0);
 const MIST_FOOT_M: f32 = 1.5;
 
 /// A lake's mist banks as one mesh: a card standing on its water every `MIST_EVERY_M`, by

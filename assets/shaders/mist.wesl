@@ -125,7 +125,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // softly, so no card's foot draws a ruler line across the lake.
     let over_water = height * in.uv_b.y - FOOT_M;
     let footed = smoothstep(0.0, 1.5, over_water);
-    let thinning = 1.0 - smoothstep(0.0, 1.0, height + (fine - 0.5) * 0.35);
+    let thinning = 1.0 - smoothstep(0.0, 1.0, height + (fine - 0.5) * 0.6 + (broad - 0.5) * 0.5);
     let across = 1.0 - abs(in.uv.x - 0.5) * 2.0;
     let profile = thinning * thinning * smoothstep(0.0, 0.7, across) * footed;
     let to_eye = view.world_position - world;
