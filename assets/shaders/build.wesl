@@ -15,6 +15,7 @@ import bevy_pbr::render::{
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing, calculate_tbn_mikktspace},
     forward_io::{VertexOutput, FragmentOutput},
     mesh_view_bindings::view,
+    mesh_view_bindings::globals,
     pbr_lighting as lighting,
 };
 
@@ -508,6 +509,38 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     } else {
         let shade = 1.0 - layers.damage.z * lost;
         pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * shade, 1.0);
+    }
+    // Fire (D377, terra_build::fire): how blackened the corner is rides on its layer number,
+    // under a half. What burns chars to charcoal, black, matte and cracked across and along
+    // its grain into blocks (alligatoring, as burnt timber checks), its cracks glowing while it
+    // burns; what does not is sooted, a smooth dark film thickest where the flame licked.
+    let char = clamp((in.uv_b.x - f32(layer)) / 0.4, 0.0, 1.0);
+    if char > 0.001 {
+        let burns = layers.breaks[layer].z > 0.5;
+        let base = pbr_input.material.base_color.rgb;
+        if burns {
+            let p = vec2(dot(wp, T), dot(wp, B)) * vec2(26.0, 15.0);
+            let row = floor(p.y);
+            let q = vec2(p.x + hash21(vec2(row, 3.0)) * 0.9, p.y);
+            let f = fract(q);
+            let edge = min(min(f.x, 1.0 - f.x) * 1.6, min(f.y, 1.0 - f.y));
+            let crack = 1.0 - smoothstep(0.03, 0.11, edge);
+            let block = hash21(floor(q) + vec2(17.0, 5.0));
+            // Grain still showing through the first char, black blocks once it is deep.
+            let coal = vec3(0.028, 0.024, 0.021) * (0.7 + 0.6 * block);
+            let black = mix(base * 0.35, coal, smoothstep(0.0, 0.55, char));
+            let charred = mix(black, vec3(0.006, 0.005, 0.004), crack * smoothstep(0.3, 0.8, char));
+            pbr_input.material.base_color = vec4(mix(base, charred, smoothstep(0.0, 0.35, char)), 1.0);
+            pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.92, char);
+            // Embers in the cracks, flickering, hotter in the deeper char.
+            let flicker = 0.55 + 0.45 * sin(globals.time * (3.0 + 4.0 * block) + block * 40.0);
+            let heat = crack * smoothstep(0.35, 0.9, char) * flicker;
+            let ember = vec3(1.0, 0.32, 0.06) * heat * 14.0 + vec3(0.6, 0.12, 0.02) * smoothstep(0.6, 1.0, char) * (1.0 - crack) * block * 1.5;
+            pbr_input.material.emissive = vec4(ember, 1.0);
+        } else {
+            let soot = vec3(0.035, 0.032, 0.03);
+            pbr_input.material.base_color = vec4(mix(base, soot, char * 0.88), 1.0);
+        }
     }
     pbr_input.material.metallic = arm.b;
     pbr_input.material.reflectance = vec3(entry.z);

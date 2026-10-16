@@ -24,9 +24,12 @@
 // toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
 // damage      how its covering breaks as it loses its health (D305): a shingle, slate or
 //             shake at a time, the gaps between them the lowest share of its height map
+// burns       what it does in a fire (D377, terra_build::fire): None for slate; a covering
+//             of wood or straw says its own in its pack
 (
     pattern: Roof,
     toughness: (health: 200, breaks: Bits),
+    burns: None,
     damage: {
         Covering: Shingles(share: 0.22),
     },

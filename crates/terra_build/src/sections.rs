@@ -82,6 +82,9 @@ pub struct Laid {
     /// Its damaged cubes and a cube round it, each with how many quarters of its health it
     /// has lost (`loss`), which its surfaces are worn by as they are drawn.
     pub worn: Vec<([i32; 3], u8)>,
+    /// Its cubes a fire has blackened and a cube round it (D377, `Base::scorch`), which its
+    /// textured surfaces are charred or sooted by as they are drawn.
+    pub scorched: Vec<([i32; 3], crate::Scorch)>,
 }
 
 impl Laid {
@@ -92,6 +95,7 @@ impl Laid {
         self.pieces.hash(&mut hasher);
         self.edge.hash(&mut hasher);
         self.worn.hash(&mut hasher);
+        self.scorched.hash(&mut hasher);
         hasher.finish()
     }
 }
@@ -392,6 +396,8 @@ pub struct Drawn {
     /// (`Laid::worn`): a textured surface near and a few metres off is worn by them as it
     /// is drawn (D290's shared damage mask, in the game), the rest in its colours here.
     pub worn: Vec<([i32; 3], u8)>,
+    /// Its cubes a fire has blackened (`Laid::scorched`), drawn by the texture arrays.
+    pub scorched: Vec<([i32; 3], crate::Scorch)>,
 }
 
 impl Drawn {

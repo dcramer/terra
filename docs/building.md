@@ -147,6 +147,10 @@ With the hammer in hand and nothing picked, aim at something damaged: its damage
 
 What loses its support without being asked, to an attack or the ground giving way, comes down (D193): what is destroyed bursts into fragments of its own material, stone into chunky blocks, logs into lengths and splinters, wattle and roofs into bits, earth crumbling, and what hung from it falls whole a moment later, the higher the later, breaking where it lands. The fragments bounce, roll off ledges and settle, with a puff of dust in the material's colour, the view shaking near a big collapse, then shrink away. Nobody can touch them and nothing is given back from them while building takes no real resources (D305). Nothing takes damage until attacks come (D90); until then the remote and a debug key (F9, on the cube aimed at) do it.
 
+### Fire
+
+What is built of wood or straw burns (D377): logs, squared timber, a timber frame, shakes and thatch catch from flame, thatch at a touch and a log only after a while; each burns for as long as its fuel lasts, chars black and cracked, glowing in its cracks, and burns through, and what it held comes down as any loss does. Fire climbs faster than it creeps, runs downwind, smoulders where no air reaches, and fills a shut room with hot gas until everything round it catches at once, as a room flashes over; burning wreckage that falls sets alight what it lands on. Stone, slate and earth do not burn but blacken with soot, and fall when the timber under them burns away: a tower's floors on bond timbers through its walls, hoardings on their beams. Times are a game's, not a real fire's: a shingle roof goes in seconds, a log wall in half a minute (real logs burn for hours). How a material burns is its file's (`burns`).
+
 ### To lock down
 
 The calls for the developers, each recommended as written above:

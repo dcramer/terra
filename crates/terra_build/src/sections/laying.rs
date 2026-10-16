@@ -381,10 +381,13 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
     }
     // Its damaged cubes, and those a cube round it whose wear reaches over its edge.
     let worn = worn_within(base, kits, low, high).into_iter().collect();
+    // And those a fire has blackened (D377), as far round.
+    let scorched = base.scorched_within(low, high).collect();
     Laid {
         pieces: own.into_iter().map(|(_, _, placed)| placed).collect(),
         edge: edge.into_iter().map(|(_, _, placed)| placed).collect(),
         worn,
+        scorched,
     }
 }
 

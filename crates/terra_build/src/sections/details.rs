@@ -282,6 +282,7 @@ pub(super) fn draw_details(
     }
     plain(section, &mut drawn);
     drawn.worn = laid.worn.clone();
+    drawn.scorched = laid.scorched.clone();
     drawn
 }
 

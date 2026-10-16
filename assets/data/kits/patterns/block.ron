@@ -31,9 +31,12 @@
 //             stone at their joints (the lowest share of its height map), the mortar first,
 //             then the stones' edges, then whole stones, leaving holes so deep (a wall's
 //             deeper than a stone is thick, dark at their back)
+// burns       what it does in a fire (D377, terra_build::fire): None, stone does not burn; it
+//             blackens with soot and falls when what holds it does
 (
     pattern: Masonry,
     toughness: (health: 600, breaks: Chunks),
+    burns: None,
     damage: {
         Masonry: Joints(share: 0.22, depth: 0.16),
         Floor: Joints(share: 0.2, depth: 0.04),

@@ -385,6 +385,20 @@ pub(super) fn in_arrays(
     worn: &BTreeMap<[i32; 3], u8>,
     used: &mut BTreeSet<u16>,
 ) -> (Option<Mesh>, Vec<(Kind, Material, Mesh)>) {
+    in_arrays_scorched(surfaces, layers, centre, worn, &BTreeMap::new(), used)
+}
+
+/// As [`in_arrays`], each corner's layer carrying how blackened it is by fire as well
+/// (D377, `terra_build::fire::charred`), which the arrays' shader chars, soots and glows by.
+#[allow(clippy::type_complexity)]
+pub(super) fn in_arrays_scorched(
+    surfaces: &BTreeMap<(Kind, Material), Surface>,
+    layers: &Layers,
+    centre: Vec3,
+    worn: &BTreeMap<[i32; 3], u8>,
+    scorched: &BTreeMap<[i32; 3], terra_build::Scorch>,
+    used: &mut BTreeSet<u16>,
+) -> (Option<Mesh>, Vec<(Kind, Material, Mesh)>) {
     let mut rest = Vec::new();
     let mut all = terra_build::Indexed::default();
     let mut tangents: Vec<[f32; 4]> = Vec::new();
@@ -410,7 +424,8 @@ pub(super) fn in_arrays(
             } else {
                 terra_build::loss::struck(worn, *p, *n)
             };
-            [f32::from(id), lost]
+            let char = terra_build::fire::charred(scorched, *p, *n);
+            [f32::from(id) + terra_build::fire::CHAR_SHARE * char, lost]
         }));
         all.append(part);
     }
@@ -476,22 +491,26 @@ pub(super) fn parts(
     let plain = |surface: &Surface| mesh(surface, centre, Uvs::None).map(pack);
     let none = BTreeMap::new();
     let worn: BTreeMap<[i32; 3], u8> = drawn.worn.iter().copied().collect();
+    let scorched: BTreeMap<[i32; 3], terra_build::Scorch> =
+        drawn.scorched.iter().copied().collect();
     let count = drawn.near_by.len().max(drawn.mid_by.len());
     let part = |c: usize| {
         only.get(c).copied().unwrap_or(true).then(|| {
             let mut used = BTreeSet::new();
-            let (near_arrays, near) = in_arrays(
+            let (near_arrays, near) = in_arrays_scorched(
                 drawn.near_by.get(c).unwrap_or(&none),
                 layers,
                 centre,
                 &worn,
+                &scorched,
                 &mut used,
             );
-            let (mid_arrays, mid) = in_arrays(
+            let (mid_arrays, mid) = in_arrays_scorched(
                 drawn.mid_by.get(c).unwrap_or(&none),
                 layers,
                 centre,
                 &worn,
+                &scorched,
                 &mut used,
             );
             let packs = |all: Vec<(Kind, Material, Mesh)>| {
@@ -865,7 +884,8 @@ fn repaint(
                         if let Some(kind) = to.get(cube)
                             && let Some(&new) = map.get(&(*kind, id[0] as u16))
                         {
-                            id[0] = f32::from(new);
+                            // Its char (D377) kept, riding on the layer.
+                            id[0] = f32::from(new) + (id[0] - id[0].floor());
                             rewritten += 1;
                         }
                     }

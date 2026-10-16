@@ -69,6 +69,10 @@ pub struct Kit {
     /// How it stands up to harm and what is left when it falls (D193): its pattern's, unless
     /// its file says otherwise.
     pub toughness: KitToughness,
+    /// How it burns (D377): what it takes to catch, how long it burns and how hot; `None`
+    /// for what does not burn, stone, slate and earth. Its pattern's, unless its material
+    /// says otherwise.
+    pub burns: Option<crate::fire::Burns>,
     /// How each of its materials breaks as its cubes lose their health (D305): by the
     /// structure its pattern lays (a block wall at its joints, timber along its grain, a
     /// covering a shingle at a time), as its pattern's file says; a material left out takes
@@ -746,6 +750,14 @@ impl Kits {
             .min_by_key(|kit| kit.id)
     }
 
+    /// How each kind that burns burns (D377), by its kit.
+    pub fn burning(&self) -> BTreeMap<Kind, crate::fire::Burns> {
+        self.0
+            .iter()
+            .filter_map(|kit| Some((kit.kind(), kit.burns.filter(|b| b.catches > 0.0)?)))
+            .collect()
+    }
+
     /// The kit that lays a kind, if any does.
     pub fn of(&self, kind: Kind) -> Option<&Kit> {
         self.0.iter().find(|kit| kit.kind() == kind)
@@ -1017,6 +1029,11 @@ impl Default for Kit {
             details: BTreeMap::new(),
             cost: KitCost::default(),
             toughness: KitToughness::default(),
+            burns: Some(crate::fire::Burns {
+                catches: 3.0,
+                fuel_s: 20.0,
+                heat: 1.0,
+            }),
             damage: BTreeMap::new(),
             dress: Dressing::default(),
             colours: KitColours::default(),
@@ -1278,6 +1295,33 @@ pub(crate) mod tests {
             "code customised by material:\n{}",
             found.join("\n")
         );
+    }
+
+    #[test]
+    fn what_burns_is_wood_and_straw_and_straw_catches_soonest() {
+        // D377: timber, shakes, thatch and a timber frame burn; stone, slate and earth do
+        // not. Straw catches at a touch, split shakes soon, a log only after a while.
+        let burns = |name: &str| shipped(name).burns;
+        for name in ["stone.ron", "slate.ron", "earth.ron", "limewash.ron"] {
+            assert_eq!(burns(name), None, "{name} burns");
+        }
+        for name in [
+            "logs.ron",
+            "hewn.ron",
+            "shakes.ron",
+            "thatch.ron",
+            "wattle.ron",
+        ] {
+            assert!(
+                burns(name).is_some_and(|b| b.catches > 0.0 && b.fuel_s > 0.0),
+                "{name} does not burn"
+            );
+        }
+        let catches = |name: &str| burns(name).unwrap().catches;
+        assert!(catches("thatch.ron") < catches("shakes.ron"));
+        assert!(catches("shakes.ron") < catches("logs.ron"));
+        // A thin covering burns out sooner than a log.
+        assert!(burns("shakes.ron").unwrap().fuel_s < burns("logs.ron").unwrap().fuel_s);
     }
 
     #[test]

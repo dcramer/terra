@@ -39,9 +39,13 @@
 //             planks split along their grain, so many splits round or across each, and
 //             gouge; a log or beam loses chunks so deep out of its outline, and its sawn
 //             ends splinter; their sawn ends check from the rim; the daub between crumbles
+// burns       what it does in a fire (D377, terra_build::fire): the heat it catches at (a
+//             second of a burning neighbour's full flame under it gives its heat), how many
+//             seconds it burns, and how hot; quicker than a real log wall, which burns for hours
 (
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
+    burns: Some((catches: 3.0, fuel_s: 20.0, heat: 1.0)),
     damage: {
         Log: Grain(splits: 5.0, chunks: 0.08),
         Hewn: Grain(splits: 3.0, chunks: 0.07),

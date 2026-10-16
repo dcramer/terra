@@ -45,7 +45,7 @@ use bevy::{
     shader::ShaderRef,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use terra_build::cells::CELLS;
 use terra_build::kit::Kits;
@@ -164,6 +164,8 @@ pub struct Layers {
     worn: BTreeMap<u16, u16>,
     /// Each layer with a detail texture, and the detail's layer.
     details: BTreeMap<u16, u16>,
+    /// The layers of a kit that burns (D377), whose char glows while it burns.
+    burns: BTreeSet<u16>,
 }
 
 impl Layers {
@@ -192,6 +194,9 @@ impl Layers {
                     detail: detail.clone(),
                 };
                 let id = out.layer(set);
+                if kit.burns.is_some() && id < MAX_LAYERS {
+                    out.burns.insert(id as u16);
+                }
                 if id >= MAX_LAYERS {
                     warn!("Build: more than {MAX_LAYERS} texture sets; the rest drawn plain");
                     continue;
@@ -738,6 +743,8 @@ impl Arrays {
         for (i, set) in self.layers.sets.iter().enumerate() {
             if let Some(entry) = out.get_mut(i + 1) {
                 *entry = set.breaks;
+                // z: whether it burns (D377), its char glowing.
+                entry.z = f32::from(u8::from(self.layers.burns.contains(&((i + 1) as u16))));
             }
         }
         out

@@ -35,6 +35,7 @@
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
+pub mod burg;
 pub mod castle;
 pub mod cells;
 pub mod checker;
@@ -43,6 +44,8 @@ pub mod cubes;
 pub mod draw;
 pub mod dress;
 mod example;
+pub mod fire;
+pub use fire::Scorch;
 pub mod fitting;
 pub mod fragments;
 pub mod ground;
@@ -274,6 +277,9 @@ pub struct Base {
     /// How much damage each cube with anything in it has taken, where it has taken any
     /// (D193, `loss`).
     damage: BTreeMap<[i32; 3], u16>,
+    /// How each cube a fire has reached is blackened (D377, `fire`): [`Scorch`]'s levels,
+    /// set by the fire as it changes and drawn as damage is. Not saved: a fire is not.
+    scorch: BTreeMap<[i32; 3], Scorch>,
     ground: Ground,
     /// Each column of cubes, by where it stands, and its layers. Each column's, part's
     /// and section's own are shared (`Arc`) and copied only when changed, so a base is
@@ -318,6 +324,52 @@ impl Base {
 
     pub fn is_empty(&self) -> bool {
         self.cubes.is_empty() && self.props.is_empty()
+    }
+
+    /// How a cube is blackened by fire (D377).
+    pub fn scorch(&self, at: IVec3) -> Scorch {
+        self.scorch.get(&at.to_array()).copied().unwrap_or_default()
+    }
+
+    /// Every cube a fire has blackened, sorted.
+    pub fn scorched(&self) -> impl Iterator<Item = (IVec3, Scorch)> + '_ {
+        self.scorch
+            .iter()
+            .map(|(&at, &scorch)| (IVec3::from_array(at), scorch))
+    }
+
+    /// The cubes a fire has blackened from one cube to another, that are still there.
+    pub fn scorched_within(
+        &self,
+        low: IVec3,
+        high: IVec3,
+    ) -> impl Iterator<Item = ([i32; 3], Scorch)> + '_ {
+        self.scorch
+            .range([low.x, i32::MIN, i32::MIN]..=[high.x, i32::MAX, i32::MAX])
+            .filter(move |(at, _)| {
+                let at = IVec3::from_array(**at);
+                at.cmpge(low).all() && at.cmple(high).all() && self.cube(at).is_some()
+            })
+            .map(|(&at, &scorch)| (at, scorch))
+    }
+
+    /// Sets how a cube is blackened, as its fire says; its section is drawn again only when
+    /// that changes. Nothing for a cube that is not there.
+    pub fn set_scorch(&mut self, at: IVec3, scorch: Scorch) {
+        if self.cube(at).is_none() {
+            self.scorch.remove(&at.to_array());
+            return;
+        }
+        let was = self.scorch(at);
+        if was == scorch {
+            return;
+        }
+        if scorch == Scorch::default() {
+            self.scorch.remove(&at.to_array());
+        } else {
+            self.scorch.insert(at.to_array(), scorch);
+        }
+        self.cubes.mark(at);
     }
 
     /// The cube at a place, counted in cubes, if it is not air.

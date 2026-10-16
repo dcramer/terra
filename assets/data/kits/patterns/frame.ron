@@ -17,9 +17,13 @@
 //             against them at its own end posts
 // toughness  how much damage a cube takes before it is destroyed (D193): wattle and daub
 //             gives way before stone or logs
+// burns       what it does in a fire (D377, terra_build::fire): the heat it catches at, how
+//             many seconds it burns and how hot; its frame burns, slower than logs, the daub
+//             between holding little
 (
     pattern: Masonry,
     toughness: (health: 300, breaks: Bits),
+    burns: Some((catches: 4.0, fuel_s: 15.0, heat: 0.6)),
     framing: Some((
         wide: 0.18,
         proud: 0.03,

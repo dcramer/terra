@@ -2,6 +2,8 @@
 // courses a copy, 26 cm thick; its own modelled sedge ridge, bound verge bundle and cut eave
 // (art/kits/thatch), and a valley and ridge of the reed itself; round pole rafters.
 (
+    // Dry straw catches at a touch and flares up hottest and shortest of all.
+    burns: Some((catches: 0.3, fuel_s: 6.0, heat: 1.8)),
     roof: (
         rows: 4.0,
         phase: 0.0,
