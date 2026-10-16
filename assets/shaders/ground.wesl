@@ -444,7 +444,7 @@ fn kind_turned(world: vec3<f32>, layer: i32) -> f32 {
 // crowberry and the lichen carpet's dark olive; sedge green, and wet straw once turned;
 // Sphagnum's gold; the fellfield's grey stones. The dwarf shrubs' autumn is their year's.
 // The lichen and shrub heath are speckled close to, the sedge smooth.
-const LICHEN: vec3<f32> = vec3<f32>(0.36, 0.28, 0.17);
+const LICHEN: vec3<f32> = vec3<f32>(0.45, 0.38, 0.23);
 const SHRUB_GREEN: vec3<f32> = vec3<f32>(0.09, 0.085, 0.045);
 const SEDGE_GREEN: vec3<f32> = vec3<f32>(0.1, 0.11, 0.045);
 const SEDGE_STRAW: vec3<f32> = vec3<f32>(0.22, 0.13, 0.04);
@@ -756,7 +756,11 @@ fn fragment(
             // round the ground's ribs rather than ending in a cut-out line.
             let edge = noise(world * 0.35 + 91.0) * 0.5 + noise(world * 1.9 + 23.0) * 0.3 + noise(world * 0.06 + 5.0) * 0.2;
             let deep = clamp((in.uv.y - 0.02) / 0.3, 0.0, 1.0);
-            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12) * up_facing;
+            // On a fell's steeper faces thin snow keeps to the lees and gullies, the ribs
+            // between bare: patchy by a noise tens of metres across, rather than an even cap.
+            let ribs = noise(world * 0.018 + 51.0) * 0.6 + noise(world * 0.05 + 53.0) * 0.4;
+            let shed = (1.0 - smoothstep(0.75, 0.95, flatness)) * (ribs - 0.45) * 1.4;
+            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12 - max(shed, 0.0)) * up_facing;
         }
 @if(VERTEX_UVS_B)
         {
@@ -1083,6 +1087,22 @@ fn fragment(
             // Wet ground darker and glossier, as wet soil and moss are (Lagarde).
             let soaked = smoothstep(0.55, 0.95, heath.ground.y) * heath.ground.z;
             ground_is.colour *= mix(1.0, 0.72, soaked);
+            // Past the blades the plants they stand for still show as a mottle a metre or
+            // two across, light and dark and of their colours, the way a heath seen from a
+            // hundred metres is grained to the horizon: the layers' own scans minified to an
+            // even paint there.
+            let past_blades = smoothstep(25.0, 80.0, far_off) * flat_ground;
+            if past_blades > 0.0 {
+                // Its grain grows with distance, a few pixels across wherever it is seen, as a
+                // far heath's tussocks and patches are, rather than averaging away to paint.
+                let reach = clamp(40.0 / far_off, 0.06, 1.0);
+                let grain = noise(world * 1.3 * reach + 77.0) * 0.6 + noise(world * 3.7 * reach + 79.0) * 0.4;
+                let tuft = noise(world * 0.9 * reach + 83.0);
+                var mottled = ground_is.colour * (0.7 + 0.6 * grain);
+                mottled = mix(mottled, LICHEN * (0.8 + 0.3 * grain), smoothstep(0.62, 0.8, tuft) * (0.3 + heath.plants.x));
+                mottled = mix(mottled, vec3<f32>(0.075, 0.07, 0.022) * (0.8 + 0.4 * grain), smoothstep(0.66, 0.82, 1.0 - tuft) * 0.6);
+                ground_is.colour = mix(ground_is.colour, mottled, past_blades * heath.ground.z);
+            }
         }
 
         // The ground under thick grass is in the blades' own shade, so what shows between

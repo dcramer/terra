@@ -380,7 +380,10 @@ pub fn square(
             let cushion = heath > 0.5 && !leafy && pick < shrub + lichen;
             // And moss's, green and gold, by the pools and in the wet hollows.
             let moss_cushion = heath > 0.5 && !leafy && !cushion && pick < shrub + lichen + mossy;
-            let own = leafy || cushion || moss_cushion;
+            // Some stands of sedge turn late and stay olive green among the straw, keeping
+            // their colour rather than browning with grass's year.
+            let late_sedge = heath > 0.5 && !leafy && !cushion && !moss_cushion && h(16) < 0.22;
+            let own = leafy || cushion || moss_cushion || late_sedge;
             let tall = (0.12 + 0.42 * libm::powf(grass, 0.7) * (0.6 + 0.4 * lush))
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
@@ -401,7 +404,7 @@ pub fn square(
                 ) * (0.8 + 0.3 * h(7))
             } else if cushion {
                 // Cladonia's cream and grey-green (the tundra's photographs' lichen crops).
-                linear(0.64, 0.60, 0.48).lerp(linear(0.55, 0.56, 0.45), 0.5 + 0.5 * clump.hue)
+                linear(0.68, 0.64, 0.50).lerp(linear(0.60, 0.61, 0.47), 0.5 + 0.5 * clump.hue)
                     * (0.85 + 0.25 * h(7))
             } else if leafy {
                 // A clump is one plant, one kind's colour, each shoot a little lighter or
@@ -409,6 +412,8 @@ pub fn square(
                 let kind = ((clump.hue * 0.5 + 0.5) * SHRUBS.len() as f32) as usize;
                 let (r, g, b) = SHRUBS[kind.min(SHRUBS.len() - 1)];
                 linear(r, g, b) * (0.75 + 0.5 * h(7))
+            } else if late_sedge {
+                linear(0.40, 0.44, 0.19).lerp(linear(0.48, 0.47, 0.22), h(6)) * (0.85 + 0.3 * h(7))
             } else if heath > 0.5 {
                 // The heath's sedge in September: olive at the root of the year, straw and
                 // bronze where it has turned, not a meadow's green.
@@ -460,6 +465,7 @@ pub fn square(
                 ring.segments,
                 rank,
                 own,
+                own && !late_sedge,
             );
         }
     }
@@ -501,15 +507,16 @@ struct BladeMesh {
 
 /// The dwarf shrubs' autumn leaves, sRGB, from the tundra's photographs (the shrub, bilberry
 /// and red shrub crops): bearberry's crimson, bilberry's wine, dwarf birch's rust and gold, and
-/// crowberry's dark brown-olive. Each redder than green by over twice, linear, which the grass
+/// crowberry's olive greens. Each redder than green by over twice, linear, which the grass
 /// shader reads as a leaf it does not brown to straw.
-const SHRUBS: [(f32, f32, f32); 6] = [
+const SHRUBS: [(f32, f32, f32); 7] = [
     (0.52, 0.11, 0.06),
     (0.43, 0.10, 0.10),
     (0.60, 0.26, 0.10),
     (0.66, 0.33, 0.11),
     (0.74, 0.46, 0.13),
     (0.30, 0.31, 0.14),
+    (0.36, 0.38, 0.16),
 ];
 
 /// Cotton grass's seed head, linear: a white tuft, a little warm (199, 191, 177 sRGB in the
@@ -531,6 +538,7 @@ impl BladeMesh {
         segments: u32,
         rank: f32,
         own: bool,
+        leaf: bool,
     ) {
         // The grass shader browns a blade with grass's year unless it keeps its own colour,
         // which it is told by 2 added to the rank (grass.wesl).
@@ -567,7 +575,7 @@ impl BladeMesh {
             let lit = (Vec3::Y * 0.6 + face * 0.4).normalize();
             // A grass blade tapers from its foot; a leaf, a lichen's or a moss's cushion is
             // broadest in its middle, as a leaf is, not a spike.
-            let half = if own {
+            let half = if leaf {
                 width * 0.5 * (0.25 + 0.75 * libm::sinf(core::f32::consts::PI * (0.15 + 0.85 * t)))
             } else {
                 width * 0.5 * libm::powf(1.0 - t, 0.8)
@@ -618,8 +626,20 @@ mod tests {
             3,
             0.25,
             true,
+            true,
         );
-        mesh.blade(Vec3::X, Vec3::X, 0.1, 0.3, 0.03, Vec3::ONE, 3, 0.25, false);
+        mesh.blade(
+            Vec3::X,
+            Vec3::X,
+            0.1,
+            0.3,
+            0.03,
+            Vec3::ONE,
+            3,
+            0.25,
+            false,
+            false,
+        );
         let half = mesh.up_and_rank.len() / 2;
         // As grass.wesl reads it: 2 and more is a blade's own colour, its rank 2 under it.
         assert!(

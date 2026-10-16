@@ -138,9 +138,25 @@ impl LakeExtension {
     }
 }
 
-/// The lakes' one material, and what it mirrors.
+/// The lakes' material, the patterned ground's pools' (peaty), and what they mirror.
 #[derive(Resource)]
-struct LakeLook(Handle<LakeMaterial>, Mirror);
+struct LakeLook(Handle<LakeMaterial>, Mirror, Option<Handle<LakeMaterial>>);
+
+/// A polygon's or a kettle's pool lies over peat, its water the brown of the peat's tannins
+/// and dark where it is a little deep, as the tundra's photographs' pools are, not a mountain
+/// lake's green over rock (D322: the water a medium by what lies under it).
+const PEAT_SHALLOW: LinearRgba = LinearRgba::new(0.05, 0.034, 0.015, 0.55);
+const PEAT_DEEP: LinearRgba = LinearRgba::new(0.008, 0.006, 0.003, 0.95);
+
+impl LakeExtension {
+    fn peaty(self) -> Self {
+        Self {
+            shallow: PEAT_SHALLOW,
+            deep: PEAT_DEEP,
+            ..self
+        }
+    }
+}
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<LakeMaterial>::default())
@@ -211,19 +227,24 @@ fn spawn(
         waters.lakes().len()
     );
     // The patterned ground's pools, many and small, drawn as one surface, each at its level.
+    let mut peat = None;
     if let Some(pools) = &round.pools {
+        let mut pooled = materials.get(&look).cloned().expect("the lakes' material");
+        pooled.extension = pooled.extension.peaty();
+        let pooled = materials.add(pooled);
         commands.spawn((
             Name::new("Pools"),
             Mesh3d(meshes.add(pools_mesh(pools))),
-            MeshMaterial3d(look.clone()),
+            MeshMaterial3d(pooled.clone()),
             NotShadowCaster,
         ));
+        peat = Some(pooled);
         info!(
             "Lakes: {} pools in the patterned ground round the start",
             pools.lakes().len()
         );
     }
-    commands.insert_resource(LakeLook(look, mirror));
+    commands.insert_resource(LakeLook(look, mirror, peat));
 }
 
 /// The sky the lakes reflect, as it changes, and the wind over them, from the climate where
@@ -267,8 +288,14 @@ fn follow_sky_and_wind(
     if !sky_changed && material.extension.wind == wind {
         return;
     }
+    let extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
+    if let Some(peat) = &look.2
+        && let Some(mut material) = materials.get_mut(peat)
+    {
+        material.extension = extension.clone().peaty();
+    }
     if let Some(mut material) = materials.get_mut(&look.0) {
-        material.extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
+        material.extension = extension;
     }
 }
 

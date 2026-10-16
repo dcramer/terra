@@ -859,10 +859,30 @@ fn plant(
             None,
         );
     });
+    // Past the trees the heath's own cover grows (below), not the woods' ferns and herbs,
+    // even where a pool's edge leaves its map a little meadow.
+    let on_heath = |point: Vec3| {
+        planet.round().is_some_and(|round| {
+            let up = point.normalize();
+            let (east, north) = (
+                up.any_orthonormal_vector(),
+                up.any_orthonormal_vector().cross(up),
+            );
+            [
+                Vec3::ZERO,
+                east * 8.0,
+                -east * 8.0,
+                north * 8.0,
+                -north * 8.0,
+            ]
+            .iter()
+            .any(|&off| round.heath.at(point + off).open > 0.5)
+        })
+    };
     scatter(seed.derive("plants"), 150.0, 3.2, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
         let cover = planet.cover(point, planet.normal(point));
-        if rng.unit() > 0.28 * cover.grass {
+        if rng.unit() > 0.28 * cover.grass || on_heath(point) {
             return;
         }
         let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
@@ -888,7 +908,7 @@ fn plant(
             return;
         }
         let cover = planet.cover(point, planet.normal(point));
-        if cover.grass < 0.5 {
+        if cover.grass < 0.5 || on_heath(point) {
             return;
         }
         let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
