@@ -255,12 +255,20 @@
           "status": "Closed"
         },
         {
-          "junction": "A timber cube cut upside down (an upside-down stair or slope)",
-          "rule": "Not yet closed: its log ends lie in the plane of its planed underside's boards, alone or on the ground",
+          "junction": "A timber cube boarded as a box: upside down, an upper half, a corner slope",
+          "rule": "Butt joints, as a carpenter boxes it: the courses of a side facing east or west run through to the cube's edges; every other board ending or edging where a side is clad (a course facing north or south, a top or underside board, a riser) stops against that cladding's inside face; a raking underside's head stops under the top's deck and its foot, cut plumb, at the cladding inside the side it falls to",
+          "code": ["layout::shapes"],
+          "tests": ["scenes::fuzz::fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar", "layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
+          "junction": "A boarded timber cube on a wall or a floor",
+          "rule": "Not yet closed: an inner corner slope on a log room's wall shows sky past it, an upside-down slope beside a log wall's window has a log in the plane of its boards, and far off a deck's board ends in the plane of a corner slope's cladding over it",
           "code": ["layout::shapes", "layout::runs"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 0, 3, 18",
+          "also": "the fuzz pass, seeds 18, 89, 166",
           "status": "Gap 10"
         },
         {

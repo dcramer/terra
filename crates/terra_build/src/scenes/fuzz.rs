@@ -684,6 +684,60 @@ mod tests {
     }
 
     #[test]
+    fn fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar() {
+        // Found by `cargo xtask fuzz` at seeds 0, 3, 4, 37, 38, 98, 99, 140 and 148, each
+        // shrunk to one cube: a timber cube cut upside down, to an upper half or a corner,
+        // boarded as a box whose boards' sawn ends lay in the plane of its other boards'
+        // faces (the voxel contract's gap 10). Every such shape, each way, in logs and hewn
+        // timber, alone on the sloping ground, each its own box.
+        let materials = baseline();
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .unwrap()
+        };
+        let boarded: Vec<Shape> = Shape::ALL
+            .into_iter()
+            .filter(|shape| {
+                matches!(
+                    shape,
+                    Shape::UpperHalf
+                        | Shape::InvertedStair(_)
+                        | Shape::InvertedSlope(_)
+                        | Shape::OuterCorner(_)
+                        | Shape::InnerCorner(_)
+                )
+            })
+            .collect();
+        let mut elements = Vec::new();
+        for (row, timber) in ["logs", "hewn"].into_iter().enumerate() {
+            for (i, &shape) in boarded.iter().enumerate() {
+                elements.push(Blocks {
+                    at: [i as i32 * 3, 0, row as i32 * 3],
+                    size: 1,
+                    shape,
+                    kind: kind(timber),
+                });
+            }
+        }
+        let base = build(&materials.kits, &elements);
+        let report = crate::inspect::inspect(
+            &base,
+            &materials.kits,
+            &crate::relief::Maps::worst(&materials.kits, false),
+        );
+        let fought: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.fault == crate::inspect::Fault::Coplanar)
+            .collect();
+        assert!(fought.is_empty(), "{fought:#?}");
+    }
+
+    #[test]
     fn a_failing_base_shrinks_to_the_element_that_fails_it() {
         // Fails while a box of hewn timber is in it: the room and the wall go, the box
         // stays, made one cube.

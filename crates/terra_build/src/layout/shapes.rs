@@ -97,27 +97,111 @@ const BOX_BOARDS: i32 = 4;
 /// it is a ramp or a corner of two, boards up each ramp cut at the crease; its underside
 /// boarded the same, flat or raking; and each open side clad in courses of boards, each as
 /// long as the shape is wide at its height there, so the box is closed whatever its cut.
+///
+/// Its corners are butt joints, as a carpenter boxes a cube: the courses of a side facing
+/// east or west run through to the cube's edges, and every other board that ends where a
+/// side is clad, a course of a side facing north or south, a board of its top or its
+/// underside, a riser, stops against that cladding's inside face, so no board's sawn end
+/// lies in the plane of another's face (the voxel contract's gap 10).
 fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
     let low = at.as_vec3() * CELL_M;
-    let point = |u: f32, h: f32, v: f32| low + Vec3::new(u, h, v) * CELL_M;
+    // A point of the cube in fractions of it: east, up, south.
+    let point = |p: Vec3| low + p * CELL_M;
     let seed = |salt: u32| hash(&[at.x as u32, at.y as u32, at.z as u32, 0xb0c, salt]);
-    let mut salt = 0u32;
-    let mut plank = |layout: &mut Layout, from: Vec3, to: Vec3, wide: f32, high: f32| {
-        salt += 1;
-        layout.pieces.push(Piece::Plank {
-            from: Place::near(from),
-            to: Place::near(to),
-            wide: ticks(wide),
-            high: ticks(high),
-            seed: seed(salt),
-        });
-    };
     let open = |step: IVec3| {
         base.cube(at + step)
             .is_none_or(|cube| cube.fill != Fill::Solid)
     };
     let width = CELL_M / BOX_BOARDS as f32;
     let half_thick = BOX_BOARD_M * 0.5;
+    let thick = BOX_BOARD_M / CELL_M;
+    let depth = 1.0 - half_thick / CELL_M;
+    // Where each open side is clad, course by course: from and to how far along it.
+    let spans: [[Option<(f32, f32)>; BOX_COURSES as usize]; 4] = Facing::ALL.map(|side| {
+        std::array::from_fn(|course| {
+            if !open(side.step()) {
+                return None;
+            }
+            let along = side.turned(1);
+            let h = (course as f32 + 0.5) / BOX_COURSES as f32;
+            let solid = |t: f32| {
+                let (u, v) = uv(side, 1.0, along, t);
+                shape.bottom(u, v) <= h && h <= shape.top(u, v)
+            };
+            let inside: Vec<f32> = (0..=16)
+                .map(|i| i as f32 / 16.0)
+                .filter(|&t| solid(t))
+                .collect();
+            let (&first, &last) = (inside.first()?, inside.last()?);
+            (last - first >= 0.1).then_some((first, last))
+        })
+    });
+    // Whether a side's cladding covers a point of its face at its height.
+    let clad = |side: Facing, p: Vec3| {
+        let course = ((p.y * BOX_COURSES as f32) as i32).clamp(0, BOX_COURSES - 1) as usize;
+        let t = side.turned(1).toward(p.x, p.z);
+        spans[side as usize][course].is_some_and(|(a, b)| a - 1e-3 <= t && t <= b + 1e-3)
+    };
+    // An end of a level board on a face of the cube clad anywhere across the board's width
+    // (`across` each way), its square end butting that face: brought back along the board
+    // to the cladding's inside face.
+    let butted = |end: Vec3, other: Vec3, across: f32| {
+        let axis = end - other;
+        let side = if axis.y.abs() > 1e-4 {
+            None
+        } else if axis.z.abs() < 1e-4 && end.x >= 1.0 - 1e-3 && axis.x > 0.0 {
+            Some(Facing::East)
+        } else if axis.z.abs() < 1e-4 && end.x <= 1e-3 && axis.x < 0.0 {
+            Some(Facing::West)
+        } else if axis.x.abs() < 1e-4 && end.z >= 1.0 - 1e-3 && axis.z > 0.0 {
+            Some(Facing::South)
+        } else if axis.x.abs() < 1e-4 && end.z <= 1e-3 && axis.z < 0.0 {
+            Some(Facing::North)
+        } else {
+            None
+        };
+        let sideways = Vec3::new(axis.z, 0.0, -axis.x).normalize_or_zero();
+        match side {
+            Some(side)
+                if [-across, 0.0, across]
+                    .iter()
+                    .any(|&a| clad(side, end + sideways * a)) =>
+            {
+                end - axis.normalize() * thick
+            }
+            _ => end,
+        }
+    };
+    let mut salt = 0u32;
+    // A board between two points of the cube; one running through, a course of a side
+    // facing east or west, keeps its ends where they are.
+    let mut plank =
+        |layout: &mut Layout, from: Vec3, to: Vec3, wide: f32, high: f32, through: bool| {
+            salt += 1;
+            let (from, to) = if through {
+                (from, to)
+            } else {
+                let across = wide * 0.5 / CELL_M;
+                (butted(from, to, across), butted(to, from, across))
+            };
+            layout.pieces.push(Piece::Plank {
+                from: Place::near(point(from)),
+                to: Place::near(point(to)),
+                wide: ticks(wide),
+                high: ticks(high),
+                seed: seed(salt),
+            });
+        };
+    let at_uv = |(u, v): (f32, f32), h: f32| Vec3::new(u, h, v);
+    // Boards laid side by side along `along` at a height lie between the claddings of the
+    // sides along them: how far in from `side` the outer board's edge stops, at the inside
+    // face of that side's cladding where any of it is clad there.
+    let edge = |along: Facing, side: Facing, y: f32| {
+        let clad_there = [0.1, 0.5, 0.9]
+            .iter()
+            .any(|&a| clad(side, at_uv(uv(along, a, side, 1.0), y)));
+        if clad_there { thick } else { 0.0 }
+    };
     // The top: a deck at the cube's top, or boards up the ramps of a corner.
     match shape {
         Shape::OuterCorner(facing) | Shape::InnerCorner(facing) => {
@@ -130,23 +214,29 @@ fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
                     // How far up toward `rise` the board runs: to the crease at `t`.
                     let (a, b) = if outer { (0.0, t) } else { (t, 1.0) };
                     let ends = [a, b].map(|r| {
-                        let (u, v) = uv(rise, r, across, t);
-                        point(u, r, v) - Vec3::Y * half_thick * std::f32::consts::SQRT_2
+                        at_uv(uv(rise, r, across, t), r)
+                            - Vec3::Y * half_thick * std::f32::consts::SQRT_2 / CELL_M
                     });
-                    plank(layout, ends[0], ends[1], width - 0.008, BOX_BOARD_M);
+                    plank(layout, ends[0], ends[1], width - 0.008, BOX_BOARD_M, false);
                 }
             }
         }
         _ if open(IVec3::Y) => {
+            let y = 1.0 - half_thick / CELL_M;
+            let (first, last) = (
+                edge(Facing::East, Facing::North, y),
+                1.0 - edge(Facing::East, Facing::South, y),
+            );
+            let each = (last - first) / BOX_BOARDS as f32;
             for board in 0..BOX_BOARDS {
-                let v = (board as f32 + 0.5) / BOX_BOARDS as f32;
-                let y = 1.0 - half_thick / CELL_M;
+                let v = first + (board as f32 + 0.5) * each;
                 plank(
                     layout,
-                    point(0.0, y, v),
-                    point(1.0, y, v),
-                    width - 0.008,
+                    Vec3::new(0.0, y, v),
+                    Vec3::new(1.0, y, v),
+                    each * CELL_M - 0.008,
                     BOX_BOARD_M,
+                    false,
                 );
             }
         }
@@ -162,17 +252,25 @@ fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
                 Shape::InvertedStair(facing) => (facing.turned(1), facing, 0.5),
                 _ => (Facing::East, Facing::South, 1.0),
             };
+            // Between the claddings of the sides along them: an outer board's edge stops
+            // at a cladding's inside face, as a board's end does.
+            let y = 0.5 + half_thick / CELL_M;
+            let first = edge(along, rise.opposite(), y);
+            let last = if reach < 1.0 {
+                reach
+            } else {
+                1.0 - edge(along, rise, y)
+            };
+            let each = (last - first) / BOX_BOARDS as f32;
             for board in 0..BOX_BOARDS {
-                let t = (board as f32 + 0.5) / BOX_BOARDS as f32 * reach;
-                let (u0, v0) = uv(along, 0.0, rise, t);
-                let (u1, v1) = uv(along, 1.0, rise, t);
-                let y = 0.5 + half_thick / CELL_M;
+                let t = first + (board as f32 + 0.5) * each;
                 plank(
                     layout,
-                    point(u0, y, v0),
-                    point(u1, y, v1),
-                    width * reach - 0.008,
+                    at_uv(uv(along, 0.0, rise, t), y),
+                    at_uv(uv(along, 1.0, rise, t), y),
+                    each * CELL_M - 0.008,
                     BOX_BOARD_M,
+                    false,
                 );
             }
             if let Shape::InvertedStair(facing) = shape {
@@ -180,63 +278,61 @@ fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
                 for course in 0..BOX_COURSES / 2 {
                     let h = (course as f32 + 0.5) / BOX_COURSES as f32;
                     let side = facing.turned(1);
-                    let (u0, v0) = uv(side, 0.0, facing, 0.5 + half_thick / CELL_M);
-                    let (u1, v1) = uv(side, 1.0, facing, 0.5 + half_thick / CELL_M);
+                    let r = 0.5 + half_thick / CELL_M;
                     plank(
                         layout,
-                        point(u0, h, v0),
-                        point(u1, h, v1),
+                        at_uv(uv(side, 0.0, facing, r), h),
+                        at_uv(uv(side, 1.0, facing, r), h),
                         BOX_BOARD_M,
                         CELL_M / BOX_COURSES as f32 - 0.006,
+                        false,
                     );
                 }
             }
         }
         Shape::InvertedSlope(facing) => {
+            // Boards down the ramp, their undersides on it: a board's middle at `r`
+            // toward the side, half its thickness out from the ramp. Its head stops under
+            // the top's deck, its highest corner at the deck's underside, and its foot,
+            // cut plumb as a sloping plank is, at the inside of the side's cladding.
             let across = facing.turned(1);
+            let out = half_thick / CELL_M * std::f32::consts::FRAC_1_SQRT_2;
             for board in 0..BOX_BOARDS {
                 let t = (board as f32 + 0.5) / BOX_BOARDS as f32;
-                let ends = [(0.0f32, 1.0f32), (1.0, 0.0)].map(|(r, h)| {
-                    let (u, v) = uv(facing, r, across, t);
-                    point(u, h, v) + Vec3::Y * half_thick * std::f32::consts::SQRT_2
-                });
-                plank(layout, ends[0], ends[1], width - 0.008, BOX_BOARD_M);
+                let middle = |r: f32| at_uv(uv(facing, r + out, across, t), 1.0 - r + out);
+                let head = thick * (1.0 + std::f32::consts::FRAC_1_SQRT_2);
+                let foot_clad = clad(facing, at_uv(uv(facing, 1.0, across, t), 0.0));
+                let foot = if foot_clad { 1.0 - thick } else { 1.0 } - out;
+                plank(
+                    layout,
+                    middle(head),
+                    middle(foot),
+                    width - 0.008,
+                    BOX_BOARD_M,
+                    false,
+                );
             }
         }
         _ => {}
     }
-    // The open sides, clad in courses, each as long as the shape is there.
+    // The open sides, clad in courses, each as long as the shape is there: those facing
+    // east or west through to the cube's edges, the others butting them.
     for side in Facing::ALL {
-        if !open(side.step()) {
-            continue;
-        }
         let along = side.turned(1);
+        let through = matches!(side, Facing::East | Facing::West);
         for course in 0..BOX_COURSES {
+            let Some((first, last)) = spans[side as usize][course as usize] else {
+                continue;
+            };
             let h = (course as f32 + 0.5) / BOX_COURSES as f32;
-            // Where along the side the shape stands at this height.
-            let solid = |t: f32| {
-                let (u, v) = uv(side, 1.0, along, t);
-                shape.bottom(u, v) <= h && h <= shape.top(u, v)
-            };
-            let samples: Vec<f32> = (0..=16).map(|i| i as f32 / 16.0).collect();
-            let inside: Vec<f32> = samples.iter().copied().filter(|&t| solid(t)).collect();
-            let (Some(&first), Some(&last)) = (inside.first(), inside.last()) else {
-                continue;
-            };
-            if last - first < 0.1 {
-                continue;
-            }
-            let depth = 1.0 - half_thick / CELL_M;
-            let ends = [first, last].map(|t| {
-                let (u, v) = uv(side, depth, along, t);
-                point(u, h, v)
-            });
+            let ends = [first, last].map(|t| at_uv(uv(side, depth, along, t), h));
             plank(
                 layout,
                 ends[0],
                 ends[1],
                 BOX_BOARD_M,
                 CELL_M / BOX_COURSES as f32 - 0.006,
+                through,
             );
         }
     }
