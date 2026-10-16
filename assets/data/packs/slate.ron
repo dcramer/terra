@@ -14,8 +14,8 @@
         batten: (0.05, 0.025),
         parts: {
             Rafter: (tint: (0.9, 0.84, 0.76)),
-            Ridge: (tint: (0.62, 0.64, 0.7)),
-            Hip: (tint: (0.62, 0.64, 0.7)),
+            Ridge: (material: Piece, tint: (0.62, 0.64, 0.7)),
+            Hip: (material: Piece, tint: (0.62, 0.64, 0.7)),
         },
     ),
     textures: {

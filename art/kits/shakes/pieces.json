@@ -1,40 +1,9 @@
 {
- "about": "The shake roof's hand-made pieces (D251, D258, tools/kits): its own modules over the roof pattern's (D290), laid along the roof's lines, each modelled along +X, Y up from what it sits on, Z across, in metres. The covering is about 0.03 m of split pine shakes (shakes.ron). Its ridge cap is anchored at the middle of its foot, seated on the covering.",
+ "about": "The shake roof's hand-made pieces (D251, D258, tools/kits): its own modules over the roof pattern's (D290), laid along the roof's lines, each modelled along +X, Y up from what it sits on, Z across, in metres. The covering is about 0.03 m of split pine shakes (shakes.ron). Its rafters and battens are the pattern's. Its ridge cap is anchored at the middle of its foot, seated on the covering.",
  "profiles": {},
  "corners": {},
  "atlas": "materials/shakes_pieces",
  "modules": {
-  "rafter": {
-   "about": "A rafter or a ridge pole: a round pine pole in its bark.",
-   "kind": "pole",
-   "length": 1.0,
-   "step": 0.25,
-   "variants": 2,
-   "open": true,
-   "radius": 0.07,
-   "sides": 8,
-   "lumps": 0.06,
-   "cap": "flat"
-  },
-  "batten": {
-   "about": "A sawn batten across the rafters, one under each course.",
-   "kind": "timber",
-   "length": 1.0,
-   "step": 1.0,
-   "variants": 1,
-   "open": true,
-   "y": [
-    -0.031,
-    -0.006
-   ],
-   "z": [
-    0.0,
-    0.06
-   ],
-   "round": 0.004,
-   "per_corner": 2,
-   "cap": "flat"
-  },
   "ridge": {
    "about": "A ridge cap of two weathered pine boards, one lapping the other, nailed, modelled; unfolded flat so it drapes over a ridge or a hip.",
    "model": "art/kits/shakes/ridge/model.glb",

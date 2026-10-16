@@ -4,22 +4,26 @@
 // line its neighbours make (ridge, hip, valley, eave, verge, flashing) and its frame
 // (rafters, battens) a module of pieces. Kinds numbered from 2048. A material of it
 // (shakes, slate, thatch) is a few lines naming this pattern and its pack, which gives its
-// covering and, where its outline is its look, its own pieces.
+// covering and, where its outline is its look, its own pieces; with none, it is laid on this
+// pattern's frame and capped by its board ridge, so a new covering needs nothing more.
 //
 // eaves       how far its covering is carried on past its cubes' open edges, drawn only
 // roof        rows: courses one copy of the covering's texture holds up the slope; phase:
 //             where a course's lower edge falls on it; thick: the covering's thickness;
 //             relief: how far its texture's height pushes each course out; tint; rafter and
 //             batten sizes; parts: the module of pieces each line and the frame is, in its
-//             material, with its ends' material and tint
+//             material, with its ends' material and tint (a pack with its own ridge draws it
+//             in its Piece atlas)
 // textures    the texture sets every roof shares: its shared pieces' atlas (Trim), rafters'
-//             ends, battens' boards, flashing's mortar; a pack adds its Covering, its rafters'
-//             Log and its own pieces' atlas (Piece)
+//             bark (Log) and ends, battens' and the ridge's boards, flashing's mortar; a pack
+//             adds its Covering, and may give its rafters' own Log and its own pieces' atlas
+//             (Piece)
 // details     the fine grain laid over its textures near (D362): wood's on its boards; a
 //             pack adds its covering's, stone's or wood's, and its rafters'
 // dress       its shared pieces (art/kits/roof): the board along a verge, an eave's fascia,
 //             the flashing, the valley's lining, each to its contract (size, anchor), seated
-//             on the deck or the covering by the layout, so one fits every covering
+//             on the deck or the covering by the layout, so one fits every covering; the
+//             frame's pine rafters and sawn battens; and a ridge of two lapped boards
 // meets       a roof is drawn over what it rests on, which it neither caps nor ends against
 // toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
 // damage      how its covering breaks as it loses its health (D305): a shingle, slate or
@@ -35,11 +39,13 @@
     },
     eaves: 0.5,
     roof: (
+        thick: 0.03,
+        relief: 0.03,
         rafter: 0.14,
         batten: (0.06, 0.025),
         parts: {
-            Ridge: (module: "ridge", material: Piece, tint: (0.66, 0.62, 0.58)),
-            Hip: (module: "ridge", material: Piece, tint: (0.66, 0.62, 0.58)),
+            Ridge: (module: "ridge", material: Board, tint: (0.66, 0.62, 0.58)),
+            Hip: (module: "ridge", material: Board, tint: (0.66, 0.62, 0.58)),
             Valley: (module: "valley", material: Trim),
             Eave: (module: "eave", material: Trim, tint: (0.58, 0.54, 0.5)),
             Verge: (module: "verge", material: Trim, tint: (0.58, 0.54, 0.5)),
@@ -55,6 +61,7 @@
     ),
     textures: {
         Trim: (path: "materials/roof_pieces", metres: (1.0, 1.0)),
+        Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),

@@ -429,11 +429,9 @@ pub fn pack_roles(kit: &Kit) -> Vec<(Material, &'static str)> {
             }
             roles
         }
+        // Its rafters are the pattern's, in the pattern's bark, unless its pack says other.
         Pattern::Roof => {
-            let mut roles = vec![
-                (Material::Covering, "its covering"),
-                (Material::Log, "its rafters"),
-            ];
+            let mut roles = vec![(Material::Covering, "its covering")];
             if kit
                 .roof
                 .parts
@@ -1140,6 +1138,34 @@ mod tests {
             said.contains("Covering's detail (materials/detail_stone): it has no texture"),
             "{said}"
         );
+    }
+
+    #[test]
+    fn a_new_roof_covering_over_no_pack_needs_nothing_but_its_covering() {
+        // `cargo xtask pack <name> --pattern roof --under none`: a material and a pack giving
+        // only a covering, laid on the roof pattern's own frame, battens and board ridge.
+        let assets = assets();
+        let read = |path: &str| match path {
+            "data/kits/fresh.ron" => Ok("(id: 2060, pattern: \"roof\", pack: \"fresh\", \
+                 cost: (steps: 4, step: [(\"Wood\", 1, 32)]), weight: 0)"
+                .to_string()),
+            "data/packs/fresh.ron" => Ok("(textures: {Covering: (path: \"materials/shakes\", \
+                 metres: (1.5, 1.5))}, roof: (rows: 6.0, phase: 0.0))"
+                .to_string()),
+            _ => std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}")),
+        };
+        let kit = Kit::read("data/kits/fresh.ron", &read).unwrap();
+        let given = BTreeSet::from([Material::Covering]);
+        let said = check(&kit, &given, &|_| None);
+        assert!(said.is_empty(), "{said:?}");
+        let items = ["Wood".to_string()];
+        let checked = crate::checker::check(&kit, &|path| assets.join(path).exists(), &items);
+        assert!(checked.problems.is_empty(), "{:?}", checked.problems);
+        // Its rafters and battens are the pattern's, and so is its ridge, in its boards.
+        let made = kit.dress.made.as_deref().unwrap();
+        for module in ["rafter", "batten", "ridge"] {
+            assert!(made.modules[module].shared, "{module}");
+        }
     }
 
     #[test]

@@ -1,5 +1,5 @@
 {
- "about": "The roof pattern's shared pieces (D290, tools/kits): one board (on edge along a verge and an eave, flat as flashing), one valley every roof of the pattern lays, retextured by none, each to its contract: its real size (dims: along, up, across, metres) and where its anchor is in it (anchor: from its low corner), the anchor seated by the layout on the roof's deck or its covering (roofing::on_covering), so one piece fits any covering. A material's own pieces override these by name.",
+ "about": "The roof pattern's shared pieces (D290, tools/kits): one board (on edge along a verge and an eave, flat as flashing), one valley, and the frame and ridge every roof of the pattern lays unless its material has its own: a rafter, a batten under each course, and a ridge of two lapped boards for a covering with no ridge of its own. Each to its contract: its real size (dims: along, up, across, metres) and where its anchor is in it (anchor: from its low corner), the anchor seated by the layout on the roof's deck or its covering (roofing::on_covering), so one piece fits any covering. A material's own pieces override these by name.",
  "profiles": {},
  "corners": {},
  "atlas": "materials/roof_pieces",
@@ -75,6 +75,72 @@
    "budget": 400,
    "trim": 0.02,
    "far": 0.45
+  },
+  "rafter": {
+   "about": "A rafter or a ridge pole: a round pine pole in its bark.",
+   "kind": "pole",
+   "length": 1.0,
+   "step": 0.25,
+   "variants": 2,
+   "open": true,
+   "radius": 0.07,
+   "sides": 8,
+   "lumps": 0.06,
+   "cap": "flat"
+  },
+  "batten": {
+   "about": "A sawn batten across the rafters, one under each course.",
+   "kind": "timber",
+   "length": 1.0,
+   "step": 1.0,
+   "variants": 1,
+   "open": true,
+   "y": [
+    -0.031,
+    -0.006
+   ],
+   "z": [
+    0.0,
+    0.06
+   ],
+   "round": 0.004,
+   "per_corner": 2,
+   "cap": "flat"
+  },
+  "ridge": {
+   "about": "A ridge or hip cap for a covering with none of its own: two sawn boards lapped over the crest, the upper over the lower, laid flat so the game drapes them over a ridge's angle or a hip's, their ends eased round where the line stops.",
+   "kind": "timber",
+   "length": 1.0,
+   "step": 1.0,
+   "variants": 1,
+   "open": true,
+   "round": 0.004,
+   "per_corner": 2,
+   "cap": "dome",
+   "blend": 0.03,
+   "parts": [
+    {
+     "y": [
+      0.0,
+      0.022
+     ],
+     "z": [
+      -0.19,
+      0.0
+     ]
+    },
+    {
+     "y": [
+      0.023,
+      0.045
+     ],
+     "z": [
+      -0.022,
+      0.19
+     ]
+    }
+   ],
+   "reach": 0.02
   }
  }
 }
