@@ -57,6 +57,13 @@ pub(super) fn held(build: &Build) -> Held {
                     Reach::Far => 2,
                     Reach::Hull => 3,
                 };
+                if drawn.by_detail {
+                    // A group drawn a detail at a time: each detail's own.
+                    for (slot, part) in by.iter_mut().zip(&drawn.parts) {
+                        *slot += part.gpu_bytes;
+                    }
+                    continue;
+                }
                 by[slot] += drawn.gpu_bytes;
             }
             by[4] = sections.cells.gpu_bytes;

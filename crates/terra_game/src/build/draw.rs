@@ -28,6 +28,8 @@ use terra_build::kit::Kits;
 use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape};
 use terra_build::{Kind, Material, Surface};
 use terra_world::detail::DetailScale;
+
+pub(super) mod detail;
 use terra_world::grown::SUN_ONLY;
 use terra_world::quality::Quality;
 
@@ -930,6 +932,11 @@ const MATERIALS: [Material; 13] = [
 /// meshes: a section near is a few hundred thousand, far a few thousand. A storey's fill
 /// a few frames apart is a near section's 200,000 or so, spread over two frames.
 const UPLOAD_CORNERS: usize = 120_000;
+/// As many for groups' details streaming in as the camera moves (`detail`), which are laid
+/// ahead of where they are seen and need not come at once: a near house's few hundred
+/// thousand corners over several frames rather than two, where each frame they came in
+/// was the street walk's slowest by a few milliseconds.
+const DETAIL_UPLOAD_CORNERS: usize = 40_000;
 
 /// How many frames a build's laid sections are held back for the rest sent out with them at
 /// most, before they are shown as they are, so a build always shows its changes: two
@@ -1048,6 +1055,7 @@ fn upload(
         .map(|build| (build.root, build.by_cubes))
         .collect();
     let mut budget = UPLOAD_CORNERS;
+    let mut detail_budget = DETAIL_UPLOAD_CORNERS;
     let mut unput: BTreeSet<Entity> = BTreeSet::new();
     for done in jobs.ready.iter_mut() {
         let streams = streaming
@@ -1061,14 +1069,20 @@ fn upload(
             continue;
         }
         let put = match &mut done.outcome {
-            Outcome::Drawn { parts, .. } => {
-                let mut spend = if all { usize::MAX } else { budget.max(1) };
+            Outcome::Drawn { parts, detail, .. } => {
+                // A group's detail streaming in spends its own, smaller budget.
+                let budget = if detail.is_some() {
+                    &mut detail_budget
+                } else {
+                    &mut budget
+                };
+                let mut spend = if all { usize::MAX } else { (*budget).max(1) };
                 let put = parts.put(
                     &mut meshes,
                     cpu.get(&done.root).copied().unwrap_or(false),
                     &mut spend,
                 );
-                budget = if all { budget } else { spend.min(budget) };
+                *budget = if all { *budget } else { spend.min(*budget) };
                 put
             }
             Outcome::Same => true,
@@ -1306,6 +1320,7 @@ fn show(
         reach,
         parts,
         drawing,
+        detail,
         ..
     } = done.outcome
     else {
@@ -1316,6 +1331,22 @@ fn show(
         return;
     };
     let parts = *parts;
+    // A group's detail, beside those it holds.
+    if let Some(detail) = detail {
+        detail::show(
+            commands,
+            meshes,
+            look,
+            arrays,
+            build,
+            (done.section, done.ticket),
+            detail,
+            key,
+            parts,
+            quality,
+        );
+        return;
+    }
     let mut old = build.sections.drawn.remove(&done.section);
     // How it was drawn before is let go on a worker: a near section's faces and pieces are
     // hundreds of thousands of small allocations, whose freeing took up to 15 ms of the
@@ -1379,6 +1410,7 @@ fn show(
         bounds: parts.bounds,
         parts: Vec::new(),
         rest: Vec::new(),
+        by_detail: false,
     };
     // Nothing in it: nothing drawn, but what it was laid as kept.
     if parts.is_empty() && kept_parts.iter().all(Option::is_none) {
@@ -1628,26 +1660,64 @@ fn show(
 
 /// Keeps each section drawn as finely as the camera's distance asks: one coming nearer
 /// is laid again with finer detail, one gone further off with coarser, a little after it
-/// crosses, so one on the line is not laid over and over.
+/// crosses, so one on the line is not laid over and over. A group drawn a detail at a time
+/// (`detail`) waits for the details it lacks that it needs now or will a second ahead, and
+/// those held that it needs neither now nor soon stay while there is room for them.
+#[allow(clippy::too_many_arguments)]
 fn stream(
+    mut commands: Commands,
     scale: Res<DetailScale>,
     quality: Res<Quality>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
+    mut jobs: ResMut<Jobs>,
+    time: Res<Time<Real>>,
+    mut was: Local<Option<Vec3>>,
 ) {
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
+    // Where the camera will be a second from now, as it is going: no further than a run
+    // takes it, so a cut to another view is not taken for speed.
+    let step = was.replace(eye).map_or(Vec3::ZERO, |was| eye - was);
+    let dt = time.delta_secs().max(1e-3);
+    jobs.ahead = (step / dt * AHEAD_S).clamp_length_max(AHEAD_MAX_M);
+    let ahead = eye + jobs.ahead;
+    let close = close(*quality);
+    let mut spare: Vec<detail::Spare> = Vec::new();
     for build in each(&mut site, &mut builds) {
         let frame = build.frame;
+        let root = build.root;
         let sections = &mut build.sections;
         let unit = sections.unit;
         for (&at, drawn) in &sections.drawn {
             let distance = store::distance_from(&frame, eye, at, unit, drawn.bounds);
             let laying = sections.waiting.contains_key(&at)
                 || sections.tickets.get(&at) != Some(&drawn.ticket);
-            let wanted = reach(distance / scale.0, Some(drawn.reach), close(*quality));
+            if drawn.by_detail {
+                let d = distance / scale.0;
+                let soon = store::distance_from(&frame, ahead, at, unit, drawn.bounds) / scale.0;
+                let (now, soon) = (detail::needed(d, close), detail::needed(soon, close));
+                let held = detail::held(drawn);
+                let lacks = (0..held.len()).any(|i| (now[i] || soon[i]) && !held[i]);
+                if lacks && !laying {
+                    sections.waiting.insert(at, store::Waiting::default());
+                }
+                for (slot, part) in drawn.parts.iter().enumerate() {
+                    if !part.entities.is_empty() && !now[slot] && !soon[slot] {
+                        spare.push(detail::Spare {
+                            root,
+                            at,
+                            slot,
+                            bytes: part.gpu_bytes,
+                            outside: detail::outside(slot, d),
+                        });
+                    }
+                }
+                continue;
+            }
+            let wanted = reach(distance / scale.0, Some(drawn.reach), close);
             if !suffices(drawn.reach, wanted) && !laying {
                 sections.waiting.insert(
                     at,
@@ -1659,7 +1729,26 @@ fn stream(
             }
         }
     }
+    // Past the room for them, those held and not wanted that the camera is furthest from
+    // where they are needed are let go, and the rest hand over without them.
+    let gone = detail::evict(spare, detail::spare_bytes(*quality));
+    if gone.is_empty() {
+        return;
+    }
+    for build in each(&mut site, &mut builds) {
+        for each in gone.iter().filter(|each| each.root == build.root) {
+            if let Some(drawn) = build.sections.drawn.get_mut(&each.at) {
+                detail::let_go(&mut commands, &mut drawn.parts[each.slot]);
+                detail::hand_over(&mut commands, drawn);
+            }
+        }
+    }
 }
+
+/// How far ahead the camera's way a group's details are laid, in seconds of its going, and
+/// at most how far, in metres.
+const AHEAD_S: f32 = 1.0;
+const AHEAD_MAX_M: f32 = 30.0;
 
 /// Streams sections by distance, as open worlds stream their cells: one further off than
 /// it is seen at all, past [`DROP_M`], is let go, its entity and meshes despawned and its

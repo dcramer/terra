@@ -15,11 +15,12 @@ use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, TaskPool, TaskPoolBuilder, block_on, poll_once};
+use draw::detail;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
-use terra_build::sections::{self, Reach, Section};
+use terra_build::sections::{self, Detail, Reach, Section};
 
 /// The steps of drawing builds, in order.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -52,7 +53,27 @@ pub(super) struct Jobs {
     /// How many frames each build's laid sections have been held back for the rest of its
     /// change (`draw::upload`).
     pub held: std::collections::BTreeMap<Entity, u32>,
+    /// Where the camera will be a second from now, from where it is: the details a group
+    /// will need soon are laid ahead of it (`draw::stream`).
+    pub ahead: Vec3,
+    /// How much worker time laying groups' details may still start, in ms: filled at
+    /// `DETAIL_CORES` a millisecond, to at most `DETAIL_BURST_MS`, and spent by each
+    /// detail's measured cost as it is sent out (`launch`).
+    budget_ms: f32,
+    /// How long laying each detail of a group has taken on a worker, in ms, on average:
+    /// what sending one out spends (`draw::detail::DETAILS` order; none measured yet, 0).
+    costs: [f32; 4],
 }
+
+/// How many workers' worth of time laying groups' details may take on average: the rest of
+/// the machine is the frame's. A town walked through laid three workers' worth, and every
+/// system of the frame took twice as long as the near details came through.
+const DETAIL_CORES: f32 = 1.5;
+/// How much of it may be spent at once: a near house and the details round it.
+const DETAIL_BURST_MS: f32 = 600.0;
+/// What a detail is taken to cost before one has been measured, in ms, as a house's took on
+/// the RTX 5090's machine: near, middle, far and hull.
+const DETAIL_COSTS: [f32; 4] = [250.0, 120.0, 45.0, 5.0];
 
 /// How long bases took to lay whole, and sections with anything in them to cut from them
 /// and merge.
@@ -111,6 +132,8 @@ pub(super) enum Outcome {
         took_ms: f32,
         /// Drawn again a part at a time, not every part: how long each step took.
         again: Option<[f32; 4]>,
+        /// The one detail of a group laid, drawn a detail at a time (`draw::detail`).
+        detail: Option<Detail>,
     },
 }
 
@@ -174,6 +197,17 @@ pub(super) fn builders() -> &'static TaskPool {
             .thread_name("builds".to_string())
             .build()
     })
+}
+
+/// How much further off than it is a group's detail needed only soon is taken to be, in
+/// metres, so every section needed now goes before it.
+const LATER_M: f32 = 10_000.0;
+
+/// Whether a build's groups are drawn a detail at a time (`draw::detail`): a base nobody is
+/// building, drawn whole, by groups. The base being built is drawn by reach, a part at a
+/// time; a plan's or one going up has ghosts and a next part with its finest detail.
+pub(super) fn by_detail(build: &super::Build) -> bool {
+    build.sections.unit > 1 && matches!(build.progress(), sections::Progress::Whole)
 }
 
 /// Whether a section drawn for one reach is drawn finely enough for another: as asked, or
@@ -244,8 +278,11 @@ fn launch(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
+    time: Res<Time<Real>>,
 ) {
     let pool = builders();
+    jobs.budget_ms =
+        (jobs.budget_ms + time.delta_secs() * 1000.0 * DETAIL_CORES).min(DETAIL_BURST_MS);
     // A scripted run sends everything at once and waits for it.
     let room = if options.scripted() && !options.bench {
         usize::MAX
@@ -420,31 +457,78 @@ fn launch(
     // remeshes a chunk edited while it meshes once that mesh is in, it is sent again once
     // what is out is shown (`out_or_back`).
     let busy = jobs.out_or_back();
-    // The nearest waiting sections of every build laid whole.
-    let mut nearest: Vec<(f32, Entity, [i32; 3])> = Vec::new();
+    let ahead = eye + jobs.ahead;
+    // The nearest waiting sections of every build laid whole; of a group drawn a detail at
+    // a time, the detail it lacks, and whether it is needed now or only soon, which waits
+    // behind every section needed now.
+    let mut nearest: Vec<(f32, Entity, [i32; 3], Option<(Detail, bool)>)> = Vec::new();
     for build in each(&mut site, &mut builds) {
         if build.sections.whole.is_none() {
             continue;
         }
-        for &at in build.sections.waiting.keys() {
+        let by_detail = by_detail(build);
+        let mut nothing: Vec<[i32; 3]> = Vec::new();
+        for (&at, waiting) in &build.sections.waiting {
             if busy.contains(&(build.root, at)) {
                 continue;
             }
+            let bounds = build.sections.drawn.get(&at).and_then(|drawn| drawn.bounds);
             // Measured against distances as the detail scale has them (D230).
-            let distance = store::distance_from(
-                &build.frame,
-                eye,
-                at,
-                build.sections.unit,
-                build.sections.drawn.get(&at).and_then(|drawn| drawn.bounds),
-            ) / scale.0;
-            nearest.push((distance, build.root, at));
+            let distance =
+                store::distance_from(&build.frame, eye, at, build.sections.unit, bounds) / scale.0;
+            let mut choice = None;
+            if by_detail {
+                let held = match build.sections.drawn.get(&at) {
+                    Some(drawn) if !waiting.force => detail::held(drawn),
+                    _ => [false; 4],
+                };
+                let soon =
+                    store::distance_from(&build.frame, ahead, at, build.sections.unit, bounds)
+                        / scale.0;
+                let close = close(*quality);
+                choice = detail::next(
+                    held,
+                    detail::needed(distance, close),
+                    detail::needed(soon, close),
+                    distance,
+                );
+                if choice.is_none() {
+                    nothing.push(at);
+                    continue;
+                }
+            }
+            let order = match choice {
+                Some((_, false)) => distance + LATER_M,
+                _ => distance,
+            };
+            nearest.push((order, build.root, at, choice));
+        }
+        for at in nothing {
+            build.sections.waiting.remove(&at);
         }
     }
     if nearest.is_empty() {
         return;
     }
     nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // A group's detail is sent out while there is worker time for it: one needed now while
+    // any is left, one only needed soon while its whole cost is.
+    let spend = !wait;
+    nearest.retain(|&(_, _, _, choice)| {
+        let Some((detail, now)) = choice.filter(|_| spend) else {
+            return true;
+        };
+        let cost = jobs.cost(detail);
+        let afford = if now {
+            jobs.budget_ms > 0.0
+        } else {
+            jobs.budget_ms >= cost
+        };
+        if afford {
+            jobs.budget_ms -= cost;
+        }
+        afford
+    });
     nearest.truncate(room);
     // The player's own base, the first, which is the one edited, keeps how each section
     // was drawn, so an edit draws again only what it reached; the rest are drawn whole.
@@ -453,7 +537,7 @@ fn launch(
         let Some(whole) = build.sections.whole.clone() else {
             continue;
         };
-        for &(distance, root, at) in &nearest {
+        for &(distance, root, at, choice) in &nearest {
             if root != build.root {
                 continue;
             }
@@ -490,7 +574,14 @@ fn launch(
             let force = waiting.force;
             let whole = whole.clone();
             let unit = build.sections.unit;
+            // Of a group drawn a detail at a time, the detail to lay, and whether it is held
+            // as laid now, if what it is laid as is as it was.
+            let chosen = choice.map(|(detail, _)| detail);
+            let held = drawn_before.is_some_and(|drawn| {
+                chosen.is_some_and(|detail| detail::held(drawn)[detail::slot(detail)])
+            });
             let task = pool.spawn(async move {
+
                 sections::remembered(|| {
                     let started = Instant::now();
                     // A group of sections, of a base not being built: each laid and drawn
@@ -512,14 +603,21 @@ fn launch(
                             })
                             .collect();
                         let key = store::group_key(laid.iter().map(|(_, laid)| laid.key()));
-                        if !force && previous == Some((key, wanted)) {
+                        let same = match chosen {
+                            Some(_) => held && previous.is_some_and(|(was, _)| was == key),
+                            None => previous == Some((key, wanted)),
+                        };
+                        if !force && same {
                             return Outcome::Same;
                         }
                         let mut drawn = sections::Drawn::default();
                         for (section, laid) in &laid {
-                            drawn.append(sections::draw_parts(
-                                section, laid, wanted, None, None, None,
-                            ));
+                            drawn.append(match chosen {
+                                Some(detail) => sections::draw_detail(section, laid, detail),
+                                None => {
+                                    sections::draw_parts(section, laid, wanted, None, None, None)
+                                }
+                            });
                         }
                         let bounds = store::members_box(&members);
                         let mut parts = draw::parts(
@@ -533,11 +631,12 @@ fn launch(
                         parts.bounds = bounds;
                         return Outcome::Drawn {
                             key,
-                            reach: wanted,
+                            reach: chosen.map_or(wanted, detail::reach_of),
                             parts: Box::new(parts),
                             drawing: None,
                             took_ms: started.elapsed().as_secs_f32() * 1000.0,
                             again: None,
+                            detail: chosen,
                         };
                     }
                     let section = Section {
@@ -617,6 +716,7 @@ fn launch(
                             drawn_ms - keyed_ms,
                             took_ms - drawn_ms,
                         ]),
+                        detail: None,
                     }
                 })
             });
@@ -666,6 +766,14 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
                     };
                     list.push(*took_ms);
                 }
+                if let Outcome::Drawn {
+                    detail: Some(detail),
+                    took_ms,
+                    ..
+                } = &outcome
+                {
+                    jobs.measured(*detail, *took_ms);
+                }
                 jobs.ready.push_back(Done {
                     root: job.root,
                     section: job.section,
@@ -681,7 +789,27 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
 }
 
 impl Jobs {
-    /// The oldest change any section of a build still on a worker was laid for, if one is.
+    /// What laying a group's detail is taken to cost on a worker, in ms: as measured, or
+    /// as a house's took before anything has been.
+    pub fn cost(&self, detail: Detail) -> f32 {
+        let i = detail::slot(detail);
+        if self.costs[i] > 0.0 {
+            self.costs[i]
+        } else {
+            DETAIL_COSTS[i]
+        }
+    }
+
+    /// Takes in how long laying a group's detail took, into its running average.
+    pub fn measured(&mut self, detail: Detail, took_ms: f32) {
+        let i = detail::slot(detail);
+        self.costs[i] = if self.costs[i] > 0.0 {
+            self.costs[i] * 0.8 + took_ms * 0.2
+        } else {
+            took_ms
+        };
+    }
+
     /// The sections with a job on a worker or an answer waiting to be shown, by build.
     pub fn out_or_back(&self) -> BTreeSet<(Entity, [i32; 3])> {
         self.running
@@ -699,6 +827,7 @@ impl Jobs {
         })
     }
 
+    /// The oldest change any section of a build still on a worker was laid for, if one is.
     pub fn oldest_out(&self, root: Entity) -> Option<u64> {
         self.running
             .iter()

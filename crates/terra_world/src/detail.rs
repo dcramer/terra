@@ -35,6 +35,13 @@ pub fn plugin(app: &mut App) {
     );
 }
 
+/// Gives an object already ranged new distances, as authored: they are scaled as a new
+/// object's are, and kept for when the scale changes. Inserting a `VisibilityRange` again
+/// alone would be taken as already scaled.
+pub fn set_range(entity: &mut EntityCommands, range: VisibilityRange) {
+    entity.remove::<Authored>().insert(range);
+}
+
 /// Keeps what each newly ranged object was given, and scales it at once.
 fn remember(
     mut commands: Commands,

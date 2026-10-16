@@ -492,6 +492,66 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
 }
 
 #[test]
+fn each_detail_drawn_alone_is_that_detail_as_drawn_with_the_rest() {
+    let kits = shipped();
+    let maps = Maps::default();
+    let base = &bases(&kits)[0];
+    let section = Section {
+        base,
+        kits: &kits,
+        maps: &maps,
+        at: IVec3::new(0, 0, 0),
+        progress: &Progress::Whole,
+    };
+    let laid = laid(&section);
+    let near_off = draw(&section, &laid, Reach::Near);
+    let mid_off = draw(&section, &laid, Reach::Mid);
+    let far_off = draw(&section, &laid, Reach::Far);
+    let alone = |detail| {
+        let mut drawn = draw_detail(&section, &laid, detail);
+        for by in [
+            std::mem::take(&mut drawn.near_by),
+            std::mem::take(&mut drawn.mid_by),
+        ] {
+            for part in by {
+                for (key, surface) in part {
+                    let into = if detail == Detail::Near {
+                        &mut drawn.near
+                    } else {
+                        &mut drawn.mid
+                    };
+                    into.entry(key).or_default().append(surface);
+                }
+            }
+        }
+        drawn
+    };
+    let (near, mid, far, proxy) = (
+        alone(Detail::Near),
+        alone(Detail::Mid),
+        alone(Detail::Far),
+        alone(Detail::Proxy),
+    );
+    assert!(!near.near.is_empty() && !mid.mid.is_empty());
+    assert_eq!(
+        triangles(near.near.values()),
+        triangles(near_off.near.values())
+    );
+    assert_eq!(
+        triangles(mid.mid.values()),
+        triangles(near_off.mid.values())
+    );
+    assert_eq!(triangles(mid.mid.values()), triangles(mid_off.mid.values()));
+    assert_eq!(triangles([&far.far]), triangles([&mid_off.far]));
+    assert_eq!(triangles([&proxy.proxy]), triangles([&far_off.proxy]));
+    // Each holds its own detail and nothing of another.
+    assert!(near.mid.is_empty() && near.far.triangle_count() == 0);
+    assert!(mid.near.is_empty() && mid.far.triangle_count() == 0);
+    assert!(far.near.is_empty() && far.mid.is_empty() && far.proxy.triangle_count() == 0);
+    assert!(proxy.far.triangle_count() == 0 && proxy.near.is_empty());
+}
+
+#[test]
 fn a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit() {
     let kits = shipped();
     let maps = Maps::default();

@@ -49,6 +49,9 @@ pub(super) struct Drawn {
     pub parts: Vec<OnScreen>,
     /// The entities of the rest of what is drawn of it, put on screen again each time.
     pub rest: Vec<Entity>,
+    /// Drawn a detail at a time, each held in its slot of `parts` (`draw::detail`): a
+    /// group of a base nobody is building.
+    pub by_detail: bool,
 }
 
 /// A part of a section on screen: what it was drawn from, if that may be compared (not
@@ -63,6 +66,8 @@ pub(super) struct OnScreen {
     /// Its meshes in the texture arrays, kept on the CPU too for a base built by its cubes,
     /// so a repaint looks their layers up in place (D298).
     pub arrays: Vec<Handle<Mesh>>,
+    /// Of its entities, the copies only the sun sees, whose range is their own.
+    pub casters: Vec<Entity>,
 }
 
 /// A change of material and of nothing else (D298): each cube, from one kind to another,

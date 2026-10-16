@@ -447,6 +447,23 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
     draw_again(section, laid, reach, None, None)
 }
 
+/// A laid section drawn at one detail alone, as the game draws a base nobody is building:
+/// each detail made once as the camera nears it and kept while it is wanted, so passing a
+/// house lays each of its details once rather than a finer one and the one it fades into
+/// each time the camera crosses a line (D213). Its middle detail is the middle detail drawn
+/// with the near (`draw` near), its far the far drawn with the middle; at `Detail::Proxy`,
+/// its hull alone. What is not of any one detail (`plain`) comes with every detail but the
+/// hull, for the game to keep one of.
+pub fn draw_detail(section: &Section, laid: &Laid, detail: Detail) -> Drawn {
+    if detail == Detail::Proxy {
+        return Drawn {
+            proxy: proxy(section),
+            ..Drawn::default()
+        };
+    }
+    draw_details(section, laid, &[detail], None, None, None)
+}
+
 /// What a section's finer details were drawn as, piece by piece and face by face, kept so
 /// drawing it again after an edit works out only what the edit reached (`draw_again`): a
 /// piece drawn the same as before, and a block surface's faces whose cubes round them are
