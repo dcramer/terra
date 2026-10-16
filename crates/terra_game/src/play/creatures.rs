@@ -1168,6 +1168,7 @@ mod tests {
         world.insert_resource(planet);
         world.init_resource::<terra_world::flora::Trunks>();
         world.init_resource::<terra_world::flora::Obstacles>();
+        world.init_resource::<super::super::wildlife::Warmth>();
         world
     }
 
