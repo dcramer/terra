@@ -1,6 +1,6 @@
 arrow painted - - -
 berries painted - - -
-boots painted models/gear/boots.glb 312665b003f81226 -
+boots painted models/gear/boots.glb dcd875c54e9110b1 -
 bow painted models/held/bow.glb 5158e7b9be852413 -
 cooked_meat painted - - -
 fibre painted - - -
@@ -21,5 +21,5 @@ stone painted - - -
 stone_axe painted models/held/stone_axe.glb ff834e6b0ad4b8d2 -
 stone_pickaxe painted models/held/stone_pickaxe.glb 19c448aced0eeebd -
 torch painted models/held/torch.glb 7ffec0d583f34647 -
-trousers painted models/gear/trousers.glb fbb8e29158095ae2 -
+trousers painted models/gear/trousers.glb d9627524c1821a94 -
 wood painted - - -

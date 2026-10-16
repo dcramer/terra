@@ -225,7 +225,7 @@ def crown_z(p):
 
 
 ankle = (joint("foot_l").z + joint("foot_r").z) / 2
-shaft_z = ankle + (knee - ankle) * COVER["shaft"] if COVER.get("shaft") else -math.inf
+shaft_z = ankle + (knee - ankle) * COVER["shaft"] if COVER.get("shaft") else math.inf
 shoulder_z = (joint("clavicle_l").z + joint("clavicle_r").z) / 2
 
 
