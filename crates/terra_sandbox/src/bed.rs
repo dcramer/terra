@@ -10,7 +10,8 @@
 //! fells, shore, yards) or a mood of the music (calm,
 //! village, danger), its gain, and when it plays, in seconds: `@from-to` for a sound, which
 //! fades in and out over a second and a half at each end; `@from` for a phrase of music,
-//! which plays to its end. The mix is scaled so its peak is a decibel under full scale.
+//! which plays to its end, or `@from-to`, phrase after phrase until then. The mix is scaled so
+//! its peak is a decibel under full scale.
 
 use bevy::audio::{Decodable, Source};
 use std::io::Write;
@@ -93,11 +94,28 @@ fn mix(layers: &[Layer], seconds: f32) -> Vec<f32> {
         let length = last.saturating_sub(first);
         let fade = (FADE_S * RATE as f32) as usize;
         let mut samples = decoder;
+        // Music given an end plays phrase after phrase until it, each new from its own seed,
+        // so a film's music does not stop partway and leave its sound thin.
+        let again = matches!(layer.sound, Sound::Music(_)) && fades;
+        let mut phrases = 0u64;
         for i in 0..length {
-            let (Some(left), right) = (
+            let mut next = (
                 samples.next(),
                 (channels > 1).then(|| samples.next()).flatten(),
-            ) else {
+            );
+            if next.0.is_none() && again && phrases < 64 {
+                phrases += 1;
+                samples = Synth {
+                    sound: layer.sound,
+                    seed: seed + phrases,
+                }
+                .decoder();
+                next = (
+                    samples.next(),
+                    (channels > 1).then(|| samples.next()).flatten(),
+                );
+            }
+            let (Some(left), right) = next else {
                 break;
             };
             let right = right.unwrap_or(left);
@@ -208,6 +226,28 @@ mod tests {
         assert!(loudest(1.0, 1.1) < loudest(1.9, 2.1) * 0.3);
         let peak = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
         assert!((peak - 0.891).abs() < 1e-3, "{peak}");
+    }
+
+    /// Music given an end plays on to it, where one phrase alone would stop short.
+    #[test]
+    fn music_given_an_end_plays_on_to_it() {
+        let loud = |samples: &[f32], from: f32, to: f32| {
+            let at = |s: f32| (s * RATE as f32) as usize * 2;
+            samples[at(from)..at(to)]
+                .iter()
+                .fold(0.0f32, |m, s| m.max(s.abs()))
+        };
+        let once = mix(&[parse_layer("calm:1@0").unwrap()], 70.0);
+        let ends = (0..70)
+            .rev()
+            .find(|&s| loud(&once, s as f32, s as f32 + 1.0) > 0.01);
+        let ends = ends.expect("a phrase sounds") as f32 + 1.0;
+        assert!(ends < 60.0, "a phrase is shorter than the test: {ends} s");
+        let on = mix(&[parse_layer("calm:1@0-70").unwrap()], 70.0);
+        assert!(
+            loud(&on, ends + 1.0, 68.0) > 0.01,
+            "silent after its first phrase"
+        );
     }
 
     #[test]

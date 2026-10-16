@@ -18,6 +18,7 @@ mod button;
 mod camera;
 pub(crate) mod catalogue;
 pub(crate) mod claim;
+mod coats;
 mod combat;
 mod controls;
 mod crafting;
@@ -60,6 +61,7 @@ pub use props::{
 pub(crate) mod rising;
 mod save;
 pub(crate) mod settlement;
+mod sighted;
 mod skills;
 mod sounds;
 mod soundscape;
@@ -159,6 +161,8 @@ impl Plugin for GameplayPlugin {
         skills::plugin(app);
         creatures::plugin(app);
         wildlife::plugin(app);
+        sighted::plugin(app);
+        coats::plugin(app);
         fliers::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);

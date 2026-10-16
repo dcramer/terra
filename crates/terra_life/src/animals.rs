@@ -68,6 +68,22 @@ enum Home {
     Owner { person: usize, door: Vec2 },
 }
 
+/// How much of a role's day is spent about the town's streets and market: its windows of
+/// browsing, selling or chatting.
+fn about_town(plan: &crate::plan::Plan, role: usize) -> usize {
+    plan.roles.get(role).map_or(0, |role| {
+        role.day
+            .iter()
+            .filter(|window| {
+                window
+                    .does
+                    .iter()
+                    .any(|does| matches!(does.as_str(), "Browse" | "Sell" | "Chat"))
+            })
+            .count()
+    })
+}
+
 fn unit(parts: &[u32]) -> f32 {
     let mut x: u32 = 0x811c_9dc5;
     for &part in parts {
@@ -157,10 +173,15 @@ impl Animals {
                         let door = homes[(unit(&[seed, 8, n as u32]) * homes.len() as f32)
                             as usize
                             % homes.len()];
+                        // Of the household's grown-ups, the one most about the streets and the
+                        // market: a dog goes where its owner goes.
                         let Some(person) = life
                             .people
                             .iter()
-                            .position(|p| p.home == door && p.scale > 0.85)
+                            .enumerate()
+                            .filter(|(_, p)| p.home == door && p.scale > 0.85)
+                            .max_by_key(|(i, p)| (about_town(&life.plan, p.role), usize::MAX - i))
+                            .map(|(i, _)| i)
                         else {
                             continue;
                         };
@@ -185,6 +206,23 @@ impl Animals {
             kinds,
             animals,
             seconds: 0.0,
+        }
+    }
+
+    /// Puts each dog at its owner's heels if its owner is out, as if the day had been going
+    /// on since the night (`Life::start_settled`), rather than at its door to run after them.
+    pub fn settle(&mut self, life: &Life) {
+        for animal in &mut self.animals {
+            let Home::Owner { person, .. } = animal.home else {
+                continue;
+            };
+            let owner = &life.people[person];
+            if !matches!(owner.state, State::Inside | State::Away) {
+                animal.at = owner.at - owner.facing * 1.6;
+                animal.target = animal.at;
+                animal.facing = owner.facing;
+                animal.trail.clear();
+            }
         }
     }
 

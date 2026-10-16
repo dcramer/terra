@@ -60,6 +60,20 @@ pub struct SpeciesDef {
     /// and legs, and how far round each a blow still counts.
     #[serde(default)]
     pub zones: Vec<ZoneDef>,
+    /// A coat moulted with the seasons, if it has one (`coats`).
+    #[serde(default)]
+    pub coat: Option<CoatDef>,
+}
+
+/// A coat moulted with the seasons, as a mountain hare's or an arctic fox's: the tint its
+/// summer coat lays over its model's own colours, linear RGB (its winter coat is the model's
+/// own, pale), and how far one animal's tone strays from another's, a share either way.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CoatDef {
+    pub summer: (f32, f32, f32),
+    #[serde(default)]
+    pub strays: f32,
 }
 
 fn seen_by_default() -> f32 {

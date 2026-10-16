@@ -92,6 +92,25 @@
             hours: [(5.0, 20.0)],
         ),
         (
+            // Swallows and house martins hawking for flies low over roofs, streets, meadows
+            // and water through the warm months, fast and close, their wings flickering.
+            name: "Swallows",
+            count: 28,
+            look: Bird,
+            size_m: 0.32,
+            colour: (0.05, 0.05, 0.08),
+            glow: 0.0,
+            opacity: 1.0,
+            motion: Flock(flocks: 4, speed_mps: 9.0, spread_m: 7.0, height_m: (2.5, 12.0), flap_hz: 7.0, about: 0.85),
+            box_m: (55.0, 18.0),
+            woods: 0.0,
+            open: 1.0,
+            water: 0.8,
+            season_c: (8.0, 40.0),
+            air_c: 10.0,
+            hours: [(6.0, 20.0)],
+        ),
+        (
             // Cotton grass and willow down blown over the heath in late summer.
             name: "Down",
             count: 160,

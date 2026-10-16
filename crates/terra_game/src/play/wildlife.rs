@@ -19,6 +19,7 @@ use bevy::{ecs::system::SystemParam, platform::collections::HashMap, prelude::*}
 use terra_gen::Seed;
 use terra_world::cover::CoverRules;
 use terra_world::flora::{Obstacles, Trunk, Trunks};
+use terra_world::sky_occlusion::SkyOccluders;
 
 /// The land's cells are cubes this wide, a few tens of metres of ground in each.
 const CELL_M: f32 = 32.0;
@@ -46,9 +47,36 @@ const TRODDEN: f32 = 0.4;
 /// it and breaks from cover as they pass, as shipped open worlds stage their ambient
 /// encounters ahead of the player (Red Dead Redemption 2's ambient animals, Far Cry's
 /// wildlife spawned out of sight in the direction of travel).
-const MEET_EVERY_S: (f32, f32) = (4.0, 9.0);
-const MEET_AHEAD_M: (f32, f32) = (34.0, 52.0);
-const MEET_ASIDE_M: (f32, f32) = (1.0, 14.0);
+/// A meeting is staged where it will be seen, as those games stage theirs: a few spots are
+/// tried, close beside the way (most likely within a few metres of it, but not on it, where
+/// the player's own body hides it from the camera behind them), and the one chosen
+/// is in view of the player, nothing standing between, in the open and the light, on bare
+/// or short ground rather than in a thicket: a hare on the path's edge, finches on the path,
+/// ducks off the shore. What then happens is the animals' own: each breaks from a player on
+/// the move across their way and on ahead (creatures' `bolt`), so it crosses the picture
+/// near rather than vanishing into cover.
+const MEET_EVERY_S: (f32, f32) = (3.0, 6.0);
+const MEET_AHEAD_M: (f32, f32) = (28.0, 44.0);
+const MEET_ASIDE_M: (f32, f32) = (2.0, 10.0);
+/// Spots tried for a meeting, each side of the way.
+const MEET_TRIES: usize = 5;
+/// The camera follows so far behind and above the player, metres (play's camera): where a
+/// meeting's spot must be seen from.
+const EYE_BEHIND_M: f32 = 4.6;
+const EYE_UP_M: f32 = 2.2;
+/// So many met animals at most besides the land's own, for every player together, so the
+/// cells round a player, full, do not leave nothing to meet ahead; one so far from every
+/// player is let go.
+const MET_MOST: usize = 24;
+const MET_RELEASE_M: f32 = 80.0;
+/// Grass thinner than this, as thick by how much taller it grows, leaves an animal on it in
+/// plain sight.
+const BARE_GRASS: f32 = 0.35;
+/// A line through a crown within this share of its size, as thick as its leaves close, is
+/// hidden by them.
+const LEAVES_HIDE: f32 = 0.85;
+/// Grass this tall hides a small animal in it.
+const HIDING_GRASS_M: f32 = 0.45;
 /// A kind met this near already is the less likely to be met again.
 const MEET_KNOWN_M: f32 = 120.0;
 /// Not where others of its kind already are this near.
@@ -63,6 +91,7 @@ const LAPSE_C_PER_M: f32 = 0.0065;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Cells>()
+        .init_resource::<Perches>()
         .init_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
@@ -83,6 +112,8 @@ struct Cells {
     /// Each player's place when last looked and how long until they next meet something.
     ways: HashMap<Entity, (Vec3, f32)>,
     meetings: u64,
+    /// The animals met ahead and still about, apart from the cells' own.
+    met: Vec<Entity>,
     /// The longest a look took since it was last told, milliseconds.
     slowest_ms: f32,
     told_s: f32,
@@ -102,6 +133,10 @@ pub struct Place {
     pub by_water: bool,
     /// How trodden the ground is by people.
     pub trodden: f32,
+    /// How much canopy is over it, from open sky (0) to none seen (1), and whether its ground
+    /// is bare or short: a path, a street, grass grown thin.
+    pub shade: f32,
+    pub bare: bool,
 }
 
 impl Place {
@@ -135,6 +170,55 @@ pub struct Surroundings<'w> {
     cover: Option<Res<'w, CoverRules>>,
     start: Res<'w, Start>,
     warmth: Res<'w, Warmth>,
+    /// The crowns of the trees, where a forest says them: leaves hide what is behind them.
+    crowns: Option<Res<'w, SkyOccluders>>,
+    perches: Res<'w, Perches>,
+}
+
+/// Where birds sit up off the ground besides the trees: the ridges of a settlement's roofs,
+/// each as its two ends, which the layer that puts the buildings up fills in (the town's).
+/// Pigeons and sparrows line a ridge, as they do on every town's roofs.
+#[derive(Resource, Default)]
+pub struct Perches(pub Vec<(Vec3, Vec3)>);
+
+impl Surroundings<'_> {
+    /// A spot on a ridge roughly the way given, between so near and so far across the ground:
+    /// the one most that way, somewhere along it.
+    pub fn perch(
+        &self,
+        here: Vec3,
+        way: Vec3,
+        (near, far): (f32, f32),
+        dice: &mut terra_gen::Rng,
+    ) -> Option<Vec3> {
+        let up = here.normalize_or(Vec3::Y);
+        let mut best: Option<(Vec3, f32)> = None;
+        for &(a, b) in &self.perches.0 {
+            let point = a.lerp(b, dice.range(0.1, 0.9));
+            let off = (point - here).reject_from(up);
+            let apart = off.length();
+            let lean = off.normalize_or_zero().dot(way);
+            if (near..=far).contains(&apart) && lean > -0.2 && best.is_none_or(|(_, l)| lean > l) {
+                best = Some((point, lean));
+            }
+        }
+        best.map(|(point, _)| point)
+    }
+
+    /// The ridge nearest a point within so far across the ground, if any.
+    pub fn ridge_near(&self, at: Vec3, within: f32) -> Option<(Vec3, Vec3)> {
+        let up = at.normalize_or(Vec3::Y);
+        self.perches
+            .0
+            .iter()
+            .map(|&(a, b)| {
+                let s = ((at - a).dot(b - a) / (b - a).length_squared().max(1e-4)).clamp(0.0, 1.0);
+                ((a, b), (a.lerp(b, s) - at).reject_from(up).length())
+            })
+            .filter(|(_, apart)| *apart <= within)
+            .min_by(|x, y| x.1.total_cmp(&y.1))
+            .map(|(ridge, _)| ridge)
+    }
 }
 
 /// The growing season's warmth as last worked out for each patch of ground: the land's
@@ -182,11 +266,15 @@ impl Surroundings<'_> {
         let trunks = self.trunks(ground, WOODED.1).count();
         let open = trunks == 0 && self.trunks(ground, OPEN_M).next().is_none();
         let local = self.start.local(ground);
-        let trodden = self.cover.as_ref().map_or(0.0, |cover| {
+        let growing = self.cover.as_ref().map(|cover| {
             cover
                 .source
                 .growing(&self.planet, ground, Vec2::new(local.x, local.z))
-                .trodden
+        });
+        let trodden = growing.as_ref().map_or(0.0, |g| g.trodden);
+        let shade = growing.as_ref().map_or(0.0, |g| g.shade);
+        let bare = growing.as_ref().is_none_or(|g| {
+            g.path || g.trodden >= TRODDEN || g.grass * (1.0 + g.tall) < BARE_GRASS
         });
         Place {
             warmth_c: self.warmth_c(ground),
@@ -195,12 +283,79 @@ impl Surroundings<'_> {
             depth_m,
             by_water,
             trodden,
+            shade,
+            bare,
         }
+    }
+
+    /// Whether nothing is between an eye and a point: no trunk, rock or log, no tree's crown
+    /// (a young tree's beside a path is a thicket of leaves to the ground), and not the
+    /// ground.
+    pub fn in_view(&self, eye: Vec3, at: Vec3) -> bool {
+        let line = at - eye;
+        let length = line.length();
+        if length < 1.0 {
+            return true;
+        }
+        let way = line / length;
+        if self.obstacles.sweep(eye, way, length - 0.5, 0.15).is_some() {
+            return false;
+        }
+        if let Some(wood) = &self.crowns {
+            let south = wood.east.cross(wood.up);
+            let leaves = wood.crowns.iter().any(|crown| {
+                // Into the crown's own frame, where it is a ball of one.
+                let into = |p: Vec3| {
+                    let off = p - crown.middle;
+                    Vec3::new(
+                        off.dot(wood.east) / crown.half.x.max(0.1),
+                        off.dot(wood.up) / crown.half.y.max(0.1),
+                        off.dot(south) / crown.half.z.max(0.1),
+                    )
+                };
+                let reach = crown.half.max_element();
+                let nearest = (crown.middle - eye).dot(way).clamp(0.0, length);
+                if (eye + way * nearest).distance(crown.middle) > reach {
+                    return false;
+                }
+                let (from, to) = (into(eye), into(at));
+                let along = to - from;
+                let s = (-from.dot(along) / along.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                // Through its thick, not grazing the gaps at its edge.
+                (from + along * s).length() < LEAVES_HIDE * crown.closes.sqrt()
+            });
+            if leaves {
+                return false;
+            }
+        }
+        const GROUND_SAMPLES: usize = 24;
+        !(1..GROUND_SAMPLES).any(|i| {
+            let point = eye + line * (i as f32 / GROUND_SAMPLES as f32);
+            self.planet.ground_at(point).length() > point.length() + 0.05
+        })
+    }
+
+    /// How tall the grass stands at a point on the ground, as most of its blades do (the
+    /// cover's own measure, `cover::blades`); none where nothing covers the ground.
+    pub fn grass_m(&self, ground: Vec3) -> f32 {
+        let local = self.start.local(ground);
+        self.cover.as_ref().map_or(0.0, |cover| {
+            let g = cover
+                .source
+                .growing(&self.planet, ground, Vec2::new(local.x, local.z));
+            if g.path {
+                return 0.0;
+            }
+            (0.12 + 0.42 * libm::powf(g.grass.max(0.0), 0.7) * (0.6 + 0.4 * g.lush))
+                * (1.0 + 0.5 * g.tall)
+                * 0.85
+                * (g.grass > 0.05) as u8 as f32
+        })
     }
 
     /// The growing season's mean at a point on the ground: the land's own seasons where they
     /// were worked out, else the start's climate at its latitude, cooling with height.
-    fn warmth_c(&self, ground: Vec3) -> f32 {
+    pub fn warmth_c(&self, ground: Vec3) -> f32 {
         let patch = (ground / WARMTH_PATCH_M).floor().as_ivec3();
         if let Ok(known) = self.warmth.0.lock()
             && let Some(&warmth) = known.get(&patch)
@@ -349,20 +504,17 @@ fn populate(
                     continue;
                 }
                 let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
-                for _ in 0..count.min(most) {
-                    let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
-                    let spot = around.ground(at + turn * east * dice.range(0.0, 2.5));
-                    if let Some(animal) = creatures::spawn(
-                        &mut commands,
-                        (&kinds, &bestiary),
-                        &around.planet,
-                        species,
-                        spot,
-                    ) {
-                        put.push(animal);
-                        about += 1;
-                    }
-                }
+                let group = put_group(
+                    &mut commands,
+                    (&kinds, &bestiary),
+                    &around,
+                    species,
+                    (at, east * 2.5),
+                    count.min(most),
+                    &mut dice,
+                );
+                about += group.len();
+                put.extend(group);
                 debug!(
                     "Wildlife: {} {} at {:.0} m east and {:.0} m south of the start.",
                     count,
@@ -374,6 +526,18 @@ fn populate(
             cells.looked.insert(cell, put);
         }
     }
+    // The met let go once nobody is near them, or once gone.
+    let mut met = std::mem::take(&mut cells.met);
+    met.retain(|&animal| {
+        let kept = placed
+            .get(animal)
+            .is_ok_and(|(at, _)| near(at.translation, MET_RELEASE_M));
+        if !kept {
+            commands.entity(animal).try_despawn();
+        }
+        kept
+    });
+    cells.met = met;
     meet(
         &mut commands,
         &mut cells,
@@ -382,7 +546,6 @@ fn populate(
         &wild,
         &moving,
         &placed,
-        &mut about,
     );
     cells.slowest_ms = cells.slowest_ms.max(began.elapsed().as_secs_f32() * 1000.0);
     cells.told_s += LOOK_EVERY_S;
@@ -413,9 +576,8 @@ fn populate(
 /// A kind living about the land: its species, numbers to a hectare, group and niche.
 type Wild<'a> = (Species, f32, (u32, u32), &'a Niche);
 
-/// Puts a group out ahead of each player on the move, now and then: somewhere of its
-/// niche beside their way, past where it is drawn, where none of its kind already is.
-#[allow(clippy::too_many_arguments)]
+/// Puts a group out ahead of each player on the move, now and then: at the spot beside their
+/// way that shows it best, of its niche, where none of its kind already is.
 fn meet(
     commands: &mut Commands,
     cells: &mut Cells,
@@ -424,7 +586,6 @@ fn meet(
     wild: &[Wild],
     moving: &[(Entity, Vec3)],
     placed: &Query<(&Transform, &creatures::Creature)>,
-    about: &mut usize,
 ) {
     let seed = around.planet.seed().derive("wildlife meetings");
     cells
@@ -437,38 +598,59 @@ fn meet(
         if went.length() / LOOK_EVERY_S > MOVING_MPS {
             left -= LOOK_EVERY_S;
         }
-        if left <= 0.0 && *about < MOST {
+        if left <= 0.0 && cells.met.len() < MET_MOST {
             cells.meetings += 1;
             let mut dice = seed.index(cells.meetings).rng();
             left = dice.range(MEET_EVERY_S.0, MEET_EVERY_S.1);
             let ahead = went.normalize_or_zero();
             let side = ahead.cross(up);
-            // A spot each side of the way, each with the kinds whose niche it is and that
-            // are not about there already; a kind already met near is less likely again, so
-            // a walk by a wood and a lake meets both.
+            let eye = here + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+            // Spots each side of the way, each with the kinds whose niche it is and that are
+            // not about there already, weighed by how well it shows them: in view, near the
+            // way, in the light, on bare ground. A kind already met near is less likely
+            // again, so a walk by a wood and a lake meets both.
             let mut fits: Vec<(Vec3, Vec3, &Wild, f32)> = Vec::new();
             for sign in [1.0, -1.0] {
                 let aside = side * sign;
-                let spot = around.ground(
-                    here + ahead * dice.range(MEET_AHEAD_M.0, MEET_AHEAD_M.1)
-                        + aside * dice.range(MEET_ASIDE_M.0, MEET_ASIDE_M.1),
-                );
-                let place = around.place(spot);
-                for kind in wild {
-                    let (species, per_ha, _, niche) = kind;
-                    if !place.fits(niche) {
+                for _ in 0..MEET_TRIES {
+                    let off = dice.range(0.0, 1.0);
+                    let off = MEET_ASIDE_M.0 + off * off * (MEET_ASIDE_M.1 - MEET_ASIDE_M.0);
+                    let spot = around.ground(
+                        here + ahead * dice.range(MEET_AHEAD_M.0, MEET_AHEAD_M.1) + aside * off,
+                    );
+                    if !around.in_view(eye, spot + up * 0.3) {
                         continue;
                     }
-                    let (mut close, mut seen) = (false, 0);
-                    for (at, creature) in placed {
-                        if creature.species == *species {
-                            let apart = at.translation.distance(spot);
-                            close |= apart < MEET_APART_M;
-                            seen += (apart < MEET_KNOWN_M) as u32;
+                    let place = around.place(spot);
+                    let grass = around.grass_m(spot);
+                    let shows = (1.0 - 0.75 * place.shade.clamp(0.0, 1.0))
+                        * if place.bare { 1.5 } else { 0.6 }
+                        * (1.0 - grass / HIDING_GRASS_M).clamp(0.1, 1.0)
+                        / (1.0 + off / 6.0);
+                    for kind in wild {
+                        let (species, per_ha, _, niche) = kind;
+                        if !place.fits(niche) {
+                            continue;
                         }
-                    }
-                    if !close {
-                        fits.push((spot, aside, kind, per_ha / (1.0 + seen as f32)));
+                        let (mut close, mut seen) = (false, 0);
+                        for (at, creature) in placed {
+                            if creature.species == *species {
+                                let apart = at.translation.distance(spot);
+                                close |= apart < MEET_APART_M;
+                                seen += (apart < MEET_KNOWN_M) as u32;
+                            }
+                        }
+                        if !close {
+                            // The best shown of a kind's spots stands for it.
+                            let weight = per_ha.sqrt() / (1.0 + seen as f32) * shows * shows;
+                            match fits.iter_mut().find(|(.., each, _)| each.0 == *species) {
+                                Some(best) if best.3 < weight => {
+                                    *best = (spot, aside, kind, weight)
+                                }
+                                Some(_) => {}
+                                None => fits.push((spot, aside, kind, weight)),
+                            }
+                        }
                     }
                 }
             }
@@ -479,23 +661,88 @@ fn meet(
                 roll <= 0.0
             });
             if let Some(&(spot, aside, &(species, _, (fewest, most), _), _)) = chosen {
-                let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
-                let cell = cell_of(spot);
-                for _ in 0..count.min(most) {
-                    let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
-                    let at = around.ground(spot + turn * aside * dice.range(0.0, 2.0));
-                    if let Some(animal) =
-                        creatures::spawn(commands, (kinds, bestiary), &around.planet, species, at)
-                    {
-                        cells.looked.entry(cell).or_default().push(animal);
-                        *about += 1;
-                    }
-                }
+                // Met as a group of the larger sort its kind keeps.
+                let count = (fewest + most).div_ceil(2)
+                    + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
+                let group = put_group(
+                    commands,
+                    (kinds, bestiary),
+                    around,
+                    species,
+                    (spot, aside * 2.0),
+                    count.min(most),
+                    &mut dice,
+                );
+                cells.met.extend(group);
                 debug!("Wildlife: {} {} met ahead.", count, bestiary.name(species));
             }
         }
         cells.ways.insert(player, (here, left));
     }
+}
+
+/// A town's birds are put out on a roof's ridge within so far, so often, rather than on the
+/// ground; so far apart along it, and sitting there so long, seconds.
+const ON_A_RIDGE: (f32, f32) = (20.0, 0.45);
+const ON_A_RIDGE_APART_M: (f32, f32) = (0.3, 0.7);
+const ON_A_RIDGE_S: (f32, f32) = (12.0, 45.0);
+
+/// Puts out a group of a kind about a spot, within the reach given of it: on the ground, or
+/// a flier of a settlement now and then in a row along the nearest roof's ridge, sitting.
+fn put_group(
+    commands: &mut Commands,
+    (kinds, bestiary): (&Kinds, &Bestiary),
+    around: &Surroundings,
+    species: Species,
+    (spot, reach): (Vec3, Vec3),
+    count: u32,
+    dice: &mut terra_gen::Rng,
+) -> Vec<Entity> {
+    let about = bestiary.get(species);
+    let townsbird = matches!(about.moves, super::species::Moves::Flies(_))
+        && about
+            .niche
+            .as_ref()
+            .is_some_and(|niche| niche.haunts.contains(&Haunt::Trodden));
+    let ridge = if townsbird && dice.unit() < ON_A_RIDGE.1 {
+        around.ridge_near(spot, ON_A_RIDGE.0)
+    } else {
+        None
+    };
+    let up = spot.normalize_or(Vec3::Y);
+    let mut put = Vec::new();
+    if let Some((a, b)) = ridge {
+        let length = a.distance(b);
+        let mut along = dice.range(0.0, (length * 0.5).max(0.0));
+        for _ in 0..count {
+            if along > length {
+                break;
+            }
+            let sits = a.lerp(b, along / length.max(1e-3));
+            let left = dice.range(ON_A_RIDGE_S.0, ON_A_RIDGE_S.1);
+            if let Some(bird) =
+                creatures::spawn(commands, (kinds, bestiary), &around.planet, species, sits)
+            {
+                commands
+                    .entity(bird)
+                    .entry::<creatures::Creature>()
+                    .and_modify(move |mut bird| bird.roost(sits, left));
+                put.push(bird);
+            }
+            along += dice.range(ON_A_RIDGE_APART_M.0, ON_A_RIDGE_APART_M.1);
+        }
+        return put;
+    }
+    for _ in 0..count {
+        let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
+        let at = around.ground(spot + turn * reach * dice.range(0.0, 1.0));
+        if let Some(animal) =
+            creatures::spawn(commands, (kinds, bestiary), &around.planet, species, at)
+        {
+            put.push(animal);
+        }
+    }
+    put
 }
 
 /// The cells round a cell within so many of it, nearest first, so the nearest are put out
@@ -542,6 +789,8 @@ mod tests {
             depth_m: -1.0,
             by_water: false,
             trodden: 0.0,
+            shade: 0.0,
+            bare: true,
         }
     }
 

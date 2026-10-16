@@ -217,6 +217,38 @@ fn hens_keep_to_their_yard_and_dogs_to_their_owners_heels() {
 }
 
 #[test]
+fn on_market_morning_the_dogs_are_out_at_their_owners_heels_from_the_start() {
+    let mut life = life(2);
+    let viewer = square(&life);
+    life.start_settled(10.5, viewer);
+    let animals = life.plan.animals.clone();
+    let mut kept = crate::Animals::new(&life, animals, 2);
+    kept.settle(&life);
+    let out: Vec<Vec2> = life
+        .people
+        .iter()
+        .filter(|p| !matches!(p.state, State::Inside | State::Away))
+        .map(|p| p.at)
+        .collect();
+    let dogs: Vec<Vec2> = kept
+        .animals
+        .iter()
+        .filter(|a| a.kind == "Dog")
+        .map(|a| a.at)
+        .collect();
+    assert!(dogs.len() >= 4, "{} dogs", dogs.len());
+    let at_heel = dogs
+        .iter()
+        .filter(|dog| out.iter().any(|p| p.distance(**dog) < 2.0))
+        .count();
+    assert!(
+        at_heel * 2 >= dogs.len(),
+        "{at_heel} of {} dogs at someone's heels",
+        dogs.len()
+    );
+}
+
+#[test]
 fn the_same_town_and_seed_live_the_same_day() {
     let viewer = |life: &Life| square(life);
     let mut a = life(4);

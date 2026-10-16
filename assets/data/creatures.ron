@@ -37,6 +37,8 @@
 //   blood    what sprays from it when it is struck
 //   carcass  what butchering it takes and gives, if it can be butchered
 //   lies_s   how long its body lies after it falls
+//   coat     a coat moulted with the seasons (play::coats): the tint its summer coat lays
+//            over the model's own pale colours, and how far one animal's tone strays
 //   zones    where a blow can land (D119): around the model's joints whose names contain
 //            `joint`, out to radius_m; the head takes the most from a blow, the legs least
 //
@@ -145,10 +147,10 @@
         walk_mps: 0.3,
         run_mps: 0.5,
         body: (radius: 0.03, weight: 0.02),
-        temper: Shy(flees_within_m: 9.0, flees_s: 2.0),
+        temper: Shy(flees_within_m: 7.0, flees_s: 2.0),
         refuge: Flies(10.0, 30.0),
         moves: Flies(8.0),
-        lives: About(per_ha: 3.0, group: (1, 3)),
+        lives: About(per_ha: 3.0, group: (2, 6)),
         niche: (warmth_c: (8.0, 30.0), haunts: [Woods]),
         seen_m: 35.0,
         calls_s: Some((6.0, 20.0)),
@@ -221,7 +223,7 @@
         walk_mps: 0.6,
         run_mps: 4.5,
         body: (radius: 0.12, weight: 0.3),
-        temper: Shy(flees_within_m: 20.0, flees_s: 4.0),
+        temper: Shy(flees_within_m: 9.0, flees_s: 3.0),
         lives: About(per_ha: 1.0, group: (1, 2)),
         niche: (warmth_c: (9.0, 30.0), haunts: [Open, Woods]),
         seen_m: 90.0,
@@ -248,7 +250,7 @@
         walk_mps: 0.55,
         run_mps: 4.2,
         body: (radius: 0.11, weight: 0.3),
-        temper: Shy(flees_within_m: 12.0, flees_s: 4.0),
+        temper: Shy(flees_within_m: 8.0, flees_s: 3.0),
         lives: About(per_ha: 1.2, group: (1, 2)),
         niche: (warmth_c: (-6.0, 7.5), haunts: [Open]),
         seen_m: 90.0,
@@ -258,6 +260,7 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 2), ("Hide", 1)]),
         lies_s: 200.0,
+        coat: (summer: (0.64, 0.52, 0.4), strays: 0.12),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.06),
             (joint: "Chest", part: Body, radius_m: 0.09),
@@ -275,7 +278,7 @@
         walk_mps: 0.9,
         run_mps: 5.5,
         body: (radius: 0.15, weight: 0.6),
-        temper: Shy(flees_within_m: 20.0, flees_s: 5.0),
+        temper: Shy(flees_within_m: 14.0, flees_s: 4.0),
         lives: About(per_ha: 0.35, group: (1, 1)),
         niche: (warmth_c: (7.0, 30.0), haunts: [Woods, Open]),
         seen_m: 110.0,
@@ -302,7 +305,7 @@
         walk_mps: 0.8,
         run_mps: 5.0,
         body: (radius: 0.14, weight: 0.5),
-        temper: Shy(flees_within_m: 16.0, flees_s: 5.0),
+        temper: Shy(flees_within_m: 12.0, flees_s: 4.0),
         lives: About(per_ha: 0.3, group: (1, 1)),
         niche: (warmth_c: (-6.0, 7.0), haunts: [Open]),
         seen_m: 110.0,
@@ -312,6 +315,7 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 1), ("Hide", 1)]),
         lies_s: 240.0,
+        coat: (summer: (0.5, 0.4, 0.3), strays: 0.12),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.07),
             (joint: "Chest", part: Body, radius_m: 0.1),

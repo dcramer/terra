@@ -194,6 +194,33 @@ fn ridge(base: &Base) -> Option<Vec3> {
     Some(middle.lerp(far, 0.45) + Vec3::Y * 0.15)
 }
 
+/// The line of a building's roof's ridge, its two ends a little over its top cubes, in its
+/// own metres: the two of its highest roof cubes farthest apart, pushed out half a cube along
+/// it, where birds line up on it.
+fn ridge_line(base: &Base) -> Option<(Vec3, Vec3)> {
+    let roof: Vec<IVec3> = base
+        .cubes()
+        .filter(|(_, cube)| cube.kind.is_roof())
+        .map(|(at, _)| at)
+        .collect();
+    let top = roof.iter().map(|at| at.y).max()?;
+    let highest: Vec<Vec3> = roof
+        .iter()
+        .filter(|at| at.y == top)
+        .map(|at| (at.as_vec3() + Vec3::new(0.5, 1.0, 0.5)) * CELL_M + Vec3::Y * 0.12)
+        .collect();
+    let (mut a, mut b, mut apart) = (highest[0], highest[0], 0.0);
+    for (i, &p) in highest.iter().enumerate() {
+        for &q in &highest[i + 1..] {
+            if p.distance(q) > apart {
+                (a, b, apart) = (p, q, p.distance(q));
+            }
+        }
+    }
+    let along = (b - a).normalize_or_zero() * CELL_M * 0.5;
+    (apart >= CELL_M).then_some((a - along, b + along))
+}
+
 /// How hard a hearth burns at an hour: high for the morning's and the evening's cooking,
 /// low between, banked at night; a house's own hours a little earlier or later.
 fn hearth_burns(hour: f32, luck: f32) -> f32 {
@@ -784,9 +811,10 @@ fn lay(
     cover: Option<Res<terra_world::cover::CoverRules>>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    (mut obstacles, rising): (
+    (mut obstacles, rising, mut perches): (
         Option<ResMut<super::flora::Obstacles>>,
         Option<Res<super::rising::Rising>>,
+        Option<ResMut<super::wildlife::Perches>>,
     ),
 ) {
     let (Some(site), Some(look)) = (site, look) else {
@@ -915,6 +943,12 @@ fn lay(
         );
         if rising.is_none() {
             clear.write(ClearAround(door, 9.0));
+            // Its ridge, for the town's birds to sit on, once it stands.
+            if let (Some(perches), Some((a, b))) = (perches.as_mut(), ridge_line(&shape)) {
+                perches
+                    .0
+                    .push((frame.transform_point(a), frame.transform_point(b)));
+            }
         }
         // Its hearth's light within, a little inside its door, at a fire's height.
         if town.homes.contains(&index) {
@@ -1344,6 +1378,7 @@ fn lay(
     let square = outline.iter().copied().sum::<Vec2>() / outline.len().max(1) as f32;
     life.start_settled(Market::hours(&clock), square);
     let mut animals = Animals::new(&life, life.plan.animals.clone(), seed);
+    animals.settle(&life);
     if !wanted.lived_in {
         animals.animals.clear();
     }

@@ -188,7 +188,8 @@ function bedFor(layers: string[], seconds: number, file: string): string | undef
 }
 const layersOf = (shot: Shot, from: number, to: number) => [
   ...(shot.sound ?? []).map((sound) => `${sound}@${from.toFixed(2)}-${to.toFixed(2)}`),
-  ...(shot.music ? [`${shot.music}@${(from + 1).toFixed(2)}`] : []),
+  // Phrase after phrase to the end of its run, so its sound stays full to the last frame.
+  ...(shot.music ? [`${shot.music}@${(from + 1).toFixed(2)}-${to.toFixed(2)}`] : []),
 ];
 
 /// A place needs about this much of the GPU's memory at 1080p (the lush forest's run took
@@ -206,6 +207,26 @@ function roomOnTheGpu() {
     if (waited === 0) console.log(`trailer: waiting for room on the GPU: ${free} MB free of the ${NEEDS_MB} a shot needs`);
     spawnSync("sleep", ["30"]);
   }
+}
+
+/// What the film saw of the wildlife, from the run's log (play's sighted.rs, twice a second of
+/// the shot): how much of the film has an animal in it, how many at once, and how big the
+/// biggest is on the picture. An encounter staged well is seen for seconds at tens of pixels.
+function wildlifeSeen(log: string, from: number, seconds: number): string | undefined {
+  const samples = [...log.matchAll(/Wildlife seen at ([\d.]+) s: (\d+) \((\d+) hidden\)(?:: (.*))?/g)]
+    .map((m) => ({ t: Number(m[1]), count: Number(m[2]), hidden: Number(m[3]), px: [...(m[4] ?? "").matchAll(/(\d+) px/g)].map((p) => Number(p[1])) }))
+    .filter((s) => s.t >= from && s.t <= from + seconds);
+  if (!samples.length) return undefined;
+  const share = (keep: (s: (typeof samples)[number]) => boolean) => samples.filter(keep).length / samples.length;
+  const biggest = samples.map((s) => s.px[0] ?? 0).filter((px) => px > 0).sort((a, b) => a - b);
+  const median = biggest.length ? biggest[Math.floor(biggest.length / 2)] : 0;
+  const mean = samples.reduce((sum, s) => sum + s.count, 0) / samples.length;
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    `wildlife seen in ${pct(share((s) => s.count > 0))} of the film, ${pct(share((s) => (s.px[0] ?? 0) >= 20))} at 20 px or more, ` +
+    `${pct(share((s) => (s.px[0] ?? 0) >= 40))} at 40 px or more; ${mean.toFixed(1)} in view at once on average; ` +
+    `the biggest ${median} px at the median, ${biggest[biggest.length - 1] ?? 0} px at most; ${(samples.reduce((sum, s) => sum + s.hidden, 0) / samples.length).toFixed(1)} drawn but hidden`
+  );
 }
 
 function renderShot(name: string, n: number) {
@@ -265,6 +286,8 @@ function renderShot(name: string, n: number) {
   if (late.length) console.log(`trailer: ${name}: ${late[late.length - 1].replace(/.*Still loading/, "still loading")}`);
   const gaveUp = `${run.stdout}`.split("\n").filter((line) => line.includes("Route: gave up"));
   if (gaveUp.length) console.log(`trailer: ${name}: the route was blocked: ${gaveUp.join("; ")}`);
+  const seen = wildlifeSeen(`${run.stdout}${run.stderr}`, shot.scene ? 0 : (shot.lead_in ?? 1.5), shot.seconds);
+  if (seen) console.log(`trailer: ${name}: ${seen}`);
   if (stills) {
     console.log(`trailer: ${name}: stills in ${((Date.now() - started) / 1000).toFixed(0)} s`);
     return;
