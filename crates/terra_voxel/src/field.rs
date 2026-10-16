@@ -215,6 +215,8 @@ pub struct GeneratedPlanet {
     hills: Noise,
     detail: Noise,
     ore: Noise,
+    /// The frozen ground's hummocky moraine (`rolling_m`).
+    moraine: Noise,
     relief_m: f32,
     /// How tall the finer detail is.
     detail_m: f32,
@@ -233,6 +235,12 @@ impl GeneratedPlanet {
     /// The finer detail: how tall, and how far apart its features are.
     const DETAIL_M: f32 = 0.8;
     const DETAIL_SCALE_M: f32 = 24.0;
+    /// The frozen ground's moraine (`rolling_m`): low ridges this tall at most and this far
+    /// across, and hummocks and kettles on them.
+    const MORAINE_RIDGES_M: f32 = 14.0;
+    const MORAINE_RIDGE_SCALE_M: f32 = 520.0;
+    const HUMMOCKS_M: f32 = 7.0;
+    const HUMMOCK_SCALE_M: f32 = 85.0;
     /// How deep the top layer of soil or sand goes.
     pub(crate) const TOPSOIL_M: f32 = 1.5;
     /// Sand instead of soil this close above the sea.
@@ -251,6 +259,7 @@ impl GeneratedPlanet {
             hills: Noise::new(spec.seed.derive("stand-in hills")),
             detail: Noise::new(spec.seed.derive("ground detail")),
             ore: Noise::new(spec.seed.derive("ore veins")),
+            moraine: Noise::new(spec.seed.derive("moraine")),
             relief_m,
             detail_m: Self::DETAIL_M,
             sea_level_m,
@@ -285,7 +294,15 @@ impl GeneratedPlanet {
     /// The most the ground stands above or below the nominal radius, in metres, before
     /// digging: its hills, its finer detail and its mountains.
     pub fn reach_m(&self) -> f32 {
-        self.relief_m + self.detail_m + self.range.as_ref().map_or(0.0, |r| r.mountains.highest_m())
+        let moraine = if self.patterned.is_some() {
+            Self::MORAINE_RIDGES_M + Self::HUMMOCKS_M
+        } else {
+            0.0
+        };
+        self.relief_m
+            + self.detail_m
+            + moraine
+            + self.range.as_ref().map_or(0.0, |r| r.mountains.highest_m())
     }
 
     /// The same planet without its finer detail: with no relief, perfectly smooth, as a
@@ -329,9 +346,34 @@ impl GeneratedPlanet {
         if let Some(patterned) = &self.patterned {
             let over_sea = node.height - self.sea_level_m.unwrap_or(0.0);
             let strength = patterned.strength(direction, over_sea);
-            node.height += patterned.relief_m(direction * self.spec.radius_m, strength);
+            node.height += patterned.relief_m(direction * self.spec.radius_m, strength)
+                + self.rolling_m(direction, strength);
         }
         node
+    }
+
+    /// How the ice's leavings raise and sink the frozen ground, laid this fully: past the trees
+    /// the land is what the ice sheets left, hummocky moraine and its kettle hollows a few metres
+    /// high and tens of metres across over low ridges some hundreds of metres apart, as the
+    /// fells' feet in Lapland and the Barren Lands are (Benn and Evans, *Glaciers and
+    /// Glaciation*). Without it the plateau past the trees was the hills' own long swells, flat
+    /// as a table at a walker's eye ("too flat", the developers, 2026-10-15). Laid where the
+    /// patterned ground is, so the forest, the lake's basin and the town's fields keep their
+    /// ground, and fading in with it.
+    fn rolling_m(&self, direction: Vec3, strength: f32) -> f32 {
+        if strength <= 0.0 {
+            return 0.0;
+        }
+        let at = direction * self.spec.radius_m;
+        let ridges = Self::MORAINE_RIDGES_M
+            * self
+                .moraine
+                .fbm(at / Self::MORAINE_RIDGE_SCALE_M, 2, 2.0, 0.5);
+        let hummocks = Self::HUMMOCKS_M
+            * self
+                .moraine
+                .fbm(at / Self::HUMMOCK_SCALE_M + Vec3::splat(41.7), 3, 2.0, 0.5);
+        (ridges + hummocks) * strength
     }
 
     /// How the ground rises in a direction, as the memo's lattice has it: which way is
@@ -543,6 +585,66 @@ mod tests {
             150.0,
             Some(-20.0),
         )
+    }
+
+    #[test]
+    fn frozen_ground_rolls_in_hummocks_and_low_ridges_and_thawed_ground_does_not() {
+        let world = |at_c: f32| {
+            GeneratedPlanet::new(
+                PlanetSpec {
+                    seed: Seed(7),
+                    radius_m: 30_000.0,
+                },
+                150.0,
+                None,
+            )
+            .smooth()
+            .with_patterned(Patterned {
+                at_c,
+                // No polygons, so only the moraine is measured.
+                trough_m: 0.0,
+                rim_m: 0.0,
+                centre_m: 0.0,
+                pool_m: 0.0,
+                ..Patterned::ICE_WEDGES
+            })
+        };
+        let (frozen, thawed, bare) = (world(5.0), world(-5.0), planet_without(30_000.0));
+        let along = |i: usize| Vec3::new(1.0, 0.02 * i as f32 / 100.0, 0.3).normalize();
+        // Along 6 km, the frozen ground over the thawed: within 300 m it rises and falls by
+        // metres to some tens, as hummocky moraine does, and never so steeply a walker cannot
+        // climb it; the thawed ground is the hills alone.
+        let (mut windows, mut steepest) = (Vec::new(), 0.0_f32);
+        let step_m = 0.02 / 100.0 * 30_000.0;
+        let rises: Vec<f32> = (0..1000)
+            .map(|i| frozen.height_m(along(i)) - thawed.height_m(along(i)))
+            .collect();
+        for (i, pair) in rises.windows(2).enumerate() {
+            steepest = steepest.max(((pair[1] - pair[0]) / step_m).abs());
+            assert_eq!(thawed.height_m(along(i)), bare.height_m(along(i)));
+        }
+        for window in rises.chunks((300.0 / step_m) as usize) {
+            let (low, high) = window
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(l, h), &r| (l.min(r), h.max(r)));
+            windows.push(high - low);
+        }
+        windows.sort_by(f32::total_cmp);
+        let middling = windows[windows.len() / 2];
+        assert!((3.0..30.0).contains(&middling), "{windows:?}");
+        assert!(libm::atanf(steepest).to_degrees() < 25.0, "{steepest}");
+    }
+
+    fn planet_without(radius_m: f32) -> GeneratedPlanet {
+        GeneratedPlanet::new(
+            PlanetSpec {
+                seed: Seed(7),
+                radius_m,
+            },
+            150.0,
+            None,
+        )
+        .smooth()
     }
 
     #[test]

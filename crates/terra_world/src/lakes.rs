@@ -281,13 +281,50 @@ fn pools_mesh(waters: &Waters) -> Mesh {
         let at = region.offset(c, r) + Vec2::new(-0.5, 0.5) * region.cell_m;
         (region.middle + region.east * at.x + region.north * at.y).normalize() * radius
     };
+    // Each pool's cells and a cell's margin round them, so its edge runs under the ground it
+    // rises onto, where the water fades out by its depth (lake.wesl): on its own cells alone
+    // the water ended in their straight edges wherever the ground past them was lower than
+    // the cell said. A margin cell is the first pool's that reaches it, so no two layers of
+    // water lie in one place.
+    let mut level: Vec<Option<f32>> = vec![None; n * n];
+    for r in 0..n {
+        for c in 0..n {
+            if let Some(lake) = waters.lake_at(c, r) {
+                level[r * n + c] = Some(waters.lake_radius_m(lake));
+            }
+        }
+    }
+    let mut margin = level.clone();
+    for r in 0..n {
+        for c in 0..n {
+            let Some(radius) = waters.lake_at(c, r).map(|l| waters.lake_radius_m(l)) else {
+                continue;
+            };
+            for (dc, dr) in [
+                (-1i64, 0i64),
+                (1, 0),
+                (0, -1),
+                (0, 1),
+                (-1, -1),
+                (1, 1),
+                (-1, 1),
+                (1, -1),
+            ] {
+                let (cc, rr) = (c as i64 + dc, r as i64 + dr);
+                if cc < 0 || rr < 0 || cc as usize >= n || rr as usize >= n {
+                    continue;
+                }
+                let at = rr as usize * n + cc as usize;
+                if margin[at].is_none() {
+                    margin[at] = Some(radius);
+                }
+            }
+        }
+    }
     let (mut positions, mut normals, mut indices) = (Vec::new(), Vec::new(), Vec::new());
     for r in 0..n {
         for c in 0..n {
-            // Only the pools' own cells, no margin: past them the ground is the polygons' troughs
-            // and rims, and water reaching over a trough lower than its level would lie on it
-            // in a cell's straight-edged sheet.
-            let Some(radius) = waters.lake_at(c, r).map(|l| waters.lake_radius_m(l)) else {
+            let Some(radius) = margin[r * n + c] else {
                 continue;
             };
             let base = positions.len() as u32;

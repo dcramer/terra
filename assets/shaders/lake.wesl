@@ -160,8 +160,12 @@ fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>) -> f32 {
     // Finer along the wind than across it, so the crests run across the wind, as they do:
     // the wind's way is one fixed direction over a lake, not the level one at each point.
     let q = p + lake.wind.xyz * dot(p, lake.wind.xyz) * 0.8;
-    return noise(q * 1.6 - downwind * t * 1.2) * 0.6
-        + noise(q * 4.3 - downwind * t * 2.2 + across * t * 0.4 + 11.0) * 0.4;
+    // Wavelets on wavelets down to a few centimetres, as a breeze raises on a pool: with only
+    // the two larger sets, near water read as blobs half a metre across.
+    return noise(q * 1.2 - downwind * t * 1.0) * 0.32
+        + noise(q * 3.4 - downwind * t * 1.9 + across * t * 0.4 + 11.0) * 0.28
+        + noise(q * 8.7 - downwind * t * 3.1 - across * t * 0.6 + 23.0) * 0.22
+        + noise(q * 21.0 - downwind * t * 4.6 + 37.0) * 0.18;
 }
 
 // The reflection of what is on screen along a ray from a point of the water, and how much it
@@ -272,9 +276,9 @@ fn fragment(
     let local = world - lake.origin.xyz;
     let here = ripples(local, downwind, across);
     let slope = vec2<f32>(
-        ripples(local + downwind * 0.075, downwind, across) - here,
-        ripples(local + across * 0.075, downwind, across) - here,
-    );
+        ripples(local + downwind * 0.03, downwind, across) - here,
+        ripples(local + across * 0.03, downwind, across) - here,
+    ) * 2.5;
     // Calm water still shivers a little; far off the ripples are under a pixel. A light wind
     // ruffles a lake in patches, cat's-paws a few tens of metres across drifting downwind,
     // with glassy water between that mirrors the shore unbroken, as a mountain lake in the
@@ -296,6 +300,18 @@ fn fragment(
         let behind = depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         let surface = depth_ndc_to_view_z(in.position.z);
         under = max(surface - behind, 0.0);
+    }
+    // At its edge the water thins to nothing over the ground it rises onto: so much of it as
+    // is under a few centimetres deep, up from the ground, is faded out, its line broken by
+    // noise, as games fade a shoreline by the depth behind it. Without it a pool's water, a
+    // flat sheet on its own cells, ended in their straight edges over the moss a hand under its
+    // level, mirroring the sky there as brightly as over its middle.
+    var edge = 1.0;
+@if(DEPTH_PREPASS)
+    {
+        let thick = under * max(dot(toward_eye, up), 0.02);
+        let broken = noise(local * 0.9 + 31.0) * 0.6 + noise(local * 3.1 + 7.0) * 0.4;
+        edge = smoothstep(0.01, 0.07, thick + (broken - 0.5) * 0.05);
     }
     // Beer's law through that depth, sharpened as the original sharpens it, and faded to deep
     // with distance (DEPTH_FOG, DEPTH_FOG_FADE).
@@ -348,5 +364,6 @@ fn fragment(
     let glinting = sun.color.rgb * view.exposure * glint * mirror;
     out.color = vec4<f32>(out.color.rgb + (seen * mirror + glinting) * (1.0 - foam), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+    out.color.a *= edge;
     return out;
 }

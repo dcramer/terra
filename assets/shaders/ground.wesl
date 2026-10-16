@@ -746,11 +746,15 @@ fn fragment(
             scree = smoothstep(0.3, 0.7, 1.0 - abs(loose - 1.0));
             gravel = smoothstep(0.3, 0.7, loose - 1.0);
             // Snow lies on what faces up, its edge broken, thinning off the steep.
-            let up_facing = smoothstep(0.5, 0.82, flatness + (fleck - 0.5) * 0.12);
+            let up_facing = smoothstep(0.4, 0.72, flatness + (fleck - 0.5) * 0.12);
             // Its edge broken a metre or two by noise, as a patch of old snow's is, so the
-            // vertices' depths never show as triangles.
-            let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
-            snow = smoothstep(0.03, 0.16, in.uv.y + (edge - 0.5) * 0.22 + (fleck - 0.5) * 0.04) * up_facing;
+            // vertices' depths never show as triangles: the depth, laid on vertices a metre or
+            // two apart and changing fast across a drift's edge, is only a share of where it
+            // lies, the noise the rest. On a fell's face the patch thins out into fingers
+            // round the ground's ribs rather than ending in a cut-out line.
+            let edge = noise(world * 0.35 + 91.0) * 0.5 + noise(world * 1.9 + 23.0) * 0.3 + noise(world * 0.06 + 5.0) * 0.2;
+            let deep = clamp((in.uv.y - 0.02) / 0.3, 0.0, 1.0);
+            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12) * up_facing;
         }
 @if(VERTEX_UVS_B)
         {
@@ -1022,7 +1026,7 @@ fn fragment(
                 // Dwarf birch and bilberry turning crimson and rust, crowberry staying dark
                 // green among them, in patches a hand or two across.
                 let crowberry = smoothstep(0.58, 0.8, noise(world * 1.3 + 31.0));
-                let autumn = ground.heath_autumn.rgb * mix(vec3<f32>(1.05, 0.55, 0.75), vec3<f32>(0.95, 1.15, 0.9), fleck);
+                let autumn = ground.heath_autumn.rgb * mix(vec3<f32>(1.08, 0.62, 0.42), vec3<f32>(0.95, 1.12, 0.8), fleck);
                 let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), SHRUB_GREEN * 0.8, crowberry);
                 ground_is = settle(ground_is, toned(layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), leaves), shrub);
             }

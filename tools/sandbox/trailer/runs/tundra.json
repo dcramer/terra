@@ -1,9 +1,19 @@
 {
-  "about": "Across the open heath toward the fells and the first snow in their lees, the sun low in the autumn afternoon",
+  "about": "North across the rolling heath and its kettle ponds toward the snowy fells, the low morning sun from the east",
   "place": "tundra",
-  "hour": 16.3,
+  "hour": 10.5,
   "seconds": 25,
-  "player": { "at": "0,-10", "route": "0,30;4,70;0,110;-4,150" },
-  "sound": ["wind:0.9"],
-  "music": "calm"
+  "player": {
+    "at": "-150,-25",
+    "route": "-150,15;-146,55;-152,95;-150,135"
+  },
+  "look": {
+    "shutter": 90,
+    "exposure_bias": 0.2
+  },
+  "sound": [
+    "wind:0.9"
+  ],
+  "music": "calm",
+  "date": "09-12"
 }
