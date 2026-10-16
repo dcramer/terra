@@ -765,8 +765,48 @@ fn fragment(
         let far_off = distance(world, view.world_position);
         let canopy = vec3<f32>(0.018, 0.036, 0.016) * (0.85 + 0.3 * blotch);
         let under_woods = woods * mix(0.25, 1.0, smoothstep(3200.0, 4400.0, far_off)) * smoothstep(300.0, 700.0, far_off);
-        let granite = ground.steep.rgb * (0.8 + 0.4 * blotch);
-        let scree_tint = ground.steep.rgb * 1.25 * (0.85 + 0.3 * fleck);
+        // The mountains' granite: grey, as the Tatras' is, the steep ground's own brightness
+        // without its earthy hue; darker streaks run down its faces where water and lichen
+        // stain it, and broad tones a few hundred metres across, so a wall seen from across a
+        // lake is not one flat colour.
+        let face = normalize(in.world_normal);
+        let level_face = face - up * dot(face, up);
+        let fall = select(normalize(level_face), up.zxy, dot(level_face, level_face) < 1e-6);
+        let across_face = normalize(cross(up, fall));
+        let streaks = noise(vec3<f32>(dot(world, across_face) * 0.11, dot(world, up) * 0.009, 7.0)) * 0.7
+            + noise(vec3<f32>(dot(world, across_face) * 0.37, dot(world, up) * 0.03, 29.0)) * 0.3;
+        let stained = 1.0 - 0.45 * smoothstep(0.5, 0.8, streaks) * (1.0 - smoothstep(0.55, 0.85, flatness));
+        let tones = 0.8 + 0.4 * noise(world * 0.004 + 53.0);
+        let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 1.3;
+        let granite = vec3<f32>(grey, grey, grey * 0.97) * (0.85 + 0.3 * blotch) * stained * tones;
+        let scree_tint = vec3<f32>(grey, grey, grey * 0.96) * 1.25 * (0.85 + 0.3 * fleck) * tones;
+        // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
+        // ribs and couloirs that split its walls (terra_voxel mountains.rs), so a wall a few
+        // kilometres off read as smooth felt. Its rock and steep ground take their ribs in
+        // the light instead: a detail normal running down the fall line, as games' far
+        // terrain carries erosion detail in its normal maps, and darker in the gullies,
+        // which see less sky; and its snow lies in the gullies, off the ribs, as a granite
+        // wall's does in summer. It fades in past where the mesh holds the relief itself.
+        let ribbed = max(bare, steep) * smoothstep(150.0, 450.0, far_off) * (1.0 - under_woods);
+        var rib = 0.0;
+        var rib_tilt = 0.0;
+        if ribbed > 0.0 {
+            let u = dot(world, across_face);
+            let v = dot(world, up);
+            // Ribs that wander as they run down, wide ones split by narrower.
+            let wander = noise(vec3<f32>(u * 0.004, v * 0.004, 61.0)) * 9.0 + noise(vec3<f32>(u * 0.013, v * 0.01, 3.0)) * 3.0;
+            // Each wave's phase taken from `u` within one of its own wavelengths first: `u`
+            // is tens of kilometres from the planet's centre, where the GPU's sine of the
+            // product alone has no precision left and the ribs came out flat.
+            let a = (u - floor(u / 89.76) * 89.76) * 0.07 + wander;
+            let b = (u - floor(u / 36.96) * 36.96) * 0.17 + wander * 1.7 + 2.0;
+            rib = 0.6 * sin(a) + 0.4 * sin(b);
+            let rise = 0.6 * 0.07 * cos(a) + 0.4 * 0.17 * cos(b);
+            // A gully's sides face across the slope: the ribs' slope across, up to about 35
+            // degrees, tilts the normal toward or away from `across_face`.
+            rib_tilt = clamp(rise * 6.0, -0.7, 0.7) * ribbed;
+            snow *= mix(1.0, smoothstep(0.35, -0.35, rib), ribbed * steep);
+        }
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);
 @if(GROUND_LOW) {
@@ -999,13 +1039,33 @@ fn fragment(
         // The mountains' bare rock, their scree under its cliffs and gravel in gullies' beds,
         // over whatever grew: nothing grows through them.
         if bare > 0.0 {
-            ground_is = over(ground_is, layer(ROCK, 1.0, granite, world + 37.0, gx, gy, n, 0.15), bare);
+            // The rock face's scan is a warm brown; its grain kept, its hue the granite's.
+            var face_rock = layer(ROCK, 1.0, granite, world + 37.0, gx, gy, n, 0.15);
+            let face_grey = dot(face_rock.colour, vec3<f32>(0.2126, 0.7152, 0.0722));
+            face_rock.colour = mix(vec3<f32>(face_grey), face_rock.colour, 0.25);
+            ground_is = over(ground_is, face_rock, bare);
         }
         if scree > 0.0 {
             ground_is = over(ground_is, layer(SCREE, 1.0, scree_tint, world + 19.0, gx, gy, n, 1.0), scree);
         }
         if gravel > 0.0 {
             ground_is = over(ground_is, layer(GRAVEL, 1.0, gravel_tint, world + 23.0, gx, gy, n, 1.0), gravel);
+        }
+        // A lake's shore from its shallows to where the trees start (terra_land::woods
+        // SHORE_BARE_M): washed granite gravel and stones where it is gentle, the granite's
+        // own slabs where it is steep, its edge frayed so it never runs as a contour.
+@if(VERTEX_UVS_B)
+        {
+            let above = in.uv_b.y + (blotch - 0.5) * 0.7 + (fleck - 0.5) * 0.15;
+            let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above);
+            if shore > 0.0 {
+                let pebbles = vec3<f32>(grey, grey * 0.99, grey * 0.95) * 1.2 * (0.8 + 0.4 * fleck) * tones;
+                ground_is = over(ground_is, layer(GRAVEL, 0.7, pebbles, world + 67.0, gx, gy, n, 1.0), shore * (1.0 - steep));
+                ground_is = over(ground_is, layer(SCREE, 0.6, pebbles, world + 71.0, gx, gy, n, 1.0), shore * smoothstep(0.55, 0.8, blotch) * (1.0 - steep));
+                var slab = layer(ROCK, 1.0, granite, world + 89.0, gx, gy, n, 0.15);
+                slab.colour = mix(vec3<f32>(dot(slab.colour, vec3<f32>(0.2126, 0.7152, 0.0722))), slab.colour, 0.25);
+                ground_is = over(ground_is, slab, shore * steep);
+            }
         }
         if snow > 0.0 {
             ground_is = over(ground_is, layer(SNOW_LAYER, 1.0, snow_tint, world + 13.0, gx, gy, n, 1.0), snow);
@@ -1049,6 +1109,10 @@ fn fragment(
         {
             colour = lake_shore(colour, in.uv_b.y, fleck);
             pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.35, wet_band(in.uv_b.y, fleck));
+        }
+        if ribbed > 0.0 {
+            ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt);
+            colour *= mix(1.0, mix(0.68, 1.08, rib * 0.5 + 0.5), ribbed);
         }
         pbr_input.N = ground_is.normal;
 }

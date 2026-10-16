@@ -178,6 +178,19 @@ impl SkyPath {
     pub fn height(&self, hour: f32) -> f32 {
         libm::asinf(self.sun(hour).dot(self.seen_from).clamp(-1.0, 1.0)).to_degrees()
     }
+
+    /// The hour as the sun keeps it where the sky is seen from: the clock's hour at the start,
+    /// later east of it and earlier west, by an hour for every 15 degrees the sky turns between
+    /// them. A place a quarter of the way round a small world sees the dawn hours after the
+    /// start does, so what goes with the time of day there, the morning's mist and warmth,
+    /// goes by its own sun, not the start's clock.
+    pub fn local_hour(&self, hour: f32) -> f32 {
+        let pole = self.pole();
+        let start = self.up.reject_from(pole).normalize_or_zero();
+        let here = self.seen_from.reject_from(pole).normalize_or_zero();
+        let turned = libm::atan2f(start.cross(here).dot(pole), start.dot(here));
+        (hour + turned / TAU * 24.0).rem_euclid(24.0)
+    }
 }
 
 use terra_land::frame::sun_local;
@@ -494,7 +507,7 @@ fn shine(
     // The hour in the air (D244): the mist thickest at dawn, burning off by midday and
     // gathering a little toward evening; and the grade warm while the sun is low, cooler at
     // noon, so a morning and an evening do not look alike.
-    let hour = clock.hour;
+    let hour = path.local_hour(clock.hour);
     let morning = 1.0 - smoothstep(7.0, 11.5, hour);
     let evening = smoothstep(16.0, 19.5, hour);
     let thick = 1.0 + 1.2 * morning * smoothstep(4.5, 6.5, hour) + 0.35 * evening;
@@ -744,6 +757,28 @@ mod tests {
             assert!(
                 moon.reject_from(Vec3::Y).dot(sun) < 0.0,
                 "{hour}: on the sun's side"
+            );
+        }
+    }
+
+    #[test]
+    fn a_place_east_of_the_start_keeps_a_later_hour_by_its_own_sun() {
+        let path = SkyPath::over(Vec3::Y, climate().declination(160));
+        // A place 15 degrees round the pole to the east: its sky an hour on from the start's.
+        let east = Quat::from_axis_angle(path.pole(), 15f32.to_radians()) * Vec3::Y;
+        assert!(east.dot(path.east) > 0.0, "the turn goes east");
+        let there = path.seen_from(east);
+        for hour in [6.0, 9.0, 13.0, 17.5] {
+            assert!(
+                (path.local_hour(hour) - hour).abs() < 1e-4,
+                "the start keeps the clock"
+            );
+            let local = there.local_hour(hour);
+            assert!((local - (hour + 1.0)).abs() < 1e-3, "{hour}: {local}");
+            // And its sun stands as the start's does at that hour.
+            assert!(
+                (there.height(hour) - path.height(hour + 1.0)).abs() < 0.05,
+                "{hour}"
             );
         }
     }

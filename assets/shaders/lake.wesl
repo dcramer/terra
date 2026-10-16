@@ -34,6 +34,10 @@ import bevy_pbr::render::{
 };
 @if(DEPTH_PREPASS)
 import bevy_pbr::prepass::utils::prepass_depth;
+// The opaque scene as drawn before the water, which Bevy copies for transmissive materials:
+// what the water's reflection of what is on screen reads (`on_screen`).
+@if(VIEW_TRANSMISSION_TEXTURE)
+import bevy_pbr::render::mesh_view_bindings::{view_transmission_texture, view_transmission_sampler};
 
 // Field order must match LakeExtension in lakes.rs.
 struct Lake {
@@ -160,6 +164,92 @@ fn ripples(p: vec3<f32>, downwind: vec3<f32>, across: vec3<f32>) -> f32 {
         + noise(q * 4.3 - downwind * t * 2.2 + across * t * 0.4 + 11.0) * 0.4;
 }
 
+// The reflection of what is on screen along a ray from a point of the water, and how much it
+// counts: nothing where the ray finds nothing before it leaves the screen, fading out toward
+// the screen's edges, so the skyline's picture takes over smoothly. A linear march through the
+// depth prepass in steps growing with distance, narrowed by halving once it passes behind
+// what is drawn, and kept only where it passed less than a step behind it (as the screen-space
+// reflections of Godot and Unreal and Bevy's own raymarch.hlsl port march, by McGuire and
+// Mara's "Efficient GPU Screen-Space Ray Tracing", 2014, in its simplest form).
+fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) -> vec4<f32> {
+    var found = vec4<f32>(0.0);
+@if(DEPTH_PREPASS && VIEW_TRANSMISSION_TEXTURE)
+    {
+        let size = view.viewport.zw;
+        // Each pixel's march starts a little further along, frame by frame, which the
+        // temporal antialiasing resolves into the smooth reflection more steps would give
+        // (interleaved gradient noise, Jimenez 2014).
+        let frame = f32(globals.frame_count % 64u);
+        let jitter = fract(52.9829189 * fract(dot(pixel + frame * 5.588238, vec2<f32>(0.06711056, 0.00583715))));
+        var step = SSR_FIRST_M + distance * SSR_FIRST_SHARE;
+        var t = step * jitter;
+        var before = 0.0;
+        for (var i = 0u; i < SSR_STEPS; i += 1u) {
+            t += step;
+            let seen = where_seen(world + ray * t, size);
+            if seen.w < 0.0 {
+                break;
+            }
+            let behind = seen.z;
+            if behind > 0.0 {
+                // Passed behind what is drawn there: halve back to where it meets it.
+                var near = before;
+                var far = t;
+                for (var k = 0u; k < 5u; k += 1u) {
+                    let middle = 0.5 * (near + far);
+                    if where_seen(world + ray * middle, size).z > 0.0 {
+                        far = middle;
+                    } else {
+                        near = middle;
+                    }
+                }
+                let hit = where_seen(world + ray * far, size);
+                if hit.w >= 0.0 && hit.z < max(step, 1.0) * 1.5 {
+                    let colour = textureSampleLevel(view_transmission_texture, view_transmission_sampler, hit.xy, 0.0).rgb;
+                    let edge = min(min(hit.x, 1.0 - hit.x), min(hit.y, 1.0 - hit.y));
+                    found = vec4<f32>(colour, smoothstep(0.0, 0.05, edge));
+                }
+                break;
+            }
+            before = t;
+            step *= SSR_GROWTH;
+        }
+    }
+    return found;
+}
+
+// Where a point is on screen and how far it lies behind what is drawn there, in metres
+// along the view (negative in front of it): x and y the screen's 0 to 1, w -1 off screen.
+fn where_seen(point: vec3<f32>, size: vec2<f32>) -> vec4<f32> {
+    let clip = view.clip_from_world * vec4<f32>(point, 1.0);
+    if clip.w <= 0.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    let ndc = clip.xyz / clip.w;
+    if abs(ndc.x) >= 1.0 || abs(ndc.y) >= 1.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    var behind = -1.0e9;
+@if(DEPTH_PREPASS)
+    {
+        let drawn = prepass_depth(vec4<f32>(uv * size, 0.0, 1.0), 0u);
+        // Nothing drawn there is the sky, which nothing passes behind.
+        if drawn > 0.0 {
+            behind = depth_ndc_to_view_z(drawn) - depth_ndc_to_view_z(ndc.z);
+        }
+    }
+    return vec4<f32>(uv, behind, 1.0);
+}
+
+// The reflection's march: its first step, so long and a share of the water's distance more;
+// each next step longer by this much; and how many, together reaching about 3 km from water
+// near the eye.
+const SSR_FIRST_M: f32 = 0.6;
+const SSR_FIRST_SHARE: f32 = 0.01;
+const SSR_GROWTH: f32 = 1.22;
+const SSR_STEPS: u32 = 32u;
+
 @fragment
 fn fragment(
     in: VertexOutput,
@@ -185,8 +275,15 @@ fn fragment(
         ripples(local + downwind * 0.075, downwind, across) - here,
         ripples(local + across * 0.075, downwind, across) - here,
     );
-    // Calm water still shivers a little; far off the ripples are under a pixel.
-    let strength = (0.15 + 0.55 * lake.wind.w) / (1.0 + distance / 120.0);
+    // Calm water still shivers a little; far off the ripples are under a pixel. A light wind
+    // ruffles a lake in patches, cat's-paws a few tens of metres across drifting downwind,
+    // with glassy water between that mirrors the shore unbroken, as a mountain lake in the
+    // morning calm is (Morskie Oko's photographs): the stiffer the wind, the more of it is
+    // ruffled, all of it in a breeze.
+    let paws = noise(local * 0.018 - downwind * globals.time * 0.03 + 5.0) * 0.65
+        + noise(local * 0.05 - downwind * globals.time * 0.05 + 19.0) * 0.35;
+    let ruffled = smoothstep(0.62 - 0.5 * lake.wind.w, 0.78 - 0.5 * lake.wind.w, paws);
+    let strength = (0.04 + (0.11 + 0.55 * lake.wind.w) * ruffled) / (1.0 + distance / 60.0);
     let normal = normalize(up - (downwind * slope.x + across * slope.y) * strength);
     pbr_input.world_normal = normal;
     pbr_input.N = normal;
@@ -221,6 +318,9 @@ fn fragment(
     // below, so the slopes it mirrors can be darker than the sky, as Bevy's own reflection of
     // the sky everywhere would not let them be.
     pbr_input.material.reflectance = vec3<f32>(0.0);
+    // The material reads the screen behind it only for its reflection (`on_screen`), not to
+    // let light through as Bevy's transmission would.
+    pbr_input.material.specular_transmission = 0.0;
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
@@ -235,6 +335,11 @@ fn fragment(
         let sky = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(0.0, 0.62, dot(reflected, up)), 0.55));
         seen = mirrored(reflected, up, sky, lake.horizon.rgb) * lake.sky_brightness;
     }
+    // What stands on screen along the reflected ray, where the ray finds it there: the shore's
+    // trees, the far slopes and peaks as they are drawn; the skyline's picture of them where it
+    // leaves the screen.
+    let found = on_screen(world, reflected, in.position.xy, distance);
+    seen = mix(seen, found.rgb, found.a);
     // The sun's glint off the ripples: a normalised Blinn-Phong lobe, as sharp as still water's.
     let sun = lights.directional_lights[0];
     let half_way = normalize(sun.direction_to_light + toward_eye);

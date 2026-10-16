@@ -149,7 +149,8 @@ fn run() -> Result<(), String> {
                     let waters =
                         terra_land::water::Waters::round(&land, site.toward, 10_000.0, 10.0);
                     let shore = waters.shore_of(site.toward).unwrap_or(site.shore);
-                    let walk = terra_land::site::shore_walk(&waters, shore, site.toward, 40.0);
+                    let walk =
+                        terra_land::site::shore_walk(&land, &waters, shore, site.toward, 25.0);
                     let through: Vec<String> = walk
                         .iter()
                         .map(|p| format!("{:.0},{:.0}", p.x, p.y))

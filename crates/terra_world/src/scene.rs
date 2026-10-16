@@ -300,6 +300,11 @@ fn style_camera(
         // otherwise crawl, and stops leaves and blades shimmering (D214). The wind shaders
         // give it last frame's positions.
         TemporalAntiAliasing::default(),
+        // The opaque scene copied for what reads it before the water is drawn: the lakes'
+        // reflection of what stands on screen (lake.wesl `on_screen`). Without it on the
+        // camera Bevy copies nothing and the water mirrored only its skyline's picture. No
+        // copy is made where no such material is drawn.
+        bevy::pbr::ScreenSpaceTransmission::default(),
         // Khronos PBR Neutral: colours as they are and the full range from deep shade to
         // bright sun, which a forest needs. AgX squeezed it into mid-greys, so the shade under
         // the canopy and the sun flecks in it read alike: the scene's middle 90% spanned

@@ -44,6 +44,14 @@ pub struct Mountains {
     /// How deep the floors of its valleys are hollowed, at most, in metres, as glaciers
     /// overdeepen them: the basins lakes fill (D322).
     pub basins_m: f32,
+    /// How far ice cut its upper slopes into walls, 0 to 1: 0 leaves a slope's climb as its
+    /// concavity bends it; 1 stands the upper part of every slope forward as a wall rising
+    /// steeply from above its valley's floor and easing to the crest, as a cirque's headwall
+    /// and a trough's sides stand over their floors and lakes.
+    pub walls: f32,
+    /// How much deeper its gullies are cut where they run down those walls, in metres: the
+    /// couloirs that split a wall into ribs and feed the scree fans under it.
+    pub couloirs_m: f32,
 }
 
 impl Mountains {
@@ -61,11 +69,13 @@ impl Mountains {
         gullies_m: 10.0,
         gully_spacing_m: 140.0,
         basins_m: 60.0,
+        walls: 0.5,
+        couloirs_m: 40.0,
     };
 
     /// The most the mountains raise the land, in metres.
     pub fn highest_m(&self) -> f32 {
-        self.base_m + self.relief_m + self.gullies_m
+        self.base_m + self.relief_m * libm::powf(HIGHEST_CREST, self.concavity) + self.gullies_m
     }
 }
 
@@ -108,6 +118,21 @@ const BRANCHING: f32 = 2.0;
 /// The ridged sum's valleys are below the first, its crests at the second.
 const VALLEY: f32 = 0.40;
 const CREST: f32 = 0.68;
+/// How fast the tops climb past the crests' share, as a share of the rise below it; and the
+/// most the ridged sum reaches, 1, in those terms.
+const ABOVE_CREST: f32 = 0.45;
+/// The walls rise from this share of the way from valley to crest, standing full from that:
+/// above the valleys' floors and the lakes in them, which stay as the ridges leave them.
+const WALLS_FROM: f32 = 0.5;
+const WALLS_FULL: f32 = 0.8;
+/// Couloirs are cut from this fall of the ground (a share of a metre a metre: about 31 degrees),
+/// full from that one (45 degrees).
+const COULOIRS_FROM: f32 = 0.35;
+const COULOIRS_FULL: f32 = 0.8;
+/// How a wall bends its slope's climb: what is left of the climb's share to the crest raised
+/// to this power, so the wall rises steeply from its foot and eases toward the crest.
+const WALL_POWER: f32 = 2.5;
+const HIGHEST_CREST: f32 = 1.0 + ((1.0 - VALLEY) / (CREST - VALLEY) - 1.0) * ABOVE_CREST;
 /// How far under the valleys' share of the ridged sum, as a share of the valleys' to the
 /// crests', the floors are hollowed deepest.
 const HOLLOWS: f32 = 0.45;
@@ -138,23 +163,47 @@ impl Range {
 
     /// How much the ridges raise a point, before gullies, in metres.
     fn ridged(&self, point: Vec3) -> f32 {
+        self.ridged_and_upper(point).0
+    }
+
+    /// [`Range::ridged`], and how far up into the walls a point is, 0 below them to 1.
+    fn ridged_and_upper(&self, point: Vec3) -> (f32, f32) {
         let m = &self.mountains;
         let inside = self.inside(point);
         if inside <= 0.0 {
-            return 0.0;
+            return (0.0, 0.0);
         }
         let ridged = self.ridges(point / m.ridges_m);
         // The range's floor rises gently with how far into it a point is; its ridges stand on
         // it, the lowest share of the sum its valleys, the rest rising faster toward the crests.
         let along = (ridged - VALLEY) / (CREST - VALLEY);
-        let crest = along.clamp(0.0, 1.0);
+        // Past the crests' share the ridged sum still rises toward its ridge lines, so the tops
+        // keep climbing, more slowly, to arêtes and horns rather than levelling into a table.
+        let crest = if along > 1.0 {
+            1.0 + (along - 1.0) * ABOVE_CREST
+        } else {
+            along.max(0.0)
+        };
+        let mut climb = libm::powf(crest, m.concavity);
+        // The upper slopes stood forward as walls: the climb's share below the crests bent
+        // convex, steep from the wall's foot and easing to the crest; the valleys below the
+        // walls' foot as they were.
+        let upper = smoothstep(WALLS_FROM, WALLS_FULL, along);
+        if m.walls > 0.0 && upper > 0.0 {
+            let below = climb.min(1.0);
+            let cut = 1.0 - libm::powf(1.0 - below, WALL_POWER) + (climb - below);
+            climb += m.walls * upper * (cut - climb);
+        }
         // The range's floor rises over its outer part and is level within, where its valleys
         // hold their lakes.
         let floor = m.base_m * smoothstep(0.0, FLOOR_RISES, inside);
         // The floors hollowed where the ridged sum falls lowest, furthest from every ridge, as
         // glaciers overdeepen a cirque's floor and a lake fills it.
         let hollow = m.basins_m * smoothstep(0.0, -HOLLOWS, along) * inside;
-        floor + m.relief_m * libm::powf(inside, 0.6) * libm::powf(crest, m.concavity) - hollow
+        (
+            floor + m.relief_m * libm::powf(inside, 0.6) * climb - hollow,
+            upper,
+        )
     }
 
     /// The ridged sum at a point of the ridges' own space, about 0 to 1.
@@ -199,7 +248,7 @@ impl Range {
     pub fn rise(&self, direction: Vec3, radius_m: f32) -> Rise {
         let up = direction;
         let point = direction * radius_m;
-        let ridged = self.ridged(point);
+        let (ridged, upper) = self.ridged_and_upper(point);
         if self.inside(point) <= 0.0 {
             return Rise::default();
         }
@@ -232,7 +281,12 @@ impl Range {
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
                 let (stripes, across, along) = self.stripes(point, up, slope, spacing, k as i32);
-                let depth = m.gullies_m * depth * fade;
+                // Down the walls, couloirs: the same lines cut the deeper, only where the wall
+                // falls steeply enough that a line cut so deep still runs downhill all the way,
+                // not into pits that would fill with water.
+                let couloir =
+                    m.couloirs_m * upper * smoothstep(COULOIRS_FROM, COULOIRS_FULL, steepness);
+                let depth = (m.gullies_m + couloir) * depth * fade;
                 // 0 on the ribs between gullies, the whole depth down a gully's line.
                 carved += depth * (stripes - 1.0) * 0.5;
                 deepest += depth;
@@ -438,6 +492,51 @@ mod tests {
             }
         }
         assert!(worst.0 == 0.0, "a step of {} m at {}", worst.0, worst.1);
+    }
+
+    #[test]
+    fn walls_raise_only_the_upper_slopes_and_couloirs_cut_only_down_the_walls() {
+        let m = Mountains::START;
+        assert!(m.walls > 0.0 && m.couloirs_m > 0.0);
+        let plain = Range::new(
+            Mountains {
+                walls: 0.0,
+                couloirs_m: 0.0,
+                ..m
+            },
+            Seed(1),
+        );
+        let uncut = Range::new(
+            Mountains {
+                couloirs_m: 0.0,
+                ..m
+            },
+            Seed(1),
+        );
+        let walled = range();
+        let (mut raised, mut deeper) = (0, 0);
+        for d in directions(20_000) {
+            let point = d * RADIUS;
+            let (low, _) = plain.ridged_and_upper(point);
+            let (high, upper) = walled.ridged_and_upper(point);
+            let carved = |range: &Range, ridged: f32| ridged - range.rise(d, RADIUS).height_m;
+            if upper == 0.0 {
+                // The valleys, their floors and lakes, as the ridges leave them.
+                assert_eq!(low, high);
+                assert!((carved(&walled, high) - carved(&uncut, high)).abs() < 1e-3);
+                continue;
+            }
+            // A wall stands its slope's upper part forward, never lower than it was.
+            assert!(high >= low - 1e-3, "{high} under {low}");
+            if high > low + 50.0 {
+                raised += 1;
+            }
+            if carved(&walled, high) > carved(&uncut, high) + 10.0 {
+                deeper += 1;
+            }
+        }
+        assert!(raised > 100, "{raised} raised");
+        assert!(deeper > 100, "{deeper} cut deeper");
     }
 
     #[test]

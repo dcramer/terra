@@ -352,18 +352,22 @@ mod tests {
                 .all(|s| s.elevation >= 0.0 && s.elevation < 0.8)
         );
         assert!(skyline[0].tree_line_m > 0.0 && skyline[0].snow_line_m > skyline[0].tree_line_m);
-        // No tree round its shore stands in its water: every foot is above the surface of any
-        // lake within two cells of it.
+        // No tree round its shore stands in its water or on the bare band its high water
+        // scours: every foot is that far above the surface of any lake within two cells of it.
         let trees = crate::woods::Woods::of(&round).trees(site.toward, 0.0, 700.0, 4.0, Seed(5));
         assert!(trees.len() > 1000, "{}", trees.len());
+        let mut by_water = 0;
         for tree in &trees {
             if let Some(level) = round.waters.lake_near(tree.at.normalize(), 2) {
+                by_water += 1;
                 assert!(
-                    tree.at.length() > level,
-                    "a tree {:.2} m under the lake",
-                    level - tree.at.length()
+                    tree.at.length() > level + crate::woods::SHORE_BARE_M,
+                    "a tree {:.2} m over the lake",
+                    tree.at.length() - level
                 );
             }
         }
+        // And the forest still comes down to the shore, not kept off it.
+        assert!(by_water > 50, "{by_water} trees by the water");
     }
 }

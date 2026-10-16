@@ -131,6 +131,9 @@ impl Land {
                 continue;
             }
             let mut highest = f32::MIN;
+            // How steeply the ground stands over the water seen from its deepest point, the
+            // most of any way round: peaks looming over it, not far off over forested hills.
+            let mut looming = 0.0f32;
             for dr in -reach..=reach {
                 for dc in -reach..=reach {
                     let (cc, rr) = (c as i64 + dc, r as i64 + dr);
@@ -140,7 +143,12 @@ impl Land {
                     if ((dc * dc + dr * dr) as f32).sqrt() > reach as f32 {
                         continue;
                     }
-                    highest = highest.max(region.height(cc as usize, rr as usize));
+                    let height = region.height(cc as usize, rr as usize);
+                    highest = highest.max(height);
+                    let off = ((dc * dc + dr * dr) as f32).sqrt() * want.step_m;
+                    if off > 0.0 {
+                        looming = looming.max(libm::atan2f(height - lake.level_m, off));
+                    }
                 }
             }
             let highest_m = highest - sea;
@@ -149,13 +157,15 @@ impl Land {
                 continue;
             }
             searched.fit += 1;
-            // Best: the forest's climb nearest the middle of what is wanted, its size nearest
-            // Morskie Oko's, then nearest the start.
+            // Best: the peaks looming steepest over it, a point for every 5 degrees, as Rysy's
+            // walls stand over Morskie Oko; the forest's climb nearest the middle of what is
+            // wanted; its size nearest Morskie Oko's; then nearest the start.
             let offset = region.offset(c, r);
             let middle = (want.under_tree_line_m.0 + want.under_tree_line_m.1) * 0.5;
             let score = (under - middle).abs() / 100.0
                 + libm::logf(lake.area_m2 / 350_000.0).abs()
-                + offset.length() / want.search_m;
+                + offset.length() / want.search_m
+                - looming.to_degrees() / 5.0;
             let site = Site {
                 toward,
                 level_m,
@@ -185,11 +195,25 @@ impl Land {
     }
 }
 
-/// A walk round a lake's shore from where one stands by it (`Start` by a lake): spots a little
-/// inland of its water every `step_m` along the shore, half way round, as metres right and
-/// back of one facing the water from `shore` (the sandbox's east and south of the start), for
-/// a film's or a bench's route to follow (`places.ts`).
+/// How high over a lake's water [`shore_walk`] keeps to, in metres: dry under foot and under
+/// the camera, and below the height its shore's trees start (`woods::SHORE_BARE_M`), so the
+/// walk runs on the bare band between the water and the forest's edge.
+pub const SHORE_WALK_OVER_M: f32 = 0.5;
+/// The walk keeps between these heights over the water all the way from spot to spot: never
+/// wet, and no further into the shore's first, sparse trees (`woods::SHORE_WOODED_M`) than a
+/// walker steps round, so it turns with the shore's bays, not with every crook of its edge.
+const SHORE_WALK_BAND_M: (f32, f32) = (0.1, 1.6);
+
+/// A walk round a lake's shore from where one stands by it (`Start` by a lake): spots on the
+/// shore every `step_m` or nearer, half way round, as metres right and back of one facing the
+/// water from `shore` (the sandbox's east and south of the start), for a film's or a bench's
+/// route to follow (`places.ts`). Each spot is on the ground's own contour
+/// [`SHORE_WALK_OVER_M`] over the water, found from the lake's edge cells by stepping along the
+/// ground's slope; a spot is kept nearer than `step_m` where the straight way to the next
+/// would leave the band between the water and the trees, so the walker neither wades across
+/// a bay nor cuts into the forest over a point.
 pub fn shore_walk(
+    land: &Land,
     waters: &crate::water::Waters,
     shore: Vec3,
     toward: Vec3,
@@ -202,6 +226,7 @@ pub fn shore_walk(
     let Some(lake) = waters.lake_at(c, r) else {
         return Vec::new();
     };
+    let level = waters.lake_radius_m(lake);
     let n = region.cells;
     // The dry cells along the lake's edge, in the region's own east and north.
     let mut edge: Vec<Vec2> = Vec::new();
@@ -229,6 +254,38 @@ pub fn shore_walk(
         let p = d * (region.middle.length() / d.dot(region.middle.normalize())) - region.middle;
         Vec2::new(p.dot(region.east), p.dot(region.north))
     };
+    // The ground's height over the water at a place east and north of the region's middle.
+    let over = |p: Vec2| {
+        let direction = region.middle + region.east * p.x + region.north * p.y;
+        land.surface(direction).length() - level
+    };
+    // The contour's point nearest a place, by Newton's steps along the ground's slope.
+    let on_contour = |from: Vec2| {
+        let mut p = from;
+        for _ in 0..40 {
+            let miss = SHORE_WALK_OVER_M - over(p);
+            if miss.abs() < 0.03 {
+                return (p.distance(from) < 30.0).then_some(p);
+            }
+            let rise = Vec2::new(
+                over(p + Vec2::X * 0.5) - over(p - Vec2::X * 0.5),
+                over(p + Vec2::Y * 0.5) - over(p - Vec2::Y * 0.5),
+            );
+            if rise.length_squared() < 1e-6 {
+                return None;
+            }
+            let step = rise * (miss / rise.length_squared());
+            p += step.clamp_length_max(2.0);
+        }
+        None
+    };
+    let in_band = |a: Vec2, b: Vec2| {
+        let samples = (a.distance(b).ceil() as usize).max(1);
+        (0..=samples).all(|k| {
+            let h = over(a.lerp(b, k as f32 / samples as f32));
+            (SHORE_WALK_BAND_M.0..=SHORE_WALK_BAND_M.1).contains(&h)
+        })
+    };
     let from = angle(on_plane(shore.normalize()));
     // Round the shore by angle from where one stands, half way.
     edge.sort_by(|a, b| {
@@ -236,28 +293,76 @@ pub fn shore_walk(
         turn(*a).total_cmp(&turn(*b))
     });
     edge.dedup();
-    let start = on_plane(shore.normalize());
+    // The start's own frame: its level through the shore, facing the water, as `Start::at`
+    // takes metres east and south. On a small world the region's level and the start's part
+    // by metres a few hundred metres off, so each spot is put on the start's level along its
+    // own direction from the centre.
     let up = shore.normalize();
+    let standing = land.surface(up);
     let water = toward.normalize();
-    let facing3 = (water - up * water.dot(up)).normalize_or_zero();
-    let facing = Vec2::new(facing3.dot(region.east), facing3.dot(region.north)).normalize_or_zero();
-    let right = Vec2::new(facing.y, -facing.x);
-    let mut walk = Vec::new();
-    let mut last = start;
+    let facing = (water - up * water.dot(up)).normalize_or_zero();
+    let right = facing.cross(up);
+    // The contour's points in turn round the shore, half way.
+    let mut round: Vec<Vec2> = Vec::new();
     for p in edge {
         if (angle(p) - from).rem_euclid(core::f32::consts::TAU) > core::f32::consts::PI {
             break;
         }
-        if p.distance(last) < step_m {
-            continue;
+        if let Some(p) = on_contour(p)
+            && round.last().is_none_or(|last| last.distance(p) >= 2.0)
+        {
+            round.push(p);
         }
-        // A few metres inland of the water, away from the lake's middle.
-        let inland = p + (p - middle).normalize_or_zero() * 6.0;
-        let at = inland - start;
-        walk.push(Vec2::new(at.dot(right), -at.dot(facing)));
-        last = p;
     }
-    walk
+    // Where even the way to the next point leaves the band, as across a bay the edge's
+    // order jumped, it goes by the contour's points between, halving the way each time.
+    fn bridge(
+        a: Vec2,
+        b: Vec2,
+        depth: u32,
+        in_band: &impl Fn(Vec2, Vec2) -> bool,
+        on_contour: &impl Fn(Vec2) -> Option<Vec2>,
+    ) -> Vec<Vec2> {
+        if depth == 0 || in_band(a, b) {
+            return Vec::new();
+        }
+        let Some(m) = on_contour((a + b) * 0.5) else {
+            return Vec::new();
+        };
+        let mut out = bridge(a, m, depth - 1, in_band, on_contour);
+        out.push(m);
+        out.extend(bridge(m, b, depth - 1, in_band, on_contour));
+        out
+    }
+    // From each spot, the furthest point within `step_m` the way to which keeps to the band.
+    let mut spots: Vec<Vec2> = round.first().copied().into_iter().collect();
+    let mut i = 0;
+    while i + 1 < round.len() {
+        let a = spots[spots.len() - 1];
+        let mut furthest = None;
+        for (j, p) in round.iter().enumerate().skip(i + 1) {
+            if a.distance(*p) > step_m {
+                break;
+            }
+            if in_band(a, *p) {
+                furthest = Some(j);
+            }
+        }
+        let j = furthest.unwrap_or(i + 1);
+        if furthest.is_none() {
+            spots.extend(bridge(a, round[j], 5, &in_band, &on_contour));
+        }
+        spots.push(round[j]);
+        i = j;
+    }
+    spots
+        .into_iter()
+        .map(|p| {
+            let direction = (region.middle + region.east * p.x + region.north * p.y).normalize();
+            let at = direction * (standing.length() / direction.dot(up)) - standing;
+            Vec2::new(at.dot(right), -at.dot(facing))
+        })
+        .collect()
 }
 
 /// The dry cell of a region nearest a lake's cell, as the crow flies, outside the lake; the
@@ -334,6 +439,46 @@ mod tests {
                 .distance(site.toward)
                 < 1e-3
         );
+    }
+
+    #[test]
+    fn the_shore_walk_keeps_to_dry_shore_below_the_trees() {
+        let land = land(30_000.0);
+        let site = land
+            .mountain_lake(PLANET_START, &MountainLake::DEMO)
+            .unwrap();
+        let waters = crate::water::Waters::round(&land, site.toward, 10_000.0, 10.0);
+        let shore = waters.shore_of(site.toward).unwrap();
+        let walk = shore_walk(&land, &waters, shore, site.toward, 25.0);
+        assert!(walk.len() > 20, "{} spots", walk.len());
+        // Each spot and the way between them put back on the ground as the sandbox's start
+        // takes metres east and south (`Start::at`), its own level through the shore facing
+        // the water, and measured against the lake's surface.
+        let level = waters.lake_level(site.toward).unwrap();
+        let up = shore.normalize();
+        let standing = land.surface(up);
+        let water = site.toward.normalize();
+        let facing = (water - up * water.dot(up)).normalize();
+        let right = facing.cross(up);
+        let over = |at: Vec2| {
+            let point = standing + right * at.x - facing * at.y;
+            land.surface(point).length() - level
+        };
+        let mut going = 0.0;
+        for pair in walk.windows(2) {
+            going += pair[0].distance(pair[1]);
+            for k in 0..=10 {
+                let h = over(pair[0].lerp(pair[1], k as f32 / 10.0));
+                assert!(h > 0.0, "{h:.2} m under the water by {:?}", pair[0]);
+                assert!(
+                    h < crate::woods::SHORE_WOODED_M,
+                    "{h:.2} m over the water by {:?}, among the trees",
+                    pair[0]
+                );
+            }
+        }
+        // Half way round a lake half a square kilometre big.
+        assert!(going > 800.0, "{going:.0} m");
     }
 
     #[test]

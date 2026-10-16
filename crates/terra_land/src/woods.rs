@@ -21,6 +21,13 @@ pub const TOO_STEEP_DEG: f32 = 45.0;
 pub const THINS_FROM_DEG: f32 = 32.0;
 /// How far over a lake's surface a tree's foot stands at the least, in metres.
 pub const DRY_FOOT_M: f32 = 0.4;
+/// A lake's shore is bare of trees up to this height over its water, and wooded fully from
+/// that, in metres: the band its spring high water, waves and ice push keep scoured, where
+/// shipped and real shores alike show stones, gravel and sedge between the water and the
+/// forest's edge (docs/demos.md §1, shores). On a gentle shore it is metres wide, on a steep
+/// one a step.
+pub const SHORE_BARE_M: f32 = 1.0;
+pub const SHORE_WOODED_M: f32 = 2.5;
 
 /// What a place's ground is, for what grows on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -257,12 +264,17 @@ impl<'a> Woods<'a> {
         // shore can still lie under its surface: the trees there stood in a metre of water. So
         // the lake is asked of the cells round the point too, and a tree's foot stands clear of
         // its water by a little, as a shore's trees stand back from the edge.
-        let water = match self.round.water_near(up, 2) {
+        let near = self.round.water_near(up, 2);
+        let water = match near {
             Some(lake) => Some(lake + DRY_FOOT_M),
             None => self.round.water_level(up),
         };
         let footing = self.round.land.footing(point, water);
-        self.round.stand(point, normal, footing)
+        let mut stand = self.round.stand(point, normal, footing);
+        if let Some(lake) = near {
+            stand.density *= smoothstep(SHORE_BARE_M, SHORE_WOODED_M, point.length() - lake);
+        }
+        stand
     }
 
     /// The trees standing within `radius_m` of a direction, between `inner_m` and it, on a

@@ -19,8 +19,10 @@ use bevy::{
 };
 use terra_land::water::Waters;
 
-/// Pools smaller than this are the ground's wet hollows, not drawn as water.
-const SMALLEST_M2: f32 = 300.0;
+/// Pools smaller than this, about 30 m across, are the ground's wet hollows and the pits where
+/// the mountains' couloirs cross, not drawn as water: drawn from 300 m², the walls over the
+/// mountain lake stood dotted with a hundred puddles.
+const SMALLEST_M2: f32 = 1000.0;
 /// A clear mountain lake over rock (docs/demos.md, open question 5): green over the pale
 /// bed where shallow, letting much of it show, and a dark bottle green where deep, as
 /// Morskie Oko's, hiding the bed. Linear colours.
@@ -183,6 +185,10 @@ fn spawn(
             perceptual_roughness: 0.06,
             reflectance: 0.5,
             alpha_mode: AlphaMode::Blend,
+            // Drawn after the opaque scene is copied for transmissive materials, which its
+            // shader reads for its reflection of what is on screen (lake.wesl `on_screen`);
+            // the shader lets no light through itself.
+            specular_transmission: 1.0,
             ..default()
         },
         extension: LakeExtension::new(sky.as_deref(), None, Vec4::ZERO, &mirror),

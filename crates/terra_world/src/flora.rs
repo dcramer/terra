@@ -317,6 +317,9 @@ impl Patch {
     }
 }
 
+/// A mountain lake's shore stones lie this far from the start, as far as its grown trees.
+const SHORE_STONES_M: f32 = 650.0;
+
 /// Asks for the plants within so many metres of a place to be cleared, for a village or
 /// a hollow set down after the plants grew.
 #[derive(Message, Clone, Copy)]
@@ -781,6 +784,57 @@ fn plant(
             stops,
         );
     });
+
+    // A mountain lake's shore: the bare band its high water and ice keep scoured
+    // (`terra_land::woods::SHORE_BARE_M`) strewn with its granite's stones and blocks, from
+    // the shallows to where the trees start, as Morskie Oko's and every glacial lake's is,
+    // thickest at the waterline. Grey rock only: ore's rust is for a find, not a shoreline.
+    if let (true, Some(round), Some(stone)) = (
+        planet.has_mountains(),
+        planet.round(),
+        flora.kinds().iter().position(|kind| kind.name == "Rock"),
+    ) {
+        let bare = terra_land::woods::SHORE_BARE_M;
+        scatter(
+            seed.derive("shore stones"),
+            SHORE_STONES_M,
+            2.6,
+            |rng, x, z| {
+                // Asked of the lakes' grid first, which is cheap, so only the shore is looked at.
+                let across = ground.middle + ground.east * x + ground.north * z;
+                if round.water_near(across.normalize(), 1).is_none() {
+                    return;
+                }
+                let point = ground.ground(&planet, x, z);
+                let over = point.length() - planet.water_near_m(point);
+                if !(-0.7..bare + 0.4).contains(&over) {
+                    return;
+                }
+                let chance = 0.6 * (1.0 - smoothstep(bare - 0.3, bare + 0.4, over));
+                if rng.unit() > chance {
+                    return;
+                }
+                // Stones over the band, the blocks the ice shoved at the waterline and in the
+                // shallows, so the band itself stays walkable.
+                let at_the_edge = 1.0 - smoothstep(0.0, 0.3, over);
+                let size = 0.2
+                    + 0.45 * rng.unit().powi(2)
+                    + at_the_edge
+                        * (1.3 * rng.unit().powi(3) + if rng.unit() < 0.08 { 1.2 } else { 0.0 });
+                let model = pick(rng, &models[stone]);
+                let scale = size / model.height;
+                let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
+                let metal = flora.kinds()[stone].cuttable(size);
+                put(
+                    &model,
+                    standing(rng, point, 0.5, scale, size * 0.3),
+                    1.0 + size,
+                    metal,
+                    stops,
+                );
+            },
+        );
+    }
 
     // Bushes and leafy plants, in the grass.
     scatter(seed.derive("bushes"), 230.0, 5.5, |rng, x, z| {
