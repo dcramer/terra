@@ -238,3 +238,22 @@ No change was shown torn in any. What is left of a fill on the main thread, as m
 Thread priority (building's threads below normal, as Unreal's background pool) and a smaller compute pool (16 of 24 threads) were tried on the storey, five runs each against the default at the same time: no difference the machine's swings did not swamp, so neither was kept.
 
 **The other GPUs.** The integrated Radeon at low (c5358c49 and after, load 12 to 50, the GPU 31 ms a frame, its main pass 18): `village` 31.1 / 43.1 / 49.6 ms, within D239's 33.3 ms median; `town300` 47.1 / 58.7 / 112.0 ms, over it (56.3 / 73.7 / 117.9 at 2d00544). The 5090's `village`: 5.51 / 7.40 / 9.83 ms, within D25. The RTX 3080 that D25 names is in the other developer's machine and could not be run from here; its last `town300` is 11.31 / 40.18 ms (4e5dd18d).
+
+## The street walk, a detail at a time (D213, D278)
+
+What the walk's workers did, from a log of every job: over ten seconds 36 groups laid near (240 to 380 ms each), 94 at the middle detail and 133 far, about 30 s of worker time, because each reach laid two details (near with the middle, the middle with the far) and a house passed was laid at the middle and far detail again on the way out. Now a base nobody is building lays each of a group's details alone (`sections::draw_detail`), when the camera comes within where it is needed or will be a second ahead of its way, and holds it beside the others; they hand over by Bevy's crossfade, each one's range stretched over any not held (`draw::detail`). Details go out within 1.5 workers' worth of their measured cost and onto the GPU 40,000 corners a frame; those not wanted stay while 192 MiB of them fit, at the high preset only. The same walk: 303 jobs, 20 s of worker time.
+
+Rooms' light probes were 0.8 ms of every frame: two cubes of their own each, all made again as the sky's colour stepped, and every probe in view gathered by Bevy to find the nearest few. Rooms closed now share one pair, a probe is seen to 60 m, and its brightness follows the sky's in steps of a two-hundredth.
+
+| `town300`, release | Median / p99 / worst ms | Over | Load | Memory, building's meshes |
+|---|---|---|---|---|
+| 5090, before (2e79aa86) | 6.87 / 14.79 / 18.86 | 1.5% | 3 to 4 | 560 MiB |
+| 5090, a detail at a time (a694abd4) | 6.50 / 12.85 / 18.88 | 0.9% | 7 to 13 | 699 MiB |
+| 5090, and the probes (100f47a8) | 6.13 / 12.87 / 17.13 | 0.7% | 3 to 5 | 699 MiB |
+| Radeon at low, before, beside the new build | 49.1 median, three runs | 100% | 2 to 10 | 196 MiB |
+| Radeon at low, after, beside the old build | 45.7 median, three runs | 100% | 2 to 15 | 183 MiB |
+| Radeon at low, after (100f47a8, recorded) | 50.1 / 62.2 / 1369.5 | 100% | 2 | 183 MiB |
+
+`village` on the 5090: 4.44 / 6.09 / 10.71 ms. On the Radeon: 31.2 / 33.2 / 45.2 ms, within D239's 33.3 ms median; `town300` there is not, its frame its main pass (18 to 21 ms) and the ground's and sky's passes, of which building is about 5 ms; the Radeon's run to run spread (median 42.7 to 51.3 ms for one build) is wider than what building changes in it. Held at the low preset, the details not wanted cost the Radeon a fifth of its frame (64 ms against 51), so they are let go there. One frame of 1.37 s in one Radeon run was not seen again.
+
+What sets the 5090's 99th percentile now: about once a second, two frames in which every system of the update and of the render world, and the driver's submission, take twice as long. It comes as regularly with nothing built (`town300`'s walk without the town: frames of 3.7 ms going to 6 or 7 once a second), so it is not building's; the machine's Balanced power plan, re-deciding which cores run, is the likeliest cause and was not chased. With the town's frame at 6.1 to 6.4 ms those frames are 12 to 13 ms, just inside the budget. The stone storey with all this: 8.4 / 11.5 / 15.7 ms, 3 frames over, no change torn.
