@@ -241,88 +241,9 @@ pub fn rows(
         ops.extend((6..=8).map(|x| open(x, 1)));
         ops
     };
-    let mut mixed = Vec::new();
-    if let Some(stone) = stone {
-        // A house all of stone under a hip roof, with a doorway and windows.
-        let mut house = vec![BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            kind: stone,
-        }];
-        house.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, stone)));
-        house.extend(
-            (1..=2)
-                .chain(7..=8)
-                .map(|x| wall([x, 0, 7], Panel::WINDOW, stone)),
-        );
-        house.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, stone)));
-        let house = with_roof(house, &[([0, 0], [9, 7], Style::Hip, true)], roof(stone));
-        // The cabin on a stone plinth a metre high: one wall over another.
-        let mut plinth = vec![BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            kind,
-        }];
-        let stone_cube = Some(Cube::new(stone, Fill::Solid));
-        plinth.extend((6..=7).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
-        plinth.extend((2..=4).map(|z| wall([9, 0, z], Panel::WINDOW, kind)));
-        // After the windows, which set their whole column.
-        for (min, max) in [
-            ([0, 0, 0], [9, 1, 0]),
-            ([0, 0, 7], [9, 1, 7]),
-            ([0, 0, 0], [0, 1, 7]),
-            ([9, 0, 0], [9, 1, 7]),
-        ] {
-            plinth.push(BuildOp::Fill {
-                min,
-                max,
-                cube: stone_cube,
-            });
-        }
-        let plinth = with_roof(plinth, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
-        // Stone and logs meeting every way walls meet.
-        let column = |x: i32, z: i32| BuildOp::Fill {
-            min: [x, 0, z],
-            max: [x, STOREY_CUBES - 1, z],
-            cube: stone_cube,
-        };
-        let ell: Vec<BuildOp> = east_west(0, 5, 0, kind)
-            .chain(north_south(1, 5, 0, stone))
-            .collect();
-        let tee_stone: Vec<BuildOp> = east_west(0, 9, 0, stone)
-            .chain(north_south(1, 5, 4, kind))
-            .collect();
-        let tee_logs: Vec<BuildOp> = east_west(0, 9, 0, kind)
-            .chain(north_south(1, 5, 4, stone))
-            .collect();
-        let in_line: Vec<BuildOp> = east_west(0, 4, 0, kind)
-            .chain(east_west(5, 9, 0, stone))
-            .collect();
-        let mut pillars: Vec<BuildOp> = east_west(0, 11, 0, kind).collect();
-        pillars.extend([0, 4, 8, 11].map(|x| column(x, 0)));
-        // A log cabin with its east end, under the gable, of stone, as a chimney end.
-        let mut end = vec![BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            kind,
-        }];
-        end.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
-        end.extend((0..=7).map(|z| column(9, z)));
-        let end = with_roof(end, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
-        mixed = vec![
-            ("Keen's piece in stone", keen(stone, true)),
-            ("shapes in stone", shapes(stone)),
-            ("floor alone in stone", floor_alone(stone)),
-            ("stone house", house),
-            ("stone plinth", plinth),
-            ("stone and logs: L", ell),
-            ("stone and logs: T, stone through", tee_stone),
-            ("stone and logs: T, logs through", tee_logs),
-            ("stone and logs: in line", in_line),
-            ("stone pillars in logs", pillars),
-            ("stone end", end),
-        ];
-    }
+    let mixed = stone
+        .map(|stone| mixed_rows(kind, stone, roof))
+        .unwrap_or_default();
     let mut rows = vec![
         ("Keen's piece", keen(kind, false)),
         ("shapes in logs", shapes(kind)),
@@ -374,37 +295,133 @@ pub fn rows(
     }
     // Decks on posts and their stairs (D306), in each timber kind and on stone piers.
     if let Some(stone) = stone {
-        let [on_posts, nine_and_l, against_and_high] = decks(kind, kind, stone);
-        rows.push(("decks on posts in logs", on_posts));
-        rows.push(("decks: nine posts and an L in logs", nine_and_l));
-        rows.push((
-            "decks: against a wall, two storeys up in logs",
-            against_and_high,
-        ));
-        if let Some(hewn) = hewn {
-            let [on_posts, nine_and_l, against_and_high] = decks(hewn, hewn, stone);
-            rows.push(("decks on posts in hewn timber", on_posts));
-            rows.push(("decks: nine posts and an L in hewn timber", nine_and_l));
-            rows.push((
-                "decks: against a wall, two storeys up in hewn timber",
-                against_and_high,
-            ));
-            let [piers, ..] = decks(hewn, stone, stone);
-            let [logs_piers, ..] = decks(kind, stone, stone);
-            let mut on_piers = logs_piers;
-            // The hewn decks beside the log ones, a row's width east.
-            on_piers.extend(piers.into_iter().map(|op| match op {
-                BuildOp::Fill { min, max, cube } => BuildOp::Fill {
-                    min: [min[0], min[1], min[2] + 14],
-                    max: [max[0], max[1], max[2] + 14],
-                    cube,
-                },
-                other => other,
-            }));
-            rows.push(("decks on stone piers", on_piers));
-        }
+        rows.extend(deck_rows(kind, stone, hewn));
     }
     rows
+}
+
+/// The rows mixing a stone kind with the kind laid: Keen's piece, the shapes and a floor in
+/// stone, a stone house, the cabin on a stone plinth, stone and logs meeting every way walls
+/// meet, stone pillars in a log wall, and a log cabin with a stone end.
+fn mixed_rows(
+    kind: Kind,
+    stone: Kind,
+    roof: &dyn Fn(Kind) -> Kind,
+) -> Vec<(&'static str, Vec<BuildOp>)> {
+    // A house all of stone under a hip roof, with a doorway and windows.
+    let mut house = vec![BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        kind: stone,
+    }];
+    house.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, stone)));
+    house.extend(
+        (1..=2)
+            .chain(7..=8)
+            .map(|x| wall([x, 0, 7], Panel::WINDOW, stone)),
+    );
+    house.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, stone)));
+    let house = with_roof(house, &[([0, 0], [9, 7], Style::Hip, true)], roof(stone));
+    // The cabin on a stone plinth a metre high: one wall over another.
+    let mut plinth = vec![BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        kind,
+    }];
+    let stone_cube = Some(Cube::new(stone, Fill::Solid));
+    plinth.extend((6..=7).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
+    plinth.extend((2..=4).map(|z| wall([9, 0, z], Panel::WINDOW, kind)));
+    // After the windows, which set their whole column.
+    for (min, max) in [
+        ([0, 0, 0], [9, 1, 0]),
+        ([0, 0, 7], [9, 1, 7]),
+        ([0, 0, 0], [0, 1, 7]),
+        ([9, 0, 0], [9, 1, 7]),
+    ] {
+        plinth.push(BuildOp::Fill {
+            min,
+            max,
+            cube: stone_cube,
+        });
+    }
+    let plinth = with_roof(plinth, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
+    // Stone and logs meeting every way walls meet.
+    let column = |x: i32, z: i32| BuildOp::Fill {
+        min: [x, 0, z],
+        max: [x, STOREY_CUBES - 1, z],
+        cube: stone_cube,
+    };
+    let ell: Vec<BuildOp> = east_west(0, 5, 0, kind)
+        .chain(north_south(1, 5, 0, stone))
+        .collect();
+    let tee_stone: Vec<BuildOp> = east_west(0, 9, 0, stone)
+        .chain(north_south(1, 5, 4, kind))
+        .collect();
+    let tee_logs: Vec<BuildOp> = east_west(0, 9, 0, kind)
+        .chain(north_south(1, 5, 4, stone))
+        .collect();
+    let in_line: Vec<BuildOp> = east_west(0, 4, 0, kind)
+        .chain(east_west(5, 9, 0, stone))
+        .collect();
+    let mut pillars: Vec<BuildOp> = east_west(0, 11, 0, kind).collect();
+    pillars.extend([0, 4, 8, 11].map(|x| column(x, 0)));
+    // A log cabin with its east end, under the gable, of stone, as a chimney end.
+    let mut end = vec![BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        kind,
+    }];
+    end.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
+    end.extend((0..=7).map(|z| column(9, z)));
+    let end = with_roof(end, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
+    vec![
+        ("Keen's piece in stone", keen(stone, true)),
+        ("shapes in stone", shapes(stone)),
+        ("floor alone in stone", floor_alone(stone)),
+        ("stone house", house),
+        ("stone plinth", plinth),
+        ("stone and logs: L", ell),
+        ("stone and logs: T, stone through", tee_stone),
+        ("stone and logs: T, logs through", tee_logs),
+        ("stone and logs: in line", in_line),
+        ("stone pillars in logs", pillars),
+        ("stone end", end),
+    ]
+}
+
+/// Decks on posts and their stairs (D306), in each timber kind and on stone piers.
+fn deck_rows(kind: Kind, stone: Kind, hewn: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
+    let mut out = Vec::new();
+    let [on_posts, nine_and_l, against_and_high] = decks(kind, kind, stone);
+    out.push(("decks on posts in logs", on_posts));
+    out.push(("decks: nine posts and an L in logs", nine_and_l));
+    out.push((
+        "decks: against a wall, two storeys up in logs",
+        against_and_high,
+    ));
+    if let Some(hewn) = hewn {
+        let [on_posts, nine_and_l, against_and_high] = decks(hewn, hewn, stone);
+        out.push(("decks on posts in hewn timber", on_posts));
+        out.push(("decks: nine posts and an L in hewn timber", nine_and_l));
+        out.push((
+            "decks: against a wall, two storeys up in hewn timber",
+            against_and_high,
+        ));
+        let [piers, ..] = decks(hewn, stone, stone);
+        let [logs_piers, ..] = decks(kind, stone, stone);
+        let mut on_piers = logs_piers;
+        // The hewn decks beside the log ones, a row's width east.
+        on_piers.extend(piers.into_iter().map(|op| match op {
+            BuildOp::Fill { min, max, cube } => BuildOp::Fill {
+                min: [min[0], min[1], min[2] + 14],
+                max: [max[0], max[1], max[2] + 14],
+                cube,
+            },
+            other => other,
+        }));
+        out.push(("decks on stone piers", on_piers));
+    }
+    out
 }
 
 /// Decks on posts as a player lays them (D306), each on a stone footing a cube into the
