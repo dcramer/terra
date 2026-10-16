@@ -35,6 +35,15 @@ const ROOM_GIVES_BACK: f32 = 0.2;
 const INTO_WALLS_M: f32 = 0.3;
 const FALLOFF: f32 = 0.03;
 
+/// How far from the camera a room's probe lights what is in it, in metres from its middle, as
+/// authored: past it a room's insides are a few pixels through its door and windows, and
+/// Bevy lights a view by its nearest few probes in any case.
+const PROBE_M: f32 = 60.0;
+
+/// How much a probe's brightness may lag the sky's, as a share of it: a two-hundredth,
+/// under a step of an 8-bit colour.
+const BRIGHTNESS_STEP: f32 = 0.005;
+
 /// How long a room's light takes to change when it is closed or opened, in seconds: a probe
 /// is blended in and out, as engines blend a probe's weight, not switched, which dimmed a
 /// room by two fifths in one frame as its last cube went in (`cargo xtask artifacts
@@ -49,13 +58,62 @@ struct Indoors {
     room: [i32; 6],
     share: f32,
     going: bool,
-    /// Its own reflection: a cube of one colour, what the room gives back, faded in with it.
+    /// Its reflection: a cube of one colour, what the room gives back, faded in with it;
+    /// every room's own while it fades, and the one all rooms closed share once it has
+    /// ([`RoomLight`]).
     reflects: Handle<Image>,
     /// The light that falls on what is in it from every way: a cube of one colour, the sky's
-    /// light on average, not the open sky over it, which a room's ceiling hides.
+    /// light on average, not the open sky over it, which a room's ceiling hides; the same
+    /// in every room ([`RoomLight`]).
     falls: Handle<Image>,
-    /// The colours they were last filled with, what falls and what is reflected.
+    /// The colour its own reflection was last filled with, while it fades.
+    filled: Vec3,
+}
+
+/// The pictures every room's probe shares (`falls`, and `reflects` once faded in), and the
+/// colours they were last filled with. A town's few hundred rooms each filled two of their
+/// own as the day turned, every one at once when the sky's colour moved a step: a few
+/// hundred textures made again on the GPU in one frame, about once a second, the town walk's
+/// worst frames. Shared, as a probe per room of the same light is in shipped games, the day
+/// turning fills two.
+#[derive(Resource, Default)]
+struct RoomLight {
+    images: Option<[Handle<Image>; 2]>,
     filled: [Vec3; 2],
+}
+
+impl RoomLight {
+    /// The shared pictures, what falls and what a room closed reflects, made on first use
+    /// and filled again when the sky's light has changed enough to see.
+    fn images(&mut self, open: &OpenSky, images: &mut Assets<Image>) -> [Handle<Image>; 2] {
+        let colours = [reflected(open, 0.0), reflected(open, 1.0)];
+        let Some(shared) = self.images.clone() else {
+            self.filled = colours;
+            let made = colours.map(|colour| images.add(cube(colour)));
+            self.images = Some(made.clone());
+            return made;
+        };
+        for (k, handle) in shared.iter().enumerate() {
+            if seen(colours[k], self.filled[k]) {
+                self.filled[k] = colours[k];
+                if let Some(mut image) = images.get_mut(handle) {
+                    *image = cube(colours[k]);
+                }
+            }
+        }
+        shared
+    }
+}
+
+/// Whether a colour has moved from another far enough to see in a byte.
+fn seen(colour: Vec3, was: Vec3) -> bool {
+    (colour - was).abs().max_element() > 1.0 / 255.0
+}
+
+/// Whether a room's probe is faded all the way in and staying, to share the reflection of
+/// every room so.
+fn steady(share: f32, going: bool) -> bool {
+    share >= 1.0 && !going
 }
 
 /// The light a room's surfaces reflect, as a cube of one colour, linear: from what the open
@@ -109,6 +167,7 @@ struct Placed(BTreeMap<Entity, (u64, Vec<(IVec3, IVec3)>)>);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Placed>()
+        .init_resource::<RoomLight>()
         .add_systems(Update, (place, follow, inside, shelter).chain());
 }
 
@@ -159,6 +218,7 @@ fn place(
     camera: Query<&EnvironmentMapLight, With<MainCamera>>,
     open: Res<OpenSky>,
     mut images: ResMut<Assets<Image>>,
+    mut shared: ResMut<RoomLight>,
 ) {
     // Nothing to dim until the sky lights the camera.
     let Some(sky) = camera.iter().next().cloned() else {
@@ -203,8 +263,9 @@ fn place(
             if kept.contains(&room) {
                 continue;
             }
-            let filled = [reflected(&open, 0.0), reflected(&open, 0.0)];
-            let (falls, reflects) = (images.add(cube(filled[0])), images.add(cube(filled[1])));
+            let filled = reflected(&open, 0.0);
+            let falls = shared.images(&open, &mut images)[0].clone();
+            let reflects = images.add(cube(filled));
             commands.spawn((
                 Name::new("Indoors"),
                 lit(&sky, 0.0, &falls, &reflects),
@@ -218,6 +279,13 @@ fn place(
                 },
                 LightProbe {
                     falloff: Vec3::splat(FALLOFF),
+                },
+                // Bevy lights a view by its nearest few probes and gathers every one in
+                // view each frame to find them: a town's hundreds were most of that.
+                bevy::camera::visibility::VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: PROBE_M..PROBE_M * 1.1,
+                    use_aabb: false,
                 },
                 Transform::from_translation((min + max) * 0.5).with_scale(max - min),
                 Visibility::default(),
@@ -270,10 +338,15 @@ fn follow(
     mut probes: Query<(Entity, &mut Indoors, &mut EnvironmentMapLight), Without<MainCamera>>,
     open: Res<OpenSky>,
     mut images: ResMut<Assets<Image>>,
+    mut shared: ResMut<RoomLight>,
 ) {
     let Some(sky) = camera.iter().next() else {
         return;
     };
+    if probes.is_empty() {
+        return;
+    }
+    let [falls, closed] = shared.images(&open, &mut images);
     for (entity, mut probe, mut light) in &mut probes {
         let share = faded(probe.share, probe.going, time.delta_secs());
         if share != probe.share {
@@ -283,23 +356,31 @@ fn follow(
             commands.entity(entity).try_despawn();
             continue;
         }
-        // Its reflection's colour again where it has changed enough to see: as it fades, and
-        // as the day turns.
-        let colour = reflected(&open, share);
-        let colours = [reflected(&open, 0.0), colour];
-        for (k, handle) in [probe.falls.clone(), probe.reflects.clone()]
-            .iter()
-            .enumerate()
-        {
-            if (colours[k] - probe.filled[k]).abs().max_element() > 1.0 / 255.0 {
-                probe.filled[k] = colours[k];
-                if let Some(mut image) = images.get_mut(handle) {
-                    *image = cube(colours[k]);
+        if probe.falls != falls {
+            probe.falls = falls.clone();
+        }
+        // Faded all the way in, the reflection every room closed shares; fading, its own,
+        // filled again where it has changed enough to see.
+        if steady(share, probe.going) {
+            if probe.reflects != closed {
+                probe.reflects = closed.clone();
+            }
+        } else {
+            let colour = reflected(&open, share);
+            if probe.reflects == closed || !images.contains(&probe.reflects) {
+                probe.filled = colour;
+                probe.reflects = images.add(cube(colour));
+            } else if seen(colour, probe.filled) {
+                probe.filled = colour;
+                if let Some(mut image) = images.get_mut(&probe.reflects) {
+                    *image = cube(colour);
                 }
             }
         }
         let now = lit(sky, share, &probe.falls, &probe.reflects);
-        if light.intensity != now.intensity
+        // Its brightness follows the sky's as the day turns, a step too small to see left
+        // until it is not, so a town's probes are not every one changed every frame.
+        if (light.intensity - now.intensity).abs() > light.intensity.abs() * BRIGHTNESS_STEP
             || light.diffuse_map != now.diffuse_map
             || light.specular_map != now.specular_map
         {
@@ -336,7 +417,7 @@ mod tests {
             going,
             reflects: Handle::default(),
             falls: Handle::default(),
-            filled: [Vec3::ZERO; 2],
+            filled: Vec3::ZERO,
         };
         let room = GlobalTransform::from(
             Transform::from_xyz(10.0, 2.0, 0.0).with_scale(Vec3::new(4.0, 3.0, 6.0)),
@@ -372,6 +453,73 @@ mod tests {
             "{closed}"
         );
         assert!(reflected(&open, 0.5).x < start.x && reflected(&open, 0.5).x > closed.x);
+    }
+
+    #[test]
+    fn rooms_closed_share_their_light_so_the_day_turning_fills_two_pictures_not_two_a_room() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        world.init_resource::<Assets<Image>>();
+        world.init_resource::<RoomLight>();
+        world.insert_resource(Time::<()>::default());
+        let sky = |c: f32| OpenSky {
+            sky: [Vec3::splat(c); 6],
+            ground: [Vec3::splat(c * 0.4); 6],
+            brightness: 1.0,
+        };
+        world.insert_resource(sky(0.5));
+        world.spawn((MainCamera, EnvironmentMapLight::default()));
+        // Four rooms closed, one still fading in.
+        for (i, share) in [1.0, 1.0, 1.0, 1.0, 0.5].into_iter().enumerate() {
+            world.spawn((
+                Indoors {
+                    room: [i as i32; 6],
+                    share,
+                    going: false,
+                    reflects: Handle::default(),
+                    falls: Handle::default(),
+                    filled: Vec3::ZERO,
+                },
+                EnvironmentMapLight::default(),
+            ));
+        }
+        let lights = |world: &mut World| {
+            let mut probes = world.query::<(&Indoors, &EnvironmentMapLight)>();
+            probes
+                .iter(world)
+                .map(|(probe, light)| {
+                    assert_eq!(light.specular_map, probe.reflects);
+                    assert_eq!(light.diffuse_map, probe.falls);
+                    (probe.share, probe.falls.id(), probe.reflects.id())
+                })
+                .collect::<Vec<_>>()
+        };
+        world.run_system_once(follow).unwrap();
+        let first = lights(&mut world);
+        let closed: std::collections::BTreeSet<_> = first
+            .iter()
+            .filter(|(share, ..)| *share >= 1.0)
+            .map(|(_, _, reflects)| *reflects)
+            .collect();
+        let falls: std::collections::BTreeSet<_> = first.iter().map(|(_, f, _)| *f).collect();
+        assert_eq!(closed.len(), 1, "the rooms closed share one reflection");
+        assert_eq!(falls.len(), 1, "every room shares what falls in it");
+        let fading = first.iter().find(|(share, ..)| *share < 1.0).unwrap();
+        assert!(!closed.contains(&fading.2), "the room fading has its own");
+        // Shared, fading: three pictures in all, and as many after the day has turned,
+        // filled again rather than made.
+        assert_eq!(world.resource::<Assets<Image>>().len(), 3);
+        world.insert_resource(sky(0.7));
+        world.run_system_once(follow).unwrap();
+        assert_eq!(lights(&mut world), first);
+        assert_eq!(world.resource::<Assets<Image>>().len(), 3);
+        let [_, reflects] = world.resource::<RoomLight>().images.clone().unwrap();
+        let image = world.resource::<Assets<Image>>().get(&reflects).unwrap();
+        let want = cube(reflected(&sky(0.7), 1.0));
+        assert_eq!(
+            image.data, want.data,
+            "the shared reflection follows the sky"
+        );
     }
 
     #[test]
