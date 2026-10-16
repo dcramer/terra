@@ -1,0 +1,456 @@
+//! Fire as it is drawn (D377): flames, embers and smoke wherever something burns, a jet of
+//! flame where something breathes fire, and the light they give. What burns, and where, is
+//! the layer above's to say ([`Blazes`]); this draws it, as smoke (D325) is drawn: instanced
+//! soft cards, moved on the GPU from each card's seed, the time and the wind, on our own
+//! materials, with no particle library.
+//!
+//! As shipped games draw fire (research/2026-10-15-dragons-and-fire.md): a few large flame
+//! cards to a blaze, pivoted at its foot, rolling up and narrowing, their colour a glowing
+//! soot's by how hot (white-yellow at the root, orange, a dark red at the tips), added to
+//! the light; embers as sparks stretched along their flight, rising with the plume and
+//! carried downwind; smoke above as dark, lit cards, glowing from under where the fire is;
+//! and a few flickering point lights where the fire is greatest, not one a flame.
+//!
+//! Every blaze is a slot of one buffer the GPU reads, so all flames are one draw, all
+//! embers another, all smoke a third, however many burn; how many slots, by the preset.
+
+use crate::climate::ClimateFields;
+use crate::daylight::Clock;
+use crate::quality::Quality;
+use bevy::{
+    asset::RenderAssetUsages,
+    camera::visibility::NoFrustumCulling,
+    light::NotShadowCaster,
+    mesh::{Indices, PrimitiveTopology},
+    pbr::{ExtendedMaterial, MaterialExtension},
+    prelude::*,
+    render::{render_resource::AsBindGroup, storage::ShaderBuffer},
+    shader::ShaderRef,
+};
+
+/// Something burning, as the layer above says it: where its flames stand from (their foot,
+/// in the world), how tall they are in metres, how hot (0 to 1, a dying fire's embers to a
+/// blaze's heart), and a number of its own so no two flicker alike.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Blaze {
+    pub at: Vec3,
+    pub tall: f32,
+    pub heat: f32,
+    pub seed: f32,
+}
+
+/// A jet of flame breathed out: from where, which way, how far it reaches, how wide it
+/// spreads (the tangent of its half angle), and whether it is on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Jet {
+    pub from: Vec3,
+    pub way: Vec3,
+    pub reach: f32,
+    pub spread: f32,
+    pub on: bool,
+}
+
+/// Everything burning now, set by whatever owns the fires each frame: the blazes, the
+/// largest first (those past the preset's slots are not drawn), and the jets.
+#[derive(Resource, Default, Debug)]
+pub struct Blazes {
+    pub blazes: Vec<Blaze>,
+    pub jets: Vec<Jet>,
+}
+
+/// How many blazes are drawn at most, by preset.
+pub fn slots(quality: Quality) -> usize {
+    match quality {
+        Quality::Low => 384,
+        Quality::Medium => 1024,
+        Quality::High => 2048,
+    }
+}
+
+/// How many cards a blaze has of each: flames, embers, smoke.
+const FLAME_CARDS: usize = 9;
+const EMBER_CARDS: usize = 5;
+const SMOKE_CARDS: usize = 4;
+/// How many cards a jet is, and how many jets are drawn.
+const JET_CARDS: usize = 360;
+const JETS: usize = 2;
+/// How many point lights the fires are lit by, and how far round each its fire is gathered,
+/// in metres.
+const LIGHTS: usize = 8;
+const LIGHT_CELL_M: f32 = 9.0;
+/// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
+/// the most one light gives.
+const LUMENS_A_METRE: f32 = 260_000.0;
+const MOST_LUMENS: f32 = 9.0e6;
+const LIGHT_RANGE_M: f32 = 40.0;
+/// A jet's light at its mouth and where it reaches.
+const JET_LUMENS: f32 = 4.0e6;
+
+/// What a fire's material is told. Field order must match `fire.wesl`.
+#[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
+pub struct FireUniform {
+    /// x which cards (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time
+    /// the cards move by, w unused.
+    kind: Vec4,
+    /// The wind where the fire is, metres a second in the world, and its strength.
+    wind: Vec4,
+    /// Each jet: from, and its reach; its way, and its spread; whether it is on (1) or since
+    /// when off, and when it came on.
+    jets: [Vec4; JETS * 3],
+}
+
+/// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
+/// material as smoke is, its shaders ours.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct FireExtension {
+    #[uniform(100)]
+    uniform: FireUniform,
+    #[storage(101, read_only)]
+    slots: Handle<ShaderBuffer>,
+}
+
+impl MaterialExtension for FireExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/fire.wesl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/fire.wesl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/fire.wesl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/fire.wesl".into()
+    }
+}
+
+pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
+
+/// What the smoke over a fire is told. Field order must match `fire_smoke.wesl`.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct FireSmokeExtension {
+    /// The wind, and how many slots are filled.
+    #[uniform(100)]
+    wind: Vec4,
+    #[storage(101, read_only)]
+    slots: Handle<ShaderBuffer>,
+}
+
+impl MaterialExtension for FireSmokeExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/fire_smoke.wesl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/fire_smoke.wesl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/fire_smoke.wesl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/fire_smoke.wesl".into()
+    }
+}
+
+pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtension>;
+
+/// The fires' drawing: their buffer, their materials, and their lights.
+#[derive(Resource)]
+struct Drawn {
+    slots: Handle<ShaderBuffer>,
+    fire: [Handle<FireMaterial>; 3],
+    smoke: Handle<FireSmokeMaterial>,
+    lights: Vec<Entity>,
+    /// When each jet came on or went off, by the cards' clock.
+    jets: [(bool, f32); JETS],
+    wind: Vec3,
+    wind_due: f32,
+}
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<Blazes>()
+        .add_plugins((
+            MaterialPlugin::<FireMaterial>::default(),
+            MaterialPlugin::<FireSmokeMaterial>::default(),
+        ))
+        .add_systems(Startup, setup)
+        .add_systems(PostUpdate, (blow, show, light).chain());
+}
+
+/// A mesh of cards, `count` of them, every corner at the origin: the first texture
+/// coordinate the corner, the second which card and of which slot.
+fn cards(slots: usize, each: usize) -> Mesh {
+    let count = slots * each;
+    let mut positions = Vec::with_capacity(count * 4);
+    let mut normals = Vec::with_capacity(count * 4);
+    let mut corners = Vec::with_capacity(count * 4);
+    let mut ids = Vec::with_capacity(count * 4);
+    let mut indices = Vec::with_capacity(count * 6);
+    for slot in 0..slots {
+        for card in 0..each {
+            let first = positions.len() as u32;
+            for corner in [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]] {
+                positions.push([0.0f32, 0.0, 0.0]);
+                normals.push([0.0f32, 1.0, 0.0]);
+                corners.push(corner);
+                ids.push([slot as f32, card as f32 / each as f32]);
+            }
+            indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+fn setup(
+    mut commands: Commands,
+    quality: Res<Quality>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut buffers: ResMut<Assets<ShaderBuffer>>,
+    mut fires: ResMut<Assets<FireMaterial>>,
+    mut smokes: ResMut<Assets<FireSmokeMaterial>>,
+) {
+    let count = slots(*quality);
+    let slots = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; count * 2]));
+    let fire = [0.0, 1.0, 2.0].map(|kind| {
+        fires.add(FireMaterial {
+            base: StandardMaterial {
+                base_color: Color::WHITE,
+                alpha_mode: AlphaMode::Add,
+                unlit: true,
+                ..default()
+            },
+            extension: FireExtension {
+                uniform: FireUniform {
+                    kind: Vec4::new(kind, 0.0, 0.0, 0.0),
+                    ..default()
+                },
+                slots: slots.clone(),
+            },
+        })
+    });
+    let smoke = smokes.add(FireSmokeMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            diffuse_transmission: 0.1,
+            ..default()
+        },
+        extension: FireSmokeExtension {
+            wind: Vec4::ZERO,
+            slots: slots.clone(),
+        },
+    });
+    // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
+    let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
+        commands.spawn((
+            Name::new(name.to_string()),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+        ));
+    };
+    spawn("Fire: flames", cards(count, FLAME_CARDS), fire[0].clone());
+    spawn("Fire: embers", cards(count, EMBER_CARDS), fire[1].clone());
+    spawn("Fire: jets", cards(JETS, JET_CARDS), fire[2].clone());
+    commands.spawn((
+        Name::new("Fire: smoke"),
+        Mesh3d(meshes.add(cards(count, SMOKE_CARDS))),
+        MeshMaterial3d(smoke.clone()),
+        Transform::IDENTITY,
+        NoFrustumCulling,
+        NotShadowCaster,
+    ));
+    let lights = (0..LIGHTS)
+        .map(|i| {
+            commands
+                .spawn((
+                    Name::new(format!("Fire: light {i}")),
+                    PointLight {
+                        color: Color::srgb(1.0, 0.55, 0.22),
+                        intensity: 0.0,
+                        range: LIGHT_RANGE_M,
+                        radius: 1.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::IDENTITY,
+                    Visibility::Hidden,
+                ))
+                .id()
+        })
+        .collect();
+    commands.insert_resource(Drawn {
+        slots,
+        fire,
+        smoke,
+        lights,
+        jets: [(false, -100.0); JETS],
+        wind: Vec3::ZERO,
+        wind_due: 0.0,
+    });
+}
+
+/// The wind where the fires are, as the climate has it, looked up now and then.
+fn blow(
+    time: Res<Time>,
+    clock: Res<Clock>,
+    climate: Option<Res<ClimateFields>>,
+    blazes: Res<Blazes>,
+    mut drawn: ResMut<Drawn>,
+) {
+    drawn.wind_due -= time.delta_secs();
+    let Some(here) = blazes.blazes.first().map(|b| b.at) else {
+        return;
+    };
+    if drawn.wind_due > 0.0 {
+        return;
+    }
+    drawn.wind_due = 3.0;
+    let up = here.normalize_or(Vec3::Y);
+    let (speed, from, north) = match &climate {
+        Some(climate) => {
+            let wind = climate.fields.at(climate.place(here), clock.time()).wind;
+            (wind.speed_m_s, wind.from, climate.frame.north(here))
+        }
+        None => (
+            1.5,
+            0.8,
+            Vec3::Y
+                .reject_from(up)
+                .normalize_or(up.any_orthonormal_vector()),
+        ),
+    };
+    let east = north.cross(up);
+    let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
+    drawn.wind = blowing_to * speed.min(10.0);
+}
+
+/// The blazes into the buffer, the hottest and tallest first, and the materials told how
+/// many there are, the wind and the jets.
+fn show(
+    time: Res<Time>,
+    quality: Res<Quality>,
+    blazes: Res<Blazes>,
+    mut drawn: ResMut<Drawn>,
+    mut buffers: ResMut<Assets<ShaderBuffer>>,
+    mut fires: ResMut<Assets<FireMaterial>>,
+    mut smokes: ResMut<Assets<FireSmokeMaterial>>,
+) {
+    let now = time.elapsed_secs_wrapped();
+    let count = blazes.blazes.len().min(slots(*quality));
+    if let Some(mut buffer) = buffers.get_mut(&drawn.slots) {
+        let mut data: Vec<[f32; 4]> = Vec::with_capacity(slots(*quality) * 2);
+        for blaze in blazes.blazes.iter().take(count) {
+            data.push([blaze.at.x, blaze.at.y, blaze.at.z, blaze.tall]);
+            data.push([blaze.heat, blaze.seed, 0.0, 0.0]);
+        }
+        data.resize(slots(*quality) * 2, [0.0; 4]);
+        *buffer = ShaderBuffer::from(data);
+    }
+    let mut jets = [Vec4::ZERO; JETS * 3];
+    for (i, state) in drawn.jets.iter_mut().enumerate() {
+        let jet = blazes.jets.get(i).copied();
+        let on = jet.is_some_and(|jet| jet.on);
+        if on != state.0 {
+            *state = (on, now);
+        }
+        let jet = jet.unwrap_or(Jet {
+            from: Vec3::ZERO,
+            way: Vec3::Z,
+            reach: 0.0,
+            spread: 0.0,
+            on: false,
+        });
+        jets[i * 3] = jet.from.extend(jet.reach);
+        jets[i * 3 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
+        jets[i * 3 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, 0.0, 0.0);
+    }
+    let wind = drawn.wind.extend(drawn.wind.length());
+    for (kind, handle) in drawn.fire.iter().enumerate() {
+        if let Some(mut material) = fires.get_mut(handle) {
+            material.extension.uniform.kind = Vec4::new(kind as f32, count as f32, now, 0.0);
+            material.extension.uniform.wind = wind;
+            material.extension.uniform.jets = jets;
+        }
+    }
+    if let Some(mut material) = smokes.get_mut(&drawn.smoke) {
+        material.extension.wind = drawn.wind.extend(count as f32);
+    }
+}
+
+/// The fires' light: each of a few lights where the most fire is, gathered over cells of a
+/// few metres, at the cell's fire's middle and as bright as it burns, wavering; and a light
+/// at each jet's mouth and where it reaches.
+fn light(
+    time: Res<Time>,
+    blazes: Res<Blazes>,
+    drawn: Res<Drawn>,
+    mut lights: Query<(&mut PointLight, &mut Transform, &mut Visibility)>,
+) {
+    let t = time.elapsed_secs_wrapped();
+    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32)> =
+        std::collections::BTreeMap::new();
+    for blaze in &blazes.blazes {
+        let weight = blaze.tall * blaze.heat;
+        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
+        let cell = cells.entry(key).or_insert((Vec3::ZERO, 0.0));
+        cell.0 += blaze.at * weight;
+        cell.1 += weight;
+    }
+    let mut lit: Vec<(Vec3, f32)> = blazes
+        .jets
+        .iter()
+        .filter(|jet| jet.on)
+        .flat_map(|jet| {
+            let way = jet.way.normalize_or(Vec3::Z);
+            [
+                (jet.from + way * jet.reach * 0.25, JET_LUMENS),
+                (jet.from + way * jet.reach * 0.85, JET_LUMENS),
+            ]
+        })
+        .collect();
+    let mut gathered: Vec<(Vec3, f32)> = cells
+        .into_values()
+        .filter(|(_, weight)| *weight > 0.0)
+        .map(|(sum, weight)| (sum / weight, (weight * LUMENS_A_METRE).min(MOST_LUMENS)))
+        .collect();
+    gathered.sort_by(|a, b| b.1.total_cmp(&a.1));
+    lit.extend(gathered);
+    for (i, &entity) in drawn.lights.iter().enumerate() {
+        let Ok((mut light, mut transform, mut visibility)) = lights.get_mut(entity) else {
+            continue;
+        };
+        match lit.get(i) {
+            Some(&(at, lumens)) => {
+                let up = at.normalize_or(Vec3::Y);
+                let k = i as f32 * 1.7;
+                let waver =
+                    0.78 + 0.12 * libm::sinf(t * 9.0 + k) + 0.1 * libm::sinf(t * 23.0 + 2.0 * k);
+                light.intensity = lumens * waver;
+                transform.translation = at + up * 1.5;
+                *visibility = Visibility::Inherited;
+            }
+            None => {
+                light.intensity = 0.0;
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+  "title": "TERRA",
+  "line": "what is built can burn",
+  "end": "in development",
+  "letterbox": 2.39,
+  "crossfade": 1.2,
+  "card_seconds": 3,
+  "shots": ["dragon"]
+}

@@ -37,7 +37,8 @@
 //! - `build.damage_drawn {drawn}`: draws damage, or not, everywhere, to compare what is not
 //!   damaged both ways (`cargo xtask artifacts --frames`).
 //! - `build.example {name}`: puts up an example building whole as the base, in place of what
-//!   is there: `castle`, to edit and time a base of 140,000 cubes (`cargo xtask qa castle`).
+//!   is there: `castle`, to edit and time a base of 140,000 cubes (`cargo xtask qa castle`),
+//!   or `burg`, the castle built to burn (D377).
 //! - `build.material {kind}`: the material in the player's hammer, as Ctrl and the wheel
 //!   pick it (D232); `build.lay` lays in it when no `kind` is given.
 //! - `build.replace {at, brush?, kind?}`: changes the cubes of a brush's box round `at` (a
@@ -264,20 +265,36 @@ struct Example {
 /// and timed to the screen as the hammer makes them (D185).
 fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Example { name } = parse_some(params)?;
-    if name != "castle" {
-        return Err(refused(format!(
-            "there is no example called {name}: castle"
-        )));
-    }
     let kits = world
         .resource::<super::BuildLook>()
         .kits
         .clone()
         .ok_or_else(|| refused("there are no kits"))?;
-    let kinds = super::village_kinds(&kits)
-        .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
-    let first = kinds.first();
-    let ops = terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof);
+    let ops = match name.as_str() {
+        "castle" => {
+            let kinds = super::village_kinds(&kits)
+                .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
+            let first = kinds.first();
+            terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
+        }
+        // The castle built to burn (D377), in the materials its parts are of.
+        "burg" => {
+            let kinds = super::village_kinds(&kits)
+                .ok_or_else(|| refused("the burg needs the settlement's materials"))?
+                .first();
+            terra_build::burg::burg(terra_build::burg::Materials {
+                stone: kinds.masonry,
+                beams: kinds.beams,
+                logs: kinds.timber,
+                shakes: kinds.timber_roof,
+            })
+        }
+        _ => {
+            return Err(refused(format!(
+                "there is no example called {name}: castle, burg"
+            )));
+        }
+    };
     let mut state = SystemState::<(
         ResMut<Site>,
         Commands,

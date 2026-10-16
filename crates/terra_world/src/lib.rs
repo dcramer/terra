@@ -24,6 +24,7 @@ pub mod debug;
 pub mod detail;
 pub mod dither;
 pub mod drift;
+pub mod fire;
 pub mod flora;
 pub mod flora_kinds;
 pub mod footprint;

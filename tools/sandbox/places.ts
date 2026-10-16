@@ -130,6 +130,23 @@ export const PLACES: Record<string, Place> = {
       through: "51.2,-346.4;39.6,-349.2;27.8,-350.8;16.0,-348.3;-4.4,-342.1;-21.9,-340.5;-33.8,-339.4;-45.4,-336.4",
     },
   },
+  valley: {
+    about:
+      "the valley floor where the land's rules make room for a town (--site town) with no town on it: level meadow with its rocks, the forest round its edges and the range's wall over it to the north, a hamlet by the start; where the dragon's castle stands (trailer/scenes/dragon.ts)",
+    args: ["--experiment", "play", "--radius", "30000", "--site", "town", "--mute"],
+    // The start's own views: north up the meadow to the forest's edge and the range, and the
+    // other three ways.
+    views: [
+      ["north", "0,12,0,0,20,-400"],
+      ["east", "0,12,0,400,20,0"],
+      ["south", "0,12,0,0,20,400"],
+      ["west", "0,12,0,-400,20,0"],
+    ],
+    measured: [],
+    look: "mountain-lake-day",
+    ground: false,
+    forest: false,
+  },
 };
 
 /// The place a tool's `--place` names, `lush` by default.

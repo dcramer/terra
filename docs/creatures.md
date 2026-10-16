@@ -59,6 +59,10 @@ So the lush forest has squirrels, chaffinches, hares and foxes; the mountain lak
 
 A small set of body plans (a four-legged runner, a flier, a crawler, a big lumbering thing, a swarm), each varied by size, look, behaviour and rank by the world's theme (D59). A new world brings new kinds without new code. Players learn each kind by meeting it, as with factions (D95): no bestiary is filled in for you (D92).
 
+## Fliers
+
+Creatures that fly are a body plan of their own (D382, `play::fliers`), each kind an entry in `assets/data/fliers.ron`. A flier flies a path, a spline through points, at its cruising speed, banked into its turns by how tight they are and how fast it goes, beating its wings to climb and gliding as it comes down; it eases into a short hover facing a point; it may breathe fire, in a strafing pass or hovering, which sets alight what it meets ([building.md](building.md#fire)). Until monsters think, a script tells it what to do over the remote. The first kind is a dragon, wyvern-built (its wings are its forelimbs), 13 m long and 18 m across its wings; whether dragons are in the game, and where, is for the developers.
+
 ## Designed kinds
 
 Monsters the developers have designed, each its own kind (D250). Their models are in `assets/models/creatures`, made from concepts in `art/props`; none is rigged, animated or in play yet.

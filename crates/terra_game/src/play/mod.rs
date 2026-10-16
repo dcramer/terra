@@ -26,6 +26,7 @@ mod death;
 mod dial;
 mod dig;
 mod figure;
+mod fliers;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
@@ -157,6 +158,7 @@ impl Plugin for GameplayPlugin {
         skills::plugin(app);
         creatures::plugin(app);
         wildlife::plugin(app);
+        fliers::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
         hits::plugin(app);

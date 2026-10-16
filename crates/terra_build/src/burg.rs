@@ -14,7 +14,7 @@
 //!   between them, joined only by the hoardings' timber bridge, so a tower can be cut off and
 //!   held or lost on its own, as towers were.
 //! - **A hall** of squared timber on a stone ground storey along the north wall, and log
-//!   **sheds** under thatch along the east and west walls.
+//!   **sheds** under split shakes along the east and west walls.
 //!
 //! Laid out in its own cubes with the gate's middle at the origin on the south wall's outer
 //! face, the ward to the north (-Z), as a village's buildings and [`crate::castle`] are.
@@ -23,14 +23,14 @@ use crate::roofer::{self, Style};
 use crate::{Base, BuildOp, Cube, Fill, Kind};
 use std::collections::BTreeSet;
 
-/// What the castle is built of: stone, squared timber, round logs, and two roof coverings.
+/// What the castle is built of: stone, squared timber, round logs and a covering of wood, the
+/// settlement's own (its masonry, beams and timber, and its timber's roof).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Materials {
     pub stone: Kind,
     pub beams: Kind,
     pub logs: Kind,
     pub shakes: Kind,
-    pub thatch: Kind,
 }
 
 /// The ward's outer extent, in cubes: x from `-WIDE / 2`, z from `-DEEP` to -1.
@@ -319,7 +319,7 @@ pub fn burg(m: Materials) -> Vec<BuildOp> {
     plan.windows(hall, 14, 1, 4);
     plan.clear(([-3, 0, hall[3] - 1], [-2, 3, hall[3]]));
     plan.roof(hall, 2, Style::Gable, Some(true), m.shakes);
-    // Sheds of logs along the east and west walls, under thatch.
+    // Sheds of logs along the east and west walls, under shakes.
     for (sx0, sx1) in [
         (x0 + THICK + 1, x0 + THICK + 7),
         (x1 - THICK - 7, x1 - THICK - 1),
@@ -330,7 +330,7 @@ pub fn burg(m: Materials) -> Vec<BuildOp> {
             let door = (sz0 + sz1) / 2;
             let face = if sx0 < 0 { sx1 } else { sx0 };
             plan.clear(([face, 0, door], [face, 3, door + 1]));
-            plan.roof(shed, 0, Style::Gable, Some(false), m.thatch);
+            plan.roof(shed, 0, Style::Gable, Some(false), m.shakes);
         }
     }
     // The roofs, each over what stands by then.
@@ -396,7 +396,6 @@ mod tests {
         beams: Kind(3),
         logs: Kind(1),
         shakes: Kind(0x800),
-        thatch: Kind(0x802),
     };
 
     #[test]
@@ -405,7 +404,7 @@ mod tests {
         assert!(base.floating().is_empty(), "{:?}", &base.floating()[..5]);
         let count = |kind: Kind| base.cubes().filter(|(_, c)| c.kind == kind).count();
         assert!(count(M.stone) > 20_000, "{} stone", count(M.stone));
-        for kind in [M.beams, M.logs, M.shakes, M.thatch] {
+        for kind in [M.beams, M.logs, M.shakes] {
             assert!(count(kind) > 200, "{} of {kind:?}", count(kind));
         }
     }

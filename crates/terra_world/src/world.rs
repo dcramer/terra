@@ -5,8 +5,8 @@
 //! through (`walk`), and test it there.
 
 use super::{
-    air, cine, climate, cover, data, daylight, detail, dither, drift, flora, grown, lod, parting,
-    quality, rises, scene, sky_occlusion, skylight, smoke, tick, upscale, wind, woods,
+    air, cine, climate, cover, data, daylight, detail, dither, drift, fire, flora, grown, lod,
+    parting, quality, rises, scene, sky_occlusion, skylight, smoke, tick, upscale, wind, woods,
 };
 use bevy::prelude::*;
 
@@ -36,6 +36,7 @@ impl Plugin for WorldPlugin {
         smoke::plugin(app);
         drift::plugin(app);
         rises::plugin(app);
+        fire::plugin(app);
         cine::plugin(app);
     }
 }

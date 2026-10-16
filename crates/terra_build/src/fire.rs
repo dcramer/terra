@@ -99,6 +99,8 @@ const DIES: f32 = 0.2;
 const SOOTS: f32 = 60.0;
 /// How much faster a cube burns for each face it shares with a burning one.
 const FEEDS: f32 = 0.25;
+/// How much of its fuel burnt timber carrying stone has burnt when it gives way under it.
+const CRUSHED: f32 = 0.6;
 /// The heat a burning cube that comes down gives what it lands on, and the cubes beside
 /// that, as a brand does; and how far it is looked for under it, in cubes.
 const BRAND: f32 = 2.5;
@@ -416,14 +418,21 @@ impl Fire {
                     kind.heat * fierce * share * downwind * TICK_S;
             }
             let full = f32::from(health(cube.kind).max(1));
-            if *left <= 0.0 {
+            // Charred through most of its section, timber carrying what does not burn, stone
+            // or slate laid on it, has lost its strength and gives way under it.
+            let laden = base
+                .cube(at + IVec3::Y)
+                .is_some_and(|over| over.is_in() && burns(over.kind).is_none());
+            if *left <= 0.0 || (laden && *left <= *had * (1.0 - CRUSHED)) {
                 destroyed.insert(key);
                 harm.entry(u16::MAX).or_default().push(key);
             } else {
-                // Its health over its fuel, owed until it makes a whole point of harm.
+                // Its health over its fuel, owed until it makes a sixteenth of its health,
+                // so cubes of a kind are harmed alike and sent together in few acts.
                 let owed = self.owed.entry(key).or_default();
                 *owed += full * burnt / *had;
-                let whole = owed.floor();
+                let quantum = (full / 16.0).floor().max(1.0);
+                let whole = (*owed / quantum).floor() * quantum;
                 if whole >= 1.0 {
                     *owed -= whole;
                     harm.entry(whole.min(f32::from(u16::MAX - 1)) as u16)
@@ -564,9 +573,19 @@ impl Fire {
                     Some(kind.heat * fierceness(left, had))
                 })
                 .sum();
-            // In the open the hot gas rises away: the more of the air flooded, up to as much
-            // as is ever flooded, the less of its heat stays.
-            let shut_in = 1.0 - air.len() as f32 / GAS_MOST as f32;
+            // Hot gas rises: under a roof or a floor it gathers, under the open sky it goes. How
+            // shut in it is, the share of its air with something built over it within a
+            // storey or so, looked at on every fourth cube of it.
+            let looked: Vec<IVec3> = air
+                .keys()
+                .step_by(4)
+                .map(|&k| IVec3::from_array(k))
+                .collect();
+            let covered = looked
+                .iter()
+                .filter(|&&at| (1..=GAS_COVER).any(|up| solid(at + IVec3::Y * up)))
+                .count();
+            let shut_in = covered as f32 / looked.len().max(1) as f32;
             let hot = HOT_GAS * shut_in * heat / (air.len().max(GAS_LEAST) as f32)
                 * TICK_S
                 * HOT_GAS_EVERY as f32;
@@ -584,10 +603,12 @@ impl Fire {
 /// in cubes, and at most how many cubes of it; the least air its heat is shared over; and
 /// how much heat it gives.
 const HOT_GAS_EVERY: u64 = 4;
-const GAS_REACH: i32 = 6;
-const GAS_MOST: usize = 1500;
+const GAS_REACH: i32 = 8;
+/// How far over the hot gas something built keeps it in, in cubes.
+const GAS_COVER: i32 = 8;
+const GAS_MOST: usize = 2500;
 const GAS_LEAST: usize = 64;
-const HOT_GAS: f32 = 10.0;
+const HOT_GAS: f32 = 20.0;
 
 /// How fiercely a fire burns with so much of its fuel left of what it had: growing at
 /// first, then full, then dying to embers.

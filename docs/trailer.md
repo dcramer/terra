@@ -23,6 +23,16 @@ Each run is left as `~/.cache/terra-review/trailer/<name>.mp4`, with its own sou
 | tundra | the tundra (`tundra`) | south across the open heath from 0,-10 toward the fells, 150 m | 16:20, low autumn sun, 8 October | The heath's red and gold in a low sun, the fells with the first snow in their lees ahead, and the wind in everything. |
 | town | the market town (`town`) | down the paved main street from 60.5,-339.0 into the market square, along its south side past the well and round the stalls' west end and back east along its north side, clear of every stall, ending on the houses round it (`Town square` in its log says where they stand) | 10:30, market morning | The square at its busiest, the sun high enough to light down the narrow street without the early sun's orange, its people and animals about their day, the setts underfoot. |
 
+## Scenes
+
+A run may be a scene instead of a run (`"scene"` in its file): a timeline of the game's own remote calls on given frames, the camera's cuts and glides among them, in `tools/sandbox/trailer/scenes/<name>.ts`, written as a QA film's is (`qa/script.ts`) and filmed in one scripted run (`--calls`) with the same look, warm-up and sound bed, the player hidden where it starts. A scene says the frame its film rolls on; what comes before, its setting up, is not filmed.
+
+```bash
+cargo xtask trailer --cut tools/sandbox/trailer/dragon.json --out ~/.cache/terra-review/dragon/cut.mp4
+```
+
+The first is the dragon (`dragon`, D377, D382): the burg on a rise by the mountain lake in the morning; a dragon in over the forest strafing its south wall, passing over the hall and the keep and hovering at the keep to breathe into it; the fire spreading through the hoardings, roofs and timber storeys; the towers and the keep coming down as their bond timbers burn through.
+
 ## How it is filmed
 
 As Unreal's Movie Render Queue renders a sequence: each run is a scripted run stepped a sixtieth of a second a frame, warmed up where it starts (six seconds, so streaming, grass and the eye settle), every second frame kept, so the film plays at the game's speed however slowly it is drawn.

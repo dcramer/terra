@@ -11,6 +11,11 @@
 // slowly it is drawn. The route is smoothed (Catmull-Rom, a spot every few metres) so the
 // player, and the camera behind them, turn gently.
 //
+// A run may instead be a scene (`scene`, trailer/scenes/<name>.ts): a timeline of the game's
+// remote calls on given frames and the camera's moves, written as a QA film's is
+// (qa/script.ts), made on their frames in the same scripted run (`--calls`), with the same
+// look; the player stands where it starts, hidden. A dragon burning a castle is one.
+//
 //   node tools/sandbox/trailer.ts [--only lake,forest] [--again] [--stills] [--no-render]
 //     [--size 1920x1080] [--cut tools/sandbox/trailer/cut.json] [--out ~/.cache/terra-review/trailer/cut.mp4]
 //
@@ -27,6 +32,8 @@ import { dirname, join, resolve } from "node:path";
 import { ROOT } from "./client.ts";
 import { place } from "./places.ts";
 import { bars, joined, lay, type Piece, smoothed } from "./timeline.ts";
+import { Script } from "./qa/script.ts";
+import { pathToFileURL } from "node:url";
 
 type Shot = {
   about: string;
@@ -41,12 +48,17 @@ type Shot = {
   lead_in?: number;
   /// Where the runner starts, the spots they run through, and how many degrees the view
   /// is tilted up from the game's own, by the arrow keys while the run warms up.
-  player: { at: string; face?: string; route: string; tilt?: number };
+  player: { at: string; face?: string; route?: string; tilt?: number; hidden?: boolean };
+  /// A scene's timeline instead of the player's run (trailer/scenes/<name>.ts).
+  scene?: string;
   look?: { letterbox?: number };
   /// Its sound bed's layers, as `terra_sandbox --sound-bed` takes them, without their times.
   sound?: string[];
   music?: string;
 };
+/// A scene: what it needs of the sandbox beyond the place's, the frame its film rolls on
+/// (what comes before, its setting up, is not filmed), and its timeline.
+type Scene = { about: string; sandbox: string[]; rolls: number; script: (s: Script) => void };
 type Cut = { title: string; line?: string; end?: string; letterbox: number; crossfade: number; card_seconds: number; shots: string[] };
 
 const FPS = 30;
@@ -73,6 +85,12 @@ const stills = args.includes("--stills");
 const names = only ? cut.shots.filter((name) => only.includes(name)) : cut.shots;
 const shots = new Map<string, Shot>(cut.shots.map((name) => [name, JSON.parse(readFileSync(join(shotsDir, `${name}.json`), "utf8"))]));
 const clipOf = (name: string) => join(clips, `${name}-${size}.mp4`);
+const scenes = new Map<string, Scene>();
+for (const shot of shots.values()) {
+  if (shot.scene && !scenes.has(shot.scene)) {
+    scenes.set(shot.scene, (await import(pathToFileURL(join(dirname(cutFile), "scenes", `${shot.scene}.ts`)).href)).default as Scene);
+  }
+}
 const sandbox = resolve(ROOT, "target/release/terra_sandbox");
 
 /// A font for the cards: a light serif, as trailers' titles are, found by fontconfig.
@@ -109,11 +127,26 @@ const EMPTY_HANDED = ["--press", "8@60"];
 /// route, smoothed.
 function sandboxArgs(shot: Shot): string[] {
   const own = [...place(shot.place).args];
+  if (shot.scene) {
+    const date = own.indexOf("--date");
+    if (shot.date && date >= 0) own.splice(date, 2);
+    return [
+      ...own,
+      ...(own.includes("--mute") ? [] : ["--mute"]),
+      "--time",
+      `${shot.hour}`,
+      ...(shot.date ? ["--date", shot.date] : []),
+      "--at",
+      shot.player.at,
+      ...(shot.player.face ? ["--face", shot.player.face] : []),
+      ...(scenes.get(shot.scene)?.sandbox ?? []),
+    ];
+  }
   const walk = own.indexOf("walk");
   if (walk > 0 && own[walk - 1] === "--experiment") own[walk] = "play";
   const date = own.indexOf("--date");
   if (shot.date && date >= 0) own.splice(date, 2);
-  const spots = [shot.player.at, ...shot.player.route.split(";")].map((s) => s.split(",").map(Number) as [number, number]);
+  const spots = [shot.player.at, ...(shot.player.route ?? "").split(";")].map((s) => s.split(",").map(Number) as [number, number]);
   const route = smoothed(spots, 4).slice(1);
   return [
     ...own,
@@ -137,6 +170,7 @@ const JOG = 4.3;
 /// Why a run's route is too short for its film, or undefined: a player who reaches its last
 /// spot stands there idle for the rest of it, which on film reads as a figure not animated.
 function tooShort(shot: Shot): string | undefined {
+  if (shot.scene || !shot.player.route) return undefined;
   const spots = [shot.player.at, ...shot.player.route.split(";")].map((s) => s.split(",").map(Number) as [number, number]);
   const length = spots.slice(1).reduce((sum, [e, s], i) => sum + Math.hypot(e - spots[i][0], s - spots[i][1]), 0);
   const needs = ((shot.lead_in ?? 1.5) + shot.seconds) * JOG;
@@ -182,20 +216,31 @@ function renderShot(name: string, n: number) {
   if (!render || !(stills || again || only || stale)) return;
   const short = tooShort(shot);
   if (short) console.log(`trailer: ${name}: ${short}; lengthen it in ${file}`);
-  const warmup = shot.warmup ?? 360;
-  const first = warmup + Math.round((shot.lead_in ?? 1.5) * 60);
+  const scene = shot.scene ? scenes.get(shot.scene) : undefined;
+  const warmup = scene?.rolls ?? shot.warmup ?? 360;
+  const first = scene ? warmup : warmup + Math.round((shot.lead_in ?? 1.5) * 60);
   const frames = Math.round(shot.seconds * FPS);
   const last = first + (frames - 1) * 2;
   const dir = join(work, stills ? "stills" : "frames", name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   const started = Date.now();
+  // A scene's timeline, its calls on their frames, the camera's among them.
+  const calls: string[] = [];
+  if (scene) {
+    const timeline = new Script();
+    scene.script(timeline);
+    const timed = join(work, `${name}.calls.jsonl`);
+    writeFileSync(timed, timeline.all(last).map(({ frame, method, params }) => JSON.stringify({ frame, method, params })).join("\n") + "\n");
+    calls.push("--calls", timed);
+  }
   const options = [
     "--offscreen",
     "--clean",
     "--picture",
     size,
     ...sandboxArgs(shot),
+    ...calls,
     "--cine",
     `${file}@${warmup}`,
     "--shots",

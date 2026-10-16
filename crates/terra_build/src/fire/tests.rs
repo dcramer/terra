@@ -282,3 +282,26 @@ fn a_fire_in_a_shut_room_reaches_its_far_wall_sooner_than_one_under_the_open_sky
         "the far wall caught on tick {shut} shut in, {open} in the open"
     );
 }
+
+#[test]
+fn timber_under_stone_gives_way_before_it_has_burnt_through() {
+    // Two log posts lit alike, apart: one carrying a stone on it, one bare.
+    let mut base = Base::from_shortcuts(&[
+        solid(LOGS, [0, 0, 0], [0, 0, 0]),
+        solid(STONE, [0, 1, 0], [0, 1, 0]),
+        solid(LOGS, [6, 0, 0], [6, 0, 0]),
+    ]);
+    let mut fire = Fire::default();
+    fire.light(&base, &burns, IVec3::new(0, 0, 0));
+    fire.light(&base, &burns, IVec3::new(6, 0, 0));
+    let mut gone = BTreeMap::new();
+    for tick in 0..2000 {
+        burn(&mut base, &mut fire, 1, Vec3::ZERO);
+        for at in [[0, 0, 0], [6, 0, 0]] {
+            if base.cube(IVec3::from_array(at)).is_none() {
+                gone.entry(at).or_insert(tick);
+            }
+        }
+    }
+    assert!(gone[&[0, 0, 0]] < gone[&[6, 0, 0]], "{gone:?}");
+}

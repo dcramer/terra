@@ -1,0 +1,36 @@
+// Creatures that fly (D382, play::fliers): a flier body plan, each kind a model with its
+// clips and how it flies.
+//
+// model         its file and its scale
+// clips         its clips by what they are for: beating its wings in flight, gliding,
+//               hovering, breathing fire hovering, breathing fire in a strafing pass, roaring
+// cruise_mps    how fast it flies along a path, metres a second; hover_mps how slowly it
+//               eases into a hover
+// most_bank_deg how far it rolls into a turn at most (a vulture circles at 25 to 35, a 45
+//               degree bank is 1.4 g); bank_deg_s how fast it rolls; turn_deg_s how fast its
+//               heading turns
+// mouth         the model's socket its breath leaves from, along the model's front
+// breath        how far its flame reaches in metres, how wide it spreads (the tangent of its
+//               half angle), and how hot (heat a second, as a burning cube's full flame gives
+//               the cube over it; a log catches at 3)
+[
+    (
+        name: "Dragon",
+        model: ("models/creatures/Dragon.glb", 1.0),
+        clips: (
+            fly: "Fly",
+            glide: "Glide",
+            hover: "Hover",
+            breathe: "Breathe",
+            fly_breathe: "FlyBreathe",
+            roar: "Roar",
+        ),
+        cruise_mps: 24.0,
+        hover_mps: 3.0,
+        most_bank_deg: 42.0,
+        bank_deg_s: 40.0,
+        turn_deg_s: 50.0,
+        mouth: "Mouth",
+        breath: (reach_m: 30.0, spread: 0.2, heat: 10.0),
+    ),
+]
