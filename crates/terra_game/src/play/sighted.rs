@@ -27,8 +27,9 @@ use terra_world::cine::Cine;
 const EVERY_S: f32 = 0.5;
 /// The player's body, as the camera sees past it: a post this wide and tall from their feet.
 const BODY_M: (f32, f32) = (0.32, 1.8);
-/// An animal is hidden in grass when less than this share of its height shows over it.
-const SHOWS_OVER_GRASS: f32 = 0.4;
+/// An animal is hidden in grass when its top is under so much of the grass's height: blades
+/// thin out up their length and stand apart, so one with its back at their height shows.
+const HIDDEN_UNDER_GRASS: f32 = 0.85;
 /// A skeleton's span on the picture leaves out the fur round its bones: so much more.
 const FUR: f32 = 1.25;
 /// An animal's bones are within this of where it stands.
@@ -141,7 +142,7 @@ fn watch(
             .map(|p| (*p - ground).dot(up))
             .fold(0.05f32, f32::max);
         let grass = around.grass_m(ground);
-        let in_grass = top - grass < SHOWS_OVER_GRASS * top;
+        let in_grass = top < grass * HIDDEN_UNDER_GRASS;
         let behind_player = body.is_some_and(|feet| behind_body(from, middle, feet));
         if in_grass || behind_player || !around.in_view(from, middle) {
             hidden += 1;

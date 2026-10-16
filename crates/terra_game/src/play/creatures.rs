@@ -42,7 +42,7 @@ const CASTS_SHADOW_FROM_M: f32 = 0.2;
 /// How far off a creature notices a player, or keeps track of one it chases.
 const SENSE_M: f32 = 40.0;
 /// A runner watches anyone coming from this many times as far as it flees them.
-const WATCHES_WITHIN: f32 = 2.0;
+const WATCHES_WITHIN: f32 = 2.5;
 /// How much bigger or smaller one animal is than another of its kind, a share either way.
 const SIZES: f32 = 0.09;
 /// How fast one that does not fly from place to place flies when it takes wing to flee.
@@ -153,6 +153,23 @@ impl Creature {
     /// Sitting up off the ground at a point for so long, as a bird put out on a roof's ridge.
     pub fn roost(&mut self, at: Vec3, left: f32) {
         self.state = State::Roost { at, left };
+    }
+
+    /// Running a way for so long, as one already put up by something and crossing a
+    /// player's way (wildlife's crossings).
+    pub fn dash(&mut self, way: Vec3, for_s: f32) {
+        self.bolt = way;
+        self.facing = way;
+        self.state = State::Flee(for_s);
+    }
+
+    /// On the wing from one place to another.
+    pub fn fly(&mut self, from: Vec3, to: Vec3) {
+        self.state = State::Fly {
+            from,
+            to,
+            along: 0.0,
+        };
     }
 }
 

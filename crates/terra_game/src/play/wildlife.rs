@@ -69,6 +69,8 @@ const EYE_UP_M: f32 = 2.2;
 /// player is let go.
 const MET_MOST: usize = 24;
 const MET_RELEASE_M: f32 = 80.0;
+/// Standing, a player meets no more than so many.
+const MET_STANDING: usize = 8;
 /// Grass thinner than this, as thick by how much taller it grows, leaves an animal on it in
 /// plain sight.
 const BARE_GRASS: f32 = 0.35;
@@ -432,11 +434,11 @@ fn populate(
     }
     cells.since_s = 0.0;
     let began = std::time::Instant::now();
-    let moving: Vec<(Entity, Vec3)> = viewers
+    let moving: Vec<(Entity, Vec3, Vec3)> = viewers
         .iter()
-        .map(|(entity, at)| (entity, at.translation))
+        .map(|(entity, at)| (entity, at.translation, at.forward().as_vec3()))
         .collect();
-    let viewers: Vec<Vec3> = moving.iter().map(|(_, at)| *at).collect();
+    let viewers: Vec<Vec3> = moving.iter().map(|(_, at, _)| *at).collect();
     let near = |middle: Vec3, within: f32| viewers.iter().any(|v| v.distance(middle) < within);
     // Let go of the cells nobody is near, and of their animals, alive or dead.
     let gone: Vec<IVec3> = cells
@@ -609,14 +611,14 @@ fn meet(
     (kinds, bestiary): (&Kinds, &Bestiary),
     around: &Surroundings,
     wild: &[Wild],
-    moving: &[(Entity, Vec3)],
+    moving: &[(Entity, Vec3, Vec3)],
     placed: &Query<(&Transform, &creatures::Creature)>,
 ) {
     let seed = around.planet.seed().derive("wildlife meetings");
     cells
         .ways
-        .retain(|player, _| moving.iter().any(|(each, _)| each == player));
-    for &(player, here) in moving {
+        .retain(|player, _| moving.iter().any(|(each, ..)| each == player));
+    for &(player, here, facing) in moving {
         let mut way = cells.ways.remove(&player).unwrap_or(Way {
             last: here,
             left: 1.0,
@@ -625,12 +627,22 @@ fn meet(
         let up = here.normalize_or(Vec3::Y);
         let went = (here - way.last).reject_from(up);
         way.last = here;
-        if went.length() / LOOK_EVERY_S <= MOVING_MPS {
+        let speed = went.length() / LOOK_EVERY_S;
+        // On the move, ahead is the way they go; standing, the way they face, where a few
+        // are met too, so a walk does not begin on an empty land.
+        let moving = speed > MOVING_MPS;
+        let ahead = if moving {
+            went.normalize_or_zero()
+        } else {
+            facing.reject_from(up).normalize_or_zero()
+        };
+        let most = if moving { MET_MOST } else { MET_STANDING };
+        if ahead == Vec3::ZERO || (!moving && cells.met.len() >= most) {
             cells.ways.insert(player, way);
             continue;
         }
         way.left -= LOOK_EVERY_S;
-        if way.left <= 0.0 && way.staging.is_none() && cells.met.len() < MET_MOST {
+        if way.left <= 0.0 && way.staging.is_none() && cells.met.len() < most {
             cells.meetings += 1;
             let mut dice = seed.index(cells.meetings).rng();
             way.left = dice.range(MEET_EVERY_S.0, MEET_EVERY_S.1);
@@ -644,7 +656,6 @@ fn meet(
             cells.ways.insert(player, way);
             continue;
         };
-        let ahead = went.normalize_or_zero();
         // A spot one side of the way and then the other, with the kinds whose niche it is and
         // that are not about there already, weighed by how well it shows them: in view, near
         // the way, in the light, on bare or short ground. A kind already met near is less
@@ -704,20 +715,135 @@ fn meet(
             // Met as a group of the larger sort its kind keeps.
             let count = (fewest + most).div_ceil(2)
                 + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
-            let group = put_group(
-                commands,
-                (kinds, bestiary),
-                around,
-                species,
-                (spot, aside * 2.0),
-                count.min(most),
-                dice,
-            );
+            let crossing = if dice.unit() < CROSSINGS {
+                cross(
+                    commands,
+                    (kinds, bestiary),
+                    around,
+                    species,
+                    (here, ahead, aside, speed),
+                    count.min(most),
+                    dice,
+                )
+            } else {
+                None
+            };
+            let group = crossing.unwrap_or_else(|| {
+                put_group(
+                    commands,
+                    (kinds, bestiary),
+                    around,
+                    species,
+                    (spot, aside * 2.0),
+                    count.min(most),
+                    dice,
+                )
+            });
             cells.met.extend(group);
             debug!("Wildlife: {} {} met ahead.", count, bestiary.name(species));
         }
         cells.ways.insert(player, way);
     }
+}
+
+/// So many meetings in ten are a crossing (`cross`) rather than a group waiting by the way.
+const CROSSINGS: f32 = 0.5;
+/// A crossing starts so far ahead and so far aside, where it is small or not drawn yet, and
+/// crosses the way so far ahead of the player as they reach it; a runner runs on so long past.
+const CROSS_FROM_M: (f32, f32) = (44.0, 54.0);
+const CROSS_ASIDE_M: (f32, f32) = (16.0, 24.0);
+const CROSS_LEAD_M: f32 = 10.0;
+const CROSS_ON_S: f32 = 2.5;
+
+/// A group put up by something before the player came, crossing their way ahead of them, as
+/// shipped open worlds stage their ambient wildlife (Red Dead Redemption 2's deer and foxes
+/// crossing the trail ahead): from far ahead and out to one side across to the other, timed
+/// from how fast it goes and how fast the player comes on to cross a little way ahead of them,
+/// so it is seen from small to near and moving all the while. A runner runs it; a flier flies
+/// it, landing past the way. None for a kind that swims or wades, or ground under water.
+fn cross(
+    commands: &mut Commands,
+    (kinds, bestiary): (&Kinds, &Bestiary),
+    around: &Surroundings,
+    species: Species,
+    (here, ahead, aside, speed): (Vec3, Vec3, Vec3, f32),
+    count: u32,
+    dice: &mut terra_gen::Rng,
+) -> Option<Vec<Entity>> {
+    let about = bestiary.get(species);
+    let (mps, flies) = match about.moves {
+        super::species::Moves::Flies(mps) => (mps, true),
+        super::species::Moves::Walks => (about.run_mps, false),
+        super::species::Moves::Swims(_) => return None,
+    };
+    if about.wades_m > 0.0 || mps < 1.0 {
+        return None;
+    }
+    let up = here.normalize_or(Vec3::Y);
+    let start = around.ground(
+        here + ahead * dice.range(CROSS_FROM_M.0, CROSS_FROM_M.1)
+            + aside * dice.range(CROSS_ASIDE_M.0, CROSS_ASIDE_M.1),
+    );
+    let (at, timed) = crossing_point(here, ahead, start, mps, speed)?;
+    let point = around.ground(at);
+    let way = (point - start).reject_from(up).normalize_or_zero();
+    let dry = |p: Vec3| around.depth_m(p) < -0.1;
+    if way == Vec3::ZERO || (!flies && !(dry(start) && dry(point))) {
+        return None;
+    }
+    let past = around.ground(point + way * dice.range(10.0, 22.0));
+    let mut put = Vec::new();
+    for _ in 0..count {
+        let from = around
+            .ground(start + (way.cross(up) * dice.range(-1.5, 1.5)) + way * dice.range(-2.0, 0.5));
+        let Some(animal) =
+            creatures::spawn(commands, (kinds, bestiary), &around.planet, species, from)
+        else {
+            continue;
+        };
+        let to = around.ground(past + way.cross(up) * dice.range(-3.0, 3.0));
+        let for_s = timed + CROSS_ON_S + dice.range(-0.4, 0.4);
+        commands
+            .entity(animal)
+            .entry::<creatures::Creature>()
+            .and_modify(move |mut animal| {
+                if flies {
+                    animal.fly(from, to);
+                } else {
+                    animal.dash(way, for_s);
+                }
+            });
+        put.push(animal);
+    }
+    Some(put)
+}
+
+/// Where on a player's way an animal starting from a point and going so fast reaches it
+/// `CROSS_LEAD_M` ahead of them as they come on so fast, and how long it takes to.
+/// None if it could not make it, the player coming on too fast.
+fn crossing_point(
+    here: Vec3,
+    ahead: Vec3,
+    start: Vec3,
+    mps: f32,
+    speed: f32,
+) -> Option<(Vec3, f32)> {
+    let takes = |along: f32| (here + ahead * along).distance(start) / mps.max(0.1);
+    // How far it falls short of meeting the way that far ahead of the player.
+    let short = |along: f32| along - CROSS_LEAD_M - speed * takes(along);
+    let (mut near, mut far) = (CROSS_LEAD_M, (start - here).dot(ahead));
+    if far <= near || short(far) < 0.0 {
+        return None;
+    }
+    for _ in 0..24 {
+        let middle = (near + far) * 0.5;
+        if short(middle) < 0.0 {
+            near = middle;
+        } else {
+            far = middle;
+        }
+    }
+    Some((here + ahead * far, takes(far)))
 }
 
 /// A town's birds are put out on a roof's ridge within so far, so often, rather than on the
@@ -891,6 +1017,22 @@ mod tests {
             }
             .fits(&niche)
         );
+    }
+
+    #[test]
+    fn a_crossing_meets_the_way_a_little_ahead_of_the_player_as_they_come_on() {
+        let here = Vec3::ZERO;
+        let ahead = Vec3::NEG_Z;
+        let start = Vec3::new(20.0, 0.0, -50.0);
+        for (mps, speed) in [(5.5, 4.3), (4.2, 4.3), (12.0, 4.3), (5.0, 0.0)] {
+            let (point, takes) = crossing_point(here, ahead, start, mps, speed).unwrap();
+            // It gets there in the time it says, going as fast as it goes.
+            assert!((point.distance(start) / mps - takes).abs() < 0.05, "{mps}");
+            // And the player, coming on meanwhile, is that far short of it.
+            let player = here + ahead * speed * takes;
+            let short = (point - player).dot(ahead);
+            assert!((short - CROSS_LEAD_M).abs() < 0.5, "{mps} {speed}: {short}");
+        }
     }
 
     #[test]

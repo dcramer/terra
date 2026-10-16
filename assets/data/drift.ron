@@ -111,6 +111,24 @@
             hours: [(6.0, 20.0)],
         ),
         (
+            // Meadow pipits, wheatears and snow buntings over the fells and the heath: small
+            // flocks flitting low over the ground and up off it, the open land's own small birds.
+            name: "Pipits",
+            count: 30,
+            look: Bird,
+            size_m: 0.22,
+            colour: (0.12, 0.1, 0.08),
+            glow: 0.0,
+            opacity: 1.0,
+            motion: Flock(flocks: 4, speed_mps: 7.0, spread_m: 5.0, height_m: (0.5, 6.0), flap_hz: 9.0, about: 0.9),
+            box_m: (45.0, 10.0),
+            woods: 0.0,
+            open: 1.0,
+            water: 0.5,
+            season_c: (-15.0, 8.0),
+            hours: [(5.0, 20.0)],
+        ),
+        (
             // Cotton grass and willow down blown over the heath in late summer.
             name: "Down",
             count: 160,
