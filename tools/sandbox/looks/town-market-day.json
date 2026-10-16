@@ -1,6 +1,6 @@
 {
   "name": "town-market-day",
-  "about": "Market towns and villages by day with people in their streets and squares: eight frames from the Steam store screenshots of Kingdom Come: Deliverance II, Kingdom Come: Deliverance and The Witcher 3 (1771300-01, -07; 379430-02, -03, -05, -14; 292030-04, -15). The living town's target by day (docs/demos.md, a living town).",
+  "about": "Market towns and villages by day with people in their streets and squares: eight frames from the Steam store screenshots of Kingdom Come: Deliverance II, Kingdom Come: Deliverance and The Witcher 3 (1771300-01, -07; 379430-02, -03, -05, -14; 292030-04, -15). The living town's target by day (docs/demos.md, a living town). Its flat foliage, leaf colour and lit leaves (D368) were measured by look.ts on 2026-10-15 from the same eight frames, the 7 with leaves enough to say.",
   "sources": [
     "https://store.steampowered.com/app/1771300/",
     "https://store.steampowered.com/app/379430/",
@@ -28,7 +28,10 @@
     "lilac": 0.001168921199845679,
     "hardEdges": 0.4125134372102568,
     "facets": 0.14010416666666667,
-    "flat": 0.02645045467930419
+    "flat": 0.02645045467930419,
+    "flatFoliage": 0.22435064935064933,
+    "foliageColour": 0.10702692718698097,
+    "foliageLit": 0.09686836005334103
   },
   "bands": {
     "sky": {

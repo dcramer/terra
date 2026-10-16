@@ -1,0 +1,57 @@
+{
+  "about": "The foliage check's kinds (foliage.ts, D368): for each card the world's plants wear, the atlas it is in (its .ron), what it is (spray, needles, single or flowers), the plants that wear it, and how wide its card is grown near the camera, the largest of them, in metres: about 1.1 times the spray it is laid round (`clump_cards`), as the code that grows it says. `known` lists each card's failures already known, with why; `*` is every card's.",
+  "atlases": {
+    "foliage": "assets/data/foliage.ron",
+    "litter": "assets/data/litter.ron"
+  },
+  "kinds": {
+    "oak": { "atlas": "foliage", "form": "spray", "grows": "the world's oaks (flora.ron Oak); the lush forest's oak scrub and oak saplings", "metres": 2.9, "from": "flora.ron Oak's clump_m 2.6; the lush scrub's sprays 0.6, saplings' 0.7 (thicket.rs)" },
+    "birch": { "atlas": "foliage", "form": "spray", "grows": "the world's birches (flora.ron Birch)", "metres": 1.8, "from": "flora.ron Birch's clump_m 1.6" },
+    "pine": { "atlas": "foliage", "form": "needles", "grows": "the world's generic pine (flora.ron Pine), where the woods are given no conifers of their own (D366); the mountain lake's pines before D366", "metres": 2.6, "from": "flora.ron Pine's clump_m 2.4" },
+    "hazel": { "atlas": "foliage", "form": "spray", "grows": "the world's bushes (flora.ron Bush); the lush forest's hazel stools, coppice and hazel saplings", "metres": 0.8, "from": "the stools' sprays 0.65 to 0.75 (thicket::coppice), saplings' 0.7" },
+    "berry": { "atlas": "foliage", "form": "spray", "grows": "the world's berry bushes and dwarf shrubs (flora.ron); the lush forest's bilberry", "metres": 0.6, "from": "plants::bush: clumps 0.35 to 0.5 of a bush up to 1.5 m" },
+    "fern": { "atlas": "foliage", "form": "single", "grows": "ferns (flora.ron Fern); the lush forest's bracken and fronds", "metres": 1.0, "from": "a frond about a metre long (floor.rs, flora.ron)" },
+    "herb": { "atlas": "foliage", "form": "single", "grows": "herbs (flora.ron); the lush forest's herbs", "metres": 0.4, "from": "a herb a third of a metre across (floor.rs)" },
+    "daisy": { "atlas": "foliage", "form": "flowers", "grows": "flowers (flora.ron); the lush forest's flowers", "metres": 0.4, "from": "plants::tuft" },
+    "buttercup": { "atlas": "foliage", "form": "flowers", "grows": "flowers (flora.ron); the lush forest's flowers", "metres": 0.4, "from": "plants::tuft" },
+    "campion": { "atlas": "foliage", "form": "flowers", "grows": "flowers (flora.ron); the lush forest's flowers", "metres": 0.4, "from": "plants::tuft" },
+    "oakbranch": { "atlas": "foliage", "form": "spray", "grows": "the lush forest's grown oaks", "metres": 1.6, "from": "an old oak's sprays 1.45 (species.rs), its leaves 14 cm (D276)" },
+    "spruce": { "atlas": "foliage", "form": "needles", "grows": "the lush forest's spruces and young spruce", "metres": 0.9, "from": "a spruce's sprays to 0.8 (species.rs), young spruce 0.5 (floor.rs)" },
+    "bramble": { "atlas": "foliage", "form": "spray", "grows": "the lush forest's bramble", "metres": 0.45, "from": "its sprays 0.3 to 0.42 (thicket::bramble)" },
+    "holly": { "atlas": "foliage", "form": "spray", "grows": "the lush forest's holly", "metres": 0.7, "from": "its sprays 0.45 to 0.62 (thicket::holly)" },
+    "scots": { "atlas": "foliage", "form": "needles", "grows": "the lush forest's Scots pines", "metres": 0.7, "from": "a pad's tufts, PAD_CLUMP_M 0.62 (species.rs)" },
+    "ivy": { "atlas": "litter", "form": "spray", "grows": "the lush forest's trunks' ivy", "metres": 0.25, "from": "leaves a hand across or less (D359)" },
+    "ivydark": { "atlas": "litter", "form": "spray", "grows": "the lush forest's trunks' ivy", "metres": 0.25, "from": "leaves a hand across or less (D359)" }
+  },
+  "known": {
+    "*": {
+      "thickness": "no atlas has a thickness map: the shader lights a leaf through by its colour alone (foliage_fragment.wesl, lit_through), the same through blade, vein and twig (D291's 'lit through from behind', the review of D292: 'still short in light through each leaf')"
+    },
+    "oak": {
+      "sharpness": "the world's oaks (flora.ron Oak, clump_m 2.6) grow its card 2.9 m across, a leaf 0.4 m long, four times a real one's; the lush forest's scrub and saplings grow it at 0.7 m, sharp"
+    },
+    "birch": {
+      "relief": "a picture (birchgold), its normal map flat",
+      "tilts": "a picture, its normal map flat",
+      "detail": "a picture's smooth painted fill",
+      "leafLight": "a picture's leaves all one tone of gold",
+      "gamut": "autumn gold by design, not a summer green"
+    },
+    "pine": {
+      "relief": "a picture, its normal map flat: the generic pine lit as flat cards, as the mountain lake's were before D366",
+      "sharpness": "the world's pine (flora.ron Pine, clump_m 2.4) grows its card 2.6 m across, magnified 1.3 times at 2 m"
+    },
+    "fern": {
+      "relief": "a picture, its normal map flat",
+      "leafTexels": "its pinnae 69 texels long",
+      "gamut": "a pale lime (luma 0.5), past a living frond's green"
+    },
+    "herb": {
+      "relief": "a picture, its normal map flat"
+    },
+    "holly": {
+      "relief": "a picture, its normal map flat: the lush forest's holly lit as flat cards",
+      "tilts": "a picture, its normal map flat"
+    }
+  }
+}

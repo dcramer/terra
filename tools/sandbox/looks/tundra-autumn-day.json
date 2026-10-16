@@ -1,6 +1,6 @@
 {
   "name": "tundra-autumn-day",
-  "about": "Open low tundra in late summer and early autumn by day: twenty-nine photographs from Wikimedia Commons (CC0, CC BY, CC BY-SA and public domain, credited in research/2026-10-15-tundra-reference.md) of Alaska, Svalbard, Greenland, Nunavut, Lapland, Norway and the Russian north: dwarf shrubs turning red and rust, lichen, sedge, pools, snow patches and a few stunted spruce and larch at the forest's edge, each with a horizon, measured by band. The real place the tundra demo is judged against (D321).",
+  "about": "Open low tundra in late summer and early autumn by day: twenty-nine photographs from Wikimedia Commons (CC0, CC BY, CC BY-SA and public domain, credited in research/2026-10-15-tundra-reference.md) of Alaska, Svalbard, Greenland, Nunavut, Lapland, Norway and the Russian north: dwarf shrubs turning red and rust, lichen, sedge, pools, snow patches and a few stunted spruce and larch at the forest's edge, each with a horizon, measured by band. The real place the tundra demo is judged against (D321). Its flat foliage, leaf colour and lit leaves (D368) were measured by look.ts on 2026-10-15 from the same twenty-nine frames, the 7 with leaves enough to say.",
   "sources": [
     "https://commons.wikimedia.org/wiki/Category:Tundra",
     "https://commons.wikimedia.org/wiki/Category:Tundra_of_Alaska",
@@ -32,7 +32,10 @@
     "lilac": 0.0024164704395487446,
     "hardEdges": 0.33589376217841066,
     "facets": 0.024209770114942526,
-    "flat": 0.008659001097981763
+    "flat": 0.008659001097981763,
+    "flatFoliage": 0.03739273207711746,
+    "foliageColour": 0.14471907666394415,
+    "foliageLit": 0.09996232452071163
   },
   "bands": {
     "sky": {

@@ -1,6 +1,6 @@
 {
   "name": "mountain-lake-day",
-  "about": "Far Cry 5's Montana by day: eleven frames of forested valleys, lakes and rivers under far mountains, from Ubisoft's Steam store screenshots and four official trailers, letterboxes trimmed, measured by band (research/2026-10-15-mountain-lake-reference.md). The mountain lake demo's target for the look (D321, D326).",
+  "about": "Far Cry 5's Montana by day: eleven frames of forested valleys, lakes and rivers under far mountains, from Ubisoft's Steam store screenshots and four official trailers, letterboxes trimmed, measured by band (research/2026-10-15-mountain-lake-reference.md). The mountain lake demo's target for the look (D321, D326). Its flat foliage, leaf colour and lit leaves (D368) were measured by look.ts on 2026-10-15 from the same eleven frames, the 9 with leaves enough to say.",
   "sources": [
     "https://store.steampowered.com/app/552520/",
     "https://store.steampowered.com/api/appdetails?appids=552520"
@@ -27,7 +27,10 @@
     "lilac": 0.002310737584175084,
     "hardEdges": 0.4149412187997306,
     "facets": 0.10814393939393939,
-    "flat": 0.025715472701785983
+    "flat": 0.025715472701785983,
+    "flatFoliage": 0.12007918707460753,
+    "foliageColour": 0.13617232310627003,
+    "foliageLit": 0.12110406336070915
   },
   "bands": {
     "sky": {

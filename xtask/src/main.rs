@@ -82,6 +82,13 @@ const TASKS: &[Task] = &[
         run: |args| node("tools/sandbox/looks.ts", args),
     },
     Task {
+        name: "foliage",
+        takes: "[--card <name>] [--draw <dir>]",
+        does: "the foliage check (D368): every leaf, needle and frond card the plants wear measured from its atlas and normal map, leaves a card, texels a leaf, relief, tilt, detail, colour, held to what reads as leaves; --draw shows the leaves it counted (docs/art-style.md#places)",
+        group: "Play and check",
+        run: |args| node("tools/textures/foliage.ts", args),
+    },
+    Task {
         name: "collide",
         takes: "[--count 20]",
         does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check against their meshes that each stops them where it is drawn, or is stepped over if low (tools/sandbox)",
@@ -1527,6 +1534,7 @@ fn check() -> bool {
         && cargo("test", &["--workspace"])
         && tools_tests()
         && kits()
+        && run("node", &["tools/textures/foliage.ts"])
         && artifacts(&["--quick".into(), "--ratchet".into()])
         && run("node", &["tools/docs/docs.ts"])
         && blender_scripts()

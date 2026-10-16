@@ -81,10 +81,11 @@ test("the mean of looks is the mean of each number", () => {
 
 test("every reference kept has every number a look has, each a number", async () => {
   const { references, reference } = await import("./look.ts");
-  const keys = Object.keys(look(picture(() => [100, 120, 80]))).sort();
+  // Flat foliage is measured only where a picture has leaves enough to say.
+  const keys = [...Object.keys(look(picture(() => [100, 120, 80]))), "flatFoliage", "foliageColour", "foliageLit"].sort();
   // Measured since some references were made, from frames no longer to hand; a reference a
   // place is held to has what it is held on (looks.test.ts).
-  const later = ["trunkMiddle", "tint", "lilac", "hardEdges", "facets", "flat"];
+  const later = ["trunkMiddle", "tint", "lilac", "hardEdges", "facets", "flat", "flatFoliage", "foliageColour", "foliageLit"];
   assert.ok(references().includes("sotf-forest-day"));
   for (const name of references()) {
     const kept = reference(name);
@@ -218,4 +219,43 @@ test("a flat fill below the skyline is flat colour; grain is not, and black is l
     const k = x < 32 ? 1 : 0.8 + 0.4 * grain(x, y);
     return [120 * k, 100 * k, 80 * k].map(Math.round) as [number, number, number];
   })), 0.5);
+});
+
+test("a bush of one green lit brighter and darker is flat foliage; leaves glinting, lit through and in shade are not", async () => {
+  const { foliage } = await import("./look.ts");
+  // A ground of leaves 256 by 192, twelve 64-pixel squares, in leaves 8 pixels across.
+  const leaf = (x: number, y: number) => grain(Math.floor(x / 8), Math.floor(y / 8));
+  // One olive green, each leaf lit from a quarter to all of it: its saturation never changes.
+  const olive = [90, 120, 40];
+  const flatBush = foliage(sized(256, 192, (x, y) => olive.map((c) => Math.round(c * (0.25 + 0.75 * leaf(x, y)))) as [number, number, number]));
+  near(flatBush.flatFoliage!, 1);
+  assert.ok(flatBush.foliageColour! < 0.02, `${flatBush.foliageColour}`);
+  // Real leaves: a fifth glint pale where they mirror the sky, a fifth glow yellow lit through,
+  // the rest olive in light and shade.
+  const real = foliage(sized(256, 192, (x, y) => {
+    const k = leaf(x, y);
+    if (k < 0.2) return [150, 175, 130];
+    if (k < 0.4) return [150, 190, 30];
+    return olive.map((c) => Math.round(c * (0.4 + k))) as [number, number, number];
+  }));
+  near(real.flatFoliage!, 0);
+  assert.ok(real.foliageColour! > 0.1, `${real.foliageColour}`);
+});
+
+test("leaves catching the light are those half as bright again as their square's middle leaf", async () => {
+  const { foliage } = await import("./look.ts");
+  // Every third column of leaves twice as bright: a third of them catch the light.
+  const third = foliage(sized(256, 192, (x) => (Math.floor(x / 8) % 3 === 0 ? [90, 120, 40] : [45, 60, 20])));
+  near(third.foliageLit!, 1 / 3, 0.05);
+  near(foliage(sized(256, 192, () => [45, 60, 20])).foliageLit!, 0);
+});
+
+test("a picture without leaves enough has no flat foliage, and sky over leaves is not counted", async () => {
+  const { foliage } = await import("./look.ts");
+  // Brown ground, grey stone, too few leaves: nothing to say.
+  assert.deepEqual(foliage(sized(256, 192, () => [110, 80, 50])), {});
+  assert.deepEqual(foliage(sized(256, 192, (x, y) => (x < 64 && y < 64 ? [45, 60, 20] : [120, 120, 120]))), {});
+  // A blue sky over a flat bush: the sky is no leaf, the bush flat.
+  const under = foliage(sized(256, 256, (_, y) => (y < 64 ? [110, 160, 230] : [45, 60, 20])));
+  near(under.flatFoliage!, 1);
 });

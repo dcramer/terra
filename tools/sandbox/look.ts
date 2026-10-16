@@ -61,6 +61,14 @@ export type Look = {
   hardEdges?: number;
   facets?: number;
   flat?: number;
+  /// Flat foliage (docs/art-style.md, "Leaves read as leaves"; D368), in squares of leaves below
+  /// the skyline: the share of them one flat green, their leaves' saturation hardly varying
+  /// (`flatFoliage`); how much it varies (`foliageColour`); and how much of their leaves catch
+  /// the light, half as bright again as the rest (`foliageLit`). None where a picture has too
+  /// few leaves to say; references measured before them lack them.
+  flatFoliage?: number;
+  foliageColour?: number;
+  foliageLit?: number;
 };
 
 /// One band of a picture by distance (D326): how bright, how blue against green, how
@@ -191,7 +199,63 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     hardEdges: hardEdges(p, masked),
     facets: facets(p, masked),
     flat: flat(p, masked),
+    ...foliage(p, masked),
   };
+}
+
+/// Whether a pixel is leaf, sRGB 0 to 1: green-hued (55 to 170 degrees, as lime crowns are
+/// counted), saturated past 0.15 in HSV and brighter than 0.03, so its hue is its own.
+export function leafy(r: number, g: number, b: number): boolean {
+  const [h, s] = hsv(r, g, b);
+  return h >= 55 && h < 170 && s > 0.15 && 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.03;
+}
+
+/// Flat foliage (docs/art-style.md, "Leaves read as leaves"; D368), over the leaf pixels
+/// (`leafy`) below the skyline, in 64-pixel squares at least two fifths leaf, a bush or a part
+/// of a crown. A leaf lit by the sun and the sky alone, one colour scaled brighter or darker,
+/// keeps its saturation however it is lit; real leaves differ in more than brightness, glinting
+/// pale where they mirror the sky or the sun, yellower where it shines through them, bluer in
+/// the shade, each a green of its own. So `foliageColour` is the spread of the leaf pixels'
+/// saturation (HSV) in a square, the mean over squares; `flatFoliage` the share of squares
+/// where it is under 0.06, a bush or a crown of one flat green; and `foliageLit` the share of a
+/// square's leaf pixels brighter than one and a half times its median leaf, a crown's lit top
+/// and the leaves that catch the light against its darker inside, the mean. Brightness alone in
+/// small squares does not tell them apart: flat leaves' dark gaps between them give them as much
+/// local contrast as real ones, and the references' frames are softened by their films'
+/// compression. None of the three where a picture has fewer than `LEAFY_SQUARES` such squares,
+/// too few to say (open tundra, a bare street).
+export const LEAFY_SQUARES = 6;
+export function foliage(p: Picture, masked: (x: number, y: number) => boolean = () => false): { flatFoliage?: number; foliageColour?: number; foliageLit?: number } {
+  const { width: W, height: H, rgba } = p;
+  const line = skyline(p);
+  let squares = 0, flatSquares = 0, colour = 0, lit = 0;
+  const sat: number[] = [], luma: number[] = [];
+  for (let by = 0; by + 64 <= H; by += 64) {
+    for (let bx = 0; bx + 64 <= W; bx += 64) {
+      sat.length = 0;
+      luma.length = 0;
+      for (let y = by; y < by + 64; y++) {
+        for (let x = bx; x < bx + 64; x++) {
+          if (masked(x, y) || y < line[x]) continue;
+          const i = (y * W + x) * 4;
+          const [r, g, b] = [rgba[i] / 255, rgba[i + 1] / 255, rgba[i + 2] / 255];
+          if (!leafy(r, g, b)) continue;
+          sat.push(hsv(r, g, b)[1]);
+          luma.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+        }
+      }
+      if (sat.length < 0.4 * 64 * 64) continue;
+      const m = sat.reduce((s, v) => s + v, 0) / sat.length;
+      const spread = Math.sqrt(sat.reduce((s, v) => s + (v - m) ** 2, 0) / sat.length);
+      const median = [...luma].sort((a, c) => a - c)[luma.length >> 1];
+      squares++;
+      colour += spread;
+      if (spread < 0.06) flatSquares++;
+      lit += luma.filter((v) => v > 1.5 * median).length / luma.length;
+    }
+  }
+  if (squares < LEAFY_SQUARES) return {};
+  return { flatFoliage: flatSquares / squares, foliageColour: colour / squares, foliageLit: lit / squares };
 }
 
 /// Hue in degrees, saturation (chroma over value) and value of sRGB values 0 to 1, as HSV has
@@ -629,7 +693,13 @@ export function drawBands(p: Picture): Picture {
 /// The mean of several pictures' looks.
 export function meanOf(looks: Look[]): Look {
   const keys = [...new Set(looks.flatMap((l) => Object.keys(l)))] as (keyof Look)[];
-  return Object.fromEntries(keys.map((k) => [k, looks.reduce((s, l) => s + (l[k] ?? 0), 0) / looks.length])) as Look;
+  // Each number over the looks that have it: a picture with too few leaves has no flat foliage.
+  return Object.fromEntries(
+    keys.map((k) => {
+      const have = looks.filter((l) => typeof l[k] === "number");
+      return [k, have.reduce((s, l) => s + (l[k] as number), 0) / have.length];
+    }),
+  ) as Look;
 }
 
 /// One line for a look: each number, and the reference's beside it (Sons of the Forest's by day
@@ -638,7 +708,7 @@ export function line(name: string, l: Look, against: Look = SOTF, called = "SotF
   const SOTF = against;
   const f = (v: number) => v.toFixed(3);
   const share = (v: number | undefined) => (v === undefined ? "-" : `${(100 * v).toFixed(1)}%`);
-  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%), trunks middle ${share(l.trunkMiddle)} (${share(SOTF.trunkMiddle)})`;
+  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%), trunks middle ${share(l.trunkMiddle)} (${share(SOTF.trunkMiddle)}), flat foliage ${share(l.flatFoliage)} (${share(SOTF.flatFoliage)}), leaf colour spread ${l.foliageColour === undefined ? "-" : f(l.foliageColour)} (${SOTF.foliageColour === undefined ? "-" : f(SOTF.foliageColour)}), leaves catching light ${share(l.foliageLit)} (${share(SOTF.foliageLit)})`;
 }
 
 /// The middle of the lower half of a picture, where a third-person film's placeholder figure

@@ -10,7 +10,8 @@
     "far": "Far things keep the near things' light",
     "horizon": "The horizon is never empty",
     "textured": "Every surface is textured in the style",
-    "eye": "What the eye meets is the reference's"
+    "eye": "What the eye meets is the reference's",
+    "leaves": "Leaves read as leaves"
   },
   "places": {
     "lush": {
@@ -29,6 +30,9 @@
         "tint": { "rule": "tint", "under": 0.01 },
         "lilac": { "rule": "tint", "under": 0.002 },
         "flat": { "rule": "textured", "under": 0.01 },
+        "flatFoliage": { "rule": "leaves", "under": 0.25 },
+        "foliageColour": { "rule": "leaves", "over": 0.04 },
+        "foliageLit": { "rule": "leaves", "over": 0.06 },
         "trunkMiddle": { "rule": "eye", "within": 0.2 },
         "limeTop": { "rule": "eye", "under": 0.03 }
       }
@@ -50,7 +54,10 @@
         "far.mean": { "rule": "far", "within": 0.08 },
         "farUnderSky": { "rule": "far", "within": 0.08 },
         "far.contrast": { "rule": "horizon", "over": 0.1 },
-        "flat": { "rule": "textured", "under": 0.025 }
+        "flat": { "rule": "textured", "under": 0.025 },
+        "flatFoliage": { "rule": "leaves", "under": 0.16 },
+        "foliageColour": { "rule": "leaves", "over": 0.04 },
+        "foliageLit": { "rule": "leaves", "over": 0.035 }
       }
     },
     "tundra": {
@@ -70,7 +77,10 @@
         "far.mean": { "rule": "far", "within": 0.09 },
         "farUnderSky": { "rule": "far", "within": 0.1 },
         "far.contrast": { "rule": "horizon", "over": 0.08 },
-        "flat": { "rule": "textured", "under": 0.03 }
+        "flat": { "rule": "textured", "under": 0.03 },
+        "flatFoliage": { "rule": "leaves", "under": 0.04 },
+        "foliageColour": { "rule": "leaves", "over": 0.04 },
+        "foliageLit": { "rule": "leaves", "over": 0.08 }
       }
     },
     "town": {
@@ -90,7 +100,10 @@
         "lilac": { "rule": "tint", "under": 0.002 },
         "far.mean": { "rule": "far", "within": 0.07 },
         "far.contrast": { "rule": "horizon", "over": 0.11 },
-        "flat": { "rule": "textured", "under": 0.025 }
+        "flat": { "rule": "textured", "under": 0.025 },
+        "flatFoliage": { "rule": "leaves", "under": 0.33 },
+        "foliageColour": { "rule": "leaves", "over": 0.04 },
+        "foliageLit": { "rule": "leaves", "over": 0.05 }
       }
     }
   }

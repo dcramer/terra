@@ -66,6 +66,9 @@ export const MEASURES: Record<string, { called: string; share?: boolean }> = {
   hardEdges: { called: "hard shade edges", share: true },
   facets: { called: "facet edges (widths)" },
   flat: { called: "flat colour", share: true },
+  flatFoliage: { called: "flat foliage", share: true },
+  foliageColour: { called: "leaf colour spread" },
+  foliageLit: { called: "leaves catching light", share: true },
   farUnderSky: { called: "far under sky" },
   farBluerThanMiddle: { called: "far bluer than middle" },
   ...Object.fromEntries(
@@ -99,11 +102,14 @@ export function judge(hold: Record<string, Hold>, target: Record<string, number>
   return Object.entries(hold).map(([measure, h]) => {
     const at = target[measure];
     if (at === undefined) throw new Error(`the reference has no ${measure}`);
-    const values = views.map((v) => ({ view: v.view, value: v.numbers[measure] }));
-    const ours = values.reduce((s, v) => s + v.value, 0) / values.length;
+    // A view without the number (one with too few leaves for flat foliage) is left out; with
+    // none of them having it, it holds, as there is nothing to judge.
+    const values = views.filter((v) => typeof v.numbers[measure] === "number").map((v) => ({ view: v.view, value: v.numbers[measure] }));
     const d = h.within ?? h.under ?? h.over ?? 0;
     const low = h.under !== undefined ? -Infinity : at - d;
     const high = h.over !== undefined ? Infinity : at + d;
+    if (!values.length) return { rule: h.rule, measure, ours: NaN, target: at, low, high, holds: true, out: 0, worst: { view: "none", value: NaN } };
+    const ours = values.reduce((s, v) => s + v.value, 0) / values.length;
     const holds = ours >= low && ours <= high;
     const out = holds ? 0 : (ours > high ? ours - high : low - ours) / Math.max(d, 1e-9);
     // The view furthest the wrong way: the highest under a ceiling, the lowest over a floor,
@@ -116,6 +122,7 @@ export function judge(hold: Record<string, Hold>, target: Record<string, number>
 
 /// A number as the table prints it: a share as a percent, anything else to three places.
 export function shown(measure: string, v: number): string {
+  if (Number.isNaN(v)) return "no leaves";
   return MEASURES[measure]?.share ? `${(100 * v).toFixed(1)}%` : v.toFixed(3);
 }
 
