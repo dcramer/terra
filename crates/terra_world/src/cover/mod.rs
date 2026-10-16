@@ -95,6 +95,8 @@ pub struct Growing {
     pub shrub: f32,
     /// How much of what grows is the heath's lichen, drawn as low pale cushions.
     pub lichen: f32,
+    /// How much of what grows is the heath's moss, drawn as low green and gold cushions.
+    pub heath_moss: f32,
 }
 
 impl Growing {

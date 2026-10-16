@@ -189,8 +189,8 @@ pub(super) struct Samples {
 }
 
 /// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
-/// needles, roots, tall, heap, heath, shrub and lichen.
-pub(super) const SAMPLED: usize = 13;
+/// needles, roots, tall, heap, heath, shrub, lichen and the heath's moss.
+pub(super) const SAMPLED: usize = 14;
 
 impl Samples {
     pub(super) fn at(&self, at: Vec2) -> [f32; SAMPLED] {
@@ -264,6 +264,7 @@ pub fn square(
                 growing.heath,
                 growing.shrub,
                 growing.lichen,
+                growing.heath_moss,
             ]);
         }
     }
@@ -329,6 +330,7 @@ pub fn square(
                 heath,
                 shrub,
                 lichen,
+                mossy,
             ] = samples.at(at);
             let cell = (((at - corner) / CELL_M).floor().as_ivec2())
                 .clamp(IVec2::ZERO, IVec2::splat(CELLS as i32 - 1));
@@ -376,6 +378,9 @@ pub fn square(
             let leafy = heath > 0.5 && pick < shrub;
             // And a share are lichen's pale cushions, lower still.
             let cushion = heath > 0.5 && !leafy && pick < shrub + lichen;
+            // And moss's, green and gold, by the pools and in the wet hollows.
+            let moss_cushion = heath > 0.5 && !leafy && !cushion && pick < shrub + lichen + mossy;
+            let own = leafy || cushion || moss_cushion;
             let tall = (0.12 + 0.42 * libm::powf(grass, 0.7) * (0.6 + 0.4 * lush))
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
@@ -389,7 +394,12 @@ pub fn square(
                 (Vec2::new(libm::cosf(facing), libm::sinf(facing)) + away * 0.8).normalize_or(away);
             let dryness =
                 ((1.0 - lush) * 0.45 + clump.dry * 0.2 + (h(6) - 0.5) * 0.25).clamp(0.0, 1.0);
-            let tip = if cushion {
+            let tip = if moss_cushion {
+                linear(0.42, 0.47, 0.16).lerp(
+                    linear(0.62, 0.50, 0.14),
+                    (0.5 + 0.5 * clump.hue).clamp(0.0, 1.0),
+                ) * (0.8 + 0.3 * h(7))
+            } else if cushion {
                 // Cladonia's cream and grey-green (the tundra's photographs' lichen crops).
                 linear(0.64, 0.60, 0.48).lerp(linear(0.55, 0.56, 0.45), 0.5 + 0.5 * clump.hue)
                     * (0.85 + 0.25 * h(7))
@@ -411,11 +421,14 @@ pub fn square(
             } else {
                 deep.lerp(green, 0.5 + 0.5 * clump.hue).lerp(dry, dryness) * (0.85 + 0.3 * h(7))
             };
-            let (tall, leafy_width) = if cushion {
-                ((0.02 + 0.04 * h(15)) * clump.height, 3.2)
+            let (tall, leafy_width) = if cushion || moss_cushion {
+                ((0.025 + 0.035 * h(15)) * clump.height, 2.2)
             } else if leafy {
-                // Shoots a hand high or less, broad with leaves, leaning out.
-                ((0.05 + 0.11 * h(15)) * clump.height, 2.6)
+                // Shoots a few fingers high, their leaves a centimetre or two, leaning out.
+                ((0.03 + 0.07 * h(15)) * clump.height, 1.5)
+            } else if heath > 0.5 {
+                // The heath's sedge a hand or two high, not a meadow's knee-high grass.
+                (tall * 0.55, 1.0)
             } else {
                 (tall, 1.0)
             };
@@ -424,10 +437,10 @@ pub fn square(
             // lush), now and then a cotton grass stem: straight, a little taller,
             // its seed head a white tuft at the top.
             let cotton = taller > 0.35 && lush < 0.35 && h(12) < 0.1 * taller;
-            let cotton = cotton && !leafy && !cushion;
+            let cotton = cotton && !own;
             let (tall, bend) = if cotton {
                 (tall * 1.3, 0.06)
-            } else if leafy || cushion {
+            } else if own {
                 (tall, 0.5 + 0.35 * h(8))
             } else {
                 (tall, 0.25 + 0.5 * h(8))
@@ -446,6 +459,7 @@ pub fn square(
                 tip,
                 ring.segments,
                 rank,
+                own,
             );
         }
     }
@@ -495,7 +509,7 @@ const SHRUBS: [(f32, f32, f32); 6] = [
     (0.60, 0.26, 0.10),
     (0.66, 0.33, 0.11),
     (0.74, 0.46, 0.13),
-    (0.26, 0.16, 0.08),
+    (0.30, 0.31, 0.14),
 ];
 
 /// Cotton grass's seed head, linear: a white tuft, a little warm (199, 191, 177 sRGB in the
@@ -516,7 +530,11 @@ impl BladeMesh {
         tip: Vec3,
         segments: u32,
         rank: f32,
+        own: bool,
     ) {
+        // The grass shader browns a blade with grass's year unless it keeps its own colour,
+        // which it is told by 2 added to the rank (grass.wesl).
+        let rank = if own { rank + 2.0 } else { rank };
         let side = way.cross(Vec3::Y).normalize_or(Vec3::X);
         let control = root + Vec3::Y * tall * 0.65;
         let end = root + Vec3::Y * tall * (1.0 - 0.4 * bend) + way * tall * bend;
@@ -547,7 +565,13 @@ impl BladeMesh {
             // surface, and to either side across it so a blade shades round.
             let face = side.cross(tangent(t)).normalize_or(Vec3::Y);
             let lit = (Vec3::Y * 0.6 + face * 0.4).normalize();
-            let half = width * 0.5 * libm::powf(1.0 - t, 0.8);
+            // A grass blade tapers from its foot; a leaf, a lichen's or a moss's cushion is
+            // broadest in its middle, as a leaf is, not a spike.
+            let half = if own {
+                width * 0.5 * (0.25 + 0.75 * libm::sinf(core::f32::consts::PI * (0.15 + 0.85 * t)))
+            } else {
+                width * 0.5 * libm::powf(1.0 - t, 0.8)
+            };
             push(point - side * half, (lit - side * 0.3).normalize(), t);
             push(point + side * half, (lit + side * 0.3).normalize(), t);
         }
@@ -582,25 +606,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_dwarf_shrubs_leaves_are_red_enough_that_the_grass_shader_keeps_them() {
-        // grass.wesl keeps a blade's colour, unbrowned to straw, from linear red over green
-        // 2.3; and grass, browned or not, stays under 1.8 of it.
-        let linear = |(r, g, b): (f32, f32, f32)| {
-            Vec3::from_array(Color::srgb(r, g, b).to_linear().to_f32_array_no_alpha())
-        };
-        for leaf in SHRUBS {
-            let c = linear(leaf);
-            assert!(c.x / c.y > 2.3, "{leaf:?}: {}", c.x / c.y);
-        }
-        for grass in [
-            (0.30, 0.45, 0.14),
-            (0.58, 0.53, 0.28),
-            (0.64, 0.53, 0.30),
-            (0.54, 0.42, 0.24),
-        ] {
-            let c = linear(grass);
-            assert!(c.x / c.y < 1.8, "{grass:?}: {}", c.x / c.y);
-        }
+    fn a_blade_keeping_its_own_colour_tells_the_shader_by_its_rank() {
+        let mut mesh = BladeMesh::default();
+        mesh.blade(
+            Vec3::ZERO,
+            Vec3::X,
+            0.1,
+            0.3,
+            0.03,
+            Vec3::ONE,
+            3,
+            0.25,
+            true,
+        );
+        mesh.blade(Vec3::X, Vec3::X, 0.1, 0.3, 0.03, Vec3::ONE, 3, 0.25, false);
+        let half = mesh.up_and_rank.len() / 2;
+        // As grass.wesl reads it: 2 and more is a blade's own colour, its rank 2 under it.
+        assert!(
+            mesh.up_and_rank[..half]
+                .iter()
+                .all(|&[_, r]| r >= 1.5 && (r - 2.0 - 0.25).abs() < 1e-6)
+        );
+        assert!(
+            mesh.up_and_rank[half..]
+                .iter()
+                .all(|&[_, r]| r < 1.5 && (r - 0.25).abs() < 1e-6)
+        );
     }
 
     #[test]

@@ -68,15 +68,15 @@ impl CoverSource for HeathCover {
         // dwarf shrubs, the lichen and the moss a few grasses only.
         // The dwarf shrubs a dense mat of short leafy shoots (`Growing::shrub`), so the heath
         // stands a hand high and has its texture rather than lying as a painted floor.
-        let blades =
-            0.55 * heath.sedge + 0.6 * heath.shrub + 0.15 * heath.moss + 0.5 * heath.lichen;
+        let blades = 0.55 * heath.sedge + 0.6 * heath.shrub + 0.7 * heath.moss + 0.9 * heath.lichen;
         Growing {
             grass: (meadow + blades).min(1.0),
             lush: wild.lush * (1.0 - heath.open) + 0.3 * heath.open,
             tall: (heath.sedge / heath.open.max(1e-3)).min(1.0) * heath.open * 0.8,
             heath: heath.open,
             shrub: 0.6 * heath.shrub,
-            lichen: 0.5 * heath.lichen,
+            lichen: 0.9 * heath.lichen,
+            heath_moss: 0.7 * heath.moss,
             ..default()
         }
     }

@@ -506,6 +506,7 @@ impl Map {
             heath: 0.0,
             shrub: 0.0,
             lichen: 0.0,
+            heath_moss: 0.0,
             // Litter heaps against trunks, logs and rocks, its edge wandering (D294).
             heap: 1.0 - smoothstep(0.0, 0.9, here.bark.min(here.lying) + wander * 0.25),
             // Tall meadow grass in patches where the sun reaches; in the shade, clumps of

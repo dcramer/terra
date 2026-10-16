@@ -215,7 +215,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var local = vertex.position;
 @if(VERTEX_UVS_A && VERTEX_UVS_B && VERTEX_COLORS)
-    local = shrunk(local, vertex.uv, vertex.color.a, vertex.uv_b.y, world_from_local);
+    // The rank, with 2 added for a blade keeping its own colour.
+    let rank = select(vertex.uv_b.y, vertex.uv_b.y - 2.0, vertex.uv_b.y >= 1.5);
+    local = shrunk(local, vertex.uv, vertex.color.a, rank, world_from_local);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
     world = vec4<f32>(world.xyz + sway(world.xyz, weights(vertex.uv_b.x), globals.time) + parted(world.xyz, vertex.uv_b.x, 0u), 1.0);
@@ -258,10 +260,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             let straw = grass.grass_autumn.rgb * 0.35;
             // A cotton grass head, many times brighter than any blade, stays white.
             let head = smoothstep(3.0, 6.0, light);
-            // A dwarf shrub's leaf (blades.rs, `SHRUBS`), far redder than any grass, keeps its
-            // own autumn colour.
-            let leaf = smoothstep(1.8, 2.3, colour.r / max(colour.g, 1e-4));
-            colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, max(head, leaf));
+            // A dwarf shrub's leaf, lichen or moss (blades.rs, `BladeMesh::blade`'s `own`)
+            // keeps its own colour: only grass browns with grass's year.
+            let own = select(0.0, 1.0, vertex.uv_b.y >= 1.5);
+            colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, max(head, own));
         }
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;

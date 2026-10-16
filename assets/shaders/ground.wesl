@@ -1022,16 +1022,28 @@ fn fragment(
             }
             let sedge = smoothstep(0.15, 0.5, heath.plants.z + mosaic) * flat_ground;
             if sedge > 0.0 {
-                let tint = mix(SEDGE_GREEN, SEDGE_STRAW, smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer))) * (0.85 + 0.3 * fleck);
+                // Some stands of it turn later than others: olive patches among the straw.
+                let late = smoothstep(0.45, 0.75, noise(world * 0.13 + 41.0) * 0.7 + fleck * 0.3);
+                let turned = smoothstep(0.0, 0.5, kind_turned(world, ground.grass_layer)) * (1.0 - 0.7 * late);
+                let tint = mix(SEDGE_GREEN, SEDGE_STRAW, turned) * (0.85 + 0.3 * fleck);
                 ground_is = settle(ground_is, toned(layer(GRASS, 0.8, tint, world + 73.0, gx, gy, n, 1.0), tint), sedge);
             }
             let shrub = smoothstep(0.12, 0.45, heath.plants.y + mosaic) * flat_ground;
             if shrub > 0.0 {
                 // Dwarf birch and bilberry turning crimson and rust, crowberry staying dark
                 // green among them, in patches a hand or two across.
-                let crowberry = smoothstep(0.58, 0.8, noise(world * 1.3 + 31.0));
-                let autumn = ground.heath_autumn.rgb * mix(vec3<f32>(1.08, 0.62, 0.42), vec3<f32>(0.95, 1.12, 0.8), fleck);
-                let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), SHRUB_GREEN * 0.8, crowberry);
+                // Which shrub holds a patch, a metre to ten across: bearberry's crimson, dwarf
+                // birch's rust and its gold, crowberry's olive, which stays green; so a shrub
+                // heath seen from off is a mottle of them, as the photographs' is, not one rust.
+                let which = noise(world * 0.21 + 5.0) * 0.55 + noise(world * 0.9 + 9.0) * 0.3 + fleck * 0.15;
+                let crimson = vec3<f32>(0.17, 0.022, 0.01);
+                let gold = vec3<f32>(0.3, 0.15, 0.025);
+                var autumn = mix(crimson, ground.heath_autumn.rgb, smoothstep(0.3, 0.42, which));
+                autumn = mix(autumn, gold, smoothstep(0.55, 0.68, which));
+                autumn *= mix(vec3<f32>(1.05, 0.8, 0.8), vec3<f32>(0.95, 1.1, 1.0), fleck);
+                let crowberry = smoothstep(0.4, 0.55, noise(world * 0.37 + 31.0) * 0.7 + fleck * 0.3);
+                let olive = vec3<f32>(0.075, 0.068, 0.02);
+                let leaves = mix(mix(SHRUB_GREEN, autumn, kind_turned(world, ground.heath_layer)), olive, crowberry * 0.85);
                 ground_is = settle(ground_is, toned(layer(LITTER, 0.6, leaves, world + 79.0, gx, gy, n, 1.0), leaves), shrub);
             }
             // Wet ground darker and glossier, as wet soil and moss are (Lagarde).
@@ -1040,8 +1052,11 @@ fn fragment(
         }
 
         // The ground under thick grass is in the blades' own shade, so what shows between
-        // them is dark, as their roots are, rather than a lawn.
-        ground_is.colour *= 1.0 - 0.6 * smoothstep(0.1, 0.7, blades);
+        // them is dark, as their roots are, rather than a lawn. Less so farther off, where
+        // the blades thin to a third of them (blades.rs `RINGS`) and the ground stands in for
+        // the rest: darkened as if under them all, the heath's middle distance was a dark
+        // trough under its lit near blades.
+        ground_is.colour *= 1.0 - 0.6 * smoothstep(0.1, 0.7, blades) * mix(1.0, 0.35, smoothstep(18.0, 60.0, far_off));
         ground_is.colour *= 0.86 + 0.28 * swell;
 
         // The mountains' bare rock, their scree under its cliffs and gravel in gullies' beds,
