@@ -369,12 +369,20 @@
           "status": "Closed"
         },
         {
-          "junction": "A lean-to rising north or south over timber walls",
-          "rule": "Not yet closed: the walls under its sloping sides stop 5 cm under the roof, and sky shows through the log wall under its high side",
+          "junction": "A roof's eave over timber walls whichever way it falls, a room's flat top beside them",
+          "rule": "The courses left out under it blocked to the roof whichever axis its wall runs along; a row leaves a corner to the crossing row's blocking only where that row is a wall under the eave too, never a floor or a flat top beside it, nor a gable the roof rises along, where its own blocking runs on into the corner",
+          "code": ["layout::runs::under_roofs"],
+          "tests": ["layout::runs::a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
+          "junction": "A lean-to's high corner over a timber gable rising north or south",
+          "rule": "Not yet closed: over the gable's crest at the high wall's corner a slot 5 cm high is left between the eave blocking's weather face and the wall's",
           "code": ["layout::runs::under_roofs"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 28, 168",
+          "also": "the fuzz pass, seed 168",
           "status": "Gap 12"
         }
       ]

@@ -624,12 +624,22 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             unfit: &|i| {
                 let p = (from + along * at(i)).with_y(foot + 0.01);
                 let cube = (p / CELL_M).floor().as_ivec3();
-                let ours = |c: IVec3| {
-                    base.cube(c)
-                        .is_some_and(|c| c.kind == kit.kind() && c.fill == crate::Fill::Solid)
+                // A wall of ours crossing it there, which lays that blocking: not a floor or
+                // a flat roof of ours beside it, which lays none.
+                let ours = |c: IVec3| walls.ours(c) == Some(crate::Fill::Solid);
+                // And only where the roof falls across that wall too, a cube along it, as
+                // at a hip's corner, so it is blocked: at a gable's foot, the roof rising
+                // along the wall that crosses, nothing of that one's reaches the roof over
+                // the corner, and this one's blocking runs on into it.
+                let falls_across = |d: IVec3| {
+                    let q = p + d.as_vec3() * CELL_M;
+                    let level = |dz: f32| roofs.top_over(q.x, q.z + dz, foot - NEAR_ROOF_M);
+                    !matches!((level(-0.1), level(0.1)), (Some(a), Some(b)) if (a - b).abs() < 0.01)
                 };
                 let crossed = along.x.abs() < 0.5
-                    && (ours(cube + IVec3::X) || ours(cube - IVec3::X))
+                    && [IVec3::X, IVec3::NEG_X]
+                        .into_iter()
+                        .any(|d| ours(cube + d) && falls_across(d))
                     && !against(p);
                 (!fits(i) && !crossed).then(|| at(i))
             },
@@ -1987,6 +1997,74 @@ mod tests {
                     let ground = if foot.x < 0.25 { -0.6 } else { -0.5 };
                     assert!(foot.y <= ground, "a corner post's foot at {foot}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises() {
+        // Found by `cargo xtask fuzz` (seeds 28, 110; docs/building-voxels.md, gap 12): a log
+        // room laid with its flat top, roofed over it by a lean-to rising north to south and
+        // a hip whose ridge runs east and west. The walls along the north and south under the
+        // eaves were left to a crossing row's blocking where the room's flat top stood beside
+        // them, which is a floor and lays none, and sky showed under the roof.
+        use crate::scenes::fuzz::{Element::*, build};
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let materials =
+            crate::scenes::registry::Materials::read(&assets, true).expect("the baseline");
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .expect(name)
+        };
+        let maps = crate::relief::Maps::worst(&materials.kits, false);
+        for elements in [
+            vec![
+                Room {
+                    min: [1, 4],
+                    max: [8, 7],
+                    storey: 0,
+                    kind: kind("logs"),
+                },
+                Roof {
+                    tile: [4, 5],
+                    storey: 0,
+                    style: Style::LeanTo,
+                    along_x: Some(false),
+                    kind: kind("shakes"),
+                },
+            ],
+            vec![
+                Room {
+                    min: [1, 1],
+                    max: [7, 7],
+                    storey: 0,
+                    kind: kind("logs"),
+                },
+                Roof {
+                    tile: [4, 4],
+                    storey: 0,
+                    style: Style::Hip,
+                    along_x: Some(true),
+                    kind: kind("shakes"),
+                },
+            ],
+        ] {
+            let base = build(&materials.kits, &elements);
+            let report = crate::inspect::inspect(&base, &materials.kits, &maps);
+            for fault in [
+                crate::inspect::Fault::SeeThrough,
+                crate::inspect::Fault::UnderRoof,
+            ] {
+                assert_eq!(
+                    report.count(fault),
+                    0,
+                    "{elements:?}: {:?}",
+                    report.findings
+                );
             }
         }
     }
