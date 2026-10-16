@@ -1050,10 +1050,7 @@ mod tests {
         );
         // Noise hashed from each texel, the same every run.
         let noise = |x: usize, y: usize| {
-            let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77);
-            h ^= h >> 15;
-            h = h.wrapping_mul(0x2C1B_3C6D);
-            h ^= h >> 12;
+            let h = crate::layout::mix3(0, x as u32, y as u32, 0);
             (h % 1000) as f32 / 1000.0
         };
         let said = stone_with(&wall(noise, lit, 0.8, 0.0), 2.4);

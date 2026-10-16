@@ -614,13 +614,7 @@ pub fn wear(surface: &mut crate::Surface, worn: &[([i32; 3], u8)]) {
 
 /// A number from 0 to 1 for a place, the same on every machine.
 fn unit(at: IVec3) -> f32 {
-    let mut hash = (at.x as u32).wrapping_mul(0x9E37_79B1)
-        ^ (at.y as u32).wrapping_mul(0x85EB_CA77)
-        ^ (at.z as u32).wrapping_mul(0xC2B2_AE3D);
-    hash ^= hash >> 15;
-    hash = hash.wrapping_mul(0x2C1B_3C6D);
-    hash ^= hash >> 12;
-    (hash & 0xFFFF) as f32 / 65535.0
+    crate::layout::unit3(0, at.x as u32, at.y as u32, at.z as u32)
 }
 
 #[cfg(test)]

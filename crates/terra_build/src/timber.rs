@@ -581,16 +581,7 @@ fn break_up(made: &mut Member, frame: &Frame, harm: Harm, depth: f32, seed: u32)
         let d = p - middle;
         (d - frame.axis * d.dot(frame.axis)).normalize_or_zero()
     };
-    let unit = |a: u32, b: i32, c: i32| {
-        let mut hash = seed
-            ^ a.wrapping_mul(0x9E37_79B1)
-            ^ (b as u32).wrapping_mul(0x85EB_CA77)
-            ^ (c as u32).wrapping_mul(0xC2B2_AE3D);
-        hash ^= hash >> 15;
-        hash = hash.wrapping_mul(0x2C1B_3C6D);
-        hash ^= hash >> 12;
-        (hash & 0xFFFF) as f32 / 65535.0
-    };
+    let unit = |a: u32, b: i32, c: i32| crate::layout::unit3(seed, a, b as u32, c as u32);
     let length = frame.length;
     let radius = made.grid[0]
         .iter()

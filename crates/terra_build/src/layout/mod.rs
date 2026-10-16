@@ -1164,6 +1164,26 @@ pub(crate) fn unit(hash: u32) -> f32 {
     (hash >> 8) as f32 / (1u32 << 24) as f32
 }
 
+/// The 32-bit hash of a place, the same on every machine: three numbers (a cube's x, y and
+/// z, a texel and a salt) and a seed, each scattered by its own odd multiplier and then
+/// mixed, so neighbours differ. Damage, loss's shading, broken timber, the cell maps and
+/// the damage mask share it.
+pub fn mix3(seed: u32, a: u32, b: u32, c: u32) -> u32 {
+    let mut hash = seed
+        ^ a.wrapping_mul(0x9E37_79B1)
+        ^ b.wrapping_mul(0x85EB_CA77)
+        ^ c.wrapping_mul(0xC2B2_AE3D);
+    hash ^= hash >> 15;
+    hash = hash.wrapping_mul(0x2C1B_3C6D);
+    hash ^= hash >> 12;
+    hash
+}
+
+/// [`mix3`] as a number from 0 to 1, from its low 16 bits.
+pub fn unit3(seed: u32, a: u32, b: u32, c: u32) -> f32 {
+    (mix3(seed, a, b, c) & 0xFFFF) as f32 / 65535.0
+}
+
 /// A seeded run of numbers, for one piece.
 pub(crate) struct Random(pub u32);
 
@@ -1192,6 +1212,22 @@ pub(crate) mod tests {
 
     pub(crate) fn kit() -> Kit {
         Kit::default()
+    }
+
+    /// A place's hash spreads its numbers over the whole of 0 to 1: across a 16 by 16 patch
+    /// of neighbours, each tenth of the range is hit, and no two neighbours in a row match.
+    #[test]
+    fn a_places_hash_spreads_over_its_range_and_neighbours_differ() {
+        let mut tenths = [0usize; 10];
+        for x in 0..16u32 {
+            for z in 0..16u32 {
+                let here = unit3(3, x, 1, z);
+                assert!((0.0..=1.0).contains(&here));
+                assert_ne!(here, unit3(3, x + 1, 1, z), "at {x}, {z}");
+                tenths[((here * 10.0) as usize).min(9)] += 1;
+            }
+        }
+        assert!(tenths.iter().all(|&n| n > 10), "{tenths:?}");
     }
 
     /// A cabin four metres by three outside.

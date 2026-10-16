@@ -13,13 +13,7 @@ const CELLS: [usize; 2] = [5, 13];
 
 /// A number from 0 to 1 for a cell, the same every run.
 fn hash(x: i64, y: i64, salt: u32) -> f32 {
-    let mut h = (x as u32).wrapping_mul(0x9E37_79B1)
-        ^ (y as u32).wrapping_mul(0x85EB_CA77)
-        ^ salt.wrapping_mul(0xC2B2_AE3D);
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2C1B_3C6D);
-    h ^= h >> 12;
-    (h & 0xFFFF) as f32 / 65535.0
+    terra_build::layout::unit3(0, x as u32, y as u32, salt)
 }
 
 /// How far a point (in cells, wrapping round `cells`) is from the nearest edge between two

@@ -109,10 +109,7 @@ pub fn label(data: &[u8], width: usize, height: usize, stride: usize, share: f32
             continue;
         }
         // A number from 8 to 255, the same every run, scattered so neighbours differ.
-        let mut h = count.wrapping_mul(0x9E37_79B1);
-        h ^= h >> 15;
-        h = h.wrapping_mul(0x2C1B_3C6D);
-        h ^= h >> 12;
+        let h = crate::layout::mix3(0, count, 0, 0);
         let value = 8 + (h % 248) as u8;
         let count_f = members.len() as f32;
         let (mx, my) = members.iter().fold((0.0f32, 0.0f32), |(a, b), &(_, x, y)| {
