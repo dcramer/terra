@@ -7,7 +7,7 @@ node tools/textures/textures.ts fetch pine_bark                         # a Poly
 node tools/textures/textures.ts fetch ambientcg:Ground104 --name packed_earth   # an ambientCG one, CC0
 node tools/textures/textures.ts material shakes art/textures/shakes.png --tile y   # from a generated image
 node tools/textures/textures.ts stack ground brown_mud_02 leafy_grass rock_face_03 sand_01 dry_decay_leaves forest_leaves_04 roots moss_004 --height
-node tools/textures/textures.ts cards foliage --size 4096 oak=art/textures/cards/oak.leaves.json birch=keep … holly=art/textures/cards/holly.png
+node tools/textures/textures.ts cards foliage --size 4096 oak=art/textures/cards/oak.leaves.json birch=keep … holly=art/textures/cards/holly.leaves.json
 node tools/textures/textures.ts cards litter oakfall=art/textures/litter/oakfall.leaves.json … ivydark=art/textures/litter/ivydark.leaves.json --size 2048 --columns 4
 ```
 

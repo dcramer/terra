@@ -41,17 +41,8 @@
       "relief": "a picture, its normal map flat: the generic pine lit as flat cards, as the mountain lake's were before D366",
       "sharpness": "the world's pine (flora.ron Pine, clump_m 2.4) grows its card 2.6 m across, magnified 1.3 times at 2 m"
     },
-    "fern": {
-      "relief": "a picture, its normal map flat",
-      "leafTexels": "its pinnae 69 texels long",
-      "gamut": "a pale lime (luma 0.5), past a living frond's green"
-    },
     "herb": {
       "relief": "a picture, its normal map flat"
-    },
-    "holly": {
-      "relief": "a picture, its normal map flat: the lush forest's holly lit as flat cards",
-      "tilts": "a picture, its normal map flat"
     }
   }
 }

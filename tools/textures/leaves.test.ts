@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Canvas, compose, drawLeaf, laidNormal, scanLeaves, type Recipe, type Scan } from "./leaves.ts";
+import { Canvas, compose, drawLeaf, laidNormal, scanLeaves, scanStats, type Recipe, type Scan } from "./leaves.ts";
 import { cellsOf, leavesOf } from "./textures.ts";
 
 const close = (a: number[], b: number[], within = 1e-6) => a.every((v, i) => Math.abs(v - b[i]) < within);
@@ -211,4 +211,55 @@ test("a conifer's card is drawn needle by needle, its needles as long as asked, 
   const solid = 2 * Math.sqrt(Math.PI * covered);
   assert.ok(edge > solid * 4, `${edge} of ${covered} covered pixels at an edge, against ${solid.toFixed(0)}`);
   assert.deepEqual(compose(undefined, recipe, size).rgba, card.rgba, "the same recipe draws the same card");
+});
+
+test("a spiny leaf's margin is cut back between its spines, its spines standing out", () => {
+  const made = scan(1);
+  const { leaves, label } = scanLeaves(made.alpha, made.width, made.height);
+  const laid = { leaf: leaves[0].id, at: [100, 180] as [number, number], angle: -Math.PI / 2, length: 160, turn: 0, tilt: 0, mirror: 1, underside: false, tint: [1, 1, 1] as [number, number, number] };
+  // Its outline's width at each row up the leaf.
+  const widths = (recipe: Recipe) => {
+    const { box, patch } = drawLeaf(made, label, leaves[0], laid, recipe, scanStats(made, leaves));
+    const w = box[2] - box[0];
+    const rows: number[] = [];
+    for (let y = 0; y < box[3] - box[1]; y++) {
+      let n = 0;
+      for (let x = 0; x < w; x++) if (patch.cover[y * w + x] > 0.5) n++;
+      rows.push(n);
+    }
+    return rows;
+  };
+  const plain = widths(graded);
+  const spiny = widths({ ...graded, spines: { count: 4, depth: 0.4 } });
+  const lost = plain.map((n, y) => n - spiny[y]);
+  // Narrower in places, much less at others: scallops between spines that keep nearly the
+  // full width.
+  assert.ok(lost.reduce((a, b) => a + b, 0) > 0, "nothing cut");
+  const blade = lost.slice(Math.round(plain.length * 0.15), Math.round(plain.length * 0.55));
+  assert.ok(Math.min(...blade) < 0.35 * Math.max(...blade) && Math.max(...blade) >= 4, `cut back by ${blade.join(",")}`);
+});
+
+test("a frond's pinnae stand either side of one rachis corner to corner, longest low down", () => {
+  const recipe: Recipe = {
+    scan: "made up", form: "frond", leaves: 24, length: [0.18, 0.22], shoots: 0, twig: [0.3, 0.4, 0.2], thickness: 0.012,
+    tone: 0, young: 0, old: 0, underside: 0, albedo: [0.25, 0.4, 0.12], seed: 3,
+  };
+  const card = compose(scan(2), recipe, 96);
+  // Covered either side of the diagonal the rachis runs up, x + y = 96 at its middle, and
+  // more round its lower third than round its top.
+  const round = (cx: number, cy: number) => {
+    let [above, below] = [0, 0];
+    for (let y = 0; y < 96; y++)
+      for (let x = 0; x < 96; x++) {
+        if (Math.hypot(x - cx, y - cy) > 14 || card.rgba[(y * 96 + x) * 4 + 3] < 128) continue;
+        const off = x - cx - (cy - y);
+        if (off > 4) below++;
+        if (off < -4) above++;
+      }
+    return { above, below };
+  };
+  const low = round(34, 62);
+  const high = round(82, 14);
+  assert.ok(low.above > 30 && low.below > 30, `low: ${low.above} above, ${low.below} below`);
+  assert.ok(low.above + low.below > 1.5 * (high.above + high.below), `low ${low.above + low.below}, high ${high.above + high.below}`);
 });

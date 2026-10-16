@@ -30,8 +30,12 @@ export type Recipe = {
    * `compound`: leaf stalks along a cane, each ending in three or five leaflets, as bramble;
    * `litter`: fallen leaves lying flat in a loose heap, with fallen needles, twigs (`shoots`
    * of them) and cones among them, for the forest floor; `needles`: a conifer's branch end,
-   * every twig clothed all round in needles (`needle`), drawn rather than cut from a scan. */
-  form: "spray" | "compound" | "litter" | "needles";
+   * every twig clothed all round in needles (`needle`), drawn rather than cut from a scan;
+   * `frond`: a fern's frond, its pinnae (`leaves` of them) in pairs either side of one
+   * rachis corner to corner across the card, from its foot at the lower left, square to it,
+   * longest a third of the way up and shortest at its foot and tip, as male and lady fern's
+   * are. */
+  form: "spray" | "compound" | "litter" | "needles" | "frond";
   /** How many leaves, or for `compound`, leaf stalks; for `needles`, the shoots each side
    * shoot has of its own, at most. */
   leaves: number;
@@ -96,6 +100,10 @@ export type Recipe = {
   holes?: number;
   /** How far a leaf's hue wanders from the next, greener or yellower. */
   hues?: number;
+  /** A spiny margin, as holly's, or a fern's pinna lobed into its pinnules: how many spines
+   * or lobes down each side of a leaf, and how deep the margin is cut back between them, as a
+   * share of the leaf's half-width there. */
+  spines?: { count: number; depth: number };
   /** Berries in bunches along the twig, if it bears them. */
   berries?: { count: number; colour: [number, number, number]; radius: number };
   /** For `litter`: fallen needles, how many and their colour, and pine cones. */
@@ -390,6 +398,19 @@ export function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: La
   const contrast = recipe.contrast ?? 1;
   const roughScale = recipe.roughness !== undefined && stats ? recipe.roughness / Math.max(0.05, stats.rough) : undefined;
   const width = 0.5 * Math.max(leaf.box[2] - leaf.box[0], leaf.box[3] - leaf.box[1]) / axisLength;
+  // For a spiny margin: the leaf's half-width at each share of the way along its midrib.
+  const SPINE_BINS = 48;
+  const halfWidth = new Float32Array(SPINE_BINS);
+  if (recipe.spines) {
+    for (let sy = leaf.box[1]; sy < leaf.box[3]; sy++)
+      for (let sx = leaf.box[0]; sx < leaf.box[2]; sx++) {
+        if (label[sy * scan.width + sx] !== leaf.id) continue;
+        const a = ((sx - bx) * axis[0] + (sy - by) * axis[1]) / axisLength;
+        const c = Math.abs(((sx - bx) * perp[0] + (sy - by) * perp[1]) / axisLength);
+        const bin = Math.min(SPINE_BINS - 1, Math.max(0, Math.floor(a * SPINE_BINS)));
+        halfWidth[bin] = Math.max(halfWidth[bin], c);
+      }
+  }
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const [px, py] = [x0 + x + 0.5 - laid.at[0], y0 + y + 0.5 - laid.at[1]];
@@ -428,6 +449,14 @@ export function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: La
         else rim = Math.max(rim, 1 - Math.min(1, (d - 1) * 4));
       }
       if (cover <= 0.002) continue;
+      // A spiny margin, as holly's: between its spines the margin cut back in scallops, a
+      // share of the leaf's width there, so each spine stands out as a point (`spines`).
+      if (recipe.spines) {
+        const t = (a - 0.1) / 0.85;
+        const hw = halfWidth[Math.min(SPINE_BINS - 1, Math.max(0, Math.floor(a * SPINE_BINS)))];
+        const scallop = t > 0 && t < 1 ? Math.abs(Math.sin(Math.PI * recipe.spines.count * t)) ** 0.6 : 0;
+        if (Math.abs(c) > hw * (1 - recipe.spines.depth * scallop)) continue;
+      }
       const j = y * w + x;
       patch.cover[j] = Math.min(1, cover);
       let [r, g, b] = colour.map((v) => v / cover);
@@ -635,10 +664,12 @@ export function compose(scan: Scan | undefined, recipe: Recipe, size: number): C
     floor(canvas, scan, label, leaves, recipe, roll, big, room);
     return halve(fit(canvas, big).canvas, size);
   }
-  // The twig enters at one side low down and runs up across the card, its shoots off it.
-  const start: [number, number] = [room + big * 0.06, room + big * roll.range(0.6, 0.78)];
-  const heading = -roll.range(0.2, 0.45);
-  const main = curve(start, heading, big * 0.82, roll.range(-0.5, 0.2));
+  // The twig enters at one side low down and runs up across the card, its shoots off it; a
+  // frond's rachis up its middle from the foot, bowing a little.
+  const frond = recipe.form === "frond";
+  const start: [number, number] = frond ? [room + big * 0.05, room + big * 0.95] : [room + big * 0.06, room + big * roll.range(0.6, 0.78)];
+  const heading = frond ? -Math.PI / 4 + roll.range(-0.05, 0.05) : -roll.range(0.2, 0.45);
+  const main = curve(start, heading, big * (frond ? 1.27 : 0.82), frond ? roll.range(-0.12, 0.12) : roll.range(-0.5, 0.2));
   const twigs: [number, number][][] = [main];
   const shoot = recipe.shoot ?? { from: [0.25, 0.65], length: [0.32, 0.5] };
   for (let k = 0; k < recipe.shoots; k++) {
@@ -664,7 +695,20 @@ export function compose(scan: Scan | undefined, recipe: Recipe, size: number): C
     return { leaf: leaves[Math.floor(roll.unit() * leaves.length)].id, turn, tilt, mirror: roll.sign(), underside: roll.unit() < recipe.underside, tint, age: young ? -1 : old ? 1 : 0 };
   };
   const length = (t: number) => big * roll.range(recipe.length[0], recipe.length[1]) * (1 - 0.35 * t);
-  if (recipe.form === "spray") {
+  if (frond) {
+    // Pinnae in near-opposite pairs, square to the rachis and sweeping a little toward its
+    // tip, longest a third of the way up.
+    const pairs = Math.max(2, Math.round(recipe.leaves / 2));
+    for (let i = 0; i < pairs; i++) {
+      const t = 0.06 + (0.9 * (i + roll.range(0.3, 0.7))) / pairs;
+      const { at, heading } = along(main, t);
+      const size = Math.sin(Math.PI * Math.min(1, t * 1.25 + 0.05)) ** 0.7 * (1 - 0.45 * t);
+      for (const side of [-1, 1]) {
+        const angle = heading + side * roll.range(1.05, 1.35);
+        laid.push({ at: [at[0] + roll.range(-1, 1), at[1] + big * 0.004 * side], angle, length: length(0) * Math.max(0.18, size), ...look(t) });
+      }
+    }
+  } else if (recipe.form === "spray") {
     const weights = twigs.map((_, k) => (k ? 0.6 : 1));
     const total = weights.reduce((a, b) => a + b, 0);
     twigs.forEach((points, k) => {

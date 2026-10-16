@@ -1,0 +1,47 @@
+{
+  "scan": "LeafSet022",
+  "form": "spray",
+  "leaves": 64,
+  "length": [
+    0.2,
+    0.27
+  ],
+  "shoots": 3,
+  "twig": [
+    0.3,
+    0.33,
+    0.18
+  ],
+  "thickness": 0.007,
+  "tone": 0.25,
+  "young": 0.1,
+  "old": 0.3,
+  "underside": 0.1,
+  "albedo": [
+    0.17,
+    0.28,
+    0.12
+  ],
+  "contrast": 1.4,
+  "roughness": 0.3,
+  "fold": 0.45,
+  "curl": 0.4,
+  "yellowed": 0.02,
+  "holes": 0.03,
+  "hues": 0.05,
+  "spines": {
+    "count": 4,
+    "depth": 0.35
+  },
+  "seed": 7,
+  "shoot": {
+    "from": [
+      0.3,
+      0.7
+    ],
+    "length": [
+      0.3,
+      0.45
+    ]
+  }
+}

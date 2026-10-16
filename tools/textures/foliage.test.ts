@@ -155,7 +155,7 @@ test("every kind is a card of its atlas, and every card of the foliage atlas a k
   for (const c of atlases.foliage.cards) assert.ok(k.kinds[c.name], `the foliage atlas's ${c.name} has no kind in foliage.json`);
   // A composed card's leaf length is read; a picture has none.
   assert.ok(atlases.foliage.cards.find((c) => c.name === "oak")!.leaf! > 0.05);
-  assert.equal(atlases.foliage.cards.find((c) => c.name === "holly")!.leaf, undefined);
+  assert.equal(atlases.foliage.cards.find((c) => c.name === "herb")!.leaf, undefined);
   for (const [card, known] of Object.entries(k.known)) {
     assert.ok(card === "*" || k.kinds[card], `known failures of ${card}, no such kind`);
     for (const f of Object.keys(known)) assert.ok(f in LIMITS, `${card}: ${f} is no measure`);
