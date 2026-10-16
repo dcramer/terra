@@ -208,13 +208,6 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
                 site.at_km.x,
                 site.at_km.y
             );
-            if let Some(water) = site.water {
-                let off = land.east_north_km(site.toward, water) * 1000.0;
-                info!(
-                    "Site {name}: its nearest water {:.0} m east and {:.0} m north of it",
-                    off.x, off.y
-                );
-            }
             if name == "town" {
                 Found::Town(site)
             } else {

@@ -46,8 +46,6 @@ pub struct TownSite {
     pub start: Vec3,
     /// Kilometres east and north of the planet's start.
     pub at_km: Vec2,
-    /// The nearest lake's water to its square, if the query asked for one.
-    pub water: Option<Vec3>,
 }
 
 /// What a market town's place must be (docs/demos.md §3).
@@ -82,8 +80,6 @@ pub struct MarketTown {
     pub start_clearing_m: f32,
     /// How far from the planet's start to look, and the grid looked over, in metres.
     pub search_m: f32,
-    /// How near a lake's water its square must be, if it must be by one, in metres.
-    pub water_within_m: Option<f32>,
     pub step_m: f32,
 }
 
@@ -106,7 +102,6 @@ impl MarketTown {
         start_m: 330.0,
         start_clearing_m: 170.0,
         search_m: 9000.0,
-        water_within_m: None,
         step_m: 50.0,
     };
 
@@ -116,7 +111,6 @@ impl MarketTown {
     pub const SETTLEMENT: MarketTown = MarketTown {
         clearing_m: 105.0,
         clearing_edge_m: 35.0,
-        water_within_m: Some(260.0),
         ..MarketTown::DEMO
     };
 
@@ -124,20 +118,7 @@ impl MarketTown {
     /// world's start beside it.
     pub fn clearings(&self, land: &Land, site: &TownSite) -> Vec<Clearing> {
         let seed = land.ground.spec().seed.derive("fields");
-        // A settlement by the water opens its clearing down to the shore, so its plots
-        // look out over it (D381).
-        let shore = site.water.map(|water| {
-            let (a, b) = (site.toward.normalize(), water.normalize());
-            let off_m = a.angle_between(b) * land.radius_m();
-            Clearing::new(
-                land,
-                a.lerp(b, 0.6).normalize(),
-                off_m * 0.45 + 30.0,
-                self.clearing_edge_m,
-                seed.derive("shore"),
-            )
-        });
-        let mut clearings = vec![
+        vec![
             Clearing::new(
                 land,
                 site.toward,
@@ -152,9 +133,7 @@ impl MarketTown {
                 self.clearing_edge_m,
                 seed.derive("start"),
             ),
-        ];
-        clearings.extend(shore);
-        clearings
+        ]
     }
 }
 
@@ -217,7 +196,6 @@ pub struct Searched {
     pub too_rough: usize,
     pub no_forest: usize,
     pub no_peaks: usize,
-    pub no_water: usize,
     pub fit: usize,
 }
 
@@ -226,14 +204,8 @@ enum Verdict {
     Rough,
     NoForest,
     NoPeaks,
-    NoWater,
     Fit(f32, TownSite),
 }
-
-/// How big and deep water a settlement wants by it must be: a lake's or the sea's, seen
-/// from across its clearing, not a pond in a hollow (D381).
-const WATER_AREA_M2: f32 = 100_000.0;
-const WATER_DEEP_M: f32 = 3.0;
 
 /// How many ways round a place the forest and the skyline are looked for along.
 const WAYS: usize = 32;
@@ -408,41 +380,12 @@ impl Land {
             if skyline_deg < want.skyline_deg {
                 return Some(Verdict::NoPeaks);
             }
-            // The nearest lake's water, for a settlement wanted by one.
-            let water = want.water_within_m.and_then(|within| {
-                let cells = (within / want.step_m).ceil() as i64;
-                let mut best: Option<(f32, (i64, i64))> = None;
-                for dr in -cells..=cells {
-                    for dc in -cells..=cells {
-                        let (cc, rr) = (c + dc, r + dr);
-                        // Open water a lake or the sea's, not a hollow's pond.
-                        let big = inside(cc, rr)
-                            && found.lake[rr as usize * n + cc as usize].is_some_and(|lake| {
-                                let lake = &found.lakes[lake as usize];
-                                lake.area_m2 >= WATER_AREA_M2 && lake.deepest_m >= WATER_DEEP_M
-                            });
-                        if !big {
-                            continue;
-                        }
-                        let d = libm::sqrtf((dc * dc + dr * dr) as f32) * want.step_m;
-                        if d <= within && best.is_none_or(|(b, _)| d < b) {
-                            best = Some((d, (cc, rr)));
-                        }
-                    }
-                }
-                best
-            });
-            if want.water_within_m.is_some() && water.is_none() {
-                return Some(Verdict::NoWater);
-            }
             let ringed = skyline.iter().filter(|&&d| d > 2.0).count() as f32 / WAYS as f32;
             let toward = region.direction(c as usize, r as usize);
             let peak_at = region.offset(peak.1.0 as usize, peak.1.1 as usize);
             // Best: level, the forest round it, the range standing high over it and round
             // much of it, but open on some side, and near the start.
-            let score = relief_m / want.relief_m
-                + slope_deg / want.flatter_than_deg
-                + water.map_or(0.0, |(d, _)| d / want.water_within_m.unwrap_or(1.0))
+            let score = relief_m / want.relief_m + slope_deg / want.flatter_than_deg
                 - forest_share
                 - (skyline_deg / 15.0).min(1.0)
                 - (ringed * 1.4).min(1.0)
@@ -464,8 +407,6 @@ impl Land {
                     ringed,
                     start: toward,
                     at_km: self.east_north_km(start, toward),
-                    water: water
-                        .map(|(_, cell)| region.direction(cell.0 as usize, cell.1 as usize)),
                 },
             ))
         });
@@ -477,7 +418,6 @@ impl Land {
                 Verdict::Rough => searched.too_rough += 1,
                 Verdict::NoForest => searched.no_forest += 1,
                 Verdict::NoPeaks => searched.no_peaks += 1,
-                Verdict::NoWater => searched.no_water += 1,
                 Verdict::Fit(score, site) => {
                     searched.fit += 1;
                     if best.is_none_or(|(b, _)| score < b) {

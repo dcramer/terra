@@ -9,7 +9,7 @@
     about: "a market town rising from its clearing in a day",
     seconds: 42.0,
     // From early morning, the sun low and the mist about, to late afternoon.
-    hours: (6.9, 13.5),
+    hours: (7.3, 14.0),
     claim: 0.6,
     first: 1.5,
     last: 31.0,

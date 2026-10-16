@@ -198,7 +198,7 @@ fn run() -> Result<(), String> {
             let peak_km = land.east_north_km(found.toward, found.peak);
             let start_km = land.east_north_km(found.toward, found.start);
             println!(
-                "FIELDS site town: {:.2} km east, {:.2} km north of the start, {:.0} m over the sea, its growing season {:.1} °C, the tree line at {:.0} m; {:.1} m of rise and fall within {:.0} m, {:.1}° at its middle; closed forest past its fields on {:.0}% of the ways out; the highest ground {:.0} m over the sea {:.1} km off ({:.2} km east, {:.2} km north of it), the skyline up to {:.1}° and over 2° on {:.0}% of the ways round; the world's start {:.2} km east, {:.2} km north of it ({} cells looked at, {} fit)",
+                "FIELDS site {name}: {:.2} km east, {:.2} km north of the start, {:.0} m over the sea, its growing season {:.1} °C, the tree line at {:.0} m; {:.1} m of rise and fall within {:.0} m, {:.1}° at its middle; closed forest past its fields on {:.0}% of the ways out; the highest ground {:.0} m over the sea {:.1} km off ({:.2} km east, {:.2} km north of it), the skyline up to {:.1}° and over 2° on {:.0}% of the ways round; the world's start {:.2} km east, {:.2} km north of it ({} cells looked at, {} fit)",
                 found.at_km.x,
                 found.at_km.y,
                 found.height_m,
@@ -219,14 +219,6 @@ fn run() -> Result<(), String> {
                 searched.cells,
                 searched.fit
             );
-            if let Some(water) = found.water {
-                let km = land.east_north_km(found.toward, water);
-                println!(
-                    "FIELDS site {name}: its nearest water {:.0} m east, {:.0} m north of it",
-                    km.x * 1000.0,
-                    km.y * 1000.0
-                );
-            }
             clearings = want.clearings(&land, &found);
             Some(found.at_km)
         }

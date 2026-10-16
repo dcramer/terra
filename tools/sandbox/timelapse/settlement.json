@@ -1,13 +1,13 @@
 {
-  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): low over its north side, looking south across the plots, the morning sun to the left, the forest's edge beyond and the valley and the sky past it, slowly round from the north-west to the north-east as the day goes by",
+  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): low over its north side, looking south across the plots, the morning sun to the left, the forest's edge beyond and the valley and the sky past it, slowly round from the north-west to the north-east and back out as the settlement grows",
   "seconds": 42,
   "rig": { "around": [0, 0, -345] },
   "keys": [
-    { "t": 0, "orbit": [-20, 78, 32], "look": [16, 0, -302], "lens": 22 },
-    { "t": 21, "orbit": [0, 76, 31], "look": [0, 0, -299], "lens": 22 },
-    { "t": 42, "orbit": [20, 74, 30], "look": [-16, 0, -302], "lens": 23 }
+    { "t": 0, "orbit": [-30, 76, 31], "look": [23, 0, -305], "lens": 22 },
+    { "t": 21, "orbit": [0, 80, 33], "look": [0, 0, -299], "lens": 22 },
+    { "t": 42, "orbit": [30, 86, 37], "look": [-23, 0, -305], "lens": 22 }
   ],
   "ease": "in-out",
-  "look": { "exposure": "auto", "exposure_bias": 0.25, "hold_clock": true },
+  "look": { "exposure": "hold", "exposure_bias": 0.1, "hold_clock": true },
   "player": { "hidden": true }
 }
