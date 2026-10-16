@@ -38,6 +38,19 @@ fn even(metres: f32) -> f32 {
     let half = super::TICKS as f32 / CELL_M * 0.5;
     libm::roundf(metres * half) / half
 }
+/// The narrowest board laid to fill under a wall beside one cube of a run: narrower, a
+/// board is no board, and what it would fill is under the wall's members' rounding.
+const FILLER_LEAST_M: f32 = 0.008;
+
+/// How far in from its cubes' face a deck's outer board stands at its open side.
+const BOARD_EDGE_IN_M: f32 = 0.003;
+
+/// How far short of a deck's open edge a board run on under a wall beside it stops.
+const FILLER_SHORT_M: f32 = 0.006;
+
+/// How far a deck's boards run on under the narrowest member of a wall beside them.
+const BOARD_UNDER_MEMBER_M: f32 = 0.006;
+
 /// How thick a joist is, a rim joist and a ledger.
 const JOIST_WIDE_M: f32 = 0.07;
 /// How far a rim run on into a wall of its kind is set in from the rim's face: behind the
@@ -91,6 +104,31 @@ pub(super) fn decks(walls: &Walls, kit: &Kit, scope: super::Scope, layout: &mut 
         }
     }
     regions(walls, kit, &deck, CELL_M, scope, layout);
+}
+
+/// How far in from its cube's face a timber kind's members stand at their narrowest, in
+/// metres: its seed's thinnest beam, a round log's round, or, in a column standing `alone`,
+/// a post; none for a kind whose members are not long ones, which fills its cube.
+pub(crate) fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
+    if kit.pattern != Pattern::Logs {
+        return None;
+    }
+    // A wall of round logs: where its round stands back from its cube's face, the boards
+    // under it out of sight however far its logs bulge.
+    if !alone && kit.timber.profile == crate::kit::Profile::Round {
+        return Some(((CELL_M - kit.diameter) * 0.5).max(0.0));
+    }
+    let roles: &[Option<Role>] = if alone {
+        &[None, Some(Role::Post)]
+    } else {
+        &[None]
+    };
+    let narrowest = roles
+        .iter()
+        .map(|&role| crate::timber::section(kit, role).0 * 0.5)
+        .fold(f32::MAX, f32::min)
+        * (1.0 - kit.timber.variation.thickness);
+    Some((CELL_M * 0.5 - narrowest).max(0.0))
 }
 
 /// The kind a cube is laid as a deck in, if it is: a whole, solid cube of a timber kind
@@ -277,6 +315,32 @@ impl Deck<'_> {
         } else {
             0.0
         }
+    }
+
+    /// How far into a wall's cube beside the deck its boards run: under its members, a
+    /// little past where they stand back from its cube's face at their narrowest
+    /// ([`member_face`]: a post up a column alone, as a lookout's corner, or its seed's
+    /// thinnest log or beam), so no slot is left at the boards' level between their ends and
+    /// the members, whatever is under them; a wall of a kind that fills its cube, at its
+    /// cube's face.
+    fn board_reach(&self, beyond: IVec3) -> f32 {
+        let base = self.walls.base;
+        let alone = SIDES
+            .iter()
+            .all(|&side| base.cube(beyond + side).is_none() || self.has(beyond + side));
+        let Some(kit) = base
+            .cube(beyond)
+            .and_then(|cube| self.walls.kits.of(cube.kind))
+        else {
+            return 0.0;
+        };
+        // Under a round log's round, to where it stands back: the boards there out of sight.
+        let under = if !alone && kit.timber.profile == crate::kit::Profile::Round {
+            0.0
+        } else {
+            BOARD_UNDER_MEMBER_M
+        };
+        member_face(kit, alone).map_or(0.0, |face| (face + under).min(CELL_M * 0.5))
     }
 
     fn lay(&self, layout: &mut Layout) {
@@ -583,7 +647,12 @@ impl Deck<'_> {
         let (a_high, b_high) = (high.dot(along), high.dot(across));
         // Boards run on under a wall as far as its members' faces, where it stands on
         // something else beside the deck, as a footing.
-        let under_wall = even(((CELL_M - self.kit.diameter) * 0.5).max(0.0));
+        let under_wall = |at: IVec3| {
+            even(
+                self.board_reach(at)
+                    .max(((CELL_M - self.kit.diameter) * 0.5).max(0.0)),
+            )
+        };
         // Covered by what stands on it, but for a roof's cube, whose slope leaves the deck
         // under it showing, as a dormer's eaves over a storey's ceiling do, and a wall of the
         // deck's own members standing on it, as a lookout's rail: they are narrower than its
@@ -615,12 +684,12 @@ impl Deck<'_> {
                 return 0.0;
             }
             if wall_foot(at) {
-                under_wall
+                under_wall(at)
             } else if !region.contains(&at.to_array())
                 && base.in_wall(at)
                 && base.cube(at).is_some_and(|c| c.fill == Fill::Solid)
             {
-                even(self.wall_face(at))
+                even(self.board_reach(at))
             } else {
                 0.0
             }
@@ -642,6 +711,14 @@ impl Deck<'_> {
                     let wider = (first..=last)
                         .map(|a| reach(cell(a, beside)))
                         .fold(f32::MAX, f32::min);
+                    // At the deck's open side, nothing it runs on under beside it, a hair in from its
+                    // cubes' face, out of the plane of the sawn ends of what stands on its
+                    // edge there, as a rail's logs.
+                    let open_side = (first..=last).all(|a| {
+                        let at = cell(a, beside);
+                        !region.contains(&at.to_array()) && reach(at) < 1e-3
+                    });
+                    let wider = if open_side { -BOARD_EDGE_IN_M } else { wider };
                     let (from_m, to_m) = if board == 0 {
                         (
                             b as f32 * CELL_M + from * CELL_M - wider,
@@ -650,10 +727,82 @@ impl Deck<'_> {
                     } else {
                         ((b as f32 + from) * CELL_M, (b as f32 + to) * CELL_M + wider)
                     };
+                    // Where a cube beside the run lets the boards further under it than the
+                    // whole run's least, as a post rising beside one cube of a deck's edge,
+                    // a board as long as that cube fills the rest of the way to it.
+                    for a in first..=last {
+                        let into = reach(cell(a, beside));
+                        let extra = into - wider;
+                        if extra < FILLER_LEAST_M {
+                            continue;
+                        }
+                        // Short of a row of the deck on that side running on into the same
+                        // cube from beside it, so the two never lie in one another.
+                        let other = |k: i32| {
+                            let at = cell(k, beside);
+                            region.contains(&at.to_array()) && !covered(at)
+                        };
+                        // And a hair short of the deck's edge where nothing is past it, out
+                        // of the plane of the sawn ends of what it runs in under.
+                        let edge = |k: i32| {
+                            !region.contains(&cell(k, b).to_array()) && reach(cell(k, b)) < 1e-3
+                        };
+                        let start = a as f32 * CELL_M
+                            + if other(a - 1) {
+                                into
+                            } else if a == first && edge(a - 1) {
+                                FILLER_SHORT_M
+                            } else {
+                                0.0
+                            };
+                        let end = (a + 1) as f32 * CELL_M
+                            - if other(a + 1) {
+                                into
+                            } else if a == last && edge(a + 1) {
+                                FILLER_SHORT_M
+                            } else {
+                                0.0
+                            };
+                        if end - start < 0.02 {
+                            continue;
+                        }
+                        let (near, far) = if board == 0 {
+                            (from_m - extra, from_m)
+                        } else {
+                            (to_m, to_m + extra)
+                        };
+                        layout.pieces.push(Piece::Plank {
+                            from: Place::near(point(start, (near + far) * 0.5, board_y)),
+                            to: Place::near(point(end, (near + far) * 0.5, board_y)),
+                            wide: ticks(far - near),
+                            high: ticks(BOARD_THICK_M),
+                            seed: hash(&[0xf11, b as u32, a as u32, board as u32, y as u32]),
+                        });
+                    }
                     let middle = (from_m + to_m) * 0.5;
                     let wide = to_m - from_m;
-                    let (start_out, end_out) =
-                        (reach(cell(first - 1, b)), reach(cell(last + 1, b)));
+                    // Run on under a wall at either end; where it stops at the deck's open
+                    // edge, widened in under a wall of flat-faced beams beside it, whose sawn
+                    // ends there are as square as its own, a hair short, out of their plane.
+                    let widened_flat = (first..=last).any(|a| {
+                        base.cube(cell(a, beside))
+                            .and_then(|cube| self.walls.kits.of(cube.kind))
+                            .is_some_and(|kit| kit.timber.profile == crate::kit::Profile::Hewn)
+                    });
+                    let out = |k: i32| {
+                        let at = cell(k, b);
+                        let past = reach(at);
+                        if past < 1e-3
+                            && wider > 1e-3
+                            && widened_flat
+                            && !region.contains(&at.to_array())
+                        {
+                            -FILLER_SHORT_M
+                        } else {
+                            past
+                        }
+                    };
+                    let (start_out, end_out) = (out(first - 1), out(last + 1));
                     // Joints over a joist, staggered from the boards beside it.
                     let seed = hash(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
                     let mut lengths = Random(seed);
@@ -741,10 +890,12 @@ mod tests {
             let steps = (from.distance(to) / 0.05).round() as i32;
             for s in 0..steps {
                 let p = from + along * (0.025 + s as f32 * 0.05);
-                for c in [-0.45, -0.15, 0.15, 0.45] {
+                // Sixteen places across it, each standing for a sixteenth of its width.
+                for k in 0..16 {
+                    let c = (k as f32 + 0.5) / 16.0 - 0.5;
                     let q = p + across * (wide * c);
                     let at = (q / CELL_M).floor().as_ivec3().with_y(y);
-                    *cover.entry(at.to_array()).or_insert(0.0) += 0.05 * wide * 0.25;
+                    *cover.entry(at.to_array()).or_insert(0.0) += 0.05 * wide / 16.0;
                 }
             }
         }
@@ -774,7 +925,7 @@ mod tests {
             let area = cover.get(at).copied().unwrap_or(0.0);
             assert!(area > whole * 0.98 && area < whole * 1.03, "{at:?}: {area}");
         }
-        let face = (CELL_M - kit().diameter) * 0.5;
+        let face = member_face(&kit(), true).expect("a timber kind") + BOARD_UNDER_MEMBER_M;
         for (at, area) in &cover {
             if deck.contains(at) {
                 continue;

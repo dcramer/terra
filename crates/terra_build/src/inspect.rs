@@ -366,6 +366,9 @@ pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
             details[slot],
             &mut report.findings,
         );
+        if slot < 2 {
+            report.rays += floor_edges(base, kits, drawn, details[slot], &mut report.findings);
+        }
         report.triangles[slot] = drawn.tris.len();
         coplanar(drawn, details[slot], &mut report.findings);
         // Far off a wall's lines need only be square to it: slanting ones find the coarser
@@ -1065,6 +1068,97 @@ fn kind_name(kits: &Kits, kind: Kind) -> String {
         format!("{:?} {}", kit.pattern, kit.id)
     })
 }
+
+/// Lines down past the edge of a floor's boards beside a timber post on its layer, a column
+/// of its kind standing alone there, as up a lookout's corner (`layout::decked`,
+/// `layout::member_face`): the post stands back from its cube's faces, and the boards run on
+/// into its cube under it. Down from just over the boards, a few places
+/// along the edge round the members' middle, every half centimetre from the edge to a little
+/// past their narrowest face, each meets something within a cube: a slot left at the boards'
+/// level between their ends and the members shows the ground or the sky under the deck.
+/// Returns how many were cast.
+fn floor_edges(
+    base: &Base,
+    kits: &Kits,
+    drawn: &Drawn,
+    detail: Detail,
+    findings: &mut Vec<Finding>,
+) -> usize {
+    let grid = Grid::new(drawn);
+    let open = crate::layout::open_flights(base, kits);
+    let mut cast = 0;
+    for (at, _) in base.cubes() {
+        if crate::layout::decked(base, kits, at).is_none() {
+            continue;
+        }
+        let top = (at.y + 1) as f32 * CELL_M;
+        'sides: for side in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+            let beside = at + side;
+            let Some(cube) = base.cube(beside) else {
+                continue;
+            };
+            if !solid(base, kits, beside, detail)
+                || crate::layout::decked(base, kits, beside).is_some()
+                || open.contains(&beside.to_array())
+            {
+                continue;
+            }
+            // A post: a column of the kind standing alone beside the deck, nothing but the
+            // deck round it on its layer.
+            let alone = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
+                .iter()
+                .all(|&s| {
+                    base.cube(beside + s).is_none()
+                        || crate::layout::decked(base, kits, beside + s).is_some()
+                });
+            if !alone {
+                continue;
+            }
+            let Some(face) = kits
+                .of(cube.kind)
+                .and_then(|kit| crate::layout::member_face(kit, true))
+            else {
+                continue;
+            };
+            let n = side.as_vec3();
+            let along = Vec3::new(n.z.abs(), 0.0, n.x.abs());
+            let edge = (at.as_vec3() + Vec3::splat(0.5)) * CELL_M + n * (CELL_M * 0.5);
+            for u in [-0.1, 0.0, 0.1] {
+                let mut d = FLOOR_EDGE_STEP_M;
+                while d < face + FLOOR_EDGE_PAST_M {
+                    let from = (edge + n * d + along * u).with_y(top + FLOOR_EDGE_OVER_M);
+                    cast += 1;
+                    if grid
+                        .hit(drawn, from, Vec3::NEG_Y, 0.0, CELL_M + FLOOR_EDGE_OVER_M)
+                        .is_none()
+                    {
+                        findings.push(Finding {
+                            by: 0.0,
+                            fault: Fault::SeeThrough,
+                            detail,
+                            at: from,
+                            what: format!(
+                                "floor cube {at}: a line down past its boards' edge into {} cube {beside}, {:.0} mm in, meets nothing",
+                                kind_name(kits, cube.kind),
+                                d * 1000.0
+                            ),
+                        });
+                        continue 'sides;
+                    }
+                    d += FLOOR_EDGE_STEP_M;
+                }
+            }
+        }
+    }
+    cast
+}
+
+/// How far apart lines down past a floor's edge are cast, from it into the cube beside.
+const FLOOR_EDGE_STEP_M: f32 = 0.005;
+/// How far past the narrowest face of the members beside a floor its lines go: into them.
+const FLOOR_EDGE_PAST_M: f32 = 0.03;
+/// How far over a floor's cube's top its lines down start: over its boards.
+const FLOOR_EDGE_OVER_M: f32 = 0.05;
 
 /// Where on a face lines are cast from: a few places across it, clear of its rounded edges.
 fn samples() -> impl Iterator<Item = (f32, f32)> {
@@ -2549,6 +2643,66 @@ mod tests {
             0,
         );
         assert!(overlap(&a, &b) < 1e-6, "{} cm²", overlap(&a, &b) * 1e4);
+    }
+
+    #[test]
+    fn a_slot_between_a_floors_boards_and_a_post_beside_them_is_seen() {
+        // A deck on posts with a rail along one edge, the posts running up into the rail's
+        // corners, as the village's lookout: its boards run on into the corner columns under
+        // their members. Planted: the boards over a corner column's cube taken away, as they
+        // stopped 2 cm short of its post before; the checker sees the slot left at the boards'
+        // level beside the post, through which the ground under the deck shows. As drawn,
+        // none.
+        let hewn = crate::kit::tests::shipped("hewn.ron");
+        let kits = Kits(vec![hewn.clone()]);
+        let mut base = Base::default();
+        let mut fill = |min: [i32; 3], max: [i32; 3], shape: Shape| {
+            base.apply(crate::BuildOp::Fill {
+                min,
+                max,
+                cube: Some(crate::Cube {
+                    shape,
+                    ..crate::Cube::new(hewn.kind(), Fill::Solid)
+                }),
+            })
+        };
+        for [x, z] in [[0, 0], [5, 0], [0, 3], [5, 3]] {
+            fill([x, 0, z], [x, 0, z], Shape::Post);
+        }
+        fill([0, 1, 0], [5, 1, 3], Shape::Whole);
+        fill([0, 2, 0], [5, 2, 0], Shape::Whole);
+        let lines = Lines::of(&base, &kits);
+        let mut found = Vec::new();
+        floor_edges(&base, &kits, &lines.drawn, Detail::Near, &mut found);
+        assert!(found.is_empty(), "{found:?}");
+        // The boards over the west corner column's cube taken away.
+        let planted = Drawn {
+            meshes: lines.drawn.meshes.clone(),
+            kinds: lines.drawn.kinds.clone(),
+            tris: lines
+                .drawn
+                .tris
+                .iter()
+                .filter(|t| {
+                    let middle = (t.p[0] + t.p[1] + t.p[2]) / 3.0;
+                    let board = lines.drawn.kinds[t.mesh as usize]
+                        .is_some_and(|(_, material)| material == Material::Floor);
+                    !(board
+                        && middle.x < 0.5
+                        && middle.z > 0.0
+                        && middle.z < 0.5
+                        && middle.y > 0.95)
+                })
+                .copied()
+                .collect(),
+        };
+        floor_edges(&base, &kits, &planted, Detail::Near, &mut found);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.fault == Fault::SeeThrough && f.what.contains("cube [0, 1, 0]")),
+            "{found:?}"
+        );
     }
 
     #[test]
