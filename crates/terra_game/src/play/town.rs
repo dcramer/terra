@@ -438,7 +438,16 @@ struct TownCover {
     streets: Vec<(Vec<Vec2>, f32)>,
     yards: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
+    /// Within so far of its middle a meadow, grass all over but where it is worn: the
+    /// clearing a settlement rising has cut (D381); none for a town of old.
+    meadow_m: f32,
 }
+
+/// How thick a settlement's cleared meadow grows at least (`TownCover::meadow_m`).
+const MEADOW_GRASS: f32 = 0.8;
+/// How far round its middle a settlement rising has cleared a meadow: to the forest's
+/// edge (`MarketTown::SETTLEMENT`).
+const MEADOW_M: f32 = 100.0;
 
 /// How far inside a street's or the square's edge its paving starts.
 const PAVING_EDGE_M: f32 = 0.35;
@@ -457,7 +466,11 @@ impl terra_world::cover::CoverSource for TownCover {
         let p = Vec2::new(offset.dot(self.east), offset.dot(self.south));
         let wild = planet.cover(ground, ground.normalize());
         let mut growing = terra_world::cover::Growing {
-            grass: wild.grass,
+            grass: if p.length() < self.meadow_m {
+                wild.grass.max(MEADOW_GRASS)
+            } else {
+                wild.grass
+            },
             lush: wild.lush,
             ..default()
         };
@@ -1166,6 +1179,7 @@ fn lay(
                 .filter(|t| t.kind == ThingKind::Door)
                 .map(|t| t.place(Vec2::new(0.0, 0.8)))
                 .collect(),
+            meadow_m: if rising.is_some() { MEADOW_M } else { 0.0 },
         };
         if rising.is_some() {
             // Rising, a house's ground is worn once its plot is laid and its yard once it

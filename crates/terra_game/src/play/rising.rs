@@ -48,6 +48,10 @@ pub struct Timelapse {
     pub last: f32,
     /// How long a building takes to go up, the smallest to the largest, in seconds.
     pub takes: (f32, f32),
+    /// How the starts gather: 1 evenly between the first and the last; under 1, few at first
+    /// and then faster, as a settlement grows from its first houses outward.
+    #[serde(default = "Timelapse::steady")]
+    pub growth: f32,
     /// How many of the town's buildings rise, the nearest the square first; all if none.
     #[serde(default)]
     pub buildings: Option<usize>,
@@ -63,6 +67,10 @@ pub struct Timelapse {
 }
 
 impl Timelapse {
+    fn steady() -> f32 {
+        1.0
+    }
+
     fn most_steps() -> u32 {
         400
     }
@@ -123,7 +131,7 @@ pub fn schedule(lapse: &Timelapse, distances: &[f32], sizes: &[usize]) -> Vec<Op
         } else {
             0.0
         };
-        let start = lapse.first + (lapse.last - lapse.first) * share;
+        let start = lapse.first + (lapse.last - lapse.first) * libm::powf(share, lapse.growth);
         let size = if large > small {
             (sizes[index] - small) as f32 / (large - small) as f32
         } else {
@@ -141,6 +149,10 @@ fn eased(share: f32) -> f32 {
     let s = share.clamp(0.0, 1.0);
     s * s * (3.0 - 2.0 * s)
 }
+
+/// How far round the square's middle a settlement rising has cleared its ground of
+/// stones and brush, to the forest's edge (`MarketTown::SETTLEMENT`).
+const CLEARED_M: f32 = 95.0;
 
 /// A time-lapse under way.
 #[derive(Resource)]
@@ -317,6 +329,7 @@ fn prepare(
     mut market: ResMut<Market>,
     clock: Res<Clock>,
     rises: Query<&Rises>,
+    mut clear: MessageWriter<ClearAround>,
     waiting: Query<
         (Entity, &GlobalTransform),
         Or<(
@@ -378,6 +391,8 @@ fn prepare(
                 .insert((wait(at), Visibility::Hidden));
         }
     }
+    // The clearing a meadow, its loose stones and brush cleared for the plots.
+    clear.write(ClearAround(market.middle, CLEARED_M));
     // Nobody builds where nothing is going up yet.
     let hours = Market::hours(&clock);
     let sites: Vec<usize> = (0..market.life.town.things.len())
@@ -559,6 +574,11 @@ fn wear(
         return;
     }
     rising.worn = (rising.t, planned.len());
+    debug!(
+        "Time-lapse: the ground worn round {} plots at {:.1} s.",
+        planned.len(),
+        rising.t
+    );
     let up = rising.up.clone();
     let times = rising.times.clone();
     commands.insert_resource(wear.rules(
@@ -609,6 +629,23 @@ mod tests {
         assert_eq!(a.0, 26.0);
         assert!(b.1 > a.1 && a.1 > d.1, "{times:?}");
         assert_eq!(b.1, 12.0);
+    }
+
+    #[test]
+    fn a_settlement_growing_starts_few_houses_at_first_and_more_later() {
+        let mut lapse = lapse();
+        lapse.buildings = None;
+        lapse.growth = 0.6;
+        let distances: Vec<f32> = (0..20).map(|i| i as f32).collect();
+        let times = schedule(&lapse, &distances, &[100; 20]);
+        let starts: Vec<f32> = times.iter().map(|t| t.unwrap().0).collect();
+        // The gap after the first house is wider than the gaps near the end.
+        assert!(
+            starts[1] - starts[0] > 3.0 * (starts[19] - starts[18]),
+            "{starts:?}"
+        );
+        assert_eq!(starts[0], lapse.first);
+        assert!((starts[19] - lapse.last).abs() < 1e-4);
     }
 
     #[test]
