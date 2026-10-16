@@ -42,6 +42,11 @@ pub struct SpeciesDef {
     /// metres, a deer or a heron across a clearing or a lake.
     #[serde(default = "seen_by_default")]
     pub seen_m: f32,
+    /// How often it calls of its own accord while at rest, between so many seconds and so
+    /// many, for a kind heard as it goes about its day; none for one that only calls in
+    /// alarm.
+    #[serde(default)]
+    pub calls_s: Option<(f32, f32)>,
     #[serde(default)]
     pub pools: bool,
     pub stride: (f32, f32),

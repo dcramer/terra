@@ -54,6 +54,18 @@ pub enum Sound {
     Wings,
     /// A foot in shallow water.
     Splash,
+    /// A golden plover's call over the fells: one plaintive whistle, falling.
+    Whistle,
+    /// A woodpecker drumming on a dead branch: a dozen knocks in half a second.
+    Drum,
+    /// A wood pigeon's song: five soft hoots, the second stressed.
+    Coo,
+    /// A fish taking a fly from the surface: a soft plop.
+    Plop,
+    /// A hen clucking as she scratches: a few short, throaty "buk"s.
+    Cluck,
+    /// A place's own calls now and then, from all round, near and far. Never ends.
+    Calls(Chorus),
     /// A phrase of music.
     Music(Phrase),
 }
@@ -63,8 +75,48 @@ impl Sound {
     pub fn endless(self) -> bool {
         matches!(
             self,
-            Sound::Wind | Sound::Birds | Sound::Water | Sound::Fire | Sound::Hum | Sound::Murmur
+            Sound::Wind
+                | Sound::Birds
+                | Sound::Water
+                | Sound::Fire
+                | Sound::Hum
+                | Sound::Murmur
+                | Sound::Calls(_)
         )
+    }
+}
+
+/// Whose calls a place has, besides the songbirds (`Birds`): what a player hears of the life
+/// there they mostly do not see.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chorus {
+    /// A wood: woodpeckers drumming and wood pigeons cooing, far off among the trees.
+    Woods,
+    /// Open fells and heath: plovers whistling, now and then a grouse's croak.
+    Fells,
+    /// A lake's shore: ducks quacking out on the water, a heron's croak, fish rising.
+    Shore,
+    /// A town's yards and streets: hens clucking, sparrows, a dog now and then.
+    Yards,
+}
+
+impl Chorus {
+    /// The calls it is made of, each with how often it comes of them all, and its length.
+    fn calls(self) -> &'static [(Sound, f32, f32)] {
+        match self {
+            Chorus::Woods => &[(Sound::Drum, 0.45, 0.8), (Sound::Coo, 0.55, 2.5)],
+            Chorus::Fells => &[(Sound::Whistle, 0.8, 0.6), (Sound::Croak, 0.2, 0.5)],
+            Chorus::Shore => &[
+                (Sound::Quack, 0.5, 0.75),
+                (Sound::Plop, 0.35, 0.3),
+                (Sound::Croak, 0.15, 0.5),
+            ],
+            Chorus::Yards => &[
+                (Sound::Cluck, 0.5, 0.9),
+                (Sound::Chirp, 0.35, 0.45),
+                (Sound::Bark, 0.15, 0.3),
+            ],
+        }
     }
 }
 
@@ -98,6 +150,12 @@ impl Decodable for Synth {
                 Sound::Bark => one_shot(0.3, bark(&mut dice)),
                 Sound::Wings => one_shot(0.6, wings(&mut dice)),
                 Sound::Splash => one_shot(0.32, splash(&mut dice)),
+                Sound::Whistle => one_shot(0.6, whistle(&mut dice)),
+                Sound::Drum => one_shot(0.8, drum(&mut dice)),
+                Sound::Coo => one_shot(2.5, coo(&mut dice)),
+                Sound::Plop => one_shot(0.3, plop(&mut dice)),
+                Sound::Cluck => one_shot(0.9, cluck(&mut dice)),
+                Sound::Calls(chorus) => (Box::new(calls(chorus, dice)), 2, None),
                 Sound::Music(phrase) => (
                     Box::new(music::play(phrase, dice)),
                     2,
@@ -710,6 +768,167 @@ fn splash(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     }
 }
 
+fn whistle(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let pitch = dice.range(2150.0, 2450.0);
+    let mut phase = 0.0f32;
+    move |t| {
+        // A pure, plaintive note, held and then falling a little, as a plover's "tlüü" is.
+        let u = t / 0.55;
+        let hz = pitch * (1.0 - 0.12 * u * u);
+        phase = (phase + hz / RATE as f32) % 1.0;
+        let swell = (u * 6.0).min(1.0) * libm::powf((1.0 - u).max(0.0), 0.7);
+        libm::sinf(TAU * phase) * swell * 0.55
+    }
+}
+
+fn drum(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut wood = Band::default();
+    let knocks = 10.0 + (dice.roll() % 6) as f32;
+    let every = 0.55 / knocks;
+    move |t| {
+        // Each knock a sharp tap of wood ringing a moment, the run fading as it ends.
+        if t > 0.6 {
+            return 0.0;
+        }
+        let since = t % every;
+        let tap = libm::expf(-since * 140.0) * (1.0 - t / 0.75);
+        (wood.pass(dice.noise() * tap, 1100.0, 0.35) * 1.4).clamp(-1.0, 1.0)
+    }
+}
+
+fn coo(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let pitch = dice.range(430.0, 480.0);
+    let mut phase = 0.0f32;
+    let mut breath = *dice;
+    // Five hoots, the second the longest and loudest: "coo-COO-coo, coo-coo".
+    let hoots = [
+        (0.0, 0.32, 0.7),
+        (0.45, 0.55, 1.0),
+        (1.12, 0.3, 0.7),
+        (1.7, 0.3, 0.75),
+        (2.1, 0.3, 0.65),
+    ];
+    move |t| {
+        let Some(&(from, length, loud)) = hoots
+            .iter()
+            .find(|(from, length, _)| t >= *from && t < from + length)
+        else {
+            return 0.0;
+        };
+        let u = (t - from) / length;
+        let hz = pitch * (1.0 + 0.06 * libm::sinf(PI * u));
+        phase = (phase + hz / RATE as f32) % 1.0;
+        // A soft hoot: the note and a breath of its octave.
+        let tone = libm::sinf(TAU * phase) + 0.15 * libm::sinf(2.0 * TAU * phase);
+        (tone + 0.03 * breath.noise()) * hump(u) * loud * 0.45
+    }
+}
+
+fn plop(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut band = Band::default();
+    let bubble = dice.range(700.0, 1100.0);
+    move |t| {
+        // A small splash and the bubble's rising note under it.
+        let rush = band.pass(dice.noise(), 1300.0, 0.7) * libm::expf(-t * 30.0) * 0.5;
+        let note = libm::sinf(TAU * (bubble + 2500.0 * t) * t) * libm::expf(-t * 18.0) * 0.4;
+        rush + note
+    }
+}
+
+fn cluck(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
+    let mut dice = *dice;
+    let mut throat = Band::default();
+    let pitch = dice.range(280.0, 340.0);
+    let count = 3 + (dice.roll() % 3) as usize;
+    let every = dice.range(0.16, 0.22);
+    let mut phase = 0.0f32;
+    move |t| {
+        // Short throaty notes, each a buzz through the throat, the last a little longer.
+        let k = (t / every) as usize;
+        if k >= count {
+            return 0.0;
+        }
+        let length = if k + 1 == count { 0.12 } else { 0.06 };
+        let u = (t - k as f32 * every) / length;
+        if u > 1.0 {
+            return 0.0;
+        }
+        phase = (phase + pitch * (1.0 + 0.2 * (1.0 - u)) / RATE as f32) % 1.0;
+        let buzz = 2.0 * phase - 1.0 + 0.2 * dice.noise();
+        (throat.pass(buzz, 850.0, 0.6) * hump(u) * 0.9).clamp(-1.0, 1.0)
+    }
+}
+
+/// A place's calls, one at a time with quiet between, each from its own side and distance,
+/// the far ones quieter and duller, as heard across a wood or a lake.
+fn calls(chorus: Chorus, mut dice: Dice) -> impl Iterator<Item = f32> + Send {
+    let table = chorus.calls();
+    let mut quiet = dice.range(0.3, 2.0);
+    let mut playing: Option<(Box<dyn FnMut(f32) -> f32 + Send>, f32)> = None;
+    let mut t = 0.0;
+    let mut pan = 0.0;
+    let mut loud = 0.0;
+    let mut far = 0.0;
+    let mut dull = Smooth::default();
+    let mut frame = [0.0f32; 2];
+    let mut channel = 0;
+    std::iter::from_fn(move || {
+        if channel == 0 {
+            let mut out = 0.0;
+            match &mut playing {
+                None => {
+                    quiet -= DT;
+                    if quiet <= 0.0 {
+                        let total: f32 = table.iter().map(|(_, share, _)| share).sum();
+                        let mut roll = dice.unit() * total;
+                        let &(sound, _, length) = table
+                            .iter()
+                            .find(|(_, share, _)| {
+                                roll -= share;
+                                roll <= 0.0
+                            })
+                            .unwrap_or(&table[0]);
+                        let mut seed = Dice::new(dice.roll());
+                        let shape: Box<dyn FnMut(f32) -> f32 + Send> = match sound {
+                            Sound::Drum => Box::new(drum(&mut seed)),
+                            Sound::Coo => Box::new(coo(&mut seed)),
+                            Sound::Whistle => Box::new(whistle(&mut seed)),
+                            Sound::Quack => Box::new(quack(&mut seed)),
+                            Sound::Plop => Box::new(plop(&mut seed)),
+                            Sound::Cluck => Box::new(cluck(&mut seed)),
+                            Sound::Chirp => Box::new(chirp(&mut seed)),
+                            Sound::Bark => Box::new(bark(&mut seed)),
+                            _ => Box::new(croak(&mut seed)),
+                        };
+                        playing = Some((shape, length));
+                        t = 0.0;
+                        pan = dice.range(-0.85, 0.85);
+                        far = dice.unit();
+                        loud = 0.6 * (1.0 - 0.6 * far);
+                        quiet = dice.range(1.5, 7.0);
+                    }
+                }
+                Some((shape, length)) => {
+                    t += DT;
+                    out = shape(t) * loud;
+                    if t >= *length {
+                        playing = None;
+                    }
+                }
+            }
+            // The farther, the more the air has taken its highs.
+            let cutoff = 9000.0 - 7000.0 * far;
+            let heard = dull.low(out, cutoff);
+            frame = [heard * (1.0 - pan) * 0.7, heard * (1.0 + pan) * 0.7];
+        }
+        let sample = frame[channel];
+        channel = 1 - channel;
+        Some(sample)
+    })
+}
+
 /// Measuring sounds, for tests here and in the crates above (the `testing` feature).
 #[cfg(any(test, feature = "testing"))]
 pub mod tests {
@@ -777,6 +996,15 @@ pub mod tests {
             Sound::Bark,
             Sound::Wings,
             Sound::Splash,
+            Sound::Whistle,
+            Sound::Drum,
+            Sound::Coo,
+            Sound::Plop,
+            Sound::Cluck,
+            Sound::Calls(Chorus::Yards),
+            Sound::Calls(Chorus::Woods),
+            Sound::Calls(Chorus::Fells),
+            Sound::Calls(Chorus::Shore),
         ] {
             let (samples, _) = render(sound, 7, 6.0);
             assert!(
@@ -815,6 +1043,12 @@ pub mod tests {
             Sound::Bark,
             Sound::Wings,
             Sound::Splash,
+            Sound::Whistle,
+            Sound::Drum,
+            Sound::Coo,
+            Sound::Plop,
+            Sound::Cluck,
+            Sound::Calls(Chorus::Shore),
             Sound::Music(phrase),
         ];
         for sound in every {
@@ -825,7 +1059,8 @@ pub mod tests {
                 | Sound::Water
                 | Sound::Fire
                 | Sound::Hum
-                | Sound::Murmur => {}
+                | Sound::Murmur
+                | Sound::Calls(_) => {}
                 Sound::Whoosh
                 | Sound::Hiss
                 | Sound::Snort
@@ -836,6 +1071,11 @@ pub mod tests {
                 | Sound::Bark
                 | Sound::Wings
                 | Sound::Splash
+                | Sound::Whistle
+                | Sound::Drum
+                | Sound::Coo
+                | Sound::Plop
+                | Sound::Cluck
                 | Sound::Music(_) => {}
             }
             let decoder = Synth { sound, seed: 1 }.decoder();

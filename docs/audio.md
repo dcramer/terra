@@ -26,7 +26,7 @@ A proposal, built so it can be heard and changed (D114).
 
 | | Now |
 |---|---|
-| **The world** | Wind outdoors, birds where it is safe, a lake lapping near the shore (small wavelets and drops, not surf). Indoors all three drop away. Birds fall silent near where magic pools. |
+| **The world** | Wind outdoors, louder on the open fells; songbirds where it is safe, most among trees and few on the fells; a lake lapping near the shore (small wavelets and drops, not surf). Each place's own calls from all round, near and far: in a wood woodpeckers drumming and wood pigeons cooing, on the fells plovers whistling and a grouse's croak, by a lake ducks, a heron and fish rising (`Chorus`; a town's yards, hens, sparrows and a dog, in the trailer's bed). Indoors all of it drops away. Birds fall silent near where magic pools. Animals are heard where they are: a call as each takes fright or wing, and the ducks, heron, grouse and small birds calling now and then at rest; a fish's plop or splash where it rises. |
 | **Things** | A campfire burns, and a forge or smelter while it works. The place where magic pools hums low. The village bell rings every two or three minutes. |
 | **Doing** | Steps on grass, wood or in water; an axe, pick or knife at work, stroke by stroke; a tree coming down; a hammer while building; a station at work, and a click when something is made. |
 | **Creatures** | A deer snorts when startled; a spider hisses when it turns to attack; blows land; hoofs and skittering legs. |

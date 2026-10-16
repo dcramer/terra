@@ -78,6 +78,8 @@ struct Cells {
     /// Each player's place when last looked and how long until they next meet something.
     ways: HashMap<Entity, (Vec3, f32)>,
     meetings: u64,
+    /// The longest a look took since it was last told, milliseconds.
+    slowest_ms: f32,
     told_s: f32,
 }
 
@@ -231,6 +233,7 @@ fn populate(
         return;
     }
     cells.since_s = 0.0;
+    let began = std::time::Instant::now();
     let moving: Vec<(Entity, Vec3)> = viewers
         .iter()
         .map(|(entity, at)| (entity, at.translation))
@@ -341,6 +344,7 @@ fn populate(
         &placed,
         &mut about,
     );
+    cells.slowest_ms = cells.slowest_ms.max(began.elapsed().as_secs_f32() * 1000.0);
     cells.told_s += LOOK_EVERY_S;
     if cells.told_s >= TELL_EVERY_S {
         cells.told_s = 0.0;
@@ -356,11 +360,13 @@ fn populate(
             .filter(|at| viewers.iter().any(|v| v.distance(**at) < 30.0))
             .count();
         info!(
-            "Wildlife: {} about, {} within 30 m of a player, {} met ahead so far.",
+            "Wildlife: {} about, {} within 30 m of a player, {} met ahead so far; a look took up to {:.2} ms.",
             animals.len(),
             near,
-            cells.meetings
+            cells.meetings,
+            cells.slowest_ms
         );
+        cells.slowest_ms = 0.0;
     }
 }
 

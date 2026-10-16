@@ -152,15 +152,20 @@ struct Was {
     health: f32,
     alarmed: bool,
     flying: bool,
+    /// Until it next calls of its own accord, seconds, for a kind that does.
+    calls_in: f32,
 }
 
 /// Blows landing, creatures dying, a deer startled, a spider turning to attack.
 fn creatures_heard(
     mut commands: Commands,
+    time: Res<Time>,
     mut creatures: Query<(Entity, &Creature, &GlobalTransform, Option<&mut Was>)>,
     bestiary: Res<Bestiary>,
     mut noise: MessageWriter<Noise>,
+    mut dice: Local<Option<terra_gen::Rng>>,
 ) {
+    let dice = dice.get_or_insert_with(|| terra_gen::Seed(23).derive("calls").rng());
     for (entity, creature, at, was) in &mut creatures {
         // Running from someone, or going for them, or up a tree out of reach.
         let alarmed = matches!(
@@ -173,6 +178,7 @@ fn creatures_heard(
                 health: creature.health,
                 alarmed,
                 flying,
+                calls_in: dice.range(0.0, 20.0),
             });
             continue;
         };
@@ -205,6 +211,19 @@ fn creatures_heard(
         }
         if flying && !was.flying {
             noise.write(Noise::at(Cue::Wings, here));
+        }
+        // Now and then a call of its own at rest: a duck on the water, a heron, a grouse.
+        if let Some((least, most)) = bestiary.get(creature.species).calls_s
+            && creature.alive()
+            && !alarmed
+        {
+            was.calls_in -= time.delta_secs();
+            if was.calls_in <= 0.0 {
+                was.calls_in = dice.range(least, most);
+                if let Some(cue) = voice {
+                    noise.write(Noise::at(cue, here));
+                }
+            }
         }
         was.health = creature.health;
         was.alarmed = alarmed;

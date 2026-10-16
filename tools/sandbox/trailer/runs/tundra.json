@@ -12,7 +12,8 @@
     "exposure_bias": 0.5
   },
   "sound": [
-    "wind:0.9"
+    "wind:0.9",
+    "fells:0.6"
   ],
   "music": "calm",
   "date": "09-12"

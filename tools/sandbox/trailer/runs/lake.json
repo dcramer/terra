@@ -17,7 +17,8 @@
   "sound": [
     "water:0.6",
     "wind:0.3",
-    "birds:0.5"
+    "birds:0.5",
+    "shore:0.5"
   ],
   "music": "calm"
 }

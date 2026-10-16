@@ -1,0 +1,17 @@
+{
+  "subject": "feral rock pigeon of a medieval town: blue-grey, an iridescent green and purple neck, two dark wing bars, a white rump, coral-red legs; the chaffinch's model textured again, walking with its head nodding rather than hopping, and flapping steadily rather than bounding",
+  "like": "chaffinch",
+  "file": "Pigeon",
+  "tripo_project": "28a9220f-3bb9-469b-9226-ceaa5ca7674d",
+  "generator": "the chaffinch's model, textured from concept.png at 2K",
+  "credits": { "texture": 10 },
+  "scale": 0.31,
+  "clips": {
+    "Idle": { "kind": "idle", "seconds": 3.0 },
+    "Walk": { "kind": "gait", "cycle": 0.5, "stride": 0.2, "lift": 0.04, "duty": 0.6, "bob": 0.01, "peel": 15, "fold": 20, "nod": 14,
+             "phases": { "Leg.L": 0.0, "Leg.R": 0.5 } },
+    "Peck": { "kind": "graze", "seconds": 1.5, "neck": 40, "head": -20, "body": 35 },
+    "Fly": { "kind": "fly", "cycle": 0.5, "beats": 3, "flapping": 1.0, "bound": false, "up": -15, "down": 70, "body": 50, "neck": -30, "head": -10, "tuck": [-40, 100, -60] },
+    "Death": { "kind": "death", "seconds": 0.8, "lie": 0.3 }
+  }
+}

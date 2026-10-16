@@ -28,6 +28,8 @@
 //            afloat, its feet so far under the surface
 //   wades_m  how deep a water it walks into
 //   seen_m   how far off it is drawn
+//   calls_s  how often it calls of its own accord at rest, (least, most) seconds; none for
+//            a kind that only calls in alarm
 //   pools    whether it forms where magic pools (D103)
 //   stride   how far a step carries, as so far and so much more for each metre a second
 //   feet     what its steps sound like
@@ -149,6 +151,7 @@
         lives: About(per_ha: 3.0, group: (1, 3)),
         niche: (warmth_c: (8.0, 30.0), haunts: [Woods]),
         seen_m: 35.0,
+        calls_s: Some((6.0, 20.0)),
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Chirp,
@@ -173,6 +176,7 @@
         lives: About(per_ha: 14.0, group: (3, 6)),
         niche: (warmth_c: (5.0, 30.0), haunts: [Trodden]),
         seen_m: 35.0,
+        calls_s: Some((3.0, 10.0)),
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Chirp,
@@ -181,6 +185,32 @@
         zones: [
             (joint: "Head", part: Head, radius_m: 0.02),
             (joint: "Body", part: Body, radius_m: 0.035),
+        ],
+    ),
+    (
+        // The town's pigeons, in a flock on its square and streets, walking with their heads
+        // nodding and clattering up together when someone comes through.
+        name: "Feral pigeon",
+        model: ("models/creatures/Pigeon.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Walk", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.207, 0.207)),
+        health: 2.0,
+        walk_mps: 0.3,
+        run_mps: 0.8,
+        body: (radius: 0.06, weight: 0.3),
+        temper: Shy(flees_within_m: 5.0, flees_s: 2.0),
+        refuge: Flies(10.0, 30.0),
+        moves: Flies(10.0),
+        lives: About(per_ha: 10.0, group: (4, 9)),
+        niche: (warmth_c: (5.0, 30.0), haunts: [Trodden]),
+        seen_m: 60.0,
+        stride: (0.1, 0.0),
+        feet: Skitter,
+        voice: Silent,
+        blood: Red,
+        lies_s: 60.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.03),
+            (joint: "Body", part: Body, radius_m: 0.07),
         ],
     ),
     (
@@ -304,6 +334,7 @@
         lives: About(per_ha: 4.0, group: (2, 5)),
         niche: (warmth_c: (6.0, 30.0), haunts: [Water]),
         seen_m: 120.0,
+        calls_s: Some((6.0, 22.0)),
         stride: (2.0, 0.0),
         feet: Water,
         voice: Quack,
@@ -331,6 +362,7 @@
         lives: About(per_ha: 3.0, group: (1, 1)),
         niche: (warmth_c: (8.0, 30.0), haunts: [Shore]),
         seen_m: 160.0,
+        calls_s: Some((25.0, 80.0)),
         stride: (0.4, 0.0),
         feet: Water,
         voice: Croak,
@@ -358,6 +390,7 @@
         lives: About(per_ha: 2.0, group: (2, 4)),
         niche: (warmth_c: (-6.0, 7.5), haunts: [Open]),
         seen_m: 70.0,
+        calls_s: Some((15.0, 45.0)),
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Croak,

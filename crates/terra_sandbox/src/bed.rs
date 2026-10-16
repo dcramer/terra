@@ -6,7 +6,8 @@
 //!
 //!   terra_sandbox --sound-bed shots/bed.wav --seconds 80 wind:0.4@0-20 birds:0.6@0-20 calm:0.8@1
 //!
-//! A layer is a sound (wind, birds, water, fire, hum, murmur) or a mood of the music (calm,
+//! A layer is a sound (wind, birds, water, fire, hum, murmur, or a place's calls: woods,
+//! fells, shore, yards) or a mood of the music (calm,
 //! village, danger), its gain, and when it plays, in seconds: `@from-to` for a sound, which
 //! fades in and out over a second and a half at each end; `@from` for a phrase of music,
 //! which plays to its end. The mix is scaled so its peak is a decibel under full scale.
@@ -14,7 +15,7 @@
 use bevy::audio::{Decodable, Source};
 use std::io::Write;
 use terra_game::play::music::Mood;
-use terra_world::audio::synth::{RATE, Sound, Synth};
+use terra_world::audio::synth::{Chorus, RATE, Sound, Synth};
 
 /// How long a sound takes to come in and to go.
 const FADE_S: f32 = 1.5;
@@ -52,6 +53,10 @@ fn parse_layer(text: &str) -> Result<Layer, String> {
         "fire" => Sound::Fire,
         "hum" => Sound::Hum,
         "murmur" => Sound::Murmur,
+        "woods" => Sound::Calls(Chorus::Woods),
+        "fells" => Sound::Calls(Chorus::Fells),
+        "shore" => Sound::Calls(Chorus::Shore),
+        "yards" => Sound::Calls(Chorus::Yards),
         "calm" => Sound::Music(Mood::Calm.phrase()),
         "village" => Sound::Music(Mood::Village.phrase()),
         "danger" => Sound::Music(Mood::Danger.phrase()),

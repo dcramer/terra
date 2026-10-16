@@ -8,6 +8,10 @@
 //! Fish rise most at dawn and dusk, when the flies hatch, and little in the day's middle; on
 //! deep enough water only, never on a pool in the heath (D379).
 
+use crate::audio::{
+    self, Bus, Mix, Speaker, Voice,
+    synth::{Sound, Synth},
+};
 use crate::daylight::Clock;
 use crate::planet::{MainCamera, Planet};
 use bevy::{
@@ -108,6 +112,7 @@ fn rise(
     mut rising: ResMut<Rising>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    (speaker, mix, synths): (Res<Speaker>, Res<Mix>, Option<ResMut<Assets<Synth>>>),
 ) {
     let (Some(planet), Some(eye)) = (planet, camera.iter().next()) else {
         return;
@@ -145,7 +150,33 @@ fn rise(
     let on_water = at.normalize() * surface;
     let now = time.elapsed_secs_wrapped();
     rises.ring(on_water, now);
-    if rising.dice.unit() < LEAPS {
+    let leaps = rising.dice.unit() < LEAPS;
+    if speaker.0
+        && let Some(mut synths) = synths
+    {
+        // Heard where it is: a soft plop, a leap's splash louder.
+        let (sound, level, reach_m) = if leaps {
+            (Sound::Splash, 0.5, 8.0)
+        } else {
+            (Sound::Plop, 0.35, 5.0)
+        };
+        audio::play_synth(
+            &mut commands,
+            &mut synths,
+            &mix,
+            Synth {
+                sound,
+                seed: rising.dice.next_u64(),
+            },
+            Voice {
+                bus: Bus::Ambience,
+                level,
+            },
+            Some(on_water),
+            reach_m,
+        );
+    }
+    if leaps {
         let way = Quat::from_axis_angle(up, rising.dice.range(0.0, std::f32::consts::TAU))
             * up.any_orthonormal_vector();
         let to = on_water + way * LEAP_FAR_M;

@@ -15,12 +15,14 @@ use super::settlement::Village;
 use super::{IsLocalPlayer, Motion};
 use crate::audio::{
     self, Bus, Fade, Mix, Voice,
-    synth::{Sound, Synth},
+    synth::{Chorus, Sound, Synth},
 };
 use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_gen::{Rng, Seed};
+use terra_world::climate::ClimateFields;
+use terra_world::flora::{Obstacles, Trunks};
 
 /// How often the place is looked at again.
 const LOOK_EVERY_S: f32 = 0.25;
@@ -83,7 +85,14 @@ struct Bell {
 struct Bells(Rng);
 
 fn surround(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, mix: Res<Mix>) {
-    for (sound, seed) in [(Sound::Wind, 1), (Sound::Birds, 2), (Sound::Water, 3)] {
+    for (sound, seed) in [
+        (Sound::Wind, 1),
+        (Sound::Birds, 2),
+        (Sound::Water, 3),
+        (Sound::Calls(Chorus::Woods), 4),
+        (Sound::Calls(Chorus::Fells), 5),
+        (Sound::Calls(Chorus::Shore), 6),
+    ] {
         let voice = Voice {
             bus: Bus::Ambience,
             level: 0.0,
@@ -107,6 +116,9 @@ fn follow_place(
     time: Res<Time>,
     planet: Res<Planet>,
     lair: Option<Res<Lair>>,
+    trunks: Res<Trunks>,
+    obstacles: Res<Obstacles>,
+    climate: Option<Res<ClimateFields>>,
     player: Single<(&Motion, &GlobalTransform), IsLocalPlayer>,
     layers: Query<(Entity, &Layer, &Voice)>,
     mut wait: Local<f32>,
@@ -118,11 +130,21 @@ fn follow_place(
     *wait = LOOK_EVERY_S;
     let (motion, at) = *player;
     let here = at.translation();
-    let outdoors = !motion.indoors;
     let lair_m = lair.map_or(f32::MAX, |lair| lair.0.distance(here));
-    let shore_m = shore_distance(&planet, here);
+    let ground = planet.ground_at(here);
+    let wooded = (trunks.near(ground, WOODED.1, &obstacles).count() as f32 / WOODED.0).min(1.0);
+    let season_c = climate.as_ref().map_or(12.0, |climate| {
+        climate.fields.season(climate.place(ground)).growing_mean_c
+    });
+    let place = Here {
+        outdoors: !motion.indoors,
+        lair_m,
+        shore_m: shore_distance(&planet, here),
+        wooded,
+        fells: ((FELLS_C - season_c) / 3.0).clamp(0.0, 1.0),
+    };
     for (entity, layer, voice) in &layers {
-        let wanted = place_level(layer.0, outdoors, lair_m, shore_m);
+        let wanted = place_level(layer.0, &place);
         if (wanted - voice.level).abs() > 0.01 {
             commands.entity(entity).insert(Fade {
                 to: wanted,
@@ -133,18 +155,57 @@ fn follow_place(
     }
 }
 
-/// How loud a surrounding layer is: outdoors or in, how near the place where magic
-/// pools (birds go quiet there), and how near water.
-fn place_level(sound: Sound, outdoors: bool, lair_m: f32, shore_m: Option<f32>) -> f32 {
-    let inside = if outdoors { 1.0 } else { 0.2 };
-    match sound {
-        Sound::Wind => 0.25 * inside,
-        Sound::Birds => 0.3 * inside * ((lair_m - BIRDS_GONE_M) / 80.0).clamp(0.0, 1.0),
-        Sound::Water => {
-            shore_m.map_or(0.0, |metres| (1.0 - (metres - 6.0) / 55.0).clamp(0.0, 1.0))
-                * 0.5
-                * inside
+/// A wood is so many trunks within so far; fells are where the growing season is colder
+/// than this, °C, trees giving way to heath (D313).
+const WOODED: (f32, f32) = (6.0, 15.0);
+const FELLS_C: f32 = 8.0;
+
+/// What the listener's place is, as the surrounding layers ask it.
+#[derive(Clone, Copy, Debug)]
+struct Here {
+    outdoors: bool,
+    /// How far the place where magic pools is.
+    lair_m: f32,
+    /// How far the nearest water is, if any is near.
+    shore_m: Option<f32>,
+    /// How wooded, 0 open to 1 among trees, and how much it is the cold open fells.
+    wooded: f32,
+    fells: f32,
+}
+
+impl Here {
+    /// In the open by default, far from anything.
+    #[cfg(test)]
+    fn open() -> Self {
+        Here {
+            outdoors: true,
+            lair_m: 500.0,
+            shore_m: None,
+            wooded: 0.0,
+            fells: 0.0,
         }
+    }
+}
+
+/// How loud a surrounding layer is: outdoors or in, how near the place where magic
+/// pools (birds go quiet there), how near water, and among trees or out on the fells: the
+/// wind louder in the open and in the leaves above a wood, songbirds most in woods and
+/// warmth and few on the fells, each place's own calls where it is.
+fn place_level(sound: Sound, here: &Here) -> f32 {
+    let inside = if here.outdoors { 1.0 } else { 0.2 };
+    let near_water = here
+        .shore_m
+        .map_or(0.0, |metres| (1.0 - (metres - 6.0) / 55.0).clamp(0.0, 1.0));
+    let unspoilt = ((here.lair_m - BIRDS_GONE_M) / 80.0).clamp(0.0, 1.0);
+    match sound {
+        Sound::Wind => (0.25 + 0.15 * here.fells) * inside,
+        Sound::Birds => {
+            0.3 * inside * unspoilt * (0.55 + 0.45 * here.wooded) * (1.0 - 0.8 * here.fells)
+        }
+        Sound::Water => near_water * 0.5 * inside,
+        Sound::Calls(Chorus::Woods) => 0.3 * inside * unspoilt * here.wooded,
+        Sound::Calls(Chorus::Fells) => 0.35 * inside * unspoilt * here.fells,
+        Sound::Calls(Chorus::Shore) => 0.3 * inside * unspoilt * near_water,
         _ => 0.0,
     }
 }
@@ -317,17 +378,69 @@ mod tests {
     #[test]
     fn birds_fall_quiet_near_pooled_magic_and_indoors() {
         let far = BIRDS_GONE_M * 10.0;
-        let open = place_level(Sound::Birds, true, far, None);
+        let at = |lair_m, outdoors| {
+            place_level(
+                Sound::Birds,
+                &Here {
+                    lair_m,
+                    outdoors,
+                    ..Here::open()
+                },
+            )
+        };
+        let open = at(far, true);
         assert!(open > 0.0);
-        assert_eq!(place_level(Sound::Birds, true, BIRDS_GONE_M, None), 0.0);
-        let nearer = place_level(Sound::Birds, true, BIRDS_GONE_M + 1.0, None);
+        assert_eq!(at(BIRDS_GONE_M, true), 0.0);
+        let nearer = at(BIRDS_GONE_M + 1.0, true);
         assert!(nearer > 0.0 && nearer < open);
-        assert!(place_level(Sound::Birds, false, far, None) < open / 2.0);
+        assert!(at(far, false) < open / 2.0);
+    }
+
+    #[test]
+    fn each_place_sounds_of_its_own_life() {
+        let woods = Here {
+            wooded: 1.0,
+            ..Here::open()
+        };
+        let fells = Here {
+            fells: 1.0,
+            ..Here::open()
+        };
+        let shore = Here {
+            shore_m: Some(0.0),
+            ..Here::open()
+        };
+        let level = place_level;
+        // Songbirds most in a wood, few on the fells, whose wind is the loudest.
+        assert!(level(Sound::Birds, &woods) > level(Sound::Birds, &Here::open()));
+        assert!(level(Sound::Birds, &fells) < level(Sound::Birds, &woods) / 3.0);
+        assert!(level(Sound::Wind, &fells) > level(Sound::Wind, &woods));
+        // Each place's calls only there.
+        for (chorus, place) in [
+            (Chorus::Woods, woods),
+            (Chorus::Fells, fells),
+            (Chorus::Shore, shore),
+        ] {
+            assert!(level(Sound::Calls(chorus), &place) > 0.2, "{chorus:?}");
+            assert_eq!(
+                level(Sound::Calls(chorus), &Here::open()),
+                0.0,
+                "{chorus:?}"
+            );
+        }
     }
 
     #[test]
     fn water_is_loudest_at_the_shore_and_heard_as_far_as_it_is_looked_for() {
-        let level = |shore_m| place_level(Sound::Water, true, 500.0, shore_m);
+        let level = |shore_m| {
+            place_level(
+                Sound::Water,
+                &Here {
+                    shore_m,
+                    ..Here::open()
+                },
+            )
+        };
         let at_shore = level(Some(0.0));
         let mut was = at_shore;
         for ring in SHORE_RINGS_M {
@@ -344,11 +457,55 @@ mod tests {
         use crate::audio::synth::tests::{active_db, at_ear, render, within};
         // Around the listener, at the loudest the place makes them.
         for (sound, level) in [
-            (Sound::Wind, place_level(Sound::Wind, true, 500.0, None)),
-            (Sound::Birds, place_level(Sound::Birds, true, 500.0, None)),
+            (
+                Sound::Wind,
+                place_level(
+                    Sound::Wind,
+                    &Here {
+                        fells: 1.0,
+                        ..Here::open()
+                    },
+                ),
+            ),
+            (
+                Sound::Birds,
+                place_level(
+                    Sound::Birds,
+                    &Here {
+                        wooded: 1.0,
+                        ..Here::open()
+                    },
+                ),
+            ),
             (
                 Sound::Water,
-                place_level(Sound::Water, true, 500.0, Some(0.0)),
+                place_level(
+                    Sound::Water,
+                    &Here {
+                        shore_m: Some(0.0),
+                        ..Here::open()
+                    },
+                ),
+            ),
+            (
+                Sound::Calls(Chorus::Woods),
+                place_level(
+                    Sound::Calls(Chorus::Woods),
+                    &Here {
+                        wooded: 1.0,
+                        ..Here::open()
+                    },
+                ),
+            ),
+            (
+                Sound::Calls(Chorus::Fells),
+                place_level(
+                    Sound::Calls(Chorus::Fells),
+                    &Here {
+                        fells: 1.0,
+                        ..Here::open()
+                    },
+                ),
             ),
         ] {
             let (samples, _) = render(sound, 5, 20.0);
