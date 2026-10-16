@@ -150,6 +150,8 @@ fn paint(
     mut open: ResMut<OpenSky>,
     sky_seen: crate::sky_occlusion::SkySeen,
     snow: Option<Res<crate::climate::SnowCover>>,
+    nightfall: Option<Res<crate::daylight::Nightfall>>,
+    dust: Option<Res<crate::air::AirDust>>,
     shaders: Option<Res<crate::loading::Shaders>>,
     screen: Option<Res<State<crate::loading::Screen>>>,
     mut images: ResMut<Assets<Image>>,
@@ -205,20 +207,26 @@ fn paint(
     // How low the sun is: 1 at 4° and below, 0 from 22° up.
     let low = 1.0 - ((sun_height - 0.07) / 0.31).clamp(0.0, 1.0);
     let low = low * low * (3.0 - 2.0 * low);
+    // The sun's light as it reaches the ground through the air, as Bevy's atmosphere gives it
+    // on what the sun lights directly: the ground's bounce is of that light, dimmed and
+    // warmed by a low sun, not of the sun's colour above the air.
+    let through = crate::air::sun_through(libm::asinf(sun_height), dust.map_or(1.0, |d| d.0));
     let colours = Colours {
         low,
+        day: 1.0 - nightfall.map_or(0.0, |n| n.0),
         shade: linear(light.shade),
         horizon: linear(sky.horizon),
         zenith: linear(sky.zenith),
-        // Sunlit ground, as bright beside the sky as the sun makes it; under snow, the
-        // snow's white (D327).
+        // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky
+        // too; under snow, the snow's white (D327).
         ground: linear(tweaks.grass_lush)
             .lerp(linear(tweaks.ground_low), 0.4)
             .lerp(SNOW_BOUNCE, snow.map_or(0.0, |snow| snow.0))
-            * linear(tweaks.sun_color)
-            * (tweaks.sun_illuminance * sun_height
-                / (std::f32::consts::PI * light.brightness.max(1.0))
-                + 1.0),
+            * (linear(tweaks.sun_color)
+                * through
+                * (tweaks.sun_illuminance * sun_height
+                    / (std::f32::consts::PI * light.brightness.max(1.0)))
+                + Vec3::ONE),
     };
     if open.brightness != light.brightness {
         open.brightness = light.brightness;
@@ -264,11 +272,64 @@ fn paint(
     image.data = Some(colours.cube());
 }
 
+/// The colour of daylight of a correlated colour temperature, as the CIE's daylight locus
+/// gives it (Judd, MacAdam and Wyszecki's from measured daylight and skylight, 1964; 4,000 to
+/// 25,000 K), in linear sRGB with a luma of 1.
+fn daylight(kelvin: f32) -> Vec3 {
+    let t = kelvin.clamp(4_000.0, 25_000.0);
+    let x = if t <= 7_000.0 {
+        0.244063 + 0.09911e3 / t + 2.9678e6 / (t * t) - 4.6070e9 / (t * t * t)
+    } else {
+        0.237040 + 0.24748e3 / t + 1.9018e6 / (t * t) - 2.0064e9 / (t * t * t)
+    };
+    let y = -3.0 * x * x + 2.87 * x - 0.275;
+    let (cx, cz) = (x / y, (1.0 - x - y) / y);
+    let rgb = Vec3::new(
+        3.2406 * cx - 1.5372 - 0.4986 * cz,
+        -0.9689 * cx + 1.8758 + 0.0415 * cz,
+        0.0557 * cx - 0.2040 + 1.0570 * cz,
+    );
+    rgb / rgb.dot(Vec3::new(0.2126, 0.7152, 0.0722))
+}
+
+/// A sky's colour moved onto the daylight locus, as warm or cool as it is (its blue over its
+/// red) and as bright (its luma): real skylight lies along the locus, blue to white to the low
+/// sun's amber, never off it toward magenta or green.
+fn on_daylight_locus(c: Vec3) -> Vec3 {
+    let luma = c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    if luma <= 0.0 {
+        return c;
+    }
+    let cool = c.z / c.x.max(1e-6);
+    // By mired, in which the locus is nearly even: blue over red rises with the temperature.
+    let (mut warm, mut cold) = (1e6 / 4_000.0, 1e6 / 25_000.0);
+    for _ in 0..24 {
+        let mid = 0.5 * (warm + cold);
+        let d = daylight(1e6 / mid);
+        if d.z / d.x < cool {
+            warm = mid;
+        } else {
+            cold = mid;
+        }
+    }
+    daylight(2e6 / (warm + cold)) * luma
+}
+
+/// The same for a colour given as sRGB.
+pub(crate) fn srgb_on_daylight_locus(srgb: Vec3) -> Vec3 {
+    let linear = Color::srgb(srgb.x, srgb.y, srgb.z).to_linear();
+    let on = on_daylight_locus(Vec3::new(linear.red, linear.green, linear.blue));
+    let back = Color::linear_rgb(on.x, on.y, on.z).to_srgba();
+    Vec3::new(back.red, back.green, back.blue)
+}
+
 /// What the sky is painted from, as linear colours.
 #[derive(Clone, Copy)]
 struct Colours {
     /// How low the sun is, 0 to 1.
     low: f32,
+    /// How much it is day, 1, and not night, 0: by night the moon's sky is its own colour.
+    day: f32,
     shade: Vec3,
     horizon: Vec3,
     zenith: Vec3,
@@ -285,6 +346,7 @@ impl Colours {
             key[i * 3..i * 3 + 3].copy_from_slice(&c.to_array());
         }
         key[12] = self.low;
+        key[13] = self.day;
         key
     }
 
@@ -300,7 +362,10 @@ impl Colours {
             // While the sun is low the drawn horizon is orange and pink, and half of it washed
             // the whole forest salmon at dusk; the shade under trees is lit by the sky above
             // it, so it takes mostly the shade's cool colour then (D256).
-            hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low)) * (1.15 - 0.35 * e.max(0.0))
+            let mixed = hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low));
+            // By day on the daylight locus: mixed along a straight line from the horizon's orange
+            // to the zenith's blue, it passed through magenta, and the shade it lit read lilac.
+            mixed.lerp(on_daylight_locus(mixed), self.day) * (1.15 - 0.35 * e.max(0.0))
         };
         if up >= 0.0 {
             sky(up)
@@ -381,6 +446,7 @@ mod tests {
     fn colours() -> Colours {
         Colours {
             low: 0.0,
+            day: 1.0,
             shade: Vec3::new(0.4, 0.5, 1.0),
             horizon: Vec3::new(0.9, 0.85, 0.8),
             zenith: Vec3::new(0.1, 0.25, 0.7),
@@ -442,5 +508,54 @@ mod tests {
         assert!(top.distance(c.toward(Vec3::Y)) < 0.01, "{top}");
         let (bottom, _) = middle(3);
         assert!(bottom.distance(c.ground) < 0.01, "{bottom}");
+    }
+
+    #[test]
+    fn daylight_of_6500_kelvin_is_srgb_white_and_the_locus_runs_amber_to_blue() {
+        // sRGB's white is D65, CIE daylight of 6,504 K.
+        let white = daylight(6_504.0);
+        assert!((white - Vec3::ONE).abs().max_element() < 0.03, "{white}");
+        let warm = daylight(4_000.0);
+        let cold = daylight(15_000.0);
+        assert!(warm.x > warm.y && warm.y > warm.z, "{warm}");
+        assert!(cold.z > cold.y && cold.y > cold.x, "{cold}");
+    }
+
+    #[test]
+    fn a_colour_on_the_locus_is_never_magenta_and_keeps_its_brightness() {
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let lilac = Vec3::new(0.45, 0.4, 0.8);
+        let on = on_daylight_locus(lilac);
+        // Daylight's green lies between its red and its blue; lilac's is under both.
+        assert!(on.y >= on.x.min(on.z), "{on}");
+        assert!((luma(on) - luma(lilac)).abs() < 1e-3, "{on}");
+        // As cool as it was: blue over red kept within the locus's reach.
+        assert!(on.z > on.x, "{on}");
+    }
+
+    fn srgb_linear(r: f32, g: f32, b: f32) -> Vec3 {
+        Vec3::from_slice(&Color::srgb(r, g, b).to_linear().to_f32_array()[..3])
+    }
+
+    #[test]
+    fn a_low_suns_sky_lights_the_shade_blue_not_lilac() {
+        // The keys a low sun gives (`daylight`): an orange horizon, a blue zenith and a lilac
+        // shade colour; every way up into the sky and the light toward each side is daylight.
+        let c = Colours {
+            low: 1.0,
+            day: 1.0,
+            shade: srgb_linear(0.68, 0.66, 0.9),
+            horizon: srgb_linear(0.95, 0.55, 0.38),
+            zenith: srgb_linear(0.16, 0.24, 0.52),
+            ground: Vec3::new(0.1, 0.1, 0.08),
+        };
+        for d in [Vec3::Y, Vec3::new(1.0, 0.05, 0.0), Vec3::new(1.0, 0.5, 1.0)] {
+            let light = c.toward(d.normalize());
+            assert!(light.y >= light.x.min(light.z) * 0.999, "{d}: {light}");
+        }
+        let (sky, _) = c.lobes();
+        for side in sky {
+            assert!(side.y >= side.x.min(side.z) * 0.999, "{side}");
+        }
     }
 }

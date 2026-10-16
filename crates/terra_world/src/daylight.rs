@@ -551,7 +551,13 @@ fn shine(
         if (air.ambient_intensity - wanted).abs() > 1e-6 {
             air.ambient_intensity = wanted;
         }
-        let tint = super::scene::HAZE_TINT.lerp(light.shade, open);
+        // The open sky's light on the mist is skylight, on the daylight locus by day, as the
+        // painted sky's is (`skylight`): the low sun's lilac shade key tinted the mist lilac.
+        let day = 1.0 - night_air;
+        let sky_tint = light
+            .shade
+            .lerp(crate::skylight::srgb_on_daylight_locus(light.shade), day);
+        let tint = super::scene::HAZE_TINT.lerp(sky_tint, open);
         let tint = colour(tint);
         if air.ambient_color != tint {
             air.ambient_color = tint;

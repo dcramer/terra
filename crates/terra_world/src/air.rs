@@ -71,6 +71,44 @@ pub fn haze_scale(open: f32, air: AirScale) -> f32 {
     let forest = (air.0 * FOREST_HAZE_SCALE / HAZE_SCALE).max(1.0);
     libm::expf(libm::logf(forest) * (1.0 - t) + libm::logf(air.0) * t)
 }
+/// How much dust the air holds now, as `medium` takes it: so many times Earth's clear day's.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct AirDust(pub f32);
+
+/// Rayleigh scattering, dust's scattering and absorption, and ozone's absorption, per metre at
+/// the ground (ozone's at its layer's peak), as `medium` makes the air.
+const RAYLEIGH: Vec3 = Vec3::new(5.802e-6, 13.558e-6, 33.1e-6);
+const RAYLEIGH_HEIGHT_M: f32 = 8_000.0;
+const DUST_SCATTERS: f32 = 3.996e-6;
+const DUST_ABSORBS: f32 = 0.444e-6;
+const DUST_HEIGHT_M: f32 = 1_200.0;
+const OZONE: Vec3 = Vec3::new(0.65e-6, 1.881e-6, 0.085e-6);
+/// Ozone's tent, 0.3 of the air's 100 km wide at its foot: as much as 15 km of its peak.
+const OZONE_COLUMN_M: f32 = 15_000.0;
+
+/// How much of the sun's light comes through the air to the ground with the sun so many
+/// radians up, the air holding so much dust, per colour: as Bevy's atmosphere dims and warms
+/// the sun's light on everything it lights (its transmittance table), worked out on the CPU
+/// for what is lit by bounce rather than by the sun directly. The air's path through each of
+/// its layers, its height times Kasten and Young's air mass (1989), which holds to the horizon.
+pub fn sun_through(height: f32, dust: f32) -> Vec3 {
+    if height <= -0.01 {
+        return Vec3::ZERO;
+    }
+    let degrees = height.max(0.0).to_degrees();
+    let air_mass =
+        1.0 / (libm::sinf(height.max(0.0)) + 0.50572 * libm::powf(degrees + 6.07995, -1.6364));
+    let depth = RAYLEIGH * RAYLEIGH_HEIGHT_M
+        + Vec3::splat((DUST_SCATTERS + DUST_ABSORBS) * dust * DUST_HEIGHT_M)
+        + OZONE * OZONE_COLUMN_M;
+    let through = depth * air_mass;
+    Vec3::new(
+        libm::expf(-through.x),
+        libm::expf(-through.y),
+        libm::expf(-through.z),
+    )
+}
+
 /// The air's planet, as Earth's, in metres of the air's own space.
 const INNER_RADIUS_M: f32 = 6_360_000.0;
 const OUTER_RADIUS_M: f32 = 6_460_000.0;
@@ -112,6 +150,7 @@ fn clear_cold_air(
     air: Query<&Atmosphere, With<Air>>,
     mut media: ResMut<Assets<ScatteringMedium>>,
     mut done: Local<bool>,
+    mut commands: Commands,
 ) {
     let (Some(fields), Some(scale)) = (fields, scale) else {
         return;
@@ -128,6 +167,7 @@ fn clear_cold_air(
     let haze = haze_for(mean);
     if let Some(mut medium) = media.get_mut(&atmosphere.medium) {
         *medium = self::medium(dust_for(*scale) * haze);
+        commands.insert_resource(AirDust(dust_for(*scale) * haze));
     }
     info!(
         "Air: the day's mean {mean:.1} °C at the start leaves {:.0}% of its haze, its dust {:.1} times a clear day's",
@@ -175,18 +215,18 @@ fn medium(dust: f32) -> ScatteringMedium {
         [
             ScatteringTerm {
                 absorption: Vec3::ZERO,
-                scattering: Vec3::new(5.802e-6, 13.558e-6, 33.1e-6),
+                scattering: RAYLEIGH,
                 falloff: Falloff::Exponential { scale: 8.0 / 100.0 },
                 phase: PhaseFunction::Rayleigh,
             },
             ScatteringTerm {
-                absorption: Vec3::splat(0.444e-6 * dust),
-                scattering: Vec3::splat(3.996e-6 * dust),
+                absorption: Vec3::splat(DUST_ABSORBS * dust),
+                scattering: Vec3::splat(DUST_SCATTERS * dust),
                 falloff: Falloff::Exponential { scale: 1.2 / 100.0 },
                 phase: PhaseFunction::Mie { asymmetry: 0.8 },
             },
             ScatteringTerm {
-                absorption: Vec3::new(0.65e-6, 1.881e-6, 0.085e-6),
+                absorption: OZONE,
                 scattering: Vec3::ZERO,
                 falloff: Falloff::Tent {
                     center: 0.75,
@@ -202,6 +242,7 @@ fn medium(dust: f32) -> ScatteringMedium {
 fn spawn(mut commands: Commands, mut media: ResMut<Assets<ScatteringMedium>>, planet: Res<Planet>) {
     let scale = AirScale::for_world(planet.radius_m(), planet.relief_m());
     commands.insert_resource(scale);
+    commands.insert_resource(AirDust(dust_for(scale)));
     info!(
         "Air: its distances {:.2} times the world's, its dust {:.1} times a clear day's",
         scale.0,
@@ -385,6 +426,40 @@ mod tests {
                 assert!(inside.normalize().dot(up) > 0.9999);
             }
         }
+    }
+
+    #[test]
+    fn the_sun_comes_through_the_air_redder_the_lower_it_is_and_not_at_all_below_it() {
+        let overhead = sun_through(std::f32::consts::FRAC_PI_2, 1.0);
+        let horizon = sun_through(0.0, 1.0);
+        // Straight up most of it comes through, the blue least.
+        assert!(
+            overhead.min_element() > 0.6 && overhead.z < overhead.x,
+            "{overhead}"
+        );
+        // At the horizon the air is Kasten and Young's 38.09 airs thick: the depth each colour
+        // goes through is that many times its depth overhead.
+        for k in 0..3 {
+            let mass = libm::logf(horizon[k]) / libm::logf(overhead[k]);
+            assert!((mass - 38.09).abs() < 0.2, "{mass}");
+        }
+        let redness = |t: Vec3| t.x / t.z;
+        let mut last = redness(overhead);
+        for degrees in [60.0_f32, 30.0, 15.0, 6.0, 2.0, 0.0] {
+            let now = redness(sun_through(degrees.to_radians(), 1.0));
+            assert!(now > last, "{degrees}: {now} after {last}");
+            last = now;
+        }
+        // Dust dims every colour alike.
+        let dusty = sun_through(0.3, 16.0);
+        let clear = sun_through(0.3, 1.0);
+        let dimmed = dusty / clear;
+        assert!(dimmed.max_element() < 0.9, "{dimmed}");
+        assert!(
+            dimmed.max_element() - dimmed.min_element() < 1e-4,
+            "{dimmed}"
+        );
+        assert_eq!(sun_through(-0.05, 1.0), Vec3::ZERO);
     }
 
     #[test]
