@@ -1,11 +1,11 @@
 {
-  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): low over its north side, looking south across the plots, the morning sun to the left, the forest's edge beyond and the valley and the sky past it, slowly round from the north-west to the north-east and back out as the settlement grows",
+  "about": "A bird's-eye drift round a settlement as it rises in its forest clearing (D381): low over its north side, looking south across the plots, the morning sun to the left, the forest's edge beyond and the valley and the sky past it, slowly round from the north-west to the north-east as the settlement grows, near enough that every building is drawn in full",
   "seconds": 42,
   "rig": { "around": [0, 0, -345] },
   "keys": [
     { "t": 0, "orbit": [-30, 76, 31], "look": [23, 0, -305], "lens": 22 },
-    { "t": 21, "orbit": [0, 84, 36], "look": [0, 0, -305], "lens": 22 },
-    { "t": 42, "orbit": [28, 98, 46], "look": [-12, 0, -318], "lens": 22 }
+    { "t": 21, "orbit": [0, 80, 34], "look": [0, 0, -303], "lens": 22 },
+    { "t": 42, "orbit": [28, 84, 38], "look": [-16, 0, -312], "lens": 21 }
   ],
   "ease": "in-out",
   "look": { "exposure": "hold", "exposure_bias": 0.1, "hold_clock": true },
