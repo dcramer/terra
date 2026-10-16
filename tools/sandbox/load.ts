@@ -6,11 +6,13 @@
 //
 // The processors' busy share is read where it is whole: under WSL from Windows (`typeperf`),
 // whose total counts WSL's own virtual machine and the Windows programs the runs are; on Linux
-// from /proc/stat over a second; elsewhere from the load average against the cores. The GPU's,
-// where `nvidia-smi` answers. Node 22.18 or later; no dependencies.
+// from /proc/stat over a second; elsewhere from the load average against the cores. While a run
+// goes, the sandbox's own share is taken out (its program, `terra_sandbox`, as Windows or /proc
+// counts it), so what is left is everything else's. The GPU's, where `nvidia-smi` answers.
+// Node 22.18 or later; no dependencies.
 
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { cpus, loadavg } from "node:os";
 import { promisify } from "node:util";
 
@@ -19,10 +21,12 @@ const run = promisify(execFile);
 /// Quiet: the processors less than this busy, and the GPU, before a run, less than this.
 export const QUIET_CPU_PCT = 35;
 export const QUIET_GPU_PCT = 15;
-/// Busy during a run: the processors more than this busy on average, the run's own share in it,
-/// or near all of them at once.
-export const BUSY_DURING_CPU_PCT = 45;
-export const BUSY_DURING_MOST_PCT = 90;
+/// Busy during a run: everything but the run itself more than this busy on average, or more than
+/// the second at once.
+export const BUSY_DURING_CPU_PCT = 30;
+export const BUSY_DURING_MOST_PCT = 70;
+/// The program whose share a run's load leaves out.
+const SANDBOX = "terra_sandbox";
 /// The most to wait for a quiet machine before a run, and over all of a command's runs.
 export const WAIT_S = 90;
 export const MOST_WAITING_S = 300;
@@ -42,11 +46,14 @@ export const quiet = (load: Load | undefined) => !load || (load.cpu < QUIET_CPU_
 export const busyDuring = (during: During | undefined) => !!during && (during.mean > BUSY_DURING_CPU_PCT || during.most > BUSY_DURING_MOST_PCT);
 export const describe = (load: Load) => `processors ${load.cpu.toFixed(0)}% busy${load.gpu === undefined ? "" : `, GPU ${load.gpu.toFixed(0)}%`}`;
 
-/// Reads typeperf's CSV: a header, then `"time","value"`.
-export function parseTypeperf(text: string): number | undefined {
+/// Reads typeperf's CSV, a header and then `"time","value",...`, as its values.
+export function parseTypeperf(text: string): number[] {
   const line = text.split("\n").filter((each) => each.startsWith('"'))[1];
-  const value = Number(line?.split(",").at(-1)?.trim().replace(/"/g, ""));
-  return Number.isFinite(value) ? value : undefined;
+  return (line ?? "")
+    .split(",")
+    .slice(1)
+    .map((cell) => Number(cell.trim().replace(/"/g, "")))
+    .filter(Number.isFinite);
 }
 
 /// The first line of /proc/stat as busy and all jiffies: idle and waiting on the disk are not busy.
@@ -66,20 +73,40 @@ async function output(program: string, args: string[]): Promise<string | undefin
   }
 }
 
-async function cpuNow(): Promise<number | undefined> {
+/// The jiffies every process called `terra_sandbox` has run, user and system.
+function sandboxJiffies(): number {
+  let sum = 0;
+  for (const pid of readdirSync("/proc").filter((name) => /^\d+$/.test(name))) {
+    try {
+      if (!readFileSync(`/proc/${pid}/comm`, "utf8").trim().startsWith(SANDBOX)) continue;
+      // After the name in brackets: its state, then fields 4 to 13, then utime and stime.
+      const fields = readFileSync(`/proc/${pid}/stat`, "utf8").split(")").at(-1)!.trim().split(/\s+/);
+      sum += Number(fields[11]) + Number(fields[12]);
+    } catch {
+      // Gone since it was listed.
+    }
+  }
+  return sum;
+}
+
+/// The processors' busy share now, and the sandbox's own part of it, where it can be told.
+async function cpuNow(): Promise<{ all: number; ours: number } | undefined> {
   if (onWsl) {
-    const windows = parseTypeperf((await output("typeperf.exe", ["\\Processor(_Total)\\% Processor Time", "-sc", "1"])) ?? "");
-    if (windows !== undefined) return windows;
+    const values = parseTypeperf((await output("typeperf.exe", ["\\Processor(_Total)\\% Processor Time", `\\Process(${SANDBOX}*)\\% Processor Time`, "-sc", "1"])) ?? "");
+    // A process's time is counted a core at a time: 100% is one core.
+    if (values.length) return { all: values[0], ours: values.slice(1).reduce((a, b) => a + b, 0) / cpus().length };
   }
   try {
     const a = parseProcStat(readFileSync("/proc/stat", "utf8"));
+    const oursA = sandboxJiffies();
     await new Promise((done) => setTimeout(done, 1000));
     const b = parseProcStat(readFileSync("/proc/stat", "utf8"));
-    if (a && b && b[1] > a[1]) return (100 * (b[0] - a[0])) / (b[1] - a[1]);
+    const oursB = sandboxJiffies();
+    if (a && b && b[1] > a[1]) return { all: (100 * (b[0] - a[0])) / (b[1] - a[1]), ours: (100 * (oursB - oursA)) / (b[1] - a[1]) };
   } catch {
     // Not Linux: the load average.
   }
-  return Math.min(100, (100 * loadavg()[0]) / cpus().length);
+  return { all: Math.min(100, (100 * loadavg()[0]) / cpus().length), ours: 0 };
 }
 
 async function gpuNow(): Promise<number | undefined> {
@@ -96,7 +123,7 @@ async function gpuNow(): Promise<number | undefined> {
 /// The load now.
 export async function sample(): Promise<Load | undefined> {
   const [cpu, gpu] = await Promise.all([cpuNow(), gpuNow()]);
-  return cpu === undefined ? undefined : { cpu, gpu };
+  return cpu === undefined ? undefined : { cpu: cpu.all, gpu };
 }
 
 /// Waits up to `most` seconds for a quiet machine, looking every five; the load it ran on and
@@ -117,8 +144,9 @@ export function watch(): { stop: () => Promise<During | undefined> } {
   let going = true;
   const loop = (async () => {
     while (going) {
-      const load = await sample();
-      if (load) samples.push(load.cpu);
+      // Everything but the run itself.
+      const cpu = await cpuNow();
+      if (cpu) samples.push(Math.max(0, cpu.all - cpu.ours));
       for (let i = 0; i < 10 && going; i++) await new Promise((done) => setTimeout(done, 300));
     }
   })();

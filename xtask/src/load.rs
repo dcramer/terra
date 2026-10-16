@@ -8,7 +8,10 @@
 //! The processor's busy share is read where it is whole: under WSL from Windows
 //! (`typeperf`), whose total counts WSL's own virtual machine and the Windows programs the
 //! benchmarks run; on Linux from `/proc/stat` over a second; on macOS from the load average
-//! against the cores. The GPU's, where `nvidia-smi` answers.
+//! against the cores. While a run goes, the sandbox's own share is taken out (its program,
+//! `terra_sandbox`, as Windows or `/proc` counts it), so what is left is everything else's;
+//! a benchmark has the GPU to itself (D319), so no other sandbox runs then. The GPU's, where
+//! `nvidia-smi` answers.
 
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,11 +22,13 @@ use std::time::{Duration, Instant};
 /// run itself takes a few of the cores, so a quiet machine is well under half busy.
 pub(crate) const QUIET_CPU_PCT: f32 = 35.0;
 pub(crate) const QUIET_GPU_PCT: f32 = 15.0;
-/// Busy during a run: the processors more than this busy on average, the run's own share
-/// counted in (a quiet run of the yard averaged 37%; one at 50% had three times its 99th
-/// percentile), or near all of them at once.
-pub(crate) const BUSY_DURING_CPU_PCT: f32 = 45.0;
-pub(crate) const BUSY_DURING_MOST_PCT: f32 = 90.0;
+/// Busy during a run: everything but the run itself more than this busy on average, or more
+/// than the second at once (a run of the yard with the processors half busy beside it had
+/// three times its 99th percentile).
+pub(crate) const BUSY_DURING_CPU_PCT: f32 = 30.0;
+pub(crate) const BUSY_DURING_MOST_PCT: f32 = 70.0;
+/// The program whose share a run's load leaves out.
+const SANDBOX: &str = "terra_sandbox";
 /// How long to wait for a quiet machine before a run, at most, and how often to look.
 pub(crate) const WAIT: Duration = Duration::from_secs(90);
 const LOOK_EVERY: Duration = Duration::from_secs(5);
@@ -50,19 +55,23 @@ impl Load {
     }
 }
 
-/// The load now, if it can be read.
+/// The load now, if it can be read: everything on the machine.
 pub(crate) fn sample() -> Option<Load> {
-    let cpu_pct = if crate::windows::on_wsl() {
+    Some(Load {
+        cpu_pct: cpu().map(|(all, _)| all)?,
+        gpu_pct: nvidia_gpu(),
+    })
+}
+
+/// The processors' busy share now, and the sandbox's own part of it, where it can be told.
+fn cpu() -> Option<(f32, f32)> {
+    if crate::windows::on_wsl() {
         windows_cpu().or_else(linux_cpu)
     } else if cfg!(target_os = "linux") {
         linux_cpu()
     } else {
-        load_average()
-    }?;
-    Some(Load {
-        cpu_pct,
-        gpu_pct: nvidia_gpu(),
-    })
+        load_average().map(|all| (all, 0.0))
+    }
 }
 
 /// Waits up to `most` for a quiet machine, looking every few seconds; says the load it ran
@@ -106,8 +115,12 @@ impl Watch {
         let (stopping, kept) = (stop.clone(), samples.clone());
         let thread = std::thread::spawn(move || {
             while !stopping.load(Ordering::Relaxed) {
-                if let (Some(load), Ok(mut kept)) = (sample(), kept.lock()) {
-                    kept.push(load);
+                // Everything but the run itself.
+                if let (Some((all, ours)), Ok(mut kept)) = (cpu(), kept.lock()) {
+                    kept.push(Load {
+                        cpu_pct: (all - ours).max(0.0),
+                        gpu_pct: None,
+                    });
                 }
                 // In short steps, so stopping does not wait out a whole interval.
                 for _ in 0..10 {
@@ -159,39 +172,86 @@ fn quiet_output(program: &str, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Windows' own count of every processor's busy share, WSL's virtual machine in it.
-fn windows_cpu() -> Option<f32> {
+/// Windows' own count of every processor's busy share, WSL's virtual machine in it, and the
+/// sandbox programs' share of it.
+fn windows_cpu() -> Option<(f32, f32)> {
+    let ours = format!(r"\Process({SANDBOX}*)\% Processor Time");
     let text = quiet_output(
         "typeperf.exe",
-        &[r"\Processor(_Total)\% Processor Time", "-sc", "1"],
+        &[r"\Processor(_Total)\% Processor Time", &ours, "-sc", "1"],
     )?;
-    parse_typeperf(&text)
+    let values = parse_typeperf(&text);
+    let (all, programs) = values.split_first()?;
+    // A process's time is counted a core at a time: 100% is one core.
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as f32;
+    Some((*all, programs.iter().sum::<f32>() / cores))
 }
 
-/// Reads typeperf's CSV: a header, then `"time","value"`.
-pub(crate) fn parse_typeperf(text: &str) -> Option<f32> {
+/// Reads typeperf's CSV, a header and then `"time","value",...`, as its values.
+pub(crate) fn parse_typeperf(text: &str) -> Vec<f32> {
     text.lines()
         .filter(|line| line.starts_with('"'))
-        .nth(1)?
-        .rsplit(',')
-        .next()?
-        .trim()
-        .trim_matches('"')
-        .parse()
-        .ok()
+        .nth(1)
+        .map(|line| {
+            line.split(',')
+                .skip(1)
+                .filter_map(|cell| cell.trim().trim_matches('"').parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-/// Linux's processors over a second, from the jiffies `/proc/stat` counts.
-fn linux_cpu() -> Option<f32> {
+/// Linux's processors over a second, from the jiffies `/proc/stat` counts, and the sandbox
+/// processes' part, from theirs.
+fn linux_cpu() -> Option<(f32, f32)> {
     let read = || -> Option<(u64, u64)> {
         let text = std::fs::read_to_string("/proc/stat").ok()?;
         parse_proc_stat(&text)
     };
     let (busy_a, all_a) = read()?;
+    let ours_a = sandbox_jiffies();
     std::thread::sleep(Duration::from_secs(1));
     let (busy_b, all_b) = read()?;
+    let ours_b = sandbox_jiffies();
     let all = all_b.saturating_sub(all_a);
-    (all > 0).then(|| 100.0 * busy_b.saturating_sub(busy_a) as f32 / all as f32)
+    (all > 0).then(|| {
+        (
+            100.0 * busy_b.saturating_sub(busy_a) as f32 / all as f32,
+            100.0 * ours_b.saturating_sub(ours_a) as f32 / all as f32,
+        )
+    })
+}
+
+/// The jiffies every process called `terra_sandbox` has run, user and system.
+fn sandbox_jiffies() -> u64 {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .bytes()
+                .all(|b| b.is_ascii_digit())
+        })
+        .filter(|entry| {
+            std::fs::read_to_string(entry.path().join("comm"))
+                .is_ok_and(|name| name.trim().starts_with(SANDBOX))
+        })
+        .filter_map(|entry| std::fs::read_to_string(entry.path().join("stat")).ok())
+        .filter_map(|stat| {
+            // After the name in brackets: its state, then fields 4 to 13, then utime and stime.
+            let rest = stat.rsplit_once(')')?.1;
+            let fields: Vec<u64> = rest
+                .split_whitespace()
+                .skip(1)
+                .map(|f| f.parse().unwrap_or(0))
+                .collect();
+            Some(fields.get(10)? + fields.get(11)?)
+        })
+        .sum()
 }
 
 /// The first line of `/proc/stat` as busy and all jiffies: idle and waiting on the disk are
@@ -241,8 +301,11 @@ mod tests {
     fn reads_windows_processor_time() {
         let text = "\"(PDH-CSV 4.0)\",\"\\\\BOX\\Processor(_Total)\\% Processor Time\"\n\
                     \"10/16/2026 11:05:03.021\",\"93.75\"\nExiting, please wait...\n";
-        assert_eq!(parse_typeperf(text), Some(93.75));
-        assert_eq!(parse_typeperf("The command failed"), None);
+        assert_eq!(parse_typeperf(text), vec![93.75]);
+        assert!(parse_typeperf("The command failed").is_empty());
+        // With the sandbox's process beside the total, its share counted a core at a time.
+        let both = "\"(PDH-CSV 4.0)\",\"total\",\"sandbox\"\n\"10/16/2026\",\"40.0\",\"320.0\"\n";
+        assert_eq!(parse_typeperf(both), vec![40.0, 320.0]);
     }
 
     #[test]

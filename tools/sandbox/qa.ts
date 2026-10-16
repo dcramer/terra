@@ -37,7 +37,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { basename, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as game from "./client.ts";
-import * as load from "./load.ts";
+import * as machine from "./load.ts";
 import { buildOffscreen, imageMagick, offscreenPath, offscreenRun, ROOT } from "./client.ts";
 import { type Call, type Known, type KitSet, inBaseline, readSets, type Scenario, Script, type Stage } from "./qa/script.ts";
 
@@ -97,7 +97,7 @@ if (!chosen.length) {
 const part = option("--part");
 const runs = Math.max(1, Number(option("--runs") ?? 3) || 3);
 /// What is left of the most a command waits for a quiet machine over all its traces.
-let waitingLeft = load.MOST_WAITING_S;
+let waitingLeft = machine.MOST_WAITING_S;
 let name = "";
 let scenario: Scenario;
 let folder = "";
@@ -305,12 +305,12 @@ type Summary = { median: number; p99: number; worst: number; over: number; hitch
 type Trace = { summary: Summary & { runs: number; of: number; p99_low: number; p99_high: number; busy: boolean; judged: string; holds: boolean } };
 
 /// One run of the trace: its frames read, what the run said, and the machine's load.
-type TraceRun = { rows: { frame: number; ms: number; game: number; render: number; gpu: number }[]; said: string; csv: string; log: string; before?: load.Load; during?: load.During; busy: boolean };
+type TraceRun = { rows: { frame: number; ms: number; game: number; render: number; gpu: number }[]; said: string; csv: string; log: string; before?: machine.Load; during?: machine.During; busy: boolean };
 
-const stat = (values: number[]) => {
+function stat(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   return { median: sorted[Math.floor(sorted.length / 2)] ?? 0, p99: sorted[Math.floor(sorted.length * 0.99)] ?? 0, worst: sorted.at(-1) ?? 0 };
-};
+}
 
 /// The same calls on the same frames in a benchmark run, every frame's time written, read
 /// against the budget stage by stage, its worst frames beside what was done on them; run
@@ -322,9 +322,9 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
   // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the machine
   // is quiet, up to as many again to stand in for runs taken while it was busy.
   for (let attempt = 0; attempt < runs * 2 && quietRuns() < runs; ) {
-    const { load: before, waited } = await load.waitForQuiet(Math.min(load.WAIT_S, waitingLeft));
+    const { load: before, waited } = await machine.waitForQuiet(Math.min(machine.WAIT_S, waitingLeft));
     waitingLeft = Math.max(0, waitingLeft - waited);
-    if (attempt >= runs && !load.quiet(before)) {
+    if (attempt >= runs && !machine.quiet(before)) {
       console.log("  the machine is still busy, so no more runs to stand in for busy ones");
       break;
     }
@@ -332,8 +332,8 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
     const csv = resolve(folder, `${label}-frames-${attempt}.csv`);
     rmSync(csv, { force: true });
     const [command, words] = offscreenRun(`qa-trace`, [...sandbox, "--bench", "--settle", String(settle), "--bench-frames", String(Math.max(100, last - settle)), "--frame-times", offscreenPath(csv)]);
-    console.log(`qa: trace ${attempt}/${runs}${attempt > runs ? " (standing in for a busy run)" : ""}${before ? `, ${load.describe(before)}${load.quiet(before) ? "" : ", busy"}` : ""}${waited >= 1 ? `, after waiting ${waited.toFixed(0)} s for it to quieten` : ""}`);
-    const watching = load.watch();
+    console.log(`qa: trace ${attempt}/${runs}${attempt > runs ? " (standing in for a busy run)" : ""}${before ? `, ${machine.describe(before)}${machine.quiet(before) ? "" : ", busy"}` : ""}${waited >= 1 ? `, after waiting ${waited.toFixed(0)} s for it to quieten` : ""}`);
+    const watching = machine.watch();
     const run = await runOffscreenAsync(command, words);
     const during = await watching.stop();
     const said = `${run.stdout}${run.stderr}`;
@@ -346,7 +346,7 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
       .slice(1)
       .map((line) => line.split(","))
       .map(([frame, ms, game, render, gpu]) => ({ frame: Number(frame), ms: Number(ms), game: Number(game), render: Number(render), gpu: Number(gpu) }));
-    traced.push({ rows, said, csv, log, before, during, busy: !load.quiet(before) || load.busyDuring(during) });
+    traced.push({ rows, said, csv, log, before, during, busy: !machine.quiet(before) || machine.busyDuring(during) });
   }
   if (!traced.length) throw new Error("no trace ran");
   // The runs read: the quiet ones when at least half are, else all, said to be busy.
@@ -375,8 +375,8 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
     const { median, p99 } = stat(filmedOf(run).map((r) => r.ms));
     return integrated ? median <= INTEGRATED_MEDIAN_MS : p99 <= BUDGET_MS;
   };
-  const p99s = load.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).p99));
-  const medians = load.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).median));
+  const p99s = machine.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).p99));
+  const medians = machine.middle(used.map((run) => stat(filmedOf(run).map((r) => r.ms)).median));
   const filmed = filmedOf(chosen);
   const all = stat(filmed.map((r) => r.ms));
   const holds = holdsRun(chosen);
@@ -389,8 +389,8 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
     "runs:",
     ...traced.map((run, i) => {
       const { median, p99, worst } = stat(filmedOf(run).map((r) => r.ms));
-      const before = run.before ? `before: ${load.describe(run.before)}` : "before: load unknown";
-      const during = run.during ? `while it ran: processors ${run.during.mean.toFixed(0)}% busy, at most ${run.during.most.toFixed(0)}%` : "";
+      const before = run.before ? `before: ${machine.describe(run.before)}` : "before: load unknown";
+      const during = run.during ? `while it ran, everything but it: processors ${run.during.mean.toFixed(0)}% busy, at most ${run.during.most.toFixed(0)}%` : "";
       return `  ${i + 1}${run === chosen ? "*" : " "} median ${median.toFixed(1).padStart(5)}  p99 ${p99.toFixed(1).padStart(5)}  worst ${worst.toFixed(1).padStart(6)} ms  ${run.busy ? "BUSY" : "quiet"}  ${before}; ${during}`;
     }),
     "  (* the run written below)",

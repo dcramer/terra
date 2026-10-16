@@ -5,8 +5,10 @@ import { busyDuring, middle, parseProcStat, parseTypeperf, quiet } from "./load.
 
 test("reads Windows' processor time from typeperf", () => {
   const text = '"(PDH-CSV 4.0)","\\\\BOX\\Processor(_Total)\\% Processor Time"\n"10/16/2026 11:05:03.021","93.75"\nExiting, please wait...\n';
-  assert.equal(parseTypeperf(text), 93.75);
-  assert.equal(parseTypeperf("The command failed"), undefined);
+  assert.deepEqual(parseTypeperf(text), [93.75]);
+  assert.deepEqual(parseTypeperf("The command failed"), []);
+  // With the sandbox's process beside the total.
+  assert.deepEqual(parseTypeperf('"(PDH-CSV 4.0)","total","sandbox"\n"10/16/2026","40.0","320.0"\n'), [40, 320]);
 });
 
 test("reads Linux's jiffies, idle and waiting on the disk not busy", () => {
@@ -22,9 +24,9 @@ test("quiet is the processors and the GPU both; busy during a run is the process
   assert.ok(!quiet({ cpu: 10, gpu: 40 }));
   // Unknown load is not held against a run.
   assert.ok(quiet(undefined));
-  assert.ok(busyDuring({ mean: 70, most: 90 }));
-  assert.ok(!busyDuring({ mean: 30, most: 90 }));
-  assert.ok(busyDuring({ mean: 30, most: 99 }));
+  assert.ok(busyDuring({ mean: 40, most: 60 }));
+  assert.ok(!busyDuring({ mean: 20, most: 60 }));
+  assert.ok(busyDuring({ mean: 20, most: 80 }));
 });
 
 test("the middle of runs and their spread", () => {

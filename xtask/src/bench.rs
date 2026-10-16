@@ -383,7 +383,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
             let during = watch.stop();
             if let Some(during) = during {
                 println!(
-                    "  while it ran: processors {:.0}% busy on average, {:.0}% at most{}",
+                    "  while it ran, everything but it: processors {:.0}% busy on average, {:.0}% at most{}",
                     during.mean_cpu_pct,
                     during.most_cpu_pct,
                     if during.busy() { ", busy" } else { "" }
@@ -515,7 +515,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
              median under {INTEGRATED_MEDIAN_MS:.1} ms (D239). A median is SLOWER than the last \
              recorded past {:.0}% or the runs' own spread, whichever is more; a run is busy \
              when the processors were over {:.0}% busy (or the GPU {:.0}%) before it, after \
-             waiting for them, or over {:.0}% on average ({:.0}% at once) while it ran.",
+             waiting for them, or everything but the run over {:.0}% on average ({:.0}% at once) while it ran.",
             first.budget_ms,
             SLOWER_BY * 100.0,
             load::QUIET_CPU_PCT,
