@@ -711,6 +711,8 @@ fn wear(
                 .iter()
                 .map(|&b| Vec2::from(market.life.town.buildings[b].at).length() + WAY_PAST_M)
                 .fold(0.0, f32::max),
+            // The square laid out once its market comes.
+            rising.t >= rising.lapse.common.0,
         ),
     );
 }

@@ -437,6 +437,8 @@ struct TownCover {
     square: Vec<Vec2>,
     streets: Vec<(Vec<Vec2>, f32)>,
     yards: Vec<[Vec2; 4]>,
+    /// The ground of each building going up in a settlement rising (D381).
+    plots: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
     /// Within so far of its middle a meadow, grass all over but where it is worn: the
     /// clearing a settlement rising has cut (D381); none for a town of old.
@@ -452,6 +454,8 @@ const MEADOW_GRASS: f32 = 0.8;
 const MEADOW_LUSH: f32 = 0.65;
 /// How trodden an unpaved way is: packed earth, under where the ground shader lays setts.
 const UNPAVED: f32 = 0.5;
+/// How far round a plot going up its ground is trodden.
+const PLOT_WORN_M: f32 = 1.8;
 /// How far round its middle a settlement rising has cleared a meadow: to the forest's
 /// edge (`MarketTown::SETTLEMENT`).
 const MEADOW_M: f32 = 125.0;
@@ -463,6 +467,24 @@ const PAVING_EDGE_M: f32 = 0.35;
 const HOUSE_WORN_M: f32 = 9.0;
 /// Within how far of a door it is worn as bare as a yard.
 const HOUSE_BARE_M: f32 = 4.5;
+
+/// Smooth value noise from 0 to 1 over a place, a unit a cell: the drifts of a meadow's mix.
+fn patch(p: Vec2) -> f32 {
+    let hash = |x: i32, y: i32| {
+        let mut h = (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
+        h ^= h >> 15;
+        h = h.wrapping_mul(0x2c1b_3c6d);
+        h ^= h >> 12;
+        (h & 0xffff) as f32 / 65535.0
+    };
+    let (x, y) = (libm::floorf(p.x), libm::floorf(p.y));
+    let (fx, fy) = (p.x - x, p.y - y);
+    let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
+    let (x, y) = (x as i32, y as i32);
+    let top = hash(x, y) + (hash(x + 1, y) - hash(x, y)) * sx;
+    let bottom = hash(x, y + 1) + (hash(x + 1, y + 1) - hash(x, y + 1)) * sx;
+    top + (bottom - top) * sy
+}
 
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
@@ -486,6 +508,14 @@ impl terra_world::cover::CoverSource for TownCover {
             },
             ..default()
         };
+        // A meadow is a mix (D381): taller grass in drifts, greener and drier patches, and
+        // toward the forest's edge bracken and low shrubs coming back into the clearing.
+        if p.length() < self.meadow_m {
+            growing.tall = (patch(p / 9.0) - 0.35).max(0.0) * 1.5;
+            growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
+            let edge = ((p.length() - (self.meadow_m - 35.0)) / 35.0).clamp(0.0, 1.0);
+            growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
+        }
         // How far into a way a point is, by the nearest street or the square, a soft edge
         // where the grass comes back.
         let street = self
@@ -540,6 +570,17 @@ impl terra_world::cover::CoverSource for TownCover {
             // Worn by hens and feet, straw strewn about.
             growing.trodden = growing.trodden.max(0.45);
         }
+        // A plot laid for a building going up, trodden to earth round its footings as
+        // builders work about it (D381): not the blades cut away from a lawn.
+        if self.plots.iter().any(|plot| {
+            terra_build::town::inside(p, plot)
+                || (0..4).any(|i| {
+                    terra_build::town::point_segment(p, plot[i], plot[(i + 1) % 4]) < PLOT_WORN_M
+                })
+        }) {
+            growing.grass *= 0.3;
+            growing.trodden = growing.trodden.max(0.5);
+        }
         // Round every house, where the town clears what grows (`ClearAround` at its door),
         // the ground is worn by feet going about it, not left the planet's bare soil.
         if door < HOUSE_WORN_M {
@@ -584,6 +625,8 @@ pub struct Wear {
     whole: TownCover,
     doors: Vec<Option<usize>>,
     yards: Vec<usize>,
+    /// Each building's ground, by the building.
+    plots: Vec<(usize, [Vec2; 4])>,
 }
 
 impl Wear {
@@ -596,6 +639,7 @@ impl Wear {
         started: impl Fn(usize) -> bool,
         up: impl Fn(usize) -> bool,
         reach_m: f32,
+        square: bool,
     ) -> terra_world::cover::CoverRules {
         let worn = TownCover {
             streets: self
@@ -628,6 +672,17 @@ impl Wear {
                 .filter(|(_, b)| up(**b))
                 .map(|(yard, _)| *yard)
                 .collect(),
+            plots: self
+                .plots
+                .iter()
+                .filter(|(b, _)| started(*b) && !up(*b))
+                .map(|(_, plot)| *plot)
+                .collect(),
+            square: if square {
+                self.whole.square.clone()
+            } else {
+                Vec::new()
+            },
             ..self.whole.clone()
         };
         over_the_worlds(self.world.as_ref(), planet, worn)
@@ -1222,6 +1277,7 @@ fn lay(
                 .map(|s| (s.points.clone(), s.wide))
                 .collect(),
             yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
+            plots: Vec::new(),
             doors: town
                 .things
                 .iter()
@@ -1243,9 +1299,15 @@ fn lay(
                     .map(|t| t.building)
                     .collect(),
                 yards: town.yards.iter().map(|(b, _)| *b).collect(),
+                plots: town
+                    .footprints
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(b, quads)| quads.iter().map(move |q| (b, *q)))
+                    .collect(),
                 whole,
             };
-            commands.insert_resource(wear.rules(&planet, |_| false, |_| false, 0.0));
+            commands.insert_resource(wear.rules(&planet, |_| false, |_| false, 0.0, false));
             commands.insert_resource(wear);
         } else {
             commands.insert_resource(over_the_worlds(cover.as_deref(), &planet, whole));
@@ -1370,6 +1432,22 @@ mod tests {
 
     use super::*;
     use terra_build::village::{Kinds, Plan, Scheme};
+
+    #[test]
+    fn a_meadows_drifts_vary_smoothly_over_its_whole_range() {
+        // D381: the mix is drifts, not speckle: neighbours a few centimetres apart differ
+        // little, and across the meadow both ends of the range are met.
+        let (mut low, mut high) = (1.0f32, 0.0f32);
+        for i in 0..400 {
+            let p = Vec2::new(i as f32 * 0.37, i as f32 * 0.21);
+            let v = patch(p);
+            assert!((0.0..=1.0).contains(&v));
+            assert!((patch(p + Vec2::splat(0.01)) - v).abs() < 0.05);
+            low = low.min(v);
+            high = high.max(v);
+        }
+        assert!(low < 0.2 && high > 0.8, "{low} {high}");
+    }
 
     #[test]
     fn a_hearth_burns_for_the_meals_and_is_banked_at_night() {

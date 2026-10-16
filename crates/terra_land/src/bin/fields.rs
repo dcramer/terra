@@ -186,8 +186,12 @@ fn run() -> Result<(), String> {
             );
             Some(found.at_km)
         }
-        Some("town") => {
-            let want = terra_land::town::MarketTown::DEMO;
+        Some(name @ ("town" | "settlement")) => {
+            let want = if name == "town" {
+                terra_land::town::MarketTown::DEMO
+            } else {
+                terra_land::town::MarketTown::SETTLEMENT
+            };
             let (found, searched) = land.market_town_searched(PLANET_START, &want);
             let found =
                 found.ok_or_else(|| format!("no place for a town on this world: {searched:?}"))?;
@@ -215,12 +219,20 @@ fn run() -> Result<(), String> {
                 searched.cells,
                 searched.fit
             );
+            if let Some(water) = found.water {
+                let km = land.east_north_km(found.toward, water);
+                println!(
+                    "FIELDS site {name}: its nearest water {:.0} m east, {:.0} m north of it",
+                    km.x * 1000.0,
+                    km.y * 1000.0
+                );
+            }
             clearings = want.clearings(&land, &found);
             Some(found.at_km)
         }
         Some(other) => {
             return Err(format!(
-                "no site called {other}: the sites are lake, tundra and town"
+                "no site called {other}: the sites are lake, tundra, town and settlement"
             ));
         }
     };
