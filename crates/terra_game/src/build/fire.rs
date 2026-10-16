@@ -55,12 +55,14 @@ pub struct SiteFire {
     /// How long the last ticks took, in milliseconds: the fire's own work, and its acts'.
     pub step_ms: f32,
     pub act_ms: f32,
+    /// Ticks since the fire was last said in the log.
+    since_said: u32,
 }
 
 /// How many rays a breath casts a frame, and how far round the cube a ray meets its heat
 /// reaches, in cubes.
 const RAYS: usize = 14;
-const SPLASH: i32 = 1;
+const SPLASH: i32 = 2;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SiteFire>()
@@ -138,7 +140,8 @@ fn breathe(
                 for y in -SPLASH..=SPLASH {
                     for z in -SPLASH..=SPLASH {
                         let near = hit.cube + IVec3::new(x, y, z);
-                        let share = if near == hit.cube { 1.0 } else { 0.25 };
+                        let off = (x * x + y * y + z * z) as f32;
+                        let share = 1.0 / (1.0 + off);
                         fire.heat(&site.base, &burns_as, near, heat * share);
                     }
                 }
@@ -223,7 +226,21 @@ fn burn(
     fire.act_ms = act_ms;
     let blazes = gather(&fire.fire, &building.site.base, &frame);
     fire.blazes = blazes;
+    // Said every few seconds while it burns, for a script to follow and its cost to be read.
+    fire.since_said += 1;
+    if fire.since_said >= SAY_EVERY {
+        fire.since_said = 0;
+        info!(
+            "Fire: {} cubes burning as {} blazes, {} cubes standing; its tick {step_ms:.1} ms and its harm {act_ms:.1} ms on the main thread.",
+            fire.fire.burning_count(),
+            fire.blazes.len(),
+            building.site.base.cubes().count()
+        );
+    }
 }
+
+/// How often the fire is said in the log while it burns, in frames that stepped it.
+const SAY_EVERY: u32 = 8;
 
 /// Each metre's cubes that burn as a blaze: at the middle of their open faces, as hot as
 /// they burn on average, as tall as there is fire in it and round it.
@@ -269,14 +286,14 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
                 .sum::<f32>()
                 - cell.count;
             let heat = (cell.fierce / cell.count).clamp(0.0, 1.0);
-            let tall = (0.7 + 0.35 * cell.count.sqrt() + 0.09 * round) * (0.5 + 0.5 * heat);
+            let tall = (0.8 + 0.4 * cell.count.sqrt() + 0.12 * round) * (0.5 + 0.5 * heat);
             let local = cell.at / cell.count;
             let seed = (key[0].wrapping_mul(73_856_093)
                 ^ key[1].wrapping_mul(19_349_663)
                 ^ key[2].wrapping_mul(83_492_791)) as u32;
             Blaze {
                 at: frame.transform_point(local),
-                tall: tall.min(5.5),
+                tall: tall.min(7.0),
                 heat,
                 seed: (seed % 10_000) as f32 / 10_000.0,
             }
@@ -287,9 +304,41 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
 }
 
 /// The blazes given to the drawing.
-fn blazes(fire: Res<SiteFire>, mut drawn: ResMut<Blazes>) {
+fn blazes(
+    mut commands: Commands,
+    fire: Res<SiteFire>,
+    mut drawn: ResMut<Blazes>,
+    mut fright: Local<Option<Entity>>,
+    mut frights: Query<(&mut Transform, &mut crate::play::Frightful)>,
+) {
     if fire.is_changed() || drawn.blazes.len() != fire.blazes.len() {
         drawn.blazes.clone_from(&fire.blazes);
+    }
+    // A fire frightens what lives round it, the more of it burns the further off: from the
+    // middle of its blazes, past their reach by as much again.
+    let count = fire.blazes.len();
+    let entity = *fright.get_or_insert_with(|| {
+        commands
+            .spawn((
+                Name::new("Fire: fright"),
+                Transform::IDENTITY,
+                crate::play::Frightful { within_m: 0.0 },
+            ))
+            .id()
+    });
+    if let Ok((mut at, mut frightful)) = frights.get_mut(entity) {
+        if count == 0 {
+            frightful.within_m = 0.0;
+            return;
+        }
+        let middle = fire.blazes.iter().map(|b| b.at).sum::<Vec3>() / count as f32;
+        let reach = fire
+            .blazes
+            .iter()
+            .map(|b| b.at.distance(middle))
+            .fold(0.0, f32::max);
+        at.translation = middle;
+        frightful.within_m = reach * 2.0 + 15.0;
     }
 }
 

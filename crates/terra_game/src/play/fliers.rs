@@ -65,8 +65,6 @@ const PATH_STEP_M: f32 = 0.5;
 /// How fast a flier eases into a hover, a share a second.
 const SETTLE: f32 = 1.6;
 const GRAVITY: f32 = 9.81;
-/// How far the breath may be aimed off the mouth's own line, in radians.
-const AIM_RAD: f32 = 1.0;
 
 /// The kinds, read once.
 #[derive(Resource)]
@@ -350,20 +348,34 @@ fn animate(
 /// The breath out of each flier's mouth: on while it breathes, aimed at what it breathes at
 /// within a turn of its head.
 fn breathe(
-    fliers: Query<&Flier>,
+    fliers: Query<(&Flier, &Transform)>,
     mut mouths: Query<(&Mouth, &GlobalTransform, &mut BreathesFire)>,
 ) {
     for (mouth, at, mut breath) in &mut mouths {
-        let Ok(flier) = fliers.get(mouth.0) else {
+        let Ok((flier, body)) = fliers.get(mouth.0) else {
             continue;
         };
         breath.on = flier.breathing;
-        breath.aim = flier.aim.and_then(|aim| {
-            let way = (aim - at.translation()).normalize_or_zero();
-            (way.angle_between(at.forward().as_vec3()) < AIM_RAD).then_some(aim)
-        });
+        // At what it is told to breathe at, its head turned to it; else ahead of it and down,
+        // as a strafing breath goes, by its body's way rather than its head's, which the clips
+        // swing.
+        let up = body.translation.normalize_or(Vec3::Y);
+        let ahead = body
+            .forward()
+            .as_vec3()
+            .reject_from(up)
+            .normalize_or(body.forward().as_vec3());
+        let down = (ahead * libm::cosf(BREATH_DOWN) - up * libm::sinf(BREATH_DOWN)).normalize();
+        breath.aim = Some(
+            flier
+                .aim
+                .unwrap_or(at.translation() + down * breath.reach_m),
+        );
     }
 }
+
+/// How far below its way a flier breathes when it is told no target, in radians.
+const BREATH_DOWN: f32 = 0.6;
 
 #[derive(Deserialize)]
 struct Spawn {
@@ -405,6 +417,8 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let flier = world
         .spawn((
             Name::new(format!("Flier: {}", def.name)),
+            // What it flies over runs from it.
+            super::Frightful { within_m: 70.0 },
             Flier {
                 kind,
                 flight: Flight::Hover { at, face },
@@ -612,6 +626,78 @@ fn roar(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    /// A world with the fliers' kinds and the clock stepping a sixtieth of a second.
+    fn world() -> World {
+        let mut world = World::new();
+        let defs: Vec<FlierDef> = terra_world::data::read(FILE);
+        world.insert_resource(Kinds {
+            models: Vec::new(),
+            ready: vec![None; defs.len()],
+            defs,
+        });
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_secs_f32(1.0 / 60.0));
+        world.insert_resource(time);
+        world
+    }
+
+    #[test]
+    fn a_flier_banks_into_a_turn_its_inside_wing_down_and_flies_level_out_of_it() {
+        let mut world = world();
+        let up = Vec3::Y;
+        let start = Vec3::new(0.0, 2000.0, 0.0);
+        // North (-z), then a right turn east (+x), then on east.
+        let points = vec![
+            start,
+            start + Vec3::new(0.0, 0.0, -80.0),
+            start + Vec3::new(60.0, 0.0, -140.0),
+            start + Vec3::new(200.0, 0.0, -140.0),
+        ];
+        let flier = world
+            .spawn((
+                Flier {
+                    kind: 0,
+                    flight: Flight::Path {
+                        points: lay_out(&points),
+                        along: 0.0,
+                        speed: 24.0,
+                        then_face: start,
+                    },
+                    bank: 0.0,
+                    speed: 0.0,
+                    breathing: false,
+                    aim: None,
+                    roar_s: 0.0,
+                },
+                Transform::from_translation(start).looking_to(Vec3::NEG_Z, up),
+            ))
+            .id();
+        let mut lowest_right = f32::INFINITY;
+        for _ in 0..60 * 9 {
+            world.run_system_once(fly).unwrap();
+            let t = world.get::<Transform>(flier).unwrap();
+            lowest_right = lowest_right.min(t.right().dot(up));
+        }
+        // In the right turn its right wing went down, well into a bank.
+        assert!(
+            lowest_right < -0.3,
+            "its right wing went no lower than {lowest_right}"
+        );
+        // Out of it, flying east, it is level again.
+        let t = world.get::<Transform>(flier).unwrap();
+        assert!(
+            t.right().dot(up).abs() < 0.1,
+            "still banked {}",
+            t.right().dot(up)
+        );
+        assert!(
+            t.forward().dot(Vec3::X) > 0.9,
+            "not heading east: {}",
+            t.forward()
+        );
+    }
 
     #[test]
     fn the_fliers_file_reads_and_every_kind_has_its_model() {

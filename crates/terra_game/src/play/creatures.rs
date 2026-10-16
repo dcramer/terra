@@ -77,6 +77,14 @@ pub enum State {
     },
 }
 
+/// Something every shy creature runs from when it comes within so many metres, as from a
+/// player it is shy of: a dragon on the wing, a fire (D382, D377). A shy creature startled by
+/// it flees as its kind does, a bird taking wing away from it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Frightful {
+    pub within_m: f32,
+}
+
 #[derive(Component)]
 #[require(Smoothed, Detail)]
 pub struct Creature {
@@ -491,6 +499,7 @@ fn think(
     around: Surroundings,
     players: Query<(Entity, &Transform), (With<Player>, Without<Downed>)>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
+    frights: Query<(&Frightful, &GlobalTransform)>,
     mut bitten: MessageWriter<Bitten>,
     mut dice: ResMut<Dice>,
     mut awake: Local<SpatialHash<Entity>>,
@@ -513,13 +522,30 @@ fn think(
         let from_home = (here - creature.home).length();
         let about = bestiary.get(creature.species);
         let temper = about.temper;
-        let away = nearest_player
+        let mut away = nearest_player
             .and_then(|(player, _)| players.get(player).ok())
             .map(|(_, p)| {
                 (here - p.translation)
                     .reject_from(here.normalize())
                     .normalize_or_zero()
             });
+        // Something frightful near (a dragon, a fire) startles a shy creature as a blow
+        // does, and it goes away from it.
+        if matches!(temper, Temper::Shy { .. })
+            && !matches!(creature.state, State::Flee(_) | State::Fly { .. })
+            && let Some((_, from)) = frights
+                .iter()
+                .map(|(fright, at)| (fright, at.translation()))
+                .filter(|(fright, at)| at.distance(here) < fright.within_m)
+                .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+        {
+            creature.hurt = true;
+            away = Some(
+                (here - from)
+                    .reject_from(here.normalize())
+                    .normalize_or_zero(),
+            );
+        }
         let next = match (temper, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
             // Gone where it went to be safe, it stays there while it plays out.
@@ -1411,6 +1437,30 @@ mod tests {
         assert!(across >= near * 0.9 && across <= far * 1.1, "{across}");
         // Away: farther from the player than it was.
         assert!(to.x < from.x, "{to} from {from}");
+    }
+
+    #[test]
+    fn a_bird_takes_wing_away_from_something_frightful_and_not_from_one_far_off() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let bird = kind(&mut world, "Chaffinch", ground);
+        let calm = kind(&mut world, "Chaffinch", ground + Vec3::Z * 500.0);
+        world.spawn((
+            Frightful { within_m: 30.0 },
+            GlobalTransform::from_translation(ground + Vec3::X * 20.0),
+        ));
+        world.run_system_once(think).unwrap();
+        let State::Fly { from, to, .. } = state(&world, bird) else {
+            panic!(
+                "it should fly from the fright, not {:?}",
+                state(&world, bird)
+            );
+        };
+        assert!(to.x < from.x, "{to} from {from}: not away from it");
+        assert!(!matches!(
+            state(&world, calm),
+            State::Fly { .. } | State::Flee(_)
+        ));
     }
 
     #[test]

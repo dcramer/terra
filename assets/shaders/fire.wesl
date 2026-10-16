@@ -151,7 +151,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let r = spread * d * sqrt(fract(luck * 13.7)) * (0.6 + 0.6 * t);
         let swirl = (vec2(noise(vec2(luck * 31.0, time * 3.0 + t * 4.0)), noise(vec2(luck * 57.0 + 3.0, time * 3.0 + t * 4.0))) - 0.5) * d * 0.12;
         let at = mouth + way * d * (1.0 - 0.18 * t * t) + (side * (cos(a) * r + swirl.x) + lift * (sin(a) * r + swirl.y)) + up * t * t * reach * 0.1 + wind * t * t * life_s;
-        let size = mix(0.35, 1.0 + spread * reach * 0.6, pow(t, 0.7)) * (0.7 + 0.6 * fract(luck * 5.3));
+        let size = mix(0.7, 0.9 + spread * reach * 0.38, pow(t, 0.8)) * (0.7 + 0.6 * fract(luck * 5.3));
         // Streaked along the way near the mouth, round as it opens.
         let to_eye = normalize(view.world_position - at);
         var across = cross(way, to_eye);
@@ -254,10 +254,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>) -> vec4<f32> {
         let fine = noise(vec2((uv.x + warp) * 9.0 + luck * 3.0, uv.y * 7.0 - time * 5.0));
         let width = (1.0 - y) * (0.7 + 0.3 * (1.0 - y)) + 0.04;
         let edge = abs(x + warp * 2.0) / max(width, 0.02) + (n - 0.5) * 1.1 + (fine - 0.5) * 0.35 + y * 0.3;
-        let body = 1.0 - smoothstep(0.45, 1.0, edge);
+        let body = 1.0 - smoothstep(0.25, 1.05, edge);
         let foot = smoothstep(0.0, 0.1, y);
         let life = smoothstep(0.0, 0.12, t) * pow(1.0 - t, 1.2);
-        alpha = body * foot * life * 0.85;
+        alpha = body * body * foot * life * 0.9;
         let hot = (1.0 - y * 0.9) * (0.6 + 0.4 * heat) * (1.0 - 0.45 * t) + (n - 0.5) * 0.35 - abs(x) * 0.2;
         colour = glow(hot) * (0.35 + 0.65 * heat);
     } else if kind == 1 {
@@ -273,9 +273,9 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>) -> vec4<f32> {
         let n = fbm(uv * 3.0 + vec2(luck * 7.0 - time * 1.5, luck * 13.0 + time * 0.8));
         let fine = noise(uv * 8.0 + vec2(luck * 3.0, time * 2.0));
         let body = 1.0 - smoothstep(0.1, 0.5, length(p) + (n - 0.5) * 0.45 + (fine - 0.5) * 0.15);
-        let life = smoothstep(0.0, 0.04, t) * pow(1.0 - t, 1.4);
-        alpha = body * life * 0.55;
-        colour = glow(1.05 - t * 0.9 + (n - 0.5) * 0.35) * (1.6 - t * 1.1);
+        let life = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.8);
+        alpha = body * life * mix(0.9, 0.35, t);
+        colour = glow(1.1 - t * 1.0 + (n - 0.5) * 0.35) * (2.2 - t * 1.6);
     }
     if alpha < 0.003 {
         discard;

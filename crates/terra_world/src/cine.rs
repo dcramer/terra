@@ -200,9 +200,19 @@ pub struct Look {
     /// player as the camera follows them.
     #[serde(default)]
     pub aperture: Option<f32>,
+    /// How much further every level of detail reaches than the preset's, as a cinematic's
+    /// level-of-detail bias does (Unreal's view distance scale, raised by Movie Render
+    /// Queue's cinematic scalability): a film's buildings and plants drawn finely out to
+    /// where its shots look.
+    #[serde(default = "Look::unbiased")]
+    pub detail: f32,
 }
 
 impl Look {
+    fn unbiased() -> f32 {
+        1.0
+    }
+
     fn film_shutter() -> f32 {
         180.0
     }
@@ -226,6 +236,7 @@ impl Default for Look {
             hold_clock: true,
             bokeh: true,
             aperture: None,
+            detail: Self::unbiased(),
         }
     }
 }
@@ -573,7 +584,7 @@ pub fn plugin(app: &mut App) {
     })
     .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
     .add_systems(PreUpdate, roll.after(crate::shell::scripted_presses))
-    .add_systems(Update, hold_exposure.after(Ticking))
+    .add_systems(Update, (hold_exposure.after(Ticking), bias_detail))
     .add_systems(PostUpdate, film.in_set(CameraHold));
 }
 
@@ -680,6 +691,18 @@ fn film(
             shutter_angle: shot.look.shutter_angle(),
             samples: 4,
         });
+    }
+}
+
+/// Every level of detail's distances as the preset sets them, times the shot's bias.
+fn bias_detail(
+    cine: Res<Cine>,
+    quality: Res<crate::quality::Quality>,
+    mut scale: ResMut<crate::detail::DetailScale>,
+) {
+    let wanted = quality.detail_reach() * cine.shot.look.detail.max(0.1);
+    if (scale.0 - wanted).abs() > 1.0e-4 {
+        scale.0 = wanted;
     }
 }
 
@@ -922,6 +945,14 @@ mod tests {
         .unwrap();
         assert_eq!(fine.look.exposure, Exposing::Ev100(11.5));
         assert!(fine.focused());
+        // Its detail drawn as the preset has it unless it biases it further.
+        assert_eq!(fine.look.detail, 1.0);
+        assert_eq!(
+            shot(r#"{"seconds": 2, "look": {"detail": 1.8}}"#)
+                .look
+                .detail,
+            1.8
+        );
         let held = shot(r#"{"seconds": 2, "keys": [{"t": 0, "at": [0,0,0], "look": [1,0,0]}]}"#);
         assert_eq!(held.look.exposure, Exposing::default());
         assert!(!held.focused());

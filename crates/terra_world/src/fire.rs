@@ -80,11 +80,13 @@ const LIGHTS: usize = 8;
 const LIGHT_CELL_M: f32 = 9.0;
 /// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
 /// the most one light gives.
-const LUMENS_A_METRE: f32 = 260_000.0;
-const MOST_LUMENS: f32 = 9.0e6;
-const LIGHT_RANGE_M: f32 = 40.0;
+const LUMENS_A_METRE: f32 = 700_000.0;
+const MOST_LUMENS: f32 = 3.0e7;
+const LIGHT_RANGE_M: f32 = 55.0;
 /// A jet's light at its mouth and where it reaches.
 const JET_LUMENS: f32 = 4.0e6;
+/// The least a fire's smoke drifts, metres a second.
+const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
 /// What a fire's material is told. Field order must match `fire.wesl`.
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
@@ -339,7 +341,9 @@ fn blow(
     };
     let east = north.cross(up);
     let blowing_to = -(north * libm::cosf(from) + east * libm::sinf(from));
-    drawn.wind = blowing_to * speed.min(10.0);
+    // A fire makes its own draught and the air is never quite still over one: its smoke
+    // leans at least as a light air carries it.
+    drawn.wind = blowing_to * speed.clamp(LEAST_DRAUGHT_MPS, 10.0);
 }
 
 /// The blazes into the buffer, the hottest and tallest first, and the materials told how

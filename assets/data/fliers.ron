@@ -31,6 +31,6 @@
         bank_deg_s: 40.0,
         turn_deg_s: 50.0,
         mouth: "Mouth",
-        breath: (reach_m: 30.0, spread: 0.2, heat: 10.0),
+        breath: (reach_m: 30.0, spread: 0.2, heat: 20.0),
     ),
 ]

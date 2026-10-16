@@ -70,9 +70,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let rise = (1.6 + 1.6 * heat + 0.25 * tall) * seconds * (1.0 - 0.3 * t);
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
-    let wander = (vec2(smooth_noise(vec2(luck * 13.0, seconds * 0.3)), smooth_noise(vec2(luck * 29.0 + 7.0, seconds * 0.3))) - 0.5) * (0.6 + 4.0 * t);
-    let middle = foot + up * (rise + tall * 0.8) + east * wander.x + north * wander.y + wind.xyz * seconds * (0.3 + 0.7 * t);
-    let size = mix(0.8 + tall * 0.9, 4.0 + tall * 2.5, sqrt(t)) * (0.8 + 0.4 * luck);
+    let wander = (vec2(smooth_noise(vec2(luck * 13.0, seconds * 0.3)), smooth_noise(vec2(luck * 29.0 + 7.0, seconds * 0.3))) - 0.5) * (1.0 + 7.0 * t);
+    // Rolling as it climbs: each puff turned about the column as it goes.
+    let roll = luck * 6.283 + seconds * (0.25 + 0.3 * luck);
+    let billow = (east * cos(roll) + north * sin(roll)) * (0.5 + 1.5 * t) * (0.5 + tall * 0.3);
+    let middle = foot + up * (rise + tall * 0.8) + east * wander.x + north * wander.y + billow + wind.xyz * seconds * (0.3 + 0.7 * t);
+    let size = mix(0.8 + tall * 0.9, 5.0 + tall * 3.0, sqrt(t)) * (0.6 + 0.8 * luck);
     let to_eye = normalize(view.world_position - middle);
     var right = cross(up, to_eye);
     if dot(right, right) < 1.0e-6 {
@@ -128,14 +131,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let t = in.uv_b.x;
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
-    let alpha = density(in.uv, t, luck) * 0.42;
+    let alpha = density(in.uv, t, luck) * mix(0.55, 0.3, t);
     if alpha < 0.004 {
         discard;
     }
     var input = pbr_input_from_standard_material(in, is_front);
     // Burning timber's smoke: a dark brown-grey, thick and darker in its middle.
     let shade = mix(1.0, 0.7, alpha);
-    input.material.base_color = vec4(vec3(0.12, 0.112, 0.105) * shade, alpha);
+    // Young smoke from burning wood near black-brown, thinning to a paler grey as it climbs.
+    let grey = mix(vec3(0.07, 0.062, 0.055), vec3(0.24, 0.235, 0.23), smoothstep(0.1, 0.8, t));
+    input.material.base_color = vec4(grey * shade, alpha);
     // Lit from under by the fire, near its foot.
     let under = pow(1.0 - t, 7.0) * heat;
     input.material.emissive = vec4(vec3(1.0, 0.35, 0.08) * under * 900.0, 1.0);
