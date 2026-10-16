@@ -28,6 +28,15 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The stack is in
 
 Read `docs/README.md`, then `docs/decisions.md`. Before building a component, read its doc in `docs/` and `docs/development.md`.
 
+## Routine
+
+Every agent and lead session follows it (D375; [development.md](docs/development.md#worktrees) has the details):
+
+- **Start.** The session-start hook fast-forwards the main checkout to origin/main if it is clean, makes sure the shared seed build is current, and seeds your worktree from it (D183). If any of these fail, run `cargo xtask doctor` and fix it before building.
+- **While working.** `git pull --rebase origin main` before each push. Commits run the quick check and pushes the full one; never use `--no-verify` (D37). Decision log lines go in [docs/decisions-log.md](docs/decisions-log.md), and decision numbers come from `cargo xtask decision` or, when two collide, the check (D376).
+- **Finish.** Confirm your commit is on origin/main (`git fetch`, then `git branch -r --contains <commit>`), then run `cargo xtask worktrees --done` (D259).
+- **A lead session runs at most three or four agents at once**, so builds and measurements stay fast and trustworthy.
+
 ## Decisions
 
 - `docs/decisions.md` is the source of truth. Don't contradict a live decision; raise it instead.
