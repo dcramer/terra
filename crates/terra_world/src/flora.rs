@@ -472,8 +472,12 @@ fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Mo
         let crease = if foliage { 75.0 } else { 50.0 };
         let part_normals = smooth_normals(&part.positions, &part.indices, &part.normals, crease);
         // The material is told to the shader in the colour's alpha: a layer of
-        // `materials/flora` in eighths, or whole for plain colour.
-        let alpha = look.material.map_or(1.0, |layer| layer as f32 / 8.0);
+        // `materials/flora` in eighths, a sixteenth more for one with ore's rust in it, or
+        // whole for plain colour.
+        let rust = if kind.rust { 0.5 } else { 0.0 };
+        let alpha = look
+            .material
+            .map_or(1.0, |layer| (layer as f32 + rust) / 8.0);
         for (position, normal) in part.positions.iter().zip(&part_normals) {
             let up_plant = (position.y / height).clamp(0.0, 1.0);
             // Foliage is darker underneath and inside, which gives a crown its depth.

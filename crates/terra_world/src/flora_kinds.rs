@@ -135,6 +135,10 @@ pub struct FloraDef {
     pub variants: u32,
     #[serde(default)]
     colours: Vec<Colour>,
+    /// Whether iron ore shows in it: rust-stained veins through its stone, and the rust
+    /// their water carries down its faces (flora.wesl).
+    #[serde(default)]
+    pub rust: bool,
     pub sway: Sway,
     pub grows: Grows,
     #[serde(default)]

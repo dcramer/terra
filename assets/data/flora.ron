@@ -25,6 +25,8 @@
 //            a layer of assets/materials/flora (pine_bark, bark_brown_02, leaves, mossy_rock,
 //            lichen_rock, rock_boulder_dry), its own colour swapped for ours; * is any material. Materials not
 //            named here take the shared colours below.
+//   rust     whether iron ore shows in it: rust-stained veins through its stone, and rust
+//            run down its faces below them, over its own material
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
 //            ByTheDoor(east, south, height) for one placed by the base's door
@@ -101,12 +103,15 @@
             cut: (what: Tree, gives: ("Wood", 0.0, 0.18), seconds: (1.0, 0.065), greater: (22.0, GreatTree)),
         ),
 
-        // Rock with ore in it: the same shapes, in a colour that gives it away, a rusty iron
-        // stain on the plain rock's own scan (the orange lichen scan read as painted coral).
+        // Rock with ore in it: the same shapes and the plain rock's own colour and scan, with
+        // rust-stained veins through it and rust run down its faces below them, which give
+        // it away up close (a whole boulder tinted read as salmon granite, the orange lichen
+        // scan before it as painted coral).
         (
             name: "Ore rock",
             models: ["Rock_1", "Rock_3", "Rock_4", "Rock_5", "Rock_7", "Rock_9"],
-            colours: [("*", (0.5, 0.38, 0.3), Firm, "rock_boulder_dry")],
+            colours: [("*", (0.4, 0.37, 0.33), Firm, "rock_boulder_dry")],
+            rust: true,
             sway: Still,
             grows: Rocks,
             size_above: 0.7,
