@@ -38,7 +38,8 @@
 //   carcass  what butchering it takes and gives, if it can be butchered
 //   lies_s   how long its body lies after it falls
 //   coat     a coat moulted with the seasons (play::coats): the tint its summer coat lays
-//            over the model's own pale colours, and how far one animal's tone strays
+//            over the model's own pale colours, how far one animal's tone strays, and whether it
+//            moults white in winter (moults, the default) or keeps its tint the year round
 //   zones    where a blow can land (D119): around the model's joints whose names contain
 //            `joint`, out to radius_m; the head takes the most from a blow, the legs least
 //
@@ -210,6 +211,7 @@
         voice: Silent,
         blood: Red,
         lies_s: 60.0,
+        coat: (summer: (0.95, 0.92, 0.8), strays: 0.15, moults: false),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.03),
             (joint: "Body", part: Body, radius_m: 0.07),

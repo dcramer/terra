@@ -1530,4 +1530,43 @@ mod tests {
         // Within the house's own ground, not out over its door.
         assert!(ridge.z < 0.0);
     }
+
+    #[test]
+    fn most_of_a_towns_buildings_have_a_ridge_along_their_top_for_birds() {
+        let kinds = Kinds {
+            timber: terra_build::Kind(1),
+            masonry: terra_build::Kind(2),
+            beams: terra_build::Kind(3),
+            cob: terra_build::Kind(4),
+            framed: terra_build::Kind(5),
+            timber_roof: terra_build::Kind(0x800),
+            masonry_roof: terra_build::Kind(0x801),
+            beams_roof: terra_build::Kind(0x802),
+        };
+        let town = terra_build::town::town(3, kinds, &|_| 0.0);
+        let mut ridged = 0;
+        for building in &town.buildings {
+            let base = Base::from_shortcuts(&building.ops);
+            let Some((a, b)) = ridge_line(&base) else {
+                continue;
+            };
+            ridged += 1;
+            let top = base
+                .cubes()
+                .filter(|(_, c)| c.kind.is_roof())
+                .map(|(at, _)| (at.y + 1) as f32 * CELL_M)
+                .fold(0.0, f32::max);
+            // On the roof's top, a few metres long, level.
+            assert!(
+                (a.y - top).abs() < 0.3 && (b.y - top).abs() < 0.3,
+                "{a} {b} {top}"
+            );
+            assert!(a.distance(b) > 1.5, "{}", a.distance(b));
+        }
+        assert!(
+            ridged * 2 >= town.buildings.len(),
+            "{ridged} of {}",
+            town.buildings.len()
+        );
+    }
 }

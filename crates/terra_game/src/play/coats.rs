@@ -73,7 +73,11 @@ fn choose(
         // Each its own: a few days either way in its moult, and its tone.
         let luck = luck(creature.home());
         let own = (luck.x - 0.5) * 0.05;
-        let white = whiteness(phase, around.warmth_c(creature.home()), own);
+        let white = if def.moults {
+            whiteness(phase, around.warmth_c(creature.home()), own)
+        } else {
+            0.0
+        };
         commands.entity(entity).insert(Coat {
             white,
             tone: (luck.y - 0.5) * 2.0 * def.strays,
@@ -188,6 +192,7 @@ mod tests {
         let def = CoatDef {
             summer: (0.6, 0.45, 0.3),
             strays: 0.1,
+            moults: true,
         };
         let summer = tint(
             &def,

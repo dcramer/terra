@@ -629,6 +629,18 @@ fn think(
                     State::Idle(dice.0.range(1.0, 3.0))
                 }
             }
+            // Sitting up there, it lets someone come nearer than on the ground, then clatters
+            // off, as pigeons go up off a roof over someone passing under.
+            (Temper::Shy { flees_within_m, .. }, State::Roost { .. })
+                if player_up && apart < flees_within_m * ROOSTING_LETS =>
+            {
+                let away = away.unwrap_or(creature.facing);
+                creature.bolt = away;
+                refuge(about, here, away, &around, &mut dice.0).unwrap_or(State::Roost {
+                    at: here,
+                    left: 2.0,
+                })
+            }
             (_, State::Roost { at, left }) if left > 0.0 => State::Roost {
                 at,
                 left: left - dt,
@@ -904,6 +916,8 @@ fn up_high(
 
 /// A flier is in a crown once it is so far over the ground.
 const ROOSTS_OVER_M: f32 = 1.5;
+/// One sitting up off the ground lets someone come this share of its flight distance.
+const ROOSTING_LETS: f32 = 0.8;
 
 /// A flight up into the crown of a tree roughly the way given, within so far: out from its
 /// trunk, two thirds of the way up it, where its branches are.

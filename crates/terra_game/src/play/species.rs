@@ -74,6 +74,13 @@ pub struct CoatDef {
     pub summer: (f32, f32, f32),
     #[serde(default)]
     pub strays: f32,
+    /// Whether it turns white in winter; one that does not keeps its tint the year round.
+    #[serde(default = "moults_by_default")]
+    pub moults: bool,
+}
+
+fn moults_by_default() -> bool {
+    true
 }
 
 fn seen_by_default() -> f32 {

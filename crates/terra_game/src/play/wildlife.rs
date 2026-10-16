@@ -209,6 +209,12 @@ impl Surroundings<'_> {
         best.map(|(point, _)| point)
     }
 
+    /// Whether ridges were put up since this was last asked: the cells looked at before had
+    /// none to put their birds on.
+    pub fn new_ridges(&self) -> bool {
+        self.perches.is_changed() && !self.perches.0.is_empty()
+    }
+
     /// The ridge nearest a point within so far across the ground, if any.
     pub fn ridge_near(&self, at: Vec3, within: f32) -> Option<(Vec3, Vec3)> {
         let up = at.normalize_or(Vec3::Y);
@@ -425,6 +431,14 @@ fn populate(
     viewers: Query<(Entity, &Transform), With<Viewpoint>>,
     placed: Query<(&Transform, &creatures::Creature)>,
 ) {
+    // A town put up after its cells were looked at: looked at again, so its birds sit on its
+    // roofs too. Asked every frame, so the change is not missed.
+    if around.new_ridges() {
+        for animal in cells.looked.drain().flat_map(|(_, put)| put) {
+            commands.entity(animal).try_despawn();
+        }
+        info!("Wildlife: {} ridges to sit on.", around.perches.0.len());
+    }
     let Some(kinds) = kinds.filter(|kinds| kinds.ready()) else {
         return;
     };
@@ -848,7 +862,7 @@ fn crossing_point(
 
 /// A town's birds are put out on a roof's ridge within so far, so often, rather than on the
 /// ground; so far apart along it, and sitting there so long, seconds.
-const ON_A_RIDGE: (f32, f32) = (20.0, 0.45);
+const ON_A_RIDGE: (f32, f32) = (25.0, 0.6);
 const ON_A_RIDGE_APART_M: (f32, f32) = (0.3, 0.7);
 const ON_A_RIDGE_S: (f32, f32) = (12.0, 45.0);
 
