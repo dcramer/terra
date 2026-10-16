@@ -457,6 +457,55 @@ mod tests {
     }
 
     #[test]
+    fn round_a_mountain_lake_spruce_holds_the_shade_and_pine_the_sun() {
+        use crate::site::MountainLake;
+        let climate = crate::start_climate().unwrap();
+        let day = terra_climate::Date::parse("06-10")
+            .unwrap()
+            .day(&climate.year);
+        let land = crate::Land::new(
+            crate::ground::world(terra_core::PlanetSpec {
+                seed: terra_core::Seed(1),
+                radius_m: 30_000.0,
+            }),
+            climate,
+        );
+        let site = land
+            .mountain_lake(crate::PLANET_START, &MountainLake::DEMO)
+            .unwrap();
+        let round = crate::round::Round::new(land, site.toward, 1_400.0, day);
+        let trees = Woods::of(&round).trees(site.toward, 0.0, 600.0, 6.5, terra_gen::Seed(5));
+        // How sunward the ground each kind stands on faces, on average.
+        let facing = |kind: Conifer| {
+            let sunward: Vec<f32> = trees
+                .iter()
+                .filter(|tree| tree.kind == kind)
+                .map(|tree| {
+                    let normal = ground_normal(&round.land, tree.at);
+                    round.land.place(tree.at, normal).sunward
+                })
+                .collect();
+            (
+                sunward.len(),
+                sunward.iter().sum::<f32>() / sunward.len().max(1) as f32,
+            )
+        };
+        let ((pines, pine_sun), (spruces, spruce_sun)) =
+            (facing(Conifer::Pine), facing(Conifer::Spruce));
+        // Both kinds make the lake's woods, neither a scatter in the other's.
+        let all = (pines + spruces) as f32;
+        assert!(all > 3_000.0, "{all} trees");
+        assert!(
+            pines as f32 > all * 0.15 && spruces as f32 > all * 0.15,
+            "{pines} pines, {spruces} spruces"
+        );
+        assert!(
+            pine_sun > spruce_sun + 0.15,
+            "pines on ground {pine_sun:.2} sunward, spruces {spruce_sun:.2}"
+        );
+    }
+
+    #[test]
     fn at_the_forests_limit_trees_stand_in_islands_and_in_the_lee() {
         // Ground a little past the tree line: along a line across it, some places hold trees
         // and some none, so the edge is islands, not a line; and the lee holds more than a rise.

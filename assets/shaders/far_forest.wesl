@@ -7,7 +7,7 @@
 // shadows and haze as the near forest, darker low and inside; its leaves' grain is the
 // bushes' leaf picture. The mesh holds each card's four corners at its foot: the first
 // texture coordinate is the corner, the second its width and height, its colour its kind
-// (0, 0.5, 1) and its luck.
+// (0, 0.5, 1), its luck and, for a card standing for a grown tree, where it comes in.
 
 import bevy_pbr::render::{
     mesh_functions,
@@ -36,7 +36,9 @@ import bevy_pbr::render::{
 struct Far {
     // Each kind's crown colour, linear: oak, pine, spruce.
     crowns: array<vec4<f32>, 3>,
-    // Within x of the eye a card is gone, from y on whole.
+    // Within x of the eye a card is gone, from y on whole. A card whose colour's blue is
+    // above 0 stands for a grown tree (terra_world's woods, D366): it comes in where that
+    // tree's last level goes, from w of blue times z metres to all of it.
     near: vec4<f32>,
 }
 
@@ -238,7 +240,12 @@ fn seen(in: VertexOutput) -> Shape {
     let s = tree(p, in.uv_b, kind, in.color.g);
     let dither = noise_at(in.position);
     let edge = max(fwidth(s.inside), 1.0e-4);
-    let near = smoothstep(far.near.x, far.near.y, distance(in.world_position.xyz, view.world_position));
+    var gone = far.near.xy;
+    if in.color.b > 0.0 {
+        let to = in.color.b * far.near.z;
+        gone = vec2<f32>(to * far.near.w, to);
+    }
+    let near = smoothstep(gone.x, gone.y, distance(in.world_position.xyz, view.world_position));
     if s.inside < (dither - 0.5) * edge || dither > near {
         discard;
     }

@@ -14,6 +14,10 @@ mod scatter;
 mod town;
 mod workbench;
 
+/// Not an experiment: always on, it gives the world's woods the lush forest's Scots pines
+/// and Norway spruces to draw (D366).
+pub use lush::conifers::plugin as woods_conifers;
+
 pub struct Experiment {
     pub name: &'static str,
     pub about: &'static str,

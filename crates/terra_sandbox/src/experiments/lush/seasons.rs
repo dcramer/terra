@@ -16,7 +16,7 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Every one of the forest's foliage materials reads the climate's maps again when painted.
-fn follow_climate(
+pub(super) fn follow_climate(
     maps: Option<Res<ClimateMaps>>,
     fields: Option<Res<ClimateFields>>,
     cards: Res<Cards>,

@@ -72,5 +72,7 @@ fn main() -> AppExit {
         };
         (experiment.add)(&mut app);
     }
+    // After the experiments, so it knows whether the lush forest brought its materials.
+    app.add_plugins(experiments::woods_conifers);
     app.run()
 }
