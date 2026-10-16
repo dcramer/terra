@@ -927,3 +927,54 @@ fn a_lone_corner_square_carries_no_crease_out_past_its_edges() {
         );
     }
 }
+
+#[test]
+fn an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it() {
+    // Found by `cargo xtask fuzz` (seeds 59, 135; docs/building-voxels.md, gap 18): a hip
+    // over a log room, a wall of logs running on from one of its corners. The wall's top is
+    // at the eave there, so the eave's edge pieces stood on it, out past where the roof's
+    // eaves, stopped by the wall, reach.
+    use crate::scenes::fuzz::{Element::*, build};
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let materials = crate::scenes::registry::Materials::read(&assets, true).expect("the baseline");
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .expect(name)
+    };
+    let maps = crate::relief::Maps::worst(&materials.kits, false);
+    let cases = [
+        ([2, 4], [7, 9], [7, 9], [11, 9], "slate"),
+        ([0, 2], [6, 7], [5, 3], [7, 3], "shakes"),
+    ];
+    for (min, max, from, to, roof) in cases {
+        let elements = [
+            Room {
+                min,
+                max,
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Wall {
+                from,
+                to,
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Roof {
+                tile: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2],
+                storey: 0,
+                style: Style::Hip,
+                along_x: None,
+                kind: kind(roof),
+            },
+        ];
+        let base = build(&materials.kits, &elements);
+        let report = crate::inspect::inspect(&base, &materials.kits, &maps);
+        let out = report.count(crate::inspect::Fault::PokesOut);
+        assert_eq!(out, 0, "{roof}: {:?}", report.findings);
+    }
+}

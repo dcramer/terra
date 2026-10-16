@@ -14,7 +14,7 @@ all	preview	PokesOut	16
 all	preview	SeeThrough	6
 all	sheet	Buried	1
 all	sheet	Coplanar	57
-all	sheet	PokesOut	25
+all	sheet	PokesOut	23
 all	sheet	SeeThrough	57
 fuzz	seed 0	Coplanar	7
 fuzz	seed 103	Coplanar	1
@@ -34,12 +34,9 @@ fuzz	seed 127	Coplanar	6
 fuzz	seed 127	PokesOut	6
 fuzz	seed 128	Coplanar	1
 fuzz	seed 131	Coplanar	4
-fuzz	seed 131	PokesOut	2
 fuzz	seed 135	Coplanar	5
-fuzz	seed 135	PokesOut	2
 fuzz	seed 137	Coplanar	10
 fuzz	seed 138	Coplanar	1
-fuzz	seed 138	PokesOut	2
 fuzz	seed 140	Coplanar	7
 fuzz	seed 143	Coplanar	3
 fuzz	seed 143	SeeThrough	4
@@ -87,17 +84,16 @@ fuzz	seed 37	Coplanar	7
 fuzz	seed 38	Coplanar	7
 fuzz	seed 39	PokesOut	2
 fuzz	seed 4	Coplanar	7
-fuzz	seed 45	Coplanar	10
+fuzz	seed 45	Coplanar	9
 fuzz	seed 45	PokesOut	2
 fuzz	seed 46	Coplanar	9
 fuzz	seed 47	Coplanar	3
 fuzz	seed 47	SeeThrough	3
 fuzz	seed 51	Coplanar	3
 fuzz	seed 54	Coplanar	4
-fuzz	seed 54	PokesOut	5
+fuzz	seed 54	PokesOut	4
 fuzz	seed 56	Coplanar	3
 fuzz	seed 59	Coplanar	1
-fuzz	seed 59	PokesOut	1
 fuzz	seed 61	Coplanar	3
 fuzz	seed 61	PokesOut	6
 fuzz	seed 64	Coplanar	3

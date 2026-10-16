@@ -464,12 +464,20 @@
           "status": "Gap 11"
         },
         {
-          "junction": "A roof's eave against a wall running on past it; a roof square laid on another roof",
-          "rule": "Not yet closed: a hip's edge piece 8 cm past the eave where a wall runs on past the room; a slate corner on a shakes gable",
+          "junction": "A roof's eave over a wall running on past it, the wall's top at the eave",
+          "rule": "A level edge of the roof's own cubes with a whole wall cube past it, its top where the edge is, is against that wall: flashed, never an eave whose board stands on the wall's top past the eaves the wall stops (R4)",
+          "code": ["layout::roofs"],
+          "tests": ["layout::roofs::an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
+          "junction": "A roof square laid on another roof",
+          "rule": "Not yet closed: a corner square of one kind laid on a gable of another stands its board, covering and trims 8 cm out past both roofs' edges",
           "code": ["layout::roofs::lines", "layout::roofs::flashing"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 59, 105",
+          "also": "the fuzz pass, seeds 97, 104, 105",
           "status": "Gap 18"
         }
       ]

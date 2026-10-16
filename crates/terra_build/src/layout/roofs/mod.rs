@@ -594,7 +594,19 @@ impl Roofs {
                                     .is_some_and(|c| c.kind.is_roof() && c.fill != Fill::Open)
                             })
                         });
-                    if base.cube(cube).is_some_and(|c| c.fill != Fill::Open) || hole {
+                    // Or a wall running on past a level edge of the roof's own cubes, its top
+                    // where the edge is, as a garden wall runs on from a room's corner under
+                    // its eaves: the eave is against it, flashed, not carried on over it
+                    // (docs/building-voxels.md, gap 18).
+                    let level = (a.y - b.y).abs() < 1e-4;
+                    let under = ((probe - Vec3::Y * 0.1) / CELL_M).floor().as_ivec3();
+                    let walled = real
+                        && level
+                        && under.y + 1 == cube.y
+                        && base.cube(under).is_some_and(|c| {
+                            !c.kind.is_roof() && c.fill == Fill::Solid && c.shape == Shape::Whole
+                        });
+                    if base.cube(cube).is_some_and(|c| c.fill != Fill::Open) || hole || walled {
                         Beside::Against
                     } else {
                         Beside::Open
