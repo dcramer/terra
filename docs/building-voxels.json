@@ -447,12 +447,20 @@
           "status": "Closed"
         },
         {
-          "junction": "A roof kind laid by hand where no roof is: alone, or on the ground",
-          "rule": "Not yet closed: a lone corner square's logs, ends and trims 8 cm past its edge; a whole square on the ground with its boards in one another",
+          "junction": "A roof kind's corner square laid by hand where no roof is",
+          "rule": "Its eaves carried on past each open side; round a corner of two open sides only as one plane or a hip's crease running down off the roof, never a valley out past an outside corner nor a crease rising out past the roof, so no beam or cap stands past its edge",
+          "code": ["layout::roofs"],
+          "tests": ["layout::roofs::a_lone_corner_square_carries_no_crease_out_past_its_edges"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
+          "junction": "A roof kind laid by hand where no roof is: a whole or half square on the ground, slopes and corners stacked two high",
+          "rule": "Not yet closed: a whole or half square's boards under its deck in one another; a box of slopes or corners two cubes high draws its upper layer's edge pieces and frame 10 to 30 cm over the layer under it",
           "code": ["layout::roofs::lines", "roofing"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 20, 21, 36",
+          "also": "the fuzz pass, seeds 35, 36, 39, 54, 61, 68, 72, 115, 128, 150, 180, 184, 196, 197",
           "status": "Gap 11"
         },
         {

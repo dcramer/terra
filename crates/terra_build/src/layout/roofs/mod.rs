@@ -441,6 +441,16 @@ impl Roofs {
             }
             let open: [bool; 4] = roofs.beside[q].map(|b| b == Beside::Open);
             let shape = base.cube(square.cube).map_or(Shape::Whole, |c| c.shape);
+            // A point carried on past the square, in half cubes, on the planes of its cube.
+            let height = |x: f32, z: f32| {
+                // A point in half cubes, in the owning cube's fractions.
+                let (u, v) = (
+                    x * 0.5 - square.cube.x as f32,
+                    z * 0.5 - square.cube.z as f32,
+                );
+                (square.cube.y as f32 + plane(shape, u, v)) * CELL_M
+            };
+            let highest = square.corners.iter().fold(f32::MIN, |a, &b| a.max(b));
             let mut out: Vec<[i32; 2]> = Vec::new();
             for side in 0..4 {
                 if !open[side] {
@@ -450,27 +460,37 @@ impl Roofs {
                 for k in 1..=n {
                     out.push([step[0] * k, step[1] * k]);
                 }
-                // Round the corner, where the next side is open too.
+                // Round the corner, where the next side is open too: as a hip's crease runs
+                // down off the roof there, or one plane on round it, but never a valley out
+                // past an outside corner, nor a crease rising out past the roof, as round a
+                // lone corner cube laid by hand, whose two ramps both run on past it
+                // (docs/building-voxels.md, gap 11).
                 let next = (side + 1) % 4;
                 if open[next] {
                     let (turn, _, _) = SIDES[next];
-                    for a in 1..=n {
-                        for b in 1..=n {
-                            out.push([step[0] * a + turn[0] * b, step[1] * a + turn[1] * b]);
-                        }
+                    let round: Vec<[i32; 2]> = (1..=n)
+                        .flat_map(|a| {
+                            (1..=n).map(move |b| {
+                                [step[0] * a + turn[0] * b, step[1] * a + turn[1] * b]
+                            })
+                        })
+                        .collect();
+                    let creased = round.iter().any(|&[dx, dz]| {
+                        let place = [square.place[0] + dx, square.place[1] + dz];
+                        let corners = CORNERS
+                            .map(|[cx, cz]| height((place[0] + cx) as f32, (place[1] + cz) as f32));
+                        let middle = height(place[0] as f32 + 0.5, place[1] as f32 + 0.5);
+                        let mean = corners.iter().sum::<f32>() * 0.25;
+                        let rises = corners.iter().any(|&h| h > highest + 1e-4);
+                        middle < mean - 1e-4 || (rises && middle > mean + 1e-4)
+                    });
+                    if !creased {
+                        out.extend(round);
                     }
                 }
             }
             for [dx, dz] in out {
                 let place = [square.place[0] + dx, square.place[1] + dz];
-                let height = |x: f32, z: f32| {
-                    // A point in half cubes, in the owning cube's fractions.
-                    let (u, v) = (
-                        x * 0.5 - square.cube.x as f32,
-                        z * 0.5 - square.cube.z as f32,
-                    );
-                    (square.cube.y as f32 + plane(shape, u, v)) * CELL_M
-                };
                 let corners =
                     CORNERS.map(|[cx, cz]| height((place[0] + cx) as f32, (place[1] + cz) as f32));
                 let middle = height(place[0] as f32 + 0.5, place[1] as f32 + 0.5);

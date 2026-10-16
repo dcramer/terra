@@ -1477,20 +1477,23 @@ fn pokes_out(
             && !cube_at(middle - t.n * 0.01).is_some_and(|c| !c.kind.is_roof() && c.is_in())
         {
             // A roof's piece where no roof is, near or under it: out past its edges, but for
-            // its covering tucked into a wall beside it (D343).
+            // its covering tucked into a wall beside it (D343). Looked for a centimetre in
+            // behind the face, so an edge piece's end flush with the roof's edge, where two
+            // edges meet at its outside corner, is at the edge, not past it.
             let reach = edge_reach(kit);
+            let behind = middle - t.n * 0.01;
             let near_edge = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
                 .iter()
                 .any(|d| {
                     roofs
                         .top_over(
-                            middle.x + d.x * reach,
-                            middle.z + d.z * reach,
+                            behind.x + d.x * reach,
+                            behind.z + d.z * reach,
                             middle.y - 0.6,
                         )
                         .is_some()
                 });
-            let under = roofs.top_over(middle.x, middle.z, middle.y - 3.0).is_some();
+            let under = roofs.top_over(behind.x, behind.z, middle.y - 3.0).is_some();
             if !near_edge && !under {
                 note(t.mesh, EDGE_M, middle, "out past the roof's edge");
             }

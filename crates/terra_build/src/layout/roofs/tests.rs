@@ -885,3 +885,45 @@ fn flashing_in_an_inside_corner_butts_and_does_not_lie_in_the_other() {
         "the east flashing reaches {reach}: {east:?}"
     );
 }
+
+#[test]
+fn a_lone_corner_square_carries_no_crease_out_past_its_edges() {
+    // Found by `cargo xtask fuzz` (seeds 20, 21, 42, 95, 118, 159; docs/building-voxels.md,
+    // gap 11): a corner cube of a roof kind laid by hand where no roof is. Round its corners
+    // its two ramps ran on past it, an inner corner's valley up and out past its high corner
+    // and down past its low one, an outer corner's hip up past its apex, and the beam and
+    // cap under them stood out past the roof's edge.
+    use crate::scenes::fuzz::{Element::Blocks, build};
+    use crate::{Facing, Shape};
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let materials = crate::scenes::registry::Materials::read(&assets, true).expect("the baseline");
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .expect(name)
+    };
+    let maps = crate::relief::Maps::worst(&materials.kits, false);
+    for (at, shape, roof) in [
+        ([4, 0, 8], Shape::InnerCorner(Facing::North), "shakes"),
+        ([-1, 0, 11], Shape::InnerCorner(Facing::West), "slate"),
+        ([2, -1, 11], Shape::OuterCorner(Facing::South), "shakes"),
+        ([5, 0, 7], Shape::OuterCorner(Facing::East), "slate"),
+    ] {
+        let elements = [Blocks {
+            at,
+            size: 1,
+            shape,
+            kind: kind(roof),
+        }];
+        let base = build(&materials.kits, &elements);
+        let report = crate::inspect::inspect(&base, &materials.kits, &maps);
+        assert!(
+            report.findings.is_empty(),
+            "{shape:?} in {roof}: {:?}",
+            report.findings
+        );
+    }
+}
