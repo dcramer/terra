@@ -150,6 +150,68 @@ struct Square {
     covered: bool,
 }
 
+/// Squares by their place, in a table over the places they cover: where each place's start
+/// in `squares`, the next place's its end.
+#[derive(Clone, Debug)]
+struct PlaceTable {
+    low: [i32; 2],
+    size: [i32; 2],
+    starts: Vec<u32>,
+    squares: Vec<usize>,
+}
+
+impl PlaceTable {
+    /// The most places a table is made over: past it a roof's squares are looked up by hash.
+    const MOST: i64 = 1 << 20;
+
+    fn of(by_place: &QuickMap<[i32; 2], Vec<usize>>) -> Option<PlaceTable> {
+        let (low, high) = by_place
+            .keys()
+            .fold(([i32::MAX; 2], [i32::MIN; 2]), |(l, h), p| {
+                (
+                    [l[0].min(p[0]), l[1].min(p[1])],
+                    [h[0].max(p[0]), h[1].max(p[1])],
+                )
+            });
+        if by_place.is_empty()
+            || i64::from(high[0] - low[0] + 1) * i64::from(high[1] - low[1] + 1) > Self::MOST
+        {
+            return None;
+        }
+        let size = [high[0] - low[0] + 1, high[1] - low[1] + 1];
+        let cells = (size[0] * size[1]) as usize;
+        let mut counts = vec![0u32; cells + 1];
+        for place in by_place.keys() {
+            let at = ((place[1] - low[1]) * size[0] + place[0] - low[0]) as usize;
+            counts[at + 1] = by_place[place].len() as u32;
+        }
+        for at in 1..=cells {
+            counts[at] += counts[at - 1];
+        }
+        let mut squares = vec![0usize; counts[cells] as usize];
+        for (place, on) in by_place {
+            let at = ((place[1] - low[1]) * size[0] + place[0] - low[0]) as usize;
+            let start = counts[at] as usize;
+            squares[start..start + on.len()].copy_from_slice(on);
+        }
+        Some(PlaceTable {
+            low,
+            size,
+            starts: counts,
+            squares,
+        })
+    }
+
+    fn at(&self, place: [i32; 2]) -> &[usize] {
+        let (x, z) = (place[0] - self.low[0], place[1] - self.low[1]);
+        if x < 0 || z < 0 || x >= self.size[0] || z >= self.size[1] {
+            return &[];
+        }
+        let at = (z * self.size[0] + x) as usize;
+        &self.squares[self.starts[at] as usize..self.starts[at + 1] as usize]
+    }
+}
+
 /// The cube standing on a roof's cube, if one does: something not a roof's, in, with its
 /// foot on the roof cube's top (not an upper half or an upside-down shape hung over it). It
 /// is carried down into the roof's cube to the roof's deck, and the roof is flashed round
@@ -189,6 +251,9 @@ enum Beside {
 pub struct Roofs {
     squares: Vec<Square>,
     by_place: QuickMap<[i32; 2], Vec<usize>>,
+    /// The same, in a table over the squares' places, where it is not too big: a point's
+    /// squares looked up by where it is, as every piece laid on a roof asks of many points.
+    table: Option<PlaceTable>,
     beside: Vec<[Beside; 4]>,
     /// Each square's roof: which squares carry on into one another.
     roof: Vec<usize>,
@@ -283,11 +348,34 @@ impl Roofs {
         self.squares.is_empty()
     }
 
+    /// The lowest any roof comes over a box east and south, in metres, eaves too: no
+    /// height a point in it asks of them ([`Roofs::top_over`]) is under it. `None` where no
+    /// roof is over any of it.
+    pub fn lowest_over(&self, low: Vec2, high: Vec2) -> Option<f32> {
+        let (from, to) = (
+            (low / STEP_M).floor().as_ivec2(),
+            (high / STEP_M).floor().as_ivec2(),
+        );
+        let mut lowest: Option<f32> = None;
+        for x in from.x..=to.x {
+            for z in from.y..=to.y {
+                for &q in self.by_place.get(&[x, z]).map_or(&[][..], Vec::as_slice) {
+                    let square = &self.squares[q];
+                    for &h in square.corners.iter().chain([&square.middle]) {
+                        lowest = Some(lowest.map_or(h, |l: f32| l.min(h)));
+                    }
+                }
+            }
+        }
+        lowest
+    }
+
     /// The roofs of these roof cubes, sorted.
     fn of(base: &Base, kits: &Kits, cubes: &[(IVec3, Cube)]) -> Roofs {
         let mut roofs = Roofs {
             squares: Vec::new(),
             by_place: QuickMap::default(),
+            table: None,
             beside: Vec::new(),
             roof: Vec::new(),
             span: Vec::new(),
@@ -424,6 +512,7 @@ impl Roofs {
         for (q, square) in self.squares.iter().enumerate() {
             self.by_place.entry(square.place).or_default().push(q);
         }
+        self.table = PlaceTable::of(&self.by_place);
     }
 
     /// What is beyond each side of each square.
@@ -593,7 +682,10 @@ impl Roofs {
             libm::floorf(x / STEP_M) as i32,
             libm::floorf(z / STEP_M) as i32,
         ];
-        self.by_place.get(&place).map_or(&[], Vec::as_slice)
+        match &self.table {
+            Some(table) => table.at(place),
+            None => self.by_place.get(&place).map_or(&[], Vec::as_slice),
+        }
     }
 
     /// The top of the lowest roof over a point that is no lower than `above`, eaves too.

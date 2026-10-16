@@ -286,8 +286,14 @@ impl Indexed {
     /// share most of theirs. What is drawn is the same.
     pub fn welded(self) -> Indexed {
         let mut out = Indexed::default();
-        let mut seen: std::collections::HashMap<[u32; 12], u32> =
-            std::collections::HashMap::with_capacity(self.positions.len());
+        let mut seen: std::collections::HashMap<
+            [u32; 12],
+            u32,
+            std::hash::BuildHasherDefault<Welding>,
+        > = std::collections::HashMap::with_capacity_and_hasher(
+            self.positions.len(),
+            Default::default(),
+        );
         let mut remap = Vec::with_capacity(self.positions.len());
         for i in 0..self.positions.len() {
             let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
@@ -478,6 +484,29 @@ pub(crate) fn ear_clip(points: &[glam::Vec2]) -> Vec<[usize; 3]> {
         out.push([left[0], left[1], left[2]]);
     }
     out
+}
+
+/// A corner's twelve numbers hashed eight bytes at a step, multiplied and folded, for welding
+/// ([`Indexed::welded`]), which hashes every corner of every mesh made: the standard
+/// library's hash, made to withstand keys chosen against it, cost a fifth more there.
+#[derive(Default)]
+pub(crate) struct Welding(u64);
+
+impl std::hash::Hasher for Welding {
+    fn finish(&self) -> u64 {
+        let h = self.0;
+        (h ^ (h >> 32)).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ (h >> 29)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        let mut chunks = bytes.chunks_exact(8);
+        for chunk in &mut chunks {
+            let word = u64::from_le_bytes(chunk.try_into().expect("eight bytes"));
+            self.0 = (self.0.rotate_left(23) ^ word).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+        for &byte in chunks.remainder() {
+            self.0 = (self.0.rotate_left(23) ^ u64::from(byte)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
 }
 
 /// FNV-1a over a corner's numbers' bits: quick, and it needs no crate.

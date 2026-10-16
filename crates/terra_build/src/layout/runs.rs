@@ -332,6 +332,21 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
     }
     let radius = kit.radius();
     let reach = radius + kit.ragged();
+    // Whether a log's line is under the lowest roof over it, out past its faces, by more
+    // than any cut reaches: its foot more than its clearance (two diameters where the roof
+    // falls across it or against a wall, one over it) under the roof, with a margin; or no
+    // roof is over it at all.
+    let clear = |from: Vec3, to: Vec3| {
+        let out = glam::Vec2::splat(reach + 2.0 * radius + 0.1);
+        let flat = |p: Vec3| glam::Vec2::new(p.x, p.z);
+        let (low, high) = (
+            flat(from).min(flat(to)) - out,
+            flat(from).max(flat(to)) + out,
+        );
+        roofs
+            .lowest_over(low, high)
+            .is_none_or(|lowest| from.y.max(to.y) < lowest - 7.0 * radius - 0.05)
+    };
     let pieces = std::mem::take(&mut layout.pieces);
     // Where logs end, and how many end there: two, a joint in a course.
     let mut ends: std::collections::HashMap<[i32; 3], u8> = Default::default();
@@ -361,6 +376,12 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
             continue;
         };
         let (from, to) = (from.metres(), to.metres());
+        // A log well under every roof is clear of them all: no roof over it comes down to
+        // within the clearance below, which is all cutting it to one could ask.
+        if clear(from, to) {
+            layout.pieces.push(piece);
+            continue;
+        }
         let length = from.distance(to);
         // An upright, a post up a gable's last cube alone: cut level under the roof over
         // it to its slope (`Piece::Log`'s lean, for an upright), as a gable's logs are.
@@ -411,11 +432,49 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 Split::Top => radius * 0.5,
                 Split::Bottom => -radius * 0.5,
             };
+        // Asked at every sample along the log, which keeps to a few cubes: the last cube
+        // asked about kept.
+        let stood: std::cell::Cell<Option<(IVec3, Option<f32>)>> = Default::default();
         let standing = |p: Vec3| {
             let at = (p.with_y(body) / CELL_M).floor().as_ivec3();
-            (base.cube(at).is_some_and(|c| !c.kind.is_roof())
+            if let Some((was, answer)) = stood.get()
+                && was == at
+            {
+                return answer;
+            }
+            let answer = (base.cube(at).is_some_and(|c| !c.kind.is_roof())
                 && base.cube(at - IVec3::Y).is_some_and(|c| c.kind.is_roof()))
-            .then_some(at.y as f32 * CELL_M)
+            .then_some(at.y as f32 * CELL_M);
+            stood.set(Some((at, answer)));
+            answer
+        };
+        // Whether a cube is a roof's, and whether one is a wall standing up beside a roof,
+        // not a gable's step under it nor one standing on it as it runs on under it: asked
+        // at every sample, of the few cubes along the log, so the last answer is kept.
+        let roofed: std::cell::Cell<Option<(IVec3, bool)>> = Default::default();
+        let roof_cube = |at: IVec3| {
+            if let Some((was, answer)) = roofed.get()
+                && was == at
+            {
+                return answer;
+            }
+            let answer = base.cube(at).is_some_and(|c| c.kind.is_roof());
+            roofed.set(Some((at, answer)));
+            answer
+        };
+        let walled: std::cell::RefCell<Vec<(IVec3, bool)>> = Default::default();
+        let wall_beside = |at: IVec3| {
+            if let Some(&(_, answer)) = walled.borrow().iter().find(|(was, _)| *was == at) {
+                return answer;
+            }
+            let roof = |at: IVec3| base.cube(at).is_some_and(|c| c.kind.is_roof());
+            let answer = base
+                .cube(at)
+                .is_some_and(|c| !c.kind.is_roof() && c.fill == Fill::Solid && c.is_in())
+                && !roof(at + IVec3::Y)
+                && !roof(at - IVec3::Y);
+            walled.borrow_mut().push((at, answer));
+            answer
         };
         // How low a roof over a point may be and still be one over the log: a little under
         // its foot, but not one it stands on.
@@ -431,16 +490,15 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
         // is not laid through it: none where no roof is near, or the log stands clear over
         // it, as a wall built on a roof does.
         let clearance_at = |p: Vec3, foot: f32| -> Option<f32> {
+            let lowest_roof = lowest_roof(p);
             // A log carried up into a roof's cube is under that roof, never over it.
             let in_roof = standing(p).is_none()
-                && base
-                    .cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3())
-                    .is_some_and(|cube| cube.kind.is_roof());
+                && roof_cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3());
             let (mut lowest, mut over, mut any) = (f32::MAX, !in_roof, false);
             let (mut least, mut most) = (f32::MAX, f32::MIN);
             for side in [-1.0, 0.0, 1.0] {
                 let q = p + across * reach * side;
-                let Some(top) = roofs.top_over(q.x, q.z, lowest_roof(p)) else {
+                let Some(top) = roofs.top_over(q.x, q.z, lowest_roof) else {
                     continue;
                 };
                 // A roof under the log's foot, the log not in a roof's cube, is one it stands
@@ -470,24 +528,16 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 0,
                 libm::roundf(along.z) as i32,
             );
-            let against = base.cube(centre).is_some_and(|c| c.kind.is_roof())
+            let against = roof_cube(centre)
                 && [step, -step].iter().any(|&d| {
                     // A wall standing up beside the roof, not a gable's step under it, the roof
                     // falling toward it.
                     let toward = p + d.as_vec3() * 0.1;
-                    base.cube(centre + d).is_some_and(|c| {
-                        !c.kind.is_roof() && c.fill == Fill::Solid && c.is_in()
-                    }) && !base
-                        .cube(centre + d + IVec3::Y)
-                        .is_some_and(|c| c.kind.is_roof())
-                        // Nor one standing on the roof as it runs on under it.
-                        && !base
-                            .cube(centre + d - IVec3::Y)
-                            .is_some_and(|c| c.kind.is_roof())
+                    wall_beside(centre + d)
                         && matches!(
                             (
-                                roofs.top_over(p.x, p.z, lowest_roof(p)),
-                                roofs.top_over(toward.x, toward.z, lowest_roof(p)),
+                                roofs.top_over(p.x, p.z, lowest_roof),
+                                roofs.top_over(toward.x, toward.z, lowest_roof),
                             ),
                             (Some(here), there) if there.is_none_or(|t| t < here - 1e-3)
                         )
