@@ -163,10 +163,10 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "check",
-        takes: "",
-        does: "what every change must pass: formatting, lints, tests, the dependency rules",
+        takes: "[--quick]",
+        does: "what every change must pass, run by git before each push: formatting, lints, every test, the kit, foliage, artifact, docs and dependency checks; --quick, run before each commit, leaves out the slow sweeps, the artifacts ratchet and the Blender scripts",
         group: "Play and check",
-        run: |_| check(),
+        run: check,
     },
     Task {
         name: "kits",
@@ -1441,13 +1441,16 @@ fn main() -> ExitCode {
     }
 }
 
-/// Points git at the repository's hooks, so `cargo xtask check` runs before every commit (D37).
+/// Points git at the repository's hooks, so `cargo xtask check --quick` runs before every commit
+/// and `cargo xtask check` before every push (D37).
 /// Any task does it, so a new clone has it as soon as anyone runs one; worktrees share it.
 fn use_hooks() {
     if output("git", &["config", "--get", "core.hooksPath"]).as_deref() != Some(".githooks") {
         let set = output("git", &["config", "core.hooksPath", ".githooks"]).is_some();
         if set {
-            eprintln!("git now runs `cargo xtask check` before each commit (.githooks)");
+            eprintln!(
+                "git now runs the quick check before each commit and the full one before each push (.githooks)"
+            );
         }
     }
 }
@@ -1522,31 +1525,68 @@ fn icons(args: &[String]) -> bool {
     run("cargo", &all)
 }
 
-fn check() -> bool {
+/// Tests too slow to run before every commit, each a sweep over every case of something, by
+/// the exact name the test harness prints. The quick check skips them; the full check, and
+/// `cargo test`, run them. Each is marked where it is written too.
+const SLOW_TESTS: &[&str] = &[
+    // terra_build's drawing swept over every case: about a minute each on one thread.
+    "sections::tests::a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest",
+    "sections::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in",
+    "sections::tests::every_junction_case_is_drawn_without_a_fault",
+];
+
+/// The gate (D37). The full check, run by git before each push: formatting, lints, every test,
+/// and the checks of the kits, the foliage, the meshes' artifacts (a ratchet), the docs, the
+/// Blender scripts and the shared crates. `--quick`, run before each commit, leaves out the slow
+/// sweeps, the artifacts ratchet (a release build) and the Blender scripts' check.
+fn check(args: &[String]) -> bool {
+    let quick = match args {
+        [] => false,
+        [flag] if flag == "--quick" => true,
+        _ => {
+            eprintln!("usage: cargo xtask check [--quick]");
+            return false;
+        }
+    };
     // CI only needs to know that everything compiles and the tests pass, so it skips
     // optimising dependencies, which is most of the time spent building Bevy.
-    let quick: &[&str] = if std::env::var_os("CI").is_some() {
+    let ci: &[&str] = if std::env::var_os("CI").is_some() {
         &["--config", "profile.dev.package.\"*\".opt-level=0"]
     } else {
         &[]
     };
     let cargo = |command: &'static str, rest: &[&'static str]| {
-        run("cargo", &[&[command], quick, rest].concat())
+        run("cargo", &[&[command], ci, rest].concat())
     };
-    run("cargo", &["fmt", "--all", "--check"])
+    let mut tests = vec!["--workspace"];
+    if quick {
+        tests.extend(["--", "--exact"]);
+        for name in SLOW_TESTS {
+            tests.extend(["--skip", name]);
+        }
+    }
+    let passed = run("cargo", &["fmt", "--all", "--check"])
         && cargo(
             "clippy",
             &["--workspace", "--all-targets", "--", "-D", "warnings"],
         )
-        && cargo("test", &["--workspace"])
+        && cargo("test", &tests)
         && tools_tests()
         && kits()
         && run("node", &["tools/textures/foliage.ts"])
-        && artifacts(&["--quick".into(), "--ratchet".into()])
+        && (quick || artifacts(&["--quick".into(), "--ratchet".into()]))
         && run("node", &["tools/docs/docs.ts"])
-        && blender_scripts()
+        && (quick || blender_scripts())
         && shared_crates_avoid_bevy()
-        && shared_crates_are_repeatable()
+        && shared_crates_are_repeatable();
+    if passed && quick {
+        println!(
+            "\nThe quick check passed. The full check (`cargo xtask check`), which git runs \
+             before a push, adds {} slow tests, the artifacts ratchet and the Blender scripts' check.",
+            SLOW_TESTS.len()
+        );
+    }
+    passed
 }
 
 /// The model contract's checker (docs/art-style.md, D303): every model the game places,
@@ -2144,7 +2184,7 @@ fn doctor() -> bool {
 
     println!("\nTools");
     report.item(
-        "git runs `cargo xtask check` before each commit",
+        "git runs the quick check before each commit and the full one before each push",
         output("git", &["config", "--get", "core.hooksPath"]).as_deref() == Some(".githooks"),
         true,
         "git config core.hooksPath .githooks   (any cargo xtask task sets it)",
@@ -2335,6 +2375,35 @@ mod bench_tests {
 #[cfg(test)]
 mod task_tests {
     use super::*;
+
+    /// A slow test renamed, or its mark left behind, would be run by the quick check again
+    /// without anyone noticing, or skipped with no sign at the test.
+    #[test]
+    fn every_slow_test_is_written_and_marked_where_it_is() {
+        let mut files = Vec::new();
+        assert!(sources(&root().join("crates"), &mut files));
+        let texts: Vec<String> = files
+            .iter()
+            .filter_map(|f| std::fs::read_to_string(f).ok())
+            .collect();
+        assert!(!SLOW_TESTS.is_empty());
+        for name in SLOW_TESTS {
+            let function = name.rsplit("::").next().unwrap();
+            let marked = texts.iter().any(|text| {
+                let lines: Vec<&str> = text.lines().collect();
+                lines.iter().enumerate().any(|(i, line)| {
+                    line.trim_start().starts_with(&format!("fn {function}("))
+                        && lines[i.saturating_sub(4)..i]
+                            .iter()
+                            .any(|l| l.contains("SLOW_TESTS"))
+                })
+            });
+            assert!(
+                marked,
+                "{name}: no test of that name marked `SLOW_TESTS` above it"
+            );
+        }
+    }
 
     #[test]
     fn every_task_has_its_own_name() {

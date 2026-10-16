@@ -740,6 +740,8 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
     }
 }
 
+// Slow, about a minute: a sweep the quick check before each commit skips and the full check
+// runs (`SLOW_TESTS` in xtask).
 #[test]
 fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest() {
     let kits = shipped();
@@ -1394,6 +1396,8 @@ fn relief(kits: &Kits, side: usize, height: impl Fn(usize) -> u8) -> Maps {
     maps
 }
 
+// Slow, about a minute: a sweep the quick check before each commit skips and the full check
+// runs (`SLOW_TESTS` in xtask).
 #[test]
 fn a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in() {
     // The commit check's rectangle under a gable (`inspect::cases`, docs/building-voxels.md,
@@ -1432,6 +1436,8 @@ fn a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
+// Slow, about a minute: a sweep the quick check before each commit skips and the full check
+// runs (`SLOW_TESTS` in xtask).
 #[test]
 fn every_junction_case_is_drawn_without_a_fault() {
     // The junctions family (`junctions`, docs/building-voxels.md, gaps 3, 7 and 9) in
