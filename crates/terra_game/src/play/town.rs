@@ -528,7 +528,10 @@ impl terra_world::cover::CoverSource for TownCover {
                     .fold(f32::MAX, f32::min)
             })
             .fold(f32::MAX, f32::min);
-        let square = if terra_build::town::inside(p, &self.square) {
+        // No square laid yet, none: a polygon of no corners holds every point.
+        let square = if self.square.len() < 3 {
+            f32::MAX
+        } else if terra_build::town::inside(p, &self.square) {
             -1.0
         } else {
             terra_build::town::segment_polygon(p, p, &self.square)
@@ -566,9 +569,11 @@ impl terra_world::cover::CoverSource for TownCover {
             .iter()
             .any(|yard| terra_build::town::inside(p, yard))
         {
-            growing.grass *= 0.35;
-            // Worn by hens and feet, straw strewn about.
-            growing.trodden = growing.trodden.max(0.45);
+            // Worn by hens and feet, straw strewn about; a new settlement's still mostly
+            // grass, grazed short.
+            let (grass, trodden) = if self.paved { (0.35, 0.45) } else { (0.6, 0.3) };
+            growing.grass *= grass;
+            growing.trodden = growing.trodden.max(trodden);
         }
         // A plot laid for a building going up, trodden to earth round its footings as
         // builders work about it (D381): not the blades cut away from a lawn.
