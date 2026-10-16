@@ -652,6 +652,38 @@ pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     })
 }
 
+/// How many steps between 0 and 1 an sRGB channel is read off at when made linear.
+const LINEAR_STEPS: usize = 4096;
+
+/// An sRGB channel made linear, as Bevy's `Srgba::gamma_function` makes it, read from a
+/// table between 0 and 1 and eased between its steps, to well under an eighth of a
+/// byte's step: a masked surface's corners each have a colour of their own, and working
+/// the power out for every channel of every corner was most of a near section's meshing.
+fn linear(c: f32) -> f32 {
+    let exact = |c: f32| {
+        if c <= 0.0 {
+            c
+        } else if c <= 0.04045 {
+            c / 12.92
+        } else {
+            libm::powf((c + 0.055) / 1.055, 2.4)
+        }
+    };
+    static TABLE: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+    if !(0.0..1.0).contains(&c) {
+        return exact(c);
+    }
+    let table = TABLE.get_or_init(|| {
+        (0..LINEAR_STEPS)
+            .map(|i| exact(i as f32 / (LINEAR_STEPS - 1) as f32))
+            .collect()
+    });
+    let at = c * (LINEAR_STEPS - 1) as f32;
+    let i = at as usize;
+    let f = at - i as f32;
+    table[i] + (table[(i + 1).min(LINEAR_STEPS - 1)] - table[i]) * f
+}
+
 /// Triangles with shared corners as a mesh about a point, its colours linear; its tangents
 /// are the caller's.
 fn mesh_of(all: terra_build::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
@@ -671,7 +703,7 @@ fn mesh_of(all: terra_build::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
             let mut to = match last {
                 Some((from, to)) if from == *c => to,
                 _ => {
-                    let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
+                    let to = [linear(c[0]), linear(c[1]), linear(c[2]), 1.0];
                     last = Some((*c, to));
                     to
                 }
@@ -1661,5 +1693,20 @@ mod tests {
         assert!(!change_back(5, None, 5));
         // An older change with nothing out at all is back.
         assert!(change_back(2, None, 5));
+    }
+
+    #[test]
+    fn a_channel_made_linear_by_the_table_is_bevys_to_well_under_a_bytes_step() {
+        use bevy::color::{Color, ColorToComponents};
+        let mut checked = 0;
+        // Across the table, between its steps, and past either end as masks can push it.
+        for i in -100..=1300 {
+            let c = i as f32 / 1000.0 + 0.000_37;
+            let bevy = Color::srgb(c, c, c).to_linear().to_f32_array()[0];
+            let ours = super::linear(c);
+            assert!((ours - bevy).abs() < 1e-4, "{c}: {ours} against {bevy}");
+            checked += 1;
+        }
+        assert_eq!(checked, 1401);
     }
 }
