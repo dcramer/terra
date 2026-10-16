@@ -298,6 +298,25 @@ export async function waitUntil<T>(what: string, ask: () => Promise<T>, test: (v
   return value;
 }
 
+/// Waits until `test` holds, asking every so often, and fails only once the game's clock has
+/// moved on by `seconds` without it: a wait on what the game does, in its own time, so a
+/// loaded machine drawing slowly does not fail it. Answers what was seen and how many
+/// seconds of game time it took. A game that stops answering, or whose clock stops, fails
+/// after `stalled` seconds on this machine's clock.
+export async function waitUntilInGame<T>(what: string, ask: () => Promise<T>, test: (value: T) => boolean, seconds: number, stalled = 120): Promise<{ value: T; seconds: number }> {
+  const from = (await status()).seconds;
+  let [last, since] = [from, Date.now()];
+  for (;;) {
+    const value = await ask();
+    const now = (await status()).seconds;
+    if (test(value)) return { value, seconds: now - from };
+    if (now - from > seconds) throw new Error(`${what} not seen in ${seconds} s of game time; last saw ${JSON.stringify(value)}`);
+    if (now !== last) [last, since] = [now, Date.now()];
+    else if (Date.now() - since > stalled * 1000) throw new Error(`the game's clock stood still for ${stalled} s waiting for ${what}`);
+    await sleep(100);
+  }
+}
+
 /// Waits until the game's clock has moved on by so many seconds.
 export async function waitSeconds(seconds: number) {
   const from = (await status()).seconds;

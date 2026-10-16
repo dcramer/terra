@@ -78,6 +78,7 @@ async function built(cubes: number[][], shape: unknown = "Whole", kind = "stone"
       const done = await op([{ Fill: { cubes: [at] } }]);
       check(done.done, `building ${at} was refused: ${done.refused}`);
     }
+    check((await cube(at)).built === true, `${at} is not built after four fills`);
   }
 }
 
@@ -270,10 +271,29 @@ async function main() {
     // Clear of the column north of it by a few centimetres.
     const start = await point([hx * 0.5 - 3, 0, hz * 0.5 + 0.4]);
     await game.warp(eastSouth(start.from_start), eastSouth((await point([hx * 0.5 + 4, 0, hz * 0.5 + 0.4])).from_start));
+    // Walked at it until they stand still, in the game's own time; where they went on the
+    // way is kept, to say how they got past if they did.
     await game.press("w:200");
-    await game.waitSeconds(4);
-    const feet = (await base()).player!;
-    check(feet[0] < hx * 0.5 + 0.5, `the player walked through under it to ${feet[0].toFixed(2)} m east`);
+    // Stopped: no further than a centimetre in a quarter of a second of game time.
+    const path: { feet: number[]; t: number }[] = [];
+    const {
+      value: { feet },
+    } = await game.waitUntilInGame(
+      "the player to stop",
+      async () => ({ feet: (await base()).player!, t: (await game.status()).seconds }),
+      (now) => {
+        const last = path[path.length - 1];
+        if (last && now.t - last.t < 0.25) return false;
+        path.push(now);
+        const moved = last ? Math.hypot(now.feet[0] - last.feet[0], now.feet[2] - last.feet[2]) : Infinity;
+        return moved < 0.01 && now.feet[0] > hx * 0.5 - 2.5;
+      },
+      8,
+    );
+    // The key let go, so the walk does not carry on into the next step.
+    await game.unpress();
+    const along = path.map(({ feet: at }) => `${at[0].toFixed(2)},${at[2].toFixed(2)}`);
+    check(feet[0] < hx * 0.5 + 0.5, `the player walked through under it to ${feet[0].toFixed(2)} m east, by ${along.slice(-12).join(" ")}`);
     return `its underside ${(layer * 0.5 - g).toFixed(2)} to ${(layer * 0.5 + 0.5 - g).toFixed(2)} m over the ground; stopped at ${(feet[0] - hx * 0.5).toFixed(2)} m into its cube`;
   });
 
@@ -362,14 +382,14 @@ async function main() {
       check((await cube([at[0], at[1] + 1, at[2]])).kind === null, `the log over ${at} still stands`);
       check((await cube([at[0], at[1] - 1, at[2]])).kind !== null, `the footing under ${at} fell`);
     }
-    // Settled, they shrink away and are gone.
-    for (let i = 0; i < 4; i++) await game.waitSeconds(2);
-    const gone = (await base()).fragments;
-    check(gone === 0, `${gone} fragments left after eight seconds`);
+    // Settled, they shrink away and are gone: waited on, in the game's own time, up to the
+    // longest a fragment lasts (`loss.rs`: still by 14 s, then at most 3.4 s at rest and
+    // 0.7 s shrinking).
+    const { seconds: settled } = await game.waitUntilInGame("every fragment gone", async () => (await base()).fragments, (left) => left === 0, 19);
     await game.shot("shots/rules-collapse-2.png");
     await game.call("sandbox.release");
     check(before.cubes - after.cubes === hit.fell, `${before.cubes - after.cubes} cubes gone, ${hit.fell} said to fall`);
-    return `${hit.fell} cubes fell, worked out in ${hit.took_ms.toFixed(1)} ms; ${flying} fragments half a second on, none eight seconds on`;
+    return `${hit.fell} cubes fell, worked out in ${hit.took_ms.toFixed(1)} ms; ${flying} fragments half a second on, gone ${settled.toFixed(1)} s later`;
   });
 
   await step("repair", async () => {
