@@ -27,6 +27,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [building-drawing.md](building-drawing.md) | What do fifty buildings cost to draw, laid and merged a section at a time on the workers, against drawn whole on the main thread, and do they meet the building plan's bars? |
 | [building-scale.md](building-scale.md) | What do three hundred buildings, a castle of 140,000 cubes and bases out to 2 km cost to draw on the fast and the integrated GPU, and where does the time go? |
 | [texture-detail-2026-10-15.md](texture-detail-2026-10-15.md) | Why do the construction materials' textures read soft a metre or two off, measured from source scan to pixel, and what do shipped games do about it? |
+| [colour-balance-2026-10-15.md](colour-balance-2026-10-15.md) | Measured against a matte grey card at noon and in the evening, is the whole picture warm, and is it the sun, the sky, the grade, the tone mapping or the materials? |
 | [benchmarks.csv](benchmarks.csv) | Frame times of the benchmark scenes, recorded by `cargo xtask bench --record` (D185) |
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [subnautica-inventory.md](subnautica-inventory.md) | How do items and containers work in Subnautica? |
