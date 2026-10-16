@@ -404,7 +404,7 @@ pub fn square(
                 ) * (0.8 + 0.3 * h(7))
             } else if cushion {
                 // Cladonia's cream and grey-green (the tundra's photographs' lichen crops).
-                linear(0.68, 0.64, 0.50).lerp(linear(0.60, 0.61, 0.47), 0.5 + 0.5 * clump.hue)
+                linear(0.76, 0.72, 0.56).lerp(linear(0.68, 0.68, 0.52), 0.5 + 0.5 * clump.hue)
                     * (0.85 + 0.25 * h(7))
             } else if leafy {
                 // A clump is one plant, one kind's colour, each shoot a little lighter or
@@ -427,7 +427,7 @@ pub fn square(
                 deep.lerp(green, 0.5 + 0.5 * clump.hue).lerp(dry, dryness) * (0.85 + 0.3 * h(7))
             };
             let (tall, leafy_width) = if cushion || moss_cushion {
-                ((0.025 + 0.035 * h(15)) * clump.height, 2.2)
+                ((0.025 + 0.035 * h(15)) * clump.height, 3.0)
             } else if leafy {
                 // Shoots a few fingers high, their leaves a centimetre or two, leaning out.
                 ((0.03 + 0.07 * h(15)) * clump.height, 1.5)

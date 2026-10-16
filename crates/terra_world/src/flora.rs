@@ -933,11 +933,14 @@ fn plant(
             let point = ground.ground(&planet, x, z);
             let heath = round.heath.at(point);
             let clumped = smoothstep(-0.1, 0.25, blooms.fbm(point / 9.0 + 41.0, 2, 2.0, 0.5));
-            let chance = (1.3 * heath.shrub + 0.08 * heath.lichen) * (0.4 + 0.6 * clumped);
+            // Scrub in the wet hollows among the sedge, as willow and birch stand there.
+            let hollow = heath.wet * (heath.sedge + heath.moss) / heath.open.max(1e-3);
+            let chance =
+                (1.3 * heath.shrub + 0.08 * heath.lichen + 0.3 * hollow) * (0.4 + 0.6 * clumped);
             if rng.unit() > chance || point.length() < planet.water_near_m(point) + 0.1 {
                 return;
             }
-            let Some(kind) = flora.choose(Grows::Heath, 0.0, 0.0, 0.0, rng) else {
+            let Some(kind) = flora.choose(Grows::Heath, hollow, 0.0, 0.0, rng) else {
                 return;
             };
             let model = pick(rng, &models[kind]);

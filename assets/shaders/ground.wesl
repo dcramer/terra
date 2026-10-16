@@ -116,8 +116,9 @@ var land_sampler: sampler;
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
 // Lying snow, linear: short of fresh snow's albedo of 0.9, settled and dusted with what falls
-// from the trees, and cool: the sun's warm light on it read peach.
-const SNOW: vec3<f32> = vec3<f32>(0.68, 0.72, 0.8);
+// from the trees, and a little cool: the sun's warm light on it read peach. No bluer than it
+// is green, or a low sun's red and the sky's blue on it make it magenta (the tundra's review).
+const SNOW: vec3<f32> = vec3<f32>(0.7, 0.74, 0.75);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
@@ -767,7 +768,7 @@ fn fragment(
             bare = smoothstep(0.25, 0.6, in.uv_b.x + (fleck - 0.5) * 0.3 + (blotch - 0.5) * 0.3);
             woods = clamp(-in.uv_b.x, 0.0, 1.0);
         }
-        let snow_tint = vec3<f32>(0.7, 0.74, 0.8) * (0.92 + 0.12 * fleck);
+        let snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck);
         // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
         // conifer canopy (the far crowns' colour, linear), so a forested slope reads forested to
         // the horizon (docs/demos.md §1); nearer, the cards stand on it and it is darker
@@ -1093,12 +1094,13 @@ fn fragment(
             // even paint there.
             let past_blades = smoothstep(25.0, 80.0, far_off) * flat_ground;
             if past_blades > 0.0 {
-                // Its grain grows with distance, a few pixels across wherever it is seen, as a
-                // far heath's tussocks and patches are, rather than averaging away to paint.
-                let reach = clamp(40.0 / far_off, 0.06, 1.0);
-                let grain = noise(world * 1.3 * reach + 77.0) * 0.6 + noise(world * 3.7 * reach + 79.0) * 0.4;
-                let tuft = noise(world * 0.9 * reach + 83.0);
-                var mottled = ground_is.colour * (0.7 + 0.6 * grain);
+                // Clumps a hand to a half metre across, lit on top with dark gaps between, as a
+                // heath's shrubs and tussocks stand seen from off; faded out where they are
+                // under a few pixels, before they shimmer.
+                let grain = noise(world * 2.4 + 77.0) * 0.65 + noise(world * 5.3 + 79.0) * 0.35;
+                let clumps = mix(1.0, 0.45 + 1.0 * smoothstep(0.3, 0.7, grain), 1.0 - smoothstep(180.0, 320.0, far_off));
+                let tuft = noise(world * 0.45 + 83.0) * 0.7 + grain * 0.3;
+                var mottled = ground_is.colour * clumps;
                 mottled = mix(mottled, LICHEN * (0.8 + 0.3 * grain), smoothstep(0.62, 0.8, tuft) * (0.3 + heath.plants.x));
                 mottled = mix(mottled, vec3<f32>(0.075, 0.07, 0.022) * (0.8 + 0.4 * grain), smoothstep(0.66, 0.82, 1.0 - tuft) * 0.6);
                 ground_is.colour = mix(ground_is.colour, mottled, past_blades * heath.ground.z);

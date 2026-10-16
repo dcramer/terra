@@ -101,11 +101,12 @@
             cut: (what: Tree, gives: ("Wood", 0.0, 0.18), seconds: (1.0, 0.065), greater: (22.0, GreatTree)),
         ),
 
-        // Rock with ore in it: the same shapes, in a colour that gives it away.
+        // Rock with ore in it: the same shapes, in a colour that gives it away, a rusty iron
+        // stain on the plain rock's own scan (the orange lichen scan read as painted coral).
         (
             name: "Ore rock",
             models: ["Rock_1", "Rock_3", "Rock_4", "Rock_5", "Rock_7", "Rock_9"],
-            colours: [("*", (0.47, 0.37, 0.32), Firm, "lichen_rock")],
+            colours: [("*", (0.5, 0.38, 0.3), Firm, "rock_boulder_dry")],
             sway: Still,
             grows: Rocks,
             size_above: 0.7,
@@ -150,6 +151,20 @@
             grows: Bushes,
             size: (0.7, 1.5),
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.7, 0.0)),
+        ),
+        // Willow and birch scrub in the heath's wet hollows, by its pools and along its
+        // sedge: knee- to thigh-high, its leaves yellowing with the birch's year. Chosen where
+        // the heath's layer says the ground is wet (`above`, the hollow's wetness there).
+        (
+            name: "Willow scrub",
+            grown: Bush((leaves: "birch", tint: (0.9, 0.86, 0.62), clumps: (6, 9), spread: 1.5)),
+            variants: 3,
+            sway: Bush,
+            grows: Heath,
+            above: 0.45,
+            chance: 0.75,
+            size: (0.45, 1.0),
+            cut: (what: Plant, gives: ("Fibre", 0.8, 0.0), seconds: (0.6, 0.0)),
         ),
         // Dwarf birch and bilberry on the heath past the trees, knee-high and lower, turning
         // crimson and rust in early autumn as the dwarf birch's year says (plant_years.ron).
