@@ -23,13 +23,19 @@ const at = (seconds: number) => ROLLS + Math.round(seconds * 60);
 /// The arena: east and south of the start, and the gravel's height there, metres; the water
 /// lies to the north. `EDGE` is how far north of the arena's middle the water begins, and
 /// `SHALLOWS` a point in it, east and south of the middle, half a metre deep or so.
-const ARENA: [number, number, number] = [250, 0, 11];
+/// Set from a probe of the shore (tiny figures on a 5 m grid, their spawn logs saying each
+/// spot's height and water): the gravel strip at the water's edge, about 0.3 m under the
+/// start, the water beginning 3 m north of it, and half a metre deep 7 m north-west.
+const ARENA: [number, number, number] = [244, 0, 13];
 const EDGE = 3;
-const SHALLOWS: [number, number] = [-3.5, -4.2];
+const SHALLOWS: [number, number] = [-6, -7];
 
-/// Whether the real troll, fight clips and held looks are in (assets/models/characters/
-/// troll.glb, character/fight.glb, held/arming_sword.glb and round_shield.glb); until then
-/// stand-ins on the base body play the nearest of its own clips.
+/// What is in yet: the troll (assets/models/characters/troll.glb, which carries the base's
+/// clips too), the held looks (held/arming_sword.glb and round_shield.glb), and the fight
+/// clips (the troll's Troll_* in its own file, the man's in character/fight.glb). Until the
+/// clips are, both play the nearest of the base's.
+const TROLL_MODEL = true;
+const HELD = true;
 const REAL = false;
 
 /// A clip as a fighter plays it: its name in the file, and, for a blow, the moment it lands,
@@ -45,7 +51,7 @@ const TROLL_CLIPS: Record<string, Clip> = REAL
       roar: { name: "Troll_Roar" },
     }
   : {
-      idle: { name: "Sword_Idle" },
+      idle: { name: "Idle_Loop" },
       walk: { name: "Walk_Loop" },
       smash: { name: "Sword_Attack", hit: 0.62 },
       sweep: { name: "Sword_Attack", hit: 0.62 },
@@ -83,8 +89,8 @@ const MAN_CLIPS: Record<string, Clip> = REAL
 /// The troll: its model, how big against it, and how fast it plays a person's clips, slowed
 /// for its size by Froude scaling (twice our height moves about 1.5 times slower), which is
 /// what makes it read as heavy.
-const TROLL = REAL
-  ? { model: "models/characters/troll.glb", clips: undefined, scale: 1, rate: 1 }
+const TROLL = TROLL_MODEL
+  ? { model: "models/characters/troll.glb", clips: undefined, scale: 1, rate: 0.68 }
   : { model: "models/character/base.glb", clips: undefined, scale: 2.2, rate: 0.68 };
 /// The man: the base body as the player's template, dressed, a sword in his right hand and a
 /// round shield in his left; his clips from the fight file, on the base's skeleton.
@@ -93,8 +99,8 @@ const MAN = {
   template: "male",
   clips: REAL ? "models/character/fight.glb" : undefined,
   wears: ["shirt", "trousers", "boots", "leather_coat"],
-  hold: REAL
-    ? { "socket.hand.R": "models/held/arming_sword.glb", "socket.hand.L": "models/held/round_shield.glb" }
+  hold: HELD
+    ?{ "socket.hand.R": "models/held/arming_sword.glb", "socket.hand.L": "models/held/round_shield.glb" }
     : { "socket.hand.R": "models/held/spear.glb" },
 };
 /// How far ahead of the troll its blows land, metres: its arm and fist at its size.
@@ -308,7 +314,10 @@ function script(s: Script) {
   man.play(s, sweepLands + 45, "guard", { blend: 350 });
   troll.play(s, sweepLands + 60, "idle", { blend: 400 });
   // Each gives ground to the water's edge: he backs to it, it follows.
-  const T4 = add(edge, scale(way(edge, T3), 3.0));
+  // It stops a little landward of him, on the line from him into the lake, so its smash
+  // reaches past him into the shallows and his combination drives it back into the water.
+  const intoWater = way(edge, splash);
+  const T4 = add(edge, scale(intoWater, -1.6));
   man.play(s, at(15.4), "right", { blend: 300 });
   man.move(s, at(15.4), edge, 1.4, troll);
   troll.play(s, at(15.4), "walk", { blend: 300 });
@@ -334,17 +343,18 @@ function script(s: Script) {
 
   // 7. His combination of three: it reels back into the shallows and roars.
   const combo = at(19.6);
-  const close = add(T4, scale(way(T4, aside), 1.9));
+  // He comes round to its landward side, so each blow drives it a metre into the lake.
+  const close = add(T4, scale(intoWater, -1.9));
   man.play(s, combo, "step", { blend: 200 });
   man.move(s, combo, close, 2.4, troll);
   let swing = combo + Math.round((level(aside, close) / 2.4) * 60);
   let back = T4;
-  const deeper = way(close, T4);
+  const deeper = intoWater;
   for (const [k, blow] of ["slash", "backhand", "chop"].entries()) {
     man.play(s, swing, blow, { once: true, blend: 140, speed: 1.15 });
     const lands = man.lands(swing, blow, 1.15);
     troll.play(s, lands, "hit", { once: true, blend: 100, speed: 0.55 });
-    back = add(back, scale(deeper, 0.8));
+    back = add(back, scale(deeper, 1.0));
     troll.move(s, lands, back, 1.1, man);
     if (k === 2) landings.push({ frame: lands, amount: 0.03 });
     swing += 54;
