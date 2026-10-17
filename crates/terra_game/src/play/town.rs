@@ -529,6 +529,11 @@ fn patch(p: Vec2) -> f32 {
     top + (bottom - top) * sy
 }
 
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
 
@@ -573,6 +578,20 @@ impl terra_world::cover::CoverSource for TownCover {
             growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
             let edge = (kept / MEADOW_KEPT).clamp(0.0, 1.0);
             growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
+            // A lowland lake's bank in a meadow: rank grass and sedge thick and tall along the
+            // waterline in clumps, as reeds and sedge fringe a lake by a pasture, hiding where
+            // the water meets the bank (D381). The lakes' grid is asked first, which is cheap.
+            if let Some(level) = planet
+                .round()
+                .and_then(|round| round.water_near(ground.normalize(), 1))
+            {
+                let over = ground.length() - level;
+                let band = smoothstep(-0.15, 0.05, over) * (1.0 - smoothstep(0.6, 1.4, over));
+                let fringe = band * (0.55 + 0.9 * patch(p / 4.0 + 13.0)).min(1.0);
+                growing.grass = growing.grass.max(fringe);
+                growing.tall = growing.tall.max(fringe * 1.3);
+                growing.lush = growing.lush.max(fringe);
+            }
         }
         // How far into a way a point is, by the nearest street or the square, a soft edge
         // where the grass comes back.

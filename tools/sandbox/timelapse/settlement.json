@@ -1,5 +1,5 @@
 {
-  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; a crane up and back over the finished town to its lake, the forest's edge and the range, the morning sun to the right",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then from high over its south-west corner a slow crane down onto the finished town, kept on the middle of what is built, ending low over its roofs with the lake and the forest beyond, the morning sun to the right",
   "seconds": 42,
   "keys": [
     {
@@ -62,31 +62,45 @@
     {
       "t": 28,
       "at": [
-        -38,
-        26,
-        -302
+        -58,
+        38,
+        -288
       ],
       "look": [
-        12,
+        8,
         0,
-        -382
+        -366
       ],
-      "lens": 21,
+      "lens": 22,
       "cut": true
+    },
+    {
+      "t": 35,
+      "at": [
+        -46,
+        28,
+        -300
+      ],
+      "look": [
+        11,
+        1,
+        -372
+      ],
+      "lens": 22
     },
     {
       "t": 42,
       "at": [
-        6,
-        34,
+        -30,
+        17,
         -314
       ],
       "look": [
-        38,
-        0,
-        -412
+        16,
+        5,
+        -382
       ],
-      "lens": 21
+      "lens": 22
     }
   ],
   "ease": "none",

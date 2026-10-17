@@ -811,6 +811,11 @@ fn fragment(
         {
             bare = smoothstep(0.25, 0.6, in.uv_b.x + (fleck - 0.5) * 0.3 + (blotch - 0.5) * 0.3);
             woods = clamp(-in.uv_b.x, 0.0, 1.0);
+            // A lowland lake's banks are silt, soil and grass, not the shingle the land lays
+            // round every lake: its gravel and scree give out a few metres over its water.
+            let banks = lowland_at(from_centre - ground.sea_radius_m) * (1.0 - smoothstep(3.0, 7.0, in.uv_b.y));
+            gravel *= 1.0 - banks;
+            scree *= 1.0 - banks;
         }
         let snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck);
         // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
