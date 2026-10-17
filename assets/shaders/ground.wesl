@@ -807,7 +807,8 @@ fn fragment(
             // between bare: patchy by a noise tens of metres across, rather than an even cap.
             let ribs = noise(world * 0.018 + 51.0) * 0.6 + noise(world * 0.05 + 53.0) * 0.4;
             let shed = (1.0 - smoothstep(0.75, 0.95, flatness)) * (ribs - 0.45) * 1.4;
-            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12 - max(shed, 0.0)) * up_facing;
+            let patches = (noise(world * 0.0032 + 71.0) * 0.65 + noise(world * 0.009 + 73.0) * 0.35 - 0.5) * 1.3 * (1.0 - smoothstep(0.75, 0.95, flatness));
+            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12 - max(shed, 0.0) - max(patches, -0.15)) * up_facing;
         }
 @if(VERTEX_UVS_B)
         {
@@ -847,10 +848,10 @@ fn fragment(
             streaks = smoothstep(-0.25, -0.8, lines) * smoothstep(0.35, 0.65, noise(world * 0.012 + 7.0)) * streaks_seen;
         }
         let stained = 1.0 - 0.4 * streaks;
-        let tones = 0.8 + 0.4 * noise(world * 0.004 + 53.0);
+        let tones = 0.66 + 0.5 * (noise(world * 0.0016 + 53.0) * 0.6 + noise(world * 0.005 + 59.0) * 0.4);
         // Granite as the Tatras' walls are seen across a valley, a mid grey under the snow,
         // not the pale slab 1.3 times as bright read as.
-        let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.95;
+        let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.85;
         let granite = vec3<f32>(grey, grey, grey * 0.97) * (0.85 + 0.3 * blotch) * stained * tones;
         let scree_tint = vec3<f32>(grey, grey, grey * 0.96) * 1.25 * (0.85 + 0.3 * fleck) * tones;
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
@@ -890,7 +891,8 @@ fn fragment(
             for (var k = 0; k < 3; k++) {
                 let band = sets[k];
                 let unheld = smoothstep(band.x * 0.2, band.x * 0.3, mesh_cell);
-                let keep = band.y * unheld * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
+                let patchy = 0.3 + 0.7 * smoothstep(0.3, 0.7, noise(world * 0.0024 + band.z * 13.0));
+                let keep = band.y * unheld * patchy * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
                 if keep > 0.001 {
                     let stripes = fall_stripes(world, across_face, band.x, band.z);
                     rib += keep * stripes.x;

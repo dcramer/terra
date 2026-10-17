@@ -65,6 +65,9 @@ pub struct Mountains {
     /// stripes, blended at random phases, broke every gully off within its own width, an
     /// egg-crate of even round hollows over a wall rather than gullies running long (D395).
     pub gully_stretch: f32,
+    /// How deep its crests are cut into cols and notches between the summits left standing, in
+    /// metres, about a kilometre apart, up its walls only (D395).
+    pub summits_m: f32,
 }
 
 impl Mountains {
@@ -87,6 +90,7 @@ impl Mountains {
         spurs: 0.0,
         peaks: 0.0,
         gully_stretch: 2.5,
+        summits_m: 380.0,
     };
 
     /// The most the mountains raise the land, in metres.
@@ -174,9 +178,16 @@ const SPUR_SHIFT: f32 = 0.12;
 const SPUR_MIDDLE: f32 = 0.45;
 /// How far apart the front's peaks are about, in metres.
 const PEAKS_M: f32 = 3200.0;
+/// How far apart the crests' summits are about, in metres, and from how far up the walls
+/// (shares of the way from valley to crest) they rise, whole from the second.
+const SUMMITS_M: f32 = 1400.0;
+const SUMMITS_FROM: (f32, f32) = (0.6, 1.0);
 /// Round a kept spot the front's rules are off within the first distance, in metres, and
 /// whole from the second.
 const KEPT_M: (f32, f32) = (700.0, 1800.0);
+/// The same for the crests' cols, which change the skyline over a place kilometres round it:
+/// cut within 3 km of the lake, they reshaped the domes over it.
+const SUMMITS_KEPT_M: (f32, f32) = (2500.0, 4000.0);
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -204,15 +215,15 @@ impl Range {
         self
     }
 
-    /// How much of the front's rules a point takes, 0 within [`KEPT_M`]'s first distance of a
-    /// kept spot to 1 past its second.
-    fn away_from_kept(&self, point: Vec3) -> f32 {
+    /// How much of the newer rules a point takes, 0 within `within`'s first distance of a kept
+    /// spot, in metres, to 1 past its second.
+    fn away_from_kept(&self, point: Vec3, within: (f32, f32)) -> f32 {
         let length = point.length();
         let direction = point / length.max(1e-3);
         self.kept.iter().fold(1.0, |away: f32, spot| {
             away.min(smoothstep(
-                KEPT_M.0,
-                KEPT_M.1,
+                within.0,
+                within.1,
                 (direction - *spot).length() * length,
             ))
         })
@@ -236,7 +247,7 @@ impl Range {
         let plain = edge(n);
         let mut front = 1.0 - smoothstep(FRONT.0, FRONT.1, plain);
         if front > 0.0 && (m.spurs > 0.0 || m.peaks > 0.0) && !self.kept.is_empty() {
-            front *= self.away_from_kept(point);
+            front *= self.away_from_kept(point, KEPT_M);
         }
         if m.spurs <= 0.0 || front <= 0.0 || n < threshold - 0.16 - SPUR_SHIFT {
             return (plain, front);
@@ -294,8 +305,26 @@ impl Range {
         } else {
             1.0
         };
+        // Its crests broken into summits and the cols and notches between them, a kilometre or
+        // so apart: the ridged sum alone left every crest one smooth arc, a curtain's top seen
+        // from across a valley (D395). Only up the walls, so no valley's floor or lake moves.
+        let crested = smoothstep(SUMMITS_FROM.0, SUMMITS_FROM.1, along);
+        let summits = if m.summits_m > 0.0 && crested > 0.0 {
+            let s = self
+                .faces
+                .fbm(point / SUMMITS_M + Vec3::splat(5.7), 3, 2.1, 0.5);
+            -m.summits_m * crested * (1.0 - smoothstep(-0.35, 0.35, s))
+        } else {
+            0.0
+        };
+        let summits = if summits != 0.0 && !self.kept.is_empty() {
+            summits * self.away_from_kept(point, SUMMITS_KEPT_M)
+        } else {
+            summits
+        };
         (
-            floor + m.relief_m * libm::powf(inside, 0.6) * climb * peaks - hollow,
+            floor + m.relief_m * libm::powf(inside, 0.6) * climb * peaks - hollow
+                + summits * libm::powf(inside, 0.6),
             upper,
         )
     }
@@ -380,7 +409,7 @@ impl Range {
             // Full depth from a gentle slope up, so the depth does not follow every change of
             // the fall near a crest.
             let fade = smoothstep(0.02, 0.4, steepness);
-            let away = self.away_from_kept(point);
+            let away = self.away_from_kept(point, KEPT_M);
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
                 let (stripes, across, along, cut) =
