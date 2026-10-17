@@ -9,6 +9,7 @@ use crate::planet::Planet;
 use crate::rises::{RISES, Rises};
 use crate::sky::Sky;
 use crate::waves::{self, TRAINS};
+use bevy::color::Mix;
 use bevy::{
     asset::RenderAssetUsages,
     light::NotShadowCaster,
@@ -38,6 +39,16 @@ const DEPTH_OFFSET: f32 = -0.2;
 /// Foam against the shore from this depth to that, and from this distance on the water is all
 /// its deep colour, the depth buffer too coarse for its shallows (the port's DEPTH_FOG_FADE).
 const FOAM_M: (f32, f32) = (0.02, 0.18);
+/// A lowland lake in the forest, as a settlement's on the valley floor (D381): not a clear
+/// tarn over pale granite but a lake over silt and drowned leaves, its water stained by the
+/// woods' tannins and its plankton, olive brown where shallow and near black a metre or two
+/// down, as the lakes of Mazury and Småland are; its bed shows only at the very edge. A lake
+/// is a mountain one from the first height over the sea, fully by the second, as its shore
+/// is (flora's `MOUNTAIN_SHORE_M`).
+const LOWLAND_SHALLOW: LinearRgba = LinearRgba::new(0.03, 0.036, 0.018, 0.62);
+const LOWLAND_DEEP: LinearRgba = LinearRgba::new(0.004, 0.007, 0.005, 0.97);
+const LOWLAND_BEERS_LAW: f32 = 1.1;
+const MOUNTAIN_LAKE_M: (f32, f32) = (250.0, 500.0);
 const FADE_M: (f32, f32) = (350.0, 1400.0);
 
 pub type LakeMaterial = ExtendedMaterial<StandardMaterial, LakeExtension>;
@@ -108,6 +119,8 @@ struct Mirror {
     east: Vec3,
     north: Vec3,
     skyline: [Vec4; SKYLINE_WAYS],
+    /// How much the start's lake is a lowland one, 0 a mountain lake to 1.
+    lowland: f32,
 }
 
 impl MaterialExtension for LakeExtension {
@@ -123,14 +136,16 @@ impl LakeExtension {
             .map_or((LinearRgba::BLACK, LinearRgba::BLACK, 0.0), |sky| {
                 (sky.horizon.into(), sky.zenith.into(), sky.brightness)
             });
+        let lowland = mirror.lowland;
+        let mix = |a: LinearRgba, b: LinearRgba| a.mix(&b, lowland);
         Self {
             horizon,
             zenith,
             sky_brightness,
-            beers_law: BEERS_LAW,
+            beers_law: BEERS_LAW + (LOWLAND_BEERS_LAW - BEERS_LAW) * lowland,
             depth_offset: DEPTH_OFFSET,
-            shallow: SHALLOW,
-            deep: DEEP,
+            shallow: mix(SHALLOW, LOWLAND_SHALLOW),
+            deep: mix(DEEP, LOWLAND_DEEP),
             foam_from: FOAM_M.0,
             foam_to: FOAM_M.1,
             fade_from: FADE_M.0,
@@ -343,7 +358,18 @@ fn spawn(
         east: round.land.frame.east(up),
         north: round.land.frame.north(up),
         skyline: ways,
+        lowland: 1.0
+            - smoothstep(
+                MOUNTAIN_LAKE_M.0,
+                MOUNTAIN_LAKE_M.1,
+                level - planet.sea_radius_m(),
+            ),
     };
+    info!(
+        "Lakes: the start's lake {:.0} m over the sea, {:.0}% a lowland lake",
+        level - planet.sea_radius_m(),
+        mirror.lowland * 100.0
+    );
     let look = materials.add(ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::from(SHALLOW),

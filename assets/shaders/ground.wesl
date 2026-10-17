@@ -160,11 +160,20 @@ fn wet_band(above: f32, fleck: f32) -> f32 {
 // (Lagarde: wet ground darkens and smooths the dry, its lighting the same), and under it
 // darkened toward the water's colour with depth, the bed fading into the deep. `above` is how
 // far over the nearest lake's water the ground stands, below 0 under it.
-fn lake_shore(colour: vec3<f32>, above: f32, fleck: f32) -> vec3<f32> {
+// A lowland lake's bed, `lowland` 1, is silt under stained water, olive brown, gone dark a
+// metre or two down; a mountain lake's, 0, granite under clear green water.
+fn lake_shore(colour: vec3<f32>, above: f32, fleck: f32, lowland: f32) -> vec3<f32> {
     let wet = wet_band(above, fleck);
-    let under = smoothstep(0.0, 5.0, -above);
+    let under = smoothstep(0.0, mix(5.0, 1.8, lowland), -above);
     let damp = colour * mix(1.0, 0.55, wet);
-    return mix(damp, vec3<f32>(0.012, 0.03, 0.026), under * 0.75);
+    let bed = mix(vec3<f32>(0.012, 0.03, 0.026), vec3<f32>(0.01, 0.011, 0.006), lowland);
+    return mix(damp, bed, under * mix(0.75, 0.92, lowland));
+}
+
+// How much the ground is a lowland lake's shore rather than a mountain lake's, from its
+// height over the sea (as `lakes::MOUNTAIN_LAKE_M` and flora's `MOUNTAIN_SHORE_M`).
+fn lowland_at(above_sea: f32) -> f32 {
+    return 1.0 - smoothstep(250.0, 500.0, above_sea);
 }
 
 // How much more the layers' relief bends the light than their normal maps say: the floor's
@@ -945,7 +954,7 @@ fn fragment(
         colour = mix(colour, canopy, under_woods * (1.0 - snow));
 @if(VERTEX_UVS_B)
         {
-            colour = lake_shore(colour, in.uv_b.y, fleck);
+            colour = lake_shore(colour, in.uv_b.y, fleck, lowland_at(from_centre - ground.sea_radius_m));
         }
         pbr_input.N = ground_is.normal;
 } @else {
@@ -1198,7 +1207,15 @@ fn fragment(
 @if(VERTEX_UVS_B)
         {
             let above = in.uv_b.y + (blotch - 0.5) * 0.7 + (fleck - 0.5) * 0.15;
-            let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above);
+            let lowland = lowland_at(from_centre - ground.sea_radius_m);
+            // A lowland lake's shore is soft: wet silt and sand a hand or two either side of
+            // the waterline, its meadow or moss down to it, not a band of scoured granite.
+            let soft = (1.0 - smoothstep(0.12, 0.45, above)) * smoothstep(-2.5, -0.8, above) * lowland;
+            if soft > 0.0 {
+                let silt = vec3<f32>(0.11, 0.085, 0.055) * (0.75 + 0.5 * fleck) * tones;
+                ground_is = over(ground_is, layer(SAND, 0.8, silt, world + 67.0, gx, gy, n, 1.0), soft);
+            }
+            let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above) * (1.0 - lowland);
             if shore > 0.0 {
                 // Granite washed by the lake, a warm grey: the blue sky over the open shore
                 // lights it, and a neutral grey under it read violet.
@@ -1250,7 +1267,7 @@ fn fragment(
         colour = mix(colour, canopy, under_woods * (1.0 - snow));
 @if(VERTEX_UVS_B)
         {
-            colour = lake_shore(colour, in.uv_b.y, fleck);
+            colour = lake_shore(colour, in.uv_b.y, fleck, lowland_at(from_centre - ground.sea_radius_m));
             pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.35, wet_band(in.uv_b.y, fleck));
         }
         if ribbed > 0.0 {

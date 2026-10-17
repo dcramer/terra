@@ -332,6 +332,43 @@ impl ScaffoldLooks {
 }
 
 /// A building's scaffold as it stands: its walls, how many lifts, and what draws it.
+/// Where each scaffolded building's top lift is, so its builders at work stand on its boards
+/// rather than on the grass under them (`townsfolk::place`): by the town's building index, its
+/// frame, its walls and how many lifts are up.
+#[derive(Resource, Default)]
+pub struct Decks(pub bevy::platform::collections::HashMap<usize, (Transform, Walls, u32)>);
+
+/// How far out of the wall a builder on the boards stands: on the middle of them.
+const ON_BOARDS_M: f32 = 0.42;
+/// How far from the walls a builder at work is taken up onto the boards; further, they work
+/// at the stacked logs on the ground.
+const TAKEN_UP_M: f32 = 2.6;
+
+/// Where a builder standing at `at` (the building's own metres, across) works on its top lift:
+/// the boards along the nearest wall, and the way to that wall; none if they stand too far
+/// off, or inside its walls.
+pub fn on_deck(walls: &Walls, lifts: u32, at: Vec2) -> Option<(Vec3, Vec2)> {
+    if lifts == 0 {
+        return None;
+    }
+    let inside = at.cmpgt(walls.low).all() && at.cmplt(walls.high).all();
+    let nearest = at.clamp(walls.low, walls.high);
+    let off = at - nearest;
+    if inside || off.length() > TAKEN_UP_M {
+        return None;
+    }
+    // Out from the nearest wall square on, not round a corner, where no board is.
+    let out = if off.x.abs() >= off.y.abs() {
+        Vec2::new(off.x.signum(), 0.0)
+    } else {
+        Vec2::new(0.0, off.y.signum())
+    };
+    let along = nearest.clamp(walls.low + Vec2::splat(0.4), walls.high - Vec2::splat(0.4));
+    let on = along * out.abs().yx() + nearest * out.abs() + out * ON_BOARDS_M;
+    let y = walls.floor_m + LIFT_M * lifts as f32;
+    Some((Vec3::new(on.x, y, on.y), -out))
+}
+
 #[derive(Component, Default)]
 pub struct Scaffolded {
     walls: Option<Option<Walls>>,
@@ -343,7 +380,7 @@ pub struct Scaffolded {
 
 /// A finished building's scaffold is struck a lift at a time, from the top, one every so many
 /// of the time-lapse's seconds, as it is taken down, not gone at once.
-const STRIKE_S: f32 = 0.5;
+const STRIKE_S: f32 = 1.2;
 
 /// How often, in frames, each rising building's scaffold is looked at again.
 const EVERY: u32 = 6;
@@ -364,7 +401,12 @@ pub(super) fn scaffold(
         Option<&mut Scaffolded>,
     )>,
     mut frame: Local<u32>,
+    decks: Option<ResMut<Decks>>,
 ) {
+    let Some(mut decks) = decks else {
+        commands.init_resource::<Decks>();
+        return;
+    };
     *frame += 1;
     if !(*frame).is_multiple_of(EVERY) {
         return;
@@ -407,8 +449,10 @@ pub(super) fn scaffold(
             continue;
         };
         if wanted == 0 {
+            decks.0.remove(&rise.index);
             continue;
         }
+        decks.0.insert(rise.index, (built.frame, walls, wanted));
         let all = pieces(&walls, wanted);
         for (board, material) in [(false, &looks.poles), (true, &looks.boards)] {
             let drawn = commands
@@ -435,6 +479,36 @@ mod tests {
             floor_m: 0.0,
             eaves_m: 5.0,
         }
+    }
+
+    /// A builder beside a wall stands on the top lift's boards out from it, facing it; one
+    /// inside the walls, or off by the stacked logs, stays on the ground.
+    #[test]
+    fn a_builder_by_a_scaffolded_wall_stands_on_its_boards_facing_it() {
+        let walls = house();
+        let (on, facing) = on_deck(&walls, 2, Vec2::new(3.0, -1.2)).expect("by the north wall");
+        assert!((on.y - 2.0 * LIFT_M).abs() < 1e-4, "{on}");
+        assert!(
+            (on.z + ON_BOARDS_M).abs() < 1e-4 && (on.x - 3.0).abs() < 1e-4,
+            "{on}"
+        );
+        assert_eq!(facing, Vec2::new(0.0, 1.0));
+        let (on, facing) = on_deck(&walls, 1, Vec2::new(9.5, 5.9)).expect("by the east wall");
+        assert!(on.x > walls.high.x && on.x < walls.high.x + OUT_M, "{on}");
+        assert!(
+            on.z < walls.high.y,
+            "on a board along the wall, not past its corner: {on}"
+        );
+        assert_eq!(facing, Vec2::new(-1.0, 0.0));
+        assert!(on_deck(&walls, 2, Vec2::new(4.0, 3.0)).is_none(), "inside");
+        assert!(
+            on_deck(&walls, 2, Vec2::new(4.0, -4.0)).is_none(),
+            "at the logs"
+        );
+        assert!(
+            on_deck(&walls, 0, Vec2::new(3.0, -1.2)).is_none(),
+            "no scaffold"
+        );
     }
 
     /// No scaffold while a builder lays from the ground; a lift for each one the walls have

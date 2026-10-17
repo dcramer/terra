@@ -432,6 +432,7 @@ fn place(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut folk: Query<(Entity, &Folk, &mut Transform, &mut Visibility)>,
     rising: Option<Res<super::rising::Rising>>,
+    decks: Option<Res<super::scaffold::Decks>>,
 ) {
     let eye = camera.single().ok().map(|c| market.local(c.translation()));
     for (entity, one, mut at, mut shown) in &mut folk {
@@ -468,8 +469,38 @@ fn place(
             .way(person.facing)
             .reject_from(up)
             .normalize_or(market.east);
+        let (feet, facing) = decks
+            .as_deref()
+            .and_then(|decks| on_the_boards(&market, decks, one.index, feet))
+            .unwrap_or((feet, facing));
         *at = Transform::from_translation(feet).looking_to(facing, up);
     }
+}
+
+/// Where a builder at work on a scaffolded building stands: on its top lift's boards facing
+/// its wall, as builders lay the courses over their heads from the scaffold (D381), two in
+/// three of them; the rest work from the ground, at the logs.
+fn on_the_boards(
+    market: &Market,
+    decks: &super::scaffold::Decks,
+    index: usize,
+    feet: Vec3,
+) -> Option<(Vec3, Vec3)> {
+    let person = market.life.people.get(index)?;
+    if !matches!(person.state, terra_life::State::Doing { .. }) || person.seed % 3 == 0 {
+        return None;
+    }
+    let thing = &market.life.town.things[market.life.spots.get(person.spot?)?.thing];
+    if thing.kind != ThingKind::Site {
+        return None;
+    }
+    let (frame, walls, lifts) = decks.0.get(&thing.building?)?;
+    let local = frame.compute_affine().inverse().transform_point3(feet);
+    let (on, toward) = super::scaffold::on_deck(walls, *lifts, Vec2::new(local.x, local.z))?;
+    Some((
+        frame.transform_point(on),
+        frame.rotation * Vec3::new(toward.x, 0.0, toward.y),
+    ))
 }
 
 /// Each body playing what its person does: a walk or a run at their speed, else their
