@@ -459,6 +459,7 @@ Checks, developer tools, languages and the repository.
 | [D391](decisions/D391.md) | Cheaper models for mechanical subagent work | Tech | Agent | Decided | Two subagents in `.claude/agents/`: `finder`… |
 | [D393](decisions/D393.md) | A demo's place pinned where its query found it | Tech | Agent | Decided | A place the land's rules make is found by its query once… |
 | [D396](decisions/D396.md) | Code health is gated, not reviewed | Tech | Agent | Decided | The classes of code-health fault the reviews kept… |
+| [D397](decisions/D397.md) | Subagents keep their prompt cache an hour | Tech | Developers | Decided | `.claude/settings.json` sets `subagentPromptCacheTtl` to… |
 
 ## Superseded and rejected
 

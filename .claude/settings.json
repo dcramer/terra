@@ -60,5 +60,6 @@
         ]
       }
     ]
-  }
+  },
+  "subagentPromptCacheTtl": "1h"
 }
