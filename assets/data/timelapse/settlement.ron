@@ -9,7 +9,7 @@
     about: "a market town rising from its clearing in a day",
     seconds: 42.0,
     // A morning: from early, the sun low and the mist about, to the middle of the morning.
-    hours: (7.3, 10.8),
+    hours: (8.0, 11.2),
     claim: 0.6,
     first: 1.5,
     last: 31.0,
@@ -20,14 +20,14 @@
     pace: 3.0,
     builders: 22,
     common: (22.0, 36.0),
-    // Before each building's door while it goes up: a stack of logs, a bucket of tools.
+    // Before each building's door while it goes up: a stack of logs (a bucket of tools read
+    // from high as stakes stood in the grass).
     site: [
         (item: "Log", at: (1.9, 1.5)),
         (item: "Log", at: (1.9, 1.95)),
         (item: "Log", at: (1.9, 2.4)),
         (item: "Log", at: (1.9, 1.72), lift: 0.4),
         (item: "Log", at: (1.9, 2.17), lift: 0.4),
-        (item: "ToolBucket", at: (-1.6, 1.6), turn: 25.0),
     ],
     steps_a_frame: 400,
 )

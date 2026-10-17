@@ -9,7 +9,9 @@
         phase: 0.005,
         thick: 0.025,
         relief: 0.032,
-        tint: (0.6, 0.64, 0.72),
+        // Dark, near neutral, as weathered slate is: lighter and bluer it read from high as
+        // painted metal sheet (the settlement time-lapse's reviews).
+        tint: (0.47, 0.49, 0.53),
         rafter: 0.13,
         batten: (0.05, 0.025),
         parts: {
