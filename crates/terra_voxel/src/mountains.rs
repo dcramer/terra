@@ -68,6 +68,13 @@ pub struct Mountains {
     /// How deep its crests are cut into cols and notches between the summits left standing, in
     /// metres, about a kilometre apart, up its walls only (D395).
     pub summits_m: f32,
+    /// How far apart a range's separate tops stand, about, in metres, and how deeply the ground
+    /// between them is lowered, as a share of the height the ridges raise it over their floor:
+    /// 0 leaves every crest standing whole, one wall along a range's front; toward 1 the range
+    /// breaks into summits of different heights with saddles between, lower ones in front of
+    /// higher ones behind, as the Tatras' and the Dolomites' do seen from a valley.
+    pub tops_m: f32,
+    pub tops: f32,
 }
 
 impl Mountains {
@@ -91,6 +98,8 @@ impl Mountains {
         peaks: 0.0,
         gully_stretch: 2.5,
         summits_m: 380.0,
+        tops_m: 1800.0,
+        tops: 0.75,
     };
 
     /// The most the mountains raise the land, in metres.
@@ -121,9 +130,13 @@ pub struct Range {
     gullies: Noise,
     /// How deeply one wall's couloirs are cut against the next's.
     faces: Noise,
+    /// Where a range's separate tops stand (`Mountains::tops`).
+    tops: Noise,
     /// Spots the front's rules leave as they were (`Range::with_kept`): directions from the
     /// centre.
     kept: Vec<Vec3>,
+    /// Those of them standing in a range (`Range::keeping_ranges_round`).
+    kept_in_ranges: Vec<Vec3>,
 }
 
 /// Octaves of ridges, from the main ridges to relief about 80 m across.
@@ -188,6 +201,25 @@ const KEPT_M: (f32, f32) = (700.0, 1800.0);
 /// The same for the crests' cols, which change the skyline over a place kilometres round it:
 /// cut within 3 km of the lake, they reshaped the domes over it.
 const SUMMITS_KEPT_M: (f32, f32) = (2500.0, 4000.0);
+/// Round a kept spot the tops' saddles are off within the first distance, in metres, and
+/// whole from the second.
+const TOPS_KEPT_M: (f32, f32) = (700.0, 1800.0);
+/// Round a kept spot in a range, the same for the mountains round it.
+const TOPS_KEPT_RANGE_M: (f32, f32) = (3500.0, 6000.0);
+/// Over a range's front, from out of it to where its floor has risen (shares of `inside`), its
+/// floor's rise is lowered between the tops too, fading out between the two.
+const TOPS_FLOOR: (f32, f32) = (0.6, 1.0);
+/// Octaves of the tops' ridged sum, and the share of it below which the ground lies in a
+/// saddle, lowered whole.
+const TOPS_OCTAVES: usize = 3;
+const TOPS_SADDLE: (f32, f32) = (0.2, 0.9);
+/// The share of `Mountains::tops` the ground between the tops is lowered by in a range's heart,
+/// and how far past the range noise's edge its heart begins (`Range::deep_inside`).
+const TOPS_HEART: f32 = 0.35;
+const TOPS_DEEP: f32 = 0.55;
+/// How high a range's front stands at its edge, as a share of what the ridges raise there,
+/// rising to the whole by its heart (`Range::deep_inside`): foothills in front of the peaks.
+const FOOTHILLS: f32 = 0.6;
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -203,7 +235,9 @@ impl Range {
             ridges: Noise::new(seed.derive("ridges")),
             gullies: Noise::new(seed.derive("gullies")),
             faces: Noise::new(seed.derive("faces")),
+            tops: Noise::new(seed.derive("tops")),
             kept: Vec::new(),
+            kept_in_ranges: Vec::new(),
         }
     }
 
@@ -213,6 +247,34 @@ impl Range {
     pub fn with_kept(mut self, spots: impl IntoIterator<Item = Vec3>) -> Self {
         self.kept = spots.into_iter().map(|s| s.normalize()).collect();
         self
+    }
+
+    /// The kept spots that stand in a range, on a planet of so many metres' radius, keep the
+    /// mountains round them as well as their own ground: a lake's or a fell's peaks are part
+    /// of the place, as a valley town's far range is not (`Mountains::tops`).
+    pub fn keeping_ranges_round(mut self, radius_m: f32) -> Self {
+        self.kept_in_ranges = self
+            .kept
+            .iter()
+            .copied()
+            .filter(|spot| self.inside(*spot * radius_m) > 0.5)
+            .collect();
+        self
+    }
+
+    /// How much of the tops' rule a point takes: [`Range::away_from_kept`] within
+    /// `TOPS_KEPT_M` of every kept spot, and within `TOPS_KEPT_RANGE_M` of one in a range.
+    fn away_for_tops(&self, point: Vec3) -> f32 {
+        let length = point.length();
+        let direction = point / length.max(1e-3);
+        let near = self.kept_in_ranges.iter().fold(1.0, |away: f32, spot| {
+            away.min(smoothstep(
+                TOPS_KEPT_RANGE_M.0,
+                TOPS_KEPT_RANGE_M.1,
+                (direction - *spot).length() * length,
+            ))
+        });
+        near.min(self.away_from_kept(point, TOPS_KEPT_M))
     }
 
     /// How much of the newer rules a point takes, 0 within `within`'s first distance of a kept
@@ -239,6 +301,16 @@ impl Range {
     /// front the range's edge is shifted out along a ridged noise's lines, as spurs, and in
     /// between them, as the valleys draining the range, so its foot is a ragged line of spurs
     /// and valley mouths rather than a rampart following the broad noise round.
+    /// How deep into a range a point is, 0 at its edge to 1 some kilometres in: as
+    /// [`Range::inside`], over a band of the range noise several times wider, since a range's
+    /// whole rise from the plain, its front, lies within a couple of kilometres of `inside`'s.
+    fn deep_inside(&self, point: Vec3) -> f32 {
+        let m = &self.mountains;
+        let n = self.ranges.fbm(point / m.range_m, 3, 2.0, 0.5);
+        let threshold = RANGE_SD * upper_quantile(m.share);
+        smoothstep(threshold - 0.16, threshold + TOPS_DEEP, n)
+    }
+
     fn inside_and_front(&self, point: Vec3) -> (f32, f32) {
         let m = &self.mountains;
         let n = self.ranges.fbm(point / m.range_m, 3, 2.0, 0.5);
@@ -322,11 +394,62 @@ impl Range {
         } else {
             summits
         };
-        (
-            floor + m.relief_m * libm::powf(inside, 0.6) * climb * peaks - hollow
-                + summits * libm::powf(inside, 0.6),
-            upper,
-        )
+        let raised = m.relief_m * libm::powf(inside, 0.6) * climb * peaks;
+        let height = floor + raised - hollow + summits * libm::powf(inside, 0.6);
+        // The range broken into separate tops of different heights, the ground between them
+        // lowered, and its outer kilometres lower as a whole, foothills rising in ranks to its
+        // heart: the ridges' rise over their floor, and over those outer kilometres the floor's
+        // own rise too, the pedestal a range stood on as one wall round it; the floor within,
+        // where its valleys hold their lakes, stays.
+        let lowered = if m.tops > 0.0 {
+            let away = if self.kept.is_empty() {
+                1.0
+            } else {
+                self.away_for_tops(point)
+            };
+            let deep = if away > 0.0 {
+                self.deep_inside(point)
+            } else {
+                1.0
+            };
+            let front_floor = floor * (1.0 - smoothstep(TOPS_FLOOR.0, TOPS_FLOOR.1, deep));
+            let standing = (raised + summits * libm::powf(inside, 0.6)).max(0.0) + front_floor;
+            if away > 0.0 && standing > 0.0 {
+                // Deepest over the outer kilometres, the front seen from the plain, and
+                // shallower in the heart, whose peaks and cols the ridges already make.
+                let depth = m.tops * (TOPS_HEART + (1.0 - TOPS_HEART) * (1.0 - deep));
+                let ranks = FOOTHILLS + (1.0 - FOOTHILLS) * smoothstep(0.0, 1.0, deep);
+                let kept = ranks * (1.0 - depth * (1.0 - self.tops_at(point)));
+                away * (1.0 - kept) * standing
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        (height - lowered, upper)
+    }
+
+    /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
+    /// between them to 1 at the highest: a ridged sum of three octaves, as the ridges' own
+    /// (Musgrave), at `tops_m`, so the tops are crests with spurs branching off them, rising
+    /// to summits and falling to saddles along them, rather than round domes.
+    fn tops_at(&self, point: Vec3) -> f32 {
+        let q = point / self.mountains.tops_m;
+        let (mut sum, mut amplitude, mut norm, mut frequency) = (0.0, 1.0, 0.0, 1.0);
+        let mut weight = 1.0;
+        for octave in 0..TOPS_OCTAVES {
+            let (part, whole) = layer_shift(octave);
+            let n = self.tops.sample_shifted(q * frequency + part, whole);
+            let r = 1.0 - n.abs();
+            let ridge = r * r * weight;
+            sum += amplitude * ridge;
+            norm += amplitude;
+            weight = (ridge * BRANCHING).clamp(0.0, 1.0);
+            amplitude *= GAIN;
+            frequency *= 2.0;
+        }
+        ((sum / norm - TOPS_SADDLE.0) / (TOPS_SADDLE.1 - TOPS_SADDLE.0)).clamp(0.0, 1.0)
     }
 
     /// The ridged sum at a point of the ridges' own space, about 0 to 1.

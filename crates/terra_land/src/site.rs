@@ -142,6 +142,19 @@ impl MountainLake {
         step_m: 100.0,
         pinned_km: None,
     };
+
+    /// [`MountainLake::DEMO`] pinned where `places.ts` pins the lake demo on a world of so many
+    /// metres' radius (D393), if it does: the lake the demo stands by, which the best fit over
+    /// the whole world need not stay as the ranges' rules change.
+    pub fn demo_pinned(radius_m: f32) -> MountainLake {
+        MountainLake {
+            pinned_km: demo_pins(radius_m)
+                .into_iter()
+                .find(|(name, _)| *name == "lake")
+                .map(|(_, km)| km),
+            ..MountainLake::DEMO
+        }
+    }
 }
 
 /// How many lakes a query looked at, and what ruled them out.
@@ -550,10 +563,12 @@ mod tests {
 
     #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn the_shore_walk_keeps_to_dry_shore_below_the_trees() {
+        // The lake the demo walks round, where it is pinned: the best lake the query finds
+        // over the whole world changes as the ranges' rules do (D395).
         let land = land(30_000.0);
-        let site = land
-            .mountain_lake(PLANET_START, &MountainLake::DEMO)
-            .unwrap();
+        let want = MountainLake::demo_pinned(30_000.0);
+        assert!(want.pinned_km.is_some());
+        let site = land.mountain_lake(PLANET_START, &want).unwrap();
         let waters = crate::water::Waters::round(&land, site.toward, 10_000.0, 10.0);
         let shore = waters.shore_of(site.toward).unwrap();
         let walk = shore_walk(&land, &waters, shore, site.toward, 25.0);

@@ -174,6 +174,7 @@ mod tests {
             peaks: 0.0,
             gully_stretch: 1.0,
             summits_m: 0.0,
+            tops: 0.0,
             ..terra_voxel::Mountains::START
         };
         let ground = GeneratedPlanet::new(spec, ground::RELIEF_M, Some(ground::SEA_LEVEL_M));

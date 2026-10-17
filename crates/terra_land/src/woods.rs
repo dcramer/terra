@@ -528,7 +528,7 @@ mod tests {
             climate,
         );
         let site = land
-            .mountain_lake(crate::PLANET_START, &MountainLake::DEMO)
+            .mountain_lake(crate::PLANET_START, &MountainLake::demo_pinned(30_000.0))
             .unwrap();
         let round = crate::round::Round::new(land, site.toward, 1_400.0, day);
         let trees = Woods::of(&round).trees(site.toward, 0.0, 600.0, 6.5, terra_gen::Seed(5));

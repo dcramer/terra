@@ -278,7 +278,10 @@ impl GeneratedPlanet {
     /// The same planet with its mountains' front rules faded out round these directions from
     /// the centre (`Range::with_kept`): where demos are pinned.
     pub fn with_kept_spots(mut self, spots: impl IntoIterator<Item = Vec3>) -> Self {
-        self.range = self.range.map(|range| range.with_kept(spots));
+        let radius_m = self.spec.radius_m;
+        self.range = self
+            .range
+            .map(|range| range.with_kept(spots).keeping_ranges_round(radius_m));
         self
     }
 
