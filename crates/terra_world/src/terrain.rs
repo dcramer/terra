@@ -142,7 +142,13 @@ fn colour(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> [f
 /// - the second's x the bare rock there, 0 to 1, or below 0 the woods standing on it, as how
 ///   close they stand, negated; its y how far it stands above the nearest lake's water, in
 ///   metres, below 0 under it, [`DRY_M`] far from any.
-fn lying(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> ([f32; 2], [f32; 2]) {
+fn lying(
+    planet: &Planet,
+    point: Vec3,
+    normal: Vec3,
+    made_of: MaterialId,
+    bed: &mut dyn FnMut() -> f32,
+) -> ([f32; 2], [f32; 2]) {
     use terra_land::woods::Footing;
     let up = point.normalize_or(Vec3::Y);
     let Some(round) = planet.round() else {
@@ -157,6 +163,15 @@ fn lying(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> ([f
     let lake = round.water_near(up, 2);
     let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
     let snow = round.snow_m(point, normal);
+    // On a mountain's steep faces a summer's snow lies in its gullies' beds and is gone from
+    // the ribs between, so from across a valley it streaks down the couloirs rather than
+    // capping every bump of the wall (D395).
+    let steep = 1.0 - smoothstep(STEEP_SNOW.0, STEEP_SNOW.1, normal.dot(up));
+    let snow = if snow > 0.0 && steep > 0.0 {
+        snow * (1.0 - steep * (1.0 - smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
+    } else {
+        snow
+    };
     let (loose, footing) = match made_of {
         material::SCREE => (1.0, Footing::Loose),
         material::GRAVEL => (2.0, Footing::Loose),
@@ -178,6 +193,18 @@ fn lying(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> ([f
 
 /// How far above a lake a vertex is said to be when no lake is near.
 const DRY_M: f32 = 50.0;
+
+/// Snow keeps to the gullies on ground steeper than the first of these, how far a vertex's
+/// normal points up (about 46 degrees), wholly past the second (about 30 degrees)...
+const STEEP_SNOW: (f32, f32) = (0.7, 0.87);
+/// ...lying from the first of these shares of the way down into a gully's bed, deep from the
+/// second.
+const SNOW_BED: (f32, f32) = (0.25, 0.6);
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
 
 /// Chunks this fine or finer work out how much sky each vertex sees; coarser ones are
 /// far enough off that it does not show.
@@ -229,11 +256,16 @@ fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
     );
     // Only a world with mountains carries what they lay, so other worlds' ground costs no more.
     if planet.has_mountains() {
+        // The gullies' beds at the chunk's own coarseness, nodes shared by its vertices.
+        let mut beds = field.memo_for(terra_voxel::VOXEL_M * (1u32 << id.level) as f32);
         let (laid, bare): (Vec<[f32; 2]>, Vec<[f32; 2]>) = chunk
             .materials
             .iter()
             .zip(chunk.positions.iter().zip(&chunk.normals))
-            .map(|(weights, (&point, &normal))| lying(planet, point, normal, weights.ids[0]))
+            .map(|(weights, (&point, &normal))| {
+                let mut bed = || field.field().gully_bed(point, &mut beds);
+                lying(planet, point, normal, weights.ids[0], &mut bed)
+            })
             .unzip();
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, laid);
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, bare);

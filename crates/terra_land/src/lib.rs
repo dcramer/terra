@@ -68,6 +68,14 @@ impl Land {
         } else {
             ground
         };
+        // The demos' pinned places kept as they are by the mountains' front rules, which
+        // reshape the ranges' edges kilometres across (D393, D395).
+        let radius_m = ground.spec().radius_m;
+        let kept: Vec<Vec3> = site::demo_pins(radius_m)
+            .into_iter()
+            .map(|(_, km)| site::along(&frame, radius_m, PLANET_START, km * 1000.0))
+            .collect();
+        let ground = ground.with_kept_spots(kept);
         let fields = Fields::new(climate, ground.spec().seed);
         Self {
             ground,
@@ -133,6 +141,7 @@ pub fn start_climate() -> Result<Climate, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Vec2;
     use terra_core::{PlanetSpec, Seed};
 
     #[test]
@@ -149,5 +158,43 @@ mod tests {
         assert!((place.latitude - START_LATITUDE).abs() < 1e-5);
         assert_eq!(place.sunward, 0.0);
         assert!((place.height_m - (start.length() - land.sea_radius_m())).abs() < 1e-3);
+    }
+
+    #[test]
+    fn the_mountains_newer_rules_leave_the_pinned_places_as_they_were() {
+        let spec = PlanetSpec {
+            seed: Seed(1),
+            radius_m: 30_000.0,
+        };
+        let climate = start_climate().unwrap();
+        let land = Land::new(ground::world(spec), climate.clone());
+        // The ranges as they were when the places were pinned: no front rules, a gully a cell.
+        let as_pinned = terra_voxel::Mountains {
+            spurs: 0.0,
+            peaks: 0.0,
+            gully_stretch: 1.0,
+            ..terra_voxel::Mountains::START
+        };
+        let ground = GeneratedPlanet::new(spec, ground::RELIEF_M, Some(ground::SEA_LEVEL_M));
+        let without = Land::new(ground.with_mountains(as_pinned), climate);
+        let pins = site::demo_pins(spec.radius_m);
+        assert!(!pins.is_empty());
+        let mut changed = 0;
+        for (name, km) in pins {
+            // At the place and a few hundred metres round it the ground is the same; some
+            // kilometres off the newer rules have reshaped it.
+            for (east, north) in [(0.0, 0.0), (0.4, 0.0), (0.0, -0.4), (-0.3, 0.3)] {
+                let at = land.along(PLANET_START, (km + Vec2::new(east, north)) * 1000.0);
+                let (with, plain) = (land.ground.height_m(at), without.ground.height_m(at));
+                assert_eq!(with, plain, "{name} {east},{north} km off");
+            }
+            for turn in 0..16 {
+                let angle = turn as f32 * std::f32::consts::TAU / 16.0;
+                let off = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * 6.0;
+                let at = land.along(PLANET_START, (km + off) * 1000.0);
+                changed += usize::from(land.ground.height_m(at) != without.ground.height_m(at));
+            }
+        }
+        assert!(changed > 0, "the newer rules change nothing anywhere");
     }
 }

@@ -418,6 +418,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D379](decisions/D379.md) | Ambient life round the eye | Tech | Agent | Decided | What lives in the air and on the water at a few metres… |
 | [D384](decisions/D384.md) | Ambient encounters staged to be seen | Tech | Agent | Decided | A meeting ahead of a player on the move… |
 | [D394](decisions/D394.md) | Far mountains drawn from their own cells, not the planet's centre | Tech | Agent | Decided | The ground shader's far ribs are laid cell by cell… |
+| [D395](decisions/D395.md) | Far walls' gullies run long, their snow lies in the mesh's own gullies, and pinned places keep their ground | Tech | Agent | Decided | A range's gullies are laid with each cell of their… |
 
 ## Tools and workflow
 

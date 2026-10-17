@@ -60,6 +60,11 @@ pub struct Mountains {
     /// How much its front's crest rises to peaks and falls to cols between them, as a share of
     /// its height, kilometres apart.
     pub peaks: f32,
+    /// How many of a set's gullies one cell of their stripes spans, across and down the fall,
+    /// so how far each runs on down a wall before the next cell's take over: at 1 the cells'
+    /// stripes, blended at random phases, broke every gully off within its own width, an
+    /// egg-crate of even round hollows over a wall rather than gullies running long (D395).
+    pub gully_stretch: f32,
 }
 
 impl Mountains {
@@ -81,6 +86,7 @@ impl Mountains {
         couloirs_m: 40.0,
         spurs: 0.0,
         peaks: 0.0,
+        gully_stretch: 2.5,
     };
 
     /// The most the mountains raise the land, in metres.
@@ -111,6 +117,9 @@ pub struct Range {
     gullies: Noise,
     /// How deeply one wall's couloirs are cut against the next's.
     faces: Noise,
+    /// Spots the front's rules leave as they were (`Range::with_kept`): directions from the
+    /// centre.
+    kept: Vec<Vec3>,
 }
 
 /// Octaves of ridges, from the main ridges to relief about 80 m across.
@@ -165,6 +174,9 @@ const SPUR_SHIFT: f32 = 0.12;
 const SPUR_MIDDLE: f32 = 0.45;
 /// How far apart the front's peaks are about, in metres.
 const PEAKS_M: f32 = 3200.0;
+/// Round a kept spot the front's rules are off within the first distance, in metres, and
+/// whole from the second.
+const KEPT_M: (f32, f32) = (700.0, 1800.0);
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -180,7 +192,30 @@ impl Range {
             ridges: Noise::new(seed.derive("ridges")),
             gullies: Noise::new(seed.derive("gullies")),
             faces: Noise::new(seed.derive("faces")),
+            kept: Vec::new(),
         }
+    }
+
+    /// The same range with its front's rules (`Mountains::spurs`, `peaks`) faded out round
+    /// these directions from the centre: the places demos are pinned to (D393), which the
+    /// rules, reshaping the ranges' fronts kilometres across, would otherwise take with them.
+    pub fn with_kept(mut self, spots: impl IntoIterator<Item = Vec3>) -> Self {
+        self.kept = spots.into_iter().map(|s| s.normalize()).collect();
+        self
+    }
+
+    /// How much of the front's rules a point takes, 0 within [`KEPT_M`]'s first distance of a
+    /// kept spot to 1 past its second.
+    fn away_from_kept(&self, point: Vec3) -> f32 {
+        let length = point.length();
+        let direction = point / length.max(1e-3);
+        self.kept.iter().fold(1.0, |away: f32, spot| {
+            away.min(smoothstep(
+                KEPT_M.0,
+                KEPT_M.1,
+                (direction - *spot).length() * length,
+            ))
+        })
     }
 
     /// How much of a range a point is in, 0 out of it to 1 in its heart.
@@ -199,7 +234,10 @@ impl Range {
         let threshold = RANGE_SD * upper_quantile(m.share);
         let edge = |n: f32| smoothstep(threshold - 0.16, threshold + 0.16, n);
         let plain = edge(n);
-        let front = 1.0 - smoothstep(FRONT.0, FRONT.1, plain);
+        let mut front = 1.0 - smoothstep(FRONT.0, FRONT.1, plain);
+        if front > 0.0 && (m.spurs > 0.0 || m.peaks > 0.0) && !self.kept.is_empty() {
+            front *= self.away_from_kept(point);
+        }
         if m.spurs <= 0.0 || front <= 0.0 || n < threshold - 0.16 - SPUR_SHIFT {
             return (plain, front);
         }
@@ -342,10 +380,11 @@ impl Range {
             // Full depth from a gentle slope up, so the depth does not follow every change of
             // the fall near a crest.
             let fade = smoothstep(0.02, 0.4, steepness);
+            let away = self.away_from_kept(point);
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
                 let (stripes, across, along, cut) =
-                    self.stripes(point, up, slope, spacing, k as i32);
+                    self.stripes(point, up, slope, spacing, k as i32, away);
                 // Down the walls, couloirs: the same lines cut the deeper, only where the wall
                 // falls steeply enough that a line cut so deep still runs downhill all the way,
                 // not into pits that would fill with water.
@@ -375,12 +414,10 @@ impl Range {
         }
     }
 
-    /// Stripes along the downhill direction round a point, laid cell by cell: each cell of
-    /// `spacing` has a point of its own, and its stripes run through it across the slope, so
-    /// they line up with the ground's fall wherever it turns. Gives -1 along a gully's line to
-    /// 1 on the rib between, the slope across the stripes it falls toward, and how fast the
-    /// stripes change across, a metre; and how deeply the gullies there are cut, a share of the
-    /// deepest, by their cells.
+    /// [`Range::stripes_by`] each cell spanning `Mountains::gully_stretch` gullies, so they run
+    /// long down the fall; round a kept spot (`Range::with_kept`) blended to a gully a cell, as
+    /// the ground was when its demo was pinned there, `away` 0 within the spot's first
+    /// distance.
     fn stripes(
         &self,
         point: Vec3,
@@ -388,10 +425,43 @@ impl Range {
         slope: Vec3,
         spacing: f32,
         set: i32,
+        away: f32,
+    ) -> (f32, Vec3, f32, f32) {
+        let stretch = self.mountains.gully_stretch;
+        let long = self.stripes_by(point, up, slope, spacing, set, stretch);
+        if away >= 1.0 || stretch == 1.0 {
+            return long;
+        }
+        let short = self.stripes_by(point, up, slope, spacing, set, 1.0);
+        let mix = |a: f32, b: f32| a + (b - a) * away;
+        (
+            mix(short.0, long.0),
+            long.1,
+            mix(short.2, long.2),
+            mix(short.3, long.3),
+        )
+    }
+
+    /// Stripes along the downhill direction round a point, laid cell by cell: each cell of
+    /// `stretch` times `spacing` has a point of its own, and its stripes, `spacing` apart, run
+    /// through it across the slope, so they line up with the ground's fall wherever it turns,
+    /// each running on down the fall for about a cell before the next cell's take over. Gives
+    /// -1 along a gully's line to
+    /// 1 on the rib between, the slope across the stripes it falls toward, and how fast the
+    /// stripes change across, a metre; and how deeply the gullies there are cut, a share of the
+    /// deepest, by their cells.
+    fn stripes_by(
+        &self,
+        point: Vec3,
+        up: Vec3,
+        slope: Vec3,
+        spacing: f32,
+        set: i32,
+        stretch: f32,
     ) -> (f32, Vec3, f32, f32) {
         let fall = slope.normalize_or(up.any_orthonormal_vector());
         let across = up.cross(fall).normalize_or(up.any_orthonormal_vector());
-        let cell = point / spacing;
+        let cell = point / (spacing * stretch);
         let base = cell.floor();
         let (mut weights, mut cosine, mut sine, mut cut) = (0.0, 0.0, 0.0, 0.0);
         for dx in -1..=1 {
@@ -409,7 +479,7 @@ impl Range {
                         continue;
                     }
                     let w = (1.0 - far) * (1.0 - far) * (1.0 - far);
-                    let phase = d.dot(across) * core::f32::consts::TAU;
+                    let phase = d.dot(across) * core::f32::consts::TAU * stretch;
                     weights += w;
                     // How deep this cell's gully is cut, from its point: a few couloirs deep,
                     // most shallower.

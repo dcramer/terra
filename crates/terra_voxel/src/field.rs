@@ -275,6 +275,13 @@ impl GeneratedPlanet {
         self
     }
 
+    /// The same planet with its mountains' front rules faded out round these directions from
+    /// the centre (`Range::with_kept`): where demos are pinned.
+    pub fn with_kept_spots(mut self, spots: impl IntoIterator<Item = Vec3>) -> Self {
+        self.range = self.range.map(|range| range.with_kept(spots));
+        self
+    }
+
     /// The same planet with patterned ground where its world's climate keeps it frozen.
     pub fn with_patterned(mut self, patterned: Patterned) -> Self {
         self.patterned = Some(patterned);
@@ -284,6 +291,16 @@ impl GeneratedPlanet {
     /// Its patterned ground, if it has any.
     pub fn patterned(&self) -> Option<&Patterned> {
         self.patterned.as_ref()
+    }
+
+    /// How far down into a gully's bed the ground in a direction lies, 0 on a rib between
+    /// gullies or off the mountains to 1 at the bottom of every set of them (`Rise::bed`), as
+    /// the ground is seen through `memo`.
+    pub fn gully_bed(&self, direction: Vec3, memo: &mut HeightMemo) -> f32 {
+        if self.range.is_none() {
+            return 0.0;
+        }
+        self.land_in(direction.normalize(), memo).bed
     }
 
     /// Its mountains, if it has any.

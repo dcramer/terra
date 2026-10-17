@@ -495,12 +495,14 @@ fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
 
 // Stripes down the fall line round a point, laid cell by cell as the ground's gullies are
 // (D394; terra_voxel mountains.rs `Range::stripes`, after Runevision's erosion filter): each cell
-// of `spacing` metres has a point of its own, and a stripe's phase is measured across the fall
-// from the nearest points, so a fall turning between triangles moves it a little, never by a
-// wavelength. Gives -1 down a gully's line to 1 on the rib between, and how fast that changes
-// across the fall, a metre. `which` gives each set its own points.
+// of `STRETCH` times `spacing` metres has a point of its own, and a stripe's phase is measured
+// across the fall from the nearest points, so a fall turning between triangles moves it a
+// little, never by a wavelength, and each stripe runs on down the fall for a cell (D395). Gives
+// -1 down a gully's line to 1 on the rib between, and how fast that changes across the fall, a
+// metre. `which` gives each set its own points.
+const STRETCH: f32 = 2.5;
 fn fall_stripes(world: vec3<f32>, across: vec3<f32>, spacing: f32, which: f32) -> vec2<f32> {
-    let cell = world / spacing;
+    let cell = world / (spacing * STRETCH);
     let base = floor(cell);
     var weights = 0.0;
     var cosine = 0.0;
@@ -512,7 +514,7 @@ fn fall_stripes(world: vec3<f32>, across: vec3<f32>, spacing: f32, which: f32) -
         let far = dot(d, d);
         if far < 1.0 {
             let w = (1.0 - far) * (1.0 - far) * (1.0 - far);
-            let phase = dot(d, across) * 6.2831853;
+            let phase = dot(d, across) * 6.2831853 * STRETCH;
             weights += w;
             cosine += w * cos(phase);
             sine += w * sin(phase);
@@ -833,9 +835,18 @@ fn fragment(
         let level_face = face - up * dot(face, up);
         let fall = select(normalize(level_face), up.zxy, dot(level_face, level_face) < 1e-6);
         let across_face = normalize(cross(up, fall));
-        let streaks = noise(vec3<f32>(dot(world, across_face) * 0.11, dot(world, up) * 0.009, 7.0)) * 0.7
-            + noise(vec3<f32>(dot(world, across_face) * 0.37, dot(world, up) * 0.03, 29.0)) * 0.3;
-        let stained = 1.0 - 0.45 * smoothstep(0.5, 0.8, streaks) * (1.0 - smoothstep(0.55, 0.85, flatness));
+        // The streaks laid down the fall cell by cell, as the far ribs are (`fall_stripes`),
+        // in patches: read as a noise of the distance across the fall and of `dot(world, up)`,
+        // which is the distance from the centre, they were a noise of height alone, dark bands
+        // at one height straight across every wall (D395).
+        let wall = 1.0 - smoothstep(0.55, 0.85, flatness);
+        var streaks = 0.0;
+        let streaks_seen = wall * (1.0 - smoothstep(3.0, 7.0, max(length(dpdx(world)), length(dpdy(world)))));
+        if streaks_seen > 0.001 {
+            let lines = fall_stripes(world, across_face, 23.0, 5.0).x;
+            streaks = smoothstep(-0.25, -0.8, lines) * smoothstep(0.35, 0.65, noise(world * 0.012 + 7.0)) * streaks_seen;
+        }
+        let stained = 1.0 - 0.4 * streaks;
         let tones = 0.8 + 0.4 * noise(world * 0.004 + 53.0);
         // Granite as the Tatras' walls are seen across a valley, a mid grey under the snow,
         // not the pale slab 1.3 times as bright read as.
@@ -869,9 +880,17 @@ fn fragment(
             var weight = 0.0;
             var rise = 0.0;
             var couloirs = 1.0;
+            var couloirs_drawn = 0.0;
+            // The far mesh's cells, about 16 m at 3 km and 32 m at 6 km: a set of gullies at
+            // least four or five of them across stands in the mesh itself, the ground's own
+            // gullies (mountains.rs), with its snow lying in their beds (terrain.rs `lying`).
+            // Drawn here too, a second set of other gullies the same size broke up the mesh's,
+            // and the two together read as an egg-crate of round bumps capped with snow.
+            let mesh_cell = far_off / 190.0;
             for (var k = 0; k < 3; k++) {
                 let band = sets[k];
-                let keep = band.y * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
+                let unheld = smoothstep(band.x * 0.2, band.x * 0.3, mesh_cell);
+                let keep = band.y * unheld * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
                 if keep > 0.001 {
                     let stripes = fall_stripes(world, across_face, band.x, band.z);
                     rib += keep * stripes.x;
@@ -879,6 +898,7 @@ fn fragment(
                     weight += keep;
                     if k == 0 {
                         couloirs = stripes.x;
+                        couloirs_drawn = keep / band.y;
                     }
                 }
             }
@@ -888,8 +908,8 @@ fn fragment(
             // degrees, tilts the normal toward or away from `across_face`.
             rib_tilt = clamp(rise * deep * 4.5, -0.7, 0.7) * ribbed;
             // A summer's snow on a wall lies in its great couloirs, in streaks down them, and
-            // is gone from the buttresses between.
-            snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), ribbed * mix(0.75, 1.0, steep));
+            // is gone from the buttresses between: past where the mesh holds them, in these.
+            snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), ribbed * mix(0.75, 1.0, steep) * couloirs_drawn);
         }
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);

@@ -5,6 +5,7 @@
 //! the query says so, and why.
 
 use crate::Land;
+use crate::frame::Frame;
 use crate::lakes;
 use crate::region::Region;
 use glam::{Vec2, Vec3};
@@ -82,6 +83,46 @@ pub fn pinned(site: &str) -> Result<(&str, Option<Vec2>), String> {
     }
 }
 
+/// The demos' places as `tools/sandbox/places.ts` gives them, the one list of where each is
+/// pinned (D393).
+const PLACES: &str = include_str!("../../../tools/sandbox/places.ts");
+
+/// The pins of the demos' places on a world of so many metres' radius, by name, kilometres east
+/// and north of the start: each place in `places.ts` whose arguments give that `--radius` and a
+/// pinned `--site`. The ground keeps them as they are (`GeneratedPlanet::with_kept_spots`).
+pub fn demo_pins(radius_m: f32) -> Vec<(&'static str, Vec2)> {
+    let mut pins = Vec::new();
+    for line in PLACES.lines() {
+        let arg = |flag: &str| {
+            let (_, rest) = line.split_once(&format!("\"{flag}\", \""))?;
+            Some(rest.split_once('"')?.0)
+        };
+        let (Some(site), Some(radius)) = (arg("--site"), arg("--radius")) else {
+            continue;
+        };
+        let Ok((name, Some(km))) = pinned(site) else {
+            continue;
+        };
+        if radius.parse::<f32>().ok() == Some(radius_m) && !pins.contains(&(name, km)) {
+            pins.push((name, km));
+        }
+    }
+    pins
+}
+
+/// [`Land::along`], on a world turned by `frame` of so many metres' radius.
+pub(crate) fn along(frame: &Frame, radius_m: f32, from: Vec3, east_north_m: Vec2) -> Vec3 {
+    let from = from.normalize();
+    let (east, north) = (frame.east(from), frame.north(from));
+    let along = east * east_north_m.x + north * east_north_m.y;
+    let distance = along.length();
+    if distance < 1e-3 {
+        return from;
+    }
+    let angle = distance / radius_m;
+    (from * libm::cosf(angle) + along / distance * libm::sinf(angle)).normalize()
+}
+
 /// Whether a place found at `at_km` is too far from a query's pin to be the pinned place.
 pub fn off_pin(pinned_km: Option<Vec2>, at_km: Vec2) -> bool {
     pinned_km.is_some_and(|pin| pin.distance(at_km) > PINNED_WITHIN_KM)
@@ -119,15 +160,7 @@ impl Land {
     /// The direction from the centre so many metres east and north of a direction, along the
     /// ground.
     pub fn along(&self, from: Vec3, east_north_m: Vec2) -> Vec3 {
-        let from = from.normalize();
-        let (east, north) = (self.frame.east(from), self.frame.north(from));
-        let along = east * east_north_m.x + north * east_north_m.y;
-        let distance = along.length();
-        if distance < 1e-3 {
-            return from;
-        }
-        let angle = distance / self.radius_m();
-        (from * libm::cosf(angle) + along / distance * libm::sinf(angle)).normalize()
+        along(&self.frame, self.radius_m(), from, east_north_m)
     }
 
     /// The best mountain lake near the planet's start, if the land has one.
@@ -553,6 +586,27 @@ mod tests {
         }
         // Half way round a lake half a square kilometre big.
         assert!(going > 800.0, "{going:.0} m");
+    }
+
+    #[test]
+    fn every_pinned_place_in_places_ts_is_kept() {
+        // Counted another way than `demo_pins` reads them: every pinned `--site` argument.
+        let written: Vec<&str> = PLACES
+            .split("\"--site\", \"")
+            .skip(1)
+            .filter_map(|rest| rest.split_once('"').map(|(site, _)| site))
+            .filter(|site| site.contains('@'))
+            .collect();
+        assert!(!written.is_empty(), "places.ts pins no place");
+        let pins = demo_pins(30_000.0);
+        for site in written {
+            let (name, km) = pinned(site).unwrap();
+            assert!(pins.contains(&(name, km.unwrap())), "{site} is not kept");
+        }
+        assert!(
+            demo_pins(2_000.0).is_empty(),
+            "a pin of the 30 km world kept on another"
+        );
     }
 
     #[test]
