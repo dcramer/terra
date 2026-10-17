@@ -228,6 +228,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let tall = a.w;
     let heat = b.x;
     let seed = b.y;
+    let broad = b.z;
     if tall <= 0.0 {
         return nowhere();
     }
@@ -256,7 +257,8 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // of a metre and made taller or shorter by its own seed, so a burning roof is a fire
         // and not rows of the same flame.
         let own = vec3(fract(seed * 12.9898), fract(seed * 78.233), fract(seed * 37.719));
-        let wide = clamp(tall * 0.8, 0.8, 2.8);
+        // A broad surface burning as one blaze is a sheet of fire its own width.
+        let wide = select(clamp(tall * 0.8, 0.8, 2.8), broad, broad > 0.0);
         let puff_hz = 1.5 / sqrt(wide);
         let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
         let flame = tall * breathe * (0.65 + 0.7 * own.z);
@@ -265,7 +267,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let lean = wind * 0.05 * flame;
         var w = wide * 1.9;
         var h = flame * 1.75;
-        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * 1.5;
+        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45);
         if phase > 0.01 {
             let side = select(-1.0, 1.0, phase > 0.5);
             w = wide * 1.2;

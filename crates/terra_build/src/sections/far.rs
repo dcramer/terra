@@ -39,7 +39,10 @@ pub(super) fn bake(section: &Section, built: BTreeMap<(Kind, Material), Surface>
                 }
             };
             let texel = swatch.map_or(fallback(material), |swatch| patch(swatch, uv));
-            [0, 1, 2].map(|i| to_srgb(linear[i] * texel[i]))
+            // Darkened as the hull is (`hull::SHADE`): the shade a near wall's relief, seams,
+            // normals and occlusion cast, which a far mesh has none of, so far walls read as
+            // flat cream beside near ones.
+            [0, 1, 2].map(|i| to_srgb(linear[i] * texel[i] * crate::hull::SHADE))
         };
         let mut surface = surface;
         let textured = surface.uvs.len() == surface.positions.len();

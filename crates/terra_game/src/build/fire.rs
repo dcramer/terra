@@ -262,8 +262,10 @@ fn burn(
     }
 }
 
-/// How many cubes a side of the base burn as one blaze.
+/// How many cubes a side of the base burn as one blaze, and from how many of those beside
+/// each other on a level they burn as one broad one.
 const BLAZE_CUBES: i32 = 4;
+const BROAD_CELLS: usize = 3;
 
 /// How often the fire is said in the log while it burns, in frames that stepped it.
 const SAY_EVERY: u32 = 8;
@@ -301,9 +303,54 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
         cell.fierce += flame.fierce;
     }
     let near: BTreeMap<[i32; 3], f32> = cells.iter().map(|(&k, c)| (k, c.count)).collect();
-    let mut out: Vec<Blaze> = cells
+    // Where fire is broad, a roof, a floor or a yard burning, the cells beside each other on
+    // a level burn as one big blaze a sheet of fire as wide as they are, as a big fire is a
+    // few large flames: one flame to each two-metre cell read as rows of the same sticker.
+    // The pairs set off a cell on each level from the one under, so they do not line up.
+    let mut broad: BTreeMap<[i32; 3], Vec<[i32; 3]>> = BTreeMap::new();
+    for &key in cells.keys() {
+        let set_off = (key[1].rem_euclid(2), (key[1].div_euclid(2)).rem_euclid(2));
+        broad
+            .entry([
+                (key[0] + set_off.0).div_euclid(2),
+                key[1],
+                (key[2] + set_off.1).div_euclid(2),
+            ])
+            .or_default()
+            .push(key);
+    }
+    let mut merged: BTreeMap<[i32; 3], (Gathered, f32)> = BTreeMap::new();
+    for keys in broad.values() {
+        if keys.len() < BROAD_CELLS {
+            for key in keys {
+                let cell = &cells[key];
+                merged.insert(
+                    *key,
+                    (
+                        Gathered {
+                            at: cell.at,
+                            count: cell.count,
+                            fierce: cell.fierce,
+                        },
+                        0.0,
+                    ),
+                );
+            }
+            continue;
+        }
+        let mut all = Gathered::default();
+        for key in keys {
+            let cell = &cells[key];
+            all.at += cell.at;
+            all.count += cell.count;
+            all.fierce += cell.fierce;
+        }
+        let wide = BLAZE_CUBES as f32 * CELL_M * (keys.len() as f32).sqrt() * 1.1;
+        merged.insert(keys[0], (all, wide));
+    }
+    let mut out: Vec<Blaze> = merged
         .iter()
-        .map(|(&key, cell)| {
+        .map(|(&key, (cell, wide))| {
             let round: f32 = (-1..=1)
                 .flat_map(|x| {
                     (-1..=1).flat_map(move |y| {
@@ -324,6 +371,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
                 tall: tall.min(7.0),
                 heat,
                 seed: (seed % 10_000) as f32 / 10_000.0,
+                wide: *wide,
             }
         })
         .collect();
@@ -350,6 +398,7 @@ fn blazes(
                 tall: SPLASH_TALL_M,
                 heat: 1.0,
                 seed: 0.37 + 0.21 * i as f32,
+                wide: 0.0,
             }));
         drawn.blazes.extend_from_slice(&fire.blazes);
     }

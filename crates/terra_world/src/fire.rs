@@ -40,6 +40,9 @@ pub struct Blaze {
     pub tall: f32,
     pub heat: f32,
     pub seed: f32,
+    /// How wide its flame is, in metres: nought for as wide as a flame so tall is, more for
+    /// a sheet of fire over a broad burning surface.
+    pub wide: f32,
 }
 
 /// A jet of flame breathed out: from where, which way, how far it reaches, how wide it
@@ -408,7 +411,7 @@ fn show(
         let mut data: Vec<[f32; 4]> = Vec::with_capacity(slots(*quality) * 2);
         for blaze in blazes.blazes.iter().take(count) {
             data.push([blaze.at.x, blaze.at.y, blaze.at.z, blaze.tall]);
-            data.push([blaze.heat, blaze.seed, 0.0, 0.0]);
+            data.push([blaze.heat, blaze.seed, blaze.wide, 0.0]);
         }
         data.resize(slots(*quality) * 2, [0.0; 4]);
         *buffer = ShaderBuffer::from(data);

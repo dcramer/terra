@@ -56,8 +56,8 @@ const PUFF_M: [f32; 2] = [0.7, 2.6];
 /// From how many cubes coming down at once a fall raises a cloud of dust, a puff in it for
 /// every so many, at most so many, and how long it lasts, in seconds.
 const CLOUD_CUBES: usize = 400;
-const CLOUD_EVERY: usize = 40;
-const CLOUD_MOST: usize = 40;
+const CLOUD_EVERY: usize = 25;
+const CLOUD_MOST: usize = 60;
 const CLOUD_S: f32 = 9.0;
 /// How many clouds may billow at once over the small puffs' budget: a castle's towers and
 /// walls come down within seconds of each other, and the small puffs of their many lesser
@@ -83,6 +83,9 @@ pub struct Fallen {
     /// they had lost before and have now (D305): the stones, timber and shingles that came
     /// off them as they broke, falling from their open faces.
     pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
+    /// The middle of the base it came down from, in metres in its space: a tall fall tips
+    /// over away from it, as a tower or a wall falls outward (`fragments::topple`).
+    pub middle: Vec3,
 }
 
 /// Marks a fragment's entity.
@@ -157,6 +160,8 @@ struct Shards {
     layers: BTreeSet<u16>,
     puff: Option<Handle<Mesh>>,
     dust: Option<Handle<Image>>,
+    /// The dust's normals: each sprite shaded as a round billow is, lit on its sunward side.
+    dust_normals: Option<Handle<Image>>,
     puffs: usize,
     behind: f32,
     /// Whether every kind's meshes have been made, ahead of anything coming down, and drawn
@@ -347,6 +352,22 @@ fn burst(
         let share = preset * if distance > FAR_M { FAR_SHARE } else { 1.0 };
         let destroyed = |at: IVec3| fallen.destroyed.contains(&at.to_array());
         let mut made = fragments::burst(&fallen.fell, &destroyed, &breaks, share, most);
+        // A tall fall tips over as one, outward from the middle of its base, before it
+        // breaks up.
+        let hung = fallen
+            .fell
+            .iter()
+            .filter(|(at, _)| !destroyed(*at))
+            .map(|(at, _)| (at.as_vec3() + 0.5) * CELL_M)
+            .fold((Vec3::ZERO, 0usize), |(sum, n), at| (sum + at, n + 1));
+        let lean = (hung.0 / hung.1.max(1) as f32 - fallen.middle).with_y(0.0);
+        // Not when it stands about the middle itself: then it goes its own way.
+        let lean = if lean.length() > 4.0 {
+            lean
+        } else {
+            Vec3::ZERO
+        };
+        fragments::topple(&mut made, &fallen.fell, lean);
         // What came off a cube still standing: a few pieces a quarter of its health lost,
         // out of its open face, where its stones and shingles were.
         for (at, cube, from, to, out) in &fallen.chipped {
@@ -399,9 +420,8 @@ fn burst(
         }
         // A big collapse raises a cloud as big as it (`cloud`).
         if let Some((kind, puffs)) = cloud(&fallen.fell) {
-            // Drawn unlit, so a shade darker than the stone it is of, as a cloud thick enough to
-            // shadow itself is: at its own pale colour it vanished against sunlit walls and sky.
-            let colour = dust_of(&look, kind).darker(0.25);
+            // Lit, so its own colour: it shades itself.
+            let colour = dust_of(&look, kind);
             let up = frame.rotation * Vec3::Y;
             for (local, mut billow) in puffs {
                 billow.drift = frame.rotation * billow.drift;
@@ -535,6 +555,42 @@ fn dust_image() -> Image {
     )
 }
 
+/// The normals of a round billow on each sprite, in its own space: facing out of the sprite
+/// in its middle and curving round to its edge, a little lumpy, as [`dust_image`] is.
+fn dust_normals() -> Image {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    const SIDE: u32 = 64;
+    let mut data = Vec::with_capacity((SIDE * SIDE * 4) as usize);
+    for y in 0..SIDE {
+        for x in 0..SIDE {
+            let (u, v) = (
+                (x as f32 + 0.5) / SIDE as f32 * 2.0 - 1.0,
+                (y as f32 + 0.5) / SIDE as f32 * 2.0 - 1.0,
+            );
+            let lump = 0.18 * libm::sinf(u * 9.0 + libm::cosf(v * 7.0) * 2.0);
+            // Rows run down the image; its up is up the sprite.
+            let side = Vec2::new(u + lump * 0.5, -v + lump * 0.3) * 0.85;
+            let n = side
+                .extend((1.0 - side.length_squared()).max(0.05).sqrt())
+                .normalize();
+            let byte = |c: f32| ((c * 0.5 + 0.5).clamp(0.0, 1.0) * 255.0) as u8;
+            data.extend([byte(n.x), byte(n.y), byte(n.z), 255]);
+        }
+    }
+    Image::new(
+        Extent3d {
+            width: SIDE,
+            height: SIDE,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
 /// A puff of dust at a place in the world, of a colour, as big as `amount` says: a few soft
 /// sprites facing the view, which billow out, rise a little and thin away.
 #[allow(clippy::too_many_arguments)]
@@ -598,18 +654,34 @@ fn billow_at(
     shards.puffs += 1;
     let quad = shards
         .puff
-        .get_or_insert_with(|| meshes.add(Rectangle::new(1.0, 1.0)))
+        .get_or_insert_with(|| {
+            meshes.add(
+                Mesh::from(Rectangle::new(1.0, 1.0))
+                    .with_generated_tangents()
+                    .expect("a rectangle has normals and uvs"),
+            )
+        })
         .clone();
     let image = shards
         .dust
         .get_or_insert_with(|| images.add(dust_image()))
         .clone();
+    let normals = shards
+        .dust_normals
+        .get_or_insert_with(|| images.add(dust_normals()))
+        .clone();
     let alpha = billow.alpha;
     let linear = colour.to_linear();
+    // Lit, as smoke and dust are in shipped games (Unreal's lit translucency, normal-mapped
+    // smoke sprites): the sun lights its sunward side, its far side and what stands in the
+    // castle's shadow go dark, and it takes the fire's light; drawn unlit it was a pale
+    // flat disc that vanished against the walls.
     let material = materials.add(StandardMaterial {
         base_color: Color::LinearRgba(linear).with_alpha(alpha),
         base_color_texture: Some(image),
-        unlit: true,
+        normal_map_texture: Some(normals),
+        perceptual_roughness: 1.0,
+        reflectance: 0.0,
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
@@ -991,9 +1063,10 @@ fn puff(
         if puff.owner
             && let Some(mut material) = materials.get_mut(&puff.material)
         {
-            // Thick at once, then thinning away.
+            // Thick at once, staying thick a while, then thinning away.
             let rise = (through / 0.12).min(1.0);
-            let alpha = puff.alpha * rise * (1.0 - through) * (1.0 - through);
+            let left = 1.0 - through;
+            let alpha = puff.alpha * rise * left * (0.35 + 0.65 * left);
             material.base_color = material.base_color.with_alpha(alpha);
         }
     }

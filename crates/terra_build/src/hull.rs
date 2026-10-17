@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, HashSet};
 
 /// How much darker than its material's mean colour a face is drawn: the shade its relief
 /// and its seams cast, which the hull has none of.
-const SHADE: f32 = 0.85;
+pub(crate) const SHADE: f32 = 0.85;
 
 /// The hull of a base's cubes from `low` to `high` inclusive, in the base's own space, its
 /// colours sRGB as a surface's are.

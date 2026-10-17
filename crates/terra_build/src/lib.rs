@@ -376,6 +376,11 @@ impl Base {
         self.cubes.get(at)
     }
 
+    /// A box holding every cube, in cubes, to the sections they are in, if there are any.
+    pub fn bounds(&self) -> Option<(IVec3, IVec3)> {
+        self.cubes.bounds()
+    }
+
     /// Every cube that is not air, in a fixed order: by `[x, y, z]`.
     pub fn cubes(&self) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
         self.cubes.iter()

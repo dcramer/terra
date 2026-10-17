@@ -1,0 +1,22 @@
+{
+  "about": "The meadow before the burg in the morning: a dragon flies its moves over it, to judge how it flies",
+  "place": "valley",
+  "hour": 6.3,
+  "date": "06-10",
+  "seconds": 38,
+  "scene": "flight",
+  "player": {
+    "at": "28,-234",
+    "face": "28,-1000",
+    "hidden": true
+  },
+  "look": {
+    "shutter": 180,
+    "exposure_bias": 0.0,
+    "detail": 0.75
+  },
+  "sound": [
+    "wind:0.4",
+    "birds:0.3"
+  ]
+}

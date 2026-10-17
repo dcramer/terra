@@ -1,14 +1,30 @@
 //! Creatures that fly (D382): a flier body plan (docs/creatures.md), its kinds data in
-//! `assets/data/fliers.ron`, the first a dragon. A flier is moved as shipped games move
-//! their dragons (research/2026-10-15-dragons-and-fire.md): along a flight path, a spline
-//! through points, at its cruising speed, rolling into each turn by the bank its speed and
-//! the turn's tightness ask for (tan φ = v² κ / g, held within its most) before it yaws,
-//! climbing with its wings beating and gliding when it comes down; then hovering, which
-//! nothing so big really can, short and with deep beats; and breathing fire, in a strafing
-//! pass (fly-by) or hovering, the breath a cone of flame from its mouth that sets alight what
-//! it meets (`build::fire::BreathesFire`). Until monsters think (creatures.md), what it does
-//! is told it: over the remote, `flight.spawn`, `flight.path`, `flight.hover`,
-//! `flight.breathe` and `flight.roar`, so a script flies it as an AI later will.
+//! `assets/data/fliers.ron`, the first a dragon. A flier is moved as shipped games and films
+//! move a big one (research/2026-10-17-large-flier-motion.md, after
+//! research/2026-10-15-dragons-and-fire.md):
+//!
+//! - **Along a planned course** ([`plan`]): a smooth curve through the points it is told,
+//!   flown at the speed its turns and climbs allow, gathering and shedding speed as
+//!   something heavy does, so it never skids round a corner or leaps to speed.
+//! - **Banked into its turns** by the coordinated turn's law (tan φ = v² κ / g, within its
+//!   most), read a little ahead so it rolls before it turns, eased as a heavy body rolls;
+//!   pitched with its climb, and nose up as it brakes, flaring into a hover.
+//! - **Its head leading and its tail trailing**: its neck turns into a turn and up into a
+//!   climb ahead of its body, and its tail swings out behind, each bone a little after the
+//!   one before it, laid over its clips after they play ([`spine`]).
+//! - **Beating its wings to climb, gather speed or slow, and gliding** as it comes down or
+//!   cruises, in bouts of a few beats; its clips blended by weight rather than switched, its
+//!   beats quicker the harder it works, and its body lifted with each downstroke.
+//! - **Hovering**, which nothing so big really can, short and with deep beats; **and
+//!   breathing fire** in a strafing pass or hovering, after rearing its head back for a
+//!   moment, the tell, the breath a cone of flame from its mouth that sets alight what it
+//!   meets (`build::fire::BreathesFire`).
+//!
+//! Until monsters think (creatures.md), what it does is told it: over the remote,
+//! `flight.spawn`, `flight.path`, `flight.hover`, `flight.breathe` and `flight.roar`, so a
+//! script flies it as an AI later will.
+
+mod plan;
 
 use crate::build::fire::BreathesFire;
 use crate::remote::{method, refused};
@@ -16,11 +32,12 @@ use bevy::{
     ecs::system::SystemState,
     prelude::*,
     remote::{BrpResult, builtin_methods::parse_some},
+    transform::TransformSystems,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
+use plan::{Plan, Wings};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::time::Duration;
 
 /// A kind of flier, as `fliers.ron` has it. The file says what each part means.
 #[derive(Deserialize, Debug, Clone)]
@@ -31,9 +48,15 @@ pub struct FlierDef {
     pub clips: FlierClips,
     pub cruise_mps: f32,
     pub hover_mps: f32,
+    pub accel_mps2: f32,
+    pub brake_mps2: f32,
     pub most_bank_deg: f32,
-    pub bank_deg_s: f32,
+    pub bank_s: f32,
     pub turn_deg_s: f32,
+    pub flare_deg: f32,
+    pub neck: (String, u8),
+    pub tail: (String, u8),
+    pub windup_s: f32,
     pub mouth: String,
     pub breath: BreathDef,
 }
@@ -57,14 +80,49 @@ pub struct BreathDef {
     pub heat: f32,
 }
 
+impl FlierDef {
+    fn wings(&self) -> Wings {
+        Wings {
+            slowest: self.hover_mps,
+            most_bank: self.most_bank_deg.to_radians(),
+            accel: self.accel_mps2,
+            brake: self.brake_mps2,
+        }
+    }
+}
+
 const FILE: &str = "fliers.ron";
-/// How long a clip takes to blend into the next.
-const BLEND: Duration = Duration::from_millis(450);
-/// How far apart the points a path is laid out through are, in metres.
-const PATH_STEP_M: f32 = 0.5;
+/// How long, in seconds, a clip's weight takes to come most of the way to what it should be:
+/// between beating and gliding, and into or out of a hover or a breath.
+const BLEND_S: f32 = 0.3;
+const BLEND_HOVER_S: f32 = 0.55;
 /// How fast a flier eases into a hover, a share a second.
 const SETTLE: f32 = 1.6;
 const GRAVITY: f32 = 9.81;
+/// How far ahead along its course it reads the turn it banks for, in seconds: it rolls
+/// before it turns.
+const ROLL_LEAD_S: f32 = 0.35;
+/// The fastest its heading may swing, in radians a second, whatever its course does.
+const MOST_TURN: f32 = 1.6;
+/// Below what speed, in metres a second, it beats as it hovers, and from what it starts to.
+const HOVERING_MPS: [f32; 2] = [4.0, 9.0];
+/// How much it must work (`Flier::effort`) to beat its wings, and how little to glide; in
+/// between it cruises, gliding with a bout of beats every so often: so many seconds of
+/// glide, then so many of beats.
+const BEATS_FROM: f32 = 0.6;
+const GLIDES_BELOW: f32 = 0.3;
+const CRUISE_BOUT_S: [f32; 2] = [3.4, 2.2];
+/// How far its body rises with each downstroke at its full beat, in metres.
+const HEAVE_M: f32 = 0.35;
+/// How far its head leads into a turn, in seconds of the turn, and most; how far its tail
+/// swings out behind, the same; how long each tail bone takes to follow the one before.
+const NECK_LEAD_S: f32 = 0.55;
+const NECK_MOST: f32 = 0.65;
+const TAIL_LAG_S: f32 = 0.5;
+const TAIL_MOST: f32 = 0.7;
+const TAIL_FOLLOW_S: f32 = 0.09;
+/// How far it rears its head back before it breathes, in radians.
+const REAR: f32 = 0.5;
 
 /// The kinds, read once.
 #[derive(Resource)]
@@ -83,36 +141,101 @@ struct Kinds {
 /// What a flier is doing.
 #[derive(Clone, Debug)]
 enum Flight {
-    /// Along a path laid out through points, so far along it, then hovering facing a point.
+    /// Along a planned course, so far into it, then hovering facing a point.
     Path {
-        points: Vec<Vec3>,
-        along: f32,
-        speed: f32,
+        plan: Plan,
+        seconds: f32,
         then_face: Vec3,
     },
     /// Holding at a point, facing another.
     Hover { at: Vec3, face: Vec3 },
 }
 
-/// A flier: its kind, what it is doing, how it is banked, its speed now, whether it is
-/// breathing fire and at what, and when it last roared.
+/// A flier: its kind and what it is doing; how it is banked and flared, and how fast each
+/// is changing; its speed and how fast that changes; how fast it turns and pitches; how
+/// hard it is working its wings; whether it is breathing fire, or rearing to, and at what;
+/// and how long it has left to roar.
 #[derive(Component)]
 pub struct Flier {
     kind: usize,
     flight: Flight,
     bank: f32,
+    bank_rate: f32,
+    flare: f32,
     speed: f32,
+    accel: f32,
+    turn_rate: f32,
+    pitch_rate: f32,
+    effort: f32,
+    heave: f32,
+    /// Its heading, climb and all, without its bank or flare; none until it first flies.
+    heading: Option<Quat>,
+    /// How much of a hover its clips are in, last frame: its flare gives way to the hover's
+    /// own tilt.
+    hovering: f32,
     breathing: bool,
+    /// Seconds left of rearing back before the breath comes, while it wants to breathe.
+    windup: f32,
+    wants_breath: bool,
     aim: Option<Vec3>,
     roar_s: f32,
 }
 
-/// On a flier's animation player: whose, and what it plays.
+impl Flier {
+    fn new(kind: usize, flight: Flight) -> Flier {
+        Flier {
+            kind,
+            flight,
+            bank: 0.0,
+            bank_rate: 0.0,
+            flare: 0.0,
+            speed: 0.0,
+            accel: 0.0,
+            turn_rate: 0.0,
+            pitch_rate: 0.0,
+            effort: 0.0,
+            heave: 0.0,
+            heading: None,
+            hovering: 1.0,
+            breathing: false,
+            windup: 0.0,
+            wants_breath: false,
+            aim: None,
+            roar_s: 0.0,
+        }
+    }
+
+    /// How far into rearing back it is, 0 to 1.
+    fn rearing(&self, def: &FlierDef) -> f32 {
+        if self.wants_breath && !self.breathing && def.windup_s > 0.0 {
+            1.0 - self.windup / def.windup_s
+        } else {
+            0.0
+        }
+    }
+}
+
+/// On a flier's animation player: whose, what it plays and at what weight each, and how long
+/// it has been in its bout of cruising.
 #[derive(Component)]
 struct Flaps {
     flier: Entity,
     clips: [AnimationNodeIndex; 6],
-    playing: Option<AnimationNodeIndex>,
+    weights: [f32; 6],
+    beating: bool,
+    bout_s: f32,
+}
+
+/// On a flier's model: its neck's and tail's bones, each with the axes in its parent's space
+/// that are the body's up and its left at rest, and how far each is turned and trailing.
+#[derive(Component)]
+struct Spine {
+    flier: Entity,
+    neck: Vec<(Entity, Vec3, Vec3)>,
+    tail: Vec<(Entity, Vec3, Vec3)>,
+    neck_turn: Vec2,
+    neck_rate: Vec2,
+    tail_turn: Vec<Vec2>,
 }
 
 /// On the entity at a flier's mouth that breathes, looking out of it: whose.
@@ -127,7 +250,13 @@ pub fn plugin(app: &mut App) {
         defs,
     })
     .add_systems(Startup, load)
-    .add_systems(Update, (prepare, fly, animate, breathe).chain());
+    .add_systems(Update, (prepare, fly, animate, breathe).chain())
+    .add_systems(
+        PostUpdate,
+        spine
+            .after(bevy::app::AnimationSystems)
+            .before(TransformSystems::Propagate),
+    );
     method(app, "flight.spawn", spawn);
     method(app, "flight.path", path);
     method(app, "flight.hover", hover);
@@ -187,52 +316,30 @@ fn prepare(
     }
 }
 
-/// A Catmull-Rom spline through the points, laid out a step apart.
-fn lay_out(points: &[Vec3]) -> Vec<Vec3> {
-    if points.len() < 2 {
-        return points.to_vec();
-    }
-    let at = |i: isize| points[i.clamp(0, points.len() as isize - 1) as usize];
-    let mut out = vec![points[0]];
-    for i in 0..points.len() as isize - 1 {
-        let (p0, p1, p2, p3) = (at(i - 1), at(i), at(i + 1), at(i + 2));
-        let steps = ((p2 - p1).length() / PATH_STEP_M).ceil().max(1.0) as usize;
-        for s in 1..=steps {
-            let t = s as f32 / steps as f32;
-            let (t2, t3) = (t * t, t * t * t);
-            out.push(
-                0.5 * ((2.0 * p1)
-                    + (p2 - p0) * t
-                    + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
-                    + (3.0 * p1 - p0 - 3.0 * p2 + p3) * t3),
-            );
-        }
-    }
-    out
+/// A critically damped spring's step toward a target, its time to settle about `settle_s`.
+fn spring(value: &mut f32, rate: &mut f32, target: f32, settle_s: f32, step: f32) {
+    let w = 4.0 / settle_s.max(1e-3);
+    *rate += (w * w * (target - *value) - 2.0 * w * *rate) * step;
+    *value += *rate * step;
 }
 
-/// Where along a laid-out path so many metres along it is, and its way there.
-fn along(path: &[Vec3], metres: f32) -> (Vec3, Vec3, bool) {
-    let mut left = metres.max(0.0);
-    for pair in path.windows(2) {
-        let length = pair[0].distance(pair[1]);
-        if left <= length && length > 0.0 {
-            let way = (pair[1] - pair[0]) / length;
-            return (pair[0] + way * left, way, false);
-        }
-        left -= length;
-    }
-    let n = path.len();
-    let way = if n >= 2 {
-        (path[n - 1] - path[n - 2]).normalize_or(Vec3::Z)
-    } else {
-        Vec3::Z
-    };
-    (path[n - 1], way, true)
+/// A share of the way to a target, easing over `settle_s`.
+fn ease(settle_s: f32, step: f32) -> f32 {
+    1.0 - libm::expf(-step / settle_s.max(1e-3))
 }
 
-/// Each flier moved by what it is doing: along its path at its speed, easing to a hover at
-/// its end, banked into its turns; or holding at its hover, turned to face what it faces.
+/// The signed angle on the level from one way to another, a turn to the left above nought.
+fn level_angle(from: Vec3, to: Vec3, up: Vec3) -> f32 {
+    let (a, b) = (
+        from.reject_from(up).normalize_or_zero(),
+        to.reject_from(up).normalize_or_zero(),
+    );
+    libm::atan2f(a.cross(b).dot(up), a.dot(b))
+}
+
+/// Each flier moved by what it is doing: along its course at its planned speed, banked into
+/// its turns and flared as it brakes, easing to a hover at its end; or holding at its hover,
+/// turned to face what it faces. Then its rearing to breathe counted down.
 fn fly(time: Res<Time>, kinds: Res<Kinds>, mut fliers: Query<(&mut Flier, &mut Transform)>) {
     let step = time.delta_secs();
     if step <= 0.0 {
@@ -240,108 +347,271 @@ fn fly(time: Res<Time>, kinds: Res<Kinds>, mut fliers: Query<(&mut Flier, &mut T
     }
     for (mut flier, mut transform) in &mut fliers {
         let def = &kinds.defs[flier.kind];
-        let here = transform.translation;
-        let up = here.normalize_or(Vec3::Y);
-        let mut bank_wanted = 0.0;
-        let next = match &mut flier.flight {
+        let up = transform.translation.normalize_or(Vec3::Y);
+        let was = flier
+            .heading
+            .map_or(transform.forward().as_vec3(), |heading| {
+                heading * Vec3::NEG_Z
+            });
+        let heave = flier.heave;
+        let most_turn = match flier.flight {
+            Flight::Hover { .. } => def.turn_deg_s.to_radians(),
+            Flight::Path { .. } => MOST_TURN,
+        };
+        let (at, way, bank_wanted, speed, accel, then) = match &mut flier.flight {
             Flight::Path {
-                points,
-                along: done,
-                speed,
+                plan,
+                seconds,
                 then_face,
             } => {
-                let length: f32 = points.windows(2).map(|p| p[0].distance(p[1])).sum();
-                // Slowing into its hover over its last stretch.
-                let left = (length - *done).max(0.0);
-                let slow = (left / 40.0).clamp(0.0, 1.0);
-                let v = def.hover_mps + (*speed - def.hover_mps) * slow;
-                *done += v * step;
-                let (at, way, ended) = along(points, *done);
-                let (_, ahead, _) = along(points, *done + v * 0.6);
-                // The turn's tightness, on the level: how fast its way turns a metre.
-                let level = |w: Vec3| w.reject_from(up).normalize_or_zero();
-                let turn = level(way).cross(level(ahead)).dot(up);
-                let curvature = turn / (v * 0.6).max(0.1);
-                bank_wanted = libm::atanf(v * v * curvature / GRAVITY);
-                let face = *then_face;
-                if ended {
-                    Some((at, way, Some(Flight::Hover { at, face }), v))
-                } else {
-                    Some((at, way, None, v))
-                }
+                *seconds += step;
+                let now = plan.at(*seconds);
+                let ahead = plan.at(*seconds + ROLL_LEAD_S);
+                let bank = libm::atanf(ahead.speed * ahead.speed * ahead.bend / GRAVITY);
+                let then = now.ended.then_some(Flight::Hover {
+                    at: now.at,
+                    face: *then_face,
+                });
+                (now.at, now.way, bank, now.speed, now.accel, then)
             }
             Flight::Hover { at, face } => {
-                let to = *at;
-                let toward = (*face - here)
-                    .reject_from(up)
-                    .normalize_or(transform.forward().as_vec3());
-                let eased = here + (to - here) * (1.0 - libm::expf(-SETTLE * step));
-                Some((eased, toward, None, def.hover_mps * 0.3))
+                let here = transform.translation - up * heave;
+                let toward = (*face - here).reject_from(up).normalize_or(was);
+                let eased = here + (*at - here) * (1.0 - libm::expf(-SETTLE * step));
+                let way = (eased - here) / step;
+                (
+                    eased,
+                    toward,
+                    0.0,
+                    way.length().min(def.hover_mps),
+                    0.0,
+                    None,
+                )
             }
-        };
-        let Some((at, way, then, v)) = next else {
-            continue;
         };
         if let Some(then) = then {
             flier.flight = then;
         }
-        flier.speed = v;
+        flier.accel = accel;
+        flier.speed = speed;
+        // Its bank eased toward the turn's, a heavy body slow to roll.
         let most = def.most_bank_deg.to_radians();
-        let rate = def.bank_deg_s.to_radians() * step;
-        let bank = flier.bank + (bank_wanted.clamp(-most, most) - flier.bank).clamp(-rate, rate);
-        flier.bank = bank;
-        // Its heading turned toward its way no faster than it turns.
-        let wanted = Transform::from_translation(at).looking_to(way, up).rotation;
-        let turned = transform.rotation.slerp(
-            wanted,
-            (def.turn_deg_s.to_radians() * step
-                / transform.rotation.angle_between(wanted).max(1e-4))
-            .min(1.0),
+        let (mut bank, mut bank_rate) = (flier.bank, flier.bank_rate);
+        spring(
+            &mut bank,
+            &mut bank_rate,
+            bank_wanted.clamp(-most, most),
+            def.bank_s,
+            step,
         );
-        transform.translation = at;
-        // Rolled into the turn: a right turn (way turning clockwise seen from above) rolls
-        // its right wing down.
-        let level = Transform::from_translation(at)
-            .looking_to(turned * Vec3::NEG_Z, up)
-            .rotation;
-        transform.rotation = level * Quat::from_rotation_z(bank);
+        (flier.bank, flier.bank_rate) = (bank, bank_rate);
+        // Nose up as it brakes, flaring its wings against the air; the hover's own tilt
+        // takes over from it.
+        let flare_wanted = (-accel / def.brake_mps2.max(0.1)).clamp(0.0, 1.0)
+            * def.flare_deg.to_radians()
+            * (1.0 - flier.hovering);
+        flier.flare += (flare_wanted - flier.flare) * ease(0.4, step);
+        // Its heading along its way, swung no faster than a body so big swings.
+        let level_was = Transform::IDENTITY.looking_to(was, up).rotation;
+        let wanted = Transform::IDENTITY.looking_to(way, up).rotation;
+        let angle = level_was.angle_between(wanted);
+        let heading = level_was.slerp(wanted, (most_turn * step / angle.max(1e-4)).min(1.0));
+        let forward = heading * Vec3::NEG_Z;
+        flier.heading = Some(heading);
+        let turned = level_angle(was, forward, up) / step;
+        flier.turn_rate += (turned - flier.turn_rate) * ease(0.12, step);
+        let pitch_was = libm::asinf(was.dot(up).clamp(-1.0, 1.0));
+        let pitch_now = libm::asinf(forward.dot(up).clamp(-1.0, 1.0));
+        flier.pitch_rate += ((pitch_now - pitch_was) / step - flier.pitch_rate) * ease(0.15, step);
+        // A right turn (its way turning clockwise seen from above) rolls its right wing down.
+        transform.translation = at + up * flier.heave;
+        transform.rotation =
+            heading * Quat::from_rotation_x(flier.flare) * Quat::from_rotation_z(flier.bank);
+        // How hard it works its wings: to climb, to gather speed, and to stay up slow.
+        let climb = speed * forward.dot(up);
+        let slow = ((def.cruise_mps * 0.6 - speed) / (def.cruise_mps * 0.3)).clamp(0.0, 1.0);
+        flier.effort = 0.4 + climb / 4.0 + accel / 2.0 + slow * f32::from(accel > -0.5);
+        if flier.wants_breath && !flier.breathing {
+            flier.windup -= step;
+            if flier.windup <= 0.0 {
+                flier.breathing = true;
+            }
+        }
     }
 }
 
-/// Each flier's clip by what it is doing: beating its wings to climb or slow, gliding as it
-/// comes down or runs level fast, hovering, breathing as it flies or hovers, roaring.
+/// Each flier's clips weighed by what it is doing: beating its wings to climb, gather speed
+/// or slow, gliding as it comes down, brakes or cruises, with a bout of beats every so often
+/// in a cruise; hovering when slow; breathing as it flies or hovers; roaring. Its beats come
+/// quicker the harder it works, and lift its body on each downstroke.
 fn animate(
     time: Res<Time>,
-    mut fliers: Query<(&mut Flier, &Transform)>,
-    mut flapping: Query<(&mut Flaps, &mut AnimationPlayer, &mut AnimationTransitions)>,
+    mut fliers: Query<&mut Flier>,
+    mut flapping: Query<(&mut Flaps, &mut AnimationPlayer)>,
 ) {
     let step = time.delta_secs();
-    for (mut flaps, mut player, mut transitions) in &mut flapping {
-        let Ok((mut flier, transform)) = fliers.get_mut(flaps.flier) else {
+    for (mut flaps, mut player) in &mut flapping {
+        let Ok(mut flier) = fliers.get_mut(flaps.flier) else {
             continue;
         };
         flier.roar_s = (flier.roar_s - step).max(0.0);
-        let [fly, glide, hover, breathe, fly_breathe, roar] = flaps.clips;
-        let up = transform.translation.normalize_or(Vec3::Y);
-        let climb = transform.forward().as_vec3().dot(up);
-        let wanted = match &flier.flight {
-            Flight::Hover { .. } if flier.roar_s > 0.0 => roar,
-            Flight::Hover { .. } if flier.breathing => breathe,
-            Flight::Hover { .. } => hover,
-            Flight::Path { .. } if flier.breathing => fly_breathe,
-            Flight::Path { .. }
-                if climb < -0.04
-                    || (climb < 0.05 && flier.speed > 18.0 && flier.bank.abs() > 0.2) =>
-            {
-                glide
+        let effort = flier.effort;
+        flaps.bout_s += step;
+        let beating = if effort > BEATS_FROM {
+            true
+        } else if effort < GLIDES_BELOW || flier.accel < -1.0 {
+            false
+        } else {
+            // Cruising: gliding, with a bout of beats every so often.
+            let [glide_s, beat_s] = CRUISE_BOUT_S;
+            let bout = if flaps.beating { beat_s } else { glide_s };
+            if flaps.bout_s > bout {
+                !flaps.beating
+            } else {
+                flaps.beating
             }
-            Flight::Path { .. } => fly,
         };
-        if flaps.playing == Some(wanted) {
-            continue;
+        if beating != flaps.beating {
+            flaps.beating = beating;
+            flaps.bout_s = 0.0;
         }
-        flaps.playing = Some(wanted);
-        transitions.play(&mut player, wanted, BLEND).repeat();
+        let breath = flier.breathing || flier.wants_breath;
+        let mut wanted = [0.0f32; 6];
+        let [fly, glide, hover, breathe, fly_breathe, roar] = [0, 1, 2, 3, 4, 5];
+        match flier.flight {
+            Flight::Hover { .. } if flier.roar_s > 0.0 => wanted[roar] = 1.0,
+            Flight::Hover { .. } if breath => wanted[breathe] = 1.0,
+            Flight::Hover { .. } => wanted[hover] = 1.0,
+            Flight::Path { .. } if breath => wanted[fly_breathe] = 1.0,
+            Flight::Path { .. } => {
+                let [low, high] = HOVERING_MPS;
+                let t = ((high - flier.speed) / (high - low)).clamp(0.0, 1.0);
+                let hovering = t * t * (3.0 - 2.0 * t);
+                let beat = if beating { 1.0 } else { 0.0 };
+                wanted[fly] = (1.0 - hovering) * beat;
+                wanted[glide] = (1.0 - hovering) * (1.0 - beat);
+                wanted[hover] = hovering;
+            }
+        }
+        let into_hover = wanted[hover] + wanted[breathe] + wanted[roar] > 0.5;
+        let share = ease(if into_hover { BLEND_HOVER_S } else { BLEND_S }, step);
+        for (weight, wanted) in flaps.weights.iter_mut().zip(wanted) {
+            *weight += (wanted - *weight) * share;
+            if *weight < 0.002 && wanted == 0.0 {
+                *weight = 0.0;
+            }
+        }
+        let total: f32 = flaps.weights.iter().sum();
+        let weights = flaps.weights.map(|w| w / total.max(1e-4));
+        flier.hovering = weights[hover] + weights[breathe] + weights[roar];
+        for (clip, weight) in flaps.clips.iter().zip(weights) {
+            if weight <= 0.0 {
+                if player.is_playing_animation(*clip) {
+                    player.stop(*clip);
+                }
+                continue;
+            }
+            if !player.is_playing_animation(*clip) {
+                player.play(*clip).repeat();
+            }
+            if let Some(active) = player.animation_mut(*clip) {
+                active.set_weight(weight);
+            }
+        }
+        // Harder strokes come quicker.
+        let pace = 0.9 + 0.3 * effort.clamp(0.0, 1.0);
+        if let Some(active) = player.animation_mut(flaps.clips[fly]) {
+            active.set_speed(pace);
+        }
+        // Lifted on each downstroke (the clip's first 55%), by how much it beats.
+        let phase = player
+            .animation(flaps.clips[fly])
+            .map_or(0.0, |active| active.seek_time() / FLY_CLIP_S);
+        let s = stroke(phase.fract(), 0.55);
+        flier.heave = HEAVE_M * weights[fly] * libm::sinf(std::f32::consts::TAU * (s - 0.05));
+    }
+}
+
+/// How long the beating clip is, in seconds (`tools/creatures/dragon.py`).
+const FLY_CLIP_S: f32 = 1.1;
+
+/// A beat's phase from its clip's time, half of it the downstroke, which takes `down` of the
+/// beat, as the clips are made.
+fn stroke(t: f32, down: f32) -> f32 {
+    if t < down {
+        0.5 * t / down
+    } else {
+        0.5 + 0.5 * (t - down) / (1.0 - down)
+    }
+}
+
+/// Each flier's neck and tail over its clips: its head turned into its turn and up into its
+/// climb ahead of its body, reared back before it breathes and thrown forward as the breath
+/// comes; its tail swinging out behind each turn and lagging each pitch, each bone a little
+/// after the one before it, as a whip follows.
+fn spine(
+    time: Res<Time>,
+    kinds: Res<Kinds>,
+    fliers: Query<&Flier>,
+    mut spines: Query<&mut Spine>,
+    mut bones: Query<&mut Transform, Without<Flier>>,
+) {
+    let step = time.delta_secs();
+    if step <= 0.0 {
+        return;
+    }
+    for mut spine in &mut spines {
+        let Ok(flier) = fliers.get(spine.flier) else {
+            continue;
+        };
+        let def = &kinds.defs[flier.kind];
+        let yaw = (flier.turn_rate * NECK_LEAD_S).clamp(-NECK_MOST, NECK_MOST);
+        let pitch = (-flier.pitch_rate * NECK_LEAD_S).clamp(-NECK_MOST, NECK_MOST)
+            - REAR * flier.rearing(def);
+        let Spine {
+            neck_turn,
+            neck_rate,
+            ..
+        } = &mut *spine;
+        // Lightly under-damped, so the throw forward as the breath comes overshoots.
+        for (value, rate, target) in [
+            (&mut neck_turn.x, &mut neck_rate.x, yaw),
+            (&mut neck_turn.y, &mut neck_rate.y, pitch),
+        ] {
+            let w = 9.0;
+            *rate += (w * w * (target - *value) - 1.1 * w * *rate) * step;
+            *value += *rate * step;
+        }
+        let tail_wanted = Vec2::new(
+            (-flier.turn_rate * TAIL_LAG_S).clamp(-TAIL_MOST, TAIL_MOST),
+            (flier.pitch_rate * TAIL_LAG_S).clamp(-TAIL_MOST, TAIL_MOST),
+        );
+        let follow = ease(TAIL_FOLLOW_S, step);
+        let mut before = tail_wanted;
+        for turn in &mut spine.tail_turn {
+            *turn += (before - *turn) * follow;
+            before = *turn;
+        }
+        let n = spine.neck.len().max(1) as f32;
+        let neck_share = |i: usize| 2.0 * (i as f32 + 1.0) / (n * (n + 1.0));
+        for (i, (bone, up, left)) in spine.neck.iter().enumerate() {
+            if let Ok(mut t) = bones.get_mut(*bone) {
+                let share = neck_share(i);
+                // Pitch about its left: a turn about the left axis by a positive angle lowers
+                // the nose, so up into a climb is the negative.
+                t.rotation = Quat::from_axis_angle(*up, spine.neck_turn.x * share)
+                    * Quat::from_axis_angle(*left, -spine.neck_turn.y * share)
+                    * t.rotation;
+            }
+        }
+        let m = spine.tail.len().max(1) as f32;
+        for ((bone, up, left), turn) in spine.tail.iter().zip(&spine.tail_turn) {
+            if let Ok(mut t) = bones.get_mut(*bone) {
+                t.rotation = Quat::from_axis_angle(*up, turn.x * 1.5 / m)
+                    * Quat::from_axis_angle(*left, turn.y * 1.5 / m)
+                    * t.rotation;
+            }
+        }
     }
 }
 
@@ -401,6 +671,44 @@ pub(super) fn placed(
         .ok_or_else(|| refused("there is no base"))
 }
 
+/// Each bone of a chain (`Neck1`, `Neck2`, ...) under a model, from its root out, with the
+/// body's up and left at rest in its parent's space.
+fn chain(
+    root: Entity,
+    (name, count): &(String, u8),
+    children: &Query<&Children>,
+    names: &Query<&Name>,
+    parents: &Query<&ChildOf>,
+    transforms: &Query<&Transform>,
+) -> Vec<(Entity, Vec3, Vec3)> {
+    // How a node is turned in the model, through its parents up to the model's root.
+    let turned = |mut node: Entity| {
+        let mut rotation = Quat::IDENTITY;
+        while node != root {
+            if let Ok(t) = transforms.get(node) {
+                rotation = t.rotation * rotation;
+            }
+            let Ok(parent) = parents.get(node) else {
+                break;
+            };
+            node = parent.parent();
+        }
+        rotation
+    };
+    (1..=*count)
+        .filter_map(|i| {
+            let want = format!("{name}{i}");
+            let bone = children
+                .iter_descendants(root)
+                .find(|&child| names.get(child).is_ok_and(|n| n.as_str() == want))?;
+            let parent = parents.get(bone).ok()?.parent();
+            // The model faces +Z with +Y up, so its left is +X.
+            let inverse = turned(parent).inverse();
+            Some((bone, inverse * Vec3::Y, inverse * Vec3::X))
+        })
+        .collect()
+}
+
 /// Brings a flier of a kind into the world, hovering at a point.
 fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Spawn = parse_some(params)?;
@@ -423,15 +731,7 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             Name::new(format!("Flier: {}", def.name)),
             // What it flies over runs from it.
             super::Frightful { within_m: 70.0 },
-            Flier {
-                kind,
-                flight: Flight::Hover { at, face },
-                bank: 0.0,
-                speed: 0.0,
-                breathing: false,
-                aim: None,
-                roar_s: 0.0,
-            },
+            Flier::new(kind, Flight::Hover { at, face }),
             Transform::from_translation(at).looking_to(
                 (face - at)
                     .reject_from(up)
@@ -443,6 +743,7 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .id();
     let mouth_name = def.mouth.clone();
     let breath = def.breath;
+    let (neck, tail) = (def.neck.clone(), def.tail.clone());
     world
         .spawn((
             bevy::world_serialization::WorldAssetRoot(scene),
@@ -456,21 +757,48 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                   mut commands: Commands,
                   children: Query<&Children>,
                   players: Query<(), With<AnimationPlayer>>,
-                  names: Query<&Name>| {
+                  names: Query<&Name>,
+                  parents: Query<&ChildOf>,
+                  transforms: Query<&Transform>| {
                 if let Some(animator) = children
                     .iter_descendants(ready.entity)
                     .find(|&child| players.contains(child))
                 {
                     commands.entity(animator).insert((
                         AnimationGraphHandle(graph.clone()),
-                        AnimationTransitions::new(),
                         Flaps {
                             flier,
                             clips,
-                            playing: None,
+                            weights: [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                            beating: false,
+                            bout_s: 0.0,
                         },
                     ));
                 }
+                let neck = chain(
+                    ready.entity,
+                    &neck,
+                    &children,
+                    &names,
+                    &parents,
+                    &transforms,
+                );
+                let tail = chain(
+                    ready.entity,
+                    &tail,
+                    &children,
+                    &names,
+                    &parents,
+                    &transforms,
+                );
+                commands.entity(ready.entity).insert(Spine {
+                    flier,
+                    tail_turn: vec![Vec2::ZERO; tail.len()],
+                    neck,
+                    tail,
+                    neck_turn: Vec2::ZERO,
+                    neck_rate: Vec2::ZERO,
+                });
                 // The breath looks out of the mouth: its socket's +Z, as the model's front.
                 if let Some(mouth) = children.iter_descendants(ready.entity).find(|&child| {
                     names
@@ -514,6 +842,28 @@ fn flier_of(world: &mut World, kind: Option<&str>) -> Result<Entity, bevy::remot
         .ok_or_else(|| refused("there is no flier"))
 }
 
+/// Plans a flier's course from where it is through points, to hover at the last facing a
+/// point: on from the way it heads now, or the way it faces hovering, at the speed it has.
+fn plan_from(
+    world: &World,
+    entity: Entity,
+    through: &[Vec3],
+    cruise: Option<f32>,
+) -> Option<(Plan, f32)> {
+    let flier = world.get::<Flier>(entity)?;
+    let here = world.get::<Transform>(entity)?.translation;
+    let up = here.normalize_or(Vec3::Y);
+    let here = here - up * flier.heave;
+    let def = &world.resource::<Kinds>().defs[flier.kind];
+    let way = match &flier.flight {
+        Flight::Path { plan, seconds, .. } => plan.at(*seconds).way,
+        Flight::Hover { face, .. } => (*face - here).reject_from(up),
+    };
+    let cruise = cruise.unwrap_or(def.cruise_mps);
+    let planned = plan::plan(here, way, flier.speed, through, cruise, &def.wings(), up);
+    Some((planned, cruise))
+}
+
 #[derive(Deserialize)]
 struct Path {
     kind: Option<String>,
@@ -524,40 +874,41 @@ struct Path {
     base: bool,
 }
 
-/// Flies a flier along a path through points from where it is, at its cruising speed or
+/// Flies a flier along a course through points from where it is, at its cruising speed or
 /// the one given, to hover at the last facing a point (on along its way if not given).
 fn path(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Path = parse_some(params)?;
     let entity = flier_of(world, asked.kind.as_deref())?;
-    let mut points = vec![
-        world
-            .get::<Transform>(entity)
-            .map_or(Vec3::ZERO, |t| t.translation),
-    ];
+    let mut through = Vec::new();
     for point in &asked.through {
-        points.push(placed(world, *point, asked.base)?);
+        through.push(placed(world, *point, asked.base)?);
     }
-    let last = *points.last().unwrap();
+    let Some(&last) = through.last() else {
+        return Err(refused("a path needs a point"));
+    };
+    let before = through
+        .len()
+        .checked_sub(2)
+        .map(|i| through[i])
+        .or_else(|| world.get::<Transform>(entity).map(|t| t.translation))
+        .unwrap_or(last);
     let face = match asked.facing {
         Some(facing) => placed(world, facing, asked.base)?,
-        None => last + (last - points[points.len().saturating_sub(2)]),
+        None => last + (last - before),
     };
-    let kind = world.get::<Flier>(entity).map_or(0, |flier| flier.kind);
-    let speed = asked
-        .speed
-        .unwrap_or(world.resource::<Kinds>().defs[kind].cruise_mps);
-    let laid = lay_out(&points);
-    let length: f32 = laid.windows(2).map(|p| p[0].distance(p[1])).sum();
+    let Some((planned, speed)) = plan_from(world, entity, &through, asked.speed) else {
+        return Err(refused("there is no flier"));
+    };
+    let (metres, seconds) = (planned.metres(), planned.seconds());
     if let Some(mut flier) = world.get_mut::<Flier>(entity) {
         flier.flight = Flight::Path {
-            points: laid,
-            along: 0.0,
-            speed,
+            plan: planned,
+            seconds: 0.0,
             then_face: face,
         };
     }
-    info!("Flight: a path of {length:.0} m at {speed:.0} m/s.");
-    Ok(json!({ "done": true, "metres": length, "seconds": length / speed }))
+    info!("Flight: a course of {metres:.0} m at up to {speed:.0} m/s, {seconds:.1} s.");
+    Ok(json!({ "done": true, "metres": metres, "seconds": seconds }))
 }
 
 #[derive(Deserialize)]
@@ -569,7 +920,8 @@ struct Hover {
     base: bool,
 }
 
-/// Holds a flier hovering at a point facing another, easing there from where it is.
+/// Holds a flier hovering at a point facing another: easing there if it is slow, else
+/// flying there and braking into the hover, as a flier must.
 fn hover(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Hover = parse_some(params)?;
     let entity = flier_of(world, asked.kind.as_deref())?;
@@ -577,8 +929,24 @@ fn hover(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         placed(world, asked.at, asked.base)?,
         placed(world, asked.facing, asked.base)?,
     );
+    let flying = world.get::<Flier>(entity).is_some_and(|flier| {
+        let def = &world.resource::<Kinds>().defs[flier.kind];
+        matches!(flier.flight, Flight::Path { .. }) && flier.speed > def.hover_mps + 0.5
+    });
+    let flight = if flying {
+        let Some((planned, _)) = plan_from(world, entity, &[at], None) else {
+            return Err(refused("there is no flier"));
+        };
+        Flight::Path {
+            plan: planned,
+            seconds: 0.0,
+            then_face: face,
+        }
+    } else {
+        Flight::Hover { at, face }
+    };
     if let Some(mut flier) = world.get_mut::<Flier>(entity) {
-        flier.flight = Flight::Hover { at, face };
+        flier.flight = flight;
     }
     Ok(json!({ "done": true }))
 }
@@ -592,7 +960,8 @@ struct Breath {
     base: bool,
 }
 
-/// Starts or stops a flier breathing fire, aimed at a point if given.
+/// Starts or stops a flier breathing fire, aimed at a point if given: it rears back first,
+/// for its kind's wind-up, and the breath comes after.
 fn breath(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Breath = parse_some(params)?;
     let entity = flier_of(world, asked.kind.as_deref())?;
@@ -600,8 +969,18 @@ fn breath(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .at
         .map(|at| placed(world, at, asked.base))
         .transpose()?;
+    let windup = world.get::<Flier>(entity).map_or(0.0, |flier| {
+        world.resource::<Kinds>().defs[flier.kind].windup_s
+    });
     if let Some(mut flier) = world.get_mut::<Flier>(entity) {
-        flier.breathing = asked.on;
+        if asked.on && !flier.wants_breath {
+            flier.windup = windup;
+            flier.breathing = windup <= 0.0;
+        }
+        if !asked.on {
+            flier.breathing = false;
+        }
+        flier.wants_breath = asked.on;
         flier.aim = aim;
     }
     info!(
@@ -653,41 +1032,46 @@ mod tests {
         let up = Vec3::Y;
         let start = Vec3::new(0.0, 2000.0, 0.0);
         // North (-z), then a right turn east (+x), then on east.
-        let points = vec![
-            start,
+        let through = [
             start + Vec3::new(0.0, 0.0, -80.0),
             start + Vec3::new(60.0, 0.0, -140.0),
-            start + Vec3::new(200.0, 0.0, -140.0),
+            start + Vec3::new(260.0, 0.0, -140.0),
         ];
+        let def = world.resource::<Kinds>().defs[0].clone();
+        let planned = plan::plan(start, Vec3::NEG_Z, 24.0, &through, 24.0, &def.wings(), up);
+        let seconds = planned.seconds();
+        let mut flier = Flier::new(
+            0,
+            Flight::Path {
+                plan: planned,
+                seconds: 0.0,
+                then_face: start,
+            },
+        );
+        flier.hovering = 0.0;
         let flier = world
             .spawn((
-                Flier {
-                    kind: 0,
-                    flight: Flight::Path {
-                        points: lay_out(&points),
-                        along: 0.0,
-                        speed: 24.0,
-                        then_face: start,
-                    },
-                    bank: 0.0,
-                    speed: 0.0,
-                    breathing: false,
-                    aim: None,
-                    roar_s: 0.0,
-                },
+                flier,
                 Transform::from_translation(start).looking_to(Vec3::NEG_Z, up),
             ))
             .id();
         let mut lowest_right = f32::INFINITY;
-        for _ in 0..60 * 9 {
+        let mut most_turn = 0.0f32;
+        // Until before it brakes into its hover, its nose up.
+        for _ in 0..(60.0 * (seconds - 7.0)) as usize {
             world.run_system_once(fly).unwrap();
             let t = world.get::<Transform>(flier).unwrap();
             lowest_right = lowest_right.min(t.right().dot(up));
+            most_turn = most_turn.min(world.get::<Flier>(flier).unwrap().turn_rate);
         }
-        // In the right turn its right wing went down, well into a bank.
+        // In the right turn its right wing went down, well into a bank, and it turned right.
         assert!(
             lowest_right < -0.3,
             "its right wing went no lower than {lowest_right}"
+        );
+        assert!(
+            most_turn < -0.1,
+            "it turned right at most {most_turn} rad/s"
         );
         // Out of it, flying east, it is level again.
         let t = world.get::<Transform>(flier).unwrap();
@@ -700,6 +1084,51 @@ mod tests {
             t.forward().dot(Vec3::X) > 0.9,
             "not heading east: {}",
             t.forward()
+        );
+    }
+
+    #[test]
+    fn a_flier_braking_into_a_hover_raises_its_nose() {
+        let mut world = world();
+        let up = Vec3::Y;
+        let start = Vec3::new(0.0, 2000.0, 0.0);
+        let def = world.resource::<Kinds>().defs[0].clone();
+        let through = [start + Vec3::new(0.0, 0.0, -200.0)];
+        let planned = plan::plan(start, Vec3::NEG_Z, 24.0, &through, 24.0, &def.wings(), up);
+        let seconds = planned.seconds();
+        let mut flier = Flier::new(
+            0,
+            Flight::Path {
+                plan: planned,
+                seconds: 0.0,
+                then_face: start + Vec3::new(0.0, 0.0, -400.0),
+            },
+        );
+        flier.hovering = 0.0;
+        let flier = world
+            .spawn((
+                flier,
+                Transform::from_translation(start).looking_to(Vec3::NEG_Z, up),
+            ))
+            .id();
+        let mut cruising_nose = None;
+        let mut braking_nose = f32::MIN;
+        for frame in 0..(60.0 * (seconds - 0.5)) as usize {
+            world.run_system_once(fly).unwrap();
+            let t = world.get::<Transform>(flier).unwrap();
+            let nose = t.forward().dot(up);
+            if frame == 60 * 4 {
+                cruising_nose = Some(nose);
+            }
+            if world.get::<Flier>(flier).unwrap().accel < -1.0 {
+                braking_nose = braking_nose.max(nose);
+            }
+        }
+        let cruising = cruising_nose.unwrap();
+        assert!(cruising.abs() < 0.05, "nose {cruising} cruising level");
+        assert!(
+            braking_nose > 0.25,
+            "nose rose only to {braking_nose} braking"
         );
     }
 
@@ -718,29 +1147,9 @@ mod tests {
                 def.cruise_mps > def.hover_mps
                     && def.most_bank_deg > 0.0
                     && def.most_bank_deg < 80.0
+                    && def.accel_mps2 > 0.0
+                    && def.brake_mps2 > 0.0
             );
         }
-    }
-
-    #[test]
-    fn a_path_runs_through_its_points_and_along_it_ends_at_the_last() {
-        let points = [
-            Vec3::ZERO,
-            Vec3::new(40.0, 0.0, 0.0),
-            Vec3::new(40.0, 0.0, 40.0),
-        ];
-        let laid = lay_out(&points);
-        for point in points {
-            assert!(
-                laid.iter().any(|p| p.distance(point) < 1e-3),
-                "{point} not on the path"
-            );
-        }
-        let length: f32 = laid.windows(2).map(|p| p[0].distance(p[1])).sum();
-        assert!(length > 80.0 && length < 90.0, "{length}");
-        let (end, _, ended) = along(&laid, length + 5.0);
-        assert!(ended && end.distance(points[2]) < 1e-3);
-        let (mid, way, ended) = along(&laid, 20.0);
-        assert!(!ended && (mid.x - 20.0).abs() < 1.0 && way.x > 0.9);
     }
 }
