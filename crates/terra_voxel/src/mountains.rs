@@ -641,7 +641,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn the_mountains_never_jump() {
         // Ground two centimetres apart is never more than a quarter of a metre apart, as on a
         // crease steeper than any wall: no step where a cell, a set of gullies or a measuring

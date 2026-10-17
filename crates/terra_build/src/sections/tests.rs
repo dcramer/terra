@@ -330,7 +330,7 @@ fn triangles<'a>(surfaces: impl IntoIterator<Item = &'a Surface>) -> Vec<([u32; 
     out
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn the_sections_merged_are_the_sum_of_the_pieces() {
     let kits = shipped();
     let maps = Maps::default();
@@ -998,7 +998,7 @@ fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_w
     );
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
     let kits = shipped();
     let maps = Maps::default();
@@ -1148,7 +1148,7 @@ fn a_base_laid_again_after_an_edit_cuts_into_the_sections_laid_whole() {
     }
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it() {
     // Every block kind's gable under every roof kind, drawn as the game draws it.
     let kits = shipped();
@@ -1528,7 +1528,7 @@ fn every_junction_case_is_drawn_without_a_fault() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn cubes_of_a_kind_meeting_only_along_an_edge_each_dress_their_own_side() {
     // Stone cubes corner to corner (docs/building-voxels.md, gap 3), on level ground with
     // no footing, so each takes its own plinth: each turns round its own outside corner at
@@ -1789,7 +1789,7 @@ fn a_stone_stairs_noses_keep_out_of_the_flight_over_them() {
     assert!(buried.is_empty(), "{buried:#?}");
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
     // Town buildings of every kit and plan, two storeys and decks among them, each edited
     // a cube at a time: one taken out of it, one put on its top, one beside it on the
@@ -2098,7 +2098,7 @@ fn a_kit_whose_kind_a_base_lacks_lays_nothing_there() {
     }
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn kits_read_again_with_one_taken_out_added_or_reordered_lay_and_draw_without_fault() {
     // A material file added, taken out or edited while the game runs reads the kits again,
     // while bases laid by the old ones are still being cut and drawn: each base's sections

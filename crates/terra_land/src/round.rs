@@ -315,7 +315,7 @@ mod tests {
     use crate::{PLANET_START, ground, start_climate};
     use terra_core::{PlanetSpec, Seed};
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn round_a_mountain_lake_in_early_summer_its_shore_is_bare_and_wooded_and_its_peaks_white() {
         let climate = start_climate().unwrap();
         let day = terra_climate::Date::parse("06-10")

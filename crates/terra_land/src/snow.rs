@@ -116,7 +116,7 @@ mod tests {
     use super::*;
     use glam::Vec3;
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn early_summer_snow_lies_on_the_heights_longest_facing_the_pole() {
         let climate = crate::start_climate().unwrap();
         let fields = Fields::new(climate.clone(), terra_gen::Seed(1));
@@ -166,7 +166,7 @@ mod tests {
         assert!((snow.depth_m(latitude, 2500.0, 0.0) - exact).abs() < 0.02);
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn a_lee_hollow_keeps_its_snow_longer_than_open_ground_and_a_rise_less() {
         let climate = crate::start_climate().unwrap();
         let fields = Fields::new(climate.clone(), terra_gen::Seed(1));

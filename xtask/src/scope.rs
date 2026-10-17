@@ -1,0 +1,444 @@
+//! What a change touches, so `cargo xtask check` runs only the stages that can see it (D398).
+//!
+//! Before a commit the change is the tracked files that differ from HEAD; before a push,
+//! everything that differs from where HEAD left origin/main (`git merge-base`), the working
+//! tree's changes included. Each file is placed: a crate's own folder is that crate, `assets/` is read
+//! by every crate, a few files outside the crates are read by the crates in [`READ_BY`],
+//! `tools/`, the docs and the agents' folders by their own checks. A file the rules cannot
+//! place, or a change to the build itself (the workspace's manifest, its lock, the compiler,
+//! cargo's or clippy's settings, the hooks), runs everything, as `--all` does.
+
+use crate::{output, root};
+use std::collections::BTreeSet;
+use std::process::Command;
+
+/// Files outside a crate's folder that a crate's code or tests read, by path prefix: a change
+/// there tests the crate, and before a push every crate depending on it. `assets/` is read by
+/// every crate and is not listed. A test (`every_file_a_crate_reads_is_in_read_by`) finds each
+/// such path a crate names and fails when it is not here.
+pub(crate) const READ_BY: &[(&str, &[&str])] = &[
+    // The demos' places, `include_str!`ed by the site queries.
+    ("tools/sandbox/places.ts", &["terra_land"]),
+    // The voxel contract, proved row by row by building's contract test.
+    ("docs/building-voxels.json", &["terra_build"]),
+    // The kits' models and references, which the kit checker and the material bench read.
+    ("art/", &["terra_build"]),
+];
+
+/// Files whose change can alter how everything builds or what the gate is: these run
+/// everything. The check's own code is the xtask crate, tested like any other.
+const EVERYTHING: &[&str] = &[
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "clippy.toml",
+    "rustfmt.toml",
+    ".cargo/",
+    ".githooks/",
+];
+
+/// Folders and files only the docs check reads, or nothing in the gate: their change runs the
+/// stages that are always cheap and nothing else.
+const DOCS: &[&str] = &[
+    "docs/",
+    "research/",
+    ".agents/",
+    ".claude/",
+    ".github/",
+    "spike/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "THIRD_PARTY.md",
+    "LICENSE",
+    "Makefile",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+    ".env.example",
+    "crates/README.md",
+];
+
+/// What a change touches.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Scope {
+    /// Why everything runs, when it does: asked for, or a change the rules cannot place.
+    pub(crate) everything: Option<String>,
+    /// How many files the change holds.
+    pub(crate) files: usize,
+    /// The workspace's packages (crates and xtask) whose own folders changed.
+    pub(crate) changed: BTreeSet<String>,
+    /// Packages that read a changed file outside their folder ([`READ_BY`], `assets/`).
+    pub(crate) readers: BTreeSet<String>,
+    /// A Rust source changed somewhere.
+    pub(crate) rust: bool,
+    /// A crate's manifest changed.
+    pub(crate) manifests: bool,
+    /// Something under `assets/` or `art/` changed.
+    pub(crate) assets: bool,
+    /// The folders under `tools/` that changed.
+    pub(crate) tools: BTreeSet<String>,
+    /// A Python script changed (the Blender scripts' check).
+    pub(crate) python: bool,
+}
+
+impl Scope {
+    /// Everything, for the reason given.
+    pub(crate) fn everything(why: &str) -> Self {
+        Self {
+            everything: Some(why.to_string()),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn all(&self) -> bool {
+        self.everything.is_some()
+    }
+
+    /// One line saying what the change is, for the check's first line.
+    pub(crate) fn summary(&self) -> String {
+        if let Some(why) = &self.everything {
+            return format!("everything ({why})");
+        }
+        let mut parts = Vec::new();
+        if !self.changed.is_empty() {
+            parts.push(join(&self.changed));
+        }
+        if !self.readers.is_empty() && self.readers != self.changed {
+            parts.push(format!("read by {}", join(&self.readers)));
+        }
+        if self.assets {
+            parts.push("assets".into());
+        }
+        if !self.tools.is_empty() {
+            parts.push(format!(
+                "tools/{{{}}}",
+                self.tools.iter().cloned().collect::<Vec<_>>().join(",")
+            ));
+        }
+        if parts.is_empty() {
+            parts.push("docs only".into());
+        }
+        format!("{} files: {}", self.files, parts.join("; "))
+    }
+}
+
+fn join(names: &BTreeSet<String>) -> String {
+    names.iter().cloned().collect::<Vec<_>>().join(", ")
+}
+
+/// Places each changed file. `packages` are the workspace's crates by folder name (each
+/// crate's name is its folder's).
+pub(crate) fn classify(files: &[String], packages: &BTreeSet<String>) -> Scope {
+    let mut scope = Scope {
+        files: files.len(),
+        ..Scope::default()
+    };
+    for file in files {
+        if EVERYTHING
+            .iter()
+            .any(|p| file == p || (p.ends_with('/') && file.starts_with(p)))
+        {
+            return Scope::everything(&format!("{file} changed"));
+        }
+        scope.rust |= file.ends_with(".rs");
+        for (prefix, readers) in READ_BY {
+            if file.starts_with(prefix) {
+                scope.readers.extend(readers.iter().map(|r| r.to_string()));
+            }
+        }
+        if DOCS
+            .iter()
+            .any(|p| file == p || (p.ends_with('/') && file.starts_with(p)))
+        {
+            continue;
+        }
+        let mut parts = file.split('/');
+        match (parts.next(), parts.next(), parts.next()) {
+            (Some("crates"), Some(name), Some(rest)) if packages.contains(name) => {
+                scope.changed.insert(name.to_string());
+                scope.manifests |= rest == "Cargo.toml";
+            }
+            (Some("xtask"), Some(_), _) => {
+                scope.changed.insert("xtask".into());
+            }
+            (Some("assets"), Some(_), _) => {
+                scope.assets = true;
+                scope.readers.extend(packages.iter().cloned());
+            }
+            (Some("art"), Some(_), _) => scope.assets = true,
+            (Some("tools"), Some(dir), Some(_)) => {
+                scope.tools.insert(dir.to_string());
+                scope.python |= file.ends_with(".py");
+            }
+            // The tools' own index.
+            (Some("tools"), Some(name), None) if name.ends_with(".md") => {}
+            _ if file.ends_with(".md") && !file.contains('/') => {}
+            _ => return Scope::everything(&format!("{file} is not placed by the scoping")),
+        }
+    }
+    scope
+}
+
+/// The workspace's crates, by folder.
+pub(crate) fn packages() -> BTreeSet<String> {
+    std::fs::read_dir(root().join("crates"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().join("Cargo.toml").exists())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn lines(text: Option<String>) -> Option<Vec<String>> {
+    text.map(|t| {
+        t.lines()
+            .filter(|l| !l.is_empty())
+            .map(String::from)
+            .collect()
+    })
+}
+
+/// What a commit holds: the files changed against HEAD, staged or not, since the check reads
+/// the working tree; old and new names of a rename both. Files git does not track are in no
+/// commit and left out.
+pub(crate) fn commit() -> Scope {
+    match lines(output(
+        "git",
+        &["diff", "HEAD", "--name-only", "--no-renames"],
+    )) {
+        Some(files) => classify(&files, &packages()),
+        None => Scope::everything("git cannot say what changed"),
+    }
+}
+
+/// What a push holds: everything that differs from where HEAD left origin/main, committed or
+/// not.
+pub(crate) fn push() -> Scope {
+    let Some(base) = output("git", &["merge-base", "HEAD", "origin/main"]) else {
+        return Scope::everything("no merge-base with origin/main");
+    };
+    match lines(output(
+        "git",
+        &["diff", "--name-only", "--no-renames", &base],
+    )) {
+        Some(files) => classify(&files, &packages()),
+        None => Scope::everything("git cannot say what changed"),
+    }
+}
+
+/// The packages given and every workspace package depending on them, through normal, build
+/// and dev dependencies on any target, as cargo resolves them (`cargo tree --invert`). `None`
+/// when cargo gives no answer.
+pub(crate) fn with_dependents(names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
+    if names.is_empty() {
+        return Some(BTreeSet::new());
+    }
+    let mut tree = Command::new("cargo");
+    tree.current_dir(root()).args([
+        "tree",
+        "--workspace",
+        "-e",
+        "normal,build,dev",
+        "--target",
+        "all",
+        "--prefix",
+        "none",
+    ]);
+    for name in names {
+        tree.args(["-i", name]);
+    }
+    let out = tree.output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let mut found = dependents(&String::from_utf8_lossy(&out.stdout), &root());
+    found.extend(names.iter().cloned());
+    Some(found)
+}
+
+/// The workspace's packages in what `cargo tree --prefix none` printed: those whose folder is
+/// under the root.
+fn dependents(tree: &str, root: &std::path::Path) -> BTreeSet<String> {
+    let inside = format!("({}", root.display());
+    tree.lines()
+        .filter(|line| line.contains(&inside))
+        .filter_map(|line| line.split(' ').next())
+        .map(String::from)
+        .collect()
+}
+
+/// The command-line options naming packages: `-p a -p b`.
+pub(crate) fn package_args(names: &BTreeSet<String>) -> Vec<String> {
+    let mut args = Vec::new();
+    for name in names {
+        args.push("-p".to_string());
+        args.push(name.clone());
+    }
+    args
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crates() -> BTreeSet<String> {
+        ["terra_build", "terra_core", "terra_land", "terra_game"]
+            .into_iter()
+            .map(String::from)
+            .collect()
+    }
+
+    fn files(list: &[&str]) -> Vec<String> {
+        list.iter().map(|f| f.to_string()).collect()
+    }
+
+    fn set(list: &[&str]) -> BTreeSet<String> {
+        list.iter().map(|f| f.to_string()).collect()
+    }
+
+    #[test]
+    fn docs_and_settings_touch_no_crate() {
+        let scope = classify(
+            &files(&[
+                ".claude/settings.json",
+                "docs/development.md",
+                "docs/decisions/D1.md",
+                "README.md",
+                "crates/README.md",
+            ]),
+            &crates(),
+        );
+        assert!(!scope.all());
+        assert!(scope.changed.is_empty() && scope.readers.is_empty());
+        assert!(!scope.rust && !scope.assets && scope.tools.is_empty());
+    }
+
+    #[test]
+    fn a_crates_file_is_that_crate() {
+        let scope = classify(
+            &files(&[
+                "crates/terra_core/src/lib.rs",
+                "crates/terra_land/README.md",
+            ]),
+            &crates(),
+        );
+        assert_eq!(scope.changed, set(&["terra_core", "terra_land"]));
+        assert!(scope.rust && !scope.manifests);
+        let manifest = classify(&files(&["crates/terra_core/Cargo.toml"]), &crates());
+        assert!(manifest.manifests && !manifest.all());
+    }
+
+    #[test]
+    fn a_file_read_from_outside_a_crate_tests_its_reader() {
+        let scope = classify(
+            &files(&["tools/sandbox/places.ts", "docs/building-voxels.json"]),
+            &crates(),
+        );
+        assert!(scope.changed.is_empty());
+        assert_eq!(scope.readers, set(&["terra_land", "terra_build"]));
+        assert_eq!(scope.tools, set(&["sandbox"]));
+    }
+
+    #[test]
+    fn assets_are_read_by_every_crate() {
+        let scope = classify(&files(&["assets/data/kits/log.ron"]), &crates());
+        assert!(scope.assets);
+        assert_eq!(scope.readers, crates());
+    }
+
+    #[test]
+    fn the_build_itself_or_an_unknown_file_runs_everything() {
+        for file in [
+            "Cargo.lock",
+            "Cargo.toml",
+            ".cargo/config.toml",
+            ".githooks/pre-commit",
+            "rust-toolchain.toml",
+            "somewhere/new.txt",
+            "crates/terra_new/src/lib.rs",
+        ] {
+            let scope = classify(&files(&["docs/a.md", file]), &crates());
+            assert!(scope.all(), "{file} should run everything");
+        }
+    }
+
+    #[test]
+    fn python_is_seen_for_the_blender_check() {
+        let scope = classify(&files(&["tools/blender/fit.py"]), &crates());
+        assert!(scope.python);
+        assert_eq!(scope.tools, set(&["blender"]));
+    }
+
+    #[test]
+    fn dependents_are_the_workspaces_packages_in_the_tree() {
+        let root = std::path::Path::new("/r");
+        let tree = "terra_build v0.1.0 (/r/crates/terra_build)\n\
+                    terra_game v0.1.0 (/r/crates/terra_game)\n\
+                    terra_game v0.1.0 (/r/crates/terra_game) (*)\n\
+                    [dev-dependencies]\n\
+                    bevy v0.20.0\n";
+        assert_eq!(dependents(tree, root), set(&["terra_build", "terra_game"]));
+    }
+
+    #[test]
+    fn cargo_finds_the_crates_depending_on_one() {
+        let found = with_dependents(&set(&["terra_build"])).expect("cargo tree answers");
+        // Known from the manifests: the world draws buildings, the game and the sandbox
+        // stand on the world, and the generator is below building.
+        assert!(found.is_superset(&set(&[
+            "terra_build",
+            "terra_world",
+            "terra_game",
+            "terra_sandbox"
+        ])));
+        assert!(!found.contains("terra_gen"));
+    }
+
+    /// A crate that starts reading a file outside its folder without a line in `READ_BY` would
+    /// not be tested when that file changes.
+    #[test]
+    fn every_file_a_crate_reads_is_in_read_by() {
+        let root = root();
+        let mut sources = Vec::new();
+        assert!(crate::check::sources(&root.join("crates"), &mut sources));
+        let mut checked = 0;
+        for file in sources {
+            let text = std::fs::read_to_string(&file).unwrap();
+            let package = file
+                .strip_prefix(root.join("crates"))
+                .unwrap()
+                .components()
+                .next()
+                .unwrap()
+                .as_os_str()
+                .to_string_lossy()
+                .to_string();
+            for literal in text.split('"').skip(1).step_by(2) {
+                let path = literal.trim_start_matches("../");
+                let outside = ["tools/", "docs/", "art/", "research/", "xtask/"]
+                    .iter()
+                    .any(|p| path.starts_with(p));
+                if !outside || !root.join(path).exists() {
+                    continue;
+                }
+                checked += 1;
+                assert!(
+                    READ_BY
+                        .iter()
+                        .any(|(prefix, readers)| path.starts_with(prefix)
+                            && readers.contains(&package.as_str())),
+                    "{} reads {path}: add it to READ_BY in xtask/src/scope.rs",
+                    file.display()
+                );
+            }
+        }
+        assert!(
+            checked > 0,
+            "no path outside the crates found: the search is wrong"
+        );
+    }
+}

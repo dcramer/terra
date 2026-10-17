@@ -177,11 +177,6 @@ impl Step {
         ok
     }
 
-    /// Prints a line saying a step did not run, and why.
-    pub(crate) fn skipped(&self, why: &str) {
-        self.say(&format!("- {} skipped: {why}", self.name));
-    }
-
     /// Waits for a step, showing at a terminal that it is still going and for how long.
     fn wait(&self, child: &mut Child, started: Instant) -> std::io::Result<ExitStatus> {
         if !self.live() {

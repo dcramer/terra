@@ -260,7 +260,7 @@ mod tests {
     use crate::{PLANET_START, ground, start_climate};
     use terra_core::{PlanetSpec, Seed};
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn the_tundra_found_is_past_the_trees_over_permafrost_with_the_forest_in_sight() {
         let land = Land::new(
             ground::world(PlanetSpec {

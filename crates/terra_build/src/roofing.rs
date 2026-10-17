@@ -983,7 +983,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn no_part_of_a_roof_lies_over_itself() {
         // Every part of a shipped roof under a hip, a cabin's and a tower's square one, and
         // the castle's, its towers' hips tens of metres out and its keep's great gable, whose

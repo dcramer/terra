@@ -8,6 +8,7 @@ mod doctor;
 mod load;
 mod primitives;
 mod scenes;
+mod scope;
 mod seed;
 mod sizes;
 mod stage;

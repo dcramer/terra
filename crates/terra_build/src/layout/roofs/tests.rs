@@ -928,7 +928,7 @@ fn a_lone_corner_square_carries_no_crease_out_past_its_edges() {
     }
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it() {
     // Found by `cargo xtask fuzz` (seeds 59, 135; docs/building-voxels.md, gap 18): a hip
     // over a log room, a wall of logs running on from one of its corners. The wall's top is
