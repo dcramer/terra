@@ -563,7 +563,7 @@ fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     if release {
         build.push("--release");
     }
-    if !run("cargo", &build) {
+    if !crate::stage::build(&build) {
         return None;
     }
     let profile = if release { "release" } else { "debug" };

@@ -450,6 +450,7 @@ Checks, developer tools, languages and the repository.
 | [D385](decisions/D385.md) | Building's debug views | Tech | Agent | Decided | One key, F4 (Shift+F4 back), and the remote's… |
 | [D386](decisions/D386.md) | The material bench | Tech | Agent | Decided | `cargo xtask look <material>…\|--all`… |
 | [D387](decisions/D387.md) | A Makefile as the front door | Tech | Developers | Decided | A `Makefile` at the root gets a new machine ready… |
+| [D388](decisions/D388.md) | Quiet gates | Tech | Agent | Decided | `cargo xtask check` and `--quick` print a line a stage… |
 | [D389](decisions/D389.md) | A file per decision | Tech | Agent | Decided | Each decision is its own file, `docs/decisions/Dnnn.md`… |
 | [D390](decisions/D390.md) | Where an agent's context goes, and the nudge to wrap up | Tech | Agent | Decided | `node tools/token-stats/context.mjs` reads the… |
 | [D391](decisions/D391.md) | Cheaper models for mechanical subagent work | Tech | Agent | Decided | Two subagents in `.claude/agents/`: `finder`… |

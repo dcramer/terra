@@ -83,7 +83,7 @@ pub(crate) fn windows_program(
     if release {
         build.push("--release");
     }
-    if !run("cargo", &build) {
+    if !crate::stage::build(&build) {
         return None;
     }
 

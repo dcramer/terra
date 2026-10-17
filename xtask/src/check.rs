@@ -1,11 +1,18 @@
 //! `cargo xtask check` (D37): what has to pass before a commit and a push, and the gates
 //! only it runs: the tools' tests, the Blender scripts, and the shared crates kept free of
 //! Bevy (D28) and of the clock and the system's randomness.
+//!
+//! Each stage runs quietly (D388, `stage`): a line when it passes, only what is needed to fix
+//! it when it fails, everything in `target/check/<stage>.log`. `--verbose`, or
+//! `TERRA_VERBOSE=1`, streams everything as it is said.
 
-use crate::build::{artifacts, fuzz, kits};
-use crate::{output, root, run};
+use crate::build::{KITS, artifacts_command, fuzz_args};
+use crate::stage::{self, Said, Step};
+use crate::{output, root};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 /// The only crates allowed to depend on Bevy (D28): the applications, and the world on
 /// screen that the game stands on (D198).
@@ -23,19 +30,70 @@ const SLOW_TESTS: &[&str] = &[
     "village::tests::no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels",
 ];
 
+/// Where the check's stages keep their logs, relative to the root.
+const LOGS: &str = "target/check";
+
+/// How a stage runs: a command, a check made here, or not at all, and why.
+enum How {
+    Command(Command),
+    Here(fn(&mut String) -> bool),
+    Skip(&'static str),
+}
+
 /// The gate (D37). The full check, run by git before each push: formatting, lints, every test,
 /// and the checks of the kits, the foliage, the meshes' artifacts and the fuzz pass (ratchets), the docs, the
 /// Blender scripts and the shared crates. `--quick`, run before each commit, leaves out the slow
 /// sweeps, the artifacts and fuzz ratchets (a release build) and the Blender scripts' check.
+/// The stages run in that order and the first to fail ends it.
 pub(crate) fn check(args: &[String]) -> bool {
-    let quick = match args {
-        [] => false,
-        [flag] if flag == "--quick" => true,
-        _ => {
-            eprintln!("usage: cargo xtask check [--quick]");
+    let mut quick = false;
+    for arg in args {
+        match arg.as_str() {
+            "--quick" => quick = true,
+            "--verbose" => stage::set_verbose(),
+            _ => {
+                eprintln!("usage: cargo xtask check [--quick] [--verbose]");
+                return false;
+            }
+        }
+    }
+    let started = Instant::now();
+    let stages = stages(quick);
+    let count = stages.len();
+    for (done, (step, how)) in stages.into_iter().enumerate() {
+        let passed = match how {
+            How::Command(command) => step.run(command),
+            How::Here(check) => step.run_here(check),
+            How::Skip(why) => {
+                step.skipped(why);
+                true
+            }
+        };
+        if !passed {
+            println!(
+                "✗ {} failed at {} ({done} of {count} stages passed, {}); TERRA_VERBOSE=1 shows everything",
+                if quick { "quick check" } else { "check" },
+                step.name(),
+                stage::duration(started.elapsed()),
+            );
             return false;
         }
-    };
+    }
+    if quick {
+        println!(
+            "✓ quick check passed in {}. The full check (`cargo xtask check`), which git runs \
+             before a push, adds {} slow tests, the artifacts and fuzz ratchets and the Blender scripts' check.",
+            stage::duration(started.elapsed()),
+            SLOW_TESTS.len()
+        );
+    } else {
+        println!("✓ check passed in {}", stage::duration(started.elapsed()));
+    }
+    true
+}
+
+/// The check's stages in the order they run, each with how to run it.
+fn stages(quick: bool) -> Vec<(Step, How)> {
     // CI only needs to know that everything compiles and the tests pass, so it skips
     // optimising dependencies, which is most of the time spent building Bevy.
     let ci: &[&str] = if std::env::var_os("CI").is_some() {
@@ -43,8 +101,22 @@ pub(crate) fn check(args: &[String]) -> bool {
     } else {
         &[]
     };
-    let cargo = |command: &'static str, rest: &[&'static str]| {
-        run("cargo", &[&[command], ci, rest].concat())
+    // Cargo's own quiet modes: no progress, the compiler's messages a line each, the test
+    // harness a dot a test. What they leave out is in the stage's log when streamed.
+    let quiet: &[&str] = if stage::verbose() {
+        &[]
+    } else {
+        &["-q", "--message-format=short"]
+    };
+    let cargo = |command: &str, rest: &[&str]| {
+        let mut cargo = Command::new("cargo");
+        cargo.arg(command).args(ci).args(quiet).args(rest);
+        cargo
+    };
+    let command = |program: &str, args: &[&str]| {
+        let mut command = Command::new(program);
+        command.args(args);
+        command
     };
     let mut tests = vec!["--workspace"];
     if quick {
@@ -53,62 +125,108 @@ pub(crate) fn check(args: &[String]) -> bool {
             tests.extend(["--skip", name]);
         }
     }
-    let passed = run("cargo", &["fmt", "--all", "--check"])
-        && cargo(
-            "clippy",
-            &["--workspace", "--all-targets", "--", "-D", "warnings"],
-        )
-        && cargo("test", &tests)
-        && tools_tests()
-        && kits()
-        && run("node", &["tools/textures/foliage.ts"])
-        && (quick || artifacts(&["--quick".into(), "--ratchet".into()]))
-        && (quick || fuzz(&["--ratchet".into()]))
-        && run("node", &["tools/docs/docs.ts"])
-        && (quick || blender_scripts())
-        && shared_crates_avoid_bevy()
-        && shared_crates_are_repeatable();
-    if passed && quick {
-        println!(
-            "\nThe quick check passed. The full check (`cargo xtask check`), which git runs \
-             before a push, adds {} slow tests, the artifacts and fuzz ratchets and the Blender scripts' check.",
-            SLOW_TESTS.len()
-        );
-    }
-    passed
-}
-
-/// The tests of the TypeScript tools (D121), which Node runs as they are.
-fn tools_tests() -> bool {
-    let Some(files) = output(
+    let tools_tests = output(
         "git",
         &["ls-files", "tools/**/*.test.ts", "tools/**/*.test.mjs"],
-    ) else {
-        println!("\n> tools tests: git cannot list them");
-        return false;
-    };
-    let files: Vec<&str> = files.lines().collect();
-    run("node", &[&["--test"], files.as_slice()].concat())
+    );
+    let mut stages = vec![
+        (
+            Step::new("fmt", Said::Fmt, LOGS).rerun("cargo fmt --all (it fixes them)"),
+            How::Command(command("cargo", &["fmt", "--all", "--check"])),
+        ),
+        (
+            Step::new("clippy", Said::Cargo, LOGS)
+                .rerun("cargo clippy --workspace --all-targets -- -D warnings"),
+            How::Command(cargo(
+                "clippy",
+                &["--workspace", "--all-targets", "--", "-D", "warnings"],
+            )),
+        ),
+        (
+            Step::new("tests", Said::Cargo, LOGS).rerun("cargo test --workspace"),
+            How::Command(cargo("test", &tests)),
+        ),
+        (
+            Step::new("tools tests", Said::NodeTest, LOGS)
+                .rerun("node --test $(git ls-files 'tools/**/*.test.ts' 'tools/**/*.test.mjs')"),
+            match &tools_tests {
+                Some(files) => {
+                    let mut node = command("node", &["--test", "--test-reporter=spec"]);
+                    node.args(files.lines());
+                    How::Command(node)
+                }
+                None => How::Here(|out| {
+                    out.push_str("git cannot list the tools' tests\n");
+                    false
+                }),
+            },
+        ),
+        (
+            Step::new("kits", Said::Cargo, LOGS).rerun("cargo xtask kits"),
+            How::Command(command("cargo", KITS)),
+        ),
+        (
+            Step::new("foliage", Said::Printed, LOGS).rerun("cargo xtask foliage"),
+            How::Command(command("node", &["tools/textures/foliage.ts"])),
+        ),
+    ];
+    if !quick {
+        let artifacts = artifacts_command(&["--quick".into(), "--ratchet".into()]);
+        let fuzz = artifacts_command(&fuzz_args(&["--ratchet".into()]));
+        for (name, rerun, (program, args)) in [
+            (
+                "artifacts",
+                "cargo xtask artifacts --quick --ratchet",
+                artifacts,
+            ),
+            ("fuzz", "cargo xtask fuzz --ratchet", fuzz),
+        ] {
+            let mut run = Command::new(program);
+            run.args(args);
+            stages.push((
+                Step::new(name, Said::Cargo, LOGS).rerun(rerun),
+                How::Command(run),
+            ));
+        }
+    }
+    stages.push((
+        Step::new("docs", Said::Printed, LOGS).rerun("node tools/docs/docs.ts"),
+        How::Command(command("node", &["tools/docs/docs.ts"])),
+    ));
+    if !quick {
+        stages.push(blender_scripts());
+    }
+    stages.push((
+        Step::new("shared crates free of Bevy", Said::Printed, LOGS),
+        How::Here(shared_crates_avoid_bevy),
+    ));
+    stages.push((
+        Step::new("shared crates repeatable", Said::Printed, LOGS),
+        How::Here(shared_crates_are_repeatable),
+    ));
+    stages
 }
 
 /// The Blender scripts (D121) compile and find what they import, checked inside the pinned
 /// Blender without running them. A machine with no Blender skips this.
-fn blender_scripts() -> bool {
-    println!("\n> Blender scripts (tools/blender/check.py)");
+fn blender_scripts() -> (Step, How) {
+    let step = Step::new("Blender scripts", Said::Printed, LOGS)
+        .rerun("tools/blender/run.sh tools/blender/check.py $(git ls-files 'tools/**/*.py')");
     if output("tools/blender/run.sh", &["--find"]).is_none() {
-        println!("  skipped: no Blender here (cargo xtask doctor)");
-        return true;
+        return (step, How::Skip("no Blender here (cargo xtask doctor)"));
     }
     let Some(files) = output("git", &["ls-files", "tools/**/*.py"]) else {
-        println!("  git cannot list them");
-        return false;
+        return (
+            step,
+            How::Here(|out| {
+                out.push_str("git cannot list them\n");
+                false
+            }),
+        );
     };
-    Command::new("tools/blender/run.sh")
-        .arg("tools/blender/check.py")
-        .args(files.lines())
-        .current_dir(root())
-        .status()
-        .is_ok_and(|status| status.success())
+    let mut run = Command::new("tools/blender/run.sh");
+    run.arg("tools/blender/check.py").args(files.lines());
+    (step, How::Command(run))
 }
 
 /// The crates that must not depend on Bevy, by name and folder, or `None` when the crates
@@ -142,10 +260,10 @@ fn bevy_verdict(tree: Option<&str>) -> &'static str {
 }
 
 /// Anything every player must agree on lives in crates that know nothing about Bevy.
-fn shared_crates_avoid_bevy() -> bool {
-    println!("\n> shared-state crates must not depend on Bevy (D28)");
+fn shared_crates_avoid_bevy(out: &mut String) -> bool {
+    let _ = writeln!(out, "shared-state crates must not depend on Bevy (D28)");
     let Some(crates) = shared_crates() else {
-        println!("  cannot list the crates");
+        let _ = writeln!(out, "  cannot list the crates");
         return false;
     };
     let mut ok = true;
@@ -155,7 +273,7 @@ fn shared_crates_avoid_bevy() -> bool {
             &["tree", "-p", &name, "-e", "normal", "--prefix", "none"],
         );
         let verdict = bevy_verdict(tree.as_deref());
-        println!("  {name}: {verdict}");
+        let _ = writeln!(out, "  {name}: {verdict}");
         ok &= verdict == "ok";
     }
     ok
@@ -183,17 +301,20 @@ fn unrepeatable(text: &str) -> Vec<(usize, &'static str)> {
         .collect()
 }
 
-fn shared_crates_are_repeatable() -> bool {
-    println!("\n> shared-state crates must not read the clock or the system's randomness");
+fn shared_crates_are_repeatable(out: &mut String) -> bool {
+    let _ = writeln!(
+        out,
+        "shared-state crates must not read the clock or the system's randomness"
+    );
     let Some(crates) = shared_crates() else {
-        println!("  cannot list the crates");
+        let _ = writeln!(out, "  cannot list the crates");
         return false;
     };
     let mut ok = true;
     for (name, path) in crates {
         let mut found = Vec::new();
         if !sources(&path.join("src"), &mut found) || found.is_empty() {
-            println!("  {name}: cannot read its sources");
+            let _ = writeln!(out, "  {name}: cannot read its sources");
             ok = false;
             continue;
         }
@@ -206,17 +327,17 @@ fn shared_crates_are_repeatable() -> bool {
             }
             let at = file.strip_prefix(root()).unwrap_or(&file).display();
             let Ok(text) = std::fs::read_to_string(&file) else {
-                println!("  {at}: cannot read it");
+                let _ = writeln!(out, "  {at}: cannot read it");
                 clean = false;
                 continue;
             };
             for (number, what) in unrepeatable(&text) {
-                println!("  {at}:{number}: {what}");
+                let _ = writeln!(out, "  {at}:{number}: {what}");
                 clean = false;
             }
         }
         if clean {
-            println!("  {name}: ok");
+            let _ = writeln!(out, "  {name}: ok");
         }
         ok &= clean;
     }

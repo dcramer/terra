@@ -8,6 +8,7 @@ mod doctor;
 mod load;
 mod scenes;
 mod seed;
+mod stage;
 mod windows;
 mod worktrees;
 
@@ -176,7 +177,7 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "check",
-        takes: "[--quick]",
+        takes: "[--quick] [--verbose]",
         does: "what every change must pass, run by git before each push: formatting, lints, every test, the kit, foliage, artifact, docs and dependency checks; --quick, run before each commit, leaves out the slow sweeps, the artifacts ratchet and the Blender scripts",
         group: "Play and check",
         run: check,

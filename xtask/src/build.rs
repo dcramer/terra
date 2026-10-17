@@ -26,11 +26,11 @@ pub(crate) fn contract() -> bool {
 /// materials its pattern needs, life-size numbers, and keeps to the style guide's budgets
 /// (`terra_build::checker`).
 pub(crate) fn kits() -> bool {
-    run(
-        "cargo",
-        &["run", "-q", "-p", "terra_build", "--example", "kits"],
-    )
+    run("cargo", KITS)
 }
+
+/// The kit checker's command, after `cargo`.
+pub(crate) const KITS: &[&str] = &["run", "-q", "-p", "terra_build", "--example", "kits"];
 
 /// How long the village's buildings take to lay whole and their sections to cut and merge,
 /// on one thread, as the game's workers do (docs/building-plan.md, checking it); a name
@@ -138,12 +138,18 @@ pub(crate) fn rules(args: &[String]) -> bool {
 /// name keeps only the bases whose names hold it, and `--all` lists every fault found. With
 /// `--frames`, what only frames show, from scripted runs on the GPU (`tools/sandbox/artifacts.ts`).
 pub(crate) fn artifacts(args: &[String]) -> bool {
+    let (program, all) = artifacts_command(args);
+    run(program, &all.iter().map(String::as_str).collect::<Vec<_>>())
+}
+
+/// The program `artifacts` runs and its arguments.
+pub(crate) fn artifacts_command(args: &[String]) -> (&'static str, Vec<String>) {
     if args.iter().any(|a| a == "--frames") {
-        let mut all = vec!["tools/sandbox/artifacts.ts"];
-        all.extend(args.iter().filter(|a| *a != "--frames").map(String::as_str));
-        return run("node", &all);
+        let mut all = vec!["tools/sandbox/artifacts.ts".to_string()];
+        all.extend(args.iter().filter(|a| *a != "--frames").cloned());
+        return ("node", all);
     }
-    let mut cargo = vec![
+    let mut cargo: Vec<String> = [
         "run",
         "-q",
         "--release",
@@ -152,9 +158,11 @@ pub(crate) fn artifacts(args: &[String]) -> bool {
         "--example",
         "artifacts",
         "--",
-    ];
-    cargo.extend(args.iter().map(String::as_str));
-    run("cargo", &cargo)
+    ]
+    .map(String::from)
+    .to_vec();
+    cargo.extend(args.iter().cloned());
+    ("cargo", cargo)
 }
 
 /// The fuzz pass (`terra_build::scenes::fuzz`): small bases built at random from seeds, as
@@ -162,7 +170,12 @@ pub(crate) fn artifacts(args: &[String]) -> bool {
 /// elements and printed as a test. `--seeds N` and `--from S` say which; `--ratchet` holds
 /// the check's seeds to the baseline, `--record` writes it.
 pub(crate) fn fuzz(args: &[String]) -> bool {
+    artifacts(&fuzz_args(args))
+}
+
+/// What `fuzz` asks of `artifacts`.
+pub(crate) fn fuzz_args(args: &[String]) -> Vec<String> {
     let mut all = vec!["--fuzz".to_string()];
     all.extend(args.iter().cloned());
-    artifacts(&all)
+    all
 }

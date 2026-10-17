@@ -35,6 +35,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
+use crate::stage::{Said, Step};
 use crate::windows::{WINDOWS_TARGET, on_wsl};
 use crate::{output, root};
 
@@ -209,7 +210,7 @@ fn run(mode: Mode) -> bool {
         say("seed: could not fetch origin; going by the origin/main this repository has".into());
     }
     say(update_main(&main));
-    let (from_target, seed_lock) = match ensure(mode == Mode::Refresh, &say) {
+    let (from_target, seed_lock) = match ensure(mode == Mode::Refresh, child, &say) {
         Ok(found) => found,
         Err(error) => {
             say(format!("seed: {error}"));
@@ -315,7 +316,7 @@ impl Stamp {
 /// Makes the seed current with origin/main, building it when its manifests changed, and
 /// gives its target folder with the seed's lock held, so it does not change while it is
 /// linked from.
-fn ensure(refresh: bool, say: &dyn Fn(String)) -> Result<(PathBuf, File), String> {
+fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, File), String> {
     let dir = seed_dir().ok_or("git cannot find the repository")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
     let held = File::options()
@@ -362,18 +363,23 @@ fn ensure(refresh: bool, say: &dyn Fn(String)) -> Result<(PathBuf, File), String
         builds.extend(WINDOWS_BUILDS);
     }
     for args in builds {
-        say(format!("seed: cargo {}", args.join(" ")));
-        let passed = Command::new("cargo")
+        let shown = format!("cargo {}", args.join(" "));
+        let mut cargo = Command::new("cargo");
+        cargo
             .args(args)
             .current_dir(dir.join("src"))
             .env("CARGO_TARGET_DIR", &target)
             // The worktree's compiler, from the `cargo run` this runs under, would override the
             // seed's own rust-toolchain.toml.
-            .env_remove("RUSTUP_TOOLCHAIN")
-            // Cargo writes its progress to stderr; stdout may be a pipe nobody reads.
-            .stdout(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success());
+            .env_remove("RUSTUP_TOOLCHAIN");
+        // Each build says only how it went; what cargo said is in the seed's `logs/` (D388).
+        let mut step = Step::new(&format!("seed: {shown}"), Said::Cargo, dir.join("logs"))
+            .rerun(format!("cd {} && {shown}", dir.join("src").display()));
+        if child {
+            // A child's stdout is its parent's pipe, read once.
+            step = step.on_stderr();
+        }
+        let passed = step.run(cargo);
         if !passed {
             failed.push(args.join(" "));
         }
