@@ -418,15 +418,27 @@ async function main(args) {
   const paths = args.filter((a, i) => !a.startsWith("--") && !["--days", "--session"].includes(args[i - 1]));
   let files;
   let roots = null;
+  let projects = null;
   if (paths.length > 0) files = paths.flatMap((p) => jsonlFiles(resolve(p)));
   else {
     const report = await import("./report.mjs");
     roots = report.roots();
+    projects = report.projectsDir();
     files = report.transcripts(roots);
   }
   files.sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
   let parsed = files.map((f) => parseTranscript(readFileSync(f, "utf8"), f));
   if (roots) parsed = parsed.filter((t) => roots.some((r) => t.cwd === r || t.cwd.startsWith(r + "/")));
+  if (roots && parsed.length === 0) {
+    // Only sessions started inside the repository count by default: say where it looked,
+    // so a session started elsewhere is not taken for no sessions at all.
+    console.log(
+      `No transcripts found: looked in ${projects} for sessions started in ${roots.join(" or ")}. ` +
+        `For a session started elsewhere, pass its transcripts or their folder ` +
+        `(node tools/token-stats/context.mjs ${join(projects, "<folder>")}), or set CLAUDE_CONFIG_DIR to the Claude Code folder holding them.`,
+    );
+    return;
+  }
   if (sessionId) parsed = parsed.filter((t) => t.session.startsWith(sessionId));
   const { cost } = await import("./worker/src/prices.js");
   const since = days > 0 ? Date.now() - days * 86400e3 : 0;

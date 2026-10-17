@@ -69,7 +69,7 @@ Output is a few percent of the cost; the rest is context, read from the cache ev
 
 | Command | What it does |
 |---|---|
-| `node tools/token-stats/context.mjs` | Every session of this repository, its subagents included |
+| `node tools/token-stats/context.mjs` | Every session started in this repository, its subagents included; with none, where it looked and how to point it elsewhere |
 | `… --days 2` | Only the API calls of the last two days |
 | `… --session <id>` | One session, by its id or the start of it, and its subagents |
 | `… <path>…` | These transcripts, or the `.jsonl` files under these folders, wherever they started |

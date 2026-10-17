@@ -1,10 +1,12 @@
 // Run with `node --test tools/token-stats/context.test.mjs`. The transcripts here are made up,
 // in the shape Claude Code writes them.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { analyse, cause, commandKey, decide, format, imageTokens, lastContext, parseTranscript, shortPath, transcriptFor } from "./context.mjs";
 
 const T0 = Date.parse("2026-10-16T12:00:00.000Z");
@@ -167,4 +169,25 @@ test("a hook inside a subagent reads the subagent's own transcript", () => {
   mkdirSync(join(dir, "s1", "subagents"), { recursive: true });
   writeFileSync(join(dir, "s1", "subagents", "agent-abc.jsonl"), "");
   assert.equal(transcriptFor({ transcript_path: session, agent_id: "abc" }), join(dir, "s1", "subagents", "agent-abc.jsonl"));
+});
+
+test("with no sessions of this repository it says where it looked and how to look elsewhere", () => {
+  const config = mkdtempSync(join(tmpdir(), "context-config-"));
+  const folder = join(config, "projects", "-src-terra");
+  mkdirSync(folder, { recursive: true });
+  // A session started outside the repository, as CWD is.
+  writeFileSync(join(folder, "s1.jsonl"), call("m1", 0, { write: 100 }).join("\n") + "\n");
+  const run = (...args) =>
+    execFileSync(process.execPath, [fileURLToPath(new URL("./context.mjs", import.meta.url)), ...args], {
+      env: { ...process.env, CLAUDE_CONFIG_DIR: config },
+      encoding: "utf8",
+    });
+  const none = run();
+  assert.match(none, /No transcripts found/);
+  assert.ok(none.includes(join(config, "projects")), "names the folder it looked in");
+  assert.match(none, /CLAUDE_CONFIG_DIR/);
+  // Pointed at the folder, as the message says, it finds the session.
+  const pointed = run(folder);
+  assert.match(pointed, /^Context: 1 transcripts, 1 API calls/);
+  assert.doesNotMatch(pointed, /No transcripts found/);
 });

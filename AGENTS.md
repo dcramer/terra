@@ -14,7 +14,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 - `docs/` designs and decisions: [README](docs/README.md) the map, [tech](docs/tech.md) the stack, [engine](docs/engine.md) the parts, [prototypes](docs/prototypes.md) the next milestone, [development](docs/development.md) every command.
 - `research/` a dated note per question, linked from its README · `assets/` what every binary loads (Bevy's asset root, set in `.cargo/config.toml`) · `art/` source art · `crates/` the game · `xtask/` tasks (`cargo xtask tools`) · `tools/` tooling outside the game, each with a README.
 - `.agents/skills/` (linked as `.claude/skills`) playbooks for characters, models, icons, Tripo, Blender, environment, building: use the matching one.
-- `spike/` throwaway experiments, one question each, deleted once the research note is written; nothing lasting depends on one (D133).
+- `spike/` throwaway experiments, one question each, deleted once the research note is written; nothing lasting (a skill, tool, doc or game code) may depend on one; move it to `tools/` or the workspace first (D133).
 
 ## Start
 
@@ -81,7 +81,7 @@ Every byte an agent reads is paid again each turn.
 - **Shared state out of Bevy** (D28): only `terra_game`, `terra_sandbox` and `terra_world` depend on Bevy. The check enforces it.
 - **`libm`** for trigonometry and exponentials, never `f32::sin` and friends (D30). The lints enforce it.
 - **No `unsafe`.**
-- **Tests** sit beside the code, need no GPU and fail when the behaviour breaks: test the outcome, know the answer another way, never pin tuned data ([how](docs/development.md#writing-tests)).
+- **Tests** sit beside the code and need no GPU. A behaviour you rely on gets a test, and it fails when the behaviour breaks: test the outcome, know the answer another way, never pin tuned data ([how](docs/development.md#writing-tests)).
 - **Check the real API**: read the pinned Bevy's source and examples under `~/.cargo/registry/src/`; never recall it. How far we change Bevy: D184.
 
 ## Checking your work

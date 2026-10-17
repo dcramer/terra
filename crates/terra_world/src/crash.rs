@@ -54,9 +54,12 @@ pub fn install() {
 /// Something about the run the capsule says, such as its seed or its save; set again, the
 /// newer value wins.
 pub fn note(key: &'static str, value: impl std::fmt::Display) {
+    // Formatted before the lock is taken: a `Display` that panics would otherwise run the
+    // hook with the lock held, and the hook's own lock would wait for ever.
+    let value = value.to_string();
     let mut notes = NOTES.lock().unwrap_or_else(|p| p.into_inner());
     notes.retain(|(k, _)| *k != key);
-    notes.push((key, value.to_string()));
+    notes.push((key, value));
 }
 
 /// The record the capsule reads the run's last lines and frame from (`record::layer`).
@@ -449,6 +452,27 @@ mod tests {
 
     fn args(text: &str) -> Vec<String> {
         text.split(' ').map(String::from).collect()
+    }
+
+    /// A value whose formatting reports whether the notes could be taken meanwhile, as the
+    /// hook takes them when that formatting panics.
+    struct Probe;
+    impl std::fmt::Display for Probe {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            let free = NOTES.try_lock().is_ok();
+            write!(f, "{}", if free { "free" } else { "held" })
+        }
+    }
+
+    #[test]
+    fn a_note_is_formatted_before_the_notes_are_locked() {
+        note("probe", Probe);
+        let notes = NOTES.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let probe = notes
+            .iter()
+            .find(|(k, _)| *k == "probe")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(probe, Some("free"));
     }
 
     #[test]

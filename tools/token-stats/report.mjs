@@ -109,11 +109,16 @@ export function roots() {
   return [...new Set(all)].filter((r) => !all.some((o) => o !== r && inside(r, o)));
 }
 
+// Where Claude Code keeps its transcripts, a folder for each path a session started in.
+export function projectsDir() {
+  return join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
+}
+
 // Claude Code names each project's folder after the path a session started in, with
 // every other character replaced by "-". That can match other folders too, such as
 // "terra-old"; addTranscript checks the real path.
 export function transcripts(roots) {
-  const projects = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
+  const projects = projectsDir();
   if (!existsSync(projects)) return [];
   const prefixes = roots.map((root) => root.replace(/[^A-Za-z0-9]/g, "-"));
   const files = [];

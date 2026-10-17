@@ -289,7 +289,7 @@ Playing the game as an agent, inside its rules rather than as a tester, is a sep
 
 ## Writing tests
 
-A test earns its place by failing when the behaviour breaks, and only then. Before keeping one, name a plausible bug in the code it covers and check that the test catches it; for a new test, make that bug for a moment and watch it fail.
+A behaviour you rely on gets a test. A test earns its place by failing when the behaviour breaks, and only then. Before keeping one, name a plausible bug in the code it covers and check that the test catches it; for a new test, make that bug for a moment and watch it fail.
 
 - **Test the outcome, through the code that makes it.** A system is tested by running it on a small `World` (`run_system_once`) and reading what changed, not by calling the helper it uses and trusting the glue. A save is tested by saving a world and loading it into another, not by round-tripping a struct through serde.
 - **Know the answer another way.** Never work out the expected value with the function under test, or with the same formula, predicate or constant copied out of it. Use a value worked out by hand, a law the result must obey (volume of a sphere, nothing made or lost, undo gives back the same state), or a second, simpler implementation.
