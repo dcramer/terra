@@ -266,10 +266,14 @@ function script(s: Script) {
   glide(s, at(36.5) + 1, [28, 15, 20], [0, 9, -20], 299);
   // Wide from the south: the north-west tower's top at about 42 s, then its stump and the
   // north-east tower whole; the dragon over the ruin.
-  cut(s, at(41.5), [10, 8, 52], [-2, 8, -22]);
-  glide(s, at(41.5) + 1, [14, 10, 58], [-2, 9, -22], 389);
+  cut(s, at(41.5), [8, 11, 40], [-2, 7, -16]);
+  glide(s, at(41.5) + 1, [12, 12, 36], [-2, 7, -14], 509);
   fell(s, at(43), NW);
   fell(s, at(44.2), NE);
+  // The south wall breached either side of the gatehouse, its burnt-out hoardings and the
+  // stone under them coming down toward the camera in one long fall and its cloud of dust.
+  breach(s, at(44.9), -31, -10);
+  breach(s, at(45.7), 9, 30);
   course.hover(s, at(43), [14, 34, 6], [0, 10, -20]);
   s.frame = at(43.5);
   s.call("flight.roar", { seconds: 2.7 });
@@ -277,7 +281,7 @@ function script(s: Script) {
     [0, 50, -60],
     [-40, 90, -300],
   ]);
-  s.frame = at(48);
+  s.frame = at(50);
 }
 
 /// The flanking towers' corners, in cubes (`terra_build::scenes::burg`): each a ring 14 a
@@ -287,6 +291,17 @@ const SW: [number, number] = [-48, -10];
 const SE: [number, number] = [34, -10];
 const NW: [number, number] = [-48, -76];
 const NE: [number, number] = [34, -76];
+
+/// The south curtain (cubes: z from -3 to -1, 18 high, its hoardings to 23 and out over its
+/// outer face) gives way from one x to another: its foot harmed past mending, and a slot cut
+/// through it and its hoardings at each end, so all of it between comes down.
+function breach(s: Script, frame: number, x0: number, x1: number) {
+  s.frame = frame;
+  const [z0, z1] = [-4, 2];
+  s.call("build.damage", { at: [x0, 0, z0], to: [x1, 1, z1] });
+  s.call("build.damage", { at: [x0, 2, z0], to: [x0, 26, z1] });
+  s.call("build.damage", { at: [x1, 2, z0], to: [x1, 26, z1] });
+}
 
 /// A tower gives way: its foot, and the cube clear round it where its hoardings' bridges
 /// still join it to the curtain, harmed past mending, so all that stands on them comes down.

@@ -27,9 +27,10 @@ use crate::layout::hash;
 use crate::{Base, CELL_M, Material, Surfaces};
 use glam::{IVec3, Quat, Vec3};
 
-/// The most fragments a fall makes, and the most about at once, at the highest preset: the
+/// The most fragments a fall makes, and the most about at once, at the highest preset (a
+/// castle's towers and walls coming down together make some thousands): the
 /// game makes fewer at lower ones and fades the oldest first past it.
-pub const MOST: usize = 2000;
+pub const MOST: usize = 5000;
 /// How fast fragments fall, in metres a second a second.
 pub const GRAVITY: f32 = 9.8;
 /// What is kept of a fragment's speed off the floor when it bounces, and along the floor.

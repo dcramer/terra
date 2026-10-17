@@ -56,9 +56,13 @@ const PUFF_M: [f32; 2] = [0.7, 2.6];
 /// From how many cubes coming down at once a fall raises a cloud of dust, a puff in it for
 /// every so many, at most so many, and how long it lasts, in seconds.
 const CLOUD_CUBES: usize = 400;
-const CLOUD_EVERY: usize = 60;
-const CLOUD_MOST: usize = 24;
-const CLOUD_S: f32 = 6.0;
+const CLOUD_EVERY: usize = 40;
+const CLOUD_MOST: usize = 40;
+const CLOUD_S: f32 = 9.0;
+/// How many clouds may billow at once over the small puffs' budget: a castle's towers and
+/// walls come down within seconds of each other, and the small puffs of their many lesser
+/// falls had used up a shared budget, so the big falls raised none.
+const CLOUDS: usize = 3;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Shards>().add_systems(
@@ -395,7 +399,9 @@ fn burst(
         }
         // A big collapse raises a cloud as big as it (`cloud`).
         if let Some((kind, puffs)) = cloud(&fallen.fell) {
-            let colour = dust_of(&look, kind);
+            // Drawn unlit, so a shade darker than the stone it is of, as a cloud thick enough to
+            // shadow itself is: at its own pale colour it vanished against sunlit walls and sky.
+            let colour = dust_of(&look, kind).darker(0.25);
             let up = frame.rotation * Vec3::Y;
             for (local, mut billow) in puffs {
                 billow.drift = frame.rotation * billow.drift;
@@ -403,7 +409,7 @@ fn burst(
                     &mut commands,
                     &mut shards,
                     (&mut meshes, &mut materials, &mut images),
-                    most_puffs + CLOUD_MOST,
+                    most_puffs + CLOUD_MOST * CLOUDS,
                     frame.transform_point(local),
                     colour,
                     up,
@@ -467,10 +473,10 @@ fn cloud(fell: &[(IVec3, Cube)]) -> Option<(Kind, Vec<(Vec3, Billow)>)> {
             );
             let out = (local - foot).with_y(0.0).normalize_or(Vec3::X);
             let billow = Billow {
-                alpha: 0.75,
-                wide: across * (0.9 + 0.8 * r(4)),
+                alpha: 0.95,
+                wide: across * (1.3 + 1.0 * r(4)),
                 life: CLOUD_S * (0.75 + 0.5 * r(5)),
-                drift: out * across * 0.35 + Vec3::Y * (0.6 + 0.8 * r(6)),
+                drift: out * across * 0.45 + Vec3::Y * (1.0 + 1.4 * r(6)),
                 stir: 2.0,
             };
             (local, billow)
@@ -871,7 +877,7 @@ fn fall(
     (steps, landed)
 }
 
-/// Never far past the most: the oldest make room, and past half again as many the oldest of
+/// Never far past the most: the oldest make room, and past twice as many the oldest of
 /// those not yet drawn are let go at once.
 fn keep_within(shards: &mut Shards, most: usize) {
     let over = shards
@@ -881,7 +887,7 @@ fn keep_within(shards: &mut Shards, most: usize) {
         .count()
         .saturating_sub(most);
     fade_oldest(shards, over);
-    while shards.live.len() > most + most / 2 {
+    while shards.live.len() > most * 2 {
         match shards
             .live
             .iter()

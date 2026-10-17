@@ -252,16 +252,20 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // flipbook's flame fills about the lower two thirds of its card, so the cards stand
         // half again as tall as the flame. Its height breathes at the puffing rate of a fire
         // that wide, 1.5 / sqrt(D) Hz.
+        // Blazes stand on a two-metre grid: each is put off its cell's middle by up to most
+        // of a metre and made taller or shorter by its own seed, so a burning roof is a fire
+        // and not rows of the same flame.
+        let own = vec3(fract(seed * 12.9898), fract(seed * 78.233), fract(seed * 37.719));
         let wide = clamp(tall * 0.8, 0.8, 2.8);
         let puff_hz = 1.5 / sqrt(wide);
         let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
-        let flame = tall * breathe;
+        let flame = tall * breathe * (0.65 + 0.7 * own.z);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
         let lean = wind * 0.05 * flame;
         var w = wide * 1.9;
         var h = flame * 1.75;
-        var at = foot;
+        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * 1.5;
         if phase > 0.01 {
             let side = select(-1.0, 1.0, phase > 0.5);
             w = wide * 1.2;
@@ -340,16 +344,32 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let alpha = spark * pow(1.0 - t, 1.5) * wink;
         light = soot(1600.0 - t * 300.0) * alpha;
     } else {
-        // A puff of breath: rolling, broken by noise, its hottest at the mouth, cooling to a
-        // dull red at its end as it burns out.
+        // A puff of breath, as games draw a flamethrower's stream: a frame of the same
+        // simulated fire as the flames (`tools/textures/flames.ts`), its tongues laid along
+        // the stream, the card's foot toward the mouth, so the stream is ragged licks of flame
+        // and not smooth balls; under a soft round mask, broken by noise at its rim, so no
+        // card's edge shows. Hottest at the mouth, cooling to a dull red at its end.
         let p = uv - 0.5;
         let n = fbm(uv * 3.0 + vec2(luck * 7.0 - time * 1.5, luck * 13.0 + time * 0.8));
-        let fine = noise(uv * 8.0 + vec2(luck * 3.0, time * 2.0));
-        let edge = length(p) + (n - 0.5) * 0.45 + (fine - 0.5) * 0.15;
-        let puff = 1.0 - smoothstep(0.1, 0.5, edge);
-        let fade = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.8);
-        let alpha = puff * fade * mix(0.9, 0.35, t);
-        let kelvin = min(mix(1680.0, 1150.0, t) + (0.35 - edge) * 200.0, 1720.0);
+        let edge = length(p * vec2(1.0, 0.8)) + (n - 0.5) * 0.3;
+        let body = 1.0 - smoothstep(0.12, 0.5, edge);
+        let channel = u32(luck * 3.0) % 3u;
+        let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
+        let f = fract(time * FLIPBOOK_FPS * 1.6 / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
+        let f0 = floor(f);
+        let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
+        // The flame's column above its fuel bed, its middle half across.
+        let fx = 0.5 + (x - 0.5) * 0.6;
+        let fy = 0.1 + uv.y * 0.62;
+        let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
+        // Near the mouth the stream is dense, a solid core; it breaks into tongues as it opens.
+        let solid = mix(0.3, 0.0, smoothstep(0.0, 0.4, t));
+        let heat_here = body * saturate(solid + 1.1 * tongue);
+        let fade = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.6);
+        // A few dozen cards overlap along its line: each faint, so their sum stays orange
+        // with a yellow heart and shows its tongues, never a solid pale wedge.
+        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.4, 0.22, t);
+        let kelvin = min(mix(1520.0, 1100.0, t) + (heat_here - 0.5) * 220.0, 1600.0);
         light = soot(kelvin) * alpha;
         cover = alpha * 0.4;
     }
