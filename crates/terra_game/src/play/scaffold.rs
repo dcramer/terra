@@ -342,7 +342,7 @@ pub struct Decks(pub bevy::platform::collections::HashMap<usize, (Transform, Wal
 const ON_BOARDS_M: f32 = 0.42;
 /// How far from the walls a builder at work is taken up onto the boards; further, they work
 /// at the stacked logs on the ground.
-const TAKEN_UP_M: f32 = 2.6;
+const TAKEN_UP_M: f32 = 4.0;
 
 /// Where a builder standing at `at` (the building's own metres, across) works on its top lift:
 /// the boards along the nearest wall, and the way to that wall; none if they stand too far
@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(facing, Vec2::new(-1.0, 0.0));
         assert!(on_deck(&walls, 2, Vec2::new(4.0, 3.0)).is_none(), "inside");
         assert!(
-            on_deck(&walls, 2, Vec2::new(4.0, -4.0)).is_none(),
+            on_deck(&walls, 2, Vec2::new(4.0, -5.0)).is_none(),
             "at the logs"
         );
         assert!(

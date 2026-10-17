@@ -621,7 +621,13 @@ impl terra_world::cover::CoverSource for TownCover {
         let worn = street.min(square).min(door);
         // The square laid only so far yet: the meadow as it was, worn toward its laid ground.
         let unworn = (square <= street.min(door) && self.square_worn < 1.0).then_some(growing);
-        if worn < 0.0 {
+        if worn < 0.0 && !self.paved && door <= street.min(square) {
+            // Before a new house's door, trodden by its builders a few days: the grass thinned
+            // and earth through it, not cut to a bare patch the meadow's own green (D381, the
+            // review of cut 3: bright green squares under every site's logs).
+            growing.grass *= 0.3;
+            growing.trodden = 0.7;
+        } else if worn < 0.0 {
             growing.grass = 0.0;
             growing.path = true;
             // Paved with setts (the ground shader's from 0.85, D350), packed earth at the very
