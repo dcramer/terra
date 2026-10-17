@@ -213,7 +213,7 @@ Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off
 
 ## Developer tools
 
-The developers want tools that help refine each system (D71), and as many of them as possible reachable from a browser by a link (research/web-build.md). Tools that look at the game's own world are the sandbox's experiments, each a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)); tools that make or inspect files live in `tools/`. Every one starts from `cargo xtask`:
+The developers want tools that help refine each system (D71), and as many of them as possible reachable from a browser by a link (research/web-build.md). Tools that look at the game's own world are the sandbox's experiments, each a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)); tools that make or inspect files live in `tools/`. What earns a tool: work that will come up again and takes several manual steps, a restart or squinting at a picture. Would build: setting a joint, a grip or a camera in the running game and seeing the result at once; a workbench sheet putting two models side by side through the same animation; a checker that measures a rig against a known-good one. Wouldn't build: a tool for something done once; a polished editor where a command-line flag does the job; a tool for a feature not yet decided. A new tool or task prints as the gates do (D388): a line a stage that passes, and on a failure only what fixes it, with the path of its full log. Every one starts from `cargo xtask`:
 
 | Tool | Start it with | What it is for |
 |---|---|---|

@@ -13,10 +13,10 @@ The baseline is **wood and stone, built by hand and destroyed, with infinite pre
 
 ## Routine (D375)
 
-- Start: `cargo xtask seed` if the session started outside the worktree, then `git pull --rebase origin main`. Check the latest commits of anyone working in the same files.
-- Commits run the quick check, pushes the full one (`cargo xtask check`, with the artifacts and fuzz ratchets whenever building changed), each scoped to the change (D398); never `--no-verify`. Pull and rebase before each push; run the checks again if anything came in.
-- Decision numbers from `cargo xtask decision`; log lines in `docs/decisions-log.md` (D376); a decision changed updates its file (`docs/decisions/Dnnn.md`, then `node tools/docs/docs.ts --render`) and every doc it touches in the same commit.
-- Finish: `git fetch` and `git branch -r --contains <commit>` to confirm it is on origin/main, then `cargo xtask worktrees --done`.
+AGENTS.md's routine, plus for building:
+
+- At the start, check the latest commits of anyone working in the same files.
+- A push touching building runs the artifacts and fuzz ratchets (D398); if the rebase before it brought anything in, run the checks again.
 
 ## Where each concern lives
 
