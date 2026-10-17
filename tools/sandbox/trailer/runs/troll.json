@@ -1,0 +1,18 @@
+{
+  "about": "On the lake's south shore in the low morning sun, on the open gravel between the forest's edge and the water: a troll about 4 m tall comes out of the trees at a man with a sword and a round shield, and they fight, a smash into the gravel, a sweep on his shield, a smash into the shallows, until it reels back into the water and roars",
+  "place": "lake",
+  "hour": 8.2,
+  "date": "07-20",
+  "seconds": 26,
+  "scene": "troll",
+  "player": {
+    "at": "250,11",
+    "face": "225,14",
+    "hidden": true
+  },
+  "look": {
+    "shutter": 180,
+    "exposure_bias": 0.2
+  },
+  "sound": ["water:0.6", "wind:0.3", "birds:0.5", "shore:0.5"]
+}

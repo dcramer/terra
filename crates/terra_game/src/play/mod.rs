@@ -67,6 +67,7 @@ mod skills;
 mod sounds;
 mod soundscape;
 mod species;
+mod staged;
 mod stall_goods;
 mod station_screen;
 pub(crate) mod storage;
@@ -165,6 +166,7 @@ impl Plugin for GameplayPlugin {
         sighted::plugin(app);
         coats::plugin(app);
         fliers::plugin(app);
+        staged::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
         hits::plugin(app);

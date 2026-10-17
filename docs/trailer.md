@@ -33,6 +33,8 @@ cargo xtask trailer --cut tools/sandbox/trailer/dragon.json --out ~/.cache/terra
 
 The first is the dragon (`dragon`, D377, D382): the burg on a rise by the mountain lake in the morning; a dragon in over the forest strafing its south wall, passing over the hall and the keep and hovering at the keep to breathe into it; the fire spreading through the hoardings, roofs and timber storeys; the towers and the keep coming down as their bond timbers burn through.
 
+The second is the troll fight (`troll`, [troll-fight.md](troll-fight.md), D402): on the mountain lake's south shore gravel in the low morning sun, a troll about 4 m tall comes out of the trees at a man with a sword and a round shield; they circle, it smashes into the gravel as he rolls aside, he cuts at its leg, it sweeps him back on his shield, a second smash lands in the shallows in a splash, and his combination drives it back into the water, roaring. Its fighters are staged figures (`play::staged`), told their clips, marks and blows' landings over the remote; no music, the shore's own sound. `cargo xtask trailer --cut tools/sandbox/trailer/troll.json --only troll`.
+
 ## How it is filmed
 
 As Unreal's Movie Render Queue renders a sequence: each run is a scripted run stepped a sixtieth of a second a frame, warmed up where it starts (six seconds, so streaming, grass and the eye settle), every second frame kept, so the film plays at the game's speed however slowly it is drawn.

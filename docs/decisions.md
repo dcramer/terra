@@ -149,6 +149,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D250](decisions/D250.md) | Worman, Drillhog and Seawish | Design | Developers | Decided | Monsters drawn by a developer's daughter… |
 | [D380](decisions/D380.md) | Small animals in every biome | Design | Developers | Decided | Every biome has a few small animals that belong there… |
 | [D382](decisions/D382.md) | Fliers, and the dragon | Tech | Agent | Decided | Creatures that fly are a body plan of their own… |
+| [D402](decisions/D402.md) | Staged figures, told over the remote | Tech | Agent | Decided | A film's set piece on the ground is played by staged… |
 
 ## People and the tribe
 

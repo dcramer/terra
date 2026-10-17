@@ -387,7 +387,11 @@ struct Spawn {
 }
 
 /// A point the remote gives, in the world, or in the player's base's own metres.
-fn placed(world: &World, point: [f32; 3], base: bool) -> Result<Vec3, bevy::remote::BrpError> {
+pub(super) fn placed(
+    world: &World,
+    point: [f32; 3],
+    base: bool,
+) -> Result<Vec3, bevy::remote::BrpError> {
     let point = Vec3::from_array(point);
     if !base {
         return Ok(point);
