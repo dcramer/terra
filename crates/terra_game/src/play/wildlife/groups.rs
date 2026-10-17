@@ -8,10 +8,15 @@ use bevy::prelude::*;
 
 /// So many meetings in ten are a crossing (`cross`) rather than a group waiting by the way.
 pub(super) const CROSSINGS: f32 = 0.5;
-/// A crossing starts so far ahead and so far aside, where it is small or not drawn yet, and
-/// crosses the way so far ahead of the player as they reach it; a runner runs on so long past.
-const CROSS_FROM_M: (f32, f32) = (44.0, 54.0);
-const CROSS_ASIDE_M: (f32, f32) = (16.0, 24.0);
+/// A big animal's meeting is a crossing so often, the most it can be seen by.
+pub(super) const BIG_CROSSINGS: f32 = 0.75;
+/// A crossing starts so far ahead and so far aside, just inside the trees about 15° off the
+/// camera's way, and crosses the way so far ahead of the player as they reach it; a runner
+/// runs on so long past.
+const CROSS_FROM_M: (f32, f32) = (28.0, 36.0);
+const CROSS_ASIDE_M: (f32, f32) = (8.0, 12.0);
+/// Starts tried for a crossing, one side of the way and then the other.
+const CROSS_TRIES: usize = 6;
 pub(super) const CROSS_LEAD_M: f32 = 10.0;
 const CROSS_ON_S: f32 = 2.5;
 
@@ -40,17 +45,28 @@ pub(super) fn cross(
         return None;
     }
     let up = here.normalize_or(Vec3::Y);
-    let start = around.ground(
-        here + ahead * dice.range(CROSS_FROM_M.0, CROSS_FROM_M.1)
-            + aside * dice.range(CROSS_ASIDE_M.0, CROSS_ASIDE_M.1),
-    );
-    let (at, timed) = crossing_point(here, ahead, start, mps, speed)?;
-    let point = around.ground(at);
-    let way = (point - start).reject_from(up).normalize_or_zero();
     let dry = |p: Vec3| around.depth_m(p) < -0.1;
-    if way == Vec3::ZERO || (!flies && !(dry(start) && dry(point))) {
-        return None;
-    }
+    // A few starts are tried, each side of the way: the first seen where it crosses, from
+    // where the player is by then, and halfway or three quarters of the way there, from where
+    // they are by then, so it is seen breaking from the trees and across.
+    let lift = up * 0.6;
+    let (start, point, way, timed) = (0..CROSS_TRIES).find_map(|tried| {
+        let side = if tried % 2 == 0 { aside } else { -aside };
+        let start = around.ground(
+            here + ahead * dice.range(CROSS_FROM_M.0, CROSS_FROM_M.1)
+                + side * dice.range(CROSS_ASIDE_M.0, CROSS_ASIDE_M.1),
+        );
+        let (at, timed) = crossing_point(here, ahead, start, mps, speed)?;
+        let point = around.ground(at);
+        let way = (point - start).reject_from(up).normalize_or_zero();
+        if way == Vec3::ZERO || (!flies && !(dry(start) && dry(point))) {
+            return None;
+        }
+        let eye = |s: f32| super::eye_at(around, here + ahead * speed * timed * s, ahead);
+        let shows = |s: f32| super::shows_from(around, eye(s), start.lerp(point, s) + lift);
+        let seen = shows(1.0) && (shows(0.5) || shows(0.75));
+        seen.then_some((start, point, way, timed))
+    })?;
     let past = around.ground(point + way * dice.range(10.0, 22.0));
     let mut put = Vec::new();
     for _ in 0..count {

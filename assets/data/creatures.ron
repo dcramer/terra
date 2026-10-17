@@ -405,6 +405,9 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 4), ("Hide", 2)]),
         lies_s: 300.0,
+        // Its model's bristles are a neutral grey, which the sky alone lights blue in shade:
+        // a wild boar's coat is a dark grizzled brown the year round.
+        coat: (summer: (0.55, 0.42, 0.3), strays: 0.15, moults: false),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.14),
             (joint: "Neck", part: Body, radius_m: 0.16),

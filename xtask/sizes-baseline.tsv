@@ -94,7 +94,6 @@ crates/terra_game/src/play/tool/aim.rs	plan_work	263
 crates/terra_game/src/play/tool/prompt.rs	prompt	228
 crates/terra_game/src/play/town.rs	-	1721
 crates/terra_game/src/play/town.rs	lay	598
-crates/terra_game/src/play/wildlife/mod.rs	meet	158
 crates/terra_game/src/play/wildlife/mod.rs	populate	174
 crates/terra_items/src/lib.rs	counts_change_only_by_what_goes_in_or_out	161
 crates/terra_land/src/bin/fields.rs	run	644
