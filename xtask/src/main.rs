@@ -180,8 +180,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "check",
-        takes: "[--quick] [--verbose]",
-        does: "what every change must pass, run by git before each push: formatting, lints, every test, the kit, foliage, artifact, docs and dependency checks; --quick, run before each commit, leaves out the slow sweeps, the artifacts ratchet and the Blender scripts",
+        takes: "[--quick] [--all] [--verbose]",
+        does: "what every change must pass, scoped to what it touches (D398): before each push, lints and every test of the crates changed and those depending on them, and the kit, foliage, artifact, fuzz, Blender, docs and dependency checks that can see it; --quick, before each commit, linters and the fast tests of the crates changed in a 30 s budget; --all runs everything",
         group: "Play and check",
         run: check,
     },

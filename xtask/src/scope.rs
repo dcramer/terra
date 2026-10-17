@@ -6,7 +6,7 @@
 //! by every crate, a few files outside the crates are read by the crates in [`READ_BY`],
 //! `tools/`, the docs and the agents' folders by their own checks. A file the rules cannot
 //! place, or a change to the build itself (the workspace's manifest, its lock, the compiler,
-//! cargo's or clippy's settings, the hooks), runs everything, as `--all` does.
+//! cargo's or clippy's settings), runs everything, as `--all` does.
 
 use crate::{output, root};
 use std::collections::BTreeSet;
@@ -34,7 +34,6 @@ const EVERYTHING: &[&str] = &[
     "clippy.toml",
     "rustfmt.toml",
     ".cargo/",
-    ".githooks/",
 ];
 
 /// Folders and files only the docs check reads, or nothing in the gate: their change runs the
@@ -45,6 +44,8 @@ const DOCS: &[&str] = &[
     ".agents/",
     ".claude/",
     ".github/",
+    // The hooks only start the check; nothing reads them.
+    ".githooks/",
     "spike/",
     "AGENTS.md",
     "CLAUDE.md",
@@ -356,7 +357,6 @@ mod tests {
             "Cargo.lock",
             "Cargo.toml",
             ".cargo/config.toml",
-            ".githooks/pre-commit",
             "rust-toolchain.toml",
             "somewhere/new.txt",
             "crates/terra_new/src/lib.rs",

@@ -400,7 +400,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn a_counters_goods_are_its_trades_and_lie_on_it_apart() {
         let market = market();
         let sizes = sizes();
@@ -498,7 +498,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn neighbouring_stalls_wear_different_awnings() {
         let mut market = market();
         market.stalls = vec!["A".into(), "B".into(), "C".into()];

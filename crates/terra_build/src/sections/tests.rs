@@ -617,7 +617,7 @@ fn changing_a_cube_marks_its_section_and_its_neighbours_on_an_edge() {
     );
 }
 
-#[test]
+#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
 fn whatever_changes_a_section_is_in_what_a_change_redraws() {
     let kits = shipped();
     let logs = kind(&kits, Pattern::Logs, Profile::Round);

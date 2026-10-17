@@ -37,6 +37,7 @@ const SLOW_TESTS: &[&str] = &[
     "sections::tests::cubes_of_a_kind_meeting_only_along_an_edge_each_dress_their_own_side",
     "sections::tests::a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it",
     "sections::tests::an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole",
+    "sections::tests::whatever_changes_a_section_is_in_what_a_change_redraws",
     "roofing::tests::no_part_of_a_roof_lies_over_itself",
     "layout::runs::tests::a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises",
     "layout::roofs::tests::an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it",
@@ -55,6 +56,12 @@ const SLOW_TESTS: &[&str] = &[
     "town::market::tests::some_stalls_hang_a_lantern_and_others_not",
     "town::market::tests::the_ground_beside_a_stall_shows_its_own_trades_goods",
     "town::market::tests::neighbouring_stalls_sell_different_things_and_seeds_differ",
+    "town::market::tests::a_counters_goods_are_its_trades_and_lie_on_it_apart",
+    "town::market::tests::neighbouring_stalls_wear_different_awnings",
+    // terra_life's town lived through a day.
+    "tests::walkers_go_round_a_visitor_standing_in_their_way",
+    "tests::the_same_town_and_seed_live_the_same_day",
+    "tests::a_town_started_settled_is_in_mid_flow_not_stood_still",
     // terra_land's places found on the land, and its snow and woods worked out over it.
     "town::tests::the_town_found_is_level_warm_wooded_round_and_under_peaks",
     "round::tests::round_a_mountain_lake_in_early_summer_its_shore_is_bare_and_wooded_and_its_peaks_white",
@@ -67,8 +74,10 @@ const SLOW_TESTS: &[&str] = &[
     "water::tests::a_lake_stands_at_its_level_over_its_own_ground_and_the_sea_elsewhere",
     "snow::tests::early_summer_snow_lies_on_the_heights_longest_facing_the_pole",
     "snow::tests::a_lee_hollow_keeps_its_snow_longer_than_open_ground_and_a_rise_less",
-    // terra_voxel's mountains sampled finely across a range.
+    // terra_voxel's mountains sampled finely across a range, and a planet's edits redrawn.
     "mountains::tests::the_mountains_never_jump",
+    "mountains::tests::the_ground_is_smooth_within_a_voxel",
+    "planet::tests::what_to_draw_again_holds_everything_the_edits_changed_near_the_surface",
 ];
 
 /// Where the check's stages keep their logs, relative to the root.

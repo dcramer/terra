@@ -743,7 +743,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
     fn the_ground_is_smooth_within_a_voxel() {
         // How far the rise over 2 cm departs from a tenth of the rise over 20 cm: none on a
         // smooth slope. A single holds a point on a planet this size to about 2 mm, and the
