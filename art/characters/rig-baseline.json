@@ -98,5 +98,17 @@
   "Sword_Attack": {
     "bad_edge_share": 0.0111,
     "sink_m": 0.005
+  },
+  "Hammer_Loop": {
+    "bad_edge_share": 0.0043,
+    "sink_m": 0.008
+  },
+  "Lean_Loop": {
+    "bad_edge_share": 0.0066,
+    "sink_m": 0.0
+  },
+  "Talk_Loop": {
+    "bad_edge_share": 0.0055,
+    "sink_m": 0.0
   }
 }

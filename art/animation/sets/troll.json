@@ -1,43 +1,49 @@
 {
   "Troll_Idle": {
-    "prompt": "A large hunched person stands breathing heavily, shoulders rising and falling, arms hanging.",
+    "prompt": "A large heavy person stands hunched forward with the head low and long arms hanging in front, breathing heavily, shoulders rising and falling.",
     "speed": 0,
     "seconds": 8,
     "seed": 1,
-    "still": true
+    "still": true,
+    "take": 2
   },
   "Troll_Walk": {
-    "prompt": "A heavy hunched person walks forward with slow stomping steps, long arms swinging.",
+    "prompt": "A heavy person hunched forward walks with slow stomping steps, head low, long arms hanging in front and swinging.",
     "speed": 1.1,
     "seconds": 6,
-    "seed": 1
+    "seed": 1,
+    "take": 2
   },
   "Troll_Smash": {
-    "prompt": "A person raises both fists high above the head and smashes them down onto the ground in front.",
+    "prompt": "A person hunched forward slowly raises both arms high above the head with the hands together, then smashes them down hard onto the ground in front, bending forward.",
     "speed": 0,
-    "seconds": 3.5,
+    "seconds": 4,
     "seed": 1,
-    "once": true
+    "once": true,
+    "take": 1
   },
   "Troll_Sweep": {
-    "prompt": "A person swings one arm in a wide horizontal arc across in front of the body.",
+    "prompt": "A person hunched forward pulls the right arm back and swings it in a wide horizontal arc from right to left in front of the body.",
     "speed": 0,
     "seconds": 3,
     "seed": 1,
-    "once": true
+    "once": true,
+    "take": 1
   },
   "Troll_Hit": {
-    "prompt": "A person is hit hard, staggers backward, then recovers.",
+    "prompt": "A person hunched forward is hit hard in the chest, staggers backward two steps with the arms in front, then recovers.",
     "speed": 0,
     "seconds": 3,
     "seed": 1,
-    "once": true
+    "once": true,
+    "take": 1
   },
   "Troll_Roar": {
-    "prompt": "A person leans forward with arms spread wide and roars.",
+    "prompt": "A person hunched forward spreads both arms wide in front and roars, head pushed forward.",
     "speed": 0,
     "seconds": 3.5,
     "seed": 1,
-    "once": true
+    "once": true,
+    "take": 0
   }
 }

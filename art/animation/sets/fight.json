@@ -1,14 +1,15 @@
 {
   "Fight_Guard": {
-    "prompt": "A person stands in a fighting stance with a sword in the right hand and a shield raised in the left hand, shifting their weight.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and stands in a fighting stance, shifting the weight from foot to foot.",
     "speed": 0,
     "seconds": 8,
     "seed": 1,
     "still": true,
-    "fist": 1
+    "fist": 1,
+    "take": 1
   },
   "Fight_Strafe_R": {
-    "prompt": "A person side-steps to the right in a fighting stance, holding a sword and a shield up.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and side-steps to the right.",
     "speed": 1.2,
     "way": 90,
     "seconds": 6,
@@ -17,51 +18,57 @@
     "take": 1
   },
   "Fight_Strafe_L": {
-    "prompt": "A person side-steps to the left in a fighting stance, holding a sword and a shield up.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and side-steps to the left.",
     "speed": 1.2,
     "way": -90,
     "seconds": 6,
     "seed": 1,
-    "fist": 1
+    "fist": 1,
+    "take": 2
   },
   "Fight_Slash": {
-    "prompt": "A person in a fighting stance steps forward and slashes a sword diagonally downward, then returns to the stance.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and steps forward and slashes the sword diagonally down from the right shoulder, then steps back.",
     "speed": 0,
     "seconds": 3,
     "seed": 1,
     "once": true,
-    "fist": 1
+    "fist": 1,
+    "take": 2
   },
   "Fight_Backhand": {
-    "prompt": "A person in a fighting stance swings a sword backhand across the body, then returns to the stance.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and swings the sword horizontally from left to right across the body.",
     "speed": 0,
     "seconds": 3,
     "seed": 1,
     "once": true,
-    "fist": 1
+    "fist": 1,
+    "take": 0
   },
   "Fight_Chop": {
-    "prompt": "A person in a fighting stance raises a sword high overhead and chops straight down, then returns to the stance.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and raises the sword above the head and chops straight down in front.",
     "speed": 0,
     "seconds": 3,
     "seed": 1,
     "once": true,
-    "fist": 1
+    "fist": 1,
+    "take": 2
   },
   "Fight_Block": {
-    "prompt": "A person in a fighting stance braces behind a raised shield, is hit by a heavy blow and pushed back a step.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and raises the shield to block a heavy blow and is pushed back a step.",
     "speed": 0,
     "seconds": 2.5,
     "seed": 1,
     "once": true,
-    "fist": 1
+    "fist": 1,
+    "take": 1
   },
   "Fight_Dodge": {
-    "prompt": "A person in a fighting stance quickly jumps to the side to dodge, then returns to the stance.",
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and quickly ducks and jumps to the left side to dodge, then stands back up.",
     "speed": 0,
     "seconds": 2.5,
     "seed": 1,
     "once": true,
-    "fist": 1
+    "fist": 1,
+    "take": 0
   }
 }

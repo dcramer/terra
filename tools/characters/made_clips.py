@@ -33,7 +33,9 @@ OUT defaults to the game's mannequin file, which it reads and writes; clips.py m
 the libraries first where they are here. --try puts one take into OUT instead of the kept one,
 to measure a candidate with gait_check.py before keeping it. --list=FILE makes another set of
 clips (a creature's, a demo's: art/animation/sets/fight.json, its takes in sets/fight/) onto
-the game's mannequin into OUT, which must be named and then carries the set's clips alone.
+the game's mannequin into OUT, which must be named and then carries the game's clips and the
+set's, so a body exported with it (export_character.py --clips=OUT) plays both: the troll walks
+and is hit as a person is and smashes as a troll, the fight's man idles and rolls as the game's.
 """
 
 import json
@@ -453,7 +455,7 @@ def main():
     tried = dict(a.split("=", 1)[1].split(":", 1) for a in args if a.startswith("--try="))
     # Another set of clips than the game's (a creature's, a demo's): its own list, its takes in
     # the folder named as the list is, made onto the game's mannequin into OUT, which then
-    # carries the set's clips alone.
+    # carries the game's clips and the set's.
     chosen = next((look.path(a.split("=", 1)[1]) for a in args if a.startswith("--list=")), None)
     if chosen and out is None:
         raise SystemExit("a set (--list) is made into a copy of the mannequin: name OUT.glb")
@@ -471,7 +473,7 @@ def main():
     body = next(o for o in bpy.data.objects if o.type == "MESH" and any(m.type == "ARMATURE" for m in o.modifiers))
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = None
-    names = [] if chosen else [t.name for t in ad.nla_tracks]
+    names = [t.name for t in ad.nla_tracks]
     fist = fist_pose(FIST_CLIP) if any("fist" in made.get(n, {}) for n in takes) else {}
     for name, path in takes.items():
         for pb in arm.pose.bones:
