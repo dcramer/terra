@@ -853,7 +853,11 @@ fn breath(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             flier.breathing = false;
         }
         flier.wants_breath = asked.on;
-        flier.aim = aim;
+        // Stopping, it keeps its aim, so the last of its flame still in the air goes on
+        // where it was going, not wherever its head swings next.
+        if asked.on || aim.is_some() {
+            flier.aim = aim;
+        }
     }
     info!(
         "Flight: breathing {}.",

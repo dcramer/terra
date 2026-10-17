@@ -1,9 +1,9 @@
 {
-  "about": "The burg on the valley floor in the morning, the forest round the meadow and the range's wall behind; a dragon comes in over the trees, strafes its walls and roofs with fire, hovers at the keep to breathe into it, and the castle burns until its towers and keep come down",
+  "about": "The burg on the valley floor in the morning, the forest round the meadow and the range's wall behind; a dragon comes in over the trees, strafes its south and east walls with fire, hovers at the keep to breathe into its door and along its timber storey, and its towers and keep come down, in thirty seconds",
   "place": "valley",
   "hour": 6.3,
   "date": "06-10",
-  "seconds": 50,
+  "seconds": 30,
   "scene": "dragon",
   "player": {
     "at": "28,-234",
