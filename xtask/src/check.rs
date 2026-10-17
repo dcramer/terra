@@ -257,10 +257,13 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
             (step, How::Skip("no crate changed"))
         }
     };
+    // Building, or what it stands on, changed, or the tasks that run its checks did (xtask is
+    // among the packages tested whenever any Rust changed, so its own change is asked of the scope).
     let builds = all
+        || scope.changed.contains("xtask")
         || packages
             .as_ref()
-            .is_some_and(|names| names.contains("terra_build") || names.contains("xtask"));
+            .is_some_and(|names| names.contains("terra_build"));
     let push_only = |step: Step, runs: bool, how: How, why: &'static str| -> (Step, How) {
         match (push, runs) {
             (false, _) => (step, How::Skip("before a push")),
