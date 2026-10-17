@@ -75,6 +75,11 @@ pub struct Mountains {
     /// higher ones behind, as the Tatras' and the Dolomites' do seen from a valley.
     pub tops_m: f32,
     pub tops: f32,
+    /// How far the ribs between a wall's couloirs are shaped by its face, 0 to 1: 0 every wall
+    /// cut alike, round gullies and ribs of one width, combed like a draped sheet; toward 1 on
+    /// some faces the gullies narrow to slots between broad buttresses standing out, and on
+    /// others they widen between sharp arêtes, faces a kilometre or two across.
+    pub buttresses: f32,
 }
 
 impl Mountains {
@@ -100,6 +105,7 @@ impl Mountains {
         summits_m: 380.0,
         tops_m: 1800.0,
         tops: 0.75,
+        buttresses: 1.0,
     };
 
     /// The most the mountains raise the land, in metres.
@@ -220,6 +226,11 @@ const TOPS_DEEP: f32 = 0.55;
 /// How high a range's front stands at its edge, as a share of what the ridges raise there,
 /// rising to the whole by its heart (`Range::deep_inside`): foothills in front of the peaks.
 const FOOTHILLS: f32 = 0.6;
+/// How far across a face that shapes its gullies one way is, about, in metres, and the powers
+/// of two its shaping runs between (`Mountains::buttresses`): from gullies twice as wide as
+/// they were, between arêtes, to slots between buttresses three times as broad.
+const BUTTRESS_FACES_M: f32 = 1600.0;
+const BUTTRESS_POWERS: (f32, f32) = (-1.0, 1.6);
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -533,6 +544,30 @@ impl Range {
             // the fall near a crest.
             let fade = smoothstep(0.02, 0.4, steepness);
             let away = self.away_from_kept(point, KEPT_M);
+            // How this face shapes its gullies (`Mountains::buttresses`): a power on how far
+            // into a gully a point is, above 1 narrowing the gullies to slots between broad
+            // buttresses, below 1 widening them between sharp arêtes; the two coarser sets only,
+            // and off round the kept spots and their ranges, whose ground stays as pinned.
+            let shaped = if m.buttresses > 0.0 {
+                let kept = if self.kept.is_empty() {
+                    1.0
+                } else {
+                    self.away_for_tops(point)
+                };
+                if kept > 0.0 {
+                    let b =
+                        self.faces
+                            .fbm(point / BUTTRESS_FACES_M + Vec3::splat(9.1), 2, 2.0, 0.5);
+                    let b = smoothstep(-0.35, 0.35, b);
+                    m.buttresses
+                        * kept
+                        * (BUTTRESS_POWERS.0 + (BUTTRESS_POWERS.1 - BUTTRESS_POWERS.0) * b)
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            };
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
                 let (stripes, across, along, cut) =
@@ -547,7 +582,12 @@ impl Range {
                 // lattice of chevrons from across the valley.
                 let depth = (m.gullies_m + couloir * cut * walls_cut) * depth * fade;
                 // 0 on the ribs between gullies, the whole depth down a gully's line.
-                carved += depth * (stripes - 1.0) * 0.5;
+                if shaped != 0.0 && k < 2 {
+                    let into = ((1.0 - stripes) * 0.5).max(0.0);
+                    carved -= depth * libm::powf(into, libm::exp2f(shaped));
+                } else {
+                    carved += depth * (stripes - 1.0) * 0.5;
+                }
                 deepest += depth;
                 // The next, finer set follows the gully walls this set cut, so they branch;
                 // turned by at most half the fall, so the way down never vanishes and turns

@@ -421,6 +421,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D394](decisions/D394.md) | Far mountains drawn from their own cells, not the planet's centre | Tech | Agent | Decided | The ground shader's far ribs are laid cell by cell… |
 | [D395](decisions/D395.md) | Far walls' gullies run long, their snow lies in the mesh's own gullies, and pinned places keep their ground | Tech | Agent | Decided | A range's gullies are laid with each cell of their… |
 | [D401](decisions/D401.md) | A range breaks into ranks of separate summits, its foothills in front | Tech | Agent | Decided | A range is no longer one wall round its edge. |
+| [D403](decisions/D403.md) | A mountain's face is drawn in tiers, weathering and skirts, its gullies shaped by face | Tech | Agent | Decided | A far wall's face gets variety at several sizes… |
 
 ## Tools and workflow
 

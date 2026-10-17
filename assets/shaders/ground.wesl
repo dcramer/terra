@@ -798,6 +798,7 @@ fn fragment(
         var gravel = 0.0;
         var bare = 0.0;
         var snow = 0.0;
+        var in_snow_m = 0.0;
         var woods = 0.0;
 @if(VERTEX_UVS_A)
         {
@@ -818,6 +819,7 @@ fn fragment(
             // lies, the noise the rest. On a fell's face the patch thins out into fingers
             // round the ground's ribs rather than ending in a cut-out line.
             let edge = noise(world * 0.35 + 91.0) * 0.5 + noise(world * 1.9 + 23.0) * 0.3 + noise(world * 0.06 + 5.0) * 0.2;
+            in_snow_m = in.uv.y;
             let deep = clamp((in.uv.y - 0.02) / 0.3, 0.0, 1.0);
             // On a fell's steeper faces thin snow keeps to the lees and gullies, the ribs
             // between bare: patchy by a noise tens of metres across, rather than an even cap.
@@ -869,7 +871,69 @@ fn fragment(
         // not the pale slab 1.3 times as bright read as.
         let grey = dot(ground.steep.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.85;
         let granite = vec3<f32>(grey, grey, grey * 0.97) * (0.85 + 0.3 * blotch) * stained * tones;
-        let scree_tint = vec3<f32>(grey, grey, grey * 0.96) * 1.25 * (0.85 + 0.3 * fleck) * tones;
+        // Scree is the wall's rock broken small, and fresh: paler than the weathered face over
+        // it, so a fan under a gully reads as a pale cone against the dark cliffs and the turf,
+        // as the Tatras' and the Dolomites' do.
+        let scree_tint = vec3<f32>(grey, grey, grey * 0.96) * 1.55 * (0.85 + 0.3 * fleck) * tones;
+        // A wall is not one rock (the developers, 2026-10-17: "the face of the mountain needs a
+        // bit of variety too"). Seen across a valley it stands in tiers: its rock in beds and
+        // sheets of different thickness, each its own tone, the tops of some ledges that catch
+        // the light and hold snow or turf, the bands following the height but warped and
+        // tilted over kilometres, strong on some faces and faint on others; and its rock in
+        // patches of different weathering, rust-stained, dark with lichen, and pale where it
+        // fell away fresh. Drawn in the colour and the light, not the mesh: terraces cut into
+        // the ground held water as ponds (research/2026-10-16-far-mountains.md).
+        let above_sea_m = from_centre - ground.sea_radius_m;
+        let rocky = max(bare, steep) * (1.0 - under_woods);
+        let footprint_m = max(length(dpdx(world)), length(dpdy(world)));
+        // How many metres of height a pixel spans: a far wall seen from below is foreshortened
+        // across, but its tiers, which run by height, hold.
+        let height_px = abs(dpdx(above_sea_m)) + abs(dpdy(above_sea_m));
+        // The face's tint over the rock and steep ground it covers, applied after the layers:
+        // a far wall's mesh is too coarse to measure 40 degrees, so it is drawn as the steep
+        // layer more than as bare granite.
+        var face_tint = vec3<f32>(1.0);
+        var ledge = 0.0;
+        if rocky > 0.001 {
+            // The bands' height warped by hundreds of metres over a couple of kilometres, by
+            // metres over tens, and tilted a few degrees, so a tier climbs, falls and wavers
+            // along a wall rather than running as a contour.
+            let warp = (noise(world * 0.0006 + 31.0) - 0.5) * 240.0 + (noise(world * 0.0023 + 37.0) - 0.5) * 70.0 + (noise(world * 0.011 + 41.0) - 0.5) * 16.0;
+            let tier_at = above_sea_m + warp + dot(world, vec3<f32>(0.031, 0.0, 0.047));
+            // Major tiers about a hundred metres high, each split into beds of a few tens; each
+            // of either its own tone, and only some of them standing out as ledges.
+            let major = tier_at / 103.0;
+            let minor = tier_at / 29.0;
+            let major_r = hash(vec3<f32>(floor(major), 7.1, 5.3));
+            let minor_r = hash(vec3<f32>(floor(minor), 3.7, 11.9));
+            let banded = smoothstep(0.25, 0.55, noise(world * 0.0007 + 61.0) * 0.7 + noise(world * 0.003 + 67.0) * 0.3);
+            let seen = 1.0 - smoothstep(18.0, 40.0, height_px);
+            let strength = banded * seen;
+            var band_tone = mix(1.0, mix(0.55, 1.25, major_r) * mix(0.8, 1.12, minor_r), strength);
+            // A bed's foot under the ledge above it is in shade.
+            band_tone *= mix(1.0, 0.65, (1.0 - smoothstep(0.0, 0.1, fract(major))) * strength * step(0.5, major_r));
+            // A ledge runs a hundred metres or so and gives out, broken where gullies and
+            // rockfall cut it: whole, they read as contour lines ruled across every wall.
+            let runs = smoothstep(0.55, 0.68, noise(world * 0.009 + 43.0) * 0.7 + noise(world * 0.03 + 47.0) * 0.3);
+            let ledge_major = smoothstep(0.88, 0.96, fract(major)) * step(0.5, major_r);
+            let ledge_minor = smoothstep(0.86, 0.95, fract(minor)) * step(0.82, minor_r);
+            ledge = max(ledge_major, ledge_minor * 0.7) * banded * runs * rocky * (1.0 - smoothstep(3.0, 9.0, height_px));
+            // Patches of weathering a few hundred metres across: iron-stained rust, dark
+            // lichen and wet rock, and pale fresh scars where a slab fell away; and a far wall
+            // a weathered mid grey, darker than the steep layer's fresh scan, as the Tatras'
+            // granite and the Dolomites' shaded faces are.
+            let patch_a = noise(world * 0.0019 + 83.0) * 0.65 + noise(world * 0.0061 + 89.0) * 0.35;
+            let patch_b = noise(world * 0.0013 + 97.0) * 0.6 + noise(world * 0.0047 + 101.0) * 0.4;
+            let patch_c = noise(world * 0.0037 + 107.0) * 0.7 + noise(world * 0.011 + 109.0) * 0.3;
+            let rust = smoothstep(0.58, 0.78, patch_a);
+            let lichen = smoothstep(0.5, 0.7, patch_b);
+            let scar = smoothstep(0.64, 0.74, patch_c) * (1.0 - lichen);
+            var weathered = mix(vec3<f32>(1.0), vec3<f32>(1.22, 0.98, 0.72), rust);
+            weathered *= mix(vec3<f32>(1.0), vec3<f32>(0.4, 0.45, 0.4), lichen);
+            weathered = mix(weathered, vec3<f32>(1.65, 1.62, 1.55), scar);
+            let far_wall = mix(1.0, 0.78, smoothstep(300.0, 900.0, far_off));
+            face_tint = mix(vec3<f32>(1.0), weathered * band_tone * far_wall, rocky);
+        }
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
         // ribs and couloirs that split its walls (terra_voxel mountains.rs), so a wall a few
         // kilometres off read as smooth felt. Its rock and steep ground take their ribs in
@@ -882,6 +946,11 @@ fn fragment(
         let ribbed = max(max(bare, steep), snow) * smoothstep(150.0, 450.0, far_off) * (1.0 - under_woods);
         var rib = 0.0;
         var rib_tilt = 0.0;
+        // Dark wet streaks down the middle set of gullies on some faces, where water runs and
+        // the rock stays wet and black with algae, as down the Dolomites' and Tatras' walls.
+        var wet_far = 0.0;
+        // How far down a great couloir's line a point lies, 0 off it to 1 down its middle.
+        var fan = 0.0;
         // How many metres of ground a pixel spans, for each set of ribs to fade out before a
         // pixel holds a whole rib and gully: finer, they sparkled as a grain over the wall.
         let footprint = max(length(dpdx(world)), length(dpdy(world)));
@@ -898,6 +967,7 @@ fn fragment(
             var rise = 0.0;
             var couloirs = 1.0;
             var couloirs_drawn = 0.0;
+            var gullies_far = 1.0;
             // The far mesh's cells, about 16 m at 3 km and 32 m at 6 km: a set of gullies at
             // least four or five of them across stands in the mesh itself, the ground's own
             // gullies (mountains.rs), with its snow lying in their beds (terrain.rs `lying`).
@@ -907,7 +977,10 @@ fn fragment(
             for (var k = 0; k < 3; k++) {
                 let band = sets[k];
                 let unheld = smoothstep(band.x * 0.2, band.x * 0.3, mesh_cell);
-                let patchy = 0.3 + 0.7 * smoothstep(0.3, 0.7, noise(world * 0.0024 + band.z * 13.0));
+                // Each set strong on some faces and nearly gone from others, so one wall is cut
+                // by broad couloirs, the next by close runnels, a third a smooth slab: drawn all
+                // alike, every face was combed at one width (the r2 review).
+                let patchy = 0.08 + 0.92 * smoothstep(0.3, 0.7, noise(world * 0.0017 + band.z * 13.0) * 0.7 + noise(world * 0.0051 + band.z * 7.0) * 0.3);
                 let keep = band.y * unheld * patchy * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
                 if keep > 0.001 {
                     let stripes = fall_stripes(world, across_face, band.x, band.z);
@@ -917,6 +990,9 @@ fn fragment(
                     if k == 0 {
                         couloirs = stripes.x;
                         couloirs_drawn = keep / band.y;
+                    }
+                    if k == 1 {
+                        gullies_far = stripes.x;
                     }
                 }
             }
@@ -928,7 +1004,36 @@ fn fragment(
             // A summer's snow on a wall lies in its great couloirs, in streaks down them, and
             // is gone from the buttresses between: past where the mesh holds them, in these.
             snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), ribbed * mix(0.75, 1.0, steep) * couloirs_drawn);
+            wet_far = smoothstep(-0.3, -0.85, gullies_far) * smoothstep(0.45, 0.7, noise(world * 0.0031 + 113.0)) * ribbed * rocky;
+            fan = smoothstep(0.0, -0.55, couloirs + (blotch - 0.5) * 0.3) * couloirs_drawn;
         }
+        // Under the walls, on the ground of 20 to 33 degrees their foot eases into, the
+        // couloirs' lines run on as pale scree fans and talus, and between them alpine turf
+        // grows below the bare heights: the Tatras' and the Odle's skirts of grey cones and
+        // green between, where the faces met the forest bare (the r2 review).
+        let skirt_slope = smoothstep(0.83, 0.87, flatness) * (1.0 - smoothstep(0.93, 0.97, flatness));
+        let skirt = skirt_slope * smoothstep(300.0, 800.0, far_off) * (1.0 - woods) * step(0.001, ribbed);
+        let talus = skirt * fan;
+        scree = max(scree, smoothstep(0.2, 0.5, talus));
+        let skirt_turf = skirt * (1.0 - fan) * smoothstep(0.35, 0.6, noise(world * 0.006 + 151.0) * 0.6 + noise(world * 0.02 + 157.0) * 0.4)
+            * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
+        // Far snow is not a smooth cap: rock breaks through it in outcrops tens of metres
+        // across, more the steeper the ground, and its edges are sharp, as a summer's snow on
+        // the Tetons' and the Tatras' tops is. Near, the vertices' snow and its frayed edge
+        // above hold it.
+        let far_snow = smoothstep(250.0, 700.0, far_off);
+        if snow > 0.0 && far_snow > 0.0 {
+            let outcrop = noise(world * 0.013 + 131.0) * 0.55 + noise(world * 0.041 + 137.0) * 0.3 + noise(world * 0.0045 + 139.0) * 0.15;
+            let breaks = smoothstep(0.6, 0.64, outcrop + (0.9 - flatness) * 0.35);
+            snow *= 1.0 - breaks * far_snow;
+            // Its edge sharpened, a fade over a few metres rather than tens.
+            snow = mix(snow, smoothstep(0.02, 0.15, snow), far_snow);
+        }
+        // Snow lies on a wall's ledges where it lies round them; elsewhere they hold turf below
+        // the bare heights, the green benches between the Tatras' cliff bands.
+        let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m);
+        snow = max(snow, ledge_snow * 0.9);
+        let ledge_turf = ledge * (1.0 - ledge_snow) * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);
 @if(GROUND_LOW) {
@@ -999,6 +1104,7 @@ fn fragment(
         {
             colour = lake_shore(colour, in.uv_b.y, fleck, lowland_at(from_centre - ground.sea_radius_m));
         }
+        colour *= mix(vec3<f32>(1.0), face_tint, (1.0 - snow) * (1.0 - scree));
         pbr_input.N = ground_is.normal;
 } @else {
         let n = normalize(in.world_normal);
@@ -1316,6 +1422,16 @@ fn fragment(
         if ribbed > 0.0 {
             ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt);
             colour *= mix(1.0, mix(0.68, 1.08, rib * 0.5 + 0.5), ribbed);
+            colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
+        }
+        colour *= mix(vec3<f32>(1.0), face_tint, (1.0 - snow) * (1.0 - scree));
+        // A ledge's top faces the sky: it catches the light over the shaded face under it, and
+        // holds turf or snow.
+        if ledge > 0.001 || skirt_turf > 0.001 {
+            ground_is.normal = normalize(mix(ground_is.normal, up, ledge * 0.65));
+            let turf = meadow_tones(world, 0.35) * 0.75 * (0.85 + 0.3 * blotch);
+            colour *= 1.0 + 0.3 * ledge * (1.0 - snow);
+            colour = mix(colour, turf, max(ledge_turf, skirt_turf) * (1.0 - snow) * 0.85);
         }
         pbr_input.N = ground_is.normal;
 }
