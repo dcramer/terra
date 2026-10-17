@@ -16,7 +16,8 @@ Locomotion is in place: the game moves the animal at the clip's pace, which this
 creature.json says, in the model's units once turned (Tripo's are a metre across its longest
 side), where each bone's head and tail are (`bones`; a bone ending `.L` is mirrored to `.R`),
 which bones make each leg (`legs`: upper, lower, the foot that meets the ground, and toes),
-and each clip's kind and numbers (`clips`). Check what it made with `sheet.py`.
+and each clip's kind and numbers (`clips`); `middle` is the x of the body's middle line, if
+Tripo put it off centre. Check what it made with `sheet.py`.
 """
 
 import json
@@ -57,12 +58,14 @@ def smooth(a, b, x):
     return t * t * (3 - 2 * t)
 
 
-# The skeleton as the file gives it, mirrored, in the model's turned units.
+# The skeleton as the file gives it, mirrored about the body's middle line (`middle`, its x in
+# the model's turned units, for a model Tripo put off centre), in the model's turned units.
+MIDDLE = SPEC.get("middle", 0.0)
 BONES = {}
 for name, (parent, head, tail) in SPEC["bones"].items():
     BONES[name] = (parent, Vector(head), Vector(tail))
     if name.endswith(".L"):
-        mirror = lambda v: Vector((-v.x, v.y, v.z))
+        mirror = lambda v: Vector((2 * MIDDLE - v.x, v.y, v.z))
         p = parent[:-2] + ".R" if parent and parent.endswith(".L") else parent
         BONES[name[:-2] + ".R"] = (p, mirror(Vector(head)), mirror(Vector(tail)))
 LEGS = {}
@@ -72,7 +75,7 @@ for leg, chain in SPEC["legs"].items():
         LEGS[leg[:-2] + ".R"] = [b[:-2] + ".R" for b in chain]
 # The origin: under the middle of the feet, so the game stands it where it is.
 feet = [BONES[chain[2]][2] for chain in LEGS.values()]
-ORIGIN = Vector((0.0, sum(v.y for v in feet) / len(feet), 0.0))
+ORIGIN = Vector((MIDDLE, sum(v.y for v in feet) / len(feet), 0.0))
 
 
 def ours(v):

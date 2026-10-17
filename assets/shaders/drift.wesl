@@ -167,9 +167,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         about = select(0.0, 1.0, luck_of_crossing < drift.flock.w);
     }
     let middle = origin + frame * (eye + rel);
-    // Faded toward the box's sides, so none is seen to come or go, and near the eye.
+    // Faded toward the box's sides, so none is seen to come or go, and over the few metres
+    // nearest the eye, where a speck would be a big bright fleck across the picture.
     let distance = length(view.world_position - middle);
-    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * smoothstep(0.25, 0.9, distance) * about;
+    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * smoothstep(1.5, 4.0, distance) * about;
     // Never smaller than a pixel and a half on screen; one drawn bigger is fainter, so a
     // far mote does not flicker in and out.
     let pixel_m = distance * 2.0 / (view.clip_from_view[1][1] * view.viewport.w);

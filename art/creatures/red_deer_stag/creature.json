@@ -1,0 +1,292 @@
+{
+  "subject": "red deer stag of European forests in the autumn rut: big, rich red-brown coat, dark shaggy neck mane, pale buff rump patch, a full spread of branching antlers",
+  "file": "RedDeerStag",
+  "plan": "quadruped",
+  "tripo_project": "858ef62b-1589-4848-921f-fc9d52b3043c",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": {
+    "model": 30
+  },
+  "turn": -90,
+  "scale": 2.05,
+  "budget": 4200,
+  "textures": {
+    "colour": 1024,
+    "normal": 1024,
+    "roughness_metal": 512
+  },
+  "bones": {
+    "Hips": [
+      null,
+      [
+        0,
+        0.32,
+        0.5
+      ],
+      [
+        0,
+        0.14,
+        0.5
+      ]
+    ],
+    "Spine": [
+      "Hips",
+      [
+        0,
+        0.14,
+        0.5
+      ],
+      [
+        0,
+        -0.04,
+        0.5
+      ]
+    ],
+    "Chest": [
+      "Spine",
+      [
+        0,
+        -0.04,
+        0.5
+      ],
+      [
+        0,
+        -0.2,
+        0.5
+      ]
+    ],
+    "Neck1": [
+      "Chest",
+      [
+        0,
+        -0.2,
+        0.5
+      ],
+      [
+        0,
+        -0.25,
+        0.6
+      ]
+    ],
+    "Neck2": [
+      "Neck1",
+      [
+        0,
+        -0.25,
+        0.6
+      ],
+      [
+        0,
+        -0.29,
+        0.71
+      ]
+    ],
+    "Head": [
+      "Neck2",
+      [
+        0,
+        -0.29,
+        0.71
+      ],
+      [
+        0,
+        -0.46,
+        0.63
+      ]
+    ],
+    "Ear.L": [
+      "Head",
+      [
+        0.04,
+        -0.27,
+        0.73
+      ],
+      [
+        0.12,
+        -0.25,
+        0.75
+      ]
+    ],
+    "Antler.L": [
+      "Head",
+      [
+        0.035,
+        -0.28,
+        0.76
+      ],
+      [
+        0.17,
+        -0.17,
+        0.94
+      ]
+    ],
+    "Tail1": [
+      "Hips",
+      [
+        0,
+        0.44,
+        0.53
+      ],
+      [
+        0,
+        0.47,
+        0.46
+      ]
+    ],
+    "Shoulder.L": [
+      "Chest",
+      [
+        0.05,
+        -0.16,
+        0.56
+      ],
+      [
+        0.06,
+        -0.12,
+        0.42
+      ]
+    ],
+    "UpperArm.L": [
+      "Shoulder.L",
+      [
+        0.06,
+        -0.12,
+        0.42
+      ],
+      [
+        0.06,
+        -0.05,
+        0.3
+      ]
+    ],
+    "Forearm.L": [
+      "UpperArm.L",
+      [
+        0.06,
+        -0.05,
+        0.3
+      ],
+      [
+        0.06,
+        -0.1,
+        0.06
+      ]
+    ],
+    "Paw.L": [
+      "Forearm.L",
+      [
+        0.06,
+        -0.1,
+        0.06
+      ],
+      [
+        0.06,
+        -0.125,
+        0.005
+      ]
+    ],
+    "Thigh.L": [
+      "Hips",
+      [
+        0.07,
+        0.31,
+        0.47
+      ],
+      [
+        0.07,
+        0.24,
+        0.35
+      ]
+    ],
+    "Shin.L": [
+      "Thigh.L",
+      [
+        0.07,
+        0.24,
+        0.35
+      ],
+      [
+        0.065,
+        0.42,
+        0.25
+      ]
+    ],
+    "Foot.L": [
+      "Shin.L",
+      [
+        0.065,
+        0.42,
+        0.25
+      ],
+      [
+        0.065,
+        0.36,
+        0.005
+      ]
+    ]
+  },
+  "legs": {
+    "Fore.L": [
+      "UpperArm.L",
+      "Forearm.L",
+      "Paw.L"
+    ],
+    "Hind.L": [
+      "Thigh.L",
+      "Shin.L",
+      "Foot.L"
+    ]
+  },
+  "clips": {
+    "Idle": {
+      "kind": "idle",
+      "seconds": 4.0,
+      "tail": 3
+    },
+    "Walk": {
+      "kind": "gait",
+      "cycle": 0.8,
+      "stride": 0.3,
+      "lift": 0.07,
+      "duty": 0.62,
+      "bob": 0.006,
+      "phases": {
+        "Hind.L": 0.0,
+        "Fore.L": 0.25,
+        "Hind.R": 0.5,
+        "Fore.R": 0.75
+      },
+      "tail": 3
+    },
+    "Run": {
+      "kind": "gait",
+      "cycle": 0.36,
+      "stride": 0.4,
+      "lift": 0.11,
+      "duty": 0.3,
+      "bob": 0.03,
+      "flex": 10,
+      "fold": 60,
+      "phases": {
+        "Hind.L": 0.0,
+        "Hind.R": 0.1,
+        "Fore.R": 0.5,
+        "Fore.L": 0.6
+      },
+      "tail": 5
+    },
+    "Eat": {
+      "kind": "graze",
+      "seconds": 3.5,
+      "crouch": 0.01,
+      "root": 4,
+      "spine": 9,
+      "neck": 95,
+      "head": 40
+    },
+    "Death": {
+      "kind": "death",
+      "seconds": 1.2
+    }
+  }
+}

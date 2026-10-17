@@ -1,0 +1,279 @@
+{
+  "subject": "red deer calf of four months in autumn: small, long-legged, big head and ears, soft red-brown coat with a few faint pale spots left, pale buff rump patch",
+  "file": "RedDeerCalf",
+  "plan": "quadruped",
+  "tripo_project": "d01ff7b6-3fd3-4b75-a67e-6a03a93cffd1",
+  "generator": "h3.1, standard geometry and texture, PBR",
+  "credits": {
+    "model": 30
+  },
+  "turn": 90,
+  "scale": 1.1,
+  "budget": 3200,
+  "textures": {
+    "colour": 1024,
+    "normal": 1024,
+    "roughness_metal": 512
+  },
+  "bones": {
+    "Hips": [
+      null,
+      [
+        0,
+        0.33,
+        0.61
+      ],
+      [
+        0,
+        0.14,
+        0.62
+      ]
+    ],
+    "Spine": [
+      "Hips",
+      [
+        0,
+        0.14,
+        0.62
+      ],
+      [
+        0,
+        -0.03,
+        0.62
+      ]
+    ],
+    "Chest": [
+      "Spine",
+      [
+        0,
+        -0.03,
+        0.62
+      ],
+      [
+        0,
+        -0.17,
+        0.6
+      ]
+    ],
+    "Neck1": [
+      "Chest",
+      [
+        0,
+        -0.17,
+        0.6
+      ],
+      [
+        0,
+        -0.21,
+        0.69
+      ]
+    ],
+    "Neck2": [
+      "Neck1",
+      [
+        0,
+        -0.21,
+        0.69
+      ],
+      [
+        0,
+        -0.25,
+        0.79
+      ]
+    ],
+    "Head": [
+      "Neck2",
+      [
+        0,
+        -0.25,
+        0.79
+      ],
+      [
+        0,
+        -0.44,
+        0.78
+      ]
+    ],
+    "Ear.L": [
+      "Head",
+      [
+        0.04,
+        -0.26,
+        0.89
+      ],
+      [
+        0.09,
+        -0.24,
+        0.99
+      ]
+    ],
+    "Tail1": [
+      "Hips",
+      [
+        0,
+        0.43,
+        0.65
+      ],
+      [
+        0,
+        0.45,
+        0.57
+      ]
+    ],
+    "Shoulder.L": [
+      "Chest",
+      [
+        0.05,
+        -0.15,
+        0.66
+      ],
+      [
+        0.07,
+        -0.12,
+        0.55
+      ]
+    ],
+    "UpperArm.L": [
+      "Shoulder.L",
+      [
+        0.07,
+        -0.12,
+        0.55
+      ],
+      [
+        0.07,
+        -0.035,
+        0.43
+      ]
+    ],
+    "Forearm.L": [
+      "UpperArm.L",
+      [
+        0.07,
+        -0.035,
+        0.43
+      ],
+      [
+        0.07,
+        -0.085,
+        0.06
+      ]
+    ],
+    "Paw.L": [
+      "Forearm.L",
+      [
+        0.07,
+        -0.085,
+        0.06
+      ],
+      [
+        0.07,
+        -0.125,
+        0.005
+      ]
+    ],
+    "Thigh.L": [
+      "Hips",
+      [
+        0.07,
+        0.326,
+        0.6
+      ],
+      [
+        0.075,
+        0.22,
+        0.45
+      ]
+    ],
+    "Shin.L": [
+      "Thigh.L",
+      [
+        0.075,
+        0.22,
+        0.45
+      ],
+      [
+        0.075,
+        0.415,
+        0.33
+      ]
+    ],
+    "Foot.L": [
+      "Shin.L",
+      [
+        0.075,
+        0.415,
+        0.33
+      ],
+      [
+        0.075,
+        0.34,
+        0.005
+      ]
+    ]
+  },
+  "legs": {
+    "Fore.L": [
+      "UpperArm.L",
+      "Forearm.L",
+      "Paw.L"
+    ],
+    "Hind.L": [
+      "Thigh.L",
+      "Shin.L",
+      "Foot.L"
+    ]
+  },
+  "clips": {
+    "Idle": {
+      "kind": "idle",
+      "seconds": 4.0,
+      "tail": 3
+    },
+    "Walk": {
+      "kind": "gait",
+      "cycle": 0.7,
+      "stride": 0.36,
+      "lift": 0.08,
+      "duty": 0.62,
+      "bob": 0.008,
+      "phases": {
+        "Hind.L": 0.0,
+        "Fore.L": 0.25,
+        "Hind.R": 0.5,
+        "Fore.R": 0.75
+      },
+      "tail": 3
+    },
+    "Run": {
+      "kind": "gait",
+      "cycle": 0.32,
+      "stride": 0.46,
+      "lift": 0.13,
+      "duty": 0.28,
+      "bob": 0.035,
+      "flex": 10,
+      "fold": 60,
+      "phases": {
+        "Hind.L": 0.0,
+        "Hind.R": 0.1,
+        "Fore.R": 0.5,
+        "Fore.L": 0.6
+      },
+      "tail": 5
+    },
+    "Eat": {
+      "kind": "graze",
+      "seconds": 3.5,
+      "crouch": 0.01,
+      "root": 4,
+      "spine": 9,
+      "neck": 80,
+      "head": 40
+    },
+    "Death": {
+      "kind": "death",
+      "seconds": 1.2
+    }
+  }
+}

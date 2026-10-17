@@ -63,6 +63,10 @@ pub struct SpeciesDef {
     /// A coat moulted with the seasons, if it has one (`coats`).
     #[serde(default)]
     pub coat: Option<CoatDef>,
+    /// The kind of its young, and how often one of its kind is met with one at its side: a
+    /// hind with her calf.
+    #[serde(default)]
+    pub young: Option<(String, f32)>,
 }
 
 /// A coat moulted with the seasons, as a mountain hare's or an arctic fox's: the tint its
@@ -176,6 +180,8 @@ pub enum Lives {
         per_ha: f32,
         group: (u32, u32),
     },
+    /// Never put out on its own: only beside one of a kind that has it as its `young`.
+    Young,
 }
 
 /// Where a kind of creature living about the land is found: as warm a growing season as it
@@ -300,8 +306,8 @@ impl Bestiary {
         (0..self.kinds.len()).map(|index| Species(index as u8))
     }
 
-    /// The kind of creature called a name. Only tests name one.
-    #[cfg(test)]
+    /// The kind of creature called a name: in code only tests name one; data names a kind's
+    /// young.
     pub fn named(&self, name: &str) -> Option<Species> {
         self.all().find(|&species| self.name(species) == name)
     }
@@ -342,6 +348,34 @@ mod tests {
         assert!(bestiary.all().count() > 0);
         for species in bestiary.all() {
             assert_eq!(bestiary.named(bestiary.name(species)), Some(species));
+        }
+    }
+
+    #[test]
+    fn young_are_kinds_that_live_only_beside_their_mothers() {
+        let bestiary = Bestiary::read(&Items::default());
+        for species in bestiary.all() {
+            let about = bestiary.get(species);
+            if let Some((name, share)) = &about.young {
+                let young = bestiary.named(name);
+                assert!(
+                    young.is_some(),
+                    "{}'s young, {name}, is no kind",
+                    about.name
+                );
+                assert_eq!(bestiary.get(young.unwrap()).lives, Lives::Young, "{name}");
+                assert!((0.0..=1.0).contains(share), "{}", about.name);
+            }
+            if about.lives == Lives::Young {
+                let mothers = bestiary.all().filter(|&mother| {
+                    bestiary
+                        .get(mother)
+                        .young
+                        .as_ref()
+                        .is_some_and(|(n, _)| *n == about.name)
+                });
+                assert!(mothers.count() > 0, "{} is nobody's young", about.name);
+            }
         }
     }
 

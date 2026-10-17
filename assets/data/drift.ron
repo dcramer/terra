@@ -23,12 +23,12 @@
             // Dust, pollen and spores hanging in the still air under the crowns, seen only
             // in the sun's shafts.
             name: "Dust motes",
-            count: 5000,
+            count: 2500,
             look: Speck,
-            size_m: 0.01,
+            size_m: 0.007,
             colour: (0.3, 0.29, 0.26),
-            glow: 90.0,
-            opacity: 0.85,
+            glow: 55.0,
+            opacity: 0.7,
             motion: Hover(wander_m: 0.6, sink_mps: 0.004, carried: 0.04),
             box_m: (9.0, 4.0),
             woods: 1.0,
@@ -41,11 +41,11 @@
             // Midges dancing in small swarms over the path and the water, morning and
             // evening, glinting where the sun catches them.
             name: "Midges",
-            count: 900,
+            count: 600,
             look: Speck,
             size_m: 0.004,
             colour: (0.55, 0.52, 0.45),
-            glow: 22.0,
+            glow: 14.0,
             opacity: 0.9,
             motion: Swarm(swarms: 7, radius_m: 0.7, buzz: 1.6),
             box_m: (16.0, 4.0),
@@ -131,11 +131,11 @@
         (
             // Cotton grass and willow down blown over the heath in late summer.
             name: "Down",
-            count: 160,
+            count: 110,
             look: Speck,
             size_m: 0.014,
             colour: (0.95, 0.94, 0.9),
-            glow: 6.0,
+            glow: 4.0,
             opacity: 0.8,
             motion: Hover(wander_m: 1.2, sink_mps: 0.02, carried: 0.7),
             box_m: (20.0, 3.0),
