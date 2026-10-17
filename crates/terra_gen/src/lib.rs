@@ -1,4 +1,5 @@
-//! Generation toolkit: seeds, repeatable random streams and noise.
+//! Generation toolkit: seeds, repeatable random streams, noise and the hash mixers
+//! (`hash`) every crate uses.
 //!
 //! Everything generated in the game is a function of a seed and a position, so only
 //! changes are ever stored or sent (D41). That only works if every machine computes the
@@ -8,6 +9,7 @@
 //! which is off and runs only when started by hand (D37), runs them on Linux, macOS and
 //! Windows.
 
+pub mod hash;
 mod noise;
 mod rng;
 mod seed;

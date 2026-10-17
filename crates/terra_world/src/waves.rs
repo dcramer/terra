@@ -46,12 +46,7 @@ pub fn trains() -> [Vec4; TRAINS] {
 
 /// A number from 0 to 1 for each whole number, by Wellons's lowbias32 hash.
 fn scatter(n: u32) -> f32 {
-    let mut x = n.wrapping_add(0x9e37_79b9);
-    x ^= x >> 16;
-    x = x.wrapping_mul(0x7feb_352d);
-    x ^= x >> 15;
-    x = x.wrapping_mul(0x846c_a68b);
-    x ^= x >> 16;
+    let x = terra_gen::hash::lowbias32(n.wrapping_add(0x9e37_79b9));
     (x >> 8) as f32 / (1u32 << 24) as f32
 }
 

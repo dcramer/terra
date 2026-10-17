@@ -1155,11 +1155,9 @@ pub(crate) fn hash(parts: &[u32]) -> u32 {
     state as u32
 }
 
-pub(crate) fn splitmix(mut x: u64) -> u64 {
-    x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
+/// A step of SplitMix64's stream: the state moved on by its increment and mixed.
+pub(crate) fn splitmix(x: u64) -> u64 {
+    terra_gen::hash::splitmix64(x.wrapping_add(0x9e37_79b9_7f4a_7c15))
 }
 
 /// A number from 0 up to 1, from a hash.
@@ -1172,14 +1170,11 @@ pub(crate) fn unit(hash: u32) -> f32 {
 /// mixed, so neighbours differ. Damage, loss's shading, broken timber, the cell maps and
 /// the damage mask share it.
 pub fn mix3(seed: u32, a: u32, b: u32, c: u32) -> u32 {
-    let mut hash = seed
-        ^ a.wrapping_mul(0x9E37_79B1)
-        ^ b.wrapping_mul(0x85EB_CA77)
-        ^ c.wrapping_mul(0xC2B2_AE3D);
-    hash ^= hash >> 15;
-    hash = hash.wrapping_mul(0x2C1B_3C6D);
-    hash ^= hash >> 12;
-    hash
+    terra_gen::hash::prospector32_round(
+        seed ^ a.wrapping_mul(0x9E37_79B1)
+            ^ b.wrapping_mul(0x85EB_CA77)
+            ^ c.wrapping_mul(0xC2B2_AE3D),
+    )
 }
 
 /// [`mix3`] as a number from 0 to 1, from its low 16 bits.

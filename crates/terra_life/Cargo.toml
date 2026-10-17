@@ -10,6 +10,8 @@ publish.workspace = true
 glam.workspace = true
 libm.workspace = true
 serde.workspace = true
+# The hash mixers every crate shares (terra_gen::hash).
+terra_gen.workspace = true
 ron.workspace = true
 # The town people live in: its things, buildings and path graph (terra_build::town).
 terra_build.workspace = true

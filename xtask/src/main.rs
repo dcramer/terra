@@ -6,8 +6,10 @@ mod build;
 mod check;
 mod doctor;
 mod load;
+mod primitives;
 mod scenes;
 mod seed;
+mod sizes;
 mod stage;
 mod windows;
 mod worktrees;
@@ -181,6 +183,13 @@ const TASKS: &[Task] = &[
         does: "what every change must pass, run by git before each push: formatting, lints, every test, the kit, foliage, artifact, docs and dependency checks; --quick, run before each commit, leaves out the slow sweeps, the artifacts ratchet and the Blender scripts",
         group: "Play and check",
         run: check,
+    },
+    Task {
+        name: "sizes",
+        takes: "[--record]",
+        does: "the size ratchet the quick check runs: no Rust file over 1,000 lines or function over 150 but those in xtask/sizes-baseline.tsv, which never grow; --record lowers the baseline to what is there",
+        group: "Play and check",
+        run: sizes::sizes,
     },
     Task {
         name: "kits",

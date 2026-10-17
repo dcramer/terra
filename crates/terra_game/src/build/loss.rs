@@ -462,8 +462,9 @@ fn cloud(fell: &[(IVec3, Cube)]) -> Option<(Kind, Vec<(Vec3, Billow)>)> {
     let puffs = (0..count)
         .map(|i| {
             let r = |salt: u32| {
-                let h = ((i as u32).wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77))
-                    .wrapping_mul(0x2C1B_3C6D);
+                let h = terra_gen::hash::prospector32_round(
+                    (i as u32).wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77),
+                );
                 ((h >> 8) & 0xFFFF) as f32 / 65535.0
             };
             let local = Vec3::new(
@@ -615,8 +616,9 @@ fn billow_at(
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
     for sprite in 0..5u32 {
         let r = |salt: u32| {
-            let h = (seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77))
-                .wrapping_mul(0x2C1B_3C6D);
+            let h = terra_gen::hash::prospector32_round(
+                seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77),
+            );
             ((h >> 8) & 0xFFFF) as f32 / 65535.0
         };
         let drift = billow.drift

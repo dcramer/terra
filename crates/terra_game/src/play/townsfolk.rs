@@ -283,12 +283,7 @@ fn prepare(
 
 /// A repeatable draw from a seed and a number, 0 to 1.
 fn draw(seed: u32, salt: u32) -> f32 {
-    let mut x = seed ^ salt.wrapping_mul(0x9e37_79b9);
-    x ^= x >> 16;
-    x = x.wrapping_mul(0x7feb_352d);
-    x ^= x >> 15;
-    x = x.wrapping_mul(0x846c_a68b);
-    x ^= x >> 16;
+    let x = terra_gen::hash::lowbias32(seed ^ salt.wrapping_mul(0x9e37_79b9));
     (x >> 8) as f32 / (1u32 << 24) as f32
 }
 

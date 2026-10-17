@@ -241,14 +241,11 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
 
 /// A number from 0 to 1 for a square of the grid, the same every run.
 fn hash(i: i32, j: i32, salt: u32) -> f32 {
-    let mut x = (i as u32).wrapping_mul(0x9E37_79B9)
-        ^ (j as u32).wrapping_mul(0x85EB_CA6B)
-        ^ salt.wrapping_mul(0xC2B2_AE35);
-    x ^= x >> 16;
-    x = x.wrapping_mul(0x7FEB_352D);
-    x ^= x >> 15;
-    x = x.wrapping_mul(0x846C_A68B);
-    x ^= x >> 16;
+    let x = terra_gen::hash::lowbias32(
+        (i as u32).wrapping_mul(0x9E37_79B9)
+            ^ (j as u32).wrapping_mul(0x85EB_CA6B)
+            ^ salt.wrapping_mul(0xC2B2_AE35),
+    );
     (x & 0xFF_FFFF) as f32 / 16_777_215.0
 }
 

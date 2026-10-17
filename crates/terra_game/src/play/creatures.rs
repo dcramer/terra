@@ -52,13 +52,12 @@ const TAKES_WING_MPS: f32 = 11.0;
 /// the beat its idle and grazing keep, its coat (`coats`).
 pub(super) fn luck(home: Vec3) -> Vec2 {
     let bits = |v: f32| (v * 16.0).round() as i64 as u64;
-    let mut h = bits(home.x)
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        .wrapping_add(bits(home.y).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
-        .wrapping_add(bits(home.z).wrapping_mul(0x1656_67B1_9E37_79F9));
-    h ^= h >> 31;
-    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    h ^= h >> 29;
+    let h = terra_gen::hash::splitmix64(
+        bits(home.x)
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .wrapping_add(bits(home.y).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
+            .wrapping_add(bits(home.z).wrapping_mul(0x1656_67B1_9E37_79F9)),
+    );
     Vec2::new(
         (h & 0xFFFF) as f32 / 65535.0,
         ((h >> 16) & 0xFFFF) as f32 / 65535.0,

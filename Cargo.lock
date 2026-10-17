@@ -5906,6 +5906,7 @@ dependencies = [
  "ron",
  "serde",
  "terra_build",
+ "terra_gen",
 ]
 
 [[package]]

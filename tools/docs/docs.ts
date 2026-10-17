@@ -1,8 +1,9 @@
 // Checks the repository's docs, run by `cargo xtask check`: links and anchors resolve, every
 // doc, note, spike and tool script is in its folder's index, every decision file
 // (docs/decisions/Dnnn.md) is well formed, with every decision a tracked file cites among them,
-// every test a contract page cites as its proof exists, and a page's part rendered from data
-// matches it. Prints each fault; exits 1 if there are any.
+// every test a contract page cites as its proof exists, a page's part rendered from data
+// matches it, and the guides name only real `cargo xtask` tasks and skills only real paths (D396).
+// Prints each fault; exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
 //   node tools/docs/docs.ts --next         the next free decision number, here and on origin/main (`cargo xtask decision`)
@@ -325,6 +326,46 @@ export function renderPages(read: (path: string) => string | undefined, write?: 
   return faults;
 }
 
+/** The tasks `cargo xtask` runs: the names in xtask/src/main.rs's `TASKS`, and `help`. */
+export function xtaskTasks(main: string): Set<string> {
+  const table = main.slice(main.indexOf("const TASKS"));
+  return new Set(["help", ...[...table.matchAll(/^\s*name: "([^"]+)",$/gm)].map((m) => m[1])]);
+}
+
+/** Pages read by agents and developers for how to work, whose commands and paths must be real (D396). */
+export const GUIDES = (file: string) =>
+  (file.startsWith("docs/") || file.startsWith(".agents/skills/") || file === "AGENTS.md" || /^tools\/.+\/README\.md$/.test(file)) &&
+  file.endsWith(".md");
+
+/** Each `cargo xtask <task>` a page names that is no task, with the tasks there are. */
+export function unknownTasks(file: string, markdown: string, tasks: Set<string>): string[] {
+  const named = new Set([...markdown.matchAll(/\bcargo xtask ([a-z][a-z0-9-]*)/g)].map((m) => m[1]));
+  return [...named]
+    .filter((task) => !tasks.has(task))
+    .map((task) => `${file}: names \`cargo xtask ${task}\`, which is no task; \`cargo xtask tools\` lists them (xtask/src/main.rs)`);
+}
+
+/**
+ * The repository paths a page names in backticks that do not exist: each word in a code span
+ * that begins with one of the repository's top folders (`crates/…`, `node tools/x.ts --y`),
+ * less a trailing `:line`, `#anchor` or punctuation. A word with a placeholder or a pattern in it
+ * (`<name>`, `NAME`, `*`, `{a,b}`, `…`, `$X`) names no one path and is skipped. `exists` says
+ * whether a path is in the repository or is somewhere git ignores, where a tool writes.
+ */
+export function missingPaths(file: string, markdown: string, exists: (path: string) => boolean, tops: Set<string>): string[] {
+  const faults = new Set<string>();
+  for (const [, span] of withoutFences(markdown).matchAll(/`([^`\n]+)`/g)) {
+    for (const word of span.split(/[\s=]+/)) {
+      const path = word.replace(/^["'(]+/, "").replace(/(:\d+(-\d+)?|#[\w-]*)?["'),.;:]*$/, "").replace(/\/$/, "");
+      const top = path.split("/")[0];
+      const placeholder = /[<>*{}…$\[\]|]/.test(path) || path.split("/").some((part) => /^[A-Z]+$|nnn|NNN/.test(part));
+      if (!path.includes("/") || !tops.has(top) || placeholder) continue;
+      if (!exists(path)) faults.add(`${file}: names \`${path}\`, which is not in the repository`);
+    }
+  }
+  return [...faults];
+}
+
 /** Entries of a folder that its index does not link or name. */
 export function unindexed(index: string, indexText: string, entries: string[]): string[] {
   return entries.filter((e) => !indexText.includes(e)).map((e) => `${index}: does not list ${e}`);
@@ -347,6 +388,25 @@ function check(): string[] {
     .join("\n");
   for (const page of PROOF_PAGES) faults.push(...missingTests(page, read(page) ?? "", sources));
   faults.push(...renderPages(read));
+
+  const tasks = xtaskTasks(read("xtask/src/main.rs") ?? "");
+  const files = new Set(tracked);
+  const folders = new Set(tracked.flatMap((f) => f.split("/").slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join("/"))));
+  const tops = new Set([...folders].filter((f) => !f.includes("/")));
+  // Ignored as it stands, or as a folder (`out/`), which git can tell only of one that exists.
+  const ignored = (path: string) => {
+    try {
+      execFileSync("git", ["check-ignore", "--no-index", path, `${path}/`], { cwd: ROOT, stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const exists = (path: string) => files.has(path) || folders.has(path) || ignored(path);
+  for (const file of docs.filter(GUIDES)) {
+    faults.push(...unknownTasks(file, read(file)!, tasks));
+    if (file.startsWith(".agents/skills/")) faults.push(...missingPaths(file, read(file)!, exists, tops));
+  }
 
   const decisions = decisionFiles();
   faults.push(...decisions.faults, ...strayRows(read("docs/decisions.md") ?? ""));

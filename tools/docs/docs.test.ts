@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   AREAS,
   anchors,
   brokenLinks,
   decisionIds,
   gist,
+  GUIDES,
+  missingPaths,
   missingTests,
   nextDecision,
   readDecisions,
@@ -17,6 +20,8 @@ import {
   strayRows,
   unindexed,
   unknownDecisions,
+  unknownTasks,
+  xtaskTasks,
 } from "./docs.ts";
 
 test("headings anchor as GitHub makes them, repeats numbered", () => {
@@ -177,4 +182,42 @@ test("a page's rendered part is written again between its markers, the rest kept
     rendered("# no markers\n", () => ""),
     undefined,
   );
+});
+
+test("the tasks are read from xtask's table, and help with them", () => {
+  const main = 'fn x() { let name: "not";\n}\nconst TASKS: &[Task] = &[\n    Task {\n        name: "play",\n    },\n    Task {\n        name: "paint-icons",\n';
+  assert.deepEqual([...xtaskTasks(main)].sort(), ["help", "paint-icons", "play"]);
+  const real = xtaskTasks(readFileSync(new URL("../../xtask/src/main.rs", import.meta.url), "utf8"));
+  for (const task of ["check", "sizes", "decision", "tools"]) assert.ok(real.has(task), task);
+});
+
+test("a page naming a task that is not one is a fault; a placeholder or bare `cargo xtask` is not", () => {
+  const tasks = new Set(["check", "help"]);
+  const text = "Run `cargo xtask check --quick`, then cargo xtask chek. Any `cargo xtask <task>`; `cargo xtask` alone; cargo xtask check.";
+  assert.deepEqual(unknownTasks("docs/a.md", text, tasks), [
+    "docs/a.md: names `cargo xtask chek`, which is no task; `cargo xtask tools` lists them (xtask/src/main.rs)",
+  ]);
+});
+
+test("the guides are the docs, the skills, AGENTS.md and the tools' READMEs", () => {
+  const files = ["docs/a.md", ".agents/skills/x/SKILL.md", "AGENTS.md", "tools/docs/README.md", "research/n.md", "README.md", "tools/docs/docs.ts"];
+  assert.deepEqual(files.filter(GUIDES), files.slice(0, 4));
+});
+
+test("a skill naming a path that is not there is a fault; placeholders, patterns and written outputs are not", () => {
+  const there = new Set(["crates/terra_build/src/kit.rs", "tools/props/props.ts", "tools/props", "tools/out-ignored"]);
+  const tops = new Set(["crates", "tools", "art"]);
+  const text = [
+    "See `crates/terra_build/src/kit.rs:40`, `crates/terra_build/src/kits.rs` and [x](`nope`).",
+    "Run `node tools/props/props.ts --into tools/prop/x.glb`, then `tools/props/`.",
+    "Name it `art/<name>/sheet.png`, `art/NAME/sheet.png`, `art/x/*.png` or `docs/Dnnn.md`; `target/x.rs` is no top here.",
+    "It writes `tools/out-ignored/a.glb`; `art/gone.png`, `art/gone.png`.",
+    "```\ncrates/fenced/out.rs\n```",
+  ].join("\n");
+  const exists = (path: string) => there.has(path) || path.startsWith("tools/out-ignored");
+  assert.deepEqual(missingPaths(".agents/skills/x/SKILL.md", text, exists, tops), [
+    ".agents/skills/x/SKILL.md: names `crates/terra_build/src/kits.rs`, which is not in the repository",
+    ".agents/skills/x/SKILL.md: names `tools/prop/x.glb`, which is not in the repository",
+    ".agents/skills/x/SKILL.md: names `art/gone.png`, which is not in the repository",
+  ]);
 });

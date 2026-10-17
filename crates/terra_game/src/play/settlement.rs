@@ -221,14 +221,11 @@ fn found(
                 .filter(|fitting| fitting.hang == hang && fitting.fits(size.0, size.1))
                 .collect();
             let roll = |extra: u32| {
-                let mut x = seed
-                    ^ building.name.len() as u32
-                    ^ (building.at[0].to_bits())
-                    ^ extra.wrapping_mul(0x9e37_79b9);
-                x ^= x >> 16;
-                x = x.wrapping_mul(0x7feb_352d);
-                x ^= x >> 15;
-                x
+                terra_gen::hash::lowbias32_round(
+                    seed ^ building.name.len() as u32
+                        ^ (building.at[0].to_bits())
+                        ^ extra.wrapping_mul(0x9e37_79b9),
+                )
             };
             let fitting =
                 kinds.get(roll(u32::from(hang == Hang::Door)) as usize % kinds.len().max(1))?;

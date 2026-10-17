@@ -138,13 +138,11 @@ fn unit(h: u64) -> f32 {
 
 /// SplitMix64 over a cell and a seed.
 fn hash(seed: u64, c: IVec3) -> u64 {
-    let mut z = seed
-        ^ (c.x as u32 as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
-        ^ (c.y as u32 as u64).wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
-        ^ (c.z as u32 as u64).wrapping_mul(0x1656_67b1_9e37_79f9);
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^ (z >> 31)
+    terra_gen::hash::splitmix64(
+        seed ^ (c.x as u32 as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            ^ (c.y as u32 as u64).wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
+            ^ (c.z as u32 as u64).wrapping_mul(0x1656_67b1_9e37_79f9),
+    )
 }
 
 #[cfg(test)]

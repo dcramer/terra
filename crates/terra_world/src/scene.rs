@@ -99,12 +99,11 @@ fn haze_density() -> Image {
     // A noise that repeats every `period` texels: values on a lattice, smoothly blended.
     let lattice = |i: i32, k: i32, period: i32, salt: u32| -> f32 {
         let (i, k) = (i.rem_euclid(period) as u32, k.rem_euclid(period) as u32);
-        let mut x = i.wrapping_mul(0x9E37_79B9)
-            ^ k.wrapping_mul(0x85EB_CA6B)
-            ^ salt.wrapping_mul(0xC2B2_AE35);
-        x ^= x >> 16;
-        x = x.wrapping_mul(0x7FEB_352D);
-        x ^= x >> 15;
+        let x = terra_gen::hash::lowbias32_round(
+            i.wrapping_mul(0x9E37_79B9)
+                ^ k.wrapping_mul(0x85EB_CA6B)
+                ^ salt.wrapping_mul(0xC2B2_AE35),
+        );
         (x & 0xFFFF) as f32 / 65_535.0
     };
     let noise = |a: f32, c: f32, cells: i32, salt: u32| {

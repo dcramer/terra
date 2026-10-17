@@ -209,15 +209,12 @@ pub struct Flame {
 
 /// A number from 0 to 1 for a cube and a use of it, the same every time.
 fn luck(at: [i32; 3], salt: u32) -> f32 {
-    let mut h = (at[0] as u32).wrapping_mul(0x8da6_b343)
-        ^ (at[1] as u32).wrapping_mul(0xd816_3841)
-        ^ (at[2] as u32).wrapping_mul(0xcb1a_b31f)
-        ^ salt.wrapping_mul(0x9e37_79b9);
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2c1b_3c6d);
-    h ^= h >> 12;
-    h = h.wrapping_mul(0x297a_2d39);
-    h ^= h >> 15;
+    let h = terra_gen::hash::prospector32(
+        (at[0] as u32).wrapping_mul(0x8da6_b343)
+            ^ (at[1] as u32).wrapping_mul(0xd816_3841)
+            ^ (at[2] as u32).wrapping_mul(0xcb1a_b31f)
+            ^ salt.wrapping_mul(0x9e37_79b9),
+    );
     (h >> 8) as f32 / (1u32 << 24) as f32
 }
 

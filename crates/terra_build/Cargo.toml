@@ -13,10 +13,11 @@ libm.workspace = true
 # A kit's dressed pieces are RON (`kit::Dressing::read`), as the kits are; and saves are
 # RON (the game's save file), which tests read as they were written.
 ron.workspace = true
+# The hash mixers every crate shares (terra_gen::hash), and seeded random streams for the
+# property tests over random operations.
+terra_gen.workspace = true
 
 [dev-dependencies]
-# Seeded random streams for the property tests over random operations.
-terra_gen.workspace = true
 # The kit checker reads a material's maps to check them as it is added (`packs`, D349).
 zune-jpeg.workspace = true
 zune-core.workspace = true

@@ -135,15 +135,11 @@ struct Clump {
 /// two worlds differ. Cover is only seen, so it need not be the same on every machine
 /// (docs/biomes.md, three tiers), but it is anyway.
 pub(super) fn hash(seed: u64, i: i32, j: i32, stream: u64) -> f32 {
-    let mut x = seed
-        ^ (i as u32 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        ^ (j as u32 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
-        ^ stream.wrapping_mul(0x1656_67B1_9E37_79F9);
-    x ^= x >> 30;
-    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    x ^= x >> 27;
-    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
-    x ^= x >> 31;
+    let x = terra_gen::hash::splitmix64(
+        seed ^ (i as u32 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ (j as u32 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+            ^ stream.wrapping_mul(0x1656_67B1_9E37_79F9),
+    );
     (x >> 40) as f32 / (1u64 << 24) as f32
 }
 

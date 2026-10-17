@@ -88,10 +88,7 @@ fn unit(parts: &[u32]) -> f32 {
     let mut x: u32 = 0x811c_9dc5;
     for &part in parts {
         x ^= part;
-        x = x.wrapping_mul(0x0100_0193);
-        x ^= x >> 15;
-        x = x.wrapping_mul(0x2c1b_3c6d);
-        x ^= x >> 12;
+        x = terra_gen::hash::prospector32_round(x.wrapping_mul(0x0100_0193));
     }
     (x >> 8) as f32 / (1u32 << 24) as f32
 }

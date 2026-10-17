@@ -1,5 +1,5 @@
 use crate::Seed;
-use crate::seed::mix;
+use crate::hash::splitmix64 as mix;
 use glam::Vec3;
 
 /// A small, fast random stream (SplitMix64). Not for anything secret; for placing rocks.

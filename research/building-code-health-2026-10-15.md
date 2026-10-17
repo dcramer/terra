@@ -57,7 +57,7 @@ Each says what to change, why, and what it waits on. Do them in this order once 
 
 **R9. Cut old saves.** Done (D353): the developers said "we dont care about old saves"; every older format is refused and its readers deleted.
 
-**R10. One hash for a place.** Done (1febbc0d): `layout::mix3` and `unit3`, used by loss's shading, broken timber, the cell maps, the damage mask and the packs' test, each with its inputs as before, so bit for bit the same. Fire's `luck` and the game's dust mix with other multipliers, and `fragments::unit` takes the low 16 bits of `layout::hash` where `layout::unit` takes the high 24: making them one would change what they give, so they stay, each said where it is.
+**R10. One hash for a place.** Done (1febbc0d): `layout::mix3` and `unit3`, used by loss's shading, broken timber, the cell maps, the damage mask and the packs' test, each with its inputs as before, so bit for bit the same. Fire's `luck` and the game's dust mix with other multipliers, and `fragments::unit` takes the low 16 bits of `layout::hash` where `layout::unit` takes the high 24: making them one would change what they give, so they stay, each said where it is. Since D396 every copy of a mixer's finaliser in the workspace, these two included, calls `terra_gen::hash` (`prospector32_round`, `prospector32`, `lowbias32`, `lowbias32_round`, `splitmix64`) with its inputs as before; the dust's puffs and an animal's `luck`, which were variants of a mixer rather than copies, land differently.
 
 **R11. Big game-side functions.** Done but for the performance agent's: `act` (486 lines) to a loop over its steps and `aim` (482) to a `Sight` worked out once and a function a tool (167bdeb7); `highlight` (338) to its look, its film's quads, the cubes touched and the snapping grid (ec709d7a); fragments' `step` (249) to warming up, the fall, keeping within the most and drawing (9774579d). `build/layout.rs::launch` (385) and `build/draw.rs::show` and `upload` wait on the performance agent, still in them.
 
@@ -83,6 +83,14 @@ After the fifth goals review's finding 5 (the code had grown back into large fil
 **Waiting, as the other agents are in these files:** `inspect.rs` (2,545 lines; the faults agent); `layout/runs.rs` (`under_roofs` 398, `eave_blocking` 271, `courses` 187), `floors::lay` (236) and `dressing::shaped` (269), the faults agent's uncommitted work today; `build/draw.rs` (1,772: `show` 338, `upload` 228), `build/layout.rs::launch` (385), `sections/details::draw_details` (281) and `surface/slots.rs::face` (265), the performance agent's. Older long functions not grown since the first pass (`plan_work` 263, `prompt` 228, `town::paths` 183) are left.
 
 **Found on the way:** a roof made with `--under none` at 1.5 m and phase 0 has 18 inward-wound covering triangles on hips and valleys and a verge against a wall, the same over shakes, so it is the covering's numbers, not the new frame; the baseline's coverings have none. The kit sheet laying many rows segfaults under WSL's CPU renderer before and after the split alike. `cargo xtask rules` at 6804198c: the rules tests, 64 seeds of random operations and the live rules hold; the drawing audit fails on coplanar pairs (stone's `Dressed` 62 pairs, the largest 1,029 cm² in the farmstead; hewn's floors and sawn ends), the same with the dressed-stone change turned off, so it is what 9e0970a4 now counts (the fifth review's finding 6), not this pass.
+
+## Gates (2026-10-16, D396)
+
+What this note and the reviews found by hand is now found at every commit, by stages of `cargo xtask check --quick`:
+
+- **Sizes.** No Rust file over 1,000 lines, no function over 150, but the 129 that were over when it began (`xtask/sizes-baseline.tsv`, `cargo xtask sizes`), each of which may shrink and never grow. The "Waiting" list above is in it at its sizes today.
+- **One definition.** The hash mixers written out in 15 files are `terra_gen::hash`, the lowest crate every user reaches; their constants anywhere else fail the check (`PRIMITIVES` in `xtask/src/primitives.rs`, where a new shared primitive is a row).
+- **Drift.** The docs check fails on a `cargo xtask` task the guides name that is not one, and on a path a skill names that is not there. It found none of the first, and in the models skill a village piece's folder (`assets/models/village`, now props) and two paths not made yet, reworded.
 
 ## Tests
 

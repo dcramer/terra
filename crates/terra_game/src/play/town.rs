@@ -514,10 +514,9 @@ fn treading(worn: f32) -> (f32, f32) {
 /// Smooth value noise from 0 to 1 over a place, a unit a cell: the drifts of a meadow's mix.
 fn patch(p: Vec2) -> f32 {
     let hash = |x: i32, y: i32| {
-        let mut h = (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
-        h ^= h >> 15;
-        h = h.wrapping_mul(0x2c1b_3c6d);
-        h ^= h >> 12;
+        let h = terra_gen::hash::prospector32_round(
+            (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b),
+        );
         (h & 0xffff) as f32 / 65535.0
     };
     let (x, y) = (libm::floorf(p.x), libm::floorf(p.y));
@@ -1114,14 +1113,11 @@ fn lay(
                 .filter(|fitting| fitting.hang == hang && fitting.fits(size.0, size.1))
                 .collect();
             let roll = |extra: u32| {
-                let mut x = seed
-                    ^ building.at[0].to_bits()
-                    ^ building.at[1].to_bits().rotate_left(7)
-                    ^ extra.wrapping_mul(0x9e37_79b9);
-                x ^= x >> 16;
-                x = x.wrapping_mul(0x7feb_352d);
-                x ^= x >> 15;
-                x
+                terra_gen::hash::lowbias32_round(
+                    seed ^ building.at[0].to_bits()
+                        ^ building.at[1].to_bits().rotate_left(7)
+                        ^ extra.wrapping_mul(0x9e37_79b9),
+                )
             };
             let fitting =
                 kinds.get(roll(u32::from(hang == Hang::Door)) as usize % kinds.len().max(1))?;

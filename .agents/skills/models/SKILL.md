@@ -18,10 +18,10 @@ Not here: characters, bodies and gear (the `character` skill); item icons (`item
 | Furniture, a prop or a station | `assets/models/props` | `assets/data/builds.ron`, an `Items` variant: file, `dims`, cost; a station also in `stations.ron` |
 | A door's or shutters' leaf | `assets/models/openings` (`"into": "openings"`, `"anchor": "hinge"`) | `builds.ron`'s `fittings`: model, how it hangs, `dims` of the leaf its first hole takes, the holes it fits, cost |
 | A tool or weapon | `assets/models/tools` (`"into": "tools"`), standing on the end of its handle, parts `Wood` and `Metal` | `items.ron`; its held look is made from it by `tools/characters/fit_held.py` |
-| An item lying on its own, such as a material | `assets/models/items` | `items.ron`; its icon by `item-icons` |
+| An item lying on its own, such as a material | `assets/models/items/<item>.glb`, where the game looks for it (no item has one yet) | `items.ron`; its icon by `item-icons` |
 | A tree, bush, plant or flower | Not a model: grown by rules from bark and leaf cards (D222) | `assets/data/flora.ron`, a kind with `grown` (below) |
 | A rock | `assets/models/nature`, from a CC0 scan (`tools/props/scans.ts`, `art/scans.json`) | `assets/data/flora.ron`, a kind (below) |
-| A village piece | `assets/models/village` | `builds.ron` |
+| A village piece, such as the well or a market stall | `assets/models/props`, with the props | `builds.ron`, under `Hidden` until it can be built |
 
 A creature or animal is not on this pipeline yet: it needs a rig (`tripo rig --type other`) and animations. Ask the developers before starting one.
 
@@ -87,4 +87,4 @@ In one commit: `art/props/<name>/` (`prop.json`, `concept.png`, `concept.prompt.
 The style guide lists what does not yet follow it ("Where the pipeline stands"). The ones that touch this skill:
 
 - **Plants are grown, not modelled** (D222), so a textured Tripo plant has no place in `flora.ron`; a modelled kind there is drawn in its kind's material, projected onto it, not its own textures.
-- **No approved image in the style yet.** Concepts are drawn from the guide's paragraph alone. Once one is approved, put it at `art/style/reference.png` and `props.ts` gives it as a reference.
+- **No approved image in the style yet.** Concepts are drawn from the guide's paragraph alone. Once one is approved, put it in `art/style/` as `reference.png` and `props.ts` gives it as a reference.

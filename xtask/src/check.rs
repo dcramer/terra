@@ -135,6 +135,14 @@ fn stages(quick: bool) -> Vec<(Step, How)> {
             How::Command(command("cargo", &["fmt", "--all", "--check"])),
         ),
         (
+            Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
+            How::Here(crate::sizes::sizes_hold),
+        ),
+        (
+            Step::new("one definition", Said::Printed, LOGS),
+            How::Here(crate::primitives::one_definition),
+        ),
+        (
             Step::new("clippy", Said::Cargo, LOGS)
                 .rerun("cargo clippy --workspace --all-targets -- -D warnings"),
             How::Command(cargo(

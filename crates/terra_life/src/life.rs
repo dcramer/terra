@@ -288,11 +288,7 @@ fn unit(parts: &[u32]) -> f32 {
     let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
     for &part in parts {
         state ^= part as u64;
-        state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        state = z ^ (z >> 31);
+        state = terra_gen::hash::splitmix64(state.wrapping_add(0x9e37_79b9_7f4a_7c15));
     }
     (state >> 40) as f32 / (1u64 << 24) as f32
 }

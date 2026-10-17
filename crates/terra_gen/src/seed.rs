@@ -1,4 +1,5 @@
 use crate::Rng;
+use crate::hash::splitmix64 as mix;
 
 /// Where every generated thing starts. One seed describes a whole planet; seeds for its
 /// parts are derived from it by name or by place, so unrelated parts never share a
@@ -31,13 +32,6 @@ impl Seed {
     pub fn rng(self) -> Rng {
         Rng::new(self)
     }
-}
-
-/// SplitMix64's finaliser: scrambles 64 bits so that nearby inputs give unrelated outputs.
-pub(crate) fn mix(mut z: u64) -> u64 {
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^ (z >> 31)
 }
 
 /// A hash of a seed and an integer grid position.
