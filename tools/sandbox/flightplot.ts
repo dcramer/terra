@@ -26,11 +26,14 @@ scene.script(s);
 const calls = s.all();
 const rolls = scene.rolls ?? 0;
 const w = wings();
+const reach = Number(/reach_m:\s*([\d.]+)/.exec(String(execFileSync("cat", [join(import.meta.dirname, "../../assets/data/fliers.ron")])))?.[1] ?? 30);
 const windup = Number(/windup_s:\s*([\d.]+)/.exec(String(execFileSync("cat", [join(import.meta.dirname, "../../assets/data/fliers.ron")])))?.[1] ?? 0);
 
 // The course, replayed from the calls, as the game is told it.
 let course: Course | undefined;
 const breaths: [number, number][] = [];
+// Where each breath is aimed, as it sweeps.
+const aims: [number, Vec3][] = [];
 let breathing: number | undefined;
 const looks = new Map<number, [Vec3, Vec3]>();
 let last = 0;
@@ -42,6 +45,7 @@ for (const call of calls) {
   else if (call.method === "flight.hover") course?.hover(call.frame, p.at as Vec3, p.facing as Vec3);
   else if (call.method === "flight.breathe") {
     if (p.on && breathing === undefined) breathing = call.frame;
+    if (p.on && p.at) aims.push([call.frame, p.at as Vec3]);
     if (!p.on && breathing !== undefined) {
       breaths.push([breathing + windup * 60, call.frame]);
       breathing = undefined;
@@ -105,6 +109,12 @@ const speedColour = (v: number) => `hsl(${Math.round(240 - (Math.min(v, w.cruise
     const [a, b] = [rows[i - 1], rows[i]];
     parts.push(`<line x1="${px(a.at[0])}" y1="${pz(a.at[2])}" x2="${px(b.at[0])}" y2="${pz(b.at[2])}" stroke="${b.fire ? "#ff8a00" : speedColour(b.speed)}" stroke-width="${b.fire ? 6 : 2.5}"/>`);
   }
+  // Within its breath's reach of where it is then, red; past it, grey: its flame ends short.
+  for (const [frame, a] of aims) {
+    const from = course.at(frame);
+    const far = Math.hypot(a[0] - from[0], a[1] - from[1], a[2] - from[2]) > reach;
+    parts.push(`<circle cx="${px(a[0])}" cy="${pz(a[2])}" r="2.2" fill="${far ? "#888" : "#ff3b00"}"/>`);
+  }
   for (const r of rows.filter((r) => Math.abs(r.t - Math.round(r.t)) < 1e-6)) {
     parts.push(`<circle cx="${px(r.at[0])}" cy="${pz(r.at[2])}" r="3" fill="#fff"/>`);
     if (Math.round(r.t) % 2 === 0) text(px(r.at[0]) + 5, pz(r.at[2]) - 4, `${Math.round(r.t)}`, 11, "#fff");
@@ -140,7 +150,7 @@ const series: { label: string; get: (r: Row) => number | undefined; lo: number; 
     text(x0 + 6, y0 + 15, `${sr.label}  ${sr.lo} to ${Math.round(sr.hi)}`, 13, sr.colour);
   });
 }
-text(20, H - 20, `${name}: ${rows.length} frames from the roll; orange is fire, after a ${windup} s wind-up`, 14, "#aaa");
+text(20, H - 20, `${name}: ${rows.length} frames from the roll; orange is fire, after a ${windup} s wind-up; red dots are where it is aimed within its reach, grey past it`, 14, "#aaa");
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="100%" height="100%" fill="#111"/>${parts.join("")}</svg>`;
 const svgFile = out.replace(/\.png$/, "") + ".svg";
