@@ -25,6 +25,10 @@ const BEND_M: f32 = 2.0;
 /// is, in metres at most, and as a share of the way to its first point.
 const LEAD_IN_M: f32 = 16.0;
 const LEAD_IN_SHARE: f32 = 0.4;
+/// How far either side of a point its speed is eased over, in metres, and how often: a
+/// heavy body does not go from gathering speed to shedding it at once.
+const EASE_SPEED_M: f32 = 8.0;
+const EASE_SPEED_PASSES: usize = 2;
 /// How much slower it flies in a climb, and faster in a dive, by the sine of its slope.
 const CLIMB_SLOWS: f32 = 0.5;
 const DIVE_SPEEDS: f32 = 0.3;
@@ -92,6 +96,13 @@ pub fn plan(
         .normalize_or(Vec3::Z);
     let lead = (control[1].distance(from) * LEAD_IN_SHARE).min(LEAD_IN_M);
     control.insert(1, from + way * lead);
+    // It comes into its hover level, as it leaves one: the last control point before the
+    // end as high as the end, so it does not tip from a climb or a dive into its hover.
+    let n = control.len();
+    let (last, before) = (control[n - 1], control[n - 2]);
+    let level_way = (last - before).reject_from(up).normalize_or_zero();
+    let lead_out = (last.distance(before) * LEAD_IN_SHARE).min(LEAD_IN_M);
+    control.insert(n - 1, last - level_way * lead_out);
     let points = resample(&spline(&control));
     let n = points.len();
     let tangent = |i: usize| {
@@ -117,19 +128,44 @@ pub fn plan(
         limit.push((cruise * by_slope).min(by_bend).max(wings.slowest));
     }
     // Gathering speed from where it is, then shedding it into its hover at the end.
-    let mut speed = limit;
-    speed[0] = speed[0].min(speed_now.max(0.0));
-    for i in 1..n {
-        let ds = points[i].distance(points[i - 1]);
-        let most = (speed[i - 1] * speed[i - 1] + 2.0 * wings.accel * ds).sqrt();
-        speed[i] = speed[i].min(most);
+    let bound = |speed: &mut Vec<f32>| {
+        speed[0] = speed[0].min(speed_now.max(0.0));
+        for i in 1..n {
+            let ds = points[i].distance(points[i - 1]);
+            let most = (speed[i - 1] * speed[i - 1] + 2.0 * wings.accel * ds).sqrt();
+            speed[i] = speed[i].min(most);
+        }
+        // Come to a stop in its hover, not at its slowest.
+        speed[n - 1] = 0.0;
+        for i in (0..n - 1).rev() {
+            let ds = points[i + 1].distance(points[i]);
+            let most = (speed[i + 1] * speed[i + 1] + 2.0 * wings.brake * ds).sqrt();
+            speed[i] = speed[i].min(most);
+        }
+    };
+    // What its turns allow, rounded at its least, each the mean of the least either side,
+    // so it is never more than allowed and comes down into a turn and up out of it gently.
+    let reach = (EASE_SPEED_M / STEP_M).round() as usize;
+    let least: Vec<f32> = (0..n)
+        .map(|i| {
+            limit[i.saturating_sub(reach)..(i + reach + 1).min(n)]
+                .iter()
+                .copied()
+                .fold(f32::MAX, f32::min)
+        })
+        .collect();
+    let limit = ease_speed(&least, reach);
+    let mut speed = limit.clone();
+    bound(&mut speed);
+    // Eased, so it never turns from gathering speed to shedding it in a step, then held
+    // within what its turns and its wings allow again.
+    for _ in 0..EASE_SPEED_PASSES {
+        speed = ease_speed(&speed, reach);
     }
-    speed[n - 1] = speed[n - 1].min(wings.slowest);
-    for i in (0..n - 1).rev() {
-        let ds = points[i + 1].distance(points[i]);
-        let most = (speed[i + 1] * speed[i + 1] + 2.0 * wings.brake * ds).sqrt();
-        speed[i] = speed[i].min(most);
+    for (v, most) in speed.iter_mut().zip(&limit) {
+        *v = v.min(*most);
     }
+    bound(&mut speed);
     let mut time = vec![0.0];
     for i in 1..n {
         let length = points[i].distance(points[i - 1]);
@@ -184,6 +220,22 @@ impl Plan {
             ended: seconds >= self.seconds(),
         }
     }
+}
+
+/// Each speed the mean of those `reach` either side of it, fewer near the ends, so the first
+/// and last stay as they are.
+fn ease_speed(speed: &[f32], reach: usize) -> Vec<f32> {
+    let n = speed.len();
+    let mut sums = vec![0.0f32];
+    for v in speed {
+        sums.push(sums.last().unwrap() + v);
+    }
+    (0..n)
+        .map(|i| {
+            let k = reach.min(i).min(n - 1 - i);
+            (sums[i + k + 1] - sums[i - k]) / (2 * k + 1) as f32
+        })
+        .collect()
 }
 
 /// A cubic B-spline over the control points, finely, clamped so it starts at the first and
@@ -275,6 +327,24 @@ mod tests {
         assert!(slowest < 20.0, "it took the corner at {slowest} m/s");
         assert!(plan.bend.iter().any(|&b| b < -0.01));
         assert!(plan.bend.iter().all(|&b| b < 0.005));
+    }
+
+    #[test]
+    fn it_eases_from_slowing_into_a_turn_to_speeding_out_of_it() {
+        let plan = corner();
+        // At the corner, half way, not braking into its hover at the end.
+        let n = plan.speed.len();
+        let slowest = (n / 4..n * 3 / 4)
+            .min_by(|&a, &b| plan.speed[a].total_cmp(&plan.speed[b]))
+            .unwrap();
+        let accel =
+            |i: usize| (plan.speed[i] - plan.speed[i - 1]) / (plan.time[i] - plan.time[i - 1]);
+        // Through the turn, how fast its speed changes changes little from point to point:
+        // a step from braking at 5 m/s² to gathering speed at 4 would be nearly 9.
+        for i in slowest - 30..slowest + 30 {
+            let change = (accel(i + 1) - accel(i)).abs();
+            assert!(change < 0.5, "its acceleration stepped by {change} at {i}");
+        }
     }
 
     #[test]

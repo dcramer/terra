@@ -34,6 +34,8 @@ const STEP_M = 0.5;
 const BEND_M = 2;
 const LEAD_IN_M = 16;
 const LEAD_IN_SHARE = 0.4;
+const EASE_SPEED_M = 8;
+const EASE_SPEED_PASSES = 2;
 const CLIMB_SLOWS = 0.5;
 const DIVE_SPEEDS = 0.3;
 const GRAVITY = 9.81;
@@ -100,6 +102,13 @@ export function plan(from: Vec3, way: Vec3, speedNow: number, through: Vec3[], c
   const heading = norm(way, norm(sub(control[1], control[0]), [0, 0, 1]));
   const lead = Math.min(dist(control[1], from) * LEAD_IN_SHARE, LEAD_IN_M);
   control.splice(1, 0, add(from, scale(heading, lead)));
+  {
+    const n = control.length;
+    const [last, before] = [control[n - 1], control[n - 2]];
+    const levelWay = norm(level(sub(last, before)), [0, 0, 0]);
+    const leadOut = Math.min(dist(last, before) * LEAD_IN_SHARE, LEAD_IN_M);
+    control.splice(n - 1, 0, sub(last, scale(levelWay, leadOut)));
+  }
   const points = resample(spline(control));
   const n = points.length;
   const tangent = (i: number) => norm(sub(points[Math.min(i + 1, n - 1)], points[Math.max(i - 1, 0)]), heading);
@@ -117,10 +126,28 @@ export function plan(from: Vec3, way: Vec3, speedNow: number, through: Vec3[], c
     const byBend = Math.sqrt((GRAVITY * Math.tan(w.mostBank)) / Math.max(whole, 1e-5));
     speed.push(Math.max(Math.min(cruise * bySlope, byBend), w.slowest));
   }
-  speed[0] = Math.min(speed[0], Math.max(speedNow, 0));
-  for (let i = 1; i < n; i++) speed[i] = Math.min(speed[i], Math.sqrt(speed[i - 1] ** 2 + 2 * w.accel * dist(points[i], points[i - 1])));
-  speed[n - 1] = Math.min(speed[n - 1], w.slowest);
-  for (let i = n - 2; i >= 0; i--) speed[i] = Math.min(speed[i], Math.sqrt(speed[i + 1] ** 2 + 2 * w.brake * dist(points[i + 1], points[i])));
+  const reach = Math.round(EASE_SPEED_M / STEP_M);
+  const ease = (values: number[]) => {
+    const sums = [0];
+    for (const v of values) sums.push(sums[sums.length - 1] + v);
+    return values.map((_, i) => {
+      const k = Math.min(reach, i, n - 1 - i);
+      return (sums[i + k + 1] - sums[i - k]) / (2 * k + 1);
+    });
+  };
+  const least = speed.map((_, i) => Math.min(...speed.slice(Math.max(0, i - reach), Math.min(n, i + reach + 1))));
+  const limit = ease(least);
+  speed.splice(0, n, ...limit);
+  const bound = () => {
+    speed[0] = Math.min(speed[0], Math.max(speedNow, 0));
+    for (let i = 1; i < n; i++) speed[i] = Math.min(speed[i], Math.sqrt(speed[i - 1] ** 2 + 2 * w.accel * dist(points[i], points[i - 1])));
+    speed[n - 1] = 0;
+    for (let i = n - 2; i >= 0; i--) speed[i] = Math.min(speed[i], Math.sqrt(speed[i + 1] ** 2 + 2 * w.brake * dist(points[i + 1], points[i])));
+  };
+  bound();
+  for (let pass = 0; pass < EASE_SPEED_PASSES; pass++) speed.splice(0, n, ...ease(speed));
+  for (let i = 0; i < n; i++) speed[i] = Math.min(speed[i], limit[i]);
+  bound();
   const time = [0];
   for (let i = 1; i < n; i++) time.push(time[i - 1] + dist(points[i], points[i - 1]) / Math.max((speed[i] + speed[i - 1]) * 0.5, 0.05));
   return { points, speed, time, bend };
