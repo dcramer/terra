@@ -36,6 +36,7 @@ Every agent and lead session follows it (D375; [development.md](docs/development
 - **While working.** `git pull --rebase origin main` before each push. Commits run the quick check and pushes the full one, each on what the change touches; never use `--no-verify` (D37, D398). Decision log lines go in [docs/decisions-log.md](docs/decisions-log.md), and decision numbers come from `cargo xtask decision` or, when two collide, the check (D376).
 - **Finish.** Confirm your commit is on origin/main (`git fetch`, then `git branch -r --contains <commit>`), then run `cargo xtask worktrees --done` (D259).
 - **A lead session runs at most three or four agents at once**, so builds and measurements stay fast and trustworthy.
+- **Every agent's task is bounded** (D400). A brief says when the agent stops: a score bar, a number of rounds or two rounds without a gain, a clock time, and a context of about 250k at most. An agent does one unit of work, writes a handoff file, and ends; the next round is a fresh agent started from that handoff, never the same one running on for hours. It waits by starting a long run in the background and taking its completion notice, never by a polling loop, and keeps one wait per thing. An agent it starts gets the same bounds and at most one helper runs at a time.
 
 ## Decisions
 
