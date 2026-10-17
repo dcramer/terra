@@ -12,7 +12,8 @@
   },
   "look": {
     "shutter": 180,
-    "exposure_bias": 0.0
+    "exposure_bias": 0.0,
+    "detail": 0.75
   },
   "sound": ["wind:0.4", "birds:0.3", "fire:0.9"],
   "music": "calm"
