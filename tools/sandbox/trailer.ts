@@ -20,7 +20,7 @@
 //     [--size 1920x1080] [--cut tools/sandbox/trailer/cut.json] [--out ~/.cache/terra-review/trailer/cut.mp4]
 //
 // Each run is left beside --out as <name>.mp4 with its own sound; a run whose clip is newer
-// than its shot file and the sandbox is kept, --again renders it again, --only renders just
+// than its shot file, its scene and the sandbox is kept, --again renders it again, --only renders just
 // those, --stills only a first, middle and last frame of each on one sheet (stills.jpg), to
 // judge a route fast, --no-render cuts what is there. The cut has a contact sheet,
 // <out>-sheet.jpg. Needs ffmpeg. Node 22.18 or later; no dependencies.
@@ -233,7 +233,9 @@ function renderShot(name: string, n: number) {
   const shot = shots.get(name) as Shot;
   const file = join(shotsDir, `${name}.json`);
   const clip = clipOf(name);
-  const stale = !existsSync(clip) || statSync(clip).mtimeMs < Math.max(statSync(file).mtimeMs, statSync(sandbox).mtimeMs);
+  // A run is stale when its shot file, its scene or the sandbox changed after it was filmed.
+  const sceneFile = shot.scene ? join(dirname(cutFile), "scenes", `${shot.scene}.ts`) : file;
+  const stale = !existsSync(clip) || statSync(clip).mtimeMs < Math.max(statSync(file).mtimeMs, statSync(sceneFile).mtimeMs, statSync(sandbox).mtimeMs);
   if (!render || !(stills || again || only || stale)) return;
   const short = tooShort(shot);
   if (short) console.log(`trailer: ${name}: ${short}; lengthen it in ${file}`);

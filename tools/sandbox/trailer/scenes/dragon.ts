@@ -178,12 +178,14 @@ function script(s: Script) {
   strafe(s, course, eastFrom, eastTo, [23.3, 10.5, -3], [23.3, 10.5, -28], 15);
   track(s, course, at(0), eastTo, [34, 3, 13], [38, 5, 16], [-12, 11, 1], 0.55);
 
-  // The hover at the keep, low off its south-east, the camera behind and beside the dragon:
+  // The hover at the keep, low off its south-east, the camera high behind the dragon:
   // its breath into the keep's door and its ground storey, which fills with fire; then it
   // rises to breathe along the jettied timber storey, its south face and its east.
   s.mark("hover", "It hovers at the keep and breathes into its door, then along its timber storey", eastTo + 1, at(16));
   const face = k[2] + KEEP_HALF + 0.1;
-  track(s, course, eastTo + 1, at(16), [30, 15, 0], [28, 17, 3], [k[0], 6, face], 0.4);
+  // High over the south wall west of the south-east tower, clear of its roof, looking down
+  // past the dragon to the keep, away from the low sun.
+  track(s, course, eastTo + 1, at(16), [14, 27, 10], [11, 26, 12], [k[0], 4, face], 0.35);
   sweep(s, hovering - 90, hovering + 60, [
     [k[0] - 0.5, 0.8, face],
     [k[0] + 0.5, 2.2, face],
