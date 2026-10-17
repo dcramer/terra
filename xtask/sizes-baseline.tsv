@@ -86,7 +86,7 @@ crates/terra_game/src/play/harvest.rs	cut	184
 crates/terra_game/src/play/movement.rs	walk	245
 crates/terra_game/src/play/options.rs	setup	256
 crates/terra_game/src/play/props.rs	-	1108
-crates/terra_game/src/play/rising.rs	build	161
+crates/terra_game/src/play/rising.rs	build	170
 crates/terra_game/src/play/save.rs	-	1273
 crates/terra_game/src/play/save.rs	load	211
 crates/terra_game/src/play/save.rs	play_a_while	199
@@ -94,7 +94,7 @@ crates/terra_game/src/play/settlement.rs	found	189
 crates/terra_game/src/play/tool/aim.rs	-	1041
 crates/terra_game/src/play/tool/aim.rs	plan_work	263
 crates/terra_game/src/play/tool/prompt.rs	prompt	228
-crates/terra_game/src/play/town.rs	-	1715
+crates/terra_game/src/play/town.rs	-	1721
 crates/terra_game/src/play/town.rs	lay	598
 crates/terra_game/src/play/wildlife.rs	-	1157
 crates/terra_game/src/play/wildlife.rs	meet	158
