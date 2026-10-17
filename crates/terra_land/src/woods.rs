@@ -262,7 +262,7 @@ const OAK_UP_TO_M: (f32, f32) = (650.0, 1_000.0);
 /// saplings and poles come up under or between the rest; and how far the ages spread.
 const COHORT_M: f32 = 45.0;
 const SAPLINGS: f32 = 0.14;
-const AGES: (f32, f32) = (0.55, 1.12);
+const AGES: (f32, f32) = (0.45, 1.15);
 /// How wide the glades a stand opens are, in metres, and how thin it stands in them.
 const GLADES_M: f32 = 70.0;
 const GLADE_DENSITY: f32 = 0.35;
@@ -345,9 +345,11 @@ impl<'a> Woods<'a> {
                 let point = land.surface(toward);
                 let normal = ground_normal(land, point);
                 let stand = self.stand_at(point, normal);
-                // The noise's spread is about 0.27 a sample.
+                // Patches the width given and three times it, 0 to 1 over a standard deviation
+                // either side (the noise's spread is about 0.27 a sample).
                 let spread = |noise: &terra_gen::Noise, wide: f32| {
-                    (noise.fbm(point / wide, 2, 2.1, 0.5) / 0.27).clamp(-1.5, 1.5) / 3.0 + 0.5
+                    (noise.fbm(point / (wide * 3.0), 3, 2.1, 0.6) / 0.27).clamp(-1.0, 1.0) / 2.0
+                        + 0.5
                 };
                 let glade = GLADE_DENSITY
                     + (1.0 - GLADE_DENSITY) * smoothstep(0.2, 0.45, spread(&glades, GLADES_M));

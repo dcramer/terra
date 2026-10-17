@@ -1,17 +1,17 @@
 {
-  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then low over its south-west corner and along its square as its last houses go up, ending over its roofs looking up the town with the lake and the forest beyond, the morning sun to the right",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then over its south-west corner and along its square as its last houses go up, ending over its roofs, the early morning sun to the right",
   "seconds": 20,
   "keys": [
     {
       "t": 0,
       "at": [
-        -30,
-        15,
-        -322
+        -16,
+        10,
+        -342
       ],
       "look": [
         6,
-        3,
+        4,
         -372
       ],
       "lens": 22
@@ -19,13 +19,13 @@
     {
       "t": 6,
       "at": [
-        -22,
-        17,
-        -332
+        -11.5,
+        12,
+        -347
       ],
       "look": [
         8,
-        3,
+        4,
         -376
       ],
       "lens": 22
@@ -91,14 +91,14 @@
     {
       "t": 20,
       "at": [
-        -2,
-        20,
-        -322
+        -6,
+        24,
+        -326
       ],
       "look": [
-        32,
-        9,
-        -412
+        26,
+        0,
+        -390
       ],
       "lens": 22
     }
@@ -106,7 +106,7 @@
   "ease": "none",
   "look": {
     "exposure": "hold",
-    "exposure_bias": 0.1,
+    "exposure_bias": 0.4,
     "hold_clock": true,
     "detail": 1.35
   },

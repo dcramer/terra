@@ -10,11 +10,11 @@
     seconds: 20.0,
     // An early morning, as the forest's own (trailer/runs/forest.json, 7.5 h): the sun low
     // and warm, the mist about the clearing and its shafts through it, lifting a little.
-    hours: (7.2, 8.0),
+    hours: (7.5, 8.3),
     claim: 0.3,
     first: 0.8,
-    last: 12.0,
-    takes: (3.0, 6.0),
+    last: 13.0,
+    takes: (3.0, 6.5),
     growth: 0.6,
     settled_after: 0.6,
     gather: 7.0,
