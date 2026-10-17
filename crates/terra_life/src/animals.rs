@@ -308,12 +308,24 @@ impl Animals {
                         } else {
                             kind.walk.max(owner.velocity.length())
                         };
-                        if to_owner < 2.2 && owner.velocity.length() < 0.2 {
+                        // Sat, it stays sat until its owner is well off or walking away, and
+                        // sits only once at heel with its owner still: one test for both
+                        // flicked it between sitting and standing frame to frame while its
+                        // owner shuffled at their work (the settlement film's pen, D381).
+                        let sat = matches!(animal.doing, Doing::Resting { .. });
+                        let (near, still) = if sat { (3.5, 0.6) } else { (2.2, 0.2) };
+                        if to_owner < near && owner.velocity.length() < still {
                             animal.speed = 0.0;
                             animal.doing = Doing::Resting { until: now + 1.0 };
                         } else {
                             animal.doing = Doing::Moving { run };
-                            walk_to(animal, target, speed, step, 0.3);
+                            // Stood where it was going, it waits there until the place it
+                            // wants is a stride off, rather than stepping after every
+                            // shuffle of its owner's and standing again a frame later.
+                            let stood = animal.speed == 0.0 && animal.at.distance(target) < 0.9;
+                            if !stood {
+                                walk_to(animal, target, speed, step, 0.3);
+                            }
                         }
                     } else {
                         // Its owner indoors: back to the door, and lie there.

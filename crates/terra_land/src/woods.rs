@@ -225,15 +225,17 @@ impl Seasons {
     }
 }
 
-/// Which kind a tree is (D313, docs/demos.md open question 4): the lush forest's conifers by
+/// Which kind a tree is (D313, docs/demos.md open question 4): the lush forest's trees by
 /// their niches. Norway spruce holds the shaded slopes and the cooler, damper ground, as it
 /// makes the Tatras' forest; Scots pine the sunny, drier slopes; and past the closed forest,
 /// both stunted to krummholz, the dwarf mountain pine's place, which is not yet a kind of
-/// its own.
+/// its own. Down in the lowlands, oak among them, on the warmer, sunnier ground, as the
+/// Carpathians' foothill forests mix it with pine below the spruce belt (D381).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Conifer {
+pub enum TreeKind {
     Spruce,
     Pine,
+    Oak,
 }
 
 /// A tree the land's rules stand somewhere.
@@ -241,10 +243,35 @@ pub enum Conifer {
 pub struct Tree {
     /// Where its foot is, on the ground as generated.
     pub at: glam::Vec3,
-    pub kind: Conifer,
-    /// Its stature, as a share of its kind's full height, and a number of its own, 0 to 1.
+    pub kind: TreeKind,
+    /// Its stature, as a share of its kind's full height where it stands, and a number of
+    /// its own, 0 to 1.
     pub stature: f32,
     pub luck: f32,
+    /// How grown it is for its stand, as a share of a mature tree's height: a sapling's
+    /// fifth to a veteran's over the rest. Unlike its stature it does not stunt it.
+    pub age: f32,
+}
+
+/// Oak's share of the lowland woods, and the heights over the sea it thins out over, in
+/// metres: a mixed foothill forest below, conifers alone toward the mountains.
+const OAK_SHARE: f32 = 0.3;
+const OAK_UP_TO_M: (f32, f32) = (650.0, 1_000.0);
+
+/// How wide a stand's cohorts are, each an age of trees, in metres; how many trees are
+/// saplings and poles come up under or between the rest; and how far the ages spread.
+const COHORT_M: f32 = 45.0;
+const SAPLINGS: f32 = 0.14;
+const AGES: (f32, f32) = (0.55, 1.12);
+/// How wide the glades a stand opens are, in metres, and how thin it stands in them.
+const GLADES_M: f32 = 70.0;
+const GLADE_DENSITY: f32 = 0.35;
+
+/// How likely a tree is an oak, at a height over the sea, its ground so sunward.
+pub fn oak_chance(height_m: f32, sunward: f32) -> f32 {
+    OAK_SHARE
+        * (1.0 - smoothstep(OAK_UP_TO_M.0, OAK_UP_TO_M.1, height_m))
+        * (0.5 + smoothstep(-0.1, 0.3, sunward))
 }
 
 /// A world's woods: the land round a place, its rules worked out ahead.
@@ -290,6 +317,13 @@ impl<'a> Woods<'a> {
     ) -> Vec<Tree> {
         let land = &self.round.land;
         let middle = middle.normalize();
+        // A stand is not one age (D381): it is a mosaic of cohorts tens of metres across, each
+        // grown up together after a storm or a felling took the trees before, with glades
+        // where it stands thin, saplings and poles coming up among the rest; so its canopy
+        // is ragged and its edge uneven, not a wall of trees of one height. Laid on the
+        // world, so the same tree is the same wherever it is asked from.
+        let cohorts = terra_gen::Noise::new(seed.derive("cohorts"));
+        let glades = terra_gen::Noise::new(seed.derive("glades"));
         let (east, north) = (land.frame.east(middle), land.frame.north(middle));
         let cells = (radius_m / spacing_m).ceil() as i32;
         let rows: Vec<i32> = (-cells..cells).collect();
@@ -311,7 +345,13 @@ impl<'a> Woods<'a> {
                 let point = land.surface(toward);
                 let normal = ground_normal(land, point);
                 let stand = self.stand_at(point, normal);
-                if stand.density <= 0.0 || rng.unit() > stand.density {
+                // The noise's spread is about 0.27 a sample.
+                let spread = |noise: &terra_gen::Noise, wide: f32| {
+                    (noise.fbm(point / wide, 2, 2.1, 0.5) / 0.27).clamp(-1.5, 1.5) / 3.0 + 0.5
+                };
+                let glade = GLADE_DENSITY
+                    + (1.0 - GLADE_DENSITY) * smoothstep(0.2, 0.45, spread(&glades, GLADES_M));
+                if stand.density <= 0.0 || rng.unit() > stand.density * glade {
                     continue;
                 }
                 let place = land.place(point, normal);
@@ -319,15 +359,32 @@ impl<'a> Woods<'a> {
                 // two mixing over a band of facing.
                 let sunny = smoothstep(0.05, 0.3, place.sunward) + (rng.unit() - 0.5) * 0.5;
                 let kind = if sunny > 0.5 {
-                    Conifer::Pine
+                    TreeKind::Pine
                 } else {
-                    Conifer::Spruce
+                    TreeKind::Spruce
+                };
+                let stature = (stand.stature * (0.85 + 0.3 * rng.unit())).min(1.0);
+                let luck = rng.unit();
+                // Oak only where the stand grows tall, never toward the tree line.
+                let kind = if stand.stature >= 0.8
+                    && rng.unit() < oak_chance(place.height_m, place.sunward)
+                {
+                    TreeKind::Oak
+                } else {
+                    kind
+                };
+                let cohort = spread(&cohorts, COHORT_M);
+                let age = if rng.unit() < SAPLINGS {
+                    0.18 + 0.3 * rng.unit()
+                } else {
+                    (AGES.0 + (AGES.1 - AGES.0) * cohort + (rng.unit() - 0.5) * 0.18).min(AGES.1)
                 };
                 out.push(Tree {
                     at: point,
                     kind,
-                    stature: (stand.stature * (0.85 + 0.3 * rng.unit())).min(1.0),
-                    luck: rng.unit(),
+                    stature,
+                    luck,
+                    age,
                 });
             }
             out
@@ -476,7 +533,7 @@ mod tests {
         let round = crate::round::Round::new(land, site.toward, 1_400.0, day);
         let trees = Woods::of(&round).trees(site.toward, 0.0, 600.0, 6.5, terra_gen::Seed(5));
         // How sunward the ground each kind stands on faces, on average.
-        let facing = |kind: Conifer| {
+        let facing = |kind: TreeKind| {
             let sunward: Vec<f32> = trees
                 .iter()
                 .filter(|tree| tree.kind == kind)
@@ -491,7 +548,7 @@ mod tests {
             )
         };
         let ((pines, pine_sun), (spruces, spruce_sun)) =
-            (facing(Conifer::Pine), facing(Conifer::Spruce));
+            (facing(TreeKind::Pine), facing(TreeKind::Spruce));
         // Both kinds make the lake's woods, neither a scatter in the other's.
         let all = (pines + spruces) as f32;
         assert!(all > 3_000.0, "{all} trees");
@@ -503,6 +560,39 @@ mod tests {
             pine_sun > spruce_sun + 0.15,
             "pines on ground {pine_sun:.2} sunward, spruces {spruce_sun:.2}"
         );
+        // At 1,317 m, no oak.
+        assert!(trees.iter().all(|tree| tree.kind != TreeKind::Oak));
+        // The stand is of many ages, saplings to veterans, each age in patches: neighbours
+        // are nearer an age than trees far apart.
+        let share =
+            |keep: &dyn Fn(f32) -> bool| trees.iter().filter(|t| keep(t.age)).count() as f32 / all;
+        let (young, old) = (share(&|a| a < 0.5), share(&|a| a > 1.0));
+        assert!(young > 0.08 && old > 0.05, "{young} young, {old} old");
+        let (mut near, mut far) = ((0.0, 0), (0.0, 0));
+        for (i, a) in trees.iter().enumerate().step_by(7) {
+            for b in trees.iter().skip(i + 1).step_by(5) {
+                let (apart, differ) = (a.at.distance(b.at), (a.age - b.age).abs());
+                if a.age > 0.5 && b.age > 0.5 {
+                    if apart < 15.0 {
+                        near = (near.0 + differ, near.1 + 1);
+                    } else if apart > 300.0 {
+                        far = (far.0 + differ, far.1 + 1);
+                    }
+                }
+            }
+        }
+        let (near, far) = (near.0 / near.1 as f32, far.0 / far.1 as f32);
+        assert!(
+            near < far * 0.7,
+            "neighbours {near:.3} apart in age, far trees {far:.3}"
+        );
+    }
+
+    #[test]
+    fn oak_grows_in_the_lowlands_on_the_sunny_side_and_not_toward_the_mountains() {
+        assert!(oak_chance(400.0, 0.3) > 0.3);
+        assert!(oak_chance(400.0, 0.3) > oak_chance(400.0, -0.2) * 2.0);
+        assert_eq!(oak_chance(1_100.0, 0.3), 0.0);
     }
 
     #[test]

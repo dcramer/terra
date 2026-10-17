@@ -26,7 +26,7 @@ use bevy::{
 };
 use std::sync::Arc;
 
-pub use terra_land::woods::Conifer;
+pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
 
 /// Grown trees out to here from the start, and billboards for every tree out to
@@ -40,12 +40,16 @@ const CLEAR_M: f32 = 14.0;
 const SPACING_M: f32 = 6.5;
 /// The far cards are merged in squares this wide.
 const SQUARE_M: f32 = 250.0;
-/// Each kind's full height range and how wide its crown is for its height, pine then spruce,
-/// as the lush forest grows its Scots pines and Norway spruces (lush/far.rs).
-const HEIGHTS: [(f32, f32); 2] = [(23.0, 31.0), (18.0, 26.0)];
-const CROWN: [f32; 2] = [0.42, 0.36];
-/// The far crowns' colours, pine and spruce, for the flora's pine: its leaves' average.
-const FAR_CROWNS: [Color; 2] = [Color::srgb(0.15, 0.23, 0.12), Color::srgb(0.13, 0.21, 0.12)];
+/// Each kind's full height range and how wide its crown is for its height, oak, pine and
+/// spruce, as the lush forest grows its oaks, Scots pines and Norway spruces (lush/far.rs).
+const HEIGHTS: [(f32, f32); 3] = [(18.0, 26.0), (23.0, 31.0), (18.0, 26.0)];
+const CROWN: [f32; 3] = [0.62, 0.42, 0.36];
+/// The far crowns' colours, oak, pine and spruce, for the flora's pine: its leaves' average.
+const FAR_CROWNS: [Color; 3] = [
+    Color::srgb(0.15, 0.23, 0.12),
+    Color::srgb(0.15, 0.23, 0.12),
+    Color::srgb(0.13, 0.21, 0.12),
+];
 /// A card standing for a grown tree is told where that tree's last level ends in its colour's
 /// blue, in metres over this (`far_forest.wesl`).
 const HANDOVER_SCALE_M: f32 = 1_000.0;
@@ -60,9 +64,9 @@ pub trait ConiferModels: Send + Sync + 'static {
     /// of detail as its children.
     fn draw(&self, entity: &mut EntityCommands, tree: &Planted) -> Drawn;
 
-    /// The far cards' crown colours, pine then spruce, linear: what the near crowns' leaves
-    /// average to, as the far forest's are coloured (D273).
-    fn far_crowns(&self) -> [Vec3; 2];
+    /// The far cards' crown colours, oak, pine and spruce, linear: what the near crowns'
+    /// leaves average to, as the far forest's are coloured (D273).
+    fn far_crowns(&self) -> [Vec3; 3];
 }
 
 /// The conifers the woods are drawn with, if the layer above has given any; it inserts them
@@ -81,7 +85,7 @@ pub struct Planting;
 pub struct Planted {
     pub foot: Vec3,
     pub rotation: Quat,
-    pub kind: Conifer,
+    pub kind: TreeKind,
     pub height_m: f32,
     pub squat: f32,
     pub luck: f32,
@@ -92,7 +96,7 @@ pub struct Planted {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Drawn {
     pub to_m: f32,
-    pub kind: Conifer,
+    pub kind: TreeKind,
 }
 
 pub type FarWoods = ExtendedMaterial<StandardMaterial, FarExtension>;
@@ -152,7 +156,7 @@ impl ConiferModels for FloraPines {
         }
     }
 
-    fn far_crowns(&self) -> [Vec3; 2] {
+    fn far_crowns(&self) -> [Vec3; 3] {
         FAR_CROWNS.map(|colour| colour.to_linear().to_vec3())
     }
 }
@@ -211,7 +215,7 @@ fn planted(tree: &Tree) -> Planted {
         rotation: Quat::from_axis_angle(up, tree.luck * std::f32::consts::TAU * 7.0)
             * Quat::from_rotation_arc(Vec3::Y, up),
         kind: tree.kind,
-        height_m: (low + (high - low) * tree.luck) * tree.stature,
+        height_m: (low + (high - low) * tree.luck) * tree.stature * tree.age,
         squat: 1.0 + 1.6 * stunted * stunted,
         luck: tree.luck,
     }
@@ -295,7 +299,7 @@ fn plant(
         .filter(|tree| tree.at.distance(middle) > CLEAR_M)
         .collect();
     let mut grown: HashMap<[u32; 3], Drawn> = HashMap::default();
-    let mut drawn_as = [[0usize; 2]; 2];
+    let mut drawn_as = [[0usize; 3]; 3];
     for tree in &near {
         let planted = planted(tree);
         trunks.add(crate::flora::Trunk {
@@ -311,7 +315,7 @@ fn plant(
     }
 
     // Far: billboards, the near crowns' colours, merged a square at a time.
-    let [pine, spruce] = conifers.far_crowns().map(|c| c.extend(1.0));
+    let [oak, pine, spruce] = conifers.far_crowns().map(|c| c.extend(1.0));
     let material = far.add(FarWoods {
         base: StandardMaterial {
             base_color_texture: Some(assets.load("textures/forest_spike/leaves.png")),
@@ -322,7 +326,7 @@ fn plant(
             ..default()
         },
         extension: FarExtension {
-            crowns: [pine, pine, spruce],
+            crowns: [oak, pine, spruce],
             // A card standing for a grown tree comes in as that tree's last level goes, over
             // the same last fifth (its colour's blue says where, `HANDOVER_SCALE_M`); one past
             // the grown trees, nothing else standing for its tree, is gone only when walked
@@ -364,19 +368,41 @@ fn plant(
             NotShadowCaster,
         ));
     }
-    let [[pines, pines_as_spruce], [spruces_as_pine, spruces]] = drawn_as;
-    info!(
-        "Woods: {} grown trees within {NEAR_M:.0} m ({pines} pines and {spruces} spruces drawn as their kind, {pines_as_spruce} pines as spruces and {spruces_as_pine} spruces as pines), {} far ones to {FAR_M:.0} m in {square_count} squares, in {:.1} s",
+    say_planted(
         near.len(),
         mid.len() + coarse.len(),
+        square_count,
+        &drawn_as,
+        began,
+    );
+}
+
+/// What the woods planted, and how each kind's grown trees were drawn.
+fn say_planted(
+    near: usize,
+    far: usize,
+    squares: usize,
+    drawn_as: &[[usize; 3]; 3],
+    began: std::time::Instant,
+) {
+    let mine = |k: usize| drawn_as[k][k];
+    let other: usize = (0..3)
+        .map(|k| drawn_as[k].iter().sum::<usize>() - drawn_as[k][k])
+        .sum();
+    info!(
+        "Woods: {near} grown trees within {NEAR_M:.0} m ({} oaks, {} pines and {} spruces drawn as their kind, {other} as another), {far} far ones to {FAR_M:.0} m in {squares} squares, in {:.1} s",
+        mine(0),
+        mine(1),
+        mine(2),
         began.elapsed().as_secs_f32()
     );
 }
 
-fn kind_index(kind: Conifer) -> usize {
+fn kind_index(kind: TreeKind) -> usize {
     match kind {
-        Conifer::Pine => 0,
-        Conifer::Spruce => 1,
+        TreeKind::Oak => 0,
+        TreeKind::Pine => 1,
+        TreeKind::Spruce => 2,
     }
 }
 
@@ -392,7 +418,7 @@ struct Card {
 /// A square's trees as one mesh of cards about its middle, in the far forest's form
 /// (far_forest.wesl): each card's four corners at its foot, the shader standing them up and
 /// turning them to the eye; the first texture coordinate the corner, the second the card's
-/// width and height, the colour its kind (pine 0.5, spruce 1), its luck and, for a grown
+/// width and height, the colour its kind (oak 0, pine 0.5, spruce 1), its luck and, for a grown
 /// tree's card, where it comes in. Its bounds hold the cards turned any way.
 fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
     let middle = cards.iter().map(|c| c.tree.at).sum::<Vec3>() / cards.len() as f32;
@@ -427,8 +453,9 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
         }
         let first = positions.len() as u32;
         let species = match kind {
-            Conifer::Pine => 0.5,
-            Conifer::Spruce => 1.0,
+            TreeKind::Oak => 0.0,
+            TreeKind::Pine => 0.5,
+            TreeKind::Spruce => 1.0,
         };
         let comes_in = card
             .grown
@@ -460,12 +487,13 @@ mod tests {
     use super::*;
     use bevy::mesh::VertexAttributeValues;
 
-    fn tree(at: Vec3, kind: Conifer, stature: f32) -> Tree {
+    fn tree(at: Vec3, kind: TreeKind, stature: f32) -> Tree {
         Tree {
             at,
             kind,
             stature,
             luck: 0.5,
+            age: 1.0,
         }
     }
 
@@ -475,25 +503,25 @@ mod tests {
         let cards = [
             // A tall pine grown near, drawn as a pine out to 588 m.
             Card {
-                tree: tree(ground, Conifer::Pine, 1.0),
+                tree: tree(ground, TreeKind::Pine, 1.0),
                 widen: 1.0,
                 grown: Some(Drawn {
                     to_m: 588.0,
-                    kind: Conifer::Pine,
+                    kind: TreeKind::Pine,
                 }),
             },
             // A stunted pine grown near, drawn as a young spruce out to 189 m.
             Card {
-                tree: tree(ground + Vec3::X * 20.0, Conifer::Pine, 0.25),
+                tree: tree(ground + Vec3::X * 20.0, TreeKind::Pine, 0.25),
                 widen: 1.0,
                 grown: Some(Drawn {
                     to_m: 189.0,
-                    kind: Conifer::Spruce,
+                    kind: TreeKind::Spruce,
                 }),
             },
             // A pine past the grown trees.
             Card {
-                tree: tree(ground + Vec3::X * 900.0, Conifer::Pine, 1.0),
+                tree: tree(ground + Vec3::X * 900.0, TreeKind::Pine, 1.0),
                 widen: 1.0,
                 grown: None,
             },
@@ -525,8 +553,8 @@ mod tests {
     fn a_tree_toward_its_limit_is_shorter_and_squatter() {
         let ground = Vec3::new(0.0, 30_000.0, 0.0);
         let (tall, low) = (
-            planted(&tree(ground, Conifer::Spruce, 1.0)),
-            planted(&tree(ground, Conifer::Spruce, 0.3)),
+            planted(&tree(ground, TreeKind::Spruce, 1.0)),
+            planted(&tree(ground, TreeKind::Spruce, 0.3)),
         );
         assert!(low.height_m < tall.height_m * 0.4);
         assert_eq!(tall.squat, 1.0);

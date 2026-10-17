@@ -471,3 +471,54 @@ fn builders_go_to_a_building_while_it_goes_up_and_leave_when_it_is_done() {
     advance(&mut life, &mut hours, 2.0);
     assert_eq!(at_sites(&life), 0, "nobody stays at a site closed");
 }
+
+#[test]
+fn a_dog_at_heel_does_not_flick_between_sitting_and_standing() {
+    use crate::animals::Doing;
+    // What a dog is drawn doing, as the game picks its clip (`town_animals::animate`).
+    fn pose(dog: &crate::Animal) -> u8 {
+        match dog.doing {
+            Doing::Resting { .. } => 0,
+            Doing::Moving { .. } if dog.speed > 0.02 => 1,
+            Doing::Moving { .. } => 2,
+        }
+    }
+    let mut life = life(2);
+    let viewer = square(&life);
+    life.start_settled(10.0, viewer);
+    let animals = life.plan.animals.clone();
+    let mut kept = crate::Animals::new(&life, animals, 2);
+    kept.settle(&life);
+    // A film's frame with the people living three times faster (`rising`, D381).
+    let step = 3.0 / 60.0;
+    let dogs: Vec<usize> = (0..kept.animals.len())
+        .filter(|&i| kept.animals[i].kind == "Dog")
+        .collect();
+    let mut since: Vec<(u8, u8, u32)> = dogs
+        .iter()
+        .map(|&i| (pose(&kept.animals[i]), pose(&kept.animals[i]), 1000))
+        .collect();
+    let mut flicks = 0;
+    for n in 0..1200u32 {
+        let at = 10.0 + n as f64 * step as f64 / SECONDS_AN_HOUR as f64;
+        life.step(at, step, &[viewer]);
+        kept.step(&life, step, &[viewer]);
+        for (k, &i) in dogs.iter().enumerate() {
+            let now = pose(&kept.animals[i]);
+            let (was, before, held) = since[k];
+            if now != was {
+                // Back to what it was a moment ago: a pose held under a fifth of a second.
+                if now == before && held < 4 {
+                    flicks += 1;
+                }
+                since[k] = (now, was, 0);
+            } else {
+                since[k].2 += 1;
+            }
+        }
+    }
+    assert_eq!(
+        flicks, 0,
+        "dogs flicked back to a pose they had just left {flicks} times"
+    );
+}

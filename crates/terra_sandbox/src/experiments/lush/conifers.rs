@@ -22,7 +22,7 @@ use terra_world::detail::DetailScale;
 use terra_world::grown::Cards;
 use terra_world::planet::Planet;
 use terra_world::start::Start;
-use terra_world::woods::{Conifer, ConiferModels, Conifers, Drawn, Planted, Planting};
+use terra_world::woods::{ConiferModels, Conifers, Drawn, Planted, Planting, TreeKind};
 
 /// A conifer shorter than this is drawn as a young spruce: a tall stand's model scaled down
 /// to it would be a pole with a tuft on top.
@@ -53,47 +53,58 @@ struct LushConifers {
     looks: Looks,
 }
 
-/// The models a tall pine, a tall spruce and a young spruce are drawn from, each by height.
+/// The models a tall oak, pine and spruce, and a young oak and spruce, are drawn from, each
+/// by height.
 struct Pools {
+    oaks: Vec<(usize, f32)>,
     pines: Vec<(usize, f32)>,
     spruces: Vec<(usize, f32)>,
     young: Vec<(usize, f32)>,
+    young_oaks: Vec<(usize, f32)>,
 }
 
 impl Pools {
     /// From each model's kind, whether young, and height.
     fn of(models: impl Iterator<Item = (Species, bool, f32)>) -> Self {
         let mut pools = Self {
+            oaks: Vec::new(),
             pines: Vec::new(),
             spruces: Vec::new(),
             young: Vec::new(),
+            young_oaks: Vec::new(),
         };
         for (index, (species, young, height)) in models.enumerate() {
             let pool = match (species, young) {
+                (Species::Oak, true) => &mut pools.young_oaks,
                 (_, true) => &mut pools.young,
                 (Species::Pine, false) => &mut pools.pines,
                 (Species::Spruce, false) => &mut pools.spruces,
-                (Species::Oak, false) => continue,
+                (Species::Oak, false) => &mut pools.oaks,
             };
             pool.push((index, height));
         }
-        for pool in [&mut pools.pines, &mut pools.spruces, &mut pools.young] {
+        for pool in [
+            &mut pools.oaks,
+            &mut pools.pines,
+            &mut pools.spruces,
+            &mut pools.young,
+            &mut pools.young_oaks,
+        ] {
             pool.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
         pools
     }
 
-    /// Which model a tree is drawn from, and as which kind: its own kind's, or a young
-    /// spruce's if it is too short for a tall one's; the taller its luck makes it, the taller
-    /// the model, so a model is scaled little.
-    fn choose(&self, tree: &Planted) -> (usize, Conifer) {
-        let (pool, kind) = if tree.height_m < YOUNG_UNDER_M {
-            (&self.young, Conifer::Spruce)
-        } else {
-            match tree.kind {
-                Conifer::Pine => (&self.pines, Conifer::Pine),
-                Conifer::Spruce => (&self.spruces, Conifer::Spruce),
-            }
+    /// Which model a tree is drawn from, and as which kind: its own kind's, or if it is too
+    /// short for a tall one's a young oak's for an oak and a young spruce's for a conifer;
+    /// the taller its luck makes it, the taller the model, so a model is scaled little.
+    fn choose(&self, tree: &Planted) -> (usize, TreeKind) {
+        let (pool, kind) = match (tree.kind, tree.height_m < YOUNG_UNDER_M) {
+            (TreeKind::Oak, true) => (&self.young_oaks, TreeKind::Oak),
+            (_, true) => (&self.young, TreeKind::Spruce),
+            (TreeKind::Oak, false) => (&self.oaks, TreeKind::Oak),
+            (TreeKind::Pine, false) => (&self.pines, TreeKind::Pine),
+            (TreeKind::Spruce, false) => (&self.spruces, TreeKind::Spruce),
         };
         let at = ((tree.luck * pool.len() as f32) as usize).min(pool.len() - 1);
         (pool[at].0, kind)
@@ -139,9 +150,9 @@ impl ConiferModels for LushConifers {
         Drawn { to_m, kind }
     }
 
-    /// As the lush forest's far forest colours its pines and spruces.
-    fn far_crowns(&self) -> [Vec3; 2] {
-        [1, 2].map(|k| LEAF_MEANS[k] * CROWN_TINTS[k] * (1.0 - LEAF.y))
+    /// As the lush forest's far forest colours its oaks, pines and spruces.
+    fn far_crowns(&self) -> [Vec3; 3] {
+        [0, 1, 2].map(|k| LEAF_MEANS[k] * CROWN_TINTS[k] * (1.0 - LEAF.y))
     }
 }
 
@@ -181,15 +192,16 @@ fn grow_conifers(
     let looks = Looks::new(&assets, &mut materials, &mut plain, &cards, &wind);
     let seed = forest_seed();
     let models: Vec<TreeModel> = (0..KINDS.len())
-        .filter(|&kind| KINDS[kind].0 != Species::Oak)
         .map(|kind| grow(kind, seed, &looks, None, &mut meshes).0)
         .collect();
     let pools = Pools::of(models.iter().map(|m| (m.species, m.young, m.height)));
     info!(
-        "Woods: the lush forest's conifers for the woods, {} pines, {} spruces and {} young spruces, in {:.1} s",
+        "Woods: the lush forest's trees for the woods, {} oaks, {} pines, {} spruces, {} young spruces and {} young oaks, in {:.1} s",
+        pools.oaks.len(),
         pools.pines.len(),
         pools.spruces.len(),
         pools.young.len(),
+        pools.young_oaks.len(),
         began.elapsed().as_secs_f32()
     );
     commands.insert_resource(Dropping {
@@ -234,12 +246,11 @@ mod tests {
         Pools::of(
             KINDS
                 .iter()
-                .filter(|kind| kind.0 != Species::Oak)
                 .map(|&(species, _, young, (low, high))| (species, young, (low + high) / 2.0)),
         )
     }
 
-    fn tree(kind: Conifer, height_m: f32, luck: f32) -> Planted {
+    fn tree(kind: TreeKind, height_m: f32, luck: f32) -> Planted {
         Planted {
             foot: Vec3::new(0.0, 30_000.0, 0.0),
             rotation: Quat::IDENTITY,
@@ -253,36 +264,46 @@ mod tests {
     #[test]
     fn the_woods_pines_are_the_lush_forests_pines_and_their_spruces_its_spruces() {
         let pools = pools();
-        let kinds: Vec<(Species, bool)> = KINDS
-            .iter()
-            .filter(|kind| kind.0 != Species::Oak)
-            .map(|kind| (kind.0, kind.2))
-            .collect();
+        let kinds: Vec<(Species, bool)> = KINDS.iter().map(|kind| (kind.0, kind.2)).collect();
         assert!(pools.pines.len() >= 4 && pools.spruces.len() >= 3 && pools.young.len() >= 2);
         for k in 0..50 {
             let luck = k as f32 / 49.0;
-            let (pine, as_kind) = pools.choose(&tree(Conifer::Pine, 28.0, luck));
+            let (pine, as_kind) = pools.choose(&tree(TreeKind::Pine, 28.0, luck));
             assert_eq!(
                 (kinds[pine], as_kind),
-                ((Species::Pine, false), Conifer::Pine)
+                ((Species::Pine, false), TreeKind::Pine)
             );
-            let (spruce, as_kind) = pools.choose(&tree(Conifer::Spruce, 24.0, luck));
+            let (spruce, as_kind) = pools.choose(&tree(TreeKind::Spruce, 24.0, luck));
             assert_eq!(
                 (kinds[spruce], as_kind),
-                ((Species::Spruce, false), Conifer::Spruce)
+                ((Species::Spruce, false), TreeKind::Spruce)
+            );
+            let (oak, as_kind) = pools.choose(&tree(TreeKind::Oak, 22.0, luck));
+            assert_eq!(
+                (kinds[oak], as_kind),
+                ((Species::Oak, false), TreeKind::Oak)
+            );
+            let (sapling, as_kind) = pools.choose(&tree(TreeKind::Oak, 6.0, luck));
+            assert_eq!(
+                (kinds[sapling], as_kind),
+                ((Species::Oak, true), TreeKind::Oak)
             );
             // Stunted toward the tree line, either kind is a young spruce.
-            for kind in [Conifer::Pine, Conifer::Spruce] {
+            for kind in [TreeKind::Pine, TreeKind::Spruce] {
                 let (young, as_kind) = pools.choose(&tree(kind, 5.0, luck));
                 assert_eq!(
                     (kinds[young], as_kind),
-                    ((Species::Spruce, true), Conifer::Spruce)
+                    ((Species::Spruce, true), TreeKind::Spruce)
                 );
             }
         }
         // Every variant of a kind is drawn somewhere, a taller tree from a taller one.
         let chosen: Vec<usize> = (0..200)
-            .map(|k| pools.choose(&tree(Conifer::Pine, 28.0, k as f32 / 199.0)).0)
+            .map(|k| {
+                pools
+                    .choose(&tree(TreeKind::Pine, 28.0, k as f32 / 199.0))
+                    .0
+            })
             .collect();
         for (index, _) in &pools.pines {
             assert!(chosen.contains(index));

@@ -1,6 +1,6 @@
 {
   "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then low over its south-west corner and along its square as its last houses go up, ending over its roofs looking up the town with the lake and the forest beyond, the morning sun to the right",
-  "seconds": 42,
+  "seconds": 20,
   "keys": [
     {
       "t": 0,
@@ -17,7 +17,7 @@
       "lens": 22
     },
     {
-      "t": 12,
+      "t": 6,
       "at": [
         -22,
         17,
@@ -31,7 +31,7 @@
       "lens": 22
     },
     {
-      "t": 12,
+      "t": 6,
       "at": [
         -40,
         24,
@@ -46,7 +46,7 @@
       "cut": true
     },
     {
-      "t": 25,
+      "t": 12.5,
       "at": [
         24,
         26,
@@ -60,7 +60,7 @@
       "lens": 22
     },
     {
-      "t": 25,
+      "t": 12.5,
       "at": [
         -48,
         32,
@@ -75,7 +75,7 @@
       "cut": true
     },
     {
-      "t": 34,
+      "t": 16.5,
       "at": [
         -22,
         26,
@@ -89,7 +89,7 @@
       "lens": 22
     },
     {
-      "t": 42,
+      "t": 20,
       "at": [
         -2,
         20,
