@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { path } from "./motion.ts";
+import { constraints, path } from "./motion.ts";
 
 test("a take's path runs straight ahead at the clip's speed, a point a frame", () => {
   const [constraint] = path(3.2, 6);
@@ -12,4 +12,23 @@ test("a take's path runs straight ahead at the clip's speed, a point a frame", (
   // Six seconds at 3.2 m/s, measured end to end: 19.2 m less the last frame's step.
   const covered = points[points.length - 1][1] - points[0][1];
   assert.ok(Math.abs(covered - 3.2 * (179 / 30)) < 1e-9);
+  // Its heading left to the take.
+  assert.equal(constraint.global_root_heading, undefined);
+});
+
+test("a strafe's path runs to the body's right at its speed, facing ahead throughout", () => {
+  const [constraint] = path(1.2, 6, 90);
+  const [x, z] = constraint.smooth_root_2d[179];
+  // Facing Kimodo's +z, the body's right is -x; ahead it goes not at all.
+  assert.ok(Math.abs(x + 1.2 * (179 / 30)) < 1e-9);
+  assert.equal(z, 0);
+  assert.equal(constraint.global_root_heading?.length, 180);
+  assert.ok(constraint.global_root_heading?.every(([c, s]) => c === 1 && s === 0));
+  // A strafe to the left goes the other way.
+  assert.ok(Math.abs(path(1.2, 6, -90)[0].smooth_root_2d[179][0] - 1.2 * (179 / 30)) < 1e-9);
+});
+
+test("a one-shot is held to nothing, a strafe to its path", () => {
+  assert.deepEqual(constraints({ prompt: "", speed: 0, seconds: 3, seed: 1, once: true }), []);
+  assert.equal(constraints({ prompt: "", speed: 1.2, seconds: 6, seed: 1, way: 90 })[0].frame_indices.length, 180);
 });

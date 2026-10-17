@@ -2,7 +2,7 @@
 mannequin file, each in place of the library's clip of the same name
 (research/2026-10-14-animation.md).
 
-    tools/blender/run.sh tools/characters/made_clips.py [OUT.glb] [--try=CLIP:FILE.bvh]
+    tools/blender/run.sh tools/characters/made_clips.py [OUT.glb] [--try=CLIP:FILE.bvh] [--list=FILE.json]
 
 Each clip in art/animation/made.json has its take, a BVH on Kimodo's SOMA skeleton in its
 standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
@@ -23,9 +23,17 @@ standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
     (swing_arms), and for one with "fist", its fingers closed that share of the way into the
     library's clenched fist (Kimodo leaves them straight).
 
+A stride that travels `way` degrees to the right of where the body faces (a strafe) is turned
+to face ahead, not along its travel. A clip marked "once" (a blow, a block, a dodge) is kept
+from the take's start to its end, or over its "span" (seconds in the take), at the take's own
+pace, in place, and not closed into a loop; an ONCE line says when each hand is raised highest
+and moves fastest, and how far the body travels, which the scene moves it by.
+
 OUT defaults to the game's mannequin file, which it reads and writes; clips.py makes it from
 the libraries first where they are here. --try puts one take into OUT instead of the kept one,
-to measure a candidate with gait_check.py before keeping it.
+to measure a candidate with gait_check.py before keeping it. --list=FILE makes another set of
+clips (a creature's, a demo's: art/animation/sets/fight.json, its takes in sets/fight/) onto
+the game's mannequin into OUT, which must be named and then carries the set's clips alone.
 """
 
 import json
@@ -136,6 +144,45 @@ def stride(src, fps):
     return best
 
 
+def one_shot(src, fps, span=None):
+    """For a one-shot (a blow, a block, a dodge): the take from its start to its end, or over
+    `span` (seconds in the take), unlooped; its seam is how far its last pose is from its first,
+    which is small for one that starts and ends in the same stance."""
+    scene = bpy.context.scene
+    start, end = (int(round(x)) for x in src.animation_data.action.frame_range)
+    f0, f1 = (start, end) if span is None else (start + int(round(span[0] * fps)), min(end, start + int(round(span[1] * fps))))
+    poses = []
+    for f in (f0, f1):
+        scene.frame_set(f)
+        poses.append({s: src.pose.bones[s].matrix_basis.to_quaternion() for s in MAP})
+    return f0, f1, sum(math.degrees(poses[0][s].rotation_difference(poses[1][s]).angle) for s in MAP) / len(MAP)
+
+
+def moments(src, fps, f0, f1):
+    """What a one-shot does, to time it in a scene by: when each hand moves fastest (a blow's
+    moment), how far the body travels ahead and to its right (which the clip, played in place,
+    leaves the scene to move it by), and how far it has turned by its end."""
+    scene = bpy.context.scene
+    ahead = facing(src, f0)
+    right = ahead.cross(Vector((0.0, 0.0, 1.0)))
+    hands, hips = {"RightHand": [], "LeftHand": []}, []
+    for f in range(f0, f1 + 1):
+        scene.frame_set(f)
+        for h in hands:
+            hands[h].append(src.matrix_world @ src.pose.bones[h].head)
+        hips.append(src.matrix_world @ src.pose.bones["Hips"].head)
+    fastest = {}
+    for h, at in hands.items():
+        speeds = [(at[i + 1] - at[i]).length * fps for i in range(len(at) - 1)]
+        i = max(range(len(speeds)), key=speeds.__getitem__)
+        # Raised: its highest before then, the top of a wind-up.
+        top = max(range(i + 1), key=lambda j: at[j].z)
+        fastest[h] = ((i + 0.5) / fps, speeds[i], top / fps, at[top].z - at[0].z)
+    moved = hips[-1] - hips[0]
+    turned = math.degrees(ahead.angle(facing(src, f1))) * (1 if ahead.cross(facing(src, f1)).z > 0 else -1)
+    return fastest, moved.dot(ahead), moved.dot(right), turned
+
+
 def world_rest(arm, bone):
     return (arm.matrix_world @ arm.data.bones[bone].matrix_local).to_quaternion()
 
@@ -149,9 +196,19 @@ def without_roll(q):
     return q @ twist.inverted()
 
 
-def retarget(src, arm, name, f0, f1, k=1.0):
+def facing(src, f):
+    """Which way the take's body faces on the ground at frame `f`: up crossed with the hips'
+    left-to-right."""
+    bpy.context.scene.frame_set(f)
+    across = (src.matrix_world @ src.pose.bones["RightLeg"].head) - (src.matrix_world @ src.pose.bones["LeftLeg"].head)
+    return Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0))).normalized()
+
+
+def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False):
     """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
-    frame of the take `k` frames of the action."""
+    frame of the take `k` frames of the action. A take that travels `way` degrees to the right
+    of where it faces (a strafe) is turned by its travel less that; a one-shot (`once`) by where
+    its body faces at the take's start (Kimodo's ahead), and not closed into a loop."""
     scene = bpy.context.scene
     src_rest = {s: world_rest(src, s) for s in MAP}
     dst_rest = {d: world_rest(arm, d) for d in MAP.values()}
@@ -165,12 +222,13 @@ def retarget(src, arm, name, f0, f1, k=1.0):
     travel = Vector((b.x - a.x, b.y - a.y, 0.0))
     # Turned to face our front, -Y, and its travel taken off. A clip that hardly travels, such as
     # an idle, faces the way its hips do: forward is up crossed with the hips' left-to-right.
-    if travel.length > 0.3:
-        ahead = travel
+    # Facing +Y, the right is +X: travel `way` to the right is ahead turned clockwise by it.
+    if once:
+        ahead = facing(src, int(round(src.animation_data.action.frame_range[0])))
+    elif travel.length > 0.3:
+        ahead = Matrix.Rotation(math.radians(way), 3, "Z") @ travel
     else:
-        scene.frame_set(f0)
-        across = (src.matrix_world @ src.pose.bones["RightLeg"].head) - (src.matrix_world @ src.pose.bones["LeftLeg"].head)
-        ahead = Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0)))
+        ahead = facing(src, f0)
     turn = Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 4, "Z")
     per_frame = travel / (f1 - f0)
     action = bpy.data.actions.new(name)
@@ -195,6 +253,8 @@ def retarget(src, arm, name, f0, f1, k=1.0):
             if d == "pelvis":
                 pb.keyframe_insert("location", frame=(f - f0) * k)
     last = f1 - f0
+    if once:
+        return action
     for fc in curves(action):
         gap = fc.evaluate(0) - fc.evaluate(last * k)
         for e in range(1, EASE + 1):
@@ -389,27 +449,46 @@ def curves(action):
 
 def main():
     args = look.args()
-    out = next((look.path(a) for a in args if not a.startswith("--")), look.FIGURE)
+    out = next((look.path(a) for a in args if not a.startswith("--")), None)
     tried = dict(a.split("=", 1)[1].split(":", 1) for a in args if a.startswith("--try="))
-    with open(LIST) as f:
+    # Another set of clips than the game's (a creature's, a demo's): its own list, its takes in
+    # the folder named as the list is, made onto the game's mannequin into OUT, which then
+    # carries the set's clips alone.
+    chosen = next((look.path(a.split("=", 1)[1]) for a in args if a.startswith("--list=")), None)
+    if chosen and out is None:
+        raise SystemExit("a set (--list) is made into a copy of the mannequin: name OUT.glb")
+    listed, kept = (chosen, chosen[: -len(".json")]) if chosen else (LIST, MADE)
+    out = out or look.FIGURE
+    with open(listed) as f:
         made = json.load(f)
     # An entry with no take kept yet is still being made (motion.ts); the library's clip stays.
-    takes = {name: os.path.join(MADE, f"{name}.bvh") for name in made if os.path.exists(os.path.join(MADE, f"{name}.bvh"))}
-    takes.update({name: look.path(path) for name, path in tried.items()})
+    # A take tried is made alone, into a copy that already has the kept ones.
+    takes = {name: look.path(path) for name, path in tried.items()} or {
+        name: os.path.join(kept, f"{name}.bvh") for name in made if os.path.exists(os.path.join(kept, f"{name}.bvh"))}
     look.reset()
-    bpy.ops.import_scene.gltf(filepath=out)
+    bpy.ops.import_scene.gltf(filepath=look.FIGURE if chosen else out)
     arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     body = next(o for o in bpy.data.objects if o.type == "MESH" and any(m.type == "ARMATURE" for m in o.modifiers))
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = None
-    names = [t.name for t in ad.nla_tracks]
+    names = [] if chosen else [t.name for t in ad.nla_tracks]
     fist = fist_pose(FIST_CLIP) if any("fist" in made.get(n, {}) for n in takes) else {}
     for name, path in takes.items():
         for pb in arm.pose.bones:
             pb.matrix_basis.identity()
         src, fps = load_take(path)
         entry = made.get(name, {})
-        f0, f1, seam = still(src, fps, tuple(entry.get("loop", (2.0, 5.0))), entry.get("busy", False)) if entry.get("still") else stride(src, fps)
+        if entry.get("once"):
+            f0, f1, seam = one_shot(src, fps, entry.get("span"))
+        elif entry.get("still"):
+            f0, f1, seam = still(src, fps, tuple(entry.get("loop", (2.0, 5.0))), entry.get("busy", False))
+        else:
+            f0, f1, seam = stride(src, fps)
+        if entry.get("once"):
+            fastest, ahead, right, turned = moments(src, fps, f0, f1)
+            print(f"ONCE {name}: " + ", ".join(f"{h[:-4].lower()} hand raised {up:+.2f} m at {top:.2f} s, fastest {v:.1f} m/s at {t:.2f} s"
+                                               for h, (t, v, top, up) in fastest.items())
+                  + f"; travels {ahead:+.2f} m ahead, {right:+.2f} m right; turned {turned:+.0f} deg (left +) by its end")
         old = bpy.data.actions.get(name)
         if old is not None:
             old.name = name + ".old"
@@ -417,10 +496,21 @@ def main():
         # a second, keyed at the scene's, rounded so the loop is a whole number of frames, which
         # the exporter samples. A stride keeps a key a frame, as made: the game plays it at the
         # pace its feet set (pace.py), and fewer keys a stride would blur its contacts.
+        # A one-shot plays at the take's own pace too: it does not travel at a pace the feet set.
         k = 1.0
-        if entry.get("still"):
+        if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action = retarget(src, arm, name, f0, f1, k)
+        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False))
+        if entry.get("way"):
+            # Which way the take went, measured: its travel from where its hips face.
+            scene = bpy.context.scene
+            scene.frame_set(f0)
+            a = src.matrix_world @ src.pose.bones["Hips"].head
+            scene.frame_set(f1)
+            went = (src.matrix_world @ src.pose.bones["Hips"].head) - a
+            ahead = facing(src, (f0 + f1) // 2)
+            print(f"WAY {name}: travelled {math.degrees(math.atan2(went.dot(ahead.cross(Vector((0.0, 0.0, 1.0)))), went.dot(ahead))):+.0f} deg "
+                  f"to the right of where its hips face mid-stride, asked {entry['way']}")
         if "arms" in entry:
             took = swing_arms(arm, action, entry["arms"])
             now = entry["arms"].get("swing")

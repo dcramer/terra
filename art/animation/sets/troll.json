@@ -1,0 +1,43 @@
+{
+  "Troll_Idle": {
+    "prompt": "A large hunched person stands breathing heavily, shoulders rising and falling, arms hanging.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 1,
+    "still": true
+  },
+  "Troll_Walk": {
+    "prompt": "A heavy hunched person walks forward with slow stomping steps, long arms swinging.",
+    "speed": 1.1,
+    "seconds": 6,
+    "seed": 1
+  },
+  "Troll_Smash": {
+    "prompt": "A person raises both fists high above the head and smashes them down onto the ground in front.",
+    "speed": 0,
+    "seconds": 3.5,
+    "seed": 1,
+    "once": true
+  },
+  "Troll_Sweep": {
+    "prompt": "A person swings one arm in a wide horizontal arc across in front of the body.",
+    "speed": 0,
+    "seconds": 3,
+    "seed": 1,
+    "once": true
+  },
+  "Troll_Hit": {
+    "prompt": "A person is hit hard, staggers backward, then recovers.",
+    "speed": 0,
+    "seconds": 3,
+    "seed": 1,
+    "once": true
+  },
+  "Troll_Roar": {
+    "prompt": "A person leans forward with arms spread wide and roars.",
+    "speed": 0,
+    "seconds": 3.5,
+    "seed": 1,
+    "once": true
+  }
+}
