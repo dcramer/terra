@@ -815,8 +815,9 @@ fn fragment(
             bare = smoothstep(0.25, 0.6, in.uv_b.x + (fleck - 0.5) * 0.3 + (blotch - 0.5) * 0.3);
             woods = clamp(-in.uv_b.x, 0.0, 1.0);
             // A lowland lake's banks are silt, soil and grass, not the shingle the land lays
-            // round every lake: its gravel and scree give out a few metres over its water.
-            let banks = lowland_at(from_centre - ground.sea_radius_m) * (1.0 - smoothstep(3.0, 7.0, in.uv_b.y));
+            // round every lake: its gravel and scree give out a few metres over its water, and
+            // the lowland's loose stones thin to a share of what they are on a mountain.
+            let banks = lowland_at(from_centre - ground.sea_radius_m) * max(1.0 - smoothstep(3.0, 7.0, in.uv_b.y), 0.75);
             gravel *= 1.0 - banks;
             scree *= 1.0 - banks;
         }

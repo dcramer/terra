@@ -614,6 +614,15 @@ fn build(
             rise.near = construct::worked_at(&step).unwrap_or(rise.near);
             budget -= 1;
         }
+        // Its stack of logs used up as its walls rise, the top of the stack first, so the
+        // stack shrinks with the work rather than standing whole until it is done.
+        let keep = libm::ceilf(rising.lapse.site.len() as f32 * (1.0 - built.base.built_share()))
+            .max(1.0) as usize;
+        while rise.dressed.len() > keep {
+            if let Some(entity) = rise.dressed.pop() {
+                commands.entity(entity).despawn();
+            }
+        }
         if construct::finished(&built.base) {
             // Its doors hung, mostly shut, and its shutters, mostly open.
             let fittings = catalogue.fittings();

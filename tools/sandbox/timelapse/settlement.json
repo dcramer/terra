@@ -108,7 +108,7 @@
     "exposure": "hold",
     "exposure_bias": 0.1,
     "hold_clock": true,
-    "detail": 1.9
+    "detail": 1.35
   },
   "player": {
     "hidden": true
