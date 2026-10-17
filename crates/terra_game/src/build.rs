@@ -199,10 +199,7 @@ pub(super) fn work_out(
                 .filter(|at| hit.contains(at))
                 .collect(),
             fell: done.fell.clone(),
-            chipped: Vec::new(),
-            middle: base.bounds().map_or(Vec3::ZERO, |(low, high)| {
-                (low + high + IVec3::ONE).as_vec3() * 0.5 * terra_build::CELL_M
-            }),
+            ..default()
         });
     }
     // A change of material and nothing else: the drawing looks it up at once (D298).

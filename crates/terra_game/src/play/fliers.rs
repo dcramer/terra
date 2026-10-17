@@ -25,6 +25,7 @@
 //! script flies it as an AI later will.
 
 mod plan;
+mod spine;
 
 use crate::build::fire::BreathesFire;
 use crate::remote::{method, refused};
@@ -38,6 +39,7 @@ use bevy::{
 use plan::{Plan, Wings};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use spine::{Spine, chain, spine};
 
 /// A kind of flier, as `fliers.ron` has it. The file says what each part means.
 #[derive(Deserialize, Debug, Clone)]
@@ -114,16 +116,6 @@ const GLIDES_BELOW: f32 = 0.3;
 const CRUISE_BOUT_S: [f32; 2] = [3.4, 2.2];
 /// How far its body rises with each downstroke at its full beat, in metres.
 const HEAVE_M: f32 = 0.35;
-/// How far its head leads into a turn, in seconds of the turn, and most; how far its tail
-/// swings out behind, the same; how long each tail bone takes to follow the one before.
-const NECK_LEAD_S: f32 = 0.55;
-const NECK_MOST: f32 = 0.65;
-const TAIL_LAG_S: f32 = 0.5;
-const TAIL_MOST: f32 = 0.7;
-const TAIL_FOLLOW_S: f32 = 0.09;
-/// How far it rears its head back before it breathes, in radians.
-const REAR: f32 = 0.5;
-
 /// The kinds, read once.
 #[derive(Resource)]
 struct Kinds {
@@ -224,18 +216,6 @@ struct Flaps {
     weights: [f32; 6],
     beating: bool,
     bout_s: f32,
-}
-
-/// On a flier's model: its neck's and tail's bones, each with the axes in its parent's space
-/// that are the body's up and its left at rest, and how far each is turned and trailing.
-#[derive(Component)]
-struct Spine {
-    flier: Entity,
-    neck: Vec<(Entity, Vec3, Vec3)>,
-    tail: Vec<(Entity, Vec3, Vec3)>,
-    neck_turn: Vec2,
-    neck_rate: Vec2,
-    tail_turn: Vec<Vec2>,
 }
 
 /// On the entity at a flier's mouth that breathes, looking out of it: whose.
@@ -545,76 +525,6 @@ fn stroke(t: f32, down: f32) -> f32 {
     }
 }
 
-/// Each flier's neck and tail over its clips: its head turned into its turn and up into its
-/// climb ahead of its body, reared back before it breathes and thrown forward as the breath
-/// comes; its tail swinging out behind each turn and lagging each pitch, each bone a little
-/// after the one before it, as a whip follows.
-fn spine(
-    time: Res<Time>,
-    kinds: Res<Kinds>,
-    fliers: Query<&Flier>,
-    mut spines: Query<&mut Spine>,
-    mut bones: Query<&mut Transform, Without<Flier>>,
-) {
-    let step = time.delta_secs();
-    if step <= 0.0 {
-        return;
-    }
-    for mut spine in &mut spines {
-        let Ok(flier) = fliers.get(spine.flier) else {
-            continue;
-        };
-        let def = &kinds.defs[flier.kind];
-        let yaw = (flier.turn_rate * NECK_LEAD_S).clamp(-NECK_MOST, NECK_MOST);
-        let pitch = (-flier.pitch_rate * NECK_LEAD_S).clamp(-NECK_MOST, NECK_MOST)
-            - REAR * flier.rearing(def);
-        let Spine {
-            neck_turn,
-            neck_rate,
-            ..
-        } = &mut *spine;
-        // Lightly under-damped, so the throw forward as the breath comes overshoots.
-        for (value, rate, target) in [
-            (&mut neck_turn.x, &mut neck_rate.x, yaw),
-            (&mut neck_turn.y, &mut neck_rate.y, pitch),
-        ] {
-            let w = 9.0;
-            *rate += (w * w * (target - *value) - 1.1 * w * *rate) * step;
-            *value += *rate * step;
-        }
-        let tail_wanted = Vec2::new(
-            (-flier.turn_rate * TAIL_LAG_S).clamp(-TAIL_MOST, TAIL_MOST),
-            (flier.pitch_rate * TAIL_LAG_S).clamp(-TAIL_MOST, TAIL_MOST),
-        );
-        let follow = ease(TAIL_FOLLOW_S, step);
-        let mut before = tail_wanted;
-        for turn in &mut spine.tail_turn {
-            *turn += (before - *turn) * follow;
-            before = *turn;
-        }
-        let n = spine.neck.len().max(1) as f32;
-        let neck_share = |i: usize| 2.0 * (i as f32 + 1.0) / (n * (n + 1.0));
-        for (i, (bone, up, left)) in spine.neck.iter().enumerate() {
-            if let Ok(mut t) = bones.get_mut(*bone) {
-                let share = neck_share(i);
-                // Pitch about its left: a turn about the left axis by a positive angle lowers
-                // the nose, so up into a climb is the negative.
-                t.rotation = Quat::from_axis_angle(*up, spine.neck_turn.x * share)
-                    * Quat::from_axis_angle(*left, -spine.neck_turn.y * share)
-                    * t.rotation;
-            }
-        }
-        let m = spine.tail.len().max(1) as f32;
-        for ((bone, up, left), turn) in spine.tail.iter().zip(&spine.tail_turn) {
-            if let Ok(mut t) = bones.get_mut(*bone) {
-                t.rotation = Quat::from_axis_angle(*up, turn.x * 1.5 / m)
-                    * Quat::from_axis_angle(*left, turn.y * 1.5 / m)
-                    * t.rotation;
-            }
-        }
-    }
-}
-
 /// The breath out of each flier's mouth: on while it breathes, aimed at what it breathes at
 /// within a turn of its head.
 fn breathe(
@@ -669,44 +579,6 @@ pub(super) fn placed(
     crate::build::base_frame(world)
         .map(|frame| frame.transform_point(point))
         .ok_or_else(|| refused("there is no base"))
-}
-
-/// Each bone of a chain (`Neck1`, `Neck2`, ...) under a model, from its root out, with the
-/// body's up and left at rest in its parent's space.
-fn chain(
-    root: Entity,
-    (name, count): &(String, u8),
-    children: &Query<&Children>,
-    names: &Query<&Name>,
-    parents: &Query<&ChildOf>,
-    transforms: &Query<&Transform>,
-) -> Vec<(Entity, Vec3, Vec3)> {
-    // How a node is turned in the model, through its parents up to the model's root.
-    let turned = |mut node: Entity| {
-        let mut rotation = Quat::IDENTITY;
-        while node != root {
-            if let Ok(t) = transforms.get(node) {
-                rotation = t.rotation * rotation;
-            }
-            let Ok(parent) = parents.get(node) else {
-                break;
-            };
-            node = parent.parent();
-        }
-        rotation
-    };
-    (1..=*count)
-        .filter_map(|i| {
-            let want = format!("{name}{i}");
-            let bone = children
-                .iter_descendants(root)
-                .find(|&child| names.get(child).is_ok_and(|n| n.as_str() == want))?;
-            let parent = parents.get(bone).ok()?.parent();
-            // The model faces +Z with +Y up, so its left is +X.
-            let inverse = turned(parent).inverse();
-            Some((bone, inverse * Vec3::Y, inverse * Vec3::X))
-        })
-        .collect()
 }
 
 /// Brings a flier of a kind into the world, hovering at a point.
@@ -1007,149 +879,4 @@ fn roar(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::ecs::system::RunSystemOnce;
-
-    /// A world with the fliers' kinds and the clock stepping a sixtieth of a second.
-    fn world() -> World {
-        let mut world = World::new();
-        let defs: Vec<FlierDef> = terra_world::data::read(FILE);
-        world.insert_resource(Kinds {
-            models: Vec::new(),
-            ready: vec![None; defs.len()],
-            defs,
-        });
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_secs_f32(1.0 / 60.0));
-        world.insert_resource(time);
-        world
-    }
-
-    #[test]
-    fn a_flier_banks_into_a_turn_its_inside_wing_down_and_flies_level_out_of_it() {
-        let mut world = world();
-        let up = Vec3::Y;
-        let start = Vec3::new(0.0, 2000.0, 0.0);
-        // North (-z), then a right turn east (+x), then on east.
-        let through = [
-            start + Vec3::new(0.0, 0.0, -80.0),
-            start + Vec3::new(60.0, 0.0, -140.0),
-            start + Vec3::new(260.0, 0.0, -140.0),
-        ];
-        let def = world.resource::<Kinds>().defs[0].clone();
-        let planned = plan::plan(start, Vec3::NEG_Z, 24.0, &through, 24.0, &def.wings(), up);
-        let seconds = planned.seconds();
-        let mut flier = Flier::new(
-            0,
-            Flight::Path {
-                plan: planned,
-                seconds: 0.0,
-                then_face: start,
-            },
-        );
-        flier.hovering = 0.0;
-        let flier = world
-            .spawn((
-                flier,
-                Transform::from_translation(start).looking_to(Vec3::NEG_Z, up),
-            ))
-            .id();
-        let mut lowest_right = f32::INFINITY;
-        let mut most_turn = 0.0f32;
-        // Until before it brakes into its hover, its nose up.
-        for _ in 0..(60.0 * (seconds - 7.0)) as usize {
-            world.run_system_once(fly).unwrap();
-            let t = world.get::<Transform>(flier).unwrap();
-            lowest_right = lowest_right.min(t.right().dot(up));
-            most_turn = most_turn.min(world.get::<Flier>(flier).unwrap().turn_rate);
-        }
-        // In the right turn its right wing went down, well into a bank, and it turned right.
-        assert!(
-            lowest_right < -0.3,
-            "its right wing went no lower than {lowest_right}"
-        );
-        assert!(
-            most_turn < -0.1,
-            "it turned right at most {most_turn} rad/s"
-        );
-        // Out of it, flying east, it is level again.
-        let t = world.get::<Transform>(flier).unwrap();
-        assert!(
-            t.right().dot(up).abs() < 0.1,
-            "still banked {}",
-            t.right().dot(up)
-        );
-        assert!(
-            t.forward().dot(Vec3::X) > 0.9,
-            "not heading east: {}",
-            t.forward()
-        );
-    }
-
-    #[test]
-    fn a_flier_braking_into_a_hover_raises_its_nose() {
-        let mut world = world();
-        let up = Vec3::Y;
-        let start = Vec3::new(0.0, 2000.0, 0.0);
-        let def = world.resource::<Kinds>().defs[0].clone();
-        let through = [start + Vec3::new(0.0, 0.0, -200.0)];
-        let planned = plan::plan(start, Vec3::NEG_Z, 24.0, &through, 24.0, &def.wings(), up);
-        let seconds = planned.seconds();
-        let mut flier = Flier::new(
-            0,
-            Flight::Path {
-                plan: planned,
-                seconds: 0.0,
-                then_face: start + Vec3::new(0.0, 0.0, -400.0),
-            },
-        );
-        flier.hovering = 0.0;
-        let flier = world
-            .spawn((
-                flier,
-                Transform::from_translation(start).looking_to(Vec3::NEG_Z, up),
-            ))
-            .id();
-        let mut cruising_nose = None;
-        let mut braking_nose = f32::MIN;
-        for frame in 0..(60.0 * (seconds - 0.5)) as usize {
-            world.run_system_once(fly).unwrap();
-            let t = world.get::<Transform>(flier).unwrap();
-            let nose = t.forward().dot(up);
-            if frame == 60 * 4 {
-                cruising_nose = Some(nose);
-            }
-            if world.get::<Flier>(flier).unwrap().accel < -1.0 {
-                braking_nose = braking_nose.max(nose);
-            }
-        }
-        let cruising = cruising_nose.unwrap();
-        assert!(cruising.abs() < 0.05, "nose {cruising} cruising level");
-        assert!(
-            braking_nose > 0.25,
-            "nose rose only to {braking_nose} braking"
-        );
-    }
-
-    #[test]
-    fn the_fliers_file_reads_and_every_kind_has_its_model() {
-        let defs: Vec<FlierDef> = terra_world::data::read(FILE);
-        assert!(!defs.is_empty());
-        for def in &defs {
-            assert!(
-                terra_world::data::assets().join(&def.model.0).exists(),
-                "{} has no model {}",
-                def.name,
-                def.model.0
-            );
-            assert!(
-                def.cruise_mps > def.hover_mps
-                    && def.most_bank_deg > 0.0
-                    && def.most_bank_deg < 80.0
-                    && def.accel_mps2 > 0.0
-                    && def.brake_mps2 > 0.0
-            );
-        }
-    }
-}
+mod tests;

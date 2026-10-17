@@ -27,6 +27,9 @@ use crate::layout::hash;
 use crate::{Base, CELL_M, Material, Surfaces};
 use glam::{IVec3, Quat, Vec3};
 
+mod topple;
+pub use topple::{Hinge, topple};
+
 /// The most fragments a fall makes, and the most about at once, at the highest preset (a
 /// castle's towers and walls coming down together make some thousands): the
 /// game makes fewer at lower ones and fades the oldest first past it.
@@ -196,40 +199,6 @@ pub struct Fragment {
     pub seed: u32,
     /// While it still leans with what it came down with, the hinge they tip over on.
     pub hinge: Option<Hinge>,
-}
-
-/// A tall fall tipping over as one before it breaks up ([`topple`]): the edge of its foot it
-/// turns about, the axis along that edge, how far over it has gone and how fast it is
-/// going over, in radians and radians a second; where the fragment's middle was from that
-/// edge and how it was turned when it stood; how tall what tips is, which sets how quickly
-/// it goes over; and how far over this fragment lets go of it and flies on its own.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Hinge {
-    pub pivot: Vec3,
-    pub axis: Vec3,
-    pub angle: f32,
-    pub rate: f32,
-    pub from: Vec3,
-    pub stood: Quat,
-    pub tall: f32,
-    pub lets_go: f32,
-}
-
-impl Hinge {
-    /// Turns it over by a step as a tall body hinged at its foot falls (θ'' = 3g sin θ / 2L),
-    /// returning where the fragment's middle is and how it is turned.
-    fn step(&mut self, dt: f32) -> (Vec3, Quat) {
-        let pull = 1.5 * GRAVITY / self.tall.max(1.0);
-        self.rate += pull * libm::sinf(self.angle) * dt;
-        self.angle += self.rate * dt;
-        let over = Quat::from_axis_angle(self.axis, self.angle);
-        (self.pivot + over * self.from, over * self.stood)
-    }
-
-    /// How fast a point at `at` on what tips is moving.
-    fn velocity(&self, at: Vec3) -> Vec3 {
-        (self.axis * self.rate).cross(at - self.pivot)
-    }
 }
 
 /// What happened to a fragment in a step.
@@ -586,20 +555,13 @@ pub fn burst(
         }
     }
     out.truncate(most);
-    // The cubes left hanging fall whole, a block of them together where there are more
-    // than there is room for: a tower comes down as chunks a metre or two across, solid,
-    // rather than as a lattice of every so many cubes.
+    // The cubes left hanging fall whole, a block of them together where there are more than
+    // there is room for: a tower comes down as solid chunks, not a lattice of every so many.
     let left = most - out.len();
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
     let fallen: std::collections::BTreeSet<[i32; 3]> =
         fell.iter().map(|(at, _)| at.to_array()).collect();
-    // A big fall comes down in chunks of many cubes: masonry breaks along its joints into
-    // blocks a metre or more across, not cube by cube.
-    let mut across = match hanging.len() {
-        0..CHUNKS_FROM => 1,
-        CHUNKS_FROM..BIG_CHUNKS_FROM => 2,
-        _ => 3,
-    };
+    let mut across = least_across(hanging.len());
     let mut blocks = group(&hanging, across);
     while blocks.len() > left && across < MOST_ACROSS {
         across += 1;
@@ -681,6 +643,17 @@ const MOST_ACROSS: i32 = 6;
 const CHUNKS_FROM: usize = 300;
 const BIG_CHUNKS_FROM: usize = 2000;
 
+/// How many cubes a side the blocks so many cubes left hanging fall as are at least: a big
+/// fall comes down in chunks of many cubes, as masonry breaks along its joints into blocks a
+/// metre or more across, not cube by cube.
+fn least_across(hanging: usize) -> i32 {
+    match hanging {
+        0..CHUNKS_FROM => 1,
+        CHUNKS_FROM..BIG_CHUNKS_FROM => 2,
+        _ => 3,
+    }
+}
+
 /// Cubes grouped in blocks so many a side, by the block each is in; each course of blocks
 /// set off from the one under it, as masonry's bond is, so the chunks do not line up in a
 /// grid.
@@ -702,85 +675,6 @@ fn group<'a>(
         blocks.entry(key).or_default().push(*cube);
     }
     blocks
-}
-
-/// From how many cubes tall, and how many in all, what was left hanging tips over as one
-/// before it breaks up ([`topple`]); how far over it is when it starts and how fast it is
-/// going, in radians and radians a second; how far over its top lets go of it and its foot
-/// at most.
-const TOPPLES_TALL: i32 = 8;
-const TOPPLES_FROM: usize = 120;
-const TOPPLE_START: f32 = 0.03;
-const TOPPLE_KICK: f32 = 0.12;
-const LETS_GO_TOP: f32 = 0.3;
-const LETS_GO_FOOT: f32 = 1.1;
-
-/// A tall fall tips over as one, as a tower or a wall section does when its foot gives way:
-/// the blocks it came down as ([`burst`]'s whole ones, still waiting their turn) hinged on the
-/// edge of its foot on the side it leans to, going over slowly and then faster, its top
-/// letting go first and the rest after, each block flung on as it was going and breaking
-/// where it lands. It leans the way `lean` says (on the level; away from its base's middle,
-/// say), or if that says nothing, from where it broke, or a way of its own.
-pub fn topple(made: &mut [Fragment], fell: &[(IVec3, Cube)], lean: Vec3) {
-    let hanging: Vec<usize> = (0..made.len())
-        .filter(|&i| made[i].shape == Shape::Whole && made[i].hinge.is_none())
-        .collect();
-    if fell.len() < TOPPLES_FROM || hanging.is_empty() {
-        return;
-    }
-    let (low, high) = fell.iter().fold(
-        (IVec3::splat(i32::MAX), IVec3::splat(i32::MIN)),
-        |(low, high), (at, _)| (low.min(*at), high.max(*at)),
-    );
-    if high.y - low.y + 1 < TOPPLES_TALL {
-        return;
-    }
-    let middle = hanging.iter().map(|&i| made[i].at).sum::<Vec3>() / hanging.len() as f32;
-    let bottom = hanging
-        .iter()
-        .map(|&i| made[i].at.y - made[i].size.y * 0.5)
-        .fold(f32::MAX, f32::min);
-    let top = hanging
-        .iter()
-        .map(|&i| made[i].at.y + made[i].size.y * 0.5)
-        .fold(f32::MIN, f32::max);
-    let seed = hash(&[low.x as u32, low.y as u32, low.z as u32, fell.len() as u32]);
-    let own = unit(&[seed, 1]) * core::f32::consts::TAU;
-    let way = lean.with_y(0.0).try_normalize().unwrap_or(Vec3::new(
-        libm::cosf(own),
-        0.0,
-        libm::sinf(own),
-    ));
-    // The edge of its foot on that side: as far that way as any of it reaches.
-    let reach = hanging
-        .iter()
-        .map(|&i| (made[i].at - middle).dot(way) + made[i].size.max_element() * 0.5)
-        .fold(0.0f32, f32::max);
-    let pivot = Vec3::new(middle.x, bottom, middle.z) + way * reach;
-    let axis = way.cross(Vec3::NEG_Y).normalize();
-    let tall = top - bottom;
-    let start = TOPPLE_START * (0.7 + 0.6 * unit(&[seed, 2]));
-    for &i in &hanging {
-        let piece = &mut made[i];
-        let height = ((piece.at.y - bottom) / tall.max(0.1)).clamp(0.0, 1.0);
-        let lets_go = LETS_GO_TOP
-            + (LETS_GO_FOOT - LETS_GO_TOP) * (1.0 - height)
-            + 0.12 * (unit(&[piece.seed, 77]) - 0.5);
-        piece.hinge = Some(Hinge {
-            pivot,
-            axis,
-            angle: start,
-            rate: TOPPLE_KICK,
-            from: piece.at - pivot,
-            stood: piece.turn,
-            tall,
-            lets_go,
-        });
-        // All of it goes together, at once.
-        piece.wait = 0.0;
-        piece.velocity = Vec3::ZERO;
-        piece.spin = Vec3::ZERO;
-    }
 }
 
 impl Base {
@@ -995,407 +889,4 @@ const TIMBER_SHADE: f32 = 0.9;
 const FRESH_WOOD: f32 = 1.2;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Fill, Shape as CubeShape};
-
-    fn cube(shape: CubeShape) -> Cube {
-        Cube {
-            shape,
-            ..Cube::new(Kind(2), Fill::Solid)
-        }
-    }
-
-    fn chunks(_: Kind) -> Breaks {
-        Breaks::Chunks
-    }
-
-    fn flat(_: Vec3) -> f32 {
-        0.0
-    }
-
-    fn open(_: Vec3) -> bool {
-        false
-    }
-
-    #[test]
-    fn what_broke_bursts_and_what_hung_falls_whole_later_the_higher_it_was() {
-        let wall: Vec<(IVec3, Cube)> = (0..4)
-            .flat_map(|y| (0..3).map(move |x| (IVec3::new(x, y, 0), cube(CubeShape::Whole))))
-            .collect();
-        let foot = |at: IVec3| at.y == 0;
-        let parts = burst(&wall, &foot, &chunks, 1.0, 2000);
-        let (broken, whole): (Vec<&Fragment>, Vec<&Fragment>) =
-            parts.iter().partition(|part| part.shape != Shape::Whole);
-        assert_eq!(broken.len(), 3 * Breaks::Chunks.count() as usize);
-        assert_eq!(whole.len(), 9);
-        assert!(broken.iter().all(|part| part.wait == 0.0));
-        let wait = |y: f32| {
-            whole
-                .iter()
-                .filter(|part| (part.at.y - y).abs() < 0.01)
-                .map(|part| part.wait)
-                .fold(0.0, f32::max)
-        };
-        assert!(wait(1.75) > wait(0.75), "the top falls after what gave way");
-        assert_eq!(
-            parts,
-            burst(&wall, &foot, &chunks, 1.0, 2000),
-            "the same every time"
-        );
-    }
-
-    #[test]
-    fn a_tower_coming_down_stays_within_the_budget_and_falls_solid() {
-        let tower: Vec<(IVec3, Cube)> = (0..20)
-            .flat_map(|y| (0..15).flat_map(move |x| (0..15).map(move |z| IVec3::new(x, y, z))))
-            .map(|at| (at, cube(CubeShape::Whole)))
-            .collect();
-        let ring = |at: IVec3| at.y == 0;
-        let parts = burst(&tower, &ring, &chunks, 1.0, 2000);
-        assert!(parts.len() <= 2000, "{}", parts.len());
-        let high = parts.iter().map(|part| part.at.y).fold(0.0, f32::max);
-        assert!(high > 9.0, "its top comes down too: {high}");
-        // What hung comes down in blocks that between them fill all of it, not as a
-        // lattice of every so many cubes.
-        let whole: f32 = parts
-            .iter()
-            .filter(|part| part.shape == Shape::Whole)
-            .map(|part| part.size.x * part.size.y * part.size.z)
-            .sum();
-        let hung = (19 * 15 * 15) as f32 * CELL_M * CELL_M * CELL_M;
-        assert!(whole > hung * 0.88, "{whole} of {hung}");
-    }
-
-    #[test]
-    fn a_tall_wall_whose_foot_gives_way_tips_over_as_one_the_way_it_leans_then_breaks_up() {
-        // A wall 30 cubes long, 3 thick and 24 high along x, its foot destroyed.
-        let wall: Vec<(IVec3, Cube)> = (0..24)
-            .flat_map(|y| (0..30).flat_map(move |x| (0..3).map(move |z| IVec3::new(x, y, z))))
-            .map(|at| (at, cube(CubeShape::Whole)))
-            .collect();
-        let foot = |at: IVec3| at.y == 0;
-        let mut parts = burst(&wall, &foot, &chunks, 1.0, 3000);
-        topple(&mut parts, &wall, Vec3::Z);
-        let top = |parts: &[Fragment]| {
-            parts
-                .iter()
-                .filter(|p| p.shape == Shape::Whole)
-                .max_by(|a, b| a.at.y.total_cmp(&b.at.y))
-                .copied()
-                .unwrap()
-        };
-        let before = top(&parts);
-        let floor = |_: Vec3| 0.0;
-        let solid = |_: Vec3| false;
-        let mut together = None;
-        for step in 0..60 * 5 {
-            for part in &mut parts {
-                part.step(1.0 / 60.0, &floor, &solid);
-            }
-            // Early on, still all one: its top and its middle go over at the same angle.
-            if step == 60 {
-                let hinged: Vec<_> = parts.iter().filter_map(|p| p.hinge).collect();
-                assert!(hinged.len() > 10, "{} hinged", hinged.len());
-                together = Some(
-                    hinged
-                        .iter()
-                        .all(|h| (h.angle - hinged[0].angle).abs() < 1e-4),
-                );
-            }
-        }
-        assert_eq!(together, Some(true), "it did not go over as one");
-        // Its top went over the way it leaned, a long way out past its foot, and came down.
-        let fell_out = parts
-            .iter()
-            .filter(|p| p.shape != Shape::Whole || p.hinge.is_none())
-            .map(|p| p.at.z)
-            .fold(f32::MIN, f32::max);
-        assert!(fell_out > 6.0, "the farthest piece is {fell_out} m out");
-        assert!(parts.iter().all(|p| p.hinge.is_none()), "some never let go");
-        assert!(parts.iter().all(|p| p.at.y < before.at.y - 3.0));
-        // Not the other way.
-        let back = parts.iter().map(|p| p.at.z).fold(f32::MAX, f32::min);
-        assert!(back > -2.5, "a piece went {back} m the wrong way");
-    }
-
-    #[test]
-    fn a_block_landing_bursts_into_its_cubes_some_whole_and_the_rest_into_pieces() {
-        // A block two metres a side, four cubes, falling as one.
-        let block = Fragment {
-            kind: cube(CubeShape::Whole).kind,
-            shape: Shape::Whole,
-            at: Vec3::new(1.0, 7.0, 1.0),
-            velocity: Vec3::new(0.0, -6.0, 0.0),
-            turn: Quat::IDENTITY,
-            spin: Vec3::ZERO,
-            size: Vec3::splat(4.0 * CELL_M * 0.97),
-            wait: 0.0,
-            still: false,
-            fill: 1.0,
-            seed: 7,
-            hinge: None,
-        };
-        let burst = block.shatter(Breaks::Chunks, 1.0);
-        // Nothing left bigger than a cube where it first lands.
-        assert!(burst.iter().all(|part| part.size.max_element() < CELL_M));
-        let whole: Vec<_> = burst
-            .iter()
-            .filter(|part| part.shape == Shape::Whole)
-            .collect();
-        assert!(
-            whole.len() > 10 && whole.len() < 54,
-            "{} whole of 64",
-            whole.len()
-        );
-        assert!(burst.len() > 64 * 2, "the rest in pieces: {}", burst.len());
-        let pieces = whole[0].shatter(Breaks::Chunks, 1.0);
-        assert!(pieces.iter().all(|piece| piece.shape != Shape::Whole));
-    }
-
-    #[test]
-    fn a_timber_fragment_shows_end_grain_across_its_grain_bark_on_its_sides_and_fresh_wood_where_split()
-     {
-        let mut kit = Kit::default();
-        for (material, path) in [(Material::Log, "log"), (Material::LogEnd, "ends")] {
-            kit.textures.insert(
-                material,
-                crate::kit::Texture {
-                    path: path.into(),
-                    metres: [1.0, 1.0],
-                    depth: 0.0,
-                    reflectance: crate::kit::matte(),
-                    strips: None,
-                    cells: 1,
-                    worn: Some("wood".into()),
-                },
-            );
-        }
-        let made = surfaces(&kit, Shape::Whole, CELL_M);
-        let ends = &made.0[&Material::LogEnd];
-        // Its ends, across its grain, its first axis: the sawn end, all of its picture.
-        assert!(ends.normals.iter().all(|n| n.x.abs() > 0.9));
-        assert_eq!(ends.normals.iter().filter(|n| n.x > 0.0).count(), 6);
-        let (low, high) = ends
-            .uvs
-            .iter()
-            .fold(([1.0f32; 2], [0.0f32; 2]), |(l, h), uv| {
-                (
-                    [l[0].min(uv[0]), l[1].min(uv[1])],
-                    [h[0].max(uv[0]), h[1].max(uv[1])],
-                )
-            });
-        assert!(
-            low[0] > 0.0 && high[0] < 1.0 && high[0] - low[0] > 0.8,
-            "{low:?} {high:?}"
-        );
-        // Along it, its texture runs with the grain: its second texture axis along the first.
-        let face = &made.0[&Material::Log];
-        for (corners, uvs) in face.positions.chunks(3).zip(face.uvs.chunks(3)) {
-            for (p, uv) in corners.iter().zip(uvs) {
-                assert!((uv[1] - p.x * CELL_M).abs() < 1e-4, "{p} at {uv:?}");
-            }
-        }
-        // Its sides bark, a little weathered; its top and bottom, split, bare fresh wood.
-        for ((n, wear), colour) in face.normals.iter().zip(&face.wear).zip(&face.colours) {
-            if n.z.abs() > 0.9 {
-                assert!(*wear < 0.5);
-            } else if n.y.abs() > 0.9 {
-                assert!(*wear > 0.9 && colour[0] > TIMBER_SHADE);
-            }
-        }
-    }
-
-    #[test]
-    fn a_chip_landing_on_a_roof_slides_down_it_and_off_the_eave() {
-        // A roof pitched at 35 degrees down to its eave at x = 2 m, 1.6 m up; the ground
-        // past it.
-        let roof = |p: Vec3| if p.x < 2.0 { 3.0 - p.x * 0.7 } else { 0.0 };
-        let fell = [(IVec3::new(1, 8, 0), cube(CubeShape::Whole))];
-        let mut chip = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
-        chip.at = Vec3::new(0.5, 4.0, 0.25);
-        chip.velocity = Vec3::ZERO;
-        for _ in 0..1200 {
-            chip.step(1.0 / 60.0, &roof, &open);
-        }
-        assert!(chip.still, "it comes to rest");
-        assert!(
-            chip.at.x > 2.0 && chip.at.y < 0.4,
-            "on the ground past the eave: {}",
-            chip.at
-        );
-        // On level ground it lies where it fell.
-        let mut lying = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
-        lying.at = Vec3::new(0.5, 1.0, 0.25);
-        lying.velocity = Vec3::ZERO;
-        for _ in 0..600 {
-            lying.step(1.0 / 60.0, &flat, &open);
-        }
-        assert!(
-            lying.still && (lying.at.x - 0.5).abs() < 0.3,
-            "{}",
-            lying.at
-        );
-    }
-
-    #[test]
-    fn a_chip_landing_on_a_built_roof_slides_off_it() {
-        // A gable roof of cubes the roofer lays over a footprint eight cubes by six, from
-        // the third storey's cubes up, on nothing (what a piece lands on is the roof).
-        let footprint: std::collections::BTreeSet<[i32; 2]> =
-            (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
-        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
-        let mut base = Base::default();
-        for (at, shape) in plan.roof {
-            base.apply(crate::BuildOp::Fill {
-                min: at.to_array(),
-                max: at.to_array(),
-                cube: Some(Cube {
-                    shape,
-                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
-                }),
-            });
-        }
-        let floor = |at: Vec3| base.top_under(at).unwrap_or(0.0).max(0.0);
-        let top = (0..8)
-            .map(|z| floor(Vec3::new(2.0, 5.5, z as f32 * 0.5 + 0.25)))
-            .fold(0.0f32, f32::max);
-        assert!(top > 3.0, "a roof to land on: {top}");
-        let fell = [(IVec3::new(4, 8, 2), cube(CubeShape::Whole))];
-        let mut chip = burst(&fell, &|_| true, &chunks, 1.0, 100)[0];
-        // Dropped on its ridge, the middle of the footprint's width.
-        chip.at = Vec3::new(2.0, top + 0.6, 1.5);
-        chip.velocity = Vec3::ZERO;
-        for _ in 0..1800 {
-            chip.step(1.0 / 60.0, &floor, &open);
-        }
-        assert!(
-            chip.at.y < 0.4,
-            "on the ground under the eave, not the roof: {}",
-            chip.at
-        );
-    }
-
-    #[test]
-    fn a_whole_cube_breaks_where_it_lands_hard_and_its_pieces_settle() {
-        let fell = [(IVec3::new(0, 8, 0), cube(CubeShape::Whole))];
-        let mut whole = burst(&fell, &|_| false, &chunks, 1.0, 100)[0];
-        let mut broke = None;
-        for _ in 0..600 {
-            let landing = whole.step(1.0 / 60.0, &flat, &open);
-            if landing.breaks {
-                broke = Some(whole.shatter(Breaks::Chunks, 1.0));
-                break;
-            }
-        }
-        let mut pieces = broke.expect("it breaks where it lands");
-        assert_eq!(pieces.len(), Breaks::Chunks.count() as usize);
-        for _ in 0..900 {
-            for piece in &mut pieces {
-                piece.step(1.0 / 60.0, &flat, &open);
-                assert!(piece.at.y + 1e-3 >= piece.reach_down(), "through the floor");
-            }
-        }
-        assert!(pieces.iter().all(|piece| piece.still), "they come to rest");
-        assert!(pieces.iter().all(|piece| piece.at.y < 0.4), "on the ground");
-    }
-
-    #[test]
-    fn a_piece_rolls_off_a_ledge_and_glances_off_a_wall() {
-        let ledge = |at: Vec3| if at.x < 1.0 { 1.0 } else { 0.0 };
-        let mut piece = burst(
-            &[(IVec3::new(1, 2, 0), cube(CubeShape::Whole))],
-            &|_| true,
-            &chunks,
-            1.0,
-            100,
-        )[0];
-        piece.at = Vec3::new(0.9, 1.1, 0.25);
-        piece.velocity = Vec3::new(1.5, 0.0, 0.0);
-        for _ in 0..300 {
-            piece.step(1.0 / 60.0, &ledge, &open);
-        }
-        assert!(
-            piece.at.x > 1.0 && piece.at.y < 0.4,
-            "off the ledge: {piece:?}"
-        );
-        let wall = |at: Vec3| at.x > 2.0;
-        piece.at = Vec3::new(1.8, 0.5, 0.25);
-        piece.velocity = Vec3::new(3.0, 0.5, 0.0);
-        piece.still = false;
-        for _ in 0..60 {
-            piece.step(1.0 / 60.0, &flat, &wall);
-        }
-        assert!(piece.at.x < 2.0, "it glanced off: {}", piece.at);
-    }
-
-    #[test]
-    fn a_roof_left_hanging_sheds_its_covering_rather_than_falling_as_cubes() {
-        let roof: Vec<(IVec3, Cube)> = (0..3)
-            .map(|x| {
-                (
-                    IVec3::new(x, 6 + x, 0),
-                    Cube::new(Kind::FIRST_ROOF, crate::Fill::Solid),
-                )
-            })
-            .collect();
-        let parts = burst(&roof, &|_| false, &|_| Breaks::Bits, 1.0, 2000);
-        assert!(!parts.is_empty());
-        assert!(parts.iter().all(|part| part.shape != Shape::Whole));
-        let latest = parts.iter().map(|part| part.wait).fold(0.0, f32::max);
-        assert!(latest > 0.0, "the higher a moment later");
-    }
-
-    #[test]
-    fn each_way_of_breaking_is_its_own_table() {
-        let sizes = |breaks: Breaks| breaks.look().pieces[0].most;
-        // Logs break into lengths, longer than they are thick; stone into chunks.
-        let length = sizes(Breaks::Lengths);
-        assert!(length[0] > 2.0 * length[1]);
-        let chunk = sizes(Breaks::Chunks);
-        assert!(chunk[0] < 2.0 * chunk[1]);
-        assert!(Breaks::Crumbs.look().dust > Breaks::Lengths.look().dust);
-    }
-
-    #[test]
-    fn what_is_built_under_a_point_is_found_by_its_shape() {
-        let mut base = Base::default();
-        base.apply(crate::BuildOp::Fill {
-            min: [0, 0, 0],
-            max: [0, 2, 0],
-            cube: Some(Cube::new(Kind(2), Fill::Solid)),
-        });
-        base.apply(crate::BuildOp::Fill {
-            min: [1, 0, 0],
-            max: [1, 0, 0],
-            cube: Some(cube(CubeShape::Half)),
-        });
-        assert_eq!(base.top_under(Vec3::new(0.25, 4.0, 0.25)), Some(1.5));
-        assert_eq!(base.top_under(Vec3::new(0.75, 1.0, 0.25)), Some(0.25));
-        assert_eq!(base.top_under(Vec3::new(3.0, 1.0, 0.25)), None);
-        assert!(base.solid_at(Vec3::new(0.25, 0.6, 0.25)));
-        assert!(!base.solid_at(Vec3::new(0.75, 0.4, 0.25)));
-    }
-
-    #[test]
-    fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
-        let stone = Kit {
-            id: 2,
-            pattern: Pattern::Masonry,
-            ..Kit::default()
-        };
-        for shape in Shape::ALL {
-            let drawn = surfaces(&stone, shape, 0.5);
-            let surface = &drawn.0[&Material::Masonry];
-            // Six faces and twelve edges of two triangles, eight corners of one.
-            assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
-            for triangle in surface.positions.chunks(3) {
-                let normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]);
-                let middle = (triangle[0] + triangle[1] + triangle[2]) / 3.0;
-                assert!(normal.dot(middle) > 0.0, "{shape:?} faces in");
-                assert!(triangle.iter().all(|p| p.abs().max_element() <= 0.5 + 1e-5));
-            }
-        }
-        assert_eq!(material(&Kit::default()), Material::Log);
-    }
-}
+mod tests;

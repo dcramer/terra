@@ -9,7 +9,6 @@ crates/terra_build/examples/sections.rs	main	196
 crates/terra_build/src/checker.rs	check	197
 crates/terra_build/src/cubes.rs	-	1240
 crates/terra_build/src/fire.rs	step	153
-crates/terra_build/src/fragments.rs	-	1190
 crates/terra_build/src/fragments.rs	burst	163
 crates/terra_build/src/inspect.rs	-	2646
 crates/terra_build/src/inspect.rs	pokes_out	188
@@ -70,7 +69,6 @@ crates/terra_game/src/build/draw.rs	show	365
 crates/terra_game/src/build/draw.rs	upload	243
 crates/terra_game/src/build/draw/detail.rs	show	188
 crates/terra_game/src/build/layout.rs	launch	461
-crates/terra_game/src/build/loss.rs	-	1096
 crates/terra_game/src/build/views.rs	-	1248
 crates/terra_game/src/icons.rs	draw	170
 crates/terra_game/src/play/bag.rs	draw	209
