@@ -11,7 +11,10 @@ reaches every part of it: here, a stone or iron head; in the game, a tint (chara
 
     tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe torch basket
 
-A thing carried hanging by a handle (a market basket, in HUNG) is made from its prop instead.
+A thing carried hanging by a handle (a market basket, in HUNG) is made from its prop instead,
+and a textured model of ours (a sword, a shield, in TEXTURED) keeps its own materials and maps:
+
+    tools/blender/run.sh tools/characters/fit_held.py arming_sword round_shield
 
 Reads the tool models in assets/models/tools: free ones (THIRD_PARTY.md), and ours where no
 free one exists, a pickaxe and a torch, made by tools/props standing on their handles; writes
@@ -57,6 +60,22 @@ TOOLS = {
 # so the thing hangs down -Z from its handle's top, its long way forward along +Y.
 HUNG = {
     "basket": ("MarketBasket.glb", 0.05),
+}
+
+# Things held whose source is a textured model of ours in assets/models/tools (tools/props,
+# "into": "tools"), kept in its own materials and textures: the source; its grip, the point
+# held at the middle of the fist; a point its handle runs toward, at its working end (the
+# look's +Y); the direction that becomes the look's +X, out of the back of a right hand and
+# the palm of a left; carry tilt in degrees. Points and directions in metres in the source's
+# glTF axes (X, Y up, Z its front), as the workbench and props.ts's sheets show it.
+TEXTURED = {
+    # Its flats out of the back of the hand and the palm, so its edges cut as the fist swings.
+    "arming_sword": ("ArmingSword.glb", (0.002, 0.12, 0.0075), (-0.03, 0.95, -0.019), (0, 0, 1), -40),
+    # A centre grip, held in the left hand across its planks just behind the board, the
+    # knuckles up into the boss: its face away from the wrist (-Z), the forearm square to the
+    # board behind it, so with the fist forward it covers the forearm and body. Its planks run
+    # along +X.
+    "round_shield": ("RoundShield.glb", (0, 0.405, -0.025), (0.4, 0.405, -0.025), (0, 1, 0), 0),
 }
 
 
@@ -111,10 +130,43 @@ def hung(item):
     print("HELD", item, f"hung from its handle, {out} m out from the leg")
 
 
+def textured(item):
+    """A textured model held as TEXTURED says: its grip at the origin, its handle toward its
+    working end along +Y, its own materials and maps kept."""
+    source, grip, toward, x, carry_tilt = TEXTURED[item]
+    look.reset()
+    bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, "tools", source))
+    objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    for o in list(bpy.context.scene.objects):
+        if o.type != "MESH":
+            bpy.data.objects.remove(o)
+    ob = one(objects, item)
+    # glTF's (x, y, z) is Blender's (x, -z, y); the look's +X, +Y and +Z go to Blender's X, Z
+    # and -Y, so they come out as glTF's X, Y and Z again.
+    blender = lambda v: Vector((v[0], -v[2], v[1]))
+    grip = blender(grip)
+    along = (blender(toward) - grip).normalized()
+    out = blender(x)
+    out = (out - out.dot(along) * along).normalized()
+    frame = Matrix((out, along, out.cross(along))).transposed()
+    held = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()
+    ob.data.transform((held @ frame.transposed()).to_4x4() @ Matrix.Translation(-grip))
+    ob["carry_tilt"] = carry_tilt
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    path = os.path.join(OUT, f"{item}.glb")
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True,
+                              export_tangents=True, export_image_format="JPEG", export_jpeg_quality=85)
+    print("HELD", item, f"from {source}, its textures kept, carried at {carry_tilt} degrees")
+
+
 os.makedirs(OUT, exist_ok=True)
 for item in look.args():
     if item in HUNG:
         hung(item)
+        continue
+    if item in TEXTURED:
+        textured(item)
         continue
     source, length, held_from_end, head, carry_tilt = TOOLS[item]
     look.reset()
