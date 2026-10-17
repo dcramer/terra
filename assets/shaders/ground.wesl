@@ -493,6 +493,16 @@ fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
     return cover * smoothstep(0.55, 0.85, up_facing) * step(0.001, lying);
 }
 
+// A meadow's colour seen from high (D381): drifts of drier and lusher grass and darker
+// hollows a few tens of metres across, as a real meadow's sward varies, so past where its
+// blades are drawn the ground is not one flat olive.
+fn meadow_tones(world: vec3<f32>, lush: f32) -> vec3<f32> {
+    let drift = noise(world * 0.021 + 17.0) * 0.6 + noise(world * 0.07 + 29.0) * 0.4;
+    let l = clamp(lush + (drift - 0.5) * 0.8, 0.0, 1.0);
+    let shade = mix(0.78, 1.14, noise(world * 0.045 + 41.0));
+    return mix(ground.grass_dry.rgb, ground.grass_lush.rgb, l) * shade;
+}
+
 // Stripes down the fall line round a point, laid cell by cell as the ground's gullies are
 // (D394; terra_voxel mountains.rs `Range::stripes`, after Runevision's erosion filter): each cell
 // of `STRETCH` times `spacing` metres has a point of its own, and a stripe's phase is measured
@@ -794,6 +804,12 @@ fn fragment(
             let loose = in.uv.x + (blotch - 0.5) * 0.6;
             scree = smoothstep(0.3, 0.7, 1.0 - abs(loose - 1.0));
             gravel = smoothstep(0.3, 0.7, loose - 1.0);
+            // A lowland's loose stones thin to a quarter of a mountain's, so a lowland lake's
+            // shingle (the land lays it round every lake) is a scatter in its meadow, not a
+            // grey band; even where a far chunk keeps no height over the water (below).
+            let low_loose = 1.0 - 0.75 * lowland_at(from_centre - ground.sea_radius_m);
+            scree *= low_loose;
+            gravel *= low_loose;
             // Snow lies on what faces up, its edge broken, thinning off the steep.
             let up_facing = smoothstep(0.4, 0.72, flatness + (fleck - 0.5) * 0.12);
             // Its edge broken a metre or two by noise, as a patch of old snow's is, so the
@@ -815,9 +831,8 @@ fn fragment(
             bare = smoothstep(0.25, 0.6, in.uv_b.x + (fleck - 0.5) * 0.3 + (blotch - 0.5) * 0.3);
             woods = clamp(-in.uv_b.x, 0.0, 1.0);
             // A lowland lake's banks are silt, soil and grass, not the shingle the land lays
-            // round every lake: its gravel and scree give out a few metres over its water, and
-            // the lowland's loose stones thin to a share of what they are on a mountain.
-            let banks = lowland_at(from_centre - ground.sea_radius_m) * max(1.0 - smoothstep(3.0, 7.0, in.uv_b.y), 0.75);
+            // round every lake: its gravel and scree give out a few metres over its water.
+            let banks = lowland_at(from_centre - ground.sea_radius_m) * (1.0 - smoothstep(3.0, 7.0, in.uv_b.y));
             gravel *= 1.0 - banks;
             scree *= 1.0 - banks;
         }
@@ -943,7 +958,7 @@ fn fragment(
             litter_colour * (0.85 + 0.3 * fleck),
             needle_colour * (0.85 + 0.3 * fleck),
             vec3<f32>(0.08, 0.058, 0.04) * (0.8 + 0.4 * blotch),
-            mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck),
+            meadow_tones(world, lush) * (0.92 + 0.16 * fleck),
             vec3<f32>(0.056, 0.08, 0.026) * (0.8 + 0.4 * fleck),
             mix(vec3<f32>(0.12, 0.1, 0.08) * (0.85 + 0.3 * blotch), vec3<f32>(0.24, 0.08, 0.04) * (0.8 + 0.4 * fleck), ore),
             ground.sand.rgb,
@@ -1112,7 +1127,7 @@ fn fragment(
         let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover * flat_ground * (1.0 - heath.ground.z);
         if grass > 0.0 {
             let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
-            let tint = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck);
+            let tint = meadow_tones(world, lush) * (0.92 + 0.16 * fleck);
             ground_is = settle(ground_is, layer(GRASS, 1.0, tint, world + 11.0, gx, gy, n, 1.0), grass);
         }
 
@@ -1320,7 +1335,7 @@ fn fragment(
         colour *= 0.9 + 0.2 * blotch;
         let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5) * ground.cover;
         let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
-        var grass_colour = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush);
+        var grass_colour = meadow_tones(world, lush);
         grass_colour *= 0.92 + 0.16 * fleck;
         colour = mix(colour, grass_colour, grass);
 

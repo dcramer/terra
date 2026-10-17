@@ -1,5 +1,5 @@
 {
-  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then from high over its south-west corner a slow crane down onto the finished town, kept on the middle of what is built, ending low over its roofs with the lake and the forest beyond, the morning sun to the right",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in three takes cut together: low over the claim stone and the first plots as their walls rise course by course; a slow track across the houses as their roofs go on, their builders at work and their hearths lit; then low over its south-west corner and along its square as its last houses go up, ending over its roofs looking up the town with the lake and the forest beyond, the morning sun to the right",
   "seconds": 42,
   "keys": [
     {
@@ -10,9 +10,9 @@
         -322
       ],
       "look": [
-        6,
-        3,
-        -372
+        8,
+        5,
+        -385
       ],
       "lens": 22
     },
@@ -24,9 +24,9 @@
         -332
       ],
       "look": [
-        8,
-        3,
-        -376
+        10,
+        5,
+        -390
       ],
       "lens": 22
     },
@@ -38,9 +38,9 @@
         -318
       ],
       "look": [
-        0,
-        0,
-        -376
+        2,
+        3,
+        -392
       ],
       "lens": 22,
       "cut": true
@@ -53,52 +53,52 @@
         -312
       ],
       "look": [
-        30,
-        0,
-        -382
+        32,
+        3,
+        -398
       ],
       "lens": 22
     },
     {
       "t": 25,
       "at": [
-        -62,
-        42,
-        -286
+        -48,
+        32,
+        -300
       ],
       "look": [
-        8,
+        5,
         0,
-        -366
+        -362
       ],
       "lens": 22,
       "cut": true
     },
     {
-      "t": 33,
+      "t": 34,
       "at": [
-        -50,
-        30,
-        -298
+        -22,
+        26,
+        -318
       ],
       "look": [
-        11,
-        1,
-        -372
+        20,
+        2,
+        -382
       ],
       "lens": 22
     },
     {
       "t": 42,
       "at": [
-        -32,
-        17,
-        -314
+        -2,
+        20,
+        -322
       ],
       "look": [
-        16,
-        7,
-        -386
+        32,
+        9,
+        -412
       ],
       "lens": 22
     }
