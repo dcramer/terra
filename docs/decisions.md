@@ -417,6 +417,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D378](decisions/D378.md) | Wildlife by niche, found as players go | Tech | Agent | Decided | A kind of creature that lives about the land says its… |
 | [D379](decisions/D379.md) | Ambient life round the eye | Tech | Agent | Decided | What lives in the air and on the water at a few metres… |
 | [D384](decisions/D384.md) | Ambient encounters staged to be seen | Tech | Agent | Decided | A meeting ahead of a player on the move… |
+| [D394](decisions/D394.md) | Far mountains drawn from their own cells, not the planet's centre | Tech | Agent | Decided | The ground shader's far ribs are laid cell by cell… |
 
 ## Tools and workflow
 

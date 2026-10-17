@@ -89,6 +89,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [2026-10-14-animation.md](2026-10-14-animation.md) | Why does the dressed character's run look wrong and what makes it look right, and how do we animate creatures whose bodies are not a person's without an animator? |
 | [2026-10-15-75fps-budget.md](2026-10-15-75fps-budget.md) | Which benchmark scenes hold to D25's 13.3 ms at 75 fps, where is the frame lost, and what would win it back at what cost to the look? |
 | [2026-10-15-run.md](2026-10-15-run.md) | Why did the player's jog read as squatting on our bodies, and what fixes its legs, arms and hands without remaking the take? |
+| [2026-10-16-far-mountains.md](2026-10-16-far-mountains.md) | What made the range's wall behind the castle look so regular, and how do shipped open worlds give far mountains their structure? |
 | [procedural-loot-and-spells.md](procedural-loot-and-spells.md) | How do shipped games generate loot procedurally, and spells, so our essence powers can be built the same way? |
 | [enshrouded-combat.md](enshrouded-combat.md) | How does Enshrouded's combat play, now that it is the baseline for ours? |
 | [worktree-builds.md](worktree-builds.md) | Agents work in many worktrees, each building Bevy from nothing. What makes a new one quick, and what is safe? |

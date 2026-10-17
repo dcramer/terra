@@ -12,6 +12,6 @@ mod noise;
 mod rng;
 mod seed;
 
-pub use noise::Noise;
+pub use noise::{Noise, layer_shift};
 pub use rng::Rng;
 pub use seed::Seed;

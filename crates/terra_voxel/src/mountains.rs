@@ -16,8 +16,8 @@
 //! - **What lies on them** the ground works out from these (`field`): bare rock past 40
 //!   degrees, scree under cliffs, gravel in the gullies' beds ([`Rise::bed`]).
 
-use glam::Vec3;
-use terra_gen::{Noise, Seed};
+use glam::{IVec3, Vec3};
+use terra_gen::{Noise, Seed, layer_shift};
 
 /// A world's mountains, as its theme's numbers.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,6 +52,14 @@ pub struct Mountains {
     /// How much deeper its gullies are cut where they run down those walls, in metres: the
     /// couloirs that split a wall into ribs and feed the scree fans under it.
     pub couloirs_m: f32,
+    /// How far a range's front, where it rises from the plain, runs out in spurs and is cut
+    /// back by the valleys between them, 0 to 1: 0 a rampart rising evenly round the range
+    /// where the broad noise puts its edge, a curtain across any view of it; 1 spurs some
+    /// kilometres apart standing out from it as foothills.
+    pub spurs: f32,
+    /// How much its front's crest rises to peaks and falls to cols between them, as a share of
+    /// its height, kilometres apart.
+    pub peaks: f32,
 }
 
 impl Mountains {
@@ -71,11 +79,15 @@ impl Mountains {
         basins_m: 60.0,
         walls: 0.5,
         couloirs_m: 40.0,
+        spurs: 0.0,
+        peaks: 0.0,
     };
 
     /// The most the mountains raise the land, in metres.
     pub fn highest_m(&self) -> f32 {
-        self.base_m + self.relief_m * libm::powf(HIGHEST_CREST, self.concavity) + self.gullies_m
+        self.base_m
+            + self.relief_m * libm::powf(HIGHEST_CREST, self.concavity) * (1.0 + self.peaks)
+            + self.gullies_m
     }
 }
 
@@ -97,6 +109,8 @@ pub struct Range {
     ranges: Noise,
     ridges: Noise,
     gullies: Noise,
+    /// How deeply one wall's couloirs are cut against the next's.
+    faces: Noise,
 }
 
 /// Octaves of ridges, from the main ridges to relief about 80 m across.
@@ -136,6 +150,21 @@ const HIGHEST_CREST: f32 = 1.0 + ((1.0 - VALLEY) / (CREST - VALLEY) - 1.0) * ABO
 /// How far under the valleys' share of the ridged sum, as a share of the valleys' to the
 /// crests', the floors are hollowed deepest.
 const HOLLOWS: f32 = 0.45;
+/// The least a couloir is cut, as a share of the deepest, and how far a wall's couloirs are cut
+/// deeper or shallower than the theme's by its face, over faces this far across.
+const COULOIR_LEAST: f32 = 0.2;
+const COULOIR_FACE: f32 = 0.6;
+const COULOIR_FACES_M: f32 = 2200.0;
+/// A range's front: from out of the range to where its floor has risen this far (shares of
+/// `inside`), fading out between the two.
+const FRONT: (f32, f32) = (0.3, 0.6);
+/// How far apart its spurs are about, in metres, and how far they shift the range noise at
+/// `spurs` 1 (its edge's band is 0.32 of it), about the ridged noise's middle.
+const SPURS_M: f32 = 2800.0;
+const SPUR_SHIFT: f32 = 0.12;
+const SPUR_MIDDLE: f32 = 0.45;
+/// How far apart the front's peaks are about, in metres.
+const PEAKS_M: f32 = 3200.0;
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -150,15 +179,33 @@ impl Range {
             ranges: Noise::new(seed.derive("ranges")),
             ridges: Noise::new(seed.derive("ridges")),
             gullies: Noise::new(seed.derive("gullies")),
+            faces: Noise::new(seed.derive("faces")),
         }
     }
 
     /// How much of a range a point is in, 0 out of it to 1 in its heart.
     pub fn inside(&self, point: Vec3) -> f32 {
+        self.inside_and_front(point).0
+    }
+
+    /// [`Range::inside`], and how far a point is in the range's front (`Mountains::spurs`): 1
+    /// out of the range and up its outer slopes, 0 from where its floor has risen. Over the
+    /// front the range's edge is shifted out along a ridged noise's lines, as spurs, and in
+    /// between them, as the valleys draining the range, so its foot is a ragged line of spurs
+    /// and valley mouths rather than a rampart following the broad noise round.
+    fn inside_and_front(&self, point: Vec3) -> (f32, f32) {
         let m = &self.mountains;
         let n = self.ranges.fbm(point / m.range_m, 3, 2.0, 0.5);
         let threshold = RANGE_SD * upper_quantile(m.share);
-        smoothstep(threshold - 0.16, threshold + 0.16, n)
+        let edge = |n: f32| smoothstep(threshold - 0.16, threshold + 0.16, n);
+        let plain = edge(n);
+        let front = 1.0 - smoothstep(FRONT.0, FRONT.1, plain);
+        if m.spurs <= 0.0 || front <= 0.0 || n < threshold - 0.16 - SPUR_SHIFT {
+            return (plain, front);
+        }
+        let ridge = 1.0 - self.faces.sample(point / SPURS_M).abs();
+        let shift = m.spurs * SPUR_SHIFT * front * (ridge * ridge - SPUR_MIDDLE);
+        (edge(n + shift), front)
     }
 
     /// How much the ridges raise a point, before gullies, in metres.
@@ -169,7 +216,7 @@ impl Range {
     /// [`Range::ridged`], and how far up into the walls a point is, 0 below them to 1.
     fn ridged_and_upper(&self, point: Vec3) -> (f32, f32) {
         let m = &self.mountains;
-        let inside = self.inside(point);
+        let (inside, front) = self.inside_and_front(point);
         if inside <= 0.0 {
             return (0.0, 0.0);
         }
@@ -200,8 +247,17 @@ impl Range {
         // The floors hollowed where the ridged sum falls lowest, furthest from every ridge, as
         // glaciers overdeepen a cirque's floor and a lake fills it.
         let hollow = m.basins_m * smoothstep(0.0, -HOLLOWS, along) * inside;
+        // Along the front, its crest rises to peaks and falls to cols kilometres apart.
+        let peaks = if m.peaks > 0.0 && front > 0.0 {
+            let p = self
+                .faces
+                .fbm(point / PEAKS_M + Vec3::splat(2.3), 2, 2.0, 0.5);
+            1.0 + m.peaks * front * (smoothstep(-0.3, 0.3, p) * 2.0 - 1.0)
+        } else {
+            1.0
+        };
         (
-            floor + m.relief_m * libm::powf(inside, 0.6) * climb - hollow,
+            floor + m.relief_m * libm::powf(inside, 0.6) * climb * peaks - hollow,
             upper,
         )
     }
@@ -215,18 +271,23 @@ impl Range {
     /// broad noise, so main ridges wander rather than running in long smooth arcs.
     fn ridges(&self, q: Vec3) -> f32 {
         let m = &self.mountains;
+        // The warp's three noises a few hundred cells apart, shifted by whole cells apart from
+        // the point (`Noise::sample_shifted`): added to it, they held it only to 0.6 m, and the
+        // warp stepped the ridges by up to 0.15 m at every one.
         let warp = Vec3::new(
-            self.ridges.sample(q * 0.5 + Vec3::splat(101.0)),
-            self.ridges.sample(q * 0.5 + Vec3::splat(203.0)),
-            self.ridges.sample(q * 0.5 + Vec3::splat(307.0)),
+            self.ridges.sample_shifted(q * 0.5, IVec3::splat(101)),
+            self.ridges.sample_shifted(q * 0.5, IVec3::splat(203)),
+            self.ridges.sample_shifted(q * 0.5, IVec3::splat(307)),
         );
         let q = q + warp * WARP;
         let (mut sum, mut amplitude, mut norm, mut frequency) = (0.0, 1.0, 0.0, 1.0);
         let mut weight = 1.0;
         let mut slope = Vec3::ZERO;
         for octave in 0..OCTAVES {
-            let shift = Vec3::splat(octave as f32 * 19.19);
-            let (n, g) = self.ridges.sample_with_gradient(q * frequency + shift);
+            let (part, whole) = layer_shift(octave);
+            let (n, g) = self
+                .ridges
+                .sample_with_gradient_shifted(q * frequency + part, whole);
             let r = 1.0 - n.abs();
             let ridge = libm::powf(r, m.sharpness) * weight;
             // Quilez's damping: an octave counts for less where those before it built slope.
@@ -275,18 +336,25 @@ impl Range {
         let mut carved = 0.0;
         let mut deepest = 0.0;
         if steepness > 0.02 {
+            // How deeply this wall's couloirs are cut, by a noise some kilometres across.
+            let face = self.faces.fbm(point / COULOIR_FACES_M, 2, 2.0, 0.5);
+            let walls_cut = 1.0 + COULOIR_FACE * (smoothstep(-0.35, 0.35, face) * 2.0 - 1.0);
             // Full depth from a gentle slope up, so the depth does not follow every change of
             // the fall near a crest.
             let fade = smoothstep(0.02, 0.4, steepness);
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
-                let (stripes, across, along) = self.stripes(point, up, slope, spacing, k as i32);
+                let (stripes, across, along, cut) =
+                    self.stripes(point, up, slope, spacing, k as i32);
                 // Down the walls, couloirs: the same lines cut the deeper, only where the wall
                 // falls steeply enough that a line cut so deep still runs downhill all the way,
                 // not into pits that would fill with water.
                 let couloir =
                     m.couloirs_m * upper * smoothstep(COULOIRS_FROM, COULOIRS_FULL, steepness);
-                let depth = (m.gullies_m + couloir) * depth * fade;
+                // Each couloir cut as deep as its own cell's point says and as its wall's face
+                // does: cut all alike, a wall's couloirs ribbed it like corduroy, a regular
+                // lattice of chevrons from across the valley.
+                let depth = (m.gullies_m + couloir * cut * walls_cut) * depth * fade;
                 // 0 on the ribs between gullies, the whole depth down a gully's line.
                 carved += depth * (stripes - 1.0) * 0.5;
                 deepest += depth;
@@ -311,7 +379,8 @@ impl Range {
     /// `spacing` has a point of its own, and its stripes run through it across the slope, so
     /// they line up with the ground's fall wherever it turns. Gives -1 along a gully's line to
     /// 1 on the rib between, the slope across the stripes it falls toward, and how fast the
-    /// stripes change across, a metre.
+    /// stripes change across, a metre; and how deeply the gullies there are cut, a share of the
+    /// deepest, by their cells.
     fn stripes(
         &self,
         point: Vec3,
@@ -319,12 +388,12 @@ impl Range {
         slope: Vec3,
         spacing: f32,
         set: i32,
-    ) -> (f32, Vec3, f32) {
+    ) -> (f32, Vec3, f32, f32) {
         let fall = slope.normalize_or(up.any_orthonormal_vector());
         let across = up.cross(fall).normalize_or(up.any_orthonormal_vector());
         let cell = point / spacing;
         let base = cell.floor();
-        let (mut weights, mut cosine, mut sine) = (0.0, 0.0, 0.0);
+        let (mut weights, mut cosine, mut sine, mut cut) = (0.0, 0.0, 0.0, 0.0);
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for dz in -1..=1 {
@@ -342,6 +411,11 @@ impl Range {
                     let w = (1.0 - far) * (1.0 - far) * (1.0 - far);
                     let phase = d.dot(across) * core::f32::consts::TAU;
                     weights += w;
+                    // How deep this cell's gully is cut, from its point: a few couloirs deep,
+                    // most shallower.
+                    let deep = jitter.x * 7.31 + jitter.y * 3.17 + jitter.z * 1.93;
+                    let deep = deep - libm::floorf(deep);
+                    cut += w * (COULOIR_LEAST + (1.0 - COULOIR_LEAST) * deep * deep);
                     cosine += w * libm::cosf(phase);
                     sine += w * libm::sinf(phase);
                 }
@@ -350,7 +424,8 @@ impl Range {
         // Where no cell's point is near, the stripes fade to a rib, not a jump.
         let value = (cosine + FADE_TO_RIB) / (weights + FADE_TO_RIB);
         let change = -(sine / (weights + FADE_TO_RIB)) * core::f32::consts::TAU / spacing;
-        (value, across, change)
+        let cut = (cut + FADE_TO_RIB * COULOIR_LEAST) / (weights + FADE_TO_RIB);
+        (value, across, change, cut)
     }
 }
 
@@ -485,9 +560,11 @@ mod tests {
                     .abs()
             };
             let near = apart(2.0);
-            // A crease's rise shrinks with the distance, ten times over ten times closer; a
-            // step's stays.
-            if near > 0.25 && apart(0.2) > 0.5 * near && near > worst.0 {
+            // A crease's rise shrinks with the distance, ten times over ten times closer, and
+            // grows as much ten times farther; a step's stays. Both ways, since closer than a
+            // centimetre a direction on a planet this size is near a single's precision (2 mm).
+            let step = apart(0.2) > 0.5 * near || apart(20.0) < 2.5 * near;
+            if near > 0.25 && step && near > worst.0 {
                 worst = (near, d);
             }
         }
@@ -565,5 +642,31 @@ mod tests {
                 assert!((range.rise(d, RADIUS).height_m - r).abs() < 1e-3);
             }
         }
+    }
+
+    #[test]
+    fn the_ground_is_smooth_within_a_voxel() {
+        // How far the rise over 2 cm departs from a tenth of the rise over 20 cm: none on a
+        // smooth slope. A single holds a point on a planet this size to about 2 mm, and the
+        // gullies' depths follow the slope measured over 40 m, so each point's height is rough
+        // by a little; rough by half a voxel, the mesh would show it. The ridges' warp, its
+        // noises shifted hundreds of cells by adding to the point, stepped by up to 0.15 m.
+        let range = range();
+        let mut rough = Vec::new();
+        for d in directions(100_000) {
+            if range.inside(d * RADIUS) <= 0.0 {
+                continue;
+            }
+            let rise = |cm: f32| {
+                let step = d.any_orthonormal_vector() * (cm * 0.005 / RADIUS);
+                range.rise((d + step).normalize(), RADIUS).height_m
+                    - range.rise((d - step).normalize(), RADIUS).height_m
+            };
+            rough.push((rise(2.0) - rise(20.0) / 10.0).abs());
+        }
+        rough.sort_by(f32::total_cmp);
+        let share = |f: f32| rough[((rough.len() - 1) as f32 * f) as usize];
+        assert!(share(0.99) < 0.05, "1% rough by {} m", share(0.99));
+        assert!(share(0.999) < 0.1, "0.1% rough by {} m", share(0.999));
     }
 }

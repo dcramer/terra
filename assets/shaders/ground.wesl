@@ -484,6 +484,34 @@ fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
     return cover * smoothstep(0.55, 0.85, up_facing) * step(0.001, lying);
 }
 
+// Stripes down the fall line round a point, laid cell by cell as the ground's gullies are
+// (D394; terra_voxel mountains.rs `Range::stripes`, after Runevision's erosion filter): each cell
+// of `spacing` metres has a point of its own, and a stripe's phase is measured across the fall
+// from the nearest points, so a fall turning between triangles moves it a little, never by a
+// wavelength. Gives -1 down a gully's line to 1 on the rib between, and how fast that changes
+// across the fall, a metre. `which` gives each set its own points.
+fn fall_stripes(world: vec3<f32>, across: vec3<f32>, spacing: f32, which: f32) -> vec2<f32> {
+    let cell = world / spacing;
+    let base = floor(cell);
+    var weights = 0.0;
+    var cosine = 0.0;
+    var sine = 0.0;
+    for (var i = 0; i < 27; i++) {
+        let c = base + vec3<f32>(f32(i % 3 - 1), f32((i / 3) % 3 - 1), f32(i / 9 - 1));
+        let jitter = vec3<f32>(hash(c + which * 7.0), hash(c + which * 7.0 + 19.0), hash(c + which * 7.0 + 43.0));
+        let d = cell - (c + jitter);
+        let far = dot(d, d);
+        if far < 1.0 {
+            let w = (1.0 - far) * (1.0 - far) * (1.0 - far);
+            let phase = dot(d, across) * 6.2831853;
+            weights += w;
+            cosine += w * cos(phase);
+            sine += w * sin(phase);
+        }
+    }
+    return vec2<f32>((cosine + 0.02) / (weights + 0.02), -(sine / (weights + 0.02)) * 6.2831853 / spacing);
+}
+
 fn noise(p: vec3<f32>) -> f32 {
     let cell = floor(p);
     let f = fract(p);
@@ -812,22 +840,42 @@ fn fragment(
         let ribbed = max(max(bare, steep), snow) * smoothstep(150.0, 450.0, far_off) * (1.0 - under_woods);
         var rib = 0.0;
         var rib_tilt = 0.0;
+        // How many metres of ground a pixel spans, for each set of ribs to fade out before a
+        // pixel holds a whole rib and gully: finer, they sparkled as a grain over the wall.
+        let footprint = max(length(dpdx(world)), length(dpdy(world)));
         if ribbed > 0.0 {
-            let u = dot(world, across_face);
-            let v = dot(world, up);
-            // Ribs that wander as they run down, wide ones split by narrower.
-            let wander = noise(vec3<f32>(u * 0.004, v * 0.004, 61.0)) * 9.0 + noise(vec3<f32>(u * 0.013, v * 0.01, 3.0)) * 3.0;
-            // Each wave's phase taken from `u` within one of its own wavelengths first: `u`
-            // is tens of kilometres from the planet's centre, where the GPU's sine of the
-            // product alone has no precision left and the ribs came out flat.
-            let a = (u - floor(u / 89.76) * 89.76) * 0.07 + wander;
-            let b = (u - floor(u / 36.96) * 36.96) * 0.17 + wander * 1.7 + 2.0;
-            rib = 0.6 * sin(a) + 0.4 * sin(b);
-            let rise = 0.6 * 0.07 * cos(a) + 0.4 * 0.17 * cos(b);
+            // Three sets of ribs, the great couloirs between a wall's buttresses split by
+            // narrower gullies and those by runnels, each laid cell by cell as the ground's own
+            // gullies are (`fall_stripes`), and cut deeper on some faces than others. Measured
+            // as a distance across the fall from the planet's centre, as they were, their phase
+            // followed the fragment's normal: a degree's turn between two triangles moved it by
+            // half a kilometre, and each triangle of the far mesh drew its own set, a quilt of
+            // chevrons across every wall.
+            let sets = array<vec3<f32>, 3>(vec3<f32>(150.0, 0.5, 0.0), vec3<f32>(62.0, 0.32, 1.0), vec3<f32>(26.0, 0.18, 2.0));
+            var weight = 0.0;
+            var rise = 0.0;
+            var couloirs = 1.0;
+            for (var k = 0; k < 3; k++) {
+                let band = sets[k];
+                let keep = band.y * (1.0 - smoothstep(band.x * 0.1, band.x * 0.25, footprint));
+                if keep > 0.001 {
+                    let stripes = fall_stripes(world, across_face, band.x, band.z);
+                    rib += keep * stripes.x;
+                    rise += keep * stripes.y;
+                    weight += keep;
+                    if k == 0 {
+                        couloirs = stripes.x;
+                    }
+                }
+            }
+            rib /= max(weight, 0.001);
+            let deep = 0.55 + 0.9 * smoothstep(0.3, 0.7, noise(world * 0.0021 + 17.0));
             // A gully's sides face across the slope: the ribs' slope across, up to about 35
             // degrees, tilts the normal toward or away from `across_face`.
-            rib_tilt = clamp(rise * 6.0, -0.7, 0.7) * ribbed;
-            snow *= mix(1.0, smoothstep(0.3, -0.45, rib), ribbed * mix(0.75, 1.0, steep));
+            rib_tilt = clamp(rise * deep * 4.5, -0.7, 0.7) * ribbed;
+            // A summer's snow on a wall lies in its great couloirs, in streaks down them, and
+            // is gone from the buttresses between.
+            snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), ribbed * mix(0.75, 1.0, steep));
         }
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);

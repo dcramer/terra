@@ -1,6 +1,6 @@
 use crate::Seed;
 use crate::seed::lattice;
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 
 /// Smooth three-dimensional noise (Perlin's improved gradient noise).
 ///
@@ -19,8 +19,21 @@ impl Noise {
     /// Noise at a point, in about `-1.0..1.0`. Features are about one unit across, so
     /// scale the input to choose their size.
     pub fn sample(&self, point: Vec3) -> f32 {
+        self.sample_shifted(point, IVec3::ZERO)
+    }
+
+    /// [`Noise::sample`] at `point + shift`, exactly, with the whole cells of the shift kept
+    /// apart from the point: a single holds a point a few units across to a ten-millionth,
+    /// but one shifted by hundreds of cells only to a few hundred-thousandths, which steps
+    /// noise sampled far from the origin by that much (a mountain's warp stepped every
+    /// 0.6 m). Shift whole cells this way and add only fractions to the point.
+    pub fn sample_shifted(&self, point: Vec3, shift: IVec3) -> f32 {
         let cell = point.floor();
-        let (x, y, z) = (cell.x as i32, cell.y as i32, cell.z as i32);
+        let (x, y, z) = (
+            cell.x as i32 + shift.x,
+            cell.y as i32 + shift.y,
+            cell.z as i32 + shift.z,
+        );
         let f = point - cell;
         let (u, v, w) = (fade(f.x), fade(f.y), fade(f.z));
 
@@ -40,8 +53,18 @@ impl Noise {
     /// noise's trilinear blend and quintic fade). Generation that shapes the land by its own
     /// slope needs it, as derivative-damped fractal noise does.
     pub fn sample_with_gradient(&self, point: Vec3) -> (f32, Vec3) {
+        self.sample_with_gradient_shifted(point, IVec3::ZERO)
+    }
+
+    /// [`Noise::sample_with_gradient`] at `point + shift`, exactly, as
+    /// [`Noise::sample_shifted`].
+    pub fn sample_with_gradient_shifted(&self, point: Vec3, shift: IVec3) -> (f32, Vec3) {
         let cell = point.floor();
-        let (x, y, z) = (cell.x as i32, cell.y as i32, cell.z as i32);
+        let (x, y, z) = (
+            cell.x as i32 + shift.x,
+            cell.y as i32 + shift.y,
+            cell.z as i32 + shift.z,
+        );
         let f = point - cell;
         let (u, v, w) = (fade(f.x), fade(f.y), fade(f.z));
         let (du, dv, dw) = (fade_slope(f.x), fade_slope(f.y), fade_slope(f.z));
@@ -110,6 +133,15 @@ impl Noise {
         }
         if range > 0.0 { total / range } else { 0.0 }
     }
+}
+
+/// How far a fractal sum's layer is shifted, 19.19 cells a layer as [`Noise::fbm`] shifts its
+/// layers so their grids do not line up, as its fraction of a cell and its whole cells, for
+/// [`Noise::sample_shifted`]. (`fbm` adds the shift to the point; its bits are pinned.)
+pub fn layer_shift(layer: usize) -> (Vec3, IVec3) {
+    let shift = layer as f32 * 19.19;
+    let whole = shift.floor();
+    (Vec3::splat(shift - whole), IVec3::splat(whole as i32))
 }
 
 fn fade(t: f32) -> f32 {
@@ -184,6 +216,31 @@ mod tests {
     }
 
     const PINNED_SAMPLES: [u32; 3] = [1_050_255_136, 1_051_968_361, 1_046_572_127];
+
+    #[test]
+    fn a_shift_by_whole_cells_is_the_noise_there_and_keeps_its_precision() {
+        let noise = Noise::new(Seed(3));
+        for p in points() {
+            let p = p / 30.0;
+            let shift = IVec3::new(3, -2, 5);
+            let there = noise.sample(p + shift.as_vec3());
+            assert!((noise.sample_shifted(p, shift) - there).abs() < 1e-4);
+            let (value, slope) = noise.sample_with_gradient_shifted(p, shift);
+            let (v, g) = noise.sample_with_gradient(p + shift.as_vec3());
+            assert!((value - v).abs() < 1e-4 && (slope - g).length() < 1e-3);
+        }
+        // Shifted 307 cells by adding, a point a millionth of a cell along moves the noise by
+        // a whole step of the single's precision there or not at all; shifted apart, smoothly,
+        // as far as its slope says.
+        let (p, along) = (Vec3::new(1.37, 2.11, 0.53), Vec3::new(1e-6, 0.0, 0.0));
+        let (_, slope) = noise.sample_with_gradient_shifted(p, IVec3::splat(307));
+        let moved = |k: f32| noise.sample_shifted(p + along * k, IVec3::splat(307));
+        for k in 1..8 {
+            let expected = slope.x * 1e-6;
+            let step = moved(k as f32) - moved(k as f32 - 1.0);
+            assert!((step - expected).abs() < 2e-7, "{step} for {expected}");
+        }
+    }
 
     #[test]
     fn stays_in_range_and_uses_it() {
