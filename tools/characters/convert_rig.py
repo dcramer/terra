@@ -81,13 +81,31 @@ bpy.ops.mesh.select_all(action="SELECT")
 bpy.ops.mesh.remove_doubles(threshold=1e-5)
 bpy.ops.object.mode_set(mode="OBJECT")
 
+# 1a. A body's triangle budget (TRIANGLES=N; none, Tripo's as made): collapsed by Blender's
+# decimator, which keeps the texture coordinates and interpolates Tripo's weights, after the
+# weld, so a seam's two sides collapse as one.
+TRIANGLES = int(os.environ.get("TRIANGLES", "") or 0)
+made_tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
+if TRIANGLES and made_tris > TRIANGLES:
+    dec = body.modifiers.new("Budget", "DECIMATE")
+    dec.decimate_type = "COLLAPSE"
+    dec.ratio = TRIANGLES / made_tris
+    dec.use_collapse_triangulate = True
+    select_only(body)
+    bpy.ops.object.modifier_apply(modifier=dec.name)
+    print("TRIANGLES", made_tris, "to", sum(len(p.vertices) - 2 for p in body.data.polygons))
+
+# A creature (CREATURE=1) keeps its design's hands and feet: the two steps below give a
+# generated body a person's, which would shrink a troll's broad feet to a man's.
+PERSON = os.environ.get("CREATURE", "") in ("", "0")
+
 # 1b. Hands a person's size. Generated bodies come with big hands, wrist to fingertip 12% of the
 # height or more, against a man's 10.8% (the adversarial review, 2026-10-15: "a hand covers half
 # the chest"). Each hand is scaled toward its wrist, its skin by how much the hand's and fingers'
 # bones weigh on it, so it eases out through the wrist, and its finger joints with it.
 HAND_LENGTH = 0.108
 fingers = ("thumb_", "index_", "middle_", "ring_", "pinky_")
-for s in ("l", "r"):
+for s in ("l", "r") if PERSON else ():
     wrist = joints[f"hand_{s}"].copy()
     ours = {f"hand_{s}"} | {n for n in joints if n.startswith(fingers) and n.endswith(f"_{s}")}
     groups = {g.index for g in body.vertex_groups if g.name in ours}
@@ -187,7 +205,7 @@ if SMOOTH:
 # ankle; its length is kept. The morphs keep the base's feet (morph.py), so every body has them.
 FOOT_WIDTH = 0.06
 tall = max(v.co.z for v in body.data.vertices) - min(v.co.z for v in body.data.vertices)
-for s in ("l", "r"):
+for s in ("l", "r") if PERSON else ():
     feet = {g.index for g in body.vertex_groups if g.name in (f"foot_{s}", f"ball_{s}", f"ball_leaf_{s}")}
     share = {v.index: sum(g.weight for g in v.groups if g.group in feet) for v in body.data.vertices}
     ankle = arm.matrix_world @ arm.data.bones[f"foot_{s}"].head_local

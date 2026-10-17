@@ -10,7 +10,8 @@ Checks:
   weights       every vertex weighted, at most 4 bones each, weights summing to 1
   seams         copies of a vertex split at a texture seam carry the same weights, or the
                 seam opens into a gap as the body moves
-  reach         no vertex driven mostly by a bone far from it (an arm stuck to the hip)
+  reach         no vertex driven mostly by a bone far from it when another is much nearer
+                (an arm stuck to the hip; a heavy belly far off the spine is not one)
   symmetry      a vertex and its mirror are driven by mirrored bones, by much the same
                 weights (not only the same strongest bone, which flips where two bones
                 share a vertex about equally, as a limb and its twist bone do)
@@ -46,7 +47,7 @@ LIMITS = {
     "rest_angle_deg": 3.0,          # largest difference in any bone's direction
     "max_influences": 4,
     "weight_sum_error": 0.02,
-    "reach": 0.14,                  # of the character's height, from a vertex to its main bone
+    "reach": 0.14,                  # of the character's height, from a vertex to its main bone, beyond the nearest bone
     "reach_fail_share": 0.005,      # share of vertices allowed beyond that
     "mirror_fail_share": 0.05,
     "mirror_weight_diff": 0.25,  # a vertex's weights and its mirror's differ by more than this
@@ -110,6 +111,20 @@ mw = body.matrix_world
 height = max((mw @ v.co).z for v in body.data.vertices) - min((mw @ v.co).z for v in body.data.vertices)
 unweighted = over = bad_sum = far = 0
 far_at = {}
+weighted = sorted({groups[g] for g in groups} & set(bones))
+
+
+def bone_distance(p, b):
+    """How far a point in the skeleton's space is from a bone, along it to the next joint (its
+    child's head), not its tail, which a glTF file does not keep: the importer guesses one,
+    often short of the joint. In world units."""
+    kids = list(b.children)
+    end = max((c.head_local for c in kids), key=lambda h: (h - b.head_local).length) if kids else b.tail_local
+    q, t = intersect_point_line(p, b.head_local, end)
+    q = b.head_local if t < 0 else end if t > 1 else q
+    return (arm.matrix_world.to_3x3() @ (p - q)).length
+
+
 main_bone = []
 for v in body.data.vertices:
     ws = [(groups[g.group], g.weight) for g in v.groups if g.weight > 0.001 and groups.get(g.group) in bones]
@@ -121,17 +136,16 @@ for v in body.data.vertices:
     bad_sum += abs(sum(w for _, w in ws) - 1) > LIMITS["weight_sum_error"]
     name = max(ws, key=lambda t: t[1])[0]
     main_bone.append(name)
-    b = bones[name]
     p = arm.matrix_world.inverted() @ (mw @ v.co)
-    # Along the bone to the next joint (its child's head), not its tail, which a glTF file
-    # does not keep: the importer guesses one, often short of the joint.
-    kids = list(b.children)
-    end = max((c.head_local for c in kids), key=lambda h: (h - b.head_local).length) if kids else b.tail_local
-    q, t = intersect_point_line(p, b.head_local, end)
-    q = b.head_local if t < 0 else end if t > 1 else q
-    if (arm.matrix_world.to_3x3() @ (p - q)).length / height > LIMITS["reach"]:
-        far += 1
-        far_at[name] = far_at.get(name, 0) + 1
+    # Far from its main bone, and that much farther than from the nearest weighted bone: a
+    # heavy creature's belly or hump stands well off its spine and is still driven by the
+    # bone nearest it, where an arm stuck to the hip has a nearer bone it should follow.
+    reach = bone_distance(p, bones[name])
+    if reach / height > LIMITS["reach"]:
+        nearest = min(bone_distance(p, bones[n]) for n in weighted)
+        if (reach - nearest) / height > LIMITS["reach"]:
+            far += 1
+            far_at[name] = far_at.get(name, 0) + 1
 n = len(body.data.vertices)
 report["weights"] = {"vertices": n, "unweighted": unweighted, "over_4_bones": over, "not_summing_to_1": bad_sum}
 ok["weights"] = unweighted == 0 and over == 0

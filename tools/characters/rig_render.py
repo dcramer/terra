@@ -44,6 +44,9 @@ cam.data.lens = 50
 scene.collection.objects.link(cam)
 scene.camera = cam
 sun = bpy.data.objects["Sun"]
+# Framed for a person 1.8 m tall and scaled by this body's height, so a troll fits as a man does.
+size = (max((body.matrix_world @ Vector(c)).z for c in body.bound_box)
+        - min((body.matrix_world @ Vector(c)).z for c in body.bound_box)) / 1.8
 rows = []
 for action_name in ACTIONS:
     action = bpy.data.actions.get(action_name) or next(a for a in bpy.data.actions if a.name.startswith(action_name))
@@ -56,8 +59,8 @@ for action_name in ACTIONS:
     for k, (yaw, t, dist) in enumerate(((30, 0.0, 3.4), (30, 0.45, 3.4), (300, 0.7, 3.4), (60, 0.45, 1.9))):
         scene.frame_set(int(start + (end - start) * t))
         y = math.radians(yaw)
-        target = Vector((0, 0, 0.85 if k < 3 else 0.7))
-        cam.location = target + Vector((math.sin(y), -math.cos(y), 0.2)) * dist
+        target = Vector((0, 0, 0.85 if k < 3 else 0.7)) * size
+        cam.location = target + Vector((math.sin(y), -math.cos(y), 0.2)) * dist * size
         cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
         ly, lp = y + math.radians(50), math.radians(40)
         towards = Vector((math.sin(ly) * math.cos(lp), -math.cos(ly) * math.cos(lp), math.sin(lp)))

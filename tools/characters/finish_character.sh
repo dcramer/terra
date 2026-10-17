@@ -9,6 +9,8 @@
 #   2. check it against our skeleton and the mannequin, and render it moving
 #   3. export it as the game loads it, with our clips re-sampled on its skeleton, and sockets
 # Writes tools/characters/out/NAME.glb, rig-check-NAME.json, NAME-sheet.png and NAME-game.glb.
+# The conversion reads SMOOTH (weight smoothing passes, default 2), TRIANGLES (a triangle budget,
+# default Tripo's as made) and CREATURE=1 (keep the design's hands and feet, not a person's).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name=$1 height=$2
