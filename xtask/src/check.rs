@@ -162,12 +162,12 @@ pub(crate) fn check(args: &[String]) -> bool {
     match tier {
         Tier::Commit => {
             let over = if took.as_secs() > COMMIT_BUDGET_SECS {
-                " OVER BUDGET: move what is slow before the push (D398)"
+                ", OVER its budget: put the slow stage's work before the push (D398)"
             } else {
                 ""
             };
             println!(
-                "✓ quick check passed in {} of its {COMMIT_BUDGET_SECS}s budget{over}. The push's \
+                "✓ quick check passed in {} (budget {COMMIT_BUDGET_SECS}s){over}. The push's \
                  check adds the crates depending on these, {} slow tests, the kit, foliage, \
                  artifacts, fuzz and Blender checks.",
                 stage::duration(took),
@@ -269,14 +269,7 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         }
     };
     let mut stages = vec![
-        (
-            Step::new("fmt", Said::Fmt, LOGS).rerun("cargo fmt --all (it fixes them)"),
-            if all || scope.rust {
-                How::Command(command("cargo", &["fmt", "--all", "--check"]))
-            } else {
-                How::Skip("no Rust changed")
-            },
-        ),
+        fmt(scope),
         (
             Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
             How::Here(crate::sizes::sizes_hold),
@@ -344,6 +337,23 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         How::Here(shared_crates_are_repeatable),
     ));
     stages
+}
+
+/// Formatting, of the crates changed: it goes file by file, so they are all a change can
+/// unsettle.
+fn fmt(scope: &Scope) -> (Step, How) {
+    let step = Step::new("fmt", Said::Fmt, LOGS).rerun("cargo fmt --all (it fixes them)");
+    if !scope.all() && !scope.rust {
+        return (step, How::Skip("no Rust changed"));
+    }
+    let mut fmt = Command::new("cargo");
+    fmt.args(["fmt", "--check"]);
+    if scope.all() || scope.changed.is_empty() {
+        fmt.arg("--all");
+    } else {
+        fmt.args(scope::package_args(&scope.changed));
+    }
+    (step, How::Command(fmt))
 }
 
 /// The tools' tests (D121): every one, or before a commit those of the tools changed.
