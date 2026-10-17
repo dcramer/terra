@@ -18,6 +18,7 @@ pub mod cache;
 pub mod cine;
 pub mod climate;
 pub mod cover;
+pub mod crash;
 pub mod data;
 pub mod daylight;
 pub mod debug;

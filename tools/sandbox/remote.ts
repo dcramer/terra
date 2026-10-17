@@ -7,6 +7,7 @@
 import { parseArgs } from "node:util";
 import * as sandbox from "./client.ts";
 import { call, describe } from "./client.ts";
+import * as snaps from "./snap.ts";
 
 const triple = (text: string | undefined) => {
   if (text === undefined) return undefined;
@@ -114,6 +115,20 @@ const COMMANDS: Record<string, Command> = {
     run: async ({ values, positionals }) => console.log(describe(await sandbox.waitFor(positionals.join(" "), { timeout: Number(values.timeout ?? 60) }))),
   },
   state: { usage: "state", help: "in play: where the player is, their body, what they hold, carry and wear, and who is near", run: async () => print(await sandbox.state()) },
+  snap: {
+    usage: "snap NAME",
+    help: "in play: keep state and build.state as shots/snaps/NAME.json, to diff against later",
+    run: async ({ positionals: [name] }) => console.log(await snaps.save(name ?? "")),
+  },
+  diff: {
+    usage: "diff A [B|now] [--epsilon m] [--most N]",
+    help: "what changed from snap A to snap B, or to now if not given: a line a change, ~ changed, + appeared, - went, # how many changed",
+    options: { epsilon: { type: "string", help: "numbers this close are the same (0.01)" }, most: { type: "string", help: "changes shown at most (40)" } },
+    run: async ({ values, positionals: [a, b] }) => {
+      const lines = snaps.diff(await snaps.load(a ?? ""), await snaps.load(b ?? "now"), { epsilon: number(values.epsilon), most: number(values.most) });
+      console.log(lines.join("\n"));
+    },
+  },
   warp: {
     usage: "warp EAST,SOUTH [--facing EAST,SOUTH]",
     help: "in play: move the player, as --warp does, and wait until they are there",

@@ -461,6 +461,7 @@ Checks, developer tools, languages and the repository.
 | [D396](decisions/D396.md) | Code health is gated, not reviewed | Tech | Agent | Decided | The classes of code-health fault the reviews kept… |
 | [D397](decisions/D397.md) | Subagents keep their prompt cache an hour | Tech | Developers | Decided | `.claude/settings.json` sets `subagentPromptCacheTtl` to… |
 | [D398](decisions/D398.md) | The gates scale with the change | Tech | Developers | Decided | The check before a commit is linters and at most fast… |
+| [D399](decisions/D399.md) | A crash leaves a capsule; state is snapped and diffed | Tech | Agent | Decided | A panic in the sandbox, and so in the play experiment… |
 
 ## Superseded and rejected
 

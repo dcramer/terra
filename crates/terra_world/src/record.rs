@@ -76,6 +76,24 @@ impl Record {
         (found, lines.next)
     }
 
+    /// Every line kept, the oldest first, and the number the next will get, for a crash
+    /// capsule (`crash`). A panic can come while this thread holds the lines, so it tries
+    /// for a moment rather than waiting, and gives none if they stay held.
+    pub fn everything(&self) -> (Vec<Line>, u64) {
+        for _ in 0..50 {
+            if let Ok(lines) = self.0.lines.try_lock() {
+                return (lines.kept.iter().cloned().collect(), lines.next);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        (Vec::new(), 0)
+    }
+
+    /// The frame now, as the record last saw it.
+    pub fn frame(&self) -> u32 {
+        self.0.frame.load(Ordering::Relaxed)
+    }
+
     fn add(&self, level: Level, source: &str, text: String) {
         let frame = self.0.frame.load(Ordering::Relaxed);
         let mut lines = self
@@ -102,6 +120,7 @@ impl Record {
 /// It sits behind the log's filter, so it keeps what the log keeps.
 pub fn layer(app: &mut App) -> Option<BoxedLayer> {
     let record = Record::default();
+    crate::crash::watch(&record);
     app.insert_resource(record.clone())
         .add_systems(First, count_frames);
     Some(Box::new(Writer(record)))

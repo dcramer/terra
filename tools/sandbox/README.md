@@ -22,10 +22,12 @@ r start --windows -- --experiment play --fresh --save test.ron
 r give bow quiver arrow:4                # waits until each is given
 r warp -32,34 --facing -45,36            # waits until the player is there
 r state                                  # where they are, their body, what they carry, what is near
+r snap before                            # keep it, to say later what changed
 r aim -45,36 --up 0.8                    # the middle of the view on the deer's chest
 r press 5 e@10:60                        # the bow, then ten frames later draw for 60 and loose
 r wait "An arrow hit" --timeout 20       # or fail, showing what was said instead
 r said                                   # everything said since the last action
+r diff before                            # only what changed since: ~ health: 100 -> 80, - carrying.arrow: 1
 ```
 
 `start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same. `start` also passes `--steady`, so the game moves a sixtieth of a second every frame however fast frames are drawn, as scripted runs do: a key held for 60 frames is a second of play on any machine. `--real-time` leaves the clock alone. It passes `--background` too, so the run stays out of the way of whoever is at the machine: its window opens behind the others without taking focus, never takes the mouse, ignores the real keyboard and mouse, and is silent; only the script drives it. `--foreground` gives a normal window, to play alongside the script.
@@ -47,6 +49,8 @@ r said                                   # everything said since the last action
 | `wait TEXT [--timeout s]` | Wait until the run says something containing TEXT since the mark; on timeout, show what it said instead and fail |
 | `mark` | Start `said` and `wait` from now |
 | `state` | In play: where the player is and faces, their body, what they hold, carry and wear, and the creatures and people within 40 m |
+| `snap NAME` | In play: keep `state` and `build.state` as `shots/snaps/NAME.json` (D399) |
+| `diff A [B\|now] [--epsilon m] [--most N]` | What changed from snap A to B, or to the run now: a line a change, `~` changed, `+` appeared, `-` went, `#` how many changed, numbers within 0.01 the same, at most 40 lines and a count of the rest. Things in a list are matched by what they are (`id`, `name`, `who`, `what`, `kind`), and among several of a kind, nearest to nearest by `at` ([snap.ts](snap.ts)) |
 | `warp EAST,SOUTH [--facing EAST,SOUTH]` | In play: move the player, as `--warp` does, and wait until they are there |
 | `take ITEM[:COUNT] …` | In play: take raw items away, all of a kind if no count (`meat`, `stone:5`), so a test starts from a known pack |
 | `unpress` | Let go of every key held or queued by `press` |

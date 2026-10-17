@@ -153,7 +153,7 @@ struct SavedPerson {
 
 /// Where the save goes, if this run saves at all.
 #[derive(Resource)]
-struct SavePath(PathBuf);
+pub(super) struct SavePath(pub(super) PathBuf);
 
 /// What is waiting for people to arrive before it can be put back.
 #[derive(Resource, Default)]

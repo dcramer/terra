@@ -793,13 +793,13 @@ fn sea_waves(
 }
 
 pub fn plugin(app: &mut App) {
-    let radius_m = app.world().resource::<Options>().radius_m;
+    let options = app.world().resource::<Options>();
+    let (radius_m, yard, rolling) = (options.radius_m, options.yard(), options.rolling);
     let spec = PlanetSpec {
         seed: Seed(1),
         radius_m,
     };
-    let yard = app.world().resource::<Options>().yard();
-    let rolling = app.world().resource::<Options>().rolling;
+    crate::crash::note("seed", spec.seed.0);
     let mut planet = if yard && rolling {
         Planet::rolling(spec)
     } else if yard {

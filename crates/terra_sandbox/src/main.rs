@@ -27,6 +27,8 @@ use terra_game::{appearance, character};
 use terra_world::{planet, shell, terrain};
 
 fn main() -> AppExit {
+    // A panic leaves a short summary for whoever reads it (terra_world::crash).
+    terra_world::crash::install();
     // A film's sound bed, written and done with, no window (`bed`).
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(at) = args.iter().position(|a| a == "--sound-bed") {

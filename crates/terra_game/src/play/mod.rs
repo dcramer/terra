@@ -181,6 +181,12 @@ impl Plugin for GameplayPlugin {
         held::plugin(app);
         worn::plugin(app);
         save::plugin(app);
+        // A crash capsule says which save the run keeps (terra_world::crash).
+        app.add_systems(PostStartup, |path: Option<Res<save::SavePath>>| {
+            if let Some(path) = path {
+                terra_world::crash::note("save", path.0.display());
+            }
+        });
         harvest::plugin(app);
         dig::plugin(app);
         probe::plugin(app);
