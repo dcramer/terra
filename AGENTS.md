@@ -48,9 +48,9 @@ Every byte an agent reads is paid again each turn.
 
 ## Decisions (D389)
 
-- Each is `docs/decisions/Dnnn.md`; edit those, never `docs/decisions.md`, then `node tools/docs/docs.ts --render`. The shape is in the index's preamble.
+- Each is `docs/decisions/Dnnn.md`; edit those, never `docs/decisions.md` or research/README.md's table, then `node tools/docs/docs.ts --render`; git merges both indexes row by row (D409). The shape is in the index's preamble.
 - They are the source of truth: don't contradict a live one, raise it. Decided is our answer, Leaning a working assumption, Open unchosen, Superseded kept so its number resolves.
-- **Design** (gameplay, art, scope) is the developers': recommend, mark it Open, don't build on it. A developer thinking out loud is input, not a decision, unless they say it is settled.
+- **Design** (gameplay, art, scope) is the developers': recommend, mark it Open, don't build on it; only they mark one Decided (D412, the docs check holds it). A developer thinking out loud is input, not a decision, unless they say it is settled.
 - **Technical** (engine, architecture, tooling, workflow) is yours: decide, record why, keep going; the developers can overrule.
 - **By** says who. An Agent decision is soft: any agent changes it with a reason and a log line. A Developers decision only they change. A choice other work builds on gets a decision; one left in chat or code didn't happen.
 - **Revisit what proves wrong**, with evidence: change an agent's decision; raise a developer's with a recommendation.

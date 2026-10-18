@@ -112,12 +112,7 @@ pub(crate) fn doctor() -> bool {
     }
 
     println!("\nTools");
-    report.item(
-        "git runs the quick check before each commit and the full one before each push",
-        output("git", &["config", "--get", "core.hooksPath"]).as_deref() == Some(".githooks"),
-        true,
-        "git config core.hooksPath .githooks   (any cargo xtask task sets it)",
-    );
+    git_setup(&mut report);
     let node = output("node", &["--version"]).unwrap_or_default();
     report.item(
         &format!("Node 22.18 or later, which runs the TypeScript tools (found: {node})"),
@@ -199,6 +194,24 @@ pub(crate) fn doctor() -> bool {
         println!("This machine is ready.");
     }
     !report.missing_required
+}
+
+/// What git is set up to do for the repository: the hooks (D37) and the rendered
+/// indexes' merge driver (D409), both set by any `cargo xtask` task.
+fn git_setup(report: &mut Report) {
+    report.item(
+        "git runs the quick check before each commit and the full one before each push",
+        output("git", &["config", "--get", "core.hooksPath"]).as_deref() == Some(".githooks"),
+        true,
+        "git config core.hooksPath .githooks   (any cargo xtask task sets it)",
+    );
+    report.item(
+        "git merges the rendered indexes row by row (D409)",
+        output("git", &["config", "--get", "merge.rendered.driver"]).as_deref()
+            == Some(crate::MERGE_DRIVER),
+        true,
+        "any cargo xtask task sets merge.rendered.driver",
+    );
 }
 
 /// Whether a `node --version` is 22.18 or later, the first to run TypeScript as it is.

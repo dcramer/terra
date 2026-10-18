@@ -44,7 +44,7 @@ const file = (id: string, meta: string, body = "Two.\n\n## Why\n\nWhy.\n", topic
   text: `# ${id}: ${topic}\n\n${meta}\n\n${body}`,
 });
 
-test("a decision file needs its shape, its number for a name, a known area, owner, status and who decided", () => {
+test("a decision file needs its shape, its number for a name, a known area, owner, status and who decided, a design call settled by the developers", () => {
   const files = [
     file("D1", "Area: Building · Owner: Design · By: Developers · Status: Decided"),
     file("D2", "Area: Engine and code · Owner: Tech · By: Agent · Status: Leaning", "Bevy.\n"),
@@ -53,12 +53,14 @@ test("a decision file needs its shape, its number for a name, a known area, owne
     file("D5", "Area: Art · Owner: Art · By: Someone · Status: Done"),
     { name: "D6.md", text: "# D7: Misnamed\n\nArea: Building · Owner: Tech · By: Agent · Status: Decided\n\nX.\n" },
     { name: "D8.md", text: "| D8 | Old | Tech | Agent | Decided | A row. | Why. |\n" },
+    file("D9", "Area: Building · Owner: Design · By: Agent · Status: Decided"),
+    file("D10", "Area: Building · Owner: Design · By: Agent · Status: Leaning"),
     { name: "notes.md", text: "" },
   ];
   const { decisions, faults } = readDecisions(files);
   assert.deepEqual(
     decisions.map((d) => [d.id, d.decision, d.why]),
-    [["D1", "Two.", "Why."], ["D2", "Bevy.", ""], ["D3", "Two.", "Why."], ["D4", "Two.", "Why."], ["D5", "Two.", "Why."], ["D7", "X.", ""]],
+    [["D1", "Two.", "Why."], ["D2", "Bevy.", ""], ["D3", "Two.", "Why."], ["D4", "Two.", "Why."], ["D5", "Two.", "Why."], ["D7", "X.", ""], ["D9", "Two.", "Why."], ["D10", "Two.", "Why."]],
   );
   assert.deepEqual(faults, [
     'docs/decisions/D4.md: has By "Agent": Developers or Agent, or — when Open, Rejected or Superseded',
@@ -68,6 +70,7 @@ test("a decision file needs its shape, its number for a name, a known area, owne
     "docs/decisions/D5.md: has Area \"Art\": one of docs/decisions.md's headings, or — when Rejected or Superseded",
     "docs/decisions/D6.md: is headed D7; a decision's file is named for its number",
     "docs/decisions/D8.md: is not `# Dnnn: Topic`, a blank line, `Area: … · Owner: … · By: … · Status: …`, a blank line, the decision, then optionally `## Why` and the reason",
+    "docs/decisions/D9.md: is a design call Decided By Agent: only the developers settle one; make it Leaning and ask them (D412)",
     "docs/decisions/notes.md: is not a decision; the folder holds only Dnnn.md files",
   ]);
 });

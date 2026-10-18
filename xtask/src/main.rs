@@ -465,9 +465,22 @@ fn main() -> ExitCode {
 }
 
 /// Points git at the repository's hooks, so `cargo xtask check --quick` runs before every commit
-/// and `cargo xtask check` before every push (D37).
+/// and `cargo xtask check` before every push (D37), and at the merge driver of the rendered
+/// indexes (D409, `.gitattributes`).
 /// Any task does it, so a new clone has it as soon as anyone runs one; worktrees share it.
 fn use_hooks() {
+    if output("git", &["config", "--get", "merge.rendered.driver"]).as_deref() != Some(MERGE_DRIVER)
+    {
+        let _ = output(
+            "git",
+            &[
+                "config",
+                "merge.rendered.name",
+                "rendered index, row by row (D409)",
+            ],
+        );
+        let _ = output("git", &["config", "merge.rendered.driver", MERGE_DRIVER]);
+    }
     if output("git", &["config", "--get", "core.hooksPath"]).as_deref() != Some(".githooks") {
         let set = output("git", &["config", "core.hooksPath", ".githooks"]).is_some();
         if set {
@@ -477,6 +490,9 @@ fn use_hooks() {
         }
     }
 }
+
+/// How git merges a page whose index is rendered from files of their own (D409).
+pub(crate) const MERGE_DRIVER: &str = "node tools/docs/merge.ts %O %A %B %P";
 
 /// A crate's example program, built quietly and run from the root.
 fn cargo_example(package: &str, example: &str, args: &[String], release: bool) -> bool {

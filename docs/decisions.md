@@ -470,6 +470,8 @@ Checks, developer tools, languages and the repository.
 | [D399](decisions/D399.md) | A crash leaves a capsule; state is snapped and diffed | Tech | Agent | Decided | A panic in the sandbox, and so in the play experiment… |
 | [D400](decisions/D400.md) | Agents' tasks are bounded | Tech | Developers | Decided | Every agent's brief says when it stops: a score bar… |
 | [D406](decisions/D406.md) | The push's slow sweeps run on every core, optimised, and an asset is read only by the crates that read it | Tech | Agent | Decided | A test that sweeps many independent cases runs them on… |
+| [D409](decisions/D409.md) | Rendered indexes merge row by row | Tech | Agent | Decided | An index of files that live on their own is rendered… |
+| [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
 
 ## Superseded and rejected
 

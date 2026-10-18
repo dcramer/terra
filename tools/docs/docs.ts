@@ -14,6 +14,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ORDER } from "./merge.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -55,6 +56,13 @@ export function brokenLinks(file: string, markdown: string, read: (path: string)
 }
 
 const STATUS = /^(Decided|Leaning|Open|Rejected|Superseded by D\d+(, D\d+)*)$/;
+
+/**
+ * Design calls an agent marked Decided before D412 made that a fault, most with the developers'
+ * leave quoted in their Why. They are the developers' to confirm (By Developers) or reopen
+ * (Leaning); this list only shrinks.
+ */
+const SETTLED_BY_AGENTS = ["D171", "D178", "D194", "D229", "D233", "D252", "D253", "D298", "D313", "D364"];
 
 /** The index's areas, in order, each a heading of docs/decisions.md and a decision's Area. */
 export const AREAS = [
@@ -102,6 +110,9 @@ export function parseDecision(file: string, text: string): { decision?: Decision
   const nobody = /^(Open|Rejected|Superseded)/.test(status);
   if (nobody ? by !== "—" : by !== "Developers" && by !== "Agent")
     fault(`has By "${by}": Developers or Agent, or — when Open, Rejected or Superseded`);
+  // A design call is the developers' (D412): an agent's stays Leaning until they settle it.
+  if (owner === "Design" && status === "Decided" && by !== "Developers" && !SETTLED_BY_AGENTS.includes(id))
+    fault(`is a design call Decided By ${by}: only the developers settle one; make it Leaning and ask them (D412)`);
   const gone = /^(Rejected|Superseded)/.test(status);
   if (!AREAS.some((a) => a.title === area) && !(gone && area === "—"))
     fault(`has Area "${area}": one of docs/decisions.md's headings, or — when Rejected or Superseded`);
@@ -243,7 +254,32 @@ const RENDERED: { page: string; render: (read: (path: string) => string | undefi
     stale: "differs from docs/building-voxels.json; edit the data, then run node tools/docs/docs.ts --render",
   },
   { page: "docs/decisions.md", render: () => renderIndex(decisionFiles().decisions), stale: EDIT_THE_FILE },
+  { page: "research/README.md", render: () => renderNotes(noteFiles()), stale: "differs from the notes; run node tools/docs/docs.ts --render (D409)" },
 ];
+
+/** The research notes on disk, read. */
+function noteFiles(): { name: string; text: string }[] {
+  const dir = join(ROOT, "research");
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
+    .map((name) => ({ name, text: readFileSync(join(dir, name), "utf8") }));
+}
+
+const DATE = /\d{4}-\d{2}-\d{2}/;
+
+/**
+ * The research index (D409): a row a note, its title and the date it states (in its name, or
+ * at its top), newest first. Rendered from the notes, so adding one never edits a shared row.
+ */
+export function renderNotes(notes: { name: string; text: string }[]): string {
+  const rows = notes.map(({ name, text }) => {
+    const title = text.match(/^# (.+)$/m)?.[1];
+    const date = name.match(DATE)?.[0] ?? text.slice(0, 1000).match(DATE)?.[0];
+    if (!title || !date) throw new Error(`research/${name} needs a \`# Title\` and its date at the top`);
+    return `| [${cell(title)}](${name}) | ${date} |`;
+  });
+  return ["| Note | Dated |", "|---|---|", ...rows.sort(ORDER["research/README.md"]), ""].join("\n");
+}
 
 /** The decision files on disk, read. */
 function decisionFiles(): { decisions: Decision[]; faults: string[] } {

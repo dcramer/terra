@@ -7,6 +7,8 @@
 # The decisions log is only ever appended to: two agents adding lines at once both keep theirs,
 # with no conflict, as changelogs commonly merge.
 docs/decisions-log.md merge=union
-# The decisions index is written from docs/decisions/ (D389). Two agents adding rows at once both
-# keep theirs; a merge that leaves it wrong fails the docs check, and --render mends it.
-docs/decisions.md merge=union
+# Indexes rendered from files of their own (D389, D409) merge row by row (tools/docs/merge.ts,
+# which `cargo xtask` sets up as `merge.rendered`): two agents adding a decision or a note at once
+# both keep theirs, in order. What it cannot merge is a conflict that --render mends.
+docs/decisions.md merge=rendered
+research/README.md merge=rendered
