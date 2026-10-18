@@ -293,12 +293,13 @@ fn shy(
 ) -> Option<State> {
     let bolts_m = bolts_within(flees_within_m);
     Some(match creature.state {
-        // A calm one crossing breaks into a run once someone comes within the distance it
-        // flees at; a wary one walking off, once they come close, and then it runs, climbs
-        // or takes wing as one startled does.
+        // A calm one crossing, or a wary one walking off, keeps to a walk until someone comes
+        // close, and then it runs, climbs or takes wing as one startled does; a crossing stag
+        // that broke into a run within its whole flight distance dashed back across the
+        // runner's way and stood beside it (lake film r9).
         State::Flee(left) if left > 0.0 => {
             let wary = creature.pace == Pace::Wary;
-            let near = s.near(if wary { bolts_m } else { flees_within_m });
+            let near = s.near(bolts_m);
             creature.pace = creature.pace.roused(near, creature.hurt);
             if wary && creature.pace != Pace::Wary {
                 creature.hurt = false;

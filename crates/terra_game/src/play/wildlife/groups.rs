@@ -6,19 +6,24 @@ use crate::play::creatures::{self, Kinds};
 use crate::play::species::{Bestiary, Haunt, Moves, Species};
 use bevy::prelude::*;
 
-/// So many meetings in ten are a crossing (`cross`) rather than a group waiting by the way.
-pub(super) const CROSSINGS: f32 = 0.5;
-/// A big animal's meeting is a crossing so often, the most it can be seen by.
-pub(super) const BIG_CROSSINGS: f32 = 0.75;
+/// So many meetings in ten are a crossing (`cross`) rather than a group waiting by the way:
+/// most are met about their day, as an animal put up by something is the rarer sight; at
+/// three in four a big one's, every stag met walked across the runner's way and stood beside
+/// him at the end (lake film r9, "animals need to fucking chill there too").
+pub(super) const CROSSINGS: f32 = 0.2;
+/// A big animal's meeting is a crossing so often, more than a small one's, since it is seen
+/// best on the move.
+pub(super) const BIG_CROSSINGS: f32 = 0.3;
 /// A crossing starts so far ahead and so far aside, just inside the trees about 15° off the
-/// camera's way, and crosses the way so far ahead of the player as they reach it; a runner
-/// runs on so long past.
-const CROSS_FROM_M: (f32, f32) = (28.0, 36.0);
+/// camera's way, and crosses the way so far ahead of the player as they reach it, well
+/// before them, and walks on so long past into the trees on the far side; 10 m ahead and
+/// 2.5 s on, a runner caught a stag up on the far bank (lake film r9).
+const CROSS_FROM_M: (f32, f32) = (34.0, 44.0);
 const CROSS_ASIDE_M: (f32, f32) = (8.0, 12.0);
 /// Starts tried for a crossing, one side of the way and then the other.
 const CROSS_TRIES: usize = 6;
-pub(super) const CROSS_LEAD_M: f32 = 10.0;
-const CROSS_ON_S: f32 = 2.5;
+pub(super) const CROSS_LEAD_M: f32 = 18.0;
+const CROSS_ON_S: f32 = 6.0;
 
 /// A group put up by something before the player came, crossing their way ahead of them, as
 /// shipped open worlds stage their ambient wildlife (Red Dead Redemption 2's deer and foxes

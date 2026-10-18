@@ -523,3 +523,34 @@ fn a_startled_bird_among_trees_may_go_up_into_a_crown_away_from_the_player() {
     }
     assert!(crowns > 3 && crowns < 17, "{crowns} of 20 went up a tree");
 }
+
+#[test]
+fn a_deer_crossing_ahead_keeps_to_a_walk_until_someone_comes_close() {
+    let mut world = world();
+    let ground = Vec3::Y * 2000.0;
+    let stag = kind(&mut world, "Red deer stag", ground);
+    let species = world.get::<Creature>(stag).unwrap().species;
+    let Temper::Shy { flees_within_m, .. } = world.resource::<Bestiary>().get(species).temper
+    else {
+        panic!("a stag is shy");
+    };
+    {
+        let mut creature = world.get_mut::<Creature>(stag).unwrap();
+        (creature.state, creature.pace) = (State::Flee(5.0), Pace::Calm);
+    }
+    // Within its flight distance, past its bolting distance: it walks on across.
+    let player = test_player(&mut world, ground + Vec3::X * flees_within_m * 0.7);
+    world.run_system_once(think).unwrap();
+    let creature = world.get::<Creature>(stag).unwrap();
+    assert!(
+        matches!(creature.state, State::Flee(_)),
+        "{:?}",
+        creature.state
+    );
+    assert_eq!(creature.pace, Pace::Calm);
+    // Close: it runs.
+    world.get_mut::<Transform>(player).unwrap().translation =
+        ground + Vec3::X * bolts_within(flees_within_m) * 0.5;
+    world.run_system_once(think).unwrap();
+    assert_ne!(world.get::<Creature>(stag).unwrap().pace, Pace::Calm);
+}

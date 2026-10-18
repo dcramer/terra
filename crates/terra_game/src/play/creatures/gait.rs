@@ -98,8 +98,9 @@ pub fn on_foot(speed: f32, about: &SpeciesDef) -> (bool, f32) {
 }
 
 /// How often an animal startled ahead of a player coming on dashes across their way to the
-/// other side, rather than breaking away on its own side.
-pub const CROSSES: f32 = 0.4;
+/// other side, rather than breaking away on its own side: seldom, since one dashing across
+/// ends beside the runner's way ahead of him (lake film r9).
+pub const CROSSES: f32 = 0.15;
 /// It dashes across only with so long a lead on them, metres along their way.
 const CROSSES_AHEAD_M: f32 = 6.0;
 

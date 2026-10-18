@@ -277,8 +277,19 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     var colour = cloud_colour * cover;
 
     // After sunset, the dusk's and the night's own colours, where the clouds leave sky.
+    // The horizon's colour keeps to a low band and is warm toward the sun's bearing; above
+    // the band its light is pale, so the sky goes from the warm band through pale to the
+    // zenith's blue. Mixed straight into the far dimmer blue zenith, the salmon horizon's red
+    // carried up the whole sky with little green: the dusk sky was magenta overhead (lake film
+    // r9, its zenith 116,74,111; split, Bevy's air gave black here and this gradient all of it).
     if sky.twilight > 0.0 {
-        var gradient = mix(sky.horizon.rgb, sky.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
+        let flat_sun = normalize(sun - up * dot(sun, up) + up * 1e-4);
+        let flat_way = normalize(direction - up * lift + up * 1e-4);
+        let bearing = max(dot(flat_way, flat_sun), 0.0);
+        let band = 1.0 - smoothstep(0.0, 0.2, lift);
+        let pale = vec3<f32>(dot(sky.horizon.rgb, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(0.94, 1.0, 1.1);
+        let horizon = mix(pale, sky.horizon.rgb, band * mix(0.3, 1.0, bearing * bearing));
+        var gradient = mix(horizon, sky.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
         gradient += sky.glow.rgb * pow(toward_sun, 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.7, lift));
         colour += gradient * sky.brightness * sky.twilight * (1.0 - cover);
     }
