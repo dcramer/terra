@@ -340,7 +340,11 @@ fn fragment(
     {
         let thick = under * max(dot(toward_eye, up), 0.02);
         let broken = noise(local * 0.9 + 31.0) * 0.6 + noise(local * 3.1 + 7.0) * 0.4;
-        edge = smoothstep(0.01, 0.07, thick + rise + (broken - 0.5) * 0.05);
+        // Its reach grows with distance, as a pixel there spans metres of a nearly flat bank:
+        // over a few centimetres the ground's own bumps of a centimetre or two stood out of
+        // the water cell by cell, a checkerboard of mud and sky round every pool from high.
+        let reach = 0.07 + distance * 0.0003;
+        edge = smoothstep(0.01, reach, thick + rise + (broken - 0.5) * 0.05 * (reach / 0.07));
     }
     // Beer's law through that depth, sharpened as the original sharpens it, and faded to deep
     // with distance (DEPTH_FOG, DEPTH_FOG_FADE).

@@ -504,7 +504,16 @@ fn meadow_tones(world: vec3<f32>, lush: f32) -> vec3<f32> {
     let drift = noise(world * 0.021 + 17.0) * 0.6 + noise(world * 0.07 + 29.0) * 0.4;
     let l = clamp(lush + (drift - 0.5) * 0.8, 0.0, 1.0);
     let shade = mix(0.78, 1.14, noise(world * 0.045 + 41.0));
-    return mix(ground.grass_dry.rgb, ground.grass_lush.rgb, l) * shade;
+    // Nearer the eye's scale from high: tussocks and trodden lines a few metres across mottle
+    // the sward, a darker clump of rush or bramble stands here and there, and drier stalks gone
+    // to seed pale whole patches. Without them, from a few hundred metres the drifts alone
+    // read as one olive felt (settlement film, 4-20 s).
+    let mottle = mix(0.8, 1.16, noise(world * 0.31 + 53.0) * 0.65 + noise(world * 0.9 + 59.0) * 0.35);
+    let clump = smoothstep(0.62, 0.76, noise(world * 0.13 + 61.0)) * 0.55;
+    let seeded = smoothstep(0.55, 0.85, noise(world * 0.035 + 67.0)) * 0.45;
+    let sward = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, l);
+    let stalks = mix(sward, ground.grass_dry.rgb * vec3<f32>(1.3, 1.2, 0.85), seeded);
+    return mix(stalks, ground.grass_lush.rgb * vec3<f32>(0.62, 0.7, 0.55), clump) * shade * mottle;
 }
 
 // Stripes down the fall line round a point, laid cell by cell as the ground's gullies are
