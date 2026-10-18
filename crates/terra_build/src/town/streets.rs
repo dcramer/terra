@@ -57,9 +57,9 @@ pub(super) fn extent(outline: &[Vec2], way: Vec2) -> (f32, f32) {
 /// The streets out of the square: the main street out of either end along the contour, and
 /// for some squares a third, from a corner or a side, up or down the slope until it can
 /// turn along it.
-pub(super) fn streets(seed: u32, square: &Square, heights: Heights) -> Vec<Street> {
+pub(super) fn streets(seed: u32, square: &Square, heights: Heights, longer: f32) -> Vec<Street> {
     let (along, across) = (square.along, square.across);
-    let long = |salt: u32| 80.0 + hash::unit(hash::of(&[seed, 3, salt])) * 25.0;
+    let long = |salt: u32| (80.0 + hash::unit(hash::of(&[seed, 3, salt])) * 25.0) * longer;
     let mut starts: Vec<(Vec2, Vec2, f32, f32)> = Vec::new();
     match square.shape {
         SquareShape::Triangle => {

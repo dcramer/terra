@@ -129,9 +129,9 @@ impl MarketTown {
     /// last houses, so the settlement looks over water to the forest and the range, as a
     /// village is founded by water.
     pub const SETTLEMENT: MarketTown = MarketTown {
-        clearing_m: 105.0,
-        clearing_edge_m: 35.0,
-        water_m: Some((95.0, 450.0, 2_000.0)),
+        clearing_m: 210.0,
+        clearing_edge_m: 45.0,
+        water_m: Some((230.0, 420.0, 40_000.0)),
         ..MarketTown::DEMO
     };
 

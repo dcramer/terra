@@ -303,3 +303,47 @@ fn builders_sites_stand_outside_every_building_facing_their_own() {
         }
     }
 }
+
+#[test]
+fn a_walled_town_closes_its_houses_in_with_a_gate_over_its_streets_and_its_castle_last() {
+    let size = Size {
+        buildings: (80, 90),
+        streets: 1.6,
+        walled: true,
+    };
+    for ground in [flat, rolling] {
+        let town = town_sized(2, KINDS, &ground, &size);
+        let (houses, works) = town.buildings.split_at(town.works);
+        assert!(town.homes.len() >= 70, "{} homes", town.homes.len());
+        assert_eq!(works.last().map(|b| b.name.as_str()), Some("the castle"));
+        let gates = works
+            .iter()
+            .filter(|b| b.name.contains("gatehouse"))
+            .count();
+        let lengths = works.iter().filter(|b| b.name.contains("length")).count();
+        eprintln!(
+            "walled town: {} homes, {} buildings, {} works: {gates} gates, {lengths} lengths",
+            town.homes.len(),
+            houses.len(),
+            works.len()
+        );
+        assert_eq!(gates, town.streets.len(), "a gate over each street");
+        // No work stands on a house, a yard or the square.
+        for (w, work) in town.footprints[town.works..].iter().enumerate() {
+            for (h, house) in town.footprints[..town.works].iter().enumerate() {
+                for (a, b) in work.iter().flat_map(|p| house.iter().map(move |q| (p, q))) {
+                    assert!(
+                        polygons(a, b) > 0.0,
+                        "{} stands on {}",
+                        works[w].name,
+                        houses[h].name
+                    );
+                }
+            }
+            for (_, yard) in &town.yards {
+                assert!(work.iter().all(|p| polygons(p, yard) > 0.0));
+            }
+            assert!(work.iter().all(|p| polygons(p, &town.square.outline) > 0.0));
+        }
+    }
+}

@@ -44,6 +44,7 @@ mod paths;
 mod plots;
 mod streets;
 mod svg;
+mod walls;
 pub use enclosure::{Enclosure, enclosure};
 pub use furnish::{FURNISHING, Fence, FenceKind, Furnishing};
 use geometry::{along_line, from_street, line_length, turned_box};
@@ -275,6 +276,28 @@ pub struct Town {
     /// The fences round its yards, a module at a time (D346).
     pub fences: Vec<Fence>,
     pub paths: Paths,
+    /// Where its works begin among its buildings: its wall's lengths, towers and gates, and
+    /// the castle last of all; as many as its buildings if it is open.
+    pub works: usize,
+}
+
+/// How big a town is laid (D381): how many buildings, at least and at most, sheds and walls
+/// not counted; how much longer than a market town's its streets run; and whether a wall with
+/// towers and gates closes it round, a castle on the highest ground beside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Size {
+    pub buildings: (usize, usize),
+    pub streets: f32,
+    pub walled: bool,
+}
+
+impl Size {
+    /// A market town of thirty to forty houses along streets of 80 to 105 metres, open.
+    pub const MARKET: Size = Size {
+        buildings: BUILDINGS,
+        streets: 1.0,
+        walled: false,
+    };
 }
 
 /// The ground under a town: its height in metres at a place east and south of the middle.
@@ -328,6 +351,12 @@ pub const CLEAR_M: f32 = 0.45;
 /// The town's buildings, square, streets, things and paths from its seed, on the ground
 /// `heights` gives: the same seed and ground, the same town.
 pub fn town(seed: u32, picks: impl Picks + Copy, heights: Heights) -> Town {
+    town_sized(seed, picks, heights, &Size::MARKET)
+}
+
+/// A town of a size (D381): as [`town`], its buildings as many and its streets as long as
+/// `size` says, and walled with a castle over it if it asks.
+pub fn town_sized(seed: u32, picks: impl Picks + Copy, heights: Heights, size: &Size) -> Town {
     let (along, uphill) = contour(heights, Vec2::ZERO, 8.0);
     let shape = match hash::of(&[seed, 1]) % 3 {
         0 => SquareShape::Long,
@@ -335,7 +364,7 @@ pub fn town(seed: u32, picks: impl Picks + Copy, heights: Heights) -> Town {
         _ => SquareShape::Widened,
     };
     let square = square(seed, shape, along, uphill);
-    let streets = streets(seed, &square, heights);
+    let streets = streets(seed, &square, heights, size.streets);
     let mut town = Town {
         square,
         streets,
@@ -347,12 +376,17 @@ pub fn town(seed: u32, picks: impl Picks + Copy, heights: Heights) -> Town {
         things: Vec::new(),
         fences: Vec::new(),
         paths: Paths::default(),
+        works: 0,
     };
     town.on_the_square(seed);
-    town.plots(seed, picks);
+    town.plots(seed, picks, size.buildings);
     town.yards(seed, picks);
     town.furnish(seed);
     town.ends();
+    town.works = town.buildings.len();
+    if size.walled {
+        town.walls(seed, picks, heights);
+    }
     town.paths();
     town.unfurnish_cut_off();
     town

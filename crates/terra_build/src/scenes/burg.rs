@@ -55,6 +55,7 @@ type Box3 = ([i32; 3], [i32; 3]);
 /// way its ridge runs, and its covering.
 type Roof = (BTreeSet<[i32; 2]>, i32, Style, Option<bool>, Kind);
 
+#[derive(Default)]
 struct Plan {
     ops: Vec<BuildOp>,
     roofs: Vec<Roof>,
@@ -158,6 +159,41 @@ impl Plan {
         self.windows(jetty, stone + 2, 1, 4);
         self.roof(jetty, (stone + 6) / 6 - 1, Style::Hip, None, m.shakes);
     }
+
+    /// A gatehouse of stone round `[gx0, gz0, gx1, z1]`, three cubes thick to a tower's
+    /// height, timber floors in it, a passage `half` cubes either side of x = 0 through it
+    /// along z, five metres high, and a jettied timber storey over it under a hip roof.
+    fn gatehouse(&mut self, [gx0, gz0, gx1, z1]: [i32; 4], half: i32, m: &Materials) {
+        self.ring([gx0, gz0, gx1, z1], 0, TOWER_STONE - 1, 3, m.stone);
+        self.solid(([gx0 + 3, 11, gz0 + 3], [gx1 - 3, 11, z1 - 3]), m.beams);
+        self.solid(([gx0 + 3, 17, gz0 + 3], [gx1 - 3, 17, z1 - 3]), m.beams);
+        self.clear(([-half, 0, gz0], [half - 1, 9, z1]));
+        self.windows([gx0, gz0, gx1, z1], 13, 3, 5);
+        let jetty = [gx0 - 1, gz0 - 1, gx1 + 1, z1 + 1];
+        self.solid(
+            (
+                [gx0 - 1, TOWER_STONE - 1, gz0 - 1],
+                [gx1 + 1, TOWER_STONE - 1, z1 + 1],
+            ),
+            m.beams,
+        );
+        self.ring(jetty, TOWER_STONE, TOWER_STONE + 5, 1, m.beams);
+        self.windows(jetty, TOWER_STONE + 2, 1, 4);
+        self.roof(jetty, 4, Style::Hip, None, m.shakes);
+    }
+
+    /// Its shortcuts, the roofs last, each over what stands by then.
+    fn finish(self) -> Vec<BuildOp> {
+        let mut walls = Base::from_shortcuts(&self.ops);
+        let mut ops = self.ops;
+        for (footprint, storey, style, along_x, kind) in self.roofs {
+            let height = roofer::field(&footprint, style, along_x);
+            let roofed = roofer::put_up(&walls, &footprint, storey, kind, &height);
+            walls.apply_shortcuts(&roofed);
+            ops.extend(roofed);
+        }
+        ops
+    }
 }
 
 /// The castle's shortcuts.
@@ -198,22 +234,7 @@ pub fn burg(m: Materials) -> Vec<BuildOp> {
     // The gate through the south side, three metres wide and five high, under a gatehouse
     // of stone over the curtain, its top storey of timber.
     let (gx0, gx1, gz0) = (-7, 6, -12);
-    plan.ring([gx0, gz0, gx1, z1], 0, TOWER_STONE - 1, 3, m.stone);
-    plan.solid(([gx0 + 3, 11, gz0 + 3], [gx1 - 3, 11, z1 - 3]), m.beams);
-    plan.solid(([gx0 + 3, 17, gz0 + 3], [gx1 - 3, 17, z1 - 3]), m.beams);
-    plan.clear(([-3, 0, gz0], [2, 9, z1]));
-    plan.windows([gx0, gz0, gx1, z1], 13, 3, 5);
-    let gate_jetty = [gx0 - 1, gz0 - 1, gx1 + 1, z1 + 1];
-    plan.solid(
-        (
-            [gx0 - 1, TOWER_STONE - 1, gz0 - 1],
-            [gx1 + 1, TOWER_STONE - 1, z1 + 1],
-        ),
-        m.beams,
-    );
-    plan.ring(gate_jetty, TOWER_STONE, TOWER_STONE + 5, 1, m.beams);
-    plan.windows(gate_jetty, TOWER_STONE + 2, 1, 4);
-    plan.roof(gate_jetty, 4, Style::Hip, None, m.shakes);
+    plan.gatehouse([gx0, gz0, gx1, z1], 3, &m);
     // Hoardings along every run of the curtain but the gatehouse's: a floor on beams carried
     // two cubes out over the outer face, timber walls a storey high along its outer edge and
     // the wall's inner face, loopholes in the outer, under a gable along the run. They run on
@@ -341,15 +362,70 @@ pub fn burg(m: Materials) -> Vec<BuildOp> {
             plan.roof(shed, 0, Style::Gable, Some(false), m.shakes);
         }
     }
-    // The roofs, each over what stands by then.
-    let mut walls = Base::from_shortcuts(&plan.ops);
-    let mut ops = plan.ops;
-    for (footprint, storey, style, along_x, kind) in plan.roofs {
-        let height = roofer::field(&footprint, style, along_x);
-        let roofed = roofer::put_up(&walls, &footprint, storey, kind, &height);
-        walls.apply_shortcuts(&roofed);
-        ops.extend(roofed);
+    plan.finish()
+}
+
+/// How deep a town's wall and its castle go into the ground under their floor, in cubes: a
+/// footing, so a length laid level on falling ground stands on it at its low end (the build
+/// is lifted to the highest ground under it).
+const FOOTING: i32 = 5;
+/// A town wall's curtain: its thickness and its height to the wall-walk.
+const TOWN_THICK: i32 = 3;
+const TOWN_HIGH: i32 = 14;
+
+/// A length of a town's curtain wall (D381), `long` cubes along x with its middle at x = 0,
+/// its outer face on z = 0 and the town to -Z: stone from its footing to the wall-walk, and a
+/// parapet of merlons along its outer edge, as a medieval town's walls stood.
+pub fn curtain(m: Materials, long: i32) -> Vec<BuildOp> {
+    let mut plan = Plan::default();
+    let (x0, x1) = (-long / 2, long - long / 2 - 1);
+    plan.solid(
+        ([x0, -FOOTING, -TOWN_THICK], [x1, TOWN_HIGH - 1, -1]),
+        m.stone,
+    );
+    plan.solid(([x0, TOWN_HIGH, -1], [x1, TOWN_HIGH, -1]), m.stone);
+    for x in (x0..=x1).step_by(3) {
+        plan.solid(([x, TOWN_HIGH + 1, -1], [x, TOWN_HIGH + 2, -1]), m.stone);
     }
+    plan.finish()
+}
+
+/// A tower of a town's wall (D381), standing out of it at a corner or along a long side: a
+/// castle's flanking tower, hollow, floored and jettied, its foot on z = 0 a metre and a half
+/// out past the curtain's outer face, which runs on z = 3 with the town to +Z, its door to the
+/// town.
+pub fn wall_tower(m: Materials) -> Vec<BuildOp> {
+    let mut plan = Plan::default();
+    const SIDE: i32 = 10;
+    plan.ring(
+        [-SIDE / 2, 0, SIDE / 2 - 1, SIDE - 1],
+        -FOOTING,
+        -1,
+        2,
+        m.stone,
+    );
+    plan.tower([-SIDE / 2, 0], SIDE, 2, 22, 11, &m);
+    plan.finish()
+}
+
+/// A town's gate (D381): a gatehouse over the street through the wall, its passage four
+/// metres wide, the street running along z through it, its outer face on z = 0.
+pub fn town_gate(m: Materials) -> Vec<BuildOp> {
+    let mut plan = Plan::default();
+    plan.ring([-8, -12, 7, -1], -FOOTING, -1, 3, m.stone);
+    plan.gatehouse([-8, -12, 7, -1], 4, &m);
+    plan.finish()
+}
+
+/// The castle built last over a town (D381): the burg on a stone footing all round its
+/// curtain and towers, so it stands level on falling ground.
+pub fn castle(m: Materials) -> Vec<BuildOp> {
+    let mut ops = vec![BuildOp::Fill {
+        min: [-WIDE / 2 - 4, -FOOTING, -DEEP - 4],
+        max: [WIDE / 2 + 3, -1, 3],
+        cube: Some(Cube::new(m.stone, Fill::Solid)),
+    }];
+    ops.extend(burg(m));
     ops
 }
 

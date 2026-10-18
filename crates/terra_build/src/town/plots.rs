@@ -7,8 +7,8 @@ impl Town {
     /// the next of the rules' in the seed's order that fits, its door to the way, until the
     /// town has its count. The first on the main street is the smithy: a woodshed open to
     /// the street with a forge before it.
-    pub(super) fn plots(&mut self, seed: u32, picks: impl Picks + Copy) {
-        let want = BUILDINGS.0 + hash::of(&[seed, 12]) as usize % (BUILDINGS.1 - BUILDINGS.0 + 1);
+    pub(super) fn plots(&mut self, seed: u32, picks: impl Picks + Copy, count: (usize, usize)) {
+        let want = count.0 + hash::of(&[seed, 12]) as usize % (count.1 - count.0 + 1);
         let mut queue: Vec<(Plan, Scheme, Roof, i32)> = village::every_building()
             .into_iter()
             // Houses, not sheds: a lean-to's one tall gable reads as a house half built

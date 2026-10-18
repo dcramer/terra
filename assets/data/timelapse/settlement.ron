@@ -14,7 +14,7 @@
     hours: (7.5, 8.3),
     claim: 0.0,
     first: 0.3,
-    last: 10.5,
+    last: 11.0,
     takes: (2.0, 3.5),
     growth: 0.4,
     settled_after: 0.6,
@@ -32,5 +32,10 @@
         (item: "Log", at: (1.9, 1.72), lift: 0.4),
         (item: "Log", at: (1.9, 2.17), lift: 0.4),
     ],
-    steps_a_frame: 900,
+    steps_a_frame: 4000,
+    // Grown big, as the camera goes far out (the developer: "settlement can be bigger since
+    // we are moving far far away, you can even imagine it finishing off with like castle
+    // and walls"): eighty to ninety houses along streets half as long again as a market
+    // town's, then its wall, towers and gates going up from 11.5 s, the castle beside it last.
+    town: (buildings: (80, 90), streets: 1.6, walls: (11.5, 14.5)),
 )

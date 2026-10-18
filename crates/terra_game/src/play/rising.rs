@@ -84,6 +84,31 @@ pub struct Timelapse {
     /// At most so many building steps a frame, across the whole settlement.
     #[serde(default = "Timelapse::most_steps")]
     pub steps_a_frame: u32,
+    /// How big the town laid is, a market town's if none.
+    #[serde(default)]
+    pub town: Option<Grown>,
+}
+
+/// How big a settlement grows (D381): how many buildings, at least and at most, sheds and
+/// yard walls not counted, and how much longer its streets run than a market town's; and, if
+/// it is walled, when its wall's first piece starts going up and when the castle does, last.
+#[derive(Deserialize, Clone, Copy, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct Grown {
+    pub buildings: (usize, usize),
+    pub streets: f32,
+    #[serde(default)]
+    pub walls: Option<(f32, f32)>,
+}
+
+impl Grown {
+    pub fn size(&self) -> terra_build::town::Size {
+        terra_build::town::Size {
+            buildings: self.buildings,
+            streets: self.streets,
+            walled: self.walls.is_some(),
+        }
+    }
 }
 
 /// A catalogue item a site is dressed with: by its file, where it lies in metres across the
@@ -153,11 +178,55 @@ impl Timelapse {
 }
 
 /// When each building starts and how long it takes, from the nearest the square to the
-/// furthest: the first `count`, by their doors' distances and how big each is in cubes.
-pub fn schedule(lapse: &Timelapse, distances: &[f32], sizes: &[usize]) -> Vec<Option<(f32, f32)>> {
+/// furthest: the first `count`, by their doors' distances and how big each is in cubes. The
+/// town's works from `works` on (its wall, towers and gates, the castle last) go up after,
+/// in their own while if the town is walled, from the nearest the square, the castle last.
+pub fn schedule(
+    lapse: &Timelapse,
+    distances: &[f32],
+    sizes: &[usize],
+    works: usize,
+) -> Vec<Option<(f32, f32)>> {
+    let works = works.min(distances.len());
+    let mut out = spread(
+        lapse,
+        (lapse.first, lapse.last, lapse.growth),
+        lapse.buildings,
+        &distances[..works],
+        &sizes[..works],
+    );
+    let walls = lapse.town.and_then(|town| town.walls);
+    let mut later = vec![None; distances.len() - works];
+    if let Some((from, to)) = walls
+        && let Some((_, rest)) = distances[works..].split_last()
+    {
+        // The castle (the last of them) at the end; the wall's pieces evenly before it.
+        let end = from + (to - from) * rest.len() as f32 / (rest.len() as f32 + 1.0);
+        later = spread(
+            lapse,
+            (from, end, 1.0),
+            None,
+            rest,
+            &sizes[works..distances.len() - 1],
+        );
+        later.push(Some((to, lapse.takes.1)));
+    }
+    out.extend(later);
+    out
+}
+
+/// When each of some buildings starts between `first` and `last`, gathering by `growth`,
+/// and how long it takes: the nearest the square first, the first `count` of them.
+fn spread(
+    lapse: &Timelapse,
+    (first, last, growth): (f32, f32, f32),
+    count: Option<usize>,
+    distances: &[f32],
+    sizes: &[usize],
+) -> Vec<Option<(f32, f32)>> {
     let mut order: Vec<usize> = (0..distances.len()).collect();
     order.sort_by(|&a, &b| distances[a].total_cmp(&distances[b]));
-    let count = lapse.buildings.unwrap_or(order.len()).min(order.len());
+    let count = count.unwrap_or(order.len()).min(order.len());
     let (small, large) = sizes
         .iter()
         .fold((usize::MAX, 0), |(lo, hi), &s| (lo.min(s), hi.max(s)));
@@ -168,7 +237,7 @@ pub fn schedule(lapse: &Timelapse, distances: &[f32], sizes: &[usize]) -> Vec<Op
         } else {
             0.0
         };
-        let start = lapse.first + (lapse.last - lapse.first) * libm::powf(share, lapse.growth);
+        let start = first + (last - first) * libm::powf(share, growth);
         let size = if large > small {
             (sizes[index] - small) as f32 / (large - small) as f32
         } else {
@@ -428,7 +497,7 @@ fn prepare(
         distances[rise.index] = Vec2::from(town.buildings[rise.index].at).length();
         sizes[rise.index] = rise.whole.cubes().count();
     }
-    let times = schedule(&rising.lapse, &distances, &sizes);
+    let times = schedule(&rising.lapse, &distances, &sizes, town.works);
     rising.up = times.iter().map(Option::is_none).collect();
     rising.finished = vec![None; count];
     rising.times = times;
@@ -477,7 +546,10 @@ fn prepare(
         }
     }
     // The clearing a meadow, its loose stones and brush cleared for the plots.
-    mow.write(MowAround(market.middle, CLEARED_M));
+    mow.write(MowAround(
+        market.middle,
+        CLEARED_M * rising.lapse.town.map_or(1.0, |t| t.streets),
+    ));
     // Nobody builds where nothing is going up yet.
     // The hour its people live at, their day's own pace, not the sun's (`town::live`).
     let hours = if market.lived.is_finite() {
@@ -698,7 +770,10 @@ fn keep_clear(
     const EVERY_S: f32 = 1.0;
     if rising.prepared && (rising.t - *last).abs() >= EVERY_S {
         *last = rising.t;
-        mow.write(MowAround(market.middle, CLEARED_M));
+        mow.write(MowAround(
+            market.middle,
+            CLEARED_M * rising.lapse.town.map_or(1.0, |t| t.streets),
+        ));
     }
 }
 
@@ -841,85 +916,4 @@ fn reveal(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lapse() -> Timelapse {
-        Timelapse::parse(
-            "(seconds: 40.0, hours: (7.0, 17.0), first: 2.0, last: 26.0, takes: (6.0, 12.0), buildings: Some(3), common: (10.0, 30.0))",
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn the_nearest_buildings_go_up_first_and_the_biggest_take_longest() {
-        let times = schedule(&lapse(), &[30.0, 5.0, 50.0, 12.0], &[400, 1600, 900, 100]);
-        // Three of four, the furthest left for later.
-        assert!(times[2].is_none());
-        let (a, b, d) = (times[0].unwrap(), times[1].unwrap(), times[3].unwrap());
-        assert!(b.0 < d.0 && d.0 < a.0, "{times:?}");
-        assert_eq!(b.0, 2.0);
-        assert_eq!(a.0, 26.0);
-        assert!(b.1 > a.1 && a.1 > d.1, "{times:?}");
-        assert_eq!(b.1, 12.0);
-    }
-
-    #[test]
-    fn a_settlement_growing_starts_few_houses_at_first_and_more_later() {
-        let mut lapse = lapse();
-        lapse.buildings = None;
-        lapse.growth = 0.6;
-        let distances: Vec<f32> = (0..20).map(|i| i as f32).collect();
-        let times = schedule(&lapse, &distances, &[100; 20]);
-        let starts: Vec<f32> = times.iter().map(|t| t.unwrap().0).collect();
-        // The gap after the first house is wider than the gaps near the end.
-        assert!(
-            starts[1] - starts[0] > 3.0 * (starts[19] - starts[18]),
-            "{starts:?}"
-        );
-        assert_eq!(starts[0], lapse.first);
-        assert!((starts[19] - lapse.last).abs() < 1e-4);
-    }
-
-    #[test]
-    fn a_time_lapse_without_people_shows_nobody_however_built() {
-        let mut rising = Rising::new(lapse(), 0);
-        rising.up = vec![true, false];
-        assert!(rising.shows(true, Some(1)) && rising.shows(false, Some(0)));
-        assert!(!rising.shows(false, Some(1)));
-        assert!(rising.wildlife());
-        rising.lapse = Timelapse::parse(
-            "(seconds: 40.0, hours: (7.0, 17.0), first: 2.0, last: 26.0, takes: (6.0, 12.0), common: (10.0, 30.0), people: false)",
-        )
-        .unwrap();
-        for (builder, home) in [(true, Some(1)), (false, Some(0)), (false, None)] {
-            assert!(!rising.shows(builder, home), "{builder} {home:?}");
-        }
-        assert!(
-            !rising.wildlife(),
-            "no wild animals in a time-lapse of the buildings alone"
-        );
-    }
-
-    #[test]
-    fn the_clock_runs_from_its_first_hour_to_its_last() {
-        let lapse = lapse();
-        assert_eq!(lapse.hour(-1.0), 7.0);
-        assert_eq!(lapse.hour(20.0), 12.0);
-        assert_eq!(lapse.hour(99.0), 17.0);
-    }
-
-    #[test]
-    fn every_time_lapse_file_reads() {
-        let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/data/timelapse");
-        let mut read = 0;
-        for entry in std::fs::read_dir(dir).expect("the time-lapses") {
-            let path = entry.unwrap().path();
-            let text = std::fs::read_to_string(&path).unwrap();
-            Timelapse::parse(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()));
-            read += 1;
-        }
-        assert!(read > 0);
-    }
-}
+mod tests;
