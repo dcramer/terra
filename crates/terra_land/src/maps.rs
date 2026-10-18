@@ -5,22 +5,8 @@
 
 use std::path::Path;
 
-/// `f` over every item, on every core, in order.
-pub fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> {
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let chunk = items.len().div_ceil(threads * 4).max(1);
-    std::thread::scope(|scope| {
-        let f = &f;
-        let parts: Vec<_> = items
-            .chunks(chunk)
-            .map(|inputs| scope.spawn(move || inputs.iter().map(f).collect::<Vec<U>>()))
-            .collect();
-        parts
-            .into_iter()
-            .flat_map(|part| part.join().expect("a worker panicked"))
-            .collect()
-    })
-}
+/// `f` over every item, on every core, in order (`terra_gen::par`, its home).
+pub use terra_gen::par::map as par_map;
 
 /// A colour ramp: colours at evenly spaced stops from the low end to the high.
 #[derive(Clone, Copy, Debug)]

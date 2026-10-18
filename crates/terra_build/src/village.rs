@@ -1555,12 +1555,12 @@ mod tests {
         let palette = Palette::read(&read, &|name| names.get(name).copied(), &kits).unwrap();
         let maps = crate::relief::Maps::default();
         let progress = crate::sections::Progress::Whole;
-        for (building, base) in each_sort(&palette) {
-            let whole = crate::sections::Whole::lay(&base, &kits);
+        terra_gen::par::map(&each_sort(&palette), |(building, base)| {
+            let whole = crate::sections::Whole::lay(base, &kits);
             let mut meshes = Vec::new();
-            for at in crate::sections::drawable(&base) {
+            for at in crate::sections::drawable(base) {
                 let section = crate::sections::Section {
-                    base: &base,
+                    base,
                     kits: &kits,
                     maps: &maps,
                     at: glam::IVec3::from_array(at),
@@ -1579,6 +1579,6 @@ mod tests {
             }
             let fights = crate::inspect::fights(meshes.iter().map(|(n, k, s)| (n.clone(), *k, s)));
             assert!(fights.is_empty(), "{}: {fights:?}", building.name);
-        }
+        });
     }
 }

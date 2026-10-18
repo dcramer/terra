@@ -12,7 +12,7 @@ use crate::root;
 use std::fmt::Write as _;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -55,6 +55,7 @@ pub(crate) struct Step {
     logs: PathBuf,
     rerun: Option<String>,
     on_stderr: bool,
+    flag_over: Option<u64>,
 }
 
 impl Step {
@@ -66,7 +67,16 @@ impl Step {
             logs: root().join(logs),
             rerun: None,
             on_stderr: false,
+            flag_over: None,
         }
+    }
+
+    /// Names each test that ran longer than `secs`, from the test harness's lines as they come
+    /// (its pretty format, `--format=pretty`: it warns of a test still running after a minute
+    /// and names each as it ends), so a test grown slow shows in the push it lands in (D406).
+    pub(crate) fn flag_tests_over(mut self, secs: u64) -> Self {
+        self.flag_over = Some(secs);
+        self
     }
 
     /// The command that runs this step alone, printed when it fails.
@@ -137,11 +147,22 @@ impl Step {
                 return ok;
             }
         };
+        let (stdout, timed) = match self.flag_over {
+            Some(_) => (Stdio::piped(), Some(out)),
+            None => (Stdio::from(out), None),
+        };
+        let mut reader = None;
         let status = command
-            .stdout(out)
+            .stdout(stdout)
             .stderr(err)
             .spawn()
-            .and_then(|mut child| self.wait(&mut child, started));
+            .and_then(|mut child| {
+                if let (Some(pipe), Some(out)) = (child.stdout.take(), timed) {
+                    reader = Some(std::thread::spawn(move || TestTimes::read(pipe, out)));
+                }
+                self.wait(&mut child, started)
+            });
+        let slow = reader.and_then(|r| r.join().ok()).unwrap_or_default();
         let ok = status.as_ref().is_ok_and(ExitStatus::success);
         let mut text = std::fs::read_to_string(&log).unwrap_or_default();
         if let Err(error) = &status {
@@ -150,6 +171,14 @@ impl Step {
         }
         let body = text.split_once("\n\n").map_or("", |(_, body)| body);
         self.verdict(ok, started.elapsed(), body, Some(&log));
+        let over = self.flag_over.unwrap_or(u64::MAX);
+        for (name, took) in slow.into_iter().filter(|(_, took)| took.as_secs() > over) {
+            self.say(&format!(
+                "  ⚠ {name} took {}, over {over}s: parallelise it, split it or sample it \
+                 before a push (D406)",
+                duration(took)
+            ));
+        }
         ok
     }
 
@@ -229,6 +258,43 @@ impl Step {
         };
         if let Some(rerun) = rerun {
             self.say(&format!("  run it alone: {rerun}"));
+        }
+    }
+}
+
+/// How long the tests that ran over a minute took, from the test harness's pretty lines:
+/// `test <name> has been running for over 60 seconds` when one passes a minute, and
+/// `test <name> ... ok` when it ends. A test ending is timed from its warning.
+#[derive(Default)]
+struct TestTimes {
+    warned: std::collections::HashMap<String, Instant>,
+    slow: Vec<(String, Duration)>,
+}
+
+impl TestTimes {
+    /// Copies the harness's lines into its log as they come, timing the slow tests.
+    fn read(pipe: impl std::io::Read, mut log: std::fs::File) -> Vec<(String, Duration)> {
+        use std::io::BufRead;
+        let mut times = TestTimes::default();
+        for line in std::io::BufReader::new(pipe).lines().map_while(Result::ok) {
+            let _ = writeln!(log, "{line}");
+            times.saw(&line, Instant::now());
+        }
+        times.slow
+    }
+
+    fn saw(&mut self, line: &str, at: Instant) {
+        let Some(rest) = line.strip_prefix("test ") else {
+            return;
+        };
+        if let Some((name, secs)) = rest.split_once(" has been running for over ") {
+            let secs: u64 = secs.trim_end_matches(" seconds").parse().unwrap_or(60);
+            let began = at.checked_sub(Duration::from_secs(secs)).unwrap_or(at);
+            self.warned.insert(name.to_string(), began);
+        } else if let Some((name, _)) = rest.rsplit_once(" ... ")
+            && let Some(began) = self.warned.remove(name)
+        {
+            self.slow.push((name.to_string(), at.duration_since(began)));
         }
     }
 }
@@ -526,6 +592,27 @@ test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; 
 
 error: test failed, to rerun pass `-p terra_core --lib`
 ";
+
+    #[test]
+    fn a_test_is_timed_from_the_harnesss_minute_warning_to_its_end() {
+        let start = Instant::now();
+        let mut times = TestTimes::default();
+        let at = |secs| start + Duration::from_secs(secs);
+        times.saw("test a::quick ... ok", at(1));
+        times.saw("test a::slow has been running for over 60 seconds", at(60));
+        times.saw(
+            "test b::slower has been running for over 60 seconds",
+            at(70),
+        );
+        times.saw("test a::slow ... ok", at(100));
+        times.saw("test b::slower ... FAILED", at(300));
+        let took: Vec<(&str, u64)> = times
+            .slow
+            .iter()
+            .map(|(name, took)| (name.as_str(), took.as_secs()))
+            .collect();
+        assert_eq!(took, [("a::slow", 100), ("b::slower", 290)]);
+    }
 
     #[test]
     fn a_clippy_failure_is_its_errors_each_once() {

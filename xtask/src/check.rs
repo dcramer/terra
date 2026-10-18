@@ -28,7 +28,7 @@ const BEVY_CRATES: [&str; 3] = ["terra_game", "terra_sandbox", "terra_world"];
 /// marked where it is written too. A test that slows past that joins them.
 const SLOW_TESTS: &[&str] = &[
     // terra_build's drawing swept over every case: minutes each.
-    "sections::tests::a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest",
+    "sections::tests::keys::a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest",
     "sections::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in",
     "sections::tests::every_junction_case_is_drawn_without_a_fault",
     "sections::tests::kits_read_again_with_one_taken_out_added_or_reordered_lay_and_draw_without_fault",
@@ -79,6 +79,10 @@ const SLOW_TESTS: &[&str] = &[
     "mountains::tests::the_ground_is_smooth_within_a_voxel",
     "planet::tests::what_to_draw_again_holds_everything_the_edits_changed_near_the_surface",
 ];
+
+/// A test the check names when it runs longer, in seconds (D406): the push waits on its
+/// slowest test, so one over this sets how long every push touching it takes.
+const SLOW_TEST_SECS: u64 = 120;
 
 /// Where the check's stages keep their logs, relative to the root.
 const LOGS: &str = "target/check";
@@ -216,12 +220,12 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         &["-q", "--message-format=short"]
     };
     let cargo = |command: &str, rest: &[String]| {
-        let mut cargo = Command::new("cargo");
+        let mut cargo = niced("cargo");
         cargo.arg(command).args(ci).args(quiet).args(rest);
         cargo
     };
     let command = |program: &str, args: &[&str]| {
-        let mut command = Command::new(program);
+        let mut command = niced(program);
         command.args(args);
         command
     };
@@ -244,13 +248,20 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         for name in SLOW_TESTS {
             tests.extend(["--skip".to_string(), name.to_string()]);
         }
+    } else {
+        tests.push("--".into());
     }
+    // A line a test, to the log alone, so the slow ones are timed (`flag_tests_over`).
+    tests.push("--format=pretty".into());
+    let test_command = cargo("test", &tests);
     let lint_and_test = |name: &str, how: How| -> (Step, How) {
         let rerun = match name {
             "clippy" => format!("cargo clippy {shown} --all-targets -- -D warnings"),
             _ => format!("cargo test {shown}"),
         };
-        let step = Step::new(name, Said::Cargo, LOGS).rerun(rerun);
+        let step = Step::new(name, Said::Cargo, LOGS)
+            .rerun(rerun)
+            .flag_tests_over(SLOW_TEST_SECS);
         if rust {
             (step, how)
         } else {
@@ -282,7 +293,7 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
             How::Here(crate::primitives::one_definition),
         ),
         lint_and_test("clippy", How::Command(cargo("clippy", &clippy))),
-        lint_and_test("tests", How::Command(cargo("test", &tests))),
+        lint_and_test("tests", How::Command(test_command)),
         tools_tests(push || all, &scope.tools),
         push_only(
             Step::new("kits", Said::Cargo, LOGS).rerun("cargo xtask kits"),
@@ -307,7 +318,7 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         ),
         ("fuzz", "cargo xtask fuzz --ratchet", fuzz),
     ] {
-        let mut run = Command::new(program);
+        let mut run = niced(program);
         run.args(args);
         stages.push(push_only(
             Step::new(name, Said::Cargo, LOGS).rerun(rerun),
@@ -340,6 +351,19 @@ fn stages(tier: Tier, scope: &Scope) -> Vec<(Step, How)> {
         How::Here(shared_crates_are_repeatable),
     ));
     stages
+}
+
+/// A command run at a lower priority, as everything the check runs is (D406): its builds and
+/// tests take every core, and renders, films and the developer's game started beside it stay
+/// responsive. `nice` is on Linux and macOS; elsewhere it runs as it is.
+fn niced(program: &str) -> Command {
+    if cfg!(unix) {
+        let mut command = Command::new("nice");
+        command.args(["-n", "10", program]);
+        command
+    } else {
+        Command::new(program)
+    }
 }
 
 /// Formatting, of the crates changed: it goes file by file, so they are all a change can

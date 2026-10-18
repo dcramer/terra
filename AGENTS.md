@@ -32,7 +32,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 ## Gates and tool output
 
-- **Gates scale with the change** (D398): a commit lints and unit-tests the changed crates in 30 s; a push tests them and what reads or depends on them, and runs the slow checks only when what they read changed. A push touching building takes minutes: give it a long timeout. `--all` runs everything. Keep a test to a few seconds or mark it `SLOW_TESTS`.
+- **Gates scale with the change** (D398): a commit lints and unit-tests the changed crates in 30 s; a push tests them and what reads or depends on them, and runs the slow checks only when what they read changed. A push touching building takes minutes: give it a long timeout. `--all` runs everything. Keep a test to a few seconds or mark it `SLOW_TESTS`; a sweep over many cases runs them on every core (`terra_gen::par::map`, D406), and the push names a test over 120 s.
 - **Gates are quiet** (D388): a line a stage. On failure read only what follows `✗`, then `target/check/<stage>.log`. `TERRA_VERBOSE=1` shows everything.
 - **A new tool or task prints the same way** (D388): a line a stage on success, only what fixes a failure, the rest in a log it names.
 - **Code health is gated** (D396): split a file over 1,000 lines or a function over 150 (`cargo xtask sizes`); call a shared primitive from its home (`terra_gen::hash`), never copy it.

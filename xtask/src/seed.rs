@@ -65,6 +65,9 @@ const BUILDS: &[&[&str]] = &[
         "artifacts",
     ],
     &["build", "-p", "terra_sandbox"],
+    // The sandbox optimised, which every render, shot, film and bench runs: Bevy in release
+    // is 4 minutes and 2.7 GB a worktree built alone (D406).
+    &["build", "--release", "-p", "terra_sandbox"],
 ];
 
 /// Under WSL, the Windows builds `play`, `win` and `bench` make, on the real GPU.
@@ -434,9 +437,17 @@ fn checkout(dir: &Path, commit: &str) -> Result<(), String> {
 
 /// The manifests a commit's dependencies are built from, a line each, as git names their
 /// contents: the workspace's `Cargo.toml`s, `Cargo.lock`, `rust-toolchain.toml` and
-/// `.cargo/config.toml`.
+/// `.cargo/config.toml`; and the builds the seed is made of, so a build added to `BUILDS` is
+/// built into the seed by the next session rather than by each worktree (D406).
 fn manifests(commit: &str) -> Option<String> {
-    output("git", &["ls-tree", "-r", commit]).map(|listing| manifest_lines(&listing))
+    let windows_builds: &[&[&str]] = if windows() { WINDOWS_BUILDS } else { &[] };
+    let builds: Vec<String> = BUILDS
+        .iter()
+        .chain(windows_builds)
+        .map(|args| args.join(" "))
+        .collect();
+    output("git", &["ls-tree", "-r", commit])
+        .map(|listing| format!("{}\nbuilds {}", manifest_lines(&listing), builds.join("; ")))
 }
 
 /// The manifest lines of `git ls-tree -r`'s listing, as `<object> <path>`.

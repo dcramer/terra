@@ -11,6 +11,7 @@
 
 pub mod hash;
 mod noise;
+pub mod par;
 mod rng;
 mod seed;
 

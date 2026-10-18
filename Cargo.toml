@@ -76,3 +76,9 @@ opt-level = 3
 
 [profile.dev.package.terra_climate]
 opt-level = 3
+
+# Building's tests sweep every kit, base and edit: optimised, the key sweep runs in 76 s, not
+# 152 s, and the roof and face sweeps in 27 s and 9 s, for 20 to 40 s more on a whole rebuild
+# of the crate; a small edit compiles in the same few seconds either way (D406).
+[profile.dev.package.terra_build]
+opt-level = 3

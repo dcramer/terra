@@ -468,6 +468,7 @@ Checks, developer tools, languages and the repository.
 | [D398](decisions/D398.md) | The gates scale with the change | Tech | Developers | Decided | The check before a commit is linters and at most fast… |
 | [D399](decisions/D399.md) | A crash leaves a capsule; state is snapped and diffed | Tech | Agent | Decided | A panic in the sandbox, and so in the play experiment… |
 | [D400](decisions/D400.md) | Agents' tasks are bounded | Tech | Developers | Decided | Every agent's brief says when it stops: a score bar… |
+| [D406](decisions/D406.md) | The push's slow sweeps run on every core, optimised, and an asset is read only by the crates that read it | Tech | Agent | Decided | A test that sweeps many independent cases runs them on… |
 
 ## Superseded and rejected
 

@@ -2,8 +2,8 @@
 //!
 //! Before a commit the change is the tracked files that differ from HEAD; before a push,
 //! everything that differs from where HEAD left origin/main (`git merge-base`), the working
-//! tree's changes included. Each file is placed: a crate's own folder is that crate, `assets/` is read
-//! by every crate, a few files outside the crates are read by the crates in [`READ_BY`],
+//! tree's changes included. Each file is placed: a crate's own folder is that crate, files outside
+//! the crates (`assets/` among them) are read by the crates in [`READ_BY`],
 //! `tools/`, the docs and the agents' folders by their own checks. A file the rules cannot
 //! place, or a change to the build itself (the workspace's manifest, its lock, the compiler,
 //! cargo's or clippy's settings), runs everything, as `--all` does.
@@ -13,9 +13,9 @@ use std::collections::BTreeSet;
 use std::process::Command;
 
 /// Files outside a crate's folder that a crate's code or tests read, by path prefix: a change
-/// there tests the crate, and before a push every crate depending on it. `assets/` is read by
-/// every crate and is not listed. A test (`every_file_a_crate_reads_is_in_read_by`) finds each
-/// such path a crate names and fails when it is not here.
+/// there tests the crate, and before a push every crate depending on it. A test
+/// (`every_file_a_crate_reads_is_in_read_by`) finds each such path a crate names, under
+/// `assets/` too, and fails when it is not here. A file may match several prefixes.
 pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     // The demos' places, `include_str!`ed by the site queries.
     ("tools/sandbox/places.ts", &["terra_land"]),
@@ -23,6 +23,21 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("docs/building-voxels.json", &["terra_build"]),
     // The kits' models and references, which the kit checker and the material bench read.
     ("art/", &["terra_build"]),
+    // The game's files (D133): the crates on Bevy load any of them through its asset server.
+    ("assets/", &["terra_world", "terra_game", "terra_sandbox"]),
+    // Building's kits, packs, items, market and settlement, and the materials its kits name,
+    // which the kit checker and the packs' tests read.
+    ("assets/data/kits/", &["terra_build"]),
+    ("assets/data/packs/", &["terra_build"]),
+    ("assets/data/items.ron", &["terra_build"]),
+    ("assets/data/market.ron", &["terra_build"]),
+    ("assets/data/settlement.ron", &["terra_build"]),
+    ("assets/data/builds.ron", &["terra_build"]),
+    ("assets/materials/", &["terra_build"]),
+    // The town's people and their day.
+    ("assets/data/life.ron", &["terra_life"]),
+    // The climate the land's places are found in.
+    ("assets/data/climate.ron", &["terra_land"]),
 ];
 
 /// Files whose change can alter how everything builds or what the gate is: these run
@@ -69,7 +84,7 @@ pub(crate) struct Scope {
     pub(crate) files: usize,
     /// The workspace's packages (crates and xtask) whose own folders changed.
     pub(crate) changed: BTreeSet<String>,
-    /// Packages that read a changed file outside their folder ([`READ_BY`], `assets/`).
+    /// Packages that read a changed file outside their folder ([`READ_BY`]).
     pub(crate) readers: BTreeSet<String>,
     /// A Rust source changed somewhere.
     pub(crate) rust: bool,
@@ -163,11 +178,7 @@ pub(crate) fn classify(files: &[String], packages: &BTreeSet<String>) -> Scope {
             (Some("xtask"), Some(_), _) => {
                 scope.changed.insert("xtask".into());
             }
-            (Some("assets"), Some(_), _) => {
-                scope.assets = true;
-                scope.readers.extend(packages.iter().cloned());
-            }
-            (Some("art"), Some(_), _) => scope.assets = true,
+            (Some("assets" | "art"), Some(_), _) => scope.assets = true,
             (Some("tools"), Some(dir), Some(_)) => {
                 scope.tools.insert(dir.to_string());
                 scope.python |= file.ends_with(".py");
@@ -345,10 +356,15 @@ mod tests {
     }
 
     #[test]
-    fn assets_are_read_by_every_crate() {
+    fn an_asset_is_read_by_the_crates_on_bevy_and_those_reading_it_alone() {
+        let bevy = ["terra_world", "terra_game", "terra_sandbox"];
         let scope = classify(&files(&["assets/data/kits/log.ron"]), &crates());
         assert!(scope.assets);
-        assert_eq!(scope.readers, crates());
+        assert_eq!(scope.readers, set(&[&bevy[..], &["terra_build"]].concat()));
+        let scope = classify(&files(&["assets/models/tree/pine.glb"]), &crates());
+        assert_eq!(scope.readers, set(&bevy));
+        let scope = classify(&files(&["assets/data/life.ron"]), &crates());
+        assert_eq!(scope.readers, set(&[&bevy[..], &["terra_life"]].concat()));
     }
 
     #[test]
@@ -405,7 +421,7 @@ mod tests {
         let root = root();
         let mut sources = Vec::new();
         assert!(crate::check::sources(&root.join("crates"), &mut sources));
-        let mut checked = 0;
+        let (mut checked, mut assets) = (0, 0);
         for file in sources {
             let text = std::fs::read_to_string(&file).unwrap();
             let package = file
@@ -418,18 +434,19 @@ mod tests {
                 .to_string_lossy()
                 .to_string();
             for literal in text.split('"').skip(1).step_by(2) {
-                let path = literal.trim_start_matches("../");
-                let outside = ["tools/", "docs/", "art/", "research/", "xtask/"]
-                    .iter()
-                    .any(|p| path.starts_with(p));
-                if !outside || !root.join(path).exists() {
+                let Some(path) = outside_path(&root, literal) else {
                     continue;
-                }
+                };
                 checked += 1;
+                assets += usize::from(path.starts_with("assets/"));
+                // A folder named is under its prefix too.
+                let under = |prefix: &str| {
+                    path.starts_with(prefix) || prefix.strip_suffix('/') == Some(path.as_str())
+                };
                 assert!(
                     READ_BY
                         .iter()
-                        .any(|(prefix, readers)| path.starts_with(prefix)
+                        .any(|(prefix, readers)| under(prefix)
                             && readers.contains(&package.as_str())),
                     "{} reads {path}: add it to READ_BY in xtask/src/scope.rs",
                     file.display()
@@ -437,8 +454,27 @@ mod tests {
             }
         }
         assert!(
-            checked > 0,
-            "no path outside the crates found: the search is wrong"
+            checked > 0 && assets > 0,
+            "no path outside the crates, or none under assets/, found: the search is wrong"
         );
+    }
+
+    /// The file outside the crates a string in a crate names, from the root: a path to a
+    /// folder outside them, or a file under `assets/` named from there (`data/life.ron`, as a
+    /// crate joins it to the folder or Bevy's asset server loads it). The folder alone is
+    /// not one: what is read in it is named after it.
+    fn outside_path(root: &std::path::Path, literal: &str) -> Option<String> {
+        let path = literal.trim_start_matches('/').trim_start_matches("../");
+        let named = ["tools/", "docs/", "art/", "research/", "xtask/", "assets/"]
+            .iter()
+            .any(|p| path.starts_with(p));
+        let path = if named {
+            path.to_string()
+        } else if path.contains('/') && !path.contains(['{', '\\']) {
+            format!("assets/{path}")
+        } else {
+            return None;
+        };
+        root.join(&path).exists().then_some(path)
     }
 }

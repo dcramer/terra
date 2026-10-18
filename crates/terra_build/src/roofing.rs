@@ -988,20 +988,19 @@ mod tests {
         // Every part of a shipped roof under a hip, a cabin's and a tower's square one, and
         // the castle's, its towers' hips tens of metres out and its keep's great gable, whose
         // battens at the ridge would cross; drawn alone: none of its faces over another of its
-        // own in one plane.
-        for name in ["shakes.ron", "slate.ron"] {
-            let kit = shipped(name);
-            for base in [cabin(Style::Hip), tower(), castle()] {
-                let surfaces = drawn(&kit, &base, |p| matches!(p, Piece::Roof { .. }));
-                for (material, surface) in &surfaces.0 {
-                    let folded = crate::inspect::self_overlap(surface);
-                    assert!(
-                        folded < 1e-4,
-                        "{name} {material:?}: {} cm² over itself",
-                        folded * 1e4
-                    );
-                }
-            }
+        // own in one plane. Each kit over each base, then each material, on a core (D406).
+        let kits = ["shakes.ron", "slate.ron"];
+        let bases = [cabin(Style::Hip), tower(), castle()];
+        let cases: Vec<_> = bases.iter().flat_map(|b| kits.map(|k| (k, b))).collect();
+        let roofs = terra_gen::par::map(&cases, |&(name, base)| {
+            let roof = drawn(&shipped(name), base, |p| matches!(p, Piece::Roof { .. })).0;
+            roof.into_iter().map(move |(m, s)| (name, m, s))
+        });
+        let surfaces: Vec<_> = roofs.into_iter().flatten().collect();
+        let folded = terra_gen::par::map(&surfaces, |(_, _, s)| crate::inspect::self_overlap(s));
+        for ((name, material, _), folded) in surfaces.iter().zip(folded) {
+            let cm2 = folded * 1e4;
+            assert!(folded < 1e-4, "{name} {material:?}: {cm2} cm² over itself");
         }
     }
 
