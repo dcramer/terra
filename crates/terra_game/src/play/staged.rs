@@ -6,7 +6,8 @@
 //! clip, looping or once and held on its last pose; `staged.move` walks it on the ground to a
 //! point at a speed, a stride clip's playback following the pace so its feet do not slide
 //! (`crate::pace`); `staged.face` turns it to a point or another figure at its turn rate; and
-//! `staged.impact` raises what a heavy blow raises where it lands (`impact`); `staged.rate`
+//! `staged.impact` raises what a heavy blow raises where it lands (`impact`), and a piece
+//! spawned `burns` keeps a fire at its foot, as a campfire; `staged.rate`
 //! runs a figure's own time slower or faster, its clip and its going, as a blow's hit-stop
 //! freezes both fighters for a few frames; and `staged.bend` turns some of its bones over its
 //! clip (`pose`). Nothing here
@@ -22,7 +23,7 @@ use crate::{appearance, character};
 use bevy::{
     animation::AnimationTargetId,
     ecs::system::SystemState,
-    gltf::{GltfAssetLabel, GltfNode},
+    gltf::{GltfAssetLabel, GltfMaterialName, GltfNode},
     platform::collections::{HashMap, HashSet},
     prelude::*,
     remote::{BrpResult, builtin_methods::parse_some},
@@ -154,7 +155,7 @@ struct Animates {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (dress, stage, animate).chain())
+    app.add_systems(Update, ((dress, stage, animate).chain(), quench))
         .add_systems(
             PostUpdate,
             pose::bend
@@ -182,6 +183,21 @@ fn fits(
         found += usize::from(model.contains(&target));
     }
     all > 0 && found as f32 >= all as f32 * FITS
+}
+
+/// A model's own flame (its part of the material `Fire`, a solid cone of orange) hidden on a
+/// figure that burns (`fire::Kindled`): the fire drawing burns in its place.
+fn quench(
+    parts: Query<(Entity, &GltfMaterialName), Added<GltfMaterialName>>,
+    parents: Query<&ChildOf>,
+    kindled: Query<(), With<terra_world::fire::Kindled>>,
+    mut commands: Commands,
+) {
+    for (part, name) in &parts {
+        if name.0 == "Fire" && parents.iter_ancestors(part).any(|up| kindled.contains(up)) {
+            commands.entity(part).insert(Visibility::Hidden);
+        }
+    }
 }
 
 /// Each figure dressed once its model and clips are in: its body, the graph of its clips, and
@@ -497,6 +513,9 @@ struct Spawn {
     bend: std::collections::BTreeMap<String, [f32; 3]>,
     #[serde(default)]
     base: bool,
+    /// Flames kept burning at its foot, so tall, so wide and so hot (`fire::Kindled`), as on
+    /// a campfire or a brazier set on the ground.
+    burns: Option<[f32; 3]>,
 }
 
 /// The figure called a name, if there is one.
@@ -565,6 +584,9 @@ pub(in crate::play) fn spawn(In(params): In<Option<Value>>, world: &mut World) -
         let mut bends = pose::Bends::default();
         bends.tell(&asked.bend, 0.0);
         entity.insert(bends);
+    }
+    if let Some([tall, wide, heat]) = asked.burns {
+        entity.insert(terra_world::fire::Kindled { tall, wide, heat });
     }
     if !asked.wears.is_empty() {
         entity.insert(character::Outfit(

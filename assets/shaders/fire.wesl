@@ -332,13 +332,16 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let wide = select(clamp(tall * 0.8, 0.8, 2.8), broad, broad > 0.0);
         let puff_hz = 1.5 / sqrt(wide);
         let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
-        let flame = tall * breathe * (0.65 + 0.7 * own.z);
+        // A kept fire is as tall as it was made, its flames sized to clear its own logs; a
+        // grid's blazes each a little taller or shorter.
+        let flame = tall * breathe * mix(0.65 + 0.7 * own.z, 1.0, b.w);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
         let lean = wind * 0.05 * flame;
         var w = wide * 1.9;
         var h = flame * 1.75;
-        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45);
+        // A kept fire (a campfire) stands just where it is, not off a grid cell's middle.
+        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45) * (1.0 - b.w);
         if phase > 0.01 {
             let side = select(-1.0, 1.0, phase > 0.5);
             w = wide * 1.2;

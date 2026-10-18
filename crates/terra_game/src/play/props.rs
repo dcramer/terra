@@ -26,8 +26,18 @@ use bevy::{
 use std::sync::Arc;
 use terra_build::{Base, CELL_M};
 
-/// Bright enough to show beside daylight, which is what the camera is exposed for.
-const FIRELIGHT_LUMENS: f32 = 500_000.0;
+/// A campfire's flames, as the fire drawing draws them with their embers, smoke and light
+/// (terra_world::fire): over its logs, leaned 0.9 m high and 1.3 m across. The flipbook's
+/// body fills about 0.58 of `tall` and its tips 1.3 of it, so the body reaches the logs' tops
+/// and the tips lick a metre over them; any shorter and the logs hide the whole flame (lake
+/// film r3: a tall of 0.9 to 1.2 on a campfire drew nothing to be seen).
+const CAMPFIRE: terra_world::fire::Kindled = terra_world::fire::Kindled {
+    tall: 1.5,
+    wide: 0.7,
+    heat: 0.9,
+};
+/// Its flames stand from so high over its foot, the embers among the stones.
+const CAMPFIRE_FOOT_M: f32 = 0.08;
 /// The heat a fire gives off as radiation, in watts: a campfire's fifteen kilowatts, a
 /// third of it radiated, the rest carried up in its smoke (climate.md).
 const FIRE_HEAT_W: f32 = 5_000.0;
@@ -87,9 +97,6 @@ impl Prop {
         }
     }
 }
-
-#[derive(Component)]
-struct Firelight;
 
 /// An item just put down, and for how many seconds: it grows into place over a moment,
 /// so a placement is felt as well as seen.
@@ -163,7 +170,7 @@ struct CheckedFor(u64);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, (load, start_checking))
-        .add_systems(Update, (flicker, keep_clear, settle));
+        .add_systems(Update, (keep_clear, settle));
 }
 
 /// Our colour for a flat-coloured part of a prop, as it should look on screen, and whether
@@ -540,6 +547,10 @@ pub fn place(
         ));
     }
     for piece in &model.pieces {
+        // A burning prop's modelled flame gives way to the fire drawn in its place.
+        if piece.glows && matches!(item.light, Light::Fire) {
+            continue;
+        }
         let drawn = (
             Mesh3d(piece.mesh.clone()),
             MeshMaterial3d(piece.material.clone()),
@@ -550,22 +561,13 @@ pub fn place(
             prop.with_child(drawn);
         }
     }
-    let glow = |colour: Color, lumens: f32, range: f32| PointLight {
-        color: colour,
-        intensity: lumens,
-        range,
-        radius: 0.25,
-        shadow_maps_enabled: false,
-        ..default()
-    };
     match item.light {
         Light::None => {}
         Light::Fire => {
             prop.with_child((
-                Firelight,
+                CAMPFIRE,
                 terra_world::climate::Heat { watts: FIRE_HEAT_W },
-                glow(Color::srgb(1.0, 0.55, 0.22), FIRELIGHT_LUMENS, 16.0),
-                Transform::from_xyz(0.0, 0.7, 0.0),
+                Transform::from_xyz(0.0, CAMPFIRE_FOOT_M, 0.0),
             ));
         }
     }
@@ -620,15 +622,6 @@ fn settle(
         if done >= 1.0 {
             commands.entity(entity).remove::<Settling>();
         }
-    }
-}
-
-/// Firelight is never steady.
-fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) {
-    let t = time.elapsed_secs();
-    let waver = 0.82 + 0.1 * libm::sinf(t * 11.0) + 0.08 * libm::sinf(t * 23.0 + 1.3);
-    for mut fire in &mut fires {
-        fire.intensity = FIRELIGHT_LUMENS * waver;
     }
 }
 

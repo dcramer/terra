@@ -57,11 +57,31 @@ pub struct Jet {
 }
 
 /// Everything burning now, set by whatever owns the fires each frame: the blazes, the
-/// largest first (those past the preset's slots are not drawn), and the jets.
+/// largest first (those past the preset's slots are not drawn), and the jets; and the fires
+/// kept where something [`Kindled`] stands, gathered here (`keep`), drawn first.
 #[derive(Resource, Default, Debug)]
 pub struct Blazes {
     pub blazes: Vec<Blaze>,
     pub jets: Vec<Jet>,
+    kept: Vec<Blaze>,
+}
+
+impl Blazes {
+    /// Every blaze drawn: the kept fires, then the rest.
+    pub fn all(&self) -> impl Iterator<Item = &Blaze> {
+        self.kept.iter().chain(&self.blazes)
+    }
+}
+
+/// A fire kept burning where this stands, as a campfire, a hearth or a brazier is: drawn as a
+/// blaze of so tall and so wide flames and so hot (as [`Blaze`]) at its foot, with its embers,
+/// smoke and flickering light, as long as it is there. A campfire's are knee-high flames
+/// over a bed of embers, a thin smoke rising (research/2026-10-16-real-time-fire-rendering.md).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Kindled {
+    pub tall: f32,
+    pub wide: f32,
+    pub heat: f32,
 }
 
 /// How a fire's light wavers at a time, for a light of its own number and so bright: as a
@@ -297,7 +317,7 @@ pub fn plugin(app: &mut App) {
             MaterialPlugin::<FireSmokeMaterial>::default(),
         ))
         .add_systems(Startup, setup)
-        .add_systems(PostUpdate, (blow, show, light).chain());
+        .add_systems(PostUpdate, (keep, blow, show, light).chain());
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
@@ -471,6 +491,30 @@ fn setup(
     });
 }
 
+/// The fires kept where something kindled stands, each with a number of its own from its
+/// place, so no two flicker alike.
+fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: ResMut<Blazes>) {
+    if kindled.is_empty() && blazes.kept.is_empty() {
+        return;
+    }
+    let kept: Vec<Blaze> = kindled
+        .iter()
+        .map(|(fire, at)| {
+            let at = at.translation();
+            Blaze {
+                at,
+                tall: fire.tall,
+                heat: fire.heat,
+                seed: (at.x * 0.731 + at.z * 0.377).rem_euclid(1.0),
+                wide: fire.wide,
+            }
+        })
+        .collect();
+    if kept != blazes.kept {
+        blazes.kept = kept;
+    }
+}
+
 /// The wind where the fires are, as the climate has it, looked up now and then.
 fn blow(
     time: Res<Time>,
@@ -480,7 +524,7 @@ fn blow(
     mut drawn: ResMut<Drawn>,
 ) {
     drawn.wind_due -= time.delta_secs();
-    let Some(here) = blazes.blazes.first().map(|b| b.at) else {
+    let Some(here) = blazes.all().next().map(|b| b.at) else {
         return;
     };
     if drawn.wind_due > 0.0 {
@@ -520,12 +564,19 @@ fn show(
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
 ) {
     let now = time.elapsed_secs_wrapped();
-    let count = blazes.blazes.len().min(slots(*quality));
+    let count = blazes.all().count().min(slots(*quality));
     if let Some(mut buffer) = buffers.get_mut(&drawn.slots) {
         let mut data: Vec<[f32; 4]> = Vec::with_capacity(slots(*quality) * 2);
-        for blaze in blazes.blazes.iter().take(count) {
+        // The kept fires first, marked so they stand just where they are.
+        let kept = blazes.kept.len();
+        for (i, blaze) in blazes.all().take(count).enumerate() {
             data.push([blaze.at.x, blaze.at.y, blaze.at.z, blaze.tall]);
-            data.push([blaze.heat, blaze.seed, blaze.wide, 0.0]);
+            data.push([
+                blaze.heat,
+                blaze.seed,
+                blaze.wide,
+                f32::from(u8::from(i < kept)),
+            ]);
         }
         data.resize(slots(*quality) * 2, [0.0; 4]);
         *buffer = ShaderBuffer::from(data);
@@ -580,7 +631,7 @@ fn light(
     let t = time.elapsed_secs_wrapped();
     let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32)> =
         std::collections::BTreeMap::new();
-    for blaze in &blazes.blazes {
+    for blaze in blazes.all() {
         let weight = blaze.tall * blaze.heat;
         let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
         let cell = cells.entry(key).or_insert((Vec3::ZERO, 0.0));
@@ -643,6 +694,29 @@ mod tests {
             .filter(|w| (w[1] - w[0]) * (w[2] - w[1]) < 0.0)
             .count();
         (high - low, turns as f32 / 10.0)
+    }
+
+    #[test]
+    fn a_kindled_fire_burns_where_it_stands_while_it_is_there() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        world.init_resource::<Blazes>();
+        let at = Vec3::new(3.0, 2000.0, -4.0);
+        let fire = Kindled {
+            tall: 0.6,
+            wide: 0.4,
+            heat: 0.9,
+        };
+        let lit = world
+            .spawn((fire, GlobalTransform::from_translation(at)))
+            .id();
+        world.run_system_once(keep).unwrap();
+        let drawn: Vec<Blaze> = world.resource::<Blazes>().all().copied().collect();
+        assert_eq!(drawn.len(), 1);
+        assert_eq!((drawn[0].at, drawn[0].tall, drawn[0].wide), (at, 0.6, 0.4));
+        world.despawn(lit);
+        world.run_system_once(keep).unwrap();
+        assert_eq!(world.resource::<Blazes>().all().count(), 0);
     }
 
     #[test]
