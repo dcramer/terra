@@ -365,7 +365,7 @@ fn release(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
 }
 
 /// Keeps the camera where `sandbox.look` asked, after whatever else moved it this frame.
-fn hold_camera(
+pub(crate) fn hold_camera(
     held: Res<HeldCamera>,
     globals: Query<&GlobalTransform>,
     parents: Query<&ChildOf>,

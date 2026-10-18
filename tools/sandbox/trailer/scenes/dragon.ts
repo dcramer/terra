@@ -1,12 +1,13 @@
-// A dragon burns a castle (D377, D382), in about thirty seconds, most of them fire and
+// A dragon burns a castle (D377, D382), in about twenty-five seconds, most of them fire and
 // collapse: the burg (terra_build::burg) standing in the morning, a dragon coming in over the
 // trees and strafing its south wall toward the camera, its breath running along the
-// hoardings and over the towers' and the gatehouse's timber storeys just ahead of it; braking
-// round into a hover low off the keep to breathe into its door, then rising to breathe along
-// its jettied timber storey; the south-west tower and the curtain by it coming down, the keep
-// on its burnt-out bond timbers with the dragon backing off over it and roaring, the
-// south-east tower and the curtain by it as the dragon goes. Every breath aimed at the
-// building, a little ahead and below the dragon's way, from close enough to strike it:
+// hoardings and over the south-west tower's and the gatehouse's timber storeys just ahead of
+// it; rearing up into a hover off the south-east tower, out over the meadow, to breathe into
+// its timber storey and roof; the south-west tower and the curtain by it coming down; the
+// dragon rising over the wall to breathe down into the keep, and the keep coming down under
+// it as it roars; the south-east tower and the curtain by it as the dragon goes. Every
+// breath aimed at the building, a little ahead and below the dragon's way, from close
+// enough to strike it:
 // `node tools/sandbox/flightplot.ts dragon <png>` casts each into the building and says so.
 // Places are in the castle's own metres: east, up and south of the middle of its gate on the
 // south wall's outer face, the ward to the north (-z), as `build.look` takes them. Frames are
@@ -25,6 +26,9 @@ const WINDUP = 48;
 
 /// The frame so many seconds into the film.
 const at = (seconds: number) => ROLLS + Math.round(seconds * 60);
+/// When the falls begin, in seconds; they were laid out from 16 s, and `fall` moves them.
+const FALLS = 11;
+const fall = (seconds: number) => at(seconds - 16 + FALLS);
 
 /// The dragon's whole course as the remote is told it (`trailer/flight.ts`, as the game flies
 /// it), so the camera can follow it.
@@ -150,83 +154,77 @@ function script(s: Script) {
   const course = new Course(spawn, [0, 30, 20]);
   const k = KEEP;
 
-  // 0-6.5 s: the castle standing in the morning, the camera low by the south-east tower
+  // 0-6 s: the castle standing in the morning, the camera low by the south-east tower
   // looking west along the south wall; the dragon comes in over the trees beyond the
   // south-west tower and strafes the wall toward the camera, a few metres out from its
   // hoardings and above them, its breath running along their outer face and roofs a little
-  // ahead of it, over the south-west tower's timber storey, the gatehouse's and the
-  // south-east tower's; it passes by the camera and brakes round into its hover.
+  // ahead of it, over the south-west tower's timber storey and the gatehouse's; past the gate
+  // it rears up and brakes into a hover off the south-east tower, out over the meadow.
   const set = at(-9);
+  const perch: Vec3 = [10, 17, 8.5];
+  const tower: Vec3 = [20, 13.5, 1];
   const first = course.fly(s, set, [
     [-110, 24, 12],
     [-50, 17.5, 6.5],
     [-20, 16.5, 6],
-    [10, 16.5, 6],
-    [24, 17, 5.5],
-    [30, 16, -4],
-    [28, 13, -13],
-    [14, 10, -12],
-  ], [k[0], 1.5, k[2] + KEEP_HALF], 16);
+    [2, 17, 7],
+    perch,
+  ], tower, 16);
   const wallFrom = set + Math.round(passes(first, [-36, 17, 6]) * 60);
-  const wallTo = set + Math.round(passes(first, [16, 16.5, 6]) * 60);
-  const eastFrom = set + Math.round(passes(first, [29, 16.5, -1]) * 60);
-  const eastTo = set + Math.round(passes(first, [28, 13, -13]) * 60);
   const hovering = set + Math.round(seconds(first) * 60);
-  s.mark("first-pass", "The castle standing; the dragon comes in over the trees and strafes the south wall and the east", at(0), eastTo);
-  strafe(s, course, wallFrom, wallTo, [-21, 12.5, 2.6], [21, 12.5, 2.6], 13);
-  // Banking north round the south-east tower, along the east wall's hoardings.
-  strafe(s, course, eastFrom, eastTo, [23.3, 10.5, -3], [23.3, 10.5, -28], 15);
-  track(s, course, at(0), eastTo, [34, 3, 13], [38, 5, 16], [-12, 11, 1], 0.55);
+  const wallTo = Math.min(set + Math.round(passes(first, [3, 17, 7]) * 60), hovering - 70);
+  s.mark("first-pass", "The castle standing; the dragon comes in over the trees and strafes the south wall", at(0), hovering - 30);
+  strafe(s, course, wallFrom, wallTo, [-21, 12.5, 2.6], [16, 12.5, 2.6], 13);
+  track(s, course, at(0), hovering - 30, [34, 3, 13], [38, 5, 16], [-12, 11, 1], 0.55);
 
-  // The hover at the keep, low off its south-east, the camera high behind the dragon:
-  // its breath into the keep's door and its ground storey, which fills with fire; then it
-  // rises to breathe along the jettied timber storey, its south face and its east.
-  s.mark("hover", "It hovers at the keep and breathes into its door, then along its timber storey", eastTo + 1, at(16));
-  const face = k[2] + KEEP_HALF + 0.1;
-  // High over the south wall west of the south-east tower, clear of its roof, looking down
-  // past the dragon to the keep, away from the low sun.
-  track(s, course, eastTo + 1, at(16), [14, 27, 10], [11, 26, 12], [k[0], 4, face], 0.35);
-  sweep(s, hovering - 90, hovering + 60, [
-    [k[0] - 0.5, 0.8, face],
-    [k[0] + 0.5, 2.2, face],
-  ]);
-  const up = hovering + 65;
-  course.hover(s, up, [12, 19, -7], [k[0], KEEP_JETTY, k[2]]);
-  sweep(s, up + 50, up + 220, [
-    [k[0] - KEEP_HALF + 0.5, KEEP_JETTY, face + 0.5],
-    [k[0] + KEEP_HALF + 0.6, KEEP_JETTY, face + 0.5],
-    [k[0] + KEEP_HALF + 0.6, KEEP_JETTY + 2, k[2] - KEEP_HALF],
+  // The hover, the camera low on the open meadow south-east of the castle, the low sun
+  // behind it, with a clear line to the dragon and the south-east tower: the stream runs
+  // across the frame into the tower's jettied timber storey from the hoardings by it, and
+  // up into its roof; the tower that comes down last.
+  s.mark("hover", "It hovers off the south-east tower and breathes into its timber storey", hovering - 29, at(FALLS));
+  track(s, course, hovering - 29, at(FALLS), [40, 4, 30], [37, 5, 31], [17, 13, 3], 0.45, 0.3);
+  sweep(s, hovering - 10, at(FALLS) - 30, [
+    [14, 12.5, 2.2],
+    [18, 13.5, 2.7],
+    [22.5, 13.5, 2.7],
+    [21, 16.5, 0],
   ]);
 
   // The towers and the keep come down. The fire took their timber storeys and the hoardings
   // that join them to the curtain; what is left of each gives way, harmed as an attack harms
   // (`build.damage`, D305), and the building's own destruction brings the stone down whole, in
   // fragments and dust, each fall in the middle of its shot, looking away from the low sun.
-  s.mark("falling", "The towers and the keep come down in fire and dust", at(16), at(30));
+  s.mark("falling", "The towers and the keep come down in fire and dust", fall(16), fall(30));
   // The south-west tower, and the curtain east of it toward the gate.
-  drift(s, at(16), at(20), [-1, 6, 31], [1, 6.5, 29], [-17, 9, -1], [-15, 7, -1]);
-  fell(s, at(17), SW);
-  breach(s, at(18.2), -31, -10);
-  // The keep: its bond timbers over its burnt-out ground storey give way and it comes down,
-  // the dragon backing off from it as it goes, then roaring over it; the camera high enough
-  // over the south wall to see the keep whole past the gatehouse.
-  course.hover(s, at(20.2), [12, 26, -10], [k[0], 12, k[2]]);
-  track(s, course, at(20) + 1, at(25), [14, 26, 22], [16, 27, 25], [k[0], 10, k[2]], 0.65);
-  s.frame = at(21.3);
+  drift(s, fall(16), fall(20), [-1, 6, 31], [1, 6.5, 29], [-17, 9, -1], [-15, 7, -1]);
+  fell(s, fall(17), SW);
+  breach(s, fall(18.2), -31, -10);
+  // The keep: the dragon rises over the wall to it and breathes down into its timber
+  // storey and roof, and its bond timbers give way and it comes down, the dragon over it
+  // roaring; the camera out over the meadow east of the castle, high enough to see the
+  // keep over the east wall, whose hoardings never burned, so no smoke stands between, the
+  // low sun behind it.
+  course.hover(s, fall(19), [12, 26, -10], [k[0], 12, k[2]]);
+  track(s, course, fall(20) + 1, fall(25), [48, 20, -10], [50, 21, -6], [k[0], 10, k[2]], 0.65);
+  sweep(s, fall(20.6), fall(21.8), [
+    [k[0] + KEEP_HALF, KEEP_JETTY, k[2] + KEEP_HALF - 1],
+    [k[0] + 1, KEEP_JETTY + 2.5, k[2]],
+  ]);
+  s.frame = fall(22);
   const kc = KEEP_CUBES;
   s.call("build.damage", { at: [kc.x0 - 1, kc.lacing, kc.z0 - 1], to: [kc.x1 + 1, kc.lacing, kc.z1 + 1] });
-  s.frame = at(22.6);
+  s.frame = fall(23.2);
   s.call("flight.roar", { seconds: 2.2 });
   // The south-east tower and the curtain west of it, the dragon going off over the ruin.
-  drift(s, at(25) + 1, at(30), [44, 5, 24], [46, 6, 27], [17, 9, -2], [14, 8, -3]);
-  fell(s, at(25.8), SE);
-  breach(s, at(26.8), 9, 30);
-  course.fly(s, at(26), [
+  drift(s, fall(25) + 1, fall(30), [44, 5, 24], [46, 6, 27], [17, 9, -2], [14, 8, -3]);
+  fell(s, fall(25.8), SE);
+  breach(s, fall(26.8), 9, 30);
+  course.fly(s, fall(26), [
     [0, 30, -10],
     [-40, 46, -60],
     [-160, 80, -240],
   ]);
-  s.frame = at(30);
+  s.frame = fall(30);
 }
 
 /// The flanking towers' corners, in cubes (`terra_build::scenes::burg`): each a ring 14 a
@@ -259,7 +257,7 @@ function fell(s: Script, frame: number, [x, z]: [number, number]) {
 }
 
 export default {
-  about: "a dragon burns the castle in thirty seconds: a strafing pass along its south wall, a hover at the keep breathing into its door and along its timber storey, its towers and keep coming down",
+  about: "a dragon burns the castle in twenty-five seconds: a strafing pass along its south wall, a hover off the south-east tower breathing into its timber storey, its towers and keep coming down",
   sandbox: ["--free-build"],
   rolls: ROLLS,
   script,

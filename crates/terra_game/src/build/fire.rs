@@ -67,9 +67,11 @@ pub struct SiteFire {
 const RAYS: usize = 14;
 const SPLASH: i32 = 2;
 /// How far short of what a breath meets its splash is drawn, and how far past it the
-/// stream runs on into it, in metres; and the splash's flame, how tall.
+/// stream runs on into it, in metres; and the splash's flame, how tall and how wide: a sheet
+/// broader than a flame so tall, as the stream spreads over what it strikes.
 const SPLASH_BACK_M: f32 = 0.8;
-const SPLASH_TALL_M: f32 = 4.5;
+const SPLASH_TALL_M: f32 = 5.5;
+const SPLASH_WIDE_M: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SiteFire>()
@@ -398,7 +400,7 @@ fn blazes(
                 tall: SPLASH_TALL_M,
                 heat: 1.0,
                 seed: 0.37 + 0.21 * i as f32,
-                wide: 0.0,
+                wide: SPLASH_WIDE_M,
             }));
         drawn.blazes.extend_from_slice(&fire.blazes);
     }

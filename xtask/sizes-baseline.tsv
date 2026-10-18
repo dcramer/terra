@@ -113,7 +113,6 @@ crates/terra_sandbox/src/experiments/lush/species.rs	conifer	508
 crates/terra_sandbox/src/experiments/lush/species.rs	oak	230
 crates/terra_sandbox/src/experiments/workbench/mod.rs	spawn	177
 crates/terra_world/src/audio/synth.rs	-	1105
-crates/terra_world/src/cine.rs	-	1066
 crates/terra_world/src/cover/blades.rs	square	271
 crates/terra_world/src/cover/mod.rs	grow	298
 crates/terra_world/src/flora.rs	-	1857

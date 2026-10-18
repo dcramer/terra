@@ -176,7 +176,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         if reach <= 0.0 {
             return nowhere();
         }
-        let speed = 34.0;
+        // Slower than the 34 m/s a flamethrower's fuel leaves at, so each puff lives long
+        // enough on screen for the stream to read as a thick rope of fire, not a wisp.
+        let speed = 24.0;
         let life_s = reach / speed;
         let luck = fract(phase * 7.31 + 0.13);
         let t = fract(time / life_s + phase);
@@ -195,11 +197,14 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let lift = normalize(cross(side, way));
         let a = luck * 6.283 + t * 2.0;
         // A flamethrower's stream: tight at the mouth, opening into a rolling cone, the puffs
-        // turbulent about its line, slowing and lifting as they burn out.
-        let r = spread * d * sqrt(fract(luck * 13.7)) * (0.6 + 0.6 * t);
+        // turbulent about its line, slowing and lifting as they burn out; where it strikes it
+        // splashes, its last puffs stopped short of what it struck and thrown out across it
+        // (as Unreal's and Frostbite's flamethrowers end in an impact burst on the surface).
+        let splash = smoothstep(0.72, 1.0, t);
+        let r = spread * d * sqrt(fract(luck * 13.7)) * (0.6 + 0.6 * t) + splash * (1.0 + 0.18 * reach) * sqrt(fract(luck * 3.9));
         let swirl = (vec2(noise(vec2(luck * 31.0, time * 3.0 + t * 4.0)), noise(vec2(luck * 57.0 + 3.0, time * 3.0 + t * 4.0))) - 0.5) * d * 0.12;
-        let at = mouth + way * d * (1.0 - 0.18 * t * t) + (side * (cos(a) * r + swirl.x) + lift * (sin(a) * r + swirl.y)) + up * t * t * reach * 0.1 + wind * t * t * life_s;
-        let size = mix(0.7, 0.9 + spread * reach * 0.38, pow(t, 0.8)) * (0.7 + 0.6 * fract(luck * 5.3));
+        let at = mouth + way * min(d * (1.0 - 0.08 * t * t), reach - 1.0) + (side * (cos(a) * r + swirl.x) + lift * (sin(a) * r + swirl.y)) + up * t * t * reach * 0.1 + wind * t * t * life_s;
+        let size = (mix(0.9, 1.3 + spread * reach * 0.7, pow(t, 0.7)) + splash * 1.2) * (0.75 + 0.5 * fract(luck * 5.3));
         // Streaked along the way near the mouth, round as it opens.
         let to_eye = normalize(view.world_position - at);
         var across = cross(way, to_eye);
@@ -365,15 +370,20 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let fy = 0.1 + uv.y * 0.62;
         let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
         // Near the mouth the stream is dense, a solid core; it breaks into tongues as it opens.
-        let solid = mix(0.3, 0.0, smoothstep(0.0, 0.4, t));
+        // It stays dense along its whole length, a rope of fire, and burns white-hot again
+        // where it strikes and splashes.
+        let struck = smoothstep(0.7, 0.92, t) * (1.0 - smoothstep(0.92, 1.0, t));
+        let solid = mix(0.5, 0.15, smoothstep(0.0, 0.5, t)) + 0.3 * struck;
         let heat_here = body * saturate(solid + 1.1 * tongue);
-        let fade = smoothstep(0.0, 0.02, t) * pow(1.0 - t, 1.6);
-        // A few dozen cards overlap along its line: each faint, so their sum stays orange
-        // with a yellow heart and shows its tongues, never a solid pale wedge.
-        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.4, 0.22, t);
-        let kelvin = min(mix(1520.0, 1100.0, t) + (heat_here - 0.5) * 220.0, 1600.0);
+        let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
+        // Many cards overlap along its line: each part-clear, so their sum is orange with a
+        // yellow heart and shows its tongues, never a solid pale wedge.
+        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.55, 0.38, t);
+        // Cooler than a blaze's heart: dozens of cards add up along the line of sight, and
+        // hotter ones sum to a pale yellow-white fog, not fire.
+        let kelvin = min(mix(1400.0, 1170.0, t) + 200.0 * struck + (heat_here - 0.5) * 220.0, 1550.0);
         light = soot(kelvin) * alpha;
-        cover = alpha * 0.4;
+        cover = alpha * 0.55;
     }
     if max(light.r, cover) < 0.002 {
         discard;

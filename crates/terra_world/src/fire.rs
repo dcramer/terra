@@ -94,7 +94,7 @@ const EMBER_CARDS: usize = 5;
 const SMOKE_CARDS: usize = 4;
 const HAZE_CARDS: usize = 1;
 /// How many cards a jet is, and how many jets are drawn.
-const JET_CARDS: usize = 360;
+const JET_CARDS: usize = 640;
 const JETS: usize = 2;
 /// How many point lights the fires are lit by, and how far round each its fire is gathered,
 /// in metres.
