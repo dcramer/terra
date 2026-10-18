@@ -424,7 +424,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D401](decisions/D401.md) | A range breaks into ranks of separate summits, its foothills in front | Tech | Agent | Decided | A range is no longer one wall round its edge. |
 | [D403](decisions/D403.md) | A mountain's face is drawn in tiers, weathering and skirts, its gullies shaped by face | Tech | Agent | Decided | A far wall's face gets variety at several sizes… |
 | [D404](decisions/D404.md) | A face's gullies come in several sizes, its tiers stand in the light, and talus aprons lie under its walls | Tech | Agent | Decided | A far wall's face varies in its gullies' sizes and its… |
-| [D407](decisions/D407.md) | How the crates are cut | Tech | — | Open | Recommended (research): cut `terra_build`… |
+| [D407](decisions/D407.md) | How the crates are cut | Tech | Developers | Decided | `terra_build` (71k lines) and `terra_game`… |
 
 ## Tools and workflow
 

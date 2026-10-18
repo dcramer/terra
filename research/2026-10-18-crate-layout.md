@@ -2,7 +2,7 @@
 
 2026-10-18. Question: how should Terra's Rust crates be segmented the way a large Rust/Bevy game is, so a change rebuilds and tests less, a dedicated server (D52) compiles without the art, and the layer rule (D198) is held by Cargo rather than by convention?
 
-**A recommendation, Open until the developers agree (D407).** Nothing here has moved; this is design before building (D49).
+**Agreed by the developers on 2026-10-18 (D407)**, who added that the point is as much smaller, better-scoped modules as build time. The migration below is under way; the names and whether `terra_life` merges are still theirs to settle.
 
 How it was done: line counts with tests at d85a5fbe; each module's `crate::`/`super::` names outside tests, gathered by a script and grouped into the crates proposed below, every name that would point from a lower crate to a higher one listed (the "seams"); rebuild times from the investigation the same morning; Veloren's, Bevy's and the community's layouts read at their sources ([below](#how-shipped-projects-do-it)).
 
