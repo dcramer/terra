@@ -1,8 +1,9 @@
 //! A base's cubes as a hull, for far off (docs/building-plan.md, drawing): what Unreal's
 //! hierarchical levels of detail call an approximated mesh, a building's outer shape at a
 //! few hundred triangles with its materials' colours baked in, in place of its pieces past
-//! where they can be told apart. Every cube in that is not an opening shows each face open
-//! to the air or to a cube that does not fill its side; the faces of whole cubes lying in
+//! where they can be told apart. Every cube in it shows each face open to the air or to a
+//! cube that does not fill its side, an opening (a window, a doorway) as a dark pane flush
+//! with its wall, as its glass and door read from afar; the faces of whole cubes lying in
 //! one plane in one colour are merged into rectangles (greedy meshing, as voxel games mesh
 //! their chunks); a cut cube shows its top at its shape's height over each corner
 //! (`Shape::top`), its sides cut to it, so roofs keep their pitch. Its colours are each
@@ -20,6 +21,11 @@ use std::collections::{BTreeMap, HashSet};
 /// How much darker than its material's mean colour a face is drawn: the shade its relief
 /// and its seams cast, which the hull has none of.
 pub(crate) const SHADE: f32 = 0.85;
+
+/// An opening's colour far off (sRGB): its glass, frame and door in the shade of its
+/// reveal, as the far detail's windows read. Drawn in its wall's colour, every window of a
+/// house far off was gone and its walls one blank box.
+const OPENING: [f32; 3] = [0.26, 0.27, 0.29];
 
 /// The hull of a base's cubes from `low` to `high` inclusive, in the base's own space, its
 /// colours sRGB as a surface's are.
@@ -47,7 +53,7 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
     let mut slopes: BTreeMap<(u8, i32, i32, usize), Vec<i32>> = BTreeMap::new();
     let mut out = Surface::default();
     for (at, cube) in store.within(low, high) {
-        if !cube.is_in() {
+        if !drawn(&cube) {
             continue;
         }
         let cube = carried(at, cube);
@@ -57,7 +63,11 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
                 if solid(at + *normal) {
                     continue;
                 }
-                let colour = colours.of(cube.kind, dir == UP);
+                let colour = if cube.fill == Fill::Open {
+                    colours.opening()
+                } else {
+                    colours.of(cube.kind, dir == UP)
+                };
                 let (plane, cell) = plane_of(dir, at);
                 planes.entry((dir, plane, colour)).or_default().insert(cell);
             }
@@ -127,9 +137,15 @@ fn along_x(facing: Facing) -> bool {
     matches!(facing, Facing::North | Facing::South)
 }
 
-/// Whether a cube fills its sides, so its neighbours' faces against it are hidden.
+/// Whether a cube is drawn: anything of it in, or an opening cut in a wall built (a pane).
+fn drawn(cube: &Cube) -> bool {
+    cube.is_in() || (cube.fill == Fill::Open && cube.level() > 0)
+}
+
+/// Whether a cube fills its sides, so its neighbours' faces against it are hidden: an
+/// opening too, drawn as a pane, so its reveals are not.
 fn fills(cube: &Cube) -> bool {
-    cube.is_in() && cube.fill == Fill::Solid && corners(cube.shape) == [1.0; 4]
+    drawn(cube) && corners(cube.shape) == [1.0; 4]
 }
 
 /// A shape's height over its corners, as fractions of a cube, west-north, east-north,
@@ -332,6 +348,17 @@ impl<'a> Colours<'a> {
         }
     }
 
+    /// The number of an opening's colour ([`OPENING`]).
+    fn opening(&mut self) -> usize {
+        match self.list.iter().position(|&c| c == OPENING) {
+            Some(index) => index,
+            None => {
+                self.list.push(OPENING);
+                self.list.len() - 1
+            }
+        }
+    }
+
     /// The number of a kind's colour on top or at its sides.
     fn of(&mut self, kind: Kind, top: bool) -> usize {
         if let Some(&index) = self.by_kind.get(&(kind, top)) {
@@ -467,6 +494,50 @@ mod tests {
         let ends = normals.iter().filter(|n| n.x.abs() > 0.9).count();
         // The stone row's two ends, a rectangle each, and the slopes' two, a triangle each.
         assert_eq!(ends, 2 * 6 + 2 * 3);
+    }
+
+    #[test]
+    fn a_window_is_a_dark_pane_flush_with_its_wall_and_no_reveals() {
+        // A wall seven cubes along X, five high, one thick, with an opening in its middle.
+        let base = Base::from_shortcuts(&[
+            BuildOp::Fill {
+                min: [0, 0, 0],
+                max: [6, 4, 0],
+                cube: Some(stone()),
+            },
+            BuildOp::Fill {
+                min: [3, 2, 0],
+                max: [3, 2, 0],
+                cube: Some(Cube::new(Kind(2), Fill::Open)),
+            },
+        ]);
+        let surface = hull(
+            &base,
+            &Kits(Vec::new()),
+            &Maps::default(),
+            IVec3::splat(-16),
+            IVec3::splat(31),
+        );
+        let shared = &surface.shared;
+        let dark = |i: &u32| shared.colours[*i as usize] == OPENING;
+        let panes: Vec<_> = shared
+            .indices
+            .chunks(3)
+            .filter(|t| t.iter().all(dark))
+            .collect();
+        assert_eq!(panes.len(), 4, "a pane each side, two triangles each");
+        // Its faces lie in the wall's two faces, so nothing inside the opening is drawn.
+        for t in &panes {
+            let z = shared.positions[t[0] as usize].z;
+            assert!(z == 0.0 || z == CELL_M, "a pane at z {z}");
+        }
+        // Sides along X only at the wall's two ends, none round the opening.
+        let ends = shared
+            .indices
+            .chunks(3)
+            .filter(|t| shared.normals[t[0] as usize].x.abs() > 0.5)
+            .count();
+        assert_eq!(ends, 4, "the two ends, two triangles each");
     }
 
     #[test]

@@ -151,9 +151,13 @@ const SNOW_LAYER: u32 = 10u;
 const COBBLES: u32 = 11u;
 
 // How wet the ground is at so many metres above a lake's water (D322): soaked at the waterline
-// and drying over a hand or two above it, its edge broken by `fleck`.
-fn wet_band(above: f32, fleck: f32) -> f32 {
-    return (1.0 - smoothstep(0.0, 0.3 + 0.25 * fleck, above)) * step(-0.3, above);
+// and drying over a hand or two above it, its edge broken by `fleck`; by a lowland lake, whose
+// meadow comes down to its water, over a few centimetres. On a flat bank a hand or two of
+// height was a band of darkened, sky-mirroring ground tens of metres wide round the water,
+// the slate ring at the settlement's shore.
+fn wet_band(above: f32, fleck: f32, lowland: f32) -> f32 {
+    let reach = mix(0.3 + 0.25 * fleck, 0.05 + 0.03 * fleck, lowland);
+    return (1.0 - smoothstep(0.0, reach, above)) * step(-0.3, above);
 }
 
 // The ground by a lake (D322): darker where wet above the water, as wet stone and soil are
@@ -163,7 +167,7 @@ fn wet_band(above: f32, fleck: f32) -> f32 {
 // A lowland lake's bed, `lowland` 1, is silt under stained water, olive brown, gone dark a
 // metre or two down; a mountain lake's, 0, granite under clear green water.
 fn lake_shore(colour: vec3<f32>, above: f32, fleck: f32, lowland: f32) -> vec3<f32> {
-    let wet = wet_band(above, fleck);
+    let wet = wet_band(above, fleck, lowland);
     let under = smoothstep(0.0, mix(5.0, 1.8, lowland), -above);
     let damp = colour * mix(1.0, 0.55, wet);
     let bed = mix(vec3<f32>(0.012, 0.03, 0.026), vec3<f32>(0.01, 0.011, 0.006), lowland);
@@ -1411,8 +1415,10 @@ fn fragment(
             let soft = (1.0 - smoothstep(0.0, 0.06, wet_above)) * smoothstep(-8.0, -5.0, wet_above) * lowland;
             if soft > 0.0 {
                 let down = 1.0 - smoothstep(-2.5, 0.0, in.uv_b.y);
-                let mud = mix(vec3<f32>(0.062, 0.056, 0.032), vec3<f32>(0.045, 0.045, 0.025), down);
-                let silt = mud * (0.9 + 0.2 * fleck) * mix(tones, 1.0, 0.5);
+                // Wet, so darker than the meadow above it, not a pale tan rim: at 0.062 the
+                // margin and its puddles read brighter than the grass and the water both.
+                let mud = mix(vec3<f32>(0.032, 0.029, 0.017), vec3<f32>(0.022, 0.022, 0.012), down);
+                let silt = mud * (0.95 + 0.1 * fleck) * mix(tones, 1.0, 0.5);
                 ground_is = over(ground_is, layer(SOIL, 0.6, silt, world + 67.0, gx, gy, n, 1.0), soft);
             }
             let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above) * (1.0 - lowland);
@@ -1467,8 +1473,11 @@ fn fragment(
         colour = mix(colour, canopy, under_woods * (1.0 - snow));
 @if(VERTEX_UVS_B)
         {
-            colour = lake_shore(colour, in.uv_b.y, fleck, lowland_at(from_centre - ground.sea_radius_m));
-            pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.35, wet_band(in.uv_b.y, fleck));
+            let lowland_bank = lowland_at(from_centre - ground.sea_radius_m);
+            colour = lake_shore(colour, in.uv_b.y, fleck, lowland_bank);
+            // Silt by a lowland lake, smoothed less than wet rock: at 0.35 its margin mirrored the
+            // sky as a grey-violet rim round the water.
+            pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, mix(0.35, 0.6, lowland_bank), wet_band(in.uv_b.y, fleck, lowland_bank));
         }
         if ribbed > 0.0 {
             ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt);
