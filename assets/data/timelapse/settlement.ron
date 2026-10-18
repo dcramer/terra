@@ -18,7 +18,7 @@
     takes: (2.5, 5.0),
     growth: 0.4,
     settled_after: 0.6,
-    gather: 0.5,
+    gather: 0.3,
     pace: 3.0,
     builders: 0,
     people: false,
