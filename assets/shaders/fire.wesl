@@ -185,7 +185,7 @@ const FLAME_GAIN: f32 = 1.7;
 fn flame_colour(h: f32) -> vec3<f32> {
     let rim = vec3(0.5, 0.07, 0.005);
     let orange = vec3(1.0, 0.32, 0.02);
-    let yellow = vec3(1.0, 0.66, 0.05);
+    let yellow = vec3(1.0, 0.74, 0.06);
     let pale = vec3(1.05, 0.9, 0.28);
     let white = vec3(0.95, 0.92, 0.82) * WHITE;
     var c = mix(rim, orange, smoothstep(0.0, 0.25, h));
@@ -598,10 +598,11 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         // building's flames as burning thickened fuel is in footage, hottest in each puff's
         // middle and in the puffs nearest the stream's line, orange and dull red only at its
         // rims, its outer puffs and as it burns out. By its flipbook heat alone each puff was one
-        // flat orange, and the stream a slab of orange card (r8's first film, the jaw 89% orange).
+        // flat orange, and the stream a slab of orange card (r8's first film, the jaw 89% orange,
+        // 4% yellow, and still 87% orange from 0.2 up: its body is lifted to the yellow and pale).
         let radial = sqrt(fract(luck * 13.7));
         let centre = 1.0 - smoothstep(0.05, 0.3, edge);
-        var h = saturate(0.2 + 0.75 * heat_here * (1.0 - 0.4 * radial) + 0.25 * centre * (1.0 - 0.5 * radial) + 0.1 * mouth - 0.25 * smoothstep(0.55, 1.0, t) + 0.15 * struck);
+        var h = saturate(0.42 + 0.75 * heat_here * (1.0 - 0.4 * radial) + 0.25 * centre * (1.0 - 0.5 * radial) + 0.1 * mouth - 0.25 * smoothstep(0.55, 1.0, t) + 0.15 * struck);
         // The rod a solid core along each card over the first two fifths of the stream,
         // whatever the flipbook's tongue there, a rope of fire from the jaw: yellow, and
         // white-hot in its middle third over the first quarter. Whole until a quarter of the
