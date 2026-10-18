@@ -1048,7 +1048,7 @@ mod tests {
         );
         // Noise hashed from each texel, the same every run.
         let noise = |x: usize, y: usize| {
-            let h = crate::layout::mix3(0, x as u32, y as u32, 0);
+            let h = terra_gen::hash::mix3(0, x as u32, y as u32, 0);
             (h % 1000) as f32 / 1000.0
         };
         let said = stone_with(&wall(noise, lit, 0.8, 0.0), 2.4);

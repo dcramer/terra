@@ -473,7 +473,7 @@ pub struct Drawing {
     faces: crate::surface::FaceCache,
     /// Its pieces drawn, by detail and part (out of how many parts), each part's kept whole
     /// so a part not drawn again carries on as it was without looking at its pieces.
-    pieces: crate::mesh::QuickMap<(Detail, usize, usize), std::sync::Arc<PiecesDrawn>>,
+    pieces: terra_gen::hash::QuickMap<(Detail, usize, usize), std::sync::Arc<PiecesDrawn>>,
     /// The ground under the base when it was drawn, which the pieces' masks were made on.
     ground: Option<crate::ground::Ground>,
     /// The roofs round it when it was drawn ([`layout::roofs::Roofs::fingerprint`]), which a

@@ -35,15 +35,16 @@ mod frame;
 mod lines;
 mod standing;
 
-use super::{Piece, Place, Scope, hash};
+use super::{Piece, Place, Scope};
 use crate::kit::{Kit, Kits};
-use crate::mesh::QuickMap;
 use crate::{Base, CELL_M, Cube, Fill, Kind, Shape};
 use flashing::{flashing, flashing_butted, flashing_wide};
 use frame::rafters;
 use glam::{IVec3, Vec2, Vec3};
 use lines::{NEAR_SCOPE, crease_met, edge_met, join, ridges_a_cube_wide};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_gen::hash;
+use terra_gen::hash::QuickMap;
 
 pub use covering::TUCK_M;
 pub use flashing::is_flashing;
@@ -787,7 +788,7 @@ impl Roofs {
 
     fn fingerprint_of(&self) -> u64 {
         use std::hash::Hasher;
-        let mut hash = crate::mesh::Corners::default();
+        let mut hash = terra_gen::hash::Fnv1a::default();
         for (q, square) in self.squares.iter().enumerate() {
             hash.write_i32(square.place[0]);
             hash.write_i32(square.place[1]);
@@ -925,7 +926,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         let segment: &Segment = segment;
         let shown = index < joined.len();
         let cell = roofs.cell(segment.square, segment.part.stage());
-        let seed = hash(&[
+        let seed = hash::of(&[
             segment.from.0[0] as u32,
             segment.from.0[2] as u32,
             segment.part as u32,

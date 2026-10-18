@@ -439,7 +439,7 @@ struct Spacing<'a> {
     fine: Vec<f32>,
     half: Vec<f32>,
     /// Each cube's, worked out once: the faces round a line each ask for the four cubes'.
-    known: std::cell::RefCell<QuickMap<IVec3, [Arc<[f32]>; 3]>>,
+    known: std::cell::RefCell<terra_gen::hash::QuickMap<IVec3, [Arc<[f32]>; 3]>>,
     nb: &'a Neighbourhood<'a>,
     look: &'a Look,
     heights: &'a Heights<'a>,
@@ -986,7 +986,7 @@ impl Drafting<'_> {
     fn placed_key(&self) -> Option<u64> {
         let (nb, heights, cube) = (self.ctx.nb, self.ctx.heights, self.at.cube);
         self.at.signed.map(|_| {
-            let mut hash = crate::mesh::Corners::default();
+            let mut hash = terra_gen::hash::Fnv1a::default();
             let mut floats = |values: &[f32]| {
                 hash.write_usize(values.len());
                 for v in values {
@@ -1553,7 +1553,7 @@ fn smooth_normals(faces: &mut [Face], grid: &Grid) {
         }
         data.local = local;
     }
-    let mut slots: QuickMap<IVec3, u32> = QuickMap::default();
+    let mut slots = terra_gen::hash::QuickMap::<IVec3, u32>::default();
     let mut sums: Vec<Vec3> = Vec::new();
     let mut anew = vec![false; grid.len()];
     for face in faces.iter().filter(|face| face.fresh) {

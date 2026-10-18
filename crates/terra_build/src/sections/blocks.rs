@@ -325,7 +325,7 @@ impl Cutting<'_> {
 struct Beds<'a> {
     beds: Vec<crate::dress::Bed>,
     boxes: Vec<(Vec3, Vec3, &'a Piece)>,
-    at: crate::mesh::QuickMap<IVec3, Vec<usize>>,
+    at: terra_gen::hash::QuickMap<IVec3, Vec<usize>>,
 }
 
 impl<'a> Beds<'a> {
@@ -350,7 +350,7 @@ impl<'a> Beds<'a> {
             })
             .collect();
         let beds: Vec<crate::dress::Bed> = bedded.iter().map(|(_, bed)| *bed).collect();
-        let mut at: crate::mesh::QuickMap<IVec3, Vec<usize>> = Default::default();
+        let mut at: terra_gen::hash::QuickMap<IVec3, Vec<usize>> = Default::default();
         for (index, (low, high, _)) in boxes.iter().enumerate() {
             let margin = Vec3::splat(BED_REACH_M);
             let (from, to) = (
@@ -407,13 +407,13 @@ struct Holes {
     metres: [f32; 2],
     /// A cube's damage round it, by a number, or `None` where none round it can take a
     /// stone anywhere, asked once a cube.
-    fall_keys: std::cell::RefCell<crate::mesh::QuickMap<IVec3, Option<u64>>>,
+    fall_keys: std::cell::RefCell<terra_gen::hash::QuickMap<IVec3, Option<u64>>>,
     /// What was lost at a stone's middle, read there once for each stone of each wall's
     /// face (`cells::middle` is the very same from every texel of a stone): a stone is
     /// whole or gone, never cut across.
-    at_middles: std::cell::RefCell<crate::mesh::QuickMap<[i32; 5], f32>>,
+    at_middles: std::cell::RefCell<terra_gen::hash::QuickMap<[i32; 5], f32>>,
     /// Whether any stone has gone from a cube's sides, asked once a cube.
-    has_holes: std::cell::RefCell<crate::mesh::QuickMap<IVec3, bool>>,
+    has_holes: std::cell::RefCell<terra_gen::hash::QuickMap<IVec3, bool>>,
 }
 
 impl Holes {

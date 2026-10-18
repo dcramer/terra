@@ -3,9 +3,9 @@
 //! go of it, the top first, each flung on as it was going and breaking where it lands.
 
 use super::{Fragment, GRAVITY, Shape, unit};
-use crate::layout::hash;
 use crate::{Base, Cube};
 use glam::{IVec3, Quat, Vec3};
+use terra_gen::hash;
 
 /// A tall fall tipping over as one before it breaks up ([`topple`]): the edge of its foot it
 /// turns about, the axis along that edge, how far over it has gone and how fast it is
@@ -81,7 +81,7 @@ pub fn topple(made: &mut [Fragment], fell: &[(IVec3, Cube)], lean: Vec3) {
         .iter()
         .map(|&i| made[i].at.y + made[i].size.y * 0.5)
         .fold(f32::MIN, f32::max);
-    let seed = hash(&[low.x as u32, low.y as u32, low.z as u32, fell.len() as u32]);
+    let seed = hash::of(&[low.x as u32, low.y as u32, low.z as u32, fell.len() as u32]);
     let own = unit(&[seed, 1]) * core::f32::consts::TAU;
     let way = lean.with_y(0.0).try_normalize().unwrap_or(Vec3::new(
         libm::cosf(own),

@@ -509,53 +509,6 @@ impl std::hash::Hasher for Welding {
     }
 }
 
-/// FNV-1a over a corner's numbers' bits: quick, and it needs no crate.
-#[derive(Default)]
-pub(crate) struct Corners(u64);
-
-/// A hash map keyed quickly ([`Corners`]): for places and cubes, never for anything a
-/// stranger chooses.
-pub(crate) type QuickMap<K, V> =
-    std::collections::HashMap<K, V, std::hash::BuildHasherDefault<Corners>>;
-
-impl std::hash::Hasher for Corners {
-    fn finish(&self) -> u64 {
-        // The low bits of FNV are weak; folded so a table's buckets spread.
-        self.0 ^ (self.0 >> 29)
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
-        }
-    }
-    fn write_u32(&mut self, n: u32) {
-        self.0 = (self.0 ^ u64::from(n)).wrapping_mul(0x0100_0000_01b3);
-    }
-    fn write_i32(&mut self, n: i32) {
-        self.write_u32(n as u32);
-    }
-    // A number a step, not a byte a step: a piece is hashed by many of them.
-    fn write_u8(&mut self, n: u8) {
-        self.write_u32(u32::from(n));
-    }
-    fn write_u16(&mut self, n: u16) {
-        self.write_u32(u32::from(n));
-    }
-    fn write_u64(&mut self, n: u64) {
-        self.write_u32(n as u32);
-        self.write_u32((n >> 32) as u32);
-    }
-    fn write_i64(&mut self, n: i64) {
-        self.write_u64(n as u64);
-    }
-    fn write_usize(&mut self, n: usize) {
-        self.write_u64(n as u64);
-    }
-    fn write_isize(&mut self, n: isize) {
-        self.write_u64(n as u64);
-    }
-}
-
 /// The six faces of a cube: which way each faces, and its corners as seen from there,
 /// on a cube from 0 to 1.
 const FACES: [([i32; 3], [[f32; 3]; 4]); 6] = [

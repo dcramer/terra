@@ -57,7 +57,7 @@ impl Noise {
             Some((cell, v)) if cell == b => v,
             _ => {
                 let at = |dx: i32, dy: i32, dz: i32| {
-                    layout::unit(hash(&[
+                    hash::unit(hash::of(&[
                         (b.x + dx) as u32,
                         (b.y + dy) as u32,
                         (b.z + dz) as u32,
@@ -109,7 +109,7 @@ pub(crate) fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
     let f = f * f * (Vec3::splat(3.0) - 2.0 * f);
     let b = base.as_ivec3();
     let at = |dx: i32, dy: i32, dz: i32| {
-        layout::unit(hash(&[
+        hash::unit(hash::of(&[
             (b.x + dx) as u32,
             (b.y + dy) as u32,
             (b.z + dz) as u32,
@@ -147,7 +147,7 @@ pub(super) fn masked(
         let y = p.y / lift + 0.35 * (noise.at(p, 1.1, 11) - 0.5);
         let layer = libm::floorf(y);
         let within = y - layer;
-        let own = layout::unit(hash(&[layer as i32 as u32, 17])) - 0.5;
+        let own = hash::unit(hash::of(&[layer as i32 as u32, 17])) - 0.5;
         let seam = (1.0 - (within.min(1.0 - within) / 0.06).min(1.0)) * 0.7;
         // Within a lift, finer layers where each basketful was rammed, fainter.
         let fine = libm::sinf(y * std::f32::consts::TAU * 3.0 + 2.0 * noise.at(p, 0.7, 15)) * 0.2;

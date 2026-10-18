@@ -15,11 +15,12 @@
 //! a coping round its cap.
 
 use super::roles::{Beyond, Dir, Dressed, Edge, End, Role, Roles};
-use super::{Piece, Place, Scope, TICKS, hash};
+use super::{Piece, Place, Scope, TICKS};
 use crate::kit::{Dress, Kit, Kits};
 use crate::{Base, Fill, Shape};
 use glam::IVec3;
 use std::collections::BTreeSet;
+use terra_gen::hash;
 
 /// Whether a kit dresses any role with pieces of its own.
 pub(super) fn dresses(kit: &Kit) -> bool {
@@ -197,7 +198,7 @@ fn across_openings(
                         ends,
                         lift: 0,
                         sink: 0,
-                        seed: hash(&[
+                        seed: hash::of(&[
                             cube.x as u32,
                             cube.y as u32,
                             cube.z as u32,
@@ -251,7 +252,7 @@ fn shaped(
             to: Place(to),
             side,
             ends,
-            seed: hash(&[
+            seed: hash::of(&[
                 cube.x as u32,
                 cube.y as u32,
                 cube.z as u32,
@@ -493,7 +494,7 @@ fn piece(roles: &Roles, kit: &Kit, dressed: &Dressed) -> Option<Piece> {
         lift,
         sink,
     } = *dressed;
-    let seed = hash(&[
+    let seed = hash::of(&[
         cube.x as u32,
         cube.y as u32,
         cube.z as u32,

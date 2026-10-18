@@ -10,8 +10,8 @@ use super::{
     CLEAR_M, GATHERED_M, Thing, ThingKind, Town, facing_of, from_street, inside, point_segment,
     polygons, segment_polygon, segments,
 };
-use crate::layout::{hash, unit};
 use glam::Vec2;
+use terra_gen::hash;
 
 /// How a fence is made.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -325,7 +325,7 @@ impl Town {
     /// trades' goods are stood there (`market`). Not before the counter or beside it, where
     /// the market's crowd walks and browses: room there jammed it (`cargo xtask life`).
     fn stall_goods(&mut self, seed: u32, numbers: &Furnishing) {
-        let roll = |salt: u32| unit(hash(&[seed, 43, salt]));
+        let roll = |salt: u32| hash::unit(hash::of(&[seed, 43, salt]));
         let stalls: Vec<Thing> = self
             .things
             .iter()
@@ -354,7 +354,7 @@ impl Town {
 
     /// Barrels: beside the forge, beside some stalls, and against the backs of some yards.
     fn barrels(&mut self, seed: u32, numbers: &Furnishing) {
-        let roll = |salt: u32| unit(hash(&[seed, 41, salt]));
+        let roll = |salt: u32| hash::unit(hash::of(&[seed, 41, salt]));
         let mut offers: Vec<(Vec2, f32, Option<usize>)> = Vec::new();
         for (index, thing) in self.things.iter().enumerate() {
             let salt = index as u32 * 8;
@@ -449,7 +449,7 @@ impl Town {
     /// Carts: one or so beside the market's stalls, along their row, and others in deep
     /// yards along a side, their shafts toward the house.
     fn carts(&mut self, seed: u32, numbers: &Furnishing) {
-        let roll = |salt: u32| unit(hash(&[seed, 42, salt]));
+        let roll = |salt: u32| hash::unit(hash::of(&[seed, 42, salt]));
         let stalls: Vec<Thing> = self
             .things
             .iter()

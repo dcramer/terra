@@ -18,11 +18,12 @@
 
 use crate::kit::{Kit, Part};
 use crate::layout::roofs::{RoofPart, planar_normal};
-use crate::layout::{Piece, Place, hash, metres, unit};
+use crate::layout::{Piece, Place, metres};
 use crate::mesh::{Material, Surface, Surfaces, planar};
 use crate::modules::{self, Line, Look, Seat};
 use crate::relief::Relief;
 use glam::Vec3;
+use terra_gen::hash;
 
 /// The size in metres of a kit's texture for a material, or a metre square if it has none.
 fn size(kit: &Kit, material: Material) -> [f32; 2] {
@@ -475,7 +476,7 @@ impl Square {
                 let course = libm::floorf(
                     self.at(band.iter().map(|p| p.y).sum::<f32>() / band.len() as f32),
                 ) as i32;
-                let shift = unit(hash(&[course as u32, 77])) * 7.0;
+                let shift = hash::unit(hash::of(&[course as u32, 77])) * 7.0;
                 let uv = |p: Vec3| [p.dot(level) / texture[0] + shift, v(p.y)];
                 let placed: Vec<(Vec3, Vec3, [f32; 2])> =
                     band.iter().map(|&p| (top(p), normal(p), uv(p))).collect();

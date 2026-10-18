@@ -30,11 +30,11 @@
 //! joined where nothing built is in the way. It needs no navmesh: the layout knows every
 //! street.
 
-use crate::layout::{hash, unit};
 use crate::village::{self, Building, Kinds, Picks, Plan, Roof, Scheme};
 use crate::{Base, CELL_M, STOREY_CUBES};
 use glam::Vec2;
 use std::collections::BTreeSet;
+use terra_gen::hash;
 
 mod enclosure;
 mod furnish;
@@ -329,7 +329,7 @@ pub const CLEAR_M: f32 = 0.45;
 /// `heights` gives: the same seed and ground, the same town.
 pub fn town(seed: u32, picks: impl Picks + Copy, heights: Heights) -> Town {
     let (along, uphill) = contour(heights, Vec2::ZERO, 8.0);
-    let shape = match hash(&[seed, 1]) % 3 {
+    let shape = match hash::of(&[seed, 1]) % 3 {
         0 => SquareShape::Long,
         1 => SquareShape::Triangle,
         _ => SquareShape::Widened,

@@ -9,7 +9,7 @@ use super::*;
 /// were cut later or face the rain: one tint at every end of a wall read as a row of the same
 /// sticker (research/kit-review-2026-10-14.md).
 pub(super) fn end_colour(t: &crate::kit::Timber, seed: u32, shade: f32, warmth: f32) -> [f32; 3] {
-    let mut random = Random(layout::hash(&[seed, 0x5a3d]));
+    let mut random = Random(terra_gen::hash::of(&[seed, 0x5a3d]));
     let own = 1.0 + END_SHADE * random.signed();
     let grey = END_GREY * random.unit() * random.unit();
     let tinted = [
@@ -183,7 +183,7 @@ pub(crate) fn end_cell(kit: &Kit, seed: u32) -> ([f32; 2], f32) {
     if cells == 1 {
         return ([0.0, 0.0], 1.0);
     }
-    let which = crate::layout::hash(&[seed, 0x0e4d]) % (cells * cells);
+    let which = terra_gen::hash::of(&[seed, 0x0e4d]) % (cells * cells);
     let size = 1.0 / cells as f32;
     (
         [(which % cells) as f32 * size, (which / cells) as f32 * size],

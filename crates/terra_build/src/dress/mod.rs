@@ -27,12 +27,13 @@ mod masks;
 mod profiles;
 
 use crate::kit::{Dress, Kit, Masks};
-use crate::layout::{self, Dir, End, Piece, TICKS, hash};
+use crate::layout::{self, Dir, End, Piece, TICKS};
 use crate::mesh::{Indexed, Material, Surface, Surfaces, planar};
 use crate::{Base, CELL_M, Fill};
 use glam::{IVec3, Mat3, Vec3};
 use profiles::stone_look;
 use std::collections::BTreeMap;
+use terra_gen::hash;
 
 pub use masks::{ground_at, mask, roof_mask, sheltered};
 pub(crate) use masks::{lift_at, smooth};

@@ -15,11 +15,11 @@
 //! the rest are kept as they were, so an edit to a castle costs what its rooms near it
 //! cost, not the castle.
 
-use crate::mesh::QuickMap;
 use crate::{Base, CELL_M, Cube};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
+use terra_gen::hash::QuickMap;
 
 /// The six neighbours of a cube.
 const FACES: [IVec3; 6] = crate::support::FACES;

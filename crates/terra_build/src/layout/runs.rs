@@ -46,7 +46,7 @@ pub(super) fn courses(
             .map(|along| walls.spot(kit, axis, row, along, course))
             .collect();
         let centre = axis.centre(kit, course);
-        let seed = hash(&[axis as u32, row as u32, course as u32]);
+        let seed = hash::of(&[axis as u32, row as u32, course as u32]);
         let mut index = 0;
         while index < spots.len() {
             let Spot::Log(split) = spots[index] else {
@@ -88,7 +88,7 @@ pub(super) fn courses(
                     _ if walls.board_against(axis.cube(row, beyond, cube.y)) => -kit.frame * 0.6,
                     // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
-                        kit.overhang - unit(hash(&[seed, end as u32, which])) * kit.ragged()
+                        kit.overhang - unit(hash::of(&[seed, end as u32, which])) * kit.ragged()
                     }
                     _ => 0.0,
                 }) - stagger
@@ -119,7 +119,7 @@ pub(super) fn courses(
             let span = (kit.longest - JOINT_CLEAR_M).max(CELL_M);
             let phase = span
                 * ((JOINT_STEP * course as f32).rem_euclid(1.0)
-                    + 0.25 * unit(hash(&[axis as u32, row as u32, 17])));
+                    + 0.25 * unit(hash::of(&[axis as u32, row as u32, 17])));
             // No joint in a cube another wall crosses: the logs are notched together there,
             // and a sawn end would stand in the crossing wall's daub. One that falls in it is
             // moved out to its nearer side.
@@ -201,7 +201,7 @@ pub(super) fn courses(
                     axis.point(row, a, centre),
                     axis.point(row, b, centre),
                     split,
-                    hash(&[seed, 0, (a * 100.0) as i32 as u32]),
+                    hash::of(&[seed, 0, (a * 100.0) as i32 as u32]),
                     chinking.filter(|(near, far)| far > near),
                 );
                 set_role(&mut piece, role);
@@ -261,7 +261,7 @@ pub(super) fn corner_posts(
                     middle.z,
                 ),
                 Split::Whole,
-                hash(&[at.x as u32, at.y as u32, at.z as u32, edge.side as u32, 13]),
+                hash::of(&[at.x as u32, at.y as u32, at.z as u32, edge.side as u32, 13]),
                 None,
             );
             set_role(&mut post, Some(Role::Arris));
@@ -761,7 +761,7 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 if index == 0 {
                     seed
                 } else {
-                    hash(&[seed, index as u32])
+                    hash::of(&[seed, index as u32])
                 },
                 chinking.and_then(|(c0, c1)| {
                     // Cut where the roof cuts it; at its own ends, as the run laid it, past
@@ -1187,7 +1187,7 @@ pub(super) fn posts(walls: &Walls, ours: &[IVec3], layout: &mut Layout) {
             middle(at.y),
             middle(top.y + 1),
             Split::Whole,
-            hash(&[at.x as u32, at.y as u32, at.z as u32, 7]),
+            hash::of(&[at.x as u32, at.y as u32, at.z as u32, 7]),
             None,
         ));
     }

@@ -13,7 +13,7 @@ const CELLS: [usize; 2] = [5, 13];
 
 /// A number from 0 to 1 for a cell, the same every run.
 fn hash(x: i64, y: i64, salt: u32) -> f32 {
-    terra_build::layout::unit3(0, x as u32, y as u32, salt)
+    terra_gen::hash::unit3(0, x as u32, y as u32, salt)
 }
 
 /// How far a point (in cells, wrapping round `cells`) is from the nearest edge between two

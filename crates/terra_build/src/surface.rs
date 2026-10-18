@@ -20,7 +20,7 @@
 //! the relief fades out, as the faces there push different ways; how near is measured to
 //! the edge itself, so every face at a point agrees.
 
-use crate::mesh::{QuickMap, planar};
+use crate::mesh::planar;
 use crate::{CELL_M, Surface};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
@@ -84,7 +84,7 @@ impl Packed {
             let layer = libm::floorf(y);
             let within = y - layer;
             let own = |l: f32| {
-                (crate::layout::unit(crate::layout::hash(&[l as i32 as u32, 61])) - 0.5)
+                (terra_gen::hash::unit(terra_gen::hash::of(&[l as i32 as u32, 61])) - 0.5)
                     * 2.0
                     * k.step
             };
@@ -325,7 +325,7 @@ pub fn draw_cut(
 /// ([`draw_part`]). Each face is filed under the number of the surface it is of.
 #[derive(Clone, Debug, Default)]
 pub struct FaceCache {
-    faces: QuickMap<(u32, IVec3, u8), Arc<FaceData>>,
+    faces: terra_gen::hash::QuickMap<(u32, IVec3, u8), Arc<FaceData>>,
     /// How many of them were taken from the last.
     taken: usize,
 }

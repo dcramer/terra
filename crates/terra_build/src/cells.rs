@@ -109,7 +109,7 @@ pub fn label(data: &[u8], width: usize, height: usize, stride: usize, share: f32
             continue;
         }
         // A number from 8 to 255, the same every run, scattered so neighbours differ.
-        let h = crate::layout::mix3(0, count, 0, 0);
+        let h = terra_gen::hash::mix3(0, count, 0, 0);
         let value = 8 + (h % 248) as u8;
         let count_f = members.len() as f32;
         let (mx, my) = members.iter().fold((0.0f32, 0.0f32), |(a, b), &(_, x, y)| {

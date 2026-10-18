@@ -185,7 +185,7 @@ impl Base {
         use std::cmp::Reverse;
         // Hashed, not ordered: a tower's fall floods thousands of cubes (D305).
         type Set =
-            std::collections::HashSet<IVec3, std::hash::BuildHasherDefault<crate::mesh::Corners>>;
+            std::collections::HashSet<IVec3, std::hash::BuildHasherDefault<terra_gen::hash::Fnv1a>>;
         let stays = |at: IVec3| !gone.contains(&at.to_array()) && self.is_in(at);
         let mut joined = Set::default();
         let mut lost = Set::default();

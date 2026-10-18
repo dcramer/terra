@@ -153,8 +153,8 @@ pub fn bed(piece: &Piece, kit: &Kit) -> Option<Bed> {
 /// A stone's shade and where its texture falls, from its seed: each a part of the texture
 /// of its own, a little lighter or darker and warmer or cooler, as stones from one bed are.
 pub(super) fn stone_look(seed: u32, tint: [f32; 3]) -> ([f32; 3], [f32; 2]) {
-    let shade = 0.86 + 0.16 * layout::unit(hash(&[seed, 3]));
-    let warm = 0.06 * (layout::unit(hash(&[seed, 4])) - 0.5);
+    let shade = 0.86 + 0.16 * hash::unit(hash::of(&[seed, 3]));
+    let warm = 0.06 * (hash::unit(hash::of(&[seed, 4])) - 0.5);
     (
         [
             tint[0] * shade * (1.0 + warm),
@@ -162,8 +162,8 @@ pub(super) fn stone_look(seed: u32, tint: [f32; 3]) -> ([f32; 3], [f32; 2]) {
             tint[2] * shade * (1.0 - warm),
         ],
         [
-            layout::unit(hash(&[seed, 1])),
-            layout::unit(hash(&[seed, 2])),
+            hash::unit(hash::of(&[seed, 1])),
+            hash::unit(hash::of(&[seed, 2])),
         ],
     )
 }

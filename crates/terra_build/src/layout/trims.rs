@@ -57,7 +57,7 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
                     axis.point(row, middle, low as f32 * CELL_M - under),
                     axis.point(row, middle, (high + 1) as f32 * CELL_M + over),
                     super::Split::Whole,
-                    super::hash(&[row as u32, along as u32, low as u32, outward as u32, 11]),
+                    super::hash::of(&[row as u32, along as u32, low as u32, outward as u32, 11]),
                     None,
                 );
                 super::runs::set_role(&mut post, Some(super::roles::Role::Jamb));

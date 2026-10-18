@@ -55,7 +55,7 @@ pub(super) fn break_up(made: &mut Member, frame: &Frame, harm: Harm, depth: f32,
         let d = p - middle;
         (d - frame.axis * d.dot(frame.axis)).normalize_or_zero()
     };
-    let unit = |a: u32, b: i32, c: i32| crate::layout::unit3(seed, a, b as u32, c as u32);
+    let unit = |a: u32, b: i32, c: i32| terra_gen::hash::unit3(seed, a, b as u32, c as u32);
     let length = frame.length;
     let radius = made.grid[0]
         .iter()

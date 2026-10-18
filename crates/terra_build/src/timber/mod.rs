@@ -355,7 +355,7 @@ impl Frame {
 /// where it gives none. Gives its age, 0 to 1.
 fn weathered(made: &mut Member, kit: &Kit, frame: &Frame, weather: Vec3, seed: u32) -> f32 {
     let v = &kit.timber.variation;
-    let mut random = Random(layout::hash(&[seed, 0x77e1]));
+    let mut random = Random(terra_gen::hash::of(&[seed, 0x77e1]));
     // Each log its own age, from fresh to as grey as the kit lets it go.
     let age = (v.age * random.unit()).clamp(0.0, 1.0);
     if v.age <= 0.0 && v.stain <= 0.0 && v.lichen <= 0.0 {
@@ -415,7 +415,7 @@ fn weathered(made: &mut Member, kit: &Kit, frame: &Frame, weather: Vec3, seed: u
 /// member's seed, as each course was daubed in its own batch, and dried paler where the
 /// member above has weathered most.
 fn chinked(kit: &Kit, seed: u32, age: f32) -> [f32; 3] {
-    let mut random = Random(layout::hash(&[seed, 0xd0b]));
+    let mut random = Random(terra_gen::hash::of(&[seed, 0xd0b]));
     let shade = 1.0 + kit.timber.variation.shade * 0.7 * random.signed() + 0.08 * age;
     kit.colours.chinking.map(|v| (v * shade).clamp(0.0, 1.0))
 }

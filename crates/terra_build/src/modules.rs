@@ -21,9 +21,9 @@
 //! another material, and each copy is a little lighter or darker by its seed.
 
 use crate::dress::{Module, Stone};
-use crate::layout::{self, hash};
 use crate::mesh::{Indexed, Material, Surfaces};
 use glam::Vec3;
+use terra_gen::hash;
 
 /// How a module sits on its line.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -104,16 +104,16 @@ fn lay_cut(
     let model = module.length.max(0.05);
     let stretch = look.repeat.max(1.0);
     let long = model * stretch;
-    let into = 0.1 + 0.8 * layout::unit(hash(&[line.seed, 13]));
+    let into = 0.1 + 0.8 * hash::unit(hash::of(&[line.seed, 13]));
     let first = lo - into * long;
     let mut cuts: [Vec<(Vec3, Vec3, [f32; 2])>; 2] = [Vec::new(), Vec::new()];
     let mut copy = 0;
     while first + copy as f32 * long < hi {
-        let seed = hash(&[line.seed, copy as u32]);
-        let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
+        let seed = hash::of(&[line.seed, copy as u32]);
+        let mesh = &variants[hash::of(&[seed, 7]) as usize % variants.len()];
         let start = first + copy as f32 * long;
         // Every other copy turned end for end, so its repeat reads half as often.
-        let (offset, along) = if hash(&[seed, 11]) % 2 == 1 {
+        let (offset, along) = if hash::of(&[seed, 11]) % 2 == 1 {
             (start + long, -1.0)
         } else {
             (start, 1.0)
@@ -322,7 +322,7 @@ fn clipped(
 ) {
     // A modelled piece carries its own colour: copies of it vary only a little, or a line
     // of them reads in bands.
-    let shade = 1.0 - look.shade * 0.3 * layout::unit(hash(&[seed, 3]));
+    let shade = 1.0 - look.shade * 0.3 * hash::unit(hash::of(&[seed, 3]));
     let colour = look.tint.map(|c| c * shade);
     // Each corner in the line's own frame (along it, up, across), its normal there and its
     // place in the atlas: cut there, and only then seated, so a cut over a crease is cut
@@ -541,8 +541,8 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         count
     };
     for copy in 0..count {
-        let seed = hash(&[line.seed, copy as u32]);
-        let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
+        let seed = hash::of(&[line.seed, copy as u32]);
+        let mesh = &variants[hash::of(&[seed, 7]) as usize % variants.len()];
         let start = copy as f32 * module.length * k;
         // A modelled piece is one model, so every other copy is turned end for end (mirrored
         // along it) and its repeat reads half as often.
@@ -566,7 +566,7 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             if !capped {
                 continue;
             }
-            let seed = hash(&[line.seed, 99, end as u32]);
+            let seed = hash::of(&[line.seed, 99, end as u32]);
             let at = if end == 1 { length - lead[1] } else { lead[0] };
             let sign = if end == 1 { 1.0 } else { -1.0 };
             place(
@@ -913,11 +913,11 @@ fn place(
     // it at its start (x = 0) and its end.
     closing: Option<(f32, [bool; 2])>,
 ) {
-    let shade = 1.0 - look.shade * layout::unit(hash(&[seed, 3]));
+    let shade = 1.0 - look.shade * hash::unit(hash::of(&[seed, 3]));
     let colour = look.tint.map(|c| c * shade);
     let shift = [
-        layout::unit(hash(&[seed, 1])),
-        layout::unit(hash(&[seed, 2])),
+        hash::unit(hash::of(&[seed, 1])),
+        hash::unit(hash::of(&[seed, 2])),
     ];
     // Each corner in the world, with its normal, and where it falls on its texture; and in
     // the line's frame, to split a face across a crease.

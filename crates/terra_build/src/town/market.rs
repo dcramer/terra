@@ -7,9 +7,9 @@
 //! a model of the goods prop pipeline (`tools/props/goods.ts`), placed by its size alone.
 
 use super::{Thing, ThingKind, Town};
-use crate::layout::{hash, unit};
 use glam::Vec2;
 use serde::Deserialize;
+use terra_gen::hash;
 
 /// The file a market's trades are read from, under `assets`.
 pub const FILE: &str = "data/market.ron";
@@ -97,7 +97,7 @@ impl Market {
                 if count == 0 {
                     return None;
                 }
-                let mut pick = hash(&[seed, 63, n as u32]) as usize % count;
+                let mut pick = hash::of(&[seed, 63, n as u32]) as usize % count;
                 if pick == last && count > 1 {
                     pick = (pick + 1) % count;
                 }
@@ -122,7 +122,7 @@ impl Market {
     /// The stalls that hang a lantern, by the seed, as indices of the town's things.
     pub fn lanterns(&self, town: &Town, seed: u32) -> Vec<usize> {
         stalls(town)
-            .filter(|(index, _)| unit(hash(&[seed, 64, *index as u32])) < self.lantern.1)
+            .filter(|(index, _)| hash::unit(hash::of(&[seed, 64, *index as u32])) < self.lantern.1)
             .map(|(index, _)| index)
             .collect()
     }
@@ -181,7 +181,7 @@ impl Market {
             if choices.is_empty() {
                 continue;
             }
-            let first = hash(&[seed, 61, stall as u32]) as usize;
+            let first = hash::of(&[seed, 61, stall as u32]) as usize;
             let turn = (first + beside[stall]) % choices.len();
             choices.rotate_left(turn);
             beside[stall] += 1;
@@ -209,7 +209,7 @@ impl Market {
         size: &dyn Fn(&str) -> Option<Vec2>,
     ) -> Vec<(String, Vec2, f32)> {
         let counter = self.counter;
-        let roll = |n: u32| unit(hash(&[seed, 62, salt, n]));
+        let roll = |n: u32| hash::unit(hash::of(&[seed, 62, salt, n]));
         let mut order: Vec<usize> = (0..trade.counter.len()).collect();
         shuffle(&mut order, seed, 100 + salt);
         let (least, most) = counter.goods;
@@ -279,7 +279,7 @@ fn stalls(town: &Town) -> impl Iterator<Item = (usize, &Thing)> {
 /// A seeded shuffle (Fisher and Yates').
 fn shuffle(items: &mut [usize], seed: u32, salt: u32) {
     for i in (1..items.len()).rev() {
-        let j = hash(&[seed, 63, salt, i as u32]) as usize % (i + 1);
+        let j = hash::of(&[seed, 63, salt, i as u32]) as usize % (i + 1);
         items.swap(i, j);
     }
 }

@@ -8,7 +8,7 @@ impl Town {
     /// town has its count. The first on the main street is the smithy: a woodshed open to
     /// the street with a forge before it.
     pub(super) fn plots(&mut self, seed: u32, picks: impl Picks + Copy) {
-        let want = BUILDINGS.0 + hash(&[seed, 12]) as usize % (BUILDINGS.1 - BUILDINGS.0 + 1);
+        let want = BUILDINGS.0 + hash::of(&[seed, 12]) as usize % (BUILDINGS.1 - BUILDINGS.0 + 1);
         let mut queue: Vec<(Plan, Scheme, Roof, i32)> = village::every_building()
             .into_iter()
             // Houses, not sheds: a lean-to's one tall gable reads as a house half built
@@ -21,7 +21,7 @@ impl Town {
             })
             .collect();
         for i in (1..queue.len()).rev() {
-            let j = hash(&[seed, 13, i as u32]) as usize % (i + 1);
+            let j = hash::of(&[seed, 13, i as u32]) as usize % (i + 1);
             queue.swap(i, j);
         }
         let mut fronts: Vec<Front> = Vec::new();
@@ -66,7 +66,7 @@ impl Town {
                     continue;
                 }
                 let first_street = f == outline.len();
-                let building_seed = hash(&[seed, 14, self.buildings.len() as u32]);
+                let building_seed = hash::of(&[seed, 14, self.buildings.len() as u32]);
                 let kinds = picks.pick(building_seed);
                 if first_street && !smithy {
                     let choice = (Plan::Shed, Scheme::Timber, Roof::LeanTo, 6);
@@ -82,7 +82,7 @@ impl Town {
                 // two storeys where the queue has them, so it is closed in as a town's is.
                 if !fronts[f].grand
                     && fronts[f].at < TALL_WITHIN_M
-                    && unit(hash(&[building_seed, 16])) < TALL_SHARE
+                    && hash::unit(hash::of(&[building_seed, 16])) < TALL_SHARE
                     && let Some(look) = (0..length)
                         .find(|look| matches!(queue[(first + look) % length].0, Plan::TwoStoreys))
                 {
@@ -103,7 +103,7 @@ impl Town {
                 // take the larger houses where the queue has them, and where the next will
                 // not fit (by a street's mouth, at a corner, at an edge's end) a smaller one
                 // that does, before the plot moves on a metre.
-                let tall = unit(hash(&[building_seed, 16])) < TALL_SHARE;
+                let tall = hash::unit(hash::of(&[building_seed, 16])) < TALL_SHARE;
                 if let Some(look) = (0..length)
                     .find(|look| {
                         tall && matches!(queue[(first + look) % length].0, Plan::TwoStoreys)
@@ -198,7 +198,7 @@ impl Town {
             ..probe
         };
         let ground = footprint(&building, &rects);
-        let gap = if hash(&[seed, 15]).is_multiple_of(PASSAGE_EVERY) {
+        let gap = if hash::of(&[seed, 15]).is_multiple_of(PASSAGE_EVERY) {
             PASSAGE_M
         } else {
             APART_M
@@ -325,9 +325,9 @@ impl Town {
                 facing,
                 Vec2::new((low.x + high.x) * 0.5, back + deep * 0.5),
             );
-            let kinds = picks.pick(hash(&[seed, 16, home as u32]));
+            let kinds = picks.pick(hash::of(&[seed, 16, home as u32]));
             // Turn by turn, so a town has some of each, then by the seed.
-            let what = (made + hash(&[seed, 17]) % 4) % 4;
+            let what = (made + hash::of(&[seed, 17]) % 4) % 4;
             made += 1;
             match what {
                 0 if deep >= 6.0 && high.x - low.x >= 5.0 => {
@@ -342,7 +342,7 @@ impl Town {
                     // block before it.
                     let corner = place(at, facing, Vec2::new(high.x - 1.8, back + 2.2));
                     let shed = village::put_up(
-                        hash(&[seed, 18, home as u32]),
+                        hash::of(&[seed, 18, home as u32]),
                         (Plan::Shed, Scheme::Timber, Roof::LeanTo, 6),
                         corner.to_array(),
                         facing,
@@ -409,7 +409,7 @@ impl Town {
             }
             // A low wall runs along its own x, its middle at its place; its face behind it.
             let wall = village::put_up(
-                hash(&[home as u32, index as u32]),
+                hash::of(&[home as u32, index as u32]),
                 (Plan::Wall, Scheme::Masonry, Roof::Gable, long),
                 ((from + to) * 0.5).to_array(),
                 libm::atan2f(-way.y, way.x),

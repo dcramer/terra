@@ -5,9 +5,10 @@
 use super::lines::crease_met;
 use super::{Beside, RoofPart, Roofs, STEP_M, Segment, join, normal, planar_normal};
 use crate::kit::Kit;
-use crate::layout::{Piece, Place, hash};
+use crate::layout::{Piece, Place};
 use crate::{Base, CELL_M, Fill};
 use glam::{IVec3, Vec3};
+use terra_gen::hash;
 
 /// How far a beam drawn from the kit's rafter module reaches from its line: as it is
 /// modelled, which may be wider than the rafter's laid size.
@@ -82,7 +83,7 @@ pub(super) fn crease_beams(
             from: Place::near(from),
             to: Place::near(to),
             sides: segment.sides,
-            seed: hash(&[seed, 1]),
+            seed: hash::of(&[seed, 1]),
             cell: roofs.cell(segment.square, 1),
             capped: [true; 2],
             met: [false; 2],
@@ -316,7 +317,7 @@ pub(super) fn rafters(
         }
     }
     for segment in join(segments) {
-        let seed = hash(&[
+        let seed = hash::of(&[
             segment.from.0[0] as u32,
             segment.from.0[2] as u32,
             segment.from.0[1] as u32,

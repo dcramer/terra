@@ -10,9 +10,9 @@
 //! that touch, so a chunk is never two walls with air between.
 
 use super::unit;
-use crate::layout::hash;
 use glam::IVec3;
 use std::collections::BTreeSet;
+use terra_gen::hash;
 
 /// Where along its longest side a box is cut, at least and at most, as a share of it.
 const CUT_FROM: f32 = 0.3;
@@ -45,14 +45,14 @@ pub(super) fn chunks(cubes: &[IVec3], least: i32, below: i32, seed: u32) -> Vec<
         // Across its longest side, the level ones first where they tie.
         let axis = [0usize, 2, 1]
             .into_iter()
-            .max_by_key(|&axis| (side[axis], (hash(&[seed, axis as u32]) & 0xFF) as i32))
+            .max_by_key(|&axis| (side[axis], (hash::of(&[seed, axis as u32]) & 0xFF) as i32))
             .unwrap_or(0);
         let share = CUT_FROM + (CUT_TO - CUT_FROM) * unit(&[seed, 2]);
         let cut = low[axis] + ((side[axis] as f32 * share).round() as i32).clamp(1, side[axis] - 1);
         let (near, far): (Vec<usize>, Vec<usize>) =
             part.into_iter().partition(|&i| cubes[i][axis] < cut);
-        todo.push((near, hash(&[seed, 3])));
-        todo.push((far, hash(&[seed, 4])));
+        todo.push((near, hash::of(&[seed, 3])));
+        todo.push((far, hash::of(&[seed, 4])));
     }
     out
 }

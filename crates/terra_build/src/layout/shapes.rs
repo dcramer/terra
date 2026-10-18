@@ -5,11 +5,12 @@
 //! else, and under a bolster across its top where something rests on it.
 
 use super::roles::Role;
-use super::{Layout, Piece, Place, Scope, Split, Walls, hash, runs, ticks};
+use super::{Layout, Piece, Place, Scope, Split, Walls, runs, ticks};
 use crate::kit::{Kit, Kits};
 use crate::{CELL_M, Facing, Fill, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
+use terra_gen::hash;
 
 /// A post's pad: how far across, as a fraction of the cube, and how thick.
 const PAD_ACROSS: f32 = 0.8;
@@ -107,7 +108,7 @@ fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
     let low = at.as_vec3() * CELL_M;
     // A point of the cube in fractions of it: east, up, south.
     let point = |p: Vec3| low + p * CELL_M;
-    let seed = |salt: u32| hash(&[at.x as u32, at.y as u32, at.z as u32, 0xb0c, salt]);
+    let seed = |salt: u32| hash::of(&[at.x as u32, at.y as u32, at.z as u32, 0xb0c, salt]);
     let open = |step: IVec3| {
         base.cube(at + step)
             .is_none_or(|cube| cube.fill != Fill::Solid)
@@ -382,7 +383,7 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
             ),
             wide: ticks(CELL_M * PAD_ACROSS),
             high: ticks(PAD_M),
-            seed: hash(&[foot.x as u32, foot.y as u32, foot.z as u32, 0x9ad]),
+            seed: hash::of(&[foot.x as u32, foot.y as u32, foot.z as u32, 0x9ad]),
         });
     }
     // A bolster across its top, under what rests on it, the way that rests along; none
@@ -400,7 +401,7 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
         middle.with_y(bottom + pad),
         middle.with_y(shaft_top),
         Split::Whole,
-        hash(&[foot.x as u32, foot.y as u32, foot.z as u32, 0x905]),
+        hash::of(&[foot.x as u32, foot.y as u32, foot.z as u32, 0x905]),
         None,
     );
     runs::set_role(&mut shaft, Some(Role::Post));
@@ -422,7 +423,7 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
             centre - reach,
             centre + reach,
             Split::Whole,
-            hash(&[foot.x as u32, top.y as u32, foot.z as u32, 0xb01]),
+            hash::of(&[foot.x as u32, top.y as u32, foot.z as u32, 0xb01]),
             None,
         );
         runs::set_role(&mut cap, Some(Role::Crest));

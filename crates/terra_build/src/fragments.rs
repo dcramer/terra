@@ -23,9 +23,9 @@
 
 use crate::cubes::{Cube, FULL, Kind};
 use crate::kit::{Kit, Pattern};
-use crate::layout::hash;
 use crate::{Base, CELL_M, Material, Surfaces};
 use glam::{IVec3, Quat, Vec3};
+use terra_gen::hash;
 
 mod fracture;
 mod topple;
@@ -355,7 +355,7 @@ impl Fragment {
             for (low, side) in fracture::crack(count, self.seed) {
                 let part = cube * side.as_vec3();
                 let offset = low.as_vec3() * cube + part * 0.5 - self.size * 0.5;
-                let seed = hash(&[self.seed, (low.x | low.y << 4 | low.z << 8) as u32]);
+                let seed = hash::of(&[self.seed, (low.x | low.y << 4 | low.z << 8) as u32]);
                 let r = |salt: u32| unit(&[seed, salt]);
                 let at = self.at + self.turn * offset;
                 let out_from = (self.turn * offset).normalize_or_zero();
@@ -412,7 +412,7 @@ impl Fragment {
 
 /// A number from 0 to 1 from some parts, the same everywhere.
 fn unit(parts: &[u32]) -> f32 {
-    (hash(parts) & 0xFFFF) as f32 / 65535.0
+    (hash::of(parts) & 0xFFFF) as f32 / 65535.0
 }
 
 /// The pieces a cube with its low corner at `low` breaks into, `share` of its way's count,
@@ -464,7 +464,7 @@ fn pieces(
                 wait: 0.0,
                 still: false,
                 fill: 1.0,
-                seed: hash(&[seed, index]),
+                seed: hash::of(&[seed, index]),
                 hinge: None,
             });
         }
@@ -520,7 +520,7 @@ pub fn burst(
     let mut out = Vec::new();
     for (at, cube) in &broken {
         let low = at.as_vec3() * CELL_M;
-        let seed = hash(&[at.x as u32, at.y as u32, at.z as u32]);
+        let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
         let away = (low + CELL_M * 0.5 - impact).normalize_or_zero() * 1.5;
         let fill = f32::from(cube.level()) / f32::from(FULL);
         pieces(
@@ -538,7 +538,7 @@ pub fn burst(
     let lowest_shed = shed.iter().map(|(at, _)| at.y).min().unwrap_or(0);
     for (at, cube) in &shed {
         let low = at.as_vec3() * CELL_M;
-        let seed = hash(&[at.x as u32, at.y as u32, at.z as u32]);
+        let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
         let away = (low + CELL_M * 0.5 - impact)
             .with_y(0.0)
             .normalize_or_zero()
@@ -581,7 +581,7 @@ pub fn burst(
             |(low, high), (at, _)| (low.min(*at), high.max(*at)),
         );
         let (at, cube) = block[0];
-        let seed = hash(&[at.x as u32, at.y as u32, at.z as u32]);
+        let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
         let r = |salt: u32| unit(&[seed, salt]);
         // As full as its cubes are, a single cube part in standing on its foot.
         let fill = if block.len() == 1 {
@@ -643,7 +643,7 @@ pub fn burst(
 fn chunks_of<'a>(hanging: &[&'a (IVec3, Cube)], left: usize) -> Vec<Vec<&'a (IVec3, Cube)>> {
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
     let places: Vec<IVec3> = hanging.iter().map(|(at, _)| *at).collect();
-    let seed = hash(&[places.len() as u32, lowest as u32]);
+    let seed = hash::of(&[places.len() as u32, lowest as u32]);
     let cut = |across: i32| -> Vec<Vec<&(IVec3, Cube)>> {
         // A small fall cube by cube.
         let below = if across == 1 { 2 } else { i32::MAX };

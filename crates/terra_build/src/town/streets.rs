@@ -5,7 +5,9 @@ use super::*;
 
 /// The square: a shape of the seed's size, its middle at the origin, along the contour.
 pub(super) fn square(seed: u32, shape: SquareShape, along: Vec2, across: Vec2) -> Square {
-    let size = |salt: u32, low: f32, high: f32| low + unit(hash(&[seed, 2, salt])) * (high - low);
+    let size = |salt: u32, low: f32, high: f32| {
+        low + hash::unit(hash::of(&[seed, 2, salt])) * (high - low)
+    };
     let corner = |a: f32, u: f32| along * a + across * u;
     let outline = match shape {
         SquareShape::Long => {
@@ -57,7 +59,7 @@ pub(super) fn extent(outline: &[Vec2], way: Vec2) -> (f32, f32) {
 /// turn along it.
 pub(super) fn streets(seed: u32, square: &Square, heights: Heights) -> Vec<Street> {
     let (along, across) = (square.along, square.across);
-    let long = |salt: u32| 80.0 + unit(hash(&[seed, 3, salt])) * 25.0;
+    let long = |salt: u32| 80.0 + hash::unit(hash::of(&[seed, 3, salt])) * 25.0;
     let mut starts: Vec<(Vec2, Vec2, f32, f32)> = Vec::new();
     match square.shape {
         SquareShape::Triangle => {
@@ -71,14 +73,14 @@ pub(super) fn streets(seed: u32, square: &Square, heights: Heights) -> Vec<Stree
             let (low, high) = extent(&square.outline, along);
             starts.push((along * low, -along, long(1), MAIN_WIDE_M));
             starts.push((along * high, along, long(2), MAIN_WIDE_M));
-            if !hash(&[seed, 4]).is_multiple_of(3) {
+            if !hash::of(&[seed, 4]).is_multiple_of(3) {
                 // A side street from one long side, up or down the slope.
-                let way = if hash(&[seed, 5]).is_multiple_of(2) {
+                let way = if hash::of(&[seed, 5]).is_multiple_of(2) {
                     across
                 } else {
                     -across
                 };
-                let shift = (unit(hash(&[seed, 6])) - 0.5) * (high - low) * 0.4;
+                let shift = (hash::unit(hash::of(&[seed, 6])) - 0.5) * (high - low) * 0.4;
                 let (_, edge) = extent(&square.outline, way);
                 starts.push((along * shift + way * edge, way, long(3) * 0.9, SIDE_WIDE_M));
             }
@@ -87,7 +89,7 @@ pub(super) fn streets(seed: u32, square: &Square, heights: Heights) -> Vec<Stree
     let mut streets: Vec<Street> = Vec::new();
     for (index, (from, way, length, wide)) in starts.into_iter().enumerate() {
         let points = trace(
-            hash(&[seed, 7, index as u32]),
+            hash::of(&[seed, 7, index as u32]),
             from,
             way,
             length,
@@ -132,7 +134,7 @@ pub(super) fn trace(
             let straight = if step < out_steps { 4.0 } else { 0.003 };
             let mut cost = rise * 8.0
                 + turn.unsigned_abs() as f32 * straight
-                + unit(hash(&[seed, step as u32, turn as u32])) * 0.004;
+                + hash::unit(hash::of(&[seed, step as u32, turn as u32])) * 0.004;
             for street in others {
                 for &point in street.points.iter().skip(2) {
                     let near = 14.0 - next.distance(point);
@@ -166,7 +168,7 @@ impl Town {
         let middle = outline.iter().copied().sum::<Vec2>() / outline.len() as f32;
         let (low_a, high_a) = extent(&outline, along);
         let (low_c, high_c) = extent(&outline, across);
-        let roll = |salt: u32| unit(hash(&[seed, 10, salt])) - 0.5;
+        let roll = |salt: u32| hash::unit(hash::of(&[seed, 10, salt])) - 0.5;
         // Inside the square by a margin, to be stood on.
         let well_in = |point: Vec2, margin: f32| {
             inside(point, &outline)
@@ -184,7 +186,7 @@ impl Town {
         // The market: two rows of stalls facing each other across an aisle, along the
         // square on the side away from the well.
         let line = middle - across * (well - middle).dot(across).signum() * (high_c - low_c) * 0.1;
-        let stalls = 4 + hash(&[seed, 11]) as usize % 4;
+        let stalls = 4 + hash::of(&[seed, 11]) as usize % 4;
         let mut placed = 0;
         let mut slot = 0usize;
         while placed < stalls && slot < 24 {

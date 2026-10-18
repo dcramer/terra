@@ -200,7 +200,7 @@ impl Out {
             return;
         }
         let (from, to) = (Place::near(from), Place::near(to));
-        let seed = hash(&[
+        let seed = hash::of(&[
             from.0[0] as u32,
             from.0[1] as u32,
             from.0[2] as u32,

@@ -22,11 +22,11 @@
 //! laid out in its own cubes with its door's middle at its origin and its door looking
 //! south (+Z), so the game turns and stands it where it goes.
 
-use crate::layout::{hash, unit};
 use crate::roofer::{self, Rectangle, Style};
 use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 use glam::Vec2;
 use std::collections::BTreeSet;
+use terra_gen::hash;
 
 /// The kinds a village is built of: its kits', and the roofs over each kind of wall.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,7 +84,7 @@ impl Picks for Kinds {
 
 impl Picks for &Palette {
     fn pick(&self, seed: u32) -> Kinds {
-        self.choose(|r, of| (unit(hash(&[seed, 0x9a1e, r as u32])) * of as f32) as usize)
+        self.choose(|r, of| (hash::unit(hash::of(&[seed, 0x9a1e, r as u32])) * of as f32) as usize)
     }
 }
 
@@ -250,7 +250,7 @@ impl Draft {
 
     /// A number from 0 up to 1 for the `n`th choice.
     fn roll(&self, n: u32) -> f32 {
-        unit(hash(&[self.seed, n]))
+        hash::unit(hash::of(&[self.seed, n]))
     }
 
     fn room(&mut self, min: [i32; 3], max: [i32; 3], kind: Kind) {
@@ -1004,12 +1004,12 @@ pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
     ];
     let mut buildings = Vec::new();
     for (index, &(plan, scheme, roofed, wide, at, facing)) in houses.iter().enumerate() {
-        let seed = hash(&[seed, index as u32]);
+        let seed = hash::of(&[seed, index as u32]);
         let kinds = picks.pick(seed);
         // A little out of line, as a village is: a lean of a few degrees and a step either
         // way along the street.
-        let lean = (unit(hash(&[seed, 1])) - 0.5) * 0.1;
-        let shift = (unit(hash(&[seed, 2])) - 0.5) * 1.2;
+        let lean = (hash::unit(hash::of(&[seed, 1])) - 0.5) * 0.1;
+        let shift = (hash::unit(hash::of(&[seed, 2])) - 0.5) * 1.2;
         let ops = match plan {
             Plan::TwoStoreys => two_storeys(seed, scheme, roofed, kinds),
             _ => one_storey(seed, plan, scheme, roofed, wide, kinds),
@@ -1030,7 +1030,7 @@ pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
         scheme: Scheme::Timber,
         at: [-34.5, -6.5],
         facing: SOUTH + 0.15,
-        ops: shed(hash(&[seed, 20]), kinds),
+        ops: shed(hash::of(&[seed, 20]), kinds),
     });
     // The lookout at the east end, its stair down toward the street.
     buildings.push(Building {
@@ -1190,7 +1190,7 @@ fn set_back(plan: Plan) -> f32 {
 fn shuffled(seed: u32) -> Vec<(Plan, Scheme, Roof, i32)> {
     let mut all = every_building();
     for i in (1..all.len()).rev() {
-        let j = hash(&[seed, 100, i as u32]) as usize % (i + 1);
+        let j = hash::of(&[seed, 100, i as u32]) as usize % (i + 1);
         all.swap(i, j);
     }
     all
@@ -1216,10 +1216,10 @@ pub fn town(seed: u32, count: usize, picks: impl Picks + Copy) -> Vec<Building> 
             let choice = choices[index % choices.len()];
             let (street, along) = (index / per_street, index % per_street);
             let (plot, north) = (along / 2, along % 2 == 0);
-            let seed = hash(&[seed, index as u32]);
+            let seed = hash::of(&[seed, index as u32]);
             // A little out of line, as a village's are.
-            let lean = (unit(hash(&[seed, 1])) - 0.5) * 0.1;
-            let shift = (unit(hash(&[seed, 2])) - 0.5) * 1.2;
+            let lean = (hash::unit(hash::of(&[seed, 1])) - 0.5) * 0.1;
+            let shift = (hash::unit(hash::of(&[seed, 2])) - 0.5) * 1.2;
             let east = (plot as f32 - (PLOTS_A_SIDE as f32 - 1.0) * 0.5) * PLOT_M + shift;
             let middle = (street as f32 - (streets as f32 - 1.0) * 0.5) * STREETS_APART_M;
             let back = set_back(choice.0);
@@ -1245,10 +1245,10 @@ pub fn hamlets(seed: u32, count: usize, radius_m: f32, picks: impl Picks + Copy)
         let (plot, north) = ((index % PER_HAMLET) / 2, index % 2 == 0);
         // Spread evenly over the area between a tenth of the radius and all of it.
         let near = radius_m * 0.1;
-        let share = unit(hash(&[seed, hamlet, 1]));
+        let share = hash::unit(hash::of(&[seed, hamlet, 1]));
         let distance = libm::sqrtf(near * near + share * (radius_m * radius_m - near * near));
-        let angle = unit(hash(&[seed, hamlet, 2])) * std::f32::consts::TAU;
-        let turn = unit(hash(&[seed, hamlet, 3])) * std::f32::consts::TAU;
+        let angle = hash::unit(hash::of(&[seed, hamlet, 2])) * std::f32::consts::TAU;
+        let turn = hash::unit(hash::of(&[seed, hamlet, 3])) * std::f32::consts::TAU;
         let middle = [distance * libm::cosf(angle), distance * libm::sinf(angle)];
         let choice = choices[index % choices.len()];
         let back = set_back(choice.0);
@@ -1264,7 +1264,7 @@ pub fn hamlets(seed: u32, count: usize, radius_m: f32, picks: impl Picks + Copy)
             middle[0] + east * c + south * s,
             middle[1] - east * s + south * c,
         ];
-        let seed_of = hash(&[seed, index as u32]);
+        let seed_of = hash::of(&[seed, index as u32]);
         out.push(put_up(
             seed_of,
             choice,

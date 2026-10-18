@@ -112,9 +112,9 @@ pub(super) fn corner(
             continue;
         }
         let turn = (cube.y * 2 + course as i32).rem_euclid(2) == 1;
-        let stone_seed = hash(&[seed, course as u32]);
+        let stone_seed = hash::of(&[seed, course as u32]);
         let pick = |sizes: &[[f32; 2]]| -> Option<[f32; 2]> {
-            (!sizes.is_empty()).then(|| sizes[hash(&[stone_seed, 9]) as usize % sizes.len()])
+            (!sizes.is_empty()).then(|| sizes[hash::of(&[stone_seed, 9]) as usize % sizes.len()])
         };
         let (size, [a, b]) = if set.short.is_empty() {
             (
@@ -177,7 +177,7 @@ pub(super) fn corner(
             match stones {
                 Some(stones) => {
                     let (centre, radius) =
-                        pick_stone(stones, hash(&[stone_seed, 11 + face as u32]));
+                        pick_stone(stones, hash::of(&[stone_seed, 11 + face as u32]));
                     let half = (radius * STONE_INSIDE).max(MIN_TILE_M * 0.5 * scale);
                     Tiling {
                         centre,

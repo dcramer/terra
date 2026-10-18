@@ -614,7 +614,7 @@ pub fn wear(surface: &mut crate::Surface, worn: &[([i32; 3], u8)]) {
 
 /// A number from 0 to 1 for a place, the same on every machine.
 fn unit(at: IVec3) -> f32 {
-    crate::layout::unit3(0, at.x as u32, at.y as u32, at.z as u32)
+    terra_gen::hash::unit3(0, at.x as u32, at.y as u32, at.z as u32)
 }
 
 #[cfg(test)]

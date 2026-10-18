@@ -25,7 +25,8 @@ impl Drawing {
 }
 
 /// A part's pieces drawn and masked, by kit, piece and the damage round it ([`harm_key`]).
-pub(super) type PiecesDrawn = crate::mesh::QuickMap<(usize, Piece, u64), std::sync::Arc<Surfaces>>;
+pub(super) type PiecesDrawn =
+    terra_gen::hash::QuickMap<(usize, Piece, u64), std::sync::Arc<Surfaces>>;
 
 /// The damage a member is broken by, as a number (`timber::draw_harmed`): that of the cubes
 /// round the box it fills, which a cube's spreads into (`loss::lost`); none for any other

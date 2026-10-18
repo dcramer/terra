@@ -1249,7 +1249,7 @@ fn an_openings_head_is_sunk_behind_its_lintels_underside() {
 /// surface's points about, so faults that only show with relief show.
 fn rough(kits: &Kits) -> Maps {
     relief(kits, 64, |i| {
-        (crate::layout::hash(&[i as u32, 7]) >> 24) as u8
+        (terra_gen::hash::of(&[i as u32, 7]) >> 24) as u8
     })
 }
 

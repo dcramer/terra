@@ -427,7 +427,7 @@ impl Deck<'_> {
                     point(first as f32 * CELL_M + BEARER_SHORT_M, middle, height),
                     point((last + 1) as f32 * CELL_M - BEARER_SHORT_M, middle, height),
                     super::Split::Whole,
-                    hash(&[0xbea2, line as u32, first as u32, y as u32, along_x as u32]),
+                    hash::of(&[0xbea2, line as u32, first as u32, y as u32, along_x as u32]),
                     None,
                 );
                 super::runs::set_role(&mut bearer, Some(Role::Crest));
@@ -482,7 +482,7 @@ impl Deck<'_> {
                     to: Place::near(point(a, to, joist_middle)),
                     wide: ticks(JOIST_WIDE_M),
                     high: ticks(joist_deep),
-                    seed: hash(&[0x1015, k as u32, first as u32, y as u32]),
+                    seed: hash::of(&[0x1015, k as u32, first as u32, y as u32]),
                 });
             }
         }
@@ -599,7 +599,7 @@ impl Deck<'_> {
                                 to: Place::near(on(rim_end + into)),
                                 wide: ticks(JOIST_WIDE_M),
                                 high: ticks(high - low) + 2 * RUN_ON_DEEPER,
-                                seed: hash(&[
+                                seed: hash::of(&[
                                     0x41c,
                                     line as u32,
                                     from as u32,
@@ -621,7 +621,7 @@ impl Deck<'_> {
                             to: Place::near(on((to + 1) as f32 * CELL_M - end_in)),
                             wide: ticks(JOIST_WIDE_M),
                             high: ticks(deep - GAP_M),
-                            seed: hash(&[
+                            seed: hash::of(&[
                                 0x41b,
                                 line as u32,
                                 from as u32,
@@ -707,7 +707,7 @@ impl Deck<'_> {
             along.as_vec3() * a + across.as_vec3() * b + Vec3::Y * height
         };
         for b in b_low..=b_high {
-            let mut row = Random(hash(&[0xdec, b as u32, y as u32, along_x as u32]));
+            let mut row = Random(hash::of(&[0xdec, b as u32, y as u32, along_x as u32]));
             let split = even((0.5 + SPLIT * row.signed()) * CELL_M) / CELL_M;
             let runs = runs(a_low..=a_high, |a| {
                 region.contains(&cell(a, b).to_array()) && !covered(cell(a, b))
@@ -784,7 +784,7 @@ impl Deck<'_> {
                             to: Place::near(point(end, (near + far) * 0.5, board_y)),
                             wide: ticks(far - near),
                             high: ticks(BOARD_THICK_M),
-                            seed: hash(&[0xf11, b as u32, a as u32, board as u32, y as u32]),
+                            seed: hash::of(&[0xf11, b as u32, a as u32, board as u32, y as u32]),
                         });
                     }
                     let middle = (from_m + to_m) * 0.5;
@@ -812,7 +812,7 @@ impl Deck<'_> {
                     };
                     let (start_out, end_out) = (out(first - 1), out(last + 1));
                     // Joints over a joist, staggered from the boards beside it.
-                    let seed = hash(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
+                    let seed = hash::of(&[0xb0a, b as u32, board as u32, y as u32, first as u32]);
                     let mut lengths = Random(seed);
                     let mut at = first;
                     let mut piece = 0u32;
@@ -834,7 +834,7 @@ impl Deck<'_> {
                             to: Place::near(point(end_m, middle, board_y)),
                             wide: ticks(wide),
                             high: ticks(BOARD_THICK_M),
-                            seed: hash(&[seed, piece]),
+                            seed: hash::of(&[seed, piece]),
                         });
                         at = end + 1;
                         piece += 1;

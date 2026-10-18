@@ -47,6 +47,89 @@ pub fn prospector32_round(mut x: u32) -> u32 {
     x ^ (x >> 12)
 }
 
+/// A number from a list of numbers, the same on every machine: SplitMix64's stream over
+/// them, a piece's version from its place (building's layout and drawing, its settlements).
+pub fn of(parts: &[u32]) -> u32 {
+    let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
+    for &part in parts {
+        state ^= part as u64;
+        state = splitmix64(state.wrapping_add(0x9e37_79b9_7f4a_7c15));
+    }
+    state as u32
+}
+
+/// A number from 0 up to 1, from a hash's high 24 bits.
+pub fn unit(hash: u32) -> f32 {
+    (hash >> 8) as f32 / (1u32 << 24) as f32
+}
+
+/// The 32-bit hash of a place, the same on every machine: three numbers (a cube's x, y and
+/// z, a texel and a salt) and a seed, each scattered by its own odd multiplier and then
+/// mixed, so neighbours differ. Building's damage, loss's shading, broken timber, the cell
+/// maps and the damage mask share it.
+pub fn mix3(seed: u32, a: u32, b: u32, c: u32) -> u32 {
+    prospector32_round(
+        seed ^ a.wrapping_mul(0x9E37_79B1)
+            ^ b.wrapping_mul(0x85EB_CA77)
+            ^ c.wrapping_mul(0xC2B2_AE3D),
+    )
+}
+
+/// [`mix3`] as a number from 0 to 1, from its low 16 bits.
+pub fn unit3(seed: u32, a: u32, b: u32, c: u32) -> f32 {
+    (mix3(seed, a, b, c) & 0xFFFF) as f32 / 65535.0
+}
+
+/// FNV-1a over a key's numbers' bits, a number at a step: quick, and it needs no crate. For
+/// keys of places and cubes, never for anything a stranger chooses.
+#[derive(Default)]
+pub struct Fnv1a(u64);
+
+/// A hash map keyed quickly ([`Fnv1a`]): for places and cubes, never for anything a stranger
+/// chooses.
+pub type QuickMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<Fnv1a>>;
+
+/// A hash set keyed quickly, as [`QuickMap`].
+pub type QuickSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<Fnv1a>>;
+
+impl std::hash::Hasher for Fnv1a {
+    fn finish(&self) -> u64 {
+        // The low bits of FNV are weak; folded so a table's buckets spread.
+        self.0 ^ (self.0 >> 29)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    fn write_u32(&mut self, n: u32) {
+        self.0 = (self.0 ^ u64::from(n)).wrapping_mul(0x0100_0000_01b3);
+    }
+    fn write_i32(&mut self, n: i32) {
+        self.write_u32(n as u32);
+    }
+    // A number a step, not a byte a step: a piece is hashed by many of them.
+    fn write_u8(&mut self, n: u8) {
+        self.write_u32(u32::from(n));
+    }
+    fn write_u16(&mut self, n: u16) {
+        self.write_u32(u32::from(n));
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.write_u32(n as u32);
+        self.write_u32((n >> 32) as u32);
+    }
+    fn write_i64(&mut self, n: i64) {
+        self.write_u64(n as u64);
+    }
+    fn write_usize(&mut self, n: usize) {
+        self.write_u64(n as u64);
+    }
+    fn write_isize(&mut self, n: isize) {
+        self.write_u64(n as u64);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +253,32 @@ mod tests {
         }
         let share = flips as f64 / tries as f64;
         assert!((0.49..0.51).contains(&share), "{share}");
+    }
+
+    /// A place's hash spreads its numbers over the whole of 0 to 1: across a 16 by 16 patch
+    /// of neighbours, each tenth of the range is hit, and no two neighbours in a row match.
+    #[test]
+    fn a_places_hash_spreads_over_its_range_and_neighbours_differ() {
+        let mut tenths = [0usize; 10];
+        for x in 0..16u32 {
+            for z in 0..16u32 {
+                let here = unit3(3, x, 1, z);
+                assert!((0.0..=1.0).contains(&here));
+                assert_ne!(here, unit3(3, x + 1, 1, z), "at {x}, {z}");
+                tenths[((here * 10.0) as usize).min(9)] += 1;
+            }
+        }
+        assert!(tenths.iter().all(|&n| n > 10), "{tenths:?}");
+    }
+
+    #[test]
+    fn a_list_hashes_the_same_on_every_machine() {
+        // Pinned, so a change to the hash, which would move every log in every base, is
+        // seen (D30).
+        assert_eq!(of(&[]), 0x7f4a_7c15);
+        assert_eq!(
+            [of(&[0, 3, 7]), of(&[1, 3, 7]), of(&[0, 3, 8])],
+            [0x85a8_47f3, 0x94d9_ad8c, 0xd1c1_928d]
+        );
     }
 }

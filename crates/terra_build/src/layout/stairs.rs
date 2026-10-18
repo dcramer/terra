@@ -11,11 +11,12 @@
 //! the treads stay whole cubes, walked as cubes are (D220); only their drawing is open.
 
 use super::roles::{Dir, Role, Roles};
-use super::{Layout, Piece, Place, Split, hash, runs, ticks};
+use super::{Layout, Piece, Place, Split, runs, ticks};
 use crate::kit::{Kit, Kits};
 use crate::{Base, CELL_M, Fill, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_gen::hash;
 
 /// What tops a step's column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -217,7 +218,7 @@ pub(super) fn lay(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layo
             to: Place::near(point(to, height - TREAD_M * 0.5, forward)),
             wide: ticks(deep),
             high: ticks(TREAD_M),
-            seed: hash(&[x as u32, z as u32, salt, 19]),
+            seed: hash::of(&[x as u32, z as u32, salt, 19]),
         };
         let top = (step.top + 1) as f32 * CELL_M;
         let half = CELL_M * 0.5;
@@ -242,7 +243,7 @@ pub(super) fn lay(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layo
                 step,
                 &point,
                 (from, to),
-                hash(&[x as u32, z as u32, 29]),
+                hash::of(&[x as u32, z as u32, 29]),
                 layout,
             ),
         }
@@ -272,7 +273,7 @@ fn ramp(
             to: Place::near(point(along, bottom + CELL_M - sink, -CELL_M * 0.5)),
             wide: ticks(wide - 0.008),
             high: ticks(RAMP_THICK_M),
-            seed: hash(&[seed, board as u32]),
+            seed: hash::of(&[seed, board as u32]),
         });
     }
     // A cleat across the middle of it, on the boards.
@@ -283,7 +284,7 @@ fn ramp(
         to: Place::near(point(to, bottom + rise, 0.0)),
         wide: ticks(cleat_wide),
         high: ticks(cleat_high),
-        seed: hash(&[seed, 0xc1ea7]),
+        seed: hash::of(&[seed, 0xc1ea7]),
     });
 }
 
@@ -383,7 +384,7 @@ fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &
             up.min(((top - (b.y + edge_over)) / rise.y).max(0.0))
         };
         let (foot, head) = (a - rise * down, b + rise * up);
-        let seed = hash(&[line as u32, sign as u32, out as u32, 23]);
+        let seed = hash::of(&[line as u32, sign as u32, out as u32, 23]);
         layout.pieces.push(Piece::Plank {
             from: Place::near(foot),
             to: Place::near(head),
@@ -416,7 +417,7 @@ fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &
                 Vec3::new(at.x, floor, at.z),
                 Vec3::new(at.x, under, at.z),
                 Split::Whole,
-                hash(&[seed, n as u32, 0x9057]),
+                hash::of(&[seed, n as u32, 0x9057]),
                 None,
             );
             runs::set_role(&mut post, Some(Role::Jamb));

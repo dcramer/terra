@@ -201,7 +201,7 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
             },
             across: Some([wide, depth]),
             capped: [true; 2],
-            seed: crate::layout::hash(&[seed, k as u32]),
+            seed: terra_gen::hash::of(&[seed, k as u32]),
             blend: 0.0,
             plumb: 0.0,
             crest: None,
