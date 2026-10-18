@@ -10,7 +10,7 @@
 use crate::build::{KITS, artifacts_command, fuzz_args};
 use crate::scope::{self, Scope};
 use crate::stage::{self, Said, Step};
-use crate::{output, root, slot, stamp};
+use crate::{land, output, root, slot, stamp};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -116,18 +116,33 @@ enum Tier {
 pub(crate) fn check(args: &[String]) -> bool {
     let mut tier = Tier::Push;
     let mut all = false;
+    let mut pushing = false;
     for arg in args {
         match arg.as_str() {
             "--quick" => tier = Tier::Commit,
+            "--pushing" => pushing = true,
             "--all" => all = true,
             "--verbose" => stage::set_verbose(),
             _ => {
-                eprintln!("usage: cargo xtask check [--quick] [--all] [--verbose]");
+                eprintln!("usage: cargo xtask check [--quick] [--all] [--pushing] [--verbose]");
                 return false;
             }
         }
     }
     let started = Instant::now();
+    // The hook's check of a push to main holds the turn to land (D413), or stops before
+    // checking what git would refuse.
+    let _turn = if pushing && tier == Tier::Push {
+        match land::hold_for_push() {
+            Ok(turn) => turn,
+            Err(why) => {
+                println!("✗ check stopped before checking: {why}");
+                return false;
+            }
+        }
+    } else {
+        None
+    };
     let scope = match (all, tier) {
         (true, _) => Scope::everything("--all"),
         (false, Tier::Commit) => scope::commit(),
@@ -159,8 +174,9 @@ pub(crate) fn check(args: &[String]) -> bool {
             plan = plan.and(&Plan::since(&since));
         }
     }
-    // A machine-wide slot while it builds and tests (D413); nothing heavy, no wait.
-    let _slot = if push && plan.heavy() {
+    // A machine-wide slot while it builds and tests (D413); nothing heavy, no wait. A push
+    // holding the turn to land goes first, since every landing waits on it.
+    let _slot = if push && plan.heavy() && !pushing {
         slot::take()
     } else {
         None

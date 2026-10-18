@@ -18,7 +18,7 @@ const SLOTS: usize = 2;
 
 /// The user's cache folder for Terra, as `terra_world::cache::folder` finds it (the tasks
 /// depend on no crate).
-fn folder() -> Option<PathBuf> {
+pub(crate) fn folder() -> Option<PathBuf> {
     let cache = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;

@@ -3,7 +3,9 @@
 # merge-base with origin/main: clippy and every test of the crates changed and every crate
 # depending on them, the slow ones too, the tools' tests, and the kit, foliage, artifacts, fuzz
 # and Blender checks when what they read changed. It checks the working tree, so run it on
-# what you push: commit, `git pull --rebase origin main`, then push. It takes minutes when
+# what you push: commit, then `cargo xtask land`, which rebases, checks, takes this machine's turn
+# to land and pushes (D413); a plain push to main takes the same turn here, or stops before
+# checking when another checkout holds it or main has moved. It takes minutes when
 # building changed, and prints as the quick check does (D388; TERRA_VERBOSE=1 streams
 # everything). A pass stamps the tree, so after a refused push and `git pull --rebase` it runs only
 # what the rebase changed; one that builds or tests waits for a machine-wide slot (D413). Never
@@ -11,4 +13,12 @@
 set -euo pipefail
 cargo=cargo
 command -v cargo >/dev/null || cargo="$HOME/.cargo/bin/cargo"
+# Git names each ref pushed on stdin: "<local ref> <sha> <remote ref> <sha>".
+to_main=
+while read -r _ _ remote_ref _; do
+    if [ "$remote_ref" = refs/heads/main ]; then to_main=1; fi
+done
+if [ -n "$to_main" ]; then
+    exec "$cargo" xtask check --pushing
+fi
 exec "$cargo" xtask check

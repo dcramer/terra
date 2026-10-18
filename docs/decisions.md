@@ -473,7 +473,7 @@ Checks, developer tools, languages and the repository.
 | [D408](decisions/D408.md) | Release builds our crates incrementally; bench builds them whole | Tech | Agent | Decided | Our own crates build incrementally in the release… |
 | [D409](decisions/D409.md) | Rendered indexes merge row by row | Tech | Agent | Decided | An index of files that live on their own is rendered… |
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
-| [D413](decisions/D413.md) | A push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
+| [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
 
 ## Superseded and rejected
 

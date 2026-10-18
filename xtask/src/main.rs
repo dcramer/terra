@@ -5,6 +5,7 @@ mod bench;
 mod build;
 mod check;
 mod doctor;
+mod land;
 mod load;
 mod primitives;
 mod scenes;
@@ -193,10 +194,17 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "check",
-        takes: "[--quick] [--all] [--verbose]",
+        takes: "[--quick] [--all] [--pushing] [--verbose]",
         does: "what every change must pass, scoped to what it touches (D398): before each push, lints and every test of the crates changed and those depending on them, and the kit, foliage, artifact, fuzz, Blender, docs and dependency checks that can see it; --quick, before each commit, linters and the fast tests of the crates changed in a 30 s budget; --all runs everything",
         group: "Play and check",
         run: check,
+    },
+    Task {
+        name: "land",
+        takes: "",
+        does: "lands the branch on main without being overtaken (D413): rebases and runs the push's check, then takes this machine's turn to land, rebases again and pushes, the hook's check running only what landed meanwhile",
+        group: "Play and check",
+        run: land::land,
     },
     Task {
         name: "sizes",
