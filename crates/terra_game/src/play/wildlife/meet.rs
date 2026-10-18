@@ -1,6 +1,8 @@
 //! Meetings: a group put out ahead of a player on the move, where the camera will see it (D384).
 
+use super::groups::{GROUP_REACH_M, spread_m};
 use super::*;
+use crate::play::species::Temper;
 
 /// A player's way as the meetings follow it: where they were at the last look, how long until
 /// they next meet something, and the meeting being staged, if one is.
@@ -13,6 +15,9 @@ pub(super) struct Way {
     moving: bool,
     met: u32,
 }
+
+/// A group met beside the way stands so much further from it than it bolts at, metres.
+const CLEAR_M: f32 = 1.0;
 
 /// How far ahead of a player and aside from their way a meeting's spot is, metres.
 #[derive(Clone, Copy)]
@@ -139,7 +144,7 @@ pub(super) fn meet(
             cells.ways.insert(player, way);
             continue;
         }
-        let chosen = choose(&mut staging, bestiary, wild);
+        let chosen = choose_clear(&mut staging, (bestiary, around), wild, (here, ahead));
         let dice = &mut staging.dice;
         let met = 'met: {
             let Some((spot, aside, index, _, in_view)) = chosen else {
@@ -177,7 +182,7 @@ pub(super) fn meet(
                     (kinds, bestiary),
                     around,
                     species,
-                    (spot, aside * 2.0),
+                    (spot, aside * GROUP_REACH_M),
                     count.min(most),
                     dice,
                 ),
@@ -304,9 +309,109 @@ fn choose(
     })
 }
 
+/// How far from a player's way a group of a kind met beside it stands at the least, metres:
+/// past the distance it bolts at from someone (D384), by its group's spread and a little
+/// more, so one keeping to the way passes it by and it watches them, or walks, paddles or
+/// wades off, rather than taking wing or bolting: a heron met in the shallows beside a shore
+/// path goes on stalking there. A hostile kind keeps no distance.
+fn clearance_m(bestiary: &Bestiary, species: Species) -> f32 {
+    match bestiary.get(species).temper {
+        Temper::Shy { flees_within_m, .. } => {
+            creatures::bolts_within(flees_within_m) + spread_m(bestiary, species) + CLEAR_M
+        }
+        Temper::Hostile { .. } => 0.0,
+    }
+}
+
+/// A spot beside a player's way moved straight out from it, the way aside, until it is so far
+/// from the line they go along at the least.
+fn clear_of_way(here: Vec3, ahead: Vec3, aside: Vec3, spot: Vec3, least_m: f32) -> Vec3 {
+    let up = here.normalize_or(Vec3::Y);
+    let off = (spot - here).reject_from(up);
+    let from_way = (off - ahead * off.dot(ahead)).dot(aside);
+    if from_way >= least_m {
+        spot
+    } else {
+        spot + aside * (least_m - from_way)
+    }
+}
+
+/// Which kind is met and where (`choose`), its spot moved out from the way past where it
+/// bolts (`clearance_m`), so long as it is still of the kind's niche there and seen as the
+/// player comes on; a kind that is neither there is passed over for the others.
+fn choose_clear(
+    staging: &mut Staging,
+    (bestiary, around): (&Bestiary, &Surroundings),
+    wild: &[Wild],
+    (here, ahead): (Vec3, Vec3),
+) -> Option<(Vec3, Vec3, usize, f32, bool)> {
+    loop {
+        let fit = choose(staging, bestiary, wild)?;
+        let (spot, aside, index, weight, in_view) = fit;
+        // One out of view stands only for its kind, for a crossing.
+        if !in_view {
+            return Some(fit);
+        }
+        let (species, _, _, niche) = wild[index];
+        let least = clearance_m(bestiary, species);
+        let moved = clear_of_way(here, ahead, aside, spot, least);
+        if moved == spot {
+            return Some(fit);
+        }
+        let moved = around.ground(moved);
+        if around.place(moved).fits(niche) && seen_coming_on(around, here, ahead, moved) > 0 {
+            return Some((moved, aside, index, weight, in_view));
+        }
+        staging.fits.retain(|fit| fit.2 != index);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_shy_kind_met_beside_the_way_is_passed_by_further_off_than_it_bolts_at() {
+        // A heron met in the shallows beside a shore path took wing as the runner went by
+        // (the lake's film, 2026-10-18): it stood 4 to 6 m off the way and bolts within 10 m.
+        let bestiary = Bestiary::read(&Default::default());
+        let (here, ahead, aside) = (Vec3::Y * 2000.0, Vec3::X, Vec3::Z);
+        let heron = bestiary.named("Grey heron").unwrap();
+        let mut checked = 0;
+        for species in bestiary.all() {
+            let Temper::Shy { flees_within_m, .. } = bestiary.get(species).temper else {
+                continue;
+            };
+            let bolts = creatures::bolts_within(flees_within_m);
+            for band in [MEET_BIG, MEET_SMALL] {
+                for (along, off) in [band.ahead_m.0, band.ahead_m.1]
+                    .into_iter()
+                    .flat_map(|along| [band.aside_m.0, band.aside_m.1].map(|off| (along, off)))
+                {
+                    let spot = here + ahead * along + aside * off;
+                    let moved =
+                        clear_of_way(here, ahead, aside, spot, clearance_m(&bestiary, species));
+                    // Each of the group wherever it stands about its spot, and the player
+                    // running on along the way from behind it to well past it.
+                    for turn in 0..16 {
+                        let angle = turn as f32 / 16.0 * std::f32::consts::TAU;
+                        let around = Quat::from_axis_angle(Vec3::Y, angle) * aside;
+                        let member = moved + around * spread_m(&bestiary, species);
+                        let nearest = (-40..=400)
+                            .map(|step| (here + ahead * (step as f32 * 0.25)).distance(member))
+                            .fold(f32::INFINITY, f32::min);
+                        assert!(
+                            nearest > bolts,
+                            "{} passed {nearest:.1} m off, bolting within {bolts:.1} m",
+                            bestiary.name(species)
+                        );
+                    }
+                    checked += (species == heron) as u32;
+                }
+            }
+        }
+        assert_eq!(checked, 8, "the heron is shy and checked at each spot");
+    }
 
     #[test]
     fn a_meeting_is_seen_off_the_way_ahead_of_the_player_never_behind_them() {

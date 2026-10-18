@@ -32,7 +32,7 @@ use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
-pub use gait::Pace;
+pub use gait::{Pace, bolts_within};
 use mind::think;
 use std::time::Duration;
 use terra_gen::{Rng, Seed};

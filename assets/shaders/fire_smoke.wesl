@@ -42,6 +42,8 @@ var<storage, read> slots: array<vec4<f32>>;
 var<storage, read> puffs: array<vec4<f32>>;
 // How long a breath's soot hangs, in seconds.
 const SOOT_S: f32 = 5.5;
+// How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
+const HEARTHS: u32 = 16u;
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -121,7 +123,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let a = slots[slot * 2u];
     let b = slots[slot * 2u + 1u];
     let tall = a.w;
-    if slot >= count || tall <= 0.0 {
+    // A kept fire's smoke is a hearth's, of cards of its own.
+    let is_hearth = b.w > 0.5 && slot < HEARTHS;
+    if slot >= count || tall <= 0.0 || (phase >= 1.0) != is_hearth {
         out.position = vec4(0.0, 0.0, -1.0, 1.0);
         return out;
     }
@@ -129,6 +133,53 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let heat = b.x;
     let seed = b.y;
     let up = normalize(foot);
+    if is_hearth {
+        // A campfire's smoke, as in dawn footage of one and in the games that draw one well:
+        // dry wood burning clean gives a thin pale wisp, not a building's black column; its
+        // puffs let go close behind one another off the flames' tips, so they rise as one
+        // thread, slow, swaying a little low down and more as they climb and spread, bent by
+        // the air. Every puff of a hearth lives as long, so they stay evenly spaced.
+        let j = phase - 1.0;
+        let luck = fract(seed * 0.618 + j * 7.37);
+        let life_s = 8.0 + 2.0 * fract(seed * 3.3);
+        let t = fract(globals.time / life_s + j + seed * 0.37);
+        let seconds = t * life_s;
+        let rise = (0.8 + 0.5 * heat) * seconds * (1.0 - 0.35 * t);
+        let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+        let north = cross(east, up);
+        let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.2 + 3.0 * t);
+        let middle = foot + up * (tall * 0.7 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
+        let size = mix(0.15 + tall * 0.12, 1.4 + tall * 0.6, sqrt(t)) * (0.75 + 0.5 * luck);
+        let to_eye = normalize(view.world_position - middle);
+        var right = cross(up, to_eye);
+        if dot(right, right) < 1.0e-6 {
+            right = cross(vec3(1.0, 0.0, 0.0), to_eye);
+        }
+        right = normalize(right);
+        let card_up = cross(to_eye, right);
+        let spin = (luck - 0.5) * 0.6 + seconds * (luck - 0.5) * 0.15;
+        // Drawn out along its rise, a wisp more than a ball.
+        let corner = (vertex.uv - vec2(0.5)) * vec2(size, size * 1.7);
+        let turned = vec2(corner.x * cos(spin) - corner.y * sin(spin), corner.x * sin(spin) + corner.y * cos(spin));
+        let world = middle + right * turned.x + card_up * turned.y;
+        out.position = position_world_to_clip(world);
+        out.world_position = vec4(world, 1.0);
+        out.uv = vertex.uv;
+        // Its age past 2, so the fragment knows a hearth's.
+        out.uv_b = vec2(t + 2.0, luck + floor(heat * 15.0 + 0.5) * 2.0);
+@if(PREPASS_PIPELINE) {
+@if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
+        out.world_normal = to_eye;
+@if(MOTION_VECTOR_PREPASS)
+        out.previous_world_position = out.world_position;
+} @else {
+        // Thin smoke is lit through, not as a ball: its normal mostly toward the eye.
+        out.world_normal = normalize(mix(to_eye, puffed(right, card_up, to_eye, turned, size), 0.35));
+}
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
+        out.instance_index = vertex_in.instance_index;
+        return out;
+    }
     let luck = fract(seed * 0.618 + phase * 2.37);
     // Longer lived and taller from a bigger fire.
     let life_s = 9.0 + 6.0 * luck;
@@ -200,11 +251,22 @@ fn fragment(in: VertexOutput) {
 @if(!PREPASS_PIPELINE)
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
-    let t = in.uv_b.x;
+    let hearth = in.uv_b.x > 1.5;
+    let t = in.uv_b.x - select(0.0, 2.0, hearth);
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
     let soot = heat > 1.5;
     var alpha = density(in.uv, t, luck) * select(mix(0.95, 0.4, t), mix(0.97, 0.55, t), soot);
+    if hearth {
+        // A wisp: its rim eaten away by finer noise turning as it rises, thin, and thinner
+        // as it spreads.
+        let p = (in.uv - vec2(0.5)) * vec2(1.0, 0.85);
+        let n = smooth_noise(in.uv * vec2(3.0, 2.0) + vec2(luck * 41.0, -t * 3.0));
+        let fine = smooth_noise(in.uv * vec2(8.0, 5.0) + vec2(luck * 7.0, -t * 6.0));
+        let wisp = 1.0 - smoothstep(0.05, 0.42, length(p) + (n - 0.5) * 0.4 + (fine - 0.5) * 0.25);
+        let life = smoothstep(0.0, 0.05, t) * pow(1.0 - t, 1.6);
+        alpha = wisp * life * (0.5 + 0.7 * fine) * mix(0.3, 0.12, t);
+    }
     // Faded in over its last metre and a half in front of what is behind it.
 @if(DEPTH_PREPASS)
     {
@@ -225,13 +287,24 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if soot {
         grey = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
     }
-    input.material.base_color = vec4(grey * shade, alpha);
+    // Dry wood burning clean: a pale grey with a little blue from its fine ash, scattering
+    // the sky's light (research/2026-10-16-real-time-fire-rendering.md).
+    var dark = shade;
+    if hearth {
+        grey = mix(vec3(0.42, 0.45, 0.5), vec3(0.55, 0.57, 0.6), smoothstep(0.1, 0.7, t));
+        dark = 1.0;
+    }
+    input.material.base_color = vec4(grey * dark, alpha);
     // Lit from under by the fire, near its foot; a breath's soot glows from the stream it
     // leaves for its first moments.
     // Most on a puff's underside, which faces the flames.
     let n = normalize(in.world_normal);
     let down = saturate(-dot(n, normalize(in.world_position.xyz)));
-    let under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.35 + 1.3 * down);
+    var under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.35 + 1.3 * down);
+    // A hearth's wisp warm only its first half metre over the flames, and dimly.
+    if hearth {
+        under = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 0.04;
+    }
     input.material.emissive = vec4(vec3(1.0, 0.3, 0.06) * under * 900.0, 1.0);
     input.N = n;
     input.world_normal = n;

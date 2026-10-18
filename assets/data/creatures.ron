@@ -347,6 +347,10 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 4), ("Hide", 2)]),
         lies_s: 300.0,
+        // Its model's coat is a pale grey-beige, its rump and back paler still (sRGB 126,101,85
+        // on the flanks, 2.6 times the stag's brightness), which the morning sun burns near
+        // white: a hind's summer coat is a red-brown a little lighter than the stag's.
+        coat: (summer: (0.78, 0.55, 0.42), strays: 0.1, moults: false),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.12),
             (joint: "Neck", part: Body, radius_m: 0.12),
@@ -376,6 +380,9 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 2), ("Hide", 1)]),
         lies_s: 300.0,
+        // Its model's tan (sRGB 144,96,66 on the flanks, its rump paler) is as pale as its
+        // mother's: a calf's coat a red-brown, a shade lighter than hers.
+        coat: (summer: (0.68, 0.7, 0.72), strays: 0.1, moults: false),
         zones: [
             (joint: "Head", part: Head, radius_m: 0.09),
             (joint: "Neck", part: Body, radius_m: 0.08),

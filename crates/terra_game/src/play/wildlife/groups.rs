@@ -135,6 +135,22 @@ pub(super) fn crossing_point(
     Some((here + ahead * far, takes(far)))
 }
 
+/// A group put out about a spot stands within so far of it, and a young one so far from its
+/// mother, metres.
+pub(super) const GROUP_REACH_M: f32 = 2.0;
+const YOUNG_BESIDE_M: (f32, f32) = (1.0, 2.5);
+
+/// How far from a spot a group of a kind put out about it may stand, metres: its reach, and
+/// a young one's place beside its mother if the kind has young.
+pub(super) fn spread_m(bestiary: &Bestiary, species: Species) -> f32 {
+    GROUP_REACH_M
+        + if bestiary.get(species).young.is_some() {
+            YOUNG_BESIDE_M.1
+        } else {
+            0.0
+        }
+}
+
 /// A town's birds are put out on a roof's ridge within so far, so often, rather than on the
 /// ground; so far apart along it, and sitting there so long, seconds.
 const ON_A_RIDGE: (f32, f32) = (25.0, 0.6);
@@ -196,8 +212,11 @@ pub(super) fn put_group(
             put.push(animal);
         }
         if let Some(young) = young_of(bestiary, species, dice) {
-            let beside =
-                around.ground(at + turn * reach.normalize_or_zero() * dice.range(1.0, 2.5));
+            let beside = around.ground(
+                at + turn
+                    * reach.normalize_or_zero()
+                    * dice.range(YOUNG_BESIDE_M.0, YOUNG_BESIDE_M.1),
+            );
             put.extend(creatures::spawn(
                 commands,
                 (kinds, bestiary),

@@ -93,6 +93,8 @@ const LIFT_FROM: f32 = 1.0;
 const LIFT_TO: f32 = 2.0;
 // How far in front of what is behind it a card fades in, in metres, so it never shows a
 // straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
+// How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
+const HEARTHS: u32 = 16u;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -200,6 +202,56 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
     let c = vec2(corner.x - 0.5, select(corner.y - 0.5, corner.y, upright));
     let turned = vec2(c.x * cos(spin) - c.y * sin(spin), c.x * sin(spin) + c.y * cos(spin));
     return at + right * turned.x * w + card_up * turned.y * h;
+}
+
+// A hearth's flames (crates/terra_world/src/fire.rs HEARTHS), as a campfire burns in
+// footage and in The Witcher 3, Red Dead Redemption 2 and Kingdom Come: its first card the
+// bed of coals glowing among its logs, low and wide; then a tongue over its middle as tall as
+// it was made, and four shorter ones round it over the logs, each of its own height and its
+// own moment of the flipbook, leaning and licking as they will.
+fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, time: f32) -> Out {
+    var out: Out;
+    let wide = select(clamp(tall * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
+    let j = i32(phase * 6.0 + 0.5);
+    let luck = fract(seed * 0.618 + f32(j) * 0.379);
+    let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+    let north = cross(east, up);
+    if j == 0 {
+        let w = wide * 1.4;
+        let h = max(0.3, tall * 0.32);
+        let world = card(foot - up * h * 0.25, up, corner, w, h, true, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(1.5, heat, luck, 3.0);
+        out.size = h;
+        return out;
+    }
+    let puff_hz = 1.5 / sqrt(wide);
+    let breathe = 1.0 + 0.18 * sin(time * puff_hz * 6.283 * (0.8 + 0.4 * luck) + luck * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + luck * 9.0));
+    // A fire is made as tall as its flames reach over its logs, which stand about four
+    // fifths as tall: each tongue must clear them, or the logs hide it (lake film r5).
+    var flame = tall * breathe * 1.1;
+    var at = foot;
+    var w = wide * 2.0;
+    if j > 1 {
+        // Round the ring over the logs, each lower than the middle one, licking up their
+        // outsides.
+        let a = f32(j) * 1.571 + seed * 6.283 + (luck - 0.5) * 0.8;
+        at = foot + (east * cos(a) + north * sin(a)) * wide * (0.28 + 0.15 * luck);
+        flame = tall * breathe * (0.72 + 0.3 * luck);
+        w = wide * (1.0 + 0.4 * luck);
+    }
+    let h = flame * 1.6;
+    let lean = wind * 0.05 * flame;
+    let world = card(at - up * h * 0.06 + lean * 0.2, up, corner, w, h, true, 0.0);
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    // Its first number past 1, so it is faded only very near what is behind it: a hearth's
+    // flames stand among its logs, and faded over a third of a metre they were a thin
+    // tongue over bare sticks (lake film r4).
+    out.life = vec4(1.5, heat, luck, 1.0);
+    out.size = h;
+    return out;
 }
 
 fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
@@ -334,6 +386,14 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         out.size = h;
         return out;
     }
+    // A kept fire's flames are a hearth's (`hearth`), drawn by cards of their own.
+    let is_hearth = b.w > 0.5 && slot < HEARTHS;
+    if kind == 0 && (phase >= 1.0) != is_hearth {
+        return nowhere();
+    }
+    if kind == 0 && is_hearth {
+        return hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, time);
+    }
     if kind == 0 {
         // A burning surface's flame (research/2026-10-16-real-time-fire-rendering.md): a few
         // cards of a simulated fire's flipbook standing where it burns, a big one over the
@@ -372,19 +432,22 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         out.size = h;
         return out;
     }
-    // An ember: only some blazes throw them, the hotter the more.
-    if luck > heat * 0.9 {
+    // An ember: only some blazes throw them, the hotter the more; a hearth a few always,
+    // sparks rising from its coals a metre or two and winking out, not flung over the trees.
+    let kept = select(0.0, 1.0, is_hearth);
+    if luck > heat * 0.9 && !is_hearth {
         return nowhere();
     }
-    let life_s = 1.6 + 2.2 * luck;
+    let life_s = mix(1.6 + 2.2 * luck, 0.9 + 1.3 * luck, kept);
     let t = fract(time / life_s + phase * 1.37 + seed);
     let seconds = t * life_s;
-    let rise = (2.5 + 3.5 * luck) * (1.0 - exp(-seconds * 0.9)) / 0.9;
+    let rise = mix(2.5 + 3.5 * luck, 1.4 + 1.6 * luck, kept) * (1.0 - exp(-seconds * 0.9)) / 0.9;
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
     let wander = vec2(noise(vec2(luck * 41.0, seconds * 0.8)), noise(vec2(luck * 73.0, seconds * 0.8))) - 0.5;
-    let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * tall * 0.8;
-    let at = foot + up * (rise + tall * 0.3) + east * (out_from.x + wander.x * 2.0 * t) + north * (out_from.y + wander.y * 2.0 * t) + wind * seconds * 0.8;
+    let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.5, kept);
+    let sway = mix(2.0, 0.6, kept);
+    let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t) + north * (out_from.y + wander.y * sway * t) + wind * seconds * mix(0.8, 0.4, kept);
     // Stretched along its flight: up and downwind.
     let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8);
     let to_eye = normalize(view.world_position - at);
@@ -393,7 +456,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         across = cross(up, to_eye);
     }
     across = normalize(across);
-    let size = 0.035 + 0.03 * luck;
+    let size = mix(0.035 + 0.03 * luck, 0.02 + 0.02 * luck, kept);
     let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * 5.0;
     out.clip = position_world_to_clip(world);
     out.uv = corner;
@@ -413,7 +476,20 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
     // What it gives, already exposed, and how much of what is behind it it covers.
     var light = vec3(0.0);
     var cover = 0.0;
-    if kind == 0 {
+    if kind == 0 && life.w > 2.5 {
+        // A hearth's bed of coals: a low glow among its logs, broken by noise into coals
+        // brighter and darker, each brightening and dimming slowly as air reaches it, deep
+        // red at the bed's edges and orange in its middle, under the flames it feeds.
+        let p = (uv - vec2(0.5, 0.45)) * vec2(2.0, 2.2);
+        let bed = 1.0 - smoothstep(0.35, 1.0, length(p));
+        let coals = fbm(uv * vec2(9.0, 5.0) + vec2(luck * 17.0, 0.0));
+        let breath = 0.75 + 0.25 * sin(time * (0.9 + 1.7 * coals) + coals * 23.0);
+        let glow = bed * smoothstep(0.3, 0.75, coals) * breath;
+        let alpha = smoothstep(0.02, 0.5, glow) * soft;
+        let kelvin = 1000.0 + 480.0 * glow * (0.6 + 0.4 * heat) + 120.0 * bed;
+        light = soot(kelvin, alpha);
+        cover = covers(light, alpha);
+    } else if kind == 0 {
         // A simulated fire's frame from the flipbook (`tools/textures/flames.ts`): one of its
         // three fires by the card's luck, mirrored for half of them, played at the rate a fire
         // this tall moves (a flame's time goes as the root of its size, Froude's scaling),
@@ -571,7 +647,10 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
 @if(DEPTH_PREPASS)
     {
         let kind = i32(fire.kind.x + 0.5);
-        let reach = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
+        var reach = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
+        if kind == 0 && in.world_normal.x > 1.0 {
+            reach = 0.06;
+        }
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);
     }

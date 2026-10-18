@@ -114,6 +114,20 @@ const FLAME_CARDS: usize = 3;
 const EMBER_CARDS: usize = 5;
 const SMOKE_CARDS: usize = 4;
 const HAZE_CARDS: usize = 1;
+/// The fires kept where something kindled stands, a campfire or a hearth, are drawn as a
+/// campfire is in footage and in the games that draw one well (The Witcher 3, Red Dead
+/// Redemption 2, Kingdom Come): several tongues of flame of their own heights over a bed of
+/// glowing coals among the logs, a few sparks, a thin grey wisp of smoke warm only at its
+/// foot, and a light of their own. At most so many of them; must match `HEARTHS` in
+/// fire.wesl and fire_smoke.wesl. Each has so many flame cards (its coals, then its tongues)
+/// and so many puffs of smoke, close enough in time to rise as one column.
+const HEARTHS: usize = 16;
+const HEARTH_FLAME_CARDS: usize = 6;
+const HEARTH_SMOKE_CARDS: usize = 24;
+/// A hearth's light, lumens for a fire a metre tall at full heat, and how far it reaches: a
+/// campfire lights the faces round it and a ring of the ground, not the trees across a lake.
+const HEARTH_LUMENS_A_METRE: f32 = 350_000.0;
+const HEARTH_RANGE_M: f32 = 14.0;
 /// How many cards a jet is, and how many jets are drawn.
 const JET_CARDS: usize = 640;
 const JETS: usize = 2;
@@ -326,8 +340,9 @@ pub fn plugin(app: &mut App) {
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
-/// coordinate the corner, the second which card and of which slot.
-fn cards(slots: usize, each: usize) -> Mesh {
+/// coordinate the corner, the second which card and of which slot, the card's place among
+/// the slot's counted `from` on (1 for a hearth's, so the shaders tell them apart).
+fn cards(slots: usize, each: usize, from: f32) -> Mesh {
     let count = slots * each;
     let mut positions = Vec::with_capacity(count * 4);
     let mut normals = Vec::with_capacity(count * 4);
@@ -341,7 +356,7 @@ fn cards(slots: usize, each: usize) -> Mesh {
                 positions.push([0.0f32, 0.0, 0.0]);
                 normals.push([0.0f32, 1.0, 0.0]);
                 corners.push(corner);
-                ids.push([slot as f32, card as f32 / each as f32]);
+                ids.push([slot as f32, from + card as f32 / each as f32]);
             }
             indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
         }
@@ -355,6 +370,67 @@ fn cards(slots: usize, each: usize) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
     .with_inserted_indices(Indices::U32(indices))
+}
+
+/// The cards of every kind, each a mesh of its own drawn wherever the fires are.
+fn spawn_cards(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    count: usize,
+    fire: &[Handle<FireMaterial>; 5],
+    smoke: &[Handle<FireSmokeMaterial>; 2],
+) {
+    // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
+    let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
+        commands.spawn((
+            Name::new(name.to_string()),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+        ));
+    };
+    spawn(
+        "Fire: flames",
+        cards(count, FLAME_CARDS, 0.0),
+        fire[0].clone(),
+    );
+    spawn(
+        "Fire: hearth flames",
+        cards(HEARTHS.min(count), HEARTH_FLAME_CARDS, 1.0),
+        fire[0].clone(),
+    );
+    spawn(
+        "Fire: embers",
+        cards(count, EMBER_CARDS, 0.0),
+        fire[1].clone(),
+    );
+    spawn("Fire: jets", cards(JETS, JET_CARDS, 0.0), fire[2].clone());
+    spawn("Fire: haze", cards(count, HAZE_CARDS, 0.0), fire[3].clone());
+    spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
+    for (name, mesh, material) in [
+        (
+            "Fire: smoke",
+            cards(count, SMOKE_CARDS, 0.0),
+            smoke[0].clone(),
+        ),
+        (
+            "Fire: hearth smoke",
+            cards(HEARTHS.min(count), HEARTH_SMOKE_CARDS, 1.0),
+            smoke[0].clone(),
+        ),
+        ("Fire: soot", cards(SOOT_PUFFS, 1, 0.0), smoke[1].clone()),
+    ] {
+        commands.spawn((
+            Name::new(name),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+        ));
+    }
 }
 
 fn setup(
@@ -438,35 +514,7 @@ fn setup(
             },
         })
     });
-    // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
-    let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
-        commands.spawn((
-            Name::new(name.to_string()),
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material),
-            Transform::IDENTITY,
-            NoFrustumCulling,
-            NotShadowCaster,
-        ));
-    };
-    spawn("Fire: flames", cards(count, FLAME_CARDS), fire[0].clone());
-    spawn("Fire: embers", cards(count, EMBER_CARDS), fire[1].clone());
-    spawn("Fire: jets", cards(JETS, JET_CARDS), fire[2].clone());
-    spawn("Fire: haze", cards(count, HAZE_CARDS), fire[3].clone());
-    spawn("Fire: drops", cards(DROPS, 1), fire[4].clone());
-    for (name, mesh, material) in [
-        ("Fire: smoke", cards(count, SMOKE_CARDS), smoke[0].clone()),
-        ("Fire: soot", cards(SOOT_PUFFS, 1), smoke[1].clone()),
-    ] {
-        commands.spawn((
-            Name::new(name),
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material),
-            Transform::IDENTITY,
-            NoFrustumCulling,
-            NotShadowCaster,
-        ));
-    }
+    spawn_cards(&mut commands, &mut meshes, count, &fire, &smoke);
     let lights = (0..LIGHTS)
         .map(|i| {
             commands
@@ -626,6 +674,15 @@ fn show(
     }
 }
 
+/// One of the fires' lights.
+struct Lit {
+    at: Vec3,
+    lumens: f32,
+    range: f32,
+    lift: f32,
+    flickers: f32,
+}
+
 /// The fires' light: each of a few lights where the most fire is, gathered over cells of a
 /// few metres, at the cell's fire's middle and as bright as it burns, wavering; and a light
 /// at each jet's mouth and where it reaches.
@@ -636,44 +693,18 @@ fn light(
     mut lights: Query<(&mut PointLight, &mut Transform, &mut Visibility)>,
 ) {
     let t = time.elapsed_secs_wrapped();
-    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32)> =
-        std::collections::BTreeMap::new();
-    for blaze in blazes.all() {
-        let weight = blaze.tall * blaze.heat;
-        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
-        let cell = cells.entry(key).or_insert((Vec3::ZERO, 0.0));
-        cell.0 += blaze.at * weight;
-        cell.1 += weight;
-    }
-    let mut lit: Vec<(Vec3, f32)> = blazes
-        .jets
-        .iter()
-        .filter(|jet| jet.on)
-        .flat_map(|jet| {
-            let way = jet.way.normalize_or(Vec3::Z);
-            [
-                (jet.from + way * jet.reach * 0.25, JET_LUMENS),
-                (jet.from + way * jet.reach * 0.85, JET_LUMENS),
-            ]
-        })
-        .collect();
-    let mut gathered: Vec<(Vec3, f32)> = cells
-        .into_values()
-        .filter(|(_, weight)| *weight > 0.0)
-        .map(|(sum, weight)| (sum / weight, (weight * LUMENS_A_METRE).min(MOST_LUMENS)))
-        .collect();
-    gathered.sort_by(|a, b| b.1.total_cmp(&a.1));
-    lit.extend(gathered);
+    let lit = lit(&blazes);
     for (i, &entity) in drawn.lights.iter().enumerate() {
         let Ok((mut light, mut transform, mut visibility)) = lights.get_mut(entity) else {
             continue;
         };
         match lit.get(i) {
-            Some(&(at, lumens)) => {
-                let up = at.normalize_or(Vec3::Y);
-                let (waver, bob) = flicker(t, i as f32 * 1.7, lumens);
-                light.intensity = lumens * waver;
-                transform.translation = at + up * (1.5 + bob);
+            Some(lit) => {
+                let up = lit.at.normalize_or(Vec3::Y);
+                let (waver, bob) = flicker(t, i as f32 * 1.7, lit.flickers);
+                light.intensity = lit.lumens * waver;
+                light.range = lit.range;
+                transform.translation = lit.at + up * (lit.lift + bob * lit.lift / 1.5);
                 *visibility = Visibility::Inherited;
             }
             None => {
@@ -682,6 +713,66 @@ fn light(
             }
         }
     }
+}
+
+/// The lights the fires want, the brightest first after the jets' and the hearths'.
+fn lit(blazes: &Blazes) -> Vec<Lit> {
+    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32)> =
+        std::collections::BTreeMap::new();
+    let hearths = blazes.kept.len().min(HEARTHS);
+    for blaze in blazes.all().skip(hearths) {
+        let weight = blaze.tall * blaze.heat;
+        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
+        let cell = cells.entry(key).or_insert((Vec3::ZERO, 0.0));
+        cell.0 += blaze.at * weight;
+        cell.1 += weight;
+    }
+    // Each light: where, how many lumens, how far it reaches, how high over where it is it
+    // hangs, and how big a fire it flickers as.
+    let mut lit: Vec<Lit> = blazes
+        .jets
+        .iter()
+        .filter(|jet| jet.on)
+        .flat_map(|jet| {
+            let way = jet.way.normalize_or(Vec3::Z);
+            [0.25, 0.85].map(|along| Lit {
+                at: jet.from + way * jet.reach * along,
+                lumens: JET_LUMENS,
+                range: LIGHT_RANGE_M,
+                lift: 1.5,
+                flickers: JET_LUMENS,
+            })
+        })
+        .collect();
+    // A hearth's light hangs low in its flames, over its logs, so it lights the ground round
+    // it and the faces of those sat by it, and flickers as its tongues do.
+    lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
+        let weight = blaze.tall * blaze.heat;
+        Lit {
+            at: blaze.at,
+            lumens: weight * HEARTH_LUMENS_A_METRE,
+            range: HEARTH_RANGE_M,
+            lift: blaze.tall * 0.6,
+            flickers: weight * LUMENS_A_METRE * 0.25,
+        }
+    }));
+    let mut gathered: Vec<Lit> = cells
+        .into_values()
+        .filter(|(_, weight)| *weight > 0.0)
+        .map(|(sum, weight)| {
+            let lumens = (weight * LUMENS_A_METRE).min(MOST_LUMENS);
+            Lit {
+                at: sum / weight,
+                lumens,
+                range: LIGHT_RANGE_M,
+                lift: 1.5,
+                flickers: lumens,
+            }
+        })
+        .collect();
+    gathered.sort_by(|a, b| b.lumens.total_cmp(&a.lumens));
+    lit.extend(gathered);
+    lit
 }
 
 #[cfg(test)]
@@ -724,6 +815,37 @@ mod tests {
         world.despawn(lit);
         world.run_system_once(keep).unwrap();
         assert_eq!(world.resource::<Blazes>().all().count(), 0);
+    }
+
+    #[test]
+    fn a_campfire_lights_round_it_from_its_flames_and_a_burning_roof_across_the_way() {
+        let ground = Vec3::new(0.0, 2000.0, 0.0);
+        let blazes = Blazes {
+            kept: vec![Blaze {
+                at: ground,
+                tall: 1.5,
+                heat: 0.9,
+                seed: 0.3,
+                wide: 0.7,
+            }],
+            blazes: vec![Blaze {
+                at: ground + Vec3::X * 40.0,
+                tall: 1.5,
+                heat: 0.9,
+                seed: 0.6,
+                wide: 0.0,
+            }],
+            ..default()
+        };
+        let lit = lit(&blazes);
+        assert_eq!(lit.len(), 2);
+        let (hearth, roof) = (&lit[0], &lit[1]);
+        assert_eq!(hearth.at, ground);
+        // In its flames, over its logs, not over the heads of those sat by it.
+        assert!(hearth.lift < 1.5 * 0.7, "{}", hearth.lift);
+        // Lighting a ring round it, not the far shore.
+        assert!(hearth.range <= 15.0 && roof.range > 3.0 * hearth.range);
+        assert!(hearth.lumens > 0.0);
     }
 
     #[test]
