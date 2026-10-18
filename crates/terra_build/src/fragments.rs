@@ -27,6 +27,7 @@ use crate::layout::hash;
 use crate::{Base, CELL_M, Material, Surfaces};
 use glam::{IVec3, Quat, Vec3};
 
+mod fracture;
 mod topple;
 pub use topple::{Hinge, topple};
 
@@ -34,6 +35,9 @@ pub use topple::{Hinge, topple};
 /// castle's towers and walls coming down together make some thousands): the
 /// game makes fewer at lower ones and fades the oldest first past it.
 pub const MOST: usize = 5000;
+/// The most cubes across a whole chunk's mesh wears its material for ([`Fragment::mesh`]):
+/// a bigger one wears it stretched.
+pub const MOST_DRAWN: u8 = 8;
 /// How fast fragments fall, in metres a second a second.
 pub const GRAVITY: f32 = 9.8;
 /// What is kept of a fragment's speed off the floor when it bounces, and along the floor.
@@ -217,7 +221,9 @@ impl Fragment {
     pub fn mesh(&self) -> (Shape, u8, f32) {
         match self.shape {
             Shape::Whole => {
-                let across = (self.size.max_element() / CELL_M).round().clamp(1.0, 4.0);
+                let across = (self.size.max_element() / CELL_M)
+                    .round()
+                    .clamp(1.0, f32::from(MOST_DRAWN));
                 (self.shape, across as u8, across * CELL_M)
             }
             shape => (shape, 0, PIECE_M),
@@ -339,50 +345,52 @@ impl Fragment {
     /// breaking says, thrown up and out a little: what is left of its fall.
     pub fn shatter(&self, breaks: Breaks, share: f32) -> Vec<Fragment> {
         let mut out = Vec::new();
-        // A block of cubes bursts where it first lands into the cubes it was made of, as
-        // voxels do: some of them whole, to tumble on and break where they land again, the
-        // rest at once into its way of breaking's pieces.
+        // A chunk of cubes cracks where it lands hard into a few smaller chunks of uneven
+        // size (`fracture::crack`), as masonry does, each tumbling on to break again where
+        // it lands hard, with a spray of its way of breaking's pieces from the cracks; its
+        // single cubes some whole, the rest at once into pieces.
         if self.size.max_element() > CELL_M * 1.2 {
             let count = (self.size / CELL_M).round().max(Vec3::ONE).as_ivec3();
-            let part = self.size / count.as_vec3();
-            for x in 0..count.x {
-                for y in 0..count.y {
-                    for z in 0..count.z {
-                        let offset = (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * part
-                            - self.size * 0.5;
-                        let seed = hash(&[self.seed, (x | y << 3 | z << 6) as u32]);
-                        let r = |salt: u32| unit(&[seed, salt]);
-                        let at = self.at + self.turn * offset;
-                        let out_from = (self.turn * offset).normalize_or_zero();
-                        let away = self.velocity.with_y(0.0) * 0.5 + out_from * (1.0 + r(4));
-                        if r(7) < WHOLE_SHARE {
-                            let axis =
-                                Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
-                            out.push(Fragment {
-                                at,
-                                velocity: away + Vec3::Y * (0.8 + r(5)),
-                                spin: axis * (2.0 + 3.0 * r(6)),
-                                size: part * 0.97,
-                                wait: 0.0,
-                                still: false,
-                                seed,
-                                hinge: None,
-                                ..*self
-                            });
-                        } else {
-                            pieces(
-                                self.kind,
-                                breaks,
-                                at - Vec3::splat(CELL_M * 0.5),
-                                1.0,
-                                seed,
-                                share,
-                                away,
-                                0.7,
-                                &mut out,
-                            );
-                        }
-                    }
+            let cube = self.size / count.as_vec3();
+            for (low, side) in fracture::crack(count, self.seed) {
+                let part = cube * side.as_vec3();
+                let offset = low.as_vec3() * cube + part * 0.5 - self.size * 0.5;
+                let seed = hash(&[self.seed, (low.x | low.y << 4 | low.z << 8) as u32]);
+                let r = |salt: u32| unit(&[seed, salt]);
+                let at = self.at + self.turn * offset;
+                let out_from = (self.turn * offset).normalize_or_zero();
+                let whole = side != IVec3::ONE || r(7) < WHOLE_SHARE;
+                if whole {
+                    // The bigger, the less it is thrown: a big chunk rolls off the heap.
+                    let heft = part.max_element().max(CELL_M).sqrt();
+                    let away = self.velocity.with_y(0.0) * 0.5 + out_from * (0.6 + r(4)) / heft;
+                    let axis = Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
+                    out.push(Fragment {
+                        at,
+                        velocity: away + Vec3::Y * (0.4 + 0.8 * r(5)) / heft,
+                        spin: axis * (2.0 + 3.0 * r(6)) / heft,
+                        size: part * 0.97,
+                        wait: 0.0,
+                        still: false,
+                        seed,
+                        hinge: None,
+                        ..*self
+                    });
+                }
+                if !whole || side != IVec3::ONE {
+                    // A cube's pieces, or from a crack a cube's worth at half.
+                    let away = self.velocity.with_y(0.0) * 0.5 + out_from * (1.0 + r(4));
+                    pieces(
+                        self.kind,
+                        breaks,
+                        at - Vec3::splat(CELL_M * 0.5),
+                        1.0,
+                        seed,
+                        if whole { share * 0.5 } else { share },
+                        away,
+                        0.7,
+                        &mut out,
+                    );
                 }
             }
             return out;
@@ -555,20 +563,16 @@ pub fn burst(
         }
     }
     out.truncate(most);
-    // The cubes left hanging fall whole, a block of them together where there are more than
-    // there is room for: a tower comes down as solid chunks, not a lattice of every so many.
+    // The cubes left hanging fall whole, in chunks of uneven size where there are many
+    // (`fracture`): a tower comes down as solid chunks of masonry, not a lattice of every
+    // so many cubes nor a grid of equal blocks.
     let left = most - out.len();
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
     let fallen: std::collections::BTreeSet<[i32; 3]> =
         fell.iter().map(|(at, _)| at.to_array()).collect();
-    let mut across = least_across(hanging.len());
-    let mut blocks = group(&hanging, across);
-    while blocks.len() > left && across < MOST_ACROSS {
-        across += 1;
-        blocks = group(&hanging, across);
-    }
+    let blocks = chunks_of(&hanging, left);
     let every = blocks.len().div_ceil(left.max(1)).max(1);
-    for (index, block) in blocks.values().enumerate() {
+    for (index, block) in blocks.iter().enumerate() {
         if index % every != 0 || out.len() >= most {
             continue;
         }
@@ -633,48 +637,56 @@ pub fn burst(
     out
 }
 
+/// The cubes left hanging cut into the chunks they fall as (`fracture::chunks`), so big as
+/// the fall's size says and bigger where there would be more than `left`, in order up the
+/// fall, so that past the budget it is every so many, evenly.
+fn chunks_of<'a>(hanging: &[&'a (IVec3, Cube)], left: usize) -> Vec<Vec<&'a (IVec3, Cube)>> {
+    let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
+    let places: Vec<IVec3> = hanging.iter().map(|(at, _)| *at).collect();
+    let seed = hash(&[places.len() as u32, lowest as u32]);
+    let cut = |across: i32| -> Vec<Vec<&(IVec3, Cube)>> {
+        // A small fall cube by cube.
+        let below = if across == 1 { 2 } else { i32::MAX };
+        fracture::chunks(&places, across, below, seed)
+            .into_iter()
+            .map(|chunk| chunk.into_iter().map(|i| hanging[i]).collect())
+            .collect()
+    };
+    let mut across = least_across(hanging.len());
+    let mut blocks = cut(across);
+    while blocks.len() > left && across < MOST_ACROSS {
+        across += 1;
+        blocks = cut(across);
+    }
+    blocks.sort_by_key(|block| {
+        let at = block[0].0;
+        (at.y, at.x, at.z)
+    });
+    blocks
+}
+
 /// How many of the cubes a block bursts into where it first lands stay whole, to break
 /// where they land again (`Fragment::shatter`).
 const WHOLE_SHARE: f32 = 0.4;
 
-/// The most cubes along each side a block of cubes left hanging falls as one, and from how
-/// many cubes left hanging they fall in blocks two and three a side at least.
+/// The most the least side of the chunks cubes left hanging fall as may grow to, to stay in
+/// the budget; and from how many cubes left hanging the chunks are two, three and four
+/// cubes a side at least (and up to twice that).
 const MOST_ACROSS: i32 = 6;
 const CHUNKS_FROM: usize = 300;
 const BIG_CHUNKS_FROM: usize = 2000;
+const HUGE_CHUNKS_FROM: usize = 4000;
 
-/// How many cubes a side the blocks so many cubes left hanging fall as are at least: a big
-/// fall comes down in chunks of many cubes, as masonry breaks along its joints into blocks a
-/// metre or more across, not cube by cube.
+/// How many cubes a side the chunks so many cubes left hanging fall as are at least: a big
+/// fall comes down in a few big chunks, as masonry breaks along its joints into pieces of a
+/// metre to a few across, which tip and tumble and break again where they land.
 fn least_across(hanging: usize) -> i32 {
     match hanging {
         0..CHUNKS_FROM => 1,
         CHUNKS_FROM..BIG_CHUNKS_FROM => 2,
-        _ => 3,
+        BIG_CHUNKS_FROM..HUGE_CHUNKS_FROM => 3,
+        _ => 4,
     }
-}
-
-/// Cubes grouped in blocks so many a side, by the block each is in; each course of blocks
-/// set off from the one under it, as masonry's bond is, so the chunks do not line up in a
-/// grid.
-fn group<'a>(
-    cubes: &[&'a (IVec3, Cube)],
-    across: i32,
-) -> std::collections::BTreeMap<[i32; 3], Vec<&'a (IVec3, Cube)>> {
-    let mut blocks: std::collections::BTreeMap<[i32; 3], Vec<&(IVec3, Cube)>> =
-        std::collections::BTreeMap::new();
-    for cube in cubes {
-        let course = cube.0.y.div_euclid(across);
-        let set_off = hash(&[course as u32, across as u32]) as i32;
-        let shift = IVec3::new(
-            set_off.rem_euclid(across),
-            0,
-            (set_off >> 8).rem_euclid(across),
-        );
-        let key = (cube.0 + shift).div_euclid(IVec3::splat(across)).to_array();
-        blocks.entry(key).or_default().push(*cube);
-    }
-    blocks
 }
 
 impl Base {

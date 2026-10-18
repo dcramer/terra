@@ -87,7 +87,8 @@
     ),
     meets: Some((weight: 3, end: None, carries: Cap)),
     colours: (
-        light: (0.62, 0.6, 0.56),
+        // Grey-brown, the stone's and the ground's, which a fall throws up together.
+        light: (0.47, 0.42, 0.36),
     ),
     // The bench's targets (D386), set from fieldstone's numbers on 2026-10-16 (texel density
     // 1,024; sharpness 31.6, 32.7 and 29.4%; values 29 to 143; 1.15 and 1.58 of the card lit,

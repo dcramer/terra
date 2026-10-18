@@ -58,7 +58,10 @@ fn a_tower_coming_down_stays_within_the_budget_and_falls_solid() {
     let ring = |at: IVec3| at.y == 0;
     let parts = burst(&tower, &ring, &chunks, 1.0, 2000);
     assert!(parts.len() <= 2000, "{}", parts.len());
-    let high = parts.iter().map(|part| part.at.y).fold(0.0, f32::max);
+    let high = parts
+        .iter()
+        .map(|part| part.at.y + part.size.y * 0.5)
+        .fold(0.0, f32::max);
     assert!(high > 9.0, "its top comes down too: {high}");
     // What hung comes down in blocks that between them fill all of it, not as a
     // lattice of every so many cubes.
@@ -72,7 +75,7 @@ fn a_tower_coming_down_stays_within_the_budget_and_falls_solid() {
 }
 
 #[test]
-fn a_block_landing_bursts_into_its_cubes_some_whole_and_the_rest_into_pieces() {
+fn a_block_landing_cracks_into_a_few_uneven_chunks_that_break_again_down_to_pieces() {
     // A block two metres a side, four cubes, falling as one.
     let block = Fragment {
         kind: cube(CubeShape::Whole).kind,
@@ -89,20 +92,44 @@ fn a_block_landing_bursts_into_its_cubes_some_whole_and_the_rest_into_pieces() {
         hinge: None,
     };
     let burst = block.shatter(Breaks::Chunks, 1.0);
-    // Nothing left bigger than a cube where it first lands.
-    assert!(burst.iter().all(|part| part.size.max_element() < CELL_M));
+    // It cracks into a few smaller chunks of uneven size where it first lands, not into
+    // its cubes in a grid, with pieces from the cracks.
     let whole: Vec<_> = burst
         .iter()
         .filter(|part| part.shape == Shape::Whole)
         .collect();
+    let longest = |part: &Fragment| part.size.max_element();
+    assert!(whole.iter().all(|part| longest(part) < longest(&block)));
     assert!(
-        whole.len() > 10 && whole.len() < 54,
-        "{} whole of 64",
+        whole.iter().any(|part| longest(part) > CELL_M * 1.5),
+        "none bigger than a cube"
+    );
+    let sizes: std::collections::BTreeSet<[u32; 3]> = whole
+        .iter()
+        .map(|part| (part.size / CELL_M).round().as_uvec3().to_array())
+        .collect();
+    assert!(sizes.len() >= 2, "{sizes:?}");
+    assert!(
+        whole.len() >= 3 && whole.len() < 40,
+        "{} chunks of 64 cubes",
         whole.len()
     );
-    assert!(burst.len() > 64 * 2, "the rest in pieces: {}", burst.len());
-    let pieces = whole[0].shatter(Breaks::Chunks, 1.0);
-    assert!(pieces.iter().all(|piece| piece.shape != Shape::Whole));
+    assert!(burst.len() > whole.len() * 2, "few pieces: {}", burst.len());
+    // Broken again and again where they land, it comes down to pieces in the end.
+    let mut left: Vec<Fragment> = burst;
+    for _ in 0..8 {
+        left = left
+            .into_iter()
+            .flat_map(|part| {
+                if part.shape == Shape::Whole {
+                    part.shatter(Breaks::Chunks, 1.0)
+                } else {
+                    vec![part]
+                }
+            })
+            .collect();
+    }
+    assert!(left.iter().all(|part| part.shape != Shape::Whole));
 }
 
 #[test]

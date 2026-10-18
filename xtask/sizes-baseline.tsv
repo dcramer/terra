@@ -9,7 +9,7 @@ crates/terra_build/examples/sections.rs	main	196
 crates/terra_build/src/checker.rs	check	197
 crates/terra_build/src/cubes.rs	-	1240
 crates/terra_build/src/fire.rs	step	153
-crates/terra_build/src/fragments.rs	burst	163
+crates/terra_build/src/fragments.rs	burst	159
 crates/terra_build/src/inspect.rs	-	2646
 crates/terra_build/src/inspect.rs	pokes_out	188
 crates/terra_build/src/inspect.rs	see_through	193

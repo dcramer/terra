@@ -28,7 +28,7 @@ use terra_build::{CELL_M, Cube, Kind};
 use terra_world::quality::Quality;
 
 mod dust;
-use dust::{billow_at, cloud, dust_at, puff};
+use dust::{billow_at, dust_at, landing, puff};
 
 /// The fixed step fragments move by, in seconds, and the most steps a frame.
 const STEP_S: f32 = 1.0 / 60.0;
@@ -56,16 +56,27 @@ const SHAKE_REACH_M: f32 = 0.06;
 /// How long a puff of dust lasts, in seconds, and how wide it grows, in metres.
 const PUFF_S: f32 = 1.6;
 const PUFF_M: [f32; 2] = [0.7, 2.6];
-/// From how many cubes coming down at once a fall raises a cloud of dust, a puff in it for
-/// every so many, at most so many, and how long it lasts, in seconds.
-const CLOUD_CUBES: usize = 400;
-const CLOUD_EVERY: usize = 25;
-const CLOUD_MOST: usize = 60;
-const CLOUD_S: f32 = 9.0;
-/// How many clouds may billow at once over the small puffs' budget: a castle's towers and
-/// walls come down within seconds of each other, and the small puffs of their many lesser
-/// falls had used up a shared budget, so the big falls raised none.
-const CLOUDS: usize = 3;
+/// From how big at its longest, in metres, a piece landing raises a billow of its own
+/// (`dust::landing`) rather than a puff.
+const BILLOW_FROM_M: f32 = 0.9;
+/// How many billows the chunks of big falls raise where they land may be up at once, over
+/// the small puffs' budget: a castle's towers and walls come down within seconds of each
+/// other, and the small puffs of their many lesser falls had used up a shared budget, so
+/// the big falls raised none.
+const BILLOWS: usize = 180;
+/// The least share of its pieces a chunk breaks into where it lands, however full the
+/// budget.
+const LEAST_SHARE: f32 = 0.3;
+
+/// What a fragment raised where it landed: where, of what kind, how much dust (0 to 1 and
+/// more), how big it is at its longest, in metres, and how it was going along the ground.
+struct Landed {
+    at: Vec3,
+    kind: Kind,
+    amount: f32,
+    size: f32,
+    along: Vec3,
+}
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Shards>().add_systems(
@@ -274,7 +285,7 @@ fn spawn(commands: &mut Commands, (mesh, drawn): (Handle<Mesh>, Drawn), at: Tran
 /// A rest a fragment lies still for before it shrinks away, its own, the same each time: a
 /// big piece, a block or a slab, long enough for the heap it makes to be seen, as rubble
 /// lies at a fallen wall's foot; a small one briefly. Every one fades in the end, and the
-/// oldest first wherever the cap needs the room (`fade_oldest`).
+/// least worth first wherever the cap needs the room (`fade_least`).
 fn rest_for(fragment: &Fragment) -> f32 {
     let unit = (fragment.seed % 1000) as f32 / 1000.0;
     let rest = if fragment.size.max_element() >= BIG_M {
@@ -393,25 +404,6 @@ fn burst(
                 at.normalize_or(Vec3::Y),
             );
         }
-        // A big collapse raises a cloud as big as it (`cloud`).
-        if let Some((kind, puffs)) = cloud(&fallen.fell) {
-            // Lit, so its own colour: it shades itself.
-            let colour = dust_of(&look, kind);
-            let up = frame.rotation * Vec3::Y;
-            for (local, mut billow) in puffs {
-                billow.drift = frame.rotation * billow.drift;
-                billow_at(
-                    &mut commands,
-                    &mut shards,
-                    (&mut meshes, &mut materials, &mut images),
-                    most_puffs + CLOUD_MOST * CLOUDS,
-                    frame.transform_point(local),
-                    colour,
-                    up,
-                    billow,
-                );
-            }
-        }
         // A big collapse near shakes the view.
         if let Some(eye) = eye
             && fallen.fell.len() >= 12
@@ -459,21 +451,34 @@ fn lean(fallen: &Fallen) -> Vec3 {
     }
 }
 
-/// Sets the oldest fragments still not fading shrinking away, so many of them.
-fn fade_oldest(shards: &mut Shards, count: usize) {
+/// Sets so many fragments still not fading shrinking away, those that matter least first
+/// ([`worth`]): as shipped destruction culls its debris (Frostbite's debris budget lets the
+/// small pieces go before the big ones of a collapse), not the oldest whatever they are,
+/// which let a burning castle's many small falls fade its keep's chunks as it fell.
+fn fade_least(shards: &mut Shards, count: usize) {
     if count == 0 {
         return;
     }
     let mut order: Vec<usize> = (0..shards.live.len())
         .filter(|&i| !shards.live[i].fading())
         .collect();
-    order.sort_by(|&a, &b| shards.live[b].age_s.total_cmp(&shards.live[a].age_s));
+    let by = |a: &usize, b: &usize| worth(&shards.live[*a]).total_cmp(&worth(&shards.live[*b]));
+    if count < order.len() {
+        order.select_nth_unstable_by(count, by);
+    }
     for &i in order.iter().take(count) {
         let live = &mut shards.live[i];
         live.fragment.still = true;
         live.still_s = live.rest_s;
         live.fade_s = QUICK_FADE_S;
     }
+}
+
+/// How much a fragment matters to what is seen: the bigger the more, still falling or
+/// tumbling more than lying still, and less the longer it has been about.
+fn worth(live: &Live) -> f32 {
+    let moving = if live.fragment.still { 1.0 } else { 3.0 };
+    live.fragment.size.max_element() * moving / (1.0 + live.age_s / 4.0)
 }
 
 /// Moves every fragment on by the fixed step as many times as the frame's time asks: what
@@ -528,18 +533,47 @@ fn step(
         (most, preset),
     );
     keep_within(&mut shards, most);
-    for (at, kind, amount) in landed {
+    for Landed {
+        at,
+        kind,
+        amount,
+        size,
+        along,
+    } in landed
+    {
         let colour = dust_of(&look, kind);
-        dust_at(
-            &mut commands,
-            &mut shards,
-            (&mut meshes, &mut materials, &mut images),
-            most_puffs,
-            at,
-            colour,
-            amount,
-            at.normalize_or(Vec3::Y),
-        );
+        let up = at.normalize_or(Vec3::Y);
+        let assets = (&mut *meshes, &mut *materials, &mut *images);
+        // A big chunk landing raises a billow as big as it, which rolls on the way it was
+        // going and up, and lasts: a big fall's cloud comes up where and when its chunks
+        // land, in lumps, as a collapse's does, not all at once over what still stands. As
+        // big as its way of breaking's dust says: a burning hoarding's timber chunks, coming
+        // down all the while, had raised so many they left none for the stone's.
+        let dusty = breaks_of(&look)(kind).look().dust;
+        if let Some(billow) = landing(size * dusty, along, up) {
+            let most = most_puffs + BILLOWS;
+            billow_at(
+                &mut commands,
+                &mut shards,
+                assets,
+                most,
+                at,
+                colour,
+                up,
+                billow,
+            );
+        } else {
+            dust_at(
+                &mut commands,
+                &mut shards,
+                assets,
+                most_puffs,
+                at,
+                colour,
+                amount,
+                up,
+            );
+        }
     }
     draw_where_they_are(
         &mut commands,
@@ -582,7 +616,10 @@ fn warm(
         let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
         let sizes = [(Shape::Chunk, 0, 0.25), (Shape::Lump, 0, 0.25)]
             .into_iter()
-            .chain((1..=4u8).map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)));
+            .chain(
+                (1..=fragments::MOST_DRAWN)
+                    .map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)),
+            );
         let sizes: Vec<_> = sizes.collect();
         for kit in &kits.0 {
             for &size in &sizes {
@@ -617,12 +654,12 @@ fn fall(
     look: &BuildLook,
     delta_s: f32,
     (most, preset): (usize, f32),
-) -> (u32, Vec<(Vec3, Kind, f32)>) {
+) -> (u32, Vec<Landed>) {
     let breaks = breaks_of(look);
     shards.behind = (shards.behind + delta_s).min(STEP_S * MOST_STEPS as f32);
     let mut steps = 0;
     let mut born: Vec<Live> = Vec::new();
-    let mut landed: Vec<(Vec3, Kind, f32)> = Vec::new();
+    let mut landed: Vec<Landed> = Vec::new();
     while shards.behind >= STEP_S && steps < MOST_STEPS {
         shards.behind -= STEP_S;
         steps += 1;
@@ -676,18 +713,24 @@ fn fall(
             };
             let solid = |at: Vec3| base.solid_at(at);
             let landing = live.fragment.step(STEP_S, &floor, &solid);
+            // What it raises where it lands: its place, its kind, how much, how big it is
+            // and the way it was going, in the world.
+            let raised = |fragment: &Fragment, amount: f32| Landed {
+                at: frame.transform_point(fragment.at),
+                kind: fragment.kind,
+                amount,
+                size: fragment.size.max_element(),
+                along: frame.rotation * fragment.velocity.with_y(0.0),
+            };
             if landing.breaks {
                 let kind = live.fragment.kind;
                 let breaking = breaks(kind);
-                let pieces = live
-                    .fragment
-                    .shatter(breaking, preset.min(room as f32 / breaking.count() as f32));
+                // Some of its pieces however full the budget is: the least worth make room
+                // for them (`fade_least`), so a chunk never cracks into holes.
+                let share = (room as f32 / breaking.count() as f32).max(LEAST_SHARE);
+                let pieces = live.fragment.shatter(breaking, preset.min(share));
                 room = room.saturating_sub(pieces.len());
-                landed.push((
-                    frame.transform_point(live.fragment.at),
-                    kind,
-                    breaking.look().dust * 0.6,
-                ));
+                landed.push(raised(&live.fragment, breaking.look().dust * 0.6));
                 if !pieces.is_empty() {
                     // What it broke into goes on; the whole is gone at once, hidden
                     // inside its pieces.
@@ -699,11 +742,7 @@ fn fall(
             } else if landing.hit.is_some_and(|hit| hit > 3.0)
                 && live.fragment.size.max_element() > 0.2
             {
-                landed.push((
-                    frame.transform_point(live.fragment.at),
-                    live.fragment.kind,
-                    0.35,
-                ));
+                landed.push(raised(&live.fragment, 0.35));
             }
         }
     }
@@ -712,8 +751,8 @@ fn fall(
     (steps, landed)
 }
 
-/// Never far past the most: the oldest make room, and past twice as many the oldest of
-/// those not yet drawn are let go at once.
+/// Never far past the most: those of least worth make room ([`fade_least`]), and past twice
+/// as many, those of least worth not yet drawn are let go at once.
 fn keep_within(shards: &mut Shards, most: usize) {
     let over = shards
         .live
@@ -721,18 +760,22 @@ fn keep_within(shards: &mut Shards, most: usize) {
         .filter(|live| !live.fading())
         .count()
         .saturating_sub(most);
-    fade_oldest(shards, over);
-    while shards.live.len() > most * 2 {
-        match shards
-            .live
-            .iter()
-            .position(|live| live.entity == Entity::PLACEHOLDER)
-        {
-            Some(at) => {
-                shards.live.remove(at);
-            }
-            None => break,
+    fade_least(shards, over);
+    let past = shards.live.len().saturating_sub(most * 2);
+    if past > 0 {
+        let mut undrawn: Vec<usize> = (0..shards.live.len())
+            .filter(|&i| shards.live[i].entity == Entity::PLACEHOLDER)
+            .collect();
+        let by = |a: &usize, b: &usize| worth(&shards.live[*a]).total_cmp(&worth(&shards.live[*b]));
+        if past < undrawn.len() {
+            undrawn.select_nth_unstable_by(past, by);
         }
+        let gone: BTreeSet<usize> = undrawn.into_iter().take(past).collect();
+        let mut index = 0;
+        shards.live.retain(|_| {
+            index += 1;
+            !gone.contains(&(index - 1))
+        });
     }
 }
 
@@ -825,46 +868,69 @@ pub(super) fn live(world: &World) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::dust::Billow;
     use super::*;
 
-    /// A solid block of stone cubes so many a side, standing on the ground at the origin.
-    fn block(side: i32, high: i32) -> Vec<(IVec3, Cube)> {
-        let cube = terra_build::Cube::new(terra_build::Kind(2), terra_build::Fill::Solid);
-        (0..side)
-            .flat_map(|x| (0..high).flat_map(move |y| (0..side).map(move |z| (x, y, z))))
-            .map(|(x, y, z)| (IVec3::new(x, y, z), cube))
-            .collect()
+    /// A fragment of stone so big at its longest, falling or lying still.
+    fn piece(size: f32, still: bool) -> Fragment {
+        let fell = [(
+            IVec3::ZERO,
+            terra_build::Cube::new(terra_build::Kind(2), terra_build::Fill::Solid),
+        )];
+        let mut piece = fragments::burst(&fell, &|_| false, &|_| Breaks::Chunks, 1.0, 1)[0];
+        piece.size = Vec3::splat(size);
+        piece.still = still;
+        piece
     }
 
     #[test]
-    fn a_fallen_towers_dust_is_a_cloud_as_wide_as_it_low_over_its_foot_and_a_wall_section_none() {
-        // A wall's top, a few dozen cubes: its own puffs only.
-        assert!(cloud(&block(3, 4)).is_none());
-        // A tower's top, 8 m across and 6 m high: a cloud lasting seconds, its puffs metres
-        // wide, over its footprint and low on what stood, drifting out and up.
-        let tower = block(16, 12);
-        let mass = (tower.len() as f32 * CELL_M.powi(3)).cbrt();
-        let (_, puffs) = cloud(&tower).expect("a tower's fall raises a cloud");
-        assert!(puffs.len() >= 8, "{}", puffs.len());
-        for (at, billow) in &puffs {
-            assert!(
-                (0.0..=8.0).contains(&at.x) && (0.0..=8.0).contains(&at.z),
-                "{at}"
-            );
-            assert!(at.y <= 6.0 * 0.35 + 1e-3, "{at}");
-            assert!(
-                billow.wide >= mass * 0.85 && billow.wide >= 3.0,
-                "{}",
-                billow.wide
-            );
-            assert!(billow.life >= 4.0, "{}", billow.life);
-            assert!(billow.drift.y > 0.0);
+    fn past_the_budget_the_small_pieces_fade_before_a_falling_chunk_however_new_they_are() {
+        let mut shards = Shards::default();
+        let root = Entity::PLACEHOLDER;
+        // The chunks of a keep coming down, then many chips of lesser falls after them.
+        for _ in 0..20 {
+            shards.live.push(Live::new(piece(2.0, false), root));
         }
-        // A bigger fall, a bigger cloud.
-        let (_, more) = cloud(&block(24, 12)).unwrap();
-        let widest = |p: &[(Vec3, Billow)]| p.iter().map(|(_, b)| b.wide).fold(0.0, f32::max);
-        assert!(more.len() >= puffs.len() && widest(&more) > widest(&puffs));
+        for _ in 0..200 {
+            shards.live.push(Live::new(piece(0.15, false), root));
+        }
+        for live in &mut shards.live[..20] {
+            live.age_s = 2.0;
+        }
+        keep_within(&mut shards, 120);
+        let fading = |big: bool| {
+            shards
+                .live
+                .iter()
+                .filter(|live| (live.fragment.size.x > 1.0) == big && live.fading())
+                .count()
+        };
+        assert_eq!(fading(true), 0, "a chunk faded for the chips");
+        assert_eq!(fading(false), 100);
+        // A chunk lying still for long goes before a chip just thrown.
+        let mut shards = Shards::default();
+        shards.live.push(Live::new(piece(2.0, true), root));
+        shards.live[0].age_s = 30.0;
+        shards.live.push(Live::new(piece(0.15, false), root));
+        keep_within(&mut shards, 1);
+        assert!(shards.live[0].fading() && !shards.live[1].fading());
+    }
+
+    #[test]
+    fn a_chunk_landing_raises_a_billow_as_big_as_it_rolling_on_and_up_and_a_chip_none() {
+        let up = Vec3::Y;
+        assert!(landing(0.2, Vec3::X, up).is_none());
+        let small = landing(1.0, Vec3::X * 3.0, up).expect("a chunk raises a billow");
+        let big = landing(3.0, Vec3::X * 3.0, up).unwrap();
+        for (size, billow) in [(1.0, &small), (3.0, &big)] {
+            assert!(billow.wide > size * 1.5, "{} for {size} m", billow.wide);
+            assert!(billow.life >= 4.0, "{}", billow.life);
+            assert!(
+                billow.drift.y > 0.0 && billow.drift.x > 0.0,
+                "{}",
+                billow.drift
+            );
+        }
+        assert!(big.wide > small.wide && big.life >= small.life);
     }
 
     #[test]
