@@ -31,6 +31,9 @@ const SKY_LIGHT_GAIN: f32 = 1.2;
 /// By night, how much of the day's saturation is left, as an eye loses colour in the dark
 /// (D302); its white balance stays neutral (D370).
 const NIGHT_SATURATION: f32 = 0.45;
+/// From sunset, how much of its colour what is dimly lit keeps against what is bright, the
+/// grade's shadows against its midtones (D302).
+const DIM_SATURATION: f32 = 0.3;
 /// By night, how bright the haze is against the day's, and its colour, the moon's (D310).
 const NIGHT_HAZE: f32 = 0.15;
 const MOON_HAZE: Vec3 = Vec3::new(0.32, 0.38, 0.52);
@@ -531,16 +534,7 @@ fn shine(
     let dark = 1.0 - smoothstep(-12.0, 0.0, height);
     nightfall.set_if_neq(Nightfall(dark));
     for mut grade in &mut grading {
-        // The grade's white balance is left neutral (`scene`) at every hour and everywhere, as
-        // a camera balanced for daylight (D65) sees (D370): a grey card in the noon sun stays
-        // grey, the sky's shade is blue, the low sun warm and the light through leaves green,
-        // all by the light itself. By night colour fades, as an eye's does in the dark (D302).
-        let day = smoothstep(-4.0, 2.0, height);
-        let saturation =
-            super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
-        if (grade.global.post_saturation - saturation).abs() > 1e-4 {
-            grade.global.post_saturation = saturation;
-        }
+        fade_colour(&mut grade, height);
     }
     // Out from under the trees, where the sky over the eye is open, the forest's haze gives
     // way to the open air's (D273): thinner, so the far forest and the land beyond show, and
@@ -609,6 +603,28 @@ fn shine(
         if camera.ev100 != ev {
             camera.ev100 = ev;
         }
+    }
+}
+
+/// Colour fading as the light goes (D302), for the sun so many degrees up.
+fn fade_colour(grade: &mut bevy::render::view::ColorGrading, height: f32) {
+    // The grade's white balance is left neutral (`scene`) at every hour and everywhere, as
+    // a camera balanced for daylight (D65) sees (D370): a grey card in the noon sun stays
+    // grey, the sky's shade is blue, the low sun warm and the light through leaves green,
+    // all by the light itself. By night colour fades, as an eye's does in the dark (D302),
+    // and the dim first: from sunset the land in the shade loses its colour, as an eye's
+    // rods take over in dim light (mesopic vision), while the bright sky and a fire keep
+    // theirs until the twilight goes. Faded all at once, from 4 degrees under, a dusk
+    // under a pink sky was the noon's green land dimmed or a grey sky (lake film r7).
+    let day = smoothstep(-12.0, -4.0, height);
+    let saturation = super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
+    if (grade.global.post_saturation - saturation).abs() > 1e-4 {
+        grade.global.post_saturation = saturation;
+    }
+    let lit = smoothstep(-3.0, 3.0, height);
+    let dim = DIM_SATURATION + (1.0 - DIM_SATURATION) * lit;
+    if (grade.shadows.saturation - dim).abs() > 1e-4 {
+        grade.shadows.saturation = dim;
     }
 }
 

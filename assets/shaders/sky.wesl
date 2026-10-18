@@ -150,6 +150,10 @@ const RIDGES: u32 = 4u;
 const RIDGE_AT: array<f32, 4> = array<f32, 4>(0.12, 0.5, 0.8, 1.0);
 const RIDGE_HILLS: array<f32, 4> = array<f32, 4>(0.45, 0.55, 0.75, 1.0);
 const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
+// After sunset, how bright the haze before the far land is against the horizon's band, and
+// how far it is turned toward the zenith's blue.
+const EARTH_SHADOW: f32 = 0.6;
+const DUSK_COOL: f32 = 0.45;
 
 // The land beyond the world's edge (D273), below the horizon, as shipped games draw the
 // hills past their maps: ridges one behind another, each paler than the one before in the
@@ -177,8 +181,14 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     let round = vec2<f32>(dot(level, east), dot(level, north));
     // The air just over the horizon: Bevy's tables darken the air's light below it, most of
     // all straight ahead, as if its own ground showed through.
-    let horizon = air_seen(normalize(level + up * 0.02))
+    let behind = air_seen(normalize(level + up * 0.02))
         + (mix(sky.horizon.rgb, sky.zenith.rgb, 0.1) * sky.brightness * sky.twilight);
+    // The haze before a ridge after sunset: the low air lies in the earth's own shadow, lit
+    // only by the sky over it, dimmer and bluer than the horizon's band behind, which is air
+    // still sunlit far off and high up. As bright as that band, a range at dusk was as pale
+    // and warm as the sky beside it (lake film r7; Bohinj's ridges at 46 and 29 against 133).
+    let cool = normalize(sky.zenith.rgb + vec3<f32>(1.0e-4)) * length(behind);
+    let horizon = mix(behind, cool, DUSK_COOL * sky.twilight) * mix(1.0, EARTH_SHADOW, sky.twilight);
     // The forest on it, lit as the world's canopy is by the sun through the air and the sky.
     let sun = normalize(sky.sun_direction);
     let canopy = sky.far_land.rgb;

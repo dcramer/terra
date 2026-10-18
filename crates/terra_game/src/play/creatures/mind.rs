@@ -19,6 +19,12 @@ use terra_world::flora::Trunk;
 pub(super) const SENSE_M: f32 = 40.0;
 /// A runner watches anyone coming from this many times as far as it flees them.
 const WATCHES_WITHIN: f32 = 2.5;
+/// Within this many times as far as it flees it stops feeding and stares; farther off, a
+/// grazer looks up between bouts of feeding, and this share of the time it bends to feed
+/// again rather than looking (feeding elk and roe deer spend most of their time head down
+/// and a fifth to a third of it vigilant: Childress and Lung 2003, Benhaiem et al. 2008).
+const STARES_WITHIN: f32 = 1.5;
+const FEEDS_ON: f32 = 0.75;
 
 /// What a creature makes of those about it as it thinks.
 struct Sense {
@@ -276,22 +282,36 @@ fn shy(
                 State::Flee(left - s.dt)
             }
         }
-        // One that has noticed someone coming stops what it is doing, turns to face them
-        // and watches, a while before it makes off, as a hare, a fox or a heron does.
+        // One that has noticed someone coming keeps feeding while they are well off, its head
+        // down most of the time and up now and then to look, as grazers share their time
+        // between feeding and vigilance; only once they come nearer does it stop, turn to face
+        // them and watch, before it makes off, as a hare, a fox or a heron does. Staring at
+        // anyone within the whole distance it watches from, every animal beside a runner's way
+        // stood head up toward him, side by side, as if posed for the camera (lake film r7).
         State::Idle(_) | State::Graze(_) | State::Wander(_)
             if s.near(flees_within_m * WATCHES_WITHIN)
                 && !s.near(flees_within_m)
                 && !creature.hurt =>
         {
-            if let Some(toward) = s.toward {
-                let turn = 1.0 - libm::expf(-s.dt * 3.0);
-                creature.facing = creature
-                    .facing
-                    .lerp(toward, turn)
-                    .reject_from(s.up)
-                    .normalize_or(toward);
+            let close = s.near(flees_within_m * STARES_WITHIN);
+            match creature.state {
+                State::Graze(left) if !close && left > 0.0 => State::Graze(left - s.dt),
+                State::Idle(left) if !close && left > 0.0 => {
+                    look_toward(creature, s);
+                    State::Idle(left - s.dt)
+                }
+                _ if !close && about.clips.eat.is_some() && dice.unit() < FEEDS_ON => {
+                    State::Graze(dice.range(4.0, 9.0))
+                }
+                _ if !close => {
+                    look_toward(creature, s);
+                    State::Idle(dice.range(1.0, 2.5))
+                }
+                _ => {
+                    look_toward(creature, s);
+                    State::Idle(0.5)
+                }
             }
-            State::Idle(0.5)
         }
         // Within the distance it flees at but not close: it walks, paddles or wades off
         // from them, straight away, and keeps an eye on them.
@@ -313,6 +333,18 @@ fn shy(
         }
         _ => return None,
     })
+}
+
+/// Turns a creature a little more toward the nearest player, level, for the time it thinks.
+fn look_toward(creature: &mut Creature, s: &Sense) {
+    if let Some(toward) = s.toward {
+        let turn = 1.0 - libm::expf(-s.dt * 3.0);
+        creature.facing = creature
+            .facing
+            .lerp(toward, turn)
+            .reject_from(s.up)
+            .normalize_or(toward);
+    }
 }
 
 /// A hostile one: biting, chasing whoever comes near or hurt it, giving up when led too far;
@@ -385,8 +417,11 @@ fn settle(
         State::Wander(to) if (to - s.here).length() > 1.0 => return State::Wander(to),
         _ => {}
     }
+    // One that can graze stands idle less than it feeds, as a grazer's day goes; standing
+    // head up two times in five, a herd beside a path read as on watch (lake film r7).
     let roll = dice.unit();
-    if roll < 0.4 {
+    let idles = if about.clips.eat.is_some() { 0.25 } else { 0.4 };
+    if roll < idles {
         return State::Idle(dice.range(2.0, 5.0));
     }
     if roll < 0.75 && about.clips.eat.is_some() {

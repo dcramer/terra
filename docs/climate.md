@@ -121,6 +121,7 @@ Temperature, daylight, precipitation, wind and the air's wetness are functions o
 - **Temperature** is the theme's base, less about 6.5 °C a kilometre of height, plus the year's swing (lagging the sun by about a month, as real seasons do), the day's (warmest mid-afternoon), and the weather's.
 - **Daylight** is the sun's path for the date: the sun's declination swings with the year, so winter days are short and its sun low.
 - **Weather** is fronts of noise drifting across the world with the clock; whether what falls is rain or snow is the temperature's doing.
+- **Wind** at the ground has the evening calm: by day the sun-warmed ground mixes the wind aloft down to it; from the sun 10° up to 2° under it falls to half the day's, as the air over cooling ground settles, so a lake at dusk is near glass (D341).
 - A world's theme is the numbers: its base climate, and how far each quantity swings and how fast. A temperate world swings in temperature, a monsoon world in rain; no code differs.
 - **In code (D315):** `terra_climate`. The clock is days; the year's slow terms move on once a day, at midnight. The start's climate is `assets/data/climate.ron`, and its clock starts in late August, under the sun the art was lit by (10° north), with the summer's leaves.
 

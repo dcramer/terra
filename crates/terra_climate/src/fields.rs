@@ -27,6 +27,11 @@ const RAMP: f32 = 1.0;
 const CLOUD_LEAD: f32 = 1.0;
 /// The hour of the day's warmest, mid-afternoon.
 const WARMEST_HOUR: f32 = 15.0;
+/// The wind at the ground by night as a share of the day's, and the sun's height, radians,
+/// from which it falls toward it and at which it has: about 10 degrees up and 2 under.
+const CALM_AT_NIGHT: f32 = 0.5;
+const STIRRED_FROM_RAD: f32 = 0.17;
+const CALMS_FROM_RAD: f32 = -0.035;
 /// Water falls as snow below 0 °C and as rain above 2 °C, mixed between, as hydrological
 /// models take it (the HBV model's threshold and interval).
 const ALL_SNOW_C: f32 = 0.0;
@@ -257,7 +262,15 @@ impl Day<'_> {
             fields.gusts.sample(point + Vec3::splat(shift)) / NOISE_SD
         };
         let storm = 0.8 * gust(0.0) + 0.6 * weather.front.clamp(-2.0, 2.0);
-        let speed_m_s = (w.mean_m_s * (1.0 + w.gustiness * storm)).max(0.0);
+        // The evening calm: by day the sun-warmed ground stirs the air, mixing the wind aloft
+        // down to the ground; as the sun goes low the ground cools, the air over it settles
+        // into a still layer and the wind at the ground falls to about half the day's by
+        // dusk, as surface winds over land do (Dai and Deser 1999). Without it a lake at dusk
+        // was as rippled as at noon, its mirror of the far shore broken (lake film r7).
+        let stirred = CALM_AT_NIGHT
+            + (1.0 - CALM_AT_NIGHT)
+                * smoothstep(CALMS_FROM_RAD, STIRRED_FROM_RAD, weather.sun_height);
+        let speed_m_s = (w.mean_m_s * stirred * (1.0 + w.gustiness * storm)).max(0.0);
         let turn = (gust(57.3) / 2.0).clamp(-1.0, 1.0);
         let from = (w.prevailing_from_deg + w.turning_deg * turn)
             .to_radians()
@@ -611,6 +624,24 @@ pub(crate) mod tests {
             assert!((0.0..=1.0).contains(&c.cloud) && (0.05..=1.0).contains(&c.humidity));
             assert!(c.wind.speed_m_s >= 0.0 && (0.0..TAU).contains(&c.wind.from));
         }
+    }
+
+    #[test]
+    fn the_wind_at_the_ground_falls_to_about_half_by_night() {
+        let fields = Fields::new(temperate(), Seed(7));
+        let mut rng = Seed(9).rng();
+        let (mut day, mut night) = (Vec::new(), Vec::new());
+        for _ in 0..6000 {
+            let c = fields.at(place(&mut rng), WorldTime(rng.range(-900.0, 900.0) as f64));
+            if c.sun_height > 0.3 {
+                day.push(c.wind.speed_m_s);
+            } else if c.sun_height < -0.05 {
+                night.push(c.wind.speed_m_s);
+            }
+        }
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        let share = mean(&night) / mean(&day);
+        assert!((0.4..0.6).contains(&share), "{share}");
     }
 
     #[test]

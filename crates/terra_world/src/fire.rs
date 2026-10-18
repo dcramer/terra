@@ -20,6 +20,7 @@
 use crate::adaptation::Adaptation;
 use crate::climate::ClimateFields;
 use crate::daylight::Clock;
+use crate::footprint::Footprint;
 use crate::quality::Quality;
 use bevy::{
     asset::RenderAssetUsages,
@@ -352,6 +353,7 @@ pub fn plugin(app: &mut App) {
             MaterialPlugin::<FireSmokeMaterial>::default(),
         ))
         .add_systems(Startup, setup)
+        .add_systems(Update, scorch)
         .add_systems(PostUpdate, (keep, blow, show, light).chain());
 }
 
@@ -565,6 +567,41 @@ fn setup(
         wind: Vec3::ZERO,
         wind_due: 0.0,
     });
+}
+
+/// How far round a kept fire nothing grows, past half its flames' width, in metres, and the
+/// cells it is cleared in: a campfire's ring of stones and the scorched, trodden earth round
+/// it, a metre or so out. With the grass grown up to the stones and through its flames, the
+/// flames were see-through where each blade stood just behind them, faded as in front of a
+/// wall (soft particles; lake film r7).
+const SCORCHED_M: f32 = 0.8;
+const SCORCHED_CELL_M: f32 = 0.25;
+
+/// Clears the ground round each fire newly kindled, as what is built clears it ([`Footprint`]),
+/// so the grass and the plants keep out.
+fn scorch(
+    mut commands: Commands,
+    kindled: Query<(Entity, &Kindled, &Transform), (Added<Kindled>, Without<Footprint>)>,
+) {
+    for (entity, fire, at) in &kindled {
+        commands.entity(entity).insert(scorched(fire, at));
+    }
+}
+
+/// The ground a fire clears, round its foot.
+fn scorched(fire: &Kindled, at: &Transform) -> Footprint {
+    let radius = fire.wide * 0.5 + SCORCHED_M;
+    let reach = (radius / SCORCHED_CELL_M).ceil() as i32;
+    let ground = (-reach..reach)
+        .flat_map(|x| (-reach..reach).map(move |z| IVec2::new(x, z)))
+        .filter(|cell| ((cell.as_vec2() + 0.5) * SCORCHED_CELL_M).length() <= radius)
+        .collect();
+    Footprint {
+        frame: Transform::from_translation(at.translation).with_rotation(at.rotation),
+        cell_m: SCORCHED_CELL_M,
+        ground,
+        standing: Default::default(),
+    }
 }
 
 /// The fires kept where something kindled stands, each with a number of its own from its
@@ -826,6 +863,21 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_campfire_clears_the_ground_a_metre_round_it_and_no_farther() {
+        let fire = Kindled {
+            tall: 1.5,
+            wide: 0.7,
+            heat: 0.9,
+        };
+        let at = Transform::from_translation(Vec3::new(3.0, 2000.0, -4.0));
+        let ground = scorched(&fire, &at);
+        let out = |m: f32| at.translation + Vec3::new(m * 0.6, 0.0, m * 0.8);
+        assert!(ground.covers(at.translation, 0.0));
+        assert!(ground.covers(out(1.0), 0.0));
+        assert!(!ground.covers(out(1.6), 0.0));
+    }
 
     /// How far a light wavers over ten seconds, and how many times a second it turns.
     fn wavers(lumens: f32) -> (f32, f32) {
