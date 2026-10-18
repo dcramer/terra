@@ -60,16 +60,22 @@ function ground(east: number, south: number): number {
 /// at its own speed, measured from its take (made_clips.py's ONCE line, the hands' heights
 /// and speeds): where its action starts after a slow start (`from`), the top of its wind-up
 /// (`top`), when the blow lands (`hit`), and when it is back on its feet (`done`).
-type Clip = { name: string; from?: number; top?: number; hit?: number; done?: number };
+/// `travel` is how far its hips go ahead of where it stands (behind if negative) by moments
+/// of the clip, metres at the body's size: the take's own step or stagger, which the clip
+/// carries in its hips rather than in the figure's place, so the camera and the other
+/// fighter know where its body really is (measured from the take's Hips channel, times the
+/// body's scale: the troll's rig is 2.22 times the person the take was made on).
+type Clip = { name: string; from?: number; top?: number; hit?: number; done?: number; travel?: [number, number][] };
 const TROLL_CLIPS: Record<string, Clip> = {
   idle: { name: "Troll_Idle" },
   walk: { name: "Troll_Walk" },
   // Its hands gather low at 1.3 s, are highest at 1.8, fastest at 2.1 and in the ground at
-  // 2.3; it is bent over the blow until 3.5.
-  smash: { name: "Troll_Smash", from: 1.0, top: 1.78, hit: 2.3, done: 3.5 },
+  // 2.3; it is bent over the blow until 3.5, its hips sat back.
+  smash: { name: "Troll_Smash", from: 1.0, top: 1.78, hit: 2.3, done: 3.5, travel: [[1.78, 0], [2.3, -0.31], [4.0, -0.22]] },
   // Its right arm drawn back at 1.0 s, fastest at 1.33 across its front, through by 1.5.
   sweep: { name: "Troll_Sweep", from: 0.6, top: 1.0, hit: 1.3, done: 2.2 },
-  hit: { name: "Troll_Hit", done: 1.6 },
+  // It reels back nearly 2 m by 1.6 s and 2.3 by the end.
+  hit: { name: "Troll_Hit", done: 1.6, travel: [[0.5, 0], [1.0, -0.51], [1.6, -1.96], [3.0, -2.34]] },
   roar: { name: "Troll_Roar" },
 };
 const MAN_CLIPS: Record<string, Clip> = {
@@ -82,7 +88,7 @@ const MAN_CLIPS: Record<string, Clip> = {
   // late, its lunge carrying the hand on after the cut.
   slash: { name: "Fight_Slash", from: 0.15, top: 0.37, hit: 1.02, done: 1.55 },
   backhand: { name: "Fight_Backhand", from: 0.2, top: 0.43, hit: 0.98, done: 1.5 },
-  chop: { name: "Fight_Chop", from: 0.25, top: 0.5, hit: 1.1, done: 1.7 },
+  chop: { name: "Fight_Chop", from: 0.25, top: 0.5, hit: 1.1, done: 1.7, travel: [[0.5, 0.04], [1.1, 0.52], [1.7, 0.59]] },
   // The shield up and braced at 1.2 s, pushed back from 1.6.
   block: { name: "Fight_Block", from: 0.7, hit: 1.25, done: 2.0 },
   dodge: { name: "Fight_Dodge" },
@@ -97,7 +103,14 @@ const TROLL = { model: "models/characters/troll.glb", rate: 0.85 };
 /// Its clips were made on a person: their hands hang and meet where a person's would, inside
 /// its belly. Its upper arms are turned out from its sides and forward over every clip
 /// (`staged.bend`), as a retarget pose fits a clip to a heavier body.
-const TROLL_BEND = { upperarm_l: [-14, 0, 22], upperarm_r: [-14, 0, -22] };
+/// Its forearms are turned out too, as the clips fold them in across its front, so its
+/// hands stay out from its body.
+const TROLL_BEND = { upperarm_l: [-14, 0, 22], upperarm_r: [-14, 0, -22], lowerarm_l: [0, 0, 18], lowerarm_r: [0, 0, -18] };
+/// Over its sweep its right arm reaches: the upper arm further out and forward, the forearm
+/// unfolded from across its chest to point ahead, so the hand meets his shield at arm's length.
+const SWEEP_BEND = { ...TROLL_BEND, upperarm_r: [-30, 0, -12], lowerarm_r: [0, -45, 0] };
+/// Reeling from his blows, its arms come up in front of its face, not over and behind its head.
+const REEL_BEND = { ...TROLL_BEND, upperarm_l: [-42, 0, 18], upperarm_r: [-42, 0, -18] };
 /// The man: the base body as the player's template, dressed, a sword in his right hand and a
 /// round shield in his left; his clips from the fight file, on the base's skeleton. His left
 /// upper arm is brought forward and out so the shield he carries on it stands clear in front
@@ -112,6 +125,9 @@ const MAN = {
 };
 /// How far ahead of the troll its blows land, metres: its arm and fist at its size.
 const REACH = 3.1;
+/// How far from the troll's hips the man stands as his blade lands: his arm and sword, about
+/// 1.4 m, meeting its leg half a metre out from its middle.
+const CUTS_AT = 1.9;
 /// A hit-stop, frames at 60 a second: how long attacker and target are held on contact, as
 /// fighting games hold a light hit about 6 frames and a heavy one 10 to 14.
 const STOP = { light: 6, heavy: 10, smash: 12 };
@@ -157,7 +173,12 @@ class Fighter {
     this.rate = rate;
   }
 
-  at(frame: number): Vec3 {
+  /// The other fighter, which its clips' steps and staggers go toward or away from.
+  foe?: Fighter;
+  private plays: { frame: number; clip: Clip; from: number; speed: number; once: boolean }[] = [];
+
+  /// Where it stands on a frame: its place as `play::staged` moves it.
+  root(frame: number): Vec3 {
     let here = this.start;
     for (const leg of this.legs) {
       if (leg.frame > frame) break;
@@ -166,8 +187,32 @@ class Fighter {
     return here;
   }
 
+  /// Where its body is on a frame: where it stands, and its clip's own step or stagger
+  /// (`travel`) toward or away from its foe.
+  at(frame: number): Vec3 {
+    return add(this.root(frame), this.travel(frame));
+  }
+
+  /// How far its clip has carried its hips from where it stands on a frame.
+  travel(frame: number): Vec3 {
+    let last: (typeof this.plays)[number] | undefined;
+    for (const p of this.plays) if (p.frame <= frame) last = p;
+    const table = last?.clip.travel;
+    if (!last || !table || !this.foe) return [0, 0, 0];
+    let t = last.from;
+    for (let f = last.frame; f < frame; f++) t += (last.speed * this.rate * this.rateAt(f)) / 60;
+    let metres = t <= table[0][0] ? 0 : table[table.length - 1][1];
+    for (let i = 1; i < table.length; i++) {
+      const [[t0, m0], [t1, m1]] = [table[i - 1], table[i]];
+      if (t >= t0 && t < t1) metres = m0 + ((m1 - m0) * (t - t0)) / (t1 - t0);
+    }
+    return scale(way(this.root(last.frame), this.foe.root(last.frame)), metres);
+  }
+
   /// Plays one of its clips from a frame: looping, or once and held on its last pose.
   play(s: Script, frame: number, clip: string, { once = false, blend = 250, speed = 1, from = 0 } = {}) {
+    this.plays.push({ frame, clip: this.clips[clip], from, speed, once });
+    this.plays.sort((a, b) => a.frame - b.frame);
     s.frame = frame;
     s.call("staged.play", { name: this.name, clip: this.clips[clip].name, speed: speed * this.rate, once, blend_ms: blend, ...(from > 0 ? { from_s: from } : {}) });
   }
@@ -228,7 +273,7 @@ class Fighter {
 
   /// Moves it from a frame to a point at a speed, facing a point or another fighter.
   move(s: Script, frame: number, to: Vec3, speed: number, face?: Vec3 | Fighter) {
-    const from = this.at(frame);
+    const from = this.root(frame);
     this.legs.push({ frame, from, to, frames: Math.max(1, Math.round((level(from, to) / speed) * 60)) });
     this.legs.sort((a, b) => a.frame - b.frame);
     s.frame = frame;
@@ -245,32 +290,51 @@ class Fighter {
     s.frame = frame;
     s.call("staged.face", { name: this.name, ...facing("at", face), base: true });
   }
+
+  /// Turns some of its bones over its clips from a frame, blended in over `blend` ms.
+  bend(s: Script, frame: number, bend: Record<string, number[]>, blend = 200) {
+    s.frame = frame;
+    s.call("staged.bend", { name: this.name, bend, blend_ms: blend });
+  }
+
+  /// Moves where it stands so its body stays where its clip's step or stagger had carried it,
+  /// over the `blend` ms the next clip takes to blend in from that clip's last pose: where the
+  /// clip's hips were is where the figure is, as an engine takes a clip's root motion. Told
+  /// before the next clip is played, on the same frame.
+  settle(s: Script, frame: number, blend: number, face?: Vec3 | Fighter) {
+    const off = this.travel(frame);
+    const metres = Math.hypot(off[0], off[2]);
+    if (metres > 0.05) this.move(s, frame, add(this.root(frame), off), metres / (blend / 1000), face);
+  }
 }
 
 /// What a fighter is told to face, as the call takes it: another fighter by name, or a point.
 const facing = (key: string, face?: Vec3 | Fighter) => (face === undefined ? {} : face instanceof Fighter ? { toward: face.name } : { [key]: face });
 
-/// The heavy landings, each frame and how hard: the camera shakes on them.
+/// The heavy landings, each the frame its shake starts on and how hard: the camera shakes on
+/// them once the hit-stop lets go, so the frozen frame of contact is sharp, not smeared by the
+/// shutter.
 const landings: { frame: number; amount: number }[] = [];
-function impact(s: Script, frame: number, point: Vec3, size: number, shake: number) {
+function impact(s: Script, frame: number, point: Vec3, size: number, shake: number, stop = 0) {
   s.frame = frame;
   s.call("staged.impact", { at: point, size, base: true });
-  landings.push({ frame, amount: shake });
+  landings.push({ frame: frame + stop, amount: shake });
 }
 
-/// The camera on a frame, shaken by the landings before it: a hard jolt down and to the side
-/// on the frame of contact, then a fast shake along the view's right and up dying away over
-/// about 0.4 s, as a heavy blow near the camera jolts it; the look shaken a little less than
-/// the eye, so the frame rocks rather than slides.
+/// The camera on a frame, shaken by the landings before it: a jolt down and to the side as
+/// the hit-stop lets go, then a shake along the view's right and up dying away over about
+/// 0.4 s, as a heavy blow near the camera jolts it; slow enough (about 5 a second) that the
+/// shutter does not smear the frame, the look shaken a little less than the eye so the frame
+/// rocks rather than slides.
 function shaken(frame: number, eye: Vec3, look: Vec3): [Vec3, Vec3] {
   let off: Vec3 = [0, 0, 0];
   const ahead = way(eye, look);
   const side = right(ahead);
   for (const { frame: f, amount } of landings) {
     const t = (frame - f) / 60;
-    if (t < 0 || t > 0.5) continue;
-    const fade = amount * Math.exp(-t * 9);
-    off = add(off, add(scale(side, fade * Math.sin(t * 60 + 0.4)), [0, -fade * Math.cos(t * 75), 0]));
+    if (t < 0 || t > 0.6) continue;
+    const fade = amount * Math.exp(-t * 7);
+    off = add(off, add(scale(side, fade * Math.sin(t * 30 + 0.4)), [0, -fade * Math.cos(t * 38), 0]));
   }
   return [add(eye, off), add(look, scale(off, 0.5))];
 }
@@ -307,6 +371,8 @@ function script(s: Script) {
   const T1 = p([-6.4, 2.6]);
   const man = new Fighter("man", M0, MAN_CLIPS, 1);
   const troll = new Fighter("troll", troll0, TROLL_CLIPS, TROLL.rate);
+  man.foe = troll;
+  troll.foe = man;
   // Where the second smash lands, in the shallows, and where the man stands at the water's
   // edge in front of it to take it.
   const splash = p(SHALLOWS);
@@ -357,13 +423,18 @@ function script(s: Script) {
   man.play(s, smashLands - 26, "roll", { once: true, blend: 100, speed: 1.15 });
   man.move(s, smashLands - 26, rolled, 3.0, M1);
   const blowAt = add(T2, scale(way(T2, M1), REACH));
-  impact(s, smashLands, blowAt, 2.4, 0.32);
+  impact(s, smashLands, blowAt, 2.6, 0.16, STOP.smash);
   s.mark("smash", "The smash: he rolls aside and it lands in the gravel", comes, smashLands + 20);
 
   // 4. Out of the roll he steps straight back in and cuts twice at its leg while it is still
   // bent over the blow; the second staggers it.
+  // He comes in at its flank, well round from where its arms are down in the gravel ahead of
+  // it, so his blade meets its leg clear of them.
   const stepIn = smashLands + 38;
-  const M3 = add(T2, scale(way(T2, rolled), 1.75));
+  const ahead = way(T2, M1);
+  const flank = way([0, 0, 0], add(scale(ahead, 0.3), scale(right(ahead), -0.95)));
+  const legHips = troll.at(stepIn);
+  const M3 = add(legHips, scale(flank, CUTS_AT));
   man.play(s, stepIn, "step", { blend: 180 });
   man.move(s, stepIn, M3, 3.2, troll);
   const cut1 = man.arrives() - 6;
@@ -371,31 +442,36 @@ function script(s: Script) {
   const hit1 = first(MAN_CLIPS.slash.hit!);
   troll.stop(s, hit1, STOP.light);
   troll.setRate(s, hit1 + STOP.light, 0.55);
-  landings.push({ frame: hit1, amount: 0.05 });
+  landings.push({ frame: hit1 + STOP.light, amount: 0.04 });
   const cut2 = first(MAN_CLIPS.slash.hit! + 0.18);
   const second = man.perform(s, cut2, "backhand", { speed: 1.2, blend: 140, strike: 1.4, stop: STOP.light });
   const hit2 = second(MAN_CLIPS.backhand.hit!);
   troll.setRate(s, hit2, 1);
   troll.perform(s, hit2, "hit", { speed: 1.1, blend: 90 });
   troll.stop(s, hit2, STOP.light);
-  landings.push({ frame: hit2, amount: 0.06 });
-  const T3 = add(T2, scale(way(M3, T2), 0.8));
-  troll.move(s, hit2 + STOP.light, T3, 1.3, man);
+  landings.push({ frame: hit2 + STOP.light, amount: 0.05 });
   man.play(s, second(MAN_CLIPS.backhand.done!), "guard", { blend: 250 });
   s.mark("cuts", "He cuts twice at its leg while it is bent over; it staggers", stepIn, hit2 + 30);
 
   // 5. Out of its stagger it sweeps at him: he takes it on his shield, both held on the blow,
-  // and is driven back a stride toward the water.
+  // and is driven back a stride toward the water. Its stagger is its clip's own; where that
+  // left its body is where it stands to sweep, and he steps in to meet it.
   const sweep = hit2 + S(0.75);
+  troll.settle(s, sweep, 200, man);
   troll.face(s, sweep, man);
+  troll.bend(s, sweep, SWEEP_BEND, 400);
   const sweeps = troll.perform(s, sweep, "sweep", { blend: 200, speed: 1.05, hold: 0.32, strike: 1.5, stop: STOP.heavy });
   const sweepLands = sweeps(TROLL_CLIPS.sweep.hit!);
+  troll.bend(s, sweeps(TROLL_CLIPS.sweep.done!), TROLL_BEND, 400);
+  const T3 = troll.root(sweepLands);
+  const M3b = add(T3, scale(way(T3, M3), 1.75));
   const braces = sweepLands - Math.round(((MAN_CLIPS.block.hit! - MAN_CLIPS.block.from!) / 1.0) * 60);
+  man.move(s, braces - 20, M3b, 1.5, troll);
   man.perform(s, braces, "block", { blend: 120 });
   man.stop(s, sweepLands, STOP.heavy);
-  const driven = add(M3, scale(way(T3, M3), 1.6));
+  const driven = add(M3b, scale(way(T3, M3b), 1.6));
   man.move(s, sweepLands + STOP.heavy, driven, 3.6, troll);
-  impact(s, sweepLands + STOP.heavy + 4, add(M3, [0, 0.1, 0]), 0.6, 0.16);
+  impact(s, sweepLands, add(M3b, [0, 0.1, 0]), 0.8, 0.1, STOP.heavy);
   s.mark("sweep", "The sweep drives him back on his shield", sweep, sweepLands + 30);
 
   // 6. It presses him to the water's edge, and smashes again from its stride: he sidesteps
@@ -404,9 +480,9 @@ function script(s: Script) {
   const T4 = add(edge, scale(intoWater, -1.6));
   const presses = sweeps(TROLL_CLIPS.sweep.done!) - 10;
   troll.play(s, presses, "walk", { blend: 300 });
-  troll.move(s, presses, T4, 2.0, man);
-  man.play(s, sweepLands + STOP.heavy + 30, "right", { blend: 260 });
-  man.move(s, sweepLands + STOP.heavy + 30, edge, 1.9, troll);
+  troll.move(s, presses, T4, 2.5, man);
+  man.play(s, sweepLands + STOP.heavy + 24, "right", { blend: 260 });
+  man.move(s, sweepLands + STOP.heavy + 24, edge, 2.2, troll);
   man.play(s, man.arrives(), "guard", { blend: 220 });
   const smash2 = troll.arrives() - 14;
   troll.face(s, smash2, splash);
@@ -416,43 +492,59 @@ function script(s: Script) {
   const aside = add(edge, scale(right(way(T4, edge)), -2.4));
   man.play(s, smash2Lands - 30, "dodge", { once: true, blend: 100, speed: 1.2 });
   man.move(s, smash2Lands - 30, aside, 3.4, T4);
-  impact(s, smash2Lands, splash, 2.6, 0.3);
+  // The splash where its fists strike, in the shallows short of the deeper water.
+  impact(s, smash2Lands, add(edge, scale(intoWater, 2.0)), 3.2, 0.16, STOP.smash);
   s.mark("splash", "A second smash lands in the shallows", presses, smash2Lands + 20);
 
   // 7. His combination of three while it is bent over the water, each blow starting as the
   // last follows through: it reels back into the shallows.
-  const close = add(T4, scale(intoWater, -1.75));
+  // Its stagger is one take played on through his three blows, slow under the first two and
+  // thrown back by the chop, each frozen on contact; he steps in with each blow, so his blade
+  // meets its body wherever the stagger has carried it.
   const combo = smash2Lands + 30;
+  const close = add(troll.root(combo), scale(intoWater, -CUTS_AT));
   man.face(s, combo, troll);
   man.play(s, combo, "step", { blend: 160 });
   man.move(s, combo, close, 3.4, troll);
   let swing = man.arrives() - 6;
-  let back = T4;
   let lands = swing;
   let done = swing;
+  const reach: string[] = [];
   for (const [k, blow] of (["slash", "backhand", "chop"] as const).entries()) {
     const last = k === 2;
-    const plays = man.perform(s, swing, blow, { speed: 1.2, blend: 120, strike: 1.4, stop: last ? STOP.heavy : STOP.light });
+    const stop = last ? STOP.heavy : STOP.light;
+    const plays = man.perform(s, swing, blow, { speed: 1.2, blend: 120, strike: 1.4, stop });
     lands = plays(MAN_CLIPS[blow].hit!);
-    troll.setRate(s, lands, 1);
-    troll.perform(s, lands, "hit", { speed: last ? 0.95 : 1.15, blend: 90 });
-    troll.stop(s, lands, last ? STOP.heavy : STOP.light);
-    back = add(back, scale(intoWater, last ? 1.3 : 0.8));
-    troll.move(s, lands + (last ? STOP.heavy : STOP.light), back, last ? 1.4 : 1.1, man);
-    landings.push({ frame: lands, amount: last ? 0.12 : 0.05 });
-    if (last) impact(s, lands + 20, add(back, scale(intoWater, -0.4)), 0.9, 0);
+    if (k === 0) {
+      troll.setRate(s, lands, 1);
+      troll.perform(s, lands, "hit", { speed: 0.8, blend: 90 });
+      troll.bend(s, lands, REEL_BEND, 250);
+    } else {
+      const want = add(troll.at(lands), scale(intoWater, -CUTS_AT));
+      const to = add(want, scale(man.travel(lands), -1));
+      const metres = level(man.root(swing), to);
+      if (metres > 0.05) man.move(s, swing, to, metres / Math.max(0.2, (lands - swing) / 60), troll);
+    }
+    troll.stop(s, lands, stop);
+    if (last) troll.setRate(s, lands + stop, 1.6);
+    landings.push({ frame: lands + stop, amount: last ? 0.1 : 0.035 });
+    if (last) impact(s, lands + 24, add(troll.at(lands + 50), scale(intoWater, -0.3)), 1.4, 0);
+    reach.push(`${level(man.at(lands), troll.at(lands)).toFixed(2)} (${((lands - ROLLS) / 60).toFixed(2)} s)`);
     swing = plays(MAN_CLIPS[blow].hit! + 0.2);
     done = plays(MAN_CLIPS[blow].done!);
   }
+  man.settle(s, done, 300, troll);
   man.play(s, done, "guard", { blend: 300 });
-  man.move(s, done, add(close, scale(intoWater, 0.5)), 0.8, troll);
   s.mark("reels", "His combination of three; it reels back into the shallows", combo, lands + 40);
 
-  // 8. It roars over him in the shallows, and he stands to it, shield up.
+  // 8. It roars over him in the shallows, and he stands to it, shield up; where its stagger
+  // carried it is where it stands to roar.
   const roar = lands + S(1.0);
+  troll.settle(s, roar, 500, man);
   troll.face(s, roar, man);
-  troll.play(s, roar, "roar", { once: true, speed: 0.95, blend: 280 });
-  const end = roar + S(4.4);
+  troll.bend(s, roar, TROLL_BEND, 500);
+  troll.play(s, roar, "roar", { once: true, speed: 0.95, blend: 500 });
+  const end = roar + S(2.8);
   s.mark("roar", "It roars over him in the shallows", roar, end);
 
   // The camera, beat by beat: close, low, moving, cut on the action; looking west along the
@@ -494,23 +586,25 @@ function script(s: Script) {
     // and his cuts.
     {
       from: smashLands - 8,
-      to: hit1 + 6,
+      to: cut1,
       eye: (f, t) => side(blowAt, T2, 0.35, 6.6 + 0.6 * t, 1.0),
       look: (f, t) => add(mix(blowAt, man.at(f), 0.3 * smooth(t)), [0, 1.0 + 0.4 * t, 0]),
     },
-    // Close past its leg from the trees' side, looking north-west over the water: the cuts.
+    // Cut as he swings: over his sword shoulder from the water's side, looking south to the
+    // trees, his blade cutting into its leg with its arms down beyond, clear of him.
     {
-      from: hit1 + 6,
+      from: cut1,
       to: sweep + S(0.5),
-      eye: (f, t) => side(man.at(f), troll.at(f), 0.45, 4.0 - 0.4 * t, 1.1),
-      look: (f) => add(mid(f, 0.5), [0, 1.5, 0]),
+      eye: (f, t) => shoulder(man.at(f), troll.at(f), 1.8 + 0.3 * t, 2.8, 2.0),
+      look: (f) => add(mid(f, 0.45), [0, 1.0, 0]),
     },
-    // Over his left shoulder, the sweep coming at him and his shield taking it.
+    // Side on from his shield side, looking west along the shore: its arm swinging in from
+    // the near side and meeting his shield.
     {
       from: sweep + S(0.5),
       to: sweepLands + S(1.0),
-      eye: (f, t) => shoulder(man.at(f), troll.at(f), 2.4 + 0.6 * t, -1.1, 1.3),
-      look: (f) => add(mid(f, 0.6), [0, 1.8, 0]),
+      eye: (f, t) => side(man.at(f), troll.at(f), 0.45, -(6.2 - 0.4 * t), 1.6),
+      look: (f) => add(mid(f, 0.5), [0, 1.8, 0]),
     },
     // From the water, low over it, side on: it presses him to the edge, the smash into the
     // shallows and the splash, his sidestep.
@@ -524,26 +618,29 @@ function script(s: Script) {
     {
       from: combo + 20,
       to: lands - 14,
-      eye: (f, t) => shoulder(man.at(f), troll.at(f), 2.6 - 0.5 * smooth(t), 0.9, 1.5),
-      look: (f) => add(mid(f, 0.7), [0, 1.9, 0]),
+      eye: (f, t) => shoulder(man.at(f), troll.at(f), 3.0 - 0.5 * smooth(t), 1.0, 1.4),
+      look: (f) => add(mid(f, 0.7), [0, 2.3, 0]),
     },
     // The chop, side on from the shore, low: it reels back into the water.
     {
       from: lands - 14,
       to: roar + S(0.4),
-      eye: (f, t) => side(close, back, 0.5, -(5.2 + 0.5 * t), 1.0),
-      look: (f) => add(mid(f, 0.6), [0, 1.7, 0]),
+      eye: (f, t) => side(close, troll.at(lands), 0.5, -(6.0 + 0.4 * t), 1.1),
+      look: (f) => add(mid(f, 0.6), [0, 2.0, 0]),
     },
-    // Its roar from low behind his shield, looking up at it in the shallows: the hero shot.
+    // Its roar from low behind his shield, looking up at it in the shallows, pushing in: the
+    // hero shot.
     {
       from: roar + S(0.4),
       to: end,
-      eye: (f, t) => shoulder(man.at(f), troll.at(f), 1.9 + 0.5 * smooth(t), -0.75, 0.8 + 0.15 * t),
+      eye: (f, t) => shoulder(man.at(f), troll.at(f), 2.5 - 0.6 * smooth(t), -0.75, 0.8 + 0.1 * t),
       look: (f, t) => add(mix(man.at(f), troll.at(f), 0.8), [0, 2.6 + 0.3 * t, 0]),
     },
   ]);
   s.frame = end;
   console.error(`troll: the film runs ${((end - ROLLS) / 60).toFixed(1)} s; beats at ${[smashLands, hit1, hit2, sweepLands, smash2Lands, lands, roar].map((f) => ((f - ROLLS) / 60).toFixed(1)).join(", ")} s`);
+  const apart = (f: number) => level(man.at(f), troll.at(f)).toFixed(2);
+  console.error(`troll: on contact the man stands ${[hit1, hit2, sweepLands].map(apart).join(", ")} and ${reach.join(", ")} m from the troll's middle`);
 }
 
 export default {

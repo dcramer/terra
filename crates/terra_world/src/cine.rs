@@ -63,9 +63,18 @@ const PLAYER_LOOK_M: f32 = 1.45;
 /// camera flies, 300 m/s at 60 steps a second.
 const CUT_M: f32 = 5.0;
 
-/// Whether the eye moving from `was` to `now` in one frame is a cut, not a move.
-fn jumped(was: Option<Vec3>, now: Vec3) -> bool {
-    was.is_some_and(|was| was.distance(now) > CUT_M)
+/// How far the view turns in one frame for it to be a cut: a reverse angle a few metres from
+/// the last set-up moves the eye too little to count, but no pan turns 30 degrees in a
+/// sixtieth of a second (1800 degrees a second; a fast whip-pan is a few hundred).
+const CUT_TURN_DEG: f32 = 30.0;
+
+/// Whether the camera going from `was` to `now` in one frame is a cut, not a move: its eye
+/// jumped, or its view turned at once.
+fn jumped(was: Option<Transform>, now: &Transform) -> bool {
+    was.is_some_and(|was| {
+        was.translation.distance(now.translation) > CUT_M
+            || was.forward().angle_between(*now.forward()) > CUT_TURN_DEG.to_radians()
+    })
 }
 
 /// A shot, as its file has it. The file may hold more (the place, the hour, the player's
@@ -673,7 +682,7 @@ fn roll(
 fn film(
     mut commands: Commands,
     cine: Res<Cine>,
-    mut eye: Local<Option<Vec3>>,
+    mut eye: Local<Option<Transform>>,
     start: Option<Res<Start>>,
     planet: Res<Planet>,
     mut subject: Query<(&Transform, &mut Visibility), (With<Subject>, Without<MainCamera>)>,
@@ -747,7 +756,7 @@ fn film(
     // On a cut the anti-aliasing's history and the blur's motion are the last set-up's: the
     // history is dropped and the frame drawn sharp, as a renderer's camera cut does; the
     // shot's own cuts, or the camera put somewhere else at once by whatever holds it.
-    let cut = cine.cut || jumped(eye.replace(transform.translation), transform.translation);
+    let cut = cine.cut || jumped(eye.replace(*transform), &transform);
     if let Some(mut taa) = taa
         && taa.reset != cut
     {

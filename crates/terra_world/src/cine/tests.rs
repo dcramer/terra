@@ -5,10 +5,33 @@ use super::*;
 #[test]
 fn a_jump_of_the_eye_is_a_cut() {
     let here = Vec3::new(10.0, 2.0, -3.0);
-    assert!(jumped(Some(here), here + Vec3::new(40.0, 5.0, 12.0)));
+    let eye = |at: Vec3| Transform::from_translation(at).looking_at(at + Vec3::Z, Vec3::Y);
+    assert!(jumped(
+        Some(eye(here)),
+        &eye(here + Vec3::new(40.0, 5.0, 12.0))
+    ));
     // A dragon chase at 60 m/s moves a metre a step.
-    assert!(!jumped(Some(here), here + Vec3::X));
-    assert!(!jumped(None, here));
+    assert!(!jumped(Some(eye(here)), &eye(here + Vec3::X)));
+    assert!(!jumped(None, &eye(here)));
+}
+
+/// A reverse angle from a few metres away is a cut too, though the eye hardly moved; a fast
+/// pan, a few degrees a step, is not.
+#[test]
+fn the_view_turned_at_once_is_a_cut() {
+    let here = Vec3::new(10.0, 2.0, -3.0);
+    let looking = |at: Vec3, degrees: f32| {
+        let (sin, cos) = (
+            libm::sinf(degrees.to_radians()),
+            libm::cosf(degrees.to_radians()),
+        );
+        Transform::from_translation(at).looking_at(at + Vec3::new(sin, 0.0, cos), Vec3::Y)
+    };
+    let step = here + Vec3::new(2.0, 0.0, 1.0);
+    assert!(jumped(Some(looking(here, 0.0)), &looking(step, 110.0)));
+    assert!(jumped(Some(looking(here, 0.0)), &looking(here, 40.0)));
+    // 400 degrees a second, a whip-pan, is under 7 a step.
+    assert!(!jumped(Some(looking(here, 0.0)), &looking(here, 7.0)));
 }
 
 fn keys(points: &[(f32, f32)]) -> Vec<(f32, f32)> {
