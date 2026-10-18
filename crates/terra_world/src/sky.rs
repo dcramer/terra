@@ -133,6 +133,14 @@ impl Material for SkyMaterial {
             AlphaMode::Opaque
         }
     }
+
+    /// Drawn before every other see-through thing, as the farthest: its sphere's middle is
+    /// the camera, so sorted by its middle it came last and its clouds were laid over the
+    /// smoke in front of them, which writes no depth to stop them (castle films r7 and r8,
+    /// the pale horizontal streaks at 18-21 s, the same with no anti-aliasing or blur).
+    fn depth_bias(&self) -> f32 {
+        -1.0e6
+    }
 }
 
 impl SkyMaterial {

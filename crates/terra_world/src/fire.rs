@@ -146,6 +146,8 @@ const DROPS_A_SECOND: f32 = 45.0;
 /// in metres.
 const LIGHTS: usize = 12;
 const LIGHT_CELL_M: f32 = 9.0;
+/// How far out from the middle of all that burns a gathering's light hangs, metres.
+const LIGHT_OUT_M: f32 = 3.0;
 /// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
 /// the most one light gives: still some times a real fire's, for the film, but no longer so
 /// much that sunlit stone round a fire goes salmon pink; a breath's brighter, as every game
@@ -191,8 +193,8 @@ pub struct FireExtension {
     uniform: FireUniform,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
-    /// The flames' flipbook (`tools/textures/flames.ts`): three simulated fires' heat frame by
-    /// frame, one a channel, linear.
+    /// The flames' flipbook (`tools/textures/flames.ts`): a simulated fire's temperature, soot
+    /// and motion frame by frame, linear.
     #[texture(102)]
     #[sampler(103)]
     flipbook: Handle<Image>,
@@ -780,13 +782,34 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
             flickers: weight * LUMENS_A_METRE * 0.25,
         }
     }));
+    // Each gathering's light hangs out from the middle of all that burns, on the outside of
+    // the walls its flames stand on: at the gathering's own middle, inside a burning building,
+    // it lit the inner faces and none of the stone the eye sees (castle film r8).
+    let (sum, weight) = cells
+        .values()
+        .fold((Vec3::ZERO, 0.0), |(s, w), (cs, cw)| (s + *cs, w + cw));
+    let middle = if weight > 0.0 {
+        sum / weight
+    } else {
+        Vec3::ZERO
+    };
+    let outward = |at: Vec3| {
+        let up = at.normalize_or(Vec3::Y);
+        let away = at - middle;
+        let flat = away - up * away.dot(up);
+        if flat.length() > 1.0 {
+            flat.normalize() * LIGHT_OUT_M
+        } else {
+            Vec3::ZERO
+        }
+    };
     let mut gathered: Vec<Lit> = cells
         .into_values()
         .filter(|(_, weight)| *weight > 0.0)
         .map(|(sum, weight)| {
             let lumens = (weight * LUMENS_A_METRE).min(MOST_LUMENS);
             Lit {
-                at: sum / weight,
+                at: sum / weight + outward(sum / weight),
                 lumens,
                 color: BLAZE_LIGHT,
                 range: LIGHT_RANGE_M,

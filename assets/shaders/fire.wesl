@@ -53,9 +53,12 @@ const DROP_S: f32 = 2.0;
 
 // The flipbook's frames, how many across its sheet, and how many it plays a second for a
 // flame two and a half metres tall (`tools/textures/flames.ts`).
-const FLIPBOOK_FRAMES: f32 = 64.0;
-const FLIPBOOK_COLUMNS: f32 = 8.0;
+const FLIPBOOK_FRAMES: f32 = 96.0;
+const FLIPBOOK_COLUMNS: f32 = 12.0;
 const FLIPBOOK_FPS: f32 = 30.0;
+// The most a texel moves frame to frame, of the frame's size, that its motion stores; must
+// match MOTION in flames.ts.
+const FLIPBOOK_MOTION: f32 = 0.08;
 
 // A frame of the flipbook at a place on its card, x across and y up, kept a hair inside the
 // frame so its neighbours never bleed in.
@@ -65,6 +68,22 @@ fn flipbook_at(frame: f32, x: f32, y: f32) -> vec4<f32> {
     let rows = FLIPBOOK_FRAMES / FLIPBOOK_COLUMNS;
     let at = vec2((column + clamp(x, 0.01, 0.99)) / FLIPBOOK_COLUMNS, (row + 1.0 - clamp(y, 0.01, 0.99)) / rows);
     return textureSampleLevel(flipbook, flipbook_sampler, at, 0.0);
+}
+
+// The simulated fire at a moment `f` (in frames, any real number) at a place on its card: its
+// temperature (x) and soot (y), 0 to 1. The two frames either side are each moved along the
+// gas's flow to the moment and then blended, as Unreal's and EmberGen's motion-vector
+// flipbooks are played, so a tongue rises smoothly between frames rather than fading out
+// in one place and in at the next (a plain crossfade doubles every edge).
+fn flame_at(f: f32, x: f32, y: f32) -> vec2<f32> {
+    let f0 = floor(f);
+    let w = f - f0;
+    let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
+    let m0 = (flipbook_at(f0, x, y).ba - 0.5) * 2.0 * FLIPBOOK_MOTION;
+    let m1 = (flipbook_at(f1, x, y).ba - 0.5) * 2.0 * FLIPBOOK_MOTION;
+    let a = flipbook_at(f0, x - m0.x * w, y - m0.y * w).rg;
+    let b = flipbook_at(f1, x + m1.x * (1.0 - w), y + m1.y * (1.0 - w)).rg;
+    return mix(a, b, w);
 }
 
 // A card's corner placed: where on screen, the corner across and up the card, how far
@@ -182,16 +201,23 @@ fn soot(kelvin: f32, amount: f32) -> vec3<f32> {
 // r8's second probe, sRGB B/R 0.45); and it is shown a little past the knee, since the frame
 // showed it about 0.6 as bright as asked for (sRGB 195,147,89 for a mean asked as 241,192,101).
 const FLAME_GAIN: f32 = 1.7;
+// Its stops are spread as real fire's colours are measured (research/2026-10-18-dragon-breath.md,
+// §4: a burning building's flame pixels 53% deep red-orange, hue under 25; 29% orange; 9%
+// yellow; 1% white): for a flame whose heat is spread evenly, the lower half of it is deep
+// red-orange, the next third orange, and only its top fifth yellow and pale. Spread as r8's
+// were, a wall's flames were 63% orange and 16% yellow, a hedge of bright tongues.
 fn flame_colour(h: f32) -> vec3<f32> {
-    let rim = vec3(0.5, 0.07, 0.005);
-    let orange = vec3(1.0, 0.32, 0.02);
-    let yellow = vec3(1.0, 0.74, 0.06);
-    let pale = vec3(1.05, 0.9, 0.28);
+    let rim = vec3(0.4, 0.035, 0.003);
+    let deep = vec3(0.95, 0.13, 0.008);
+    let orange = vec3(1.0, 0.33, 0.02);
+    let yellow = vec3(1.0, 0.7, 0.06);
+    let pale = vec3(1.05, 0.9, 0.3);
     let white = vec3(0.95, 0.92, 0.82) * WHITE;
-    var c = mix(rim, orange, smoothstep(0.0, 0.25, h));
-    c = mix(c, yellow, smoothstep(0.25, 0.5, h));
-    c = mix(c, pale, smoothstep(0.62, 0.85, h));
-    return mix(c * FLAME_GAIN, white, smoothstep(0.88, 1.0, h));
+    var c = mix(rim, deep, smoothstep(0.0, 0.4, h));
+    c = mix(c, orange, smoothstep(0.4, 0.75, h));
+    c = mix(c, yellow, smoothstep(0.75, 0.88, h));
+    c = mix(c, pale, smoothstep(0.88, 0.95, h));
+    return mix(c * FLAME_GAIN, white, smoothstep(0.95, 1.0, h));
 }
 
 // How much of what is behind it a flame covers, for what it gives and its alpha. Its light is
@@ -203,6 +229,39 @@ fn covers(light: vec3<f32>, alpha: f32) -> f32 {
     let yellow = light.g / max(light.r, 1.0e-4);
     return alpha * mix(0.4, 0.97, smoothstep(0.2, 0.75, yellow));
 }
+
+// The black of soot as the screen shows it, a little warm.
+const SOOT_BLACK: vec3<f32> = vec3<f32>(0.012, 0.01, 0.009);
+// A burning building's flame where the simulated fire is `temp` hot and holds `soot`, for a
+// blaze `heat` hot, faded by `soft`: its light, premultiplied, and how much it covers. As real
+// fire is measured (research/2026-10-18-dragon-breath.md, its photographs of burning timber
+// and pool fires): white-yellow only in the hottest few in a hundred, low in the body where
+// the fuel's gas burns; most of it orange with yellow cores; deep red only at its thinnest
+// edges, and those see-through; and black soot breaking off between its tongues and over
+// them where the gas has cooled.
+fn wall_flame(temp: f32, soot_in: f32, heat: f32, soft: f32) -> vec4<f32> {
+    let h = WALL_HEAT * pow(temp, WALL_GAMMA) * (0.85 + 0.15 * heat);
+    let glow = smoothstep(0.03, 0.35, temp) * soft;
+    // Thin and cool, it is see-through; thick and hot, it hides what is behind.
+    let flame = glow * mix(WALL_THIN, 0.95, smoothstep(0.3, 0.7, temp));
+    let black = saturate(soot_in * WALL_SOOT) * (1.0 - smoothstep(0.05, 0.3, temp)) * soft;
+    let cover = flame + black * WALL_SOOT_COVER * (1.0 - flame);
+    // Its hottest cores glow past what they cover, as an overexposed flame blooms over its body.
+    let c = flame_colour(h);
+    let light = c * flame + c * glow * WALL_BLOOM * smoothstep(0.7, 1.0, h) + SOOT_BLACK * black * (1.0 - flame);
+    return vec4(light / exp2(adapted.x), cover);
+}
+const WALL_HEAT: f32 = 1.0;
+const WALL_GAMMA: f32 = 1.0;
+const WALL_THIN: f32 = 0.35;
+const WALL_SOOT: f32 = 2.5;
+const WALL_SOOT_COVER: f32 = 0.85;
+const WALL_BLOOM: f32 = 0.6;
+// A breath's least heat through its body, how much its dim rims cover, and how far its hot
+// core glows past what it covers.
+const BREATH_BASE: f32 = 0.45;
+const BREATH_THIN: f32 = 0.85;
+const BREATH_BLOOM: f32 = 0.7;
 
 fn nowhere() -> Out {
     var out: Out;
@@ -445,7 +504,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
         // A kept fire is as tall as it was made, its flames sized to clear its own logs; a
         // grid's blazes each a little taller or shorter.
-        let flame = tall * breathe * mix(0.65 + 0.7 * own.z, 1.0, b.w);
+        let flame = tall * breathe * mix(0.5 + 1.2 * own.z * own.z, 1.0, b.w);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
         let lean = wind * 0.05 * flame;
@@ -462,7 +521,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // Each card its own width, height and lean by its luck, so a burning wall's flames
         // are not one cut-out stamped along it (castle film r7).
         w *= 0.8 + 0.45 * fract(luck * 4.3);
-        h *= 0.85 + 0.3 * fract(luck * 6.1);
+        h *= 0.7 + 0.7 * pow(fract(luck * 6.1), 1.5);
         let tilt = (fract(luck * 9.7) - 0.5) * 0.22;
         let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, tilt);
         out.clip = position_world_to_clip(world);
@@ -535,38 +594,32 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         light = soot(kelvin, alpha);
         cover = covers(light, alpha);
     } else if kind == 0 {
-        // A simulated fire's frame from the flipbook (`tools/textures/flames.ts`): one of its
-        // three fires by the card's luck, mirrored for half of them, played at the rate a fire
-        // this tall moves (a flame's time goes as the root of its size, Froude's scaling),
-        // blended frame to frame. Its heat is how hot the soot there glows and how much of the
-        // card it covers.
-        let channel = u32(luck * 3.0) % 3u;
+        // A simulated fire's frame from the flipbook (`tools/textures/flames.ts`) at its own
+        // moment by the card's luck, mirrored for half of them, played at the rate a fire this
+        // tall moves (a flame's time goes as the root of its size, Froude's scaling), each
+        // frame moved along the flow into the next. Its temperature is coloured through the
+        // gradient and blended as it covers; its soot is drawn dark where the gas has cooled,
+        // the black wisps that break off between a burning building's tongues.
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
         let rate = FLIPBOOK_FPS * sqrt(2.5 / max(size, 0.5)) * (0.8 + 0.4 * fract(luck * 17.3));
         let f = fract(time * rate / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
-        let f0 = floor(f);
-        let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
-        let a = flipbook_at(f0, x, uv.y)[channel];
-        let b = flipbook_at(f1, x, uv.y)[channel];
-        let heat_here = mix(a, b, fract(f)) * smoothstep(0.0, 0.03, uv.y);
-        // The flipbook's body is near its full heat, so only its hottest cores go yellow and
-        // pale: the rest orange, its rims and licks a dull red. Coloured through the gradient
-        // and blended as it covers, as the breath is: through soot's lift by brightness on the
-        // screen its bodies went white, cut-outs with pastel rims (castle film r7 and r8's
-        // first probe, B/R 0.51 where a barn fire's is 0.19).
-        var alpha = smoothstep(0.08, 0.4, heat_here) * soft;
-        var h = 0.92 * pow(heat_here, 2.2) * (0.8 + 0.2 * heat);
+        let sim = flame_at(f, x, uv.y);
+        let heat_here = sim.x * smoothstep(0.0, 0.03, uv.y);
+        let drawn = wall_flame(heat_here, sim.y, heat, soft);
+        light = drawn.rgb;
+        cover = drawn.a;
         if t > 1.0 {
             // A hearth's tongue (its first number past 1, `hearth`): a campfire's flames are
             // solid and yellow-orange through their body with a near-white heart, only their
             // tips going thin and red, the hottest thing in the picture. With a roof's thin
             // rims they were see-through peach over the troll sat by them, dimmer than his
-            // firelit skin (lake film r5).
-            alpha = smoothstep(0.16, 0.36, heat_here) * soft;
-            h = pow(heat_here, 1.6) * (0.85 + 0.15 * heat);
+            // firelit skin (lake film r5). Lifted into the gradient's top, which a building's
+            // flame reaches only in its hottest fifth.
+            let alpha = smoothstep(0.16, 0.36, heat_here) * soft;
+            let h = saturate(0.4 + 0.6 * pow(heat_here, 1.3)) * (0.85 + 0.15 * heat);
+            cover = alpha * 0.95;
+            light = flame_colour(h) * cover / exp2(adapted.x);
         }
-        cover = alpha * 0.95;
-        light = flame_colour(h) * cover / exp2(adapted.x);
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
@@ -596,53 +649,43 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         // Nothing at the card's own edges, so its straight sides never show.
         let window = 1.0 - smoothstep(0.32, 0.5, max(abs(p.x), abs(p.y)));
         let body = (1.0 - smoothstep(0.1, 0.46, edge)) * window;
-        let channel = u32(luck * 3.0) % 3u;
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
         let f = fract(time * FLIPBOOK_FPS * 1.6 / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
-        let f0 = floor(f);
-        let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
-        // The flame's column above its fuel bed, its middle half across.
-        let fx = 0.5 + (x - 0.5) * 0.6;
-        let fy = 0.1 + uv.y * 0.62;
-        let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
+        // The simulated fire's body above its bed, its middle part across: its rolling tongues,
+        // its cooler pockets and its soot, laid along the stream.
+        let sim = flame_at(f, 0.5 + (x - 0.5) * 0.6, 0.12 + uv.y * 0.6);
         let mouth = 1.0 - smoothstep(0.0, 0.3, t);
         let struck = smoothstep(0.7, 0.92, t) * (1.0 - smoothstep(0.92, 1.0, t));
-        // Dense and burning through its body, thinning only as it burns out past the middle:
-        // its heat from the flipbook's tongues alone left most of the stream under the alpha's
-        // threshold, a translucent smear (castle film r6 and r7's probes, alpha 0.1 to 0.3).
-        let heat_here = body * saturate(mix(0.45, 0.04, smoothstep(0.25, 0.85, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
-        let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
-        // How hot it burns there, for its colour: yellow through its body, hotter than a
-        // building's flames as burning thickened fuel is in footage, hottest in each puff's
-        // middle and in the puffs nearest the stream's line, orange and dull red only at its
-        // rims, its outer puffs and as it burns out. By its flipbook heat alone each puff was one
-        // flat orange, and the stream a slab of orange card (r8's first film, the jaw 89% orange,
-        // 4% yellow, and still 87% orange from 0.2 up: its body is lifted to the yellow and pale).
+        // How near the stream's line this puff flies (0 on it, 1 at its outside), and how near
+        // its own middle the point is.
         let radial = sqrt(fract(luck * 13.7));
-        let centre = 1.0 - smoothstep(0.05, 0.3, edge);
-        var h = saturate(0.42 + 0.75 * heat_here * (1.0 - 0.4 * radial) + 0.25 * centre * (1.0 - 0.5 * radial) + 0.1 * mouth - 0.25 * smoothstep(0.55, 1.0, t) + 0.15 * struck);
-        // The rod a solid core along each card over the first two fifths of the stream,
-        // whatever the flipbook's tongue there, a rope of fire from the jaw: yellow, and
-        // white-hot in its middle third over the first quarter. Whole until a quarter of the
-        // way, as fading from the jaw on it reached its yellow only in the first metre or two.
+        let centre = 1.0 - smoothstep(0.0, 0.3, edge);
+        // How hot it burns there: white-yellow in the stream's core, the puffs on its line
+        // hottest in their middles; orange round them; dull red at the outer puffs' rims and as
+        // it burns out; the simulated fire's tongues and pockets through all of it, so no puff
+        // is one flat colour (r8: the stream one flat cream-yellow, sRGB 233,206,112).
+        let line = (1.0 - radial) * centre;
+        var h = body * (BREATH_BASE + 0.4 * sim.x + 0.35 * line + 0.2 * mouth * centre - 0.3 * smoothstep(0.5, 1.0, t) + 0.2 * struck * sim.x);
+        // The rod at the jaw: a rope whole along its first quarter, white-hot in its middle.
         let core = (1.0 - smoothstep(0.12, 0.3, length(p) + (n - 0.5) * 0.12)) * window;
-        let rod = (1.0 - smoothstep(0.25, 0.45, t)) * core * fade * heat * soft;
-        let inner = (1.0 - smoothstep(0.03, 0.11, length(p) + (n - 0.5) * 0.06)) * (1.0 - smoothstep(0.15, 0.28, t));
-        h = max(h, mix(0.75, 1.0, inner) * smoothstep(0.0, 0.6, rod));
-        // Black soot at its outer edge once it rolls open, as rich-burning fuel makes it.
-        let outer = smoothstep(0.2, 0.34, edge) * (1.0 - smoothstep(0.38, 0.48, edge)) * window * smoothstep(0.4, 0.8, t);
-        let black = saturate(0.9 * pocket + 0.8 * outer);
-        // Blended over what is behind it as it covers, not added: the cards are drawn in the
-        // stream's order and overlap many deep at the jaw, and their light summed past the
-        // tonemapper's peak, which the neutral tonemapper takes from orange to salmon (castle
-        // film r7, the jaw's crop sRGB 231,165,137). Blended, it is the colour its cards burn.
-        // Covering wholly through its body: at its flipbook alpha (0.1 to 0.3 through most of
-        // the stream) the sky's blue showed through its yellow, an olive-green smear (r8's
-        // first probe).
-        let solid = smoothstep(0.05, 0.3, heat_here) * fade * heat * soft;
-        cover = saturate(max(max(solid * 0.96, rod * 0.97), black * fade * heat * soft * 0.7));
-        light = mix(flame_colour(h),vec3(0.012, 0.01, 0.009), black) * cover / exp2(adapted.x);
+        let rod = (1.0 - smoothstep(0.2, 0.4, t)) * core * fade * heat * soft;
+        h = saturate(max(h, mix(0.8, 1.0, core * (1.0 - smoothstep(0.1, 0.25, t))) * smoothstep(0.0, 0.6, rod)));
+        // Covering as it glows: its hot core wholly, its orange only partly, a dim rim thin and
+        // see-through, as real flame is; blended over what is behind, not added, so it never
+        // sums past the tonemapper's peak to salmon (r7).
+        let glow = smoothstep(0.08, 0.4, h) * body * fade * heat * soft;
+        let flame = max(glow * mix(BREATH_THIN, 0.97, smoothstep(0.4, 0.75, h)), rod * 0.97);
+        // Soot outside it: on the puffs on the stream's outside once it has rolled open, black
+        // where the simulated gas has cooled and at their rims, wrapping the bright core rather
+        // than ringing every puff with black.
+        let outside = smoothstep(0.45, 0.85, radial) * smoothstep(0.3, 0.7, t);
+        let rim = smoothstep(0.18, 0.32, edge) * (1.0 - smoothstep(0.38, 0.48, edge)) * window;
+        let black = saturate(outside * (0.8 * rim + 2.0 * sim.y * (1.0 - smoothstep(0.1, 0.4, sim.x)) * body)) * (1.0 - smoothstep(0.3, 0.55, h)) * fade * heat * soft;
+        cover = saturate(flame + black * 0.9 * (1.0 - flame));
+        // Its hot core glowing past what it covers, over the stream round it.
+        let c = flame_colour(h);
+        light = (c * flame + c * glow * BREATH_BLOOM * smoothstep(0.75, 1.0, h) + SOOT_BLACK * black * (1.0 - flame)) / exp2(adapted.x);
     }
     if max(light.r, cover) < 0.002 {
         discard;
