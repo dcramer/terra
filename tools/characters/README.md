@@ -11,6 +11,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `convert_rig.py` | Tripo's V3 rig (Unreal skeleton) onto ours, keeping its twist bones and weights |
 | `clips.py` | Cuts the clips in `art/animation/clips.txt` out of Quaternius's animation libraries into the game's mannequin file |
 | `made_clips.py` | The clips we made rather than took from the libraries (`art/animation/made.json`), each put into the mannequin file in place of the library's: its best looping stride, carried onto our skeleton by world rotation from the T-pose, run in place, the upper limbs' roll handed to the forearm and shin |
+| `phases.ts FILE.glb CLIP... [--tip 0.83]` | Measures a blow's active frames: the sword's tip, followed through the skeleton from `socket.hand.R`, while it is ahead of the hips and fast; the moves data takes its spans (D405) |
 | `motion.ts CLIP [--keep N]` | Makes a clip's takes with Kimodo from its entry in `made.json`, measures each on the mannequin (`gait_check.py`), and keeps one as its take (below) |
 | `clip_check.py` | Checks every clip is one our skinning can follow: no roll of the upper arm or thigh, no step too big after the twist step |
 | `twist.py` | The twist step: a limb's roll moved to the hand and foot and halved on the twist bones, baked into each clip as it is sampled for a body |

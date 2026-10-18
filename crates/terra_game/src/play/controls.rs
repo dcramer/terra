@@ -62,10 +62,12 @@ pub enum Action {
     Lower,
     /// Undo the last thing built, laid or taken apart, within a while.
     Undo,
+    /// Draw or sheathe a sword and shield, the movement prototype's stance (D405).
+    Draw,
 }
 
 impl Action {
-    pub const ALL: [Action; 30] = [
+    pub const ALL: [Action; 31] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -96,6 +98,7 @@ impl Action {
         Action::Raise,
         Action::Lower,
         Action::Undo,
+        Action::Draw,
     ];
 
     /// What the options menu calls it.
@@ -131,6 +134,7 @@ impl Action {
             Action::Raise => "Raise what you place",
             Action::Lower => "Lower what you place",
             Action::Undo => "Undo the last thing built",
+            Action::Draw => "Draw or sheathe your sword",
         }
     }
 
@@ -167,6 +171,7 @@ impl Action {
             Action::Raise => "raise",
             Action::Lower => "lower",
             Action::Undo => "undo",
+            Action::Draw => "draw",
         }
     }
 
@@ -205,6 +210,7 @@ impl Action {
             Action::Lower => (Key(KeyCode::PageDown), None),
             // Enshrouded's key. Ctrl and Z would roll, Ctrl being the roll.
             Action::Undo => (Key(KeyCode::KeyY), None),
+            Action::Draw => (Key(KeyCode::KeyT), None),
         };
         [Some(first), second]
     }

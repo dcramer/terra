@@ -1,0 +1,96 @@
+#![enable(implicit_some)]
+// The sword-and-shield move set (docs/movement.md, "Moves as data"; the combat prototype,
+// D405), for the player and the sparring partner alike. A new move is an entry here; no code
+// names one but the prototype's buttons (light, heavy, roll, block) and the partner's rhythm.
+//
+// Every time is in the clip's own seconds, as tools/characters/phases.ts measures them from
+// models/character/fight.glb (the sword's tip followed through the skeleton, 0.83 m out of
+// the right hand's socket), so they can be checked against the clip; a move plays its clip
+// from `from` at `speed`, so it lasts (done - from) / speed seconds.
+//
+// Each:
+//   clip      the clip that shows it
+//   from      where in the clip it starts, past a slow start
+//   speed     how fast the clip plays
+//   active    when its blade can strike: the tip more than half a metre ahead of the hips
+//             and faster than 4 m/s (measured)
+//   done      when it is over and the body is back on guard
+//   cancel    from when the next blow of a chain, a roll or a block may cut it short
+//   next      the blow a light attack pressed again chains into
+//   damage    out of a sparring health of 100
+//   hit_stop  how long both fighters are held on a blow that lands, seconds: fighting
+//             games hold a light hit about 6 frames at 60 and a heavy one 10 to 14
+//             (research/melee-feel.md)
+//   heavy     breaks a guard rather than being stopped by it
+//   drive     the body's speed ahead over the move, (clip seconds, metres a second), joined
+//             by straight lines: a stand-in for root motion until clips carry their own
+//   warp      how a blow closes on a target in front during its wind-up (Motion Warping):
+//             one within `within` metres and `cone` degrees of its facing is turned to and
+//             stepped toward until `stop_at` metres away, no faster than `most_mps`
+//   invulnerable   when blows pass through the body (a roll's i-frames)
+//   hold      where the clip is held while the button stays down (a block)
+//   brace     for a block: from where in the clip a blow taken on it plays, pushed back
+(
+    // A block pressed this long or less before a blow lands parries it (150 to 200 ms in
+    // shipped games). An attack asked within `buffer_s` of the window opening waits for it.
+    parry_s: 0.18,
+    buffer_s: 0.35,
+    moves: {
+        // Fastest 18 m/s at 0.75 s, 1.2 m ahead at hip height, right to left.
+        "slash": (
+            clip: "Fight_Slash", from: 0.15, speed: 1.35, active: (0.70, 0.92), done: 1.55,
+            cancel: 1.02, next: "backhand", damage: 12, hit_stop: 0.1,
+            drive: [(0.15, 0.0), (0.45, 1.8), (0.80, 0.6), (1.0, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+        ),
+        // Fastest 21 m/s at 0.85 s, left to right.
+        "backhand": (
+            clip: "Fight_Backhand", from: 0.2, speed: 1.35, active: (0.70, 0.90), done: 1.5,
+            cancel: 0.98, next: "finisher", damage: 12, hit_stop: 0.1,
+            drive: [(0.2, 0.0), (0.45, 1.8), (0.80, 0.6), (1.0, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+        ),
+        // The third of the chain: the slash again, a little slower and harder.
+        "finisher": (
+            clip: "Fight_Slash", from: 0.15, speed: 1.15, active: (0.70, 0.92), done: 1.6,
+            cancel: 1.2, damage: 18, hit_stop: 0.13,
+            drive: [(0.15, 0.0), (0.45, 2.4), (0.80, 0.8), (1.05, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
+        ),
+        // A big diagonal cut, fastest 49 m/s at 0.42 s, 1.4 m ahead: its wind-up slowed so it
+        // reads, then through.
+        "heavy": (
+            clip: "Sword_Attack", from: 0.0, speed: 0.62, active: (0.38, 0.52), done: 1.25,
+            cancel: 1.05, damage: 30, hit_stop: 0.2, heavy: true,
+            drive: [(0.0, 0.0), (0.25, 0.6), (0.40, 3.2), (0.55, 0.5), (0.8, 0.0)],
+            warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
+        ),
+        // The base's forward roll, in place in its clip: the body driven 3.5 m along the way
+        // asked, blows passing through it from tuck to the get-up.
+        "roll": (
+            clip: "Roll", from: 0.05, speed: 1.45, done: 1.2, cancel: 1.0,
+            invulnerable: (0.12, 0.78),
+            drive: [(0.05, 5.5), (0.75, 5.5), (0.95, 1.5), (1.2, 0.0)],
+        ),
+        // The shield brought up and braced by 1.2 s and held; a blow taken on it plays the
+        // push back from 1.25.
+        "block": (
+            clip: "Fight_Block", from: 0.75, speed: 1.6, done: 2.0, cancel: 0.75, hold: 1.2,
+            brace: 1.25,
+        ),
+        // The partner's slash: a long, readable wind-up at three quarters speed.
+        "partner_slash": (
+            clip: "Fight_Slash", from: 0.0, speed: 0.75, active: (0.70, 0.92), done: 1.55,
+            damage: 15, hit_stop: 0.1,
+            drive: [(0.3, 0.0), (0.55, 1.5), (0.85, 0.4), (1.0, 0.0)],
+            warp: (within: 3.0, cone: 80, stop_at: 1.5, most_mps: 3.0),
+        ),
+        // The partner's heavy: the big cut, its wind-up held longer.
+        "partner_heavy": (
+            clip: "Sword_Attack", from: 0.0, speed: 0.45, active: (0.38, 0.52), done: 1.25,
+            damage: 25, hit_stop: 0.18, heavy: true,
+            drive: [(0.0, 0.0), (0.30, 0.4), (0.40, 2.6), (0.55, 0.4), (0.8, 0.0)],
+            warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),
+        ),
+    },
+)

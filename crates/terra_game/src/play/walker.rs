@@ -77,6 +77,18 @@ pub(super) struct Stance {
     pub(super) dodge_direction: Vec3,
     /// Holding a guard up.
     pub(super) guarding: bool,
+    /// What a layer above asks of the walk this tick, as the sword stance does (D405).
+    pub(super) steer: Steer,
+}
+
+/// How a layer above steers a walk: which way the body faces, how fast it walks, a move's
+/// own drive in place of what the keys ask, and whether Ctrl's roll is left to it.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) struct Steer {
+    pub(super) face: Option<Vec3>,
+    pub(super) pace: Option<f32>,
+    pub(super) drive: Option<Vec3>,
+    pub(super) no_roll: bool,
 }
 
 impl Default for Stance {
@@ -88,6 +100,7 @@ impl Default for Stance {
             flinch: 0.0,
             dodge_direction: Vec3::ZERO,
             guarding: false,
+            steer: Steer::default(),
         }
     }
 }

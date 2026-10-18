@@ -49,6 +49,8 @@ fn sounds_like(cue: Cue, stations: &Stations) -> Like {
         Cue::Swing => Made("swing", Sound::Whoosh, 0.38, 3.0),
         Cue::Hit => Clips("hit"),
         Cue::Kill => Clips("kill"),
+        Cue::Clash => Clips("anvil"),
+        Cue::Parry => Clips("bell"),
         Cue::Hurt => Clips("hurt"),
         Cue::Down => Clips("down"),
         Cue::Strike(Cut::Tree | Cut::GreatTree) => Clips("strike.wood"),
@@ -573,6 +575,8 @@ mod tests {
             Cue::Click,
             Cue::Open,
             Cue::Close,
+            Cue::Clash,
+            Cue::Parry,
         ];
         cues.extend(stations.all().map(Cue::Working));
         let place = |cue: Cue| match cue {
@@ -612,8 +616,10 @@ mod tests {
             Cue::Croak => 33,
             Cue::Bark => 34,
             Cue::Wings => 35,
+            Cue::Clash => 36,
+            Cue::Parry => 37,
         };
-        let mut listed = [false; 36];
+        let mut listed = [false; 38];
         for &cue in &cues {
             listed[place(cue)] = true;
         }

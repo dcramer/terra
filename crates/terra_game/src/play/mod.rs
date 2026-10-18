@@ -43,6 +43,7 @@ pub(crate) mod interact;
 pub mod inventory;
 mod kinds;
 mod map;
+mod melee;
 mod movement;
 pub mod music;
 mod noise;
@@ -167,6 +168,7 @@ impl Plugin for GameplayPlugin {
         coats::plugin(app);
         fliers::plugin(app);
         staged::plugin(app);
+        melee::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
         hits::plugin(app);

@@ -17,6 +17,8 @@ pub struct Grip {
     pub player: Entity,
     /// The kind of item shown in it, once something has been decided.
     showing: Option<Option<ItemKind>>,
+    /// A sword is drawn (D405): the bar's item is put away while it is.
+    pub drawn: bool,
 }
 
 impl Grip {
@@ -24,6 +26,7 @@ impl Grip {
         Self {
             player,
             showing: None,
+            drawn: false,
         }
     }
 }
@@ -51,7 +54,11 @@ fn show(
         let Ok((backpack, bar)) = players.get(grip.player) else {
             continue;
         };
-        let holding = bar.0.in_hand(&backpack.0).map(|item| item.kind);
+        let holding = bar
+            .0
+            .in_hand(&backpack.0)
+            .map(|item| item.kind)
+            .filter(|_| !grip.drawn);
         if grip.showing == Some(holding) {
             continue;
         }

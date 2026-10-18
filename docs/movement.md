@@ -115,6 +115,10 @@ Each stage is done when its checks pass and a duel run or film shows it; the tro
 | 6. Many | Animation and IK by distance; hits judged on baked tracks on the server | The crowd benchmark with fighters, measured on both GPUs |
 | 7. Physics (after D33) | Physical animation on hits, ragdolls | Measured against the clip reactions on the duel run |
 
+## Prototype (D405)
+
+Before the layers, a playable sword-and-shield prototype in `terra_game` (`play/melee`), for the developers to feel and give feedback on: in the yard (`cargo xtask yard`) or `make play`, T draws a sword and shield and brings a sparring partner. Its moves are data (`assets/data/moves/sword_and_shield.ron`) run by the move runner with phases, cancels and a buffer; active frames typed from `tools/characters/phases.ts`; blades swept against hurt capsules. Shortcuts the layers replace: drive curves stand in for root motion; a guard is judged by facing, not the shield's volume; one hurt capsule a body; a clip picked by the dominant direction, no blend space; the build keys reused in stance (left click, right click, Q, Ctrl); the sword and shield given on drawing, not from the inventory; the spar's health apart from Vitals.
+
 ## What happens to what exists
 
 `play::staged` keeps its remote calls but tells figures intents and moves, not clips and positions; its bends move into the export and its hips bookkeeping into the mover. `play/figure.rs`'s clip names become the player's move set. `pace.rs` is the pose layer's speed matching. `swing.rs` stays as the spring-bone fix-up. `tools/creatures/animal.py` keeps making the runner's and bird's clips, played through the same layers. Kimodo stays the source of clips for people (D316), made to each move's spec.

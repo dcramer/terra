@@ -150,6 +150,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D380](decisions/D380.md) | Small animals in every biome | Design | Developers | Decided | Every biome has a few small animals that belong there… |
 | [D382](decisions/D382.md) | Fliers, and the dragon | Tech | Agent | Decided | Creatures that fly are a body plan of their own… |
 | [D402](decisions/D402.md) | Staged figures, told over the remote | Tech | Agent | Decided | A film's set piece on the ground is played by staged… |
+| [D405](decisions/D405.md) | A playable sword-and-shield prototype comes before the movement system's layers | Design | Developers | Decided | Before the layers of docs/movement.md are built… |
 
 ## People and the tribe
 

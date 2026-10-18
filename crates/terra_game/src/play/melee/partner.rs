@@ -1,0 +1,253 @@
+//! The sparring partner (D405): a swordsman with a round shield who closes on a drawn player,
+//! guards while circling, then strikes from the moves data, every third blow the heavy one,
+//! each with a wind-up long enough to read, and stands open after it, the window to punish.
+//! No chance in it, so a scripted run sees the same fight every time (`--steady`).
+
+use super::{Fighter, Set};
+use crate::character;
+use crate::play::bodies::Body;
+use crate::play::figure::CLIPS;
+use crate::play::staged::{self, Staged};
+use crate::play::{Player, Stance};
+use bevy::prelude::*;
+use serde_json::json;
+
+/// Its name on the stage.
+const NAME: &str = "sparring_partner";
+/// How far ahead of the player it steps up, metres.
+const AHEAD_M: f32 = 4.0;
+/// How near it closes before it guards, and how far off it closes again.
+const CLOSE_M: f32 = 2.2;
+const OPEN_M: f32 = 3.2;
+/// The nearest a blow's drive takes it to the player, metres.
+const NEAREST_M: f32 = 1.3;
+/// How long it guards between blows, and stands open after one, seconds.
+const GUARD_S: f32 = 1.4;
+const RECOVER_S: f32 = 1.0;
+/// How fast it walks in, and circles on its guard, metres a second.
+const WALK_MPS: f32 = 1.8;
+const CIRCLE_MPS: f32 = 0.7;
+
+/// Where it is in its rhythm, how long it has been there, how many blows it has thrown,
+/// and the clip it was last told.
+#[derive(Component, Default)]
+pub(in crate::play) struct Partner {
+    pub(super) beat: Beat,
+    pub(super) beat_s: f32,
+    blows: u32,
+    pub(super) showing: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Beat {
+    #[default]
+    Close,
+    Guard,
+    Strike,
+    Recover,
+}
+
+impl Partner {
+    /// Tells its figure a clip unless it plays it already.
+    pub(super) fn show(&mut self, staged: &mut Staged, clip: &str, speed: f32, once: bool) {
+        if self.showing.as_deref() == Some(clip) {
+            staged.set_clip_speed(speed);
+            return;
+        }
+        self.showing = Some(clip.to_string());
+        staged.tell_play(clip, speed, once, 200, 0.0);
+    }
+
+    pub(super) fn to(&mut self, beat: Beat) {
+        self.beat = beat;
+        self.beat_s = 0.0;
+    }
+}
+
+/// Stands a partner a few metres ahead of a player, facing them: the base body as the
+/// player's template, dressed, a sword in its right hand and a round shield on its left arm,
+/// brought forward and out so the shield stands clear of its chest.
+pub(super) fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
+    let up = at.normalize();
+    let spot = at
+        + facing
+            .reject_from(up)
+            .normalize_or(up.any_orthonormal_vector())
+            * AHEAD_M;
+    let call = json!({
+        "name": NAME,
+        "model": crate::appearance::BASE,
+        "template": "male",
+        "clips": CLIPS,
+        "wears": ["shirt", "trousers", "boots", "leather_coat"],
+        "hold": { "socket.hand.R": super::SWORD, "socket.hand.L": super::SHIELD },
+        "bend": { "upperarm_l": super::SHIELD_ARM },
+        "at": spot.to_array(),
+        "facing": at.to_array(),
+        "turn_deg_s": 260.0,
+    });
+    commands.queue(move |world: &mut World| {
+        let spawned = staged::spawn(In(Some(call)), world);
+        let entity = spawned
+            .ok()
+            .and_then(|done| done["entity"].as_u64())
+            .and_then(Entity::try_from_bits);
+        match entity {
+            Some(entity) => {
+                world.entity_mut(entity).insert((
+                    Partner::default(),
+                    Fighter::new(None),
+                    Body::fixed(0.35),
+                ));
+                info!("Melee: a sparring partner steps up");
+            }
+            None => warn!("Melee: the sparring partner could not be stood up"),
+        }
+    });
+}
+
+type Them<'a> = (
+    Entity,
+    &'a Transform,
+    &'a mut Staged,
+    &'a mut Fighter,
+    &'a mut Partner,
+);
+
+/// Each partner's tick: closing, guarding, striking and recovering on its rhythm against
+/// the nearest drawn player; a blow's drive and its step in to land, in its own time.
+pub(super) fn think(
+    time: Res<Time>,
+    set: Res<Set>,
+    mut partners: Query<Them<'_>, Without<Player>>,
+    players: Query<(&Transform, &Fighter), (With<Player>, With<Stance>, With<super::Drawn>)>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+) {
+    let dt = time.delta_secs();
+    let set = &set.0;
+    for (entity, place, mut staged, mut fighter, mut partner) in &mut partners {
+        fighter.age(dt);
+        let rate = fighter.rate();
+        staged.tell_rate(rate);
+        if fighter.hand.is_none() {
+            fighter.hand = character::find(entity, character::HAND_R, &children, &names);
+        }
+        let here = place.translation;
+        let up = here.normalize();
+        if fighter.down_s.is_some() {
+            staged.tell_go(None, 0.0);
+            partner.show(&mut staged, "Death01", 1.0, true);
+            continue;
+        }
+        if !fighter.free() {
+            let shoved = (fighter.shove_s > 0.0).then_some(fighter.shove);
+            staged.tell_go(shoved.map(|v| here + v), shoved.map_or(0.0, Vec3::length));
+            continue;
+        }
+        let foe = players
+            .iter()
+            .map(|(at, _)| at.translation)
+            .filter(|at| at.distance(here) < 30.0)
+            .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+        let Some(foe) = foe else {
+            fighter.guard_s = None;
+            staged.tell_go(None, 0.0);
+            partner.show(&mut staged, "Fight_Guard", 1.0, false);
+            continue;
+        };
+        let to = (foe - here).reject_from(up);
+        let far = to.length();
+        let toward = to / far.max(1e-3);
+        if fighter.shove_s > 0.0 {
+            staged.tell_go(Some(here + fighter.shove), fighter.shove.length());
+        }
+        // In a blow: it tracks the player through the wind-up, then commits.
+        if let Some(each) = fighter.runner.now(set) {
+            let t = fighter.runner.t();
+            let left = each.until_active(t);
+            if left.is_some() {
+                fighter.way = toward;
+            }
+            let mut speed = each.drive_at(t);
+            if let (Some(warp), Some(left)) = (each.warp, left)
+                && far < warp.within
+            {
+                speed += super::moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
+            }
+            staged.tell_face(here + fighter.way);
+            // Never into the player: a blow's drive stops at arm's length.
+            if far < NEAREST_M {
+                speed = 0.0;
+            }
+            if fighter.shove_s <= 0.0 {
+                staged.tell_go(Some(here + fighter.way * 2.0), speed);
+            }
+            if let super::Ran::Ended(_) = fighter.runner.tick(set, dt * rate) {
+                partner.to(Beat::Recover);
+            }
+            continue;
+        }
+        staged.tell_face(foe);
+        partner.beat_s += dt;
+        match partner.beat {
+            Beat::Close => {
+                fighter.guard_s = None;
+                if far > CLOSE_M {
+                    staged.tell_go(Some(foe - toward * (CLOSE_M - 0.2)), WALK_MPS);
+                    partner.show(&mut staged, "Walk_Loop", 1.0, false);
+                } else {
+                    partner.to(Beat::Guard);
+                }
+            }
+            Beat::Guard => {
+                fighter.guard_s = Some(fighter.guard_s.map_or(0.0, |held| held + dt));
+                // Circles on its guard, one way and then the other.
+                let side = toward.cross(up) * if partner.blows % 2 == 0 { 1.0 } else { -1.0 };
+                if fighter.shove_s <= 0.0 {
+                    staged.tell_go(Some(here + side), CIRCLE_MPS);
+                }
+                let clip = if partner.blows % 2 == 0 {
+                    "Fight_Strafe_R"
+                } else {
+                    "Fight_Strafe_L"
+                };
+                partner.show(&mut staged, clip, 1.0, false);
+                if far > OPEN_M {
+                    partner.to(Beat::Close);
+                } else if partner.beat_s > GUARD_S {
+                    partner.to(Beat::Strike);
+                }
+            }
+            Beat::Strike => {
+                partner.blows += 1;
+                let name = if partner.blows % 3 == 0 {
+                    "partner_heavy"
+                } else {
+                    "partner_slash"
+                };
+                fighter.guard_s = None;
+                fighter.runner.start(name);
+                fighter.way = toward;
+                fighter.was = None;
+                if let Some(each) = set.get(name) {
+                    partner.showing = Some(each.clip.clone());
+                    staged.tell_play(&each.clip, each.speed, true, 150, each.from);
+                }
+                info!("Melee: the partner winds up {name}");
+            }
+            Beat::Recover => {
+                fighter.guard_s = None;
+                staged.tell_go(None, 0.0);
+                partner.show(&mut staged, "Fight_Guard", 1.0, false);
+                if partner.beat_s > RECOVER_S {
+                    partner.to(if far > CLOSE_M {
+                        Beat::Close
+                    } else {
+                        Beat::Guard
+                    });
+                }
+            }
+        }
+    }
+}

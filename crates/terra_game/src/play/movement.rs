@@ -77,6 +77,34 @@ fn cramped(stand: Vec3, walker: &Walker, room: impl Fn(Vec3) -> f32) -> bool {
         .any(|height| room(stand + up * height) < walker.radius * 0.8)
 }
 
+/// How fast a body walks: rolling, as a layer above steers it, guarding, sprinting or
+/// jogging.
+fn top_speed(stance: &Stance, sprinting: bool) -> f32 {
+    if stance.dodging > 0.0 {
+        DODGE_SPEED
+    } else if let Some(pace) = stance.steer.pace {
+        pace
+    } else if stance.guarding {
+        JOG_SPEED * 0.5
+    } else if sprinting {
+        SPRINT_SPEED
+    } else {
+        JOG_SPEED
+    }
+}
+
+/// Which way a body turns to face: as a layer above steers it, the view while it works,
+/// or the way it goes.
+fn toward(stance: &Stance, view: Vec3, wish: Vec3, up: Vec3) -> Vec3 {
+    if let Some(face) = stance.steer.face {
+        face.reject_from(up).normalize_or_zero()
+    } else if stance.since_acting < 0.8 {
+        view
+    } else {
+        wish
+    }
+}
+
 /// Moves every player by what they mean to do: walking, sprinting, rolling and jumping,
 /// held up by the ground and their base, and stopped by walls, bodies and the sea. A body
 /// with no vitals, as in the walker on its own, never tires.
@@ -134,7 +162,9 @@ fn walk(
         stance.attacking = (stance.attacking - dt).max(0.0);
         stance.flinch = (stance.flinch - dt).max(0.0);
         stance.dodging = (stance.dodging - dt).max(0.0);
+        let steer = stance.steer;
         if stance.dodging == 0.0
+            && !steer.no_roll
             && motion.on_ground
             && intent.pressed(Action::Dodge)
             // Ctrl and the wheel change the hammer's material while a part is in hand (D232).
@@ -148,17 +178,9 @@ fn walk(
                 wish
             };
         }
-        let top_speed = if stance.dodging > 0.0 {
-            DODGE_SPEED
-        } else if stance.guarding {
-            JOG_SPEED * 0.5
-        } else if intent.held(Action::Sprint)
-            && vitals.as_ref().is_none_or(|body| body.can_sprint())
-        {
-            SPRINT_SPEED
-        } else {
-            JOG_SPEED
-        } * ground.map_or(1.0, going);
+        let sprinting =
+            intent.held(Action::Sprint) && vitals.as_ref().is_none_or(|body| body.can_sprint());
+        let top_speed = top_speed(&stance, sprinting) * ground.map_or(1.0, going);
         // Ease into and out of a run rather than starting and stopping dead.
         let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
         let wish = if stance.dodging > 0.0 {
@@ -166,7 +188,11 @@ fn walk(
         } else {
             wish
         };
-        motion.velocity = motion.velocity.lerp(wish * top_speed, ease).reject_from(up);
+        motion.velocity = match steer.drive {
+            // A move's drive is its own: no easing into it.
+            Some(drive) if motion.on_ground => drive.reject_from(up),
+            _ => motion.velocity.lerp(wish * top_speed, ease).reject_from(up),
+        };
         let mut target = feet + motion.velocity * dt;
         // Furniture and kit are solid. Walls come after, so they have the last word.
         target = props::push_out(target, walker.radius, items.iter());
@@ -305,11 +331,7 @@ fn walk(
         motion.velocity = ((target - feet) / dt.max(1e-4)).reject_from(up);
         // Turn to face the way the figure is going, or the way it is working.
         stance.since_acting += dt;
-        let toward = if stance.since_acting < 0.8 {
-            view.forward
-        } else {
-            wish
-        };
+        let toward = toward(&stance, view.forward, wish, up);
         let turn = 1.0 - libm::expf(-dt * 12.0);
         // Turning right round has no shorter way to go, so it is given one.
         let about_face = toward != Vec3::ZERO && motion.facing.dot(toward) < -0.98;

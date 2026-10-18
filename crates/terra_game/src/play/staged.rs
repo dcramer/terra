@@ -13,7 +13,7 @@
 //! names a model, an item or a clip: all of it is in the calls.
 
 mod impact;
-mod pose;
+pub(in crate::play) mod pose;
 
 use super::fliers::placed;
 use crate::planet::Planet;
@@ -57,6 +57,54 @@ pub struct Staged {
     asked_n: u32,
     /// How fast its own time runs: 1 as the world's, near 0 held in a hit-stop.
     rate: f32,
+}
+
+/// What a mind in the game tells a figure, as the calls do (the sparring partner, D405).
+impl Staged {
+    /// Blends it into a clip, as `staged.play` does.
+    pub(in crate::play) fn tell_play(
+        &mut self,
+        clip: &str,
+        speed: f32,
+        once: bool,
+        blend_ms: u64,
+        from_s: f32,
+    ) {
+        self.asked = Some(Asked {
+            clip: clip.to_string(),
+            speed,
+            once,
+            blend: Duration::from_millis(blend_ms),
+            from_s: from_s.max(0.0),
+        });
+        self.asked_n += 1;
+    }
+
+    /// Changes the speed of the clip playing without starting it again.
+    pub(in crate::play) fn set_clip_speed(&mut self, speed: f32) {
+        if let Some(asked) = &mut self.asked {
+            asked.speed = speed;
+        }
+    }
+
+    /// Walks it to a point at a speed, or stops it.
+    pub(in crate::play) fn tell_go(&mut self, to: Option<Vec3>, speed: f32) {
+        self.going = to.map(|to| Going { to, speed });
+    }
+
+    /// Turns it toward a point.
+    pub(in crate::play) fn tell_face(&mut self, point: Vec3) {
+        self.face = Face::Point(point);
+    }
+
+    /// Runs its own time slower or faster, as a hit-stop holds it.
+    pub(in crate::play) fn tell_rate(&mut self, rate: f32) {
+        self.rate = rate.clamp(0.0, 4.0);
+    }
+
+    pub(in crate::play) fn facing(&self) -> Vec3 {
+        self.facing
+    }
 }
 
 /// Going to a point at a speed, metres a second.
@@ -466,7 +514,7 @@ fn named(world: &mut World, name: &str) -> Result<Entity, bevy::remote::BrpError
 }
 
 /// Stands a figure on the ground at a point, facing another; one of the same name goes.
-fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+pub(in crate::play) fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Spawn = parse_some(params)?;
     let at = placed(world, asked.at, asked.base)?;
     let toward = placed(world, asked.facing, asked.base)?;

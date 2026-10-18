@@ -116,7 +116,7 @@ usage: terra_sandbox [options]
   --moments <fraction,…>
                         in the workbench sheet: how far through each clip to look
                         (default 0.4)
-  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, equal, minus, pageup, pagedown or an arrow
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, pageup, pagedown or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
@@ -765,63 +765,42 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
 }
 
 /// The keys a script can press, in words.
-pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, equal, minus, pageup, pagedown or an arrow (left, right, up, down)";
+pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, pageup, pagedown or an arrow (left, right, up, down)";
 
 /// A key a script can press, by name: one of [`KEYS`].
 pub fn parse_key(key: &str) -> Option<KeyCode> {
+    use KeyCode as K;
+    #[rustfmt::skip]
     const LETTERS: [KeyCode; 26] = [
-        KeyCode::KeyA,
-        KeyCode::KeyB,
-        KeyCode::KeyC,
-        KeyCode::KeyD,
-        KeyCode::KeyE,
-        KeyCode::KeyF,
-        KeyCode::KeyG,
-        KeyCode::KeyH,
-        KeyCode::KeyI,
-        KeyCode::KeyJ,
-        KeyCode::KeyK,
-        KeyCode::KeyL,
-        KeyCode::KeyM,
-        KeyCode::KeyN,
-        KeyCode::KeyO,
-        KeyCode::KeyP,
-        KeyCode::KeyQ,
-        KeyCode::KeyR,
-        KeyCode::KeyS,
-        KeyCode::KeyT,
-        KeyCode::KeyU,
-        KeyCode::KeyV,
-        KeyCode::KeyW,
-        KeyCode::KeyX,
-        KeyCode::KeyY,
-        KeyCode::KeyZ,
+        K::KeyA, K::KeyB, K::KeyC, K::KeyD, K::KeyE, K::KeyF, K::KeyG, K::KeyH, K::KeyI,
+        K::KeyJ, K::KeyK, K::KeyL, K::KeyM, K::KeyN, K::KeyO, K::KeyP, K::KeyQ, K::KeyR,
+        K::KeyS, K::KeyT, K::KeyU, K::KeyV, K::KeyW, K::KeyX, K::KeyY, K::KeyZ,
     ];
     const DIGITS: [KeyCode; 10] = [
-        KeyCode::Digit0,
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
+        K::Digit0,
+        K::Digit1,
+        K::Digit2,
+        K::Digit3,
+        K::Digit4,
+        K::Digit5,
+        K::Digit6,
+        K::Digit7,
+        K::Digit8,
+        K::Digit9,
     ];
     const FUNCTIONS: [KeyCode; 12] = [
-        KeyCode::F1,
-        KeyCode::F2,
-        KeyCode::F3,
-        KeyCode::F4,
-        KeyCode::F5,
-        KeyCode::F6,
-        KeyCode::F7,
-        KeyCode::F8,
-        KeyCode::F9,
-        KeyCode::F10,
-        KeyCode::F11,
-        KeyCode::F12,
+        K::F1,
+        K::F2,
+        K::F3,
+        K::F4,
+        K::F5,
+        K::F6,
+        K::F7,
+        K::F8,
+        K::F9,
+        K::F10,
+        K::F11,
+        K::F12,
     ];
     let function = key
         .strip_prefix(['F', 'f'])
@@ -832,6 +811,9 @@ pub fn parse_key(key: &str) -> Option<KeyCode> {
         None if key.eq_ignore_ascii_case("esc") => KeyCode::Escape,
         None if key.eq_ignore_ascii_case("enter") => KeyCode::Enter,
         None if key.eq_ignore_ascii_case("backspace") => KeyCode::Backspace,
+        None if key.eq_ignore_ascii_case("space") => KeyCode::Space,
+        None if key.eq_ignore_ascii_case("ctrl") => KeyCode::ControlLeft,
+        None if key.eq_ignore_ascii_case("shift") => KeyCode::ShiftLeft,
         None if key.eq_ignore_ascii_case("left") => KeyCode::ArrowLeft,
         None if key.eq_ignore_ascii_case("right") => KeyCode::ArrowRight,
         None if key.eq_ignore_ascii_case("up") => KeyCode::ArrowUp,

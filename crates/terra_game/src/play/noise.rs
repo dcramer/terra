@@ -42,6 +42,9 @@ pub enum Cue {
     /// A blow landing on a creature, and one that killed it.
     Hit,
     Kill,
+    /// Steel on steel: a blow taken on a sword or shield, and one turned aside by a parry.
+    Clash,
+    Parry,
     /// The player hurt, and the player going down.
     Hurt,
     Down,
