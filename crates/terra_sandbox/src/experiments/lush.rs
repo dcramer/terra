@@ -333,12 +333,12 @@ pub fn plugin(app: &mut App) {
     .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
 }
 
-/// Past the far forest, land covered by the same forest to the horizon, drawn in the sky
-/// (D273): its canopy the far crowns' colours together, its hills low.
+/// Past the far forest, the same forest's low rolling hills to the horizon in the sky (D273).
 fn far_land(mut sky: ResMut<terra_world::sky::Sky>) {
     sky.far_land = Some(terra_world::sky::FarLand {
         canopy: Color::srgb(0.18, 0.27, 0.12),
         hills: 1.1,
+        peaks: 0.0,
     });
 }
 

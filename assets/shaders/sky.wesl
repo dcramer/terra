@@ -25,6 +25,8 @@ struct Sky {
     // The far land's canopy, and in w how high its farthest ridges rise, in radians; 0 for
     // none (D273).
     far_land: vec4<f32>,
+    // How its ridges are shaped: 0 a forest's rolling hills, 1 a range's peaks.
+    far_peaks: f32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
@@ -191,8 +193,14 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         let p = vec3<f32>(round * (5.0 + 4.0 * f), f * 13.7);
         let shape = billow(p) * 0.85 + billow(p * 3.7 + 3.0) * 0.15;
         let crowns = noise(vec3<f32>(round * (260.0 + 240.0 * f), f * 5.1));
-        let ridge = base + hills * rising[k] * smoothstep(0.25, 0.85, shape)
-            + hills * (0.06 / (1.0 + f)) * crowns;
+        // A range's crests, sharp where two slopes meet, never down to the horizon, so peak
+        // stands behind peak along all of it (a ridged noise, as terrain generators make them).
+        let crest = 1.0 - abs(noise(p * 1.7 + 11.0) * 2.0 - 1.0);
+        let fine = 1.0 - abs(noise(p * 4.1 + 23.0) * 2.0 - 1.0);
+        let range = 0.3 + 0.7 * pow(crest * 0.75 + fine * 0.25, 1.6);
+        let rolling = smoothstep(0.25, 0.85, shape);
+        let ridge = base + hills * rising[k] * mix(rolling, range, sky.far_peaks)
+            + hills * (0.06 / (1.0 + f)) * crowns * (1.0 - sky.far_peaks);
         let inside = clamp((ridge - rise) / pixel + 0.5, 0.0, 1.0);
         if inside <= 0.0 {
             continue;

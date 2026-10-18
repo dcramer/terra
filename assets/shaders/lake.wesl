@@ -77,6 +77,10 @@ struct Lake {
     rises: array<vec4<f32>, RISES>,
     // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
     over_air: u32,
+    // How much of the sky's own dusk colours are drawn over the air, and the glow round the
+    // sun (sky.wesl): the water mirrors them as the sky shows them.
+    twilight: f32,
+    glow: vec4<f32>,
 }
 
 const RISES: u32 = 8u;
@@ -168,6 +172,19 @@ fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> lake: Lake;
+
+// The dusk's own colours the sky draws over the air along a direction where no cloud is
+// (sky.wesl, after sunset): its horizon's colour to its zenith's, the glow toward the sun.
+fn dusk(direction: vec3<f32>, up: vec3<f32>, sun: vec3<f32>) -> vec3<f32> {
+    if lake.twilight <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    let lift = dot(direction, up);
+    let toward_sun = max(dot(direction, sun), 0.0);
+    var gradient = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
+    gradient += lake.glow.rgb * pow(toward_sun, 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.7, lift));
+    return gradient * lake.sky_brightness * lake.twilight;
+}
 
 // The reflection of what is on screen along a ray from a point of the water, and how much it
 // counts: nothing where the ray finds nothing before it leaves the screen, fading out toward
@@ -384,7 +401,9 @@ fn fragment(
     var seen: vec3<f32>;
     if lake.over_air != 0u {
         let level = normalize(reflected - up * dot(reflected, up) + up * 0.02);
-        seen = mirrored(reflected, up, air_seen(reflected), air_seen(level));
+        let toward_sun = lights.directional_lights[0].direction_to_light;
+        seen = mirrored(reflected, up, air_seen(reflected) + dusk(reflected, up, toward_sun),
+            air_seen(level) + dusk(level, up, toward_sun));
     } else {
         let sky = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(0.0, 0.62, dot(reflected, up)), 0.55));
         seen = mirrored(reflected, up, sky, lake.horizon.rgb) * lake.sky_brightness;

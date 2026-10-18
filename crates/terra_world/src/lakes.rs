@@ -33,8 +33,10 @@ const DEEP: LinearRgba = LinearRgba::new(0.008, 0.03, 0.025, 0.93);
 /// Beer's law's strength a metre, and the depth offset before it, as the port's own
 /// defaults are tuned for clear water (beers_law 2, depth_offset -0.75 there, for a sea whose
 /// depth is in tenths of its units; ours is metres of clear mountain water, which lets the
-/// eye a few metres down).
-const BEERS_LAW: f32 = 0.35;
+/// eye a few metres down). At 0.35 the bed showed pale cyan through the shallows tens of
+/// metres out, where a mountain lake at dusk mirrors its sky past the first metre or two
+/// (lake film r6).
+const BEERS_LAW: f32 = 0.6;
 const DEPTH_OFFSET: f32 = -0.2;
 /// Foam against the shore from this depth to that, and from this distance on the water is all
 /// its deep colour, the depth buffer too coarse for its shallows (the port's DEPTH_FOG_FADE).
@@ -103,6 +105,13 @@ pub struct LakeExtension {
     /// draws, exposed as it is, rather than the painted sky's two colours.
     #[uniform(100)]
     over_air: u32,
+    /// How much of the sky's own dusk colours the sky draws over the air (`Sky::twilight`),
+    /// and the glow round the sun's way, so the water mirrors the dusk the sky shows: mirroring
+    /// the air alone, a lake under a pink dusk sky was teal (lake film r6).
+    #[uniform(100)]
+    twilight: f32,
+    #[uniform(100)]
+    glow: LinearRgba,
     /// The air all round the camera (`air::AirPicture`), unexposed.
     #[texture(101, dimension = "cube")]
     #[sampler(102)]
@@ -136,6 +145,9 @@ impl LakeExtension {
             .map_or((LinearRgba::BLACK, LinearRgba::BLACK, 0.0), |sky| {
                 (sky.horizon.into(), sky.zenith.into(), sky.brightness)
             });
+        let (twilight, glow) = sky.map_or((0.0, LinearRgba::BLACK), |sky| {
+            (sky.twilight, sky.glow.into())
+        });
         let lowland = mirror.lowland;
         let mix = |a: LinearRgba, b: LinearRgba| a.mix(&b, lowland);
         Self {
@@ -158,6 +170,8 @@ impl LakeExtension {
             trains: waves::trains(),
             rises: [Vec4::ZERO; RISES],
             over_air: air.is_some() as u32,
+            twilight,
+            glow,
             air,
         }
     }

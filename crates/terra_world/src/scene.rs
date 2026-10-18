@@ -58,7 +58,26 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun, haze))
         .init_resource::<Indoors>()
-        .add_systems(Update, (haze_follows, follow_quality, adapt_indoors));
+        .add_systems(Update, (haze_follows, follow_quality, adapt_indoors))
+        .add_systems(
+            Update,
+            far_ranges.run_if(resource_added::<crate::start::Sited>),
+        );
+}
+
+/// Past a mountain lake's own slopes, ranges to the horizon drawn in the sky (D273), ridge
+/// behind ridge, each paler in the haze: on the 30 km world the ground a few hundred metres
+/// past the far shore falls under the eye's horizon, so from the shore one hill stood
+/// against the sky with nothing behind it (lake film r6). Their cover the far slopes' dark
+/// conifers and rock together, seen from afar.
+fn far_ranges(sited: Res<crate::start::Sited>, mut sky: ResMut<Sky>) {
+    if matches!(**sited, crate::start::Found::Lake(_)) {
+        sky.far_land = Some(crate::sky::FarLand {
+            canopy: Color::srgb(0.11, 0.14, 0.12),
+            hills: 5.0,
+            peaks: 1.0,
+        });
+    }
 }
 
 fn preset(mut tweaks: ResMut<Tweaks>) {

@@ -53,6 +53,9 @@ pub struct FarLand {
     pub canopy: Color,
     /// How high its farthest ridges rise over the horizon, in degrees.
     pub hills: f32,
+    /// How its ridges are shaped, 0 a forest's rolling hills with low gaps between, 1 a
+    /// range's peaks, crest after crest along the whole horizon.
+    pub peaks: f32,
 }
 
 impl Sky {
@@ -114,6 +117,9 @@ struct SkyMaterial {
     /// for none.
     #[uniform(0)]
     far_land: Vec4,
+    /// How its ridges are shaped (`FarLand::peaks`).
+    #[uniform(0)]
+    far_peaks: f32,
     /// The air all round the camera, for the far land's haze.
     #[texture(1, dimension = "cube")]
     #[sampler(2)]
@@ -155,6 +161,7 @@ impl SkyMaterial {
         };
         SkyMaterial {
             far_land,
+            far_peaks: sky.far_land.map_or(0.0, |land| land.peaks),
             air,
             horizon: sky.horizon.into(),
             zenith: sky.zenith.into(),
