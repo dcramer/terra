@@ -96,17 +96,28 @@ const HAZE_CARDS: usize = 1;
 /// How many cards a jet is, and how many jets are drawn.
 const JET_CARDS: usize = 640;
 const JETS: usize = 2;
+/// What a breath leaves in the air, as a flamethrower's stream does (research/
+/// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
+/// Each is let go where the stream is when it is born and then moves on its own, so it stays
+/// where it was breathed as the breather flies on: how many are kept, and how many a second
+/// a breath lets go.
+const SOOT_PUFFS: usize = 320;
+const DROPS: usize = 112;
+const SOOT_A_SECOND: f32 = 55.0;
+const DROPS_A_SECOND: f32 = 45.0;
 /// How many point lights the fires are lit by, and how far round each its fire is gathered,
 /// in metres.
 const LIGHTS: usize = 8;
 const LIGHT_CELL_M: f32 = 9.0;
 /// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
-/// the most one light gives.
-const LUMENS_A_METRE: f32 = 700_000.0;
+/// the most one light gives: still some times a real fire's, for the film, but no longer so
+/// much that sunlit stone round a fire goes salmon pink; a breath's brighter, as every game
+/// that draws one well lights the ground under it.
+const LUMENS_A_METRE: f32 = 350_000.0;
 const MOST_LUMENS: f32 = 3.0e7;
 const LIGHT_RANGE_M: f32 = 55.0;
 /// A jet's light at its mouth and where it reaches.
-const JET_LUMENS: f32 = 4.0e6;
+const JET_LUMENS: f32 = 1.0e7;
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
@@ -136,6 +147,9 @@ pub struct FireExtension {
     #[texture(102)]
     #[sampler(103)]
     flipbook: Handle<Image>,
+    /// The breaths' soot and drops (`Puffs`).
+    #[storage(104, read_only)]
+    puffs: Handle<ShaderBuffer>,
 }
 
 /// The flames' flipbook.
@@ -162,13 +176,24 @@ impl MaterialExtension for FireExtension {
 pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
 
 /// What the smoke over a fire is told. Field order must match `fire_smoke.wesl`.
+#[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
+pub struct FireSmokeUniform {
+    /// The wind, and how many slots are filled.
+    wind: Vec4,
+    /// x which smoke (0 over the blazes, 1 a breath's soot), y the time the puffs were let
+    /// go by.
+    kind: Vec4,
+}
+
+/// The smoke over a fire, or a breath's soot.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct FireSmokeExtension {
-    /// The wind, and how many slots are filled.
     #[uniform(100)]
-    wind: Vec4,
+    uniform: FireSmokeUniform,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
+    #[storage(102, read_only)]
+    puffs: Handle<ShaderBuffer>,
 }
 
 impl MaterialExtension for FireSmokeExtension {
@@ -195,13 +220,74 @@ pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtensi
 #[derive(Resource)]
 struct Drawn {
     slots: Handle<ShaderBuffer>,
-    fire: [Handle<FireMaterial>; 4],
-    smoke: Handle<FireSmokeMaterial>,
+    fire: [Handle<FireMaterial>; 5],
+    smoke: [Handle<FireSmokeMaterial>; 2],
+    puffs: Puffs,
     lights: Vec<Entity>,
     /// When each jet came on or went off, by the cards' clock.
     jets: [(bool, f32); JETS],
     wind: Vec3,
     wind_due: f32,
+}
+
+/// The soot and drops breaths have let go, in two rings the GPU reads: each two vec4s, where
+/// it was let go and when, then how fast it was going and its luck. The soot first, then
+/// the drops.
+struct Puffs {
+    buffer: Handle<ShaderBuffer>,
+    data: Vec<[f32; 4]>,
+    next: [usize; 2],
+    /// What is owed of each, a fraction of one, carried to the next frame.
+    owed: [f32; 2],
+    luck: u32,
+}
+
+impl Puffs {
+    fn roll(&mut self) -> f32 {
+        self.luck = self.luck.wrapping_add(1);
+        (terra_gen::hash::lowbias32(self.luck) >> 8) as f32 / (1u32 << 24) as f32
+    }
+
+    /// Let go of what each breath sheds this frame, `step` seconds long, at time `now`.
+    fn shed(&mut self, jets: &[Jet], step: f32, now: f32) {
+        for (ring, (rate, size, from)) in [
+            (SOOT_A_SECOND, SOOT_PUFFS, 0),
+            (DROPS_A_SECOND, DROPS, SOOT_PUFFS),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for jet in jets.iter().filter(|jet| jet.on && jet.reach > 0.0) {
+                self.owed[ring] += rate * step;
+                while self.owed[ring] >= 1.0 {
+                    self.owed[ring] -= 1.0;
+                    let way = jet.way.normalize_or(Vec3::Z);
+                    let side = way.any_orthonormal_vector();
+                    let lift = way.cross(side);
+                    let a = self.roll() * core::f32::consts::TAU;
+                    let (along, out, speed) = if ring == 0 {
+                        // Soot rolls off the stream's outer two thirds and most where it
+                        // strikes, carried on a while by the stream.
+                        (0.3 + 0.7 * self.roll().sqrt(), 1.0, 9.0)
+                    } else {
+                        // Drops fall from its underside, from near the mouth to its end,
+                        // still going most of the stream's speed.
+                        (0.12 + 0.7 * self.roll(), 0.6, 15.0)
+                    };
+                    let d = jet.reach * along;
+                    let r = jet.spread * d * out * self.roll().sqrt();
+                    let at = jet.from + way * d + (side * libm::cosf(a) + lift * libm::sinf(a)) * r;
+                    let wobble = Vec3::new(self.roll(), self.roll(), self.roll()) - 0.5;
+                    let going = way * speed * (0.6 + 0.4 * self.roll()) + wobble * 3.0;
+                    let luck = self.roll();
+                    let i = from + self.next[ring];
+                    self.next[ring] = (self.next[ring] + 1) % size;
+                    self.data[i * 2] = at.extend(now).to_array();
+                    self.data[i * 2 + 1] = going.extend(luck).to_array();
+                }
+            }
+        }
+    }
 }
 
 pub fn plugin(app: &mut App) {
@@ -264,7 +350,17 @@ fn setup(
             settings.is_srgb = false;
         })
         .load(FLIPBOOK);
-    let fire = [0.0, 1.0, 2.0, 3.0].map(|kind| {
+    // Nothing let go yet: born an hour ago, long gone.
+    let puffs = Puffs {
+        buffer: buffers.add(ShaderBuffer::from(
+            [[0.0f32, 0.0, 0.0, -3600.0], [0.0; 4]].repeat(SOOT_PUFFS + DROPS),
+        )),
+        data: [[0.0f32, 0.0, 0.0, -3600.0], [0.0; 4]].repeat(SOOT_PUFFS + DROPS),
+        next: [0, 0],
+        owed: [0.0, 0.0],
+        luck: 0,
+    };
+    let fire = [0.0, 1.0, 2.0, 3.0, 4.0].map(|kind| {
         // The haze reads the opaque scene as Bevy copies it for transmissive materials, so it
         // is drawn among them, blended over it.
         let haze = kind == 3.0;
@@ -287,22 +383,29 @@ fn setup(
                 },
                 slots: slots.clone(),
                 flipbook: flipbook.clone(),
+                puffs: puffs.buffer.clone(),
             },
         })
     });
-    let smoke = smokes.add(FireSmokeMaterial {
-        base: StandardMaterial {
-            base_color: Color::WHITE,
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            reflectance: 0.0,
-            diffuse_transmission: 0.1,
-            ..default()
-        },
-        extension: FireSmokeExtension {
-            wind: Vec4::ZERO,
-            slots: slots.clone(),
-        },
+    let smoke = [0.0, 1.0].map(|kind| {
+        smokes.add(FireSmokeMaterial {
+            base: StandardMaterial {
+                base_color: Color::WHITE,
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                diffuse_transmission: 0.1,
+                ..default()
+            },
+            extension: FireSmokeExtension {
+                uniform: FireSmokeUniform {
+                    kind: Vec4::new(kind, 0.0, 0.0, 0.0),
+                    ..default()
+                },
+                slots: slots.clone(),
+                puffs: puffs.buffer.clone(),
+            },
+        })
     });
     // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
     let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
@@ -319,14 +422,20 @@ fn setup(
     spawn("Fire: embers", cards(count, EMBER_CARDS), fire[1].clone());
     spawn("Fire: jets", cards(JETS, JET_CARDS), fire[2].clone());
     spawn("Fire: haze", cards(count, HAZE_CARDS), fire[3].clone());
-    commands.spawn((
-        Name::new("Fire: smoke"),
-        Mesh3d(meshes.add(cards(count, SMOKE_CARDS))),
-        MeshMaterial3d(smoke.clone()),
-        Transform::IDENTITY,
-        NoFrustumCulling,
-        NotShadowCaster,
-    ));
+    spawn("Fire: drops", cards(DROPS, 1), fire[4].clone());
+    for (name, mesh, material) in [
+        ("Fire: smoke", cards(count, SMOKE_CARDS), smoke[0].clone()),
+        ("Fire: soot", cards(SOOT_PUFFS, 1), smoke[1].clone()),
+    ] {
+        commands.spawn((
+            Name::new(name),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+        ));
+    }
     let lights = (0..LIGHTS)
         .map(|i| {
             commands
@@ -350,6 +459,7 @@ fn setup(
         slots,
         fire,
         smoke,
+        puffs,
         lights,
         jets: [(false, -100.0); JETS],
         wind: Vec3::ZERO,
@@ -434,6 +544,10 @@ fn show(
         jets[i * 3 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
         jets[i * 3 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, 0.0, 0.0);
     }
+    drawn.puffs.shed(&blazes.jets, time.delta_secs(), now);
+    if let Some(mut buffer) = buffers.get_mut(&drawn.puffs.buffer) {
+        *buffer = ShaderBuffer::from(drawn.puffs.data.clone());
+    }
     let wind = drawn.wind.extend(drawn.wind.length());
     for (kind, handle) in drawn.fire.iter().enumerate() {
         if let Some(mut material) = fires.get_mut(handle) {
@@ -442,8 +556,11 @@ fn show(
             material.extension.uniform.jets = jets;
         }
     }
-    if let Some(mut material) = smokes.get_mut(&drawn.smoke) {
-        material.extension.wind = drawn.wind.extend(count as f32);
+    for (kind, handle) in drawn.smoke.iter().enumerate() {
+        if let Some(mut material) = smokes.get_mut(handle) {
+            material.extension.uniform.wind = drawn.wind.extend(count as f32);
+            material.extension.uniform.kind = Vec4::new(kind as f32, now, 0.0, 0.0);
+        }
     }
 }
 

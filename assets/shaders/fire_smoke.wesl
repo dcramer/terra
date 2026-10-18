@@ -27,11 +27,21 @@ import bevy_pbr::prepass::utils::prepass_depth;
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
 
-// The wind, metres a second, and how many slots are filled. Must match FireSmokeExtension.
+// The wind, metres a second, and how many slots are filled; which smoke (0 over blazes, 1 a
+// breath's soot) and the time its puffs were let go by. Must match FireSmokeUniform.
+struct Smoke {
+    wind: vec4<f32>,
+    kind: vec4<f32>,
+}
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
-var<uniform> wind: vec4<f32>;
+var<uniform> smoke: Smoke;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> slots: array<vec4<f32>>;
+// What breaths have let go, the soot first: where and when, then its going and its luck.
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var<storage, read> puffs: array<vec4<f32>>;
+// How long a breath's soot hangs, in seconds.
+const SOOT_S: f32 = 5.5;
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -52,6 +62,55 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
     let slot = u32(vertex.uv_b.x + 0.5);
     let phase = vertex.uv_b.y;
+    let wind = smoke.wind;
+    if smoke.kind.x > 0.5 {
+        // A breath's soot (research/2026-10-18-dragon-breath.md): black smoke rolling off
+        // the stream where it was let go, carried on a little by it, then rising as hot
+        // smoke does and swelling, leaning downwind, hanging a while after the breath stops.
+        let born = puffs[slot * 2u];
+        let going = puffs[slot * 2u + 1u];
+        let s = smoke.kind.y - born.w;
+        if s < 0.0 || s > SOOT_S {
+            out.position = vec4(0.0, 0.0, -1.0, 1.0);
+            return out;
+        }
+        let luck = going.w;
+        let t = s / SOOT_S;
+        let up = normalize(born.xyz);
+        let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+        let north = cross(east, up);
+        let roll = luck * 6.283 + s * (0.5 + 0.6 * luck);
+        let billow = (east * cos(roll) + north * sin(roll)) * (0.4 + 1.2 * t);
+        let middle = born.xyz + going.xyz * (1.0 - exp(-s * 1.4)) / 1.4 + up * (1.2 * s + 0.25 * s * s) + billow + wind.xyz * s * 0.8;
+        let size = mix(1.4, 7.5, sqrt(t)) * (0.6 + 0.8 * luck);
+        let to_eye = normalize(view.world_position - middle);
+        var right = cross(up, to_eye);
+        if dot(right, right) < 1.0e-6 {
+            right = cross(vec3(1.0, 0.0, 0.0), to_eye);
+        }
+        right = normalize(right);
+        let card_up = cross(to_eye, right);
+        let spin = luck * 6.283 + s * (luck - 0.5) * 0.4;
+        let corner = (vertex.uv - vec2(0.5)) * size;
+        let turned = vec2(corner.x * cos(spin) - corner.y * sin(spin), corner.x * sin(spin) + corner.y * cos(spin));
+        let world = middle + right * turned.x + card_up * turned.y;
+        out.position = position_world_to_clip(world);
+        out.world_position = vec4(world, 1.0);
+        out.uv = vertex.uv;
+        // Its heat past any blaze's, so the fragment knows a breath's soot.
+        out.uv_b = vec2(t, luck + 64.0);
+@if(PREPASS_PIPELINE) {
+@if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
+        out.world_normal = to_eye;
+@if(MOTION_VECTOR_PREPASS)
+        out.previous_world_position = out.world_position;
+} @else {
+        out.world_normal = to_eye;
+}
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
+        out.instance_index = vertex_in.instance_index;
+        return out;
+    }
     let count = u32(wind.w + 0.5);
     let a = slots[slot * 2u];
     let b = slots[slot * 2u + 1u];
@@ -133,7 +192,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let t = in.uv_b.x;
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
-    var alpha = density(in.uv, t, luck) * mix(0.85, 0.35, t);
+    let soot = heat > 1.5;
+    var alpha = density(in.uv, t, luck) * select(mix(0.85, 0.35, t), mix(0.95, 0.5, t), soot);
     // Faded in over its last metre and a half in front of what is behind it.
 @if(DEPTH_PREPASS)
     {
@@ -147,10 +207,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Burning timber's smoke: a dark brown-grey, thick and darker in its middle.
     let shade = mix(1.0, 0.55, alpha);
     // Young smoke from burning wood near black-brown, thinning to a paler grey as it climbs.
-    let grey = mix(vec3(0.04, 0.036, 0.032), vec3(0.25, 0.23, 0.2), smoothstep(0.15, 0.85, t));
+    var grey = mix(vec3(0.04, 0.036, 0.032), vec3(0.25, 0.23, 0.2), smoothstep(0.15, 0.85, t));
+    // A breath's soot is fuel burnt rich: black, and greying only a little as it thins.
+    if soot {
+        grey = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
+    }
     input.material.base_color = vec4(grey * shade, alpha);
-    // Lit from under by the fire, near its foot.
-    let under = pow(1.0 - t, 7.0) * heat;
+    // Lit from under by the fire, near its foot; a breath's soot glows from the stream it
+    // leaves for its first moments.
+    let under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot);
     input.material.emissive = vec4(vec3(1.0, 0.35, 0.08) * under * 900.0, 1.0);
     let n = normalize(in.world_normal);
     input.N = n;

@@ -26,6 +26,12 @@ const FH = 256;
 /// Steps of the simulation a frame, and a step's length (in the grid's own time).
 const SUBSTEPS = 2;
 const DT = 0.5;
+/// How high the flame's gas burns above its bed at most, in cells, and how fast it makes
+/// heat there.
+const BODY = Math.round(H * 0.42);
+const BURN = 0.35;
+/// How much faster the heat cools at the top of the frame than in the body.
+const TIPS = 0.22;
 /// Steps run before the first frame is kept, so the fire is burning steadily.
 const WARM = 240;
 
@@ -97,18 +103,28 @@ function simulate(seed: number): Float32Array[] {
     const time = step * DT;
     // The fuel bed: heat fed in over the foot, ragged across and wandering in time, wider
     // in the middle, with a little upward push where it burns hottest.
-    for (let y = 1; y < 9; y++) {
-      for (let x = 0; x < W; x++) {
-        const across = (x - W / 2) / (W * 0.4);
-        if (Math.abs(across) >= 1) continue;
-        // Burning hardest in a few places along it, which wander, so it rises as a few
-        // tongues rather than one column.
-        const drift = noise1(wander, time * 0.02) * 20;
-        const tongues = 0.25 + 0.75 * Math.min(1, Math.max(0, (noise1(table, x * 0.11 + time * 0.035 + drift) - 0.3) / 0.4));
-        const bed = (1 - across * across) * tongues * (0.65 + 0.35 * noise1(table, x * 0.3 + time * 0.12 + drift + 7));
+    for (let x = 0; x < W; x++) {
+      const across = (x - W / 2) / (W * 0.4);
+      if (Math.abs(across) >= 1) continue;
+      // Burning hardest in a few places along it, which wander, so it rises as a few
+      // tongues rather than one column.
+      const drift = noise1(wander, time * 0.02) * 20;
+      const tongues = 0.25 + 0.75 * Math.min(1, Math.max(0, (noise1(table, x * 0.11 + time * 0.035 + drift) - 0.3) / 0.4));
+      const bed = (1 - across * across) * tongues * (0.65 + 0.35 * noise1(table, x * 0.3 + time * 0.12 + drift + 7));
+      // Above the bed the fuel's gas still burns, as a real flame's continuous region does to
+      // about half its height: heat made through a body whose top is ragged and moves, so
+      // the flame is solid low down and breaks into licks above.
+      const body = BODY * (0.35 + 0.65 * tongues) * (0.6 + 0.4 * noise1(table, x * 0.07 + time * 0.05 + drift + 3));
+      for (let y = 1; y < Math.max(9, body); y++) {
         const k = at(x, y);
-        heat[k] = Math.max(heat[k], bed * 1.15);
-        v[k] += bed * 0.25 * DT;
+        if (y < 9) {
+          heat[k] = Math.max(heat[k], bed * 1.15);
+          v[k] += bed * 0.25 * DT;
+        } else {
+          // In pockets that rise through it, so the body is never one flat glow.
+          const pocket = noise1(wander, y * 0.11 - time * 0.3 + x * 0.06) * noise1(table, x * 0.17 + y * 0.03 + drift + 11);
+          heat[k] = Math.min(1.1, heat[k] + bed * (1 - y / body) * BURN * (0.3 + 1.4 * pocket) * DT);
+        }
       }
     }
     // Buoyancy: hot gas rises.
@@ -159,11 +175,14 @@ function simulate(seed: number): Float32Array[] {
     }
     for (let x = 0; x < W; x++) v[at(x, 0)] = 0;
     // The heat carried with the gas and cooling as it goes, more where it is thin, so the
-    // flame's tips break into licks that wink out.
+    // flame's tips break into licks that wink out; and past the burning body faster the
+    // higher it rises, as soot there no longer glows for long, so the tips break off as
+    // flamelets and are gone by about three quarters of the frame.
     advect(heat, u, v, scratch);
     for (let k = 0; k < W * H; k++) {
       const h = scratch[k];
-      heat[k] = Math.max(0, h - DT * (0.02 + 0.02 * h));
+      const high = Math.min(1, Math.max(0, (Math.floor(k / W) / H - 0.3) / 0.45));
+      heat[k] = Math.max(0, h - DT * (0.012 + 0.015 * h + TIPS * high * high));
     }
     // Damp what is left near the sides, so no flame reaches a card's edge.
     for (let y = 0; y < H; y++) {
@@ -233,6 +252,32 @@ function png(width: number, height: number, rgba: Uint8Array): Buffer {
   ]);
 }
 
+/// How far up its frame a fire reaches: where it stops being solid (the height at which, on
+/// average over its frames, fewer than half as many cells glow as at its widest), and where
+/// its tips end (the highest row any cell glows in on one frame in ten); each of the frame's
+/// height. The shader sizes its cards on these (`fire.wesl`: a flame fills about the lower
+/// two thirds of its card).
+function reach(frames: Float32Array[]): [number, number] {
+  const glows = 0.25;
+  const rows = new Float32Array(H);
+  const highest: number[] = [];
+  for (const f of frames) {
+    let top = 0;
+    for (let y = 0; y < H; y++) {
+      let n = 0;
+      for (let x = 0; x < W; x++) if (f[at(x, y)] > glows) n++;
+      rows[y] += n / frames.length;
+      if (n > 0) top = y;
+    }
+    highest.push(top);
+  }
+  const widest = Math.max(...rows);
+  let solid = 0;
+  for (let y = 0; y < H; y++) if (rows[y] >= widest * 0.5) solid = y;
+  highest.sort((a, b) => a - b);
+  return [solid / H, highest[Math.floor(highest.length * 0.9)] / H];
+}
+
 function main() {
   const out = process.argv[2] ?? "assets/textures/fire/flames.png";
   const fires = [11, 23, 37].map((seed) => looped(simulate(seed)));
@@ -258,7 +303,8 @@ function main() {
   }
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, png(width, height, rgba));
-  console.log(`flames: ${out}, ${FRAMES} frames of ${FW}x${FH}, three fires, ${width}x${height}`);
+  const shape = fires.map(reach).map(([solid, tips]) => `${solid.toFixed(2)}/${tips.toFixed(2)}`);
+  console.log(`flames: ${out}, ${FRAMES} frames of ${FW}x${FH}, three fires, ${width}x${height}; solid to/tips to (of the frame's height): ${shape.join(", ")}`);
 }
 
 main();

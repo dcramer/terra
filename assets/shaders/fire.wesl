@@ -41,6 +41,12 @@ struct Fire {
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var<storage, read> slots: array<vec4<f32>>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(102) var flipbook: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var flipbook_sampler: sampler;
+// What breaths have let go: soot, then drops, each where and when, then its going and luck.
+@group(constants::MATERIAL_BIND_GROUP) @binding(104) var<storage, read> puffs: array<vec4<f32>>;
+// How many soot puffs come before the drops; must match SOOT_PUFFS in fire.rs.
+const SOOT_PUFFS: u32 = 320u;
+// How long a drop burns as it falls, in seconds.
+const DROP_S: f32 = 2.0;
 
 // The flipbook's frames, how many across its sheet, and how many it plays a second for a
 // flame two and a half metres tall (`tools/textures/flames.ts`).
@@ -127,6 +133,16 @@ fn soot(kelvin: f32) -> vec3<f32> {
     return kept + (vec3(1.0) - kept) * lift;
 }
 
+// How much of what is behind it a flame covers, for what it gives and its alpha. Its light is
+// already shouldered, so its red is near one wherever it is hot and only its green grows: a
+// hot yellow over a blue sky at half cover summed to more green than red, a pale olive. So
+// the yellower it glows the more it covers, keeping red over green over blue as a camera
+// sees fire; a dull red flame stays thin, as it is.
+fn covers(light: vec3<f32>, alpha: f32) -> f32 {
+    let yellow = light.g / max(light.r, 1.0e-4);
+    return alpha * mix(0.4, 0.97, smoothstep(0.2, 0.75, yellow));
+}
+
 fn nowhere() -> Out {
     var out: Out;
     out.clip = vec4(0.0, 0.0, -1.0, 1.0);
@@ -164,6 +180,37 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let phase = id.y;
     let wind = fire.wind.xyz;
     var out: Out;
+    if kind == 4 {
+        // A burning drop of the breath's fuel, falling from where it left the stream: going
+        // on as the stream went, slowed by the air, and falling, stretched along its flight
+        // as a streak (research/2026-10-18-dragon-breath.md).
+        let i = (SOOT_PUFFS + slot) * 2u;
+        let born = puffs[i];
+        let going = puffs[i + 1u];
+        let s = time - born.w;
+        if s < 0.0 || s > DROP_S {
+            return nowhere();
+        }
+        let up = normalize(born.xyz);
+        let drag = (1.0 - exp(-s * 1.2)) / 1.2;
+        let at = born.xyz + going.xyz * drag - up * 4.9 * s * s;
+        let flight = going.xyz * exp(-s * 1.2) - up * 9.8 * s;
+        let to_eye = normalize(view.world_position - at);
+        var along = flight - to_eye * dot(flight, to_eye);
+        if dot(along, along) < 1.0e-6 {
+            along = up;
+        }
+        let streak = clamp(length(along) * 0.035, 0.3, 1.6);
+        along = normalize(along);
+        let across = normalize(cross(along, to_eye));
+        let size = 0.16 + 0.14 * going.w;
+        let world = at + across * (corner.x - 0.5) * size + along * (corner.y - 0.8) * streak;
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(s / DROP_S, 1.0, going.w, 5.0);
+        out.size = size;
+        return out;
+    }
     if kind == 2 {
         // A jet: each card a puff flying out along the way from the mouth.
         let j = slot * 3u;
@@ -340,26 +387,39 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let a = flipbook_at(f0, x, uv.y)[channel];
         let b = flipbook_at(f1, x, uv.y)[channel];
         let heat_here = mix(a, b, fract(f)) * smoothstep(0.0, 0.03, uv.y);
-        let alpha = smoothstep(0.07, 0.3, heat_here);
-        let kelvin = 950.0 + 720.0 * pow(heat_here, 0.8) * (0.7 + 0.3 * heat);
+        // The flipbook's body is near its full heat, so only its hottest cores go yellow: the
+        // rest orange, its rims and licks a dull red.
+        let alpha = smoothstep(0.08, 0.4, heat_here);
+        let kelvin = 950.0 + 700.0 * pow(heat_here, 1.5) * (0.72 + 0.28 * heat);
         light = soot(kelvin) * alpha;
-        cover = alpha * 0.45 * smoothstep(0.15, 0.5, heat_here);
+        cover = covers(light, alpha);
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
         let wink = 0.6 + 0.4 * sin(time * (9.0 + luck * 14.0) + luck * 50.0);
         let alpha = spark * pow(1.0 - t, 1.5) * wink;
         light = soot(1600.0 - t * 300.0) * alpha;
+    } else if kind == 4 {
+        // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
+        let x = abs(uv.x - 0.5) * 2.0;
+        let streak = (1.0 - smoothstep(0.3, 1.0, x)) * smoothstep(0.0, 0.7, uv.y) * (1.0 - smoothstep(0.85, 1.0, uv.y));
+        let wink = 0.75 + 0.25 * sin(time * (11.0 + luck * 9.0) + luck * 40.0);
+        let alpha = streak * (1.0 - smoothstep(0.6, 1.0, t)) * wink;
+        light = soot(mix(1640.0, 1300.0, t) + 80.0 * uv.y) * alpha;
+        cover = covers(light, alpha);
     } else {
-        // A puff of breath, as games draw a flamethrower's stream: a frame of the same
-        // simulated fire as the flames (`tools/textures/flames.ts`), its tongues laid along
-        // the stream, the card's foot toward the mouth, so the stream is ragged licks of flame
-        // and not smooth balls; under a soft round mask, broken by noise at its rim, so no
-        // card's edge shows. Hottest at the mouth, cooling to a dull red at its end.
+        // A puff of breath, as a flamethrower's stream is in footage and in games that do it
+        // well (research/2026-10-18-dragon-breath.md): what reads is the contrast inside it.
+        // A frame of the simulated fire (`tools/textures/flames.ts`), its tongues laid along
+        // the stream, the card's foot toward the mouth, under a soft round mask broken by
+        // noise at its rim. Its heat there sets both how hot it glows and how much it covers:
+        // a rod near-white at the mouth; yellow cores with orange round them and dull red at
+        // the rims as it rolls open; pockets of black soot in it where it burns rich, more as
+        // it burns out; and white-hot again where it strikes and splashes.
         let p = uv - 0.5;
         let n = fbm(uv * 3.0 + vec2(luck * 7.0 - time * 1.5, luck * 13.0 + time * 0.8));
-        let edge = length(p * vec2(1.0, 0.8)) + (n - 0.5) * 0.3;
-        let body = 1.0 - smoothstep(0.12, 0.5, edge);
+        let edge = length(p * vec2(1.0, 0.8)) + (n - 0.5) * 0.35;
+        let body = 1.0 - smoothstep(0.1, 0.5, edge);
         let channel = u32(luck * 3.0) % 3u;
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
         let f = fract(time * FLIPBOOK_FPS * 1.6 / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
@@ -369,24 +429,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let fx = 0.5 + (x - 0.5) * 0.6;
         let fy = 0.1 + uv.y * 0.62;
         let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
-        // Near the mouth the stream is dense, a solid core; it breaks into tongues as it opens.
-        // It stays dense along its whole length, a rope of fire, and burns white-hot again
-        // where it strikes and splashes.
+        let mouth = 1.0 - smoothstep(0.0, 0.22, t);
         let struck = smoothstep(0.7, 0.92, t) * (1.0 - smoothstep(0.92, 1.0, t));
-        let solid = mix(0.5, 0.15, smoothstep(0.0, 0.5, t)) + 0.3 * struck;
-        let heat_here = body * saturate(solid + 1.1 * tongue);
+        let heat_here = body * saturate(mix(0.2, 0.02, smoothstep(0.0, 0.5, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
+        let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
-        // Many cards overlap along its line, so each covers what is behind it nearly as much
-        // as it glows (premultiplied "over", as games composite thick fire): stacked, they
-        // come to the colour of the cards in front, not a sum. Added up, they had summed to a
-        // pale yellow-white fog, and cooled to stop that, each added so little over the
-        // smoke and sky it was a faint orange haze. Over, its colour is its own: orange,
-        // yellow near the mouth, deep orange as it burns out. Past about 1450 K the soot's
-        // green saturates in a sunlit morning's exposure, and the rope goes a pale olive.
-        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.8, 0.5, t);
-        let kelvin = min(mix(1420.0, 1230.0, t) + 100.0 * struck + (heat_here - 0.5) * 160.0, 1480.0);
-        light = soot(kelvin) * alpha;
-        cover = alpha * 0.9;
+        let alpha = smoothstep(0.05, 0.4, heat_here) * fade;
+        let kelvin = 1060.0 + 640.0 * pow(heat_here, 1.3) + 200.0 * mouth - 110.0 * t + 90.0 * struck;
+        light = soot(kelvin) * alpha * (1.0 - 0.9 * pocket);
+        cover = saturate(covers(light, alpha) + pocket * fade * 0.7);
     }
     if max(light.r, cover) < 0.002 {
         discard;
@@ -458,7 +509,7 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
 @if(DEPTH_PREPASS)
     {
         let kind = i32(fire.kind.x + 0.5);
-        let soft = select(select(SOFT_M.z, SOFT_M.y, kind == 1), SOFT_M.x, kind == 0);
+        let soft = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         colour *= smoothstep(0.0, soft, behind);
     }
