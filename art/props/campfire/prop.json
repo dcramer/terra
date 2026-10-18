@@ -3,5 +3,6 @@
   "file": "Campfire",
   "dims": [1.3, 0.9, 1.3],
   "budget": 1500,
-  "roles": ["Rock", "RockDark", "Wood", "WoodDark", "Black", "Fire"]
+  "roles": ["Rock", "RockDark", "Wood", "WoodDark", "Black", "Fire"],
+  "char": true
 }

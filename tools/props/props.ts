@@ -128,6 +128,9 @@ export type Prop = {
   // With dyes, how much the rest is greyed and darkened (0.75 a quarter darker), for wood
   // painted fresh that stands out in the weather.
   weather?: number;
+  // A fire's wood charred after refine by char.py: its logs near-black where they burn,
+  // cracked, the cracks glowing thinly, its stones as they were (a campfire, D377).
+  char?: boolean;
 };
 
 export function readProp(text: string, name: string): Prop {
@@ -241,6 +244,7 @@ function refine(name: string, prop: Prop) {
   run(BLENDER, [join(HERE, "refine.py"), ...args]);
   const folder = join(ROOT, "assets", "models", prop.into ?? "props");
   const refined = join(folder, `${prop.file}.glb`);
+  if (prop.char) run(BLENDER, [join(HERE, "char.py"), here(refined), here(refined)]);
   const kept = join(OUT, `${name}-undyed.glb`);
   if (prop.dyes) copyFileSync(refined, kept);
   for (const [file, colour] of Object.entries(prop.dyes ?? {})) {

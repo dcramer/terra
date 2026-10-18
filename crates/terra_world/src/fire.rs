@@ -124,9 +124,11 @@ const HAZE_CARDS: usize = 1;
 const HEARTHS: usize = 16;
 const HEARTH_FLAME_CARDS: usize = 6;
 const HEARTH_SMOKE_CARDS: usize = 24;
+/// A hearth's sparks, ten or so a second rising from its coals, a few seen at once.
+const HEARTH_EMBER_CARDS: usize = 16;
 /// A hearth's light, lumens for a fire a metre tall at full heat, and how far it reaches: a
 /// campfire lights the faces round it and a ring of the ground, not the trees across a lake.
-const HEARTH_LUMENS_A_METRE: f32 = 350_000.0;
+const HEARTH_LUMENS_A_METRE: f32 = 280_000.0;
 const HEARTH_RANGE_M: f32 = 14.0;
 /// How many cards a jet is, and how many jets are drawn.
 const JET_CARDS: usize = 640;
@@ -162,6 +164,9 @@ const JET_RANGE_M: f32 = 30.0;
 const JET_LUMENS: f32 = 5.0e7;
 const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
+/// A campfire's, wood's flame about 1,800 K: an orange, not the yellow the grass turned a
+/// timber blaze's (lake film r5).
+const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.5, 0.18);
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
@@ -413,6 +418,11 @@ fn spawn_cards(
     spawn(
         "Fire: embers",
         cards(count, EMBER_CARDS, 0.0),
+        fire[1].clone(),
+    );
+    spawn(
+        "Fire: hearth embers",
+        cards(HEARTHS.min(count), HEARTH_EMBER_CARDS, 1.0),
         fire[1].clone(),
     );
     spawn("Fire: jets", cards(JETS, JET_CARDS, 0.0), fire[2].clone());
@@ -756,16 +766,17 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
             })
         })
         .collect();
-    // A hearth's light hangs low in its flames, over its logs, so it lights the ground round
-    // it and the faces of those sat by it, and flickers as its tongues do.
+    // A hearth's light hangs in its flames just clear of its logs' ends, so it lights the
+    // ground round it and the faces of those sat by it, and flickers as its tongues do: level
+    // with the ends (0.6 of its height) they were the brightest thing by it (lake film r6).
     lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
         let weight = blaze.tall * blaze.heat;
         Lit {
             at: blaze.at,
             lumens: weight * HEARTH_LUMENS_A_METRE,
-            color: BLAZE_LIGHT,
+            color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,
-            lift: blaze.tall * 0.6,
+            lift: blaze.tall * 0.8,
             flickers: weight * LUMENS_A_METRE * 0.25,
         }
     }));
@@ -856,7 +867,7 @@ mod tests {
         let (hearth, roof) = (&lit[0], &lit[1]);
         assert_eq!(hearth.at, ground);
         // In its flames, over its logs, not over the heads of those sat by it.
-        assert!(hearth.lift < 1.5 * 0.7, "{}", hearth.lift);
+        assert!(hearth.lift < 1.5, "{}", hearth.lift);
         // Lighting a ring round it, not the far shore; a burning roof's light reaches farther.
         assert!(hearth.range <= 15.0 && roof.range > hearth.range);
         assert!(hearth.lumens > 0.0);

@@ -262,14 +262,14 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     // fifths as tall: each tongue must clear them, or the logs hide it (lake film r5).
     var flame = tall * breathe * 1.1;
     var at = foot;
-    var w = wide * 2.0;
+    var w = wide * 2.4;
     if j > 1 {
         // Round the ring over the logs, each lower than the middle one, licking up their
         // outsides.
         let a = f32(j) * 1.571 + seed * 6.283 + (luck - 0.5) * 0.8;
         at = foot + (east * cos(a) + north * sin(a)) * wide * (0.28 + 0.15 * luck);
         flame = tall * breathe * (0.72 + 0.3 * luck);
-        w = wide * (1.0 + 0.4 * luck);
+        w = wide * (1.25 + 0.4 * luck);
     }
     let h = flame * 1.6;
     let lean = wind * 0.05 * flame;
@@ -424,6 +424,10 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     if kind == 0 && is_hearth {
         return hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, time);
     }
+    // A hearth's sparks are cards of their own too, more of them than a burning roof's.
+    if kind == 1 && (phase >= 1.0) != is_hearth {
+        return nowhere();
+    }
     if kind == 0 {
         // A burning surface's flame (research/2026-10-16-real-time-fire-rendering.md): a few
         // cards of a simulated fire's flipbook standing where it burns, a big one over the
@@ -474,7 +478,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         return nowhere();
     }
     let life_s = mix(1.6 + 2.2 * luck, 0.9 + 1.3 * luck, kept);
-    let t = fract(time / life_s + phase * 1.37 + seed);
+    let t = fract(time / life_s + fract(phase) * 1.37 + seed);
     let seconds = t * life_s;
     let rise = mix(2.5 + 3.5 * luck, 1.4 + 1.6 * luck, kept) * (1.0 - exp(-seconds * 0.9)) / 0.9;
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
@@ -491,8 +495,12 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         across = cross(up, to_eye);
     }
     across = normalize(across);
-    let size = mix(0.035 + 0.03 * luck, 0.02 + 0.02 * luck, kept);
-    let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * 5.0;
+    // A hearth's a little bigger than a roof's: at 0.02 to 0.04 m none showed at 1080p from
+    // six metres, the film's distance (lake film r5).
+    let size = mix(0.035 + 0.03 * luck, 0.035 + 0.025 * luck, kept);
+    // A hearth's short streaks, a roof's long: drawn out five times its sparks were white
+    // needles beside the flames (lake film r6's first still).
+    let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * mix(5.0, 2.5, kept);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
     out.life = vec4(t, heat, luck, 2.0);
@@ -520,8 +528,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let coals = fbm(uv * vec2(9.0, 5.0) + vec2(luck * 17.0, 0.0));
         let breath = 0.75 + 0.25 * sin(time * (0.9 + 1.7 * coals) + coals * 23.0);
         let glow = bed * smoothstep(0.3, 0.75, coals) * breath;
-        let alpha = smoothstep(0.02, 0.5, glow) * soft;
-        let kelvin = 1000.0 + 480.0 * glow * (0.6 + 0.4 * heat) + 120.0 * bed;
+        let alpha = smoothstep(0.02, 0.35, glow) * soft;
+        // Hot enough to read orange by day: at 1000 to 1500 K it was a dull red lost under
+        // the logs (lake film r5).
+        let kelvin = 1150.0 + 420.0 * glow * (0.6 + 0.4 * heat) + 120.0 * bed;
         light = soot(kelvin, alpha);
         cover = covers(light, alpha);
     } else if kind == 0 {
@@ -544,8 +554,17 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         // and blended as it covers, as the breath is: through soot's lift by brightness on the
         // screen its bodies went white, cut-outs with pastel rims (castle film r7 and r8's
         // first probe, B/R 0.51 where a barn fire's is 0.19).
-        let alpha = smoothstep(0.08, 0.4, heat_here) * soft;
-        let h = 0.92 * pow(heat_here, 2.2) * (0.8 + 0.2 * heat);
+        var alpha = smoothstep(0.08, 0.4, heat_here) * soft;
+        var h = 0.92 * pow(heat_here, 2.2) * (0.8 + 0.2 * heat);
+        if t > 1.0 {
+            // A hearth's tongue (its first number past 1, `hearth`): a campfire's flames are
+            // solid and yellow-orange through their body with a near-white heart, only their
+            // tips going thin and red, the hottest thing in the picture. With a roof's thin
+            // rims they were see-through peach over the troll sat by them, dimmer than his
+            // firelit skin (lake film r5).
+            alpha = smoothstep(0.16, 0.36, heat_here) * soft;
+            h = pow(heat_here, 1.6) * (0.85 + 0.15 * heat);
+        }
         cover = alpha * 0.95;
         light = flame_colour(h) * cover / exp2(adapted.x);
     } else if kind == 1 {
@@ -553,7 +572,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
         let wink = 0.6 + 0.4 * sin(time * (9.0 + luck * 14.0) + luck * 50.0);
         let alpha = spark * pow(1.0 - t, 1.5) * wink * soft;
-        light = soot(1600.0 - t * 300.0, alpha);
+        light = soot(1520.0 - t * 250.0, alpha);
     } else if kind == 4 {
         // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
         let x = abs(uv.x - 0.5) * 2.0;

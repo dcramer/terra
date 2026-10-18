@@ -295,8 +295,13 @@ fn shy(
         }
         // Within the distance it flees at but not close: it walks, paddles or wades off
         // from them, straight away, and keeps an eye on them.
+        // Each of a group its own way off, within a quarter turn of straight away: all
+        // straight away from one far off, a group of ducks paddled off as a row of clones in
+        // step (lake film r5).
         _ if !creature.hurt && s.near(flees_within_m) && !s.near(bolts_m) => {
-            (creature.bolt, creature.pace) = (s.toward.map_or(Vec3::ZERO, |t| -t), Pace::Wary);
+            let off = Quat::from_axis_angle(s.up, dice.range(-0.5, 0.5));
+            (creature.bolt, creature.pace) =
+                (s.toward.map_or(Vec3::ZERO, |t| off * -t), Pace::Wary);
             State::Flee(flees_s)
         }
         _ if creature.hurt || s.near(flees_within_m) => {

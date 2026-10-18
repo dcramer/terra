@@ -141,15 +141,17 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         // the air. Every puff of a hearth lives as long, so they stay evenly spaced.
         let j = phase - 1.0;
         let luck = fract(seed * 0.618 + j * 7.37);
-        let life_s = 8.0 + 2.0 * fract(seed * 3.3);
+        // Gone four or five metres up: lived nine seconds its puffs climbed past eight
+        // metres, swaying apart, and hung among the trunks as patches of fog (lake film r5).
+        let life_s = 4.5 + 1.0 * fract(seed * 3.3);
         let t = fract(globals.time / life_s + j + seed * 0.37);
         let seconds = t * life_s;
         let rise = (0.8 + 0.5 * heat) * seconds * (1.0 - 0.35 * t);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
-        let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.2 + 3.0 * t);
+        let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.15 + 1.2 * t);
         let middle = foot + up * (tall * 0.7 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
-        let size = mix(0.15 + tall * 0.12, 1.4 + tall * 0.6, sqrt(t)) * (0.75 + 0.5 * luck);
+        let size = mix(0.15 + tall * 0.12, 0.9 + tall * 0.4, sqrt(t)) * (0.75 + 0.5 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
         if dot(right, right) < 1.0e-6 {
@@ -264,7 +266,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let n = smooth_noise(in.uv * vec2(3.0, 2.0) + vec2(luck * 41.0, -t * 3.0));
         let fine = smooth_noise(in.uv * vec2(8.0, 5.0) + vec2(luck * 7.0, -t * 6.0));
         let wisp = 1.0 - smoothstep(0.05, 0.42, length(p) + (n - 0.5) * 0.4 + (fine - 0.5) * 0.25);
-        let life = smoothstep(0.0, 0.05, t) * pow(1.0 - t, 1.6);
+        // Thinning out as it climbs, so its top fades into the air rather than ending.
+        // Clear of its flames before it shows: born over them it lay a pale smear across
+        // them and the troll sat by them (lake film r6's first still).
+        let life = smoothstep(0.03, 0.14, t) * pow(1.0 - t, 2.2);
         alpha = wisp * life * (0.5 + 0.7 * fine) * mix(0.3, 0.12, t);
     }
     // Faded in over its last metre and a half in front of what is behind it.
@@ -291,7 +296,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // the sky's light (research/2026-10-16-real-time-fire-rendering.md).
     var dark = shade;
     if hearth {
-        grey = mix(vec3(0.42, 0.45, 0.5), vec3(0.55, 0.57, 0.6), smoothstep(0.1, 0.7, t));
+        grey = mix(vec3(0.34, 0.36, 0.4), vec3(0.46, 0.48, 0.52), smoothstep(0.1, 0.7, t));
         dark = 1.0;
     }
     input.material.base_color = vec4(grey * dark, alpha);
