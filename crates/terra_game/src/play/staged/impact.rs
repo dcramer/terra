@@ -384,8 +384,10 @@ fn dust(
     at: Vec3,
     colour: Color,
 ) {
-    // Dust is paler than the stones it comes off: the fine stuff, dry.
-    let colour = colour.mix(&Color::srgb(0.78, 0.75, 0.7), 0.3);
+    // Dust is paler and greyer than the stones it comes off: the fine stuff, dry. The material
+    // under the surface can be the soil under a gravel shore, whose mud read as a brown tint
+    // over the troll, so it is mostly a dry stone grey.
+    let colour = colour.mix(&Color::srgb(0.6, 0.59, 0.56), 0.6);
     let size = s.size;
     for puff in 0..7u32 {
         let middle = puff == 0;
@@ -399,20 +401,22 @@ fn dust(
             materials,
             soft,
             colour,
-            if middle { 0.7 } else { 0.55 },
+            if middle { 0.6 } else { 0.5 },
             life,
             false,
         );
         let out = s.round(puff as f32 / 6.0 + 0.1 * s.r(puff, 2));
+        // A ring thrown out low along the ground, as a heavy blow's dust rolls out from it,
+        // not a cloud standing over it (which hung in front of the troll as a tint).
         for sprite in 0..3u32 {
             let i = puff * 3 + sprite;
-            let speed = if middle { 0.4 } else { 1.6 + 1.4 * s.r(i, 3) } * size;
+            let speed = if middle { 0.4 } else { 1.8 + 1.4 * s.r(i, 3) } * size;
             let velocity =
-                out * speed + s.up * (0.3 + 0.6 * s.r(i, 4)) * size + s.round(s.r(i, 5)) * 0.3;
-            let wide = if middle { 2.6 } else { 1.6 + 0.8 * s.r(i, 6) } * size;
+                out * speed + s.up * (0.1 + 0.25 * s.r(i, 4)) * size + s.round(s.r(i, 5)) * 0.3;
+            let wide = if middle { 1.3 } else { 0.8 + 0.5 * s.r(i, 6) } * size;
             s.mote(
                 &material,
-                at + s.up * 0.25 * size + out * 0.3 * size,
+                at + s.up * 0.12 * size + out * 0.3 * size,
                 Mote {
                     age: 0.0,
                     life,
@@ -480,16 +484,20 @@ fn splash(
     let size = s.size;
     let water = surface.length();
     let drops = soft_material(s.commands, materials, soft, SPRAY, 0.9, 1.6, true);
-    let crown = (34.0 * size).round() as u32;
-    for i in 0..crown + 8 {
+    // A crown: a sheet of many small drops thrown up and out from round where the blow went
+    // in, falling back in an arc, the shutter drawing each into a streak; and a short jet from
+    // the middle. Fewer, bigger drops and a tall column read as balls of light over a white
+    // pillar.
+    let crown = (70.0 * size).round() as u32;
+    for i in 0..crown + 10 {
         let column = i >= crown;
         let out = s.round(i as f32 / crown as f32 + 0.05 * s.r(i, 1));
         let velocity = if column {
-            s.round(s.r(i, 2)) * 0.6 + s.up * (5.5 + 2.5 * s.r(i, 3))
+            s.round(s.r(i, 2)) * 0.5 + s.up * (3.2 + 1.6 * s.r(i, 3))
         } else {
-            out * (1.3 + 1.5 * s.r(i, 4)) + s.up * (3.0 + 3.0 * s.r(i, 5))
+            out * (1.4 + 2.0 * s.r(i, 4)) + s.up * (2.4 + 2.2 * s.r(i, 5))
         } * size.sqrt();
-        let wide = (0.07 + 0.09 * s.r(i, 6)) * size.sqrt();
+        let wide = (0.03 + 0.04 * s.r(i, 6)) * size.sqrt();
         s.mote(
             &drops,
             surface + out * 0.35 * size + s.up * 0.05,
@@ -504,22 +512,23 @@ fn splash(
             },
         );
     }
+    // A thin mist low over it, drifting out: spray, not a white cloud standing over the water.
     for puff in 0..3u32 {
-        let life = 1.4 + 0.4 * s.r(puff, 7);
-        let material = soft_material(s.commands, materials, soft, SPRAY, 0.5, life, false);
+        let life = 1.2 + 0.4 * s.r(puff, 7);
+        let material = soft_material(s.commands, materials, soft, SPRAY, 0.3, life, false);
         for sprite in 0..2u32 {
             let i = puff * 2 + sprite;
             let out = s.round(s.r(i, 8));
             s.mote(
                 &material,
-                surface + s.up * (0.3 + 0.4 * puff as f32) * size,
+                surface + s.up * (0.15 + 0.2 * puff as f32) * size,
                 Mote {
                     age: 0.0,
                     life,
-                    velocity: out * 0.6 * size + s.up * (0.8 + 0.6 * s.r(i, 9)) * size,
+                    velocity: out * 0.8 * size + s.up * (0.3 + 0.3 * s.r(i, 9)) * size,
                     gravity: 0.0,
                     drag: 1.2,
-                    wide: [0.4 * size, (1.6 + 0.6 * s.r(i, 10)) * size],
+                    wide: [0.3 * size, (0.8 + 0.4 * s.r(i, 10)) * size],
                     into_water: None,
                 },
             );
