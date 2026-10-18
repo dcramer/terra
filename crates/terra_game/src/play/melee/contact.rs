@@ -196,11 +196,14 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         .normalize_or_zero();
     let who = |player: bool| if player { "you" } else { "the partner" };
     info!(
-        "Melee: frame {frame}: {} {:?} by {} ({} damage)",
+        "Melee: frame {frame}: {} {:?} by {} ({} damage, {:.2} m apart)",
         who(on.player),
         blow.taken,
         who(by.player),
-        blow.damage
+        blow.damage,
+        (on.feet - by.feet)
+            .reject_from(on.feet.normalize())
+            .length()
     );
     match blow.taken {
         Taken::Hit => {

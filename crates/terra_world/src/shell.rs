@@ -25,6 +25,7 @@ use bevy::{
         view::screenshot::{Screenshot, save_to_disk},
     },
     time::TimeUpdateStrategy,
+    ui::IsDefaultUiCamera,
     window::{CursorGrabMode, CursorOptions, PresentMode, PrimaryWindow, WindowLevel, WindowRef},
     winit::{UpdateMode, WinitSettings},
 };
@@ -1023,12 +1024,20 @@ fn make_picture(mut commands: Commands, mut images: ResMut<Assets<Image>>, optio
 
 /// Points every camera that would draw into the window at the picture instead, including
 /// cameras experiments spawn later.
+///
+/// Bevy draws the UI with the last camera into the primary window unless one is marked
+/// [`IsDefaultUiCamera`]; with none left drawing into it the screen's UI (bars, panels,
+/// notices) would be missing from the picture, so the last camera drawing into it is marked.
 fn draw_into_picture(
+    mut commands: Commands,
     picture: Res<Picture>,
     primary: Query<(), With<PrimaryWindow>>,
-    mut cameras: Query<&mut RenderTarget, With<Camera>>,
+    mut cameras: Query<(Entity, &Camera, &mut RenderTarget, Has<IsDefaultUiCamera>)>,
 ) {
-    for mut target in &mut cameras {
+    let mut marked = false;
+    let mut last = None;
+    for (entity, camera, mut target, default_ui) in &mut cameras {
+        marked |= default_ui;
         let into_window = match &*target {
             RenderTarget::Window(WindowRef::Primary) => true,
             RenderTarget::Window(WindowRef::Entity(window)) => primary.contains(*window),
@@ -1037,6 +1046,13 @@ fn draw_into_picture(
         if into_window {
             *target = RenderTarget::Image(picture.0.clone().into());
         }
+        let drawn = matches!(&*target, RenderTarget::Image(image) if image.handle == picture.0);
+        if drawn && last.is_none_or(|(order, at)| (camera.order, entity) > (order, at)) {
+            last = Some((camera.order, entity));
+        }
+    }
+    if let (false, Some((_, entity))) = (marked, last) {
+        commands.entity(entity).insert(IsDefaultUiCamera);
     }
 }
 

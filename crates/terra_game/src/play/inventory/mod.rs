@@ -22,7 +22,7 @@ mod rules;
 mod tests;
 
 pub use super::kinds::Cut;
-pub use belongings::{Belongings, Inventory, Spilled};
+pub use belongings::{Belongings, HandsFull, Inventory, Spilled};
 use bevy::prelude::*;
 pub use items::Items;
 pub use rules::*;

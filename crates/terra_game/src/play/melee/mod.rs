@@ -18,6 +18,7 @@ use super::controls::Action;
 use super::figure::{Act, Acting, Moves};
 use super::held::Grip;
 use super::intent::Intent;
+use super::inventory::HandsFull;
 use super::staged::pose::Bends;
 use super::tick::Sim;
 use super::walker::Steer;
@@ -36,6 +37,9 @@ const GUARD_PACE: f32 = 1.4;
 pub(super) const HEALTH: f32 = 100.0;
 /// How far the lock-on reaches, metres.
 const LOCK_M: f32 = 15.0;
+/// The nearest a blow's drive takes a fighter to the other, feet to feet, metres: the
+/// shields and sword arms touch about here, so a blow never carries one into the other.
+pub(super) const NEAREST_M: f32 = 1.3;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
 /// The looks drawn: a sword in the right hand, a round shield in the left.
@@ -170,7 +174,7 @@ fn draw(
             stance.steer = Steer::default();
             commands
                 .entity(player)
-                .remove::<(Drawn, Fighter, Bends)>()
+                .remove::<(Drawn, Fighter, Bends, HandsFull)>()
                 .insert(Acting::default());
             info!("Melee: sheathed");
             continue;
@@ -206,6 +210,7 @@ fn draw(
             Fighter::new(Some(hand)),
             Acting::default(),
             bends,
+            HandsFull,
         ));
         info!("Melee: drawn");
         let near = partners
@@ -350,12 +355,18 @@ fn act(
                 &mut acting,
             );
         }
+        let nearest = partners
+            .iter()
+            .map(|(_, place)| place.translation)
+            .min_by(|a, b| {
+                a.distance(at.translation)
+                    .total_cmp(&b.distance(at.translation))
+            });
         steer(
             &mut stance,
             &fighter,
             set,
-            at.translation,
-            target,
+            (at.translation, target, nearest),
             ahead,
             rate,
         );
@@ -435,12 +446,14 @@ fn show(
 
 /// How the walk goes this tick: a move's own drive (closing on a locked target in a blow's
 /// wind-up), a shove, or the stance's pace, facing the view or the target.
+/// Where the player is, the partner locked on to, and the nearest partner.
+type Places = (Vec3, Option<Vec3>, Option<Vec3>);
+
 fn steer(
     stance: &mut Stance,
     fighter: &Fighter,
     set: &MoveSet,
-    here: Vec3,
-    target: Option<Vec3>,
+    (here, target, nearest): Places,
     ahead: Vec3,
     rate: f32,
 ) {
@@ -463,6 +476,13 @@ fn steer(
             let cone = libm::cosf(warp.cone.to_radians());
             if far < warp.within && fighter.way.dot(to / far.max(1e-3)) > cone {
                 speed += moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
+            }
+        }
+        // Never into the partner: a blow's drive toward them stops at arm's length.
+        if let Some(nearest) = nearest.filter(|_| each.damage > 0.0) {
+            let to = (nearest - here).reject_from(here.normalize());
+            if to.length() < NEAREST_M && fighter.way.dot(to) > 0.0 {
+                speed = speed.min(0.0);
             }
         }
         steer.drive = Some(fighter.way * speed * rate);

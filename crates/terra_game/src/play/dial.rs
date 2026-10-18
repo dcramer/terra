@@ -7,12 +7,12 @@
 use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
 use super::catalogue::Builds;
-use super::controls::{Action, Controls, Settings};
+use super::controls::{Action, Controls, Settings, capitalised};
 use super::crafting::Crafts;
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
 use super::interact::Focus;
-use super::inventory::{Belongings, InventoryScreen};
+use super::inventory::{Belongings, Inventory, InventoryScreen};
 use super::options::OptionsMenu;
 use super::registries::FloraGives;
 use super::tool::{self, Builder};
@@ -345,6 +345,8 @@ fn draw(
     let Some(belongings) = belongings.mine() else {
         return;
     };
+    // A sword drawn puts the bar's tool away, so the hammer says nothing (D405).
+    let drawn = belongings.hands_full();
     let set = |text: &mut Text, to: String| {
         if text.0 != to {
             text.0 = to;
@@ -421,31 +423,7 @@ fn draw(
     let holding = belongings.holding();
     let items = belongings.items();
     let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
-    let part = builder.picked(&builds);
-    set(
-        &mut texts.p1(),
-        match (holding, part.variant_name(builder.variant())) {
-            (None, _) => match belongings.broken_in_hand() {
-                Some(tool) => format!("{}  (broken)", items.name(tool)),
-                None => "Empty hand".to_string(),
-            },
-            (Some(tool), _) if !hammer => items.name(tool).to_string(),
-            _ if builder.stowed => "Hammer:  nothing picked".to_string(),
-            (_, Some(variant)) if part.variants() > 1 => format!(
-                "{}:  {}  ({} of {})",
-                part.name,
-                variant,
-                builder.variant() + 1,
-                part.variants()
-            ),
-            (_, Some(variant)) => format!("{}:  {}", part.name, variant),
-            (_, None) => part.name.to_string(),
-        } + if builder.snap || !hammer {
-            ""
-        } else {
-            "     grid off"
-        },
-    );
+    set(&mut texts.p1(), in_hand(&belongings, &builder, &builds));
     set(
         &mut texts.p2(),
         if tool::waiting(&cursor, &options) && !inventory.open {
@@ -456,6 +434,8 @@ fn draw(
             format!("{}  close the inventory", settings.key(Action::Inventory))
         } else if dial.open && builder.picked(&builds).variants() > 1 {
             "Move the mouse to a kind and let go".to_string()
+        } else if drawn {
+            format!("{}  sheathe", capitalised(settings.key(Action::Draw)))
         } else {
             let doing = match holding {
                 Some(_) if hammer => tool::prompt(&builder, &builds, &settings, items),
@@ -520,6 +500,40 @@ fn draw(
             tool::legend(&builder, &builds, &settings, &material)
         },
     );
+}
+
+/// What the label over the bar says is in hand: the sword drawn, a tool, or the hammer's
+/// part and kind.
+fn in_hand(belongings: &Inventory, builder: &Builder, builds: &Builds) -> String {
+    let holding = belongings.holding();
+    let items = belongings.items();
+    let drawn = belongings.hands_full();
+    let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
+    let part = builder.picked(builds);
+    let label = match (holding, part.variant_name(builder.variant())) {
+        _ if drawn => "Sword and shield".to_string(),
+        (None, _) => match belongings.broken_in_hand() {
+            Some(tool) => format!("{}  (broken)", items.name(tool)),
+            None => "Empty hand".to_string(),
+        },
+        (Some(tool), _) if !hammer => items.name(tool).to_string(),
+        _ if builder.stowed => "Hammer:  nothing picked".to_string(),
+        (_, Some(variant)) if part.variants() > 1 => format!(
+            "{}:  {}  ({} of {})",
+            part.name,
+            variant,
+            builder.variant() + 1,
+            part.variants()
+        ),
+        (_, Some(variant)) => format!("{}:  {}", part.name, variant),
+        (_, None) => part.name.to_string(),
+    };
+    label
+        + if builder.snap || !hammer {
+            ""
+        } else {
+            "     grid off"
+        }
 }
 
 /// Fills the bar under the aiming mark while a job is held down: building, taking apart,

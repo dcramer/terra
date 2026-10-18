@@ -11,6 +11,7 @@ use crate::play::staged::{self, Staged};
 use crate::play::{Player, Stance};
 use bevy::prelude::*;
 use serde_json::json;
+use terra_world::shell::ScriptFrame;
 
 /// Its name on the stage.
 const NAME: &str = "sparring_partner";
@@ -19,8 +20,6 @@ const AHEAD_M: f32 = 4.0;
 /// How near it closes before it guards, and how far off it closes again.
 const CLOSE_M: f32 = 2.2;
 const OPEN_M: f32 = 3.2;
-/// The nearest a blow's drive takes it to the player, metres.
-const NEAREST_M: f32 = 1.3;
 /// How long it guards between blows, and stands open after one, seconds.
 const GUARD_S: f32 = 1.4;
 const RECOVER_S: f32 = 1.0;
@@ -36,6 +35,9 @@ pub(in crate::play) struct Partner {
     pub(super) beat_s: f32,
     blows: u32,
     pub(super) showing: Option<String>,
+    /// The nearest the player has come since its last wind-up, feet to feet, metres:
+    /// logged with the next, so a scripted run shows whether the bodies ever overlap.
+    closest_m: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -123,7 +125,9 @@ pub(super) fn think(
     players: Query<(&Transform, &Fighter), (With<Player>, With<Stance>, With<super::Drawn>)>,
     children: Query<&Children>,
     names: Query<&Name>,
+    frame: Option<Res<ScriptFrame>>,
 ) {
+    let frame = frame.map_or(0, |frame| frame.0);
     let dt = time.delta_secs();
     let set = &set.0;
     for (entity, place, mut staged, mut fighter, mut partner) in &mut partners {
@@ -158,6 +162,7 @@ pub(super) fn think(
         };
         let to = (foe - here).reject_from(up);
         let far = to.length();
+        partner.closest_m = Some(partner.closest_m.map_or(far, |was| was.min(far)));
         let toward = to / far.max(1e-3);
         if fighter.shove_s > 0.0 {
             staged.tell_go(Some(here + fighter.shove), fighter.shove.length());
@@ -177,7 +182,7 @@ pub(super) fn think(
             }
             staged.tell_face(here + fighter.way);
             // Never into the player: a blow's drive stops at arm's length.
-            if far < NEAREST_M {
+            if far < super::NEAREST_M {
                 speed = 0.0;
             }
             if fighter.shove_s <= 0.0 {
@@ -234,7 +239,11 @@ pub(super) fn think(
                     partner.showing = Some(each.clip.clone());
                     staged.tell_play(&each.clip, each.speed, true, 150, each.from);
                 }
-                info!("Melee: the partner winds up {name}");
+                info!(
+                    "Melee: frame {frame}: the partner winds up {name}, {far:.2} m off \
+                     (closest since its last {:.2} m)",
+                    partner.closest_m.take().unwrap_or(far)
+                );
             }
             Beat::Recover => {
                 fighter.guard_s = None;

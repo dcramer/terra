@@ -13,13 +13,27 @@ use terra_items::{ActionBar, Equipment, Grid, ItemId, ItemKind, Refused};
 #[derive(SystemParam)]
 pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
-    carried:
-        Query<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear), With<Player>>,
+    carried: Query<
+        'w,
+        's,
+        (
+            &'static mut Backpack,
+            &'static mut Bar,
+            &'static mut Gear,
+            Has<HandsFull>,
+        ),
+        With<Player>,
+    >,
     local: Query<'w, 's, Entity, IsLocalPlayer>,
     gained: MessageWriter<'w, Gained>,
     broke: MessageWriter<'w, Broke>,
     spilled: MessageWriter<'w, Spilled>,
 }
+
+/// A player's hands are on something other than the bar's tool, such as a drawn sword
+/// and shield (D405): the tool is put away, so nothing is in hand for the tools to use.
+#[derive(Component)]
+pub struct HandsFull;
 
 /// What was given to the player but did not fit: so many of a kind, which drop to the
 /// ground at their feet rather than being lost (`pile`).
@@ -42,9 +56,10 @@ impl<'w> Belongings<'w, '_> {
 
     /// What a player carries, if they are a player.
     pub fn of(&mut self, player: Entity) -> Option<Inventory<'_, 'w>> {
-        let (backpack, bar, gear) = self.carried.get_mut(player).ok()?;
+        let (backpack, bar, gear, hands_full) = self.carried.get_mut(player).ok()?;
         Some(Inventory {
             player,
+            hands_full,
             // Only to give new items their identities, which is not a change to the kinds
             // of item, so it does not mark them changed.
             items: self.items.bypass_change_detection(),
@@ -68,6 +83,7 @@ impl<'w> Belongings<'w, '_> {
 /// refused (`terra_items`), and what comes in or breaks is told as a message naming them.
 pub struct Inventory<'a, 'w> {
     player: Entity,
+    hands_full: bool,
     items: &'a mut Items,
     backpack: Mut<'a, Backpack>,
     bar: Mut<'a, Bar>,
@@ -104,8 +120,16 @@ impl Inventory<'_, '_> {
         protection(self.items, self.gear())
     }
 
-    /// The kind of tool in hand, if it is not broken.
+    /// Whether their hands are on something else than the bar's tool (`HandsFull`).
+    pub fn hands_full(&self) -> bool {
+        self.hands_full
+    }
+
+    /// The kind of tool in hand, if it is not broken nor put away.
     pub fn holding(&self) -> Option<ItemKind> {
+        if self.hands_full {
+            return None;
+        }
         holding(self.items, self.backpack(), self.bar())
     }
 
@@ -116,6 +140,9 @@ impl Inventory<'_, '_> {
 
     /// The tool in hand if it is broken, so it can be said why it does nothing.
     pub fn broken_in_hand(&self) -> Option<ItemKind> {
+        if self.hands_full {
+            return None;
+        }
         let item = self.bar().in_hand(self.backpack())?;
         let def = self.items.catalogue.get(item.kind).ok()?;
         (item.broken(def) && self.items.tool(item.kind).is_some()).then_some(item.kind)
@@ -375,5 +402,34 @@ impl Inventory<'_, '_> {
         if is_tool {
             self.bar.0.set(slot, Some(id));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::play::{test_player, test_world};
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn in_hand(world: &mut World, player: Entity) -> Option<ItemKind> {
+        world
+            .run_system_once(move |mut belongings: Belongings| {
+                belongings.of(player).and_then(|carried| carried.holding())
+            })
+            .unwrap()
+    }
+
+    /// The starting kit has a tool in hand; hands full put it away, and empty they hold it
+    /// again, so no tool answers its buttons while a sword is drawn (D405).
+    #[test]
+    fn full_hands_hold_no_tool() {
+        let mut world = test_world();
+        let player = test_player(&mut world, Vec3::Y * 2000.0);
+        let tool = in_hand(&mut world, player);
+        assert!(tool.is_some());
+        world.entity_mut(player).insert(HandsFull);
+        assert_eq!(in_hand(&mut world, player), None);
+        world.entity_mut(player).remove::<HandsFull>();
+        assert_eq!(in_hand(&mut world, player), tool);
     }
 }
