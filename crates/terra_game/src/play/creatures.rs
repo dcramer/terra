@@ -10,6 +10,8 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
+mod gait;
+
 use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Interactable, Interacted};
@@ -32,6 +34,8 @@ use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
+pub use gait::Pace;
+use gait::{CROSSES, bolt};
 use std::time::Duration;
 use terra_gen::{Rng, Seed};
 use terra_world::flora::Trunk;
@@ -126,6 +130,8 @@ pub struct Creature {
     /// The way it runs while it flees, chosen when it was startled (`bolt`); none when it was
     /// hurt with nobody about, and runs the way it faces.
     bolt: Vec3,
+    /// Why it is on the move, which sets how fast (`gait`).
+    pace: Pace,
 }
 
 impl Creature {
@@ -154,16 +160,17 @@ impl Creature {
         self.state = State::Roost { at, left };
     }
 
-    /// Running a way for so long, as one already put up by something and crossing a
-    /// player's way (wildlife's crossings).
+    /// Going a way for so long, calmly, as one already put up by something and crossing a
+    /// player's way (wildlife's crossings), until they come near.
     pub fn dash(&mut self, way: Vec3, for_s: f32) {
-        self.bolt = way;
+        (self.bolt, self.pace) = (way, Pace::Calm);
         self.facing = way;
         self.state = State::Flee(for_s);
     }
 
-    /// On the wing from one place to another.
+    /// On the wing from one place to another, calmly.
     pub fn fly(&mut self, from: Vec3, to: Vec3) {
+        self.pace = Pace::Calm;
         self.state = State::Fly {
             from,
             to,
@@ -187,6 +194,7 @@ impl Creature {
             aloft: 0.0,
             side: Vec3::X,
             bolt: Vec3::ZERO,
+            pace: Pace::Startled,
         }
     }
 }
@@ -485,6 +493,7 @@ pub(super) fn spawn(
                 aloft: 0.0,
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
+                pace: Pace::Startled,
             },
             bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
@@ -596,18 +605,10 @@ fn think(
         // does, and it goes away from it.
         if matches!(temper, Temper::Shy { .. })
             && !matches!(creature.state, State::Flee(_) | State::Fly { .. })
-            && let Some((_, from)) = frights
-                .iter()
-                .map(|(fright, at)| (fright, at.translation()))
-                .filter(|(fright, at)| at.distance(here) < fright.within_m)
-                .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+            && let Some(from) = nearest_fright(&frights, here)
         {
             creature.hurt = true;
-            away = Some(
-                (here - from)
-                    .reject_from(here.normalize())
-                    .normalize_or_zero(),
-            );
+            away = Some((here - from).reject_from(up).normalize_or_zero());
         }
         let next = match (temper, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
@@ -634,7 +635,7 @@ fn think(
                 if player_up && apart < flees_within_m * ROOSTING_LETS =>
             {
                 let away = away.unwrap_or(creature.facing);
-                creature.bolt = away;
+                (creature.bolt, creature.pace) = (away, Pace::Startled);
                 refuge(about, here, away, &around, &mut dice.0).unwrap_or(State::Roost {
                     at: here,
                     left: 2.0,
@@ -688,7 +689,12 @@ fn think(
                     State::Climb { trunk, height }
                 }
             }
-            (Temper::Shy { .. }, State::Flee(left)) if left > 0.0 => State::Flee(left - dt),
+            // A calm one breaks into a run once someone comes within the distance it flees at.
+            (Temper::Shy { flees_within_m, .. }, State::Flee(left)) if left > 0.0 => {
+                let near = player_up && apart < flees_within_m;
+                creature.pace = creature.pace.roused(near, creature.hurt);
+                State::Flee(left - dt)
+            }
             // A runner that has noticed someone coming stops what it is doing, turns to face
             // them and watches, a while before it bolts, as a hare or a fox does.
             (
@@ -718,6 +724,7 @@ fn think(
                 },
                 _,
             ) if creature.hurt || (apart < flees_within_m && player_up) => {
+                creature.pace = Pace::Startled.roused(true, creature.hurt);
                 creature.hurt = false;
                 creature.bolt = away.unwrap_or(Vec3::ZERO);
                 let away = away.unwrap_or(creature.facing);
@@ -858,41 +865,14 @@ fn refuge(
     }
 }
 
-/// How often an animal startled ahead of a player coming on dashes across their way to the
-/// other side, rather than breaking away on its own side.
-const CROSSES: f32 = 0.4;
-/// It dashes across only with so long a lead on them, metres along their way.
-const CROSSES_AHEAD_M: f32 = 6.0;
-
-/// Which way a startled animal makes off from a player, given the way from them to it and
-/// their heading (none if they stand): straight away from one standing; from one coming on,
-/// at an angle across their way and on ahead of them, as prey breaks from what comes at it
-/// rather than running down its path, and now and then, with the lead to make it, across to
-/// the other side of their way, as a hare dashes across a track. Shipped open worlds stage
-/// their wildlife so (Red Dead Redemption 2's animals breaking across the trail): it crosses
-/// the player's sight near, in the open, rather than shrinking straight away.
-fn bolt(from: Vec3, heading: Vec3, up: Vec3, crosses: bool) -> Vec3 {
-    let away = from.normalize_or_zero();
-    let speed = heading.length();
-    if speed < 0.5 || away == Vec3::ZERO {
-        return away;
-    }
-    let ahead = heading / speed;
-    let lead = from.dot(ahead);
-    if lead < 0.0 {
-        // Behind or beside them as they pass: away.
-        return away;
-    }
-    let beside = from - ahead * lead;
-    let mut side = if beside.length() > 0.3 {
-        beside.normalize()
-    } else {
-        ahead.cross(up).normalize_or_zero()
-    };
-    if crosses && lead > CROSSES_AHEAD_M {
-        side = -side;
-    }
-    (ahead * 0.6 + side * 0.8).normalize_or(away)
+/// Where the nearest frightful thing is that a creature here is within reach of, if any.
+fn nearest_fright(frights: &Query<(&Frightful, &GlobalTransform)>, here: Vec3) -> Option<Vec3> {
+    frights
+        .iter()
+        .map(|(fright, at)| (fright, at.translation()))
+        .filter(|(fright, at)| at.distance(here) < fright.within_m)
+        .map(|(_, at)| at)
+        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)))
 }
 
 /// A flight up off the ground roughly the way given, within so far: into a tree's crown, or
@@ -1029,12 +1009,12 @@ fn walk(
         let scale = at.scale;
         match creature.state {
             State::Fly { from, to, along } => {
-                let speed = match about.moves {
+                let speed = creature.pace.flies_mps(match about.moves {
                     Moves::Flies(mps) => mps,
                     // A swimmer that takes to the air when startled, as a duck does.
                     _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
                     _ => about.run_mps,
-                };
+                });
                 let length = (to - from).length().max(0.5);
                 let along = (along + speed * dt / length).min(1.0);
                 // Up off the ground and down onto it again, as high over the way as a tenth of
@@ -1121,7 +1101,7 @@ fn walk(
                 } else {
                     quarry.map_or(creature.facing, |toward| -toward)
                 },
-                about.run_mps,
+                creature.pace.runs_mps(about),
             ),
             (State::Chase, Some(toward)) => (toward, about.run_mps),
             (State::Attack(_), Some(toward)) => (toward, 0.0),
@@ -1197,10 +1177,6 @@ fn animate(
         };
         let about = bestiary.get(creature.species);
         let clips = animates.clips;
-        let paces = about.clips.paces;
-        let rate = |speed: f32, pace: Option<f32>| {
-            pace.map_or(1.0, |pace| (speed / pace.max(0.05)).clamp(0.4, 2.5))
-        };
         // Each keeps its own beat at rest, and picks up its clips where it will, so a group
         // does not idle and graze in step.
         let own = luck(creature.home());
@@ -1209,9 +1185,18 @@ fn animate(
             State::Idle(_) | State::Perch { .. } | State::Roost { .. } => (clips.idle, beat),
             State::Graze(_) => (clips.eat, beat),
             State::Wander(_) | State::Return => {
-                (clips.walk, rate(about.walk_mps, paces.map(|p| p.0)))
+                (clips.walk, gait::on_foot(about.walk_mps, about).1)
             }
-            State::Flee(_) | State::Chase => (clips.run, rate(about.run_mps, paces.map(|p| p.1))),
+            State::Flee(_) | State::Chase => {
+                let fleeing = matches!(creature.state, State::Flee(_));
+                let speed = if fleeing {
+                    creature.pace.runs_mps(about)
+                } else {
+                    about.run_mps
+                };
+                let (walks, rate) = gait::on_foot(speed, about);
+                (if walks { clips.walk } else { clips.run }, rate)
+            }
             State::Climb { .. } => (clips.run, 1.0),
             State::Fly { .. } => (clips.fly, 1.0),
             State::Attack(_) => (clips.attack, 1.0),
@@ -1337,6 +1322,7 @@ mod tests {
             aloft: 0.0,
             side: Vec3::X,
             bolt: Vec3::ZERO,
+            pace: Pace::Startled,
         };
         assert!(creature.unaware());
         creature.state = State::Flee(2.0);
@@ -1360,6 +1346,7 @@ mod tests {
                     aloft: 0.0,
                     side: Vec3::X,
                     bolt: Vec3::ZERO,
+                    pace: Pace::Startled,
                 },
                 Transform::from_translation(at),
             ))
@@ -1644,32 +1631,6 @@ mod tests {
             state(&world, calm),
             State::Fly { .. } | State::Flee(_)
         ));
-    }
-
-    #[test]
-    fn an_animal_ahead_of_a_player_coming_on_breaks_across_their_way_and_on_ahead() {
-        let up = Vec3::Y;
-        let heading = Vec3::NEG_Z * 4.0;
-        // Ten metres ahead and two to the right of a player running north.
-        let from = Vec3::new(2.0, 0.0, -10.0);
-        let breaks = bolt(from, heading, up, false);
-        assert!(breaks.z < -0.3, "on ahead: {breaks}");
-        assert!(
-            breaks.x > 0.6,
-            "out to its own side, across their way: {breaks}"
-        );
-        let dashes = bolt(from, heading, up, true);
-        assert!(
-            dashes.x < -0.6 && dashes.z < -0.3,
-            "across to the other side: {dashes}"
-        );
-        // Too near to make it across, it keeps to its side.
-        let near = bolt(Vec3::new(2.0, 0.0, -3.0), heading, up, true);
-        assert!(near.x > 0.6, "{near}");
-        // From someone standing, or once they have passed it, straight away.
-        assert_eq!(bolt(from, Vec3::ZERO, up, true), from.normalize());
-        let behind = Vec3::new(2.0, 0.0, 3.0);
-        assert_eq!(bolt(behind, heading, up, true), behind.normalize());
     }
 
     #[test]

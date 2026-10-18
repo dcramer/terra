@@ -37,8 +37,8 @@ pub(super) fn cross(
 ) -> Option<Vec<Entity>> {
     let about = bestiary.get(species);
     let (mps, flies) = match about.moves {
-        Moves::Flies(mps) => (mps, true),
-        Moves::Walks => (about.run_mps, false),
+        Moves::Flies(mps) => (creatures::Pace::Calm.flies_mps(mps), true),
+        Moves::Walks => (creatures::Pace::Calm.runs_mps(about), false),
         Moves::Swims(_) => return None,
     };
     if about.wades_m > 0.0 || mps < 1.0 {
