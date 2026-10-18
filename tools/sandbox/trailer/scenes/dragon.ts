@@ -205,11 +205,13 @@ function script(s: Script) {
   // storey and roof, and its bond timbers give way and it comes down, the dragon over it
   // roaring; the camera out over the meadow east of the castle, high enough to see the
   // keep over the east wall, whose hoardings never burned, so no smoke stands between, the
-  // low sun behind it.
-  course.hover(s, fall(19), [12, 26, -10], [k[0], 12, k[2]]);
-  track(s, course, fall(20) + 1, fall(25), [48, 20, -10], [50, 21, -6], [k[0], 10, k[2]], 0.65);
+  // low sun behind it. The dragon hovers upwind of the keep, off its north-east corner, the
+  // morning wind carrying the keep's smoke south away from it: hovering south of the keep it
+  // was inside the keep's own plume, a ghost in brown haze (castle films r4 to r6).
+  course.hover(s, fall(19), [11, 25, -33], [k[0], 12, k[2]]);
+  track(s, course, fall(20) + 1, fall(25), [48, 20, -10], [50, 21, -6], [k[0] + 4, 13, k[2] - 6], 0.65);
   sweep(s, fall(20.6), fall(21.8), [
-    [k[0] + KEEP_HALF, KEEP_JETTY, k[2] + KEEP_HALF - 1],
+    [k[0] + KEEP_HALF, KEEP_JETTY, k[2] - KEEP_HALF + 1],
     [k[0] + 1, KEEP_JETTY + 2.5, k[2]],
   ]);
   s.frame = fall(22);

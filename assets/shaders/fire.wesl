@@ -43,6 +43,9 @@ struct Fire {
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var flipbook_sampler: sampler;
 // What breaths have let go: soot, then drops, each where and when, then its going and luck.
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<storage, read> puffs: array<vec4<f32>>;
+// The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
+// tonemapper multiplied the last frame by, after Bevy's auto exposure.
+@group(constants::MATERIAL_BIND_GROUP) @binding(105) var<storage, read> adapted: vec4<f32>;
 // How many soot puffs come before the drops; must match SOOT_PUFFS in fire.rs.
 const SOOT_PUFFS: u32 = 320u;
 // How long a drop burns as it falls, in seconds.
@@ -75,13 +78,19 @@ struct Out {
 
 // How bright glowing soot is taken to be, on the luminances `soot` works from.
 const LUMINANCE: f32 = 1.0;
-// How far over the tonemapper's knee glowing soot is kept, by the camera's exposure. Eye
-// adaptation is applied after the scene is drawn (Bevy's auto exposure, in the tonemapping
-// pass), so a flame kept under the knee of `view.exposure` alone was darkened with the rest
-// of a sunlit frame by up to the stop the day lets it darken (scene.rs, ADAPT_DARKER): a
-// shouldered yellow at half its brightness, the olive of castle film r5 and r6 (flame hearts
-// at sRGB 162,149,89). One stop of headroom keeps its heart a full yellow then.
-const HEADROOM: f32 = 2.0;
+// Glowing soot is kept under the tonemapper's knee as it is shown on the screen: the camera's
+// exposure and the eye's adaptation together, the adaptation applied after the scene is drawn
+// (Bevy's auto exposure, in the tonemapping pass). Kept under the knee of `view.exposure`
+// alone, a flame was darkened with the rest of a sunlit frame by the stop the day lets it
+// darken (scene.rs, ADAPT_DARKER): its yellow hearts at half brightness, olive (castle films
+// r5 and r6, sRGB 162,149,89), and with a stop of headroom guessed for it never white.
+const KNEE: f32 = 1.0;
+// The white a white-hot core is lifted toward on the screen, far past the tonemapper's peak
+// so it clips there as fire does on film (4% of a barn fire's flame pixels are white), and
+// how bright on the screen the lift starts and is whole.
+const WHITE: f32 = 4.0;
+const LIFT_FROM: f32 = 1.0;
+const LIFT_TO: f32 = 2.0;
 // How far in front of what is behind it a card fades in, in metres, so it never shows a
 // straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
@@ -139,10 +148,18 @@ fn soot(kelvin: f32, amount: f32) -> vec3<f32> {
     let slope = select(0.0105, 0.0064, kelvin > 1400.0);
     let nits = exp(7.05 + (kelvin - 1400.0) * slope) * LUMINANCE * amount;
     let unit = 0.2126 + 0.7152 * g + 0.0722 * 0.02;
-    let exposed = vec3(1.0, g, 0.02) * (nits / unit) * view.exposure;
-    let kept = HEADROOM * (vec3(1.0) - exp(-exposed / HEADROOM));
-    let lift = 0.5 * saturate((nits * view.exposure - 3.0) / 10.0);
-    return kept + (vec3(HEADROOM) - kept) * lift;
+    let shown = exp2(adapted.x);
+    let screen = nits * view.exposure * shown;
+    let exposed = vec3(1.0, g, 0.02) * (screen / unit);
+    let kept = KNEE * (vec3(1.0) - exp(-exposed / KNEE));
+    // White-hot as soot glows hotter: its green rising to its red first (yellow), and only
+    // then all three past the peak (white). Lifted straight toward white an orange passes
+    // through salmon, white blobs with pink rims (castle film r7's first probe).
+    let lift = smoothstep(LIFT_FROM, LIFT_TO, screen);
+    let yellow = saturate(2.0 * lift);
+    let white = saturate(2.0 * lift - 1.0);
+    let hot = vec3(kept.r, mix(kept.g, max(kept.g, 0.92 * kept.r), yellow), mix(kept.b, max(kept.b, 0.3 * kept.r), yellow));
+    return mix(hot, vec3(WHITE), white * white) / shown;
 }
 
 // How much of what is behind it a flame covers, for what it gives and its alpha. Its light is
@@ -457,17 +474,32 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
         let mouth = 1.0 - smoothstep(0.0, 0.3, t);
         let struck = smoothstep(0.7, 0.92, t) * (1.0 - smoothstep(0.92, 1.0, t));
-        let heat_here = body * saturate(mix(0.2, 0.02, smoothstep(0.0, 0.5, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
+        // Dense and burning through its body, thinning only as it burns out past the middle:
+        // its heat from the flipbook's tongues alone left most of the stream under the alpha's
+        // threshold, a translucent smear (castle film r6 and r7's probes, alpha 0.1 to 0.3).
+        let heat_here = body * saturate(mix(0.45, 0.04, smoothstep(0.25, 0.85, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
         let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
         let alpha = smoothstep(0.05, 0.4, heat_here) * fade * heat * soft;
-        let kelvin = 1060.0 + 640.0 * pow(heat_here, 1.3) + 200.0 * mouth - 110.0 * t + 90.0 * struck;
+        // Its body a yellow-orange, hotter than a building's flames, as burning thickened fuel
+        // is in footage; dull red only at its thin rims.
+        let kelvin = 1150.0 + 600.0 * pow(heat_here, 1.2) + 250.0 * mouth - 100.0 * t + 90.0 * struck;
         light = soot(kelvin, alpha) * (1.0 - 0.9 * pocket);
-        // The rod overexposed, white-yellow as a flamethrower's is on film, and solid.
-        let rod = mouth * alpha;
-        light = mix(light, vec3(1.0, 0.92, 0.66) * HEADROOM, rod * 0.85);
-        // A stream of thickened fuel is dense: it covers more than a building's thin flames.
-        cover = max(saturate(mix(covers(light, alpha), alpha, 0.5) + pocket * fade * heat * soft * 0.8), rod * 0.95);
+        // The rod a solid core along each card over the first two fifths of the stream,
+        // whatever the flipbook's tongue there, a rope of fire from the jaw: overexposed,
+        // white-yellow as a flamethrower's is on film, past the tonemapper's peak on the
+        // screen whatever the eye is adapted to.
+        let core = (1.0 - smoothstep(0.12, 0.3, length(p) + (n - 0.5) * 0.12)) * window;
+        let rod = (1.0 - smoothstep(0.0, 0.4, t)) * core * fade * heat * soft;
+        light = mix(light, vec3(1.0, 0.92, 0.72) * WHITE / exp2(adapted.x), rod * 0.85);
+        // Covering what is behind it by how yellow it glows, its dull red rims next to not at
+        // all, as glowing gas is thin: the cards are drawn in the stream's order, not by depth,
+        // so rims covering half of what is behind them laid dull red over the bright cores of
+        // the cards under them, layer on layer, and the stream summed to rust (castle film r6,
+        // sRGB 114,68,47 by the jaw) and then salmon. Black soot covers.
+        let yellow = light.g / max(light.r, 1.0e-4);
+        let glows = alpha * mix(0.08, 0.97, smoothstep(0.3, 0.8, yellow));
+        cover = max(saturate(glows + pocket * fade * heat * soft * 0.8), rod * 0.95);
     }
     if max(light.r, cover) < 0.002 {
         discard;

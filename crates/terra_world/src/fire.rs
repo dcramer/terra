@@ -17,6 +17,7 @@
 //! Every blaze is a slot of one buffer the GPU reads, so all flames are one draw, all
 //! embers another, all smoke a third, however many burn; how many slots, by the preset.
 
+use crate::adaptation::Adaptation;
 use crate::climate::ClimateFields;
 use crate::daylight::Clock;
 use crate::quality::Quality;
@@ -170,6 +171,10 @@ pub struct FireExtension {
     /// The breaths' soot and drops (`Puffs`).
     #[storage(104, read_only)]
     puffs: Handle<ShaderBuffer>,
+    /// The exposure the eye is adapted to (`adaptation`), so a flame's hottest cores clip
+    /// white on the screen whatever the adaptation does.
+    #[storage(105, read_only)]
+    adaptation: Handle<ShaderBuffer>,
 }
 
 /// The flames' flipbook.
@@ -358,6 +363,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut buffers: ResMut<Assets<ShaderBuffer>>,
     assets: Res<AssetServer>,
+    adaptation: Res<Adaptation>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
 ) {
@@ -408,6 +414,7 @@ fn setup(
                 slots: slots.clone(),
                 flipbook: flipbook.clone(),
                 puffs: puffs.buffer.clone(),
+                adaptation: adaptation.0.clone(),
             },
         })
     });
