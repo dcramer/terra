@@ -24,13 +24,13 @@ pub fn near(planet: &Planet, point: Vec3) -> (f32, f32) {
 }
 
 /// How much grass a bank holds so high over its water: a mountain lake's scoured stones reach
-/// a man's height up it; a lowland lake's meadow comes down to a hand over its water, wet silt
-/// below (the ground shader's soft shore), as a lowland mere's bank is (Red Dead Redemption 2's
-/// and Kingdom Come's ponds, sedge and grass to the waterline), not a band of bare ground
-/// tens of metres wide where the bank is flat.
+/// a man's height up it; a lowland lake's meadow comes down to a few centimetres over its
+/// water, a margin of wet mud below (the ground shader's soft shore), as a lowland mere's bank
+/// is (Red Dead Redemption 2's and Kingdom Come's ponds, sedge and grass to the waterline), not
+/// a band of bare ground tens of metres wide where the bank is flat.
 pub fn grass(above_m: f32, lowland: f32) -> f32 {
-    let from = 0.5 + (0.12 - 0.5) * lowland;
-    let to = 1.6 + (0.45 - 1.6) * lowland;
+    let from = 0.5 + (0.03 - 0.5) * lowland;
+    let to = 1.6 + (0.3 - 1.6) * lowland;
     let t = ((above_m - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -39,11 +39,11 @@ pub fn grass(above_m: f32, lowland: f32) -> f32 {
 mod tests {
     use super::*;
 
-    /// A lowland lake's meadow comes down to a hand over its water; a mountain lake's bank is
+    /// A lowland lake's meadow comes down to its water; a mountain lake's bank is
     /// bare to a man's height, the sea's alike; nothing grows under any water.
     #[test]
     fn a_lowland_banks_grass_comes_down_to_its_water() {
-        assert!(grass(0.5, 1.0) > 0.95);
+        assert!(grass(0.3, 1.0) > 0.95);
         assert!(grass(0.5, 0.0) < 0.01);
         assert!(grass(1.7, 0.0) > 0.99);
         assert!(grass(0.0, 1.0) == 0.0 && grass(-1.0, 0.0) == 0.0);

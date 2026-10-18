@@ -1394,12 +1394,17 @@ fn fragment(
         {
             let above = in.uv_b.y + (blotch - 0.5) * 0.7 + (fleck - 0.5) * 0.15;
             let lowland = lowland_at(from_centre - ground.sea_radius_m);
-            // A lowland lake's shore is soft: wet silt and sand a hand or two either side of
-            // the waterline, its meadow or moss down to it, not a band of scoured granite.
-            let soft = (1.0 - smoothstep(0.12, 0.45, above)) * smoothstep(-2.5, -0.8, above) * lowland;
+            // A lowland lake's shore is soft: wet mud a hand or so either side of the waterline,
+            // its meadow or moss down to it, not a band of scoured granite. Mud, not the sand
+            // scan, whose pebbles read as coarse grey shingle from above ("textures of the
+            // beach are kinda chonky"), finer than the field's soil, as silt is.
+            // Its edge frayed less than the mountain shore's: on a flat bank the blotches'
+            // half metre laid mud in patches far up the meadow.
+            let wet_above = in.uv_b.y + (blotch - 0.5) * 0.2 + (fleck - 0.5) * 0.1;
+            let soft = (1.0 - smoothstep(0.03, 0.3, wet_above)) * smoothstep(-2.0, -0.6, wet_above) * lowland;
             if soft > 0.0 {
                 let silt = vec3<f32>(0.11, 0.085, 0.055) * (0.75 + 0.5 * fleck) * tones;
-                ground_is = over(ground_is, layer(SAND, 0.8, silt, world + 67.0, gx, gy, n, 1.0), soft);
+                ground_is = over(ground_is, layer(SOIL, 0.6, silt, world + 67.0, gx, gy, n, 1.0), soft);
             }
             let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above) * (1.0 - lowland);
             if shore > 0.0 {

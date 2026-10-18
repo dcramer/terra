@@ -155,9 +155,12 @@ pub fn fill(region: &Region, sea: Option<f32>) -> Lakes {
     for (k, stands) in bottoms {
         level[k] = height[k].max(stands);
     }
-    // The lakes: cells under water, joined to their neighbours under the same level.
-    let wet =
-        |k: usize| level[k] - height[k] >= SHALLOWEST_M && sea.is_none_or(|sea| level[k] > sea);
+    // The lakes: cells under water, joined to their neighbours under the same level, however
+    // shallow those are. A lake's shallows are its water too: left dry, a flat basin's margin
+    // a hand under the water was bare ground below the lake's level, tens of metres wide past
+    // where its water was drawn (D381's lake). Only a basin shallow everywhere is wet ground.
+    let under = |k: usize| level[k] > height[k] && sea.is_none_or(|sea| level[k] > sea);
+    let wet = |k: usize| under(k) && level[k] - height[k] >= SHALLOWEST_M;
     let mut lake = vec![None; n * n];
     let mut lakes = Vec::new();
     for start in 0..n * n {
@@ -188,7 +191,7 @@ pub fn fill(region: &Region, sea: Option<f32>) -> Lakes {
                     continue;
                 }
                 let next = nr as usize * n + nc as usize;
-                if lake[next].is_none() && wet(next) && (level[next] - level[k]).abs() < 1e-3 {
+                if lake[next].is_none() && under(next) && (level[next] - level[k]).abs() < 1e-3 {
                     lake[next] = Some(index);
                     stack.push(next);
                 }
@@ -262,6 +265,33 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn a_lakes_shallows_are_its_water_and_a_shallow_hollow_is_wet_ground() {
+        // A pond 3 m deep in the middle of a flat floor 0.1 m under the rim's gap, so its
+        // shallows reach far out over the floor; and apart from it a hollow 0.2 m deep.
+        let land = region(41, |x, y| {
+            let d = (x * x + y * y).sqrt();
+            let hollow = ((x - 120.0).powi(2) + (y - 120.0).powi(2)).sqrt();
+            if d < 40.0 {
+                -3.0
+            } else if d < 110.0 {
+                -0.1
+            } else if hollow < 25.0 {
+                0.8
+            } else if x > 0.0 && y.abs() < 15.0 {
+                0.0
+            } else {
+                1.0
+            }
+        });
+        let lakes = fill(&land, None);
+        assert_eq!(lakes.lakes.len(), 1, "{:?}", lakes.lakes);
+        // Its water reaches over the whole floor, to the ground at its level.
+        for (k, under) in lakes.lake.iter().enumerate() {
+            assert_eq!(under.is_some(), land.heights[k] < -0.05, "cell {k}");
         }
     }
 

@@ -56,14 +56,23 @@ fn corner(middle: Vec2, texel_m: f32) -> Vec2 {
 
 /// How wide a texel is for a camera so high over the ground, and how far ahead of it, along
 /// the ground the way it looks, the map's middle stands: round its feet at eye height; from
-/// high up, where a bird's-eye view looks out over a settlement or a valley (D381), twice
-/// as wide and ahead of it, so the ground it sees is painted rather than bare, its streets
-/// and meadow out to some 200 m. `level` is how much of its view lies along the ground, 1
-/// looking out level, 0 straight down, where the map is round the ground under it.
+/// high up, where a bird's-eye view looks out over a settlement or a valley (D381), wider and
+/// ahead of it, so the ground it sees is painted rather than bare, its streets and meadow out
+/// to some 200 m. Each doubling of the height over [`HIGH_M`] doubles the texel, to
+/// [`WIDEST_M`], as a clipmap's eye height picks its finest level: a camera 60 m up looking out
+/// over a town 400 m off sees its streets and square, which a 256 m map left bare past 220 m.
+/// `level` is how much of its view lies along the ground, 1 looking out level, 0 straight
+/// down, where the map is round the ground under it.
 fn reach(height_m: f32, level: f32) -> (f32, f32) {
     if height_m > HIGH_M {
-        let half = TEXELS as f32 * TEXEL_M;
-        (TEXEL_M * 2.0, (half - BEHIND_M) * level.clamp(0.0, 1.0))
+        let mut texel = TEXEL_M * 2.0;
+        let mut over = height_m / HIGH_M;
+        while over >= 2.0 && texel < WIDEST_M {
+            texel *= 2.0;
+            over /= 2.0;
+        }
+        let half = TEXELS as f32 * texel / 2.0;
+        (texel, (half - BEHIND_M) * level.clamp(0.0, 1.0))
     } else {
         (TEXEL_M, 0.0)
     }
@@ -73,6 +82,8 @@ fn reach(height_m: f32, level: f32) -> (f32, f32) {
 /// out level: what it sees under itself.
 const HIGH_M: f32 = 18.0;
 const BEHIND_M: f32 = 32.0;
+/// The widest a texel grows, however high the camera: a street a few metres wide still reads.
+const WIDEST_M: f32 = 2.0;
 
 /// From a point in the world to its place on a map with this middle: x and y from 0 to 1.
 fn from_world(start: &Start, middle: Vec2, texel_m: f32) -> Mat4 {
@@ -368,5 +379,11 @@ mod tests {
         );
         // Straight down, round the ground under it.
         assert_eq!(reach(40.0, 0.0).1, 0.0);
+        // Some 60 m up, looking out 8 degrees down over a town 400 m off: painted to its
+        // far side, 480 m, and never coarser than a street is wide.
+        let (higher, ahead) = reach(60.0, libm::cosf(8f32.to_radians()));
+        let half = TEXELS as f32 * higher / 2.0;
+        assert!(ahead + half > 470.0, "{ahead} {half}");
+        assert!(reach(500.0, 1.0).0 <= 2.0);
     }
 }
