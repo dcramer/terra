@@ -34,7 +34,7 @@
         own: Some("data/kits/pieces/slate.ron"),
         masks: (wear: 0.14, moss: 0.3, moss_tint: (1.15, 1.15, 1.0)),
     ),
-    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // The real thing, which the material bench shows it beside (`cargo xtask material`, D386;
     // art/references/README.md).
     reference: Some((
         photo: "art/references/slate.jpg",

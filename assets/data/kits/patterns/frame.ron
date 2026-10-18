@@ -20,7 +20,7 @@
 // burns       what it does in a fire (D377, terra_build::fire): the heat it catches at, how
 //             many seconds it burns and how hot; its frame burns, slower than logs, the daub
 //             between holding little
-// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+// look        what the material bench holds every material of it to (`cargo xtask material`, D386,
 //             terra_build::look): its infill's texels a metre, sharpness, brightness against
 //             an 18% grey card, values' spread and stretch
 (

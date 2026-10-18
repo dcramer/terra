@@ -140,14 +140,28 @@ fn code_fault(code: &str) -> Option<String> {
     Some(format!("{code}: no such module"))
 }
 
-/// The groups of scenes the ratchet's baseline has faults recorded for, in any set.
+/// The groups of scenes the ratchet's baseline has faults recorded for, in any set: the
+/// first column of every file in `artifacts-baseline/<set>/` (D414).
 fn faulty_groups() -> BTreeSet<String> {
-    let baseline = root().join("examples/artifacts-baseline.tsv");
-    std::fs::read_to_string(baseline)
-        .unwrap_or_default()
-        .lines()
-        .filter(|line| !line.starts_with('#'))
-        .filter_map(|line| line.split('\t').nth(1).map(str::to_string))
+    let sets = std::fs::read_dir(root().join("examples/artifacts-baseline"))
+        .into_iter()
+        .flatten()
+        .flatten();
+    let files = sets.flat_map(|set| {
+        std::fs::read_dir(set.path())
+            .into_iter()
+            .flatten()
+            .flatten()
+    });
+    files
+        .filter_map(|file| std::fs::read_to_string(file.path()).ok())
+        .flat_map(|text| {
+            text.lines()
+                .filter(|line| !line.starts_with('#'))
+                .filter_map(|line| line.split('\t').next().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .filter(|group| !group.is_empty())
         .collect()
 }
 

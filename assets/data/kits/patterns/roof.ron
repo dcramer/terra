@@ -30,7 +30,7 @@
 //             shake at a time, the gaps between them the lowest share of its height map
 // burns       what it does in a fire (D377, terra_build::fire): None for slate; a covering
 //             of wood or straw says its own in its pack
-// look        what the material bench holds every covering of it to (`cargo xtask look`, D386,
+// look        what the material bench holds every covering of it to (`cargo xtask material`, D386,
 //             terra_build::look): its covering's texels a metre, its sharpness from 1, 2 and
 //             5 m, its brightness against an 18% grey card lit and in shade, its values'
 //             spread, and the most of each texture set drawn stretched, its own pieces'

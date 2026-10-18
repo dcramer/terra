@@ -10,12 +10,21 @@
 use crate::build::{KITS, artifacts_command, fuzz_args};
 use crate::scope::{self, Scope};
 use crate::stage::{self, Said, Step};
-use crate::{land, output, root, slot, stamp};
+use crate::{Task, land, output, root, slot, stamp};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "check",
+    takes: "[--quick] [--all] [--pushing] [--verbose]",
+    does: "what every change must pass, scoped to what it touches (D398): before each push, lints and every test of the crates changed and those depending on them, and the kit, foliage, artifact, fuzz, Blender, docs and dependency checks that can see it; --quick, before each commit, linters and the fast tests of the crates changed in a 30 s budget; --all runs everything",
+    group: "Play and check",
+    run: check,
+}];
 
 /// The only crates allowed to depend on Bevy (D28): the applications, and the world on
 /// screen that the game stands on (D198).
@@ -451,6 +460,7 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
             Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
             How::Here(crate::sizes::sizes_hold),
         ),
+        baselines(push),
         (
             Step::new("one definition", Said::Printed, LOGS),
             How::Here(crate::primitives::one_definition),
@@ -510,7 +520,7 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
 /// A command run at a lower priority, as everything the check runs is (D406): its builds and
 /// tests take every core, and renders, films and the developer's game started beside it stay
 /// responsive. `nice` is on Linux and macOS; elsewhere it runs as it is.
-fn niced(program: &str) -> Command {
+pub(crate) fn niced(program: &str) -> Command {
     if cfg!(unix) {
         let mut command = Command::new("nice");
         command.args(["-n", "10", program]);
@@ -522,6 +532,16 @@ fn niced(program: &str) -> Command {
 
 /// Formatting, of the crates changed: it goes file by file, so they are all a change can
 /// unsettle.
+/// The baselines (D414): against HEAD before a commit, the merge-base before a push.
+fn baselines(push: bool) -> (Step, How) {
+    let step = Step::new("baselines", Said::Printed, LOGS);
+    if push {
+        (step, How::Here(crate::baselines::hold_before_push))
+    } else {
+        (step, How::Here(crate::baselines::hold_before_commit))
+    }
+}
+
 fn fmt(scope: &Scope) -> (Step, How) {
     let step = Step::new("fmt", Said::Fmt, LOGS).rerun("cargo fmt --all (it fixes them)");
     if !scope.all() && !scope.rust {

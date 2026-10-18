@@ -457,7 +457,7 @@ Checks, developer tools, languages and the repository.
 | [D376](decisions/D376.md) | Recording decisions without conflicts | Tech | Agent | Decided | The log of decisions changed is its own file… |
 | [D381](decisions/D381.md) | A settlement's time-lapse, built by the building system's own steps | Tech | Agent | Decided | `--timelapse <file>[@frame]` with the town experiment… |
 | [D385](decisions/D385.md) | Building's debug views | Tech | Agent | Decided | One key, F4 (Shift+F4 back), and the remote's… |
-| [D386](decisions/D386.md) | The material bench | Tech | Agent | Decided | `cargo xtask look <material>…\|--all`… |
+| [D386](decisions/D386.md) | The material bench | Tech | Agent | Decided | `cargo xtask material <material>…\|--all`… |
 | [D387](decisions/D387.md) | A Makefile as the front door | Tech | Developers | Decided | A `Makefile` at the root gets a new machine ready… |
 | [D388](decisions/D388.md) | Quiet gates | Tech | Agent | Decided | `cargo xtask check` and `--quick` print a line a stage… |
 | [D389](decisions/D389.md) | A file per decision | Tech | Agent | Decided | Each decision is its own file, `docs/decisions/Dnnn.md`… |
@@ -472,8 +472,11 @@ Checks, developer tools, languages and the repository.
 | [D406](decisions/D406.md) | The push's slow sweeps run on every core, optimised, and an asset is read only by the crates that read it | Tech | Agent | Decided | A test that sweeps many independent cases runs them on… |
 | [D408](decisions/D408.md) | Release builds our crates incrementally; bench builds them whole | Tech | Agent | Decided | Our own crates build incrementally in the release… |
 | [D409](decisions/D409.md) | Rendered indexes merge row by row | Tech | Agent | Decided | An index of files that live on their own is rendered… |
+| [D410](decisions/D410.md) | Tasks register from their own modules | Tech | Agent | Decided | Each xtask module that owns tasks lists them in its own… |
+| [D411](decisions/D411.md) | A full run on main, by hand, lowers the baselines and bisects what breaks | Tech | Agent | Decided | `cargo xtask nightly` (`xtask/src/nightly.rs`) runs what… |
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
 | [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
+| [D414](decisions/D414.md) | A ratchet's baseline is raised by a change with its why, and lowered only by the full run on main | Tech | Agent | Decided | A ratchet's baseline (the artifacts and fuzz counts… |
 
 ## Superseded and rejected
 

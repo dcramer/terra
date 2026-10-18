@@ -39,7 +39,7 @@
 //!   middle at `at`, metres east, above the ground and south of the start, its face toward
 //!   `facing` (east, up, south), `size` metres square (half a metre unless told), its colour
 //!   `albedo` in linear light (0.18, an 18% grey card, unless told), rough, not metal. The
-//!   material bench stands them beside what it measures (`cargo xtask look`).
+//!   material bench stands them beside what it measures (`cargo xtask material`).
 //! - `sandbox.quit`: closes the sandbox.
 //! - `sandbox.whoami`: the token it was started with (`--remote-token`), so a script can
 //!   tell the run it started from another session's on the same port.

@@ -4,7 +4,7 @@
 // research/colour-balance-2026-10-15.md), each against its pattern's targets, so a change that
 // makes a material worse fails here rather than in a review.
 //
-//   cargo xtask look <material>... | --all [--out shots/look]
+//   cargo xtask material <material>... | --all [--out shots/material]
 //
 // For each material, the kit sheet lays its preview alone (`--sheet-rows "<name>: preview"`,
 // tools/kits/preview.ts) and two scripted runs on the real GPU shoot fixed vantages of it: at
@@ -28,7 +28,7 @@
 // Each number against its pattern's `look` targets (assets/data/kits/patterns/*.ron), passing
 // or failing; one JPG under 2 MB a material beside its pack's reference photograph
 // (`reference` in assets/data/packs/*.ron, fetched where it is missing), and a table, in
-// shots/look/. `--all` is the building baseline's materials (D333). Exits 1 if any fails.
+// shots/material/. `--all` is the building baseline's materials (D333). Exits 1 if any fails.
 // Needs ImageMagick. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
@@ -476,10 +476,10 @@ async function photo(material: Material): Promise<string | undefined> {
     if (!reply.ok) throw new Error(`${reply.status} ${reply.statusText}`);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, Buffer.from(await reply.arrayBuffer()));
-    console.log(`look: fetched ${material.name}'s reference photograph to ${relative(ROOT, path)} (${reference.licence})`);
+    console.log(`material: fetched ${material.name}'s reference photograph to ${relative(ROOT, path)} (${reference.licence})`);
     return path;
   } catch (error) {
-    console.log(`look: ${material.name}'s reference photograph could not be fetched from ${reference.source}: ${(error as Error).message}`);
+    console.log(`material: ${material.name}'s reference photograph could not be fetched from ${reference.source}: ${(error as Error).message}`);
     return undefined;
   }
 }
@@ -504,7 +504,7 @@ function shoot(material: Material, out: string): Map<View, string> {
     if (!said.includes("SANDBOX saved")) throw new Error(`the run at ${hour}:00 did not finish:\n${said.split("\n").slice(-20).join("\n")}`);
     if (said.includes("sandbox.card") && /Calls: .*refused|Calls: .*no method/.test(said)) throw new Error(`the grey cards were refused:\n${said.split("\n").filter((line) => line.includes("Calls")).join("\n")}`);
     views.forEach((view, i) => shots.set(view, `${prefix}-${String(frames[i]).padStart(5, "0")}.png`));
-    console.log(`look: ${material.name} at ${hour}:00, ${views.length} views in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+    console.log(`material: ${material.name} at ${hour}:00, ${views.length} views in ${((Date.now() - started) / 1000).toFixed(0)} s`);
   }
   return shots;
 }
@@ -613,10 +613,10 @@ function sheet(material: Material, shots: Map<View, string>, reference: string |
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
-    options: { all: { type: "boolean" }, out: { type: "string", default: "shots/look" }, help: { type: "boolean", short: "h" } },
+    options: { all: { type: "boolean" }, out: { type: "string", default: "shots/material" }, help: { type: "boolean", short: "h" } },
   });
   if (values.help || (!values.all && !positionals.length)) {
-    console.log("usage: cargo xtask look <material>... | --all [--out shots/look]");
+    console.log("usage: cargo xtask material <material>... | --all [--out shots/material]");
     process.exit(values.help ? 0 : 2);
   }
   const started = Date.now();
@@ -625,9 +625,9 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const chosen = materials(names);
   if (!buildOffscreen()) throw new Error("the sandbox does not build");
-  console.log(`look: ${chosen.map((m) => m.name).join(", ")}; measuring stretch (texels)…`);
+  console.log(`material: ${chosen.map((m) => m.name).join(", ")}; measuring stretch (texels)…`);
   const stretched = texels(chosen);
-  console.log(`look: stretch measured in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  console.log(`material: stretch measured in ${((Date.now() - started) / 1000).toFixed(0)} s`);
   const verdicts: string[] = [];
   let failed = 0;
   for (const material of chosen) {
@@ -645,7 +645,7 @@ async function main() {
     if (!lines.every((line) => line.ok)) failed++;
   }
   console.log(verdicts.join("\n"));
-  console.log(`look: ${chosen.length} materials in ${((Date.now() - started) / 60000).toFixed(1)} min; ${failed ? `${failed} FAILED` : "every one holds"} (shots/look/)`);
+  console.log(`material: ${chosen.length} materials in ${((Date.now() - started) / 60000).toFixed(1)} min; ${failed ? `${failed} FAILED` : "every one holds"} (shots/material/)`);
   process.exit(failed ? 1 : 0);
 }
 
@@ -653,7 +653,7 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
-    console.error(`look: ${(error as Error).message}`);
+    console.error(`material: ${(error as Error).message}`);
     process.exit(1);
   }
 }

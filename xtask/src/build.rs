@@ -1,8 +1,68 @@
 //! The building tasks: the kit and contract checkers, the rules, the sections' and the
 //! drawing's measures, and the texel density check (docs/building.md).
 
-use crate::{root, run};
+use crate::{Task, node, root, run};
 use std::process::Command;
+
+/// The tasks this module runs (D410), and the material bench beside them (tools/kits).
+pub(crate) const TASKS: &[Task] = &[
+    Task {
+        name: "kits",
+        takes: "",
+        does: "check every building kit file: the materials it needs, sizes and the style guide's budgets",
+        group: "Play and check",
+        run: |_| kits(),
+    },
+    Task {
+        name: "contract",
+        takes: "",
+        does: "check every model the game places against the model contract: size, anchor, axes, sockets and, for doors and shutters, fit in their hole",
+        group: "Play and check",
+        run: |_| contract(),
+    },
+    Task {
+        name: "rules",
+        takes: "[--pure] [--here] [--debug]",
+        does: "audit building: its rules by test and live, the village's drawing, edits' and frames' timings (research/building-audit.md)",
+        group: "Play and check",
+        run: rules,
+    },
+    Task {
+        name: "sections",
+        takes: "[building]",
+        does: "time laying and merging the village's sections, as the game's workers do, against the 2 ms bar, and the block kinds' near triangles and MiB against their budget (D284)",
+        group: "Play and check",
+        run: sections,
+    },
+    Task {
+        name: "artifacts",
+        takes: "[building] [--all] [--quick] [--ratchet|--raise WHY|--lower] | --frames [--quality high,low] [--checks still,sun,glide,going-up,undamaged,damaged]",
+        does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out; --frames, what only frames show, on the GPU: shimmer, acne, flashes during an edit, TAA trails, light probes popping",
+        group: "Play and check",
+        run: artifacts,
+    },
+    Task {
+        name: "fuzz",
+        takes: "[--seeds N] [--from S] [--ratchet|--raise WHY|--lower]",
+        does: "build small bases at random from seeds, as a player builds, and find junk in their meshes as artifacts does; each base with a fault shrunk to its fewest elements and printed as a test to paste. The full check holds seeds 0 to 200 to a baseline (--ratchet)",
+        group: "Play and check",
+        run: fuzz,
+    },
+    Task {
+        name: "texels",
+        takes: "[building] [--worst N]",
+        does: "find where building's textures are stretched or smeared, from the meshes: each kit's share of area drawn past 1.5:1 and 2.5:1, and where the worst is",
+        group: "Play and check",
+        run: texels,
+    },
+    Task {
+        name: "material",
+        takes: "<material>… | --all",
+        does: "the material bench (D386): a material shot from fixed vantages at noon, in shade and in the evening beside its reference photo and an 18% grey card, its texel density, sharpness, grey-card balance, value range and stretch against its pattern's targets; fails on a regression; shots/material/ (tools/kits)",
+        group: "Play and check",
+        run: |args| node("tools/kits/material.ts", args),
+    },
+];
 
 /// The model contract's checker (docs/art-style.md, D303): every model the game places,
 /// each on a line with what is wrong with it. The same test runs in `check`.
@@ -168,7 +228,7 @@ pub(crate) fn artifacts_command(args: &[String]) -> (&'static str, Vec<String>) 
 /// The fuzz pass (`terra_build::scenes::fuzz`): small bases built at random from seeds, as
 /// a player builds, each through the mesh checker; a base with a fault shrunk to its fewest
 /// elements and printed as a test. `--seeds N` and `--from S` say which; `--ratchet` holds
-/// the check's seeds to the baseline, `--record` writes it.
+/// the check's seeds to the baseline, `--raise "<why>"` writes what rose (D414).
 pub(crate) fn fuzz(args: &[String]) -> bool {
     artifacts(&fuzz_args(args))
 }

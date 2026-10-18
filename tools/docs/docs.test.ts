@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import {
   AREAS,
   anchors,
@@ -187,18 +187,25 @@ test("a page's rendered part is written again between its markers, the rest kept
   );
 });
 
-test("the tasks are read from xtask's table, and help with them", () => {
-  const main = 'fn x() { let name: "not";\n}\nconst TASKS: &[Task] = &[\n    Task {\n        name: "play",\n    },\n    Task {\n        name: "paint-icons",\n';
-  assert.deepEqual([...xtaskTasks(main)].sort(), ["help", "paint-icons", "play"]);
-  const real = xtaskTasks(readFileSync(new URL("../../xtask/src/main.rs", import.meta.url), "utf8"));
-  for (const task of ["check", "sizes", "decision", "tools"]) assert.ok(real.has(task), task);
+test("the tasks are read from every module's table, and help with them", () => {
+  const one = 'struct Task {\n    name: &\'static str,\n}\nfn x() { let name: "not";\n}\nconst TASKS: &[Task] = &[\n    Task {\n        name: "play",\n    },\n    Task {\n        name: "paint-icons",\n';
+  const other = 'pub(crate) const TASKS: &[Task] = &[Task {\n    name: "sizes",\n    takes: "",\n}];\n';
+  assert.deepEqual([...xtaskTasks(`${one}\n${other}`)].sort(), ["help", "paint-icons", "play", "sizes"]);
+  const dir = new URL("../../xtask/src/", import.meta.url);
+  const sources = (readdirSync(dir, { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".rs"))
+    .map((f) => readFileSync(new URL(f, dir), "utf8"))
+    .join("\n");
+  const real = xtaskTasks(sources);
+  for (const task of ["check", "sizes", "decision", "tools", "material", "loop"]) assert.ok(real.has(task), task);
+  assert.ok(!real.has("look"), "the material bench is `material` (D410)");
 });
 
 test("a page naming a task that is not one is a fault; a placeholder or bare `cargo xtask` is not", () => {
   const tasks = new Set(["check", "help"]);
   const text = "Run `cargo xtask check --quick`, then cargo xtask chek. Any `cargo xtask <task>`; `cargo xtask` alone; cargo xtask check.";
   assert.deepEqual(unknownTasks("docs/a.md", text, tasks), [
-    "docs/a.md: names `cargo xtask chek`, which is no task; `cargo xtask tools` lists them (xtask/src/main.rs)",
+    "docs/a.md: names `cargo xtask chek`, which is no task; `cargo xtask tools` lists them (xtask/src/)",
   ]);
 });
 

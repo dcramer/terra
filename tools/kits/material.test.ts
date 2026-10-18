@@ -1,7 +1,7 @@
-// node --test tools/kits/look.test.ts
+// node --test tools/kits/material.test.ts
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { CARD_CROP, CARD_OUT_M, CROP, DISTANCES, FIRST, FRAME_M, HOLD, finestOctave, judge, lights, type Measured, onScreen, parseTexels, percentile, run, type Targets } from "./look.ts";
+import { CARD_CROP, CARD_OUT_M, CROP, DISTANCES, FIRST, FRAME_M, HOLD, finestOctave, judge, lights, type Measured, onScreen, parseTexels, percentile, run, type Targets } from "./material.ts";
 import { ORIGIN } from "./preview.ts";
 
 /** A picture of values made by a rule, a pixel at a time. */
@@ -95,7 +95,7 @@ test("the shade's run turns the light view on for its view and off for the next"
 });
 
 test("an hour's run shoots its lights' views, each once held, and stands its cards first", () => {
-  const noon = run("logs", "Logs", 12, "calls.jsonl", "shots/look/logs-12");
+  const noon = run("logs", "Logs", 12, "calls.jsonl", "shots/material/logs-12");
   const expected = lights("Logs").filter((light) => light.hour === 12).flatMap((light) => light.views);
   assert.equal(noon.views.length, expected.length);
   const vantages = noon.args.filter((_, i) => noon.args[i - 1] === "--vantage");

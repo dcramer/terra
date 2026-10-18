@@ -28,7 +28,7 @@
         own: Some("data/kits/pieces/shakes.ron"),
         masks: (weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),
     ),
-    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // The real thing, which the material bench shows it beside (`cargo xtask material`, D386;
     // art/references/README.md).
     reference: Some((
         photo: "art/references/shakes.jpg",

@@ -1,9 +1,34 @@
 //! Running on the real GPU from WSL (D185): the Windows build of a program, its assets
 //! copied beside it, and `play` and `yard`, which use it wherever you are.
 
-use crate::{root, run};
+use crate::{Task, root, run};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+/// The tasks this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[
+    Task {
+        name: "play",
+        takes: "[--fresh] [game args]",
+        does: "play the tech demo on the real GPU, wherever you are; --fresh starts a new game",
+        group: "Play and check",
+        run: play,
+    },
+    Task {
+        name: "yard",
+        takes: "[game args]",
+        does: "play the yard, a flat test level for building: nothing on it, building free and instant, nothing saved",
+        group: "Play and check",
+        run: yard,
+    },
+    Task {
+        name: "win",
+        takes: "-p <package> [--release] [--copy <name>] [-- args]",
+        does: "under WSL, build for Windows and run it there, on the real GPU",
+        group: "This machine",
+        run: win,
+    },
+];
 
 pub(crate) fn on_wsl() -> bool {
     std::fs::read_to_string("/proc/version").is_ok_and(|v| v.to_lowercase().contains("microsoft"))

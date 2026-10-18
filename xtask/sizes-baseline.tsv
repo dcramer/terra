@@ -1,6 +1,6 @@
 # What was over the size limits (files over 1,000 lines, functions over 150) when the
 # ratchet began, as it is now (D396). Each may shrink, never grow, and nothing is added:
-# `cargo xtask sizes --record` lowers it to what is there and drops what is under the limits.
+# the scheduled full run (`cargo xtask sizes --lower`, D414) lowers it and drops what is under.
 # path	function (- for the file)	lines
 crates/terra_build/examples/artifacts.rs	fuzz	152
 crates/terra_build/examples/artifacts.rs	main	221

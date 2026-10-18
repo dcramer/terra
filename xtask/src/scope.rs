@@ -4,7 +4,8 @@
 //! everything that differs from where HEAD left origin/main (`git merge-base`), the working
 //! tree's changes included. Each file is placed: a crate's own folder is that crate, files outside
 //! the crates (`assets/` among them) are read by the crates in [`READ_BY`],
-//! `tools/`, the docs and the agents' folders by their own checks. A file the rules cannot
+//! `tools/`, the docs and the agents' folders by their own checks, a ratchet's baseline by the
+//! baselines stage alone (D411). A file the rules cannot
 //! place, or a change to the build itself (the workspace's manifest, its lock, the compiler,
 //! cargo's or clippy's settings), runs everything, as `--all` does.
 
@@ -96,6 +97,9 @@ pub(crate) struct Scope {
     pub(crate) tools: BTreeSet<String>,
     /// A Python script changed (the Blender scripts' check).
     pub(crate) python: bool,
+    /// A ratchet's baseline changed (`baselines::is_baseline`), which only the baselines
+    /// stage reads.
+    pub(crate) baselines: bool,
 }
 
 impl Scope {
@@ -132,6 +136,9 @@ impl Scope {
                 self.tools.iter().cloned().collect::<Vec<_>>().join(",")
             ));
         }
+        if self.baselines {
+            parts.push("baselines".into());
+        }
         if parts.is_empty() {
             parts.push("docs only".into());
         }
@@ -156,6 +163,14 @@ pub(crate) fn classify(files: &[String], packages: &BTreeSet<String>) -> Scope {
             .any(|p| file == p || (p.ends_with('/') && file.starts_with(p)))
         {
             return Scope::everything(&format!("{file} changed"));
+        }
+        // A ratchet's baseline is its own class (D411), not a change to the crate or the
+        // tasks holding it: the baselines stage, which always runs, holds its rules; a raise
+        // only loosens a ratchet and only the full run on main (`cargo xtask nightly`) lowers one, having measured
+        // it. So the run's lowering commit is checked in seconds and lands before main moves.
+        if crate::baselines::is_baseline(file) {
+            scope.baselines = true;
+            continue;
         }
         scope.rust |= file.ends_with(".rs");
         for (prefix, readers) in READ_BY {
@@ -379,6 +394,42 @@ mod tests {
         ] {
             let scope = classify(&files(&["docs/a.md", file]), &crates());
             assert!(scope.all(), "{file} should run everything");
+        }
+    }
+
+    #[test]
+    fn a_baseline_is_its_own_class_and_tests_no_crate() {
+        // The scheduled run's lowering commit: the check's cheap stages and nothing else.
+        let scope = classify(
+            &files(&[
+                "crates/terra_build/examples/artifacts-baseline/fuzz/seed-2.tsv",
+                "crates/terra_build/examples/artifacts-baseline/all/sheet.tsv",
+                "xtask/sizes-baseline.tsv",
+                "docs/decisions.md",
+            ]),
+            &crates(),
+        );
+        assert!(scope.baselines && !scope.all());
+        assert!(scope.changed.is_empty() && scope.readers.is_empty());
+        assert!(!scope.rust && !scope.manifests && !scope.assets);
+        assert!(
+            scope.summary().ends_with("baselines"),
+            "{}",
+            scope.summary()
+        );
+        // Beside them, the checker and the tasks are still their crates, and a file only
+        // named like the folder is not in it.
+        for (file, crate_) in [
+            ("crates/terra_build/examples/artifacts.rs", "terra_build"),
+            (
+                "crates/terra_build/examples/artifacts-baseline.tsv",
+                "terra_build",
+            ),
+            ("xtask/src/sizes.rs", "xtask"),
+        ] {
+            let scope = classify(&files(&[file]), &crates());
+            assert!(!scope.baselines, "{file}");
+            assert_eq!(scope.changed, set(&[crate_]), "{file}");
         }
     }
 

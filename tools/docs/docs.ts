@@ -362,10 +362,9 @@ export function renderPages(read: (path: string) => string | undefined, write?: 
   return faults;
 }
 
-/** The tasks `cargo xtask` runs: the names in xtask/src/main.rs's `TASKS`, and `help`. */
-export function xtaskTasks(main: string): Set<string> {
-  const table = main.slice(main.indexOf("const TASKS"));
-  return new Set(["help", ...[...table.matchAll(/^\s*name: "([^"]+)",$/gm)].map((m) => m[1])]);
+/** The tasks `cargo xtask` runs: each `Task { name: "…"` in xtask's sources, every module listing its own (D410), and `help`. */
+export function xtaskTasks(sources: string): Set<string> {
+  return new Set(["help", ...[...sources.matchAll(/\bTask \{\s*name: "([^"]+)"/g)].map((m) => m[1])]);
 }
 
 /** Pages read by agents and developers for how to work, whose commands and paths must be real (D396). */
@@ -378,7 +377,7 @@ export function unknownTasks(file: string, markdown: string, tasks: Set<string>)
   const named = new Set([...markdown.matchAll(/\bcargo xtask ([a-z][a-z0-9-]*)/g)].map((m) => m[1]));
   return [...named]
     .filter((task) => !tasks.has(task))
-    .map((task) => `${file}: names \`cargo xtask ${task}\`, which is no task; \`cargo xtask tools\` lists them (xtask/src/main.rs)`);
+    .map((task) => `${file}: names \`cargo xtask ${task}\`, which is no task; \`cargo xtask tools\` lists them (xtask/src/)`);
 }
 
 /**
@@ -425,7 +424,12 @@ function check(): string[] {
   for (const page of PROOF_PAGES) faults.push(...missingTests(page, read(page) ?? "", sources));
   faults.push(...renderPages(read));
 
-  const tasks = xtaskTasks(read("xtask/src/main.rs") ?? "");
+  const tasks = xtaskTasks(
+    tracked
+      .filter((f) => f.startsWith("xtask/src/") && f.endsWith(".rs"))
+      .map((f) => read(f) ?? "")
+      .join("\n"),
+  );
   const files = new Set(tracked);
   const folders = new Set(tracked.flatMap((f) => f.split("/").slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join("/"))));
   const tops = new Set([...folders].filter((f) => !f.includes("/")));

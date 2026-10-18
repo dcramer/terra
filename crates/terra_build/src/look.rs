@@ -1,5 +1,5 @@
-//! What a construction material is held to on the material bench (`cargo xtask look`,
-//! tools/kits/look.ts, D386): the numbers agents measured by hand to judge a material
+//! What a construction material is held to on the material bench (`cargo xtask material`,
+//! tools/kits/material.ts, D386): the numbers agents measured by hand to judge a material
 //! (research/texture-detail-2026-10-15.md, research/colour-balance-2026-10-15.md), as
 //! targets its pattern's file gives every material of it, so a change that makes one worse
 //! fails the bench rather than waiting for a review. And the photograph of the real thing a
@@ -35,7 +35,7 @@ pub struct Targets {
     pub shade: [f32; 2],
     /// In shade with the light view on (D385), every surface an 18% grey lit as it is: its
     /// brightness against the card's, least and most, the sky's light its occlusion leaves it.
-    /// Its red over blue is held to the card's for every material alike (look.ts `SKY_TINT`).
+    /// Its red over blue is held to the card's for every material alike (material.ts `SKY_TINT`).
     pub sky: [f32; 2],
     /// The spread of its surface's values at 2 m at noon, its 95th percentile less its 5th,
     /// least and most: too little is flat, too much is noise or a black crush.

@@ -42,7 +42,7 @@
 // burns       what it does in a fire (D377, terra_build::fire): the heat it catches at (a
 //             second of a burning neighbour's full flame under it gives its heat), how many
 //             seconds it burns, and how hot; quicker than a real log wall, which burns for hours
-// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+// look        what the material bench holds every material of it to (`cargo xtask material`, D386,
 //             terra_build::look): its logs' or beams' texels a metre, their sharpness from 1,
 //             2 and 5 m, their brightness against an 18% grey card lit and in shade, their
 //             values' spread, and the most of each texture set drawn stretched

@@ -31,7 +31,7 @@
         masks: (weather: 0.25),
     ),
     colours: (chinking: (0.66, 0.63, 0.58)),
-    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // The real thing, which the material bench shows it beside (`cargo xtask material`, D386;
     // art/references/README.md).
     reference: Some((
         photo: "art/references/hewn_timber.jpg",

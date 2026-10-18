@@ -10,7 +10,7 @@
         tint: (0.91, 0.91, 0.91),
         masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
     ),
-    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // The real thing, which the material bench shows it beside (`cargo xtask material`, D386;
     // art/references/README.md).
     reference: Some((
         photo: "art/references/fieldstone.jpg",

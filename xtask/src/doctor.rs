@@ -1,7 +1,16 @@
 //! `cargo xtask doctor`: what this machine is missing to build, check and run the game.
 
 use crate::windows::{WINDOWS_TARGET, on_wsl};
-use crate::{output, root, seed};
+use crate::{Task, output, root, seed};
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "doctor",
+    takes: "",
+    does: "what this machine is missing",
+    group: "This machine",
+    run: |_| doctor(),
+}];
 
 struct Report {
     missing_required: bool,

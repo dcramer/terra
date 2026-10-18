@@ -7,7 +7,7 @@
 //!
 //! `cargo xtask fuzz --seeds N` inspects seeds 0 to N, shrinks each base with a fault to the
 //! fewest elements that still show it, and prints it as a test to paste; the full check runs
-//! seeds 0 to 200 against the ratchet's baseline (`examples/artifacts-baseline.tsv`), so a
+//! seeds 0 to 200 against the ratchet's baseline (`examples/artifacts-baseline/fuzz/`), so a
 //! seed's faults may fall but never rise. A junction it finds that the kits do not yet close
 //! is fixed, or listed in the voxel contract's Gaps (docs/building-voxels.md) with the rule
 //! it needs and its seeds' faults recorded in the baseline until it is closed.

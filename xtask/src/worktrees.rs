@@ -24,7 +24,16 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
-use super::{output, root, seed};
+use super::{Task, output, root, seed};
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "worktrees",
+    takes: "[--prune | --done]",
+    does: "what each worktree holds; --prune clears away the ones agents are done with (a hook does it hourly); --done, once your work is pushed, deletes this worktree's build",
+    group: "This machine",
+    run: worktrees,
+}];
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
 /// How long an idle subagent's worktree is kept, in case its agent is sent another message: a
@@ -451,7 +460,7 @@ fn gb(bytes: u64) -> String {
     }
 }
 
-fn git(dir: &Path, args: &[&str]) -> bool {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> bool {
     Command::new("git")
         .args(args)
         .current_dir(dir)
@@ -461,7 +470,7 @@ fn git(dir: &Path, args: &[&str]) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(dir)

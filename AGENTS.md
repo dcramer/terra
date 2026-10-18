@@ -26,6 +26,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 - **Start**: the session hook fast-forwards a clean main checkout, updates the shared seed and seeds your worktree (D183). On failure run `cargo xtask doctor` and fix it before building. Entered a worktree mid-session, or ran `--done` there: `cargo xtask seed` first.
 - **Land on `main` after each incremental change**, no pull requests: commit on the branch, then `cargo xtask land` (rebases, checks, takes this machine's turn to land, pushes; D413), with a long timeout. Never force-push `main`.
 - **Hooks are the gate** (D37): commit runs `cargo xtask check --quick`, push `cargo xtask check`. Never `--no-verify`. Any `cargo xtask` task switches them on; CI is off.
+- **Baselines**: lowering one is `cargo xtask nightly`'s alone, run by hand on main (D414, D411); its report, with the first bad commit of a failure, is `.git/terra-nightly/report.txt`.
 - **Finish**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259).
 - A lead session runs at most three or four agents at once.
 - **Every task is bounded** (D400): a brief says when the agent stops (a score bar, a number of rounds or two without a gain, a clock time, a context of about 250k at most). Do one unit of work, write a handoff file, end; the next round is a fresh agent from it. Wait on a long run started in the background by its completion notice, never a polling loop, one wait per thing. An agent you start gets the same bounds, one helper at a time.

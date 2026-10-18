@@ -94,7 +94,7 @@ pub struct Kit {
     /// A block kind framed in timber (D236, `layout::frames`): its cubes the infill, drawn as
     /// their surface, and a frame of its members laid over them by rule; left out, none.
     pub framing: Option<Framing>,
-    /// What the material bench holds it to (`cargo xtask look`, D386): its pattern's.
+    /// What the material bench holds it to (`cargo xtask material`, D386): its pattern's.
     pub look: crate::look::Targets,
     /// A photograph of the real material, which the bench shows it beside: its pack's.
     pub reference: Option<crate::look::Reference>,

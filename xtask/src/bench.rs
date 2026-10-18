@@ -4,9 +4,27 @@
 use crate::load::{self, During, Load};
 use crate::scenes::{SCENES, Scene};
 use crate::windows::{on_wsl, profile_folder, windows_program};
-use crate::{output, root, run};
+use crate::{Task, node, output, root, run};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+/// The tasks this module runs (D410): the benchmark scenes, and the rebuild times beside them.
+pub(crate) const TASKS: &[Task] = &[
+    Task {
+        name: "bench",
+        takes: "[scene…] [--runs N] [--record] [--debug] [--copy NAME]",
+        does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded; with every scene, also lodcheck",
+        group: "Play and check",
+        run: bench,
+    },
+    Task {
+        name: "rebuilds",
+        takes: "[--dev|--release] [probe…]",
+        does: "how long the sandbox takes to rebuild after a file in each part of the code is touched, in dev and release, and which crates were compiled again, against the last run (D407, tools/rebuilds)",
+        group: "Play and check",
+        run: |args| node("tools/rebuilds/rebuilds.ts", args),
+    },
+];
 
 /// Frames run before any are timed, so shaders are ready and the scene has settled.
 const BENCH_SETTLE: &str = "240";

@@ -17,7 +17,7 @@
 //! than check for most of an hour and be refused. Only pushes from this machine take turns; one
 //! from elsewhere is still refused and retried, the stamp keeping the retry short.
 
-use crate::{output, root, slot, stage};
+use crate::{Task, output, root, slot, stage};
 use std::fs::{File, OpenOptions};
 use std::io::Write as _;
 use std::process::Command;
@@ -28,6 +28,15 @@ const HELD: &str = "TERRA_LANDING";
 
 /// How many times `land` pushes, holding the turn, when pushes from elsewhere keep landing.
 const TRIES: usize = 3;
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "land",
+    takes: "",
+    does: "lands the branch on main without being overtaken (D413): rebases and runs the push's check, then takes this machine's turn to land, rebases again and pushes, the hook's check running only what landed meanwhile",
+    group: "Play and check",
+    run: land,
+}];
 
 pub(crate) fn land(args: &[String]) -> bool {
     if !args.is_empty() {

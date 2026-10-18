@@ -1,0 +1,90 @@
+//! The scripted runs of the sandbox, checks and films alike (tools/sandbox).
+
+use crate::{Task, node};
+
+pub(crate) const TASKS: &[Task] = &[
+    Task {
+        name: "loop",
+        takes: "",
+        does: "play the demo's loop by script and check every step happened (D69)",
+        group: "Play and check",
+        run: |_| node("tools/sandbox/loop.ts", &[]),
+    },
+    Task {
+        name: "cabin",
+        takes: "[--here] [--until STEP]",
+        does: "build a cabin from plan to door by script, fit a door and shutters, open and shut them, walk in, and check every step by state (D69, D139, D201)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/cabin.ts", args),
+    },
+    Task {
+        name: "demo",
+        takes: "[--skip-cabin] [--hour 15] [--out shots/demo]",
+        does: "the construction demo's pictures: the cabin built by script, then the village and the cabin from fixed views (tools/sandbox)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/demo.ts", args),
+    },
+    Task {
+        name: "vantage",
+        takes: "[--place lake] [--time 13,17] [--date 10-15]",
+        does: "the vantage sheet: the lush forest from fixed views, side by side, to judge how the world looks (tools/sandbox)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/vantage.ts", args),
+    },
+    Task {
+        name: "looks",
+        takes: "[--place lush|lake|tundra|town|all] [--time 13] [--from DIR]",
+        does: "the looks check (D356): each place's views shot and held to the art style's rules, each number against its reference, pass or fail, and the view furthest out (docs/art-style.md#places)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/looks.ts", args),
+    },
+    Task {
+        name: "foliage",
+        takes: "[--card <name>] [--draw <dir>]",
+        does: "the foliage check (D368): every leaf, needle and frond card the plants wear measured from its atlas and normal map, leaves a card, texels a leaf, relief, tilt, detail, colour, held to what reads as leaves; --draw shows the leaves it counted (docs/art-style.md#places)",
+        group: "Play and check",
+        run: |args| node("tools/textures/foliage.ts", args),
+    },
+    Task {
+        name: "collide",
+        takes: "[--count 20]",
+        does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check against their meshes that each stops them where it is drawn, or is stepped over if low (tools/sandbox)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/collide.ts", args),
+    },
+    Task {
+        name: "lodcheck",
+        takes: "[--views floor,path,clearing,village,town] [--time 17] [--limit 0.5]",
+        does: "find what pops as detail changes: still views while every switch distance is swept; fails past the limit (tools/sandbox)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/lodcheck.ts", args),
+    },
+    Task {
+        name: "pops",
+        takes: "[--frames 1200-1320] [-- sandbox args]",
+        does: "find what pops in or out, or flickers, in a stretch of a scripted walk, frame by frame (tools/sandbox)",
+        group: "Play and check",
+        run: |args| node("tools/sandbox/pops.ts", args),
+    },
+    Task {
+        name: "film",
+        takes: "[--place lake] [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- sandbox args]",
+        does: "a video of a scripted run, by default the forest walk, at the game's own speed (tools/sandbox)",
+        group: "Look at things",
+        run: |args| node("tools/sandbox/film.ts", args),
+    },
+    Task {
+        name: "trailer",
+        takes: "[--only lake,forest] [--again] [--stills] [--no-render] [--size 1920x1080]",
+        does: "the trailer: a run through each place filmed with a cinematic look, cut with crossfades and the game's own sound, in ~/.cache/terra-review/trailer/ (docs/trailer.md)",
+        group: "Look at things",
+        run: |args| node("tools/sandbox/trailer.ts", args),
+    },
+    Task {
+        name: "qa",
+        takes: "clips|<scenario> [--set <kit>|all] [--part <stage>] [--no-trace] [--runs 3] | --list | --index",
+        does: "QA clips of building and destruction in a set, the same every time, each with a real-time frame trace against the budget, in shots/qa/ (tools/sandbox)",
+        group: "Look at things",
+        run: |args| node("tools/sandbox/qa.ts", args),
+    },
+];

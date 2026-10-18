@@ -36,7 +36,7 @@
 //             deeper than a stone is thick, dark at their back)
 // burns       what it does in a fire (D377, terra_build::fire): None, stone does not burn; it
 //             blackens with soot and falls when what holds it does
-// look        what the material bench holds every material of it to (`cargo xtask look`, D386,
+// look        what the material bench holds every material of it to (`cargo xtask material`, D386,
 //             terra_build::look): its walls' texels a metre, their sharpness from 1, 2 and 5 m,
 //             their brightness against an 18% grey card lit and in shade, their values'
 //             spread, and the most of each texture set drawn stretched

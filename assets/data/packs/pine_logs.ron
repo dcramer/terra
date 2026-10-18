@@ -20,7 +20,7 @@
         own: Some("data/kits/pieces/logs.ron"),
         masks: (weather: 0.5),
     ),
-    // The real thing, which the material bench shows it beside (`cargo xtask look`, D386;
+    // The real thing, which the material bench shows it beside (`cargo xtask material`, D386;
     // art/references/README.md).
     reference: Some((
         photo: "art/references/pine_logs.jpg",

@@ -6,10 +6,11 @@
 //! given keeps only the scenes whose names hold it, in every material, as `"logs: rectangle"`.
 //!
 //! It is also a ratchet (D69): the faults found of each kind in each group of scenes (a
-//! name's kits, or its family's, "sheet", "village") are kept in `artifacts-baseline.tsv`
-//! beside this file. `--ratchet` fails if any count is above its baseline, so no change adds
-//! junk unnoticed, and says which have dropped; `--record` writes the counts as the new
-//! baseline, to commit as fixes land. `--quick` inspects the scenes the registry gates before
+//! name's kits, or its family's, "sheet", "village") are kept in `artifacts-baseline/`
+//! beside this file, a file a set and group (D414). `--ratchet` fails if any count is above
+//! its baseline, so no change adds junk unnoticed; a count that falls passes and is left for
+//! the full run on main (`cargo xtask nightly`) to lower (`--lower`, D414). `--raise "<why>"` writes the counts that
+//! rose, with why the rise is meant. `--quick` inspects the scenes the registry gates before
 //! a push (`Gate::Push`: some of every family but the castles, the states, the previews and
 //! the example base),
 //! which `cargo xtask check` ratchets before every push; the whole set is
@@ -33,7 +34,7 @@ fn main() -> ExitCode {
         .enumerate()
         .find(|&(i, a)| {
             !a.starts_with("--")
-                && (i == 0 || !["--seeds", "--from"].contains(&args[i - 1].as_str()))
+                && (i == 0 || !["--seeds", "--from", "--raise"].contains(&args[i - 1].as_str()))
         })
         .map(|(_, a)| a.clone())
         .filter(|_| !quick);
@@ -62,18 +63,12 @@ fn main() -> ExitCode {
         };
         let from = number("--from", 0);
         let seeds = from..from + number("--seeds", FUZZ_SEEDS);
-        let how = if args.iter().any(|a| a == "--record") {
-            Fuzzing::Record
-        } else if args.iter().any(|a| a == "--ratchet") {
-            Fuzzing::Ratchet
-        } else {
-            Fuzzing::Report
-        };
-        if how != Fuzzing::Report && seeds != (0..FUZZ_SEEDS) {
+        let hold = baseline::Hold::from(&args);
+        if hold.is_some() && seeds != (0..FUZZ_SEEDS) {
             println!("fuzz: the baseline is of the check's seeds, 0 to {FUZZ_SEEDS}, not others");
             return ExitCode::FAILURE;
         }
-        return fuzz(seeds, (&scope, &every), &maps, how);
+        return fuzz(seeds, (&scope, &every), &maps, hold.as_ref());
     }
     // The scene registry's (`terra_build::scenes::registry`): before a push those it gates
     // so, else every one, or those whose names hold the name given.
@@ -214,26 +209,13 @@ fn main() -> ExitCode {
     } else {
         ""
     };
-    let ratchet = args.iter().any(|a| a == "--ratchet");
-    let record = args.iter().any(|a| a == "--record");
-    if (ratchet || record) && set.is_empty() {
+    let hold = baseline::Hold::from(&args);
+    if hold.is_some() && set.is_empty() {
         println!("artifacts: the baseline is of every base or of --quick's, not of a name");
         return ExitCode::FAILURE;
     }
-    if record {
-        return match baseline::record(set, &by_kit) {
-            Ok(()) => {
-                println!("artifacts: baseline of {set} recorded, {total} faults");
-                ExitCode::SUCCESS
-            }
-            Err(why) => {
-                println!("artifacts: {why}");
-                ExitCode::FAILURE
-            }
-        };
-    }
-    if ratchet {
-        return baseline::ratchet(set, &by_kit);
+    if let Some(hold) = hold {
+        return baseline::hold(set, &by_kit, &hold);
     }
     if total == 0 {
         println!("artifacts: meshes clean");
@@ -248,25 +230,17 @@ fn main() -> ExitCode {
 /// a desktop's 32 threads.
 const FUZZ_SEEDS: u64 = 200;
 
-/// How the fuzz pass ends: with every fault said, held to its baseline, or recorded.
-#[derive(Clone, Copy, PartialEq)]
-enum Fuzzing {
-    Report,
-    Ratchet,
-    Record,
-}
-
 /// The fuzz pass (`terra_build::scenes::fuzz`, `cargo xtask fuzz`): a small base built at
 /// random from each seed in the baseline's materials (`scope`), drawn by every kit, each
 /// inspected on a thread of its own. A base with a fault, a sort of fault at a time, is
 /// shrunk to the fewest elements still showing it and printed as a test to paste: every
-/// one found, or, held to the baseline (`set` "fuzz", a seed's faults of each kind), only
-/// those of seeds whose counts rose, which fail it.
+/// one found, or, held to the baseline (`hold`, set "fuzz", a seed's faults of each kind),
+/// only those of seeds whose counts rose, which fail it.
 fn fuzz(
     seeds: std::ops::Range<u64>,
     (scope, every): (&Materials, &Materials),
     maps: &Maps,
-    how: Fuzzing,
+    hold: Option<&baseline::Hold>,
 ) -> ExitCode {
     use terra_build::scenes::fuzz::{as_rust, build, elements, shrink};
     let kits = &every.kits;
@@ -314,19 +288,7 @@ fn fuzz(
                 .or_default() += 1;
         }
     }
-    if how == Fuzzing::Record {
-        return match baseline::record("fuzz", &counts) {
-            Ok(()) => {
-                println!("fuzz: baseline recorded, {} seeds with faults", found.len());
-                ExitCode::SUCCESS
-            }
-            Err(why) => {
-                println!("fuzz: {why}");
-                ExitCode::FAILURE
-            }
-        };
-    }
-    let recorded = if how == Fuzzing::Ratchet {
+    let recorded = if hold.is_some() {
         baseline::counts("fuzz")
     } else {
         Default::default()
@@ -402,8 +364,8 @@ fn fuzz(
             as_rust(&kept, &name).replace('\n', "\n    "),
         );
     }
-    if how == Fuzzing::Ratchet {
-        return baseline::ratchet("fuzz", &counts);
+    if let Some(hold) = hold {
+        return baseline::hold("fuzz", &counts, hold);
     }
     if found.is_empty() {
         return ExitCode::SUCCESS;
@@ -421,94 +383,194 @@ fn group(case: &str) -> String {
     case.split(':').next().unwrap_or(case).trim().to_string()
 }
 
-/// The ratchet's baseline: a line a set, kits and fault, its count, tab-separated.
+/// The ratchet's baseline (D414): the folder `artifacts-baseline/<set>/<group>.tsv` beside
+/// this file, a file a set and group of scenes, so changes to different groups never touch one
+/// file. A row a group and fault, tab-separated: group, fault, count and why the count is
+/// what it is (`-` for none said). `--ratchet` holds a set to it; `--raise "<why>"` writes the
+/// counts that rose or are new, with the why; `--lower` writes those that fell, and is the
+/// full run on main's alone: `cargo xtask check` refuses a lowering made anywhere else.
 mod baseline {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
     use std::process::ExitCode;
 
-    fn path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/artifacts-baseline.tsv")
-    }
-
     type Counts = BTreeMap<(String, String), usize>;
 
-    /// Every set's counts as recorded.
-    fn read() -> BTreeMap<String, Counts> {
-        let mut out: BTreeMap<String, Counts> = BTreeMap::new();
-        let text = std::fs::read_to_string(path()).unwrap_or_default();
-        for line in text
-            .lines()
-            .filter(|l| !l.starts_with('#') && !l.is_empty())
-        {
-            let cells: Vec<&str> = line.split('\t').collect();
-            if let [set, kits, fault, count] = cells[..]
-                && let Ok(count) = count.parse()
+    /// A set's rows: group and fault to count and why.
+    type Rows = BTreeMap<(String, String), (usize, String)>;
+
+    /// How a run ends with the baseline: held to it, or writing it first.
+    #[derive(Clone, PartialEq)]
+    pub enum Hold {
+        Ratchet,
+        Raise(String),
+        Lower,
+    }
+
+    impl Hold {
+        /// `--ratchet`, `--raise "<why>"` or `--lower` from the arguments, or none.
+        pub fn from(args: &[String]) -> Option<Hold> {
+            if let Some(i) = args.iter().position(|a| a == "--raise") {
+                let why = args.get(i + 1).filter(|a| !a.starts_with("--"));
+                return Some(Hold::Raise(why.cloned().unwrap_or_default()));
+            }
+            if args.iter().any(|a| a == "--lower") {
+                return Some(Hold::Lower);
+            }
+            args.iter()
+                .any(|a| a == "--ratchet")
+                .then_some(Hold::Ratchet)
+        }
+    }
+
+    fn folder(set: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/artifacts-baseline")
+            .join(set)
+    }
+
+    /// A group's file: "seed 103" is `seed-103.tsv`, "logs with stone" `logs-with-stone.tsv`.
+    fn file(set: &str, group: &str) -> PathBuf {
+        let slug = group
+            .to_lowercase()
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+        folder(set).join(format!("{slug}.tsv"))
+    }
+
+    /// A set's rows as recorded.
+    fn read(set: &str) -> Rows {
+        let mut rows = Rows::new();
+        let Ok(entries) = std::fs::read_dir(folder(set)) else {
+            return rows;
+        };
+        for entry in entries.flatten() {
+            let text = std::fs::read_to_string(entry.path()).unwrap_or_default();
+            for line in text
+                .lines()
+                .filter(|l| !l.starts_with('#') && !l.is_empty())
             {
-                out.entry(set.to_string())
-                    .or_default()
-                    .insert((kits.to_string(), fault.to_string()), count);
+                if let [group, fault, count, why] = line.split('\t').collect::<Vec<_>>()[..]
+                    && let Ok(count) = count.parse()
+                {
+                    rows.insert((group.into(), fault.into()), (count, why.into()));
+                }
             }
         }
-        out
+        rows
     }
 
     /// A set's counts as recorded.
     pub fn counts(set: &str) -> Counts {
-        read().remove(set).unwrap_or_default()
+        read(set)
+            .into_iter()
+            .map(|(key, (count, _))| (key, count))
+            .collect()
     }
 
-    pub fn record(set: &str, counts: &Counts) -> Result<(), String> {
-        let mut all = read();
-        all.insert(set.to_string(), counts.clone());
-        let mut text = String::from(
-            "# The faults `cargo xtask artifacts` finds in building's meshes, of each kind in each group of\n# scenes, and the fuzz pass in each seed's base: the ratchet's baseline. `cargo xtask artifacts\n# --record` (every scene), `--quick --record` (the scenes `cargo xtask check` inspects before a\n# push) and `cargo xtask fuzz --record` (the fuzz pass's seeds the check runs) write it.\n# set\tkits\tfault\tcount\n",
-        );
-        for (set, counts) in &all {
-            for ((kits, fault), count) in counts {
-                text.push_str(&format!("{set}\t{kits}\t{fault}\t{count}\n"));
-            }
+    /// Writes the files of `groups` from `rows`, removing one left with no rows.
+    fn write(set: &str, rows: &Rows, groups: &BTreeSet<&str>) -> Result<(), String> {
+        std::fs::create_dir_all(folder(set)).map_err(|why| format!("{set}: {why}"))?;
+        for group in groups {
+            let path = file(set, group);
+            let text: String = rows
+                .iter()
+                .filter(|((g, _), _)| file(set, g) == path)
+                .map(|((g, fault), (count, why))| format!("{g}\t{fault}\t{count}\t{why}\n"))
+                .collect();
+            let done = match (text.is_empty(), path.exists()) {
+                (true, true) => std::fs::remove_file(&path),
+                (true, false) => Ok(()),
+                (false, _) => std::fs::write(&path, text),
+            };
+            done.map_err(|why| format!("{}: {why}", path.display()))?;
         }
-        std::fs::write(path(), text).map_err(|why| format!("{}: {why}", path().display()))
+        Ok(())
     }
 
-    /// Fails if any count is above its baseline; says which are below it.
-    pub fn ratchet(set: &str, counts: &Counts) -> ExitCode {
-        let recorded = read().remove(set).unwrap_or_default();
-        let (mut rose, mut fell) = (Vec::new(), Vec::new());
-        let keys: std::collections::BTreeSet<&(String, String)> =
-            counts.keys().chain(recorded.keys()).collect();
+    /// A count that changed: group and fault, what it was and what it is.
+    type Change = ((String, String), usize, usize);
+
+    /// Holds `counts` to the set's baseline and fails if any rose past it, after `--raise`
+    /// has written those that rose, or `--lower` those that fell.
+    pub fn hold(set: &str, counts: &Counts, how: &Hold) -> ExitCode {
+        let mut rows = read(set);
+        let (mut rose, mut fell): (Vec<Change>, Vec<Change>) = Default::default();
+        let keys: BTreeSet<(String, String)> = counts.keys().chain(rows.keys()).cloned().collect();
         for key in keys {
-            let now = counts.get(key).copied().unwrap_or(0);
-            let was = recorded.get(key).copied().unwrap_or(0);
-            let line = format!("{} {}: {was} to {now}", key.0, key.1);
+            let now = counts.get(&key).copied().unwrap_or(0);
+            let was = rows.get(&key).map_or(0, |(count, _)| *count);
             if now > was {
-                rose.push(line);
+                rose.push((key, was, now));
             } else if now < was {
-                fell.push(line);
+                fell.push((key, was, now));
             }
-        }
-        for line in &fell {
-            println!("  fewer: {line}");
-        }
-        for line in &rose {
-            println!("  MORE:  {line}");
         }
         let command = match set {
             "quick" => "cargo xtask artifacts --quick",
             "fuzz" => "cargo xtask fuzz",
             _ => "cargo xtask artifacts",
         };
+        let written = match how {
+            Hold::Ratchet => Vec::new(),
+            Hold::Raise(why) => {
+                let why = why.split_whitespace().collect::<Vec<_>>().join(" ");
+                if why.is_empty() || why == "-" {
+                    println!(
+                        "artifacts: FAIL: a raise says why: `{command} --raise \"<why the rise is meant>\"`"
+                    );
+                    return ExitCode::FAILURE;
+                }
+                if rose.is_empty() {
+                    println!("artifacts: FAIL: nothing rose past the baseline ({set}) to raise");
+                    return ExitCode::FAILURE;
+                }
+                for (key, _, now) in &rose {
+                    rows.insert(key.clone(), (*now, why.clone()));
+                }
+                std::mem::take(&mut rose)
+            }
+            Hold::Lower => {
+                for (key, _, now) in &fell {
+                    match rows.get_mut(key) {
+                        Some(row) if *now > 0 => row.0 = *now,
+                        _ => {
+                            rows.remove(key);
+                        }
+                    }
+                }
+                std::mem::take(&mut fell)
+            }
+        };
+        if !written.is_empty() {
+            let groups: BTreeSet<&str> = written.iter().map(|((g, _), _, _)| g.as_str()).collect();
+            if let Err(why) = write(set, &rows, &groups) {
+                println!("artifacts: {why}");
+                return ExitCode::FAILURE;
+            }
+            for ((group, fault), was, now) in &written {
+                println!("  written: {group} {fault}: {was} to {now}");
+            }
+            println!(
+                "artifacts: {} counts of {set} written to examples/artifacts-baseline/{set}",
+                written.len()
+            );
+        }
+        for ((group, fault), was, now) in &rose {
+            println!("  MORE:  {group} {fault}: {was} to {now}");
+        }
         if !rose.is_empty() {
             println!(
-                "artifacts: FAIL: {} counts of junk in building's meshes rose past the baseline (examples/artifacts-baseline.tsv); `{command}` lists them. Fix them, or if the rise is meant, `{command} --record` and say why in the commit",
+                "artifacts: FAIL: {} counts of junk in building's meshes rose past the baseline (examples/artifacts-baseline/{set}); `{command}` lists them. Fix them, or if the rise is meant, `{command} --raise \"<why>\"`",
                 rose.len()
             );
             return ExitCode::FAILURE;
         }
         if !fell.is_empty() {
             println!(
-                "artifacts: {} counts fell: lower the baseline with `{command} --record` and commit it",
+                "artifacts: {} counts fell; the baseline is left as it is, the full run on main (`cargo xtask nightly`) lowers it (D414)",
                 fell.len()
             );
         }

@@ -1,6 +1,6 @@
 # Reference photographs
 
-Photographs of the real materials the construction packs stand for, which the material bench shows beside each material's shots (`cargo xtask look`, D386). Each pack names its own (`reference` in `assets/data/packs/<pack>.ron`): the photograph's path, a direct link it is fetched from where it is missing, its licence and what it shows. Only CC0 and public-domain photographs are committed, here, 1,024 wide; any other is kept on the machine that fetched it, named `*.local.jpg`, which git ignores.
+Photographs of the real materials the construction packs stand for, which the material bench shows beside each material's shots (`cargo xtask material`, D386). Each pack names its own (`reference` in `assets/data/packs/<pack>.ron`): the photograph's path, a direct link it is fetched from where it is missing, its licence and what it shows. Only CC0 and public-domain photographs are committed, here, 1,024 wide; any other is kept on the machine that fetched it, named `*.local.jpg`, which git ignores.
 
 | File | What it shows | Source | Author | Licence |
 |---|---|---|---|---|

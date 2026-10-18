@@ -1,4 +1,4 @@
-//! The material bench's data (`cargo xtask look`, tools/kits/look.ts, D386): for each
+//! The material bench's data (`cargo xtask material`, tools/kits/material.ts, D386): for each
 //! material named, or every one, as its file resolves over its pattern and pack, the texture
 //! its bench measures (its path, its metres and its colour map's texels a metre at the high
 //! preset), what its pattern holds it to, every texture set it draws and the photograph it

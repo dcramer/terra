@@ -1,16 +1,26 @@
 //! The size ratchet (D396): no Rust file over [`FILE_LINES`] lines and no function over
 //! [`FN_LINES`], except those already over when it began, kept in [`BASELINE`], which may
 //! shrink and drop out but never grow. `cargo xtask check --quick` runs it, and
-//! `cargo xtask sizes` runs it alone; `--record` lowers the baseline to what is there now,
-//! dropping what is under the limits, and never adds to it or raises it.
+//! `cargo xtask sizes` runs it alone; `--lower`, the full run on main (`cargo xtask nightly`)'s alone (D414), lowers
+//! the baseline to what is there now, dropping what is under the limits, and never adds to it
+//! or raises it; the check refuses a baseline lowered anywhere else.
 //!
 //! Functions are found by reading the source, not parsing it: each `fn name` and its body's
 //! braces, skipping strings, characters and comments. A function's lines run from the line
 //! of its `fn` to its closing brace, a function written inside it included.
 
-use crate::{output, root};
+use crate::{Task, output, root};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "sizes",
+    takes: "[--lower]",
+    does: "the size ratchet the quick check runs: no Rust file over 1,000 lines or function over 150 but those in xtask/sizes-baseline.tsv, which never grow; --lower, the full run on main (`cargo xtask nightly`)'s alone (D414), lowers the baseline to what is there",
+    group: "Play and check",
+    run: sizes,
+}];
 
 /// Over this many lines a file is doing more than one thing: a module per concern reads
 /// better, builds in parallel and keeps two people's edits apart. Most of the code is under
@@ -29,7 +39,7 @@ const MEASURED: [&str; 2] = ["crates", "xtask"];
 
 const HEADER: &str = "# What was over the size limits (files over 1,000 lines, functions over 150) when the\n\
 # ratchet began, as it is now (D396). Each may shrink, never grow, and nothing is added:\n\
-# `cargo xtask sizes --record` lowers it to what is there and drops what is under the limits.\n\
+# the full run on main (`cargo xtask nightly`) (`cargo xtask sizes --lower`, D414) lowers it and drops what is under.\n\
 # path\tfunction (- for the file)\tlines\n";
 
 /// A function as read: its name, the line its `fn` is on (from 1) and how many lines it spans.
@@ -370,7 +380,7 @@ const SPLIT: [&str; 6] = [
     "  they share; a long match: a function per arm; a long test: a helper for its setup",
     "- a long file: a folder module, `name/mod.rs` with a file per concern beside it, its tests",
     "  in `name/tests.rs`; see how `terra_build::layout` and `xtask/src` are split",
-    "An offender in the baseline may shrink; `cargo xtask sizes --record` then lowers its entry.",
+    "An offender in the baseline may shrink; leave its entry, the full run on main (`cargo xtask nightly`) lowers it (D414).",
 ];
 
 /// The tracked Rust sources measured, as path and text, or `None` when git cannot list them.
@@ -438,14 +448,14 @@ fn report(verdict: &Verdict, unread: &[String], out: &mut String) -> bool {
     ok
 }
 
-/// `cargo xtask sizes [--record]`: the ratchet alone, saying what shrank; `--record` lowers
+/// `cargo xtask sizes [--lower]`: the ratchet alone, saying what shrank; `--lower` lowers
 /// the baseline to what is there now.
 pub(crate) fn sizes(args: &[String]) -> bool {
-    let record = match args {
+    let lowering = match args {
         [] => false,
-        [flag] if flag == "--record" => true,
+        [flag] if flag == "--lower" => true,
         _ => {
-            eprintln!("usage: cargo xtask sizes [--record]");
+            eprintln!("usage: cargo xtask sizes [--lower]");
             return false;
         }
     };
@@ -460,7 +470,7 @@ pub(crate) fn sizes(args: &[String]) -> bool {
     let mut out = String::new();
     let ok = report(&verdict, &unread, &mut out);
     print!("{out}");
-    if record {
+    if lowering {
         let lowered = lower(&recorded, &now);
         if lowered != recorded {
             if let Err(error) = std::fs::write(&path, render(&lowered)) {
@@ -474,7 +484,7 @@ pub(crate) fn sizes(args: &[String]) -> bool {
         }
     } else if verdict.shrank > 0 {
         println!(
-            "{} offenders shrank or went: `cargo xtask sizes --record` lowers the baseline",
+            "{} offenders shrank or went; leave the baseline, the full run on main (`cargo xtask nightly`) lowers it (D414)",
             verdict.shrank
         );
     }
@@ -496,9 +506,58 @@ fn lower(recorded: &Sizes, now: &Sizes) -> Sizes {
         .collect()
 }
 
+/// A size baseline lowered at one commit (`at` to `lowered`) carried onto a later commit's
+/// (`now`), for the full run on main's push after main moved (D411): an entry lowered or dropped
+/// is lowered or dropped there too while its file did not change in between (`since`) and
+/// the later baseline has it as it was; everything else is the later baseline's.
+pub(crate) fn carry_lowered(
+    at: &str,
+    lowered: &str,
+    now: &str,
+    since: &std::collections::BTreeSet<String>,
+) -> String {
+    let (at, lowered) = (parse(at), parse(lowered));
+    let mut now = parse(now);
+    for (key, was) in &at {
+        if since.contains(&key.0) || now.get(key) != Some(was) {
+            continue;
+        }
+        match lowered.get(key) {
+            Some(&less) => now.insert(key.clone(), less.min(*was)),
+            None => now.remove(key),
+        };
+    }
+    render(&now)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lowering_is_carried_onto_a_later_baseline_only_where_its_file_is_unchanged() {
+        let rows = |list: &[(&str, usize)]| -> String {
+            list.iter()
+                .map(|(path, lines)| format!("{path}\tf\t{lines}\n"))
+                .collect()
+        };
+        let at = rows(&[("a.rs", 200), ("b.rs", 190), ("c.rs", 180), ("d.rs", 170)]);
+        // Measured there: a fell, b went under the limit, c and d fell.
+        let lowered = rows(&[("a.rs", 160), ("c.rs", 175), ("d.rs", 165)]);
+        // Later: c's file changed, d's entry was lowered by another run, e is new.
+        let now = rows(&[
+            ("a.rs", 200),
+            ("b.rs", 190),
+            ("c.rs", 180),
+            ("d.rs", 168),
+            ("e.rs", 155),
+        ]);
+        let since = ["c.rs".to_string()].into_iter().collect();
+        let carried = carry_lowered(&at, &lowered, &now, &since);
+        let expect = rows(&[("a.rs", 160), ("c.rs", 180), ("d.rs", 168), ("e.rs", 155)]);
+        assert_eq!(parse(&carried), parse(&expect));
+        assert!(carried.starts_with(HEADER));
+    }
 
     /// A source as lines, so no line of it stands alone in this file to be misread.
     fn source(lines: &[&str]) -> String {

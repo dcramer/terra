@@ -37,7 +37,16 @@ use std::time::Instant;
 
 use crate::stage::{Said, Step};
 use crate::windows::{WINDOWS_TARGET, on_wsl};
-use crate::{output, root};
+use crate::{Task, output, root};
+
+/// The task this module runs (D410).
+pub(crate) const TASKS: &[Task] = &[Task {
+    name: "seed",
+    takes: "[--refresh]",
+    does: "keep the shared seed build current with origin/main and link its compiled dependencies into this worktree, so its first build is quick; fast-forwards the main checkout when it is clean (D183)",
+    group: "This machine",
+    run: seed,
+}];
 
 /// The locks Cargo 1.97 takes in a profile directory: `.cargo-lock` shared, the other two
 /// exclusive, for the length of a build. `cargo run` lets them go before the program starts.
