@@ -6,10 +6,14 @@
 //! clip, looping or once and held on its last pose; `staged.move` walks it on the ground to a
 //! point at a speed, a stride clip's playback following the pace so its feet do not slide
 //! (`crate::pace`); `staged.face` turns it to a point or another figure at its turn rate; and
-//! `staged.impact` raises what a heavy blow raises where it lands (`impact`). Nothing here
+//! `staged.impact` raises what a heavy blow raises where it lands (`impact`); `staged.rate`
+//! runs a figure's own time slower or faster, its clip and its going, as a blow's hit-stop
+//! freezes both fighters for a few frames; and `staged.bend` turns some of its bones over its
+//! clip (`pose`). Nothing here
 //! names a model, an item or a clip: all of it is in the calls.
 
 mod impact;
+mod pose;
 
 use super::fliers::placed;
 use crate::planet::Planet;
@@ -51,6 +55,8 @@ pub struct Staged {
     scale: f32,
     asked: Option<Asked>,
     asked_n: u32,
+    /// How fast its own time runs: 1 as the world's, near 0 held in a hit-stop.
+    rate: f32,
 }
 
 /// Going to a point at a speed, metres a second.
@@ -75,6 +81,8 @@ struct Asked {
     speed: f32,
     once: bool,
     blend: Duration,
+    /// Seconds into the clip it starts from, past a slow start.
+    from_s: f32,
 }
 
 /// A figure whose model and clips are still loading: what to dress it in once they are in.
@@ -98,12 +106,20 @@ struct Animates {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (dress, stage, animate).chain());
+    app.add_systems(Update, (dress, stage, animate).chain())
+        .add_systems(
+            PostUpdate,
+            pose::bend
+                .after(bevy::app::AnimationSystems)
+                .before(bevy::transform::TransformSystems::Propagate),
+        );
     impact::plugin(app);
     method(app, "staged.spawn", spawn);
     method(app, "staged.play", play);
     method(app, "staged.move", go);
     method(app, "staged.face", face);
+    method(app, "staged.rate", rate);
+    method(app, "staged.bend", bend);
 }
 
 /// Whether clips fit a model's skeleton: most of the bones they move are its bones, by the
@@ -320,6 +336,8 @@ fn stage(
         .collect();
     for (_, mut staged, mut transform) in &mut figures {
         let here = transform.translation;
+        // Its own time: held in a hit-stop, it all but stops where it is.
+        let dt = dt * staged.rate;
         let toward = match staged.face {
             Face::Way => None,
             Face::Point(point) => Some(point),
@@ -337,10 +355,13 @@ fn stage(
         if next.arrived {
             staged.going = None;
         }
-        staged.speed_now = (next.at - here)
-            .reject_from(here.normalize_or(Vec3::Y))
-            .length()
-            / dt;
+        // How fast it goes in its own time, so its stride keeps pace once that is slowed too.
+        if dt > 1e-6 {
+            staged.speed_now = (next.at - here)
+                .reject_from(here.normalize_or(Vec3::Y))
+                .length()
+                / dt;
+        }
         staged.facing = next.facing;
         let up = next.at.normalize_or(Vec3::Y);
         *transform = Transform::from_translation(next.at)
@@ -378,7 +399,9 @@ fn animate(
                         if !asked.once {
                             active.repeat();
                         }
-                        active.set_speed(asked.speed);
+                        if asked.from_s > 0.0 {
+                            active.seek_to(asked.from_s);
+                        }
                         animates.playing = Some((asked.clip.clone(), copy));
                     }
                     None => warn!("Staged: {} has no clip {}.", staged.name, asked.clip),
@@ -388,12 +411,21 @@ fn animate(
         let Some((name, copy)) = animates.playing.clone() else {
             continue;
         };
-        if let (Some(pace), Some(nodes)) = (animates.paces.get(&name), animates.clips.get(&name))
-            && staged.speed_now > STILL_MPS
-            && let Some(active) = player.animation_mut(nodes[copy])
-        {
-            active.set_speed(crate::pace::rate(staged.speed_now, *pace, place.scale().y));
-        }
+        let Some(active) = animates
+            .clips
+            .get(&name)
+            .and_then(|nodes| player.animation_mut(nodes[copy]))
+        else {
+            continue;
+        };
+        // As asked, or a stride at the pace it goes; either in the figure's own time.
+        let speed = match animates.paces.get(&name) {
+            Some(pace) if staged.speed_now > STILL_MPS => {
+                crate::pace::rate(staged.speed_now, *pace, place.scale().y)
+            }
+            _ => staged.asked.as_ref().map_or(1.0, |asked| asked.speed),
+        };
+        active.set_speed(speed * staged.rate);
     }
 }
 
@@ -412,6 +444,9 @@ struct Spawn {
     facing: [f32; 3],
     scale: Option<f32>,
     turn_deg_s: Option<f32>,
+    /// Bones turned over its clips (`pose`): degrees about the body's x, y and z.
+    #[serde(default)]
+    bend: std::collections::BTreeMap<String, [f32; 3]>,
     #[serde(default)]
     base: bool,
 }
@@ -470,6 +505,7 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             scale,
             asked: None,
             asked_n: 0,
+            rate: 1.0,
         },
         dressing,
         Transform::from_translation(feet)
@@ -477,6 +513,11 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             .with_scale(Vec3::splat(scale)),
         Visibility::default(),
     ));
+    if !asked.bend.is_empty() {
+        let mut bends = pose::Bends::default();
+        bends.tell(&asked.bend, 0.0);
+        entity.insert(bends);
+    }
     if !asked.wears.is_empty() {
         entity.insert(character::Outfit(
             asked.wears.iter().map(character::Clothing::new).collect(),
@@ -510,9 +551,11 @@ struct Play {
     #[serde(default)]
     once: bool,
     blend_ms: Option<u64>,
+    from_s: Option<f32>,
 }
 
-/// Blends a figure into a clip: looping, or once and held on its last pose until the next.
+/// Blends a figure into a clip: looping, or once and held on its last pose until the next,
+/// from its start or so far into it.
 fn play(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Play = parse_some(params)?;
     let entity = named(world, &asked.name)?;
@@ -522,6 +565,7 @@ fn play(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             speed: asked.speed.unwrap_or(1.0),
             once: asked.once,
             blend: Duration::from_millis(asked.blend_ms.unwrap_or(BLEND_MS)),
+            from_s: asked.from_s.unwrap_or(0.0).max(0.0),
         });
         staged.asked_n += 1;
     }
@@ -592,6 +636,50 @@ fn face(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     if let Some(mut staged) = world.get_mut::<Staged>(entity) {
         staged.face = face;
+    }
+    Ok(json!({ "done": true }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RateCall {
+    name: String,
+    rate: f32,
+}
+
+/// Runs a figure's own time at a rate, its clip and its going: near 0 for a hit-stop, 1 again
+/// after.
+fn rate(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: RateCall = parse_some(params)?;
+    let entity = named(world, &asked.name)?;
+    if let Some(mut staged) = world.get_mut::<Staged>(entity) {
+        staged.rate = asked.rate.clamp(0.0, 4.0);
+    }
+    Ok(json!({ "done": true }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BendCall {
+    name: String,
+    bend: std::collections::BTreeMap<String, [f32; 3]>,
+    blend_ms: Option<u64>,
+}
+
+/// Turns some of a figure's bones over its clips, blended from how they were turned before;
+/// any bent before and not named now blend back to the clip's own pose.
+fn bend(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: BendCall = parse_some(params)?;
+    let entity = named(world, &asked.name)?;
+    let blend = asked.blend_ms.unwrap_or(BLEND_MS) as f32 / 1000.0;
+    let mut figure = world.entity_mut(entity);
+    match figure.get_mut::<pose::Bends>() {
+        Some(mut bends) => bends.tell(&asked.bend, blend),
+        None => {
+            let mut bends = pose::Bends::default();
+            bends.tell(&asked.bend, blend);
+            figure.insert(bends);
+        }
     }
     Ok(json!({ "done": true }))
 }
@@ -731,6 +819,7 @@ mod tests {
             scale: 1.0,
             asked: None,
             asked_n: 0,
+            rate: 1.0,
         };
         let troll_at = planet.ground_at(ground + Vec3::new(6.0, 3.0, 0.0));
         let troll = world
@@ -765,5 +854,49 @@ mod tests {
         // Strafing past it, it kept the troll in front.
         let to_troll = level(troll_at - at.translation).normalize();
         assert!(at.forward().dot(to_troll) > 0.99, "not facing the troll");
+    }
+    #[test]
+    fn a_figure_whose_time_runs_at_a_quarter_goes_a_quarter_as_far() {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let ground = planet.ground_at(Vec3::Y * 2100.0);
+        let mut world = World::new();
+        world.insert_resource(planet.clone());
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+        world.insert_resource(time);
+        let to = ground + Vec3::new(0.0, 0.0, 50.0);
+        let moved = |world: &mut World, rate: f32| {
+            let figure = world
+                .spawn((
+                    Staged {
+                        name: "man".into(),
+                        going: Some(Going { to, speed: 2.0 }),
+                        face: Face::Way,
+                        facing: Vec3::Z,
+                        turn: 3.0,
+                        speed_now: 0.0,
+                        scale: 1.0,
+                        asked: None,
+                        asked_n: 0,
+                        rate,
+                    },
+                    Transform::from_translation(ground),
+                ))
+                .id();
+            // A second at 2 m/s: two metres in its own time at the world's.
+            for _ in 0..60 {
+                world.run_system_once(stage).unwrap();
+            }
+            let at = world.get::<Transform>(figure).unwrap().translation;
+            world.despawn(figure);
+            (at - ground).length()
+        };
+        let whole = moved(&mut world, 1.0);
+        let quarter = moved(&mut world, 0.25);
+        assert!((whole - 2.0).abs() < 0.05, "went {whole} m");
+        assert!((quarter - 0.5).abs() < 0.02, "went {quarter} m");
     }
 }

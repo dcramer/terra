@@ -27,31 +27,43 @@
     "take": 2
   },
   "Fight_Slash": {
-    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and steps forward and slashes the sword diagonally down from the right shoulder, then steps back.",
+    "prompt": "A swordsman cuts diagonally down across his body with his right arm, from high on the right to low on the left.",
     "speed": 0,
     "seconds": 3,
-    "seed": 1,
+    "seed": 2,
     "once": true,
+    "span": [
+      0.2,
+      2.3
+    ],
     "fist": 1,
-    "take": 2
+    "take": 1
   },
   "Fight_Backhand": {
-    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and swings the sword horizontally from left to right across the body.",
+    "prompt": "A swordsman swings his right arm across from his left shoulder out to the right in a flat, fast cut.",
     "speed": 0,
     "seconds": 3,
-    "seed": 1,
+    "seed": 2,
     "once": true,
+    "span": [
+      0.2,
+      2.1
+    ],
     "fist": 1,
-    "take": 0
+    "take": 1
   },
   "Fight_Chop": {
-    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and raises the sword above the head and chops straight down in front.",
+    "prompt": "A swordsman raises his right arm high above his head and cuts straight down in front of him.",
     "speed": 0,
     "seconds": 3,
-    "seed": 1,
+    "seed": 2,
     "once": true,
+    "span": [
+      0.15,
+      2.1
+    ],
     "fist": 1,
-    "take": 2
+    "take": 1
   },
   "Fight_Block": {
     "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and raises the shield to block a heavy blow and is pushed back a step.",

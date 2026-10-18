@@ -27,7 +27,8 @@ A stride that travels `way` degrees to the right of where the body faces (a stra
 to face ahead, not along its travel. A clip marked "once" (a blow, a block, a dodge) is kept
 from the take's start to its end, or over its "span" (seconds in the take), at the take's own
 pace, in place, and not closed into a loop; an ONCE line says when each hand is raised highest
-and moves fastest, and how far the body travels, which the scene moves it by.
+and moves fastest, when the faster hand's blow lands, and how far the body travels, which the
+scene moves it by.
 
 OUT defaults to the game's mannequin file, which it reads and writes; clips.py makes it from
 the libraries first where they are here. --try puts one take into OUT instead of the kept one,
@@ -162,8 +163,10 @@ def one_shot(src, fps, span=None):
 
 def moments(src, fps, f0, f1):
     """What a one-shot does, to time it in a scene by: when each hand moves fastest (a blow's
-    moment), how far the body travels ahead and to its right (which the clip, played in place,
-    leaves the scene to move it by), and how far it has turned by its end."""
+    moment), when the faster hand's blow lands (its contact: the first moment after its fastest
+    that it slows below 30% of that, the cut stopping), how far the body travels ahead and to
+    its right (which the clip, played in place, leaves the scene to move it by), and how far it
+    has turned by its end."""
     scene = bpy.context.scene
     ahead = facing(src, f0)
     right = ahead.cross(Vector((0.0, 0.0, 1.0)))
@@ -173,16 +176,20 @@ def moments(src, fps, f0, f1):
         for h in hands:
             hands[h].append(src.matrix_world @ src.pose.bones[h].head)
         hips.append(src.matrix_world @ src.pose.bones["Hips"].head)
-    fastest = {}
+    fastest, contact = {}, {}
     for h, at in hands.items():
         speeds = [(at[i + 1] - at[i]).length * fps for i in range(len(at) - 1)]
         i = max(range(len(speeds)), key=speeds.__getitem__)
         # Raised: its highest before then, the top of a wind-up.
         top = max(range(i + 1), key=lambda j: at[j].z)
         fastest[h] = ((i + 0.5) / fps, speeds[i], top / fps, at[top].z - at[0].z)
+        # Lands: the first moment after then that it falls below 30% of that speed.
+        stop = next((j for j in range(i + 1, len(speeds)) if speeds[j] < 0.3 * speeds[i]), len(speeds) - 1)
+        contact[h] = (stop + 0.5) / fps
+    hand = max(fastest, key=lambda h: fastest[h][1])
     moved = hips[-1] - hips[0]
     turned = math.degrees(ahead.angle(facing(src, f1))) * (1 if ahead.cross(facing(src, f1)).z > 0 else -1)
-    return fastest, moved.dot(ahead), moved.dot(right), turned
+    return fastest, (hand, contact[hand]), moved.dot(ahead), moved.dot(right), turned
 
 
 def world_rest(arm, bone):
@@ -487,10 +494,10 @@ def main():
         else:
             f0, f1, seam = stride(src, fps)
         if entry.get("once"):
-            fastest, ahead, right, turned = moments(src, fps, f0, f1)
+            fastest, (hand, lands), ahead, right, turned = moments(src, fps, f0, f1)
             print(f"ONCE {name}: " + ", ".join(f"{h[:-4].lower()} hand raised {up:+.2f} m at {top:.2f} s, fastest {v:.1f} m/s at {t:.2f} s"
                                                for h, (t, v, top, up) in fastest.items())
-                  + f"; travels {ahead:+.2f} m ahead, {right:+.2f} m right; turned {turned:+.0f} deg (left +) by its end")
+                  + f"; {hand[:-4].lower()} hand's blow lands at {lands:.2f} s; travels {ahead:+.2f} m ahead, {right:+.2f} m right; turned {turned:+.0f} deg (left +) by its end")
         old = bpy.data.actions.get(name)
         if old is not None:
             old.name = name + ".old"
