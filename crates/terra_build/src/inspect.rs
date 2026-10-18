@@ -26,9 +26,8 @@
 
 use crate::kit::{Kits, Pattern};
 use crate::mesh::{Material, Surface};
-use crate::relief::Maps;
 use crate::sections::{self, Detail, Progress, Reach, Section};
-use crate::{Base, CELL_M, Fill, Kind, Shape};
+use crate::{Base, CELL_M, Fill, Kind, Shape, hull, relief::Maps};
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::BTreeMap;
 
@@ -847,8 +846,8 @@ fn solid(base: &Base, kits: &Kits, at: IVec3, detail: Detail) -> bool {
         return true;
     }
     base.cube(at).is_some_and(|cube| {
-        shown(kits, &cube, detail)
-            && cube.fill == Fill::Solid
+        // A window or doorway in the hull is a pane filling its cube (`hull::pane`).
+        (hull::pane(Some(cube), detail) || (shown(kits, &cube, detail) && cube.fill == Fill::Solid))
             && cube.shape == Shape::Whole
             && !cube.kind.is_roof()
             && kits.of(cube.kind).is_some_and(|kit| {
@@ -881,14 +880,7 @@ fn see_through(
     let mut cast = 0;
     // One finding a cube and fault, the first line through it.
     let mut found: BTreeMap<[i32; 3], (Vec3, String)> = BTreeMap::new();
-    let faces = [
-        IVec3::X,
-        IVec3::NEG_X,
-        IVec3::Y,
-        IVec3::NEG_Y,
-        IVec3::Z,
-        IVec3::NEG_Z,
-    ];
+    let faces = crate::support::FACES;
     let ground = base.ground();
     // A timber flight's cubes are drawn as steps on stringers, open under them as a stair
     // is: not a wall to look through.

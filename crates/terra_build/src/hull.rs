@@ -14,6 +14,7 @@
 use crate::kit::{Kits, Pattern};
 use crate::mesh::{Material, Surface};
 use crate::relief::Maps;
+use crate::sections::Detail;
 use crate::{Base, CELL_M, Cube, Cubes, Facing, Fill, Kind, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, HashSet};
@@ -139,7 +140,14 @@ fn along_x(facing: Facing) -> bool {
 
 /// Whether a cube is drawn: anything of it in, or an opening cut in a wall built (a pane).
 fn drawn(cube: &Cube) -> bool {
-    cube.is_in() || (cube.fill == Fill::Open && cube.level() > 0)
+    cube.is_in() || pane(Some(*cube), Detail::Proxy)
+}
+
+/// Whether a cube is drawn at this detail as a pane filling it: an opening built, in the
+/// hull. A wall's faces round it (its reveals) are hidden there as against a wall, so the
+/// artifacts check takes it as solid there (`inspect::solid`).
+pub(crate) fn pane(cube: Option<Cube>, detail: Detail) -> bool {
+    detail == Detail::Proxy && cube.is_some_and(|c| c.fill == Fill::Open && c.level() > 0)
 }
 
 /// Whether a cube fills its sides, so its neighbours' faces against it are hidden: an
