@@ -29,8 +29,8 @@ pub fn near(planet: &Planet, point: Vec3) -> (f32, f32) {
 /// is (Red Dead Redemption 2's and Kingdom Come's ponds, sedge and grass to the waterline), not
 /// a band of bare ground tens of metres wide where the bank is flat.
 pub fn grass(above_m: f32, lowland: f32) -> f32 {
-    let from = 0.5 + (0.03 - 0.5) * lowland;
-    let to = 1.6 + (0.3 - 1.6) * lowland;
+    let from = 0.5 + (0.02 - 0.5) * lowland;
+    let to = 1.6 + (0.08 - 1.6) * lowland;
     let t = ((above_m - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -43,7 +43,7 @@ mod tests {
     /// bare to a man's height, the sea's alike; nothing grows under any water.
     #[test]
     fn a_lowland_banks_grass_comes_down_to_its_water() {
-        assert!(grass(0.3, 1.0) > 0.95);
+        assert!(grass(0.1, 1.0) > 0.95);
         assert!(grass(0.5, 0.0) < 0.01);
         assert!(grass(1.7, 0.0) > 0.99);
         assert!(grass(0.0, 1.0) == 0.0 && grass(-1.0, 0.0) == 0.0);

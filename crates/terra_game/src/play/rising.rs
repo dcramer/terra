@@ -250,6 +250,13 @@ impl Rising {
         self.lapse.people && (builder || self.is_up(home))
     }
 
+    /// Whether the land's wild animals are about: none in a time-lapse without its people,
+    /// which shows the buildings alone (a deer walking through a film of the town's day reads
+    /// as a figure moving at a sprint).
+    pub fn wildlife(&self) -> bool {
+        self.lapse.people
+    }
+
     /// Whether a building is up and lived in long enough for its yard, smoke and torch.
     pub fn settled(&self, building: usize) -> bool {
         self.finished
@@ -880,6 +887,7 @@ mod tests {
         rising.up = vec![true, false];
         assert!(rising.shows(true, Some(1)) && rising.shows(false, Some(0)));
         assert!(!rising.shows(false, Some(1)));
+        assert!(rising.wildlife());
         rising.lapse = Timelapse::parse(
             "(seconds: 40.0, hours: (7.0, 17.0), first: 2.0, last: 26.0, takes: (6.0, 12.0), common: (10.0, 30.0), people: false)",
         )
@@ -887,6 +895,10 @@ mod tests {
         for (builder, home) in [(true, Some(1)), (false, Some(0)), (false, None)] {
             assert!(!rising.shows(builder, home), "{builder} {home:?}");
         }
+        assert!(
+            !rising.wildlife(),
+            "no wild animals in a time-lapse of the buildings alone"
+        );
     }
 
     #[test]

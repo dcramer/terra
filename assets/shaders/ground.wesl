@@ -1394,16 +1394,25 @@ fn fragment(
         {
             let above = in.uv_b.y + (blotch - 0.5) * 0.7 + (fleck - 0.5) * 0.15;
             let lowland = lowland_at(from_centre - ground.sea_radius_m);
-            // A lowland lake's shore is soft: wet mud a hand or so either side of the waterline,
-            // its meadow or moss down to it, not a band of scoured granite. Mud, not the sand
-            // scan, whose pebbles read as coarse grey shingle from above ("textures of the
-            // beach are kinda chonky"), finer than the field's soil, as silt is.
-            // Its edge frayed less than the mountain shore's: on a flat bank the blotches'
-            // half metre laid mud in patches far up the meadow.
-            let wet_above = in.uv_b.y + (blotch - 0.5) * 0.2 + (fleck - 0.5) * 0.1;
-            let soft = (1.0 - smoothstep(0.03, 0.3, wet_above)) * smoothstep(-2.0, -0.6, wet_above) * lowland;
+            // A lowland lake's shore is soft: its meadow comes down to the water, a few
+            // centimetres of wet mud at the line, and under the water one bed of silt however
+            // deep, the brown-green of drowned leaves and algae, darker as it goes down. Mud,
+            // not the sand scan, whose pebbles read as coarse grey shingle from above
+            // ("textures of the beach are kinda chonky"), finer than the field's soil, as silt
+            // is. The margin is a few centimetres of height, frayed by as little: on a flat
+            // bank 3 to 30 cm over the water was a mud flat tens of metres wide with the
+            // meadow's bumps standing out of it as islands, and where the bed gave way to the
+            // meadow's own ground a metre down it showed through the water as olive patches
+            // (measured with the ground tinted by its height over the water). Past 5 m, where
+            // the lowland water hides its bed, the ground's own again, so land lower than a
+            // lake beside it (below its outflow) is no mud flat.
+            let fray = (blotch - 0.5) * 0.04 + (fleck - 0.5) * 0.02;
+            let wet_above = in.uv_b.y + fray;
+            let soft = (1.0 - smoothstep(0.0, 0.06, wet_above)) * smoothstep(-8.0, -5.0, wet_above) * lowland;
             if soft > 0.0 {
-                let silt = vec3<f32>(0.11, 0.085, 0.055) * (0.75 + 0.5 * fleck) * tones;
+                let down = 1.0 - smoothstep(-2.5, 0.0, in.uv_b.y);
+                let mud = mix(vec3<f32>(0.062, 0.056, 0.032), vec3<f32>(0.045, 0.045, 0.025), down);
+                let silt = mud * (0.9 + 0.2 * fleck) * mix(tones, 1.0, 0.5);
                 ground_is = over(ground_is, layer(SOIL, 0.6, silt, world + 67.0, gx, gy, n, 1.0), soft);
             }
             let shore = (1.0 - smoothstep(0.9, 1.6, above)) * smoothstep(-6.0, -3.0, above) * (1.0 - lowland);

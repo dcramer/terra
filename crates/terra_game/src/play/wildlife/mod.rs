@@ -135,7 +135,12 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
-        .add_systems(Update, populate.run_if(something_grows));
+        .add_systems(Update, populate.run_if(something_grows).run_if(wild_shown));
+}
+
+/// Whether wild animals are put out: not in a time-lapse without people (D381).
+fn wild_shown(rising: Option<Res<super::rising::Rising>>) -> bool {
+    rising.is_none_or(|r| r.wildlife())
 }
 
 /// Whether the world grows anything: anywhere but the yard, the flat test level, unless a
