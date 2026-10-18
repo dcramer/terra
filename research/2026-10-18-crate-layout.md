@@ -143,7 +143,24 @@ Before the first move, and after each step below, on the same machine with the l
 2. Touch-only rebuilds of the sandbox in dev and release after touching one file in each future crate (a fixed list, `layout/runs.rs`, `sections.rs`, `town/mod.rs`, `play/creatures.rs`, `play/movement.rs`, …).
 3. `cargo xtask check` (the push gate) on a one-line change in each of the same files.
 
-That is the same check done some fifteen times, so it is a task (D71): a `cargo xtask rebuilds` printing a line a file, dev and release seconds and the push gate's, against the last result, as `cargo xtask bench` does. To be built only once this is agreed.
+That is the same check done some fifteen times, so it is a task (D71): `cargo xtask rebuilds` ([tools/rebuilds](../tools/rebuilds/README.md)) does 1 and 2; the push gate's time is read from each push.
+
+### Measured: the baseline
+
+At 9a523313, before any cut, on the 10-core Mac with other agents building (load average 32 to 56). Seconds to rebuild the sandbox after the probe's file is touched, and the workspace crates compiled for it:
+
+| Probe | Dev | Of which | Release | Of which |
+|---|---|---|---|---|
+| core (`terra_core/src/lib.rs`) | 54 | game 25, world 19, sandbox 13 | 823 | game 645, world 367, sandbox 111 |
+| building's rules (`cubes.rs`) | 58 | world 22, game 21, build 11, sandbox 9 | 1,136 | game 768, world 487, build 232, sandbox 113, life 48 |
+| building's layout (`layout/runs.rs`) | 48 | game 19, world 18, build 9, sandbox 7 | | |
+| building's drawing (`sections.rs`) | 46 | world 16, game 15, sandbox 9, build 8 | | |
+| a town (`town/streets.rs`) | 38 | game 14, world 11, build 8, sandbox 7 | | |
+| the world (`flora.rs`) | 43 | game 21, world 16, sandbox 10 | | |
+| the walker (`play/movement.rs`) | 44 | game 29, sandbox 13 | | |
+| a creature (`play/creatures.rs`) | 38 | game 26, sandbox 10 | | |
+
+Per-crate seconds overlap, since cargo compiles crates side by side. The world is 11 to 22 s of every building rebuild in dev and 487 s of one in release, which step 3 removes; release rebuilds, which every shot and film pays, run to 14 to 19 minutes under this load, `terra_game` alone 11 to 13. The release pass was stopped after two probes so as not to hold the machine for two hours. A building push's gate took 16 to 59 minutes, and a push that slow often loses the race to main to another agent's.
 
 ## How shipped projects do it
 
