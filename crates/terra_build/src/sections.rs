@@ -33,7 +33,7 @@ mod blocks;
 use blocks::*;
 mod ghosts;
 use ghosts::*;
-mod far;
+pub(crate) mod far;
 pub use far::*;
 mod plain;
 use plain::*;

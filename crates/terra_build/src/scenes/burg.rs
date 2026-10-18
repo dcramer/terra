@@ -196,8 +196,41 @@ impl Plan {
     }
 }
 
+/// How tall a castle's flanking towers' stone and its keep's stand, and how wide its keep is,
+/// in cubes.
+#[derive(Clone, Copy)]
+struct Heights {
+    towers: i32,
+    keep: i32,
+    keep_side: i32,
+}
+
+/// The burg's: a hill castle's, its keep a little over its towers.
+const BURG: Heights = Heights {
+    towers: TOWER_STONE,
+    keep: KEEP_STONE,
+    keep_side: KEEP,
+};
+
+/// A town's castle's (D381): seen from far over the town it crowns, its towers half as tall
+/// again and its keep twice the burg's, 32 m of stone and 11 m across, so it stands over
+/// every roof of the town: the burg's keep, 15 m, read from the film's end as a low block.
+const CROWN: Heights = Heights {
+    towers: 36,
+    keep: 64,
+    keep_side: 22,
+};
+
+/// How far behind its gate a town's castle's middle stands, in metres.
+pub const CASTLE_BEHIND_M: f32 = (DEEP / 2 + 2) as f32 * crate::CELL_M;
+
 /// The castle's shortcuts.
 pub fn burg(m: Materials) -> Vec<BuildOp> {
+    ward(m, BURG)
+}
+
+/// A castle of these heights' shortcuts.
+fn ward(m: Materials, heights: Heights) -> Vec<BuildOp> {
     let mut plan = Plan {
         ops: Vec::new(),
         roofs: Vec::new(),
@@ -240,93 +273,14 @@ pub fn burg(m: Materials) -> Vec<BuildOp> {
     // the wall's inner face, loopholes in the outer, under a gable along the run. They run on
     // over the joint to each tower's stone, the timber bridge that joins it to the walls.
     let gate_x = gx0 - 1..=gx1 + 1;
-    let hoardings: [(Box3, [i32; 3]); 4] = [
-        (sides[0], [0, 0, 1]),
-        (sides[1], [0, 0, -1]),
-        (sides[2], [-1, 0, 0]),
-        (sides[3], [1, 0, 0]),
-    ];
-    for ((min, max), out) in hoardings {
-        let along_x = out[2] != 0;
-        // Its strip of columns: the wall's thickness and two cubes out.
-        let strip = |from: i32, to: i32| -> [i32; 4] {
-            if along_x {
-                let (za, zb) = if out[2] > 0 {
-                    (min[2], max[2] + 2)
-                } else {
-                    (min[2] - 2, max[2])
-                };
-                [from, za, to, zb]
-            } else {
-                let (xa, xb) = if out[0] > 0 {
-                    (min[0], max[0] + 2)
-                } else {
-                    (min[0] - 2, max[0])
-                };
-                [xa, from, xb, to]
-            }
-        };
-        // Each run of the wall between towers, a cube longer at each end over the joint, and
-        // on the south side either side of the gatehouse.
-        let mut pieces: Vec<(i32, i32)> = Vec::new();
-        for (a, b) in runs(min, max, &clear_of_towers) {
-            let (from, to) = if along_x {
-                (a[0] - 1, b[0] + 1)
-            } else {
-                (a[1] - 1, b[1] + 1)
-            };
-            if along_x && out[2] > 0 {
-                pieces.push((from, *gate_x.start() - 1));
-                pieces.push((*gate_x.end() + 1, to));
-            } else {
-                pieces.push((from, to));
-            }
-        }
-        for (from, to) in pieces {
-            let [sx0, sz0, sx1, sz1] = strip(from, to);
-            // The floor over the wall's top and out.
-            plan.solid(([sx0, HIGH - 1, sz0], [sx1, HIGH - 1, sz1]), m.beams);
-            // Its two long walls, outer and inner, a storey high.
-            let (outer, inner): (Box3, Box3) = if along_x {
-                let (zo, zi) = if out[2] > 0 { (sz1, sz0) } else { (sz0, sz1) };
-                (
-                    ([sx0, HIGH, zo], [sx1, HIGH + 5, zo]),
-                    ([sx0, HIGH, zi], [sx1, HIGH + 5, zi]),
-                )
-            } else {
-                let (xo, xi) = if out[0] > 0 { (sx1, sx0) } else { (sx0, sx1) };
-                (
-                    ([xo, HIGH, sz0], [xo, HIGH + 5, sz1]),
-                    ([xi, HIGH, sz0], [xi, HIGH + 5, sz1]),
-                )
-            };
-            plan.solid(outer, m.beams);
-            plan.solid(inner, m.beams);
-            // Loopholes in the outer wall every three cubes.
-            let (lo, hi) = if along_x { (sx0, sx1) } else { (sz0, sz1) };
-            for v in (lo + 2..hi - 1).step_by(3) {
-                let at = if along_x {
-                    [v, HIGH + 2, outer.0[2]]
-                } else {
-                    [outer.0[0], HIGH + 2, v]
-                };
-                plan.clear((at, [at[0], at[1] + 1, at[2]]));
-            }
-            plan.roof(
-                [sx0, sz0, sx1, sz1],
-                HIGH / 6,
-                Style::Gable,
-                Some(along_x),
-                m.shakes,
-            );
-        }
-    }
+    hoardings(&mut plan, &sides, &clear_of_towers, gate_x, &m);
     // The flanking towers.
     for at in corners {
-        plan.tower(at, TOWER, TOWER_WALL, TOWER_STONE, LACING, &m);
+        plan.tower(at, TOWER, TOWER_WALL, heights.towers, LACING, &m);
     }
     // The keep, standing free in the ward north of the gate.
-    plan.tower([-KEEP / 2, -48], KEEP, 2, KEEP_STONE, KEEP_LACING, &m);
+    let keep = heights.keep_side;
+    plan.tower([-keep / 2, -48], keep, 2, heights.keep, KEEP_LACING, &m);
     // The hall along the north wall, a cube clear of it: a ground storey of stone, two of
     // squared timber over it, under a gable.
     let hall = [-32, z0 + THICK + 1, 23, z0 + THICK + 12];
@@ -425,8 +379,102 @@ pub fn castle(m: Materials) -> Vec<BuildOp> {
         max: [WIDE / 2 + 3, -1, 3],
         cube: Some(Cube::new(m.stone, Fill::Solid)),
     }];
-    ops.extend(burg(m));
+    ops.extend(ward(m, CROWN));
     ops
+}
+
+// Hoardings along every run of the curtain but the gatehouse's: a floor on beams carried
+// two cubes out over the outer face, timber walls a storey high along its outer edge and
+// the wall's inner face, loopholes in the outer, under a gable along the run. They run on
+// over the joint to each tower's stone, the timber bridge that joins it to the walls.
+fn hoardings(
+    plan: &mut Plan,
+    sides: &[Box3; 4],
+    clear_of_towers: &dyn Fn(i32, i32) -> bool,
+    gate_x: std::ops::RangeInclusive<i32>,
+    m: &Materials,
+) {
+    let hoardings: [(Box3, [i32; 3]); 4] = [
+        (sides[0], [0, 0, 1]),
+        (sides[1], [0, 0, -1]),
+        (sides[2], [-1, 0, 0]),
+        (sides[3], [1, 0, 0]),
+    ];
+    for ((min, max), out) in hoardings {
+        let along_x = out[2] != 0;
+        // Its strip of columns: the wall's thickness and two cubes out.
+        let strip = |from: i32, to: i32| -> [i32; 4] {
+            if along_x {
+                let (za, zb) = if out[2] > 0 {
+                    (min[2], max[2] + 2)
+                } else {
+                    (min[2] - 2, max[2])
+                };
+                [from, za, to, zb]
+            } else {
+                let (xa, xb) = if out[0] > 0 {
+                    (min[0], max[0] + 2)
+                } else {
+                    (min[0] - 2, max[0])
+                };
+                [xa, from, xb, to]
+            }
+        };
+        // Each run of the wall between towers, a cube longer at each end over the joint, and
+        // on the south side either side of the gatehouse.
+        let mut pieces: Vec<(i32, i32)> = Vec::new();
+        for (a, b) in runs(min, max, &clear_of_towers) {
+            let (from, to) = if along_x {
+                (a[0] - 1, b[0] + 1)
+            } else {
+                (a[1] - 1, b[1] + 1)
+            };
+            if along_x && out[2] > 0 {
+                pieces.push((from, *gate_x.start() - 1));
+                pieces.push((*gate_x.end() + 1, to));
+            } else {
+                pieces.push((from, to));
+            }
+        }
+        for (from, to) in pieces {
+            let [sx0, sz0, sx1, sz1] = strip(from, to);
+            // The floor over the wall's top and out.
+            plan.solid(([sx0, HIGH - 1, sz0], [sx1, HIGH - 1, sz1]), m.beams);
+            // Its two long walls, outer and inner, a storey high.
+            let (outer, inner): (Box3, Box3) = if along_x {
+                let (zo, zi) = if out[2] > 0 { (sz1, sz0) } else { (sz0, sz1) };
+                (
+                    ([sx0, HIGH, zo], [sx1, HIGH + 5, zo]),
+                    ([sx0, HIGH, zi], [sx1, HIGH + 5, zi]),
+                )
+            } else {
+                let (xo, xi) = if out[0] > 0 { (sx1, sx0) } else { (sx0, sx1) };
+                (
+                    ([xo, HIGH, sz0], [xo, HIGH + 5, sz1]),
+                    ([xi, HIGH, sz0], [xi, HIGH + 5, sz1]),
+                )
+            };
+            plan.solid(outer, m.beams);
+            plan.solid(inner, m.beams);
+            // Loopholes in the outer wall every three cubes.
+            let (lo, hi) = if along_x { (sx0, sx1) } else { (sz0, sz1) };
+            for v in (lo + 2..hi - 1).step_by(3) {
+                let at = if along_x {
+                    [v, HIGH + 2, outer.0[2]]
+                } else {
+                    [outer.0[0], HIGH + 2, v]
+                };
+                plan.clear((at, [at[0], at[1] + 1, at[2]]));
+            }
+            plan.roof(
+                [sx0, sz0, sx1, sz1],
+                HIGH / 6,
+                Style::Gable,
+                Some(along_x),
+                m.shakes,
+            );
+        }
+    }
 }
 
 /// The runs of a box's columns, in x and z, along its longer side, where `keep` holds of

@@ -63,7 +63,7 @@ pub(super) fn bake(section: &Section, built: BTreeMap<(Kind, Material), Surface>
 /// what a far face's corners, half a metre apart on a two-metre stone texture, stand for,
 /// as a texture's smaller copy averages it. One texel at each corner repeated the same few
 /// values every tile and blended them across each triangle into a quilt of dimples.
-fn patch(swatch: &crate::relief::Swatch, uv: [f32; 2]) -> [f32; 3] {
+pub(crate) fn patch(swatch: &crate::relief::Swatch, uv: [f32; 2]) -> [f32; 3] {
     const ACROSS: usize = 4;
     const STEP: f32 = 1.0 / 16.0;
     let mut sum = [0.0f32; 3];

@@ -7,7 +7,9 @@
 //! one plane in one colour are merged into rectangles (greedy meshing, as voxel games mesh
 //! their chunks); a cut cube shows its top at its shape's height over each corner
 //! (`Shape::top`), its sides cut to it, so roofs keep their pitch. Its colours are each
-//! kit's materials' mean, darkened a little for the shade a surface's relief casts.
+//! kit's materials' mean, darkened a little for the shade a surface's relief casts, a whole
+//! cube's side a few steps lighter or darker as its texture is there and dirtier at its
+//! wall's foot (`Colours::side`).
 //!
 //! Pure data, so it runs on any thread: the game makes it on its workers.
 
@@ -66,8 +68,10 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
                 }
                 let colour = if cube.fill == Fill::Open {
                     colours.opening()
+                } else if dir == UP {
+                    colours.of(cube.kind, true)
                 } else {
-                    colours.of(cube.kind, dir == UP)
+                    colours.side(cube.kind, at, dir)
                 };
                 let (plane, cell) = plane_of(dir, at);
                 planes.entry((dir, plane, colour)).or_default().insert(cell);
@@ -338,11 +342,26 @@ fn triangle(out: &mut Surface, corners: [Vec3; 3], toward: Vec3, colour: [f32; 3
     shared.indices.extend([first, first + 1, first + 2]);
 }
 
+/// How a cube's side far off follows its texture there (`Colours::side`): in steps of this
+/// share of its kind's colour, at most `TONES` steps lighter or darker, its texture's own
+/// difference from its mean over the half metre it covers times `TONE_GAIN`, which a far
+/// face's relief and joints would deepen near. In one colour a stone wall's hull was a flat
+/// cream block from 120 m out, the town wall and castle blockout beside textured houses.
+const TONE_STEP: f32 = 0.07;
+const TONES: i32 = 4;
+const TONE_GAIN: f32 = 3.0;
+/// A side within its kit's dirt's rise of the base's floor is that much of the way to its
+/// dirt's colour, as the near detail's masks darken a wall's foot (`dress::masks`): the
+/// dark band along a wall's foot that sets it on the ground far off.
+const DIRT_SHARE: f32 = 0.6;
+
 /// Each kind's colours, its top's and its sides', worked out once, by number.
 struct Colours<'a> {
     kits: &'a Kits,
     maps: &'a Maps,
     by_kind: BTreeMap<(Kind, bool), usize>,
+    /// A kind's side colour a few steps lighter or darker (`side`).
+    by_tone: BTreeMap<(Kind, i32), usize>,
     list: Vec<[f32; 3]>,
 }
 
@@ -352,8 +371,63 @@ impl<'a> Colours<'a> {
             kits,
             maps,
             by_kind: BTreeMap::new(),
+            by_tone: BTreeMap::new(),
             list: Vec::new(),
         }
+    }
+
+    /// The number of a cube's side's colour facing `dir`: its kind's, lighter or darker in
+    /// steps as its texture is where the face falls on it, as the far detail bakes its
+    /// texture into its corners (`sections::far::bake`), so a stone wall far off shows its
+    /// stones and a log wall its courses. A kind with no texture is its one colour.
+    fn side(&mut self, kind: Kind, at: IVec3, dir: usize) -> usize {
+        let plain = self.of(kind, false);
+        let Some(kit) = self.kits.of(kind) else {
+            return plain;
+        };
+        let material = match kit.pattern {
+            Pattern::Roof => return plain,
+            Pattern::Masonry => Material::Masonry,
+            Pattern::Logs => Material::Log,
+        };
+        let (Some(swatch), Some(texture)) =
+            (self.maps.colour(kit, material), kit.textures.get(&material))
+        else {
+            return plain;
+        };
+        let normal = DIRECTIONS[dir];
+        let middle = (at.as_vec3() + Vec3::splat(0.5) + normal.as_vec3() * 0.5) * CELL_M;
+        let across = if normal.x != 0 { middle.z } else { middle.x };
+        let uv = [
+            across / texture.metres[0].max(0.01),
+            -middle.y / texture.metres[1].max(0.01),
+        ];
+        let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        let mean = luma(swatch.mean()).max(1e-3);
+        let here = luma(crate::sections::far::patch(swatch, uv));
+        let tone = libm::roundf((here / mean - 1.0) * TONE_GAIN / TONE_STEP) as i32;
+        let tone = tone.clamp(-TONES, TONES);
+        let masks = &kit.dress.masks;
+        let dirty = masks.dirt > 0.0 && (at.y as f32 + 0.5) * CELL_M < masks.dirt;
+        if tone == 0 && !dirty {
+            return plain;
+        }
+        // A dirty side's tone is numbered past the clean ones'.
+        let key = tone + if dirty { 4 * TONES } else { 0 };
+        if let Some(&index) = self.by_tone.get(&(kind, key)) {
+            return index;
+        }
+        let mut colour =
+            self.list[plain].map(|c| (c * (1.0 + TONE_STEP * tone as f32)).clamp(0.0, 1.0));
+        if dirty {
+            for (c, d) in colour.iter_mut().zip(masks.dirt_tint) {
+                *c *= 1.0 + (d - 1.0) * DIRT_SHARE;
+            }
+        }
+        let index = self.list.len();
+        self.list.push(colour);
+        self.by_tone.insert((kind, key), index);
+        index
     }
 
     /// The number of an opening's colour ([`OPENING`]).

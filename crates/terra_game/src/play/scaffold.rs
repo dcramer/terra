@@ -379,8 +379,11 @@ pub struct Scaffolded {
 }
 
 /// A finished building's scaffold is struck a lift at a time, from the top, one every so many
-/// of the time-lapse's seconds, as it is taken down, not gone at once.
+/// of the time-lapse's seconds, as it is taken down, not gone at once; a tall one's lifts
+/// faster, so all of it is down within `STRUCK_S`: a lift every 1.2 s, a wall tower's nine
+/// stood ten seconds past its finish, still up at the film's end.
 const STRIKE_S: f32 = 1.2;
+const STRUCK_S: f32 = 2.4;
 
 /// How often, in frames, each rising building's scaffold is looked at again.
 const EVERY: u32 = 6;
@@ -422,7 +425,12 @@ pub(super) fn scaffold(
         };
         let up = rising.up.get(rise.index).copied().unwrap_or(true);
         let wanted = if up {
-            if scaffolded.lifts == 0 || rising.t < scaffolded.changed_t + STRIKE_S {
+            let all = match scaffolded.walls {
+                Some(Some(walls)) => lifts(&walls, walls.eaves_m).max(1),
+                _ => 1,
+            };
+            let every = STRIKE_S.min(STRUCK_S / all as f32);
+            if scaffolded.lifts == 0 || rising.t < scaffolded.changed_t + every {
                 continue;
             }
             scaffolded.lifts - 1

@@ -10,7 +10,7 @@ use crate::BuildOp;
 use crate::scenes::burg;
 
 /// How far out past its outermost building, yard or the square the wall's outer face runs.
-const WALL_OUT_M: f32 = 10.0;
+const WALL_OUT_M: f32 = 8.0;
 /// How far in a corner of the wall's line may be cut off to make it plainer, at most.
 const CUT_M: f32 = 3.0;
 /// The longest length of curtain put up as one piece, so each stands level on its own ground.
@@ -23,10 +23,14 @@ const GATE_HALF_M: f32 = 4.0;
 const GAP_M: f32 = 0.1;
 /// How far out from the tower's foot the curtain's outer face runs (`burg::wall_tower`).
 const TOWER_OUT_M: f32 = 1.5;
-/// How far past the wall the castle's gate may stand, the least and the most, and how many
-/// ways round the town its place is looked for.
-const CASTLE_OUT_M: (f32, f32) = (25.0, 60.0);
-const CASTLE_WAYS: u32 = 48;
+/// How far the castle's curtain keeps from the wall, the least and the most; within how far
+/// of the town's middle its own middle stands (inside the settlement's clearing,
+/// `MarketTown::SETTLEMENT`'s 210 m less its 45 m edge and the castle's half); how far out
+/// its towers reach from its middle; and how finely its place is looked for.
+const CASTLE_OUT_M: (f32, f32) = (12.0, 50.0);
+const CASTLE_WITHIN_M: f32 = 135.0;
+const CASTLE_HALF_M: f32 = 30.0;
+const CASTLE_STEP_M: f32 = 6.0;
 
 impl Town {
     /// The town's wall, its towers and gates, and the castle, as buildings after the rest.
@@ -139,29 +143,28 @@ impl Town {
                 }
             }
         }
-        // The castle, last: on the highest ground a little way out past the wall, its gate
-        // toward the town.
-        let reach = |way: Vec2| {
-            ring.iter()
-                .map(|&p| (p - middle).dot(way))
-                .fold(0.0f32, f32::max)
+        // The castle, last: on the highest ground a little way out past the wall and within
+        // the settlement's clearing, its gate toward the town.
+        let room = |c: Vec2| {
+            let off = (0..ring.len())
+                .map(|i| point_segment(c, ring[i], ring[(i + 1) % ring.len()]))
+                .fold(f32::INFINITY, f32::min);
+            !inside(c, &ring)
+                && (CASTLE_HALF_M + CASTLE_OUT_M.0..CASTLE_HALF_M + CASTLE_OUT_M.1).contains(&off)
+                && c.distance(middle) < CASTLE_WITHIN_M
         };
-        let castle = (0..CASTLE_WAYS)
-            .flat_map(|w| {
-                let angle = w as f32 / CASTLE_WAYS as f32 * core::f32::consts::TAU;
-                let way = Vec2::new(libm::cosf(angle), libm::sinf(angle));
-                [0.0, 0.5, 1.0].map(|s| {
-                    middle
-                        + way
-                            * (reach(way) + CASTLE_OUT_M.0 + (CASTLE_OUT_M.1 - CASTLE_OUT_M.0) * s)
-                })
-            })
+        let steps = (CASTLE_WITHIN_M / CASTLE_STEP_M) as i32;
+        let castle = (-steps..=steps)
+            .flat_map(|x| (-steps..=steps).map(move |y| Vec2::new(x as f32, y as f32)))
+            .map(|cell| middle + cell * CASTLE_STEP_M)
+            .filter(|&c| room(c))
             .max_by(|p, q| heights(*p).total_cmp(&heights(*q)));
-        if let Some(at) = castle {
+        if let Some(centre) = castle {
+            let toward = (middle - centre).normalize_or(Vec2::Y);
             works.push((
                 "the castle".into(),
-                at,
-                facing_of(middle - at),
+                centre + toward * burg::CASTLE_BEHIND_M,
+                facing_of(toward),
                 burg::castle(m),
             ));
         }
@@ -181,12 +184,13 @@ impl Town {
     }
 }
 
-/// The line of a wall's outer face round points: their hull, every side moved out by
-/// `WALL_OUT_M`, its corners that turn least cut off while that takes no more than `CUT_M`
-/// in, in order round it with the town on each side's left of its way (+90° from it, in
-/// metres east and south, being out).
+/// The line of a wall's outer face round points: their concave hull ([`concave`]), every
+/// side moved out by `WALL_OUT_M`, its corners that turn least cut off while that takes no
+/// more than `CUT_M` in, in order round it with the town on each side's left of its way
+/// (+90° from it, in metres east and south, being out). Round their convex hull, a town of
+/// streets running out from its square walled the meadow between them, more of it than town.
 fn wall_line(points: &[Vec2]) -> Vec<Vec2> {
-    let hull = hull(points);
+    let hull = concave(points);
     let n = hull.len();
     if n < 3 {
         return hull;
@@ -218,6 +222,85 @@ fn wall_line(points: &[Vec2]) -> Vec<Vec2> {
             break;
         }
         ring.remove(least);
+    }
+    ring
+}
+
+/// A side of a wall's line longer than `DIG_FROM_M` that passes further than `DIG_CLEAR_M`
+/// from everything of the town somewhere along its middle (looked at in `DIG_SAMPLES`
+/// steps, an eighth at each end left out) is dug in toward the town.
+const DIG_FROM_M: f32 = 40.0;
+const DIG_CLEAR_M: f32 = 25.0;
+const DIG_SAMPLES: usize = 16;
+
+/// The concave hull of points, in the convex hull's order, as Park and Oh's ("A New Concave
+/// Hull Algorithm and Concaveness Measure for n-dimensional Datasets", 2012) digs it: from
+/// the convex hull, each long side running clear of the points along its middle is dug in to
+/// the nearest of them there, while the two new sides cross no other and leave no point out,
+/// until none is. So a town of streets running out from its square is walled along its
+/// houses' backs, not across the meadow between its streets.
+fn concave(points: &[Vec2]) -> Vec<Vec2> {
+    let mut ring = hull(points);
+    let mut inner: Vec<Vec2> = points
+        .iter()
+        .copied()
+        .filter(|p| !ring.contains(p))
+        .collect();
+    inner.sort_by(|p, q| p.x.total_cmp(&q.x).then(p.y.total_cmp(&q.y)));
+    inner.dedup();
+    let mut i = 0;
+    while i < ring.len() {
+        let n = ring.len();
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let long = a.distance(b);
+        // The emptiest place along its middle: the furthest from any point.
+        let gap = |at: Vec2| {
+            inner
+                .iter()
+                .map(|q| q.distance(at))
+                .fold(f32::INFINITY, f32::min)
+        };
+        let emptiest = (long >= DIG_FROM_M)
+            .then(|| {
+                (DIG_SAMPLES / 8..=DIG_SAMPLES - DIG_SAMPLES / 8)
+                    .map(|k| a.lerp(b, k as f32 / DIG_SAMPLES as f32))
+                    .max_by(|p, q| gap(*p).total_cmp(&gap(*q)))
+            })
+            .flatten()
+            .filter(|&at| gap(at) > DIG_CLEAR_M);
+        // Dug to the point nearest its line among those beside it: no other point lies
+        // between that one and the side, so the dig leaves none out.
+        let line = (b - a) / long;
+        let beside = |p: Vec2| (0.0..=long).contains(&(p - a).dot(line));
+        let dug = emptiest
+            .and_then(|_| {
+                inner
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .filter(|&(_, p)| beside(p))
+                    .min_by(|(_, p), (_, q)| {
+                        line.perp_dot(*p - a)
+                            .abs()
+                            .total_cmp(&line.perp_dot(*q - a).abs())
+                    })
+            })
+            .filter(|&(_, p)| {
+                !(0..n).any(|j| {
+                    let (c, d) = (ring[j], ring[(j + 1) % n]);
+                    j != i
+                        && [(a, p), (p, b)].iter().any(|&(e, f)| {
+                            e != c && e != d && f != c && f != d && crossing(e, f, c, d).is_some()
+                        })
+                })
+            });
+        match dug {
+            Some((k, p)) => {
+                ring.insert(i + 1, p);
+                inner.swap_remove(k);
+            }
+            None => i += 1,
+        }
     }
     ring
 }
