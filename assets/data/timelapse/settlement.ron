@@ -1,9 +1,10 @@
 // A settlement built from a bare clearing into a market town in a day, as a city-builder's
 // time-lapse shows one (D381, play::rising): the claim stone set at the heart of it, then
 // every building of the town from the square out, each from its plan to its last trim by the
-// building system's own steps, its builders at its sites; each finished house's hearth
-// smoking and its household about, its yard, fences and torch there; the well, benches and
-// stalls as the settlement reaches them. Times are seconds after it rolls.
+// building system's own steps, the first house alone at first and then the rest spreading
+// outward ever faster; each finished house's hearth smoking, its yard, fences and torch
+// there; the well, benches and stalls as the settlement reaches them. The buildings alone,
+// with nobody about (`people: false`). Times are seconds after it rolls.
 #![enable(implicit_some)]
 (
     about: "a market town rising from its clearing in a day",
@@ -11,16 +12,17 @@
     // An early morning, as the forest's own (trailer/runs/forest.json, 7.5 h): the sun low
     // and warm, the mist about the clearing and its shafts through it, lifting a little.
     hours: (7.5, 8.3),
-    claim: 0.3,
-    first: 0.8,
-    last: 15.5,
-    takes: (3.5, 7.0),
-    growth: 0.6,
+    claim: 0.0,
+    first: 0.3,
+    last: 14.0,
+    takes: (2.5, 5.0),
+    growth: 0.4,
     settled_after: 0.6,
-    gather: 7.0,
+    gather: 0.5,
     pace: 3.0,
-    builders: 22,
-    common: (9.0, 17.0),
+    builders: 0,
+    people: false,
+    common: (6.0, 16.0),
     // Before each building's door while it goes up: a stack of logs (a bucket of tools read
     // from high as stakes stood in the grass).
     site: [

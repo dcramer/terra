@@ -69,6 +69,10 @@ pub struct Timelapse {
     /// How many builders its people have, if not as many as the life's plan says.
     #[serde(default)]
     pub builders: Option<u32>,
+    /// Whether its people and their animals are shown: false for the buildings alone, a
+    /// settlement growing with nobody in it (the town's life still runs, unseen).
+    #[serde(default = "Timelapse::shown")]
+    pub people: bool,
     /// How long before a building's plan is laid its builders are called to its sites, in
     /// seconds: they walk at their own day's pace, far slower than the work goes on.
     #[serde(default)]
@@ -98,6 +102,10 @@ pub struct SiteThing {
 impl Timelapse {
     fn steady() -> f32 {
         1.0
+    }
+
+    fn shown() -> bool {
+        true
     }
 
     fn most_steps() -> u32 {
@@ -230,8 +238,16 @@ impl Rising {
     /// home is up.
     pub fn about(&self, market: &Market, person: usize) -> bool {
         let life = &market.life;
-        life.role(person) == "builder"
-            || self.is_up(life.town.things[life.people[person].home].building)
+        self.shows(
+            life.role(person) == "builder",
+            life.town.things[life.people[person].home].building,
+        )
+    }
+
+    /// Whether someone is shown: nobody if the time-lapse has no people, else a builder
+    /// always and anyone else once their home (or their animal's yard) is up.
+    pub fn shows(&self, builder: bool, home: Option<usize>) -> bool {
+        self.lapse.people && (builder || self.is_up(home))
     }
 
     /// Whether a building is up and lived in long enough for its yard, smoke and torch.
@@ -856,6 +872,21 @@ mod tests {
         );
         assert_eq!(starts[0], lapse.first);
         assert!((starts[19] - lapse.last).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_time_lapse_without_people_shows_nobody_however_built() {
+        let mut rising = Rising::new(lapse(), 0);
+        rising.up = vec![true, false];
+        assert!(rising.shows(true, Some(1)) && rising.shows(false, Some(0)));
+        assert!(!rising.shows(false, Some(1)));
+        rising.lapse = Timelapse::parse(
+            "(seconds: 40.0, hours: (7.0, 17.0), first: 2.0, last: 26.0, takes: (6.0, 12.0), common: (10.0, 30.0), people: false)",
+        )
+        .unwrap();
+        for (builder, home) in [(true, Some(1)), (false, Some(0)), (false, None)] {
+            assert!(!rising.shows(builder, home), "{builder} {home:?}");
+        }
     }
 
     #[test]

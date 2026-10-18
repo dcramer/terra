@@ -244,10 +244,11 @@ fn place(
         let Some(animal) = market.animals.animals.get(beast.index) else {
             continue;
         };
-        // In a settlement rising, a yard's animals come with its house (D381).
+        // In a settlement rising, a yard's animals come with its house, and none in a
+        // time-lapse without its people (D381).
         let wanted = if rising
             .as_ref()
-            .is_some_and(|r| !r.is_up(super::rising::owner(&market.life.town, animal.at)))
+            .is_some_and(|r| !r.shows(false, super::rising::owner(&market.life.town, animal.at)))
         {
             Visibility::Hidden
         } else {

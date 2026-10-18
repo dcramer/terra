@@ -437,7 +437,8 @@ fn place(
         let beyond = eye.is_some_and(|eye| eye.distance(person.at) > DRAWN_M);
         let hidden = matches!(market.life.shows(one.index), Shows::Hidden)
             || person.detail == Detail::Far
-            // In a settlement rising, nobody but its builders until their home is up.
+            // In a settlement rising, nobody but its builders until their home is up, and
+            // nobody at all in a time-lapse without its people.
             || rising.as_ref().is_some_and(|r| !r.about(&market, one.index))
             || beyond;
         let wanted = if hidden {
