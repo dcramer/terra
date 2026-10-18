@@ -282,6 +282,16 @@ fn ring_for(distance: f32, now: Option<usize>) -> usize {
     }
 }
 
+/// Where the blades shrink away with distance and where they thin out one by one
+/// (`blades::thinning`), for how far detail reaches (D230) and how thick the preset grows
+/// them: scaled as the rings are, so every ring's blades are still there to see.
+fn fading(detail: f32, density: f32) -> (Vec4, Vec4) {
+    (
+        Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail,
+        blades::thinning(density) * Vec4::new(1.0, detail, 1.0, detail),
+    )
+}
+
 fn square_middle((i, j): (i32, i32)) -> Vec2 {
     (Vec2::new(i as f32, j as f32) + 0.5) * SQUARE_M
 }
@@ -322,9 +332,7 @@ fn grow(
         && let Some(meadow) = &meadow
         && let Some(mut material) = materials.get_mut(&meadow.material)
     {
-        material.extension.fade = Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail.0;
-        material.extension.thinning =
-            blades::thinning(density) * Vec4::new(1.0, detail.0, 1.0, detail.0);
+        (material.extension.fade, material.extension.thinning) = fading(detail.0, density);
     }
     if detail.is_changed()
         && let Some(meadow) = &meadow
@@ -350,8 +358,10 @@ fn grow(
             // The wind blows along the start's east, as it does through the trees.
             extension: GrassExtension {
                 wind: (start.rotation * Vec3::X).extend(1.0),
-                fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
-                thinning: blades::thinning(density),
+                // As far as detail reaches: a film's detail set before this left the far
+                // rings' blades shrunk away, the meadow a bare plane from high (`fading`).
+                fade: fading(detail.0, density).0,
+                thinning: fading(detail.0, density).1,
                 parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
                 climate_on: 0,
                 grass_layer: -1,
@@ -469,8 +479,7 @@ fn grow(
             square.ring = usize::MAX;
         }
         if let Some(mut grass) = materials.get_mut(&*material) {
-            grass.extension.thinning =
-                blades::thinning(density) * Vec4::new(1.0, detail.0, 1.0, detail.0);
+            grass.extension.thinning = fading(detail.0, density).1;
         }
     }
     let local = start.local(camera.translation());
@@ -702,6 +711,26 @@ fn measure_bare(squares: &HashMap<(i32, i32), Square>, here: Vec2) -> BareGround
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_ring_grown_still_shows_however_far_detail_reaches() {
+        // The far ring starts where the second ends, the rings scaled by detail; its blades
+        // must not be shrunk away there already, nor the second's thinned out before it ends.
+        for detail in [1.0, 1.35, 2.0] {
+            let (fade, thinning) = fading(detail, 1.0);
+            let far_ring_starts = RINGS[1].1 * detail;
+            assert!(fade.x >= far_ring_starts * 0.95, "{detail}: {fade}");
+            assert!(fade.y > far_ring_starts + 10.0, "{detail}: {fade}");
+            assert!(
+                thinning.w >= far_ring_starts - 2.0 * detail,
+                "{detail}: {thinning}"
+            );
+            assert!(
+                thinning.y >= RINGS[0].1 * detail - 2.0 * detail,
+                "{detail}: {thinning}"
+            );
+        }
+    }
 
     #[test]
     fn a_square_keeps_its_ring_until_the_camera_is_well_past_the_edge() {
