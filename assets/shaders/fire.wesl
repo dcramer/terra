@@ -376,14 +376,17 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let solid = mix(0.5, 0.15, smoothstep(0.0, 0.5, t)) + 0.3 * struck;
         let heat_here = body * saturate(solid + 1.1 * tongue);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
-        // Many cards overlap along its line: each part-clear, so their sum is orange with a
-        // yellow heart and shows its tongues, never a solid pale wedge.
-        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.55, 0.38, t);
-        // Cooler than a blaze's heart: dozens of cards add up along the line of sight, and
-        // hotter ones sum to a pale yellow-white fog, not fire.
-        let kelvin = min(mix(1400.0, 1170.0, t) + 200.0 * struck + (heat_here - 0.5) * 220.0, 1550.0);
+        // Many cards overlap along its line, so each covers what is behind it nearly as much
+        // as it glows (premultiplied "over", as games composite thick fire): stacked, they
+        // come to the colour of the cards in front, not a sum. Added up, they had summed to a
+        // pale yellow-white fog, and cooled to stop that, each added so little over the
+        // smoke and sky it was a faint orange haze. Over, its colour is its own: orange,
+        // yellow near the mouth, deep orange as it burns out. Past about 1450 K the soot's
+        // green saturates in a sunlit morning's exposure, and the rope goes a pale olive.
+        let alpha = smoothstep(0.08, 0.45, heat_here) * fade * mix(0.8, 0.5, t);
+        let kelvin = min(mix(1420.0, 1230.0, t) + 100.0 * struck + (heat_here - 0.5) * 160.0, 1480.0);
         light = soot(kelvin) * alpha;
-        cover = alpha * 0.55;
+        cover = alpha * 0.9;
     }
     if max(light.r, cover) < 0.002 {
         discard;

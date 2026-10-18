@@ -40,6 +40,31 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
     })
 }
 
+/// How long, in seconds, a billow takes in the chunks landing near it, before it has
+/// drifted and thinned enough that a new one comes up there.
+const JOINS_S: f32 = 1.5;
+
+/// The billows raised lately: where, how wide they grow, in metres, and when. A chunk
+/// landing within half a young billow's width joins it rather than raising its own, as a
+/// collapse's dust is a few big clouds, not one per stone (the emitter per area of shipped
+/// games' destruction, not one per piece).
+#[derive(Default)]
+pub(super) struct Raised(Vec<(Vec3, f32, f32)>);
+
+impl Raised {
+    /// Whether a chunk landing at `at` at `now` seconds joins a billow raised near it.
+    pub(super) fn joins(&mut self, at: Vec3, now: f32) -> bool {
+        self.0.retain(|&(_, _, when)| now - when < JOINS_S);
+        self.0
+            .iter()
+            .any(|&(there, wide, _)| there.distance(at) < wide * 0.5)
+    }
+
+    pub(super) fn add(&mut self, at: Vec3, wide: f32, now: f32) {
+        self.0.push((at, wide, now));
+    }
+}
+
 /// A dust sprite's colour, alpha and normals, made once: a lumpy billow whose edge is
 /// uneven (a few octaves of value noise, as smoke and dust sprites are painted), thick and
 /// darker in its core where it shades itself, thin and lighter at its edge; its normals
@@ -178,6 +203,7 @@ pub(super) struct Billow {
 }
 
 /// A puff of dust billowing at a place, of a colour: five soft sprites facing the view.
+/// Whether it was raised, which it is not once `most` are up.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn billow_at(
     commands: &mut Commands,
@@ -192,9 +218,9 @@ pub(super) fn billow_at(
     colour: Color,
     up: Vec3,
     billow: Billow,
-) {
+) -> bool {
     if shards.puffs >= most {
-        return;
+        return false;
     }
     shards.puffs += 1;
     let quad = shards
@@ -213,7 +239,7 @@ pub(super) fn billow_at(
         shards.dust_normals = Some(images.add(normals));
     }
     let (Some(image), Some(normals)) = (shards.dust.clone(), shards.dust_normals.clone()) else {
-        return;
+        return false;
     };
     let alpha = billow.alpha;
     let linear = colour.to_linear();
@@ -265,6 +291,7 @@ pub(super) fn billow_at(
             .with_scale(Vec3::splat(PUFF_M[0] * 0.5)),
         ));
     }
+    true
 }
 
 /// Dust billows out, rises and thins away, each sprite facing the view.

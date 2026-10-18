@@ -162,6 +162,8 @@ struct Shards {
     /// The dust's normals: each sprite shaded as a round billow is, lit on its sunward side.
     dust_normals: Option<Handle<Image>>,
     puffs: usize,
+    /// The billows raised lately, which chunks landing near them join.
+    raised: dust::Raised,
     behind: f32,
     /// Whether every kind's meshes have been made, ahead of anything coming down, and drawn
     /// out of sight for a while so their pipelines are ready.
@@ -551,8 +553,14 @@ fn step(
         // down all the while, had raised so many they left none for the stone's.
         let dusty = breaks_of(&look)(kind).look().dust;
         if let Some(billow) = landing(size * dusty, along, up) {
+            // Chunks of one fall landing together raise one cloud between them, not one
+            // each, so the budget lasts to the next fall.
+            if shards.raised.joins(at, time.elapsed_secs()) {
+                continue;
+            }
+            let wide = billow.wide;
             let most = most_puffs + BILLOWS;
-            billow_at(
+            let raised = billow_at(
                 &mut commands,
                 &mut shards,
                 assets,
@@ -562,6 +570,9 @@ fn step(
                 up,
                 billow,
             );
+            if raised {
+                shards.raised.add(at, wide, time.elapsed_secs());
+            }
         } else {
             dust_at(
                 &mut commands,
@@ -931,6 +942,20 @@ mod tests {
             );
         }
         assert!(big.wide > small.wide && big.life >= small.life);
+    }
+
+    #[test]
+    fn chunks_landing_together_join_one_billow_and_one_far_off_or_later_raises_its_own() {
+        let mut raised = dust::Raised::default();
+        let here = Vec3::new(10.0, 0.0, 10.0);
+        assert!(!raised.joins(here, 0.0), "nothing raised yet");
+        raised.add(here, 8.0, 0.0);
+        // A chunk landing two metres off a moment later is in the same cloud.
+        assert!(raised.joins(here + Vec3::X * 2.0, 0.3));
+        // One ten metres off, past half the billow's width, is a cloud of its own.
+        assert!(!raised.joins(here + Vec3::X * 10.0, 0.3));
+        // And seconds later, the first has drifted and thinned: a new one comes up.
+        assert!(!raised.joins(here + Vec3::X * 2.0, 3.0));
     }
 
     #[test]
