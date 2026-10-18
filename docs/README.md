@@ -43,6 +43,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [climate.md](climate.md) | Leaning: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |
 | [survival.md](survival.md) | Needs, rhythms and death: hunger, thirst, warmth, breath, rest, mana; day and night; coming back at a hearth. |
 | [combat.md](combat.md) | A fast action RPG on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |
+| [movement.md](movement.md) | Proposal: how every body moves and fights on one system, in layers (intent, mover, actions, pose, fix-up, physics): root motion, moves as data, bodies that do not pass through, creatures of every size, what to port, the checks, open questions and the order of work. |
 | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, and what they leave. |
 | [magic.md](magic.md) | Magic as a whole, with examples: core essences, attributes, mana, confluences by rule, awakening as a weighted draw of generated powers, combat styles and studied crafts from skill books, old-school spellcraft (reagents, words of power, Mark and Recall, scrolls and wands), and magic beyond these. |
 | [crafting.md](crafting.md) | Resources by region and rank, tools, stations run by recruits, learning what to make. |

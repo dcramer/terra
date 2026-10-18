@@ -78,6 +78,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [recruits-at-the-base.md](recruits-at-the-base.md) | How do shipped games handle recruits who live and work at your base, and which work without the player managing each one? |
 | [web-build.md](web-build.md) | Can the sandbox's tools run in a web browser on the game's own renderer, opened and controlled by a link? |
 | [melee-feel.md](melee-feel.md) | Why did the troll fight's first film read as slow and weightless, and how do shipped melee games make a blow feel heavy (wind-up, hit-stop, cancels, shake)? |
+| [2026-10-17-movement-and-fighting.md](2026-10-17-movement-and-fighting.md) | After five rounds of the troll fight, how do shipped games and engines move and fight a player, people and monsters of every size on one system (root motion, motion matching, blend spaces, IK, procedural and physical layers, attack data, body volumes), and what do we port? |
 | [hwfwm-magic.md](hwfwm-magic.md) | How do the magic mechanics of *He Who Fights With Monsters* work (essences, awakening stones, abilities, ranks, skill books, other magic), so we can design our own? |
 | [planning-mode-cameras.md](planning-mode-cameras.md) | Which games give building, and planning in particular, a camera other than the character's, and what does each choice cost in a persistent multiplayer world? |
 

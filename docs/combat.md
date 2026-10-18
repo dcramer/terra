@@ -32,7 +32,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 ## What it asks of the engine
 
-Technical, mine. Feel is mostly animation (D180): a move starts the moment it is pressed, chains into the next, can be cancelled into a dodge, and a hit lands with weight, the struck body reacting. With a server that decides everything (D51), a swing must feel instant on your screen and be confirmed by the server, so the client shows the hit at once and the server checks it against where things were when you swung. Hit shapes come from the collision design (D53, open). Many fighters in one place at once is a measured risk for a thousand players (D52).
+Technical, mine. Feel is mostly animation (D180): a move starts the moment it is pressed, chains into the next, can be cancelled into a dodge, and a hit lands with weight, the struck body reacting. With a server that decides everything (D51), a swing must feel instant on your screen and be confirmed by the server, so the client shows the hit at once and the server checks it against where things were when you swung. Hit shapes come from the collision design (D53, open). Many fighters in one place at once is a measured risk for a thousand players (D52). How bodies move and fight, in layers shared by players and monsters, is proposed in [movement.md](movement.md).
 
 ## Questions
 

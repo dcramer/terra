@@ -1,6 +1,6 @@
 # The troll fight: a demo scene
 
-Status: the developers' brief, 2026-10-17: "for lake one, to make things more interesting - have an agent generate like a really high fidelity realistic troll (largeish one) and have our guy fight it for some time. It will be a bigger task because it needs to do some modeling, then have it be animated with like some attack and movement, and our guy has to have a sword/shield and move sideways and have attack animations and it needs to be engaging." and "one off clips don't have to have music on". A demo for the trailer (docs/trailer.md, Scenes), not a combat system: how the game fights is [combat.md](combat.md), still to be built on, and nothing here decides it.
+Status: the developers' brief, 2026-10-17: "for lake one, to make things more interesting - have an agent generate like a really high fidelity realistic troll (largeish one) and have our guy fight it for some time. It will be a bigger task because it needs to do some modeling, then have it be animated with like some attack and movement, and our guy has to have a sword/shield and move sideways and have attack animations and it needs to be engaging." and "one off clips don't have to have music on". A demo for the trailer (docs/trailer.md, Scenes), not a combat system: how the game fights is [combat.md](combat.md), still to be built on, and nothing here decides it. After five rounds the fight stopped at 6/10 for want of a movement system under it, proposed in [movement.md](movement.md).
 
 ## What it is
 
