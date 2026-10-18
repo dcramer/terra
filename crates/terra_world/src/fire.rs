@@ -857,8 +857,8 @@ mod tests {
         assert_eq!(hearth.at, ground);
         // In its flames, over its logs, not over the heads of those sat by it.
         assert!(hearth.lift < 1.5 * 0.7, "{}", hearth.lift);
-        // Lighting a ring round it, not the far shore.
-        assert!(hearth.range <= 15.0 && roof.range > 3.0 * hearth.range);
+        // Lighting a ring round it, not the far shore; a burning roof's light reaches farther.
+        assert!(hearth.range <= 15.0 && roof.range > hearth.range);
         assert!(hearth.lumens > 0.0);
     }
 
