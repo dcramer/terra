@@ -22,46 +22,7 @@ const CEILING: [f32; 3] = [0.93, 0.91, 0.86];
 /// gables stop under it.
 pub(crate) const ROOF_THICK_M: f32 = 0.15;
 
-/// What a surface is drawn in: plain colour from each triangle, or one of a kit's
-/// materials, which the game gives textures (D14).
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub enum Material {
-    Plain,
-    /// A log's side, and a log's sawn end.
-    Log,
-    LogEnd,
-    /// The daub between logs.
-    Daub,
-    /// Boards: round openings, under and along a roof's edge.
-    Board,
-    /// A roof's covering: shakes, slates or thatch.
-    #[serde(alias = "Shakes")]
-    Covering,
-    /// A footing's stone.
-    Stone,
-    /// A floor's planks.
-    Floor,
-    /// A block kind's surface: stone, plaster, earth (D197).
-    Masonry,
-    /// Mortar where a roof meets a wall standing above it.
-    Flashing,
-    /// Dressed stone: the pieces a block kind's edges are dressed with by role (D215).
-    Dressed,
-    /// Squared timber: the plates, sills and posts a timber kind's edges are dressed with
-    /// by role (D215), and a framed kind's frame (D236).
-    Hewn,
-    /// Woven wattle: a framed kind's infill before it is daubed, or where it is cut into
-    /// (D236).
-    Wattle,
-    /// A kit's modelled pieces (D251, D258): their own textures baked into one atlas, read
-    /// by each piece's own UVs. A material's own pieces (its pack's).
-    Piece,
-    /// A pattern's modelled pieces, shared by its materials (D290): their own textures baked
-    /// into the pattern's atlas, as `Piece`.
-    Trim,
-}
+pub use crate::pieces::Material;
 
 /// Surfaces by what they are drawn in; the second, whether what is drawn into them may
 /// share its corners ([`Surface::sharing`]).
@@ -537,6 +498,19 @@ const FACES: [([i32; 3], [[f32; 3]; 4]); 6] = [
         [[1., 0., 0.], [0., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
     ),
 ];
+
+impl Base {
+    /// The base as triangles, ready to draw: cubes of a kind with a kit, which `kitted`
+    /// says, are left to the kit.
+    pub fn mesh(&self, kitted: impl Fn(Kind) -> bool) -> Surface {
+        build(self, kitted)
+    }
+
+    /// The base as triangles, its cubes of a kind with a kit left to the kit.
+    pub fn mesh_for_kits(&self, kits: &crate::kit::Kits) -> Surface {
+        build(self, |kind| kits.of(kind).is_some())
+    }
+}
 
 /// The base's cubes of kinds no kit draws (`kitted` says which a kit draws) as plain
 /// coloured boxes.

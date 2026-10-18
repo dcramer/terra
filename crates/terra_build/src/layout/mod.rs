@@ -35,7 +35,7 @@ mod stairs;
 mod trims;
 
 use crate::kit::{Kit, Kits, Pattern};
-use crate::mesh::Material;
+use crate::pieces::Material;
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
 pub use roles::{Dir, End, Role};
@@ -827,15 +827,7 @@ pub(crate) fn framed(base: &Base, at: IVec3) -> bool {
     base.prop_in(at).is_some()
 }
 
-/// What fills a cube as a layout draws it: an opening already once any of it has been
-/// carved out, so a log is cut and framed at the saw's first cut.
-pub fn drawn_fill(cube: &crate::Cube) -> Fill {
-    if cube.pending == crate::Pending::Carve && !cube.is_built() {
-        Fill::Open
-    } else {
-        cube.fill
-    }
-}
+pub use crate::drawn_fill;
 
 /// Lays everything of a base in the kit's kind, as [`lay_among`] does, with the kit the
 /// only one there is.

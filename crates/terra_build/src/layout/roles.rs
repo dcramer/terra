@@ -135,48 +135,7 @@ impl Beyond {
     }
 }
 
-/// What an edge of a cube is, by where it is (the module's comment).
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub enum Role {
-    Arris,
-    Jamb,
-    Inside,
-    Crest,
-    Nose,
-    Sill,
-    Head,
-    Soffit,
-    Foot,
-    Border,
-    Meet,
-    /// Not an edge: a post's shaft, up a column of cubes cut as posts (D193), as the kit
-    /// dresses it: a member of its timber, or a pillar of its stone.
-    Post,
-}
-
-impl Role {
-    pub const ALL: [Role; 12] = [
-        Role::Arris,
-        Role::Jamb,
-        Role::Inside,
-        Role::Crest,
-        Role::Nose,
-        Role::Sill,
-        Role::Head,
-        Role::Soffit,
-        Role::Foot,
-        Role::Border,
-        Role::Meet,
-        Role::Post,
-    ];
-
-    /// Whether it runs up and down, rather than level.
-    pub fn upright(self) -> bool {
-        matches!(self, Role::Arris | Role::Jamb | Role::Inside)
-    }
-}
+pub use crate::pieces::Role;
 
 /// An edge of a cube with a role: between its face `side`, which it looks out of, and
 /// `other`: up or down for a level edge; for an upright one, the face north or south of it

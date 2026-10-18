@@ -55,16 +55,7 @@ pub(crate) use standing::{curbs, gables, underside};
 pub const STEP_M: f32 = CELL_M * 0.5;
 /// How far a roof of a kind with no kit is carried on past its edges.
 pub const EAVES_M: f32 = 0.5;
-/// How many stages a roof cube goes up in: its frame, its battens, its covering and its
-/// trims, a step of its fill each (`kit.cost.steps`).
-pub const ROOF_STAGES: u8 = 4;
-
-/// How far a roof cube is up, by its fill: nothing, then its frame, battens, covering and
-/// trims, a quarter of the cube each.
-pub fn stage_of(cube: &Cube) -> u8 {
-    let level = u16::from(cube.level());
-    (level * u16::from(ROOF_STAGES)).div_ceil(16) as u8
-}
+pub use crate::pieces::{ROOF_STAGES, RoofPart, stage_of};
 
 /// Which roof cube a piece of roof goes up with, and in which of its stages: 1 its frame,
 /// 2 its battens, 3 its covering, 4 its trims.
@@ -72,47 +63,6 @@ pub fn stage_of(cube: &Cube) -> u8 {
 pub struct RoofCell {
     pub cube: IVec3,
     pub stage: u8,
-}
-
-/// What a long piece of roof is.
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub enum RoofPart {
-    /// The frame: a rafter up a slope, or the beam under a ridge, hip or valley.
-    Rafter,
-    /// A batten across the rafters under the foot of a course.
-    Batten,
-    /// Along an eave: a fascia, or thatch's cut butt.
-    Eave,
-    /// The board along a verge, a gable's sloping edge: the bargeboard.
-    Verge,
-    /// The cap over a ridge.
-    Ridge,
-    /// The cap over a hip.
-    Hip,
-    /// The lining of a valley.
-    Valley,
-    /// Where the roof rises to something standing on or beside it along a level line: an
-    /// apron, as under a chimney or along a lean-to's head.
-    Flashing,
-    /// Where the roof meets something standing on or beside it along a sloping line: step
-    /// flashing over soakers, up a chimney's or a dormer cheek's sides.
-    Step,
-    /// Where the roof falls to something standing on or beside it along a level line: a
-    /// back gutter, above a chimney.
-    Gutter,
-}
-
-impl RoofPart {
-    /// The stage of its roof cube it goes up in.
-    pub fn stage(self) -> u8 {
-        match self {
-            RoofPart::Rafter => 1,
-            RoofPart::Batten => 2,
-            _ => 4,
-        }
-    }
 }
 
 /// The stage a square of covering goes up in.

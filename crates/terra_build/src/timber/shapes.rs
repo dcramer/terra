@@ -324,12 +324,6 @@ fn worn_ring(
         .collect()
 }
 
-/// A hewn member's half height: half a course less its joint, so the daub between courses
-/// shows as a line `joint` tall.
-pub(super) fn hewn_high(kit: &Kit) -> f32 {
-    ((kit.course - kit.timber.joint.max(0.0)) * 0.5).max(0.01)
-}
-
 /// How far out from a wall's middle the daub in a round log's groove stands: where the
 /// groove between two logs of the kit's size, a course apart, is `joint` tall, so that much
 /// of it shows; the kit's own `daub` share of the log where the logs do not meet.

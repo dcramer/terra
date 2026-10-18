@@ -58,19 +58,7 @@ const SLOPE_READ_M: f32 = 0.12;
 const STAGGER_S: f32 = 0.035;
 const STAGGER_MOST_S: f32 = 0.6;
 
-/// How a kind breaks (D305): data on its kit, by its pattern unless its material says.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Breaks {
-    /// Chunky irregular blocks: stone, brick.
-    #[default]
-    Chunks,
-    /// Lengths and splinters: logs, timber.
-    Lengths,
-    /// Small flat bits: wattle and plaster, a roof's covering.
-    Bits,
-    /// Crumbling lumps: packed earth.
-    Crumbs,
-}
+pub use crate::pieces::Breaks;
 
 /// The shapes a piece is drawn as: a box with its edges bevelled, more for a rougher one.
 /// Its size and proportions are the piece's own, so a few meshes draw every piece.

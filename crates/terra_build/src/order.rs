@@ -334,7 +334,7 @@ impl Base {
                     let cube = self
                         .cube(IVec3::from_array(cubes[0]))
                         .unwrap_or(Cube::planned(kind, None));
-                    crate::layout::roofs::stage_of(&cube).min(3)
+                    crate::pieces::stage_of(&cube).min(3)
                 });
                 steps.push(Step::Put {
                     part: id,

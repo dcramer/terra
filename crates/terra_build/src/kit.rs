@@ -7,9 +7,7 @@
 
 use crate::Kind;
 use crate::cost::{Amount, Bill, Rules, Terms};
-use crate::layout::roles::Role;
-use crate::layout::roofs::RoofPart;
-use crate::mesh::Material;
+use crate::pieces::{Material, Role, RoofPart};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -285,7 +283,7 @@ pub struct Dressing {
     pub masks: Masks,
     /// Its pieces, once read ([`Dressing::read`]).
     #[serde(skip)]
-    pub made: Option<Arc<crate::dress::Pieces>>,
+    pub made: Option<Arc<crate::pieces::Pieces>>,
     /// Whether its modules are drawn at their far budget (D258): set for a section drawn a
     /// few metres off and further, never read from a file.
     #[serde(skip)]
@@ -434,7 +432,7 @@ impl Dressing {
     /// How many times its length each copy of its modules is drawn.
     pub fn repeat(&self) -> f32 {
         if self.far_off {
-            crate::modules::FAR_REPEAT
+            crate::pieces::FAR_REPEAT
         } else {
             1.0
         }
@@ -457,11 +455,11 @@ impl Dressing {
     /// pattern's, shared, and its own over them, a profile, corner set or module of a name
     /// its own having it in place of the pattern's.
     pub fn read(&mut self, read: &dyn Fn(&str) -> Result<String, String>) -> Result<(), String> {
-        let file = |path: &str, shared: bool| -> Result<crate::dress::Pieces, String> {
+        let file = |path: &str, shared: bool| -> Result<crate::pieces::Pieces, String> {
             let text = read(path)?;
-            let mut pieces: crate::dress::Pieces =
+            let mut pieces: crate::pieces::Pieces =
                 ron::from_str(&text).map_err(|why| format!("{path}: {why}"))?;
-            crate::modules::clean_all(&mut pieces);
+            crate::pieces::clean_all(&mut pieces);
             for module in pieces.modules.values_mut() {
                 module.shared = shared;
             }
@@ -690,7 +688,7 @@ impl KitCost {
 pub struct KitToughness {
     pub health: u16,
     pub repair: (u64, u64),
-    pub breaks: crate::fragments::Breaks,
+    pub breaks: crate::pieces::Breaks,
 }
 
 impl Default for KitToughness {
@@ -699,7 +697,7 @@ impl Default for KitToughness {
         KitToughness {
             health: 400,
             repair: (1, 2),
-            breaks: crate::fragments::Breaks::Lengths,
+            breaks: crate::pieces::Breaks::Lengths,
         }
     }
 }
@@ -1148,12 +1146,12 @@ impl Kit {
     /// How far a wall of it stands out from its middle to its outer face, in metres: where
     /// a door's or shutters' frame is seated on it (`fitting`). As the asset contract has a
     /// piece's real size from its kit's numbers: a course's member's half section, a round
-    /// log's crest or a beam's face (`timber::section`), which a log's bark and bow vary
+    /// log's crest or a beam's face (`pieces::section`), which a log's bark and bow vary
     /// about; a block wall's surface on its cubes' faces.
     pub fn face(&self) -> f32 {
         let half = crate::CELL_M * 0.5;
         match self.pattern {
-            Pattern::Logs => (crate::timber::section(self, None).0 * 0.5).min(half),
+            Pattern::Logs => (crate::pieces::section(self, None).0 * 0.5).min(half),
             Pattern::Masonry | Pattern::Roof => half,
         }
     }
@@ -1390,7 +1388,7 @@ pub(crate) mod tests {
         assert!(health("logs.ron") > health("wattle.ron"));
         assert!(health("wattle.ron") > health("thatch.ron"));
         // How each breaks: by its pattern, earth as its own file says.
-        use crate::fragments::Breaks;
+        use crate::pieces::Breaks;
         let breaks = |name: &str| shipped(name).toughness.breaks;
         assert_eq!(breaks("stone.ron"), Breaks::Chunks);
         assert_eq!(breaks("logs.ron"), Breaks::Lengths);

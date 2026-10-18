@@ -394,7 +394,7 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
         && base
             .cube(above)
             .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape != Shape::Post);
-    let (_, bolster) = crate::timber::section(kit, Some(Role::Crest));
+    let (_, bolster) = crate::pieces::section(kit, Some(Role::Crest));
     let bolster = bolster.min(CELL_M * 0.7);
     let shaft_top = if carries { height - bolster } else { height };
     let mut shaft = runs::log(

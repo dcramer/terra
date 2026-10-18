@@ -9,7 +9,7 @@
 //! doubling it again, its sharpness; an *18% grey card* is a matte card of known reflectance
 //! stood in the same light, the photographer's reference for colour and exposure.
 
-use crate::mesh::Material;
+use crate::pieces::Material;
 use std::collections::BTreeMap;
 
 /// A pattern's targets on the bench. Shares are percentages, as `cargo xtask texels` prints

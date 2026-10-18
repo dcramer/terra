@@ -139,7 +139,7 @@ pub(crate) fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
     };
     let narrowest = roles
         .iter()
-        .map(|&role| crate::timber::section(kit, role).0 * 0.5)
+        .map(|&role| crate::pieces::section(kit, role).0 * 0.5)
         .fold(f32::MAX, f32::min)
         * (1.0 - kit.timber.variation.thickness);
     Some((CELL_M * 0.5 - narrowest).max(0.0))
@@ -411,7 +411,7 @@ impl Deck<'_> {
         };
         self.boards(along, across, (low, high), top, layout);
         // The bearers' depth, and the joists' over them up to the boards.
-        let (_, bearer_high) = crate::timber::section(self.kit, Some(Role::Crest));
+        let (_, bearer_high) = crate::pieces::section(self.kit, Some(Role::Crest));
         let joist_foot = if whole { foot + bearer_high } else { foot };
         let joist_deep = (top - BOARD_THICK_M - joist_foot).max(JOIST_LEAST_M);
         let joist_foot = top - BOARD_THICK_M - joist_deep;

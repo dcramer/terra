@@ -19,15 +19,7 @@ use crate::kit::{Kit, Kits};
 use crate::{Base, CELL_M, Fill, Kind, Prop};
 use glam::{IVec3, Vec2, Vec3};
 
-/// How a prop hangs in its hole: as a door, or as shutters.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub enum Hang {
-    #[default]
-    Door,
-    Shutters,
-}
+pub use crate::pieces::Hang;
 
 /// How far a frame reaches past the hole's edges into the wall round it: so what is fitted
 /// fills its hole whatever stands round it, a log wall's courses or a stone wall's dressed

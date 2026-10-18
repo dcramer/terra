@@ -23,6 +23,7 @@ use crate::draw::cuboid;
 use crate::kit::{Kit, Notch, Profile};
 use crate::layout::{self, Piece, Random, Split};
 use crate::mesh::{Material, Surface, Surfaces};
+use crate::pieces::{HEWN_WIDE, hewn_high, section};
 use glam::Vec3;
 use std::f32::consts::{PI, TAU};
 
@@ -40,31 +41,9 @@ const PLANK_STEP_M: f32 = 0.4;
 /// How far in from where it is laid to the daub under a log stops.
 const DAUB_IN_M: f32 = 0.002;
 
-/// A hewn member's half width, as a fraction of its kit's log.
-const HEWN_WIDE: f32 = 0.45;
 /// How far a wall's log reaches past where it meets the next course, in metres, so the two
 /// sit into each other along their scribed faces and no line of light shows between.
 const SCRIBE_M: f32 = 0.005;
-
-/// How wide and how high a member laid for a role is as this code draws it, before its seed
-/// varies it a little, in metres: what a layout needs to set what rests on it, or what it
-/// rests on, against its faces (the asset contract: a piece's real size, from its kit's data,
-/// with no offsets kept for a kit in code). A role the kit does not dress as a member is
-/// drawn as a log of the kit's own.
-pub fn section(kit: &Kit, role: Option<crate::layout::Role>) -> (f32, f32) {
-    let (profile, scale) = role
-        .and_then(|role| kit.dress.member(role))
-        .map_or((kit.timber.profile, 1.0), |(profile, scale, _)| {
-            (profile, scale)
-        });
-    let diameter = kit.diameter * scale;
-    match profile {
-        Profile::Round => (diameter * 1.03, diameter * 1.03),
-        // What rests on a beam is set a hair into its flat bed, not on it, so the two faces
-        // are not drawn in one plane.
-        Profile::Hewn => (diameter * HEWN_WIDE * 2.0, hewn_high(kit) * 2.0),
-    }
-}
 
 /// How much of its health a point of a member has lost, from 0 to 1, by where it is and
 /// which way its face looks out there (`loss::struck`, D305).
@@ -314,7 +293,7 @@ mod sweep;
 
 use cuts::{LEAN_RING_M, densify, level_cut, plumb_cut, rings_at};
 use harm::{break_up, chunk_depth, harmed_along};
-use shapes::{Squared, hewn, hewn_high, round, squared};
+use shapes::{Squared, hewn, round, squared};
 use sweep::{cap, end_colour, smoothstep, sweep};
 
 pub use plank::plank;

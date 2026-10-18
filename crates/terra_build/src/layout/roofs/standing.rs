@@ -101,7 +101,7 @@ pub(crate) fn curbs(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece
     };
     // Half a member's widest across, less a hair: an upright's section stands either way.
     let half_of = |role: Option<crate::layout::Role>| {
-        let (wide, high) = crate::timber::section(kit, role);
+        let (wide, high) = crate::pieces::section(kit, role);
         wide.max(high) * 0.5 - CURB_IN_M
     };
     // A wall's foot on the roof is its sill where the kit dresses one, wider than its logs.

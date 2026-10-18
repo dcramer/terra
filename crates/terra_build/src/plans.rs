@@ -882,7 +882,7 @@ pub fn prop_for(
     base: &Base,
     cube: IVec3,
     kind: crate::PropKind,
-    hang: crate::fitting::Hang,
+    hang: crate::pieces::Hang,
 ) -> Option<crate::Prop> {
     let (min, max) = hole(base, cube)?;
     let size = max - min;
@@ -914,8 +914,8 @@ pub fn prop_for(
         if off >= 0.0 { across } else { -across }
     };
     let opens = match hang {
-        crate::fitting::Hang::Door => inward,
-        crate::fitting::Hang::Shutters => -inward,
+        crate::pieces::Hang::Door => inward,
+        crate::pieces::Hang::Shutters => -inward,
     };
     Some(crate::Prop {
         kind,
@@ -929,8 +929,8 @@ pub fn prop_for(
 
 /// How a hole whose lowest cube is `low` takes a prop: a doorway, from its storey's floor
 /// or over no wall, a door; a window, over a sill, shutters.
-pub fn hang_for(base: &Base, low: IVec3) -> crate::fitting::Hang {
-    use crate::fitting::Hang;
+pub fn hang_for(base: &Base, low: IVec3) -> crate::pieces::Hang {
+    use crate::pieces::Hang;
     if low.y == wall_layer(storey_of(low.y)) || !base.in_wall(low - IVec3::Y) {
         Hang::Door
     } else {
@@ -946,7 +946,7 @@ pub enum Misfit {
     /// Something is fitted there already.
     Taken,
     /// The hole takes the other hang: a doorway a door, a window shutters ([`hang_for`]).
-    Hang(crate::fitting::Hang),
+    Hang(crate::pieces::Hang),
     /// The hole is this size, wide by high in cubes, which it does not fit.
     Size(i32, i32),
 }
@@ -959,7 +959,7 @@ pub fn fit(
     base: &Base,
     cube: IVec3,
     kind: crate::PropKind,
-    hang: crate::fitting::Hang,
+    hang: crate::pieces::Hang,
     fits: &[(i32, i32)],
 ) -> Result<crate::Prop, Misfit> {
     let (low, _) = hole(base, cube).ok_or(Misfit::NoHole)?;
@@ -1209,7 +1209,7 @@ mod tests {
         );
         // The doorway takes a door, hung to swing into the room, north of its south wall;
         // the window a cube wide in the west wall, shutters to fold out to the west.
-        use crate::fitting::Hang;
+        use crate::pieces::Hang;
         let at = IVec3::new(5, 2, 7);
         assert_eq!(hang_for(&base, IVec3::new(4, 0, 7)), Hang::Door);
         let door = prop_for(&base, at, crate::PropKind(0), Hang::Door).unwrap();
@@ -1227,7 +1227,7 @@ mod tests {
 
     #[test]
     fn a_doorway_takes_only_a_door_and_a_window_only_shutters() {
-        use crate::fitting::Hang;
+        use crate::pieces::Hang;
         use crate::{BuildOp, Cube};
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {

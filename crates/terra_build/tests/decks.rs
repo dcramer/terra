@@ -251,7 +251,7 @@ fn check(name: &str, scene: &Scene, kits: &Kits) {
     let deck_kit = kits.of(scene.deck).unwrap();
     let foot = scene.layer as f32 * CELL_M;
     let top = foot + CELL_M;
-    let (_, bearer_high) = terra_build::timber::section(deck_kit, Some(Role::Crest));
+    let (_, bearer_high) = terra_build::pieces::section(deck_kit, Some(Role::Crest));
     let bearers: Vec<(Vec3, Vec3)> = pieces
         .iter()
         .filter(|(kind, piece)| *kind == scene.deck && role(piece) == Some(Role::Crest))
@@ -339,7 +339,7 @@ fn check(name: &str, scene: &Scene, kits: &Kits) {
                 );
             }
             // Within the deck's footprint, all round.
-            let (wide, _) = terra_build::timber::section(kits.of(kind).unwrap(), Some(Role::Post));
+            let (wide, _) = terra_build::pieces::section(kits.of(kind).unwrap(), Some(Role::Post));
             for corner in [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z] {
                 let p = middle + corner * wide * 0.5;
                 let column = [(p.x / CELL_M).floor() as i32, (p.z / CELL_M).floor() as i32];

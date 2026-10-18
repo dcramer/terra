@@ -434,7 +434,7 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
         // it to its slope (`Piece::Log`'s lean, for an upright), as a gable's logs are.
         if from.x == to.x && from.z == to.z && length > 1e-3 {
             let (bottom, top) = (from.y.min(to.y), from.y.max(to.y));
-            let half = crate::timber::section(kit, role).0 * 0.5;
+            let half = crate::pieces::section(kit, role).0 * 0.5;
             let under = |dx: f32, dz: f32| roofs.under_over(from.x + dx, from.z + dz, bottom);
             let (Some(middle), Some(east), Some(west), Some(south), Some(north)) = (
                 under(0.0, 0.0),
@@ -861,7 +861,7 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
     // A little inside the member's width, a log's or a hewn beam's, so its sides are not in
     // the planes of the members' faces under it, and its foot a little into the course under
     // it.
-    let wide = crate::timber::section(kit, None).0 * 0.5;
+    let wide = crate::pieces::section(kit, None).0 * 0.5;
     let half = wide.min(radius) - inset;
     // Its face to the weather: all but flush with a round log's widest; behind a hewn
     // beam's flat face as narrow as its seed makes one, and as far as its faces' lattice

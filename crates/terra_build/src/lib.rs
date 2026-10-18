@@ -61,6 +61,7 @@ pub mod ops;
 pub mod order;
 pub mod packs;
 pub mod parts;
+pub mod pieces;
 pub mod plans;
 pub mod put_up;
 mod ray;
@@ -79,6 +80,9 @@ pub mod timber;
 pub mod town;
 pub mod village;
 mod walk;
+
+#[cfg(test)]
+mod seams;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms, Toughness};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
@@ -241,7 +245,7 @@ pub struct Prop {
     pub opens: [i32; 3],
     /// Whether it hangs as a door or as shutters.
     #[serde(default)]
-    pub hang: fitting::Hang,
+    pub hang: pieces::Hang,
 }
 
 impl Prop {
@@ -832,17 +836,6 @@ impl Base {
             self.cube(at).map(|cube| (at, cube))
         })
     }
-
-    /// The base as triangles, ready to draw: cubes of a kind with a kit, which `kitted`
-    /// says, are left to the kit.
-    pub fn mesh(&self, kitted: impl Fn(Kind) -> bool) -> Surface {
-        mesh::build(self, kitted)
-    }
-
-    /// The base as triangles, its cubes of a kind with a kit left to the kit.
-    pub fn mesh_for_kits(&self, kits: &kit::Kits) -> Surface {
-        mesh::build(self, |kind| kits.of(kind).is_some())
-    }
 }
 
 pub use mesh::{Material, Surfaces};
@@ -850,7 +843,13 @@ pub use mesh::{Material, Surfaces};
 /// Whether a cube is part of what stands: something of it in, or an opening, or being
 /// carved, which is drawn open whatever is in.
 fn stands(cube: &Cube) -> bool {
-    cube.level() > 0 || layout::drawn_fill(cube) == Fill::Open
+    cube.level() > 0 || drawn_fill(cube) == Fill::Open
+}
+
+/// What fills a cube as it is laid and drawn: open from the saw's first cut into it.
+pub fn drawn_fill(cube: &Cube) -> Fill {
+    let carving = cube.pending == Pending::Carve && !cube.is_built();
+    if carving { Fill::Open } else { cube.fill }
 }
 
 /// The slab of 16 along x a cube's part keeps it in (`Base::in_parts`).
