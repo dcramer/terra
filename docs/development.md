@@ -227,6 +227,7 @@ The developers want tools that help refine each system (D71), and as many of the
 | [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
 | [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
 | [Docs check](../tools/docs/README.md) | `cargo xtask check` | Links and anchors resolve, every doc, note, spike and script is in its index, every decision file is well formed and the decisions index is their render, and every `cargo xtask` task the guides name and every path a skill names exists (D396) |
+| [Rebuilds](../tools/rebuilds/README.md) | `cargo xtask rebuilds` | How long the sandbox takes to rebuild after a file in each part of the code changes, in dev and release, and which crates were compiled again (D407) |
 | [Token stats](../tools/token-stats/README.md) | a Claude Code hook; `node tools/token-stats/context.mjs` | Claude tokens and Tripo credits per developer, on a public page; where each session's context went (D390) |
 
 A new tool gets a line in `TASKS` in `xtask/src/main.rs` and a row here, so it is found the same way as the rest.

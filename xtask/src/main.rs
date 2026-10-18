@@ -179,6 +179,17 @@ const TASKS: &[Task] = &[
         run: bench,
     },
     Task {
+        name: "rebuilds",
+        takes: "[--dev|--release] [probe…]",
+        does: "how long the sandbox takes to rebuild after a file in each part of the code is touched, in dev and release, and which crates were compiled again, against the last run (D407, tools/rebuilds)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/rebuilds/rebuilds.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "check",
         takes: "[--quick] [--all] [--verbose]",
         does: "what every change must pass, scoped to what it touches (D398): before each push, lints and every test of the crates changed and those depending on them, and the kit, foliage, artifact, fuzz, Blender, docs and dependency checks that can see it; --quick, before each commit, linters and the fast tests of the crates changed in a 30 s budget; --all runs everything",
