@@ -14,7 +14,9 @@
 // A run may instead be a scene (`scene`, trailer/scenes/<name>.ts): a timeline of the game's
 // remote calls on given frames and the camera's moves, written as a QA film's is
 // (qa/script.ts), made on their frames in the same scripted run (`--calls`), with the same
-// look; the player stands where it starts, hidden. A dragon burning a castle is one.
+// look; the player stands where it starts, hidden. A dragon burning a castle is one. A run
+// with a route and a scene is the player's run with the scene's calls made over it, the game's
+// camera following: figures staged along the way, a troll sat on the shore as the player runs by.
 //
 //   node tools/sandbox/trailer.ts [--only lake,forest] [--again] [--stills] [--no-render]
 //     [--size 1920x1080] [--cut tools/sandbox/trailer/cut.json] [--out ~/.cache/terra-review/trailer/cut.mp4]
@@ -49,7 +51,8 @@ type Shot = {
   /// Where the runner starts, the spots they run through, and how many degrees the view
   /// is tilted up from the game's own, by the arrow keys while the run warms up.
   player: { at: string; face?: string; route?: string; tilt?: number; hidden?: boolean };
-  /// A scene's timeline instead of the player's run (trailer/scenes/<name>.ts).
+  /// A scene's timeline instead of the player's run (trailer/scenes/<name>.ts), or, with a
+  /// route, made over it.
   scene?: string;
   look?: { letterbox?: number };
   /// Its sound bed's layers, as `terra_sandbox --sound-bed` takes them, without their times.
@@ -127,7 +130,7 @@ const EMPTY_HANDED = ["--press", "8@60"];
 /// route, smoothed.
 function sandboxArgs(shot: Shot): string[] {
   const own = [...place(shot.place).args];
-  if (shot.scene) {
+  if (shot.scene && !shot.player.route) {
     const date = own.indexOf("--date");
     if (shot.date && date >= 0) own.splice(date, 2);
     return [
@@ -161,6 +164,7 @@ function sandboxArgs(shot: Shot): string[] {
     ...route.flatMap(([e, s]) => ["--route", `${e.toFixed(1)},${s.toFixed(1)}`]),
     ...tilted(shot.player.tilt ?? 0),
     ...EMPTY_HANDED,
+    ...(shot.scene ? (scenes.get(shot.scene)?.sandbox ?? []) : []),
   ];
 }
 
@@ -170,7 +174,7 @@ const JOG = 4.3;
 /// Why a run's route is too short for its film, or undefined: a player who reaches its last
 /// spot stands there idle for the rest of it, which on film reads as a figure not animated.
 function tooShort(shot: Shot): string | undefined {
-  if (shot.scene || !shot.player.route) return undefined;
+  if (!shot.player.route) return undefined;
   const spots = [shot.player.at, ...shot.player.route.split(";")].map((s) => s.split(",").map(Number) as [number, number]);
   const length = spots.slice(1).reduce((sum, [e, s], i) => sum + Math.hypot(e - spots[i][0], s - spots[i][1]), 0);
   const needs = ((shot.lead_in ?? 1.5) + shot.seconds) * JOG;
@@ -241,7 +245,7 @@ function renderShot(name: string, n: number) {
   if (short) console.log(`trailer: ${name}: ${short}; lengthen it in ${file}`);
   const scene = shot.scene ? scenes.get(shot.scene) : undefined;
   const warmup = scene?.rolls ?? shot.warmup ?? 360;
-  const first = scene ? warmup : warmup + Math.round((shot.lead_in ?? 1.5) * 60);
+  const first = scene && !shot.player.route ? warmup : warmup + Math.round((shot.lead_in ?? 1.5) * 60);
   const frames = Math.round(shot.seconds * FPS);
   const last = first + (frames - 1) * 2;
   const dir = join(work, stills ? "stills" : "frames", name);
@@ -288,7 +292,7 @@ function renderShot(name: string, n: number) {
   if (late.length) console.log(`trailer: ${name}: ${late[late.length - 1].replace(/.*Still loading/, "still loading")}`);
   const gaveUp = `${run.stdout}`.split("\n").filter((line) => line.includes("Route: gave up"));
   if (gaveUp.length) console.log(`trailer: ${name}: the route was blocked: ${gaveUp.join("; ")}`);
-  const seen = wildlifeSeen(`${run.stdout}${run.stderr}`, shot.scene ? 0 : (shot.lead_in ?? 1.5), shot.seconds);
+  const seen = wildlifeSeen(`${run.stdout}${run.stderr}`, shot.scene && !shot.player.route ? 0 : (shot.lead_in ?? 1.5), shot.seconds);
   if (seen) console.log(`trailer: ${name}: ${seen}`);
   if (stills) {
     console.log(`trailer: ${name}: stills in ${((Date.now() - started) / 1000).toFixed(0)} s`);

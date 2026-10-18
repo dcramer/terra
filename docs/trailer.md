@@ -25,7 +25,7 @@ Each run is left as `~/.cache/terra-review/trailer/<name>.mp4`, with its own sou
 
 ## Scenes
 
-A run may be a scene instead of a run (`"scene"` in its file): a timeline of the game's own remote calls on given frames, the camera's cuts and glides among them, in `tools/sandbox/trailer/scenes/<name>.ts`, written as a QA film's is (`qa/script.ts`) and filmed in one scripted run (`--calls`) with the same look, warm-up and sound bed, the player hidden where it starts. A scene says the frame its film rolls on; what comes before, its setting up, is not filmed.
+A run may be a scene instead of a run (`"scene"` in its file): a timeline of the game's own remote calls on given frames, the camera's cuts and glides among them, in `tools/sandbox/trailer/scenes/<name>.ts`, written as a QA film's is (`qa/script.ts`) and filmed in one scripted run (`--calls`) with the same look, warm-up and sound bed, the player hidden where it starts. A scene says the frame its film rolls on; what comes before, its setting up, is not filmed. A run with both a route and a scene is the player's run, the game's camera following, with the scene's calls made over it: figures staged along the way, such as a troll sat on the shore the player runs past.
 
 ```bash
 cargo xtask trailer --cut tools/sandbox/trailer/dragon.json --out ~/.cache/terra-review/dragon/cut.mp4
