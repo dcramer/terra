@@ -182,22 +182,26 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     // The forest on it, lit as the world's canopy is by the sun through the air and the sky.
     let sun = normalize(sky.sun_direction);
     let canopy = sky.far_land.rgb;
-    let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 + air_seen(up) * 1.6) / 3.14159
+    // A range's slopes face every way, most away from a low sun: half of them lit.
+    let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 * (1.0 - 0.5 * sky.far_peaks) + air_seen(up) * 1.6) / 3.14159
         * view.exposure;
     var colour = vec3<f32>(0.0);
     var cover = 0.0;
     for (var k = 0u; k < RIDGES; k++) {
         let f = f32(k);
-        let base = -dip * (1.0 - at[k]);
+        // A range's nearer ridges stand over the horizon too, behind the world's own slopes,
+        // where a forest's lie between the planet's horizon and the air's: with them below it
+        // only the farthest showed, as pale as the sky.
+        let base = -dip * (1.0 - at[k]) * (1.0 - 0.85 * sky.far_peaks);
         // Hills along the ridge, and the crowns on them, finer and lower the farther.
         let p = vec3<f32>(round * (5.0 + 4.0 * f), f * 13.7);
         let shape = billow(p) * 0.85 + billow(p * 3.7 + 3.0) * 0.15;
         let crowns = noise(vec3<f32>(round * (260.0 + 240.0 * f), f * 5.1));
         // A range's crests, sharp where two slopes meet, never down to the horizon, so peak
         // stands behind peak along all of it (a ridged noise, as terrain generators make them).
-        let crest = 1.0 - abs(noise(p * 1.7 + 11.0) * 2.0 - 1.0);
-        let fine = 1.0 - abs(noise(p * 4.1 + 23.0) * 2.0 - 1.0);
-        let range = 0.3 + 0.7 * pow(crest * 0.75 + fine * 0.25, 1.6);
+        let crest = 1.0 - abs(noise(p * 3.1 + 11.0) * 2.0 - 1.0);
+        let fine = 1.0 - abs(noise(p * 6.1 + 23.0) * 2.0 - 1.0);
+        let range = 0.3 + 0.7 * pow(crest * 0.85 + fine * 0.15, 1.3) * mix(0.6, 1.0, shape);
         let rolling = smoothstep(0.25, 0.85, shape);
         let ridge = base + hills * rising[k] * mix(rolling, range, sky.far_peaks)
             + hills * (0.06 / (1.0 + f)) * crowns * (1.0 - sky.far_peaks);
@@ -207,7 +211,9 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         }
         // Mist settles below each ridge's crest, paler toward the valley behind the next.
         let deep = smoothstep(0.0, max(dip * 0.35, 0.004), ridge - rise);
-        let left = leaves[k] * mix(1.0, 0.7, deep);
+        // A range's ridges keep more of their own dark the nearer, against the glow behind
+        // them (Bohinj at dusk: 46 against the sky's 133).
+        let left = min(leaves[k] * (1.0 + 0.8 * sky.far_peaks), 1.0) * mix(1.0, 0.7, deep);
         // The crowns' light and shade, finer the farther.
         let grain = noise(vec3<f32>(round * (420.0 + 400.0 * f), rise * (420.0 + 400.0 * f) + f * 3.3));
         let land = lit * (0.8 + 0.4 * grain);
