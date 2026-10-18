@@ -34,7 +34,7 @@ use crate::shell::{Options, ScriptFrame, counting};
 use crate::start::Start;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
-    camera::Exposure,
+    camera::{Exposure, visibility::VisibilitySystems},
     post_process::{
         auto_exposure::AutoExposure,
         dof::{DepthOfField, DepthOfFieldMode},
@@ -645,8 +645,20 @@ pub fn plugin(app: &mut App) {
     .add_systems(Update, (hold_exposure.after(Ticking), bias_detail))
     .add_systems(
         PostUpdate,
-        film.in_set(CameraHold).after(crate::remote::hold_camera),
+        (
+            film.in_set(CameraHold).after(crate::remote::hold_camera),
+            hide_screen.before(VisibilitySystems::VisibilityPropagate),
+        ),
     );
+}
+
+/// A shot films the world without the screen's bars, panels and help, as a game's cinematic
+/// hides its HUD: every UI tree's root is hidden, its children with it, however late it is
+/// spawned (offscreen pictures draw the UI since D405's spar).
+fn hide_screen(mut roots: Query<&mut Visibility, (With<Node>, Without<ChildOf>)>) {
+    for mut visibility in &mut roots {
+        visibility.set_if_neq(Visibility::Hidden);
+    }
 }
 
 /// How far into the shot it is: in a scripted run by the frame, so the same shot is the

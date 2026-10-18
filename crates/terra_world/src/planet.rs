@@ -284,7 +284,7 @@ impl Planet {
 
     /// What grows on the ground at a point, given which way the ground faces there.
     pub fn cover(&self, point: Vec3, normal: Vec3) -> Cover {
-        let above_sea = point.length() - self.water_near_m(point);
+        let (water, lowland) = crate::shore::near(self, point);
         let steepness = 1.0 - normal.dot(point.normalize());
         let patches = self.cover.fbm(point / 70.0, 3, 2.0, 0.5);
         // Past the trees the heath holds the ground, not a meadow's grass (`terra_land::heath`).
@@ -295,7 +295,7 @@ impl Planet {
         Cover {
             grass: (1.0 - heath)
                 * smoothstep(-0.4, -0.26, patches)
-                * smoothstep(0.5, 1.6, above_sea)
+                * crate::shore::grass(point.length() - water, lowland)
                 * (1.0 - smoothstep(0.14, 0.27, steepness)),
             lush: smoothstep(
                 -0.35,

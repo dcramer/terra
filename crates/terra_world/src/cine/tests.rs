@@ -287,3 +287,29 @@ fn handheld_drift_is_small_and_slow() {
         last = now;
     }
 }
+
+/// A shot hides the screen's UI, a tree spawned after it rolls too, its panels with their root.
+#[test]
+fn a_shot_hides_the_screens_ui() {
+    let mut app = App::new();
+    app.add_systems(Update, hide_screen);
+    let root = app
+        .world_mut()
+        .spawn((Node::default(), Visibility::Visible))
+        .id();
+    let panel = app
+        .world_mut()
+        .spawn((Node::default(), Visibility::Inherited, ChildOf(root)))
+        .id();
+    app.update();
+    let late = app
+        .world_mut()
+        .spawn((Node::default(), Visibility::Visible))
+        .id();
+    app.update();
+    let seen = |e: Entity| *app.world().get::<Visibility>(e).unwrap();
+    assert_eq!(seen(root), Visibility::Hidden);
+    assert_eq!(seen(late), Visibility::Hidden);
+    // The panel inherits from its root rather than being hidden itself.
+    assert_eq!(seen(panel), Visibility::Inherited);
+}

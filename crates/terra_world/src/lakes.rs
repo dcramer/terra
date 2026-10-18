@@ -293,6 +293,11 @@ fn mist_thickness(local_hour: f32, wind: f32) -> f32 {
     dawn * calm
 }
 
+/// How much a lake so high over the sea is a lowland one, 1, rather than a mountain one, 0.
+pub(crate) fn lowland(over_sea_m: f32) -> f32 {
+    1.0 - smoothstep(MOUNTAIN_LAKE_M.0, MOUNTAIN_LAKE_M.1, over_sea_m)
+}
+
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -358,12 +363,7 @@ fn spawn(
         east: round.land.frame.east(up),
         north: round.land.frame.north(up),
         skyline: ways,
-        lowland: 1.0
-            - smoothstep(
-                MOUNTAIN_LAKE_M.0,
-                MOUNTAIN_LAKE_M.1,
-                level - planet.sea_radius_m(),
-            ),
+        lowland: lowland(level - planet.sea_radius_m()),
     };
     info!(
         "Lakes: the start's lake {:.0} m over the sea, {:.0}% a lowland lake",

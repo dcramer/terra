@@ -160,7 +160,7 @@ fn lying(
         let bare = if made_of == material::STONE { 1.0 } else { 0.0 };
         return ([loose, 0.0], [bare, DRY_M]);
     };
-    let lake = round.water_near(up, 2);
+    let lake = round.water_near(up, crate::shore::REACH_CELLS);
     let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
     let snow = round.snow_m(point, normal);
     // On a mountain's steep faces a summer's snow lies in its gullies' beds and is gone from

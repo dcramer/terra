@@ -46,6 +46,7 @@ pub mod remote;
 pub mod rises;
 pub mod scene;
 pub mod shell;
+pub mod shore;
 pub mod sky;
 pub mod sky_occlusion;
 pub mod skylight;
