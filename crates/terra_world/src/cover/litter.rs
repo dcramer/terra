@@ -40,6 +40,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use std::f32::consts::TAU;
+use terra_gen::smoothstep;
 
 /// The litter's cards, in `assets/data/litter.ron`.
 pub const FILE: &str = "litter.ron";
@@ -285,11 +286,6 @@ fn drift(seed: u64, at: Vec2) -> f32 {
     let top = corner(0, 0) + (corner(1, 0) - corner(0, 0)) * sx;
     let bottom = corner(0, 1) + (corner(1, 1) - corner(0, 1)) * sx;
     top + (bottom - top) * sy
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// The pieces of a square, as the litter shader reads them.

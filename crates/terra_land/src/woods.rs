@@ -10,6 +10,7 @@
 //! colder (the tree species line). The numbers below say so.
 
 use terra_climate::{Season, TREE_LINE_DAYS, TREE_LINE_SEASON_C};
+use terra_gen::smoothstep;
 
 /// How much warmer than the tree line's the growing season is where the forest closes, and how
 /// much colder where the last krummholz creeps, in degrees Celsius.
@@ -410,11 +411,6 @@ pub fn ground_normal(land: &crate::Land, point: glam::Vec3) -> glam::Vec3 {
         } else {
             1.0
         }
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]

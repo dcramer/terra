@@ -10,6 +10,7 @@ use crate::sun::{self, day_length_hours, declination};
 use crate::{Climate, WorldTime};
 use core::f32::consts::{FRAC_1_SQRT_2, TAU};
 use glam::Vec3;
+use terra_gen::smoothstep;
 use terra_gen::{Noise, Seed};
 
 /// The spread of one sample of `terra_gen`'s noise over space, measured
@@ -363,11 +364,6 @@ impl Day<'_> {
             tau,
         }
     }
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// How many standard deviations a normal variable must pass to do so only a share of the

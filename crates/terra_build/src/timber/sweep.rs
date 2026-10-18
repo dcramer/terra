@@ -191,11 +191,6 @@ pub(crate) fn end_cell(kit: &Kit, seed: u32) -> ([f32; 2], f32) {
     )
 }
 
-pub(super) fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
-    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
 /// A flat cap over a ring, facing `outward`, the end grain's picture across it, turned by
 /// `spin`, as much of it as `grain` says, from the atlas's cell `cell` gives.
 #[allow(clippy::too_many_arguments)]

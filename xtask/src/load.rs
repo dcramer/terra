@@ -3,7 +3,7 @@
 //! even. Before each run the task waits, a bounded time, for a quiet machine; during it, it
 //! samples the load; and it says which runs were taken on a busy one, so a number is never
 //! argued with because of noise nobody saw. `tools/sandbox/load.ts` is the same for the QA
-//! traces; the thresholds are the same in both.
+//! traces; the thresholds are the same in both, held so by a test here.
 //!
 //! The processor's busy share is read where it is whole: under WSL from Windows
 //! (`typeperf`), whose total counts WSL's own virtual machine and the Windows programs the
@@ -32,6 +32,13 @@ const SANDBOX: &str = "terra_sandbox";
 /// How long to wait for a quiet machine before a run, at most, and how often to look.
 pub(crate) const WAIT: Duration = Duration::from_secs(90);
 const LOOK_EVERY: Duration = Duration::from_secs(5);
+/// The most a command waits for a quiet machine over all its runs, so a machine that never
+/// quiets costs minutes, not hours: after it, runs go ahead and say they were busy.
+pub(crate) const MOST_WAITING: Duration = Duration::from_secs(300);
+/// The QA traces' side of this module, which must judge a machine quiet or busy as this one
+/// does: `the_traces_judge_load_as_benchmarks_do` holds its numbers to these.
+#[cfg(test)]
+const TRACES: &str = "tools/sandbox/load.ts";
 
 /// The machine's load at a moment.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -326,5 +333,39 @@ mod tests {
         assert_eq!((seen.mean_cpu_pct, seen.most_cpu_pct), (60.0, 90.0));
         assert!(seen.busy());
         assert_eq!(during(&[]), None);
+    }
+
+    /// The QA traces wait for and judge a quiet machine by the same numbers as the
+    /// benchmarks, so a trace and a benchmark taken side by side agree on which ran busy.
+    #[test]
+    fn the_traces_judge_load_as_benchmarks_do() {
+        let text = std::fs::read_to_string(crate::root().join(TRACES)).expect(TRACES);
+        let value = |name: &str| -> String {
+            let line = text
+                .lines()
+                .find_map(|line| {
+                    line.trim_start()
+                        .strip_prefix("export ")
+                        .unwrap_or(line.trim_start())
+                        .strip_prefix(&format!("const {name} = "))
+                })
+                .unwrap_or_else(|| panic!("{TRACES} has no const {name}"));
+            line.trim_end_matches(';')
+                .trim()
+                .trim_matches('"')
+                .to_string()
+        };
+        let number = |name: &str| -> f32 {
+            value(name)
+                .parse()
+                .unwrap_or_else(|_| panic!("{TRACES}'s {name} is not a number"))
+        };
+        assert_eq!(number("QUIET_CPU_PCT"), QUIET_CPU_PCT);
+        assert_eq!(number("QUIET_GPU_PCT"), QUIET_GPU_PCT);
+        assert_eq!(number("BUSY_DURING_CPU_PCT"), BUSY_DURING_CPU_PCT);
+        assert_eq!(number("BUSY_DURING_MOST_PCT"), BUSY_DURING_MOST_PCT);
+        assert_eq!(number("WAIT_S"), WAIT.as_secs_f32());
+        assert_eq!(number("MOST_WAITING_S"), MOST_WAITING.as_secs_f32());
+        assert_eq!(value("SANDBOX"), SANDBOX);
     }
 }

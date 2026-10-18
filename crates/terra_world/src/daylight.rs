@@ -19,6 +19,7 @@ use crate::shell::Options;
 use crate::sky::Sky;
 use bevy::{camera::Exposure, pbr::DistanceFog, prelude::*};
 use std::f32::consts::TAU;
+use terra_gen::smoothstep;
 
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
 /// Valheim's and Enshrouded's are.
@@ -379,11 +380,6 @@ fn light_at(height: f32) -> Light {
 #[cfg(test)]
 pub(crate) fn illuminance(height: f32) -> f32 {
     light_at(height).illuminance
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// The moon's light with the sun so many degrees below the horizon: none as it sets,

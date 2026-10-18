@@ -46,6 +46,7 @@ use bevy::{
 };
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
+use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::{CoverRules, CoverSource, Growing};
 use terra_world::detail::DetailScale;
@@ -617,11 +618,6 @@ const SPRUCES_OVER: f32 = 0.3;
 /// How far apart grown pines stand, of `SPACING_M`, before their knots: closer than the oaks
 /// were, as a tall stand's poles are, so a walk among them is among trunks (D301, D318).
 const PINES_APART: f32 = 0.62;
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 /// One kind of tree at each level of detail, and the stand-in its shadow is cast from.
 struct TreeModel {

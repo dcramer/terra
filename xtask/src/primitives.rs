@@ -7,13 +7,15 @@
 use crate::{output, root};
 use std::fmt::Write as _;
 
-/// A primitive: what it is, the file it lives in, what to call instead, and the constants
-/// that give it away, as hex digits without `0x` or separators (so this file is not a copy).
+/// A primitive: what it is, the file it lives in, what to call instead, and what gives it
+/// away: its constants, as hex digits without `0x` or separators (so this file is not a
+/// copy), or, for one with no telling constant, the names of its functions defined again.
 pub(crate) struct Primitive {
     pub(crate) what: &'static str,
     pub(crate) home: &'static str,
     pub(crate) call: &'static str,
     pub(crate) constants: &'static [&'static str],
+    pub(crate) functions: &'static [&'static str],
 }
 
 pub(crate) const PRIMITIVES: &[Primitive] = &[
@@ -22,12 +24,21 @@ pub(crate) const PRIMITIVES: &[Primitive] = &[
         home: "crates/terra_gen/src/hash.rs",
         call: "terra_gen::hash::{lowbias32, lowbias32_round, prospector32, prospector32_round}",
         constants: &["7feb352d", "846ca68b", "2c1b3c6d", "297a2d39"],
+        functions: &[],
     },
     Primitive {
         what: "SplitMix64's finaliser",
         home: "crates/terra_gen/src/hash.rs",
         call: "terra_gen::hash::splitmix64",
         constants: &["bf58476d1ce4e5b9", "94d049bb133111eb"],
+        functions: &[],
+    },
+    Primitive {
+        what: "the smoothstep easing",
+        home: "crates/terra_gen/src/ease.rs",
+        call: "terra_gen::smoothstep",
+        constants: &[],
+        functions: &["smoothstep"],
     },
 ];
 
@@ -64,11 +75,44 @@ fn hex_literals(line: &str) -> Vec<String> {
     found
 }
 
-/// Where a source writes out a primitive's constant though it is not its home: line (from 1)
-/// and what to say of it.
+/// The function a line defines, if it does: `fn name(`, after any `pub`, `pub(…)` or `const`.
+fn defined_function(line: &str) -> Option<&str> {
+    let mut rest = line.trim_start();
+    loop {
+        if let Some(after) = rest.strip_prefix("pub(") {
+            rest = after.split_once(')')?.1.trim_start();
+        } else if let Some(after) = rest
+            .strip_prefix("pub ")
+            .or_else(|| rest.strip_prefix("const "))
+        {
+            rest = after.trim_start();
+        } else {
+            break;
+        }
+    }
+    let name = rest.strip_prefix("fn ")?;
+    let end = name.find(['(', '<'])?;
+    Some(name[..end].trim())
+}
+
+/// Where a source writes out a primitive's constant, or defines one of its functions, though
+/// it is not its home: line (from 1) and what to say of it.
 fn copies(path: &str, text: &str, primitives: &[Primitive]) -> Vec<String> {
     let mut found = Vec::new();
     for (number, line) in text.lines().enumerate() {
+        if let Some(name) = defined_function(line) {
+            for primitive in primitives {
+                if primitive.home != path && primitive.functions.contains(&name) {
+                    found.push(format!(
+                        "{path}:{}: fn {name} is {}: call {} ({})",
+                        number + 1,
+                        primitive.what,
+                        primitive.call,
+                        primitive.home
+                    ));
+                }
+            }
+        }
         for literal in hex_literals(line) {
             for primitive in primitives {
                 if primitive.home != path && primitive.constants.contains(&literal.as_str()) {
@@ -157,10 +201,41 @@ mod tests {
         assert!(copies("crates/x.rs", scatter, PRIMITIVES).is_empty());
     }
 
-    /// Each home holds every constant it is known by, so a constant mistyped here would be
-    /// caught: a primitive that matched nothing would guard nothing.
     #[test]
-    fn every_home_holds_its_constants() {
+    fn a_function_defined_again_fails_and_calls_and_lookalikes_pass() {
+        let easing = PRIMITIVES
+            .iter()
+            .find(|primitive| primitive.functions.contains(&"smoothstep"))
+            .expect("smoothstep is a primitive");
+        let planted =
+            "use x;\n\npub(super) fn smoothstep(a: f32, b: f32, x: f32) -> f32 {\n    0.0\n}\n";
+        let found = copies("crates/terra_game/src/planted.rs", planted, PRIMITIVES);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0].starts_with("crates/terra_game/src/planted.rs:3: fn smoothstep "),
+            "{found:?}"
+        );
+        assert!(found[0].contains(easing.call), "{found:?}");
+        assert!(copies(easing.home, planted, PRIMITIVES).is_empty());
+        let fine = "    let k = smoothstep(0.0, 1.0, x);\nfn smoothstep_twice(x: f32) -> f32 {\n// fn smoothstep(\n";
+        assert!(copies("crates/x.rs", fine, PRIMITIVES).is_empty());
+    }
+
+    #[test]
+    fn a_definition_is_read_past_its_visibility() {
+        assert_eq!(defined_function("fn a(x: f32)"), Some("a"));
+        assert_eq!(
+            defined_function("    pub(crate) const fn b<T>()"),
+            Some("b")
+        );
+        assert_eq!(defined_function("pub fn c ()"), Some("c"));
+        assert_eq!(defined_function("let d = fn_pointer(1);"), None);
+    }
+
+    /// Each home holds every constant it is known by and defines every function, so one
+    /// mistyped here would be caught: a primitive that matched nothing would guard nothing.
+    #[test]
+    fn every_home_holds_its_constants_and_functions() {
         for primitive in PRIMITIVES {
             let text = std::fs::read_to_string(root().join(primitive.home)).expect(primitive.home);
             let held: Vec<String> = text.lines().flat_map(hex_literals).collect();
@@ -168,6 +243,14 @@ mod tests {
                 assert!(
                     held.iter().any(|literal| literal == constant),
                     "{} lacks {constant}",
+                    primitive.home
+                );
+            }
+            for function in primitive.functions {
+                assert!(
+                    text.lines()
+                        .any(|line| defined_function(line) == Some(function)),
+                    "{} does not define {function}",
                     primitive.home
                 );
             }

@@ -19,6 +19,7 @@ use bevy::{
     render::render_resource::AsBindGroup,
     shader::ShaderRef,
 };
+use terra_gen::smoothstep;
 use terra_land::water::Waters;
 
 /// Pools smaller than this, about 30 m across, are the ground's wet hollows and the pits where
@@ -318,11 +319,6 @@ fn mist_thickness(local_hour: f32, wind: f32) -> f32 {
 /// How much a lake so high over the sea is a lowland one, 1, rather than a mountain one, 0.
 pub(crate) fn lowland(over_sea_m: f32) -> f32 {
     1.0 - smoothstep(MOUNTAIN_LAKE_M.0, MOUNTAIN_LAKE_M.1, over_sea_m)
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// The lakes' mist as the morning goes, by the sun where the camera is (D363): thickest from

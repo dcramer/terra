@@ -22,6 +22,7 @@ use bevy_inspector_egui::{prelude::*, quick::ResourceInspectorPlugin};
 use std::sync::Arc;
 use terra_core::{Ground, Operation, PlanetSpec, RayHit, Seed, Yield};
 use terra_gen::Noise;
+use terra_gen::smoothstep;
 use terra_voxel::{GeneratedPlanet, VoxelPlanet};
 
 // The ground as generated is the land's (`terra_land::ground`), so the tools that map its
@@ -327,11 +328,6 @@ impl Planet {
 /// and how much of its lushness the straw takes at most.
 const LOWLAND_MEADOW_C: f32 = 10.0;
 const MOUNTAIN_STRAW: f32 = 0.8;
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 #[derive(Resource, Reflect, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]

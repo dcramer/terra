@@ -29,6 +29,7 @@ use bevy::{
         AutoExposure, AutoExposureCompensationCurve, AutoExposurePlugin,
     },
 };
+use terra_gen::smoothstep;
 
 /// Direction from the scene toward the sun: low over the water. The morning sun the art was lit
 /// under, which the world's frame is turned for (`terra_land::frame`).
@@ -164,11 +165,6 @@ fn haze_density() -> Image {
     sampler.set_address_mode(ImageAddressMode::Repeat);
     image.sampler = ImageSampler::Descriptor(sampler);
     image
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// How thick the haze is at its thinnest; the mist is seven times this (D244). The day

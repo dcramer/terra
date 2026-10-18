@@ -26,6 +26,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future},
 };
 use std::sync::Arc;
+use terra_gen::smoothstep;
 
 /// A crown, as an ellipsoid of leaves: its middle, its half sizes along east, up and south,
 /// and how much of the sky it hides looking straight up through its middle.
@@ -568,11 +569,6 @@ impl Leaves {
         }
         libm::expf(-depth)
     }
-}
-
-fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
-    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]

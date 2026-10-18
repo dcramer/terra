@@ -12,6 +12,7 @@
 //! are.
 
 use glam::{IVec3, Vec3};
+use terra_gen::smoothstep;
 
 /// Patterned ground: where it lies and how it is shaped.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -124,11 +125,6 @@ impl Patterned {
         };
         (trough + rim - pool * middle) * strength
     }
-}
-
-fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
-    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// A number from 0 to 1 from a hash's low 21 bits.

@@ -24,6 +24,7 @@ use bevy::{
 };
 use std::collections::HashMap;
 use terra_core::{ChunkId, ChunkMesh, MaterialId};
+use terra_gen::smoothstep;
 use terra_voxel::{
     Detail, Field, Sides, chunk_origin, chunk_size_m, chunks_around, material, may_hold_surface,
     mesh_chunk,
@@ -201,11 +202,6 @@ const STEEP_SNOW: (f32, f32) = (0.7, 0.87);
 /// second: low, as most gullies are cut shallow (`Mountains::gully_depths`), their beds a
 /// share of the deepest's, and buttresses narrow them to slots.
 const SNOW_BED: (f32, f32) = (0.12, 0.4);
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 /// Chunks this fine or finer work out how much sky each vertex sees; coarser ones are
 /// far enough off that it does not show.

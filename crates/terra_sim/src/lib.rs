@@ -9,6 +9,8 @@
 
 mod grid;
 
+use terra_gen::smoothstep;
+
 pub use grid::Grid;
 
 /// Height range of the terrain around the nominal radius, in metres.
@@ -422,11 +424,6 @@ fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
 fn normalise(v: [f32; 3]) -> [f32; 3] {
     let len = dot(v, v).sqrt().max(1e-9);
     [v[0] / len, v[1] / len, v[2] / len]
-}
-
-fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
-    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {

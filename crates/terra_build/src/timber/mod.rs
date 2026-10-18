@@ -294,7 +294,8 @@ mod sweep;
 use cuts::{LEAN_RING_M, densify, level_cut, plumb_cut, rings_at};
 use harm::{break_up, chunk_depth, harmed_along};
 use shapes::{Squared, hewn, round, squared};
-use sweep::{cap, end_colour, smoothstep, sweep};
+use sweep::{cap, end_colour, sweep};
+use terra_gen::smoothstep;
 
 pub use plank::plank;
 pub(crate) use sweep::end_cell;

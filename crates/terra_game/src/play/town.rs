@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use terra_build::fitting::Hang;
 use terra_build::town::{Size, ThingKind};
 use terra_build::{Base, CELL_M};
+use terra_gen::smoothstep;
 use terra_life::{Animals, Life, Plan};
 use terra_world::lod::Viewpoint;
 use terra_world::smoke::{Burning, Smoke};
@@ -529,11 +530,6 @@ fn patch(p: Vec2) -> f32 {
     let top = hash(x, y) + (hash(x + 1, y) - hash(x, y)) * sx;
     let bottom = hash(x, y + 1) + (hash(x + 1, y + 1) - hash(x, y + 1)) * sx;
     top + (bottom - top) * sy
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// How far round its middle the town's cover is its own.

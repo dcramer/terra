@@ -1,6 +1,6 @@
 // How busy the machine is, for measuring (D185 as amended): the QA traces' side of what
-// `cargo xtask bench` does (xtask/src/load.rs, the same thresholds). A trace shares the machine
-// with builds, tests and other agents' runs, whose work makes frames slower and less even, so
+// `cargo xtask bench` does (xtask/src/load.rs, whose test holds these thresholds to its own). A
+// trace shares the machine with builds, tests and other agents' runs, whose work makes frames slower and less even, so
 // before each run it waits, a bounded time, for a quiet machine; during it, it samples the
 // load; and it says which runs were taken on a busy one.
 //

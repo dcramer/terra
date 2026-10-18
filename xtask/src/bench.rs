@@ -46,9 +46,6 @@ const MOST_DRIFT_PCT: f32 = 15.0;
 /// The integrated GPU's target at the low preset (D239): 30 frames a second, a median under
 /// this.
 const INTEGRATED_MEDIAN_MS: f32 = 1000.0 / 30.0;
-/// The most a benchmark waits for a quiet machine over all its runs, so a machine that never
-/// quiets costs minutes, not hours: after it, runs go ahead and say they were busy.
-const MOST_WAITING: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// One timed run, as the sandbox prints it.
 #[derive(Debug, Clone, PartialEq)]
@@ -363,7 +360,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
 
     let mut ok = true;
     let mut lines = Vec::new();
-    let mut waiting_left = MOST_WAITING;
+    let mut waiting_left = load::MOST_WAITING;
     for scene in chosen {
         let mut timed: Vec<Run> = Vec::new();
         // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the

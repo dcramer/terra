@@ -17,6 +17,7 @@
 //!   degrees, scree under cliffs, gravel in the gullies' beds ([`Rise::bed`]).
 
 use glam::{IVec3, Vec3};
+use terra_gen::smoothstep;
 use terra_gen::{Noise, Seed, layer_shift};
 
 /// A world's mountains, as its theme's numbers.
@@ -821,11 +822,6 @@ impl Range {
         let cut = (cut + FADE_TO_RIB * COULOIR_LEAST) / (weights + FADE_TO_RIB);
         (value, across, change, cut)
     }
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// How many standard deviations a normal variable passes only a share of the time

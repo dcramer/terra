@@ -19,6 +19,7 @@
 
 use crate::region::Region;
 use glam::{Vec2, Vec3};
+use terra_gen::smoothstep;
 
 /// How much of each community covers a place, as shares of the ground, and how much of the
 /// ground is the open heath's at all (the rest the forest's floor or the meadow's grass).
@@ -50,11 +51,6 @@ pub struct Ground {
     pub wet: f32,
     /// How steep, in degrees.
     pub slope_deg: f32,
-}
-
-fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
-    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// The heath a place holds.

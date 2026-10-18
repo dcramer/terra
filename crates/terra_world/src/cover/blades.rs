@@ -25,6 +25,7 @@ use bevy::{
 };
 use std::f32::consts::TAU;
 use terra_gen::Seed;
+use terra_gen::smoothstep;
 
 /// Blades are tried on a grid this fine, in metres: about 280 a square metre where the
 /// grass is thickest.
@@ -169,11 +170,6 @@ fn tussocks(grass: f32, clump: &Clump, from_middle: f32) -> f32 {
         0.0
     };
     tuft + (even - tuft) * thick
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// What grows on the sample grid: the ground's rise above the square's middle, how much

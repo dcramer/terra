@@ -16,6 +16,7 @@ use crate::lakes;
 use crate::region::Region;
 use crate::woods::{Footing, Seasons, stand};
 use glam::{Vec2, Vec3};
+use terra_gen::smoothstep;
 
 /// A town's place found.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -602,11 +603,6 @@ impl Land {
         }
         best.map_or(site.toward, |(_, at)| at)
     }
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]

@@ -31,6 +31,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, TaskPool, block_on, poll_once},
 };
 use terra_core::{Piece, Solid, Walker};
+use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
 
 /// Grass is planted this far from the base, thinning out over the last stretch.
@@ -638,11 +639,6 @@ fn scatter(seed: Seed, reach_m: f32, spacing_m: f32, mut place: impl FnMut(&mut 
             place(&mut rng, east, north);
         }
     }
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 fn plant(

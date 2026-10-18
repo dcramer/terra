@@ -9,6 +9,7 @@ use crate::snow::Snow;
 use crate::water::Waters;
 use crate::woods::{self, Footing, Seasons, Stand};
 use glam::Vec3;
+use terra_gen::smoothstep;
 
 /// The land round a place.
 pub struct Round {
@@ -239,11 +240,6 @@ fn heath_over(
             slope_deg,
         })
     })
-}
-
-fn smoothstep(from: f32, to: f32, x: f32) -> f32 {
-    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// What a still lake mirrors, all round it (D322): in each of so many ways out, how high the
