@@ -295,12 +295,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         dark = 1.0;
     }
     input.material.base_color = vec4(grey * dark, alpha);
-    // Lit from under by the fire, near its foot; a breath's soot glows from the stream it
-    // leaves for its first moments.
-    // Most on a puff's underside, which faces the flames.
+    // Lit from under by the fire just over the flames; a breath's soot glows from the stream it
+    // leaves for its first moments. Most on a puff's underside, which faces the flames, and
+    // little on the rest: glowing up to a third of the way up, a column's base was a brown fog
+    // (castle film r7, sRGB 104,75,55) where young smoke over a fire is black.
     let n = normalize(in.world_normal);
     let down = saturate(-dot(n, normalize(in.world_position.xyz)));
-    var under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.35 + 1.3 * down);
+    var under = select(pow(1.0 - t, 24.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.15 + 1.5 * down);
     // A hearth's wisp warm only its first half metre over the flames, and dimly.
     if hearth {
         under = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 0.04;

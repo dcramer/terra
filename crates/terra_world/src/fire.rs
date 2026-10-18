@@ -142,17 +142,26 @@ const SOOT_A_SECOND: f32 = 55.0;
 const DROPS_A_SECOND: f32 = 45.0;
 /// How many point lights the fires are lit by, and how far round each its fire is gathered,
 /// in metres.
-const LIGHTS: usize = 8;
+const LIGHTS: usize = 12;
 const LIGHT_CELL_M: f32 = 9.0;
 /// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
 /// the most one light gives: still some times a real fire's, for the film, but no longer so
 /// much that sunlit stone round a fire goes salmon pink; a breath's brighter, as every game
-/// that draws one well lights the ground under it.
-const LUMENS_A_METRE: f32 = 350_000.0;
-const MOST_LUMENS: f32 = 3.0e7;
-const LIGHT_RANGE_M: f32 = 55.0;
-/// A jet's light at its mouth and where it reaches.
-const JET_LUMENS: f32 = 1.0e7;
+/// that draws one well lights the ground under it. Eight lights at 3e7 left the walls round a
+/// burning keep unlit by it in daylight (castle film r7).
+const LUMENS_A_METRE: f32 = 500_000.0;
+const MOST_LUMENS: f32 = 4.0e7;
+/// How far a blaze's light and a jet's reach, metres: at 55 every light tinted every sunlit wall
+/// of the burg a uniform salmon (r8's first probe), where firelight by day shows only close
+/// round the fire.
+const LIGHT_RANGE_M: f32 = 22.0;
+const JET_RANGE_M: f32 = 30.0;
+/// A jet's light just past the mouth, on the breather's head and neck, along its stream and
+/// where it strikes: at 1e7 the dragon and the wall it struck showed none of it by day (castle
+/// film r7). Its colour the stream's yellow, a blaze's the orange of burning timber.
+const JET_LUMENS: f32 = 5.0e7;
+const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
+const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
@@ -521,7 +530,7 @@ fn setup(
                 .spawn((
                     Name::new(format!("Fire: light {i}")),
                     PointLight {
-                        color: Color::srgb(1.0, 0.55, 0.22),
+                        color: BLAZE_LIGHT,
                         intensity: 0.0,
                         range: LIGHT_RANGE_M,
                         radius: 1.0,
@@ -678,6 +687,7 @@ fn show(
 struct Lit {
     at: Vec3,
     lumens: f32,
+    color: Color,
     range: f32,
     lift: f32,
     flickers: f32,
@@ -704,6 +714,7 @@ fn light(
                 let (waver, bob) = flicker(t, i as f32 * 1.7, lit.flickers);
                 light.intensity = lit.lumens * waver;
                 light.range = lit.range;
+                light.color = lit.color;
                 transform.translation = lit.at + up * (lit.lift + bob * lit.lift / 1.5);
                 *visibility = Visibility::Inherited;
             }
@@ -735,10 +746,11 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
         .filter(|jet| jet.on)
         .flat_map(|jet| {
             let way = jet.way.normalize_or(Vec3::Z);
-            [0.25, 0.85].map(|along| Lit {
+            [0.06, 0.4, 0.85].map(|along| Lit {
                 at: jet.from + way * jet.reach * along,
                 lumens: JET_LUMENS,
-                range: LIGHT_RANGE_M,
+                color: JET_LIGHT,
+                range: JET_RANGE_M,
                 lift: 1.5,
                 flickers: JET_LUMENS,
             })
@@ -751,6 +763,7 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
         Lit {
             at: blaze.at,
             lumens: weight * HEARTH_LUMENS_A_METRE,
+            color: BLAZE_LIGHT,
             range: HEARTH_RANGE_M,
             lift: blaze.tall * 0.6,
             flickers: weight * LUMENS_A_METRE * 0.25,
@@ -764,6 +777,7 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
             Lit {
                 at: sum / weight,
                 lumens,
+                color: BLAZE_LIGHT,
                 range: LIGHT_RANGE_M,
                 lift: 1.5,
                 flickers: lumens,

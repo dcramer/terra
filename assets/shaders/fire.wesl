@@ -86,11 +86,16 @@ const LUMINANCE: f32 = 1.0;
 // r5 and r6, sRGB 162,149,89), and with a stop of headroom guessed for it never white.
 const KNEE: f32 = 1.0;
 // The white a white-hot core is lifted toward on the screen, far past the tonemapper's peak
-// so it clips there as fire does on film (4% of a barn fire's flame pixels are white), and
-// how bright on the screen the lift starts and is whole.
+// so it clips there as fire does on film (4% of a barn fire's flame pixels are white); how
+// bright on the screen soot's green rises to its red (yellow), and how bright its blue then
+// rises too (white), late and steep so only the hottest few in a hundred clip: lifted from 1.0
+// to 2.0 the bodies of a wall's flames went white with pastel rims, their blue half their red
+// where a barn fire's is a fifth (castle film r7, B/R 0.51 against 0.19).
 const WHITE: f32 = 4.0;
-const LIFT_FROM: f32 = 1.0;
-const LIFT_TO: f32 = 2.0;
+const YELLOW_FROM: f32 = 0.9;
+const YELLOW_TO: f32 = 1.6;
+const WHITE_FROM: f32 = 1.5;
+const WHITE_TO: f32 = 2.6;
 // How far in front of what is behind it a card fades in, in metres, so it never shows a
 // straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
 // How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
@@ -157,11 +162,36 @@ fn soot(kelvin: f32, amount: f32) -> vec3<f32> {
     // White-hot as soot glows hotter: its green rising to its red first (yellow), and only
     // then all three past the peak (white). Lifted straight toward white an orange passes
     // through salmon, white blobs with pink rims (castle film r7's first probe).
-    let lift = smoothstep(LIFT_FROM, LIFT_TO, screen);
-    let yellow = saturate(2.0 * lift);
-    let white = saturate(2.0 * lift - 1.0);
-    let hot = vec3(kept.r, mix(kept.g, max(kept.g, 0.92 * kept.r), yellow), mix(kept.b, max(kept.b, 0.3 * kept.r), yellow));
-    return mix(hot, vec3(WHITE), white * white) / shown;
+    let yellow = smoothstep(YELLOW_FROM, YELLOW_TO, screen);
+    let white = pow(smoothstep(WHITE_FROM, WHITE_TO, screen), 3.0);
+    let hot = vec3(kept.r, mix(kept.g, max(kept.g, 0.88 * kept.r), yellow), mix(kept.b, max(kept.b, 0.2 * kept.r), yellow));
+    return mix(hot, vec3(WHITE), white) / shown;
+}
+
+// A flame's or a breath's colour on the screen by how hot it burns there, 0 to 1, as Unreal's
+// and most games' fire materials colour a flipbook's heat through a gradient: dull red at its
+// thinnest rims, orange, then the saturated yellow that is nearly all of a flamethrower's
+// stream on film (98% of an M7's flame pixels are hue 40-60), pale yellow, and white-hot past
+// the tonemapper's peak only in the hottest cores. Each step is kept under the knee (Khronos
+// neutral's peak of 1) until the white, so it stays saturated: lifted toward white from
+// orange, or added over a blue sky and summed past the peak card over card, the neutral
+// tonemapper takes an orange straight to salmon pink (castle film r7, the breath 12% yellow).
+// On the screen whatever the eye is adapted to, as film exposes for fire by day or night.
+// Its blue is a twentieth of its red until the pale, so the yellow is a fire's and not a
+// khaki's (a yellow with a fifth of its red in blue, linear, read olive over sky and smoke in
+// r8's second probe, sRGB B/R 0.45); and it is shown a little past the knee, since the frame
+// showed it about 0.6 as bright as asked for (sRGB 195,147,89 for a mean asked as 241,192,101).
+const FLAME_GAIN: f32 = 1.7;
+fn flame_colour(h: f32) -> vec3<f32> {
+    let rim = vec3(0.5, 0.07, 0.005);
+    let orange = vec3(1.0, 0.32, 0.02);
+    let yellow = vec3(1.0, 0.66, 0.05);
+    let pale = vec3(1.05, 0.9, 0.28);
+    let white = vec3(0.95, 0.92, 0.82) * WHITE;
+    var c = mix(rim, orange, smoothstep(0.0, 0.25, h));
+    c = mix(c, yellow, smoothstep(0.25, 0.5, h));
+    c = mix(c, pale, smoothstep(0.62, 0.85, h));
+    return mix(c * FLAME_GAIN, white, smoothstep(0.88, 1.0, h));
 }
 
 // How much of what is behind it a flame covers, for what it gives and its alpha. Its light is
@@ -425,7 +455,12 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
             h = flame * 1.3;
             at = foot + east * side * wide * (0.25 + 0.2 * luck) + north * (fract(luck * 3.1) - 0.5) * wide * 0.5;
         }
-        let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, 0.0);
+        // Each card its own width, height and lean by its luck, so a burning wall's flames
+        // are not one cut-out stamped along it (castle film r7).
+        w *= 0.8 + 0.45 * fract(luck * 4.3);
+        h *= 0.85 + 0.3 * fract(luck * 6.1);
+        let tilt = (fract(luck * 9.7) - 0.5) * 0.22;
+        let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, tilt);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
         out.life = vec4(0.5, heat, luck, 1.0);
@@ -497,19 +532,22 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         // card it covers.
         let channel = u32(luck * 3.0) % 3u;
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
-        let rate = FLIPBOOK_FPS * sqrt(2.5 / max(size, 0.5));
+        let rate = FLIPBOOK_FPS * sqrt(2.5 / max(size, 0.5)) * (0.8 + 0.4 * fract(luck * 17.3));
         let f = fract(time * rate / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
         let f0 = floor(f);
         let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
         let a = flipbook_at(f0, x, uv.y)[channel];
         let b = flipbook_at(f1, x, uv.y)[channel];
         let heat_here = mix(a, b, fract(f)) * smoothstep(0.0, 0.03, uv.y);
-        // The flipbook's body is near its full heat, so only its hottest cores go yellow: the
-        // rest orange, its rims and licks a dull red.
+        // The flipbook's body is near its full heat, so only its hottest cores go yellow and
+        // pale: the rest orange, its rims and licks a dull red. Coloured through the gradient
+        // and blended as it covers, as the breath is: through soot's lift by brightness on the
+        // screen its bodies went white, cut-outs with pastel rims (castle film r7 and r8's
+        // first probe, B/R 0.51 where a barn fire's is 0.19).
         let alpha = smoothstep(0.08, 0.4, heat_here) * soft;
-        let kelvin = 950.0 + 700.0 * pow(heat_here, 1.5) * (0.72 + 0.28 * heat);
-        light = soot(kelvin, alpha);
-        cover = covers(light, alpha);
+        let h = 0.92 * pow(heat_here, 2.2) * (0.8 + 0.2 * heat);
+        cover = alpha * 0.95;
+        light = flame_colour(h) * cover / exp2(adapted.x);
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
@@ -556,26 +594,30 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let heat_here = body * saturate(mix(0.45, 0.04, smoothstep(0.25, 0.85, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
         let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
-        let alpha = smoothstep(0.05, 0.4, heat_here) * fade * heat * soft;
-        // Its body a yellow-orange, hotter than a building's flames, as burning thickened fuel
-        // is in footage; dull red only at its thin rims.
-        let kelvin = 1150.0 + 600.0 * pow(heat_here, 1.2) + 250.0 * mouth - 100.0 * t + 90.0 * struck;
-        light = soot(kelvin, alpha) * (1.0 - 0.9 * pocket);
+        // How hot it burns there, for its colour: yellow through its body, hotter than a
+        // building's flames as burning thickened fuel is in footage, orange and dull red only
+        // at its thin rims and as it burns out.
+        var h = saturate(0.12 + 0.72 * heat_here + 0.12 * mouth - 0.18 * smoothstep(0.5, 1.0, t) + 0.15 * struck);
         // The rod a solid core along each card over the first two fifths of the stream,
-        // whatever the flipbook's tongue there, a rope of fire from the jaw: overexposed,
-        // white-yellow as a flamethrower's is on film, past the tonemapper's peak on the
-        // screen whatever the eye is adapted to.
+        // whatever the flipbook's tongue there, a rope of fire from the jaw: yellow, and
+        // white-hot in its middle third over the first quarter.
         let core = (1.0 - smoothstep(0.12, 0.3, length(p) + (n - 0.5) * 0.12)) * window;
         let rod = (1.0 - smoothstep(0.0, 0.4, t)) * core * fade * heat * soft;
-        light = mix(light, vec3(1.0, 0.92, 0.72) * WHITE / exp2(adapted.x), rod * 0.85);
-        // Covering what is behind it by how yellow it glows, its dull red rims next to not at
-        // all, as glowing gas is thin: the cards are drawn in the stream's order, not by depth,
-        // so rims covering half of what is behind them laid dull red over the bright cores of
-        // the cards under them, layer on layer, and the stream summed to rust (castle film r6,
-        // sRGB 114,68,47 by the jaw) and then salmon. Black soot covers.
-        let yellow = light.g / max(light.r, 1.0e-4);
-        let glows = alpha * mix(0.08, 0.97, smoothstep(0.3, 0.8, yellow));
-        cover = max(saturate(glows + pocket * fade * heat * soft * 0.8), rod * 0.95);
+        let inner = (1.0 - smoothstep(0.03, 0.11, length(p) + (n - 0.5) * 0.06)) * (1.0 - smoothstep(0.12, 0.25, t));
+        h = max(h, rod * mix(0.72, 1.0, inner));
+        // Black soot at its outer edge once it rolls open, as rich-burning fuel makes it.
+        let outer = smoothstep(0.2, 0.34, edge) * (1.0 - smoothstep(0.38, 0.48, edge)) * window * smoothstep(0.4, 0.8, t);
+        let black = saturate(0.9 * pocket + 0.8 * outer);
+        // Blended over what is behind it as it covers, not added: the cards are drawn in the
+        // stream's order and overlap many deep at the jaw, and their light summed past the
+        // tonemapper's peak, which the neutral tonemapper takes from orange to salmon (castle
+        // film r7, the jaw's crop sRGB 231,165,137). Blended, it is the colour its cards burn.
+        // Covering wholly through its body: at its flipbook alpha (0.1 to 0.3 through most of
+        // the stream) the sky's blue showed through its yellow, an olive-green smear (r8's
+        // first probe).
+        let solid = smoothstep(0.03, 0.22, heat_here) * fade * heat * soft;
+        cover = saturate(max(max(solid * 0.96, rod * 0.97), black * fade * heat * soft * 0.7));
+        light = mix(flame_colour(h),vec3(0.012, 0.01, 0.009), black) * cover / exp2(adapted.x);
     }
     if max(light.r, cover) < 0.002 {
         discard;
