@@ -160,7 +160,7 @@ At 9a523313, before any cut, on the 10-core Mac with other agents building (load
 | the walker (`play/movement.rs`) | 44 | game 29, sandbox 13 | | |
 | a creature (`play/creatures.rs`) | 38 | game 26, sandbox 10 | | |
 
-Per-crate seconds overlap, since cargo compiles crates side by side. The world is 11 to 22 s of every building rebuild in dev and 487 s of one in release, which step 3 removes; release rebuilds, which every shot and film pays, run to 14 to 19 minutes under this load, `terra_game` alone 11 to 13. The release pass was stopped after two probes so as not to hold the machine for two hours. A building push's gate took 16 to 59 minutes, and a push that slow often loses the race to main to another agent's.
+Per-crate seconds overlap, since cargo compiles crates side by side. The world is 11 to 22 s of every building rebuild in dev and 487 s of one in release, which step 3 removes; release rebuilds, which every shot and film pays, run to 14 to 19 minutes under this load, `terra_game` alone 11 to 13. The release pass was stopped after two probes so as not to hold the machine for two hours. These release figures predate D408 (c5a762b3), which builds our crates incrementally in release too, so later release runs are not comparable with them; the dev figures are. A building push's gate took 16 to 59 minutes, and a push that slow often loses the race to main to another agent's.
 
 ## How shipped projects do it
 
