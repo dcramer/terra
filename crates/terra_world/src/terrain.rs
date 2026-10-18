@@ -198,8 +198,9 @@ const DRY_M: f32 = 50.0;
 /// normal points up (about 46 degrees), wholly past the second (about 30 degrees)...
 const STEEP_SNOW: (f32, f32) = (0.7, 0.87);
 /// ...lying from the first of these shares of the way down into a gully's bed, deep from the
-/// second.
-const SNOW_BED: (f32, f32) = (0.25, 0.6);
+/// second: low, as most gullies are cut shallow (`Mountains::gully_depths`), their beds a
+/// share of the deepest's, and buttresses narrow them to slots.
+const SNOW_BED: (f32, f32) = (0.12, 0.4);
 
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);

@@ -80,6 +80,21 @@ pub struct Mountains {
     /// some faces the gullies narrow to slots between broad buttresses standing out, and on
     /// others they widen between sharp arêtes, faces a kilometre or two across.
     pub buttresses: f32,
+    /// How far the coarsest gullies' spacing differs by face, 0 to 1: 0 every wall combed at
+    /// `gully_spacing_m`, one width from 3 to 6 km off however the face runs; toward 1 some faces,
+    /// a kilometre or so across, cut by couloirs `WIDE_GULLIES` times as far apart and deeper.
+    /// Two spacings blended by a face noise, not one scaled smoothly: a spacing that changes
+    /// across a face sweeps the stripes' phase, kilometres from the centre, into a moiré.
+    pub wide_gullies: f32,
+    /// How far some faces are smooth slabs, 0 to 1: their coarser gullies cut to a tenth and a
+    /// half, so a wall shows a broad unbroken sheet of rock between fluted ones.
+    pub slabs: f32,
+    /// How far each gully is cut to its own depth, 0 to 1: 0 all of a cell's alike; toward 1
+    /// most of them shallow, down to `GULLY_LEAST` of the deepest, and a few deep.
+    pub gully_depths: f32,
+    /// How high a talus apron piles against a wall's foot, in metres, its gullies running out
+    /// into cones down it: 0 a wall dropping bare to its valley's floor.
+    pub aprons_m: f32,
 }
 
 impl Mountains {
@@ -106,6 +121,10 @@ impl Mountains {
         tops_m: 1800.0,
         tops: 0.75,
         buttresses: 1.0,
+        wide_gullies: 1.0,
+        slabs: 1.0,
+        gully_depths: 1.0,
+        aprons_m: 80.0,
     };
 
     /// The most the mountains raise the land, in metres.
@@ -231,6 +250,30 @@ const FOOTHILLS: f32 = 0.6;
 /// they were, between arêtes, to slots between buttresses three times as broad.
 const BUTTRESS_FACES_M: f32 = 1600.0;
 const BUTTRESS_POWERS: (f32, f32) = (-1.0, 1.6);
+/// The wide couloirs' spacing and depth, as shares of the coarsest set's
+/// (`Mountains::wide_gullies`), and the middle set's depth between them; how far across a face
+/// that takes them is, in metres, and the
+/// face noise's span over which a face goes from one spacing to the other: narrow, as two
+/// spacings mixed half and half beat into a lattice.
+const WIDE_GULLIES: (f32, f32, f32) = (2.2, 1.5, 0.6);
+const WIDE_FACES_M: f32 = 1300.0;
+const WIDE_SPAN: (f32, f32) = (-0.12, 0.12);
+/// How far across a slab's face is, in metres, where on the face noise it begins and is whole
+/// (`Mountains::slabs`), and how much of each of the two coarser sets' depth a slab keeps.
+const SLAB_FACES_M: f32 = 1900.0;
+const SLAB_SPAN: (f32, f32) = (0.05, 0.13);
+const SLAB_KEEPS: [f32; 2] = [0.1, 0.5];
+/// The shallowest a gully is cut (`Mountains::gully_depths`), as a share of the deepest, and
+/// the power that skews the depths between toward it, so a few stand out deep.
+const GULLY_LEAST: f32 = 0.25;
+const GULLY_SKEW: f32 = 1.3;
+/// Where a talus apron lies, as shares of the climb from the valley to the crest (`along`): from
+/// the first, highest at the second, the wall's foot, gone by the third; how much of the
+/// gullies' depth it fills, and how deep, as a share of its height, the ground between its
+/// cones is lowered.
+const APRON: (f32, f32, f32) = (0.28, 0.5, 0.64);
+const APRON_FILL: f32 = 0.8;
+const APRON_CONES: f32 = 0.5;
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
@@ -347,10 +390,17 @@ impl Range {
 
     /// [`Range::ridged`], and how far up into the walls a point is, 0 below them to 1.
     fn ridged_and_upper(&self, point: Vec3) -> (f32, f32) {
+        let (ridged, upper, _) = self.ridged_upper_and_foot(point);
+        (ridged, upper)
+    }
+
+    /// [`Range::ridged_and_upper`], and how far a point lies in the band at and below a wall's
+    /// foot that its talus apron covers (`Mountains::aprons_m`), 0 to 1.
+    fn ridged_upper_and_foot(&self, point: Vec3) -> (f32, f32, f32) {
         let m = &self.mountains;
         let (inside, front) = self.inside_and_front(point);
         if inside <= 0.0 {
-            return (0.0, 0.0);
+            return (0.0, 0.0, 0.0);
         }
         let ridged = self.ridges(point / m.ridges_m);
         // The range's floor rises gently with how far into it a point is; its ridges stand on
@@ -373,6 +423,22 @@ impl Range {
             let cut = 1.0 - libm::powf(1.0 - below, WALL_POWER) + (climb - below);
             climb += m.walls * upper * (cut - climb);
         }
+        // Under the walls, a talus apron: the band at and below a wall's foot raised, as the
+        // rock that falls from a wall piles against its foot, and the gullies that run out of
+        // the wall into it (`Range::rise`) leave cones down their lines. The walls dropped to
+        // the valley's floor bare, with almost none of the 20 to 33 degree ground a talus
+        // makes (the r3 review). Off round the kept spots and their ranges.
+        let foot = if m.aprons_m > 0.0 {
+            let kept = if self.kept.is_empty() {
+                1.0
+            } else {
+                self.away_for_tops(point)
+            };
+            kept * smoothstep(APRON.0, APRON.1, along) * (1.0 - smoothstep(APRON.1, APRON.2, along))
+        } else {
+            0.0
+        };
+        climb += m.aprons_m / m.relief_m * foot;
         // The range's floor rises over its outer part and is level within, where its valleys
         // hold their lakes.
         let floor = m.base_m * smoothstep(0.0, FLOOR_RISES, inside);
@@ -438,7 +504,7 @@ impl Range {
         } else {
             0.0
         };
-        (height - lowered, upper)
+        (height - lowered, upper, foot)
     }
 
     /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
@@ -510,7 +576,7 @@ impl Range {
     pub fn rise(&self, direction: Vec3, radius_m: f32) -> Rise {
         let up = direction;
         let point = direction * radius_m;
-        let (ridged, upper) = self.ridged_and_upper(point);
+        let (ridged, upper, foot) = self.ridged_upper_and_foot(point);
         if self.inside(point) <= 0.0 {
             return Rise::default();
         }
@@ -536,6 +602,9 @@ impl Range {
         // The gullies, each set following the slope the ones before it left.
         let mut carved = 0.0;
         let mut deepest = 0.0;
+        // What the talus aprons' cones take off between them (`Mountains::aprons_m`), apart
+        // from the gullies' cuts, whose beds hold snow and gravel.
+        let mut piled = 0.0;
         if steepness > 0.02 {
             // How deeply this wall's couloirs are cut, by a noise some kilometres across.
             let face = self.faces.fbm(point / COULOIR_FACES_M, 2, 2.0, 0.5);
@@ -544,34 +613,35 @@ impl Range {
             // the fall near a crest.
             let fade = smoothstep(0.02, 0.4, steepness);
             let away = self.away_from_kept(point, KEPT_M);
-            // How this face shapes its gullies (`Mountains::buttresses`): a power on how far
-            // into a gully a point is, above 1 narrowing the gullies to slots between broad
-            // buttresses, below 1 widening them between sharp arêtes; the two coarser sets only,
-            // and off round the kept spots and their ranges, whose ground stays as pinned.
-            let shaped = if m.buttresses > 0.0 {
-                let kept = if self.kept.is_empty() {
-                    1.0
-                } else {
-                    self.away_for_tops(point)
-                };
-                if kept > 0.0 {
-                    let b =
-                        self.faces
-                            .fbm(point / BUTTRESS_FACES_M + Vec3::splat(9.1), 2, 2.0, 0.5);
-                    let b = smoothstep(-0.35, 0.35, b);
-                    m.buttresses
-                        * kept
-                        * (BUTTRESS_POWERS.0 + (BUTTRESS_POWERS.1 - BUTTRESS_POWERS.0) * b)
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            };
+            let (wide, slab, vary, shaped) = self.face_shaping(point);
             for (k, (scale, depth)) in GULLY_SETS.iter().enumerate() {
                 let spacing = m.gully_spacing_m * scale;
-                let (stripes, across, along, cut) =
-                    self.stripes(point, up, slope, spacing, k as i32, away);
+                let (mut stripes, across, mut along, mut cut) =
+                    self.stripes(point, up, slope, spacing, k as i32, (away, vary));
+                // The coarsest set on a wide face: another set of stripes farther apart, from
+                // cells of their own, blended in by the face (`Mountains::wide_gullies`).
+                let mut widened = 1.0;
+                if k == 0 && wide > 0.0 {
+                    let (s, _, a, c) = self.stripes(
+                        point,
+                        up,
+                        slope,
+                        spacing * WIDE_GULLIES.0,
+                        GULLY_SETS.len() as i32,
+                        (away, vary),
+                    );
+                    stripes += (s - stripes) * wide;
+                    along += (a - along) * wide;
+                    cut += (c - cut) * wide;
+                    widened += (WIDE_GULLIES.1 - 1.0) * wide;
+                }
+                // The middle set fainter between wide couloirs, so they read as the face's own.
+                if k == 1 {
+                    widened *= 1.0 + (WIDE_GULLIES.2 - 1.0) * wide;
+                }
+                if k < 2 {
+                    widened *= 1.0 + (SLAB_KEEPS[k] - 1.0) * slab;
+                }
                 // Down the walls, couloirs: the same lines cut the deeper, only where the wall
                 // falls steeply enough that a line cut so deep still runs downhill all the way,
                 // not into pits that would fill with water.
@@ -580,7 +650,15 @@ impl Range {
                 // Each couloir cut as deep as its own cell's point says and as its wall's face
                 // does: cut all alike, a wall's couloirs ribbed it like corduroy, a regular
                 // lattice of chevrons from across the valley.
-                let depth = (m.gullies_m + couloir * cut * walls_cut) * depth * fade;
+                let depth = (m.gullies_m + couloir * cut * walls_cut) * depth * fade * widened;
+                // On a talus apron the gullies run out into fans: their cuts filled with what
+                // they bring down, and the coarsest set's lines left standing as cones, the
+                // ground between them lower.
+                let depth = depth * (1.0 - APRON_FILL * foot);
+                if k == 0 && foot > 0.0 {
+                    let between = ((1.0 + stripes) * 0.5).clamp(0.0, 1.0);
+                    piled -= m.aprons_m * APRON_CONES * foot * fade * between;
+                }
                 // 0 on the ribs between gullies, the whole depth down a gully's line.
                 if shaped != 0.0 && k < 2 {
                     let into = ((1.0 - stripes) * 0.5).max(0.0);
@@ -597,13 +675,52 @@ impl Range {
             }
         }
         Rise {
-            height_m: ridged + carved,
+            height_m: ridged + carved + piled,
             bed: if deepest > 0.0 {
                 -carved / deepest
             } else {
                 0.0
             },
         }
+    }
+
+    /// How a face shapes its gullies, each 0 round the kept spots and their ranges, whose
+    /// ground stays as pinned: how far it takes the wide couloirs (`Mountains::wide_gullies`),
+    /// how far it is a slab (`Mountains::slabs`), how far each gully is cut to its own depth
+    /// (`Mountains::gully_depths`), and the buttresses' power on how far into a gully a point
+    /// is (`Mountains::buttresses`): above 1 narrowing the two coarser sets' gullies to slots
+    /// between broad buttresses, below 1 widening them between sharp arêtes.
+    fn face_shaping(&self, point: Vec3) -> (f32, f32, f32, f32) {
+        let m = &self.mountains;
+        let faced =
+            m.buttresses > 0.0 || m.wide_gullies > 0.0 || m.slabs > 0.0 || m.gully_depths > 0.0;
+        let kept = if !faced || self.kept.is_empty() {
+            1.0
+        } else {
+            self.away_for_tops(point)
+        };
+        if kept <= 0.0 {
+            return (0.0, 0.0, 0.0, 0.0);
+        }
+        let on_face = |share: f32, scale_m: f32, shift: f32, span: (f32, f32)| {
+            if share > 0.0 {
+                let n = self
+                    .faces
+                    .fbm(point / scale_m + Vec3::splat(shift), 2, 2.0, 0.5);
+                share * kept * smoothstep(span.0, span.1, n)
+            } else {
+                0.0
+            }
+        };
+        let wide = on_face(m.wide_gullies, WIDE_FACES_M, 13.3, WIDE_SPAN);
+        let slab = on_face(m.slabs, SLAB_FACES_M, 17.9, SLAB_SPAN);
+        let b = on_face(m.buttresses, BUTTRESS_FACES_M, 9.1, (-0.35, 0.35));
+        let shaped = if m.buttresses > 0.0 {
+            m.buttresses * kept * BUTTRESS_POWERS.0 + (BUTTRESS_POWERS.1 - BUTTRESS_POWERS.0) * b
+        } else {
+            0.0
+        };
+        (wide, slab, m.gully_depths * kept, shaped)
     }
 
     /// [`Range::stripes_by`] each cell spanning `Mountains::gully_stretch` gullies, so they run
@@ -617,14 +734,14 @@ impl Range {
         slope: Vec3,
         spacing: f32,
         set: i32,
-        away: f32,
+        (away, vary): (f32, f32),
     ) -> (f32, Vec3, f32, f32) {
         let stretch = self.mountains.gully_stretch;
-        let long = self.stripes_by(point, up, slope, spacing, set, stretch);
+        let long = self.stripes_by(point, up, slope, spacing, set, (stretch, vary));
         if away >= 1.0 || stretch == 1.0 {
             return long;
         }
-        let short = self.stripes_by(point, up, slope, spacing, set, 1.0);
+        let short = self.stripes_by(point, up, slope, spacing, set, (1.0, vary));
         let mix = |a: f32, b: f32| a + (b - a) * away;
         (
             mix(short.0, long.0),
@@ -649,7 +766,7 @@ impl Range {
         slope: Vec3,
         spacing: f32,
         set: i32,
-        stretch: f32,
+        (stretch, vary): (f32, f32),
     ) -> (f32, Vec3, f32, f32) {
         let fall = slope.normalize_or(up.any_orthonormal_vector());
         let across = up.cross(fall).normalize_or(up.any_orthonormal_vector());
@@ -678,8 +795,23 @@ impl Range {
                     let deep = jitter.x * 7.31 + jitter.y * 3.17 + jitter.z * 1.93;
                     let deep = deep - libm::floorf(deep);
                     cut += w * (COULOIR_LEAST + (1.0 - COULOIR_LEAST) * deep * deep);
-                    cosine += w * libm::cosf(phase);
-                    sine += w * libm::sinf(phase);
+                    // Each gully between two ribs cut to its own depth, most shallow and a few
+                    // deep, by `vary`: cut alike, a cell's gullies were a comb of one width and
+                    // depth (the r3 review). Whole at the ribs, so the ground never jumps.
+                    let deep = if vary > 0.0 {
+                        let gully = libm::floorf(d.dot(across) * stretch) as i32;
+                        let h = self.gullies.point_in(
+                            c.x as i32 + set * 7919 + gully * 104_729,
+                            c.y as i32 + 31,
+                            c.z as i32,
+                        );
+                        let h = libm::powf(h.x, GULLY_SKEW);
+                        1.0 + (GULLY_LEAST + (1.0 - GULLY_LEAST) * h - 1.0) * vary
+                    } else {
+                        1.0
+                    };
+                    cosine += w * (1.0 - deep * (1.0 - libm::cosf(phase)));
+                    sine += w * deep * libm::sinf(phase);
                 }
             }
         }
@@ -713,222 +845,4 @@ fn upper_quantile(share: f32) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const RADIUS: f32 = 30_000.0;
-
-    fn range() -> Range {
-        Range::new(Mountains::START, Seed(1))
-    }
-
-    /// Directions spread evenly over the sphere (a Fibonacci lattice).
-    fn directions(count: usize) -> impl Iterator<Item = Vec3> {
-        (0..count).map(move |i| {
-            let y = 1.0 - 2.0 * (i as f32 + 0.5) / count as f32;
-            let around = i as f32 * 2.399_963;
-            let flat = libm::sqrtf(1.0 - y * y);
-            Vec3::new(flat * libm::cosf(around), y, flat * libm::sinf(around))
-        })
-    }
-
-    #[test]
-    fn the_range_noise_spreads_as_the_share_assumes() {
-        let range = range();
-        let n = 20_000;
-        let inside = directions(n)
-            .filter(|&d| range.inside(d * RADIUS) > 0.5)
-            .count() as f32
-            / n as f32;
-        let share = Mountains::START.share;
-        assert!(
-            (inside - share).abs() < 0.1,
-            "{inside} of the land, not {share}"
-        );
-    }
-
-    #[test]
-    fn ranges_stand_high_and_the_land_out_of_them_is_untouched() {
-        let range = range();
-        let mut highest: f32 = 0.0;
-        for d in directions(20_000) {
-            let rise = range.rise(d, RADIUS);
-            if range.inside(d * RADIUS) <= 0.0 {
-                assert_eq!(rise, Rise::default());
-            }
-            assert!(rise.height_m <= Mountains::START.highest_m());
-            highest = highest.max(rise.height_m);
-        }
-        let m = Mountains::START;
-        assert!(highest > m.base_m + m.relief_m * 0.5, "{highest}");
-    }
-
-    #[test]
-    fn gullies_only_cut_down_and_their_beds_lie_lowest() {
-        let range = range();
-        let (mut beds, mut ribs) = ((0.0, 0), (0.0, 0));
-        for d in directions(20_000) {
-            let ridged = range.ridged(d * RADIUS);
-            let rise = range.rise(d, RADIUS);
-            assert!(rise.height_m <= ridged + 1e-3, "{rise:?} over {ridged}");
-            let cut = ridged - rise.height_m;
-            if rise.bed > 0.7 {
-                beds = (beds.0 + cut, beds.1 + 1);
-            } else if rise.bed < 0.3 && ridged > 0.0 {
-                ribs = (ribs.0 + cut, ribs.1 + 1);
-            }
-        }
-        assert!(beds.1 > 0 && ribs.1 > 0);
-        assert!(beds.0 / beds.1 as f32 > 3.0 * ribs.0 / ribs.1 as f32);
-    }
-
-    #[test]
-    fn the_ridged_sum_spreads_as_valleys_and_crests_assume() {
-        // A quarter of the ground is valley floor, and only the highest few in a hundred
-        // reach the crests.
-        let range = range();
-        let mut v: Vec<f32> = directions(20_000)
-            .map(|d| range.ridges(d * RADIUS / 5000.0))
-            .collect();
-        v.sort_by(f32::total_cmp);
-        let share_under = |x: f32| v.iter().filter(|&&r| r < x).count() as f32 / v.len() as f32;
-        assert!(
-            (0.15..0.4).contains(&share_under(VALLEY)),
-            "{}",
-            share_under(VALLEY)
-        );
-        assert!(
-            (0.97..1.0).contains(&share_under(CREST)),
-            "{}",
-            share_under(CREST)
-        );
-    }
-
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
-    fn the_mountains_never_jump() {
-        // Ground two centimetres apart is never more than a quarter of a metre apart, as on a
-        // crease steeper than any wall: no step where a cell, a set of gullies or a measuring
-        // direction changes, which would stand as a ledge however close one looked.
-        let range = range();
-        let mut worst = (0.0, Vec3::ZERO);
-        for d in directions(200_000) {
-            if range.inside(d * RADIUS) <= 0.0 {
-                continue;
-            }
-            let apart = |cm: f32| {
-                let step = d.any_orthonormal_vector() * (cm * 0.005 / RADIUS);
-                (range.rise((d + step).normalize(), RADIUS).height_m
-                    - range.rise((d - step).normalize(), RADIUS).height_m)
-                    .abs()
-            };
-            let near = apart(2.0);
-            // A crease's rise shrinks with the distance, ten times over ten times closer, and
-            // grows as much ten times farther; a step's stays. Both ways, since closer than a
-            // centimetre a direction on a planet this size is near a single's precision (2 mm).
-            let step = apart(0.2) > 0.5 * near || apart(20.0) < 2.5 * near;
-            if near > 0.25 && step && near > worst.0 {
-                worst = (near, d);
-            }
-        }
-        assert!(worst.0 == 0.0, "a step of {} m at {}", worst.0, worst.1);
-    }
-
-    #[test]
-    fn walls_raise_only_the_upper_slopes_and_couloirs_cut_only_down_the_walls() {
-        let m = Mountains::START;
-        assert!(m.walls > 0.0 && m.couloirs_m > 0.0);
-        let plain = Range::new(
-            Mountains {
-                walls: 0.0,
-                couloirs_m: 0.0,
-                ..m
-            },
-            Seed(1),
-        );
-        let uncut = Range::new(
-            Mountains {
-                couloirs_m: 0.0,
-                ..m
-            },
-            Seed(1),
-        );
-        let walled = range();
-        let (mut raised, mut deeper) = (0, 0);
-        for d in directions(20_000) {
-            let point = d * RADIUS;
-            let (low, _) = plain.ridged_and_upper(point);
-            let (high, upper) = walled.ridged_and_upper(point);
-            let carved = |range: &Range, ridged: f32| ridged - range.rise(d, RADIUS).height_m;
-            if upper == 0.0 {
-                // The valleys, their floors and lakes, as the ridges leave them.
-                assert_eq!(low, high);
-                assert!((carved(&walled, high) - carved(&uncut, high)).abs() < 1e-3);
-                continue;
-            }
-            // A wall stands its slope's upper part forward, never lower than it was.
-            assert!(high >= low - 1e-3, "{high} under {low}");
-            if high > low + 50.0 {
-                raised += 1;
-            }
-            if carved(&walled, high) > carved(&uncut, high) + 10.0 {
-                deeper += 1;
-            }
-        }
-        assert!(raised > 100, "{raised} raised");
-        assert!(deeper > 100, "{deeper} cut deeper");
-    }
-
-    #[test]
-    fn flat_land_in_a_range_has_no_gullies() {
-        // Gullies follow a slope; where there is none, as on the valleys' floors, nothing cuts.
-        let range = range();
-        for d in directions(20_000) {
-            let point = d * RADIUS;
-            if range.inside(point) < 1.0 {
-                continue;
-            }
-            // Level over a gully set's reach every way round, measured another way than the
-            // gullies measure it: across the ground rather than along the world's axes.
-            let (a, b) = (
-                d.any_orthonormal_vector(),
-                d.any_orthonormal_vector().cross(d),
-            );
-            let r = range.ridged(point);
-            let reach = SLOPE_STEP_M * 2.0;
-            let level = [a, -a, b, -b, a + b, a - b, -a + b, -a - b]
-                .iter()
-                .all(|&way| {
-                    (range.ridged(point + way.normalize() * reach) - r).abs() < 0.005 * reach
-                });
-            if level {
-                assert!((range.rise(d, RADIUS).height_m - r).abs() < 1e-3);
-            }
-        }
-    }
-
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
-    fn the_ground_is_smooth_within_a_voxel() {
-        // How far the rise over 2 cm departs from a tenth of the rise over 20 cm: none on a
-        // smooth slope. A single holds a point on a planet this size to about 2 mm, and the
-        // gullies' depths follow the slope measured over 40 m, so each point's height is rough
-        // by a little; rough by half a voxel, the mesh would show it. The ridges' warp, its
-        // noises shifted hundreds of cells by adding to the point, stepped by up to 0.15 m.
-        let range = range();
-        let mut rough = Vec::new();
-        for d in directions(100_000) {
-            if range.inside(d * RADIUS) <= 0.0 {
-                continue;
-            }
-            let rise = |cm: f32| {
-                let step = d.any_orthonormal_vector() * (cm * 0.005 / RADIUS);
-                range.rise((d + step).normalize(), RADIUS).height_m
-                    - range.rise((d - step).normalize(), RADIUS).height_m
-            };
-            rough.push((rise(2.0) - rise(20.0) / 10.0).abs());
-        }
-        rough.sort_by(f32::total_cmp);
-        let share = |f: f32| rough[((rough.len() - 1) as f32 * f) as usize];
-        assert!(share(0.99) < 0.05, "1% rough by {} m", share(0.99));
-        assert!(share(0.999) < 0.1, "0.1% rough by {} m", share(0.999));
-    }
-}
+mod tests;

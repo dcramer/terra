@@ -422,6 +422,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D395](decisions/D395.md) | Far walls' gullies run long, their snow lies in the mesh's own gullies, and pinned places keep their ground | Tech | Agent | Decided | A range's gullies are laid with each cell of their… |
 | [D401](decisions/D401.md) | A range breaks into ranks of separate summits, its foothills in front | Tech | Agent | Decided | A range is no longer one wall round its edge. |
 | [D403](decisions/D403.md) | A mountain's face is drawn in tiers, weathering and skirts, its gullies shaped by face | Tech | Agent | Decided | A far wall's face gets variety at several sizes… |
+| [D404](decisions/D404.md) | A face's gullies come in several sizes, its tiers stand in the light, and talus aprons lie under its walls | Tech | Agent | Decided | A far wall's face varies in its gullies' sizes and its… |
 
 ## Tools and workflow
 
