@@ -25,6 +25,8 @@ const WATCHES_WITHIN: f32 = 2.5;
 /// and a fifth to a third of it vigilant: Childress and Lung 2003, Benhaiem et al. 2008).
 const STARES_WITHIN: f32 = 1.5;
 const FEEDS_ON: f32 = 0.75;
+/// How far ahead a creature reckons where someone on the move is going, in seconds.
+const RECKONS_AHEAD_S: f32 = 8.0;
 
 /// What a creature makes of those about it as it thinks.
 struct Sense {
@@ -40,6 +42,9 @@ struct Sense {
     /// Away from the nearest player, and across their way and on ahead of them if they are
     /// coming on; or away from something frightful near.
     away: Option<Vec3>,
+    /// How near the nearest player's way comes to it, kept to as they go now
+    /// (`passes_within`): none, or as near as they stand, for one keeping still.
+    passes: f32,
 }
 
 impl Sense {
@@ -86,6 +91,13 @@ pub(super) fn think(
         let toward = player
             .map(|(_, p, _)| (p.translation - here).reject_from(up).normalize_or_zero())
             .filter(|toward| *toward != Vec3::ZERO);
+        let passes = player.map_or(f32::INFINITY, |(_, p, motion)| {
+            passes_within(
+                here - p.translation,
+                motion.map_or(Vec3::ZERO, |m| m.velocity),
+                up,
+            )
+        });
         let mut away = player.map(|(_, p, motion)| {
             let from = (here - p.translation).reject_from(up);
             let heading = motion.map_or(Vec3::ZERO, |m| m.velocity.reject_from(up));
@@ -108,6 +120,7 @@ pub(super) fn think(
             apart: apart.unwrap_or(f32::INFINITY),
             toward,
             away,
+            passes,
         };
         let next = decide(
             &mut creature,
@@ -131,6 +144,20 @@ pub(super) fn think(
         }
         creature.state = next;
     }
+}
+
+/// How near someone so far `from` a creature (from them to it) and going so fast comes to it
+/// as they keep on their way over the next few seconds: none for one standing about, who may
+/// come any way.
+fn passes_within(from: Vec3, velocity: Vec3, up: Vec3) -> f32 {
+    let from = from.reject_from(up);
+    let heading = velocity.reject_from(up);
+    let speed = heading.length();
+    if speed < 0.5 {
+        return 0.0;
+    }
+    let ahead_s = (from.dot(heading) / (speed * speed)).clamp(0.0, RECKONS_AHEAD_S);
+    (from - heading * ahead_s).length()
 }
 
 /// What one creature does next, from what it is doing and what it senses.
@@ -288,6 +315,19 @@ fn shy(
         // them and watch, before it makes off, as a hare, a fox or a heron does. Staring at
         // anyone within the whole distance it watches from, every animal beside a runner's way
         // stood head up toward him, side by side, as if posed for the camera (lake film r7).
+        // Someone going by on their way, which keeps wider of it than it bolts at, it lets
+        // be and goes on with its day, as deer beside a trail feed on while walkers pass and
+        // flee a walker coming straight at them from twice as far (Taylor and Knight 2003;
+        // tangential against direct approach, Stankowich 2008). Watching every runner on his
+        // way, each animal beside the lake turned to face him, head up (lake film r8).
+        State::Idle(_) | State::Graze(_) | State::Wander(_)
+            if s.near(flees_within_m * WATCHES_WITHIN)
+                && !s.near(flees_within_m)
+                && !creature.hurt
+                && s.passes >= bolts_m =>
+        {
+            return None;
+        }
         State::Idle(_) | State::Graze(_) | State::Wander(_)
             if s.near(flees_within_m * WATCHES_WITHIN)
                 && !s.near(flees_within_m)
@@ -410,11 +450,24 @@ fn settle(
     around: &Surroundings,
     dice: &mut Rng,
 ) -> State {
+    // Where the nearest player is and how wide of them it keeps, if they are near enough
+    // to mind: it never makes its way toward them, so a stag grazing above a runner's path
+    // walked down to the water beside him (lake film r8).
+    let minds = match about.temper {
+        Temper::Shy { flees_within_m, .. } if s.near(flees_within_m * WATCHES_WITHIN) => s
+            .toward
+            .map(|toward| (s.here + toward * s.apart, toward, flees_within_m)),
+        _ => None,
+    };
+    let toward_them =
+        |to: Vec3| minds.is_some_and(|(them, _, keeps_m)| (to - them).length() < keeps_m * 1.2);
     match creature.state {
         State::Return if (s.here - creature.home).length() > 2.0 => return State::Return,
         State::Idle(left) if left > 0.0 => return State::Idle(left - s.dt),
         State::Graze(left) if left > 0.0 => return State::Graze(left - s.dt),
-        State::Wander(to) if (to - s.here).length() > 1.0 => return State::Wander(to),
+        State::Wander(to) if (to - s.here).length() > 1.0 && !toward_them(to) => {
+            return State::Wander(to);
+        }
         _ => {}
     }
     // One that can graze stands idle less than it feeds, as a grazer's day goes; standing
@@ -429,7 +482,12 @@ fn settle(
     }
     let up = creature.home.normalize();
     let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
-    let way = turn * up.any_orthonormal_vector();
+    let mut way = turn * up.any_orthonormal_vector();
+    if let Some((_, toward, _)) = minds
+        && way.dot(toward) > 0.0
+    {
+        way = way.reject_from(toward) * 2.0 - way;
+    }
     let here = s.here;
     match about.moves {
         // Up into a crown now and then, among trees.
@@ -440,7 +498,16 @@ fn settle(
             flight(about, here, way, (4.0, 14.0), around, dice).unwrap_or(State::Idle(1.0))
         }
         Moves::Flies(_) => State::Wander(creature.home + way * dice.range(0.8, 3.0)),
-        _ => State::Wander(creature.home + way * dice.range(2.0, 12.0)),
+        _ => {
+            let to = creature.home + way * dice.range(2.0, 12.0);
+            if toward_them(to) && about.clips.eat.is_some() {
+                State::Graze(dice.range(3.0, 7.0))
+            } else if toward_them(to) {
+                State::Idle(dice.range(2.0, 5.0))
+            } else {
+                State::Wander(to)
+            }
+        }
     }
 }
 

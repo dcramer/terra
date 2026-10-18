@@ -573,8 +573,12 @@ fn setup(
 /// cells it is cleared in: a campfire's ring of stones and the scorched, trodden earth round
 /// it, a metre or so out. With the grass grown up to the stones and through its flames, the
 /// flames were see-through where each blade stood just behind them, faded as in front of a
-/// wall (soft particles; lake film r7).
-const SCORCHED_M: f32 = 0.8;
+/// wall (soft particles; lake film r7). The ring itself reaches about as far as half its
+/// flames' width and more (a troll's campfire's stones 0.85 m out, its flames 0.9 m wide): at
+/// 0.8 m past them the blades, leaning in, still reached the stones (lake film r8), where a
+/// kept camp's ground is bare a stride round its ring (a 10-foot cleared circle, as the US
+/// Forest Service asks of a campfire).
+const SCORCHED_M: f32 = 1.6;
 const SCORCHED_CELL_M: f32 = 0.25;
 
 /// Clears the ground round each fire newly kindled, as what is built clears it ([`Footprint`]),
@@ -865,7 +869,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_campfire_clears_the_ground_a_metre_round_it_and_no_farther() {
+    fn a_campfire_clears_the_ground_a_stride_past_its_stones_and_no_farther() {
         let fire = Kindled {
             tall: 1.5,
             wide: 0.7,
@@ -875,8 +879,8 @@ mod tests {
         let ground = scorched(&fire, &at);
         let out = |m: f32| at.translation + Vec3::new(m * 0.6, 0.0, m * 0.8);
         assert!(ground.covers(at.translation, 0.0));
-        assert!(ground.covers(out(1.0), 0.0));
-        assert!(!ground.covers(out(1.6), 0.0));
+        assert!(ground.covers(out(1.8), 0.0));
+        assert!(!ground.covers(out(2.4), 0.0));
     }
 
     /// How far a light wavers over ten seconds, and how many times a second it turns.

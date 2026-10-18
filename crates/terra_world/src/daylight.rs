@@ -33,7 +33,14 @@ const SKY_LIGHT_GAIN: f32 = 1.2;
 const NIGHT_SATURATION: f32 = 0.45;
 /// From sunset, how much of its colour what is dimly lit keeps against what is bright, the
 /// grade's shadows against its midtones (D302).
-const DIM_SATURATION: f32 = 0.3;
+const DIM_SATURATION: f32 = 0.2;
+/// Through the dusk, how much the grade lifts every colour before the tonemapper (D302).
+/// Khronos PBR Neutral's toe takes a dark colour's least channel down to 6.25 times its
+/// square (x - 6.25x² under 0.08), so a dim colour leaves it far more saturated than it came:
+/// grass the grade had faded to 0.2 came out at 0.62, lawn green, and the shaded hill at luma 3
+/// (lake film r8). Lifted, the least channel sits higher up the toe, so the dim land comes out
+/// as grey as it went in, and dark shapes keep their form, as a dusk photograph's do.
+const DUSK_LIFT: f32 = 0.02;
 /// By night, how bright the haze is against the day's, and its colour, the moon's (D310).
 const NIGHT_HAZE: f32 = 0.15;
 const MOON_HAZE: Vec3 = Vec3::new(0.32, 0.38, 0.52);
@@ -625,6 +632,18 @@ fn fade_colour(grade: &mut bevy::render::view::ColorGrading, height: f32) {
     let dim = DIM_SATURATION + (1.0 - DIM_SATURATION) * lit;
     if (grade.shadows.saturation - dim).abs() > 1e-4 {
         grade.shadows.saturation = dim;
+    }
+    // The same lift for every section: Bevy blends its sections at their edges, so one lifted
+    // alone would step where the shadows end.
+    let lift = DUSK_LIFT * (1.0 - lit) * day;
+    for section in [
+        &mut grade.shadows,
+        &mut grade.midtones,
+        &mut grade.highlights,
+    ] {
+        if (section.lift - lift).abs() > 1e-5 {
+            section.lift = lift;
+        }
     }
 }
 

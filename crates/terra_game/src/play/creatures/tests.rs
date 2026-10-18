@@ -3,6 +3,7 @@ use super::mind::{ROOSTS_OVER_M, SENSE_M, nearest};
 use super::*;
 use crate::play::species::Temper;
 use crate::play::tick::Ticks;
+use crate::play::walker::Motion;
 use crate::play::{Downed, test_player};
 use crate::spatial::SpatialHash;
 use bevy::ecs::system::RunSystemOnce;
@@ -182,6 +183,44 @@ fn a_grazer_feeds_on_while_someone_is_well_off_and_stops_to_watch_them_nearer() 
     near_world.run_system_once(think).unwrap();
     assert!(matches!(state(&world, far), State::Graze(_)));
     assert!(matches!(state(&near_world, near), State::Idle(_)));
+}
+
+#[test]
+fn a_grazer_feeds_on_while_someone_jogs_by_wide_of_it_and_watches_one_coming_at_it() {
+    let ground = Vec3::Y * 2000.0;
+    let (mut world, mut toward_world) = (world(), world());
+    let passed = one(&mut world, false, ground);
+    let met = one(&mut toward_world, false, ground);
+    let Temper::Shy { flees_within_m, .. } = temper(&world, passed) else {
+        unreachable!()
+    };
+    let facing = Vec3::Z;
+    for (world, creature) in [(&mut world, passed), (&mut toward_world, met)] {
+        let mut creature = world.get_mut::<Creature>(creature).unwrap();
+        (creature.state, creature.facing) = (State::Graze(5.0), facing);
+    }
+    // Both 1.2 times its flight distance off: one jogging along a way that keeps wider of it
+    // than it bolts at, one jogging straight at it.
+    let off = flees_within_m * 1.2;
+    let aside = (bolts_within(flees_within_m) + 1.0).min(off * 0.9);
+    let along = (off * off - aside * aside).sqrt();
+    let by = test_player(&mut world, ground + Vec3::X * aside - Vec3::Z * along);
+    world.get_mut::<Motion>(by).unwrap().velocity = Vec3::Z * 4.3;
+    let at = test_player(&mut toward_world, ground + Vec3::X * off);
+    toward_world.get_mut::<Motion>(at).unwrap().velocity = -Vec3::X * 4.3;
+    world.run_system_once(think).unwrap();
+    toward_world.run_system_once(think).unwrap();
+    assert!(
+        matches!(state(&world, passed), State::Graze(_)),
+        "{:?}",
+        state(&world, passed)
+    );
+    assert_eq!(world.get::<Creature>(passed).unwrap().facing, facing);
+    assert!(
+        matches!(state(&toward_world, met), State::Idle(_)),
+        "{:?}",
+        state(&toward_world, met)
+    );
 }
 
 #[test]
