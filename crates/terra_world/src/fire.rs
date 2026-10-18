@@ -374,6 +374,10 @@ fn setup(
                 },
                 specular_transmission: if haze { 1.0 } else { 0.0 },
                 unlit: true,
+                // Drawn after the smoke, which is sorted with it by the same middle: smoke
+                // drawn over its own flames greyed and dimmed their yellow hearts to olive
+                // (castle film r5 and r6). A fire's flames show through the smoke over it.
+                depth_bias: if haze { 0.0 } else { 1.0 },
                 ..default()
             },
             extension: FireExtension {

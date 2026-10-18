@@ -154,12 +154,14 @@ function script(s: Script) {
   const course = new Course(spawn, [0, 30, 20]);
   const k = KEEP;
 
-  // 0-6 s: the castle standing in the morning, the camera low by the south-east tower
-  // looking west along the south wall; the dragon comes in over the trees beyond the
-  // south-west tower and strafes the wall toward the camera, a few metres out from its
+  // 0-6 s: the castle standing in the morning, the camera low on the meadow south of it
+  // looking north at the south wall; the dragon comes in over the trees beyond the
+  // south-west tower and strafes the wall across the frame, a few metres out from its
   // hoardings and above them, its breath running along their outer face and roofs a little
   // ahead of it, over the south-west tower's timber storey and the gatehouse's; past the gate
-  // it rears up and brakes into a hover off the south-east tower, out over the meadow.
+  // it rears up and brakes into a hover off the south-east tower, out over the meadow. Seen
+  // from the side, the stream shows its length, as a fly-by does; from the east along the
+  // wall it came at the camera end-on, and read as a ball of fire at the mouth (r5).
   const set = at(-9);
   const perch: Vec3 = [10, 17, 8.5];
   const tower: Vec3 = [20, 13.5, 1];
@@ -175,7 +177,7 @@ function script(s: Script) {
   const wallTo = Math.min(set + Math.round(passes(first, [3, 17, 7]) * 60), hovering - 70);
   s.mark("first-pass", "The castle standing; the dragon comes in over the trees and strafes the south wall", at(0), hovering - 30);
   strafe(s, course, wallFrom, wallTo, [-21, 12.5, 2.6], [16, 12.5, 2.6], 13);
-  track(s, course, at(0), hovering - 30, [34, 3, 13], [38, 5, 16], [-12, 11, 1], 0.55);
+  track(s, course, at(0), hovering - 30, [-12, 3, 36], [0, 4, 33], [-8, 12, 2], 0.45);
 
   // The hover, the camera low on the open meadow south-east of the castle, the low sun
   // behind it, with a clear line to the dragon and the south-east tower: the stream runs

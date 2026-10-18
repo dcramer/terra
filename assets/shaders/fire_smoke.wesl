@@ -56,6 +56,12 @@ fn smooth_noise(p: vec2<f32>) -> f32 {
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
+// A puff's normal at one of its corners, `turned` from its middle in a puff `size` across.
+fn puffed(right: vec3<f32>, card_up: vec3<f32>, to_eye: vec3<f32>, turned: vec2<f32>, size: f32) -> vec3<f32> {
+    let out = turned / max(size * 0.5, 1.0e-3);
+    return right * out.x + card_up * out.y + to_eye * 0.7;
+}
+
 @vertex
 fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
@@ -105,7 +111,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 @if(MOTION_VECTOR_PREPASS)
         out.previous_world_position = out.world_position;
 } @else {
-        out.world_normal = to_eye;
+        out.world_normal = puffed(right, card_up, to_eye, turned, size);
 }
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
         out.instance_index = vertex_in.instance_index;
@@ -158,7 +164,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 @if(MOTION_VECTOR_PREPASS)
     out.previous_world_position = out.world_position;
 } @else {
-    out.world_normal = to_eye;
+    // Each puff lit as a ball, its normal at a corner leaning out toward that corner, so its
+    // sunward side is lit and its far side and underside dark, as a billow is: lit flat
+    // toward the eye, a column of puffs was one even tan.
+    out.world_normal = puffed(right, card_up, to_eye, turned, size);
 }
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_in.instance_index;
@@ -169,9 +178,11 @@ fn density(uv: vec2<f32>, t: f32, luck: f32) -> f32 {
     let p = uv - vec2(0.5);
     let n = smooth_noise(uv * 3.5 + vec2(luck * 41.0, luck * 17.0));
     let fine = smooth_noise(uv * 9.0 + vec2(luck * 7.0, luck * 63.0));
-    let round = 1.0 - smoothstep(0.16, 0.5, length(p) + (n - 0.5) * 0.3 + (fine - 0.5) * 0.08);
+    // Its rim cauliflowered by the finer noise, so a column's edge billows, not blurs.
+    let round = 1.0 - smoothstep(0.2, 0.44, length(p) + (n - 0.5) * 0.3 + (fine - 0.5) * 0.16);
+    let window = 1.0 - smoothstep(0.36, 0.5, max(abs(p.x), abs(p.y)));
     let life = smoothstep(0.0, 0.06, t) * pow(1.0 - t, 1.3);
-    return round * life * (0.7 + 0.6 * n);
+    return round * window * life * (0.7 + 0.6 * n);
 }
 
 @if(PREPASS_PIPELINE && PREPASS_FRAGMENT)
@@ -193,7 +204,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
     let soot = heat > 1.5;
-    var alpha = density(in.uv, t, luck) * select(mix(0.85, 0.35, t), mix(0.95, 0.5, t), soot);
+    var alpha = density(in.uv, t, luck) * select(mix(0.95, 0.4, t), mix(0.97, 0.55, t), soot);
     // Faded in over its last metre and a half in front of what is behind it.
 @if(DEPTH_PREPASS)
     {
@@ -206,8 +217,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var input = pbr_input_from_standard_material(in, is_front);
     // Burning timber's smoke: a dark brown-grey, thick and darker in its middle.
     let shade = mix(1.0, 0.55, alpha);
-    // Young smoke from burning wood near black-brown, thinning to a paler grey as it climbs.
-    var grey = mix(vec3(0.04, 0.036, 0.032), vec3(0.25, 0.23, 0.2), smoothstep(0.15, 0.85, t));
+    // Young smoke from a big timber fire near black (soot's albedo 0.03 to 0.05,
+    // research/2026-10-16-real-time-fire-rendering.md), thinning to a grey as it climbs, never
+    // the tan its old 0.25 albedo turned in the morning sun with the fire's glow on it.
+    var grey = mix(vec3(0.03, 0.028, 0.026), vec3(0.15, 0.145, 0.14), smoothstep(0.2, 0.9, t));
     // A breath's soot is fuel burnt rich: black, and greying only a little as it thins.
     if soot {
         grey = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
@@ -215,9 +228,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     input.material.base_color = vec4(grey * shade, alpha);
     // Lit from under by the fire, near its foot; a breath's soot glows from the stream it
     // leaves for its first moments.
-    let under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot);
-    input.material.emissive = vec4(vec3(1.0, 0.35, 0.08) * under * 900.0, 1.0);
+    // Most on a puff's underside, which faces the flames.
     let n = normalize(in.world_normal);
+    let down = saturate(-dot(n, normalize(in.world_position.xyz)));
+    let under = select(pow(1.0 - t, 7.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.35 + 1.3 * down);
+    input.material.emissive = vec4(vec3(1.0, 0.3, 0.06) * under * 900.0, 1.0);
     input.N = n;
     input.world_normal = n;
     var out: FragmentOutput;

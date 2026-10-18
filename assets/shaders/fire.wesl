@@ -75,9 +75,16 @@ struct Out {
 
 // How bright glowing soot is taken to be, on the luminances `soot` works from.
 const LUMINANCE: f32 = 1.0;
+// How far over the tonemapper's knee glowing soot is kept, by the camera's exposure. Eye
+// adaptation is applied after the scene is drawn (Bevy's auto exposure, in the tonemapping
+// pass), so a flame kept under the knee of `view.exposure` alone was darkened with the rest
+// of a sunlit frame by up to the stop the day lets it darken (scene.rs, ADAPT_DARKER): a
+// shouldered yellow at half its brightness, the olive of castle film r5 and r6 (flame hearts
+// at sRGB 162,149,89). One stop of headroom keeps its heart a full yellow then.
+const HEADROOM: f32 = 2.0;
 // How far in front of what is behind it a card fades in, in metres, so it never shows a
 // straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
-const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.8);
+const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -115,22 +122,27 @@ fn gnoise(p: vec2<f32>) -> f32 {
 }
 
 
-// Glowing soot at a temperature, as the camera sees it: its colour from soot's emission at
-// that temperature (red, with green rising from 0.04 at 1000 K to 0.21 at 1600 K, never the
-// yellow or white of the 3000 K colours a wood flame has not got), its luminance from about
-// 50 nits at 1100 K to 1150 at 1400 and 5700 at 1650, a sunlit white's 0.005 to 0.6; then
-// kept under the tonemapper's knee per channel, as film shoulders it, with a white-hot lift
-// only where it is far brighter than the exposure, so a fire by day stays orange with a
-// yellow heart and never goes salmon pink.
-fn soot(kelvin: f32) -> vec3<f32> {
+// Glowing soot at a temperature and in an amount (how much of it there is along the eye's
+// ray, 0 to 1), as the camera sees it: its colour from soot's emission at that temperature
+// (red, with green rising from 0.04 at 1000 K to 0.21 at 1600 K, never the yellow or white of
+// the 3000 K colours a wood flame has not got), its luminance from about 50 nits at 1100 K to
+// 1150 at 1400 and 5700 at 1650, a sunlit white's 0.005 to 0.6, times the amount; then kept
+// under the tonemapper's knee per channel, as film shoulders it, with a white-hot lift only
+// where it is far brighter than the exposure, so a fire by day stays orange with a yellow
+// heart and never goes salmon pink. The amount is taken before the shoulder, as a camera
+// takes light: a thin or dim flame is dull red, since only red is near the knee, and goes
+// yellow only where there is light enough to lift its green there. Shouldered first and then
+// thinned, a dim flame kept its hot one's yellow at a fraction of its brightness, which over
+// charred timber and smoke is olive (castle film r5: hue 50-60 at sRGB 153,148,92).
+fn soot(kelvin: f32, amount: f32) -> vec3<f32> {
     let g = clamp(0.042 + 0.000278 * (kelvin - 1000.0), 0.03, 0.26);
     let slope = select(0.0105, 0.0064, kelvin > 1400.0);
-    let nits = exp(7.05 + (kelvin - 1400.0) * slope) * LUMINANCE;
+    let nits = exp(7.05 + (kelvin - 1400.0) * slope) * LUMINANCE * amount;
     let unit = 0.2126 + 0.7152 * g + 0.0722 * 0.02;
     let exposed = vec3(1.0, g, 0.02) * (nits / unit) * view.exposure;
-    let kept = vec3(1.0) - exp(-exposed);
+    let kept = HEADROOM * (vec3(1.0) - exp(-exposed / HEADROOM));
     let lift = 0.5 * saturate((nits * view.exposure - 3.0) / 10.0);
-    return kept + (vec3(1.0) - kept) * lift;
+    return kept + (vec3(HEADROOM) - kept) * lift;
 }
 
 // How much of what is behind it a flame covers, for what it gives and its alpha. Its light is
@@ -200,10 +212,12 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         if dot(along, along) < 1.0e-6 {
             along = up;
         }
-        let streak = clamp(length(along) * 0.035, 0.3, 1.6);
+        // Long enough to read as a falling streak forty metres off, as drops of burning fuel
+        // do in footage, smeared by the camera's shutter.
+        let streak = clamp(length(along) * 0.09, 0.6, 3.2);
         along = normalize(along);
         let across = normalize(cross(along, to_eye));
-        let size = 0.16 + 0.14 * going.w;
+        let size = 0.28 + 0.2 * going.w;
         let world = at + across * (corner.x - 0.5) * size + along * (corner.y - 0.8) * streak;
         out.clip = position_world_to_clip(world);
         out.uv = corner;
@@ -251,7 +265,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let r = spread * d * sqrt(fract(luck * 13.7)) * (0.6 + 0.6 * t) + splash * (1.0 + 0.18 * reach) * sqrt(fract(luck * 3.9));
         let swirl = (vec2(noise(vec2(luck * 31.0, time * 3.0 + t * 4.0)), noise(vec2(luck * 57.0 + 3.0, time * 3.0 + t * 4.0))) - 0.5) * d * 0.12;
         let at = mouth + way * min(d * (1.0 - 0.08 * t * t), reach - 1.0) + (side * (cos(a) * r + swirl.x) + lift * (sin(a) * r + swirl.y)) + up * t * t * reach * 0.1 + wind * t * t * life_s;
-        let size = (mix(0.9, 1.3 + spread * reach * 0.7, pow(t, 0.7)) + splash * 1.2) * (0.75 + 0.5 * fract(luck * 5.3));
+        // The rod at the mouth thin and long, a rope of fire, opening into the rolling body.
+        let rod = 1.0 - smoothstep(0.0, 0.3, t);
+        let size = (mix(0.9, 1.3 + spread * reach * 0.7, pow(t, 0.7)) + splash * 1.2) * (0.75 + 0.5 * fract(luck * 5.3)) * (1.0 - 0.45 * rod);
         // Streaked along the way near the mouth, round as it opens.
         let to_eye = normalize(view.world_position - at);
         var across = cross(way, to_eye);
@@ -260,14 +276,17 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         }
         across = normalize(across);
         let along = normalize(cross(to_eye, across));
-        let stretch = mix(3.2, 1.0, smoothstep(0.0, 0.45, t));
+        let stretch = mix(5.5, 1.0, smoothstep(0.0, 0.5, t));
         let spin = (luck - 0.5) * 0.6 * t;
         let c = corner - 0.5;
         let turned = vec2(c.x * cos(spin) - c.y * sin(spin), c.x * sin(spin) + c.y * cos(spin));
         let world = at + across * turned.x * size + along * turned.y * size * stretch;
         out.clip = position_world_to_clip(world);
         out.uv = corner;
-        out.life = vec4(t, 1.0 - t * 0.85, luck, 1.0);
+        // Once it is off, what was breathed burns out in a moment where it is, rather than
+        // flying on its course as a cloud cut loose from the dragon (castle film r5, 12.75 s).
+        let gone = select(saturate(1.0 - (time - since) / 0.3), 1.0, on > 0.5);
+        out.life = vec4(t, gone, luck, 1.0);
         return out;
     }
     let count = u32(fire.kind.y + 0.5);
@@ -362,7 +381,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     return out;
 }
 
-fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
+// `soft` is how far it has faded in front of what is behind it: taken as less soot glowing,
+// so a flame meeting the roof it stands on goes dull red there rather than a dim yellow.
+fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
     let kind = i32(fire.kind.x + 0.5);
     let time = fire.kind.z;
     let t = life.x;
@@ -389,23 +410,23 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let heat_here = mix(a, b, fract(f)) * smoothstep(0.0, 0.03, uv.y);
         // The flipbook's body is near its full heat, so only its hottest cores go yellow: the
         // rest orange, its rims and licks a dull red.
-        let alpha = smoothstep(0.08, 0.4, heat_here);
+        let alpha = smoothstep(0.08, 0.4, heat_here) * soft;
         let kelvin = 950.0 + 700.0 * pow(heat_here, 1.5) * (0.72 + 0.28 * heat);
-        light = soot(kelvin) * alpha;
+        light = soot(kelvin, alpha);
         cover = covers(light, alpha);
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
         let wink = 0.6 + 0.4 * sin(time * (9.0 + luck * 14.0) + luck * 50.0);
-        let alpha = spark * pow(1.0 - t, 1.5) * wink;
-        light = soot(1600.0 - t * 300.0) * alpha;
+        let alpha = spark * pow(1.0 - t, 1.5) * wink * soft;
+        light = soot(1600.0 - t * 300.0, alpha);
     } else if kind == 4 {
         // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
         let x = abs(uv.x - 0.5) * 2.0;
         let streak = (1.0 - smoothstep(0.3, 1.0, x)) * smoothstep(0.0, 0.7, uv.y) * (1.0 - smoothstep(0.85, 1.0, uv.y));
         let wink = 0.75 + 0.25 * sin(time * (11.0 + luck * 9.0) + luck * 40.0);
-        let alpha = streak * (1.0 - smoothstep(0.6, 1.0, t)) * wink;
-        light = soot(mix(1640.0, 1300.0, t) + 80.0 * uv.y) * alpha;
+        let alpha = streak * (1.0 - smoothstep(0.6, 1.0, t)) * wink * soft;
+        light = soot(mix(1640.0, 1300.0, t) + 80.0 * uv.y, alpha);
         cover = covers(light, alpha);
     } else {
         // A puff of breath, as a flamethrower's stream is in footage and in games that do it
@@ -418,8 +439,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         // it burns out; and white-hot again where it strikes and splashes.
         let p = uv - 0.5;
         let n = fbm(uv * 3.0 + vec2(luck * 7.0 - time * 1.5, luck * 13.0 + time * 0.8));
-        let edge = length(p * vec2(1.0, 0.8)) + (n - 0.5) * 0.35;
-        let body = 1.0 - smoothstep(0.1, 0.5, edge);
+        let edge = length(p) + (n - 0.5) * 0.35;
+        // Nothing at the card's own edges, so its straight sides never show.
+        let window = 1.0 - smoothstep(0.32, 0.5, max(abs(p.x), abs(p.y)));
+        let body = (1.0 - smoothstep(0.1, 0.46, edge)) * window;
         let channel = u32(luck * 3.0) % 3u;
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
         let f = fract(time * FLIPBOOK_FPS * 1.6 / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
@@ -429,15 +452,19 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32) -> vec4<f32> {
         let fx = 0.5 + (x - 0.5) * 0.6;
         let fy = 0.1 + uv.y * 0.62;
         let tongue = mix(flipbook_at(f0, fx, fy)[channel], flipbook_at(f1, fx, fy)[channel], fract(f));
-        let mouth = 1.0 - smoothstep(0.0, 0.22, t);
+        let mouth = 1.0 - smoothstep(0.0, 0.3, t);
         let struck = smoothstep(0.7, 0.92, t) * (1.0 - smoothstep(0.92, 1.0, t));
         let heat_here = body * saturate(mix(0.2, 0.02, smoothstep(0.0, 0.5, t)) + 0.45 * mouth + 0.2 * struck + 0.85 * tongue);
         let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
-        let alpha = smoothstep(0.05, 0.4, heat_here) * fade;
+        let alpha = smoothstep(0.05, 0.4, heat_here) * fade * heat * soft;
         let kelvin = 1060.0 + 640.0 * pow(heat_here, 1.3) + 200.0 * mouth - 110.0 * t + 90.0 * struck;
-        light = soot(kelvin) * alpha * (1.0 - 0.9 * pocket);
-        cover = saturate(covers(light, alpha) + pocket * fade * 0.7);
+        light = soot(kelvin, alpha) * (1.0 - 0.9 * pocket);
+        // The rod overexposed, white-yellow as a flamethrower's is on film, and solid.
+        let rod = mouth * alpha;
+        light = mix(light, vec3(1.0, 0.92, 0.66) * HEADROOM, rod * 0.85);
+        // A stream of thickened fuel is dense: it covers more than a building's thin flames.
+        cover = max(saturate(mix(covers(light, alpha), alpha, 0.5) + pocket * fade * heat * soft * 0.8), rod * 0.95);
     }
     if max(light.r, cover) < 0.002 {
         discard;
@@ -504,15 +531,15 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         out.color = haze(in);
         return out;
     }
-    var colour = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y);
     // Faded in over the last of its way in front of what is behind it (soft particles).
+    var soft = 1.0;
 @if(DEPTH_PREPASS)
     {
         let kind = i32(fire.kind.x + 0.5);
-        let soft = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
+        let reach = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
-        colour *= smoothstep(0.0, soft, behind);
+        soft = smoothstep(0.0, reach, behind);
     }
-    out.color = colour;
+    out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft);
     return out;
 }
