@@ -24,7 +24,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 ## Routine (D375)
 
 - **Start**: the session hook fast-forwards a clean main checkout, updates the shared seed and seeds your worktree (D183). On failure run `cargo xtask doctor` and fix it before building. Entered a worktree mid-session, or ran `--done` there: `cargo xtask seed` first.
-- **Land on `main` after each incremental change**, no pull requests: commit on the branch, `git pull --rebase origin main`, `git push origin HEAD:main`. Never force-push `main`.
+- **Land on `main` after each incremental change**, no pull requests: commit on the branch, `git pull --rebase origin main`, `git push origin HEAD:main`; refused because main moved, pull and push again, the check runs only what the rebase changed (D413). Never force-push `main`.
 - **Hooks are the gate** (D37): commit runs `cargo xtask check --quick`, push `cargo xtask check`. Never `--no-verify`. Any `cargo xtask` task switches them on; CI is off.
 - **Finish**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259).
 - A lead session runs at most three or four agents at once.

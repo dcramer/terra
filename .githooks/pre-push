@@ -5,7 +5,9 @@
 # and Blender checks when what they read changed. It checks the working tree, so run it on
 # what you push: commit, `git pull --rebase origin main`, then push. It takes minutes when
 # building changed, and prints as the quick check does (D388; TERRA_VERBOSE=1 streams
-# everything). Never skip it with --no-verify.
+# everything). A pass stamps the tree, so after a refused push and `git pull --rebase` it runs only
+# what the rebase changed; one that builds or tests waits for a machine-wide slot (D413). Never
+# skip it with --no-verify.
 set -euo pipefail
 cargo=cargo
 command -v cargo >/dev/null || cargo="$HOME/.cargo/bin/cargo"

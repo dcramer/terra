@@ -472,6 +472,7 @@ Checks, developer tools, languages and the repository.
 | [D406](decisions/D406.md) | The push's slow sweeps run on every core, optimised, and an asset is read only by the crates that read it | Tech | Agent | Decided | A test that sweeps many independent cases runs them on… |
 | [D409](decisions/D409.md) | Rendered indexes merge row by row | Tech | Agent | Decided | An index of files that live on their own is rendered… |
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
+| [D413](decisions/D413.md) | A push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
 
 ## Superseded and rejected
 

@@ -11,7 +11,9 @@ mod scenes;
 mod scope;
 mod seed;
 mod sizes;
+mod slot;
 mod stage;
+mod stamp;
 mod windows;
 mod worktrees;
 
