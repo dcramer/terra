@@ -595,16 +595,21 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let pocket = body * smoothstep(0.2, 0.8, t) * (1.0 - smoothstep(0.04, 0.3, tongue)) * smoothstep(0.42, 0.62, n);
         let fade = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(0.82, 1.0, t));
         // How hot it burns there, for its colour: yellow through its body, hotter than a
-        // building's flames as burning thickened fuel is in footage, orange and dull red only
-        // at its thin rims and as it burns out.
-        var h = saturate(0.12 + 0.72 * heat_here + 0.12 * mouth - 0.18 * smoothstep(0.5, 1.0, t) + 0.15 * struck);
+        // building's flames as burning thickened fuel is in footage, hottest in each puff's
+        // middle and in the puffs nearest the stream's line, orange and dull red only at its
+        // rims, its outer puffs and as it burns out. By its flipbook heat alone each puff was one
+        // flat orange, and the stream a slab of orange card (r8's first film, the jaw 89% orange).
+        let radial = sqrt(fract(luck * 13.7));
+        let centre = 1.0 - smoothstep(0.05, 0.3, edge);
+        var h = saturate(0.2 + 0.75 * heat_here * (1.0 - 0.4 * radial) + 0.25 * centre * (1.0 - 0.5 * radial) + 0.1 * mouth - 0.25 * smoothstep(0.55, 1.0, t) + 0.15 * struck);
         // The rod a solid core along each card over the first two fifths of the stream,
         // whatever the flipbook's tongue there, a rope of fire from the jaw: yellow, and
-        // white-hot in its middle third over the first quarter.
+        // white-hot in its middle third over the first quarter. Whole until a quarter of the
+        // way, as fading from the jaw on it reached its yellow only in the first metre or two.
         let core = (1.0 - smoothstep(0.12, 0.3, length(p) + (n - 0.5) * 0.12)) * window;
-        let rod = (1.0 - smoothstep(0.0, 0.4, t)) * core * fade * heat * soft;
-        let inner = (1.0 - smoothstep(0.03, 0.11, length(p) + (n - 0.5) * 0.06)) * (1.0 - smoothstep(0.12, 0.25, t));
-        h = max(h, rod * mix(0.72, 1.0, inner));
+        let rod = (1.0 - smoothstep(0.25, 0.45, t)) * core * fade * heat * soft;
+        let inner = (1.0 - smoothstep(0.03, 0.11, length(p) + (n - 0.5) * 0.06)) * (1.0 - smoothstep(0.15, 0.28, t));
+        h = max(h, mix(0.75, 1.0, inner) * smoothstep(0.0, 0.6, rod));
         // Black soot at its outer edge once it rolls open, as rich-burning fuel makes it.
         let outer = smoothstep(0.2, 0.34, edge) * (1.0 - smoothstep(0.38, 0.48, edge)) * window * smoothstep(0.4, 0.8, t);
         let black = saturate(0.9 * pocket + 0.8 * outer);
@@ -615,7 +620,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         // Covering wholly through its body: at its flipbook alpha (0.1 to 0.3 through most of
         // the stream) the sky's blue showed through its yellow, an olive-green smear (r8's
         // first probe).
-        let solid = smoothstep(0.03, 0.22, heat_here) * fade * heat * soft;
+        let solid = smoothstep(0.05, 0.3, heat_here) * fade * heat * soft;
         cover = saturate(max(max(solid * 0.96, rod * 0.97), black * fade * heat * soft * 0.7));
         light = mix(flame_colour(h),vec3(0.012, 0.01, 0.009), black) * cover / exp2(adapted.x);
     }
