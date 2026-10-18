@@ -10,8 +10,13 @@
 //! stands over. They are painted on another thread from the same
 //! [`CoverSource`](super::CoverSource) the blades ask, and painted again when the camera has
 //! moved a quarter of the way to their edge.
+//!
+//! Under what is built or planned, where the blades are cut (`blades::CLEAR_M`), the floor
+//! is earth trodden by its builders, not the meadow's green with no blades over it, which
+//! from high up showed as bright green squares under every house, pen and log pile (D381).
 
-use super::CoverRules;
+use super::{CoverRules, Growing, Meadow};
+use crate::footprint::Footprint;
 use crate::planet::{GroundCoverMap, MainCamera, Planet};
 use crate::start::Start;
 use bevy::{
@@ -21,6 +26,7 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
+use std::sync::Arc;
 
 /// Texels to a side, and how wide each is.
 const TEXELS: u32 = 256;
@@ -91,6 +97,8 @@ fn paint(
     mut images: ResMut<Assets<Image>>,
     mut map: ResMut<GroundCoverMap>,
     mut changed: Local<bool>,
+    meadow: Option<Res<Meadow>>,
+    mut built: Local<Option<Arc<Vec<Footprint>>>>,
 ) {
     let Some(camera) = camera.iter().next() else {
         return;
@@ -153,6 +161,15 @@ fn paint(
     if rules.is_changed() {
         *changed = true;
     }
+    // And when what is built or planned changes, so the trodden ground under it follows.
+    if let Some(meadow) = &meadow
+        && built
+            .as_ref()
+            .is_none_or(|b| !Arc::ptr_eq(b, &meadow.clear))
+    {
+        *built = Some(meadow.clear.clone());
+        *changed = true;
+    }
     let stale = *changed
         || floor
             .middle
@@ -161,14 +178,19 @@ fn paint(
         // On a grid, so the same place is painted the same each time.
         let middle = (here / 8.0).round() * 8.0;
         let (source, planet, start) = (rules.source.clone(), planet.clone(), *start);
+        let built = built.clone().unwrap_or_default();
         let task = AsyncComputeTaskPool::get().spawn(async move {
             let corner = corner(middle, texel_m);
+            let size = TEXELS as f32 * texel_m;
+            let near = Built::near(&built, &start, corner + Vec2::splat(size / 2.0), size / 2.0);
             let mut pixels = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
             let mut more = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
             for b in 0..TEXELS {
                 for a in 0..TEXELS {
                     let at = corner + (Vec2::new(a as f32, b as f32) + 0.5) * texel_m;
-                    let growing = source.growing(&planet, start.at(at.x, at.y), at);
+                    let ground = start.at(at.x, at.y);
+                    let mut growing = source.growing(&planet, ground, at);
+                    near.tread(&mut growing, ground, at);
                     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                     pixels.extend([
                         byte(growing.grass),
@@ -191,9 +213,113 @@ fn paint(
     }
 }
 
+/// How far round anything standing its builders tread the ground, and how trodden it is
+/// under it and round it: turned earth, as a settlement's plots are (D381).
+const TREAD_M: f32 = 1.2;
+const UNDER: f32 = 0.5;
+const ROUND: f32 = 0.3;
+
+/// The footprints near a map, each with what takes a point into its space and how far round
+/// its origin, east and south of the start, it reaches.
+struct Built<'a> {
+    near: Vec<(&'a Footprint, bevy::math::Affine3A, Vec2, f32)>,
+}
+
+impl<'a> Built<'a> {
+    /// Those of `all` that reach within `half` metres each way of `middle`.
+    fn near(all: &'a [Footprint], start: &Start, middle: Vec2, half: f32) -> Self {
+        let near = all
+            .iter()
+            .filter_map(|footprint| {
+                let origin = start.local(footprint.frame.translation);
+                let origin = Vec2::new(origin.x, origin.z);
+                let cells = footprint.places().map(|p| p.abs().max_element()).max()?;
+                let reach = (cells as f32 + 1.0)
+                    * footprint.cell_m
+                    * footprint.frame.scale.max_element()
+                    * 1.5
+                    + TREAD_M;
+                let gap = ((origin - middle).abs() - Vec2::splat(half + reach)).max_element();
+                (gap < 0.0).then(|| (footprint, footprint.to_local(), origin, reach))
+            })
+            .collect();
+        Self { near }
+    }
+
+    /// The ground at `ground`, `at` east and south of the start, as its builders leave it:
+    /// on a footprint no grass and turned earth, round what stands grass thinned and trodden.
+    fn tread(&self, growing: &mut Growing, ground: Vec3, at: Vec2) {
+        let mut trodden = 0.0f32;
+        for (footprint, to_local, origin, reach) in &self.near {
+            if at.distance(*origin) > *reach {
+                continue;
+            }
+            let local = to_local.transform_point3(ground);
+            if footprint.covers_local(local, 0.0) {
+                trodden = UNDER;
+                break;
+            }
+            if footprint.covers_local(local, TREAD_M) {
+                trodden = ROUND;
+            }
+        }
+        if trodden >= UNDER {
+            growing.grass = 0.0;
+        } else if trodden > 0.0 {
+            growing.grass *= 0.5;
+        }
+        growing.trodden = growing.trodden.max(trodden);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ground_under_what_is_built_is_trodden_earth_not_bare_meadow() {
+        // A hut of four places on a grid a metre apart, 10 m east of the start: on it the
+        // grass is gone and the earth trodden; a little way off its wall thinned and trodden
+        // less; far off the meadow as it grows.
+        let start = Start(Transform::from_xyz(0.0, 0.0, 0.0));
+        let places = [
+            IVec2::new(0, 0),
+            IVec2::new(1, 0),
+            IVec2::new(0, 1),
+            IVec2::new(1, 1),
+        ];
+        let hut = Footprint {
+            frame: Transform::from_xyz(10.0, 0.0, 0.0),
+            cell_m: 1.0,
+            ground: places.into_iter().collect(),
+            standing: places.into_iter().collect(),
+        };
+        let all = vec![hut];
+        let built = Built::near(&all, &start, Vec2::ZERO, 64.0);
+        let meadow = Growing {
+            grass: 0.8,
+            lush: 0.6,
+            ..default()
+        };
+        let at = |east: f32, south: f32| {
+            let mut growing = meadow;
+            built.tread(&mut growing, start.at(east, south), Vec2::new(east, south));
+            growing
+        };
+        let on = at(11.0, 1.0);
+        assert_eq!(on.grass, 0.0);
+        assert!(on.trodden >= 0.45, "{on:?}");
+        let by = at(12.5, 1.0);
+        assert!(by.grass > 0.0 && by.grass < meadow.grass, "{by:?}");
+        assert!(by.trodden > 0.0 && by.trodden < on.trodden, "{by:?}");
+        assert_eq!(at(20.0, 1.0), meadow);
+        // A map far from it does not look at it at all.
+        assert!(
+            Built::near(&all, &start, Vec2::new(500.0, 0.0), 64.0)
+                .near
+                .is_empty()
+        );
+    }
 
     #[test]
     fn a_place_maps_to_where_it_is_painted() {

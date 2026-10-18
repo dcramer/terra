@@ -13,14 +13,14 @@
     hours: (7.5, 8.3),
     claim: 0.3,
     first: 0.8,
-    last: 13.0,
-    takes: (3.0, 6.5),
+    last: 15.5,
+    takes: (3.5, 7.0),
     growth: 0.6,
     settled_after: 0.6,
     gather: 7.0,
     pace: 3.0,
     builders: 22,
-    common: (8.0, 15.0),
+    common: (9.0, 17.0),
     // Before each building's door while it goes up: a stack of logs (a bucket of tools read
     // from high as stakes stood in the grass).
     site: [

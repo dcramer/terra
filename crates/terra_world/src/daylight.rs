@@ -478,6 +478,10 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
+    (eye, planet): (
+        Query<&GlobalTransform, With<MainCamera>>,
+        Option<Res<Planet>>,
+    ),
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -509,8 +513,17 @@ fn shine(
     let morning = 1.0 - smoothstep(7.0, 11.5, hour);
     let evening = smoothstep(16.0, 19.5, hour);
     let thick = 1.0 + 1.2 * morning * smoothstep(4.5, 6.5, hour) + 0.35 * evening;
+    // An eye risen over the mist sees it from above (D273).
+    let above = eye
+        .iter()
+        .next()
+        .zip(planet.as_deref())
+        .map_or(1.0, |(eye, planet)| {
+            let at = eye.translation();
+            above_mist(at.length() - planet.ground_at(at).length())
+        });
     for mut fog in &mut mist {
-        let wanted = super::scene::HAZE_DENSITY * thick;
+        let wanted = super::scene::HAZE_DENSITY * thick * above;
         if (fog.density_factor - wanted).abs() > 1e-5 {
             fog.density_factor = wanted;
         }
@@ -599,6 +612,23 @@ fn shine(
     }
 }
 
+/// How thick the volumetric haze is drawn for an eye so many metres over the ground, as a
+/// share of how thick it is round a walker (D273). The haze box stands for the air between
+/// the trees and the mist lying in their hollows, seen from among them; an eye risen over
+/// the mist, as a bird's-eye time-lapse's or a hover's camera 15 to 30 m up, looks down
+/// through clear air onto it, as a drone over a morning meadow sees the ground through its
+/// mist. Drawn as thick as round a walker, every slant ray from up there crossed some 20 m
+/// of mist glowing with the open sky's light and the ground below was a flat yellow veil.
+fn above_mist(height_m: f32) -> f32 {
+    1.0 - ABOVE_MIST_THINS * smoothstep(MIST_TOP_M, OVER_MIST_M, height_m)
+}
+
+/// The mist's top over the ground (scene.rs `haze_density`'s band), and the height by which an
+/// eye looks down on it from clear air, the haze then this much thinner.
+const MIST_TOP_M: f32 = 6.0;
+const OVER_MIST_M: f32 = 28.0;
+const ABOVE_MIST_THINS: f32 = 0.6;
+
 /// How many times brighter the volumetric haze's sky light is out in the open than under
 /// the trees: the open sky lights mist from every side.
 const OPEN_HAZE_GLOW: f32 = 4.0;
@@ -628,6 +658,21 @@ mod tests {
 
     fn path() -> SkyPath {
         SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))
+    }
+
+    #[test]
+    fn the_mist_is_drawn_as_thick_round_a_walker_and_thinner_for_an_eye_above_it() {
+        // A walker, and a rider, stand in the mist as it was tuned.
+        assert_eq!(above_mist(1.7), 1.0);
+        assert_eq!(above_mist(3.0), 1.0);
+        // From a bird's-eye height the haze between the eye and the ground is thinner, the
+        // higher the thinner, and never gone.
+        let (low, high, higher) = (above_mist(12.0), above_mist(25.0), above_mist(60.0));
+        assert!(
+            low < 1.0 && high < low && higher <= high,
+            "{low} {high} {higher}"
+        );
+        assert!(higher > 0.2, "{higher}");
     }
 
     #[test]
