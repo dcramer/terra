@@ -69,7 +69,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 
 The tasks that make art, `props`, `tripo`, `bodies`, `blender`, `icons` and `paint-icons`, are under [Developer tools](#developer-tools).
 
-A clean build of a Bevy application takes about two and a half minutes; a rebuild after a small change takes a few seconds.
+A clean build of a Bevy application takes about two and a half minutes; a rebuild after a small change takes a few seconds. Release builds our own crates incrementally (D408), so after an edit to terra_build the shot, film and look builds (`--release`) take 31 s on a quiet machine and 2 minutes on a loaded one, where they took 12 to 25 minutes; the dependencies are not incremental and come from the seed.
 
 ## Worktrees
 
@@ -116,7 +116,7 @@ cargo xtask bench forest --runs 5    # one scene
 cargo xtask bench --record           # and add the results to research/benchmarks.csv
 ```
 
-It builds the sandbox for release and runs each **scene**, a scripted run that comes out the same on every machine, at 17:00, whose long shadows cost the most:
+It builds the sandbox in the `bench` profile, a release with nothing incremental as a player's build is (D408; the first in a worktree compiles our crates whole, minutes, beside the incremental release shots use), and runs each **scene**, a scripted run that comes out the same on every machine, at 17:00, whose long shadows cost the most:
 
 | Scene | What it is |
 |---|---|

@@ -3,7 +3,7 @@
 
 use crate::load::{self, During, Load};
 use crate::scenes::{SCENES, Scene};
-use crate::windows::{on_wsl, windows_program};
+use crate::windows::{on_wsl, profile_folder, windows_program};
 use crate::{output, root, run};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -554,20 +554,21 @@ fn append_line(path: &Path, header: &str, line: &str) -> bool {
 }
 
 /// Builds the sandbox and says where its program is and the folder to run it from. Under
-/// WSL that is the Windows build, the only one with a real GPU.
+/// WSL that is the Windows build, the only one with a real GPU. Optimised, it is the `bench`
+/// profile: a release with nothing built incrementally, as a player's build is, where the
+/// release that shots and films build has our crates incremental (Cargo.toml).
 fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
+    let profile = if release { "bench" } else { "dev" };
     if on_wsl() {
-        return windows_program("terra_sandbox", release, Some(copy));
+        return windows_program("terra_sandbox", profile, Some(copy));
     }
-    let mut build = vec!["build", "-p", "terra_sandbox"];
-    if release {
-        build.push("--release");
-    }
-    if !crate::stage::build(&build) {
+    if !crate::stage::build(&["build", "--profile", profile, "-p", "terra_sandbox"]) {
         return None;
     }
-    let profile = if release { "release" } else { "debug" };
-    let program = root().join("target").join(profile).join("terra_sandbox");
+    let program = root()
+        .join("target")
+        .join(profile_folder(profile))
+        .join("terra_sandbox");
     Some((program, root()))
 }
 

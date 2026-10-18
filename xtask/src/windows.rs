@@ -43,7 +43,8 @@ pub(crate) fn win(args: &[String]) -> bool {
         return false;
     };
 
-    let Some((program, run_dir)) = windows_program(package, release, copy.map(String::as_str))
+    let profile = if release { "release" } else { "dev" };
+    let Some((program, run_dir)) = windows_program(package, profile, copy.map(String::as_str))
     else {
         return false;
     };
@@ -71,28 +72,32 @@ pub(crate) fn win(args: &[String]) -> bool {
         .unwrap_or(false)
 }
 
-/// Builds a package for Windows and copies it, with the assets, to a folder of its own in
-/// the Windows temp folder. Windows cannot use a WSL folder as a working directory. Gives
-/// the program and its folder.
+/// Builds a package for Windows in a cargo profile (`dev`, `release` or `bench`) and copies
+/// it, with the assets, to a folder of its own in the Windows temp folder. Windows cannot use
+/// a WSL folder as a working directory. Gives the program and its folder.
 pub(crate) fn windows_program(
     package: &str,
-    release: bool,
+    profile: &str,
     copy: Option<&str>,
 ) -> Option<(PathBuf, PathBuf)> {
-    let mut build = vec!["build", "--target", WINDOWS_TARGET, "-p", package];
-    if release {
-        build.push("--release");
-    }
+    let build = [
+        "build",
+        "--target",
+        WINDOWS_TARGET,
+        "--profile",
+        profile,
+        "-p",
+        package,
+    ];
     if !crate::stage::build(&build) {
         return None;
     }
 
-    let profile = if release { "release" } else { "debug" };
     let exe_name = format!("{package}.exe");
     let built = root()
         .join("target")
         .join(WINDOWS_TARGET)
-        .join(profile)
+        .join(profile_folder(profile))
         .join(&exe_name);
     let folder = match copy {
         Some(name) => format!("{package}-{name}"),
@@ -114,6 +119,16 @@ pub(crate) fn windows_program(
         return None;
     }
     Some((run_dir.join(&exe_name), run_dir))
+}
+
+/// The folder under `target/` a cargo profile builds into: Cargo's own profiles share `debug`
+/// and `release` (`test` builds with `dev`, `bench` with `release`).
+pub(crate) fn profile_folder(profile: &str) -> &str {
+    match profile {
+        "dev" | "test" => "debug",
+        "release" | "bench" => "release",
+        custom => custom,
+    }
 }
 
 /// Plays the tech demo as a person would: the sandbox's play experiment, with its save

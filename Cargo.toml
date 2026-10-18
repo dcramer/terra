@@ -82,3 +82,17 @@ opt-level = 3
 # of the crate; a small edit compiles in the same few seconds either way (D406).
 [profile.dev.package.terra_build]
 opt-level = 3
+
+# Our own crates build incrementally in release too: every shot, film, look and the artifacts
+# and fuzz ratchets build `--release`, and an edit to terra_build rebuilt it and every crate
+# above it from nothing at opt 3, 12 minutes on the loaded machine. Dependencies stay
+# non-incremental, as the seed builds them. `cargo xtask bench` builds the `bench` profile,
+# which shares the dependencies and builds ours whole, as a player's build is (D408).
+[profile.release]
+incremental = true
+
+[profile.release.package."*"]
+incremental = false
+
+[profile.bench]
+incremental = false
