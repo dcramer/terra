@@ -74,9 +74,8 @@ crates/terra_game/src/icons.rs	draw	170
 crates/terra_game/src/play/bag.rs	draw	209
 crates/terra_game/src/play/bag.rs	setup	237
 crates/terra_game/src/play/camera.rs	follow	216
-crates/terra_game/src/play/creatures.rs	-	1739
+crates/terra_game/src/play/creatures.rs	-	1337
 crates/terra_game/src/play/creatures.rs	prepare	152
-crates/terra_game/src/play/creatures.rs	think	269
 crates/terra_game/src/play/creatures.rs	walk	155
 crates/terra_game/src/play/dial.rs	draw	209
 crates/terra_game/src/play/dial.rs	setup	161

@@ -24,6 +24,8 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 The developers, 2026-10-15: "we should add some small animals to all biomes, we have already some, others we can generate." Each biome has a few kinds that belong there, found where their niche is, by rule (D380, D378):
 
+Someone coming within a kind's flight distance, an animal first walks, paddles or wades off from them, watching; it does what this table says only once they come within 0.4 of that distance (4 m at the least), or it is hurt or frightened (D384).
+
 | Kind | Niche: growing season, places | When startled |
 |---|---|---|
 | Red squirrel | 7 °C and up, among trees | Scolds, runs up the nearest trunk and waits there until nobody is near |
@@ -32,8 +34,8 @@ The developers, 2026-10-15: "we should add some small animals to all biomes, we 
 | Red fox | 7 °C and up, woods and open ground | Barks and runs |
 | Red deer: a stag alone in the rut, hinds in ones to threes, most with a calf at foot | 5 °C and up, woods and open ground | Snorts and bounds off, the calf with its mother |
 | Wild boar | 6 °C and up, among trees, in ones to threes | Grunts and runs |
-| Mallard | 6 °C and up, open water | Quacks and takes wing, coming down on the water 25 to 70 m off; dabbles, tail up |
-| Grey heron | 8 °C and up, the shore and the shallows, wading | Croaks and flies 50 to 110 m along the shore |
+| Mallard | 6 °C and up, open water | Paddles off; near, quacks and takes wing, coming down on the water 25 to 70 m off; dabbles, tail up |
+| Grey heron | 8 °C and up, the shore and the shallows, wading | Stalks off along the shallows; near, croaks and flies 50 to 110 m along the shore |
 | Mountain hare, brown in summer and white in winter | up to 7.5 °C, open ground | Sits tight, watching, and bolts at 5 m |
 | Ptarmigan | up to 7.5 °C, open ground | In coveys of three to eight; croaks and flushes 25 to 60 m |
 | Arctic fox | up to 7 °C, open ground | Barks and runs |

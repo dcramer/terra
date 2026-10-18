@@ -1,0 +1,564 @@
+//! What each creature does next (`think`): what it senses of those about it, then whether
+//! it is up off the ground (`aloft`), what its temper makes of them (`shy`, `hostile`), or
+//! else what it gets on with (`settle`).
+
+use super::gait::{CROSSES, Pace, bolt, bolts_within};
+use super::{Bitten, CLIMB_REACH_M, Creature, Dice, Frightful, State};
+use crate::play::lod::Detail;
+use crate::play::species::{Bestiary, Moves, Refuge, SpeciesDef, Temper};
+use crate::play::tick::Ticks;
+use crate::play::walker::Motion;
+use crate::play::wildlife::Surroundings;
+use crate::play::{Downed, Player};
+use crate::spatial::SpatialHash;
+use bevy::prelude::*;
+use terra_gen::Rng;
+use terra_world::flora::Trunk;
+
+/// How far off a creature notices a player, or keeps track of one it chases.
+pub(super) const SENSE_M: f32 = 40.0;
+/// A runner watches anyone coming from this many times as far as it flees them.
+const WATCHES_WITHIN: f32 = 2.5;
+
+/// What a creature makes of those about it as it thinks.
+struct Sense {
+    /// The time it thinks over.
+    dt: f32,
+    here: Vec3,
+    up: Vec3,
+    /// The nearest player it senses, and how far off across the ground (infinite for none).
+    quarry: Option<Entity>,
+    apart: f32,
+    /// Toward the nearest player, along the ground.
+    toward: Option<Vec3>,
+    /// Away from the nearest player, and across their way and on ahead of them if they are
+    /// coming on; or away from something frightful near.
+    away: Option<Vec3>,
+}
+
+impl Sense {
+    /// Whether a player is within so far of it.
+    fn near(&self, within_m: f32) -> bool {
+        self.quarry.is_some() && self.apart < within_m
+    }
+}
+
+/// Decides what each creature does next.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn think(
+    time: Res<Time>,
+    ticks: Res<Ticks>,
+    bestiary: Res<Bestiary>,
+    around: Surroundings,
+    players: Query<(Entity, &Transform, Option<&Motion>), (With<Player>, Without<Downed>)>,
+    mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
+    frights: Query<(&Frightful, &GlobalTransform)>,
+    mut bitten: MessageWriter<Bitten>,
+    mut dice: ResMut<Dice>,
+    mut awake: Local<SpatialHash<Entity>>,
+) {
+    let tick = time.delta_secs().min(0.1);
+    // Players filed by place, so each creature looks only at those near it (D127).
+    awake.clear();
+    awake.extend(
+        players
+            .iter()
+            .map(|(player, at, _)| (at.translation, player)),
+    );
+    for (entity, mut creature, at, detail) in &mut creatures {
+        // Far from everyone it thinks less often, over the ticks it waited (D145).
+        let Some(dt) = detail.thinks(ticks.0, entity, tick) else {
+            continue;
+        };
+        let here = at.translation;
+        let up = here.normalize();
+        let nearest_player = nearest(&awake, here);
+        let (quarry, apart) = nearest_player.unzip();
+        creature.quarry = quarry;
+        let about = bestiary.get(creature.species);
+        let player = nearest_player.and_then(|(player, _)| players.get(player).ok());
+        let toward = player
+            .map(|(_, p, _)| (p.translation - here).reject_from(up).normalize_or_zero())
+            .filter(|toward| *toward != Vec3::ZERO);
+        let mut away = player.map(|(_, p, motion)| {
+            let from = (here - p.translation).reject_from(up);
+            let heading = motion.map_or(Vec3::ZERO, |m| m.velocity.reject_from(up));
+            bolt(from, heading, up, dice.0.unit() < CROSSES)
+        });
+        // Something frightful near (a dragon, a fire) startles a shy creature as a blow
+        // does, and it goes away from it.
+        if matches!(about.temper, Temper::Shy { .. })
+            && !matches!(creature.state, State::Flee(_) | State::Fly { .. })
+            && let Some(from) = nearest_fright(&frights, here)
+        {
+            creature.hurt = true;
+            away = Some((here - from).reject_from(up).normalize_or_zero());
+        }
+        let sense = Sense {
+            dt,
+            here,
+            up,
+            quarry,
+            apart: apart.unwrap_or(f32::INFINITY),
+            toward,
+            away,
+        };
+        let next = decide(
+            &mut creature,
+            about,
+            &sense,
+            &around,
+            &mut dice.0,
+            &mut bitten,
+        );
+        if bestiary.hostile(creature.species) && !matches!(next, State::Chase | State::Attack(_)) {
+            creature.hurt = false;
+        }
+        if std::mem::discriminant(&next) != std::mem::discriminant(&creature.state) {
+            debug!(
+                "{} {:?} -> {:?}, the nearest player {:.1} m off",
+                bestiary.name(creature.species),
+                creature.state,
+                next,
+                sense.apart
+            );
+        }
+        creature.state = next;
+    }
+}
+
+/// What one creature does next, from what it is doing and what it senses.
+fn decide(
+    creature: &mut Creature,
+    about: &SpeciesDef,
+    s: &Sense,
+    around: &Surroundings,
+    dice: &mut Rng,
+    bitten: &mut MessageWriter<Bitten>,
+) -> State {
+    if let Some(next) = aloft(creature, about, s, around, dice) {
+        return next;
+    }
+    let roused = match about.temper {
+        Temper::Shy {
+            flees_within_m,
+            flees_s,
+        } => shy(creature, about, s, (flees_within_m, flees_s), around, dice),
+        Temper::Hostile { .. } => hostile(creature, about.temper, s, bitten),
+    };
+    roused.unwrap_or_else(|| settle(creature, about, s, around, dice))
+}
+
+/// Dead, on the wing, up in a crown or on a trunk: what it does there, or none for one on
+/// the ground.
+fn aloft(
+    creature: &mut Creature,
+    about: &SpeciesDef,
+    s: &Sense,
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let flees_within_m = match about.temper {
+        Temper::Shy { flees_within_m, .. } => Some(flees_within_m),
+        Temper::Hostile { .. } => None,
+    };
+    Some(match creature.state {
+        State::Dead(lying) => State::Dead(lying + s.dt),
+        // Gone where it went to be safe, it stays there while it plays out.
+        State::Fly { from, to, along } if along < 1.0 => State::Fly { from, to, along },
+        State::Fly { to, .. } => landed(creature, to, around, dice),
+        // Sitting up there, it lets someone come nearer than on the ground, then clatters
+        // off, as pigeons go up off a roof over someone passing under.
+        State::Roost { .. } if flees_within_m.is_some_and(|m| s.near(m * ROOSTING_LETS)) => {
+            let away = s.away.unwrap_or(creature.facing);
+            (creature.bolt, creature.pace) = (away, Pace::Startled);
+            refuge(about, s.here, away, around, dice).unwrap_or(State::Roost {
+                at: s.here,
+                left: 2.0,
+            })
+        }
+        State::Roost { at, left } if left > 0.0 => State::Roost {
+            at,
+            left: left - s.dt,
+        },
+        State::Roost { .. } => leave_roost(about, s.here, around, dice),
+        State::Perch { trunk, left } if flees_within_m.is_some() => {
+            if flees_within_m.is_some_and(|m| s.near(m * 1.6)) {
+                State::Perch {
+                    trunk,
+                    left: left.max(2.0),
+                }
+            } else if left > 0.0 {
+                State::Perch {
+                    trunk,
+                    left: left - s.dt,
+                }
+            } else {
+                State::Climb { trunk, height: 0.0 }
+            }
+        }
+        State::Climb { trunk, height } => {
+            if height > 0.0 && creature.aloft >= height - 0.05 {
+                State::Perch {
+                    trunk,
+                    left: dice.range(6.0, 14.0),
+                }
+            } else if height <= 0.0 && creature.aloft <= 0.0 {
+                State::Idle(dice.range(1.0, 3.0))
+            } else {
+                State::Climb { trunk, height }
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Come down where it flew to: in a crown it sits a while among the leaves, on the ground
+/// or the water it is home there.
+fn landed(creature: &mut Creature, to: Vec3, around: &Surroundings, dice: &mut Rng) -> State {
+    let ground = around.ground(to);
+    creature.home = ground;
+    // Over the ground or the water's surface, whichever is higher.
+    let under = ground.length() + around.depth_m(ground).max(0.0);
+    if to.length() - under > ROOSTS_OVER_M {
+        State::Roost {
+            at: to,
+            left: dice.range(4.0, 16.0),
+        }
+    } else {
+        State::Idle(dice.range(1.0, 3.0))
+    }
+}
+
+/// Done sitting in a crown: down to the ground again, or across to another crown.
+fn leave_roost(about: &SpeciesDef, here: Vec3, around: &Surroundings, dice: &mut Rng) -> State {
+    let up = here.normalize();
+    let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
+    let way = turn * up.any_orthonormal_vector();
+    let crown = if dice.unit() < 0.5 {
+        up_high(here, way, (6.0, 25.0), around, dice)
+    } else {
+        None
+    };
+    crown
+        .or_else(|| flight(about, here, way, (4.0, 14.0), around, dice))
+        .unwrap_or(State::Roost {
+            at: here,
+            left: 3.0,
+        })
+}
+
+/// A shy one on the ground: watching someone coming, walking off from one within the
+/// distance it flees at, bolting from one close or once hurt (D384); none if nobody is near.
+fn shy(
+    creature: &mut Creature,
+    about: &SpeciesDef,
+    s: &Sense,
+    (flees_within_m, flees_s): (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let bolts_m = bolts_within(flees_within_m);
+    Some(match creature.state {
+        // A calm one crossing breaks into a run once someone comes within the distance it
+        // flees at; a wary one walking off, once they come close, and then it runs, climbs
+        // or takes wing as one startled does.
+        State::Flee(left) if left > 0.0 => {
+            let wary = creature.pace == Pace::Wary;
+            let near = s.near(if wary { bolts_m } else { flees_within_m });
+            creature.pace = creature.pace.roused(near, creature.hurt);
+            if wary && creature.pace != Pace::Wary {
+                creature.hurt = false;
+                creature.bolt = s.away.unwrap_or(creature.bolt);
+                let away = s.away.unwrap_or(creature.facing);
+                refuge(about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
+            } else {
+                State::Flee(left - s.dt)
+            }
+        }
+        // One that has noticed someone coming stops what it is doing, turns to face them
+        // and watches, a while before it makes off, as a hare, a fox or a heron does.
+        State::Idle(_) | State::Graze(_) | State::Wander(_)
+            if s.near(flees_within_m * WATCHES_WITHIN)
+                && !s.near(flees_within_m)
+                && !creature.hurt =>
+        {
+            if let Some(toward) = s.toward {
+                let turn = 1.0 - libm::expf(-s.dt * 3.0);
+                creature.facing = creature
+                    .facing
+                    .lerp(toward, turn)
+                    .reject_from(s.up)
+                    .normalize_or(toward);
+            }
+            State::Idle(0.5)
+        }
+        // Within the distance it flees at but not close: it walks, paddles or wades off
+        // from them, straight away, and keeps an eye on them.
+        _ if !creature.hurt && s.near(flees_within_m) && !s.near(bolts_m) => {
+            (creature.bolt, creature.pace) = (s.toward.map_or(Vec3::ZERO, |t| -t), Pace::Wary);
+            State::Flee(flees_s)
+        }
+        _ if creature.hurt || s.near(flees_within_m) => {
+            creature.pace = Pace::Startled.roused(true, creature.hurt);
+            creature.hurt = false;
+            creature.bolt = s.away.unwrap_or(Vec3::ZERO);
+            let away = s.away.unwrap_or(creature.facing);
+            refuge(about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
+        }
+        _ => return None,
+    })
+}
+
+/// A hostile one: biting, chasing whoever comes near or hurt it, giving up when led too far;
+/// none if nobody is near.
+fn hostile(
+    creature: &mut Creature,
+    temper: Temper,
+    s: &Sense,
+    bitten: &mut MessageWriter<Bitten>,
+) -> Option<State> {
+    let Temper::Hostile {
+        bite,
+        bite_at_s,
+        bite_reach_m,
+        attack_s,
+        attacks_within_m,
+        notices_m,
+        leash_m,
+        ..
+    } = temper
+    else {
+        return None;
+    };
+    let from_home = (s.here - creature.home).length();
+    Some(match creature.state {
+        State::Attack(through) => {
+            let through = through + s.dt;
+            // The bite lands partway through, if its quarry is still there.
+            if through - s.dt < bite_at_s
+                && through >= bite_at_s
+                && s.apart < bite_reach_m
+                && let Some(player) = s.quarry
+            {
+                bitten.write(Bitten {
+                    player,
+                    damage: bite,
+                });
+            }
+            if through > attack_s {
+                State::Chase
+            } else {
+                State::Attack(through)
+            }
+        }
+        _ if s.near(attacks_within_m) => State::Attack(0.0),
+        _ if s.quarry.is_some()
+            && (s.apart < notices_m || creature.hurt)
+            && from_home < leash_m =>
+        {
+            State::Chase
+        }
+        State::Chase => State::Return,
+        _ => return None,
+    })
+}
+
+/// Going on with what it was doing, or else resting a while, grazing if it can, or wandering
+/// somewhere near home; one that flies flits to its next place rather than walking far.
+fn settle(
+    creature: &Creature,
+    about: &SpeciesDef,
+    s: &Sense,
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> State {
+    match creature.state {
+        State::Return if (s.here - creature.home).length() > 2.0 => return State::Return,
+        State::Idle(left) if left > 0.0 => return State::Idle(left - s.dt),
+        State::Graze(left) if left > 0.0 => return State::Graze(left - s.dt),
+        State::Wander(to) if (to - s.here).length() > 1.0 => return State::Wander(to),
+        _ => {}
+    }
+    let roll = dice.unit();
+    if roll < 0.4 {
+        return State::Idle(dice.range(2.0, 5.0));
+    }
+    if roll < 0.75 && about.clips.eat.is_some() {
+        return State::Graze(dice.range(3.0, 7.0));
+    }
+    let up = creature.home.normalize();
+    let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
+    let way = turn * up.any_orthonormal_vector();
+    let here = s.here;
+    match about.moves {
+        // Up into a crown now and then, among trees.
+        Moves::Flies(_) if dice.unit() < 0.2 => {
+            up_high(here, way, (5.0, 20.0), around, dice).unwrap_or(State::Idle(1.0))
+        }
+        Moves::Flies(_) if dice.unit() < 0.5 => {
+            flight(about, here, way, (4.0, 14.0), around, dice).unwrap_or(State::Idle(1.0))
+        }
+        Moves::Flies(_) => State::Wander(creature.home + way * dice.range(0.8, 3.0)),
+        _ => State::Wander(creature.home + way * dice.range(2.0, 12.0)),
+    }
+}
+
+/// Where a shy creature goes when it is startled, by its kind's refuge: up the nearest trunk,
+/// away on the wing, or none, for one that runs.
+fn refuge(
+    about: &SpeciesDef,
+    here: Vec3,
+    away: Vec3,
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    match about.refuge {
+        Refuge::Runs => None,
+        Refuge::Climbs => {
+            let up = here.normalize();
+            // The nearest, as near goes the way it breaks: a trunk across the path rather
+            // than one back toward whoever startled it.
+            around
+                .trunks(here, CLIMB_REACH_M)
+                .min_by(|a, b| {
+                    let far = |t: &Trunk| {
+                        let off = (t.foot - here).reject_from(up);
+                        off.length() * (1.5 - off.normalize_or_zero().dot(away))
+                    };
+                    far(a).total_cmp(&far(b))
+                })
+                .map(|trunk| State::Climb {
+                    trunk,
+                    height: (trunk.height_m * dice.range(0.3, 0.55)).clamp(2.0, 9.0),
+                })
+        }
+        // Among trees a startled bird as often as not goes up into a crown.
+        Refuge::Flies(near, far) => {
+            // Not a swimmer, which comes down on the water.
+            let up_a_tree = if !matches!(about.moves, Moves::Swims(_)) && dice.unit() < 0.5 {
+                up_high(here, away, (near * 0.6, far), around, dice)
+            } else {
+                None
+            };
+            up_a_tree.or_else(|| flight(about, here, away, (near, far), around, dice))
+        }
+    }
+}
+
+/// Where the nearest frightful thing is that a creature here is within reach of, if any.
+fn nearest_fright(frights: &Query<(&Frightful, &GlobalTransform)>, here: Vec3) -> Option<Vec3> {
+    frights
+        .iter()
+        .map(|(fright, at)| (fright, at.translation()))
+        .filter(|(fright, at)| at.distance(here) < fright.within_m)
+        .map(|(_, at)| at)
+        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)))
+}
+
+/// A flight up off the ground roughly the way given, within so far: into a tree's crown, or
+/// where there are no trees, onto a roof's ridge.
+fn up_high(
+    here: Vec3,
+    way: Vec3,
+    reach: (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    crown(here, way, reach, around, dice).or_else(|| {
+        around.perch(here, way, reach, dice).map(|to| State::Fly {
+            from: here,
+            to,
+            along: 0.0,
+        })
+    })
+}
+
+/// A flier is in a crown once it is so far over the ground.
+pub(super) const ROOSTS_OVER_M: f32 = 1.5;
+/// One sitting up off the ground lets someone come this share of its flight distance.
+const ROOSTING_LETS: f32 = 0.8;
+
+/// A flight up into the crown of a tree roughly the way given, within so far: out from its
+/// trunk, two thirds of the way up it, where its branches are.
+fn crown(
+    here: Vec3,
+    way: Vec3,
+    (near, far): (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let up = here.normalize();
+    let trunk = around
+        .trunks(here, far)
+        .filter(|trunk| trunk.height_m > 6.0)
+        .filter(|trunk| {
+            let off = (trunk.foot - here).reject_from(up);
+            off.length() >= near && off.normalize_or_zero().dot(way) > -0.2
+        })
+        .max_by(|a, b| {
+            let lean = |t: &Trunk| (t.foot - here).reject_from(up).normalize_or_zero().dot(way);
+            lean(a).total_cmp(&lean(b))
+        })?;
+    let foot_up = trunk.foot.normalize();
+    let turn = Quat::from_axis_angle(foot_up, dice.range(0.0, std::f32::consts::TAU));
+    let side = turn * foot_up.any_orthonormal_vector();
+    let to = trunk.foot
+        + foot_up * trunk.height_m * dice.range(0.5, 0.75)
+        + side * (trunk.radius_m + dice.range(0.6, 2.2));
+    Some(State::Fly {
+        from: here,
+        to,
+        along: 0.0,
+    })
+}
+
+/// A flight from here to somewhere it keeps to, roughly the way given and within so far: the
+/// first of a few tries that lands where its niche is, or else as dry or wet as it lives.
+fn flight(
+    about: &SpeciesDef,
+    here: Vec3,
+    way: Vec3,
+    (near, far): (f32, f32),
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let up = here.normalize();
+    let mut fallback = None;
+    for _ in 0..6 {
+        let turn = Quat::from_axis_angle(up, dice.range(-0.7, 0.7));
+        let to = around.ground(here + turn * way * dice.range(near, far));
+        let wet = matches!(about.moves, Moves::Swims(_));
+        let depth = around.depth_m(to);
+        if (depth > 0.4) != wet {
+            continue;
+        }
+        // A swimmer comes down on the water, not on the bed under it.
+        let to = if wet { to + to.normalize() * depth } else { to };
+        let state = State::Fly {
+            from: here,
+            to,
+            along: 0.0,
+        };
+        if about
+            .niche
+            .as_ref()
+            .is_none_or(|niche| around.fits(niche, to))
+        {
+            return Some(state);
+        }
+        fallback.get_or_insert(state);
+    }
+    fallback
+}
+
+/// The nearest awake player a creature at a place can sense, and how far off across the
+/// ground.
+pub(super) fn nearest(awake: &SpatialHash<Entity>, here: Vec3) -> Option<(Entity, f32)> {
+    let up = here.normalize();
+    awake
+        .near(here, SENSE_M)
+        .map(|&(at, player)| (player, (at - here).reject_from(up).length()))
+        .filter(|&(_, apart)| apart <= SENSE_M)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}

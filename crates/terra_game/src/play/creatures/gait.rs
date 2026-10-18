@@ -14,6 +14,9 @@ use bevy::prelude::*;
 pub enum Pace {
     /// Put up a while ago and crossing someone's way, unhurried.
     Calm,
+    /// Moving off at a walk from someone come within the distance its kind flees at, a duck
+    /// paddling and a heron stalking away, before they come close (`BOLTS_WITHIN`).
+    Wary,
     /// Startled by someone coming.
     Startled,
     /// Hurt, or frightened by a dragon or a fire.
@@ -30,6 +33,23 @@ const CALM_FLIGHT: f32 = 0.7;
 const STARTLED_FLIGHT: f32 = 0.85;
 /// Startled, a runner runs off at so much of its full run.
 const STARTLED_RUN: f32 = 0.75;
+/// A wary one walks off at so many times its walking speed.
+const WARY_WALK: f32 = 1.4;
+/// Someone within the distance its kind flees at, an unhurt one first walks, paddles or wades
+/// off (`Pace::Wary`), and runs, climbs or takes wing only once they come within so much of
+/// it: wildlife keeps its distance from a passer-by and bolts only from one who comes close,
+/// as ducks paddle off from a walker on the bank and a heron stalks away along the shallows
+/// before either flushes (D384). A small animal's flight distance is short already: it bolts
+/// from no nearer than so many metres, or at once within its distance if that is shorter.
+const BOLTS_WITHIN: f32 = 0.4;
+const BOLTS_LEAST_M: f32 = 4.0;
+
+/// How near someone comes before a wary one of a kind fleeing at this distance bolts.
+pub fn bolts_within(flees_within_m: f32) -> f32 {
+    (flees_within_m * BOLTS_WITHIN)
+        .max(BOLTS_LEAST_M)
+        .min(flees_within_m)
+}
 /// Its walk clip plays up to so many times its own pace before its run clip takes over.
 const WALK_CLIP_UP_TO: f32 = 1.8;
 
@@ -38,6 +58,7 @@ impl Pace {
     pub fn runs_mps(self, about: &SpeciesDef) -> f32 {
         match self {
             Pace::Calm => (about.walk_mps * CALM_WALK).max(about.run_mps.min(CALM_LEAST_MPS)),
+            Pace::Wary => about.walk_mps * WARY_WALK,
             Pace::Startled => about.run_mps * STARTLED_RUN,
             Pace::Flat => about.run_mps,
         }
@@ -47,18 +68,18 @@ impl Pace {
     /// How fast it flies at this pace, given its kind's own speed on the wing.
     pub fn flies_mps(self, mps: f32) -> f32 {
         match self {
-            Pace::Calm => mps * CALM_FLIGHT,
+            Pace::Calm | Pace::Wary => mps * CALM_FLIGHT,
             Pace::Startled => mps * STARTLED_FLIGHT,
             Pace::Flat => mps,
         }
     }
 
-    /// Its pace once something more rouses it: hurt, flat out; someone come within the
-    /// distance it flees at, a calm one startled.
+    /// Its pace once something more rouses it: hurt, flat out; someone come near (within the
+    /// distance it flees at for a calm one crossing, close for a wary one), startled.
     pub fn roused(self, near: bool, hurt: bool) -> Pace {
         match self {
             _ if hurt => Pace::Flat,
-            Pace::Calm if near => Pace::Startled,
+            Pace::Calm | Pace::Wary if near => Pace::Startled,
             pace => pace,
         }
     }

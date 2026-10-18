@@ -143,6 +143,7 @@ fn show(
     mut panel: Query<&mut Visibility, (With<ControlsPanel>, Without<Bars>)>,
     mut fills: Query<(&Fill, &mut Node)>,
     mut whiteout: Query<&mut BackgroundColor, With<Whiteout>>,
+    filming: Option<Res<terra_world::cine::Cine>>,
 ) {
     let (fighter, drawn) = ours.map_or((None, false), |ours| {
         let (fighter, drawn) = ours.into_inner();
@@ -158,7 +159,8 @@ fn show(
     for mut visible in &mut bars {
         visible.set_if_neq(shown(drawn));
     }
-    let hint = drawn || time.elapsed_secs() < HINT_S;
+    // The controls are for someone playing, never in a film's picture.
+    let hint = filming.is_none() && (drawn || time.elapsed_secs() < HINT_S);
     for mut visible in &mut panel {
         visible.set_if_neq(shown(hint));
     }
