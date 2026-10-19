@@ -7,11 +7,11 @@
 //! a thing carry `Ambient`, and are heard only within earshot, so a world can hold any
 //! number of them.
 
+use super::claim::Village;
 use super::crafting::{Fire, Stations, Works};
 use super::creatures::Lair;
 use super::noise::{Cue, Noise};
 use super::props::Prop;
-use super::settlement::Village;
 use super::{IsLocalPlayer, Motion};
 use crate::audio::{
     self, Bus, Fade, Mix, Voice,

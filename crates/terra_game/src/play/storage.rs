@@ -258,7 +258,7 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         Res<Models>,
         Query<(Entity, &Claim), (With<Player>, With<LocalPlayer>)>,
         Query<&Claim>,
-        Option<Res<super::settlement::Village>>,
+        Option<Res<super::claim::Village>>,
         Res<super::catalogue::Builds>,
     )>::new(world);
     let answer = {

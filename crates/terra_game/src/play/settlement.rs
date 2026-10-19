@@ -13,6 +13,7 @@
 
 use super::Footprint;
 use super::catalogue::Builds;
+use super::claim::Village;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
 use super::flora::ClearAround;
@@ -104,12 +105,6 @@ pub(super) const PEOPLE: [Villager; 4] = [
         says: Some("Wyn: \"Meat keeps you longer cooked. Any fire will do.\""),
     },
 ];
-
-/// Where the village's green is, its middle; and points on the ground along its street and
-/// at each building's door, back and corners, which no claim comes within a margin of
-/// (D193, D265).
-#[derive(Resource)]
-pub struct Village(pub Vec3, pub Vec<Vec3>);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, found.run_if(resource_added::<Lair>))

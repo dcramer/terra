@@ -641,7 +641,7 @@ pub(super) fn afford(
     look: Res<crate::build::BuildLook>,
     props: Query<&Prop>,
     mut building: Building,
-    village: Option<Res<crate::play::settlement::Village>>,
+    village: Option<Res<crate::play::claim::Village>>,
     mut players: Query<
         (
             Entity,

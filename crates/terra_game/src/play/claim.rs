@@ -13,7 +13,6 @@ use super::catalogue::{Builds, ClaimRule};
 use super::interact::{Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::{PlacedBy, Prop};
-use super::settlement::Village;
 use super::tick::Sim;
 use super::told::Told;
 use super::{IsLocalPlayer, Player};
@@ -29,6 +28,13 @@ pub const MARGIN_M: f32 = 10.0;
 /// Something a claim keeps clear of: where its middle is, and how far round it it reaches
 /// across the ground, in metres.
 pub type Keeps = (Vec3, f32);
+
+/// A village's land, which a settlement sets and a claim asks of, so its owner is the side
+/// that asks (D407). Where the village's green is, its middle; and points on the ground
+/// along its street and at each building's door, back and corners, which no claim comes
+/// within a margin of (D193, D265).
+#[derive(Resource)]
+pub struct Village(pub Vec3, pub Vec<Vec3>);
 
 /// Why a claim so far across round a centre would be too near something else: another
 /// claim, or a village, within the margin of its edge; `None` if it keeps clear of all of

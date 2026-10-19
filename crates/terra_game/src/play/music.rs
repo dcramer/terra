@@ -4,8 +4,8 @@
 //! (`audio::music`), so none repeats.
 
 use super::IsLocalPlayer;
+use super::claim::Village;
 use super::creatures::{Creature, Lair, State};
-use super::settlement::Village;
 use crate::audio::{
     self, Bus, Fade, Mix, Voice,
     music::Phrase,

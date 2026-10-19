@@ -20,6 +20,8 @@ pub mod lift;
 pub(crate) mod model_files;
 pub mod pace;
 pub mod play;
+#[cfg(test)]
+mod seams;
 pub mod skinning;
 pub mod swing;
 
