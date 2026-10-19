@@ -95,6 +95,11 @@ for (const shot of shots.values()) {
   }
 }
 const sandbox = resolve(ROOT, "target/release/terra_sandbox");
+// Without it every shot fails with no output ("undefinedundefined"), after the GPU queue's wait.
+if (!existsSync(sandbox)) {
+  console.error(`✗ trailer: ${sandbox} is missing; run cargo build --release -p terra_sandbox first`);
+  process.exit(1);
+}
 
 /// A font for the cards: a light serif, as trailers' titles are, found by fontconfig.
 const font = (() => {
