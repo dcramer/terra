@@ -578,8 +578,12 @@ fn shine(
         let (air, visible) = haze_for(light.horizon, open, air_scale);
         // Under a deck the haze is the deck's light on the air, as bright on screen as the
         // deck at the horizon, so the far land fades into the sky rather than a band; what
-        // falls shortens how far one sees (D418).
-        let veil = crate::weather::veil(light.ambient * SKY_LIGHT_GAIN * under.diffuse, set);
+        // falls shortens how far one sees (D418). Among the trees it is the air under the
+        // crowns, lit by the sky they let through, as the forest's own haze is: at the deck's
+        // full light it stood at luma 140 over snow at 87, and the snow read grey.
+        let wooded = 1.0 - smoothstep(0.55, 0.98, open);
+        let veil = crate::weather::veil(light.ambient * SKY_LIGHT_GAIN * under.diffuse, set)
+            * (1.0 - (1.0 - WOODED_VEIL) * wooded);
         let air = air.lerp(MOON_HAZE, dark) * level;
         fog.color = colour(air.lerp(veil, deck));
         fog.directional_light_color = colour(light.light * 0.55 * under.direct).with_alpha(0.5);
@@ -701,6 +705,9 @@ const ABOVE_MIST_THINS: f32 = 0.6;
 /// How many times brighter the volumetric haze's sky light is out in the open than under
 /// the trees: the open sky lights mist from every side.
 const OPEN_HAZE_GLOW: f32 = 4.0;
+/// Under a deck, how bright the haze among the trees is beside the open air's: the forest's
+/// own haze is dimmed so by the shade it hangs in (`haze_for`).
+const WOODED_VEIL: f32 = 0.62;
 
 /// How many stops brighter the eye is set by day out in the open on a world whose views reach
 /// kilometres (D338). The day's exposures were tuned under the lush forest's canopy against
