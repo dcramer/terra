@@ -53,7 +53,7 @@ pub(super) struct Asking {
     meetings: Vec<(Meeting, Species)>,
     done: Vec<bool>,
     /// Why the last try at each failed.
-    why: Vec<&'static str>,
+    why: Vec<String>,
     /// The player's feet at the last look, and how fast they go.
     last: Option<Vec3>,
     speed: f32,
@@ -72,18 +72,20 @@ const CROSSING_FROM: [f32; 5] = [0.0, -30.0, 30.0, -55.0, 55.0];
 const FLEEING_FROM: [f32; 4] = [-40.0, -20.0, -60.0, 0.0];
 const GRAZING_FROM: [f32; 5] = [0.0, 40.0, -30.0, 80.0, -60.0];
 /// How far the spot is moved, ahead and round, metres and degrees, when the asked one is in
-/// water, a trunk or hidden from the camera.
-const NUDGES: [(f32, f32); 9] = [
-    (0.0, 0.0),
-    (3.0, 0.0),
-    (-3.0, 0.0),
-    (0.0, 3.0),
-    (0.0, -3.0),
-    (6.0, 0.0),
-    (-6.0, 0.0),
-    (3.0, 5.0),
-    (3.0, -5.0),
-];
+/// water, a trunk or hidden from the camera: the nearest first.
+const NUDGE_AHEAD_M: [f32; 7] = [0.0, 3.0, -3.0, 6.0, -6.0, 10.0, -10.0];
+const NUDGE_ROUND_DEG: [f32; 5] = [0.0, 4.0, -4.0, 8.0, -8.0];
+
+fn nudges() -> Vec<(f32, f32)> {
+    let mut all: Vec<(f32, f32)> = NUDGE_AHEAD_M
+        .iter()
+        .flat_map(|&m| NUDGE_ROUND_DEG.iter().map(move |&d| (m, d)))
+        .collect();
+    all.sort_by(|a, b| {
+        (a.0.abs() / 3.0 + a.1.abs() / 4.0).total_cmp(&(b.0.abs() / 3.0 + b.1.abs() / 4.0))
+    });
+    all
+}
 /// The steepest ground a walker is put on or sent across, rise over run.
 const STEEPEST: f32 = 0.8;
 
@@ -201,11 +203,11 @@ pub(super) fn stage(
     about: &SpeciesDef,
     (feet, ahead): (Vec3, Vec3),
     lead_s: f32,
-) -> Result<Staged, &'static str> {
+) -> Result<Staged, String> {
     let up = feet.normalize_or(Vec3::Y);
     let ahead = ahead.reject_from(up).normalize_or_zero();
     if ahead == Vec3::ZERO {
-        return Err("the camera's way is unknown");
+        return Err("the camera's way is unknown".into());
     }
     let right = ahead.cross(up);
     let eye = eye_at(around, feet, ahead);
@@ -224,14 +226,30 @@ pub(super) fn stage(
                 .near(p, radius + 2.0)
                 .all(|(foot, round)| apart(p, foot) > round + radius + 0.3)
     };
-    let mut why = "its spot is in water, a trunk or hidden from the camera";
-    let spot = NUDGES.iter().find_map(|&(more_m, more_deg)| {
+    // Why each spot tried did not fit: in water, in a trunk, hidden from the camera.
+    let mut not = [0; 3];
+    let spot = nudges().into_iter().find_map(|(more_m, more_deg)| {
         let off = (meeting.bearing + more_deg).to_radians();
         let dir = ahead * libm::cosf(off) + right * libm::sinf(off);
         let spot = around.ground(eye + dir * (meeting.ahead + more_m).max(4.0));
-        (dry(spot) && clear(spot) && shows_from(around, eye, spot + lift)).then_some(spot)
+        let fault = if !dry(spot) {
+            0
+        } else if !clear(spot) {
+            1
+        } else if !shows_from(around, eye, spot + lift) {
+            2
+        } else {
+            return Some(spot);
+        };
+        not[fault] += 1;
+        None
     });
-    let Some(spot) = spot else { return Err(why) };
+    let Some(spot) = spot else {
+        return Err(format!(
+            "of its spots {} in water, {} in a trunk, {} hidden from the camera",
+            not[0], not[1], not[2]
+        ));
+    };
     // Out to the side it is on, away from the view axis.
     let side = (spot - eye).reject_from(up).dot(right);
     let outward = if side >= 0.0 { right } else { -right };
@@ -241,7 +259,7 @@ pub(super) fn stage(
         Behaviour::Fleeing => &FLEEING_FROM[..],
         Behaviour::Grazing => &GRAZING_FROM[..],
     };
-    why = "nowhere out of sight to come from";
+    let mut not = [0; 3];
     for &degrees in from {
         let (sin, cos) = (
             libm::sinf(degrees.to_radians()),
@@ -249,11 +267,17 @@ pub(super) fn stage(
         );
         let dir = outward * cos + ahead * sin;
         let start = around.ground(spot + dir * mps * lead_s);
-        if !dry(start) || !clear(start) || around.seen_now(start + lift, about.seen_m()) {
-            continue;
-        }
-        if !flies && !walkable(around, start, spot) {
-            why = "no dry, gentle ground in from out of sight";
+        let fault = if !dry(start) || !clear(start) {
+            0
+        } else if around.seen_now(start + lift, about.seen_m()) {
+            1
+        } else if !flies && !walkable(around, start, spot) {
+            2
+        } else {
+            3
+        };
+        if fault < 3 {
+            not[fault] += 1;
             continue;
         }
         let way = (spot - start).reject_from(up).normalize_or_zero();
@@ -264,7 +288,10 @@ pub(super) fn stage(
             lead_s,
         });
     }
-    Err(why)
+    Err(format!(
+        "of its starts {} in water or a trunk, {} in sight, {} with no dry, gentle way in",
+        not[0], not[1], not[2]
+    ))
 }
 
 /// Whether a walker can go straight from one point to another: dry ground, never steeper than
@@ -301,7 +328,7 @@ pub(super) fn ask(
         asking.meetings =
             read(&cine.shot.more, &bestiary).unwrap_or_else(|why| panic!("--cine: {why}"));
         asking.done = vec![false; asking.meetings.len()];
-        asking.why = vec![""; asking.meetings.len()];
+        asking.why = vec![String::new(); asking.meetings.len()];
     }
     let (Some(t), Some(kinds)) = (cine.t, kinds.filter(|kinds| kinds.ready())) else {
         return;
