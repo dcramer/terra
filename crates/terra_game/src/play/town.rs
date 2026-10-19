@@ -25,6 +25,14 @@ use terra_town::{Animals, Life, Plan};
 use terra_world::lod::Viewpoint;
 use terra_world::smoke::{Burning, Smoke};
 
+/// The demo's town (terra_sandbox's `town` experiment): its seed, chosen for a long square
+/// with a side street up the slope.
+pub const SEED: u32 = 2;
+
+/// How far from the place the land's rules found the demo's town (`--site town` or
+/// `settlement`) its square may move, to the most level ground there on the ground as drawn.
+pub const AT_THE_SITE_M: f32 = 40.0;
+
 /// A town wanted: its seed, and near where, in metres east and south of the start; its
 /// square goes on the most level ground within `within` of there.
 #[derive(Resource, Clone, Copy, Debug)]
@@ -932,6 +940,34 @@ fn ways_bounds(town: &terra_town::town::Town) -> (Vec2, Vec2) {
     )
 }
 
+/// Where a town wanted is laid and how (D381): its square's middle on the planet, on the most
+/// level ground near where it is wanted; the start's east there; and the town `terra_town`
+/// lays from its seed on the ground round that middle, in the town's own terms.
+pub(crate) fn laid_out(
+    planet: &Planet,
+    start: &Start,
+    wanted: &Wanted,
+    picks: impl terra_town::village::Picks + Copy,
+    size: &Size,
+) -> (Vec3, Vec3, terra_town::town::Town) {
+    let place = site_for(planet, start, wanted.near, wanted.within);
+    let middle = planet.ground_at(start.at(place.x, place.y));
+    let up = middle.normalize();
+    let east = (start.rotation * Vec3::X)
+        .reject_from(up)
+        .normalize_or(up.any_orthonormal_vector());
+    let south = east.cross(up);
+    let radius = middle.length();
+    // The ground's height in the town's own terms: above the square's middle, the planet's
+    // curve taken out, so a level street reads level.
+    let heights = |at: Vec2| {
+        let ground = planet.ground_at(middle + east * at.x + south * at.y);
+        ground.length() - radius + at.length_squared() / (2.0 * radius)
+    };
+    let town = terra_town::town::town_sized(wanted.seed, picks, &heights, size);
+    (middle, east, town)
+}
+
 /// Lays the town out on the ground where it is wanted, and puts it up: its buildings by the
 /// shortcuts, their doors and shutters, the things of its day as catalogue items, the
 /// streets and square kept clear of what grows; then its people, placed where the clock
@@ -983,27 +1019,15 @@ fn lay(
             role.count = terra_town::plan::Count::Fixed(builders);
         }
     }
-    let place = site_for(&planet, &start, wanted.near, wanted.within);
-    let middle = planet.ground_at(start.at(place.x, place.y));
-    let up = middle.normalize();
-    let east = (start.rotation * Vec3::X)
-        .reject_from(up)
-        .normalize_or(up.any_orthonormal_vector());
-    let south = east.cross(up);
-    let radius = middle.length();
-    // The ground's height in the town's own terms: above the square's middle, the planet's
-    // curve taken out, so a level street reads level.
-    let heights = |at: Vec2| {
-        let ground = planet.ground_at(middle + east * at.x + south * at.y);
-        ground.length() - radius + at.length_squared() / (2.0 * radius)
-    };
     // A settlement rising grows as big as its time-lapse asks (D381).
     let size = rising
         .as_ref()
         .and_then(|r| r.lapse.town)
         .map_or(Size::MARKET, |g| g.size());
     let grown = size.streets;
-    let mut town = terra_town::town::town_sized(wanted.seed, &palette, &heights, &size);
+    let (middle, east, mut town) = laid_out(&planet, &start, &wanted, &palette, &size);
+    let up = middle.normalize();
+    let south = east.cross(up);
     let at = |p: Vec2| planet.ground_at(middle + east * p.x + south * p.y);
 
     // The streets and the square, their plants cleared and kept off, trodden bare.

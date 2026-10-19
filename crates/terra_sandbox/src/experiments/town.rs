@@ -10,16 +10,9 @@
 //! The log gives its vantage points (`Town vantage: …`) as `--vantage` takes them.
 
 use bevy::prelude::*;
-use terra_game::play::town::Wanted;
+use terra_game::play::town::{AT_THE_SITE_M, SEED, Wanted};
 use terra_world::planet::Planet;
 use terra_world::start::{Found, Sited, Start};
-
-/// The town shown: its seed, chosen for a long square with a side street up the slope.
-const SEED: u32 = 2;
-
-/// How far from the place the land's rules found its square may move, to the most level
-/// ground there on the ground as drawn.
-const AT_THE_SITE_M: f32 = 40.0;
 
 fn wanted(lived_in: bool) -> Wanted {
     Wanted {

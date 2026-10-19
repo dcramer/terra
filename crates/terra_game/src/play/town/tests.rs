@@ -169,3 +169,90 @@ fn most_of_a_towns_buildings_have_a_ridge_along_their_top_for_birds() {
         town.buildings.len()
     );
 }
+
+#[test] // Slow: a minute or two (the mountain world's land, the site's search, the town).
+fn the_settlements_pinned_site_still_lays_its_walled_town() {
+    // The settlement time-lapse's town, laid as the sandbox lays it at its pinned place
+    // (`--experiment town --site settlement@2.41,2.51`, D393, D381): a change to the land or
+    // the town's rules that leaves it without its wall or castle, or puts a house in the
+    // lake, fails here rather than in a film (terra_land's
+    // `the_settlements_pinned_site_is_still_by_its_lake_under_its_range` holds the place).
+    use terra_world::start::Found;
+    let planet = Planet::new(terra_core::PlanetSpec {
+        seed: terra_gen::Seed(1),
+        radius_m: 30_000.0,
+    });
+    let found = terra_world::start::find_site(&planet, "settlement@2.41,2.51");
+    let Found::Settlement(site) = found else {
+        panic!("not a settlement")
+    };
+    let start = found.start(&planet);
+    let at = start.local(planet.surface(site.toward));
+    let wanted = Wanted {
+        seed: SEED,
+        near: Vec2::new(at.x, at.z),
+        within: AT_THE_SITE_M,
+        arrive: true,
+        lived_in: true,
+    };
+    let (lapse, _) = super::super::rising::Timelapse::read("settlement.ron").unwrap();
+    let size = lapse.town.expect("the settlement's size").size();
+    assert!(size.walled);
+    let kinds = Kinds {
+        timber: terra_build::Kind(1),
+        masonry: terra_build::Kind(2),
+        beams: terra_build::Kind(3),
+        cob: terra_build::Kind(4),
+        framed: terra_build::Kind(5),
+        works: terra_build::Kind(2),
+        timber_roof: terra_build::Kind(0x800),
+        masonry_roof: terra_build::Kind(0x801),
+        beams_roof: terra_build::Kind(0x802),
+    };
+    let (middle, east, town) = laid_out(&planet, &start, &wanted, kinds, &size);
+    let (houses, works) = town.buildings.split_at(town.works);
+    let gates = works
+        .iter()
+        .filter(|b| b.name.contains("gatehouse"))
+        .count();
+    let towers = works.iter().filter(|b| b.name.contains("tower")).count();
+    eprintln!(
+        "settlement: {} buildings, {} homes, {} works ({gates} gates, {towers} towers), a wall of {} corners",
+        town.buildings.len(),
+        town.homes.len(),
+        works.len(),
+        town.wall.len()
+    );
+    // As big as its time-lapse asks, walled round with towers and gates, and its castle
+    // within it, last. (Not yet a gate over every street: here the north street runs into a
+    // notch the wall's line makes round its last houses, a 3 m side too short for a gate.)
+    assert!(
+        houses.len() >= size.buildings.0,
+        "{} buildings",
+        houses.len()
+    );
+    assert!(town.wall.len() >= 3, "no wall");
+    assert!(towers >= 3, "{towers} towers");
+    assert!(gates >= 1, "no gate");
+    assert_eq!(works.last().map(|b| b.name.as_str()), Some("the castle"));
+    // Nothing built stands in the water: every corner of every building's ground over dry
+    // land, as the world draws its lakes and the sea.
+    let land = terra_land::Land::new(
+        planet.voxels().field().clone(),
+        terra_land::start_climate().unwrap(),
+    );
+    let waters = terra_land::water::Waters::round(&land, site.toward, 1200.0, 10.0);
+    let up = middle.normalize();
+    let south = east.cross(up);
+    for (b, quads) in town.footprints.iter().enumerate() {
+        for &p in quads.iter().flatten() {
+            let ground = planet.ground_at(middle + east * p.x + south * p.y);
+            assert!(
+                waters.lake_level(ground.normalize()).is_none()
+                    && ground.length() > planet.sea_radius_m(),
+                "{} at {p} stands in the water",
+                town.buildings[b].name
+            );
+        }
+    }
+}

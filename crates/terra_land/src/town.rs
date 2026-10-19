@@ -731,6 +731,50 @@ mod tests {
         assert!(high - low > 30.0, "{reached:?}");
     }
 
+    #[test] // Slow: minutes.
+    fn the_settlements_pinned_site_is_still_by_its_lake_under_its_range() {
+        // The settlement time-lapse's place (`--site settlement@2.41,2.51`, D393), where its
+        // film is keyed: a change to the land that moves or spoils it fails here, not in a
+        // film (terra_game's `the_settlements_pinned_site_still_lays_its_walled_town` holds
+        // the town laid there).
+        let land = land(30_000.0);
+        let pin = Vec2::new(2.41, 2.51);
+        let want = MarketTown {
+            pinned_km: Some(pin),
+            ..MarketTown::SETTLEMENT
+        };
+        let (site, searched) = land.market_town_searched(PLANET_START, &want);
+        let site = site.unwrap_or_else(|| panic!("no settlement at its pin: {searched:?}"));
+        // Where it was found, to the log's hundredth of a kilometre, not merely within the
+        // pin's 200 m.
+        assert!(site.at_km.distance(pin) < 0.015, "{}", site.at_km);
+        assert!(
+            land.along(PLANET_START, site.at_km * 1000.0)
+                .distance(site.toward)
+                < 1e-3
+        );
+        // By its water: the ground past the shore the query found lies under the town's, and
+        // the shore stands past the houses, where the film looks over it.
+        let water = site.water.expect("a lake beside it");
+        let (near_m, far_m, _) = want.water_m.unwrap();
+        assert!((near_m..far_m).contains(&water.length()), "{water}");
+        let town = land.surface(site.toward).length();
+        let past = land.surface(land.along(site.toward, water * 1.15)).length();
+        assert!(
+            past < town - 1.0,
+            "the water {} m under the town",
+            town - past
+        );
+        // Under its range: the film's last shot looks over the castle to it.
+        assert!(
+            site.skyline_deg > 20.0,
+            "the skyline at {}°",
+            site.skyline_deg
+        );
+        let peak = land.surface(site.peak).length() - land.sea_radius_m();
+        assert!(peak > site.tree_line_m, "{peak}");
+    }
+
     #[test]
     fn a_world_without_mountains_has_no_town_site() {
         let land = land(2000.0);
