@@ -1,0 +1,162 @@
+<title>Terra Review Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of cards, open items first; each card a decision or a look, answered in place. */
+:root{
+  --bg:#f3f2ee; --surface:#fbfaf7; --fg:#22231f; --muted:#6c6d64; --line:#dddcd3;
+  --ember:#c4501d; --ember-soft:#f6e3d8; --moss:#3f6b4a; --moss-soft:#e1ece2;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#171815; --surface:#20211d; --fg:#e8e7df; --muted:#9a9b90; --line:#34352f;
+  --ember:#ec7a45; --ember-soft:#3a251a; --moss:#7fb38b; --moss-soft:#1f2e22; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171815; --surface:#20211d; --fg:#e8e7df; --muted:#9a9b90; --line:#34352f;
+  --ember:#ec7a45; --ember-soft:#3a251a; --moss:#7fb38b; --moss-soft:#1f2e22; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header h1{font:600 30px/1.15 var(--display);margin:0;text-wrap:balance}
+header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tabs button{font:500 13px var(--body);padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tabs button:focus-visible,.opt:focus-visible,.send:focus-visible,textarea:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.list{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:500 12px var(--mono);color:var(--muted);letter-spacing:.02em}
+.chip{padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.chip.question{background:var(--ember-soft);color:var(--ember)}
+.chip.review{background:var(--moss-soft);color:var(--moss)}
+.chip.done{background:transparent;border:1px solid var(--line)}
+.card h2{font:600 18px/1.3 var(--body);margin:0;text-wrap:balance}
+.card .body{margin:0;color:var(--fg);white-space:pre-wrap;max-width:68ch}
+.imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.imgs a{display:block;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.imgs img{display:block;width:100%;height:auto}
+.cap{font:12px var(--mono);color:var(--muted);margin-top:4px}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{text-align:left;font:14px/1.4 var(--body);padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.opt b{font-weight:600}
+.opt[aria-pressed="true"]{border-color:var(--ember);box-shadow:inset 3px 0 0 var(--ember)}
+textarea{width:100%;box-sizing:border-box;min-height:64px;font:14px/1.45 var(--body);padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.send{font:600 14px var(--body);padding:8px 16px;border-radius:8px;border:0;background:var(--ember);color:#fff;cursor:pointer}
+.send[disabled]{opacity:.45;cursor:default}
+.status{font:12px var(--mono);color:var(--muted)}
+.answer{border-left:3px solid var(--moss);padding:6px 0 6px 12px;color:var(--fg)}
+.answer .who{font:12px var(--mono);color:var(--muted)}
+.empty{color:var(--muted);padding:24px 0}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Terra Review Desk</h1>
+    <p>What needs your eye or your call, oldest open first. Answer here and the coordinator reads it on its next turn; nothing posted in chat needs answering.</p>
+  </header>
+  <div class="tabs" role="group" aria-label="Filter">
+    <button id="f-open" aria-pressed="true" data-f="open">Open</button>
+    <button id="f-done" aria-pressed="false" data-f="done">Answered</button>
+    <button id="f-all" aria-pressed="false" data-f="all">All</button>
+  </div>
+  <div class="list" id="list"><p class="empty">Loading the desk… Items appear here as the agents raise them.</p></div>
+</div>
+
+<script>
+let filter = "open", items = [], db = null, me = null;
+const drafts = {}; // id -> {choice, note}
+try { const f = localStorage.getItem("desk-filter"); if (f) filter = f; } catch {}
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k) e.append(k);
+  return e;
+}
+function when(t) { if (!t) return ""; const d = new Date(t); return d.toLocaleString(undefined, {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}); }
+
+function render() {
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === filter)));
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  const shown = items.filter(i => filter === "all" || (filter === "open" ? i.status !== "answered" : i.status === "answered"));
+  if (!db) { list.append(el("p", {class:"empty", text:"The desk could not reach its store in this view. Open it on claude.ai while signed in."})); return; }
+  if (!shown.length) { list.append(el("p", {class:"empty", text: filter === "open" ? "Nothing waiting on you." : "Nothing here yet."})); return; }
+  for (const it of shown) list.append(card(it));
+}
+
+function card(it) {
+  const d = drafts[it.id] ||= {choice: null, note: ""};
+  const done = it.status === "answered";
+  const c = el("article", {class:"card"});
+  c.append(el("div", {class:"meta"},
+    el("span", {class:"chip " + (done ? "done" : it.kind), text: done ? "answered" : it.kind}),
+    el("span", {text: it.area || ""}), el("span", {text: when(it.createdAt)})));
+  c.append(el("h2", {text: it.title || ""}));
+  if (it.body) c.append(el("p", {class:"body", text: it.body}));
+  if (Array.isArray(it.images) && it.images.length) {
+    const g = el("div", {class:"imgs"});
+    for (const im of it.images) {
+      const a = el("a", {href: im.url, target:"_blank", rel:"noopener"}, el("img", {src: im.url, alt: im.caption || it.title || "still", loading:"lazy"}));
+      g.append(el("div", {}, a, im.caption ? el("div", {class:"cap", text: im.caption}) : null));
+    }
+    c.append(g);
+  }
+  if (Array.isArray(it.videos) && it.videos.length) {
+    for (const v of it.videos) {
+      const vid = el("video", {src: v.url, controls: "", preload: "metadata", playsinline: "", muted: ""});
+      vid.style.cssText = "width:100%;height:auto;border-radius:6px;border:1px solid var(--line);background:#000";
+      c.append(el("div", {}, vid, v.caption ? el("div", {class:"cap", text: v.caption}) : null));
+    }
+  }
+  if (done) {
+    c.append(el("div", {class:"answer"}, el("div", {class:"who", text: "Answered " + when(it.answeredAt)}),
+      el("div", {text: [it.answer, it.note].filter(Boolean).join(" — ")})));
+    return c;
+  }
+  const opts = Array.isArray(it.options) ? it.options : [];
+  if (opts.length) {
+    const o = el("div", {class:"opts"});
+    for (const op of opts) {
+      const b = el("button", {class:"opt", type:"button", "aria-pressed": String(d.choice === op.label),
+        onclick: () => { d.choice = d.choice === op.label ? null : op.label; render(); }},
+        el("b", {text: op.label}), op.detail ? document.createTextNode(" · " + op.detail) : null);
+      o.append(b);
+    }
+    c.append(o);
+  }
+  const ta = el("textarea", {id: "note-" + it.id, placeholder: it.kind === "review" ? "What's wrong, what's right, what to aim at…" : "Anything to add (optional)", "aria-label":"Your note"});
+  ta.value = d.note; ta.addEventListener("input", () => { d.note = ta.value; btn.disabled = !(d.choice || d.note.trim()); });
+  const st = el("span", {class:"status"});
+  const btn = el("button", {class:"send", type:"button", text:"Send answer", onclick: async () => {
+    btn.disabled = true; st.textContent = "Sending…";
+    try {
+      await db.collection("items").doc(it.id).update({status:"answered", answer: d.choice || "", note: d.note.trim(), answeredAt: new Date().toISOString(), answeredBy: me || ""});
+      st.textContent = "Sent";
+    } catch (e) { st.textContent = "Not sent: " + (e && e.message ? e.message : "the store refused it") + ". Try again."; btn.disabled = false; }
+  }});
+  btn.disabled = !(d.choice || d.note.trim());
+  c.append(ta, el("div", {class:"row"}, btn, st));
+  return c;
+}
+
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f; try { localStorage.setItem("desk-filter", filter); } catch {} render();
+}));
+
+(async () => {
+  db = window.claude ? await window.claude.use("db") : null;
+  const user = window.claude ? await window.claude.use("user") : null;
+  try { me = user ? await user.id() : null; } catch {}
+  if (!db) { render(); return; }
+  db.collection("items").orderBy("createdAt", "asc").onSnapshot(snap => {
+    items = snap.docs.map(s => ({id: s.id, ...(s.data() || {})}));
+    render();
+  }, () => { document.getElementById("list").replaceChildren(el("p", {class:"empty", text:"The desk lost its connection. Reload the page."})); });
+})();
+</script>

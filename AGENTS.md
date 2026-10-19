@@ -61,6 +61,7 @@ Every byte an agent reads is paid again each turn.
 
 - **Design before building** (D49): code waits for a design doc the developers have read. An idea from conversation is written down and asked about, not started as an experiment.
 - **Don't overbuild**: nothing on a Leaning or Open design decision but a spike, which answers one stated question with the least code, then stops.
+- **The review desk** (D422): a question, or a still or film for the developer's eye, goes on their desk, never into chat; the coordinator keeps it and subagents hand items over in a `FOR REVIEW` line (`.agents/skills/review-desk`).
 - **Tools for repeated work** (D71): when a check you will do again takes several manual steps, a restart or squinting at a picture, make it one step. General over single-case; its output reads at a glance and explains itself ([examples](docs/development.md#developer-tools)).
 - **No options for one-offs** (D249): one scene or check uses existing options, `cargo xtask remote` or an uncommitted script; if none can, ask.
 - **Do it as shipped games do**: find how they and other engines do it first, use the industry's terms, say where we depart.

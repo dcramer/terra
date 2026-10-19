@@ -482,6 +482,7 @@ Checks, developer tools, languages and the repository.
 | [D414](decisions/D414.md) | A ratchet's baseline is raised by a change with its why, and lowered only by the full run on main | Tech | Agent | Decided | A ratchet's baseline (the artifacts and fuzz counts… |
 | [D417](decisions/D417.md) | Offscreen runs open no window | Tech | Agent | Decided | An unattended run drawing into a picture… |
 | [D421](decisions/D421.md) | Demo and film places leave out the combat lair | Design | Developers | Decided | Play keeps its lair of combat creatures… |
+| [D422](decisions/D422.md) | The review desk, one per developer | Tech | Agent | Decided | Each developer runs their own review desk… |
 
 ## Superseded and rejected
 
