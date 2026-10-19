@@ -425,6 +425,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D403](decisions/D403.md) | A mountain's face is drawn in tiers, weathering and skirts, its gullies shaped by face | Tech | Agent | Decided | A far wall's face gets variety at several sizes… |
 | [D404](decisions/D404.md) | A face's gullies come in several sizes, its tiers stand in the light, and talus aprons lie under its walls | Tech | Agent | Decided | A far wall's face varies in its gullies' sizes and its… |
 | [D407](decisions/D407.md) | How the crates are cut | Tech | Developers | Decided | `terra_build` (71k lines) and `terra_game`… |
+| [D415](decisions/D415.md) | One Fire module, built by the rules shipped games follow | Tech | Agent | Leaning | Every fire in the game, from a candle to a burning… |
 
 ## Tools and workflow
 

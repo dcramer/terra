@@ -64,6 +64,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [progression.md](progression.md) | Three ways to grow (skills, studied techniques, essences), skills on the rank ladder, crossing a rank, and how things are unlocked. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [art-style.md](art-style.md) | **The style guide and art direction for anything the game draws**, the same in every realm and setting: textured, lightly stylised realism, what a realm brings, life size, shape, colour, light, budgets, the concept prompt, a checklist, how the renderer makes the look and open questions. |
+| [fire.md](fire.md) | Leaning (D415): one Fire module for every fire, from a candle to a burning castle, a breath and an explosion: its layers, the flipbook channels and our Mantaflow baker, one colour ramp, the exposure rule, the tonemapper bake-off, light, smoke and haze rules, presets as data, LOD and the cinematic tier, the check against real fire, and the staged plan. |
 | [audio.md](audio.md) | Sound: how it is put together, what it sounds like now, and questions for the developers. |
 
 **Parked**

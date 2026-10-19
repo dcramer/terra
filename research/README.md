@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [How games draw fire: four surveys combined](2026-10-19-how-games-draw-fire.md) | 2026-10-19 |
 | [How the crates should be cut](2026-10-18-crate-layout.md) | 2026-10-18 |
 | [Dragon breath and a burning castle: what makes them read as real](2026-10-18-dragon-breath.md) | 2026-10-18 |
 | [Recurring film defects: what came back, how often, and how engines stop it](2026-10-18-recurring-film-defects.md) | 2026-10-18 |
