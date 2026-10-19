@@ -10,20 +10,19 @@
 // breathing on a stone wall (its stream and the fireball where it strikes). Each fire is shot
 // from a fixed camera; at the shot `fire.seen` tells each kind's box on the picture, which is
 // the crop measured. Prints one line a fire and hour, ✓ or ✗ on each number, and writes
-// `<out>/sheet.jpg` (the crops, a row a fire, a column an hour) and `<out>/table.json`. Every
-// run takes the GPU through `~/.cache/terra/gpu.queue`. --from measures a folder a run wrote
+// `<out>/sheet.jpg` (the crops, a row a fire, a column an hour) and `<out>/table.json`. A run
+// is small (the yard), so it skips `~/.cache/terra/gpu.queue` and takes one of the game's own
+// shared slots on `gpu.lock` (D319), as every unattended run does. --from measures a folder a run wrote
 // (`<hour>/run.log` and its stills) instead of running. Exits 1 when a fire is out of its
 // class. Node 22.18 or later, ffmpeg, ImageMagick; no dependencies.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { imageMagick } from "../sandbox/client.ts";
 import { type Box, type Held, judge, load, measure, REFERENCES_FILE, references, said } from "./measure.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-const QUEUE = join(homedir(), ".cache/terra/gpu.queue");
 
 /// The hours, on the equinox: noon, the sun just down, and full night.
 export const HOURS: Record<string, string> = { noon: "12", dusk: "18.4", night: "22" };
@@ -36,18 +35,21 @@ type Call = { frame: number; method: string; params?: unknown };
 /// shot on, which of `fire.seen`'s boxes is its crop, and the camera it is shot from.
 export type Fire = { name: string; class: string; frame: number; box: "kept" | "blazes" | "stream" | "ball"; eye: Vec3; at: Vec3 };
 
-// Where things stand, in metres east, up and south of the start; cubes are half a metre.
+// Where things stand, in metres east, up and south of the start; the base's cubes, which are
+// half a metre, for what is built. The hammer builds only within 14 m of the player, who stays
+// at the start (`NEAR_WORK_M`), so the cabin stands 7 m off. The wall, 33 m off, stays a plan;
+// the breath's fireball forms where it strikes it, and with no wall there is none.
 const CAMPFIRE: Vec3 = [-10, 0, 10];
-const CABIN = { min: [20, 0, 20], max: [29, 0, 27] };
+const CABIN = { min: [4, 0, 8], max: [13, 0, 15] };
 const WALL = { min: [60, 0, 20], max: [80, 0, 20] };
 const HOVER: Vec3 = [35, 9, 1];
 const AIM: Vec3 = [35, 1.5, 10];
 
 export const FIRES: Fire[] = [
   { name: "campfire", class: "campfire", frame: 330, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10] },
-  { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [12.25, 3.5, 30], at: [12.25, 3, 12] },
-  { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [21, 5, 5], at: [35, 4.5, 6] },
-  { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [21, 5, 5], at: [35, 4.5, 6] },
+  { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75] },
+  { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6] },
+  { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6] },
 ];
 
 /// The run's calls: the scene set up, then each fire's camera held from a second before its
@@ -56,8 +58,11 @@ export function calls(): Call[] {
   const out: Call[] = [
     { frame: 2, method: "staged.spawn", params: { name: "campfire", model: "models/props/Campfire.glb", at: CAMPFIRE, facing: [CAMPFIRE[0], 0, CAMPFIRE[2] + 5], base: true, burns: [1.5, 0.7, 0.9] } },
     { frame: 4, method: "build.lay", params: { what: "room", min: CABIN.min, max: CABIN.max, kind: "logs", floor: "stone" } },
-    { frame: 6, method: "build.lay", params: { what: "roof", over: [24, 0, 23], kind: "logs", style: "Gable" } },
+    { frame: 6, method: "build.lay", params: { what: "roof", over: [8, 0, 11], kind: "logs", style: "Gable" } },
     { frame: 8, method: "build.lay", params: { what: "wall", min: WALL.min, max: WALL.max, kind: "stone" } },
+    // A plan is only laid; the hammer's steps build it (free and instant on the yard), or the
+    // cabin is a blueprint with nothing to burn.
+    { frame: 9, method: "build.fill", params: { steps: 100000 } },
     { frame: 10, method: "flight.spawn", params: { kind: "Dragon", at: [35, 14, -40], facing: HOVER, base: true } },
     { frame: 12, method: "flight.hover", params: { at: HOVER, facing: AIM, base: true } },
     // The cabin's south wall set alight long before its shot, so its fire has spread.
@@ -74,20 +79,53 @@ export function calls(): Call[] {
 const frames = () => [...new Set(FIRES.map((f) => f.frame))].sort((a, b) => a - b);
 const still = (dir: string, frame: number) => join(dir, `f-${String(frame).padStart(5, "0")}.png`);
 
-/// Runs the scene at an hour into `dir`: its calls, its stills and what it said.
+/// The GPU memory a yard run needs free, in MiB: the shared slots count runs, not their size,
+/// so beside a big town run (7 GB) the yard ran out of memory and drew nothing.
+const ROOM = 3500;
+
+/// Waits until the GPU has `ROOM` free, saying so once; at once where nvidia-smi is missing.
+function waitForRoom() {
+  for (let told = false; ; told = true) {
+    const smi = spawnSync("nvidia-smi", ["--query-gpu=memory.free", "--format=csv,noheader,nounits"], { encoding: "utf8" });
+    const free = Number(smi.stdout?.trim().split("\n")[0]);
+    if (smi.status !== 0 || !(free < ROOM)) return;
+    if (!told) console.log(`fire: waiting for ${ROOM} MiB free on the GPU (${free} free)`);
+    spawnSync("sleep", ["10"]);
+  }
+}
+
+/// Runs the scene at an hour into `dir`, again once if the GPU ran out of memory.
 function run(hour: string, dir: string) {
+  for (let tries = 0; ; tries++) {
+    waitForRoom();
+    runOnce(hour, dir);
+    if (tries > 0 || !readFileSync(join(dir, "run.log"), "utf8").includes("rendering error: Out of Memory")) break;
+    console.log(`fire: the GPU ran out of memory at ${hour}; again`);
+  }
+  if (!existsSync(still(dir, frames().at(-1)!))) throw new Error(`the run at ${hour} made no still at frame ${frames().at(-1)}: see ${join(dir, "run.log")}`);
+}
+
+/// Runs the scene at an hour into `dir`: its calls, its stills and what it said.
+function runOnce(hour: string, dir: string) {
   mkdirSync(dir, { recursive: true });
   const callsFile = join(dir, "calls.jsonl");
   writeFileSync(callsFile, calls().map((c) => JSON.stringify(c)).join("\n") + "\n");
-  const last = frames().at(-1)!;
   const args = [
-    ...[QUEUE, "timeout", "900", resolve(ROOT, "target/release/terra_sandbox"), "--offscreen", "--clean", "--picture", PICTURE],
+    ...["900", resolve(ROOT, "target/release/terra_sandbox"), "--offscreen", "--clean", "--picture", PICTURE],
     ...["--experiment", "play", "--level", "yard", "--free-build", "--mute", "--at", "0,0", "--face", "0,30"],
     ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames().join(",")}`],
   ];
-  const done = spawnSync("flock", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 1 << 28 });
+  const done = spawnSync("timeout", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 1 << 28 });
   writeFileSync(join(dir, "run.log"), `${done.stdout}${done.stderr}`);
-  if (!existsSync(still(dir, last))) throw new Error(`the run at ${hour} made no still at frame ${last}: see ${join(dir, "run.log")}`);
+}
+
+/// Where the play HUD begins, as a share of the picture's height: the hints, bars and action
+/// bar fill the fifth below it, and a crop stops above it.
+const HUD_TOP = 0.78;
+
+/// A crop cut off where the HUD begins.
+export function belowHud(box: Box, height: number): Box {
+  return { ...box, h: Math.max(0, Math.min(box.h, Math.floor(HUD_TOP * height) - box.y)) };
 }
 
 /// What `fire.seen` said on a frame: each kind's box and the picture's size.
@@ -186,7 +224,7 @@ if (import.meta.main) {
         continue;
       }
       const pic = load(file);
-      const box = scaled(seen[fire.box], seen.picture, pic.width, pic.height);
+      const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
       const crop = `${box.w}x${box.h}+${box.x}+${box.y}`;
       const known = classes[fire.class];
       const held = known ? judge(measure(pic, box), known.bands) : [];
