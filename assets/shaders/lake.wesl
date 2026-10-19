@@ -76,6 +76,10 @@ struct Lake {
     // The rings spreading where fish rise (rises.rs): each where it is from `origin`, and
     // when it began by the clock, none when 0.
     rises: array<vec4<f32>, RISES>,
+    // The wakes behind what swims (wakes.rs): each swimmer where it is from `origin` and its
+    // speed, none when 0; and the way it heads, level, and how wide it is.
+    wakes_at: array<vec4<f32>, WAKES>,
+    wakes_way: array<vec4<f32>, WAKES>,
     // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
     over_air: u32,
     // How much of the sky's own dusk colours are drawn over the air, and the glow round the
@@ -88,6 +92,9 @@ struct Lake {
 }
 
 const RISES: u32 = 8u;
+const WAKES: u32 = 8u;
+// The tangent of Kelvin's half angle, 19.47 degrees, at which a wake's arms open (wakes.rs).
+const KELVIN: f32 = 0.3536;
 // How long a ring spreads before it is gone, seconds (rises.rs RING_S).
 const RING_S: f32 = 6.0;
 
@@ -122,6 +129,54 @@ fn rise_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, t: f32, pixe
             * step(x, wide) * fine;
         let magnitude = 0.6 * fading * (-x / wide * hump + 0.6 * crests * hump);
         slope += flat / d * magnitude;
+    }
+    return slope;
+}
+
+// The slopes of the wakes behind what swims (wakes.rs): two arms opening behind each swimmer
+// at Kelvin's angle, a ridge of water along each with fine crests trailing inside the V, a
+// bow wave round its front, all fading over a few body lengths and stronger the faster it
+// goes. The crests too fine for the pixel are left out, the ridges kept.
+fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) -> vec2<f32> {
+    var slope = vec2<f32>(0.0);
+    for (var i = 0u; i < WAKES; i += 1u) {
+        let at = lake.wakes_at[i];
+        if at.w <= 0.0 {
+            continue;
+        }
+        let off = local - at.xyz;
+        let flat = vec2<f32>(dot(off, east), dot(off, north));
+        let heading = lake.wakes_way[i].xyz;
+        var ahead = vec2<f32>(dot(heading, east), dot(heading, north));
+        if length(ahead) < 1e-3 {
+            continue;
+        }
+        ahead = normalize(ahead);
+        let side = vec2<f32>(-ahead.y, ahead.x);
+        let wide = max(lake.wakes_way[i].w, 0.05);
+        // How far behind the swimmer, and how far to one side.
+        let behind = -dot(flat, ahead);
+        let across = dot(flat, side);
+        let reach = wide * 18.0 * clamp(at.w / 0.4, 0.5, 2.0);
+        if behind < -wide * 2.0 || behind > reach {
+            continue;
+        }
+        let strength = clamp(at.w / 0.5, 0.0, 1.5) * (1.0 - smoothstep(reach * 0.4, reach, behind));
+        // Each arm's ridge, across its line, widening as it trails.
+        let x = abs(across) - (max(behind, 0.0) * KELVIN + wide * 0.5);
+        let ridge = 0.03 + 0.04 * max(behind, 0.0);
+        let hump = exp(-x * x / (2.0 * ridge * ridge));
+        let wavelength = 0.08 + 0.05 * at.w;
+        let fine = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.6, pixel);
+        let crests = sin(behind / wavelength * 6.283) * step(x, 0.0) * exp(x / (2.0 * wavelength)) * fine;
+        let normal_out = side * sign(across) + ahead * KELVIN;
+        slope += normal_out * (0.5 * strength * (-x / ridge * hump)) + ahead * (0.25 * strength * crests);
+        // The bow wave round its breast.
+        let d = length(flat);
+        let bow = exp(-(d - wide * 0.6) * (d - wide * 0.6) / (2.0 * 0.03 * 0.03)) * step(0.0, -behind + wide * 0.3);
+        if d > 1e-3 {
+            slope += flat / d * (0.3 * strength * bow);
+        }
     }
     return slope;
 }
@@ -291,6 +346,10 @@ const SSR_FIRST_M: f32 = 0.6;
 const SSR_FIRST_SHARE: f32 = 0.01;
 const SSR_GROWTH: f32 = 1.25;
 const SSR_STEPS: u32 = 36u;
+// How much of the waves' slope bends the ray the shore's reflection is marched along
+// (`on_screen`), and how much a thin water film darkens the ground under it.
+const REFLECTION_BUMP: f32 = 0.3;
+const WET_FILM: f32 = 0.4;
 
 @fragment
 fn fragment(
@@ -331,7 +390,7 @@ fn fragment(
     for (var i = 0u; i < TRAINS; i += 1u) {
         wave_train(&face, lake.trains[i], i < SWELL, bent, pixel, downwind, spread, slopes, t);
     }
-    face.slope += rise_slopes(local, east, north, t, pixel);
+    face.slope += rise_slopes(local, east, north, t, pixel) + wake_slopes(local, east, north, pixel);
     let normal = normalize(up - east * face.slope.x - north * face.slope.y);
     pbr_input.world_normal = normal;
     pbr_input.N = normal;
@@ -417,13 +476,31 @@ fn fragment(
     // What stands on screen along the reflected ray, where the ray finds it there: the shore's
     // trees, the far slopes and peaks as they are drawn; the skyline's picture of them where it
     // leaves the screen.
-    let found = on_screen(world, reflected, in.position.xy, distance);
+    // It is marched along a calmer ray than the sky's: the waves' slopes bent by
+    // REFLECTION_BUMP, as Unreal's and CryEngine's water distort their reflection by a
+    // scaled normal. A pixel of water mirrors many facets at once, and their mirror image is
+    // the shore smeared up and down a little; one ray from the pixel's one facet, bent by its
+    // full slope, swung by twice that slope, which off a far shore at a grazing angle of a
+    // fraction of a degree sent every ray over the treeline into the sky or down into the
+    // water itself: the far woods mirrored a band a fifth of their height, and the near water
+    // broke into rows of dark and pale dashes (lake film r13).
+    let calm = normalize(up + (normal - up) * REFLECTION_BUMP);
+    let found = on_screen(world, reflect(-toward_eye, calm), in.position.xy, distance);
     seen = mix(seen, found.rgb, found.a);
     // The sun's glint off the ripples (waves.wesl `glint`).
     let sun = lights.directional_lights[0];
     let glinting = sun.color.rgb * view.exposure * glint(normal, toward_eye, sun.direction_to_light, face.unseen) * mirror;
     out.color = vec4<f32>(out.color.rgb + (seen * mirror + glinting) * (1.0 - foam), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
-    out.color.a *= edge;
+    // Where it thins to nothing over the ground it covers, that ground is wet, and darker for
+    // it than the dry shore above the waterline: a film over it, darkening what is behind by
+    // WET_FILM and adding nothing, as Unreal's and Frostbite's wetness darkens a surface's
+    // albedo under a water film (wet soil and stone reflect about half to two thirds of their
+    // dry light, Lekner and Dorf 1988). Faded out with the water alone, the shallows round every
+    // shore rock read as a pale rim of dry ground (lake film r13).
+    let covers = out.color.a * edge;
+    let film = WET_FILM * (1.0 - edge) * (1.0 - smoothstep(40.0, 120.0, distance));
+    let alpha = 1.0 - (1.0 - covers) * (1.0 - film);
+    out.color = vec4<f32>(out.color.rgb * covers / max(alpha, 1e-4), alpha);
     return out;
 }
