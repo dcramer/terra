@@ -4,18 +4,20 @@ The commit and push gates scale with the change (D398), so the slow checks (ever
 
 ## Running it
 
-It ships as a container, so the box needs only Docker. On the box, in `tools/ci/` of any copy of the repository:
+On the box, which needs only Docker, over SSH:
 
-1. Write `tools/ci/.env` (git ignores it) with `GH_TOKEN=<token>`: a classic GitHub token with only the `public_repo` scope, which covers the baseline push and the issues. A fine-grained token cannot reach a repository its owner only collaborates on, as dcramer/terra is for all but its owner.
-2. Run `docker compose up -d --build`.
+```bash
+GH_TOKEN=<token> sh -c 'curl -fsSL https://raw.githubusercontent.com/dcramer/terra/main/tools/ci/up.sh | sh'
+```
 
-The container clones the repository into its `work` volume, then watches origin/main every 2 minutes (`TERRA_CI_EVERY`). Nightly takes 20–30 minutes, so each run takes in the commits that landed during the last one, and the bisect names the one that broke a stage.
+The token is a classic GitHub token with only the `public_repo` scope, which covers the baseline push and the issues. A fine-grained token cannot reach a repository its holder only collaborates on.
 
-- `docker compose logs -f` shows it.
-- `docker compose run --rm ci --dry-run` runs once and prints what it would file.
-- It updates itself: when a pull changes `tools/ci`, it exits and the restart policy starts it on the new code. A change to the Dockerfile needs `docker compose up -d --build` again.
+`up.sh` keeps the token in `~/terra-ci/.env`, fetches the container's files there, and starts it. Run the same command without `GH_TOKEN` to update it.
 
-Without Docker, `cargo xtask ci --watch` does the same in a checkout; `cargo xtask ci [--dry-run] [--no-run]` runs once.
+The container clones the repository into a volume of its own, then looks at origin/main every 2 minutes. Nightly takes 20–30 minutes, so each run takes in the commits that landed during the last one, and the bisect names the one that broke a stage. When a pull changes `tools/ci`, it exits and Docker starts it on the new code.
+
+- `docker compose -f ~/terra-ci/compose.yaml logs -f` shows it.
+- `cargo xtask ci --watch` does the same in a checkout without Docker; `cargo xtask ci --dry-run` runs once and prints what it would file.
 
 ## What it files
 
@@ -36,7 +38,7 @@ A passing nightly lowers the baselines and pushes that commit to main (D414). So
 
 - **Hardware:** any machine with Docker; Linux, or Windows with Docker Desktop. 32 GB RAM or more, and about 100 GB of free disk for the volumes: history, checkout, the seed build and nightly's worktree.
 - **No GPU:** nightly needs none. Benchmarks will, with the GPU passed into the container.
-- **Credentials:** the token is the only credential, kept in `.env` on the box and never in the repository. It runs main's code, as anyone with push access can already make it do.
+- **Credentials:** the token is the only one, kept in `~/terra-ci/.env` on the box and never in the repository. It runs main's code, as anyone with push access can already make it do.
 
 ## Next
 
