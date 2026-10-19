@@ -303,7 +303,7 @@ pub struct FoliageExtension {
 /// How many cells of the card atlas a shader can tell the kind of: four by four.
 const CELLS: usize = 16;
 /// How many kinds' autumn colours a shader is told.
-const AUTUMNS: usize = 8;
+const AUTUMNS: usize = 12;
 
 /// What the foliage shader is told of the climate (climate.md, D327): whether there are maps,
 /// how wide the atlas's cells are, which kind's layer of the leaves map each cell's card is

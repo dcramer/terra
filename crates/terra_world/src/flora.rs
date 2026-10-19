@@ -10,7 +10,7 @@
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
 use super::flora_kinds::Cuttable;
-use super::flora_kinds::{Cut, Flora, FloraDef, Grows, MATERIALS, Sway};
+use super::flora_kinds::{Cut, Flora, FloraDef, Grows, MATERIALS, Season, Sway};
 use super::footprint::Footprint;
 use super::grown;
 use super::models::{Part, read_model};
@@ -656,7 +656,12 @@ fn plant(
     tweaks: Res<Tweaks>,
     footprints: Query<(Entity, &Footprint)>,
     ticks: SystemChangeTick,
-    (start, sited): (Res<Start>, Option<Res<crate::start::Sited>>),
+    (start, sited, fields, clock): (
+        Res<Start>,
+        Option<Res<crate::start::Sited>>,
+        Option<Res<crate::climate::ClimateFields>>,
+        Option<Res<crate::daylight::Clock>>,
+    ),
     flora: Res<Flora>,
     (mut obstacles, mut trunks): (ResMut<Obstacles>, ResMut<Trunks>),
     mut meshes: ResMut<Assets<Mesh>>,
@@ -677,6 +682,11 @@ fn plant(
         north: east.cross(up),
     };
     let seed = planet.seed().derive("flora");
+    // What dies back is not there in its season (D419), as the start's climate has it.
+    let season = match (fields, clock) {
+        (Some(fields), Some(clock)) => Season::at(&fields, middle, clock.time()),
+        _ => Season::Unknown,
+    };
 
     // The wind blows in off the water, which is where the sun is.
     let (color, normal) = flora_textures(&assets);
@@ -849,7 +859,7 @@ fn plant(
             return;
         }
         let which = species.fbm(point / 150.0 + 9.0, 2, 2.0, 0.5) + rng.range(-0.12, 0.12);
-        let Some(kind) = flora.choose(Grows::Trees, which, 0.0, 0.0, rng) else {
+        let Some(kind) = flora.choose(Grows::Trees, which, 0.0, 0.0, &season, rng) else {
             return;
         };
         let tall = size(rng, kind);
@@ -896,7 +906,7 @@ fn plant(
         // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         // A few of the bigger ones hold ore; in the grass, most are mossy.
-        let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, rng) else {
+        let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, &season, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
@@ -1016,7 +1026,8 @@ fn plant(
                 return;
             }
             // Some bear berries, the first food to be found.
-            let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
+            let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, &season, rng)
+            else {
                 return;
             };
             let model = pick(rng, &models[kind]);
@@ -1037,7 +1048,8 @@ fn plant(
             if rng.unit() > 0.28 * cover.grass || on_heath(point) {
                 return;
             }
-            let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
+            let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, &season, rng)
+            else {
                 return;
             };
             let model = pick(rng, &models[kind]);
@@ -1063,7 +1075,8 @@ fn plant(
             if cover.grass < 0.5 || on_heath(point) {
                 return;
             }
-            let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
+            let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, &season, rng)
+            else {
                 return;
             };
             let model = pick(rng, &models[kind]);
@@ -1093,7 +1106,7 @@ fn plant(
             if rng.unit() > chance || point.length() < planet.water_near_m(point) + 0.1 {
                 return;
             }
-            let Some(kind) = flora.choose(Grows::Heath, hollow, 0.0, 0.0, rng) else {
+            let Some(kind) = flora.choose(Grows::Heath, hollow, 0.0, 0.0, &season, rng) else {
                 return;
             };
             let model = pick(rng, &models[kind]);

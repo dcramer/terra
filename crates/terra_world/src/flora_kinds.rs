@@ -5,10 +5,13 @@
 //!
 //! The file is read into a registry, `Flora` (`data`).
 
+use super::climate::{ClimateFields, PastCache};
 use super::data;
 use super::grown::Grown;
-use bevy::prelude::{Color, Resource};
+use bevy::prelude::{Color, Resource, Vec3};
 use serde::Deserialize;
+use std::sync::Arc;
+use terra_climate::{LeafYear, Past, WorldTime};
 use terra_gen::Rng;
 
 /// The sorts of thing that can be cut. Each is worked by one family of tool, and some
@@ -120,6 +123,54 @@ fn four() -> u32 {
     4
 }
 
+/// The year where and when things are placed, as what dies back to the ground asks it
+/// (D419): a flower is not there in January, though a tree stands bare. Every placing asks
+/// it the same way, so a place grows the same things on the same date on every machine.
+#[derive(Clone, Debug)]
+pub enum Season {
+    /// No climate is known, as on the yard: everything is up.
+    Unknown,
+    /// The plants' years, and the past and the day's length at a place and moment.
+    At {
+        years: Arc<Vec<LeafYear>>,
+        past: Past,
+        day_hours: f32,
+    },
+}
+
+impl Season {
+    /// The season at a point at a moment, from the climate's fields.
+    pub fn at(fields: &ClimateFields, at: Vec3, time: WorldTime) -> Self {
+        let past = fields.past_at(&mut PastCache::new(1), at, time);
+        let day_hours = fields
+            .fields
+            .daylight(fields.frame.latitude(at), time.day())
+            .day_hours;
+        Season::At {
+            years: fields.years.clone(),
+            past,
+            day_hours,
+        }
+    }
+
+    /// How much of a kind's leaves are up, 0 to 1, by its year's name, at the middle of its
+    /// kind's year: all of them where no season is known or no year has that name.
+    pub fn up(&self, year: &str) -> f32 {
+        let Season::At {
+            years,
+            past,
+            day_hours,
+        } = self
+        else {
+            return 1.0;
+        };
+        years
+            .iter()
+            .find(|kind| kind.kind == year)
+            .map_or(1.0, |kind| kind.leaves(past, *day_hours, 0.0).on)
+    }
+}
+
 /// One kind, as the file has it. The file says what each part means.
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
@@ -151,6 +202,11 @@ pub struct FloraDef {
     size_above: Option<f32>,
     #[serde(default)]
     chance: Option<f32>,
+    /// For what dies back to the ground once its leaves are gone, a herb or a flower: the
+    /// year it keeps (`assets/data/plant_years.ron`), so none grows where that year has it
+    /// gone (D419). A tree or bush stands bare instead, and names none.
+    #[serde(default)]
+    dies_back: Option<String>,
     #[serde(default)]
     pub size: Option<(f32, f32)>,
     #[serde(default)]
@@ -198,15 +254,18 @@ impl Flora {
     }
 
     /// The kind a layer grows, given what is known of the place: the layer's noise there,
-    /// how grassy the ground is, and how big the thing is, where those matter. The layer's
-    /// kinds are tried in the file's order; the first whose conditions hold is chosen,
-    /// rolling for chance last, so the same place grows the same thing every time.
+    /// how grassy the ground is, how big the thing is, where those matter, and the season,
+    /// for what dies back in it. The layer's kinds are tried in the file's order; the first
+    /// whose conditions hold is chosen, rolling for the season and chance last, so the same
+    /// place grows the same thing every time, and in full leaf it rolls nothing for the
+    /// season.
     pub fn choose(
         &self,
         layer: Grows,
         noise: f32,
         grass: f32,
         size: f32,
+        season: &Season,
         rng: &mut Rng,
     ) -> Option<usize> {
         self.0.iter().position(|kind| {
@@ -217,6 +276,10 @@ impl Flora {
                     .grass_above
                     .is_none_or(|grass_above| grass > grass_above)
                 && kind.size_above.is_none_or(|size_above| size > size_above)
+                && kind.dies_back.as_deref().is_none_or(|year| {
+                    let up = season.up(year);
+                    up >= 1.0 || rng.unit() < up
+                })
                 && kind.chance.is_none_or(|chance| rng.unit() < chance)
         })
     }
@@ -302,7 +365,9 @@ mod tests {
         let mut rng = rng();
         for layer in LAYERS {
             assert!(
-                flora.choose(layer, 0.0, 0.0, 0.0, &mut rng).is_some(),
+                flora
+                    .choose(layer, 0.0, 0.0, 0.0, &Season::Unknown, &mut rng)
+                    .is_some(),
                 "nothing in {layer:?}"
             );
             // The last of a layer is what grows otherwise, so it asks for nothing.
@@ -339,6 +404,42 @@ mod tests {
     }
 
     #[test]
+    fn a_january_draw_grows_nothing_that_dies_back_and_a_june_one_does() {
+        let flora = Flora::read();
+        let fields = ClimateFields::for_tests(data::read(crate::climate::YEARS_FILE));
+        for kind in flora.kinds() {
+            if let Some(year) = &kind.dies_back {
+                assert!(
+                    fields.layer(year).is_some(),
+                    "{} dies back by {year}, which plant_years.ron does not have",
+                    kind.name
+                );
+            }
+        }
+        let at = Vec3::new(30.0, 2040.0, -10.0);
+        let draw = |date: &str| {
+            let day = terra_climate::Date::parse(date)
+                .unwrap()
+                .day(&fields.fields.climate().year);
+            let season = Season::at(&fields, at, WorldTime::at(day, 12.0));
+            let mut rng = rng();
+            LAYERS
+                .iter()
+                .flat_map(|&layer| (0..400).map(move |_| layer))
+                .filter_map(|layer| flora.choose(layer, 0.0, 1.0, 1.0, &season, &mut rng))
+                .filter(|&kind| flora.kinds()[kind].dies_back.is_some())
+                .map(|kind| flora.kinds()[kind].name.clone())
+                .collect::<Vec<_>>()
+        };
+        let january = draw("01-10");
+        assert!(january.is_empty(), "in January it grew {january:?}");
+        assert!(
+            draw("06-20").len() > 200,
+            "in June the herbs and flowers grew"
+        );
+    }
+
+    #[test]
     fn a_layer_chooses_the_first_kind_whose_conditions_hold() {
         let flora = fixture(
             r#"
@@ -357,7 +458,7 @@ mod tests {
         let mut rng = rng();
         let mut name = |layer, noise, grass, size| {
             flora
-                .choose(layer, noise, grass, size, &mut rng)
+                .choose(layer, noise, grass, size, &Season::Unknown, &mut rng)
                 .map(|index| flora.kinds()[index].name.as_str())
         };
         // Below and above are strict, and the first that holds wins over a later one.

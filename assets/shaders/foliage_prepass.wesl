@@ -33,7 +33,7 @@ struct FoliageClimate {
     on: u32,
     across: f32,
     layers: array<vec4<i32>, 4>,
-    autumn: array<vec4<f32>, 8>,
+    autumn: array<vec4<f32>, 12>,
 }
 
 struct Wind {

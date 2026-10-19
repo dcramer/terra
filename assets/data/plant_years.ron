@@ -109,6 +109,45 @@
         cards: ["spruce"],
     ),
     (
+        // Herbs of the forest floor: up with the spring's first warmth, yellowing with the
+        // first chill, died back to the ground by late November (D419).
+        kind: "herb",
+        flush: (from: 40.0, over: 100.0),
+        turn: (from: 5.0, over: 60.0),
+        fall: (from: 40.0, over: 100.0),
+        turns_under_hours: 12.5,
+        turns: 1.0,
+        drops: 1.0,
+        autumn: (0.42, 0.34, 0.18),
+        cards: ["herb"],
+    ),
+    (
+        // Daisy, buttercup and campion: in flower from May, faded by October, gone by
+        // early November, none in January (D419).
+        kind: "flowers",
+        flush: (from: 80.0, over: 120.0),
+        turn: (from: 0.0, over: 30.0),
+        fall: (from: 15.0, over: 60.0),
+        turns_under_hours: 12.5,
+        turns: 1.0,
+        drops: 1.0,
+        autumn: (0.45, 0.38, 0.22),
+        cards: ["daisy", "buttercup", "campion"],
+    ),
+    (
+        // Bramble: its leaves dark purple-red with the chill, most gone by midwinter, a few
+        // kept on the canes, as in life (D419). Holly and ivy keep theirs, and have no year.
+        kind: "bramble",
+        flush: (from: 60.0, over: 100.0),
+        turn: (from: 20.0, over: 80.0),
+        fall: (from: 120.0, over: 200.0),
+        turns_under_hours: 12.0,
+        turns: 0.8,
+        drops: 0.85,
+        autumn: (0.32, 0.12, 0.1),
+        cards: ["bramble"],
+    ),
+    (
         // Dwarf birch, and the bilberry among it, on the heath past the trees (terra_land::heath):
         // crimson and rust with the first chill of late summer, before any tree turns, a few
         // leaves left into the first snows; out in leaf as the snow goes. Drawn in the

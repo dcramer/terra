@@ -31,6 +31,8 @@
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
 //            ByTheDoor(east, south, height) for one placed by the base's door
 //   size     its height, in metres, from and to; a rock's comes from its layer
+//   dies_back for a herb or flower, gone to the ground once its leaves are: the year it
+//            keeps (plant_years.ron), so none is placed where that year has it gone (D419)
 //   below, above, grass_above, size_above, chance
 //            when its layer chooses it: the layer tries its kinds in the order here and
 //            takes the first whose noise is below or above so much, whose ground is grassier
@@ -196,6 +198,7 @@
             grown: Rosette((card: "herb", leaves: (4, 6), tilt: (15.0, 40.0), stalk: (0.5, 0.97), tip: (0.5, 0.05))),
             sway: Plant,
             grows: Plants,
+            dies_back: "herb",
             size: (0.3, 0.55),
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
         ),
@@ -205,6 +208,7 @@
             variants: 6,
             sway: Plant,
             grows: Flowers,
+            dies_back: "flowers",
             size: (0.4, 0.62),
         ),
 
