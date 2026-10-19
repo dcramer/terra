@@ -288,7 +288,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 
 | Part | Exists | Missing |
 |---|---|---|
-| Buildings | `terra_build::village`: about 300 buildings a player can tell apart (8 plans, 9 schemes, 3 roofs, 3 widths); the street village (D229), `town` on a grid of plots, `hamlets`; drawn to the horizon (D278); bench scenes `village` and `town300` | A town layout with a square, streets along the slope and plots that follow the ground; chimneys; furnished interiors in villages |
+| Buildings | `terra_town::village`: about 300 buildings a player can tell apart (8 plans, 9 schemes, 3 roofs, 3 widths); the street village (D229), `town` on a grid of plots, `hamlets`; drawn to the horizon (D278); bench scenes `village` and `town300` | A town layout with a square, streets along the slope and plots that follow the ground; chimneys; furnished interiors in villages |
 | People | `play/people.rs` `Person`, `Doing { Bound, Following, Working, Standing, Sitting }`; four villagers who stand or sit; one base body of 73 joints, five templates, garments; 25 clips including walk, jog and sprint (D316), talk, sit, kneel, pick up | Days and schedules; homes and work places; walking a town; looks from a seed; character and animation LOD (characters.md phase 6) |
 | Navigation | Bodies pushed out of each other and out of `Obstacles` (`play/bodies.rs`), a stand-in until collision is designed (D53) | Any path finding or avoidance; no navigation crate supports Bevy 0.20 yet |
 | Animals | Deer and spiders (`assets/data/creatures.ron`), with idle, graze, wander and flee states; simulation by distance (D145) | Domestic animals: models, rigs, clips, pens, following an owner |
@@ -300,7 +300,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 ### (c) Parts and rules
 
 **The layout:**
-- An extension of `terra_build::village`, as Emilien et al. lay villages and Ghost Recon Wildlands adapted them.
+- An extension of `terra_town::village`, as Emilien et al. lay villages and Ghost Recon Wildlands adapted them.
 - A square where the roads meet on the flattest ground. Streets out of it along the contours. Plots divided along each street, the buildings' doors to it. Yards, sheds and pens behind.
 - Packed, as Kingdom Come's Rattay and Kuttenberg are (D330): houses joined wall to wall along streets 4 to 5 m front to front, a passage every few to the yards behind, the square small and closed in by fronts, two storeys near it, the market's stalls in close rows. `cargo xtask town` measures it.
 - A town is a square's shape (long, triangular, a widened street) by its roads and slope, out of the 300 buildings. That makes dozens of towns a player can tell apart, by data in `settlement.ron`.

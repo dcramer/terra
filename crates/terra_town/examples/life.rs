@@ -14,9 +14,9 @@ use glam::Vec2;
 use std::process::ExitCode;
 use std::time::Instant;
 use terra_build::Kind;
-use terra_build::village::Kinds;
 use terra_town::check::Watch;
 use terra_town::town::Mark;
+use terra_town::village::Kinds;
 use terra_town::{Life, Plan, Shows};
 
 const KINDS: Kinds = Kinds {

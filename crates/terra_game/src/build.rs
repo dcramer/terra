@@ -895,7 +895,7 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
         .then_some(kind)
 }
 
-/// The kinds a village is built of (`terra_build::village`): each role's material as the
+/// The kinds a village is built of (`terra_town::village`): each role's material as the
 /// settlement's data names it, and the roof each takes (D290).
 /// Where the player's base stands, its own space placed on the planet, if there is one: for
 /// what is told places in the base's own metres, as a script tells the camera.
@@ -903,7 +903,7 @@ pub(crate) fn base_frame(world: &World) -> Option<Transform> {
     world.get_resource::<Site>().map(|site| site.frame)
 }
 
-pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Palette> {
+pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_town::village::Palette> {
     let assets = kit_assets();
     let read = |file: &str| {
         std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
@@ -915,7 +915,7 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Palette
             .find(|(_, n)| n.as_str() == name)
             .map(|(k, _)| *k)
     };
-    terra_build::village::Palette::read(&read, &named, kits)
+    terra_town::village::Palette::read(&read, &named, kits)
         .map_err(|why| error!("{why}"))
         .ok()
 }

@@ -10,8 +10,8 @@
 
 use glam::Vec2;
 use terra_build::Kind;
-use terra_build::village::Kinds;
 use terra_town::town::{self, ThingKind, Town};
+use terra_town::village::Kinds;
 
 const KINDS: Kinds = Kinds {
     timber: Kind(1),

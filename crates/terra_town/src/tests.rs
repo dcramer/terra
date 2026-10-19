@@ -2,10 +2,10 @@
 
 use crate::check::Watch;
 use crate::town::{ThingKind, town};
+use crate::village::Kinds;
 use crate::{Life, Plan, State};
 use glam::Vec2;
 use terra_build::Kind;
-use terra_build::village::Kinds;
 
 const KINDS: Kinds = Kinds {
     timber: Kind(1),

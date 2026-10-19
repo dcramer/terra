@@ -64,7 +64,6 @@ pub mod save;
 mod shortcuts;
 pub mod support;
 pub mod testing;
-pub mod village;
 mod walk;
 
 #[cfg(test)]

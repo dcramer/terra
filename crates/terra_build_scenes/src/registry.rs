@@ -13,8 +13,8 @@
 use glam::IVec3;
 use std::collections::BTreeMap;
 use terra_build::kit::{Kit, Kits, Pattern};
-use terra_build::village::Palette;
 use terra_build::{Base, BuildOp, Kind};
+use terra_town::village::Palette;
 
 /// What the scenes are built of: the kits in scope, their files' names, and the settlement's
 /// palette where there is one, which the village's buildings are built of.
@@ -421,12 +421,12 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
     // One of each sort of the village's buildings, in the settlement's own materials: the
     // shipped scene the game builds most of.
     if let Some(palette) = &m.village {
-        for building in terra_build::village::sorts(palette) {
+        for building in terra_town::village::sorts(palette) {
             out.push(Scene {
                 name: format!("village: {}", building.name),
                 family: Family::Village,
                 gate: Gate::Push,
-                build: Box::new(move || terra_build::village::standing(&building, palette)),
+                build: Box::new(move || terra_town::village::standing(&building, palette)),
             });
         }
     }

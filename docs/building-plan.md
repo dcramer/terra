@@ -80,7 +80,7 @@ A layout is a pure function of a section of cubes and what reaches it (the whole
 | The ground under a plan | A height per column, in centimetres, sampled when it is laid | 2 bytes a column |
 | A fitted prop | Its kind, its hole, and whether it is open | An operation |
 | A base | A snapshot of its sections, plus the operations since, folded in now and then; older roof sections turned into cubes as read | |
-| A village | A seed and the generator that makes its plan (`terra_build::village`, D229); only what players change is stored (D108) | |
+| A village | A seed and the generator that makes its plan (`terra_town::village`, D229); only what players change is stored (D108) | |
 
 Iteration is always in sorted order, so every machine lays and floods the same way.
 

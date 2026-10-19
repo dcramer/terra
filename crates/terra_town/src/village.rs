@@ -22,10 +22,10 @@
 //! laid out in its own cubes with its door's middle at its origin and its door looking
 //! south (+Z), so the game turns and stands it where it goes.
 
-use crate::roofer::{self, Rectangle, Style};
-use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 use glam::Vec2;
 use std::collections::BTreeSet;
+use terra_build::roofer::{self, Rectangle, Style};
+use terra_build::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 use terra_gen::hash;
 
 /// The kinds a village is built of: its kits', and the roofs over each kind of wall.
@@ -98,7 +98,7 @@ impl Palette {
     pub fn read(
         read: &dyn Fn(&str) -> Result<String, String>,
         named: &dyn Fn(&str) -> Option<Kind>,
-        kits: &crate::kit::Kits,
+        kits: &terra_build::kit::Kits,
     ) -> Result<Palette, String> {
         let text = read(SETTLEMENT)?;
         let settlement: Settlement =
@@ -1075,7 +1075,7 @@ pub fn village(seed: u32, picks: impl Picks + Copy) -> Vec<Building> {
     // Gardens walled in stone behind two houses of the southern row, a gap in each back
     // wall for a gate; each length its own, standing on the ground where it is.
     const EAST: f32 = std::f32::consts::FRAC_PI_2;
-    let long = |metres: f32| (metres / crate::CELL_M).round() as i32;
+    let long = |metres: f32| (metres / terra_build::CELL_M).round() as i32;
     let mut n = 0;
     for (west, east, front, back) in [(-30.5, -19.5, 11.5, 17.5), (19.5, 29.5, 11.5, 16.5)] {
         let gate = (west + east) * 0.5;

@@ -324,7 +324,7 @@ fn an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it() {
     }
 }
 
-// ---- from crates/terra_build/src/village/tests.rs
+// ---- from terra_town's village tests (it draws, which the town cannot)
 
 // Slow, a minute or two: lays and draws one of each sort of the village's buildings.
 #[test]
@@ -360,12 +360,11 @@ fn no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels() {
     }
     let kits = terra_build::kit::Kits(kits);
     let palette =
-        terra_build::village::Palette::read(&read, &|name| names.get(name).copied(), &kits)
-            .unwrap();
+        terra_town::village::Palette::read(&read, &|name| names.get(name).copied(), &kits).unwrap();
     let maps = terra_build_mesh::relief::Maps::default();
     let progress = terra_build_mesh::sections::Progress::Whole;
     terra_gen::par::map(
-        &terra_build::village::each_sort(&palette),
+        &terra_town::village::each_sort(&palette),
         |(building, base)| {
             let whole = terra_build_mesh::sections::Whole::lay(base, &kits);
             let mut meshes = Vec::new();

@@ -13,8 +13,8 @@ serde.workspace = true
 # The hash mixers every crate shares (terra_gen::hash).
 terra_gen.workspace = true
 ron.workspace = true
-# What a town is built of and how: its buildings (terra_build::village), their parts,
-# kits and shortcuts, and the burg its walls are of.
+# What a town is built of and how: its buildings' parts, kits and shortcuts, and the
+# burg its walls are of; the buildings themselves are `village` here (D407).
 terra_build.workspace = true
 
 [lints]

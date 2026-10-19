@@ -1,7 +1,7 @@
 //! Settlements, laid out and lived in (D407): a town from its seed and its ground, [`town`],
 //! and people's days in it (docs/demos.md, a living town; D324), the same on every machine
-//! and on a server with no window (D28, D52). A town's buildings are building's own
-//! (`terra_build::village`), put up by the same rules as a player's.
+//! and on a server with no window (D28, D52). A town's buildings are [`village`]'s,
+//! put up by building's rules (`terra_build`) as a player's are.
 //!
 //! - **What a day is made of** is data, [`plan`]: the things of a town and the places round
 //!   each where something is done (smart objects, as The Sims' objects advertise and The
@@ -24,6 +24,7 @@ mod life;
 pub mod orca;
 pub mod plan;
 pub mod town;
+pub mod village;
 
 pub mod check;
 

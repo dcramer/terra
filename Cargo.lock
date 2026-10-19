@@ -5837,6 +5837,7 @@ dependencies = [
  "serde",
  "terra_build",
  "terra_gen",
+ "terra_town",
  "zune-core",
  "zune-jpeg",
 ]
@@ -5851,6 +5852,7 @@ dependencies = [
  "terra_build",
  "terra_build_mesh",
  "terra_gen",
+ "terra_town",
  "zune-core",
  "zune-jpeg",
 ]

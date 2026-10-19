@@ -38,7 +38,7 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ),
     (
         "assets/data/settlement.ron",
-        &["terra_build", "terra_build_scenes"],
+        &["terra_town", "terra_build_mesh", "terra_build_scenes"],
     ),
     (
         "assets/materials/",

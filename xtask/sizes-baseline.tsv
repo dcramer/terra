@@ -51,8 +51,8 @@ crates/terra_build_mesh/src/surface/slots.rs	-	1701
 crates/terra_build_mesh/src/surface/slots.rs	face	265
 crates/terra_build_mesh/src/surface/slots.rs	of	159
 crates/terra_build_mesh/src/timber/shapes.rs	round	174
-crates/terra_build/src/village.rs	-	1293
-crates/terra_build/src/village.rs	village	197
+crates/terra_town/src/village.rs	-	1293
+crates/terra_town/src/village.rs	village	197
 crates/terra_build/tests/decks.rs	check	231
 crates/terra_build/tests/rules.rs	-	1029
 crates/terra_game/src/appearance.rs	-	1029

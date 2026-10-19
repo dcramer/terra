@@ -3,8 +3,9 @@
 //! is a fixed set of operations in the kinds it is given, Bevy-free so tests and tools build
 //! it headless. Building's fixtures are a crate over the rules, the layout, the drawing and
 //! the settlements (D407), so the checks that need all of them live here; the example cabin,
-//! the bench village and the junctions, built from the rules alone, stay in `terra_build`,
-//! whose own tests lay them, and the castle, the burg and the village are `terra_town`'s.
+//! the bench village, the castle, the burg and the junctions, built from the rules alone,
+//! stay in `terra_build`, whose own tests lay them, and the village's buildings are
+//! `terra_town`'s.
 //!
 //! - [`sheet`]: the kit sheet's rows and a material's preview;
 //! - [`qa_cabin`]: the QA cabin each material is filmed and checked on;

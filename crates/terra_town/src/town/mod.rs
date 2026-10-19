@@ -30,9 +30,9 @@
 //! joined where nothing built is in the way. It needs no navmesh: the layout knows every
 //! street.
 
+use crate::village::{self, Building, Kinds, Picks, Plan, Roof, Scheme};
 use glam::Vec2;
 use std::collections::BTreeSet;
-use terra_build::village::{self, Building, Kinds, Picks, Plan, Roof, Scheme};
 use terra_build::{Base, CELL_M, STOREY_CUBES};
 use terra_gen::hash;
 

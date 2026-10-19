@@ -4,7 +4,7 @@
 //! they know. Bring the smith home to your claim and the elder says so.
 //!
 //! Everything in it is built from the same parts as the player's things (D108): each
-//! building is laid out from the village's seed by `terra_build::village`, a street of
+//! building is laid out from the village's seed by `terra_town::village`, a street of
 //! houses of every kind of construction, a shed, a lookout and garden walls, and put up by
 //! the same shortcuts as a player's rooms; the well and stall are catalogue items, placed
 //! as a player places one. They are the villagers', not the player's. What grows keeps out
@@ -124,7 +124,7 @@ pub fn plugin(app: &mut App) {
 const STREET_M: (f32, f32) = (42.0, 5.0);
 
 /// Once the lair is chosen, sets the village down somewhere else, dry and level enough,
-/// and builds it from its seed (`terra_build::village`, D108): each building put up by the
+/// and builds it from its seed (`terra_town::village`, D108): each building put up by the
 /// same shortcuts as the player's, stood on the ground where it goes, its door to the
 /// street.
 #[allow(clippy::too_many_arguments)]
@@ -147,7 +147,7 @@ fn found(
         return;
     };
     let seed = planet.seed().derive("village").0 as u32;
-    let buildings = terra_build::village::village(seed, &kinds);
+    let buildings = terra_town::village::village(seed, &kinds);
     let Some((middle, east)) = site_for(&planet, &start, lair.0, &buildings) else {
         warn!("No dry ground for the village.");
         return;
@@ -327,7 +327,7 @@ fn site_for(
     planet: &Planet,
     start: &Start,
     lair: Vec3,
-    buildings: &[terra_build::village::Building],
+    buildings: &[terra_town::village::Building],
 ) -> Option<(Vec3, Vec3)> {
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.5;
     let samples = reaches(buildings);
@@ -371,7 +371,7 @@ fn site_for(
 
 /// Where the village reaches, in its own metres east and south: along the street, and at
 /// each building's door, a few metres behind it and its corners.
-fn reaches(buildings: &[terra_build::village::Building]) -> Vec<[f32; 2]> {
+fn reaches(buildings: &[terra_town::village::Building]) -> Vec<[f32; 2]> {
     let mut samples: Vec<[f32; 2]> = (-5..=5).map(|i| [i as f32 * 8.0, 0.0]).collect();
     for building in buildings {
         let [e, s] = building.at;

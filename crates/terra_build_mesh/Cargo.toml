@@ -22,6 +22,8 @@ zune-core.workspace = true
 # The tests and the kit checker read kits, items and textures as RON.
 ron.workspace = true
 serde.workspace = true
+# A sections test lays a town's buildings (terra_town::village; D407).
+terra_town.workspace = true
 
 [lints]
 workspace = true

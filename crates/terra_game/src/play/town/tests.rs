@@ -14,7 +14,7 @@ fn a_held_clock_leaves_the_day_going_at_its_pace() {
 }
 
 use super::*;
-use terra_build::village::{Kinds, Plan, Scheme};
+use terra_town::village::{Kinds, Plan, Scheme};
 
 #[test]
 fn a_meadows_drifts_vary_smoothly_over_its_whole_range() {

@@ -8,7 +8,7 @@
 //! Laying it also times operations on each house, as a player's are applied and checked,
 //! and says how long they took.
 //!
-//! The scale scenes lay theirs here too, from `terra_build::village` and
+//! The scale scenes lay theirs here too, from `terra_town::village` and
 //! `terra_build::castle`: with `--town N` a town of N buildings on a grid of streets
 //! north of the start, `--castle` one base of a castle north of it, and `--far N` N
 //! buildings in hamlets spread round the start out to two kilometres.
@@ -22,8 +22,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::{Context, Op};
-use terra_build::village::Building;
 use terra_build::{Base, Rules};
+use terra_town::village::Building;
 
 /// How many buildings to a row, and how far apart, in metres.
 const PER_ROW: usize = 10;
@@ -188,19 +188,19 @@ pub(super) fn lay_scale(
     let started = Instant::now();
     let mut buildings: Vec<(Building, [f32; 2])> = Vec::new();
     if let Some(count) = options.town {
-        let town = terra_build::village::town(7, count, &kinds);
+        let town = terra_town::village::town(7, count, &kinds);
         buildings.extend(town.into_iter().map(|b| (b, [0.0, -TOWN_NORTH_M])));
     }
     if let Some(count) = options.far {
-        let spread = terra_build::village::hamlets(7, count, FAR_M, &kinds);
+        let spread = terra_town::village::hamlets(7, count, FAR_M, &kinds);
         buildings.extend(spread.into_iter().map(|b| (b, [0.0, 0.0])));
     }
     if options.castle {
         buildings.push((
             Building {
                 name: "castle".to_string(),
-                plan: terra_build::village::Plan::Rectangle,
-                scheme: terra_build::village::Scheme::Masonry,
+                plan: terra_town::village::Plan::Rectangle,
+                scheme: terra_town::village::Scheme::Masonry,
                 at: [0.0, 0.0],
                 facing: 0.0,
                 ops: {
