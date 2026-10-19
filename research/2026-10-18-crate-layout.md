@@ -179,6 +179,8 @@ At f0062671, the world off building (steps 2 and 3 on main), on the same Mac und
 
 No building probe compiles the world any more (0 s, from 11 to 22 s), and a building change no longer tests it. What is left of a building rebuild is the game, which names building throughout until it is cut (step 4 onward), so the wall time falls only where the world was on the critical path (the rules, 58 to 38 s). Building now stands on `terra_core`, so a core change compiles building too (8 s), which it did not before. The game's own seconds wander with the load (19 to 35 s for a building probe), more than the cut moves them.
 
+**After step 4** (f3c257ef, `terra_town`; load 11 to 13, so lower than above for the load alone): a town (`terra_town/src/town/streets.rs`) 9 s, game 5, sandbox 2, and no longer building (0 s, from 9); building's rules (`cubes.rs`) 9 s, game 4, sandbox 2, build 2, the town under 1 s.
+
 ## How shipped projects do it
 
 Read at their sources on 2026-10-18: Veloren master at c1e20929 (its manifests and `cargo metadata`), Bevy main at 85503941 (0.20.0-dev; 0.20.0 the latest release), Cargo master at 3022244f; line counts ours, with tests.
