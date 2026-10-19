@@ -33,8 +33,8 @@
     "Idle": { "kind": "idle", "seconds": 4.0, "tail": 2 },
     "Walk": { "kind": "gait", "cycle": 0.6, "stride": 0.2, "lift": 0.06, "duty": 0.5, "bob": 0.01, "flex": 6,
               "phases": { "Hind.L": 0.0, "Hind.R": 0.05, "Fore.L": 0.45, "Fore.R": 0.6 }, "tail": 3 },
-    "Run": { "kind": "gait", "cycle": 0.375, "stride": 0.4, "lift": 0.1, "duty": 0.38, "bob": 0.04, "flex": 18, "fold": 70, "ears": 25,
-             "phases": { "Hind.L": 0.0, "Hind.R": 0.04, "Fore.L": 0.5, "Fore.R": 0.6 }, "tail": 6 },
+    "Run": { "kind": "gait", "gait": "half-bound", "speed": 11.0, "lift": 0.1, "bob": 0.03, "crouch": 0.03, "peel": 50,
+             "flex": 20, "fold": 75, "ears": 30, "tail": 6 },
     "Eat": { "kind": "graze", "seconds": 3.0, "crouch": 0.1, "root": 5, "spine": 15, "neck": 55, "head": 25 },
     "Death": { "kind": "death", "seconds": 1.0 }
   }

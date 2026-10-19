@@ -15,7 +15,8 @@ pub enum Pace {
     /// Put up a while ago and crossing someone's way, unhurried.
     Calm,
     /// Moving off at a walk from someone come within the distance its kind flees at, a duck
-    /// paddling and a heron stalking away, before they come close (`BOLTS_WITHIN`).
+    /// paddling and a heron stalking away, before they come close (`BOLTS_WITHIN`); a kind
+    /// that trots trots off, as deer and foxes do from a walker still some way off.
     Wary,
     /// Startled by someone coming.
     Startled,
@@ -66,7 +67,10 @@ impl Pace {
     pub fn runs_mps(self, about: &SpeciesDef) -> f32 {
         let wanted = match self {
             Pace::Calm => (about.walk_mps * CALM_WALK).max(about.run_mps.min(CALM_LEAST_MPS)),
-            Pace::Wary => about.walk_mps * WARY_WALK,
+            Pace::Wary => match &about.clips.trot {
+                Some((_, trot)) => *trot,
+                None => about.walk_mps * WARY_WALK,
+            },
             Pace::Startled => about.run_mps * STARTLED_RUN,
             Pace::Flat => about.run_mps,
         }
@@ -94,13 +98,31 @@ impl Pace {
     }
 }
 
-/// Its gaits on foot, slowest first: the ground speed each one's clip covers at its own rate
-/// (`paces`), walk then run. A trot or a canter would be one more clip and pace here.
-fn gaits(about: &SpeciesDef) -> Option<[f32; 2]> {
-    about
+/// Which of its gaits one goes at on foot.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Gait {
+    Walk,
+    /// Between its walk and its run, for a kind that trots.
+    Trot,
+    Run,
+}
+
+/// Its gaits on foot, slowest first, with the ground speed each one's clip covers at its own
+/// rate (`paces`): walk, a trot if it trots, run. A canter would be one more clip and pace.
+fn gaits(about: &SpeciesDef) -> Option<impl Iterator<Item = (Gait, f32)>> {
+    let (walk, run) = about.clips.paces?;
+    let trot = about
         .clips
-        .paces
-        .map(|(walk, run)| [walk.max(0.05), run.max(0.05)])
+        .trot
+        .as_ref()
+        .map(|(_, pace)| (Gait::Trot, *pace));
+    Some(
+        [(Gait::Walk, walk)]
+            .into_iter()
+            .chain(trot)
+            .chain([(Gait::Run, run)])
+            .map(|(gait, pace)| (gait, pace.max(0.05))),
+    )
 }
 
 /// How fast one of a kind goes on foot when it would go `wanted`: as fast as that while some
@@ -112,7 +134,7 @@ pub fn keeps_to(wanted: f32, about: &SpeciesDef) -> f32 {
         return wanted;
     };
     let mut best = f32::NAN;
-    for (i, pace) in gaits.into_iter().enumerate() {
+    for (i, (_, pace)) in gaits.enumerate() {
         let least = if i == 0 { 0.0 } else { pace * RATE.0 };
         let fits = wanted.clamp(least, pace * RATE.1);
         if best.is_nan() || (fits - wanted).abs() < (best - wanted).abs() {
@@ -122,17 +144,23 @@ pub fn keeps_to(wanted: f32, about: &SpeciesDef) -> f32 {
     best
 }
 
-/// Which clip shows one going so fast on foot, whether its walk (else its run), and how fast
-/// it plays: the slowest gait that keeps up within its rates, as fast as it goes over that
-/// clip's own pace, so its feet keep to the ground; a speed come to by `keeps_to` always
-/// plays within `RATE`.
-pub fn on_foot(speed: f32, about: &SpeciesDef) -> (bool, f32) {
-    let Some([walk, run]) = gaits(about) else {
-        return (speed <= about.walk_mps * RATE.1, 1.0);
+/// Which gait shows one going so fast on foot, and how fast its clip plays: the slowest gait
+/// that keeps up within its rates, its run past them all, as fast as it goes over that clip's
+/// own pace, so its feet keep to the ground; a speed come to by `keeps_to` always plays
+/// within `RATE`.
+pub fn on_foot(speed: f32, about: &SpeciesDef) -> (Gait, f32) {
+    let Some(gaits) = gaits(about) else {
+        let walks = speed <= about.walk_mps * RATE.1;
+        return (if walks { Gait::Walk } else { Gait::Run }, 1.0);
     };
-    let walks = speed <= walk * RATE.1;
-    let pace = if walks { walk } else { run };
-    (walks, (speed / pace).clamp(SLOWEST_RATE, RATE.1))
+    let mut on = (Gait::Run, 1.0);
+    for (gait, pace) in gaits {
+        on = (gait, pace);
+        if speed <= pace * RATE.1 {
+            break;
+        }
+    }
+    (on.0, (speed / on.1).clamp(SLOWEST_RATE, RATE.1))
 }
 
 /// How often an animal startled ahead of a player coming on dashes across their way to the
@@ -215,26 +243,32 @@ mod tests {
     }
 
     #[test]
-    fn a_crossing_stag_walks_with_a_stags_beat_and_startled_gallops_short_of_flat_out() {
+    fn a_stag_walks_with_a_stags_beat_trots_off_wary_and_startled_gallops_short_of_flat_out() {
         let bestiary = crate::play::species::Bestiary::read(&Default::default());
         let stag = bestiary.get(bestiary.named("Red deer stag").unwrap());
         let calm = Pace::Calm.runs_mps(stag);
-        let (walks, rate) = on_foot(calm, stag);
+        let (gait, rate) = on_foot(calm, stag);
         assert!(
-            walks && rate > 1.0 && rate <= RATE.1 + 1e-4,
-            "a brisk walk, its legs no quicker than its clip allows: {rate}"
+            gait == Gait::Walk && rate > 1.0 && rate <= RATE.1 + 1e-4,
+            "a brisk walk, its legs no quicker than its clip allows: {gait:?} {rate}"
         );
         assert!(calm > stag.walk_mps, "brisker than its stroll: {calm}");
-        let startled = Pace::Startled.runs_mps(stag);
-        let (walks, rate) = on_foot(startled, stag);
+        let wary = Pace::Wary.runs_mps(stag);
+        let (gait, rate) = on_foot(wary, stag);
         assert!(
-            !walks && rate < 0.9,
-            "a gallop slower than its clip's: {rate}"
+            gait == Gait::Trot && (rate - 1.0).abs() < 0.01 && wary > calm,
+            "trots off, its trot's own: {gait:?} {rate} at {wary}"
+        );
+        let startled = Pace::Startled.runs_mps(stag);
+        let (gait, rate) = on_foot(startled, stag);
+        assert!(
+            gait == Gait::Run && rate < 0.9 && startled > wary,
+            "a gallop slower than its clip's: {gait:?} {rate}"
         );
         assert!(startled < Pace::Flat.runs_mps(stag));
-        let (walks, rate) = on_foot(stag.run_mps, stag);
+        let (gait, rate) = on_foot(stag.run_mps, stag);
         assert!(
-            !walks && (rate - 1.0).abs() < 0.01,
+            gait == Gait::Run && (rate - 1.0).abs() < 0.01,
             "flat out, its clip's own: {rate}"
         );
     }
@@ -249,13 +283,18 @@ mod tests {
             let Some((walk, run)) = about.clips.paces else {
                 continue;
             };
+            let trot = about.clips.trot.as_ref().map(|(_, pace)| *pace);
             let speeds = paces
                 .iter()
                 .map(|pace| pace.runs_mps(about))
                 .chain([about.walk_mps, about.run_mps].map(|mps| keeps_to(mps, about)));
             for speed in speeds {
-                let (walks, rate) = on_foot(speed, about);
-                let pace = if walks { walk } else { run };
+                let (gait, rate) = on_foot(speed, about);
+                let pace = match gait {
+                    Gait::Walk => walk,
+                    Gait::Trot => trot.expect("a trot only for a kind that trots"),
+                    Gait::Run => run,
+                };
                 assert!(
                     rate <= RATE.1 + 1e-4,
                     "{}: {speed} m/s plays its clip at {rate}",
@@ -268,10 +307,10 @@ mod tests {
                     about.name,
                     pace * rate
                 );
-                if !walks {
+                if gait != Gait::Walk {
                     assert!(
                         rate >= RATE.0 - 1e-4,
-                        "{}: a crawling run, {rate}",
+                        "{}: a crawling {gait:?}, {rate}",
                         about.name
                     );
                 }
@@ -279,5 +318,25 @@ mod tests {
             }
         }
         assert!(checked > 40, "the bestiary's paced kinds: {checked}");
+    }
+
+    #[test]
+    fn every_runner_runs_flat_out_as_fast_as_its_kind_goes() {
+        // Each run clip is made for its kind's speed (tools/creatures/animal.py's gaits), so no
+        // kind is held below its `run_mps` by a stride too short for it (D424).
+        let bestiary = crate::play::species::Bestiary::read(&Default::default());
+        for kind in bestiary.all() {
+            let about = bestiary.get(kind);
+            if about.clips.paces.is_none() {
+                continue;
+            }
+            let flat = Pace::Flat.runs_mps(about);
+            assert!(
+                (flat - about.run_mps).abs() < 1e-3 * about.run_mps.max(1.0),
+                "{} runs at {flat} m/s, not its {}",
+                about.name,
+                about.run_mps
+            );
+        }
     }
 }

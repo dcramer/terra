@@ -222,6 +222,8 @@ impl Kinds {
 struct Clips {
     idle: AnimationNodeIndex,
     walk: AnimationNodeIndex,
+    /// Its trot, or its run for a kind that does not trot.
+    trot: AnimationNodeIndex,
     run: AnimationNodeIndex,
     eat: AnimationNodeIndex,
     attack: AnimationNodeIndex,
@@ -433,6 +435,7 @@ fn animated(
             &about.attack,
             &about.death,
             about.fly.as_ref().unwrap_or(&about.run),
+            about.trot.as_ref().map_or(&about.run, |(trot, _)| trot),
         ];
         let Some(clips) = names
             .iter()
@@ -455,6 +458,7 @@ fn animated(
                 attack: nodes[4],
                 death: nodes[5],
                 fly: nodes[6],
+                trot: nodes[7],
             },
         ));
     }
@@ -813,8 +817,13 @@ fn animate(
                 } else {
                     gait::keeps_to(about.run_mps, about)
                 };
-                let (walks, rate) = gait::on_foot(speed, about);
-                (if walks { clips.walk } else { clips.run }, rate)
+                let (gait, rate) = gait::on_foot(speed, about);
+                let clip = match gait {
+                    gait::Gait::Walk => clips.walk,
+                    gait::Gait::Trot => clips.trot,
+                    gait::Gait::Run => clips.run,
+                };
+                (clip, rate)
             }
             State::Climb { .. } => (clips.run, 1.0),
             State::Fly { .. } => (clips.fly, 1.0),

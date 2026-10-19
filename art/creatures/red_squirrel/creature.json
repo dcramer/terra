@@ -37,8 +37,8 @@
     "Idle": { "kind": "idle", "seconds": 4.0 },
     "Walk": { "kind": "gait", "cycle": 0.5, "stride": 0.16, "lift": 0.05, "duty": 0.6, "bob": 0.008,
               "phases": { "Hind.L": 0.0, "Fore.L": 0.25, "Hind.R": 0.5, "Fore.R": 0.75 }, "tail": 4 },
-    "Run": { "kind": "gait", "cycle": 0.36, "stride": 0.55, "lift": 0.09, "duty": 0.38, "bob": 0.03, "flex": 16, "fold": 70,
-             "phases": { "Hind.L": 0.0, "Hind.R": 0.04, "Fore.L": 0.5, "Fore.R": 0.55 }, "tail": 8 },
+    "Run": { "kind": "gait", "gait": "bound", "speed": 5.0, "cycle": 0.15, "fore": 0.7, "lift": 0.09, "bob": 0.03, "crouch": 0.03, "peel": 50,
+             "flex": 18, "fold": 75, "tail": 8 },
     "Eat": { "kind": "sit", "seconds": 3.0, "lean": 58, "drop": 0.05 },
     "Death": { "kind": "death", "seconds": 1.0 }
   }

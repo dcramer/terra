@@ -32,7 +32,7 @@ moments = int(option("--moments", "5"))
 side = float(option("--side", "90"))
 look.reset()
 scene = bpy.context.scene
-scene.render.fps = 24
+scene.render.fps = 60  # as animal.py samples its clips
 look.stage()
 if cpu:
     scene.render.engine = "CYCLES"

@@ -33,7 +33,8 @@ from mathutils import Matrix, Quaternion, Vector
 
 import look
 
-FPS = 24
+# Sampled 60 times a second, as the game draws: a squirrel bounds 8 strides a second.
+FPS = 60
 argv = sys.argv[sys.argv.index("--") + 1:]
 NAME = argv[0]
 HOME = os.path.join(look.ART, "creatures", NAME)
@@ -512,44 +513,116 @@ def clip_idle(name, c):
     finish(name, act, frames)
 
 
+# --- Gaits ----------------------------------------------------------------------------------
+# Each gait's footfalls: when each foot lands, as a share of the stride after the left hind's,
+# and the share of the stride each foot is down (its duty factor) at the speeds it is used for.
+#   walk        lateral sequence, a foot a quarter apart (Muybridge, Animals in Motion, 1899:
+#               the walking horse, dog and deer; Hildebrand 1965, Science 150:701).
+#   trot        diagonal pairs together, a short suspension between the pairs at a running
+#               trot (Muybridge's trotting horse and dog), each foot down 0.4 of the stride
+#               (Alexander & Jayes 1983, J. Zool. 201:135, at a Froude number about 1).
+#   gallop      rotary, as canids and deer gallop (Hildebrand 1977, J. Mammal. 58:131): left
+#               hind, right hind, right fore, left fore, an extended suspension after the hinds
+#               push off and a gathered one after the fores (Muybridge's greyhound), each foot
+#               down about a fifth of the stride at speed (Alexander & Jayes 1983).
+#   half-bound  the hares': the hinds nearly together, the fores apart (Hildebrand 1977;
+#               Gambaryan, How Mammals Run, 1974), the long stretched flight after the hinds.
+#   bound       the squirrels': the hinds together and the fores together (Gambaryan 1974),
+#               the back flexing with each pair.
+GAITS = {
+    "walk": {"duty": 0.62, "phases": {"Hind.L": 0.0, "Fore.L": 0.25, "Hind.R": 0.5, "Fore.R": 0.75}},
+    "trot": {"duty": 0.4, "phases": {"Hind.L": 0.0, "Fore.R": 0.02, "Hind.R": 0.5, "Fore.L": 0.52}},
+    "gallop": {"duty": 0.2, "phases": {"Hind.L": 0.0, "Hind.R": 0.1, "Fore.R": 0.44, "Fore.L": 0.54}},
+    "half-bound": {"duty": 0.2, "phases": {"Hind.L": 0.0, "Hind.R": 0.03, "Fore.L": 0.55, "Fore.R": 0.66}},
+    "bound": {"duty": 0.24, "phases": {"Hind.L": 0.0, "Hind.R": 0.03, "Fore.L": 0.52, "Fore.R": 0.56}},
+}
+G = 9.81
+
+
+def gait_of(c):
+    """A gait clip's cycle in seconds, how far each foot sweeps back while down in metres, its
+    duty factor and footfalls: as made (`cycle`, `stride` in the model's units, `duty`,
+    `phases`), or from its gait (`gait`) and the speed it goes (`speed`, m/s). Then its stride
+    is a real animal's at that speed: Alexander's relative stride length, 2.3 (v^2/gh)^0.3 hip
+    heights (Alexander 1976, Nature 261:129; Alexander & Jayes 1983), measured over mammals
+    from mice to horses, so a fox at 11 m/s goes 2.4 m a stride, 4.5 strides a second, its
+    cadence quickening little with speed as Heglund, Taylor & McMahon found (1974, Science
+    186:1112); a foot down for its duty covers speed x duty x cycle. `cycle` given with `gait`
+    sets the cadence instead."""
+    if "gait" not in c:
+        return c["cycle"], c["stride"] * SCALE, c["duty"], c["phases"]
+    g = GAITS[c["gait"]]
+    duty, v = c.get("duty", g["duty"]), c["speed"]
+    hip = sum(HEAD[LEGS[leg][0]].z for leg in LEGS) / len(LEGS)
+    cycle = c.get("cycle", 2.3 * hip * (v * v / (G * hip)) ** 0.3 / v)
+    cycle = max(round(cycle * FPS), 6) / FPS
+    return cycle, v * duty * cycle, duty, c.get("phases", g["phases"])
+
+
+def airborne(t, duties, phases, cycle):
+    """How high the body is thrown over a suspension at this moment of the stride, metres: with
+    no foot down it flies as anything thrown does, g/2 (t - lift-off)(landing - t)."""
+    def down(u):
+        return any((u - phases.get(leg, 0.0)) % 1.0 < duties[leg] for leg in LEGS)
+    if down(t):
+        return 0.0
+    step = 1.0 / 400
+    a = b = t
+    while not down(a - step) and t - a < 1:
+        a -= step
+    while not down(b + step) and b - t < 1:
+        b += step
+    return G / 2 * (t - a) * (b - t) * cycle * cycle
+
+
 def clip_gait(name, c):
-    """Walking, trotting, bounding or hopping in place: each foot on the ground for `duty` of the
-    cycle, sliding back at the pace, then lifted and swung ahead; `phases` say when each leg
-    lands. `flex` arches and stretches the back twice a stride, as a bound does."""
-    frames = round(c["cycle"] * FPS)
-    stride, lift, duty = c["stride"] * SCALE, c["lift"] * SCALE, c["duty"]
+    """Walking, trotting, galloping, bounding or hopping in place: each foot on the ground for
+    `duty` of the cycle, sliding back at the pace, then lifted and swung ahead; `phases` say when
+    each leg lands (`gait_of`). `flex` arches and stretches the back once a stride, as a gallop
+    and a bound do; `crouch` carries the body so much lower, in the model's units, as a runner
+    goes low to reach further; over a suspension the body flies (`airborne`). `fore` is the
+    fore feet's time down over the hinds', as a hare's short fores are down for less of its
+    bound and sweep less ground at the same speed."""
+    cycle, stride, duty, phases = gait_of(c)
+    duties = {leg: duty * (c.get("fore", 1.0) if leg.startswith("Fore") else 1.0) for leg in LEGS}
+    frames = round(cycle * FPS)
+    lift = c["lift"] * SCALE
     fold = c.get("fold", 45)
+    crouch = c.get("crouch", 0.0) * SCALE
     act = new_clip(name)
-    worst = 0.0
+    worst, before = {}, clamped[0]
     for f in range(1, frames + 2):
         t = (f - 1) / frames
         legs = {}
         for leg in LEGS:
-            p = (t - c["phases"].get(leg, 0.0)) % 1.0
+            p = (t - phases.get(leg, 0.0)) % 1.0
             base = CONTACT[leg].copy()
-            if p < duty:
-                u = p / duty
-                y = -stride / 2 + stride * u
+            d = duties[leg]
+            sweep = stride * d / duty
+            if p < d:
+                u = p / d
+                y = -sweep / 2 + sweep * u
                 z = 0.0
                 ang = c.get("peel", 25) * smooth(0.55, 1.0, u)
             else:
-                v = (p - duty) / (1 - duty)
+                v = (p - d) / (1 - d)
                 e = 0.5 - 0.5 * math.cos(math.pi * v)
-                y = stride / 2 - stride * e
+                y = sweep / 2 - sweep * e
                 z = lift * math.sin(math.pi * v)
                 ang = fold * math.sin(math.pi * min(v * 1.3, 1.0)) + c.get("peel", 25) * (1 - v) ** 3
             legs[leg] = (base + Vector((0, y, z)), q(X, ang))
         turn = {}
         flex = c.get("flex", 0.0) * math.sin(2 * math.pi * t)
         bob = c.get("bob", 0.0) * SCALE
+        air = airborne(t, duties, phases, cycle) - crouch
         if c.get("flex"):
-            # A bound: the back arches as the hind feet come under, stretches as they push.
+            # The back arches as the hind feet come under, stretches as they push.
             for b in SPINE:
                 turn[b] = q(X, -flex / max(len(SPINE), 1))
-            root = Vector((0, 0, bob * math.sin(2 * math.pi * (t - 0.15))))
+            root = Vector((0, 0, bob * math.sin(2 * math.pi * (t - 0.15)) + air))
             turn[ORDER[0]] = q(X, flex * 0.4)
         else:
-            root = Vector((0, 0, -bob * math.cos(4 * math.pi * t)))
+            root = Vector((0, 0, -bob * math.cos(4 * math.pi * t) + air))
             turn[ORDER[0]] = q(Y, c.get("roll", 2.0) * math.sin(2 * math.pi * t))
         # The head held steadier than the body, nodding with the step.
         nod = c.get("nod", 3.0) * math.sin(4 * math.pi * t)
@@ -565,10 +638,16 @@ def clip_gait(name, c):
         R, H = key({"turn": turn, "legs": legs, "root": root}, f)
         # The planted feet's tips go where they were put; any clamp would slide them.
         for leg, (target, _) in legs.items():
-            worst = max(worst, (tip(R, H, LEGS[leg][2]) - target).length)
+            if (t - phases.get(leg, 0.0)) % 1.0 < duties[leg]:
+                pair = leg[:4]
+                worst[pair] = max(worst.get(pair, 0.0), (tip(R, H, LEGS[leg][2]) - target).length)
     finish(name, act, frames)
-    paces[name] = stride / (duty * frames / FPS)
-    print(f"pace {name}: {paces[name]:.3f} m/s, worst foot off its mark {worst * 100:.2f} cm")
+    paces[name] = stride / (duty * cycle)
+    flight = max(airborne(i / 200, duties, phases, cycle) for i in range(200))
+    off = ", ".join(f"{pair} {cm * 100:.2f}" for pair, cm in sorted(worst.items()))
+    print(f"pace {name}: {paces[name]:.3f} m/s, {1 / cycle:.2f} strides a second of"
+          f" {paces[name] * cycle:.2f} m, feet sweep {stride:.2f} m, flight {flight * 100:.1f} cm,"
+          f" planted feet off their marks at worst (cm) {off}; {clamped[0] - before} poses out of reach")
 
 
 def clip_graze(name, c):

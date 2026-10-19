@@ -246,21 +246,27 @@
       },
       "tail": 3
     },
+    "Trot": {
+      "kind": "gait",
+      "gait": "trot",
+      "speed": 3.2,
+      "lift": 0.08,
+      "bob": 0.008,
+      "crouch": 0.02,
+      "peel": 35,
+      "tail": 3
+    },
     "Run": {
       "kind": "gait",
-      "cycle": 0.32,
-      "stride": 0.42,
+      "gait": "gallop",
+      "speed": 12.0,
+      "fore": 0.85,
       "lift": 0.12,
-      "duty": 0.3,
-      "bob": 0.035,
+      "bob": 0.025,
+      "crouch": 0.04,
+      "peel": 40,
       "flex": 10,
-      "fold": 60,
-      "phases": {
-        "Hind.L": 0.0,
-        "Hind.R": 0.1,
-        "Fore.R": 0.5,
-        "Fore.L": 0.6
-      },
+      "fold": 70,
       "tail": 5
     },
     "Eat": {

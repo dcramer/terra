@@ -143,6 +143,10 @@ pub struct ClipNames {
     /// fast as it goes and its feet keep to the ground; none for a clip of its own pace.
     #[serde(default)]
     pub paces: Option<(f32, f32)>,
+    /// A trot between its walk and its run, for a kind that trots: its clip, and the pace it
+    /// covers as made, metres a second (D424).
+    #[serde(default)]
+    pub trot: Option<(String, f32)>,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
