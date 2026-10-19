@@ -34,6 +34,9 @@ struct Fire {
     wind: vec4<f32>,
     // Each jet's from and reach; way and spread; on, and since when.
     jets: array<vec4<f32>, 6>,
+    // The exposure weight, and the log2 of the exposure multiplier at dusk
+    // (crates/terra_world/src/fire/exposure.rs).
+    exposure: vec4<f32>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -46,6 +49,16 @@ struct Fire {
 // The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
 // tonemapper multiplied the last frame by, after Bevy's auto exposure.
 @group(constants::MATERIAL_BIND_GROUP) @binding(105) var<storage, read> adapted: vec4<f32>;
+// What a fire drawn on the screen's scale is multiplied by for the main pass: the exposure
+// weight's factor (docs/fire.md, "The exposure rule"), `(k / k_dusk)^(1 - w)` for the frame's
+// exposure multiplier `k`, the camera's times the eye's adaptation, so at w = 1 it is on the
+// screen's scale whatever the eye does; then the adaptation the tonemapper applies, undone.
+fn on_screen() -> f32 {
+    let stops = log2(view.exposure) + adapted.x;
+    let weighted = exp2((1.0 - fire.exposure.x) * (stops - fire.exposure.y));
+    return weighted / exp2(adapted.x);
+}
+
 // How many soot puffs come before the drops; must match SOOT_PUFFS in fire.rs.
 const SOOT_PUFFS: u32 = 320u;
 // How long a drop burns as it falls, in seconds.
@@ -270,7 +283,7 @@ fn wall_flame(filmed: Filmed, heat: f32, soft: f32) -> vec4<f32> {
     let flame = filmed.cover * soft;
     let black = saturate(filmed.soot * WALL_SOOT) * (1.0 - flame) * soft;
     let cover = flame + black * WALL_SOOT_COVER;
-    return vec4((light + SOOT_BLACK * black) / exp2(adapted.x), cover);
+    return vec4((light + SOOT_BLACK * black) * on_screen(), cover);
 }
 const FOOTAGE_GAIN: f32 = 1.25;
 // At 0.85 a wall's flame pixels were 71-73% deep red against a building fire's 53 (r12's
@@ -583,7 +596,7 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     if cover < 0.002 {
         discard;
     }
-    return vec4(light / exp2(adapted.x), cover);
+    return vec4(light * on_screen(), cover);
 }
 
 // The hull round a breath, in its frame: across both ways and along, its least and most.
@@ -920,7 +933,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // filmed, the footage's own, solid through their body, without the soot or the
             // cooling a building's blaze is given.
             cover = filmed.cover * soft;
-            light = filmed.light * FOOTAGE_GAIN * (0.85 + 0.15 * heat) * soft / exp2(adapted.x);
+            light = filmed.light * FOOTAGE_GAIN * (0.85 + 0.15 * heat) * soft * on_screen();
         }
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);

@@ -34,6 +34,7 @@ pub mod gltf_gate;
 pub mod gpu_turn;
 pub mod grading;
 pub mod grown;
+pub mod hable;
 pub mod headless;
 pub mod lakes;
 pub mod loading;

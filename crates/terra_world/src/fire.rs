@@ -35,6 +35,7 @@ use bevy::{
     },
     shader::ShaderRef,
 };
+pub use exposure::{FireExposure, LEANING_WEIGHT};
 
 /// Something burning, as the layer above says it: where its flames stand from (their foot,
 /// in the world), how tall they are in metres, how hot (0 to 1, a dying fire's embers to a
@@ -140,6 +141,8 @@ pub struct FireUniform {
     /// Each jet: from, and its reach; its way, and its spread; whether it is on (1) or since
     /// when off, and when it came on.
     jets: [Vec4; JETS * 3],
+    /// The exposure weight and the dusk it is drawn as tuned at (`FireExposure::packed`).
+    exposure: Vec4,
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -735,8 +738,10 @@ fn show(
     mut buffers: ResMut<Assets<ShaderBuffer>>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
+    realm: Option<Res<FireExposure>>,
 ) {
     let now = time.elapsed_secs_wrapped();
+    let exposure = realm.as_deref().copied().unwrap_or_default().packed();
     let count = blazes.all().count().min(slots(*quality));
     // The kept fires come first, told how many so they stand just where they are.
     let kept = blazes.kept.len().min(count);
@@ -779,6 +784,7 @@ fn show(
                 Vec4::new(kind as f32, count as f32, now, kept as f32);
             material.extension.uniform.wind = wind;
             material.extension.uniform.jets = jets;
+            material.extension.uniform.exposure = exposure;
         }
     }
     for (kind, handle) in drawn.smoke.iter().enumerate() {
@@ -794,5 +800,6 @@ mod seen;
 
 pub use light::{FireGlows, GLOWS};
 
+mod exposure;
 #[cfg(test)]
 mod tests;

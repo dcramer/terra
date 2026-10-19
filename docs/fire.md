@@ -161,6 +161,7 @@ A preset gives a fire's luminance in absolute units (a candle about 10^4 cd/m²,
   - w = 0 is physical (Frostbite): the fire is weak by day.
   - w = 1 is the screen's scale, ours today: the fire is the same at noon and night, and reads as pasted on.
   - **Leaning: w = 0.4**, to be measured.
+  - It is data: `FireExposure` (crates/terra_world/src/fire/exposure.rs), a resource a realm sets, its weight and the dusk exposure (EV100 9) a fire is drawn as tuned at. Absent, the weight is 1, today's look. The shader's `on_screen` applies it to everything drawn on the screen's scale (flames, walls, tongues, breaths); embers, coals and drops (`soot`) are already physical.
   - The rule's own check is that the drawn fire's noon-to-night ratio is about 3 (The Witcher 3's 15x by day against 5x at night, against an exposure swing of many stops).
   - **How much a fire should dominate at dawn against noon is Open for the developers** (art).
 - **Lights stay physical** (weight 0). By day a fire lights almost nothing, and at dusk it lights everything near it (MEASURED observation 10).
@@ -172,7 +173,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 
 - **Candidates**:
   - Bevy 0.20's own: AcesFitted (per-channel, hue-shifting, the nearest Bevy has to Hable), AgX, TonyMcMapface, BlenderFilmic and KhronosPbrNeutral (today's).
-  - A Hable (Uncharted 2) curve, which Bevy does not have. It would be ported from Godot's Filmic tonemapper (MIT, D196) through our tonemapping shader patch (`shader_patch`, D302).
+  - A Hable (Uncharted 2) curve, which Bevy does not have, ported from Godot's Filmic tonemapper (MIT, D196): `crates/terra_world/src/hable.rs` swaps Bevy's unused Reinhard for it (`shader_patch`), so a camera given `hable::HABLE` draws with it. Its white is Hable's own 11.2 (5.6 before Godot's doubling).
 - **Test**:
   - Render the fire sheet (below) through each.
   - Measure each preset's bands against its class.
