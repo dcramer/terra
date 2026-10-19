@@ -12,9 +12,9 @@
 //! People feel it as players do (D169), in what their outfit shows they wear, and out of
 //! their band they work slower (`crafting`, `terra_climate::body::pace`).
 
+use super::crafting::Worker;
 use super::death::effort;
 use super::inventory::{Gear, Items, warmth};
-use super::people::{Doing, Person};
 use super::tick::Sim;
 use super::told::Told;
 use super::vitals::{Effort, Vitals};
@@ -135,16 +135,12 @@ fn outfit_warmth(items: &Items, outfit: &Outfit) -> f32 {
 fn feel_people(
     time: Res<Time>,
     items: Res<Items>,
-    mut people: Query<(&Person, &ClimateSample, &mut BodyHeat, Option<&Outfit>), Without<Player>>,
+    mut people: Query<(&Worker, &ClimateSample, &mut BodyHeat, Option<&Outfit>), Without<Player>>,
 ) {
     let dt = time.delta_secs().min(0.1);
-    for (person, sample, mut heat, outfit) in &mut people {
+    for (worker, sample, mut heat, outfit) in &mut people {
         let clo = BARE_CLO + outfit.map_or(0.0, |outfit| outfit_warmth(&items, outfit));
-        let mets = match person.doing {
-            Doing::Working(_) | Doing::Following(_) => 3.0,
-            _ => 1.0,
-        };
-        let next = warmed(*heat, sample, clo, mets, false, dt);
+        let next = warmed(*heat, sample, clo, mets(worker.effort), false, dt);
         heat.set_if_neq(BodyHeat {
             felt: Feeling::at(next.temperature_c),
             ..next

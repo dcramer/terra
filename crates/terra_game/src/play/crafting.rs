@@ -8,7 +8,7 @@
 //! Stations and recipes are data, in `assets/data/stations.ron` and `recipes.ron` (D136).
 //! A station can need someone of a trade at work at it, as the forge needs a smith, as
 //! Enshrouded's rescued survivors run its stations; until one is, it says so. Who works
-//! where is read from the people themselves (`Staff`), so there is nothing to keep in step.
+//! where is read from each worker (`Worker`, which the people set as they go to work).
 
 use super::camera::grab_mouse;
 use super::controls::{Action, Settings};
@@ -17,11 +17,11 @@ use super::interact::{Focus, Interactable, REACH_M};
 use super::inventory::{Belongings, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
 use super::options::OptionsMenu;
-use super::people::{Doing, Person};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
 use super::tick::Sim;
 use super::told::{Notice, Told};
+use super::vitals::Effort;
 use super::warmth::BodyHeat;
 use super::{IsLocalPlayer, Player};
 use bevy::{
@@ -243,28 +243,53 @@ pub fn mended_at(
 /// How near a station someone at work at it stands.
 const WORKER_REACH_M: f32 = 3.0;
 
+/// Someone who can work a station, and whom work warms (D407): who they are, their trade,
+/// where they are at work and how hard they work. Whoever moves them sets it, as the people
+/// do from what they are doing; the stations (`Staff`) and warmth read it.
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+pub struct Worker {
+    pub name: &'static str,
+    /// Their trade, if they have one: what stations they can work (`worked_by` in
+    /// `assets/data/stations.ron`), such as a smith a forge.
+    pub trade: Option<&'static str>,
+    /// The spot they are at work at, if they are.
+    pub working_at: Option<Vec3>,
+    pub effort: Effort,
+}
+
+impl Default for Worker {
+    fn default() -> Self {
+        Self {
+            name: "",
+            trade: None,
+            working_at: None,
+            effort: Effort::Resting,
+        }
+    }
+}
+
 /// Who works the stations that need someone of a trade at work at them, as the forge needs a
 /// smith.
 #[derive(SystemParam)]
 pub struct Staff<'w, 's> {
     kinds: Res<'w, Stations>,
-    people: Query<'w, 's, (&'static Person, Option<&'static BodyHeat>)>,
+    people: Query<'w, 's, (&'static Worker, Option<&'static BodyHeat>)>,
     stations: Query<'w, 's, &'static Transform, With<Works>>,
 }
 
 impl Staff<'_, '_> {
     /// Whoever is at work at a station, if it is one that needs someone.
-    pub fn worker(&self, entity: Entity, station: Station) -> Option<&Person> {
+    pub fn worker(&self, entity: Entity, station: Station) -> Option<&Worker> {
         let trade = self.kinds.worked_by(station)?;
         self.at_work(entity, trade).map(|(person, _)| person)
     }
 
     /// Whoever of a trade is at work at a station, and how warm they are.
-    fn at_work(&self, entity: Entity, trade: &str) -> Option<(&Person, Option<&BodyHeat>)> {
+    fn at_work(&self, entity: Entity, trade: &str) -> Option<(&Worker, Option<&BodyHeat>)> {
         let at = self.stations.get(entity).ok()?.translation;
         self.people
             .iter()
-            .find(|(person, _)| person.trade == Some(trade) && at_work(person, at))
+            .find(|(worker, _)| worker.trade == Some(trade) && at_work(worker, at))
     }
 
     /// How fast a station is worked: as fast as its worker works, slower out of their
@@ -286,8 +311,10 @@ impl Staff<'_, '_> {
 }
 
 /// Whether someone is at work at a station standing at a place.
-fn at_work(person: &Person, station: Vec3) -> bool {
-    matches!(person.doing, Doing::Working(spot) if spot.distance(station) < WORKER_REACH_M)
+fn at_work(worker: &Worker, station: Vec3) -> bool {
+    worker
+        .working_at
+        .is_some_and(|spot| spot.distance(station) < WORKER_REACH_M)
 }
 
 /// A station's queue: what is to be made, by its place in `Recipes`, how far into the
@@ -641,15 +668,18 @@ mod tests {
         assert!(!staffed(&mut world, forge_kind));
         assert!(staffed(&mut world, smelter));
         // A smith following you is not at work; one working beside the forge is.
-        let smith = world
-            .spawn(Person::new(
-                "Bren",
-                Doing::Following(Entity::PLACEHOLDER),
-                Some("smith"),
-            ))
-            .id();
+        let smith = Worker {
+            name: "Bren",
+            trade: Some("smith"),
+            working_at: None,
+            effort: Effort::Moving,
+        };
+        let smith = world.spawn((smith, BodyHeat::default())).id();
         assert!(!staffed(&mut world, forge_kind));
-        world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 1.8);
+        let at = |world: &mut World, spot| {
+            world.get_mut::<Worker>(smith).unwrap().working_at = Some(spot);
+        };
+        at(&mut world, forge + Vec3::X * 1.8);
         assert!(staffed(&mut world, forge_kind));
         // A smith out of their warmth's band works the forge slower (D169); the smelter goes
         // at its own pace whoever is cold.
@@ -663,7 +693,7 @@ mod tests {
         assert!(pace(&mut world, forge_kind) < 0.7);
         assert_eq!(pace(&mut world, smelter), 1.0);
         // Someone at work at another forge far off does not work this one.
-        world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 50.0);
+        at(&mut world, forge + Vec3::X * 50.0);
         assert!(!staffed(&mut world, forge_kind));
     }
 
@@ -742,11 +772,12 @@ mod tests {
         assert_eq!(progress(&world, forge), 0.0);
         let trade = world.resource::<Stations>().worked_by(kind.0).unwrap();
         let trade: &'static str = trade.to_string().leak();
-        world.spawn(Person::new(
-            "Bren",
-            Doing::Working(GROUND + Vec3::Z),
-            Some(trade),
-        ));
+        world.spawn(Worker {
+            name: "Bren",
+            trade: Some(trade),
+            working_at: Some(GROUND + Vec3::Z),
+            effort: Effort::Working,
+        });
         world.run_system_once(work).unwrap();
         assert!(progress(&world, forge) > 0.0);
     }

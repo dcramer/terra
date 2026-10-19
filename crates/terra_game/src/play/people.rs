@@ -11,18 +11,20 @@ use super::Player;
 use super::bodies::Body;
 use super::catalogue::Rest;
 use super::claim::Claim;
-use super::crafting::Stations;
+use super::crafting::{Stations, Worker};
 use super::creatures::Creature;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::{Models, Prop};
 use super::tick::{Sim, Smoothed};
 use super::told::Told;
+use super::vitals::Effort;
 use super::warmth::BodyHeat;
 use crate::loading::Loading;
 use crate::planet::Planet;
 use crate::start::Start;
 use crate::{appearance, character};
 use bevy::{
+    ecs::{lifecycle::HookContext, world::DeferredWorld},
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
@@ -50,13 +52,17 @@ pub enum Doing {
     Sitting,
 }
 
+/// Someone in the world. The stations and fires see them by their `Worker`, set from them
+/// when they are put in the world and by `set_doing` in the system that changes what they
+/// do, so no one reads one a tick old.
 #[derive(Component)]
-#[require(Smoothed, ClimateSample, BodyHeat)]
+#[require(Smoothed, ClimateSample, BodyHeat, Worker)]
+#[component(on_insert = Person::seen_at_work)]
 pub struct Person {
     pub name: &'static str,
     /// What they say when spoken to, if anything in particular.
     pub says: Option<&'static str>,
-    pub doing: Doing,
+    doing: Doing,
     /// Their trade, if they have one: what stations they can work (`worked_by` in
     /// `assets/data/stations.ron`), such as a smith a forge.
     pub trade: Option<&'static str>,
@@ -74,6 +80,45 @@ impl Person {
             trade,
             facing: Vec3::ZERO,
             asked: false,
+        }
+    }
+
+    /// What they are doing.
+    pub fn doing(&self) -> Doing {
+        self.doing
+    }
+
+    /// Sets what they are doing, and their worker with it.
+    pub fn set_doing(&mut self, doing: Doing, worker: &mut Worker) {
+        self.doing = doing;
+        *worker = self.worker();
+    }
+
+    /// What the stations and fires see of them: who they are, their trade, where they are
+    /// at work, and how hard they work (following someone is walking).
+    fn worker(&self) -> Worker {
+        Worker {
+            name: self.name,
+            trade: self.trade,
+            working_at: match self.doing {
+                Doing::Working(spot) => Some(spot),
+                _ => None,
+            },
+            effort: match self.doing {
+                Doing::Working(_) => Effort::Working,
+                Doing::Following(_) => Effort::Moving,
+                _ => Effort::Resting,
+            },
+        }
+    }
+
+    /// Sets the worker of someone just put in the world from them.
+    fn seen_at_work(mut world: DeferredWorld, context: HookContext) {
+        let Some(worker) = world.get::<Person>(context.entity).map(Person::worker) else {
+            return;
+        };
+        if let Some(mut was) = world.get_mut::<Worker>(context.entity) {
+            *was = worker;
         }
     }
 }
@@ -307,14 +352,14 @@ fn free(
     mut interacted: MessageReader<Interacted>,
     creatures: Query<(&Creature, &Transform)>,
     bestiary: Res<super::species::Bestiary>,
-    mut people: Query<(&mut Person, &Transform), Without<Creature>>,
+    mut people: Query<(&mut Person, &mut Worker, &Transform), Without<Creature>>,
     mut told: MessageWriter<Told>,
 ) {
     for used in interacted.read() {
         let Some(entity) = used.on(Interactable::Prisoner) else {
             continue;
         };
-        let Ok((mut person, at)) = people.get_mut(entity) else {
+        let Ok((mut person, mut worker, at)) = people.get_mut(entity) else {
             continue;
         };
         let guarded = creatures.iter().any(|(creature, there)| {
@@ -326,7 +371,7 @@ fn free(
             told.write(Told::new(used.player, "Not while the spiders are near"));
             continue;
         }
-        person.doing = Doing::Following(used.player);
+        person.set_doing(Doing::Following(used.player), &mut worker);
         commands.entity(entity).remove::<CanInteract>();
         info!("Freed {}.", person.name);
         let said = match person.trade {
@@ -391,10 +436,10 @@ fn settle(
     claims: Query<&Claim>,
     props: Query<(&Prop, &Transform)>,
     stations: Res<Stations>,
-    mut people: Query<(&mut Person, &Transform), Without<Prop>>,
+    mut people: Query<(&mut Person, &mut Worker, &Transform), Without<Prop>>,
     mut told: MessageWriter<Told>,
 ) {
-    for (mut person, at) in &mut people {
+    for (mut person, mut worker, at) in &mut people {
         let Doing::Following(leader) = person.doing else {
             continue;
         };
@@ -424,7 +469,7 @@ fn settle(
             (Some((station, at)), _) => {
                 let up = at.normalize();
                 let spot = at + up.any_orthonormal_vector() * 1.8;
-                person.doing = Doing::Working(spot);
+                person.set_doing(Doing::Working(spot), &mut worker);
                 let station = stations.name(station).to_lowercase();
                 info!("{} took up the {station}.", person.name);
                 say(format!("{} takes up the {station}", person.name));
@@ -610,5 +655,36 @@ mod tests {
             dyed += 1;
         }
         assert!(dyed > 0, "no colour was checked");
+    }
+
+    #[test]
+    fn the_stations_and_fires_see_what_someone_is_doing() {
+        let mut world = World::new();
+        let forge = Vec3::new(3.0, 2000.0, 0.0);
+        let bren = Person::new("Bren", Doing::Working(forge), Some("smith"));
+        let bren = world.spawn(bren).id();
+        let worker = |world: &World| *world.get::<Worker>(bren).unwrap();
+        let at_work = Worker {
+            name: "Bren",
+            trade: Some("smith"),
+            working_at: Some(forge),
+            effort: Effort::Working,
+        };
+        assert_eq!(worker(&world), at_work);
+        let mut people = world.query::<(&mut Person, &mut Worker)>();
+        let (mut person, mut seen) = people.get_mut(&mut world, bren).unwrap();
+        person.set_doing(Doing::Following(Entity::PLACEHOLDER), &mut seen);
+        let following = Worker {
+            working_at: None,
+            effort: Effort::Moving,
+            ..at_work
+        };
+        assert_eq!(worker(&world), following);
+        let bound = world.spawn(Person::new("Ash", Doing::Bound, None)).id();
+        let resting = Worker {
+            name: "Ash",
+            ..Worker::default()
+        };
+        assert_eq!(*world.get::<Worker>(bound).unwrap(), resting);
     }
 }

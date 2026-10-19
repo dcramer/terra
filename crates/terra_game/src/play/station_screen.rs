@@ -384,7 +384,7 @@ fn who(entity: Entity, station: Station, staff: &Staff, stations: &crafting::Sta
     if let Some(trade) = stations.worked_by(station) {
         let name = stations.name(station).to_lowercase();
         return match staff.worker(entity, station) {
-            Some(person) => format!("{} works this {name}", person.name),
+            Some(worker) => format!("{} works this {name}", worker.name),
             None => format!("No {trade} works this {name} yet"),
         };
     }

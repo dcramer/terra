@@ -10,7 +10,7 @@
 use super::catalogue::Builds;
 use super::claim::Claim;
 use super::controls::Settings;
-use super::crafting::{Recipes, Works};
+use super::crafting::{Recipes, Worker, Works};
 use super::daylight::Clock;
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
@@ -421,7 +421,7 @@ fn restore_claim(
 fn restore_people(
     mut commands: Commands,
     mut waiting: ResMut<Waiting>,
-    mut people: Query<(Entity, &mut Person, &mut Transform)>,
+    mut people: Query<(Entity, &mut Person, &mut Worker, &mut Transform)>,
     player: Single<Entity, IsLocalPlayer>,
 ) {
     if waiting.people.is_empty() {
@@ -429,19 +429,20 @@ fn restore_people(
     }
     let mut still = Vec::new();
     for saved in waiting.people.drain(..) {
-        let Some((entity, mut person, mut transform)) = people
+        let Some((entity, mut person, mut worker, mut transform)) = people
             .iter_mut()
-            .find(|(_, person, _)| person.name == saved.name)
+            .find(|(_, person, ..)| person.name == saved.name)
         else {
             still.push(saved);
             continue;
         };
-        person.doing = match (saved.doing.as_str(), saved.spot) {
+        let doing = match (saved.doing.as_str(), saved.spot) {
             ("working", Some(spot)) => Doing::Working(Vec3::from(spot)),
             // A saved game is this machine's player's, so whoever followed, follows them.
             ("following", _) => Doing::Following(*player),
             _ => continue,
         };
+        person.set_doing(doing, &mut worker);
         transform.translation = Vec3::from(saved.at);
         commands
             .entity(entity)
@@ -708,7 +709,7 @@ fn gather(
         people: people
             .iter()
             .filter_map(|(person, at)| {
-                let (doing, spot) = match person.doing {
+                let (doing, spot) = match person.doing() {
                     Doing::Following(_) => ("following", None),
                     Doing::Working(spot) => ("working", Some(spot.into())),
                     _ => return None,
@@ -1145,7 +1146,7 @@ mod tests {
         kept.people = people
             .iter(world)
             .map(|(person, at)| {
-                let doing = match person.doing {
+                let doing = match person.doing() {
                     Doing::Following(whom) if whom == player => "following the player".into(),
                     Doing::Working(spot) => format!("working at {spot}"),
                     ref other => format!("{other:?}"),

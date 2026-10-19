@@ -431,7 +431,7 @@ fn talk(
         let smith = people
             .iter()
             .find(|person| person.trade == Some("smith"))
-            .map(|smith| smith.doing);
+            .map(|smith| smith.doing());
         let line = match smith {
             Some(Doing::Bound) | None => format!(
                 "{}: \"Spiders took Bren, our smith. They nest where the light comes out of the ground, {}. You'll see the glow.\"",
