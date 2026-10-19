@@ -279,6 +279,9 @@ pub struct Town {
     /// Where its works begin among its buildings: its wall's lengths, towers and gates, and
     /// the castle last of all; as many as its buildings if it is open.
     pub works: usize,
+    /// The line of its wall's outer face, in order round it: round every house, yard and the
+    /// square and round the castle. Empty if it is open.
+    pub wall: Vec<Vec2>,
 }
 
 /// How big a town is laid (D381): how many buildings, at least and at most, sheds and walls
@@ -377,6 +380,7 @@ pub fn town_sized(seed: u32, picks: impl Picks + Copy, heights: Heights, size: &
         fences: Vec::new(),
         paths: Paths::default(),
         works: 0,
+        wall: Vec::new(),
     };
     town.on_the_square(seed);
     town.plots(seed, picks, size.buildings);

@@ -1,9 +1,10 @@
 //! A town's walls and the castle over it (D381): a curtain of stone closing the town round a
 //! few metres past its last houses and yards, towers standing out of it at its corners and
 //! along its long sides, a gatehouse over each street where it goes out; and the castle (the
-//! burg, `scenes::burg`) on the highest ground beside the town, its gate toward it. Each a
-//! building of the town's, after its houses (`Town::works`), the castle last, so a settlement
-//! rising walls itself and crowns itself as it is finished, as towns that grew rich did.
+//! burg, `scenes::burg`) on the highest ground at the town's edge, within its wall, its gate
+//! toward the town. Each a building of the town's, after its houses (`Town::works`), the
+//! castle last, so a settlement rising walls itself and crowns itself as it is finished, as
+//! towns that grew rich did.
 
 use super::*;
 use crate::BuildOp;
@@ -23,14 +24,18 @@ const GATE_HALF_M: f32 = 4.0;
 const GAP_M: f32 = 0.1;
 /// How far out from the tower's foot the curtain's outer face runs (`burg::wall_tower`).
 const TOWER_OUT_M: f32 = 1.5;
-/// How far the castle's curtain keeps from the wall, the least and the most; within how far
-/// of the town's middle its own middle stands (inside the settlement's clearing,
-/// `MarketTown::SETTLEMENT`'s 210 m less its 45 m edge and the castle's half); how far out
+/// How far the castle's curtain keeps from the houses' line of wall, the least and the most;
+/// within how far of the town's middle its own middle stands (so the wall round it, its half
+/// and `WALL_OUT_M` further, keeps inside the settlement's clearing,
+/// `MarketTown::SETTLEMENT`'s 210 m less its 45 m edge); how far out
 /// its towers reach from its middle; and how finely its place is looked for.
-const CASTLE_OUT_M: (f32, f32) = (12.0, 50.0);
-const CASTLE_WITHIN_M: f32 = 135.0;
+const CASTLE_OUT_M: (f32, f32) = (8.0, 18.0);
+const CASTLE_WITHIN_M: f32 = 125.0;
 const CASTLE_HALF_M: f32 = 30.0;
 const CASTLE_STEP_M: f32 = 6.0;
+/// Within how far of the castle's middle the wall's line is not dug in toward the houses
+/// ([`concave`]): dug there, it ran in between them, the castle an annex walled on.
+const CASTLE_UNDUG_M: f32 = 70.0;
 
 impl Town {
     /// The town's wall, its towers and gates, and the castle, as buildings after the rest.
@@ -51,11 +56,28 @@ impl Town {
             .collect();
         points.extend(self.yards.iter().flat_map(|(_, yard)| yard.iter().copied()));
         points.extend(self.square.outline.iter().copied());
-        let ring = wall_line(&points);
-        if ring.len() < 3 {
+        let town_ring = wall_line(&points, None);
+        if town_ring.len() < 3 {
             return;
         }
-        let middle = ring.iter().copied().sum::<Vec2>() / ring.len() as f32;
+        let middle = town_ring.iter().copied().sum::<Vec2>() / town_ring.len() as f32;
+        // The castle: on the highest ground a little way out past the houses' own line of
+        // wall and within the settlement's clearing, its gate toward the town; the wall then
+        // goes round it too, so it stands within the town's walls as a citadel does (the
+        // developer: "castle needs to be within the city walls"; walled past it, it stood in
+        // the meadow outside).
+        let castle = castle_place(&town_ring, &points, middle, heights)
+            .map(|centre| castle_at(centre, middle, m));
+        let castle_footprint = castle
+            .as_ref()
+            .map(|building| footprint(building, &ground_rects(building)));
+        if let Some(quads) = &castle_footprint {
+            points.extend(quads.iter().flatten().copied());
+        }
+        // Not dug in between the castle and the houses, so the wall runs on round both.
+        let undug = castle_middle(&castle_footprint).map(|m| (m, CASTLE_UNDUG_M));
+        let ring = wall_line(&points, undug);
+        self.wall = ring.clone();
         let mut works: Vec<(String, Vec2, f32, Vec<BuildOp>)> = Vec::new();
         for i in 0..ring.len() {
             let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
@@ -143,31 +165,6 @@ impl Town {
                 }
             }
         }
-        // The castle, last: on the highest ground a little way out past the wall and within
-        // the settlement's clearing, its gate toward the town.
-        let room = |c: Vec2| {
-            let off = (0..ring.len())
-                .map(|i| point_segment(c, ring[i], ring[(i + 1) % ring.len()]))
-                .fold(f32::INFINITY, f32::min);
-            !inside(c, &ring)
-                && (CASTLE_HALF_M + CASTLE_OUT_M.0..CASTLE_HALF_M + CASTLE_OUT_M.1).contains(&off)
-                && c.distance(middle) < CASTLE_WITHIN_M
-        };
-        let steps = (CASTLE_WITHIN_M / CASTLE_STEP_M) as i32;
-        let castle = (-steps..=steps)
-            .flat_map(|x| (-steps..=steps).map(move |y| Vec2::new(x as f32, y as f32)))
-            .map(|cell| middle + cell * CASTLE_STEP_M)
-            .filter(|&c| room(c))
-            .max_by(|p, q| heights(*p).total_cmp(&heights(*q)));
-        if let Some(centre) = castle {
-            let toward = (middle - centre).normalize_or(Vec2::Y);
-            works.push((
-                "the castle".into(),
-                centre + toward * burg::CASTLE_BEHIND_M,
-                facing_of(toward),
-                burg::castle(m),
-            ));
-        }
         for (name, at, facing, ops) in works {
             let building = village::Building {
                 name,
@@ -181,7 +178,50 @@ impl Town {
             self.footprints.push(footprint(&building, &rects));
             self.buildings.push(building);
         }
+        // The castle, last, so a settlement crowns itself as it is finished.
+        if let (Some(building), Some(quads)) = (castle, castle_footprint) {
+            self.footprints.push(quads);
+            self.buildings.push(building);
+        }
     }
+}
+
+/// The castle with its middle at `centre`, its gate toward the town's `middle`.
+fn castle_at(centre: Vec2, middle: Vec2, m: burg::Materials) -> village::Building {
+    let toward = (middle - centre).normalize_or(Vec2::Y);
+    village::Building {
+        name: "the castle".into(),
+        plan: Plan::Wall,
+        scheme: Scheme::Masonry,
+        at: (centre + toward * burg::CASTLE_BEHIND_M).to_array(),
+        facing: facing_of(toward),
+        ops: burg::castle(m),
+    }
+}
+
+/// Where the castle's middle stands: on the highest ground at least `CASTLE_OUT_M.0` and at
+/// most `CASTLE_OUT_M.1` past the line round the houses (`ring`), clear of its own half, as
+/// far from every house, yard and the square (`points`) as that line is, and within
+/// `CASTLE_WITHIN_M` of the town's middle. So close, the wall round both runs on round the
+/// castle's far side with no neck between them: 12 to 50 m out, the wall's dig along the
+/// meadow between them walled the castle as an annex, outside the town in the film.
+fn castle_place(ring: &[Vec2], points: &[Vec2], middle: Vec2, heights: Heights) -> Option<Vec2> {
+    let clear = CASTLE_HALF_M + CASTLE_OUT_M.0 + WALL_OUT_M;
+    let room = |c: Vec2| {
+        let off = (0..ring.len())
+            .map(|i| point_segment(c, ring[i], ring[(i + 1) % ring.len()]))
+            .fold(f32::INFINITY, f32::min);
+        !inside(c, ring)
+            && (CASTLE_HALF_M + CASTLE_OUT_M.0..CASTLE_HALF_M + CASTLE_OUT_M.1).contains(&off)
+            && c.distance(middle) < CASTLE_WITHIN_M
+            && points.iter().all(|p| p.distance(c) >= clear)
+    };
+    let steps = (CASTLE_WITHIN_M / CASTLE_STEP_M) as i32;
+    (-steps..=steps)
+        .flat_map(|x| (-steps..=steps).map(move |y| Vec2::new(x as f32, y as f32)))
+        .map(|cell| middle + cell * CASTLE_STEP_M)
+        .filter(|&c| room(c))
+        .max_by(|p, q| heights(*p).total_cmp(&heights(*q)))
 }
 
 /// The line of a wall's outer face round points: their concave hull ([`concave`]), every
@@ -189,8 +229,8 @@ impl Town {
 /// more than `CUT_M` in, in order round it with the town on each side's left of its way
 /// (+90° from it, in metres east and south, being out). Round their convex hull, a town of
 /// streets running out from its square walled the meadow between them, more of it than town.
-fn wall_line(points: &[Vec2]) -> Vec<Vec2> {
-    let hull = concave(points);
+fn wall_line(points: &[Vec2], undug: Option<(Vec2, f32)>) -> Vec<Vec2> {
+    let hull = concave(points, undug);
     let n = hull.len();
     if n < 3 {
         return hull;
@@ -233,13 +273,20 @@ const DIG_FROM_M: f32 = 40.0;
 const DIG_CLEAR_M: f32 = 25.0;
 const DIG_SAMPLES: usize = 16;
 
+/// The middle of the castle's ground, from its footprint's corners.
+fn castle_middle(footprint: &Option<Vec<[Vec2; 4]>>) -> Option<Vec2> {
+    let corners: Vec<Vec2> = footprint.iter().flatten().flatten().copied().collect();
+    (!corners.is_empty()).then(|| corners.iter().copied().sum::<Vec2>() / corners.len() as f32)
+}
+
 /// The concave hull of points, in the convex hull's order, as Park and Oh's ("A New Concave
 /// Hull Algorithm and Concaveness Measure for n-dimensional Datasets", 2012) digs it: from
 /// the convex hull, each long side running clear of the points along its middle is dug in to
 /// the nearest of them there, while the two new sides cross no other and leave no point out,
-/// until none is. So a town of streets running out from its square is walled along its
-/// houses' backs, not across the meadow between its streets.
-fn concave(points: &[Vec2]) -> Vec<Vec2> {
+/// until none is, but where the side's emptiest place is within `undug`'s reach of its
+/// middle. So a town of streets running out from its square is walled along its houses'
+/// backs, not across the meadow between its streets.
+fn concave(points: &[Vec2], undug: Option<(Vec2, f32)>) -> Vec<Vec2> {
     let mut ring = hull(points);
     let mut inner: Vec<Vec2> = points
         .iter()
@@ -267,7 +314,8 @@ fn concave(points: &[Vec2]) -> Vec<Vec2> {
                     .max_by(|p, q| gap(*p).total_cmp(&gap(*q)))
             })
             .flatten()
-            .filter(|&at| gap(at) > DIG_CLEAR_M);
+            .filter(|&at| gap(at) > DIG_CLEAR_M)
+            .filter(|&at| undug.is_none_or(|(c, r)| at.distance(c) > r));
         // Dug to the point nearest its line among those beside it: no other point lies
         // between that one and the side, so the dig leaves none out.
         let line = (b - a) / long;

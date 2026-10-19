@@ -306,7 +306,8 @@ fn builders_sites_stand_outside_every_building_facing_their_own() {
 }
 
 #[test]
-fn a_walled_town_closes_its_houses_in_with_a_gate_over_its_streets_and_its_castle_last() {
+fn a_walled_town_closes_its_houses_and_castle_in_with_a_gate_over_its_streets_and_its_castle_last()
+{
     let size = Size {
         buildings: (80, 90),
         streets: 1.6,
@@ -329,15 +330,49 @@ fn a_walled_town_closes_its_houses_in_with_a_gate_over_its_streets_and_its_castl
             works.len()
         );
         assert_eq!(gates, town.streets.len(), "a gate over each street");
+        // Every house, yard and the square stands within the wall's line, and the castle too.
+        let mut within: Vec<(&str, Vec2)> = Vec::new();
+        for (b, quads) in town.footprints.iter().enumerate() {
+            if b >= town.works && b + 1 < town.buildings.len() {
+                continue;
+            }
+            let name = town.buildings[b].name.as_str();
+            within.extend(quads.iter().flatten().map(|&p| (name, p)));
+        }
+        within.extend(
+            town.yards
+                .iter()
+                .flat_map(|(_, y)| y.iter().map(|&p| ("a yard", p))),
+        );
+        for (name, p) in within {
+            assert!(
+                in_polygon(p, &town.wall),
+                "{name} at {p} stands outside the wall"
+            );
+        }
+        // And the castle is of the town, not an annex walled on: the way from its gate to
+        // the square runs inside the wall all along.
+        let gate = Vec2::from(works.last().expect("a castle").at);
+        let square =
+            town.square.outline.iter().copied().sum::<Vec2>() / town.square.outline.len() as f32;
+        for k in 0..=50 {
+            let p = gate.lerp(square, k as f32 / 50.0);
+            assert!(
+                in_polygon(p, &town.wall),
+                "the way from the castle leaves the wall at {p}"
+            );
+        }
         // No work stands on a house, a yard or the square.
         for (w, work) in town.footprints[town.works..].iter().enumerate() {
             for (h, house) in town.footprints[..town.works].iter().enumerate() {
                 for (a, b) in work.iter().flat_map(|p| house.iter().map(move |q| (p, q))) {
                     assert!(
                         polygons(a, b) > 0.0,
-                        "{} stands on {}",
+                        "{} at {:?} stands on {} at {:?}",
                         works[w].name,
-                        houses[h].name
+                        works[w].at,
+                        houses[h].name,
+                        houses[h].at
                     );
                 }
             }
@@ -347,4 +382,16 @@ fn a_walled_town_closes_its_houses_in_with_a_gate_over_its_streets_and_its_castl
             assert!(work.iter().all(|p| polygons(p, &town.square.outline) > 0.0));
         }
     }
+}
+
+/// Whether a point is inside a polygon, convex or not (by the crossings of a ray east).
+fn in_polygon(at: Vec2, polygon: &[Vec2]) -> bool {
+    let mut odd = false;
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        if (a.y > at.y) != (b.y > at.y) && at.x < a.x + (at.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            odd = !odd;
+        }
+    }
+    odd
 }

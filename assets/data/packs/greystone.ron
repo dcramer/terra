@@ -3,15 +3,16 @@
 // greyer than a house's, as old curtain walls stand grey-brown under their grime: its face
 // multiplied toward grey-brown (the fieldstone's mean, sRGB 0.64, 0.57, 0.48, read cream at
 // 500 m under a low sun, settlement film r10), its dressed stone with it, and the dirt and
-// damp risen higher up its foot and darker.
+// damp risen higher up its foot and darker. Its tint is a warm grey: bluer (0.55, 0.58, 0.66),
+// the castle read lilac at 300 m under a low sun and blue-grey in shade (settlement film r12).
 (
-    tint: (0.55, 0.58, 0.66),
+    tint: (0.60, 0.59, 0.60),
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0), depth: 0.025),
         Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8), depth: 0.008),
     },
     dress: (
-        tint: (0.55, 0.57, 0.62),
+        tint: (0.60, 0.58, 0.58),
         masks: (dirt: 1.4, dirt_tint: (0.4, 0.37, 0.32), wear: 0.1),
     ),
     reference: Some((

@@ -351,7 +351,12 @@ fn triangle(out: &mut Surface, corners: [Vec3; 3], toward: Vec3, colour: [f32; 3
 /// a grid of dark cubes on pale stone from 500 m, not one masonry surface.
 const TONE_STEP: f32 = 0.07;
 const TONES: i32 = 3;
-const TONE_GAIN: f32 = 2.0;
+const TONE_GAIN: f32 = 1.5;
+/// A masonry wall far off is laid in courses this tall, each a step lighter, darker or as
+/// its kind, the same all round a building at one height, as coursed stone reads from far
+/// off in its bands: toned by its texture alone, a castle's faces read as fine pebble-dash
+/// from 300 m (settlement film r12), its stones each a cube.
+const COURSE_M: f32 = 1.0;
 /// A side within its kit's dirt's rise of the base's floor is that much of the way to its
 /// dirt's colour, as the near detail's masks darken a wall's foot (`dress::masks`): the
 /// dark band along a wall's foot that sets it on the ground far off.
@@ -426,7 +431,15 @@ impl<'a> Colours<'a> {
         let mean = luma(swatch.mean()).max(1e-3);
         let here = luma(crate::sections::far::patch(swatch, uv));
         let tone = libm::roundf((here / mean - 1.0) * TONE_GAIN / TONE_STEP) as i32;
-        let tone = tone.clamp(-TONES, TONES);
+        let course = libm::floorf(middle.y / COURSE_M) as i32;
+        let band = match kit.pattern {
+            Pattern::Masonry => {
+                let h = terra_gen::hash::mix3(u32::from(kind.0), course as u32, 0x636f_7572, 0);
+                (terra_gen::hash::unit(h) * 3.0) as i32 - 1
+            }
+            _ => 0,
+        };
+        let tone = (tone + band).clamp(-TONES, TONES);
         let masks = &kit.dress.masks;
         let dirty = masks.dirt > 0.0 && (at.y as f32 + 0.5) * CELL_M < masks.dirt;
         if tone == 0 && !dirty {
@@ -733,6 +746,46 @@ mod tests {
         assert!(
             like_first < 8,
             "{like_first} of 16 tiles toned as the first"
+        );
+    }
+
+    /// A masonry wall far off is laid in courses: on a plain texture each metre-high course
+    /// is one tone all along it, and the courses are not all alike, so the wall shows bands.
+    #[test]
+    fn far_stone_is_laid_in_courses() {
+        let texture: crate::kit::Texture =
+            ron::from_str(r#"(path: "stone", metres: (2.0, 2.0))"#).expect("a texture");
+        let kit = crate::kit::Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            textures: [(Material::Masonry, texture)].into(),
+            ..Default::default()
+        };
+        let kits = Kits(vec![kit]);
+        let swatch = crate::relief::Swatch::new(4, 4, vec![[0.5; 3]; 16]).expect("a swatch");
+        let mut maps = Maps::default();
+        maps.colours
+            .insert("stone".into(), std::sync::Arc::new(swatch));
+        let mut colours = Colours::new(&kits, &maps);
+        // A wall 16 m long and 12 m high facing +z: rows of cubes half a metre high.
+        let rows: Vec<Vec<usize>> = (0..24)
+            .map(|y| {
+                (0..32)
+                    .map(|x| colours.side(Kind(2), IVec3::new(x, y, 0), 4))
+                    .collect()
+            })
+            .collect();
+        for (y, row) in rows.iter().enumerate() {
+            assert!(
+                row.iter().all(|&c| c == row[0]),
+                "row {y} is one tone along"
+            );
+        }
+        let courses: std::collections::BTreeSet<usize> = rows.iter().map(|row| row[0]).collect();
+        assert!(
+            courses.len() >= 2,
+            "the courses differ: {} tones",
+            courses.len()
         );
     }
 }

@@ -196,6 +196,7 @@ mod tests {
             fences: Vec::new(),
             paths: Paths::default(),
             works: 0,
+            wall: Vec::new(),
         }
     }
 
