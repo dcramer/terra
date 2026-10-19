@@ -25,6 +25,11 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("art/", &["terra_build", "terra_build_mesh"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     ("assets/", &["terra_world", "terra_game", "terra_sandbox"]),
+    // The texture bake (D188): every model's and material's pictures and the fire's
+    // flipbooks, and the builds, for the materials they name.
+    ("assets/models/", &["terra_bake"]),
+    ("assets/materials/", &["terra_bake"]),
+    ("assets/textures/fire/", &["terra_bake"]),
     // Building's kits, packs, items and settlement, and the materials its kits name, which the
     // kit checker and the packs' tests read.
     (
@@ -56,7 +61,7 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ),
     // The town's market and the catalogue its stalls are sized from, and its people's day.
     ("assets/data/market.ron", &["terra_town"]),
-    ("assets/data/builds.ron", &["terra_town"]),
+    ("assets/data/builds.ron", &["terra_town", "terra_bake"]),
     ("assets/data/life.ron", &["terra_town"]),
     // The climate the land's places are found in.
     ("assets/data/climate.ron", &["terra_land"]),
@@ -456,7 +461,7 @@ mod tests {
             .concat())
         );
         let scope = classify(&files(&["assets/models/tree/pine.glb"]), &crates());
-        assert_eq!(scope.readers, set(&bevy));
+        assert_eq!(scope.readers, set(&[&bevy[..], &["terra_bake"]].concat()));
         let scope = classify(&files(&["assets/data/life.ron"]), &crates());
         assert_eq!(scope.readers, set(&[&bevy[..], &["terra_town"]].concat()));
     }
