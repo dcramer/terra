@@ -349,7 +349,10 @@ const SSR_STEPS: u32 = 36u;
 // How much of the waves' slope bends the ray the shore's reflection is marched along
 // (`on_screen`), and how much a thin water film darkens the ground under it.
 const REFLECTION_BUMP: f32 = 0.3;
-const WET_FILM: f32 = 0.4;
+// Off (0): at 0.4 the film drew the shore's straight submerged strips as hard dark bands that
+// popped as the eye moved (lake film r14, popin.ts at 15.3 s), until the ground under the
+// shallows is fixed.
+const WET_FILM: f32 = 0.0;
 
 @fragment
 fn fragment(
