@@ -508,7 +508,7 @@ Kept so their numbers still resolve. They no longer bind anything.
 | [D65](decisions/D65.md) | Inventory and backpack | Design | — | Superseded by D106 | Was: the inventory is the backpack, small at the start… |
 | [D79](decisions/D79.md) | Terraform rating | Design | — | Superseded by D89 | A terraformable planet's rating of how far along it is. |
 | [D209](decisions/D209.md) | How roofs are laid and drawn | Tech | — | Superseded by D241 | Was: a kit laid pitched roofs from roof sections… |
-| [D283](decisions/D283.md) | Mesh slabs start at 64 MiB and double | Tech | Agent | Superseded by D420 | Was: Bevy keeps meshes in shared slabs of GPU memory… |
+| [D283](decisions/D283.md) | Mesh slabs start at 64 MiB and double | Tech | — | Superseded by D420 | Was: Bevy keeps meshes in shared slabs of GPU memory… |
 | [D369](decisions/D369.md) | A grey card grey at noon in the open | Tech | — | Superseded by D370 | Was: the day grade warmed only under a closed canopy… |
 | [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | — | Superseded by D37 | Was: a push's check that passed stamped its tree… |
 

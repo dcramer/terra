@@ -101,17 +101,7 @@ impl Town {
             ));
             // Where streets go out through it: a gatehouse over each.
             let gates: Vec<f32> = self
-                .streets
-                .iter()
-                .filter_map(|street| {
-                    // A street ending short of the wall goes on out through it.
-                    let mut line = street.points.clone();
-                    if let [.., p, q] = line[..] {
-                        line.push(q + (q - p).normalize_or_zero() * 4.0 * WALL_OUT_M);
-                    }
-                    line.windows(2)
-                        .find_map(|pair| crossing(pair[0], pair[1], a, b))
-                })
+                .street_crossings(a, b)
                 // Clear of the towers at its corners, near where it crosses.
                 .map(|t| t * long)
                 .filter(|_| long > 2.0 * (TOWER_HALF_M + GATE_HALF_M + GAP_M))
@@ -124,20 +114,8 @@ impl Town {
                 .collect();
             let mut stops: Vec<(f32, f32)> = vec![(0.0, TOWER_HALF_M), (long, TOWER_HALF_M)];
             for &t in &gates {
-                // Its passage reaches `GATE_IN_M` in from the wall's line, and where a corner
-                // of the line is cut it can come down on the street's last house (flat seed 7,
-                // hillside 3 and 6): there it stands proud of the curtain, out toward the
-                // fields, as gatehouses are built out over the ditch, until it is clear.
                 let ops = burg::town_gate(m);
-                let mut at = a + along * t;
-                for _ in 0..GATE_PROUD_STEPS {
-                    let gate = work("a gatehouse of the town wall", at, facing_of(out), &ops);
-                    let quads = footprint(&gate, &ground_rects(&gate));
-                    if self.clear_of_houses(&quads) {
-                        break;
-                    }
-                    at += out * GATE_PROUD_STEP_M;
-                }
+                let at = self.gate_clear(a + along * t, out, &ops);
                 works.push((
                     "a gatehouse of the town wall".into(),
                     at,
@@ -200,6 +178,35 @@ impl Town {
 }
 
 impl Town {
+    /// How far along the wall's side from `a` to `b` (0 at `a`, 1 at `b`) each street crossing
+    /// it does, a street ending short of the wall going on out through it.
+    fn street_crossings(&self, a: Vec2, b: Vec2) -> impl Iterator<Item = f32> + '_ {
+        self.streets.iter().filter_map(move |street| {
+            let mut line = street.points.clone();
+            if let [.., p, q] = line[..] {
+                line.push(q + (q - p).normalize_or_zero() * 4.0 * WALL_OUT_M);
+            }
+            line.windows(2)
+                .find_map(|pair| crossing(pair[0], pair[1], a, b))
+        })
+    }
+
+    /// Where a gatehouse (`ops`) over the wall's line at `at` stands, `out` toward the fields.
+    /// Its passage reaches `GATE_IN_M` in from the wall's line, and where a corner of the line
+    /// is cut it can come down on the street's last house (flat seed 7, hillside 3 and 6):
+    /// there it stands proud of the curtain, out toward the fields, as gatehouses are built out
+    /// over the ditch, until it is clear.
+    fn gate_clear(&self, mut at: Vec2, out: Vec2, ops: &[BuildOp]) -> Vec2 {
+        for _ in 0..GATE_PROUD_STEPS {
+            let gate = work("a gatehouse of the town wall", at, facing_of(out), ops);
+            if self.clear_of_houses(&footprint(&gate, &ground_rects(&gate))) {
+                break;
+            }
+            at += out * GATE_PROUD_STEP_M;
+        }
+        at
+    }
+
     /// Whether ground `quads` keep clear of every house and yard laid before the works.
     fn clear_of_houses(&self, quads: &[[Vec2; 4]]) -> bool {
         quads.iter().all(|q| {

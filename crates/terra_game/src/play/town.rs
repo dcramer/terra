@@ -534,6 +534,36 @@ fn patch(p: Vec2) -> f32 {
     top + (bottom - top) * sy
 }
 
+/// A meadow is a mix (D381): taller grass in drifts, greener and drier patches, and toward
+/// the forest's edge (`kept` of it kept here) bracken and low shrubs coming back into the
+/// clearing; along a lowland lake's bank rank grass and sedge.
+fn meadow_mix(
+    planet: &Planet,
+    ground: Vec3,
+    p: Vec2,
+    kept: f32,
+    growing: &mut terra_world::cover::Growing,
+) {
+    growing.tall = (patch(p / 9.0) - 0.35).max(0.0) * 1.5;
+    growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
+    let edge = (kept / MEADOW_KEPT).clamp(0.0, 1.0);
+    growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
+    // A lowland lake's bank in a meadow: rank grass and sedge thick and tall along the
+    // waterline in clumps, as reeds and sedge fringe a lake by a pasture, hiding where the
+    // water meets the bank (D381). The lakes' grid is asked first, which is cheap.
+    if let Some(level) = planet
+        .round()
+        .and_then(|round| round.water_near(ground.normalize(), 1))
+    {
+        let over = ground.length() - level;
+        let band = smoothstep(-0.15, 0.05, over) * (1.0 - smoothstep(0.6, 1.4, over));
+        let fringe = band * (0.55 + 0.9 * patch(p / 4.0 + 13.0)).min(1.0);
+        growing.grass = growing.grass.max(fringe);
+        growing.tall = growing.tall.max(fringe * 1.3);
+        growing.lush = growing.lush.max(fringe);
+    }
+}
+
 /// How far round its middle the town's cover is its own.
 const COVER_REACH_M: f32 = 170.0;
 
@@ -581,27 +611,8 @@ impl terra_world::cover::CoverSource for TownCover {
             },
             ..default()
         };
-        // A meadow is a mix (D381): taller grass in drifts, greener and drier patches, and
-        // toward the forest's edge bracken and low shrubs coming back into the clearing.
         if meadow {
-            growing.tall = (patch(p / 9.0) - 0.35).max(0.0) * 1.5;
-            growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
-            let edge = (kept / MEADOW_KEPT).clamp(0.0, 1.0);
-            growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
-            // A lowland lake's bank in a meadow: rank grass and sedge thick and tall along the
-            // waterline in clumps, as reeds and sedge fringe a lake by a pasture, hiding where
-            // the water meets the bank (D381). The lakes' grid is asked first, which is cheap.
-            if let Some(level) = planet
-                .round()
-                .and_then(|round| round.water_near(ground.normalize(), 1))
-            {
-                let over = ground.length() - level;
-                let band = smoothstep(-0.15, 0.05, over) * (1.0 - smoothstep(0.6, 1.4, over));
-                let fringe = band * (0.55 + 0.9 * patch(p / 4.0 + 13.0)).min(1.0);
-                growing.grass = growing.grass.max(fringe);
-                growing.tall = growing.tall.max(fringe * 1.3);
-                growing.lush = growing.lush.max(fringe);
-            }
+            meadow_mix(planet, ground, p, kept, &mut growing);
         }
         // How far into a way a point is, by the nearest street or the square, a soft edge
         // where the grass comes back.
@@ -911,11 +922,6 @@ pub struct Laid;
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Live;
 
-/// Lays the town out on the ground where it is wanted, and puts it up: its buildings by the
-/// shortcuts, their doors and shutters, the things of its day as catalogue items, the
-/// streets and square kept clear of what grows; then its people, placed where the clock
-/// says they are.
-#[allow(clippy::too_many_arguments)]
 /// The corners of a box round a town's ways, ten metres out past them.
 fn ways_bounds(town: &terra_town::town::Town) -> (Vec2, Vec2) {
     let nodes = || town.paths.nodes.iter().map(|n| n.0);
@@ -926,6 +932,11 @@ fn ways_bounds(town: &terra_town::town::Town) -> (Vec2, Vec2) {
     )
 }
 
+/// Lays the town out on the ground where it is wanted, and puts it up: its buildings by the
+/// shortcuts, their doors and shutters, the things of its day as catalogue items, the
+/// streets and square kept clear of what grows; then its people, placed where the clock
+/// says they are.
+#[allow(clippy::too_many_arguments)]
 fn lay(
     mut commands: Commands,
     wanted: Res<Wanted>,
@@ -1307,117 +1318,11 @@ fn lay(
     );
     info!("Town: {} fence modules round its yards.", fences);
 
-    // Where to stand to see it, as the settlement gives its own (D69).
-    let vantage = |name: &str, eye: Vec2, eye_up: f32, look: Vec2, look_up: f32| {
-        let point = |p: Vec2, h: f32| {
-            let ground = at(p);
-            start.local(ground + ground.normalize() * h)
-        };
-        let (eye, look) = (point(eye, eye_up), point(look, look_up));
-        info!(
-            "Town vantage: {name}: --vantage {:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
-            eye.x, eye.y, eye.z, look.x, look.y, look.z
-        );
-    };
-    let along = town.square.along;
-    let across = town.square.across;
-    let (low_a, high_a) = town
-        .square
-        .outline
-        .iter()
-        .map(|p| p.dot(along))
-        .fold((f32::MAX, f32::MIN), |(l, h), x| (l.min(x), h.max(x)));
-    vantage(
-        "square",
-        along * (low_a + 3.0) + across * 2.0,
-        1.7,
-        along * high_a * 0.5,
-        1.6,
-    );
-    vantage(
-        "market",
-        along * high_a * 0.6 - across * 4.0,
-        1.7,
-        -along * 4.0,
-        1.4,
-    );
-    // A hen yard, and the smithy, from a few metres off.
-    for (name, kind, off) in [
-        ("yard", ThingKind::Yard, -7.0),
-        ("forge", ThingKind::Forge, 6.0),
-    ] {
-        if let Some(thing) = town.things.iter().find(|t| t.kind == kind) {
-            let eye = thing.place(Vec2::new(off * 0.5, off));
-            vantage(name, eye, 1.7, thing.at, 0.6);
-        }
-    }
-    vantage(
-        "above",
-        along * low_a * 1.6 + across * 30.0,
-        28.0,
-        Vec2::ZERO,
-        0.0,
-    );
-    if let Some(street) = town.streets.first() {
-        let n = street.points.len();
-        // Down the street toward the square, from a little off its middle.
-        let (eye, toward) = (street.points[n / 2], street.points[n / 5]);
-        let aside = (toward - eye).normalize_or_zero().perp() * 1.2;
-        vantage("street", eye + aside, 1.7, toward, 1.8);
-        // Where to stand to walk in, as --at and --face take it.
-        let (from, toward) = (
-            start_terms(&start, at(street.points[n / 2])),
-            start_terms(&start, middle),
-        );
-        info!(
-            "Town arrival: --at {:.1},{:.1} --face {:.1},{:.1}",
-            from.x, from.y, toward.x, toward.y
-        );
-        if wanted.arrive {
-            warp.0 = Some(((from.x, from.y), Some((toward.x, toward.y))));
-        }
-        // A walk for a film: in along the main street from halfway out, across the square
-        // past the market, and on up the other main street a way, as `--route` takes it.
-        let mut walk: Vec<Vec2> = street.points[..=n / 2].iter().rev().copied().collect();
-        walk.push(along * low_a * 0.3 - across * 2.0);
-        walk.push(along * high_a * 0.3 + across * 2.0);
-        if let Some(other) = town.streets.get(1) {
-            walk.extend(other.points.iter().take(other.points.len() / 3));
-        }
-        let route: Vec<String> = walk
-            .iter()
-            .step_by(2)
-            .map(|&p| {
-                let l = start_terms(&start, at(p));
-                format!("--route {:.1},{:.1}", l.x, l.y)
-            })
-            .collect();
-        info!("Town route: {}", route.join(" "));
-        // Where the square and its market are, in the terms a route takes, to plan one by.
-        let spot = |p: Vec2| {
-            let l = start_terms(&start, at(p));
-            format!("{:.1},{:.1}", l.x, l.y)
-        };
-        let marked = |kind: ThingKind| {
-            town.things
-                .iter()
-                .filter(|t| t.kind == kind)
-                .map(|t| spot(t.at))
-                .collect::<Vec<_>>()
-                .join(" ")
-        };
-        info!(
-            "Town square: corners {}; well {}; stalls {}; benches {}",
-            town.square
-                .outline
-                .iter()
-                .map(|&p| spot(p))
-                .collect::<Vec<_>>()
-                .join(" "),
-            marked(ThingKind::Well),
-            marked(ThingKind::Stall),
-            marked(ThingKind::Bench),
-        );
+    // Where to stand to see it and to walk in, as the settlement gives its own (D69).
+    if let Some((from, toward)) = vantages::announce(&town, &start, &at, middle)
+        && wanted.arrive
+    {
+        warp.0 = Some(((from.x, from.y), Some((toward.x, toward.y))));
     }
 
     // Its ground cover, over what the world grows round it if it grows its own.
@@ -1580,6 +1485,8 @@ fn live(
     let market = &mut *market;
     market.animals.step(&market.life, step, &viewers);
 }
+
+mod vantages;
 
 #[cfg(test)]
 mod tests;
