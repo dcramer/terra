@@ -71,7 +71,7 @@ Each layer is a renderer with its own clock: it starts, stops, loops and hides o
 
 ## The flipbook format
 
-Two textures a flipbook set, both KTX2 BC-compressed (Leaning), with motion vectors for every frame.
+Two textures a flipbook set, with motion vectors for every frame, cooked without mips by `cargo xtask cook` (D188): the flame map BC7, the motion BC5.
 
 - **Flame map**, per texel, 0 to 1 each:
   - **R heat**: the index into the ramp, the fire's temperature as the baker renders it.
@@ -121,7 +121,7 @@ A smoke set (`"six_way": true`, `campfire-smoke` and `house-smoke`) is one puff,
 - crossfades a loop's last frames into its first, premultiplied;
 - writes `assets/textures/fire/<set>.png` (the flame map), `<set>.motion.png` (half size) and `<set>.json` (the sidecar the engine reads: grid, rate, motion scale).
 
-PNG, not KTX2, until the GPU compression step D188 names: a set is about 4.3 MB in the repository (2048² flame map 3.5 MB, motion 0.8 MB). Far sets are the hero's mips, not files of their own.
+PNG in the repository, a set about 4.3 MB (2048² flame map 3.5 MB, motion 0.8 MB); the game reads the cooked copies where they are there. Far sets are the hero's mips, not files of their own.
 
 It prints one line per set:
 - frames;

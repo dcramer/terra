@@ -162,7 +162,7 @@ Check every model in the game's own light, beside a figure for scale (the workbe
 Not everything we have made yet follows this guide. Each gap is work to do, not an exception to the rules:
 
 - **Tools and the modelled trees are flat colour by role,** from direction D and before: a tool because its held look is coloured by its Wood and Metal parts (`tools/characters/fit_held.py`). Every prop the game places is textured (D304).
-- **Textures are not compressed yet.** A prop's maps are JPEG in its file and plain RGBA on the GPU, with mipmaps made when they load; GPU-compressed textures (KTX2, BC7) come with the asset pipeline step D188 names.
+- **Textures are block-compressed only once cooked** (D188): a model's maps stay JPEG or PNG in its file, and `cargo xtask cook` bakes them for the GPU (colour BC7, normals BC5, with mipmaps); a checkout that has not cooked draws them uncompressed.
 - **Item icons are painted in direction C** (D130), and will be repainted to match.
 
 ## How the renderer makes it

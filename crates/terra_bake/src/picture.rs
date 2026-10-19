@@ -12,9 +12,11 @@ use ctt::{
     AlphaMode, ColorSpace, Container, ConvertSettings, Format, FormatDesc, ImageRef,
     PipelineOutput, Quality, SurfaceRef, TargetFormat, TextureKind,
 };
+use std::borrow::Cow;
 use terra_core::cooked::{Kind, mips};
 
 /// One layer's pixels, four bytes each.
+#[derive(Clone)]
 pub struct Layer {
     pub rgba: Vec<u8>,
     pub width: u32,
@@ -58,6 +60,8 @@ pub fn block(kind: Kind, one_channel: bool) -> Block {
 
 /// The layers cooked as `kind` into `block`, with every mipmap down to one texel where `mips`.
 pub fn cook(layers: &[Layer], kind: Kind, block: Block, mips: bool) -> Result<Vec<u8>, String> {
+    let fitted: Vec<Cow<Layer>> = layers.iter().map(whole_blocks).collect();
+    let layers: Vec<&Layer> = fitted.iter().map(|l| l.as_ref()).collect();
     let srgb = kind == Kind::Colour;
     let cut_out = srgb && mips && layers.iter().any(|l| mips::is_cut_out(&l.rgba, true));
     // Every layer's levels, made here where the chain must keep coverage.
@@ -134,6 +138,26 @@ pub fn cook(layers: &[Layer], kind: Kind, block: Block, mips: bool) -> Result<Ve
         Ok(PipelineOutput::Raw(_)) => Err("ctt returned a raw image for a KTX2".into()),
         Err(problem) => Err(problem.to_string()),
     }
+}
+
+/// A layer whose sides are whole blocks of four, as a block-compressed texture's top level
+/// must be (wgpu refuses one 615 high): resampled to the nearest multiple of four where not,
+/// as Unreal and Unity resize a compressed texture's non-multiple sides. The picture's UVs
+/// run 0 to 1, so the model still maps it whole; it moves by under two texels in hundreds.
+fn whole_blocks(layer: &Layer) -> Cow<'_, Layer> {
+    let fit = |side: u32| ((side + 2) / 4 * 4).max(4);
+    let (w, h) = (fit(layer.width), fit(layer.height));
+    if (w, h) == (layer.width, layer.height) {
+        return Cow::Borrowed(layer);
+    }
+    let buffer = image::RgbaImage::from_raw(layer.width, layer.height, layer.rgba.clone())
+        .expect("a layer's bytes are its pixels");
+    let fitted = image::imageops::resize(&buffer, w, h, image::imageops::FilterType::Triangle);
+    Cow::Owned(Layer {
+        width: w,
+        height: h,
+        rgba: fitted.into_raw(),
+    })
 }
 
 /// A chain laid end to end (`mips::cut_out_chain`) cut into its levels.
@@ -238,5 +262,45 @@ mod tests {
         assert_eq!(read(&normal), (Format::BC5_UNORM_BLOCK, 7, 2));
         let flipbook = cook(&[layer()], Kind::Data, Block::Bc7, false).unwrap();
         assert_eq!(read(&flipbook), (Format::BC7_UNORM_BLOCK, 1, 0));
+    }
+
+    #[test]
+    fn a_data_picture_keeps_its_alpha() {
+        // The leaf cards' normal map: roughness in its alpha (D292), varying across the card.
+        let layer = Layer {
+            rgba: (0..64 * 64)
+                .flat_map(|i| [128, 128, 255, (i % 64 * 4) as u8])
+                .collect(),
+            width: 64,
+            height: 64,
+        };
+        let bytes = cook(&[layer], Kind::Data, Block::Bc7, true).unwrap();
+        let reader = ktx2::Reader::new(&bytes[..]).expect("a KTX2");
+        let top = reader.levels().next().expect("a level");
+        let blocks = zstd::decode_all(top.data).expect("zstd");
+        // A BC7 block's mode is its lowest set bit; only modes 4 to 7 carry alpha.
+        let opaque = blocks
+            .chunks_exact(16)
+            .filter(|b| b[0].trailing_zeros() < 4)
+            .count();
+        assert_eq!(
+            opaque,
+            0,
+            "{opaque} of {} blocks dropped the alpha",
+            blocks.len() / 16
+        );
+    }
+
+    #[test]
+    fn a_picture_whose_sides_are_not_whole_blocks_is_cooked_to_the_nearest() {
+        // A 2048 by 1231 map capped at 1024 is 1024 by 615, which wgpu refuses as BC.
+        let layer = Layer {
+            rgba: vec![128; 10 * 615 * 4],
+            width: 10,
+            height: 615,
+        };
+        let bytes = cook(&[layer], Kind::Colour, Block::Bc7, true).unwrap();
+        let header = ktx2::Reader::new(&bytes[..]).expect("a KTX2").header();
+        assert_eq!((header.pixel_width, header.pixel_height), (12, 616));
     }
 }

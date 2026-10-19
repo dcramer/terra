@@ -17,6 +17,8 @@ serde_json = "1"
 [dev-dependencies]
 # Reads back what the bake wrote: the version ctt writes with.
 ktx2 = "0.5"
+# Unpacks a level the bake wrote, as ctt writes them with zstd; already built for ctt.
+zstd = "0.13"
 
 [lints]
 workspace = true

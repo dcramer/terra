@@ -51,7 +51,16 @@ pub fn picture(
     settings: impl Fn(&mut ImageLoaderSettings) + Send + Sync + 'static,
 ) -> Handle<Image> {
     match name(path, cook) {
-        Some(name) => assets.load(AssetPath::from(name).with_source(SOURCE)),
+        // Bevy's KTX2 reader takes sRGB from the settings, not the file, and reads every BC7
+        // as colour by default: a data map (the leaf cards' normal, a bark's ARM) read so
+        // turned every leaf and petal grey.
+        Some(name) => {
+            let srgb = cook.kind == cooked::Kind::Colour;
+            assets
+                .load_builder()
+                .with_settings(move |s: &mut ImageLoaderSettings| s.is_srgb = srgb)
+                .load(AssetPath::from(name).with_source(SOURCE))
+        }
         None => assets
             .load_builder()
             .with_settings(settings)

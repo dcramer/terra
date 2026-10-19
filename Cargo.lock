@@ -6005,6 +6005,7 @@ dependencies = [
  "rayon",
  "serde_json",
  "terra_core",
+ "zstd",
 ]
 
 [[package]]
