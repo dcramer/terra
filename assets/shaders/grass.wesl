@@ -75,6 +75,10 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
+// How far snow presses down what it covers, metres, beyond its depth.
+const BLADES_PRESSED_M: f32 = 0.25;
+// Snow caught on what still stands through it, linear, as the ground's snow.
+const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
 // Rime on grass's blades in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
@@ -84,14 +88,22 @@ fn climate_place(world: vec3<f32>) -> vec2<f32> {
 
 // How deep the snow lies over a blade's root, as ground.wesl lays it, so the blades sink
 // into the white the ground is painted: none where its broken edge leaves the ground bare.
+// Snow flattens what it buries, so a blade is pressed down under it by more than the depth
+// (BLADES_PRESSED_M at full cover): stood up through it, the forest's blades drew a black
+// carpet round the eye and black hatching over the white (weather round 7).
 fn snow_over(root: vec3<f32>) -> f32 {
     if grass.climate_on == 0u {
         return 0.0;
     }
     let depth = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(root), 0.0).r * SNOW_FULL_M;
+    let cover = snow_cover(root, depth);
+    return (depth * 1.2 + BLADES_PRESSED_M) * cover;
+}
+
+// How whole the snow's cover is over a point, as ground.wesl lays it.
+fn snow_cover(root: vec3<f32>, depth: f32) -> f32 {
     let edge = noise(root * 0.35 + 91.0) * 0.6 + noise(root * 1.9 + 23.0) * 0.4;
-    let cover = smoothstep(0.0, 1.0, (depth - 0.004) / 0.09 + (edge - 0.5) * 0.9);
-    return depth * cover * 1.2;
+    return smoothstep(0.0, 1.0, (depth - 0.004) / 0.06 + (edge - 0.5) * 0.9);
 }
 
 fn hash(p: vec3<f32>) -> f32 {
@@ -273,6 +285,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;
         colour = mix(colour, RIME, frost * 0.6 * vertex.uv_b.x);
+        // What stands through lying snow carries some on it, most toward its top.
+        let depth = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).r * SNOW_FULL_M;
+        let snowed = snow_cover(world.xyz, depth) * smoothstep(0.0, 0.03, depth);
+        colour = mix(colour, SNOW, snowed * (0.35 + 0.45 * vertex.uv_b.x));
 }
     }
     out.color = vec4<f32>(colour, 1.0);

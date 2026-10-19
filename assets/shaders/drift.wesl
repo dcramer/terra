@@ -61,6 +61,11 @@ fn is_fall() -> bool {
     return drift.look.z > 0.5;
 }
 
+// Snow falling, not rain.
+fn is_snow() -> bool {
+    return drift.look.w > 0.5;
+}
+
 // How long a camera's shutter is open, seconds: half a frame at 30 a second, as a film
 // camera's 180 degree shutter, so a flake moving across the view draws a short streak.
 const SHUTTER_S: f32 = 1.0 / 60.0;
@@ -179,9 +184,11 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // Faded toward the box's sides, so none is seen to come or go, and over the few metres
     // nearest the eye, where a speck would be a big bright fleck across the picture. A
     // flake of snow is seen big and soft as it passes within a metre or two, as a camera
-    // sees one, so only the nearest half metre is faded.
+    // sees one, so only the nearest half metre of rain is faded, and the nearest metre or so of
+    // snow: from half a metre, two soft grey flakes read as dirt on the lens (weather round 7).
     let distance = length(view.world_position - middle);
-    let near = select(smoothstep(1.5, 4.0, distance), smoothstep(0.3, 0.8, distance), is_fall());
+    let fall_near = select(vec2<f32>(0.3, 0.8), vec2<f32>(0.9, 1.8), is_snow());
+    let near = select(smoothstep(1.5, 4.0, distance), smoothstep(fall_near.x, fall_near.y, distance), is_fall());
     var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * near * about;
     // Never smaller than a pixel and a half on screen; one drawn bigger is fainter, so a
     // far mote does not flicker in and out.

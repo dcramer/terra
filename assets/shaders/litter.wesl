@@ -61,7 +61,7 @@ fn under_snow(world: vec3<f32>) -> f32 {
     let at = clamp((litter.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
     let depth = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).r * SNOW_FULL_M;
     let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
-    return smoothstep(0.3, 0.6, (depth - 0.004) / 0.09 + (edge - 0.5) * 0.9);
+    return smoothstep(0.3, 0.6, (depth - 0.004) / 0.06 + (edge - 0.5) * 0.9);
 }
 
 // A point sunk under the ground as the camera draws away from it, by its piece's rank. The

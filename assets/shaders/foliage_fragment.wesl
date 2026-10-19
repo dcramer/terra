@@ -247,6 +247,11 @@ const BOUGH_UNDERSIDE: f32 = 0.35;
 // The height over a plant's foot, metres, from which its boughs carry more of the load, to
 // where they carry all of it.
 const BOUGH_HIGH_M: vec2<f32> = vec2<f32>(2.0, 10.0);
+// How much of bark's colour a frost greys, where snow lies (weather round 8).
+const BARK_FROST_GREY: f32 = 0.6;
+// The height over a stem's foot, metres, to which plastered snow is thickest and wraps
+// farthest round, and from which it is only the windward coat.
+const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -379,22 +384,33 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let clumped = smoothstep(0.25 - 0.2 * lying, 0.6 - 0.2 * lying, wander(world * 1.3));
         snow = lying * smoothstep(0.3, 0.75, up) * clumped;
         colour = mix(colour, SNOW, snow * 0.92);
+        // Bark in a frost is dry and grey, and the moss on it dull under the rime: its green
+        // read as a summer wood's beside the snow (weather round 7).
+        let bark_grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));
+        colour = mix(colour, vec3<f32>(bark_grey), lying * BARK_FROST_GREY);
         // Snow the wind drives onto a stem's windward side sticks there through a snowy spell
-        // (rime and plastered snow), in patches, so a trunk reads white on one side and dark
-        // bark on the other. Gated by what lies, so a summer stem is bare.
+        // (plastered snow), a soft, uneven coat, thickest low where the drift reaches and
+        // wrapping farther round the stem there, so a trunk reads white on one side and dark
+        // bark on the other; and banked all round its foot. In the plant's own frame (the
+        // world's is the planet's, whose up is the position itself), moved for each plant.
+        // Gated by what lies, so a summer stem is bare. Thin vertical streaks read as birch
+        // bark or lichen (weather round 7).
         let level = wind.direction - sky_up * dot(wind.direction, sky_up);
         let into = -level / max(length(level), 1e-4);
-        // Streaks run up the stem: the noise, in the plant's own frame (the world's is the
-        // planet's, whose up is the position itself), is stretched along its up, a fifth as
-        // fine, and moved for each plant.
-        let windward = smoothstep(0.25, 0.85, dot((*input).N, into));
         let foot_up = normalize(origin);
         let from_foot = world - origin;
         let stem_h = dot(from_foot, foot_up);
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
-        let streaks = smoothstep(0.45, 0.7, wander(across * 3.0 + foot_up * stem_h * 0.6 + seed));
-        colour = mix(colour, SNOW, lying * windward * streaks * 0.8);
+        let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
+        let windward = smoothstep(-0.1 - 0.4 * low, 0.5, dot((*input).N, into));
+        let blot = wander(across * 1.7 + foot_up * stem_h * 0.5 + seed) * 0.7 + wander(world * 6.0 + seed) * 0.3;
+        let plaster = smoothstep(0.4, 0.52, blot + 0.3 * low) * windward;
+        let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
+        let stuck = lying * max(plaster, bank);
+        colour = mix(colour, SNOW, stuck);
+        // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
+        snow = max(snow, stuck * 0.5);
     }
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     // Lit as the snow lying is, by the sky over it, not as the leaf under it.

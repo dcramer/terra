@@ -155,7 +155,8 @@ pub struct DriftExtension {
     /// Its colour, linear, and its glow toward the sun.
     #[uniform(100)]
     colour: Vec4,
-    /// How it is drawn (0 speck, 1 leaf, 2 bird) and how opaque.
+    /// How it is drawn (0 speck, 1 leaf, 2 bird), how opaque, whether it is a fall, and
+    /// whether a fall of snow.
     #[uniform(100)]
     look: Vec4,
     /// A flock's: how high over the eye it flies, lowest and highest, its wings' beat, and
@@ -403,7 +404,12 @@ fn sow(
                     kind.opacity,
                     // A fall thins by its cards, not by fading them.
                     if kind.falls.is_some() { 1.0 } else { 0.0 },
-                    0.0,
+                    // Snow is faded farther from the eye than rain (drift.wesl).
+                    if kind.falls.is_some_and(|falls| falls.snow) {
+                        1.0
+                    } else {
+                        0.0
+                    },
                 ),
                 flock,
             },

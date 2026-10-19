@@ -493,11 +493,20 @@ fn heath_flat(h: HeathHere, shrub_colour: vec3<f32>, sedge_colour: vec3<f32>) ->
 // Snow lying on ground facing up (climate.md, D327): a dusting shows the floor through in
 // patches, its edge broken by noise, and some ten centimetres covers it; less under the
 // crowns, which catch what falls. `up_facing` is how level the surface is.
+// How much less snow lies under the crowns than in the open: a conifer stand intercepts a
+// third to a half of a fall (Hedstrom and Pomeroy 1998), but the floor still reads white; at
+// 0.6 the forest's floor showed through as dark hatching (weather round 7).
+const SNOW_UNDER_CROWNS: f32 = 0.35;
+// How deep, metres, snow lies before it covers the floor whole, its edge's noise aside.
+const SNOW_COVERS_M: f32 = 0.06;
+// How level, the normal's dot with up, ground must be for snow to start to lie, and to lie
+// whole: a bank of 50 degrees holds snow; without, banks along the path stood black.
+const SNOW_SLOPE: vec2<f32> = vec2<f32>(0.35, 0.7);
 fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
-    let lying = depth_m * (1.0 - 0.6 * under);
+    let lying = depth_m * (1.0 - SNOW_UNDER_CROWNS * under);
     let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
-    let cover = smoothstep(0.0, 1.0, (lying - 0.004) / 0.09 + (edge - 0.5) * 0.9);
-    return cover * smoothstep(0.55, 0.85, up_facing) * step(0.001, lying);
+    let cover = smoothstep(0.0, 1.0, (lying - 0.004) / SNOW_COVERS_M + (edge - 0.5) * 0.9);
+    return cover * smoothstep(SNOW_SLOPE.x, SNOW_SLOPE.y, up_facing) * step(0.001, lying);
 }
 
 // A meadow's colour seen from high (D381): drifts of drier and lusher grass and darker

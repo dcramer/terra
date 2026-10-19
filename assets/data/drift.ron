@@ -155,9 +155,9 @@
             // the big ones drifting past, some five a cubic metre in a moderate fall, so a few
             // hundred are seen within 4 m at 6 to 12 px (round 2 drew some 30, of 1 to 2 px).
             name: "Snowfall",
-            count: 16000,
+            count: 40000,
             look: Speck,
-            size_m: 0.022,
+            size_m: 0.018,
             colour: (0.95, 0.96, 0.98),
             glow: 1.5,
             opacity: 0.9,
@@ -173,7 +173,7 @@
         (
             // The same snow farther off, filling the view to where the haze takes over.
             name: "Snowfall far",
-            count: 30000,
+            count: 60000,
             look: Speck,
             size_m: 0.018,
             colour: (0.95, 0.96, 0.98),
