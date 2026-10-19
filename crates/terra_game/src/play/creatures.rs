@@ -312,48 +312,9 @@ fn prepare(
     {
         return;
     }
-    let mut ready = Vec::new();
-    for (species, model) in &kinds.models {
-        let Some(gltf) = gltfs.get(model) else { return };
-        let Some(scene) = gltf.default_scene.clone() else {
-            error!("{} has no scene.", bestiary.name(*species));
-            return;
-        };
-        let about = &bestiary.get(*species).clips;
-        let clip = |name: &str| gltf.named_animations.get(name).cloned();
-        let names = [
-            &about.idle,
-            &about.walk,
-            &about.run,
-            about.eat.as_ref().unwrap_or(&about.idle),
-            &about.attack,
-            &about.death,
-            about.fly.as_ref().unwrap_or(&about.run),
-        ];
-        let Some(clips) = names
-            .iter()
-            .map(|name| clip(name))
-            .collect::<Option<Vec<_>>>()
-        else {
-            error!("{} is missing an animation.", bestiary.name(*species));
-            return;
-        };
-        let (graph, nodes) = AnimationGraph::from_clips(clips);
-        ready.push((
-            *species,
-            scene,
-            graphs.add(graph),
-            Clips {
-                idle: nodes[0],
-                walk: nodes[1],
-                run: nodes[2],
-                eat: nodes[3],
-                attack: nodes[4],
-                death: nodes[5],
-                fly: nodes[6],
-            },
-        ));
-    }
+    let Some(ready) = animated(&kinds, &gltfs, &bestiary, &mut graphs) else {
+        return;
+    };
     kinds.ready = ready;
     // The yard, the flat test level, has no herds, and so no lair and no village beside it;
     // a forest grown on it has its wildlife all the same (`wildlife`).
@@ -445,6 +406,59 @@ fn prepare(
         }
     }
     commands.insert_resource(Populated);
+}
+
+/// Each kind's scene, its animation graph and the clips in it, or nothing if a model
+/// lacks its scene or a clip its kind asks for.
+fn animated(
+    kinds: &Kinds,
+    gltfs: &Assets<Gltf>,
+    bestiary: &Bestiary,
+    graphs: &mut Assets<AnimationGraph>,
+) -> Option<Vec<(Species, Handle<WorldAsset>, Handle<AnimationGraph>, Clips)>> {
+    let mut ready = Vec::new();
+    for (species, model) in &kinds.models {
+        let gltf = gltfs.get(model)?;
+        let Some(scene) = gltf.default_scene.clone() else {
+            error!("{} has no scene.", bestiary.name(*species));
+            return None;
+        };
+        let about = &bestiary.get(*species).clips;
+        let clip = |name: &str| gltf.named_animations.get(name).cloned();
+        let names = [
+            &about.idle,
+            &about.walk,
+            &about.run,
+            about.eat.as_ref().unwrap_or(&about.idle),
+            &about.attack,
+            &about.death,
+            about.fly.as_ref().unwrap_or(&about.run),
+        ];
+        let Some(clips) = names
+            .iter()
+            .map(|name| clip(name))
+            .collect::<Option<Vec<_>>>()
+        else {
+            error!("{} is missing an animation.", bestiary.name(*species));
+            return None;
+        };
+        let (graph, nodes) = AnimationGraph::from_clips(clips);
+        ready.push((
+            *species,
+            scene,
+            graphs.add(graph),
+            Clips {
+                idle: nodes[0],
+                walk: nodes[1],
+                run: nodes[2],
+                eat: nodes[3],
+                attack: nodes[4],
+                death: nodes[5],
+                fly: nodes[6],
+            },
+        ));
+    }
+    Some(ready)
 }
 
 /// Forms the creatures asked for.

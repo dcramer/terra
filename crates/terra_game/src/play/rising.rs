@@ -607,27 +607,7 @@ fn build(
         && let Some(site) = site.as_deref()
     {
         rising.claimed = true;
-        let middle = market.middle;
-        let to_site = site.frame.compute_affine().inverse();
-        if let Some(item) = catalogue.item_from("ClaimStone") {
-            let point = to_site.transform_point3(middle + market.east * 1.5);
-            if let Some(stone) = props::place(
-                &mut commands,
-                &models,
-                site,
-                &planet,
-                &item,
-                point.with_y(0.0),
-                0.0,
-                30.0,
-                false,
-            ) {
-                // The town's, so the player's props' hiding (`props::keep_clear`) leaves it be.
-                commands
-                    .entity(stone)
-                    .insert((props::Theirs, Visibility::Hidden));
-            }
-        }
+        set_claim(&mut commands, (&models, &catalogue), site, &planet, &market);
     }
     let mut budget = rising.lapse.steps_a_frame;
     for (mut built, mut rise) in &mut builds {
@@ -750,6 +730,38 @@ fn build(
                 commands.entity(entity).despawn();
             }
             info!("Time-lapse: building {index} up at {t:.1} s.");
+        }
+    }
+}
+
+/// The claim stone set at the square, a step and a half east of its middle, as the town's,
+/// unseen.
+fn set_claim(
+    commands: &mut Commands,
+    (models, catalogue): (&Models, &Builds),
+    site: &Site,
+    planet: &Planet,
+    market: &Market,
+) {
+    let middle = market.middle;
+    let to_site = site.frame.compute_affine().inverse();
+    if let Some(item) = catalogue.item_from("ClaimStone") {
+        let point = to_site.transform_point3(middle + market.east * 1.5);
+        if let Some(stone) = props::place(
+            commands,
+            models,
+            site,
+            planet,
+            &item,
+            point.with_y(0.0),
+            0.0,
+            30.0,
+            false,
+        ) {
+            // The town's, so the player's props' hiding (`props::keep_clear`) leaves it be.
+            commands
+                .entity(stone)
+                .insert((props::Theirs, Visibility::Hidden));
         }
     }
 }
