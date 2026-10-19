@@ -86,6 +86,17 @@ export const PLACES: Record<string, Place> = {
     // --site lake` prints.
     route: { at: "216,22", face: "248,-3", through: "248,-3;275,-35;302,-67;340,-84;378,-100;410,-124;431,-165;445,-213" },
   },
+  // The lake's peaks held to the mountains' own reference (D425): the lake's site from 80 m up
+  // its shore, across the water to the range, side-lit in the morning.
+  "lake-range": {
+    about: "the mountain lake's range (the lake's site, 80 m up its shore), held to the mountains' reference",
+    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-10"],
+    views: [["range", "40,80,120,300,400,-2500"]],
+    measured: ["range"],
+    look: "mountains-day",
+    ground: true,
+    forest: false,
+  },
   tundra: {
     about:
       "the tundra (docs/demos.md §2): the fell plateau its query found 10.5 km north of the start, pinned (--site tundra@-15.54,10.52), in early October, the heath's autumn colours and the first snow lying in the lees",
@@ -148,9 +159,12 @@ export const PLACES: Record<string, Place> = {
       ["east", "0,12,0,400,20,0"],
       ["south", "0,12,0,0,20,400"],
       ["west", "0,12,0,-400,20,0"],
+      // The range's south-facing wall from 60 m up, side-lit in the morning (D425); from eye
+      // height the range does not show yet (research/2026-10-19-mountain-look.md).
+      ["range", "0,60,0,0,70,-1500"],
     ],
-    measured: [],
-    look: "mountain-lake-day",
+    measured: ["range"],
+    look: "mountains-day",
     ground: false,
     forest: false,
   },

@@ -83,6 +83,20 @@
         "foliageLit": { "rule": "leaves", "over": 0.08 }
       }
     },
+    "valley": {
+      "time": "8",
+      "hold": {
+        "far.contrast": { "rule": "horizon", "over": 0.08 },
+        "farUnderSky": { "rule": "far", "within": 0.14 }
+      }
+    },
+    "lake-range": {
+      "time": "8",
+      "hold": {
+        "far.contrast": { "rule": "horizon", "over": 0.08 },
+        "farUnderSky": { "rule": "far", "within": 0.14 }
+      }
+    },
     "town": {
       "time": "13",
       "hold": {

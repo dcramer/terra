@@ -1,0 +1,74 @@
+{
+  "name": "mountains-day",
+  "about": "Rocky, tall ranges by day, side-lit: six photographs from Wikimedia Commons (the Tatras over Morskie Oko, the Dolomites' Sella and Langkofel and the Odle in snow, the Matterhorn, Fitz Roy, Lauterbrunnen's walls; CC BY and CC BY-SA, credited in research/2026-10-19-mountain-look.md) and Steam store frames of Witcher 3 (Toussaint, Kaer Morhen), Red Dead Redemption 2 (the Grizzlies) and Horizon Forbidden West (the Daunt), measured by band. What the ranges are judged against (D425).",
+  "sources": [
+    "https://commons.wikimedia.org/wiki/File:Morskie_Oko_o_poranku.jpg",
+    "https://commons.wikimedia.org/wiki/File:Val_Gardena_with_Sella_and_Saslonch_from_Resciesa.JPG",
+    "https://commons.wikimedia.org/wiki/File:Val_Gardena_Cisles.JPG",
+    "https://commons.wikimedia.org/wiki/File:Matterhorngletscher.jpg",
+    "https://commons.wikimedia.org/wiki/File:Los_Glaciares_-_El_Chalten_Fitz_Roy_001.jpg",
+    "https://commons.wikimedia.org/wiki/File:1_lauterbrunnen_valley_2012.jpg",
+    "https://store.steampowered.com/app/292030",
+    "https://store.steampowered.com/app/1174180",
+    "https://store.steampowered.com/app/2420110"
+  ],
+  "frames": 10,
+  "measured": "2026-10-19",
+  "look": {
+    "mean": 0.44019629384652514,
+    "p5": 0.14484917647058823,
+    "p50": 0.42794219607843137,
+    "p95": 0.7830626666666666,
+    "dark": 0.025596836419753084,
+    "bright": 0.023649546682098767,
+    "redOverGreen": 0.9443284509131802,
+    "blueOverGreen": 1.074391675934664,
+    "contrast": 0.1888312956098263,
+    "litLitter": 0.07112514467592593,
+    "shadeRedOverGreen": 1.0937973976771265,
+    "shadeBlueOverGreen": 0.845703984766877,
+    "middleBlueOverGreen": 1.0652633927002202,
+    "limeTop": 0.00689453125,
+    "trunkMiddle": 0.2079526909722222,
+    "tint": 0.00251789212465073,
+    "lilac": 0.0059294463734567895,
+    "hardEdges": 0.37488991540445504,
+    "facets": 0.06604166666666668,
+    "flat": 0.025237492946500524,
+    "flatFoliage": 0.12080456031024099,
+    "foliageColour": 0.11800698397269181,
+    "foliageLit": 0.06405744875879789
+  },
+  "bands": {
+    "sky": {
+      "share": 0.3564925250771605,
+      "mean": 0.5988951203692597,
+      "blueOverGreen": 1.2518570259893977,
+      "saturation": 0.30931045326772955,
+      "contrast": 0.03204701951120475
+    },
+    "far": {
+      "share": 0.0914927662037037,
+      "mean": 0.45796003445875355,
+      "blueOverGreen": 1.0658635765442521,
+      "saturation": 0.22221257187392546,
+      "contrast": 0.19854011166103644
+    },
+    "middle": {
+      "share": 0.2492803819444444,
+      "mean": 0.4050538020433054,
+      "blueOverGreen": 1.0054730542699137,
+      "saturation": 0.2390485567435902,
+      "contrast": 0.20847273828009757
+    },
+    "near": {
+      "share": 0.3027343267746913,
+      "mean": 0.3028649376482499,
+      "blueOverGreen": 0.8290354909284925,
+      "saturation": 0.34879994645340984,
+      "contrast": 0.24576675084917313
+    },
+    "farUnderSky": 0.20433368016148065,
+    "farBluerThanMiddle": 0.0603905222743385
+  }
+}
