@@ -58,11 +58,15 @@ struct Painted {
     filtering: u32,
 }
 
-/// What snow lying round the camera gives back of the light, linear: the ground's bounce in the
-/// sky's light where it lies, darker than its albedo, as what it lights faces it only in part
-/// and the snow in shade is shaded too; at its full albedo, shaded snow was a quarter darker
-/// than sunlit, against half in Sons of the Forest's winter.
+/// What snow lying round the camera gives back of the sun's light, linear, darker than its
+/// albedo, as the snow in the shade of what it lights is shaded too; at its full albedo,
+/// shaded snow was a quarter darker than sunlit, against half in Sons of the Forest's winter.
 const SNOW_BOUNCE: Vec3 = Vec3::new(0.45, 0.47, 0.52);
+/// What it gives back of the sky's light: its albedo, as ground.wesl's SNOW, since the sky
+/// lights the snow round a shaded thing as it lights the rest. At SNOW_BOUNCE, under a full
+/// deck the forest's trunks took a third of the light from the snow below them that a side
+/// facing snow of 0.8 takes (weather round 4).
+const SNOW_ALBEDO: Vec3 = Vec3::new(0.8, 0.83, 0.83);
 
 /// Bevy filters a generated environment map into its diffuse and specular light every frame
 /// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only
@@ -211,6 +215,8 @@ fn paint(
     // on what the sun lights directly: the ground's bounce is of that light, dimmed and
     // warmed by a low sun, not of the sun's colour above the air.
     let through = crate::air::sun_through(libm::asinf(sun_height), dust.map_or(1.0, |d| d.0));
+    let bare = linear(tweaks.grass_lush).lerp(linear(tweaks.ground_low), 0.4);
+    let cover = snow.map_or(0.0, |snow| snow.0);
     let colours = Colours {
         low,
         day: 1.0 - nightfall.map_or(0.0, |n| n.0),
@@ -219,14 +225,12 @@ fn paint(
         zenith: linear(sky.zenith),
         // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky
         // too; under snow, the snow's white (D327).
-        ground: linear(tweaks.grass_lush)
-            .lerp(linear(tweaks.ground_low), 0.4)
-            .lerp(SNOW_BOUNCE, snow.map_or(0.0, |snow| snow.0))
+        ground: bare.lerp(SNOW_BOUNCE, cover)
             * (linear(tweaks.sun_color)
                 * through
                 * (tweaks.sun_illuminance * sun_height
-                    / (std::f32::consts::PI * light.brightness.max(1.0)))
-                + Vec3::ONE),
+                    / (std::f32::consts::PI * light.brightness.max(1.0))))
+            + bare.lerp(SNOW_ALBEDO, cover),
     };
     if open.brightness != light.brightness {
         open.brightness = light.brightness;

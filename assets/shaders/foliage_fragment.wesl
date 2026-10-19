@@ -241,7 +241,7 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
-const SNOW: vec3<f32> = vec3<f32>(0.68, 0.72, 0.8);
+const SNOW: vec3<f32> = vec3<f32>(0.8, 0.83, 0.83);
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -344,10 +344,27 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     // Snow lies on branches through a snowy spell, most in a frost; a thaw, the rain or a
     // day above freezing takes it off, as the ground's snow going takes it.
     let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * (0.55 + 0.45 * weather.a) * (1.0 - weather.b);
-    let up = dot((*input).N, normalize(world));
-    let snow = lying * smoothstep(0.3, 0.75, up) * smoothstep(0.25, 0.6, wander(world * 1.3));
+    let sky_up = normalize(world);
+    var up = dot((*input).N, sky_up);
+    if wind.bark < 0.5 {
+        // A spray holds its snow on its upper face, which the crown's normal, leaning out of
+        // the whole crown, does not say: on a spruce's sides it is level, and the tiers stood
+        // green through a snowfall (weather round 4). The card's own face, turned to the eye,
+        // says which face is seen: its top, white where it is level, or its underside, dark.
+        let across = cross(dpdx(world), dpdy(world));
+        if dot(across, across) > 1.0e-24 {
+            let face = across * inverseSqrt(dot(across, across));
+            let seen = face * select(-1.0, 1.0, dot(face, view.world_position - world) >= 0.0);
+            up = max(up, dot(seen, sky_up));
+        }
+    }
+    // The deeper it lies, the more of each bough it covers, in clumps.
+    let clumped = smoothstep(0.25 - 0.2 * lying, 0.6 - 0.2 * lying, wander(world * 1.3));
+    let snow = lying * smoothstep(0.3, 0.75, up) * clumped;
     colour = mix(colour, SNOW, snow * 0.92);
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
+    // Lit as the snow lying is, by the sky over it, not as the leaf under it.
+    (*input).N = normalize(mix((*input).N, sky_up, snow));
 }
 
 // Each leaf turned to its own angle (D269): the atlas's normal map, laid on the card's own
@@ -924,7 +941,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let grey = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
         pbr_input.material.base_color = vec4<f32>(mix(c, vec3<f32>(grey), wind.leaf.x) * (1.0 - wind.leaf.y), pbr_input.material.base_color.a);
     }
-    pbr_input.diffuse_occlusion *= mix(BOUNCE, vec3<f32>(1.0), sky);
+    var hidden = mix(BOUNCE, vec3<f32>(1.0), sky);
+@if(IRRADIANCE_VOLUME) {
+    // On snow most of a trunk's light comes up from the floor, which the crowns over it do
+    // not hide, and the sky they hide the volume's cells already trace (D270): dimmed by its
+    // own sky again, the forest's near trunks stood black on snow (weather round 4). Over a
+    // dark floor, and for leaves, the inside of a crown a cell is too coarse to see, it stays.
+    if wind.bark > 0.5 && wind.climate.on != 0u {
+        let lying = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(in.world_position.xyz), 0.0).r * SNOW_FULL_M;
+        hidden = mix(hidden, vec3<f32>(1.0), smoothstep(0.02, 0.1, lying));
+    }
+}
+    pbr_input.diffuse_occlusion *= hidden;
     pbr_input.specular_occlusion *= mix(0.35, 1.0, sky);
     // The inside of a crown, which little light reaches, darkened in the sun too, not only
     // in the sky's light, down to leaf.w (D247); the outermost leaves, which see most of the
