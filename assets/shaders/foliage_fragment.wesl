@@ -241,7 +241,12 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
-const SNOW: vec3<f32> = vec3<f32>(0.8, 0.83, 0.83);
+const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+// How much of a level spray's load shows seen from below, where only its edge overhangs.
+const BOUGH_UNDERSIDE: f32 = 0.35;
+// The height over a plant's foot, metres, from which its boughs carry more of the load, to
+// where they carry all of it.
+const BOUGH_HIGH_M: vec2<f32> = vec2<f32>(2.0, 10.0);
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -345,23 +350,52 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     // day above freezing takes it off, as the ground's snow going takes it.
     let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * (0.55 + 0.45 * weather.a) * (1.0 - weather.b);
     let sky_up = normalize(world);
-    var up = dot((*input).N, sky_up);
+    let up = dot((*input).N, sky_up);
+    var snow = 0.0;
     if wind.bark < 0.5 {
-        // A spray holds its snow on its upper face, which the crown's normal, leaning out of
-        // the whole crown, does not say: on a spruce's sides it is level, and the tiers stood
-        // green through a snowfall (weather round 4). The card's own face, turned to the eye,
-        // says which face is seen: its top, white where it is level, or its underside, dark.
+        // A bough's load, as Unreal's world-normal blend and Ghost of Yotei's snow on trees
+        // lay it: on what faces up, the crown's upper side (its normal, leaning out of the
+        // whole crown) and each level spray's upper face, which the card's own face, turned
+        // to the eye, says is seen (its top, or its underside, where only the load's edge
+        // overhangs). Heaviest on the upper boughs, as a crown intercepts most snow at its
+        // top (Hedstrom and Pomeroy 1998). Covered or not by clumps, so it reads white loads
+        // over dark needles, not a pale tint over every leaf (weather round 5: "pale-sage").
+        var face_up = 0.0;
         let across = cross(dpdx(world), dpdy(world));
         if dot(across, across) > 1.0e-24 {
             let face = across * inverseSqrt(dot(across, across));
             let seen = face * select(-1.0, 1.0, dot(face, view.world_position - world) >= 0.0);
-            up = max(up, dot(seen, sky_up));
+            face_up = dot(seen, sky_up);
         }
+        let level = smoothstep(0.3, 0.8, abs(face_up)) * select(BOUGH_UNDERSIDE, 1.0, face_up > 0.0);
+        let high = smoothstep(BOUGH_HIGH_M.x, BOUGH_HIGH_M.y, dot(world - origin, sky_up));
+        let load = lying * (0.5 + 0.5 * high) * max(smoothstep(0.25, 0.7, up), level);
+        // Gated by the load itself: where clumps() is 0 the threshold alone is a half, and
+        // summer's cards went half white.
+        snow = smoothstep(-0.06, 0.06, load - clumps(world * 2.2 + 5.0)) * smoothstep(0.0, 0.1, load);
+        colour = mix(colour, SNOW, snow);
+    } else {
+        // The deeper it lies, the more of each limb it covers, in clumps.
+        let clumped = smoothstep(0.25 - 0.2 * lying, 0.6 - 0.2 * lying, wander(world * 1.3));
+        snow = lying * smoothstep(0.3, 0.75, up) * clumped;
+        colour = mix(colour, SNOW, snow * 0.92);
+        // Snow the wind drives onto a stem's windward side sticks there through a snowy spell
+        // (rime and plastered snow), in patches, so a trunk reads white on one side and dark
+        // bark on the other. Gated by what lies, so a summer stem is bare.
+        let level = wind.direction - sky_up * dot(wind.direction, sky_up);
+        let into = -level / max(length(level), 1e-4);
+        // Streaks run up the stem: the noise, in the plant's own frame (the world's is the
+        // planet's, whose up is the position itself), is stretched along its up, a fifth as
+        // fine, and moved for each plant.
+        let windward = smoothstep(0.25, 0.85, dot((*input).N, into));
+        let foot_up = normalize(origin);
+        let from_foot = world - origin;
+        let stem_h = dot(from_foot, foot_up);
+        let across = from_foot - foot_up * stem_h;
+        let seed = fract(origin * 0.137) * 50.0;
+        let streaks = smoothstep(0.45, 0.7, wander(across * 3.0 + foot_up * stem_h * 0.6 + seed));
+        colour = mix(colour, SNOW, lying * windward * streaks * 0.8);
     }
-    // The deeper it lies, the more of each bough it covers, in clumps.
-    let clumped = smoothstep(0.25 - 0.2 * lying, 0.6 - 0.2 * lying, wander(world * 1.3));
-    let snow = lying * smoothstep(0.3, 0.75, up) * clumped;
-    colour = mix(colour, SNOW, snow * 0.92);
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     // Lit as the snow lying is, by the sky over it, not as the leaf under it.
     (*input).N = normalize(mix((*input).N, sky_up, snow));

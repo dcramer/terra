@@ -118,7 +118,7 @@ const SNOW_FULL_M: f32 = 0.5;
 // from the trees, and a little cool: the sun's warm light on it read peach. No bluer than it
 // is green, or a low sun's red and the sky's blue on it make it magenta (the tundra's review).
 // At 0.7 the forest's snow under a deck read grey beside the haze (weather round 2).
-const SNOW: vec3<f32> = vec3<f32>(0.8, 0.83, 0.83);
+const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
