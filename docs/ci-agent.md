@@ -6,7 +6,7 @@ The commit and push gates scale with the change (D398), so the slow checks (ever
 
 It ships as a container, so the box needs only Docker. On the box, in `tools/ci/` of any copy of the repository:
 
-1. Write `tools/ci/.env` (git ignores it) with `GH_TOKEN=<token>`: a fine-grained GitHub token for this repository only, with Contents and Issues read-write. Contents write is for the baseline push.
+1. Write `tools/ci/.env` (git ignores it) with `GH_TOKEN=<token>`: a classic GitHub token with only the `public_repo` scope, which covers the baseline push and the issues. A fine-grained token cannot reach a repository its owner only collaborates on, as dcramer/terra is for all but its owner.
 2. Run `docker compose up -d --build`.
 
 The container clones the repository into its `work` volume, then watches origin/main every 2 minutes (`TERRA_CI_EVERY`). Nightly takes 20–30 minutes, so each run takes in the commits that landed during the last one, and the bisect names the one that broke a stage.
