@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Formatting and clippy of the crates changed since the merge-base with origin/main, before
 # every push (D37), in seconds. Tests are yours to run for what you changed; the full check,
-# `cargo xtask check --all`, runs on main every 8 hours (.github/workflows/main.yml). It reads
+# `cargo xtask check --all`, is run by hand (no CI while we are pre-release). It reads
 # the working tree, and prints a line a stage (D388; TERRA_VERBOSE=1 streams everything).
 # Never skip it with --no-verify.
 set -euo pipefail

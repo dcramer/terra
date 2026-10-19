@@ -98,7 +98,7 @@ pub(crate) fn check(args: &[String]) -> bool {
     } else {
         println!(
             "✓ check passed in {took}; the tests of what you changed are yours to run, and the \
-             full check runs on main every 8 hours (D37)"
+             full check is `cargo xtask check --all` (D37)"
         );
     }
     true
