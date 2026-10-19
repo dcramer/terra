@@ -162,6 +162,23 @@ At 9a523313, before any cut, on the 10-core Mac with other agents building (load
 
 Per-crate seconds overlap, since cargo compiles crates side by side. The world is 11 to 22 s of every building rebuild in dev and 487 s of one in release, which step 3 removes; release rebuilds, which every shot and film pays, run to 14 to 19 minutes under this load, `terra_game` alone 11 to 13. The release pass was stopped after two probes so as not to hold the machine for two hours. These release figures predate D408 (c5a762b3), which builds our crates incrementally in release too, so later release runs are not comparable with them; the dev figures are. A building push's gate took 16 to 59 minutes, and a push that slow often loses the race to main to another agent's.
 
+### Measured: after step 3
+
+At f0062671, the world off building (steps 2 and 3 on main), on the same Mac under load 34 to 70, dev only (`cargo xtask rebuilds --dev`). Four probes waited on a lock behind other builds, so their totals (1,462 to 2,399 s) are left out and only their crates' seconds count:
+
+| Probe | Dev | Of which | Baseline |
+|---|---|---|---|
+| core (`terra_core/src/lib.rs`) | 50 | game 23, world 21, sandbox 10, build 8 | 54: game 25, world 19, sandbox 13 |
+| building's rules (`cubes.rs`) | 38 | game 21, sandbox 10, build 7 | 58: world 22, game 21, build 11, sandbox 9 |
+| building's layout (`layout/runs.rs`) | 50 | game 28, sandbox 13, build 8 | 48: game 19, world 18, build 9, sandbox 7 |
+| building's drawing (`sections.rs`) | (waited) | game 35, sandbox 14, build 11 | 46: world 16, game 15, sandbox 9, build 8 |
+| a town (`town/streets.rs`) | (waited) | game 28, build 9, sandbox 7 | 38: game 14, world 11, build 8, sandbox 7 |
+| the world (`flora.rs`) | (waited) | world 22, game 21, sandbox 9 | 43: game 21, world 16, sandbox 10 |
+| the walker (`play/movement.rs`) | (waited) | game 28, sandbox 13 | 44: game 29, sandbox 13 |
+| a creature (`play/creatures.rs`) | 73 | game 32, sandbox 19 | 38: game 26, sandbox 10 |
+
+No building probe compiles the world any more (0 s, from 11 to 22 s), and a building change no longer tests it. What is left of a building rebuild is the game, which names building throughout until it is cut (step 4 onward), so the wall time falls only where the world was on the critical path (the rules, 58 to 38 s). Building now stands on `terra_core`, so a core change compiles building too (8 s), which it did not before. The game's own seconds wander with the load (19 to 35 s for a building probe), more than the cut moves them.
+
 ## How shipped projects do it
 
 Read at their sources on 2026-10-18: Veloren master at c1e20929 (its manifests and `cargo metadata`), Bevy main at 85503941 (0.20.0-dev; 0.20.0 the latest release), Cargo master at 3022244f; line counts ours, with tests.
@@ -187,8 +204,8 @@ What Terra takes from them: the server's half apart from the drawing first (Velo
 Each step is one push that builds, passes the gate and changes no behaviour. A move is a pure rename (`git mv`) plus the manifest and `use` lines, so git's rename detection carries other agents' in-flight edits to the moved files through their rebase. Out of `terra_game`, which ends on top, the old path stays as a re-export (`pub use terra_creatures as creatures`) until nothing names it, so a branch written against it still builds. Out of `terra_build`, which ends at the bottom, a re-export would be a cycle, so that push changes the callers' paths too (the game's and the sandbox's `terra_build::sections`, `::town`, `::scenes` and the like, about a hundred names). Each move gets a line in `docs/decisions-log.md` and lands when no other agent is mid-way through a large change of the same files (the lead checks the linked sessions).
 
 1. **Measure** the baseline (above).
-2. **Cut building's seams inside the crate**: the hashers to `terra_gen::hash`; `stage_of`, `Role`, `RoofPart`, `timber::section`, `Material`, `Hang` into the rules' modules; a kit's look out of `Kit`. A test in `terra_build` fails when a rules module names a layout or drawing module, so the line holds before any move. Two or three pushes.
-3. **Take the world off building**: `Walker` to `terra_core`, the start's plot as data, the example's fit as a test. `terra_world`'s manifest loses `terra_build`. One push; the first measured gain.
+2. **Cut building's seams inside the crate**: the hashers to `terra_gen::hash`; `stage_of`, `Role`, `RoofPart`, `timber::section`, `Material`, `Hang` into the rules' modules; a kit's look out of `Kit`. A test in `terra_build` fails when a rules module names a layout or drawing module, so the line holds before any move. Two or three pushes. Done: a5135e5b (the hashers), c7b331ac (the rest into a rules module, `pieces`, the kit's modelled pieces and `Breaks` moved down as plain data rather than taken out of `Kit`, and the test `seams`).
+3. **Take the world off building**: `Walker` to `terra_core`, the start's plot as data, the example's fit as a test. `terra_world`'s manifest loses `terra_build`. One push; the first measured gain. Done: f0062671, measured above.
 4. **`terra_town`**: move `town` and `village`, merge `terra_life` in (or leave it beside, depending on `terra_town`, if the developers prefer it apart). One push.
 5. **`terra_build_scenes`**, then **`terra_build_layout`**, then **`terra_build_mesh`**: three pushes of moves, `terra_build` left as the rules.
 6. **Measure** again; write the result here.
