@@ -8,6 +8,7 @@
   "rows": 8,
   "frame": 256,
   "fps": 24,
+  "metres": 1.6,
   "channels": "R heat, G cover, B soot, A distortion",
   "motion": {
     "file": "breath-puff.motion.png",

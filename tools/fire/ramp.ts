@@ -8,8 +8,14 @@
 // The blackbody's colour is Planck's law integrated against the CIE 1931 observer, through
 // Wyman, Sloan and Shirley's multi-lobe fit of it ("Simple Analytic Approximations to the CIE
 // XYZ Color Matching Functions", JCGT 2013), into linear sRGB. Node 22.18 or later; no
-// dependencies. The ramp's texture and its machine tuning against the references come with the
-// engine's use of it.
+// dependencies. `node tools/fire/ramp.ts` writes the texture the engine reads
+// (assets/textures/fire/ramp.png and ramp.json); its machine tuning against the references is
+// still to come.
+
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { type Picture, writePng } from "../sandbox/png.ts";
 
 /// A fuel's row: the temperatures heat 0 and 1 stand for, in kelvin, and how steeply its
 /// brightness falls with heat (1 is the blackbody's own luminance, smaller is softer).
@@ -73,4 +79,34 @@ export function table(fuel: Fuel = FUELS.wood, n = 256): Float32Array {
   const out = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) out.set(ramp(i / (n - 1), fuel), i * 4);
   return out;
+}
+
+/// The texture's rows, top to bottom, as the engine names them (fire.rs `RAMP_ROWS`).
+export const ROWS = ["wood", "oil", "gas"] as const;
+
+/// The ramp as the engine's texture: 256 wide, a row a fuel, its RGB over `scale` (the ramp's
+/// brightest channel, as the blackbody's red passes 1) and sRGB-encoded so the dim red end keeps
+/// its precision in 8 bits, its A linear. The engine multiplies the scale back (`ramp.json`).
+export function texture(n = 256): { picture: Picture; scale: number } {
+  const rows = ROWS.map((name) => table(FUELS[name], n));
+  let scale = 0;
+  for (const t of rows) for (let i = 0; i < t.length; i++) if (i % 4 !== 3) scale = Math.max(scale, t[i]);
+  const encode = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+  const rgba = new Uint8Array(n * rows.length * 4);
+  rows.forEach((t, y) => {
+    for (let i = 0; i < n * 4; i++) {
+      const v = i % 4 === 3 ? t[i] : encode(t[i] / scale);
+      rgba[y * n * 4 + i] = Math.round(Math.min(1, Math.max(0, v)) * 255);
+    }
+  });
+  return { picture: { width: n, height: rows.length, rgba }, scale };
+}
+
+if (import.meta.main) {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), "../../assets/textures/fire");
+  const { picture, scale } = texture();
+  writePng(join(dir, "ramp.png"), picture);
+  const about = "The fire's colour ramp (tools/fire/ramp.ts): a row a fuel, RGB sRGB-encoded over scale, A how far a heat occludes";
+  writeFileSync(join(dir, "ramp.json"), `${JSON.stringify({ about, rows: ROWS, scale: +scale.toFixed(4) }, null, 2)}\n`);
+  console.log(`ramp: ${ROWS.length} rows of ${picture.width}, scale ${scale.toFixed(3)}`);
 }
