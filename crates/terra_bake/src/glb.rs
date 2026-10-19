@@ -48,11 +48,11 @@ pub fn read(bytes: &[u8]) -> Result<Glb, String> {
 
 pub fn write(glb: &Glb) -> Vec<u8> {
     let mut json = serde_json::to_vec(&glb.json).expect("JSON writes");
-    while json.len() % 4 != 0 {
+    while !json.len().is_multiple_of(4) {
         json.push(b' ');
     }
     let mut bin = glb.bin.clone();
-    while bin.len() % 4 != 0 {
+    while !bin.len().is_multiple_of(4) {
         bin.push(0);
     }
     let total = 12 + 8 + json.len() + if bin.is_empty() { 0 } else { 8 + bin.len() };

@@ -74,7 +74,7 @@ fn main() {
     let _ = std::fs::create_dir_all(log_path.parent().expect("a parent"));
     let start = Instant::now();
     let jobs = jobs(&assets);
-    let results: Vec<(String, Result<(Tally, String), String>)> = jobs
+    let results: Vec<(String, Outcome)> = jobs
         .par_iter()
         .map(|job| (job.class.to_string(), run(job, &out, force)))
         .collect();
@@ -107,14 +107,13 @@ fn main() {
     }
     let _ = std::fs::write(&log_path, &log);
     println!(
-        "textures: {} pictures in {} files, {:.0} -> {:.0} MiB on the GPU, {:.0} s; {} (log {})",
+        "textures: {} pictures in {} files, {:.0} -> {:.0} MiB on the GPU, {:.0} s; {} (log target/bake/textures.log)",
         total.pictures,
         jobs.len(),
         total.before,
         total.after,
         start.elapsed().as_secs_f64(),
         out.display(),
-        "target/bake/textures.log"
     );
     if failed > 0 {
         std::process::exit(1);
@@ -240,7 +239,10 @@ fn files(dir: &Path, extensions: &[&str]) -> Vec<PathBuf> {
     found
 }
 
-fn run(job: &Job, out: &Path, force: bool) -> Result<(Tally, String), String> {
+/// What cooking one file came to: its tally and its line of the log, or why it failed.
+type Outcome = Result<(Tally, String), String>;
+
+fn run(job: &Job, out: &Path, force: bool) -> Outcome {
     let bytes = std::fs::read(&job.source).map_err(|p| p.to_string())?;
     match job.what {
         What::Model { side } => model(&bytes, side, out, force),

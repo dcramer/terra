@@ -496,7 +496,7 @@ impl Looks {
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
-                base_color_texture: Some(atlas(&cards, &assets)),
+                base_color_texture: Some(atlas(cards, assets)),
                 alpha_mode: AlphaMode::Mask(cards.cut),
                 // Seen from both sides, but with the same normal on both, which leans out of
                 // the crown, so a card does not flip from lit to dark as it turns.
