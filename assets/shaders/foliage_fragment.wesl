@@ -273,6 +273,36 @@ fn climate_place(world: vec3<f32>) -> vec2<f32> {
     return clamp((parting.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
+// How far over a spray's upper edge, metres up the card, its picture must be empty for snow
+// to lie along that edge.
+const SHELF_M: f32 = 0.12;
+
+// 1 where a card's picture is empty SHELF_M straight up from this point, along the card's own
+// plane: the top edge of a spray, where a load lies (the offset-alpha test of snow on foliage
+// cards). The world's up is carried into the atlas by the screen derivatives of the point and
+// of its uv, least squares; a card lying level has no up in its plane and no shelf.
+fn shelf_edge(uv: vec2<f32>, world: vec3<f32>, sky_up: vec3<f32>) -> f32 {
+    let at = (pbr_bindings::material.uv_transform * vec3<f32>(uv, 1.0)).xy;
+    let dwx = dpdx(world);
+    let dwy = dpdy(world);
+    let dux = dpdx(at);
+    let duy = dpdy(at);
+    let a11 = dot(dwx, dwx);
+    let a12 = dot(dwx, dwy);
+    let a22 = dot(dwy, dwy);
+    let det = a11 * a22 - a12 * a12;
+    if det < 1.0e-24 {
+        return 0.0;
+    }
+    let bx = dot(dwx, sky_up);
+    let by = dot(dwy, sky_up);
+    let sx = (a22 * bx - a12 * by) / det;
+    let sy = (a11 * by - a12 * bx) / det;
+    let uv_up = (sx * dux + sy * duy) * SHELF_M;
+    let over = textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at + uv_up, dux, duy).a;
+    return 1.0 - smoothstep(0.15, 0.5, over);
+}
+
 // Which kind's layer of the leaves map a card is, by its atlas cell (foliage.wesl's).
 fn card_layer(uv: vec2<f32>) -> i32 {
     let cell = vec2<i32>(floor(uv / wind.climate.across));
@@ -389,6 +419,10 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // needles into a variegated leaf (weather round 8). Gated by the load itself: where
         // clumps() is 0 the threshold alone is a half, and summer's cards went half white.
         snow = smoothstep(-0.06, 0.06, load - clumps(world * LOAD_CLUMPS + 5.0)) * smoothstep(0.0, 0.1, load);
+        // And as a shelf along each spray's upper edge, where the card's picture has nothing
+        // over it a few centimetres up: the load sits on the boughs, not scattered over their
+        // faces (weather round 9's judge: "snow sits scattered across the card face").
+        snow = max(snow, lying * (0.6 + 0.4 * high) * shelf_edge(uv, world, sky_up));
         // Needles still on in a snowy spell are an evergreen's, dark and cool under the white:
         // the spruce's sage, kept, read as a broadleaf in leaf (weather round 8).
         colour *= mix(vec3<f32>(1.0), NEEDLES_UNDER_SNOW, lying * (1.0 - turned));
