@@ -596,7 +596,11 @@ fn build(
     } else {
         Market::hours(&clock)
     };
-    // The claim stone, at the heart of it.
+    // The claim, at the heart of it: the base begun at the square (`claim::settle`). A town
+    // rising of itself is no player's claim, so its stone is set unseen: a player's claim
+    // stone is their mark (D94), and seen from over the first house it read as a debug
+    // marker (the settlement's review, round 14). A film shows the world's things, not the
+    // game's (docs/scene-rules.md, "Nothing of the game's in a film").
     if !rising.claimed
         && let Some(when) = rising.lapse.claim
         && t >= when
@@ -607,7 +611,7 @@ fn build(
         let to_site = site.frame.compute_affine().inverse();
         if let Some(item) = catalogue.item_from("ClaimStone") {
             let point = to_site.transform_point3(middle + market.east * 1.5);
-            props::place(
+            if let Some(stone) = props::place(
                 &mut commands,
                 &models,
                 site,
@@ -617,7 +621,12 @@ fn build(
                 0.0,
                 30.0,
                 false,
-            );
+            ) {
+                // The town's, so the player's props' hiding (`props::keep_clear`) leaves it be.
+                commands
+                    .entity(stone)
+                    .insert((props::Theirs, Visibility::Hidden));
+            }
         }
     }
     let mut budget = rising.lapse.steps_a_frame;
