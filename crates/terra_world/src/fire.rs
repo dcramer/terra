@@ -52,7 +52,9 @@ pub struct Blaze {
 }
 
 /// A jet of flame breathed out: from where, which way, how far it reaches, how wide it
-/// spreads (the tangent of its half angle), and whether it is on.
+/// spreads (the tangent of its half angle), and whether it is on; and what it strikes: how
+/// far off the face it meets is and which way that face looks, in the world (`face` 0 and
+/// `normal` zero when it meets nothing), so its fire spreads over that face, not into it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Jet {
     pub from: Vec3,
@@ -60,6 +62,8 @@ pub struct Jet {
     pub reach: f32,
     pub spread: f32,
     pub on: bool,
+    pub face: f32,
+    pub normal: Vec3,
 }
 
 /// Everything burning now, set by whatever owns the fires each frame: the blazes, the
@@ -122,9 +126,10 @@ const HEARTH_EMBER_CARDS: usize = 48;
 const JETS: usize = 2;
 /// A breath's flame sprites, as Monster Hunter World draws Zeno Jiva's (docs/fire.md,
 /// "Composites"): puffs of burning fuel along its stream, each its own age, the fireball
-/// rolling where it strikes and the blast when it first does, round the hot rod its hull
+/// rolling where it strikes, the blast when it first does and the soot it leaves on what it
+/// strikes, round the hot rod its hull
 /// marches. Must match `BREATH_CARDS` in fire.wesl.
-const BREATH_CARDS: usize = 150;
+const BREATH_CARDS: usize = 152;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
 /// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
 /// Each is let go where the stream is when it is born and then moves on its own, so it stays
@@ -152,8 +157,9 @@ pub struct FireUniform {
     /// The wind where the fire is, metres a second in the world, and its strength.
     wind: Vec4,
     /// Each jet: from, and its reach; its way, and its spread; whether it is on (1), since
-    /// when it is on or off, and when it last came on.
-    jets: [Vec4; JETS * 3],
+    /// when it is on or off, and when it last came on; the face it strikes, its normal and
+    /// how far off it is.
+    jets: [Vec4; JETS * 4],
     /// The exposure weight and the dusk it is drawn as tuned at (`FireExposure::packed`).
     exposure: Vec4,
     /// Each flipbook set's rate, metres, motion scale and whether it blends along its vectors
@@ -822,7 +828,7 @@ fn show(
         data.resize(slots(*quality) * 2, [0.0; 4]);
         *buffer = ShaderBuffer::from(data);
     }
-    let mut jets = [Vec4::ZERO; JETS * 3];
+    let mut jets = [Vec4::ZERO; JETS * 4];
     let mut debris = Vec::new();
     for (i, state) in drawn.jets.iter_mut().enumerate() {
         let jet = blazes.jets.get(i).copied();
@@ -837,10 +843,13 @@ fn show(
             reach: 0.0,
             spread: 0.0,
             on: false,
+            face: 0.0,
+            normal: Vec3::ZERO,
         });
-        jets[i * 3] = jet.from.extend(jet.reach);
-        jets[i * 3 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
-        jets[i * 3 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, state.2, 0.0);
+        jets[i * 4] = jet.from.extend(jet.reach);
+        jets[i * 4 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
+        jets[i * 4 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, state.2, 0.0);
+        jets[i * 4 + 3] = jet.normal.normalize_or_zero().extend(jet.face);
         // The blast where its front first strikes throws its debris.
         let struck = state.2 + jet.reach / JET_SPEED_MPS;
         if state.0 && jet.reach > 0.0 && (now - time.delta_secs()..now).contains(&struck) {

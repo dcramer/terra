@@ -31,8 +31,9 @@ struct Fire {
     kind: vec4<f32>,
     // The wind, metres a second, and its strength.
     wind: vec4<f32>,
-    // Each jet's from and reach; way and spread; on, and since when.
-    jets: array<vec4<f32>, 6>,
+    // Each jet's from and reach; way and spread; on, and since when; the face it strikes, its
+    // normal and how far off.
+    jets: array<vec4<f32>, 8>,
     // The exposure weight, and the log2 of the exposure multiplier at dusk
     // (crates/terra_world/src/fire/exposure.rs).
     exposure: vec4<f32>,
@@ -98,7 +99,8 @@ const BLAZE_BRIGHTNESS: f32 = 2.1;
 // first does. Its puffs no longer sum where they overlap (`breath_fuel`), so at 3.5 the
 // stream was 45% pale (breath r7), at 2.0 orange-yellow (r10).
 const PUFF_BRIGHTNESS: f32 = 2.0;
-const BALL_BRIGHTNESS: f32 = 3.5;
+// The fireball at 3.5 went 41% yellow by noon and 20% white by night through the new ramp (r27).
+const BALL_BRIGHTNESS: f32 = 2.4;
 // How much hotter than baked a breath's sets burn: brightness alone took its stream paler,
 // not yellower (breath r3: 9 against 5.5, yellow 3% both, B/R 0.66 to 0.72), as the
 // tonemapper keeps a hue; a fuel jet's flame is mostly yellow (MEASURED.md §2). At 1.5 it
@@ -106,16 +108,19 @@ const BALL_BRIGHTNESS: f32 = 3.5;
 // 68% yellow and 19% red and orange against at least 30 (r9), 1.0 holds (r10). The puff set
 // rebaked to burn longer packs its heat about 8% lower (heat scale 1.40, was 1.52): at 1.0 it
 // was 49% orange, at 1.09 31% pale at dusk with soot at its edge (r18, r20).
-const BREATH_HEAT: f32 = 1.05;
+// The ramp filmed to a yellow-white hot end (D415) took the stream 18-24% pale at 1.05; the body
+// burns cooler at 0.93 (orange-red, pale 10-12%) and the core, its first frames and its line
+// near the jaw, hotter by `BREATH_CORE` 1.5, so only it reads yellow-white (breath r27).
+const BREATH_HEAT: f32 = 0.93;
 const BLAST_BRIGHTNESS: f32 = 5.0;
 // A breath's core: how much hotter its puffs burn in their first frames, and how much
 // brighter those on its line in its first third (`breath_sprite`).
-const BREATH_CORE: f32 = 1.0;
+const BREATH_CORE: f32 = 1.5;
 // How thick a breath's baked soot is drawn: its soot channel b as cover 1 - exp(-k b).
 const BREATH_SOOT: f32 = 6.0;
 // How far a breath's hot flame covers what is behind it rather than adding to it, past what
 // the ramp's heat alone gives (`breath_fuel`).
-const BREATH_THICK: f32 = 0.5;
+const BREATH_THICK: f32 = 0.8;
 // Which of the ramp's rows (ramp.json) a breath burns by.
 const BREATH_ROW: f32 = 0.0;
 
@@ -420,10 +425,14 @@ struct Breath {
     back: f32,
     ball: f32,
     left: f32,
+    // The face it strikes: how far along its way, and which way it looks (`face` 0 when it
+    // strikes nothing).
+    face: f32,
+    normal: vec3<f32>,
 }
 
 fn breath_of(slot: u32) -> Breath {
-    let j = slot * 3u;
+    let j = slot * 4u;
     var b: Breath;
     b.mouth = fire.jets[j].xyz;
     b.reach = fire.jets[j].w;
@@ -439,6 +448,8 @@ fn breath_of(slot: u32) -> Breath {
     }
     b.side = normalize(side);
     b.lift = normalize(cross(b.side, b.way));
+    b.face = fire.jets[j + 3u].w;
+    b.normal = fire.jets[j + 3u].xyz;
     b.up = vec3(dot(up, b.lift), dot(up, b.side), dot(up, b.way));
     let flown = JET_SPEED * max(time - since, 0.0);
     // Once on, the gas reaches as far as it has flown; once off, the last of it flies on
@@ -695,16 +706,21 @@ fn nowhere() -> Out {
 }
 
 // A breath's sprites (crates/terra_world/src/fire.rs BREATH_CARDS), in index order, which is
-// the order they are drawn in: the stream's puffs, oldest first so the hot young ones near the
+// the order they are drawn in: the soot stain on the face it strikes, under everything; the stream's puffs, oldest first so the hot young ones near the
 // jaw lie over the soot they become; the fireball rolling where it strikes; the blast when the
 // stream first strikes, and its flash.
-const BREATH_CARDS: f32 = 150.0;
+const BREATH_CARDS: f32 = 152.0;
+const STAIN_CARDS: f32 = 2.0;
 const PUFF_CARDS: f32 = 112.0;
 const BALL_CARDS: f32 = 33.0;
 const BLAST_CARDS: f32 = 5.0;
 // How long a puff burns on past where the stream strikes or ends, seconds: rolling out and
 // up as black soot.
 const PUFF_LINGER_S: f32 = 0.9;
+// How far a landed puff's card turns from the eye to lie along the face it burns on: laid
+// on it wholly, from an eye looking along the face its flame was a horizontal smear past the
+// wall's end (breath r25); turned to the eye, half of it stood behind the face.
+const FACE_HUG: f32 = 0.5;
 // How long a fireball's own puff lives, seconds at the set's size (Froude: as the root of
 // its size), and the blast's.
 const BALL_S: f32 = 2.67;
@@ -712,7 +728,13 @@ const BALL_S: f32 = 2.67;
 // A card turned to the eye about the line `up`, its middle at `at`, `w` across and `h` along,
 // turned by `spin` on the screen.
 fn sprite(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, spin: f32) -> vec3<f32> {
-    let to_eye = normalize(view.world_position - at);
+    return sprite_facing(at, up, normalize(view.world_position - at), corner, w, h, spin);
+}
+
+// The same card turned to look along `facing` rather than at the eye: laid on a face it
+// burns on, as a game's surface-aligned flame cards are.
+fn sprite_facing(at: vec3<f32>, up: vec3<f32>, facing: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, spin: f32) -> vec3<f32> {
+    let to_eye = facing;
     var right = cross(up, to_eye);
     if dot(right, right) < 1.0e-6 {
         right = cross(vec3(1.0, 0.0, 0.0), to_eye);
@@ -727,10 +749,73 @@ fn sprite(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, spin:
 // Whether a puff born at `born` was breathed: after the jet last came on, and before it went
 // off if it is off.
 fn breathed(j: u32, born: f32) -> bool {
-    let on = fire.jets[j * 3u + 2u].x > 0.5;
-    let since = fire.jets[j * 3u + 2u].y;
-    let came_on = fire.jets[j * 3u + 2u].z;
+    let on = fire.jets[j * 4u + 2u].x > 0.5;
+    let since = fire.jets[j * 4u + 2u].y;
+    let came_on = fire.jets[j * 4u + 2u].z;
     return born >= came_on && (on || born <= since);
+}
+
+// The face a breath strikes, in the world: where its stream meets it, which way it looks,
+// and the way up it and across it (on a floor, up it is on along the stream); striking
+// nothing, the stream's end, looking back along it.
+struct Face {
+    at: vec3<f32>,
+    along: f32,
+    normal: vec3<f32>,
+    up: vec3<f32>,
+    side: vec3<f32>,
+}
+
+fn face_of(b: Breath) -> Face {
+    var f: Face;
+    let struck = b.face > 0.0;
+    f.normal = select(-b.way, normalize(b.normal), struck);
+    f.along = select(b.reach, b.face, struck);
+    f.at = b.mouth + b.way * f.along;
+    let up = normalize(b.mouth);
+    var face_up = up - f.normal * dot(up, f.normal);
+    if dot(face_up, face_up) < 0.04 {
+        face_up = b.way - f.normal * dot(b.way, f.normal);
+    }
+    f.up = normalize(face_up);
+    f.side = normalize(cross(f.normal, f.up));
+    return f;
+}
+
+// How long a struck face takes to blacken fully, seconds of the stream on it.
+const STAIN_S: f32 = 4.0;
+
+// The soot a breath leaves on the face it strikes (docs/fire.md, "Composites": a scorch):
+// a card laid on the face, a hair off it, darkening it as the stream plays on it; a plume of
+// soot over the hit, as fire leaves above a burnt window or a hearth's mouth, and a char spot
+// where the stream meets it. Kept to the face by depth (`fragment`), as a decal is.
+fn breath_stain(corner: vec2<f32>, b: Breath, jet: u32, i: f32) -> Out {
+    if b.face <= 0.0 {
+        return nowhere();
+    }
+    let time = fire.kind.z;
+    let came_on = fire.jets[jet * 4u + 2u].z;
+    let struck = came_on + b.face / JET_SPEED;
+    let grown = saturate((time - struck) / STAIN_S);
+    if grown <= 0.0 {
+        return nowhere();
+    }
+    let f = face_of(b);
+    let ball = 0.8 + (0.12 + b.spread * 0.45 * b.reach) * 0.9;
+    // The plume over the hit, rising as it spreads; the char spot round the hit.
+    let w = select(ball * 1.7, ball * (1.8 + 1.0 * sqrt(grown)), i < 0.5);
+    let h = select(ball * 1.5, ball * (2.6 + 2.2 * sqrt(grown)), i < 0.5);
+    let foot = select(-0.55, -0.2, i < 0.5);
+    let at = f.at + f.normal * (0.03 + 0.01 * i) + f.up * h * (0.5 + foot);
+    let world = sprite_facing(at, f.up, f.normal, corner, w, h, 0.0);
+    var out: Out;
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    out.world = world;
+    out.life = vec4(grown, i, hash(vec2(f32(jet), came_on)), -2.0);
+    out.size = 0.01;
+    out.glow = 1.0;
+    return out;
 }
 
 fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
@@ -739,13 +824,16 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         return nowhere();
     }
     let time = fire.kind.z;
-    let k = floor(phase * BREATH_CARDS + 0.5);
+    let card = floor(phase * BREATH_CARDS + 0.5);
     let up = normalize(b.mouth);
+    if card < STAIN_CARDS {
+        return breath_stain(corner, b, jet, card);
+    }
+    let k = card - STAIN_CARDS;
     // The stream's flight to where it strikes, and how wide the puffs spread round its line
     // there: a flamethrower's rope opening to a few metres where it lands.
     let flight = b.reach / JET_SPEED;
     let spread = 0.12 + b.spread * 0.45 * b.reach;
-    let hit = b.mouth + b.way * b.reach;
     var out: Out;
     if k < PUFF_CARDS {
         // A puff of burning fuel thrown from the jaw at the stream's speed, slowing, opening
@@ -766,43 +854,67 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let h4 = hash(vec2(n + 0.13, 11.3));
         let s = age / flight;
         let gone = min(s, 1.0);
-        let d = b.reach * gone * (1.35 - 0.35 * gone);
+        let struck = b.face > 0.0;
+        let f = face_of(b);
+        let normal = f.normal;
+        let face = f.at;
+        let face_up = f.up;
+        let face_side = f.side;
+        let d = f.along * gone * (1.35 - 0.35 * gone);
         let post = max(age - flight, 0.0);
         let a = h1 * 6.2831853;
         let out_of_line = b.lift * cos(a) + b.side * sin(a);
         let near = smoothstep(0.0, 0.35 * b.reach, d);
         let r = (0.08 + b.spread * 0.45 * d) * sqrt(h2) * 0.9 * mix(0.35, 1.0, near);
-        // Landed, it splashes out across the face it struck, slowing (a flamethrower's fuel
-        // spreads along a wall and does not fly back off it), most of it up the face rather than
-        // down, and climbs it fast while it still burns, lifting off it only a little as it
-        // rises: the flame licking up the struck face, its soot a plume over it. Climbing at
-        // the rate soot rises, the flame had burnt out 0.6 m up (breath r21's review).
-        let spread_on = post / (post + 0.25);
-        let across = b.side * sin(a) * (1.6 + 2.0 * h3) + b.lift * (0.6 + 1.6 * abs(cos(a)));
-        let splash = across * 1.1 * spread_on + up * post * (2.5 + 2.5 * h4) * (0.5 + post) - b.way * post * 0.4;
-        let at = b.mouth + b.way * d + out_of_line * r + splash;
         // As big as the stream is wide there, and swelling as it burns out: a tight rope for
         // its first third, so its hot core reads (as wide as the rod from the jaw, it was lost).
         // The set's puff fills a fifth of its frame as it flares (cut to a quarter, the stream
         // went thin and the climbing soot showed through it as a gap, breath r22).
         let wide = mix(0.1 + 0.08 * d, 0.35 + 0.2 * d, near) * (0.75 + 0.5 * h3) + post * 1.2;
         let card_m = wide / 0.2;
-        // Drawn along the stream as it flies, stretched along it near the jaw; its smoke
-        // rising once landed.
-        let line = normalize(mix(b.way, up, smoothstep(0.75, 1.15, s)));
+        // Landed, it splashes out over the face it struck, slowing, most of it up the face
+        // rather than down, and climbs it fast while it still burns, laid on it and kept off it
+        // only a hand's breadth: a flamethrower's fuel spreads along a wall and its flame licks
+        // up it (Monster Hunter World's Fatalis on a palisade, Elden Ring's Agheel on a
+        // standing stone). Once burnt out it lifts off the face as soot rolling up over it.
+        // Driven past the face as far as the stream runs on into it and lifted along its frame
+        // off the stream's line, it stood behind the wall and over it (breath r24's review).
+        let spread_on = post / (post + 0.25);
+        let lifted = smoothstep(0.3, 0.8, post);
+        let flying = b.mouth + b.way * d + out_of_line * r;
+        let standing = max(0.15, dot(flying - face, normal));
+        let across = face_side * sin(a) * (1.0 + 1.5 * h3) + face_up * (0.3 + 1.2 * abs(cos(a)));
+        let climb = face_up * post * (2.5 + 2.5 * h4) * (0.5 + post);
+        let off = max(standing, 0.4 * wide) + 0.3 * wide * lifted;
+        let landed = flying - normal * (dot(flying - face, normal) - off) + across * 1.1 * spread_on + climb;
+        let at = select(flying, landed, s >= 1.0 || dot(flying - face, normal) < 0.15);
+        // Laid on the face from the last of its flight until it lifts off (the flame on it);
+        // turned to the eye otherwise. Turned to the eye on the face, a card as wide as the
+        // splash stood half behind the face from any eye looking along it.
+        let hugging = select(0.0, smoothstep(0.85, 1.0, s) * (1.0 - lifted) * FACE_HUG, struck);
+        let to_eye = normalize(view.world_position - at);
+        var facing = normalize(mix(to_eye, normal, hugging));
+        // From behind the face, the card lies on it facing the eye's side.
+        facing = select(facing, -facing, dot(facing, to_eye) < 0.0);
+        // Drawn along the stream as it flies, stretched along it near the jaw; up the face
+        // once landed, rolled every way as it splashes, so the landed cards never stack as
+        // level bands (breath r24: "stacked cards like blinds").
+        let line = normalize(mix(b.way, face_up, smoothstep(0.75, 1.15, s)));
         let stretch = mix(2.4, 1.0, smoothstep(0.0, 0.6, s));
-        let spin = (h4 - 0.5) * 0.9;
-        let world = sprite(at, line, corner, card_m, card_m * stretch, spin);
+        let spin = (h4 - 0.5) * mix(0.9, 2.4, spread_on);
+        let world = sprite_facing(at, line, facing, corner, card_m, card_m * stretch, spin);
         // Its edge burns out first: a puff flung out from the line plays on into the set's
         // soot in the stream's back half, so soot folds out of its edges, as a fuel jet's does.
         // Its top edge only, as soot rolls up off a flamethrower's rope (M113, Iraq photos).
         let edge = smoothstep(0.45, 1.0, h2) * smoothstep(-0.3, 0.6, cos(a));
         // The set burns from frame 0 to 21, its flame largest at 15 and cooling: its middle
-        // reaches the wall at frame 12, still burning, and burns its largest on the wall for
-        // 0.3 s before its soot rolls up (to frame 9 in flight its puffs were smaller and the
-        // climbing soot showed through the stream's back half as a gap, breath r23).
+        // reaches the wall at frame 12, still burning; on the face it burns on slowly for half
+        // a second, each at its own moment, then rolls up as soot. Played on at 29 frames a
+        // second, it was soot a third of a second after it struck, a black hole where the
+        // stream met the wall (breath r24's review).
         let flown = 12.0 * pow(s, 0.85) * (1.0 + 0.7 * edge * smoothstep(0.65, 1.0, s));
-        let frame = select(flown, 12.0 * (1.0 + 0.7 * edge) + 29.0 * post, s >= 1.0);
+        let on_face = 12.0 * (1.0 + 0.7 * edge) + 3.0 * (h3 - 0.5) + 14.0 * post + 30.0 * max(post - 0.45, 0.0);
+        let frame = select(flown, on_face, s >= 1.0);
         let fade = smoothstep(0.0, 0.04, age) * (1.0 - smoothstep(0.6, 1.0, post / PUFF_LINGER_S)) * b.left;
         out.clip = position_world_to_clip(world);
         out.uv = corner;
@@ -810,9 +922,11 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // core a fuel jet's rope shows there before it opens out.
         // Burning as bright to the wall, brightest as it splashes there.
         let core = 1.0 + BREATH_CORE * (1.0 - h2) * (1.0 - near);
-        let strike = 1.0 + 0.25 * step(1.0, s) * (1.0 - smoothstep(0.0, 0.35, post));
+        let strike = 1.0 + 0.6 * step(1.0, s) * (1.0 - smoothstep(0.0, 0.35, post));
         out.life = vec4(frame, PUFF_BRIGHTNESS * mix(1.2, 1.05, gone) * core * strike, h3, f32(SET_BREATH_PUFF));
-        out.size = card_m;
+        // A breath sprite's size is how far it is faded before what is behind it (`fragment`):
+        // a metre, but a hand's breadth for a card laid on the face, which stands only that off it.
+        out.size = mix(1.2, 0.4, hugging / FACE_HUG);
         out.glow = max(fade, 1.0e-3);
         return out;
     }
@@ -821,7 +935,10 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
     // Rolled up what it struck and back off it, so it stands over the stream's foot, not
     // behind a wall's: centred a little off the hit, most of it was hidden (breath r6).
     let ball = 0.8 + spread * 0.9;
-    let middle = hit - b.way * ball * 0.9 + up * ball * 0.9;
+    // Off the face it struck and up it, so it stands over the splash: from the point past the
+    // face the stream runs on to, it stood half behind a wall (breath r24).
+    let struck_at = face_of(b);
+    let middle = struck_at.at + struck_at.normal * ball * 0.9 + struck_at.up * ball * 0.9;
     if k < PUFF_CARDS + BALL_CARDS {
         // The set's flame fills about a fifth of its frame across, so the cards are seven
         // times the ball for a fireball two to three times the stream's width.
@@ -856,7 +973,7 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
     }
     // The blast when the stream's front first strikes: the explosion set played once, a few
     // cards of it a moment apart, and a flash over them.
-    let came_on = fire.jets[jet * 3u + 2u].z;
+    let came_on = fire.jets[jet * 4u + 2u].z;
     let struck = came_on + flight;
     let i = k - PUFF_CARDS - BALL_CARDS;
     if !breathed(jet, came_on) || time < struck {
@@ -1253,7 +1370,25 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // of them, faded at the frame's edges and by its age (its `glow`); or the blast's
         // flash, a soft ball of white-hot light going out.
         let layer = i32(life.w + 0.5);
-        if life.w < -0.5 {
+        if life.w < -1.5 {
+            // The soot stain on a struck face (`breath_stain`): black, thickest just over the
+            // hit and thinning up and out, its edge broken by noise and streaked upward as soot
+            // climbs a wall; `heat` here is which card (0 the plume, 1 the char spot).
+            let n = fbm(uv * vec2(4.0, 2.5) + vec2(luck * 13.0, heat * 7.0));
+            let streak = 0.7 + 0.3 * fbm(vec2(uv.x * 11.0 + luck * 5.0, uv.y * 1.5));
+            var stain = 0.0;
+            if heat < 0.5 {
+                let across = abs(uv.x - 0.5) / (0.2 + 0.3 * uv.y);
+                stain = (1.0 - smoothstep(0.5, 1.0, across + 0.6 * (n - 0.5)))
+                    * smoothstep(0.0, 0.18, uv.y) * (1.0 - smoothstep(0.35, 1.0, uv.y + 0.5 * (n - 0.5)))
+                    * streak * 0.8;
+            } else {
+                let d = length((uv - 0.5) * vec2(2.0, 2.2));
+                stain = (1.0 - smoothstep(0.35, 1.0, d + 0.5 * (n - 0.5))) * 0.75;
+            }
+            cover = saturate(stain * smoothstep(0.0, 1.0, t)) * soft;
+            light = SOOT_BLACK * cover;
+        } else if life.w < -0.5 {
             let p = length(uv - 0.5) * 2.0;
             let ball = (1.0 - smoothstep(0.0, 1.0, p)) * (1.0 - t) * (1.0 - t);
             let r = ramp_row(1.0, BREATH_ROW);
@@ -1363,11 +1498,18 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         }
         // A breath's sprites are metres across: faded over a metre, so a puff against the
         // wall it strikes never shows the line it cuts.
+        // A card laid on the face it burns on, a hand's breadth off it, by that (its size,
+        // `breath_sprite`).
         if kind == 5 {
-            reach = 1.2;
+            reach = min(in.uv_b.y, 1.2);
         }
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);
+        // A soot stain is only where the face it lies on is (`breath_stain`): past the wall's
+        // end or top, where nothing stands a hair behind it, it is gone, as a decal is.
+        if kind == 5 && in.uv_b.x < -1.5 {
+            soft = smoothstep(-0.02, 0.005, behind) * (1.0 - smoothstep(0.12, 0.3, behind));
+        }
     }
     out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft, in.world_position.w);
 @if(FIRE_MASK)

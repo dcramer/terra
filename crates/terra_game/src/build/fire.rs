@@ -145,6 +145,10 @@ fn breathe(
                 .map_or(breath.reach_m, |hit| hit.distance + SPLASH_BACK_M),
             spread: breath.spread,
             on: breath.on,
+            face: struck.as_ref().map_or(0.0, |hit| hit.distance),
+            normal: struck.as_ref().map_or(Vec3::ZERO, |hit| {
+                (site.frame.rotation * hit.normal.as_vec3()).normalize_or_zero()
+            }),
         });
         if !breath.on || step <= 0.0 {
             continue;

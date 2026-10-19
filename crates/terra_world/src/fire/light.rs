@@ -46,9 +46,12 @@ const LIGHT_RANGE_M: f32 = 22.0;
 const JET_RANGE_M: f32 = 30.0;
 /// A jet's light just past the mouth, on the breather's head and neck, along its stream and
 /// where it strikes: at 1e7 the dragon and the wall it struck showed none of it by day
-/// (castle film r7). Its colour the stream's yellow, a blaze's the orange of burning timber.
-const JET_LUMENS: f32 = 5.0e7;
-const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
+/// (castle film r7), but at 5e7 and a pale yellow the ground, the wall and the dragon by night
+/// stood brighter than the flame, near white (breath r27: the fireball's crop 365% as lit as
+/// at noon), where the flame is the brightest thing by it (D415). Its colour a wood flame's
+/// orange, as a blaze's.
+const JET_LUMENS: f32 = 4.0e6;
+const JET_LIGHT: Color = Color::srgb(1.0, 0.58, 0.22);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's, wood's flame about 1,900 K: an orange, not the yellow the grass turned a
 /// timber blaze's (lake film r5), and with no blue, as a blackbody that cool has none
@@ -215,7 +218,7 @@ pub(super) struct Lit {
 /// The flash where a jet's stream first strikes (docs/fire.md, "Composites": 0.1 to 0.3 s),
 /// as bright as the blast it lights, then gone: `FLASH_S` long, easing out, its light the
 /// white of the blast's hottest.
-const FLASH_LUMENS: f32 = 4.0e8;
+const FLASH_LUMENS: f32 = 8.0e7;
 const FLASH_S: f32 = 0.25;
 const FLASH_LIGHT: Color = Color::srgb(1.0, 0.85, 0.62);
 

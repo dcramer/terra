@@ -188,6 +188,8 @@ mod tests {
             reach: 30.0,
             spread: 0.1,
             on: true,
+            face: 0.0,
+            normal: Vec3::ZERO,
         };
         let (stream, ball) = jet_points(&jet);
         let (near, far) = reach(&stream, from, Vec3::X);

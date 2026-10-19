@@ -255,6 +255,9 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - embers and, if the breath is liquid, burning drops falling from its underside;
   - a light riding its front.
   - A ray cast finds where it hits. A hit spawns a blast, lingering fire sites on what burns, and a scorch.
+  - The jet carries the struck face's distance and normal (`Jet::face`, `Jet::normal`), so its landed puffs spread over that face and climb it, laid half onto it, rather than flying on into the wall, and the fireball stands off it.
+  - Its scorch is a soot stain laid on the struck face: a plume over the hit and a char spot at it, darkening over `STAIN_S` of the stream on it, kept to the face by depth as a decal is (`breath_stain`). It lasts as long as the jet; a lasting scorch is still to come.
+  - Its light is under its flame (D415's brightness order): a jet's three lights at 4e6 lm and a wood flame's orange, where 5e7 and a pale yellow lit the ground, the wall and the dragon brighter than the fire by night.
   - **Whether a dragon breathes a gas jet or liquid fire (napalm: it falls, clings and burns on) is Open for the developers.**
 - **Explosion and fireball**:
   - a flash light for 0.1-0.3 s;
