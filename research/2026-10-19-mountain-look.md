@@ -105,7 +105,9 @@ Sources were checked on 2026-10-19. "Abstract only" means the talk itself is not
 Our ground is a density field asked per point (D322), meshed in an octree of chunks. That rules out a global simulation run per point, but gives us two things a heightfield lacks: vertical and overhanging faces, and coarse grids baked once per world, as the lakes' Priority-Flood already is. The plan uses both. Each step is measured on the band numbers above and on a still of the settlement's wall, side-lit, against the frames.
 
 0. **The reference first** (an hour). Make `mountains-day` by band (`look.ts reference --open`) from the 6 photographs and the Witcher 3, RDR2 and Horizon frames. Give each place a side-lit mountain view in `places.ts`, held by `cargo xtask looks`: far contrast ≥ 0.12, far under sky 0.06 to 0.20.
-1. **Drainage erosion, baked per world (spike first).**
+   - Done (292e4ce2). `mountains-day` is 10 frames: far contrast 0.199, far under sky 0.204. The valley's `range` view (60 m up) and `lake-range` (80 m up the shore) are shot at 08:00 for side light and held to far contrast ≥ 0.12 and far under sky 0.204 ± 0.14.
+   - The valley fails today: far contrast 0.040, far under sky 0.050. The lake-range holds (0.251, 0.322), but its far rank is still the sky's painted cones.
+1. **Drainage erosion, baked per world (spike first; answered below: not as planned).**
    - Stream-power erosion on a coarse grid of the ranges, about 32 m cells (940² over the 30 km world), from the current mountain term as uplift. It is a port of Schott et al.'s code; check its licence first, or work from the paper (D196).
    - It is baked in seconds on every core (`terra_gen::par`) and read bicubically in the field.
    - It gives the branching valleys and spurs, plus a flow and a wear map for the shader and placement, as Gaea's outputs do. The per-point gullies (Runevision's filter) then follow its fall lines at finer scale.
@@ -144,6 +146,41 @@ Our ground is a density field asked per point (D322), meshed in an octree of chu
   - Each range (a cell of the range noise) takes one kind, its neighbours often another. So the settlement's horizon shows two or three kinds side by side: the variety asked for.
   - The kinds blend over a range's edge by the same noise, never in one range's middle.
 - **What stays rules, not variants.** The tree line, the snowline and the zones on a slope follow from the climate and the date (demos.md).
+
+## The spike: stream-power erosion on a 32 m grid (2026-10-19)
+
+**Question.** Does stream-power erosion on a coarse grid, baked once per world under our per-point gullies, give branching spurs on the settlement's wall in under 10 s, without pits that fill as lakes?
+
+**Answer: no.** It is fast enough and leaves no new lakes, but it gives no branching spurs. It deepens and smooths the valleys the ridge noise already laid out. On the wall, the water runs straight down the fall lines.
+
+**How it was tested.** The spike is in git at c757b01b (`spike/mountain-erosion`, deleted since).
+- **Grid.** 938² cells of 32 m, 30 km across, centred on the settlement's site (town@2.22,2.12).
+- **Ground.** Sampled twice: as it is, and without its per-point gullies (`gullies_m` and `couloirs_m` at 0). The second was eroded, then the first's gullies were added back over it.
+- **Solver.** Braun and Willett's implicit stream-power scheme (2013, from the paper), with m = 0.5 and n = 1. It drains over a Priority-Flood fill with an epsilon (Barnes et al. 2014). The erosion law follows [Schott et al.'s code](https://github.com/H-Schott/StreamPowerErosion) (MIT): a hillslope Laplacian, erodibility noise of ±25%, and area spread over the lower neighbours by slope. fastscapelib is GPL-3, so we used only its papers.
+- **Lakes.** The lakes the ground had keep their beds. A hollow made by a step is filled until it drains, as FastScape does.
+- **Measures.** On the wall, the ground steeper than 20° and over 1,100 m within 8 km of the site (18.9 km²): the channel network (D8, channels over 0.05 km², Strahler order), confluences per km², and relief within 290 m. On the whole grid, new water, found by `terra_land::lakes::fill`.
+
+| | Bake | Highest Strahler order on the wall | Confluences a km² | Relief within 290 m | New hollows holding water | Lakes the ground had, grown |
+|---|---|---|---|---|---|---|
+| Before (the ground as it is) | | 3 | 1.96 | 346 m | | |
+| A: erosion on that ground, 24 steps | 6 to 7 s | 3 | 1.59 | 311 m | 16, mostly 1 to 3 cells | 0.24 km² |
+| A with stronger erosion (KT 3), uplift 0.6, 48 steps | 13 s | 3 | 1.75 | 406 m | 39 | 0.25 km² |
+| B: range lowered to 10%, raised back as it erodes, 48 steps | 13 s | 3 | 1.80 | 329 m | 31 | 0.29 km² |
+
+- **Time.** Sampling the field twice took 2.7 s on 24 cores. A light bake took 6 to 7 s and a strong one 13 s. Most of that is the routing (fill, sort, accumulate), which runs on one core. So 10 s holds for this patch but not for the whole sphere: at 32 m it is about 15 times as many cells.
+- **Pits.** The bake leaves almost none, about 1.2 to 2 km² in 880 km², but it drains lakes. The lakes of 3 or more cells and 1 m or more deep fall from 618 to between 373 and 438. Their outlets cut down, so the pinned lake could drain too.
+  - Adding the per-point gullies back over the eroded ground makes hundreds of 1-cell hollows. The ground as it is already shows 350 more hollows than it does without its gullies. That is the gullies (140 m apart) sampled at 32 m, not the bake.
+- **Shape** (the sheet: `~/.cache/terra-review/mountains/erosion-spike.jpg`).
+  - From above, the valleys run as before, only deeper and softer.
+  - On the wall, the erosion cuts straight chutes down the fall lines, or smooths them, depending on the diffusion.
+  - No run raised the wall's highest Strahler order above 3 or added confluences. A wall 1 to 2 km high is 30 to 60 cells at 32 m: too few for a network to branch on it. A network that branches at the spurs' scale forms only at a steady state reached over hundreds or thousands of steps, as in Schott et al. on the GPU. That is not a bake of seconds on the CPU.
+  - The horizontal bands on the walls in the views are the spike's CPU ray-march, not the ground.
+
+**What follows (a recommendation, not built).**
+- Keep stream power out of the game for now.
+- Branching spurs need a per-point model that makes them, since our field is asked per point. One example is "Dendry" (Gaillard et al., 2019, a procedural model for dendritic patterns, evaluated locally). Another is the debris-flow cuts of Jain, Benes and Cordonnier (2024) on the walls only.
+- Step 2, the faces in the density, does not depend on this, and gives the dark faces the far band lacks (0.040 against ≥ 0.12). It should go next.
+- The developers' "re-find them once" (D425) stays unused until something reshapes the ground under the pinned sites.
 
 ## For the developers (answered: D425)
 
