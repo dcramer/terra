@@ -37,8 +37,10 @@ export type Fire = { name: string; class: string; frame: number; box: "kept" | "
 
 // Where things stand, in metres east, up and south of the start; the base's cubes, which are
 // half a metre, for what is built. The hammer builds only within 14 m of the player, who stays
-// at the start (`NEAR_WORK_M`), so the cabin stands 7 m off. The wall, 33 m off, stays a plan;
-// the breath's fireball forms where it strikes it, and with no wall there is none.
+// at the start (`NEAR_WORK_M`), so the cabin stands 7 m off. The wall, 33 m off, is built by
+// naming it (a part aimed at is built at any distance): laid first, its footing is part 0 and
+// the wall above part 1. The breath's fireball forms where it strikes it, and with no wall
+// there is none.
 const CAMPFIRE: Vec3 = [-10, 0, 10];
 const CABIN = { min: [4, 0, 8], max: [13, 0, 15] };
 const WALL = { min: [60, 0, 20], max: [80, 0, 20] };
@@ -57,11 +59,13 @@ export const FIRES: Fire[] = [
 export function calls(): Call[] {
   const out: Call[] = [
     { frame: 2, method: "staged.spawn", params: { name: "campfire", model: "models/props/Campfire.glb", at: CAMPFIRE, facing: [CAMPFIRE[0], 0, CAMPFIRE[2] + 5], base: true, burns: [1.5, 0.7, 0.9] } },
-    { frame: 4, method: "build.lay", params: { what: "room", min: CABIN.min, max: CABIN.max, kind: "logs", floor: "stone" } },
-    { frame: 6, method: "build.lay", params: { what: "roof", over: [8, 0, 11], kind: "logs", style: "Gable" } },
-    { frame: 8, method: "build.lay", params: { what: "wall", min: WALL.min, max: WALL.max, kind: "stone" } },
     // A plan is only laid; the hammer's steps build it (free and instant on the yard), or the
-    // cabin is a blueprint with nothing to burn.
+    // cabin is a blueprint with nothing to burn and the wall a blue ghost in the fireball's crop.
+    { frame: 3, method: "build.lay", params: { what: "wall", min: WALL.min, max: WALL.max, kind: "stone" } },
+    { frame: 4, method: "build.fill", params: { part: 0, steps: 100000 } },
+    { frame: 5, method: "build.fill", params: { part: 1, steps: 100000 } },
+    { frame: 6, method: "build.lay", params: { what: "room", min: CABIN.min, max: CABIN.max, kind: "logs", floor: "stone" } },
+    { frame: 7, method: "build.lay", params: { what: "roof", over: [8, 0, 11], kind: "logs", style: "Gable" } },
     { frame: 9, method: "build.fill", params: { steps: 100000 } },
     { frame: 10, method: "flight.spawn", params: { kind: "Dragon", at: [35, 14, -40], facing: HOVER, base: true } },
     { frame: 12, method: "flight.hover", params: { at: HOVER, facing: AIM, base: true } },
@@ -80,8 +84,9 @@ const frames = () => [...new Set(FIRES.map((f) => f.frame))].sort((a, b) => a - 
 const still = (dir: string, frame: number) => join(dir, `f-${String(frame).padStart(5, "0")}.png`);
 
 /// The GPU memory a yard run needs free, in MiB: the shared slots count runs, not their size,
-/// so beside a big town run (7 GB) the yard ran out of memory and drew nothing.
-const ROOM = 3500;
+/// so beside a big town run (7 GB) the yard ran out of memory and drew nothing, as it did
+/// with 3.5 GB free.
+const ROOM = 5000;
 
 /// Waits until the GPU has `ROOM` free, saying so once; at once where nvidia-smi is missing.
 function waitForRoom() {
