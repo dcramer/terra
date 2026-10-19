@@ -394,7 +394,6 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D196](decisions/D196.md) | When Bevy falls short | Tech | Developers | Decided | Find the engine or public tool that does it well and… |
 | [D198](decisions/D198.md) | The game in layers | Tech | Agent | Decided | `terra_game` is three plugin layers… |
 | [D239](decisions/D239.md) | Quality presets, and what the integrated GPU must hold | Tech | Agent | Decided | Three presets, low, medium and high… |
-| [D283](decisions/D283.md) | Mesh slabs start at 64 MiB and double | Tech | Agent | Decided | Bevy keeps meshes in shared slabs of GPU memory… |
 | [D288](decisions/D288.md) | Foliage shaded only where it is in front | Tech | Agent | Decided | Leaves, grass, litter and the plants that sway… |
 | [D307](decisions/D307.md) | The low preset drawn as integrated GPUs need | Tech | Agent | Decided | What the low preset draws is cut where an integrated GPU… |
 | [D322](decisions/D322.md) | Mountains, lakes and water | Tech | Agent | Decided | The world's ground gains a mountain term set by a… |
@@ -429,6 +428,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D415](decisions/D415.md) | One Fire module, built by the rules shipped games follow | Tech | Agent | Leaning | Every fire in the game, from a candle to a burning… |
 | [D416](decisions/D416.md) | The ground shades and mirrors what the camera does not see from a horizon map of the land, not from what is drawn | Tech | Agent | Leaning | What lies off screen already casts… |
 | [D418](decisions/D418.md) | The weather at the eye drives the sky, the light, the air and what falls | Tech | Agent | Decided | One `Weather` resource holds the climate's cloud… |
+| [D420](decisions/D420.md) | GPU memory in pages, made once, uploaded over frames | Tech | Agent | Decided | What the GPU holds is made at its size once and in… |
 
 ## Tools and workflow
 
@@ -505,6 +505,7 @@ Kept so their numbers still resolve. They no longer bind anything.
 | [D65](decisions/D65.md) | Inventory and backpack | Design | — | Superseded by D106 | Was: the inventory is the backpack, small at the start… |
 | [D79](decisions/D79.md) | Terraform rating | Design | — | Superseded by D89 | A terraformable planet's rating of how far along it is. |
 | [D209](decisions/D209.md) | How roofs are laid and drawn | Tech | — | Superseded by D241 | Was: a kit laid pitched roofs from roof sections… |
+| [D283](decisions/D283.md) | Mesh slabs start at 64 MiB and double | Tech | Agent | Superseded by D420 | Was: Bevy keeps meshes in shared slabs of GPU memory… |
 | [D369](decisions/D369.md) | A grey card grey at noon in the open | Tech | — | Superseded by D370 | Was: the day grade warmed only under a closed canopy… |
 | [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | — | Superseded by D37 | Was: a push's check that passed stamped its tree… |
 

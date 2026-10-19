@@ -967,20 +967,27 @@ impl Plugin for ShellPlugin {
         if self.0.remote || self.0.calls.is_some() {
             crate::remote::plugin(app);
         }
-        // Meshes share slabs of GPU memory, each grown by copying it into a bigger one,
-        // after which every mesh in it is prepared and batched again: tens of
-        // milliseconds a time with a town's gigabytes of buildings streaming in. Slabs start
-        // at 64 MiB and double, so one grows three times on its way to Bevy's 512 MiB
-        // rather than a dozen from 1 MiB.
+        // Meshes share slabs of GPU memory, one set a vertex layout; a full slab is copied
+        // into a bigger one, after which every mesh in it is prepared and batched again
+        // (D283). Slabs are pages of at most 64 MiB, as engines keep fixed-size pages:
+        // a slab starts at 4 MiB, doubles to 64 and, full there, another is begun beside it,
+        // so a growth copies and batches again at most 32 MiB of meshes, a layout holds at
+        // most one part-empty page, and a small layout no 64 MiB one (D420).
+        // Uploads are spread over frames, 128 MiB a frame at most (Godot's staging pool),
+        // rather than every texture and mesh of a place staged on its first frame.
+        app.insert_resource(bevy::render::render_asset::RenderAssetBytesPerFrame::new(
+            128 * 1024 * 1024,
+        ));
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             use bevy::render::{
                 mesh::allocator::MeshAllocatorSettings, slab_allocator::SlabAllocatorSettings,
             };
             render_app.insert_resource(MeshAllocatorSettings {
                 slab_allocator_settings: SlabAllocatorSettings {
-                    min_slab_size: 64 * 1024 * 1024,
+                    min_slab_size: 4 * 1024 * 1024,
+                    max_slab_size: 64 * 1024 * 1024,
+                    large_threshold: 64 * 1024 * 1024,
                     growth_factor: 2.0,
-                    ..default()
                 },
                 ..default()
             });

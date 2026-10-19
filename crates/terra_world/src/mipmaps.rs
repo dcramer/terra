@@ -18,7 +18,9 @@ pub use terra_core::cooked::mips::CUT_OUT;
 use terra_core::cooked::mips::{chain, cut_out_chain, is_cut_out};
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostUpdate, mipmaps);
+    // Run as the image's arrival is announced, in the frame it arrived, so it is made on the
+    // GPU once with its mipmaps, never first without them and then again (D420).
+    app.add_systems(PostUpdate, mipmaps.after(bevy::asset::AssetEventSystems));
 }
 
 fn mipmaps(
@@ -27,7 +29,8 @@ fn mipmaps(
     mut images: ResMut<Assets<Image>>,
 ) {
     for event in events.read() {
-        let AssetEvent::LoadedWithDependencies { id } = event else {
+        // Loaded, or loaded again as its file changed.
+        let (AssetEvent::Added { id } | AssetEvent::Modified { id }) = event else {
             continue;
         };
         let from_a_model = assets.get_path(*id).is_some_and(|path| {
@@ -41,7 +44,9 @@ fn mipmaps(
         let cooked = images
             .get(*id)
             .is_some_and(|image| image.texture_descriptor.format.is_compressed());
-        let Some(mut image) = images.get_mut(*id) else {
+        // Changed unannounced: it has not been sent to the GPU yet, and an announced change
+        // would send it again.
+        let Some(image) = images.get_mut_untracked(*id) else {
             continue;
         };
         if cooked {

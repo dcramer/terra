@@ -68,7 +68,9 @@ impl Quality {
     pub fn shadows(self) -> Shadows {
         match self {
             Quality::High => Shadows {
-                map: 4096,
+                // Unreal's default cascade (`r.Shadow.MaxCSMResolution`): 64 MiB for the four, not
+                // 256 at 4096 (D420).
+                map: 2048,
                 cascades: 4,
                 first_m: 24.0,
                 most_m: 300.0,

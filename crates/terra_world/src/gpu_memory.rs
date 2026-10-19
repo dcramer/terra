@@ -51,7 +51,9 @@ struct Sample {
 #[derive(Clone, Default)]
 struct Prepared {
     images: Vec<(AssetId<Image>, u64, String)>,
-    meshes: Vec<(AssetId<Mesh>, u64)>,
+    /// Each mesh's bytes and its vertex layout (its stride and attributes), which says
+    /// what made a mesh nothing draws.
+    meshes: Vec<(AssetId<Mesh>, u64, String)>,
 }
 
 #[derive(Default)]
@@ -63,6 +65,9 @@ struct State {
     prepared: Prepared,
     prepared_at: u64,
     said_at: u64,
+    /// Who drew each mesh when the peak's meshes were counted, noted by the main world in
+    /// the frame after, so a mesh let go since is still put to who drew it then.
+    drawers: Option<HashMap<AssetId<Mesh>, String>>,
 }
 
 /// Shared between the render world, which samples, and the main world, which says it.
@@ -72,7 +77,7 @@ struct Shared(Arc<Mutex<State>>);
 pub fn plugin(app: &mut App) {
     let shared = Shared::default();
     app.insert_resource(shared.clone())
-        .add_systems(Last, say_on_exit);
+        .add_systems(Last, (note_drawers, say_on_exit));
     if let Some(render) = app.get_sub_app_mut(RenderApp) {
         render
             .insert_resource(shared)
@@ -136,6 +141,21 @@ pub fn texture_bytes(
         * u64::from(samples.max(1))
 }
 
+/// A mesh's vertex layout: its stride and its attributes' ids (`MeshVertexAttribute::id`).
+fn layout_of(mesh: &RenderMesh) -> String {
+    let MeshVertexBufferLayoutRef(layout) = &mesh.layout;
+    let ids: Vec<String> = layout
+        .attribute_ids()
+        .iter()
+        .map(|id| format!("{id:?}").replace("MeshVertexAttributeId", ""))
+        .collect();
+    format!(
+        "[stride {}, attributes {}]",
+        layout.layout().array_stride,
+        ids.join(" ")
+    )
+}
+
 fn mesh_bytes(mesh: &RenderMesh) -> u64 {
     let MeshVertexBufferLayoutRef(layout) = &mesh.layout;
     let vertices = u64::from(mesh.vertex_count) * layout.layout().array_stride;
@@ -189,6 +209,7 @@ fn sample(
     let reserved = state.peak.reserved;
     if reserved >= state.prepared_at + RECOUNT || state.prepared.images.is_empty() {
         state.prepared_at = reserved;
+        state.drawers = None;
         state.prepared = Prepared {
             images: images.map_or_else(Vec::new, |images| {
                 images
@@ -212,7 +233,7 @@ fn sample(
             meshes: meshes.map_or_else(Vec::new, |meshes| {
                 meshes
                     .iter()
-                    .map(|(id, mesh)| (id, mesh_bytes(mesh)))
+                    .map(|(id, mesh)| (id, mesh_bytes(mesh), layout_of(mesh)))
                     .collect()
             }),
         };
@@ -236,25 +257,8 @@ fn sample(
     }
 }
 
-/// The peak's textures by the asset they were loaded from (or their shape, if made in code),
-/// and its meshes by the nearest named entity that draws them; a mesh nothing draws is
-/// counted as such.
-fn owners(
-    world: &mut World,
-    prepared: &Prepared,
-) -> (Vec<(String, u64, usize)>, Vec<(String, u64, usize)>) {
-    let server = world.get_resource::<AssetServer>();
-    let images = sum_by(prepared.images.iter().map(|(id, bytes, shape)| {
-        let path =
-            server.and_then(|s| s.get_path(UntypedAssetId::from(*id)).map(|p| p.to_string()));
-        (
-            path.map_or_else(
-                || format!("(made) {shape}"),
-                |p| format!("{} [{shape}]", fold(&p)),
-            ),
-            *bytes,
-        )
-    }));
+/// Each drawn mesh's drawer: the nearest named entity up from one that draws it.
+fn drawers_now(world: &mut World) -> HashMap<AssetId<Mesh>, String> {
     let mut drawer: HashMap<AssetId<Mesh>, String> = HashMap::new();
     let mut query = world.query::<(Entity, &Mesh3d)>();
     let drawn: Vec<(Entity, AssetId<Mesh>)> = query.iter(world).map(|(e, m)| (e, m.id())).collect();
@@ -277,12 +281,58 @@ fn owners(
         }
         drawer.insert(mesh, name.unwrap_or_else(|| "(unnamed)".to_string()));
     }
-    let meshes = sum_by(prepared.meshes.iter().map(|(id, bytes)| {
+    drawer
+}
+
+/// Notes who draws each mesh once the render world has counted the peak's meshes.
+fn note_drawers(world: &mut World) {
+    let Some(shared) = world.get_resource::<Shared>().cloned() else {
+        return;
+    };
+    let wanted = {
+        let state = shared
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.drawers.is_none() && !state.prepared.meshes.is_empty()
+    };
+    if wanted {
+        let drawers = drawers_now(world);
+        shared
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .drawers = Some(drawers);
+    }
+}
+
+/// The peak's textures by the asset they were loaded from (or their shape, if made in code),
+/// and its meshes by the nearest named entity that draws them; a mesh nothing draws is
+/// counted as such.
+fn owners(
+    world: &mut World,
+    prepared: &Prepared,
+    drawers: Option<HashMap<AssetId<Mesh>, String>>,
+) -> (Vec<(String, u64, usize)>, Vec<(String, u64, usize)>) {
+    let server = world.get_resource::<AssetServer>();
+    let images = sum_by(prepared.images.iter().map(|(id, bytes, shape)| {
+        let path =
+            server.and_then(|s| s.get_path(UntypedAssetId::from(*id)).map(|p| p.to_string()));
+        (
+            path.map_or_else(
+                || format!("(made) {shape}"),
+                |p| format!("{} [{shape}]", fold(&p)),
+            ),
+            *bytes,
+        )
+    }));
+    let drawer = drawers.unwrap_or_else(|| drawers_now(world));
+    let meshes = sum_by(prepared.meshes.iter().map(|(id, bytes, layout)| {
         (
             drawer
                 .get(id)
                 .cloned()
-                .unwrap_or_else(|| "(drawn by nothing)".to_string()),
+                .unwrap_or_else(|| format!("(drawn by nothing) {layout}")),
             *bytes,
         )
     }));
@@ -313,7 +363,7 @@ fn memory(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .and_then(Value::as_u64)
         .unwrap_or(20) as usize;
     let shared = world.resource::<Shared>().clone();
-    let (now, peak, prepared) = {
+    let (now, peak, prepared, drawers) = {
         let state = shared
             .0
             .lock()
@@ -322,9 +372,10 @@ fn memory(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             state.now.clone(),
             state.peak.clone(),
             state.prepared.clone(),
+            state.drawers.clone(),
         )
     };
-    let (images, meshes) = owners(world, &prepared);
+    let (images, meshes) = owners(world, &prepared, drawers);
     Ok(json!({
         "now": sample_json(&now, top),
         "peak": sample_json(&peak, top),
@@ -342,17 +393,21 @@ fn say_on_exit(world: &mut World, mut said: Local<bool>) {
     }
     *said = true;
     let shared = world.resource::<Shared>().clone();
-    let (peak, prepared) = {
+    let (peak, prepared, drawers) = {
         let state = shared
             .0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        (state.peak.clone(), state.prepared.clone())
+        (
+            state.peak.clone(),
+            state.prepared.clone(),
+            state.drawers.clone(),
+        )
     };
     if peak.reserved == 0 {
         return;
     }
-    let (images, meshes) = owners(world, &prepared);
+    let (images, meshes) = owners(world, &prepared, drawers);
     let say = |sums: &[(String, u64, usize)]| -> String {
         sums.iter()
             .take(40)

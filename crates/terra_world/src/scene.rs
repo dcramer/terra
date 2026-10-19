@@ -55,7 +55,7 @@ pub fn plugin(app: &mut App) {
             ..Sky::by_day(HORIZON, ZENITH, Color::srgb(1.0, 0.74, 0.46), 0.55, 1.6)
         })
         // Shade is lit by the sky (`skylight`), so it comes out cool against the warm sun.
-        .insert_resource(DirectionalLightShadowMap { size: 4096 })
+        .insert_resource(DirectionalLightShadowMap { size: 2048 })
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun, haze))
         .init_resource::<Indoors>()
