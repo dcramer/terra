@@ -54,6 +54,18 @@ So roughly **$1–5 a month at six months, $2–10 a month at a year**, rising w
 
 On a bare single-branch copy of `main` (1,165 commits), `git lfs migrate import --everything` with the binary patterns took 16 s; after `gc --aggressive` the pack is 10.8 MiB and `lfs/` 2.3 GB. A clone with smudging skipped, then `git lfs fetch` and `git lfs checkout`, left `git status` clean and its 1.05 GiB of binaries shared with `.git/lfs` (btrfs `filesystem du`). A `git worktree add` on the same clone wrote 1.07 GiB of its own.
 
+## Without rewriting history
+
+Rewriting is ruled out: it would break the owner's checkout and every agent's branch. The forward-only switch was rehearsed instead: `git lfs track` for the binary patterns and `git add --renormalize .`, one ordinary commit (681 files) on top of `main`, putting 1.1 GB in LFS.
+
+- Another checkout pulls it as a **fast-forward**; no hash changes.
+- A machine **without git-lfs** gets pointer text where the models were, so every machine installs git-lfs before it pulls the switch.
+- An older branch that **edited a binary** conflicts once on rebase; taking its side stores it as a pointer.
+- An older branch that **added a binary** brings it in as a plain blob. `git lfs fsck --pointers` names it and `git add --renormalize` fixes it, which `cargo xtask land` would do.
+- The 2.2 GB already in history stays. A new clone skips it with `--filter=blob:none`.
+
+What it would take: git-lfs pinned in mise; `.githooks` calling git-lfs's hooks, since `core.hooksPath` replaces the ones it installs; the worktree seed checking out with smudging skipped, then `git lfs checkout` for reflinks; the pointer check in commit and land. Held for now, 2026-10-18.
+
 ## Sources
 
 - GitHub, [Git LFS billing](https://docs.github.com/en/billing/concepts/product-billing/git-lfs) and [about billing for Git LFS](https://docs.github.com/en/billing/using-the-new-billing-platform/about-billing-for-git-large-file-storage).
