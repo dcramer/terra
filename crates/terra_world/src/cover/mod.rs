@@ -114,6 +114,18 @@ pub trait CoverSource: Send + Sync + 'static {
     /// is `ground`.
     fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> Growing;
 
+    /// What grows over the square `texel_m` wide round `at`, on average, as a picture of the
+    /// ground with texels that wide must hold it (the floor's, `floor`): a pattern finer than
+    /// the texel, a garden's rows, reads as its mean rather than as whichever stripe the
+    /// texel's middle fell on, which from high up showed as torn blotches (the settlement's
+    /// review, round 14). A source with such patterns filters them itself, by their
+    /// integral over the square, as a procedural texture is antialiased (Ebert et al.,
+    /// "Texturing and Modeling", ch. 2, the box-filtered pulse train); by default the
+    /// point's.
+    fn growing_over(&self, planet: &Planet, ground: Vec3, at: Vec2, _texel_m: f32) -> Growing {
+        self.growing(planet, ground, at)
+    }
+
     /// Whether anything may grow in the square round `middle`, `half` metres each way, so a
     /// square with nothing in it is skipped at once.
     fn reaches(&self, _middle: Vec2, _half: f32) -> bool {

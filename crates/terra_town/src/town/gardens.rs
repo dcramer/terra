@@ -11,7 +11,7 @@ use super::*;
 /// How big a garden's plot is, along the town's contour (`Square::along`) and across it:
 /// long plots running back from the streets along the contour, as burgage plots run.
 const PLOT_M: Vec2 = Vec2::new(8.0, 14.0);
-/// How wide the balk of grass between two plots is, half each side.
+/// How wide the path between two plots is, half each side (`play::town_gardens` treads it pale).
 pub const BALK_M: f32 = 0.6;
 /// How far a plot keeps from the wall's line (its towers and gatehouses reach in to six
 /// metres), from anything built, from a street's edge, the square, a yard, a lane and a

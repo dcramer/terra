@@ -200,7 +200,7 @@ fn paint(
                 for a in 0..TEXELS {
                     let at = corner + (Vec2::new(a as f32, b as f32) + 0.5) * texel_m;
                     let ground = start.at(at.x, at.y);
-                    let mut growing = source.growing(&planet, ground, at);
+                    let mut growing = source.growing_over(&planet, ground, at, texel_m);
                     near.tread(&mut growing, ground, at);
                     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                     pixels.extend([

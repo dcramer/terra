@@ -81,6 +81,14 @@ What appears in view either builds in by its stages (D381's steps, each stage at
 
 Masonry has almost no tensile strength: a leaning tower opens on its tension side and breaks into courses as it goes, it does not tip as one. A fall becomes rigid bodies of a few cubes each, bonded by mortar that breaks under strain (Chaos's geometry collections with damage thresholds, Teardown's voxel bodies, Red Faction Guerrilla's structural stress, documentation and talks only), falling under gravity on the physics engine D33 settles on, with dust where they land (D305 keeps the rules of what falls). `fragments::topple`, a scripted rigid tip, went on 2026-10-18 for rules of support on our own fragments (`fragments::collapse` and `fragments::Rubble`, D305): a fall tips only on one-sided support and slenderness and cracks apart within its material's angle, otherwise it crumbles in place onto its heap.
 
+### Ground patterns: filtered to the texel they land in
+
+A pattern on the ground finer than the floor's texel (a garden's rows, 1.1 m apart, under the 2 m texel of a camera 50 m up) is painted as its mean over the texel, never as the stripe the texel's middle fell on, which aliased into torn mud blotches (settlement r14). The cover source integrates its own patterns (`CoverSource::growing_over`, the box-filtered pulse train of Apodaca and Gritz), as a mip prefilters a texture. Gardens are framed by paths trodden paler than their beds, so a plot reads as a plot from any height. Tested in `play::town_gardens`.
+
+### Nothing of the game's in a film
+
+A film shows the world's things, not the game's: no claim stone, plan outline, marker or ghost unless a player stands in the shot. A town rising by itself sets its claim unseen (`play::rising`), and demo and film places leave out the combat lair (D421).
+
 ### Render runs: fresh, within budget, bounded
 
 Every film, still and probe writes a stamp (the commit, a hash of the uncommitted diff, of the binary, of `assets/` and of the scene) and the asset watcher is off; the review and the trailer's cache read the stamp, not mtimes. A run declares its VRAM need from a probe of its heaviest frame, not `trailer.ts`'s one 7,000 MB for every place, and a watchdog ends a run that writes nothing for five minutes.

@@ -551,7 +551,17 @@ impl TownCover {
 }
 
 impl terra_world::cover::CoverSource for TownCover {
-    fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> terra_world::cover::Growing {
+    fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> terra_world::cover::Growing {
+        self.growing_over(planet, ground, at, 0.0)
+    }
+
+    fn growing_over(
+        &self,
+        planet: &Planet,
+        ground: Vec3,
+        _at: Vec2,
+        texel_m: f32,
+    ) -> terra_world::cover::Growing {
         let offset = ground - self.middle;
         let p = Vec2::new(offset.dot(self.east), offset.dot(self.south));
         let wild = planet.cover(ground, ground.normalize());
@@ -669,7 +679,7 @@ impl terra_world::cover::CoverSource for TownCover {
             growing.grass *= grass;
             growing.trodden = growing.trodden.max(trodden);
         }
-        self.gardens.grow(p, &mut growing);
+        self.gardens.grow(p, texel_m, &mut growing);
         // A plot laid for a building going up, trodden to earth round its footings as
         // builders work about it (D381): not the blades cut away from a lawn.
         let plot_worn = self
@@ -719,6 +729,16 @@ struct TownOverWorld {
 
 impl terra_world::cover::CoverSource for TownOverWorld {
     fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> terra_world::cover::Growing {
+        self.growing_over(planet, ground, at, 0.0)
+    }
+
+    fn growing_over(
+        &self,
+        planet: &Planet,
+        ground: Vec3,
+        at: Vec2,
+        texel_m: f32,
+    ) -> terra_world::cover::Growing {
         // A settlement rising's own cover is its meadow and its ways; the forest round it is
         // the world's, its needles, litter and moss (D381).
         let theirs = if self.town.meadow_m > 0.0 {
@@ -729,9 +749,9 @@ impl terra_world::cover::CoverSource for TownOverWorld {
             at.distance(self.town.at) < COVER_REACH_M
         };
         if theirs {
-            self.town.growing(planet, ground, at)
+            self.town.growing_over(planet, ground, at, texel_m)
         } else {
-            self.world.growing(planet, ground, at)
+            self.world.growing_over(planet, ground, at, texel_m)
         }
     }
 
