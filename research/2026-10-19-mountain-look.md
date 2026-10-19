@@ -145,7 +145,9 @@ Our ground is a density field asked per point (D322), meshed in an octree of chu
   - The kinds blend over a range's edge by the same noise, never in one range's middle.
 - **What stays rules, not variants.** The tree line, the snowline and the zones on a slope follow from the climate and the date (demos.md).
 
-## For the developers (Open, D412)
+## For the developers (answered: D425)
+
+Answered 2026-10-19 (D425): horns and arêtes, and Witcher 3-like ranges (Skellige, Velen), first; two thirds rock, one third snow in summer; the sites re-found once.
 
 1. **Which range kinds to make, and which first?** Recommended: horns and arêtes, and towers and tiers, first. They are the Tatras and the Dolomites, the most "rocky and tall", and the most different from each other. Then the other four. The starting realm would show the first two side by side round the settlement.
 2. **How much rock against snow?** Recommended: rock first. Above the tree line, in early summer:

@@ -76,6 +76,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D350](decisions/D350.md) | The market town paved, with shops, women and a horizon | Design | Developers | Decided | The town's streets and square are paved… |
 | [D365](decisions/D365.md) | Townsfolk dressed by role, sex and seed | Tech | Agent | Decided | Serves D350's varied people, women among them. |
 | [D419](decisions/D419.md) | Winter strips the plants; falling snow grades cool; trails are shared and fade | Design | Developers | Decided | In winter the land is in its winter state. |
+| [D425](decisions/D425.md) | Mountains: horns and Witcher-like ranges first, two thirds rock, sites re-found once | Design | Developers | Decided | The three questions of the mountain look note: |
 
 ## The player and survival
 
