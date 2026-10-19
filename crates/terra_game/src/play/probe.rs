@@ -19,7 +19,7 @@
 //! Places are in metres east and south of the start, as the command-line options take them.
 
 use super::{
-    Downed, IsLocalPlayer, Motion, View,
+    Downed, IsLocalPlayer, Motion, Stamina, View,
     creatures::Creature,
     inventory::{self, Backpack, Bar, Gear, Items},
     people::Person,
@@ -205,19 +205,28 @@ fn ask_give(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 fn give(
     mut asked: ResMut<Asked>,
     mut items: ResMut<Items>,
-    player: Single<(&mut Backpack, &mut Gear, &mut Bar, &mut Vitals), IsLocalPlayer>,
+    player: Single<
+        (
+            &mut Backpack,
+            &mut Gear,
+            &mut Bar,
+            &mut Vitals,
+            &mut Stamina,
+        ),
+        IsLocalPlayer,
+    >,
 ) {
     if asked.gives.is_empty() {
         return;
     }
     let gives = std::mem::take(&mut asked.gives);
-    let (mut backpack, mut gear, mut bar, mut body) = player.into_inner();
+    let (mut backpack, mut gear, mut bar, mut body, mut stamina) = player.into_inner();
     for (name, value) in &gives {
         let value = *value as f32;
         match name.as_str() {
             "health" => body.health = value,
             "fed" => body.fed = value,
-            "stamina" => body.stamina = value,
+            "stamina" => stamina.left = value,
             _ => {}
         }
     }
@@ -258,7 +267,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         &Transform,
         &Motion,
         Has<Downed>,
-        &Vitals,
+        (&Vitals, &Stamina),
         &Backpack,
         &Gear,
         &Bar,
@@ -267,7 +276,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
     let mut creatures = world.query::<(&Creature, &GlobalTransform, &super::lod::Detail)>();
     let mut people = world.query_filtered::<(&Name, &GlobalTransform), With<Person>>();
     let start = *world.resource::<Start>();
-    let (transform, motion, downed, body, backpack, gear, bar, view) = players
+    let (transform, motion, downed, (body, stamina), backpack, gear, bar, view) = players
         .single(world)
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
@@ -342,7 +351,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         "indoors": motion.indoors,
         "down": downed,
         "health": number(body.health),
-        "stamina": number(body.stamina),
+        "stamina": number(stamina.left),
         "fed": number(body.fed),
         "holding": inventory::holding(items, &backpack.0, &bar.0).map(|tool| items.name(tool)),
         // What is in hand whether or not it works, and how much use it has left (D99).

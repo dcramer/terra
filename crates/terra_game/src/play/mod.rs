@@ -99,7 +99,7 @@ use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
 use terra_world::{data, daylight, flora, flora_kinds, footprint, lod, models, tick, world};
 pub use tool::Builder;
-pub use walker::{ArriveAt, Hands, PlayerInput, WalkerPlugin, WarpTo};
+pub use walker::{ArriveAt, Hands, PlayerInput, Stamina, WalkerPlugin, WarpTo};
 // The player's own components are the walker's; every layer reads them by these names.
 use walker::{Downed, IsLocalPlayer, Motion, Stance, View};
 pub(crate) use walker::{LocalPlayer, Player};
@@ -250,11 +250,12 @@ fn equip(
         return;
     };
     let mut body = vitals::Vitals::default();
+    let mut stamina = Stamina::default();
     for (name, value) in &options.gives {
         match name.as_str() {
             "health" => body.health = *value as f32,
             "fed" => body.fed = *value as f32,
-            "stamina" => body.stamina = *value as f32,
+            "stamina" => stamina.left = *value as f32,
             _ => {}
         }
     }
@@ -272,6 +273,7 @@ fn equip(
             facing: motion.facing,
         },
         body,
+        stamina,
         warmth::BodyHeat::default(),
         skills::Skills::default(),
         kit,

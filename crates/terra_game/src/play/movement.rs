@@ -4,7 +4,7 @@
 use super::controls::Action;
 use super::intent::Intent;
 use super::tick::Sim;
-use super::{Downed, Motion, Player, Stance, View, bodies, flora, props, vitals};
+use super::{Downed, Motion, Player, Stamina, Stance, View, bodies, flora};
 use crate::build::{self, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -108,21 +108,21 @@ fn toward(stance: &Stance, view: Vec3, wish: Vec3, up: Vec3) -> Vec3 {
 
 /// Moves every player by what they mean to do: walking, sprinting, rolling and jumping,
 /// held up by the ground and their base, and stopped by walls, bodies and the sea. A body
-/// with no vitals, as in the walker on its own, never tires.
+/// with no stamina, as in the walker on its own, never tires.
 fn walk(
     time: Res<Time>,
     planet: Res<Planet>,
     site: Option<Res<Site>>,
     builds: Query<&build::Built>,
     obstacles: Res<flora::Obstacles>,
-    items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
+    solids: Query<(&bodies::Solid, &Transform, &Visibility), Without<Player>>,
     others: Query<(&bodies::Body, &Transform), Without<Player>>,
     mut players: Query<
         (
             &mut Transform,
             &mut Motion,
             &mut Stance,
-            Option<&mut vitals::Vitals>,
+            Option<&mut Stamina>,
             &View,
             &Intent,
             Has<Downed>,
@@ -136,7 +136,7 @@ fn walk(
         mut transform,
         mut motion,
         mut stance,
-        mut vitals,
+        mut stamina,
         view,
         intent,
         downed,
@@ -170,7 +170,7 @@ fn walk(
             && intent.pressed(Action::Dodge)
             // Ctrl and the wheel change the hammer's material while a part is in hand (D232).
             && !builder.is_some_and(|builder| builder.takes_material())
-            && vitals.as_mut().is_none_or(|body| body.spend(DODGE_STAMINA))
+            && stamina.as_mut().is_none_or(|body| body.spend(DODGE_STAMINA))
         {
             stance.dodging = DODGE_S;
             stance.dodge_direction = if wish == Vec3::ZERO {
@@ -180,7 +180,7 @@ fn walk(
             };
         }
         let sprinting =
-            intent.held(Action::Sprint) && vitals.as_ref().is_none_or(|body| body.can_sprint());
+            intent.held(Action::Sprint) && stamina.as_ref().is_none_or(|body| body.can_sprint());
         let top_speed = top_speed(&stance, sprinting) * ground.map_or(1.0, going);
         // Ease into and out of a run rather than starting and stopping dead.
         let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
@@ -196,7 +196,7 @@ fn walk(
         };
         let mut target = feet + motion.velocity * dt;
         // Furniture and kit are solid. Walls come after, so they have the last word.
-        target = props::push_out(target, walker.radius, items.iter());
+        target = bodies::push_out_of_solids(target, walker.radius, solids.iter());
         // Creatures and people take up room.
         target = bodies::push_out(target, walker.radius, others.iter());
 
@@ -259,7 +259,7 @@ fn walk(
         motion.rising -= GRAVITY * dt;
         if motion.on_ground
             && intent.pressed(Action::Jump)
-            && vitals.as_mut().is_none_or(|body| body.spend(JUMP_STAMINA))
+            && stamina.as_mut().is_none_or(|body| body.spend(JUMP_STAMINA))
         {
             motion.rising = JUMP_SPEED;
         }

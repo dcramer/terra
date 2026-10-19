@@ -19,7 +19,7 @@ use super::skills::{Skill, Skills};
 use super::storage::Storage;
 use super::told::Notice;
 use super::vitals::Vitals;
-use super::{IsLocalPlayer, Player, View};
+use super::{IsLocalPlayer, Player, Stamina, View};
 use crate::build::Site;
 use crate::build::act::{BuildRules, Offcuts};
 use crate::planet::Planet;
@@ -211,7 +211,7 @@ fn load(
     player: Single<
         (
             &mut Transform,
-            &mut Vitals,
+            (&mut Vitals, &mut Stamina),
             &mut Skills,
             &mut Backpack,
             &mut Gear,
@@ -249,7 +249,7 @@ fn load(
             return;
         }
     };
-    let (mut transform, mut vitals, mut skills, mut backpack, mut gear, mut bar) =
+    let (mut transform, (mut vitals, mut stamina), mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
 
     // The time of day and the date, unless a scripted run set them.
@@ -348,7 +348,7 @@ fn load(
     *transform = Transform::from_translation(at).looking_to(facing, at.normalize());
     view.forward = facing;
     vitals.health = player.health;
-    vitals.stamina = player.stamina;
+    stamina.left = player.stamina;
     vitals.fed = player.fed;
     *skills = Skills::default();
     for (name, progress) in &player.skills {
@@ -465,7 +465,7 @@ fn autosave(
     view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
-    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
+    player: Single<PlayerParts, IsLocalPlayer>,
     mut since: Local<f32>,
     mut notice: ResMut<Notice>,
 ) {
@@ -505,7 +505,7 @@ fn save_on_exit(
     view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
-    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
+    player: Single<PlayerParts, IsLocalPlayer>,
 ) {
     if exits.read().next().is_some() {
         let save = gather(
@@ -525,7 +525,7 @@ fn save_on_exit(
 
 type PlayerParts<'a> = (
     &'a Transform,
-    &'a Vitals,
+    (&'a Vitals, &'a Stamina),
     &'a Skills,
     &'a Backpack,
     &'a Gear,
@@ -591,7 +591,7 @@ fn gather(
     people: &Query<(&Person, &Transform), Without<Player>>,
     player: &PlayerParts,
 ) -> SaveFile {
-    let (at, vitals, skills, backpack, gear, bar) = *player;
+    let (at, (vitals, stamina), skills, backpack, gear, bar) = *player;
     let placed: Vec<_> = backpack.0.iter().collect();
     let kept = kept_items(items, &backpack.0);
     let bar_slots = (0..bar.0.len())
@@ -606,7 +606,7 @@ fn gather(
             at: at.translation.into(),
             facing: view.forward.into(),
             health: vitals.health,
-            stamina: vitals.stamina,
+            stamina: stamina.left,
             fed: vitals.fed,
             skills: skills
                 .known()
@@ -839,8 +839,8 @@ mod tests {
         entity.get_mut::<View>().unwrap().forward = (east + north).normalize();
         let mut vitals = entity.get_mut::<Vitals>().unwrap();
         vitals.health = 61.5;
-        vitals.stamina = 12.25;
         vitals.fed = 40.0;
+        entity.get_mut::<Stamina>().unwrap().left = 12.25;
         let mut skills = entity.get_mut::<Skills>().unwrap();
         for _ in 0..9 {
             skills.did(Skill::Chopping, 1.0);
@@ -1063,12 +1063,12 @@ mod tests {
         let backpack = &entity.get::<Backpack>().unwrap().0;
         let gear = &entity.get::<Gear>().unwrap().0;
         let bar = &entity.get::<Bar>().unwrap().0;
-        let vitals = entity.get::<Vitals>().unwrap();
+        let (vitals, stamina) = (entity.get::<Vitals>().unwrap(), entity.get::<Stamina>());
         let site = world.resource::<Site>();
         let mut kept = Kept {
             at: entity.get::<Transform>().unwrap().translation,
             facing: entity.get::<View>().unwrap().forward,
-            body: [vitals.health, vitals.stamina, vitals.fed],
+            body: [vitals.health, stamina.unwrap().left, vitals.fed],
             skills: entity.get::<Skills>().unwrap().clone(),
             worn: gear
                 .iter()
@@ -1171,10 +1171,7 @@ mod tests {
                  view: Single<&View, IsLocalPlayer>,
                  props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
                  people: Query<(&Person, &Transform), Without<Player>>,
-                 player: Single<
-                    (&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar),
-                    IsLocalPlayer,
-                >| {
+                 player: Single<PlayerParts, IsLocalPlayer>| {
                     gather(
                         &clock,
                         &planet,

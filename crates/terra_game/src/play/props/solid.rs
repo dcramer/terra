@@ -3,6 +3,7 @@
 
 use super::{Prop, STEP_OVER_M};
 use crate::play::Footprint;
+use crate::play::bodies::Solid;
 use crate::play::flora::Obstacles;
 use bevy::prelude::*;
 use terra_build::{Base, CELL_M};
@@ -207,80 +208,48 @@ pub fn ray_box(
     (side != Vec3::ZERO).then(|| (near, transform.rotation * side))
 }
 
-/// Moves a walker's next position out of any item it would be standing inside. A
-/// walker is a circle on the ground; an item is its box.
-pub fn push_out<'a>(
-    mut target: Vec3,
-    walker_radius: f32,
-    props: impl Iterator<Item = (&'a Prop, &'a Transform, &'a Visibility)>,
-) -> Vec3 {
-    for (prop, transform, visibility) in props {
-        if !prop.is_solid() || *visibility == Visibility::Hidden {
-            continue;
-        }
-        let turned_back = transform.rotation.inverse();
-        let mut local = turned_back * (target - transform.translation);
-        // Only if the feet are between its foot and its top.
-        if local.y < -0.5 || local.y > prop.half.y * 2.0 - 0.05 {
-            continue;
-        }
-        let reach = Vec2::new(prop.half.x, prop.half.z) + walker_radius;
-        let inside = reach - Vec2::new(local.x.abs(), local.z.abs());
-        if inside.x <= 0.0 || inside.y <= 0.0 {
-            continue;
-        }
-        // Out by the nearest side.
-        if inside.x < inside.y {
-            local.x = reach.x.copysign(local.x);
-        } else {
-            local.z = reach.y.copysign(local.z);
-        }
-        target = transform.translation + transform.rotation * local;
+/// Gives an item put down the walker's [`Solid`] if it is too tall to step over, and takes
+/// it away if it is not, so walkers go round it (`bodies::push_out_of_solids`).
+pub(super) fn solid_or_not(put: On<Insert<Prop>>, props: Query<&Prop>, mut commands: Commands) {
+    let Ok(prop) = props.get(put.entity) else {
+        return;
+    };
+    if prop.is_solid() {
+        commands
+            .entity(put.entity)
+            .insert(Solid { half: prop.half });
+    } else {
+        commands.entity(put.entity).remove::<Solid>();
     }
-    target
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn box_at_origin() -> (Prop, Transform, Visibility) {
-        let prop = Prop::boxed(Vec3::splat(0.4), None);
-        (prop, Transform::IDENTITY, Visibility::Inherited)
-    }
-
     #[test]
-    fn a_walker_is_pushed_out_of_an_item_by_its_nearest_side() {
-        let (prop, transform, visibility) = box_at_origin();
-        let push =
-            |target: Vec3| push_out(target, 0.3, [(&prop, &transform, &visibility)].into_iter());
-        // Just inside the east side: out to the east, a radius clear of the box.
-        let out = push(Vec3::new(0.5, 0.0, 0.1));
-        assert!((out.x - 0.7).abs() < 1e-5 && (out.z - 0.1).abs() < 1e-5);
-        // Clear of it already, or standing on top of it: left alone.
-        for free in [Vec3::new(0.8, 0.0, 0.0), Vec3::new(0.0, 0.8, 0.0)] {
-            assert_eq!(push(free), free);
-        }
-    }
-
-    #[test]
-    fn a_rug_and_a_hidden_item_are_walked_over() {
-        let (mut prop, transform, visibility) = box_at_origin();
-        let inside = Vec3::new(0.1, 0.0, 0.1);
+    fn a_box_put_down_is_solid_and_a_rug_is_walked_over() {
+        let mut world = World::new();
+        world.add_observer(solid_or_not);
+        let chest = world.spawn(Prop::boxed(Vec3::splat(0.4), None)).id();
+        let flat = || {
+            let mut rug = Prop::boxed(Vec3::splat(0.4), None);
+            rug.half.y = 0.01;
+            rug
+        };
+        let rug = world.spawn(flat()).id();
+        world.flush();
         assert_eq!(
-            push_out(
-                inside,
-                0.3,
-                [(&prop, &transform, &Visibility::Hidden)].into_iter()
-            ),
-            inside
+            world.get::<Solid>(chest),
+            Some(&Solid {
+                half: Vec3::splat(0.4)
+            })
         );
-        prop.half.y = 0.01;
-        assert!(!prop.is_solid());
-        assert_eq!(
-            push_out(inside, 0.3, [(&prop, &transform, &visibility)].into_iter()),
-            inside
-        );
+        assert_eq!(world.get::<Solid>(rug), None);
+        // Put back down as a rug, the chest is walked over too.
+        world.entity_mut(chest).insert(flat());
+        world.flush();
+        assert_eq!(world.get::<Solid>(chest), None);
     }
 
     fn standing(east: f32, turn: f32) -> Standing {

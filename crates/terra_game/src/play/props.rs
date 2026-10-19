@@ -25,7 +25,7 @@ use std::sync::Arc;
 use terra_build::CELL_M;
 
 mod solid;
-pub use solid::{Blocked, Standing, blocked, push_out, ray_box};
+pub use solid::{Blocked, Standing, blocked, ray_box};
 
 /// A campfire's flames, as the fire drawing draws them with their embers, smoke and light
 /// (terra_world::fire): their tips licking 1.3 m over the stones, 0.75 m over its low
@@ -173,7 +173,8 @@ impl Models {
 struct CheckedFor(u64);
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, (load, start_checking))
+    app.add_observer(solid::solid_or_not)
+        .add_systems(Startup, (load, start_checking))
         .add_systems(Update, (keep_clear, settle, (kindle, smoulder).chain()));
 }
 

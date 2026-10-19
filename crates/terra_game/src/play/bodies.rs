@@ -38,6 +38,49 @@ impl Body {
     }
 }
 
+/// Something a walker cannot walk into, such as a chest or a bed: the box from its foot,
+/// so many metres to each side and twice `half.y` up, turned as its `Transform` is. What
+/// is low enough to step over, such as a rug, has none. The layers above add it, as
+/// props do to every solid item put down (`props::solid`).
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+pub struct Solid {
+    pub half: Vec3,
+}
+
+/// Moves a walker's next position out of any solid it would be standing inside, by the
+/// nearest side. A walker is a circle on the ground; a solid is its box, walked through
+/// while hidden.
+pub fn push_out_of_solids<'a>(
+    mut target: Vec3,
+    walker_radius: f32,
+    solids: impl Iterator<Item = (&'a Solid, &'a Transform, &'a Visibility)>,
+) -> Vec3 {
+    for (solid, transform, visibility) in solids {
+        if *visibility == Visibility::Hidden {
+            continue;
+        }
+        let turned_back = transform.rotation.inverse();
+        let mut local = turned_back * (target - transform.translation);
+        // Only if the feet are between its foot and its top.
+        if local.y < -0.5 || local.y > solid.half.y * 2.0 - 0.05 {
+            continue;
+        }
+        let reach = Vec2::new(solid.half.x, solid.half.z) + walker_radius;
+        let inside = reach - Vec2::new(local.x.abs(), local.z.abs());
+        if inside.x <= 0.0 || inside.y <= 0.0 {
+            continue;
+        }
+        // Out by the nearest side.
+        if inside.x < inside.y {
+            local.x = reach.x.copysign(local.x);
+        } else {
+            local.z = reach.y.copysign(local.z);
+        }
+        target = transform.translation + transform.rotation * local;
+    }
+    target
+}
+
 pub fn plugin(app: &mut App) {
     app.add_systems(FixedUpdate, keep_apart.in_set(Sim::Resolve));
 }
@@ -147,6 +190,30 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use terra_core::{PlanetSpec, Seed};
+
+    #[test]
+    fn a_walker_is_pushed_out_of_a_solid_by_its_nearest_side() {
+        let solid = Solid {
+            half: Vec3::splat(0.4),
+        };
+        let push = |target: Vec3, visibility: Visibility| {
+            push_out_of_solids(
+                target,
+                0.3,
+                [(&solid, &Transform::IDENTITY, &visibility)].into_iter(),
+            )
+        };
+        // Just inside the east side: out to the east, a radius clear of the box.
+        let out = push(Vec3::new(0.5, 0.0, 0.1), Visibility::Inherited);
+        assert!((out.x - 0.7).abs() < 1e-5 && (out.z - 0.1).abs() < 1e-5);
+        // Clear of it already, or standing on top of it: left alone.
+        for free in [Vec3::new(0.8, 0.0, 0.0), Vec3::new(0.0, 0.8, 0.0)] {
+            assert_eq!(push(free, Visibility::Inherited), free);
+        }
+        // Hidden, it is walked through.
+        let inside = Vec3::new(0.1, 0.0, 0.1);
+        assert_eq!(push(inside, Visibility::Hidden), inside);
+    }
 
     /// A world on a smooth planet, and a place on its ground.
     fn world() -> (World, Vec3) {

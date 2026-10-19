@@ -13,7 +13,7 @@ use super::props::{self, Prop};
 use super::tick::Sim;
 use super::told::{Notice, Told};
 use super::vitals::{Effort, Vitals};
-use super::{Downed, LocalPlayer, Motion, Player, Stance, View};
+use super::{Downed, LocalPlayer, Motion, Player, Stamina, Stance, View};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_items::Grid;
@@ -102,12 +102,15 @@ fn load_look(
 fn live(
     mut commands: Commands,
     time: Res<Time>,
-    mut players: Query<(Entity, &mut Vitals, &Motion, &Stance), (With<Player>, Without<Downed>)>,
+    mut players: Query<
+        (Entity, &mut Vitals, &mut Stamina, &Motion, &Stance),
+        (With<Player>, Without<Downed>),
+    >,
     mut went_down: MessageWriter<WentDown>,
 ) {
     let dt = time.delta_secs().min(0.1);
-    for (entity, mut vitals, motion, stance) in &mut players {
-        if vitals.tick(dt, effort(motion, stance)) {
+    for (entity, mut vitals, mut stamina, motion, stance) in &mut players {
+        if vitals.tick(&mut stamina, dt, effort(motion, stance)) {
             commands.entity(entity).insert(Downed { lying_s: 0.0 });
             went_down.write(WentDown(entity));
         }
@@ -143,6 +146,7 @@ fn fall(
             &mut Motion,
             &mut Downed,
             &mut Vitals,
+            &mut Stamina,
             &mut Backpack,
             &Arrival,
             &Claim,
@@ -160,6 +164,7 @@ fn fall(
         mut motion,
         mut downed,
         mut vitals,
+        mut stamina,
         mut backpack,
         arrival,
         claim,
@@ -234,6 +239,7 @@ fn fall(
         motion.velocity = Vec3::ZERO;
         motion.rising = 0.0;
         *vitals = Vitals::default();
+        *stamina = Stamina::default();
         say(if bed.is_some() {
             "You wake in your bed"
         } else {
@@ -331,5 +337,36 @@ mod tests {
             .map(|WentDown(player)| player)
             .collect();
         assert_eq!(fell, [dying]);
+    }
+
+    #[test]
+    fn waking_from_a_fall_restores_health_and_stamina() {
+        let mut world = crate::play::test_world();
+        world.init_resource::<Time>();
+        world.init_resource::<Notice>();
+        world.insert_resource(BagLook {
+            mesh: default(),
+            material: default(),
+        });
+        world.insert_resource(Planet::smooth(terra_core::PlanetSpec {
+            seed: terra_core::Seed(1),
+            radius_m: 2000.0,
+        }));
+        let ground = Vec3::Y * 2000.0;
+        let player = test_player(&mut world, ground);
+        world.entity_mut(player).insert((
+            Downed { lying_s: DOWN_S },
+            Arrival {
+                at: ground,
+                facing: Vec3::X,
+            },
+            Claim::default(),
+        ));
+        world.get_mut::<Vitals>(player).unwrap().health = 0.0;
+        world.get_mut::<Stamina>(player).unwrap().spend(90.0);
+        world.run_system_once(fall).unwrap();
+        assert!(world.get::<Downed>(player).is_none(), "awake");
+        assert_eq!(world.get::<Vitals>(player), Some(&Vitals::default()));
+        assert_eq!(world.get::<Stamina>(player), Some(&Stamina::default()));
     }
 }

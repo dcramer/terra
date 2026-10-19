@@ -18,7 +18,7 @@ use super::tick::Sim;
 use super::told::Told;
 use super::vitals::Vitals;
 use super::zones::Zones;
-use super::{Downed, Player, Stance, View};
+use super::{Downed, Player, Stamina, Stance, View};
 use bevy::prelude::*;
 
 /// What a swing costs in stamina.
@@ -112,7 +112,7 @@ fn swing(
             &Intent,
             &Skills,
             &mut Stance,
-            &mut Vitals,
+            &mut Stamina,
             &mut Swing,
             Has<Downed>,
         ),
@@ -125,7 +125,7 @@ fn swing(
     bestiary: Res<Bestiary>,
     zones: Zones,
 ) {
-    for (player, player_at, view, intent, skills, mut stance, mut vitals, mut swung, downed) in
+    for (player, player_at, view, intent, skills, mut stance, mut stamina, mut swung, downed) in
         &mut players
     {
         swung.since += time.delta_secs();
@@ -163,7 +163,7 @@ fn swing(
             continue;
         };
         // A tired arm hits softly.
-        let strength = if vitals.spend(SWING_STAMINA) {
+        let strength = if stamina.spend(SWING_STAMINA) {
             1.0
         } else {
             0.4
@@ -273,12 +273,22 @@ fn guard(
 fn take_blows(
     mut bitten: MessageReader<Bitten>,
     items: Res<Items>,
-    mut players: Query<(&mut Stance, &mut Vitals, &mut Gear, Has<Downed>), With<Player>>,
+    mut players: Query<
+        (
+            &mut Stance,
+            &mut Vitals,
+            &mut Stamina,
+            &mut Gear,
+            Has<Downed>,
+        ),
+        With<Player>,
+    >,
     mut hurt: MessageWriter<Hurt>,
     mut broke: MessageWriter<Broke>,
 ) {
     for &Bitten { player, damage } in bitten.read() {
-        let Ok((mut stance, mut vitals, mut gear, downed)) = players.get_mut(player) else {
+        let Ok((mut stance, mut vitals, mut stamina, mut gear, downed)) = players.get_mut(player)
+        else {
             continue;
         };
         if downed || stance.dodging > 0.0 {
@@ -286,7 +296,7 @@ fn take_blows(
         }
         // Leather takes some of it.
         let damage = damage * (1.0 - inventory::protection(&items, &gear.0));
-        let taken = if stance.guarding && vitals.spend(GUARD_STAMINA) {
+        let taken = if stance.guarding && stamina.spend(GUARD_STAMINA) {
             damage * GUARDED
         } else {
             damage
@@ -321,9 +331,9 @@ mod tests {
 
     const GROUND: Vec3 = Vec3::new(0.0, 2000.0, 0.0);
 
-    /// A player as `ready` leaves them, bitten once: their body after it, and how much
-    /// the blow was said to take.
-    fn bitten(ready: impl FnOnce(&mut World, Entity)) -> (Vitals, Option<f32>) {
+    /// A player as `ready` leaves them, bitten once: their body and stamina after it, and
+    /// how much the blow was said to take.
+    fn bitten(ready: impl FnOnce(&mut World, Entity)) -> ((Vitals, Stamina), Option<f32>) {
         let mut world = world();
         let player = test_player(&mut world, GROUND);
         ready(&mut world, player);
@@ -334,12 +344,15 @@ mod tests {
         world.run_system_once(take_blows).unwrap();
         let hurt = world.resource_mut::<Messages<Hurt>>().drain().next();
         (
-            *world.get::<Vitals>(player).unwrap(),
+            (
+                *world.get::<Vitals>(player).unwrap(),
+                *world.get::<Stamina>(player).unwrap(),
+            ),
             hurt.map(|hurt| hurt.amount),
         )
     }
 
-    fn health_lost((vitals, _): (Vitals, Option<f32>)) -> f32 {
+    fn health_lost(((vitals, _), _): ((Vitals, Stamina), Option<f32>)) -> f32 {
         Vitals::default().health - vitals.health
     }
 
@@ -392,12 +405,12 @@ mod tests {
             world.get_mut::<Stance>(player).unwrap().guarding = true;
         });
         assert!(health_lost(guarded) < health_lost(open));
-        assert!(guarded.0.stamina < open.0.stamina);
+        assert!(guarded.0.1.left < open.0.1.left);
         // With no stamina left, a guard is no help.
         let spent = bitten(|world, player| {
             let mut stance = world.get_mut::<Stance>(player).unwrap();
             stance.guarding = true;
-            world.get_mut::<Vitals>(player).unwrap().stamina = 0.0;
+            world.get_mut::<Stamina>(player).unwrap().left = 0.0;
         });
         assert_eq!(health_lost(spent), health_lost(open));
     }

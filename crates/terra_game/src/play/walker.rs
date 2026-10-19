@@ -111,6 +111,58 @@ pub(super) struct Downed {
     pub(super) lying_s: f32,
 }
 
+/// What a body has left to sprint, roll and jump on, out of [`Stamina::FULL`]. The walk
+/// spends it; what lies above, the body's needs (`vitals`), fills it. A body without it,
+/// as in the walker on its own, never tires.
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+pub struct Stamina {
+    pub left: f32,
+    /// Seconds since it was last spent; it waits a moment before coming back.
+    since_spent: f32,
+}
+
+impl Default for Stamina {
+    fn default() -> Self {
+        Self {
+            left: Self::FULL,
+            since_spent: 10.0,
+        }
+    }
+}
+
+impl Stamina {
+    pub const FULL: f32 = 100.0;
+
+    /// Spends stamina, if there is any to spend. Returns whether there was.
+    pub fn spend(&mut self, amount: f32) -> bool {
+        if self.left <= 0.0 {
+            return false;
+        }
+        self.left = (self.left - amount).max(0.0);
+        self.since_spent = 0.0;
+        true
+    }
+
+    pub fn can_sprint(&self) -> bool {
+        self.left > 0.0
+    }
+
+    /// Lets a moment pass without spending any.
+    pub fn wait(&mut self, dt: f32) {
+        self.since_spent += dt;
+    }
+
+    /// Seconds since it was last spent.
+    pub fn rested_s(&self) -> f32 {
+        self.since_spent
+    }
+
+    /// Puts some back, up to full.
+    pub fn fill(&mut self, amount: f32) {
+        self.left = (self.left + amount).min(Self::FULL);
+    }
+}
+
 /// Where a player is looking.
 #[derive(Component)]
 pub(super) struct View {

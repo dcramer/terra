@@ -168,16 +168,6 @@ const PLACES: &[(&str, Crate)] = {
 /// the seam that cuts it, numbered as the research's "Where the shared types go" lists
 /// them from `Village` (1), then those found since (10 on).
 const NOT_YET_CUT: &[(&str, &str, &str)] = &[
-    (
-        "play/movement",
-        "play/props",
-        "2: the walker's Solid, props add it",
-    ),
-    (
-        "play/movement",
-        "play/vitals",
-        "2: a stamina the walker asks of",
-    ),
     ("play/movement", "play/tool", "2: Builder into the bases"),
     ("build/draw", "play/tool", "2: Builder into the bases"),
     ("play/figure", "play/held", "3: held::Grip into the walker"),

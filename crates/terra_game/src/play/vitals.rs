@@ -12,10 +12,11 @@ use super::intent::Intent;
 use super::inventory::Belongings;
 use super::tick::Sim;
 use super::told::Told;
-use super::{IsLocalPlayer, Player};
+use super::{IsLocalPlayer, Player, Stamina};
 use bevy::prelude::*;
 
-pub const FULL: f32 = 100.0;
+/// Every bar is out of the same, the walker's stamina too.
+pub const FULL: f32 = Stamina::FULL;
 
 /// How hard the body is working, which decides what it spends.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -26,14 +27,13 @@ pub enum Effort {
     Working,
 }
 
-/// Health, stamina and how fed you are, each out of [`FULL`].
+/// Health and how fed you are, each out of [`FULL`]. Stamina is the walker's ([`Stamina`]),
+/// which these fill ([`Vitals::tick`]).
 #[derive(Component, Clone, Copy, PartialEq, Debug)]
+#[require(Stamina)]
 pub struct Vitals {
     pub health: f32,
-    pub stamina: f32,
     pub fed: f32,
-    /// Seconds since stamina was last spent; it waits a moment before coming back.
-    since_spent: f32,
     /// Seconds since the body was last in danger from the cold or the heat; it heals only
     /// once out of it (`warmth`).
     since_exposed: f32,
@@ -43,9 +43,7 @@ impl Default for Vitals {
     fn default() -> Self {
         Self {
             health: FULL,
-            stamina: FULL,
             fed: 70.0,
-            since_spent: 10.0,
             since_exposed: 10.0,
         }
     }
@@ -70,22 +68,23 @@ const STARVING: f32 = 1.5;
 const EXPOSED: f32 = 0.5;
 
 impl Vitals {
-    /// Moves the body on by a moment of doing something. Returns whether it died.
-    pub fn tick(&mut self, dt: f32, effort: Effort) -> bool {
+    /// Moves the body on by a moment of doing something, spending and filling its stamina.
+    /// Returns whether it died.
+    pub fn tick(&mut self, stamina: &mut Stamina, dt: f32, effort: Effort) -> bool {
         let hard = matches!(effort, Effort::Sprinting | Effort::Working);
         let cost = match effort {
             Effort::Sprinting => SPRINT_COST,
             Effort::Working => WORK_COST,
             _ => 0.0,
         };
-        if cost > 0.0 && self.stamina > 0.0 {
-            self.spend(cost * dt);
+        if cost > 0.0 && stamina.left > 0.0 {
+            stamina.spend(cost * dt);
         } else {
-            self.since_spent += dt;
+            stamina.wait(dt);
         }
         let slowed = if self.fed < HUNGRY { 0.4 } else { 1.0 };
-        if self.since_spent > STAMINA_WAIT_S {
-            self.stamina = (self.stamina + STAMINA_BACK * slowed * dt).min(FULL);
+        if stamina.rested_s() > STAMINA_WAIT_S {
+            stamina.fill(STAMINA_BACK * slowed * dt);
         }
         self.fed = (self.fed - (HUNGER + if hard { HUNGER_HARD } else { 0.0 }) * dt).max(0.0);
         self.since_exposed += dt;
@@ -104,20 +103,6 @@ impl Vitals {
             self.health -= EXPOSED * danger_c.abs() * dt;
             self.since_exposed = 0.0;
         }
-    }
-
-    /// Spends stamina, if there is any to spend. Returns whether there was.
-    pub fn spend(&mut self, amount: f32) -> bool {
-        if self.stamina <= 0.0 {
-            return false;
-        }
-        self.stamina = (self.stamina - amount).max(0.0);
-        self.since_spent = 0.0;
-        true
-    }
-
-    pub fn can_sprint(&self) -> bool {
-        self.stamina > 0.0
     }
 
     /// Takes a blow. Returns whether it killed.
@@ -227,15 +212,16 @@ fn eat(
 }
 
 fn show(
-    vitals: Single<&Vitals, IsLocalPlayer>,
+    vitals: Single<(&Vitals, &Stamina), IsLocalPlayer>,
     options: Res<crate::shell::Options>,
     mut bars: Query<(&Bar, &mut Node, &ChildOf)>,
     mut frames: Query<&mut Visibility, Without<Bar>>,
 ) {
+    let (vitals, stamina) = *vitals;
     for (bar, mut node, parent) in &mut bars {
         let value = match bar.0 {
             Which::Health => vitals.health,
-            Which::Stamina => vitals.stamina,
+            Which::Stamina => stamina.left,
             Which::Fed => vitals.fed,
         };
         let width = percent((value / FULL * 100.0).clamp(0.0, 100.0));
@@ -290,16 +276,16 @@ mod tests {
 
     #[test]
     fn sprinting_spends_stamina_and_resting_brings_it_back() {
-        let mut vitals = Vitals::default();
+        let (mut vitals, mut stamina) = (Vitals::default(), Stamina::default());
         for _ in 0..60 {
-            vitals.tick(0.1, Effort::Sprinting);
+            vitals.tick(&mut stamina, 0.1, Effort::Sprinting);
         }
-        assert!(vitals.stamina < FULL * 0.3);
-        let tired = vitals.stamina;
+        assert!(stamina.left < FULL * 0.3);
+        let tired = stamina.left;
         for _ in 0..60 {
-            vitals.tick(0.1, Effort::Resting);
+            vitals.tick(&mut stamina, 0.1, Effort::Resting);
         }
-        assert!(vitals.stamina > tired + 50.0);
+        assert!(stamina.left > tired + 50.0);
     }
 
     #[test]
@@ -307,7 +293,7 @@ mod tests {
         let mut vitals = Vitals::default();
         let mut died = false;
         for _ in 0..20_000 {
-            died |= vitals.tick(0.1, Effort::Resting);
+            died |= vitals.tick(&mut Stamina::default(), 0.1, Effort::Resting);
         }
         assert!(died, "starving kills in the end (D101)");
         assert_eq!(vitals.fed, 0.0);
@@ -318,7 +304,7 @@ mod tests {
         let mut vitals = Vitals::default();
         vitals.hurt(50.0);
         for _ in 0..100 {
-            vitals.tick(0.1, Effort::Resting);
+            vitals.tick(&mut Stamina::default(), 0.1, Effort::Resting);
         }
         assert!(vitals.health > 50.0);
         let items = crate::play::inventory::Items::default();
@@ -334,13 +320,13 @@ mod tests {
         let mut died = false;
         for _ in 0..100 {
             vitals.expose(0.1, -2.0);
-            died |= vitals.tick(0.1, Effort::Resting);
+            died |= vitals.tick(&mut Stamina::default(), 0.1, Effort::Resting);
         }
         assert!((vitals.health - 70.0).abs() < 0.01, "{}", vitals.health);
         assert!(!died);
         for _ in 0..2000 {
             vitals.expose(0.1, -2.0);
-            died |= vitals.tick(0.1, Effort::Resting);
+            died |= vitals.tick(&mut Stamina::default(), 0.1, Effort::Resting);
         }
         assert!(died, "hypothermia kills in the end");
         // Out of danger, it heals again.
@@ -348,24 +334,27 @@ mod tests {
         warm.hurt(20.0);
         warm.expose(0.1, 0.0);
         for _ in 0..30 {
-            warm.tick(0.1, Effort::Resting);
+            warm.tick(&mut Stamina::default(), 0.1, Effort::Resting);
         }
         assert!(warm.health > 80.0);
     }
 
     #[test]
     fn hungry_bodies_recover_stamina_slowly() {
-        let mut fed = Vitals::default();
-        let mut hungry = Vitals {
-            fed: 10.0,
-            ..Vitals::default()
-        };
-        for vitals in [&mut fed, &mut hungry] {
-            vitals.spend(80.0);
+        let mut fed = (Vitals::default(), Stamina::default());
+        let mut hungry = (
+            Vitals {
+                fed: 10.0,
+                ..Vitals::default()
+            },
+            Stamina::default(),
+        );
+        for (vitals, stamina) in [&mut fed, &mut hungry] {
+            stamina.spend(80.0);
             for _ in 0..20 {
-                vitals.tick(0.1, Effort::Resting);
+                vitals.tick(stamina, 0.1, Effort::Resting);
             }
         }
-        assert!(fed.stamina > hungry.stamina);
+        assert!(fed.1.left > hungry.1.left);
     }
 }
