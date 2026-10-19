@@ -18,14 +18,16 @@ fn names(stages: &[(Step, How)]) -> Vec<String> {
 }
 
 /// The hook formats and lints the crates changed and runs nothing else (D37): no test, no
-/// ratchet, no other crate's build.
+/// other crate's build; the code-health lints, which read every Rust file in under a second,
+/// only when Rust changed.
 #[test]
 fn the_hook_formats_and_lints_only_the_crates_changed() {
     let stages = hook(&changed(&["terra_core"]));
-    assert_eq!(names(&stages), ["fmt", "clippy"]);
+    assert_eq!(names(&stages), ["fmt", "sizes", "one definition", "clippy"]);
     for (step, how) in &stages {
         let How::Command(command) = how else {
-            panic!("{} does not run a command", step.name());
+            assert!(matches!(how, How::Here(_)), "{} runs nothing", step.name());
+            continue;
         };
         let args: Vec<String> = command
             .get_args()

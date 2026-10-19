@@ -1,6 +1,7 @@
-//! `cargo xtask check` (D37): the hook before a push, formatting and clippy of the crates
-//! changed since main and nothing else; and `--all`, the full check the scheduled run on main
-//! runs (`.github/workflows/main.yml`), with the gates only it runs: every test, the tools'
+//! `cargo xtask check` (D37): the hook before a push, formatting, the size and
+//! one-definition lints and clippy of the crates changed since main, and nothing else; and
+//! `--all`, the full check the scheduled run on main runs (`.github/workflows/main.yml`),
+//! with the gates only it runs: every test, the tools'
 //! tests, the kits, foliage, artifacts and fuzz ratchets, the Blender scripts, and the shared
 //! crates kept free of Bevy (D28) and of the clock and the system's randomness.
 //!
@@ -21,7 +22,7 @@ use std::time::Instant;
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "check",
     takes: "[--all] [--verbose]",
-    does: "the hook before a push (D37): formatting and clippy of the crates changed since main, in seconds; --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz and Blender checks and the shared crates' rules",
+    does: "the hook before a push (D37): formatting, the size and one-definition lints and clippy of the crates changed since main, in seconds; --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz and Blender checks and the shared crates' rules",
     group: "Play and check",
     run: check,
 }];
@@ -45,9 +46,9 @@ enum How {
 }
 
 /// The gate (D37). Before a push (no flag), over everything that differs from the merge-base
-/// with origin/main: formatting of the crates changed and clippy on them, nothing else. `--all`
-/// is the full check over everything, as the scheduled run on main runs it. The stages run in
-/// order and the first to fail ends it.
+/// with origin/main: formatting of the crates changed, the code-health lints and clippy on
+/// them, nothing else. `--all` is the full check over everything, as the scheduled run on
+/// main runs it. The stages run in order and the first to fail ends it.
 pub(crate) fn check(args: &[String]) -> bool {
     let mut all = false;
     for arg in args {
@@ -125,8 +126,24 @@ fn clippy(selected: &[String]) -> (Step, How) {
     (step, How::Command(cargo("clippy", &args)))
 }
 
-/// The hook's stages: formatting and clippy of the crates changed, the workspace when the
-/// build itself changed (`Scope::all`).
+/// The code-health rules (D396): no file or function past its size, no shared primitive
+/// written out again. Lints in all but name, well under a second together, so the hook runs
+/// them beside clippy.
+fn code_health() -> [(Step, How); 2] {
+    [
+        (
+            Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
+            How::Here(crate::sizes::sizes_hold),
+        ),
+        (
+            Step::new("one definition", Said::Printed, LOGS),
+            How::Here(crate::primitives::one_definition),
+        ),
+    ]
+}
+
+/// The hook's stages: formatting, the code-health rules, and clippy of the crates changed,
+/// the workspace when the build itself changed (`Scope::all`).
 fn hook(scope: &Scope) -> Vec<(Step, How)> {
     let lint = if scope.all() {
         clippy(&["--workspace".to_string()])
@@ -138,7 +155,12 @@ fn hook(scope: &Scope) -> Vec<(Step, How)> {
     } else {
         clippy(&scope::package_args(&scope.changed))
     };
-    vec![fmt(scope), lint]
+    let mut stages = vec![fmt(scope)];
+    if scope.rust {
+        stages.extend(code_health());
+    }
+    stages.push(lint);
+    stages
 }
 
 /// The full check's stages, over everything.
@@ -154,16 +176,11 @@ fn full() -> Vec<(Step, How)> {
         "test",
         &["--workspace", "--", "--format=pretty"].map(String::from),
     );
+    let [sizes, one_definition] = code_health();
     let mut stages = vec![
         fmt(&Scope::everything("--all")),
-        (
-            Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
-            How::Here(crate::sizes::sizes_hold),
-        ),
-        (
-            Step::new("one definition", Said::Printed, LOGS),
-            How::Here(crate::primitives::one_definition),
-        ),
+        sizes,
+        one_definition,
         clippy(&workspace),
         (
             Step::new("tests", Said::Cargo, LOGS)
