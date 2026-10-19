@@ -32,6 +32,7 @@ mod footing;
 pub(crate) use draw::PlanGhost;
 pub(crate) mod fire;
 mod going_up;
+pub mod hammer;
 mod hlod;
 mod layout;
 mod light;
@@ -47,8 +48,7 @@ mod views;
 mod village;
 
 use draw::{KitMaterials, kit_materials};
-use terra_build_mesh::relief::Maps;
-use terra_build_mesh::sections::Progress;
+use terra_build_mesh::{relief::Maps, sections::Progress};
 
 const REACH_M: f32 = 300.0;
 

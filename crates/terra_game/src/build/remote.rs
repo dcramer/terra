@@ -744,11 +744,12 @@ fn material(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .kind(&kind)
         .filter(|kind| rules.names.contains_key(kind))
         .ok_or_else(|| refused(format!("there is no material called {kind}")))?;
-    for mut builder in world
-        .query_filtered::<&mut Builder, (With<Player>, With<LocalPlayer>)>()
+    for (mut builder, mut hammer) in world
+        .query_filtered::<(&mut Builder, &mut super::hammer::Hammer), (With<Player>, With<LocalPlayer>)>()
         .iter_mut(world)
     {
         builder.material = Some(picked);
+        hammer.set_if_neq(builder.hammer());
     }
     info!("Build: material: {}", rules.name(picked));
     Ok(json!({ "material": rules.name(picked) }))

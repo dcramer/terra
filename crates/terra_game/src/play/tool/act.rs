@@ -5,6 +5,7 @@
 use super::*;
 use crate::build::Site;
 use crate::build::act::Building;
+use crate::build::hammer::Hammer;
 use crate::planet::Planet;
 use crate::play::catalogue::{self, Builds, Kind, Tab};
 use crate::play::controls::Action;
@@ -74,43 +75,57 @@ fn in_hand(building: &mut Building, player: Entity) -> bool {
 /// button is held until the job is done, and letting go early leaves nothing done. Each
 /// step below either deals with the player this frame or passes them on to the next.
 pub(super) fn act(
-    mut players: Query<(Entity, &Transform, &Intent, &mut Builder, &mut Stance), With<Player>>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &Intent,
+            &mut Builder,
+            &mut Stance,
+            &mut Hammer,
+        ),
+        With<Player>,
+    >,
     mut cx: Acting,
 ) {
-    for (player, player_at, intent, mut builder, mut stance) in &mut players {
-        let player_at = player_at.translation;
-        let near = cx.building.local(player_at);
-        let me = Actor {
-            player,
-            at: player_at,
-            near,
-        };
-        if cancel(&mut cx, me, &mut builder) || undo(&mut cx, me, intent, &mut builder) {
-            continue;
+    for (player, player_at, intent, mut builder, mut stance, mut hammer) in &mut players {
+        'acting: {
+            let player_at = player_at.translation;
+            let near = cx.building.local(player_at);
+            let me = Actor {
+                player,
+                at: player_at,
+                near,
+            };
+            if cancel(&mut cx, me, &mut builder) || undo(&mut cx, me, intent, &mut builder) {
+                break 'acting;
+            }
+            let held = intent.held(Action::Use);
+            let click = intent.pressed(Action::Use);
+            if !held {
+                builder.must_release = false;
+            }
+            if carry_on(&mut cx, me, intent, held, &mut builder, &mut stance)
+                || copy(&mut cx, me, intent, &mut builder)
+            {
+                break 'acting;
+            }
+            let Some(building_held) = draw(&mut cx, me, click, held, &mut builder) else {
+                break 'acting;
+            };
+            if let Some(reason) = builder.unclaimed {
+                cx.building.tell(player, reason);
+                break 'acting;
+            }
+            if move_item(&mut cx, me, &mut builder, &mut stance)
+                || begin_on_base(&mut cx, me, building_held, &mut builder)
+            {
+                break 'acting;
+            }
+            begin_on_items(&mut cx, me, &mut builder);
         }
-        let held = intent.held(Action::Use);
-        let click = intent.pressed(Action::Use);
-        if !held {
-            builder.must_release = false;
-        }
-        if carry_on(&mut cx, me, intent, held, &mut builder, &mut stance)
-            || copy(&mut cx, me, intent, &mut builder)
-        {
-            continue;
-        }
-        let Some(building_held) = draw(&mut cx, me, click, held, &mut builder) else {
-            continue;
-        };
-        if let Some(reason) = builder.unclaimed {
-            cx.building.tell(player, reason);
-            continue;
-        }
-        if move_item(&mut cx, me, &mut builder, &mut stance)
-            || begin_on_base(&mut cx, me, building_held, &mut builder)
-        {
-            continue;
-        }
-        begin_on_items(&mut cx, me, &mut builder);
+        // What was picked up, put away or copied is shown to the layers below at once.
+        hammer.set_if_neq(builder.hammer());
     }
 }
 

@@ -18,6 +18,7 @@ use super::options::OptionsMenu;
 use super::storage::Stores;
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
+use crate::build::hammer::Hammer;
 use bevy::{
     picking::hover::Hovered,
     prelude::*,
@@ -206,11 +207,12 @@ fn navigate(
     window: Single<(&Window, &mut CursorOptions)>,
     builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
-    mut builder: Single<&mut Builder, IsLocalPlayer>,
+    player: Single<(&mut Builder, &mut Hammer), IsLocalPlayer>,
 ) {
     if !menu.open {
         return;
     }
+    let (mut builder, mut hammer) = player.into_inner();
     const NUMBERS: [KeyCode; 7] = [
         KeyCode::Digit1,
         KeyCode::Digit2,
@@ -239,6 +241,7 @@ fn navigate(
         menu.open = false;
         grab_mouse(&mut cursor, window.focused);
     }
+    hammer.set_if_neq(builder.hammer());
 }
 
 fn pick(menu: &mut BuildMenu, builder: &mut Builder, builds: &Builds, part: usize) {
@@ -259,7 +262,7 @@ fn click(
     window: Single<(&Window, &mut CursorOptions)>,
     builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
-    mut builder: Single<&mut Builder, IsLocalPlayer>,
+    player: Single<(&mut Builder, &mut Hammer), IsLocalPlayer>,
 ) {
     if !menu.open || !left_click(&mouse) {
         return;
@@ -271,7 +274,9 @@ fn click(
     }
     let picked = tiles.iter().next().map(|tile| tile.part);
     if let Some(part) = picked {
+        let (mut builder, mut hammer) = player.into_inner();
         pick(&mut menu, &mut builder, &builds, part);
+        hammer.set_if_neq(builder.hammer());
         let (window, mut cursor) = window.into_inner();
         grab_mouse(&mut cursor, window.focused);
     }

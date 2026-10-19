@@ -45,6 +45,7 @@ use super::tick::Sim;
 use super::work::Hold;
 use super::{IsLocalPlayer, Player};
 use crate::build::act::Work as BaseWork;
+use crate::build::hammer::Hammer;
 use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
@@ -286,6 +287,7 @@ struct Work {
 
 /// A player's builder: what is picked, turned and aimed at, and the work in hand.
 #[derive(Component)]
+#[require(Hammer)]
 pub struct Builder {
     /// Which part is picked, as its place in the catalogue.
     pub part: usize,
@@ -515,9 +517,13 @@ impl Builder {
                 || matches!(self.picked(builds).kind, Kind::Wall(_)))
     }
 
-    /// Whether Ctrl is the material key now, not the roll: a part is in hand (D232).
-    pub fn takes_material(&self) -> bool {
-        self.in_hand && !self.stowed
+    /// What the bases and the walker see of it: the material picked, and whether a part is
+    /// in hand, when Ctrl is the material key, not the roll (D232).
+    pub fn hammer(&self) -> Hammer {
+        Hammer {
+            material: self.material,
+            part_in_hand: self.in_hand && !self.stowed,
+        }
     }
 
     /// Whether the part in hand is laid, or changes cubes, in the material picked.
@@ -733,9 +739,9 @@ fn choose(
     rules: Res<crate::build::act::BuildRules>,
     look: Res<crate::build::BuildLook>,
     mut belongings: Belongings,
-    mut players: Query<(Entity, &Intent, &mut Builder), With<Player>>,
+    mut players: Query<(Entity, &Intent, &mut Builder, &mut Hammer), With<Player>>,
 ) {
-    for (player, intent, mut builder) in &mut players {
+    for (player, intent, mut builder, mut hammer) in &mut players {
         let Some(belongings) = belongings.of(player) else {
             continue;
         };
@@ -749,8 +755,10 @@ fn choose(
             builder.before_mode = None;
             builder.work = None;
             builder.drag = None;
+            hammer.set_if_neq(builder.hammer());
             continue;
         }
+        hammer.set_if_neq(builder.hammer());
         // Nothing about the job changes while it is being done.
         if intent.choosing || builder.work.is_some() {
             continue;
@@ -763,6 +771,7 @@ fn choose(
                 builder.toggle(builds.part_of(|kind| matches!(kind, Kind::Move)));
             }
         }
+        hammer.set_if_neq(builder.hammer());
         builder.snapping = builder.snap != intent.held(Action::OffGrid);
         if intent.pressed(Action::Grid) {
             builder.snap = !builder.snap;
@@ -784,6 +793,7 @@ fn choose(
                 let at = kinds.iter().position(|&kind| kind == now).unwrap_or(0) as i32;
                 let next = (at + intent.wheel).rem_euclid(kinds.len() as i32) as usize;
                 builder.material = Some(kinds[next]);
+                hammer.set_if_neq(builder.hammer());
             }
             continue;
         }
@@ -875,6 +885,23 @@ pub fn grounded(item: &Item) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_hammer_shows_a_part_in_hand_only_when_one_is_picked_and_held() {
+        let mut world = World::new();
+        let player = world.spawn(Builder::default()).id();
+        // A builder comes with its hammer, saying what the new builder says.
+        let builder = world.get::<Builder>(player).unwrap();
+        assert_eq!(world.get::<Hammer>(player), Some(&builder.hammer()));
+        let mut builder = Builder::default();
+        assert!(!builder.hammer().part_in_hand, "not the tool in hand");
+        builder.in_hand = true;
+        assert!(builder.hammer().part_in_hand);
+        builder.stowed = true;
+        assert!(!builder.hammer().part_in_hand, "put away");
+        builder.material = Some(terra_build::Kind(3));
+        assert_eq!(builder.hammer().material, Some(terra_build::Kind(3)));
+    }
 
     #[test]
     fn a_room_is_the_rectangle_between_its_corners_whichever_way_it_is_drawn() {

@@ -126,7 +126,7 @@ fn walk(
             &View,
             &Intent,
             Has<Downed>,
-            Option<&super::tool::Builder>,
+            Option<&build::hammer::Hammer>,
             Option<&ClimateSample>,
         ),
         With<Player>,
@@ -140,7 +140,7 @@ fn walk(
         view,
         intent,
         downed,
-        builder,
+        hammer,
         ground,
     ) in &mut players
     {
@@ -169,7 +169,7 @@ fn walk(
             && motion.on_ground
             && intent.pressed(Action::Dodge)
             // Ctrl and the wheel change the hammer's material while a part is in hand (D232).
-            && !builder.is_some_and(|builder| builder.takes_material())
+            && !hammer.is_some_and(|hammer| hammer.part_in_hand)
             && stamina.as_mut().is_none_or(|body| body.spend(DODGE_STAMINA))
         {
             stance.dodging = DODGE_S;

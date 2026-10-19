@@ -969,12 +969,12 @@ fn upload(
     mut meshes: ResMut<Assets<Mesh>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    (mut arrays, assets, time, mut last_kept, builders, frame): (
+    (mut arrays, assets, time, mut last_kept, hammers, frame): (
         Option<ResMut<Arrays>>,
         Res<AssetServer>,
         Res<Time<Real>>,
         Local<u64>,
-        Query<&crate::play::Builder>,
+        Query<&super::hammer::Hammer>,
         Res<bevy::diagnostic::FrameCount>,
     ),
 ) {
@@ -1003,8 +1003,8 @@ fn upload(
         }
         // And the material in each hammer, so a change to it is a lookup at once (D298).
         if tick != *last_kept {
-            for builder in &builders {
-                if let Some(kind) = builder.material {
+            for hammer in &hammers {
+                if let Some(kind) = hammer.material {
                     arrays.want(&look.layers.of_kind(kind), &assets, now);
                 }
             }
