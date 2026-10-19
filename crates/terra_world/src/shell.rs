@@ -976,11 +976,8 @@ impl Plugin for ShellPlugin {
         // a slab starts at 4 MiB, doubles to 64 and, full there, another is begun beside it,
         // so a growth copies and batches again at most 32 MiB of meshes, a layout holds at
         // most one part-empty page, and a small layout no 64 MiB one (D420).
-        // Uploads are spread over frames, 128 MiB a frame at most (Godot's staging pool),
-        // rather than every texture and mesh of a place staged on its first frame.
-        app.insert_resource(bevy::render::render_asset::RenderAssetBytesPerFrame::new(
-            128 * 1024 * 1024,
-        ));
+        // Textures go up 128 MiB a frame at most, a drawn one kept until its update lands (D420).
+        app.add_plugins(crate::uploads::plugin);
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             use bevy::render::{
                 mesh::allocator::MeshAllocatorSettings, slab_allocator::SlabAllocatorSettings,
