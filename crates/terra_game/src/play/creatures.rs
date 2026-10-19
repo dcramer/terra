@@ -258,6 +258,8 @@ pub struct Lair(pub Vec3);
 pub struct Form(pub Species, pub Vec3);
 
 pub fn plugin(app: &mut App) {
+    // The kinds of creature, read with the other registries (D136).
+    super::registries::read_with_the_rest::<Bestiary>(app);
     app.add_message::<Bitten>()
         .add_message::<Form>()
         .insert_resource(Dice(Seed(31).derive("creatures").rng()))

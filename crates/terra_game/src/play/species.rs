@@ -3,12 +3,14 @@
 //! and what they sound like and leave behind. Nothing else names a creature; code asks
 //! what a kind is like, such as whether it is hostile or what butchering it gives.
 //!
-//! The file is read into a registry, `Bestiary` (`data`).
+//! The file is read into a registry, `Bestiary` (`data`), which the creatures have read
+//! with the other registries (`registries::read_with_the_rest`), and again with them.
 
 use super::bodies::Body;
 use super::data;
 use super::inventory::{Cut, Items};
 use super::noise::Feet;
+use super::registries::Registry;
 use bevy::prelude::Resource;
 use serde::Deserialize;
 use terra_items::ItemKind;
@@ -291,14 +293,13 @@ pub struct Bestiary {
 
 impl Bestiary {
     pub fn read(items: &Items) -> Self {
-        const FILE: &str = "creatures.ron";
-        let kinds: Vec<SpeciesDef> = data::read(FILE);
+        let kinds: Vec<SpeciesDef> = data::read(Self::FILE);
         let carcasses = kinds
             .iter()
             .map(|kind| {
                 kind.carcass.as_ref().map(|carcass| Carcass {
                     needs: carcass.needs,
-                    gives: items.cost(&carcass.gives, FILE),
+                    gives: items.cost(&carcass.gives, Self::FILE),
                 })
             })
             .collect();
@@ -338,6 +339,19 @@ impl Bestiary {
     pub fn body(&self, species: Species) -> Body {
         let BodyDef { radius, weight } = self.get(species).body;
         Body::new(radius, weight)
+    }
+}
+
+impl Registry for Bestiary {
+    const FILE: &'static str = "creatures.ron";
+
+    fn read(items: &Items) -> Self {
+        Bestiary::read(items)
+    }
+
+    /// Every kind of creature by name.
+    fn kinds(&self) -> Vec<String> {
+        self.all().map(|kind| self.name(kind).to_string()).collect()
     }
 }
 
