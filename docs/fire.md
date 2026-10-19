@@ -238,6 +238,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 
 ## Heat haze
 
+- Not drawn today (fire round 8, 2026-10-19): the card that drew the opaque scene's copy shimmering over the flames was too faint to see and showed only as a grey smudge round a campfire's tips, so it was dropped. Done again, it is the design below.
 - One distortion buffer at a quarter of the screen.
   - Haze cards write RG offsets (from the flame maps' A, or a panned noise), scaled by heat.
   - It is applied in one pass before the tonemapper (Doom applies it in the tonemap pass itself).

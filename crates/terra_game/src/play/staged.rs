@@ -186,16 +186,31 @@ fn fits(
 }
 
 /// A model's own flame (its part of the material `Fire`, a solid cone of orange) hidden on a
-/// figure that burns (`fire::Kindled`): the fire drawing burns in its place.
+/// figure that burns (`fire::Kindled`): the fire drawing burns in its place. Its other parts
+/// with an emissive map glow as the fire burns, as a placed campfire's logs do
+/// (`props::Embers`), so a staged campfire is drawn as the game's: left at its glTF's
+/// strength of 3, its logs were flat black planks (fire review, round 2).
 fn quench(
-    parts: Query<(Entity, &GltfMaterialName), Added<GltfMaterialName>>,
+    parts: Query<
+        (Entity, &GltfMaterialName, &MeshMaterial3d<StandardMaterial>),
+        Added<GltfMaterialName>,
+    >,
     parents: Query<&ChildOf>,
     kindled: Query<(), With<terra_world::fire::Kindled>>,
+    materials: Res<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
-    for (part, name) in &parts {
-        if name.0 == "Fire" && parents.iter_ancestors(part).any(|up| kindled.contains(up)) {
+    for (part, name, material) in &parts {
+        if !parents.iter_ancestors(part).any(|up| kindled.contains(up)) {
+            continue;
+        }
+        if name.0 == "Fire" {
             commands.entity(part).insert(Visibility::Hidden);
+        } else if materials
+            .get(&material.0)
+            .is_some_and(|m| m.emissive_texture.is_some())
+        {
+            commands.entity(part).insert(super::props::Embers);
         }
     }
 }

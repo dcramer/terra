@@ -11,7 +11,7 @@
 //! heart, never white or pink by day), faded in where they meet what is behind; embers as
 //! sparks stretched along their flight, rising with the plume and carried downwind; smoke
 //! above as near-black lit cards paling as they climb, glowing from under where the fire is;
-//! heat haze over the flames; and a few point lights where the fire is greatest (`light`),
+//! and a few point lights where the fire is greatest (`light`),
 //! each fire flickering by one signal that its light, flames, embers and char all follow.
 //!
 //! Every blaze is a slot of one buffer the GPU reads, so all flames are one draw, all
@@ -99,11 +99,12 @@ pub fn slots(quality: Quality) -> usize {
     }
 }
 
-/// How many cards a blaze has of each: flames, embers, smoke and heat haze.
+/// How many cards a blaze has of each: flames, embers and smoke. A heat haze card, the
+/// opaque scene drawn shimmering over the flames, was dropped: too faint to see, all it showed
+/// was a grey smudge round a campfire's tips (fire round 8).
 const FLAME_CARDS: usize = 3;
 const EMBER_CARDS: usize = 5;
 const SMOKE_CARDS: usize = 4;
-const HAZE_CARDS: usize = 1;
 /// The fires kept where something kindled stands, a campfire or a hearth, are drawn as a
 /// campfire is in footage and in the games that draw one well (The Witcher 3, Red Dead
 /// Redemption 2, Kingdom Come): several tongues of flame of their own heights over a bed of
@@ -114,8 +115,9 @@ const HAZE_CARDS: usize = 1;
 const HEARTHS: usize = 16;
 const HEARTH_FLAME_CARDS: usize = 6;
 const HEARTH_SMOKE_CARDS: usize = 24;
-/// A hearth's sparks, ten or so a second rising from its coals, a few seen at once.
-const HEARTH_EMBER_CARDS: usize = 16;
+/// A hearth's sparks, thirty or more seen at once, most dying low (fire review, round 2:
+/// 30 to 60 small points, not a file of a few streaks).
+const HEARTH_EMBER_CARDS: usize = 48;
 /// How many jets are drawn.
 const JETS: usize = 2;
 /// A breath's flame sprites, as Monster Hunter World draws Zeno Jiva's (docs/fire.md,
@@ -143,7 +145,7 @@ const LEAST_DRAUGHT_MPS: f32 = 1.6;
 /// What a fire's material is told. Field order must match `fire.wesl`.
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
 pub struct FireUniform {
-    /// x which cards (0 flames, 1 embers, 2 jets' rods, 3 haze, 4 drops, 5 jets' sprites), y
+    /// x which cards (0 flames, 1 embers, 2 jets' rods, 3 none, 4 drops, 5 jets' sprites), y
     /// how many slots are filled, z the time the cards move by, w how many of the first slots
     /// are kept fires.
     kind: Vec4,
@@ -529,7 +531,6 @@ fn spawn_cards(
         cards(JETS, BREATH_CARDS, 0.0),
         fire[5].clone(),
     );
-    spawn("Fire: haze", cards(count, HAZE_CARDS, 0.0), fire[3].clone());
     spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
     for (name, mesh, material) in [
         (
@@ -586,20 +587,12 @@ fn setup(
     };
     let fire = std::array::from_fn::<_, KINDS, _>(|i| {
         let kind = drawn_kind(i);
-        // The haze reads the opaque scene as Bevy copies it for transmissive materials, so it
-        // is drawn among them, blended over it.
-        let haze = kind == 3.0;
         fires.add(FireMaterial {
             base: StandardMaterial {
                 base_color: Color::WHITE,
                 // Flames are light over what they cover, premultiplied (docs/fire.md, "The
                 // colour ramp"): `ONE, ONE_MINUS_SRC_ALPHA`.
-                alpha_mode: if haze {
-                    AlphaMode::Blend
-                } else {
-                    AlphaMode::Premultiplied
-                },
-                specular_transmission: if haze { 1.0 } else { 0.0 },
+                alpha_mode: AlphaMode::Premultiplied,
                 unlit: true,
                 // Drawn after the smoke, which is sorted with it by the same middle: smoke
                 // drawn over its own flames greyed and dimmed their yellow hearts to olive
@@ -609,9 +602,7 @@ fn setup(
                 // cards behind its fireball were drawn over it, a lighter patch with their
                 // straight edges, and smoke behind it browned it (castle film r11). Its
                 // sprites go first, its hot rod last, so the rod shows through their soot.
-                depth_bias: if haze {
-                    0.0
-                } else if kind == 2.0 {
+                depth_bias: if kind == 2.0 {
                     2.5
                 } else if kind == 5.0 {
                     2.0

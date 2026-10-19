@@ -25,7 +25,6 @@ import bevy_pbr::render::forward_io::{Vertex, VertexOutput, FragmentOutput, deco
 @if(DEPTH_PREPASS && !PREPASS_PIPELINE)
 import bevy_pbr::prepass::utils::prepass_depth;
 @if(!PREPASS_PIPELINE)
-import bevy_pbr::render::mesh_view_bindings::{view_transmission_texture, view_transmission_sampler};
 
 struct Fire {
     // x which (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time.
@@ -237,25 +236,6 @@ fn noise(p: vec2<f32>) -> f32 {
 fn fbm(p: vec2<f32>) -> f32 {
     return 0.55 * noise(p) + 0.3 * noise(p * 2.1 + 3.7) + 0.15 * noise(p * 4.3 + 9.1);
 }
-
-// A gradient for a lattice point, and gradient noise from them, about -0.7 to 0.7: smoother
-// than value noise, without its blocky grain.
-fn gradient(p: vec2<f32>) -> vec2<f32> {
-    let q = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-    return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
-}
-
-fn gnoise(p: vec2<f32>) -> f32 {
-    let i = floor(p);
-    let f = fract(p);
-    let u = f * f * (3.0 - 2.0 * f);
-    let a = dot(gradient(i), f);
-    let b = dot(gradient(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
-    let c = dot(gradient(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
-    let d = dot(gradient(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
 
 // Glowing soot at a temperature and in an amount (how much of it there is along the eye's
 // ray, 0 to 1), as the camera sees it: its colour from soot's emission at that temperature
@@ -1079,18 +1059,6 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     }
     let up = normalize(foot);
     let luck = fract(seed * 0.618 + phase * 3.71);
-    if kind == 3 {
-        // Heat haze: a card over the flame, from half its height to twice it, through which
-        // what is behind shimmers.
-        let w = tall * 1.5;
-        let h = tall * 1.6;
-        let world = card(foot + up * tall * 0.45, up, corner, w, h, true, 0.0);
-        out.clip = position_world_to_clip(world);
-        out.uv = corner;
-        out.life = vec4(0.0, heat, luck, 4.0);
-        out.size = h;
-        return out;
-    }
     // A kept fire's flames are a hearth's (`hearth`), drawn by cards of their own.
     let kept_slot = select(0.0, 1.0, slot < u32(fire.kind.w + 0.5));
     let is_hearth = slot < min(u32(fire.kind.w + 0.5), HEARTHS);
@@ -1171,18 +1139,27 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     if luck > heat * 0.9 && !is_hearth {
         return nowhere();
     }
-    let life_s = mix(1.6 + 2.2 * luck, 0.9 + 1.3 * luck, kept);
-    let t = fract(time / life_s + fract(phase) * 1.37 + seed);
+    // A hearth's each at its own moment and pace, from anywhere over its coals: born on one
+    // beat, evenly spaced (`phase`), they rose as a file of streaks on one slant (fire review,
+    // round 2). Most die low and soon, a few ride the plume two or three flames high, as
+    // RDR2's and the photographs' do.
+    let own = hash(vec2(phase * 17.0 + seed, 3.0));
+    let life_s = mix(1.6 + 2.2 * luck, 0.7 + 1.6 * own * own, kept);
+    let t = fract(time / life_s + mix(fract(phase) * 1.37, own * 7.13, kept) + seed);
     let seconds = t * life_s;
-    let rise = mix(2.5 + 3.5 * luck, 1.4 + 1.6 * luck, kept) * (1.0 - exp(-seconds * 0.9)) / 0.9;
+    let climb = mix(2.5 + 3.5 * luck, 1.0 + 2.6 * own * luck, kept);
+    let rise = climb * (1.0 - exp(-seconds * 0.9)) / 0.9;
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
-    let wander = vec2(noise(vec2(luck * 41.0, seconds * 0.8)), noise(vec2(luck * 73.0, seconds * 0.8))) - 0.5;
-    let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.5, kept);
-    let sway = mix(2.0, 0.6, kept);
+    // Tossed by the plume's eddies, two octaves of them, the farther the higher it rides.
+    let slow = vec2(noise(vec2(luck * 41.0, seconds * 0.8)), noise(vec2(luck * 73.0, seconds * 0.8))) - 0.5;
+    let quick = vec2(noise(vec2(own * 59.0, seconds * 3.1)), noise(vec2(own * 97.0, seconds * 3.1))) - 0.5;
+    let wander = slow + quick * 0.45 * kept;
+    let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.6, kept);
+    let sway = mix(2.0, 0.5 + 0.6 * rise, kept);
     let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t) + north * (out_from.y + wander.y * sway * t) + wind * seconds * mix(0.8, 0.4, kept);
-    // Stretched along its flight: up and downwind.
-    let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8);
+    // Stretched along its flight: up and downwind, and as the eddies toss it.
+    let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8 + (east * quick.x + north * quick.y) * 2.0 * kept);
     let to_eye = normalize(view.world_position - at);
     var across = cross(flight, to_eye);
     if dot(across, across) < 1.0e-6 {
@@ -1191,10 +1168,12 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     across = normalize(across);
     // A hearth's a little bigger than a roof's: at 0.02 to 0.04 m none showed at 1080p from
     // six metres, the film's distance (lake film r5).
-    let size = mix(0.035 + 0.03 * luck, 0.035 + 0.025 * luck, kept);
+    // A hearth's points of one to three pixels at six metres, most small: at 0.035 to 0.06 m
+    // they were blobs a few streaks of (fire review, round 2).
+    let size = mix(0.035 + 0.03 * luck, 0.014 + 0.016 * own * own, kept);
     // A hearth's short streaks, a roof's long: drawn out five times its sparks were white
     // needles beside the flames (lake film r6's first still).
-    let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * mix(5.0, 2.5, kept);
+    let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * mix(5.0, 2.0, kept);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
     out.life = vec4(t, heat, luck, 2.0);
@@ -1365,35 +1344,10 @@ fn fragment(in: VertexOutput) {
     discard;
 }
 
-// What is behind a heat haze card, shimmering: the opaque scene as Bevy copies it for
-// transmissive materials, read a few pixels off (0.2 to 0.5% of the screen's width) by
-// noise rising at a metre or two a second, as games draw heat haze; the most a third of the
-// way up the card, none at its edges.
-@if(!PREPASS_PIPELINE)
-fn haze(in: VertexOutput) -> vec4<f32> {
-    let time = fire.kind.z;
-    let heat = in.world_normal.y;
-    let rise = 1.5 / max(in.uv_b.y, 0.5);
-    let p = in.uv - vec2(0.5, 0.35);
-    let mask = (1.0 - smoothstep(0.15, 0.5, length(p * vec2(1.0, 0.75)))) * (0.4 + 0.6 * heat);
-    if mask < 0.01 {
-        discard;
-    }
-    let q = in.uv * vec2(5.0, 4.0) - vec2(0.0, time * rise * 4.0);
-    let off = vec2(gnoise(q), gnoise(q + vec2(5.2, 1.3))) * 0.006 * mask;
-    let screen = in.position.xy / view.viewport.zw;
-    let behind = textureSampleLevel(view_transmission_texture, view_transmission_sampler, screen + off, 0.0).rgb;
-    return vec4(behind, mask);
-}
-
 @if(!PREPASS_PIPELINE)
 @fragment
 fn fragment(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;
-    if i32(fire.kind.x + 0.5) == 3 {
-        out.color = haze(in);
-        return out;
-    }
     if i32(fire.kind.x + 0.5) == 2 {
         out.color = breath(in);
         return out;

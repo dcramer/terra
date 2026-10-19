@@ -182,7 +182,7 @@ pub fn plugin(app: &mut App) {
 /// logs' cracks do, on a material of its own (`kindle`): one flicker drives the fire's light,
 /// its flames and its embers, as Sons of the Forest links its fires' (D415).
 #[derive(Component)]
-struct Embers;
+pub(crate) struct Embers;
 
 /// How bright the embers glow at the fire's mean, on their map's colour: as a burning
 /// building's char's cracks (build.wesl, 14), so a campfire's logs glow as a house's beams.
@@ -227,7 +227,9 @@ fn smoulder(
             .filter(|(d, _)| *d < EMBER_REACH_M)
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .map_or(0.0, |(_, glow)| (1.0 + 3.0 * (glow - 1.0)).max(0.15));
-        let emissive = LinearRgba::rgb(EMBER_GLOW, EMBER_GLOW, EMBER_GLOW) * glow;
+        // Its colour scaled, not its alpha: `LinearRgba * f32` scales all four.
+        let strength = EMBER_GLOW * glow;
+        let emissive = LinearRgba::rgb(strength, strength, strength);
         // Only when it changed, so a material is not written again for nothing.
         let changed = materials
             .get(&material.0)
