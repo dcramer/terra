@@ -369,7 +369,9 @@ fn prepare(
     let lair = [(70.0, -60.0), (-80.0, -70.0), (90.0, 20.0), (-90.0, 10.0)]
         .into_iter()
         .map(|(east, south)| on_ground(east, south))
-        .find(|&point| dry(point));
+        .find(|&point| dry(point))
+        // A demo's or film's place has none (D421): play keeps it.
+        .filter(|_| !options.no_lair);
     // Where they like it first, then the nearest dry ground on rings further out, so a
     // world with water at all four still has a herd, away from the lair.
     let rings = (3..=9).flat_map(|ring| {

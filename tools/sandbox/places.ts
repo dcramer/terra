@@ -26,6 +26,10 @@ export type Place = {
   /// The film's route: spots to walk to in turn, metres east and south of the start, and
   /// where the walker starts and first faces.
   route?: { at: string; face: string; through: string };
+  /// Whether the lair of combat creatures (the spider nest) stands beside it, as play's
+  /// places have. A demo's or film's place leaves it out (D421, "Leave it out of films"), so
+  /// `place` adds `--no-lair` unless this is true.
+  lair?: boolean;
 };
 
 export const PLACES: Record<string, Place> = {
@@ -156,5 +160,5 @@ export const PLACES: Record<string, Place> = {
 export function place(name: string | undefined): Place {
   const found = PLACES[name ?? "lush"];
   if (!found) throw new Error(`no place called ${name}: ${Object.keys(PLACES).join(", ")}`);
-  return found;
+  return found.lair ? found : { ...found, args: [...found.args, "--no-lair"] };
 }

@@ -137,6 +137,8 @@ usage: terra_sandbox [options]
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
+  --no-lair             no lair of combat creatures (the spider nest) beside the place,
+                        as every demo's and film's place (tools/sandbox/places.ts, D421)
   --free-build          building in the play experiment costs nothing, every cost met
                         as on the yard, though claims still hold: building with
                         pretend materials, as the QA films do (tools/sandbox/qa.ts)
@@ -301,6 +303,9 @@ pub struct Options {
     pub frame_times: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
+    /// No lair of combat creatures beside the place, as a demo's or film's (D421): play
+    /// keeps it.
+    pub no_lair: bool,
     /// Building costs nothing: every cost is met, as on the yard, but claims still hold.
     pub free_build: bool,
     /// Which level the play experiment is on: the world, or a test level.
@@ -473,6 +478,7 @@ impl Options {
             calls: None,
             frame_times: None,
             fresh: false,
+            no_lair: false,
             free_build: false,
             level: Level::World,
             walls: None,
@@ -545,6 +551,7 @@ impl Options {
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
+                "--no-lair" => options.no_lair = true,
                 "--free-build" => options.free_build = true,
                 "--level" => {
                     options.level = match value("--level")?.as_str() {

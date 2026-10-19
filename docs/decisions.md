@@ -481,6 +481,7 @@ Checks, developer tools, languages and the repository.
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
 | [D414](decisions/D414.md) | A ratchet's baseline is raised by a change with its why, and lowered only by the full run on main | Tech | Agent | Decided | A ratchet's baseline (the artifacts and fuzz counts… |
 | [D417](decisions/D417.md) | Offscreen runs open no window | Tech | Agent | Decided | An unattended run drawing into a picture… |
+| [D421](decisions/D421.md) | Demo and film places leave out the combat lair | Design | Developers | Decided | Play keeps its lair of combat creatures… |
 
 ## Superseded and rejected
 
