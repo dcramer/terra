@@ -3,6 +3,8 @@
 //! distortion, 8x8 frames), its half-size motion and a sidecar, stacked as the layers of two
 //! array textures so one draw reads every set; the one colour ramp every fire's heat is
 //! coloured through (`tools/fire/ramp.ts`); and which set each kind of fire is drawn from.
+//! The smoke's puffs are sets of their own, six-way lightmaps (`tools/fire/bake/smoke.ts`),
+//! stacked the same way ([`read_smoke`]).
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -83,6 +85,73 @@ impl Sidecar {
 
 fn whole() -> f32 {
     1.0
+}
+
+/// The smoke's puffs, a layer each in this order (`fire_smoke.wesl`'s `SMOKE_*`): a hearth's
+/// thin wisp and a blaze's thick soot, a breath's soot drawn from the second. 4 MB of the
+/// GPU's a map a set.
+pub const SMOKE_SETS: [&str; 2] = ["campfire-smoke", "house-smoke"];
+
+/// A smoke set's sidecar, as `tools/fire/bake/smoke.ts` writes it.
+#[derive(Deserialize, Debug)]
+pub struct SmokeSidecar {
+    pub frames: u32,
+    pub columns: u32,
+    pub rows: u32,
+    pub frame: u32,
+    /// What a map's texel is its response times, so the shader divides it back out.
+    pub light_scale: f32,
+}
+
+/// The smoke's six-way maps as its material reads them.
+pub struct SmokeBooks {
+    /// Map 0 (right, top, back, alpha), a layer a set of [`SMOKE_SETS`].
+    pub near: Image,
+    /// Map 1 (left, bottom, front, glow).
+    pub far: Image,
+    /// Each set's [`SmokeSidecar::light_scale`], x y in the order of [`SMOKE_SETS`].
+    pub light_scales: Vec4,
+}
+
+/// Reads a smoke set's sidecar, stopping the game at a mistake in it as [`sidecar`] does.
+pub fn smoke_sidecar(set: &str) -> SmokeSidecar {
+    let path = file(&format!("{set}.json"));
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|problem| panic!("Could not read {}: {problem}", path.display()));
+    let read: SmokeSidecar = serde_json::from_str(&text)
+        .unwrap_or_else(|problem| panic!("{}: {problem}", path.display()));
+    assert!(
+        read.frames == FRAMES
+            && read.columns == COLUMNS
+            && read.rows * read.columns == read.frames
+            && read.frame == SMOKE_FRAME
+            && read.light_scale > 0.0,
+        "{}: fire_smoke.wesl reads {FRAMES} frames of {SMOKE_FRAME} texels, {COLUMNS} across",
+        path.display()
+    );
+    read
+}
+
+/// Texels a smoke frame across, as `fire_smoke.wesl` keeps its samples inside one.
+const SMOKE_FRAME: u32 = 128;
+
+/// Reads the smoke's sets: at startup, once, as the smoke cannot draw without them.
+pub fn read_smoke() -> SmokeBooks {
+    let sidecars = SMOKE_SETS.map(smoke_sidecar);
+    let maps = |suffix: &str| {
+        stack(
+            SMOKE_SETS
+                .iter()
+                .map(|set| picture(&format!("{set}{suffix}.png"), false))
+                .collect(),
+            ImageSampler::linear(),
+        )
+    };
+    SmokeBooks {
+        near: maps(""),
+        far: maps(".opposite"),
+        light_scales: Vec4::new(sidecars[0].light_scale, sidecars[1].light_scale, 0.0, 0.0),
+    }
 }
 
 /// The colour ramp's sidecar (`tools/fire/ramp.ts`).
@@ -248,6 +317,35 @@ mod tests {
                 shader.contains(&format!("const SET_{name}: i32 = {layer};")),
                 "{set}"
             );
+        }
+    }
+
+    #[test]
+    fn the_smoke_shader_names_each_smoke_set_by_its_layer() {
+        let shader =
+            std::fs::read_to_string(crate::data::assets().join("shaders/fire_smoke.wesl")).unwrap();
+        for (layer, set) in SMOKE_SETS.iter().enumerate() {
+            let name = set.trim_end_matches("-smoke").to_uppercase();
+            assert!(
+                shader.contains(&format!("const SMOKE_{name}: i32 = {layer};")),
+                "{set}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_smoke_set_has_both_maps_and_a_sane_sidecar() {
+        for set in SMOKE_SETS {
+            let read = smoke_sidecar(set);
+            // A texel at most 1 is its response times the scale: a response of a few
+            // Lambert surfaces' at most, or the maps were scaled wrong.
+            assert!(read.light_scale > 0.1 && read.light_scale < 50.0, "{set}");
+            for suffix in ["", ".opposite"] {
+                assert!(
+                    file(&format!("{set}{suffix}.png")).exists(),
+                    "{set}{suffix}"
+                );
+            }
         }
     }
 

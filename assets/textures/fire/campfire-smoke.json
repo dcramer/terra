@@ -1,0 +1,26 @@
+{
+  "set": "campfire-smoke",
+  "about": "One puff of a campfire's smoke: a thin, wispy breath of grey that rolls up off the logs, opens and thins away. The hearth's wisp is many of these, each its own age; lit six ways (six_way), not glowing.",
+  "kind": "oneshot",
+  "class": "smoke",
+  "frames": 64,
+  "columns": 8,
+  "rows": 8,
+  "frame": 128,
+  "fps": 12,
+  "metres": 1.2,
+  "reach": 0.992,
+  "channels": "map 0 (<set>.png): R right +X, G top +Z, B back +Y, A alpha; map 1 (<set>.opposite.png): R left, G bottom, B front, A glow",
+  "light_scale": 7.1322,
+  "baked": {
+    "heat_scale": 3.2119,
+    "mean_response": [
+      0.117,
+      0.115,
+      0.116,
+      0.117,
+      0.115,
+      0.117
+    ]
+  }
+}

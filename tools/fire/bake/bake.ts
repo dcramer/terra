@@ -18,6 +18,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { join, resolve } from "node:path";
 import { pack } from "./pack.ts";
 import { sheet } from "./sheet.ts";
+import { packSmoke } from "./smoke.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, "../../..");
@@ -30,6 +31,10 @@ export type Recipe = {
   about: string;
   class: string;
   kind: "loop" | "oneshot";
+  /// Lit six ways, not glowing: smoke (smoke.ts).
+  six_way?: boolean;
+  /// Sim frames a rendered frame.
+  step?: number;
   size: number;
   frames: number;
   crossfade?: number;
@@ -92,8 +97,9 @@ function main() {
     try {
       if (!flags.has("--pack") || !existsSync(join(out, "raw.bin"))) bake(r, out);
       const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
-      const packed = pack(r, out, flags.has("--draft") ? out : ASSETS);
-      const judged = sheet(r, out, packed);
+      const dest = flags.has("--draft") ? out : ASSETS;
+      const packed = r.six_way ? packSmoke(r, out, dest) : pack(r, out, dest);
+      const judged = r.six_way ? `maps ${join(out, "maps.png")}` : sheet(r, out, packed);
       console.log(`${r.name.padEnd(16)} sim ${meta.sim_s} s, render ${meta.render_s} s; ${packed.line}; ${judged}`);
     } catch (e) {
       failed = true;

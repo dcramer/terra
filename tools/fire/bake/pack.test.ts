@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fitFlow, halves, warpError } from "./pack.ts";
+import { smokeFrame } from "./smoke.ts";
+
+test("a six-way frame's alpha is the glow pass's G and each map its light over alpha", () => {
+  // Two texels: smoke half covering, lit 0.1 from the right and 0.12 from the front; and none.
+  const light0 = new Float32Array([0.1, 0.05, 0.02, 0, 0, 0]);
+  const light1 = new Float32Array([0.03, 0.04, 0.12, 0, 0, 0]);
+  const glow = new Float32Array([0.25, 0.5, 0, 0, 0, 0]);
+  const fr = smokeFrame(light0, light1, glow, 2);
+  assert.equal(fr.alpha[0], 0.5);
+  assert.ok(Math.abs(fr.maps[0][0] - 0.2) < 1e-6 && Math.abs(fr.maps[5][0] - 0.24) < 1e-6);
+  assert.ok(Math.abs(fr.glow[0] - 0.5) < 1e-6);
+  assert.equal(fr.alpha[1], 0);
+  assert.equal(fr.maps[0][1], 0);
+});
 
 test("half floats decode as IEEE 754 says", () => {
   const bits = new Uint16Array([0x3c00, 0xc000, 0x3555, 0x0001, 0x7bff, 0x0000]);

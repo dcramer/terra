@@ -1,0 +1,26 @@
+{
+  "set": "house-smoke",
+  "about": "One puff of a burning house's smoke: a dense, cauliflowered roll of soot that boils up, darkest where it is young, and greys as it opens. The blaze's column is many of these, the breath's soot too; lit six ways (six_way), not glowing.",
+  "kind": "oneshot",
+  "class": "smoke",
+  "frames": 64,
+  "columns": 8,
+  "rows": 8,
+  "frame": 128,
+  "fps": 12,
+  "metres": 2,
+  "reach": 0.906,
+  "channels": "map 0 (<set>.png): R right +X, G top +Z, B back +Y, A alpha; map 1 (<set>.opposite.png): R left, G bottom, B front, A glow",
+  "light_scale": 7.3181,
+  "baked": {
+    "heat_scale": 5.0169,
+    "mean_response": [
+      0.089,
+      0.091,
+      0.086,
+      0.089,
+      0.091,
+      0.093
+    ]
+  }
+}

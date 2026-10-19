@@ -19,7 +19,12 @@ import bevy_pbr::render::{
     forward_io::{Vertex, VertexOutput, FragmentOutput, decompress_vertex},
     mesh_view_bindings::globals,
     pbr_fragment::pbr_input_from_standard_material,
-    pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
+    pbr_functions::main_pass_post_lighting_processing,
+    mesh_view_bindings as view_bindings,
+    mesh_view_types,
+    pbr_lighting as lighting,
+    clustered_forward as clustering,
+    shadows,
 };
 @if(DEPTH_PREPASS && !PREPASS_PIPELINE)
 import bevy_pbr::prepass::utils::prepass_depth;
@@ -28,10 +33,15 @@ import bevy_pbr::prepass::utils::prepass_depth;
 @group(0) @binding(1) var<uniform> globals: Globals;
 
 // The wind, metres a second, and how many slots are filled; which smoke (0 over blazes, 1 a
-// breath's soot) and the time its puffs were let go by. Must match FireSmokeUniform.
+// breath's soot) and the time its puffs were let go by; the open sky's light from each side of
+// the sky's frame (+X, -X, +Y, -Y, +Z, -Z) and that frame's axes in the world; each smoke set's
+// light scale. Must match FireSmokeUniform (crates/terra_world/src/fire/smoke.rs).
 struct Smoke {
     wind: vec4<f32>,
     kind: vec4<f32>,
+    sky: array<vec4<f32>, 6>,
+    sky_frame: array<vec4<f32>, 3>,
+    sets: vec4<f32>,
 }
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> smoke: Smoke;
@@ -40,6 +50,27 @@ var<storage, read> slots: array<vec4<f32>>;
 // What breaths have let go, the soot first: where and when, then its going and its luck.
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var<storage, read> puffs: array<vec4<f32>>;
+// The six-way lightmaps of the baked puffs (tools/fire/bake/smoke.ts), a layer a set in
+// books.rs's SMOKE_SETS order: map 0 R right, G top, B back, A alpha; map 1 R left, G bottom,
+// B front, A glow.
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var near_maps: texture_2d_array<f32>;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var maps_sampler: sampler;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var far_maps: texture_2d_array<f32>;
+const SMOKE_CAMPFIRE: i32 = 0;
+const SMOKE_HOUSE: i32 = 1;
+// Which of a baked puff's 64 frames a card plays over its life: born a little open, and done
+// before the puff outgrows its frame (by frame 35 both sets' reach the frame's edge; the card
+// grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
+const PUFF_FROM: f32 = 4.0;
+const PUFF_TO: f32 = 34.0;
+const HEARTH_THIN: f32 = 0.6;
+const PI: f32 = 3.14159265;
 // How long a breath's soot hangs, in seconds.
 const SOOT_S: f32 = 5.5;
 // How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
@@ -227,17 +258,6 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     return out;
 }
 
-fn density(uv: vec2<f32>, t: f32, luck: f32) -> f32 {
-    let p = uv - vec2(0.5);
-    let n = smooth_noise(uv * 3.5 + vec2(luck * 41.0, luck * 17.0));
-    let fine = smooth_noise(uv * 9.0 + vec2(luck * 7.0, luck * 63.0));
-    // Its rim cauliflowered by the finer noise, so a column's edge billows, not blurs.
-    let round = 1.0 - smoothstep(0.2, 0.44, length(p) + (n - 0.5) * 0.3 + (fine - 0.5) * 0.16);
-    let window = 1.0 - smoothstep(0.36, 0.5, max(abs(p.x), abs(p.y)));
-    let life = smoothstep(0.0, 0.06, t) * pow(1.0 - t, 1.3);
-    return round * window * life * (0.7 + 0.6 * n);
-}
-
 @if(PREPASS_PIPELINE && PREPASS_FRAGMENT)
 @fragment
 fn fragment(in: VertexOutput) -> bevy_pbr::prepass::io::FragmentOutput {
@@ -250,6 +270,43 @@ fn fragment(in: VertexOutput) {
     discard;
 }
 
+// A frame of a baked puff's maps, both maps, at a card's uv: frame `f` of the set's 8x8.
+@if(!PREPASS_PIPELINE)
+fn frame_maps(layer: i32, f: f32, uv: vec2<f32>) -> array<vec4<f32>, 2> {
+    let cell = vec2(f % 8.0, floor(f / 8.0));
+    // Kept half a texel in from the frame's edge so a neighbour never bleeds in.
+    let inside = clamp(vec2(uv.x, 1.0 - uv.y), vec2(0.5 / 128.0), vec2(1.0 - 0.5 / 128.0));
+    let at = (cell + inside) / 8.0;
+    return array(
+        textureSampleLevel(near_maps, maps_sampler, at, layer, 0.0),
+        textureSampleLevel(far_maps, maps_sampler, at, layer, 0.0),
+    );
+}
+
+// The baked response to light from `l`, in the card's frame (right, up the card, toward the
+// eye; unit length): each axis's map by the side the light is on, weighted by l squared, in a
+// white Lambert surface's units (tools/fire/bake/smoke.ts).
+@if(!PREPASS_PIPELINE)
+fn response(l: vec3<f32>, near: vec4<f32>, far: vec4<f32>) -> f32 {
+    let w = l * l;
+    let x = select(far.r, near.r, l.x > 0.0);
+    let y = select(far.g, near.g, l.y > 0.0);
+    // Map 0's B is lit from behind, map 1's from the eye's side.
+    let z = select(near.b, far.b, l.z > 0.0);
+    return w.x * x + w.y * y + w.z * z;
+}
+
+// The open sky's light arriving from world direction `d` (toward where it comes from), from
+// its six sides as skylight.rs's OpenSky gives them, already times the environment's brightness.
+@if(!PREPASS_PIPELINE)
+fn sky_from(d: vec3<f32>) -> vec3<f32> {
+    let s = vec3(dot(d, smoke.sky_frame[0].xyz), dot(d, smoke.sky_frame[1].xyz), dot(d, smoke.sky_frame[2].xyz));
+    let w = s * s;
+    return w.x * select(smoke.sky[1].rgb, smoke.sky[0].rgb, s.x > 0.0)
+        + w.y * select(smoke.sky[3].rgb, smoke.sky[2].rgb, s.y > 0.0)
+        + w.z * select(smoke.sky[5].rgb, smoke.sky[4].rgb, s.z > 0.0);
+}
+
 @if(!PREPASS_PIPELINE)
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
@@ -258,20 +315,38 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let luck = fract(in.uv_b.y);
     let heat = floor(in.uv_b.y * 0.5) / 15.0;
     let soot = heat > 1.5;
-    var alpha = density(in.uv, t, luck) * select(mix(0.95, 0.4, t), mix(0.97, 0.55, t), soot);
+    let P = in.world_position.xyz;
+    // The card's own frame from how its position runs with its uv, before anything is
+    // discarded (derivatives need every pixel of a quad): right, up the card, toward the eye.
+    // So a puff turned or mirrored is lit from where its light really is.
+    let dp_x = dpdx(P);
+    let dp_y = dpdy(P);
+    let du_x = dpdx(in.uv);
+    let du_y = dpdy(in.uv);
+    let det = du_x.x * du_y.y - du_x.y * du_y.x;
+    let flip = select(-1.0, 1.0, det >= 0.0);
+    let T = normalize((dp_x * du_y.y - dp_y * du_x.y) * flip + vec3(1.0e-7));
+    let B = normalize((dp_y * du_x.x - dp_x * du_y.x) * flip + vec3(1.0e-7));
+    let F = normalize(view.world_position - P);
+    // Which baked puff, and where in its life: a hearth's thin wisp, or a blaze's (and a
+    // breath's) thick soot; played from PUFF_FROM to PUFF_TO, the frames crossfaded.
+    let book = select(SMOKE_HOUSE, SMOKE_CAMPFIRE, hearth);
+    let f = mix(PUFF_FROM, PUFF_TO, t);
+    let a = frame_maps(book, floor(f), in.uv);
+    let b = frame_maps(book, floor(f) + 1.0, in.uv);
+    let k = fract(f);
+    let near = mix(a[0], b[0], k);
+    let far = mix(a[1], b[1], k);
+    // Its life: a blaze's puff in quickly and thinning as it opens; a hearth's clear of its
+    // flames before it shows (born over them it lay a pale smear across them, lake film r6)
+    // and thinning to nothing as it climbs, so its top fades into the air rather than ending.
+    var life = smoothstep(0.0, 0.06, t) * pow(1.0 - t, 1.3) * select(mix(1.0, 0.5, t), mix(1.0, 0.65, t), soot);
     if hearth {
-        // A wisp: its rim eaten away by finer noise turning as it rises, thin, and thinner
-        // as it spreads.
-        let p = (in.uv - vec2(0.5)) * vec2(1.0, 0.85);
-        let n = smooth_noise(in.uv * vec2(3.0, 2.0) + vec2(luck * 41.0, -t * 3.0));
-        let fine = smooth_noise(in.uv * vec2(8.0, 5.0) + vec2(luck * 7.0, -t * 6.0));
-        let wisp = 1.0 - smoothstep(0.05, 0.42, length(p) + (n - 0.5) * 0.4 + (fine - 0.5) * 0.25);
-        // Thinning out as it climbs, so its top fades into the air rather than ending.
-        // Clear of its flames before it shows: born over them it lay a pale smear across
-        // them and the troll sat by them (lake film r6's first still).
-        let life = smoothstep(0.03, 0.14, t) * pow(1.0 - t, 2.2);
-        alpha = wisp * life * (0.5 + 0.7 * fine) * mix(0.3, 0.12, t);
+        life = smoothstep(0.03, 0.14, t) * pow(1.0 - t, 2.2) * HEARTH_THIN;
     }
+    let p = abs(in.uv - vec2(0.5));
+    let window = 1.0 - smoothstep(0.42, 0.5, max(p.x, p.y));
+    var alpha = near.a * life * window;
     // Faded in over its last metre and a half in front of what is behind it.
 @if(DEPTH_PREPASS)
     {
@@ -281,42 +356,74 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if alpha < 0.004 {
         discard;
     }
-    var input = pbr_input_from_standard_material(in, is_front);
-    // Burning timber's smoke: a dark brown-grey, thick and darker in its middle.
-    let shade = mix(1.0, 0.55, alpha);
+    let scale = select(smoke.sets.y, smoke.sets.x, hearth);
+    let near_m = vec4(near.rgb / scale, near.a);
+    let far_m = vec4(far.rgb / scale, far.a);
     // Young smoke from a big timber fire near black (soot's albedo 0.03 to 0.05,
-    // research/2026-10-16-real-time-fire-rendering.md), thinning to a grey as it climbs, never
-    // the tan its old 0.25 albedo turned in the morning sun with the fire's glow on it.
-    var grey = mix(vec3(0.03, 0.028, 0.026), vec3(0.15, 0.145, 0.14), smoothstep(0.2, 0.9, t));
-    // A breath's soot is fuel burnt rich: black, and greying only a little as it thins.
+    // research/2026-10-16-real-time-fire-rendering.md), greying as it climbs and thins; a
+    // breath's is fuel burnt rich, black and greying only a little; a hearth's dry wood burns
+    // clean, a mid grey with a little blue from its fine ash, never the pale grey that the fire's
+    // light turned salmon.
+    var albedo = mix(vec3(0.03, 0.028, 0.026), vec3(0.15, 0.145, 0.14), smoothstep(0.2, 0.9, t));
     if soot {
-        grey = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
+        albedo = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
     }
-    // Dry wood burning clean: a pale grey with a little blue from its fine ash, scattering
-    // the sky's light (research/2026-10-16-real-time-fire-rendering.md).
-    var dark = shade;
     if hearth {
-        grey = mix(vec3(0.34, 0.36, 0.4), vec3(0.46, 0.48, 0.52), smoothstep(0.1, 0.7, t));
-        dark = 1.0;
+        albedo = mix(vec3(0.08, 0.082, 0.088), vec3(0.3, 0.31, 0.33), smoothstep(0.05, 0.6, t));
     }
-    input.material.base_color = vec4(grey * dark, alpha);
-    // Lit from under by the fire just over the flames; a breath's soot glows from the stream it
-    // leaves for its first moments. Most on a puff's underside, which faces the flames, and
-    // little on the rest: glowing up to a third of the way up, a column's base was a brown fog
-    // (castle film r7, sRGB 104,75,55) where young smoke over a fire is black.
-    let n = normalize(in.world_normal);
-    let down = saturate(-dot(n, normalize(in.world_position.xyz)));
-    var under = select(pow(1.0 - t, 24.0) * heat, pow(1.0 - t, 18.0) * 1.5, soot) * (0.15 + 1.5 * down);
-    // A hearth's wisp warm only its first half metre over the flames, and dimly.
+    var light = vec3(0.0);
+    // The sun (and moon), through the atmosphere and the shadows, as Bevy lights a surface
+    // facing it: directional_light gives colour times transmittance over pi for a white one.
+    let view_z = dot(vec4(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), vec4(P, 1.0));
+    for (var i: u32 = 0u; i < view_bindings::lights.n_directional_lights; i = i + 1u) {
+        let L = view_bindings::lights.directional_lights[i].direction_to_light.xyz;
+        var li: lighting::LightingInput;
+        li.layers[0].N = L;
+        li.layers[0].R = L;
+        li.layers[0].NdotV = 1.0;
+        li.layers[0].perceptual_roughness = 1.0;
+        li.layers[0].roughness = 1.0;
+        li.P = P;
+        li.V = L;
+        li.diffuse_color = vec3(1.0);
+        var shadow = 1.0;
+        if (view_bindings::lights.directional_lights[i].flags & mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u {
+            shadow = shadows::fetch_directional_shadow(i, vec4(P, 1.0), F, view_z, in.position.xy);
+        }
+        let m = response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m);
+        light += lighting::directional_light(i, &li, true) * shadow * m;
+    }
+    // The fires' lights from the clusters, as Bevy walks them, each held at its own radius as
+    // the fog's are (scatter.rs): one under a young puff lights only its underside.
+    let ortho = view.clip_from_view[3].w == 1.0;
+    let cluster = clustering::view_fragment_cluster_index(in.position.xy, view_z, ortho);
+    let ranges = clustering::unpack_clusterable_object_index_ranges(cluster);
+    for (var i: u32 = ranges.first_point_light_index_offset; i < ranges.first_spot_light_index_offset; i = i + 1u) {
+        let id = clustering::get_clusterable_object_id(i);
+        let lamp = &view_bindings::clustered_lights.data[id];
+        let to = (*lamp).position_radius.xyz - P;
+        let d2 = dot(to, to);
+        let r = (*lamp).position_radius.w;
+        let e = (*lamp).color_inverse_square_range.rgb * lighting::getRangeFalloff(d2, (*lamp).color_inverse_square_range.w) / max(d2, max(r * r, 1.0e-4));
+        let L = to * inverseSqrt(max(d2, 1.0e-8));
+        light += e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
+    }
+    // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.
+    light += (2.0 / 3.0) * (near_m.r * sky_from(T) + far_m.r * sky_from(-T)
+        + near_m.g * sky_from(B) + far_m.g * sky_from(-B)
+        + far_m.b * sky_from(F) + near_m.b * sky_from(-F));
+    // Its hot core's own light, where it is young over the fire: dimly in a hearth's first half
+    // metre, a blaze's column at its foot, a breath's soot its first moments.
+    var glow = select(pow(1.0 - t, 18.0) * heat, pow(1.0 - t, 14.0) * 1.5, soot) * 900.0;
     if hearth {
-        under = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 0.04;
+        glow = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 36.0;
     }
-    input.material.emissive = vec4(vec3(1.0, 0.3, 0.06) * under * 900.0, 1.0);
-    input.N = n;
-    input.world_normal = n;
+    let lit = (albedo * light + vec3(1.0, 0.3, 0.06) * glow * far.a) * view.exposure;
+    var input = pbr_input_from_standard_material(in, is_front);
+    input.N = F;
+    input.world_normal = F;
     var out: FragmentOutput;
-    out.color = apply_pbr_lighting(input);
-    out.color = main_pass_post_lighting_processing(input, out.color);
+    out.color = main_pass_post_lighting_processing(input, vec4(lit, alpha));
     out.color.a = alpha;
     return out;
 }

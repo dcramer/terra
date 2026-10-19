@@ -246,44 +246,7 @@ impl MaterialExtension for FireExtension {
 
 pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
 
-/// What the smoke over a fire is told. Field order must match `fire_smoke.wesl`.
-#[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
-pub struct FireSmokeUniform {
-    /// The wind, and how many slots are filled.
-    wind: Vec4,
-    /// x which smoke (0 over the blazes, 1 a breath's soot), y the time the puffs were let
-    /// go by, w how many of the first slots are kept fires.
-    kind: Vec4,
-}
-
-/// The smoke over a fire, or a breath's soot.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-pub struct FireSmokeExtension {
-    #[uniform(100)]
-    uniform: FireSmokeUniform,
-    #[storage(101, read_only)]
-    slots: Handle<ShaderBuffer>,
-    #[storage(102, read_only)]
-    puffs: Handle<ShaderBuffer>,
-}
-
-impl MaterialExtension for FireSmokeExtension {
-    fn vertex_shader() -> ShaderRef {
-        "shaders/fire_smoke.wesl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "shaders/fire_smoke.wesl".into()
-    }
-
-    fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/fire_smoke.wesl".into()
-    }
-
-    fn prepass_fragment_shader() -> ShaderRef {
-        "shaders/fire_smoke.wesl".into()
-    }
-}
+use smoke::{FireSmokeExtension, FireSmokeUniform};
 
 pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtension>;
 
@@ -558,6 +521,9 @@ fn setup(
     let count = slots(*quality);
     let slots = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; count * 2]));
     let books = books::read();
+    let smoke_books = books::read_smoke();
+    let near = images.add(smoke_books.near);
+    let far = images.add(smoke_books.far);
     let flames = images.add(books.flames);
     let motions = images.add(books.motions);
     let ramp = images.add(books.ramp);
@@ -640,16 +606,18 @@ fn setup(
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: 1.0,
                 reflectance: 0.0,
-                diffuse_transmission: 0.1,
                 ..default()
             },
             extension: FireSmokeExtension {
                 uniform: FireSmokeUniform {
                     kind: Vec4::new(kind, 0.0, 0.0, 0.0),
+                    sets: smoke_books.light_scales,
                     ..default()
                 },
                 slots: slots.clone(),
                 puffs: puffs.buffer.clone(),
+                near: near.clone(),
+                far: far.clone(),
             },
         })
     });
@@ -796,6 +764,8 @@ fn show(
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
     realm: Option<Res<FireExposure>>,
+    open_sky: Option<Res<crate::skylight::OpenSky>>,
+    environments: Query<&bevy::light::EnvironmentMapLight, With<Camera3d>>,
 ) {
     let now = time.elapsed_secs_wrapped();
     let exposure = realm.as_deref().copied().unwrap_or_default().packed();
@@ -856,10 +826,14 @@ fn show(
             material.extension.uniform.exposure = exposure;
         }
     }
+    // The smoke is lit by the open sky round it as the shading's light gives it.
+    let (sky, sky_frame) = smoke::sky(open_sky.as_deref(), environments.iter().next());
     for (kind, handle) in drawn.smoke.iter().enumerate() {
         if let Some(mut material) = smokes.get_mut(handle) {
             material.extension.uniform.wind = drawn.wind.extend(count as f32);
             material.extension.uniform.kind = Vec4::new(kind as f32, now, 0.0, kept as f32);
+            material.extension.uniform.sky = sky;
+            material.extension.uniform.sky_frame = sky_frame;
         }
     }
 }
@@ -868,6 +842,7 @@ mod books;
 mod fog;
 mod light;
 mod seen;
+mod smoke;
 
 pub use light::{FireGlows, GLOWS};
 

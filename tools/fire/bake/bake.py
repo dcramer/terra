@@ -12,6 +12,17 @@
 #   motion: absorbed the same, emits w*(0.5+s*vx, 0.5+s*vz, 1) with w = f + d
 #   depth:  no absorption, emits (kf*f, ks*d*(1 - min(1, m*f)), 0) -> cover and soot depths
 #
+# A six-way smoke set (recipe "six_way": true; docs/fire.md, "The smoke") is lit, not glowing:
+# single scatter is linear in light, so three suns of three colours light three sides at once
+# (the idea is Unity VFXToolbox's six-way lightmaps; the code is ours):
+#
+#   light0: scatters ks*d, lit red from +X, green from +Z, blue from +Y (behind)
+#   light1: the same, red from -X, green from -Z, blue from -Y (the camera's side)
+#   glow:   absorbed by ks*d, emits (h*ks*d, ks*d, 0)      -> alpha = G, mean heat R/G
+#
+# A white Lambert surface facing a strength-1 sun renders as 1, so a pixel over alpha is the
+# smoke's response in those units: 1/4 for thin smoke lit from one side.
+#
 # It writes raw.bin (every frame's three passes, RGB half floats, frame by frame) and meta.json;
 # bake.ts packs them. Our own script (D121): nothing of Blender's or anyone's is copied in.
 
@@ -30,8 +41,10 @@ os.makedirs(out, exist_ok=True)
 os.chdir(out)  # Mantaflow writes its noise tile (waveletNoiseTile.bin) where it runs
 dom_r = recipe["domain"]
 frames = recipe["frames"]
+STEP = recipe.get("step", 1)  # sim frames a rendered frame, to stretch a slow puff over 64
+SIX_WAY = recipe.get("six_way", False)
 first = recipe.get("warmup", 0) + 1
-last = first + frames + recipe.get("crossfade", 0) - 1
+last = first + (frames + recipe.get("crossfade", 0) - 1) * STEP
 passes_r = recipe.get("passes", {})
 KF = passes_r.get("cover", 12.0)
 KS = passes_r.get("soot", 3.0)
@@ -205,7 +218,47 @@ def enc(v):
 
 
 
-PASSES = {
+def lit(density):
+    sc = N.new("ShaderNodeVolumeScatter")
+    sc.inputs["Color"].default_value = (1, 1, 1, 1)
+    sc.inputs["Anisotropy"].default_value = 0.0
+    L.new(density, sc.inputs["Density"])
+    return sc.outputs[0]
+
+
+ks_d = math("MULTIPLY", d, KS)
+SIX = {
+    "light0": lit(ks_d),
+    "light1": lit(ks_d),
+    "glow": volume(rgb(math("MULTIPLY", math("MAXIMUM", attr("heat"), 0.0), ks_d), ks_d, 0.0), ks_d),
+}
+# Which suns light each six-way pass: (from, colour), red, green and blue from three sides.
+SUNS = {"light0": [((1, 0, 0), 0), ((0, 0, 1), 1), ((0, 1, 0), 2)],
+        "light1": [((-1, 0, 0), 0), ((0, 0, -1), 1), ((0, -1, 0), 2)]}
+suns = {}
+if SIX_WAY:
+    from mathutils import Vector
+    for name, lamps in SUNS.items():
+        for k, (frm, ch) in enumerate(lamps):
+            sun = bpy.data.objects.new("%s_%d" % (name, k), bpy.data.lights.new("%s_%d" % (name, k), "SUN"))
+            sun.data.energy = 1.0
+            sun.data.angle = 0.0
+            sun.data.color = tuple(1.0 if c == ch else 0.0 for c in range(3))
+            sun.rotation_mode = "QUATERNION"
+            sun.rotation_quaternion = (-Vector(frm)).to_track_quat("-Z", "Y")
+            scene.collection.objects.link(sun)
+            suns.setdefault(name, []).append(sun)
+
+
+def only(name):
+    """Switches on the suns of one six-way pass and off the rest, by their strength: Cycles
+    kept a sun hidden from render lighting the volume (every map came out the same)."""
+    for k, objs in suns.items():
+        for o in objs:
+            o.data.energy = 1.0 if k == name else 0.0
+
+
+PASSES = SIX if SIX_WAY else {
     "heat": volume(rgb(math("MULTIPLY", f, f), f, d), sigma),
     "motion": volume(rgb(enc(sep.outputs["X"]), enc(sep.outputs["Z"]), w), sigma),
     "depth": volume(rgb(math("MULTIPLY", f, KF),
@@ -238,9 +291,11 @@ r.image_settings.file_format = "OPEN_EXR"
 r.image_settings.color_depth = "32"
 c = scene.cycles
 c.device = "CPU"
-c.samples = recipe.get("samples", 16)
+c.samples = recipe.get("samples", 32 if SIX_WAY else 16)
 c.use_adaptive_sampling = False
-c.use_denoising = False
+c.use_denoising = SIX_WAY  # the scatter passes are sampled; OIDN keeps 64 samples smooth
+if SIX_WAY:
+    c.denoiser = "OPENIMAGEDENOISE"
 c.max_bounces = c.volume_bounces = c.diffuse_bounces = c.glossy_bounces = 0
 c.transparent_max_bounces = 8
 c.volume_biased = True  # ray marched, so an emission integral is smooth, not sampled
@@ -251,9 +306,11 @@ c.filter_width = 1.5
 exr = os.path.join(out, "pass.exr")
 t0 = time.time()
 with open(os.path.join(out, "raw.bin"), "wb") as raw:
-    for frame in range(first, last + 1):
+    for frame in range(first, last + 1, STEP):
         scene.frame_set(frame)
         for name, shader in PASSES.items():
+            if SIX_WAY:
+                only(name)
             L.new(shader, output.inputs["Volume"])
             r.filepath = exr
             bpy.ops.render.render(write_still=True)
@@ -268,7 +325,7 @@ with open(os.path.join(out, "raw.bin"), "wb") as raw:
             print("frame %d of %d" % (frame, last), flush=True)
 os.remove(exr)
 render_s = time.time() - t0
-meta = {"set": recipe.get("name"), "size": size, "frames": last - first + 1, "first": first,
+meta = {"set": recipe.get("name"), "size": size, "frames": (last - first) // STEP + 1, "first": first, "step": STEP,
         "passes": list(PASSES), "fps": scene.render.fps, "velocity_max": VMAX,
         "extent": cam_r["extent"], "sim_s": round(sim_s, 1), "render_s": round(render_s, 1)}
 with open(os.path.join(out, "meta.json"), "w") as m:

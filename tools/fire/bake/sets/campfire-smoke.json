@@ -1,0 +1,23 @@
+{
+  "about": "One puff of a campfire's smoke: a thin, wispy breath of grey that rolls up off the logs, opens and thins away. The hearth's wisp is many of these, each its own age; lit six ways (six_way), not glowing.",
+  "class": "smoke",
+  "kind": "oneshot",
+  "six_way": true,
+  "size": 128,
+  "frames": 64,
+  "step": 2,
+  "warmup": 0,
+  "fps": 24,
+  "samples": 64,
+  "domain": {
+    "center": [0, 0, 0.6], "size": [1.2, 1.2, 1.2], "resolution": 80, "noise": 2, "noise_strength": 2.0,
+    "vorticity": 0.45, "alpha": 0.0, "beta": 0.5, "dissolve": 70, "floor": false
+  },
+  "sources": [
+    { "shape": "sphere", "location": [0, 0, 0.3], "scale": [0.15, 0.15, 0.15], "behavior": "INFLOW", "until": 6,
+      "type": "SMOKE", "density": 0.5, "temperature": 1.0, "surface": 1.0, "normal": 0.6, "random": 0.4,
+      "texture": { "scale": 0.1, "speed": 0.0, "contrast": 1.8 } }
+  ],
+  "camera": { "center": [0, 0.6], "extent": 1.2 },
+  "passes": { "soot": 7 }
+}

@@ -109,7 +109,12 @@ Flipbooks are simulated, not filmed. Footage has no heat or cover of its own and
 - **motion**: the velocity in m/s (Mantaflow's is cells a second), weighted the same, projected onto the camera. It gives exact motion vectors, with no optical-flow guessing;
 - **depth**: the flame's and the smoke outside it's optical depths, so cover and soot are `1 - e^-depth`.
 
-Six-way smoke and inner glow are stage 4's: the same tool, with scattering renders added.
+A smoke set (`"six_way": true`, `campfire-smoke` and `house-smoke`) is one puff, a one-shot, rendered three times a frame. Single scatter is linear in light, so three suns of three colours light three sides in one render (the idea is Unity VFXToolbox's, the code ours):
+
+- **light0**: lit red from the right, green from the top, blue from behind; **light1** the opposite three;
+- **glow**: emits the smoke's heat and its density and absorbs its density, so G is exactly its alpha and R/G its mean heat.
+
+`smoke.ts` packs them as the smoke maps above, each the light over alpha (straight, for straight blending), times a `light_scale` in the sidecar. Its unit is a white Lambert surface facing the light; thin smoke lit from one side is about a quarter. Its line says the mean response from each side; `maps.png` shows the six maps, alpha and glow of four frames. Smoke has no motion vectors: its frames crossfade.
 
 `pack.ts` then:
 - scales heat so the set's 99th percentile is 0.97;
@@ -215,10 +220,11 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 
 ## The smoke
 
-- **Lit six ways**, by the sun's direction and by the nearest fire light's, from the smoke maps.
+- **Lit six ways**, from the smoke maps, by everything that lights a surface: the sun through the atmosphere and its shadows, every fire light in the cluster (held at its radius, as the fog's are), and the open sky from all six sides (`OpenSky` times the environment's brightness, the 2/3 so thin smoke gives back the sky itself). The card's frame comes from its uv's derivatives, so a turned card is lit from where its light is. A fire light under a young puff lights only its underside.
 - **Backlit**: a transmission term, so smoke between the camera and the sun or the fire glows at its rim (Cyberpunk 2077's backlighting).
-- **Lit from inside**: the emission channel times the fire's flicker, strongest just above the flames, so the column's underside glows orange (MEASURED observation 5).
-- **Dark**: its albedo is soot's, about 0.03-0.08, paling to grey only as it thins and climbs (D325's rule).
+- **Lit from inside**: the glow channel times the fire's heat, strongest just above the flames, so the column's foot glows orange (MEASURED observation 5).
+- **Dark**: its albedo is soot's, about 0.03-0.08, paling to grey only as it thins and climbs (D325's rule): a blaze's 0.03 to 0.15, a hearth's 0.08 to 0.3, never the pale 0.5 the fire's light turned salmon.
+- **Puffs**: each card plays frames 4 to 34 of a baked puff over its life, born a little open and done before the puff outgrows its frame; a hearth's wisp from `campfire-smoke`, a blaze's column and a breath's soot from `house-smoke`.
 - **Shadowing**: dense smoke casts into the sun's shadow map as a dithered caster at its density (Leaning). A burning building's column shades the ground downwind.
 - **Stable**: a smoke card's lighting eases over about a second, so dappled sun does not make it flicker (Monster Hunter World's Temporal Shadow).
 - **Soft**: faded where it meets geometry (depth fade) and near the camera.
