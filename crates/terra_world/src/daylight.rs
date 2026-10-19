@@ -375,6 +375,12 @@ fn light_at(height: f32) -> Light {
         .unwrap_or(keys[keys.len() - 1].1)
 }
 
+/// The sun's or the moon's illuminance, lux, with the sun so many degrees up.
+#[cfg(test)]
+pub(crate) fn illuminance(height: f32) -> f32 {
+    light_at(height).illuminance
+}
+
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -624,13 +630,17 @@ fn fade_colour(grade: &mut bevy::render::view::ColorGrading, height: f32) {
     // rods take over in dim light (mesopic vision), while the bright sky and a fire keep
     // theirs until the twilight goes. Faded all at once, from 4 degrees under, a dusk
     // under a pink sky was the noon's green land dimmed or a grey sky (lake film r7).
+    // By night only the dim loses its colour, the whole picture's fade on its shadows: a
+    // fire keeps its colour on what it lights, as an eye's cones see by a fire's light while
+    // its rods see the moonlit land round it. Faded over the whole picture, the ground a
+    // campfire lit at night kept 7% of its colour and stood grey (fire sheet, round 6).
     let day = smoothstep(-12.0, -4.0, height);
-    let saturation = super::scene::SATURATION * (NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day);
-    if (grade.global.post_saturation - saturation).abs() > 1e-4 {
-        grade.global.post_saturation = saturation;
+    let night = NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day;
+    if (grade.global.post_saturation - super::scene::SATURATION).abs() > 1e-4 {
+        grade.global.post_saturation = super::scene::SATURATION;
     }
     let lit = smoothstep(-3.0, 3.0, height);
-    let dim = DIM_SATURATION + (1.0 - DIM_SATURATION) * lit;
+    let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night;
     if (grade.shadows.saturation - dim).abs() > 1e-4 {
         grade.shadows.saturation = dim;
     }

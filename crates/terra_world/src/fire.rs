@@ -343,6 +343,7 @@ impl Puffs {
 pub fn plugin(app: &mut App) {
     seen::plugin(app);
     light::plugin(app);
+    fog::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -795,6 +796,7 @@ fn show(
     }
 }
 
+mod fog;
 mod light;
 mod seen;
 

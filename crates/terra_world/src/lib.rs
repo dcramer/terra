@@ -48,6 +48,7 @@ pub mod quality;
 pub mod record;
 pub mod remote;
 pub mod rises;
+pub mod scatter;
 pub mod scene;
 pub mod shader_patch;
 pub mod shell;

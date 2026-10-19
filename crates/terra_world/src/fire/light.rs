@@ -1,7 +1,8 @@
 //! The fires' light, by docs/fire.md's light rules (D415): one flicker per fire, the same
 //! signal driving the light's power, the flame's and embers' brightness and the char's glow;
 //! the light swaying on three axes by it, so the shadows it casts move as a real flame's do;
-//! shadows from the nearest few fire lights, which also shine in the volumetric fog; and a
+//! shadows from the nearest few fire lights, the kept fires' among them glowing in a fog volume
+//! of their own (`fog`); brighter by night than by day (`by_night`); and a
 //! dozen lights however much burns, gathered over cells, chosen by what the eye is near and
 //! eased out by 40 m (D127).
 //!
@@ -14,6 +15,7 @@ use super::{Blaze, Blazes, HEARTHS};
 use crate::planet::MainCamera;
 use crate::quality::Quality;
 use bevy::{
+    light::VolumetricLight,
     prelude::*,
     render::{
         Render, RenderApp, RenderSystems,
@@ -62,6 +64,21 @@ const SHADOW_M: [f32; 2] = [20.0, 23.0];
 /// How far a light sways for each metre of its flame's height, and the least and most.
 const SWAY_A_METRE: f32 = 0.07;
 const SWAY_M: [f32; 2] = [0.005, 0.4];
+/// How many stops brighter a fire's light is by night than by day, as Witcher 3 keys its
+/// fire's brightness to the hour in its environment curves: the night is drawn some stops
+/// brighter than a real one (the moon at 700 lux, the eye at EV 9, `daylight`), so a fire as
+/// bright as by day lit the ground round a campfire about as much as the moon did, grey and
+/// barely there (fire sheet, round 5: 380,000 lm, about 1,000 lux at 3 m), where in every
+/// game's night and every photograph a campfire's ground glows orange a few metres out; and
+/// as bright by day as by night, sunlit stone round it went salmon.
+const NIGHT_STOPS: f32 = 2.5;
+
+/// How many times brighter a fire's light is so far into the night (`Sky::night`, 0 by day,
+/// 1 in full dark) than by day.
+pub(super) fn by_night(night: f32) -> f32 {
+    libm::exp2f(NIGHT_STOPS * night.clamp(0.0, 1.0))
+}
+
 /// How many fire lights' places and flickers the char and embers of what burns are told.
 pub const GLOWS: usize = 16;
 
@@ -157,6 +174,8 @@ pub(super) struct Lit {
     pub radius: f32,
     /// Its flicker now, a share of its mean.
     pub glow: f32,
+    /// Whether it is a kept fire's, which glows in the air round it (`fog`).
+    pub kept: bool,
 }
 
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
@@ -200,6 +219,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
+                    kept: false,
                 }
             })
         })
@@ -218,6 +238,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
             range: HEARTH_RANGE_M,
             radius: width(blaze) * 0.5,
             glow,
+            kept: true,
         }
     }));
     // Each gathering's light hangs out from the middle of all that burns, on the outside of
@@ -257,6 +278,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
                 range: LIGHT_RANGE_M,
                 radius: (wide * 0.5).min(2.0),
                 glow,
+                kept: false,
             }
         })
         .collect();
@@ -429,13 +451,21 @@ fn write_glows(
 /// the light entities, and their places and flickers told to what burns.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn light(
+    mut commands: Commands,
     time: Res<Time>,
     quality: Res<Quality>,
+    sky: Option<Res<crate::sky::Sky>>,
     blazes: Res<Blazes>,
     drawn: Res<super::Drawn>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut lights: Query<(&mut PointLight, &mut Transform, &mut Visibility)>,
+    mut lights: Query<(
+        &mut PointLight,
+        &mut Transform,
+        &mut Visibility,
+        Has<VolumetricLight>,
+    )>,
     mut glows: ResMut<FireGlows>,
+    mut fog: ResMut<super::fog::Glows>,
 ) {
     let t = time.elapsed_secs_wrapped();
     let was: Vec<Was> = drawn
@@ -448,7 +478,7 @@ pub(super) fn light(
                     on: false,
                     shadows: false,
                 },
-                |(light, transform, visibility)| Was {
+                |(light, transform, visibility, _)| Was {
                     at: transform.translation,
                     on: *visibility != Visibility::Hidden,
                     shadows: light.shadow_maps_enabled,
@@ -458,22 +488,37 @@ pub(super) fn light(
         .collect();
     let eye = camera.iter().next().map(GlobalTransform::translation);
     let shown = choose(lit(&blazes, t), eye, &was, shadowed(*quality));
+    let by_night = by_night(sky.map_or(0.0, |sky| sky.night));
     let mut told = [[0.0f32; 4]; GLOWS];
+    let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
-        let Ok((mut light, mut transform, mut visibility)) = lights.get_mut(entity) else {
+        let Ok((mut light, mut transform, mut visibility, volumetric)) = lights.get_mut(entity)
+        else {
             continue;
         };
         match shown {
             Some(Shown { lit, fade, shadows }) => {
-                light.intensity = lit.lumens * fade;
+                light.intensity = lit.lumens * fade * by_night;
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
                 transform.translation = lit.at;
                 *visibility = Visibility::Inherited;
-                // No `VolumetricLight`: a blaze's tens of millions of lumens in the haze
-                // washed its whole frame orange at dusk and white at night (fire sheet, round 5).
                 light.shadow_maps_enabled = shadows;
+                // A kept fire's shadowed light shines in the air round it (`fog`), sampling
+                // its shadows there; a blaze's stays out of the fog, where its tens of
+                // millions of lumens lit a ball of air brighter than the house (round 6).
+                let scatters = shadows && lit.kept;
+                if scatters != volumetric {
+                    if scatters {
+                        commands.entity(entity).insert(VolumetricLight);
+                    } else {
+                        commands.entity(entity).remove::<VolumetricLight>();
+                    }
+                }
+                if scatters {
+                    wanted.push(super::fog::Glow::of(lit.at, lit.radius, fade));
+                }
                 if let Some(slot) = told.get_mut(i) {
                     *slot = lit.at.extend(lit.glow * fade.max(0.01)).to_array();
                 }
@@ -481,12 +526,18 @@ pub(super) fn light(
             None => {
                 light.intensity = 0.0;
                 light.shadow_maps_enabled = false;
+                if volumetric {
+                    commands.entity(entity).remove::<VolumetricLight>();
+                }
                 *visibility = Visibility::Hidden;
             }
         }
     }
     if told != glows.glows {
         glows.glows = told;
+    }
+    if fog.0 != wanted {
+        fog.0 = wanted;
     }
 }
 

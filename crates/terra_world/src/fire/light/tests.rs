@@ -130,6 +130,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         range: 20.0,
         radius: 0.5,
         glow: 1.0,
+        kept: false,
     }
 }
 
@@ -215,4 +216,39 @@ fn a_lights_shadows_stay_on_it_until_it_is_well_past_their_reach() {
     );
     assert_eq!(shown[0].as_ref().unwrap().lit.at.x, 10.0);
     assert_eq!(shown[1].as_ref().unwrap().lit.at.x, 5.0);
+}
+
+/// The illuminance a light gives the ground so far out from under it, lux.
+fn on_ground(lit: &Lit, foot: Vec3, out: f32, lumens: f32) -> f32 {
+    let h = lit.at.y - foot.y;
+    lumens / (4.0 * core::f32::consts::PI) * h / libm::powf(h * h + out * out, 1.5)
+}
+
+#[test]
+fn by_night_a_campfire_lights_the_ground_round_it_brighter_than_the_moon_and_by_day_barely() {
+    // The fire sheet's campfire: 1.5 m of flame at 0.9 heat, 0.7 m wide.
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: foot,
+            tall: 1.5,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.7,
+        }],
+        ..default()
+    };
+    let lit = lit(&blazes, 0.0).remove(0);
+    assert!(lit.kept);
+    // By full night the ground 3 m out is lit several times as brightly as the moon lights
+    // it (round 5: about as brightly, and it stood grey), and 5 m out still more brightly.
+    let moon = crate::daylight::illuminance(-18.0);
+    let night = lit.lumens * by_night(1.0);
+    let near = on_ground(&lit, foot, 3.0, night);
+    assert!(near > 3.0 * moon, "{near} lux at 3 m by a {moon} lux moon");
+    assert!(on_ground(&lit, foot, 5.0, night) > moon);
+    // By day a few percent of the sun's, so sunlit stone round it keeps its colour.
+    let sun = crate::daylight::illuminance(50.0);
+    let day = on_ground(&lit, foot, 3.0, lit.lumens * by_night(0.0));
+    assert!(day < 0.05 * sun, "{day} lux at 3 m in a {sun} lux sun");
 }

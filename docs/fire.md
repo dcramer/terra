@@ -200,10 +200,12 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - The nearest two fire lights within 20 m cast shadows; four on the high setting.
   - A held torch always does.
   - Bevy's point light has no shadow strength. A light's shadows switch on and off with hysteresis while its power eases. Porting a shadow-fade (D184) is a later stage, if the switch shows.
+- **By night.** A fire's light is 2.5 stops brighter by full night than by day (`Sky::night`), as The Witcher 3 keys its fire to the hour: our night is drawn some stops brighter than a real one (a 700 lux moon at EV 9), so a fire as bright as by day lit the ground 3 m out about as much as the moon and stood grey; as bright by day as by night, sunlit stone went salmon. The night grade fades only the dim (D302), so the ground a fire lights keeps its orange.
 - **Fog.**
-  - Fire lights carry no `VolumetricLight`: in the haze's fog volume a blaze's tens of millions of lumens washed its whole frame orange at dusk and white at night (fire sheet, round 5). A fire's glow in the air waits for its own fog volume with a bounded scatter.
-  - Each fire puts a `FogVolume` round itself: denser and absorbing where its smoke is, so the air near it glows orange and the smoke above it darkens.
-  - Bevy's fog volumes have no emission term. Enshrouded's emissive fog volume is a later stage (D184).
+  - Bevy's volumetric fog scattered a point light with no phase function (`terra_world::scatter` patches it with the directional light's Henyey-Greenstein).
+  - A blaze's light stays out of the fog: in the haze its tens of millions of lumens lit a ball of air brighter than the house (fire sheet, rounds 5 and 6).
+  - Each of the nearest kept fires with a shadowed light (four at most) puts a small `FogVolume` round its light (`fire::fog`): a ball of air densest at the flames, a few metres across, thickening as night comes, which of the fire lights only kept fires' shine in. The haze's own box is too big for a campfire's glow to show in it.
+  - Its smoke's absorption, darkening the air above, and Enshrouded's emissive fog volume are later stages (D184).
 - **LOD.**
   - Light to 40 m, shadows to 20 m (Valheim), eased, never popped.
   - Past 40 m a fire keeps its flare and an emissive glow card, with no light.
@@ -352,7 +354,7 @@ Each stage lands on main, passes the check, and shows a visible improvement on t
 |---|---|---|
 | 0. The check | `tools/fire/measure.ts` and its tests, `references.json` with at least eight photos a class, the xtask task `fire` with today's fires as presets | Today's fires measured. They are expected to fail on yellow and on red, soot and dim shares, and the table says where. |
 | 1. Curve and exposure | the tonemapper bake-off (Bevy's five and a Hable port), then the exposure weight | Bake-off table of bands per candidate and scene looks per candidate. The developers see the sheet before a camera-wide change. |
-| 2. Light | clustered fire lights; flicker with three-axis jitter; shadows near; `VolumetricLight` tried and left out (it washed the frame out); a fog volume per fire; the flicker linked to fuel glow and sparks | The night sheet's lit-ground metric; a film of a campfire's swimming shadows; bench. |
+| 2. Light | clustered fire lights; flicker with three-axis jitter; shadows near; brighter by night; a fog volume per kept fire, blazes out of the fog; the flicker linked to fuel glow and sparks | The night sheet's lit-ground metric; a film of a campfire's swimming shadows; bench. |
 | 3. Channels and ramp | the flame map format, `ramp.ts` and the ramp, premultiplied drawing; `tools/fire/bake/` and the first Mantaflow sets (body, licks) | Band shares within range for campfire and building. |
 | 4. Smoke | the six-way smoke maps baked; lit, backlit, from-inside smoke; shadow caster | Soot over flame and edge soot within range; smoke reads dark by day on the sheet. |
 | 5. Small fires as presets | `fire.ron`; candle, torch, campfire, brazier, embers; flare and sparks | Every small kind passes the check at three hours. |
