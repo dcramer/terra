@@ -50,6 +50,7 @@ const MODULES: &[&[Task]] = &[
     tasks::art::TASKS,
     seed::TASKS,
     worktrees::TASKS,
+    tasks::machine::TASKS,
     tasks::docs::TASKS,
     TASKS,
 ];

@@ -12,7 +12,9 @@
 //! the same turn: `flock ~/.cache/terra/gpu.lock <command>` for a measurement of one's own,
 //! `flock --shared` for anything else that renders heavily. A run started under such a turn, as
 //! one is when its script is wrapped in `flock`, has it already: on Linux it finds the lock held
-//! by one of its own forebears (`/proc/locks`) and goes on, where it once waited on itself.
+//! by one of its own forebears (`/proc/locks`) and goes on, where it once waited on itself,
+//! and takes no slot either. That is how a run under `cargo xtask gpu` (tools/gpu) starts: the
+//! scheduler admits it by the GPU's free memory and holds the lock for it, shared or alone.
 
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
@@ -51,7 +53,10 @@ pub fn take(alone: bool) {
     else {
         return;
     };
-    if !alone {
+    // A turn a forebear holds (the GPU scheduler's, or a script's `flock`) was admitted by
+    // whoever took it, so neither the lock nor a slot is waited for.
+    let above = held_above(&file);
+    if !alone && !above {
         take_slot(&path);
     }
     let free = if alone {
@@ -59,7 +64,7 @@ pub fn take(alone: bool) {
     } else {
         file.try_lock_shared().is_ok()
     };
-    if !free && !held_above(&file) {
+    if !free && !above {
         println!(
             "SANDBOX waiting for the GPU: {} holds {}",
             if alone {

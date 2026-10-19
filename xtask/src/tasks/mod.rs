@@ -3,6 +3,7 @@
 
 pub(crate) mod art;
 pub(crate) mod docs;
+pub(crate) mod machine;
 pub(crate) mod play;
 pub(crate) mod sandbox;
 pub(crate) mod world;
