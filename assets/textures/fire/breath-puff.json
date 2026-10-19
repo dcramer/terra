@@ -1,6 +1,6 @@
 {
   "set": "breath-puff",
-  "about": "One puff of a dragon's breath: a gob of burning fuel thrown out, flaring, rolling and burning down to soot. The breath's stream is many of these, each its own age; the flamethrower class's one-shot.",
+  "about": "One puff of a dragon's breath: a gob of burning fuel thrown out, flaring through its flight (frames 0-12) and largest as it spreads where it lands (to 21), then rolling up as soot. The breath's stream is many of these, each its own age; the flamethrower class's one-shot.",
   "kind": "oneshot",
   "class": "flamethrower",
   "frames": 64,
@@ -9,17 +9,18 @@
   "frame": 256,
   "fps": 24,
   "metres": 1.6,
+  "reach": 0.969,
   "channels": "R heat, G cover, B soot, A distortion",
   "motion": {
     "file": "breath-puff.motion.png",
     "frame": 128,
-    "scale": 0.02271,
+    "scale": 0.03969,
     "channels": "RG flow to the next frame in frame widths: (v - 0.5) * 2 * scale, y down"
   },
   "baked": {
-    "heat_scale": 1.5204,
-    "flow_gain": 0.592,
-    "flow_fit": 1.81,
+    "heat_scale": 1.3977,
+    "flow_gain": 0.712,
+    "flow_fit": 1.23,
     "seam": 0
   }
 }

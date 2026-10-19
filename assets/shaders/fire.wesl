@@ -103,8 +103,10 @@ const BALL_BRIGHTNESS: f32 = 3.5;
 // not yellower (breath r3: 9 against 5.5, yellow 3% both, B/R 0.66 to 0.72), as the
 // tonemapper keeps a hue; a fuel jet's flame is mostly yellow (MEASURED.md §2). At 1.5 it
 // went 74% pale (r4), at 1.25 33% (r5). Once its puffs covered rather than summed, 1.2 was
-// 68% yellow and 19% red and orange against at least 30 (r9), 1.0 holds (r10).
-const BREATH_HEAT: f32 = 1.0;
+// 68% yellow and 19% red and orange against at least 30 (r9), 1.0 holds (r10). The puff set
+// rebaked to burn longer packs its heat about 8% lower (heat scale 1.40, was 1.52): at 1.0 it
+// was 49% orange, at 1.09 31% pale at dusk with soot at its edge (r18, r20).
+const BREATH_HEAT: f32 = 1.05;
 const BLAST_BRIGHTNESS: f32 = 5.0;
 // A breath's core: how much hotter its puffs burn in their first frames, and how much
 // brighter those on its line in its first third (`breath_sprite`).
@@ -463,7 +465,7 @@ fn breath_of(slot: u32) -> Breath {
 // inside the sprites that carry the stream's turbulence; it burns out by `ROD_ENDS` of the
 // way, where the stream is all puffs.
 const ROD_WIDTH: f32 = 0.35;
-const ROD_ENDS: f32 = 0.6;
+const ROD_ENDS: f32 = 0.8;
 fn stream_radius(z: f32, b: Breath) -> f32 {
     return (0.22 + b.spread * z * (0.7 + 0.5 * saturate(z / b.reach))) * ROD_WIDTH;
 }
@@ -780,13 +782,19 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let out_of_line = b.lift * cos(a) + b.side * sin(a);
         let near = smoothstep(0.0, 0.35 * b.reach, d);
         let r = (0.08 + b.spread * 0.45 * d) * sqrt(h2) * 0.9 * mix(0.35, 1.0, near);
-        // Landed, it splashes out along what it struck, rolls back off it and rises.
-        // Mostly up, as its soot rises in a plume off what it struck.
-        let splash = out_of_line * post * (1.5 + 2.0 * h3) + up * post * (2.5 + 2.0 * h4) - b.way * post * 0.3;
+        // Landed, it splashes out across the face it struck, slowing (a flamethrower's fuel
+        // spreads along a wall and does not fly back off it), most of it up the face rather than
+        // down, and climbs it fast while it still burns, lifting off it only a little as it
+        // rises: the flame licking up the struck face, its soot a plume over it. Climbing at
+        // the rate soot rises, the flame had burnt out 0.6 m up (breath r21's review).
+        let spread_on = post / (post + 0.25);
+        let across = b.side * sin(a) * (1.6 + 2.0 * h3) + b.lift * (0.6 + 1.6 * abs(cos(a)));
+        let splash = across * 1.1 * spread_on + up * post * (2.5 + 2.5 * h4) * (0.5 + post) - b.way * post * 0.4;
         let at = b.mouth + b.way * d + out_of_line * r + splash;
         // As big as the stream is wide there, and swelling as it burns out: a tight rope for
         // its first third, so its hot core reads (as wide as the rod from the jaw, it was lost).
-        // The set's puff fills a fifth of its frame as it flares.
+        // The set's puff fills a fifth of its frame as it flares (cut to a quarter, the stream
+        // went thin and the climbing soot showed through it as a gap, breath r22).
         let wide = mix(0.1 + 0.08 * d, 0.35 + 0.2 * d, near) * (0.75 + 0.5 * h3) + post * 1.2;
         let card_m = wide / 0.2;
         // Drawn along the stream as it flies, stretched along it near the jaw; its smoke
@@ -797,16 +805,23 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let world = sprite(at, line, corner, card_m, card_m * stretch, spin);
         // Its edge burns out first: a puff flung out from the line plays on into the set's
         // soot in the stream's back half, so soot folds out of its edges, as a fuel jet's does.
-        let edge = smoothstep(0.45, 1.0, h2);
+        // Its top edge only, as soot rolls up off a flamethrower's rope (M113, Iraq photos).
+        let edge = smoothstep(0.45, 1.0, h2) * smoothstep(-0.3, 0.6, cos(a));
+        // The set burns from frame 0 to 21, its flame largest at 15 and cooling: its middle
+        // reaches the wall at frame 12, still burning, and burns its largest on the wall for
+        // 0.3 s before its soot rolls up (to frame 9 in flight its puffs were smaller and the
+        // climbing soot showed through the stream's back half as a gap, breath r23).
         let flown = 12.0 * pow(s, 0.85) * (1.0 + 0.7 * edge * smoothstep(0.65, 1.0, s));
-        let frame = select(flown, 12.0 + 8.4 * edge + 34.0 * post / PUFF_LINGER_S, s >= 1.0);
+        let frame = select(flown, 12.0 * (1.0 + 0.7 * edge) + 29.0 * post, s >= 1.0);
         let fade = smoothstep(0.0, 0.04, age) * (1.0 - smoothstep(0.6, 1.0, post / PUFF_LINGER_S)) * b.left;
         out.clip = position_world_to_clip(world);
         out.uv = corner;
         // Its middle near the jaw brightest, past the tonemapper's knee to white-yellow: the
         // core a fuel jet's rope shows there before it opens out.
+        // Burning as bright to the wall, brightest as it splashes there.
         let core = 1.0 + BREATH_CORE * (1.0 - h2) * (1.0 - near);
-        out.life = vec4(frame, PUFF_BRIGHTNESS * mix(1.25, 0.85, gone) * core, h3, f32(SET_BREATH_PUFF));
+        let strike = 1.0 + 0.25 * step(1.0, s) * (1.0 - smoothstep(0.0, 0.35, post));
+        out.life = vec4(frame, PUFF_BRIGHTNESS * mix(1.2, 1.05, gone) * core * strike, h3, f32(SET_BREATH_PUFF));
         out.size = card_m;
         out.glow = max(fade, 1.0e-3);
         return out;
