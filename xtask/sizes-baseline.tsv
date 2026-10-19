@@ -1,9 +1,8 @@
 # What was over the size limits (files over 1,000 lines, functions over 150) when the
 # ratchet began, as it is now (D396). Each may shrink, never grow, and nothing is added:
-# the scheduled full run (`cargo xtask sizes --lower`, D414) lowers it and drops what is under.
+# the full run on main (`cargo xtask nightly`) (`cargo xtask sizes --lower`, D414) lowers it and drops what is under.
 # path	function (- for the file)	lines
-crates/terra_build/examples/artifacts.rs	fuzz	152
-crates/terra_build/examples/artifacts.rs	main	221
+crates/terra_build/examples/artifacts.rs	main	202
 crates/terra_build/examples/drawing.rs	main	204
 crates/terra_build/examples/sections.rs	main	196
 crates/terra_build/src/checker.rs	check	197
@@ -38,7 +37,6 @@ crates/terra_build/src/packs.rs	-	1298
 crates/terra_build/src/plans.rs	-	1678
 crates/terra_build/src/roofing.rs	-	1167
 crates/terra_build/src/roofing.rs	draw_as	155
-crates/terra_build/src/scenes/burg.rs	burg	167
 crates/terra_build/src/scenes/castle.rs	castle	162
 crates/terra_build/src/scenes/fuzz.rs	elements	223
 crates/terra_build/src/scenes/qa_cabin.rs	cabin	156
@@ -47,7 +45,7 @@ crates/terra_build/src/scenes/sheet.rs	-	1181
 crates/terra_build/src/sections/details.rs	draw_details	281
 crates/terra_build/src/sections/ghosts.rs	ghost	156
 crates/terra_build/src/sections/parts.rs	cluster_keys	212
-crates/terra_build/src/sections/tests.rs	-	2729
+crates/terra_build/src/sections/tests.rs	-	2725
 crates/terra_build/src/surface.rs	-	1228
 crates/terra_build/src/surface/slots.rs	-	1701
 crates/terra_build/src/surface/slots.rs	face	265
@@ -55,7 +53,7 @@ crates/terra_build/src/surface/slots.rs	of	159
 crates/terra_build/src/timber/shapes.rs	round	174
 crates/terra_build/src/town/paths.rs	paths	183
 crates/terra_build/src/town/svg.rs	svg	194
-crates/terra_build/src/village.rs	-	1584
+crates/terra_build/src/village.rs	-	1293
 crates/terra_build/src/village.rs	village	197
 crates/terra_build/tests/decks.rs	check	231
 crates/terra_build/tests/rules.rs	-	1029
