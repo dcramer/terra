@@ -111,6 +111,8 @@ struct Out {
     size: f32,
     // Where the corner is in the world (a breath's hull's only).
     world: vec3<f32>,
+    // Its fire's flicker now, a share of its mean (a blaze's, a hearth's; 0 for one of its own).
+    glow: f32,
 };
 
 // How bright glowing soot is taken to be, on the luminances `soot` works from.
@@ -646,7 +648,7 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
 // bed of coals glowing among its logs, low and wide; then a tongue over its middle as tall as
 // it was made, and four shorter ones round it over the logs, each of its own height and its
 // own moment of the flipbook, leaning and licking as they will.
-fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, time: f32) -> Out {
+fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32) -> Out {
     var out: Out;
     let wide = select(clamp(tall * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
     let j = i32(phase * 6.0 + 0.5);
@@ -663,8 +665,8 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         out.size = h;
         return out;
     }
-    let puff_hz = 1.5 / sqrt(wide);
-    let breathe = 1.0 + 0.18 * sin(time * puff_hz * 6.283 * (0.8 + 0.4 * luck) + luck * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + luck * 9.0));
+    // Each tongue rises and falls with the fire's flicker, some more than others.
+    let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
     // A fire is made as tall as its flames reach over its logs, which stand about four
     // fifths as tall: each tongue must clear them, or the logs hide it (lake film r5).
     var flame = tall * breathe * 1.1;
@@ -742,6 +744,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let heat = b.x;
     let seed = b.y;
     let broad = b.z;
+    // Its flicker now (crates/terra_world/src/fire/light.rs `glow`), which its light burns by
+    // too: its flames are as much brighter and taller, its sparks and coals brighter still.
+    let glow = max(b.w, 0.0);
     if tall <= 0.0 {
         return nowhere();
     }
@@ -760,12 +765,15 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         return out;
     }
     // A kept fire's flames are a hearth's (`hearth`), drawn by cards of their own.
-    let is_hearth = b.w > 0.5 && slot < HEARTHS;
+    let kept_slot = select(0.0, 1.0, slot < u32(fire.kind.w + 0.5));
+    let is_hearth = slot < min(u32(fire.kind.w + 0.5), HEARTHS);
     if kind == 0 && (phase >= 1.0) != is_hearth {
         return nowhere();
     }
     if kind == 0 && is_hearth {
-        return hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, time);
+        var tongue = hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, glow);
+        tongue.glow = glow;
+        return tongue;
     }
     // A hearth's sparks are cards of their own too, more of them than a burning roof's.
     if kind == 1 && (phase >= 1.0) != is_hearth {
@@ -784,19 +792,19 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         let own = vec3(fract(seed * 12.9898), fract(seed * 78.233), fract(seed * 37.719));
         // A broad surface burning as one blaze is a sheet of fire its own width.
         let wide = select(clamp(tall * 0.8, 0.8, 2.8), broad, broad > 0.0);
-        let puff_hz = 1.5 / sqrt(wide);
-        let breathe = 1.0 + 0.15 * sin(time * puff_hz * 6.283 + seed * 40.0) * (0.6 + 0.4 * sin(time * puff_hz * 2.7 + seed * 9.0));
+        // Its height breathes with its flicker, at the puffing rate of a fire that wide.
+        let breathe = 1.0 + (glow - 1.0);
         // A kept fire is as tall as it was made, its flames sized to clear its own logs; a
         // grid's blazes each a little taller or shorter.
-        let flame = tall * breathe * mix(0.5 + 1.2 * own.z * own.z, 1.0, b.w);
+        let flame = tall * breathe * mix(0.5 + 1.2 * own.z * own.z, 1.0, kept_slot);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
         let lean = wind * 0.05 * flame;
         var w = wide * 1.9;
         var h = flame * 1.75;
         // A kept fire (a campfire) stands just where it is, not off a grid cell's middle.
-        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45) * (1.0 - b.w);
-        if b.w < 0.5 {
+        var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45) * (1.0 - kept_slot);
+        if kept_slot < 0.5 {
             // A grid's blaze is one filmed fire, a bonfire's width, and one in three is
             // only its embers and smoke: each frame of the footage is a whole fire of many
             // tongues, so three to a blaze two metres apart, each wider than the cell, were
@@ -823,6 +831,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         out.uv = corner;
         out.life = vec4(0.5, heat, luck, 1.0);
         out.size = h;
+        out.glow = glow;
         return out;
     }
     // An ember: only some blazes throw them, the hotter the more; a hearth a few always,
@@ -858,12 +867,13 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     out.clip = position_world_to_clip(world);
     out.uv = corner;
     out.life = vec4(t, heat, luck, 2.0);
+    out.glow = glow;
     return out;
 }
 
 // `soft` is how far it has faded in front of what is behind it: taken as less soot glowing,
 // so a flame meeting the roof it stands on goes dull red there rather than a dim yellow.
-fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
+fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> vec4<f32> {
     let kind = i32(fire.kind.x + 0.5);
     let time = fire.kind.z;
     let t = life.x;
@@ -880,7 +890,8 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         let p = (uv - vec2(0.5, 0.45)) * vec2(2.0, 2.2);
         let bed = 1.0 - smoothstep(0.35, 1.0, length(p));
         let coals = fbm(uv * vec2(9.0, 5.0) + vec2(luck * 17.0, 0.0));
-        let breath = 0.75 + 0.25 * sin(time * (0.9 + 1.7 * coals) + coals * 23.0);
+        // Brighter as the fire flares, by twice its flicker, the brightest coals the most.
+        let breath = (0.8 + 0.2 * coals) * max(1.0 + 2.0 * (glow - 1.0), 0.2);
         let glow = bed * smoothstep(0.3, 0.75, coals) * breath;
         let alpha = smoothstep(0.02, 0.35, glow) * soft;
         // Hot enough to read orange by day: at 1000 to 1500 K it was a dull red lost under
@@ -926,6 +937,13 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32) -> vec4<f32> {
         light = soot(mix(1640.0, 1300.0, t) + 80.0 * uv.y, alpha);
         cover = covers(light, alpha);
     }
+    // The fire's flicker, which its light burns by too: its flames as much brighter, its
+    // sparks by twice as much (its coals' is in their glow above).
+    if kind == 0 && life.w < 2.5 {
+        light *= glow;
+    } else if kind == 1 {
+        light *= max(1.0 + 2.0 * (glow - 1.0), 0.2);
+    }
     if max(light.r, cover) < 0.002 {
         discard;
     }
@@ -944,7 +962,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
     out.position = placed.clip;
 @if(!PREPASS_PIPELINE) {
-    out.world_position = vec4(placed.world, 1.0);
+    // The fire's flicker rides in the position's w, read only by `shade`.
+    out.world_position = vec4(placed.world, select(1.0, placed.glow, placed.glow > 0.0));
     // The card's life rides where a normal would.
     out.world_normal = placed.life.xyz;
     out.uv = placed.uv;
@@ -1012,6 +1031,6 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);
     }
-    out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft);
+    out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft, in.world_position.w);
     return out;
 }

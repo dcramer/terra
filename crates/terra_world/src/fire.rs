@@ -11,8 +11,8 @@
 //! heart, never white or pink by day), faded in where they meet what is behind; embers as
 //! sparks stretched along their flight, rising with the plume and carried downwind; smoke
 //! above as near-black lit cards paling as they climb, glowing from under where the fire is;
-//! heat haze over the flames; and a few point lights where the fire is greatest, flickering
-//! as a fire that size puffs, not one a flame.
+//! heat haze over the flames; and a few point lights where the fire is greatest (`light`),
+//! each fire flickering by one signal that its light, flames, embers and char all follow.
 //!
 //! Every blaze is a slot of one buffer the GPU reads, so all flames are one draw, all
 //! embers another, all smoke a third, however many burn; how many slots, by the preset.
@@ -89,21 +89,6 @@ pub struct Kindled {
     pub heat: f32,
 }
 
-/// How a fire's light wavers at a time, for a light of its own number and so bright: as a
-/// fire that size puffs (1.5 / sqrt(D) Hz, D its width, taken from its light), up to 4 Hz,
-/// by a fifth either way for a small fire and less for a big one, whose many flames even
-/// out; and how far it bobs up and down, in metres.
-fn flicker(t: f32, k: f32, lumens: f32) -> (f32, f32) {
-    let wide = (lumens / LUMENS_A_METRE).sqrt().clamp(0.5, 8.0);
-    let hz = (1.5 / wide.sqrt()).min(4.0);
-    let reach = 0.22 - 0.14 * ((wide - 0.5) / 7.5);
-    let a = core::f32::consts::TAU * hz * t + k;
-    let wave = 0.55 * libm::sinf(a)
-        + 0.3 * libm::sinf(a * 2.31 + 1.3 * k)
-        + 0.15 * libm::sinf(a * 4.7 + 0.4);
-    (1.0 + reach * wave, 0.2 * libm::sinf(a * 0.7 + 2.0 * k))
-}
-
 /// How many blazes are drawn at most, by preset.
 pub fn slots(quality: Quality) -> usize {
     match quality {
@@ -130,10 +115,6 @@ const HEARTH_FLAME_CARDS: usize = 6;
 const HEARTH_SMOKE_CARDS: usize = 24;
 /// A hearth's sparks, ten or so a second rising from its coals, a few seen at once.
 const HEARTH_EMBER_CARDS: usize = 16;
-/// A hearth's light, lumens for a fire a metre tall at full heat, and how far it reaches: a
-/// campfire lights the faces round it and a ring of the ground, not the trees across a lake.
-const HEARTH_LUMENS_A_METRE: f32 = 280_000.0;
-const HEARTH_RANGE_M: f32 = 14.0;
 /// How many cards a jet is, and how many jets are drawn.
 const JETS: usize = 2;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
@@ -145,33 +126,6 @@ const SOOT_PUFFS: usize = 320;
 const DROPS: usize = 112;
 const SOOT_A_SECOND: f32 = 55.0;
 const DROPS_A_SECOND: f32 = 45.0;
-/// How many point lights the fires are lit by, and how far round each its fire is gathered,
-/// in metres.
-const LIGHTS: usize = 12;
-const LIGHT_CELL_M: f32 = 9.0;
-/// How far out from the middle of all that burns a gathering's light hangs, metres.
-const LIGHT_OUT_M: f32 = 3.0;
-/// A blaze's light, in lumens for a blaze a metre tall at full heat, how far it reaches, and
-/// the most one light gives: still some times a real fire's, for the film, but no longer so
-/// much that sunlit stone round a fire goes salmon pink; a breath's brighter, as every game
-/// that draws one well lights the ground under it. Eight lights at 3e7 left the walls round a
-/// burning keep unlit by it in daylight (castle film r7).
-const LUMENS_A_METRE: f32 = 500_000.0;
-const MOST_LUMENS: f32 = 4.0e7;
-/// How far a blaze's light and a jet's reach, metres: at 55 every light tinted every sunlit wall
-/// of the burg a uniform salmon (r8's first probe), where firelight by day shows only close
-/// round the fire.
-const LIGHT_RANGE_M: f32 = 22.0;
-const JET_RANGE_M: f32 = 30.0;
-/// A jet's light just past the mouth, on the breather's head and neck, along its stream and
-/// where it strikes: at 1e7 the dragon and the wall it struck showed none of it by day (castle
-/// film r7). Its colour the stream's yellow, a blaze's the orange of burning timber.
-const JET_LUMENS: f32 = 5.0e7;
-const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
-const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
-/// A campfire's, wood's flame about 1,800 K: an orange, not the yellow the grass turned a
-/// timber blaze's (lake film r5).
-const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.5, 0.18);
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
@@ -179,7 +133,7 @@ const LEAST_DRAUGHT_MPS: f32 = 1.6;
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
 pub struct FireUniform {
     /// x which cards (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time
-    /// the cards move by, w unused.
+    /// the cards move by, w how many of the first slots are kept fires.
     kind: Vec4,
     /// The wind where the fire is, metres a second in the world, and its strength.
     wind: Vec4,
@@ -274,7 +228,7 @@ pub struct FireSmokeUniform {
     /// The wind, and how many slots are filled.
     wind: Vec4,
     /// x which smoke (0 over the blazes, 1 a breath's soot), y the time the puffs were let
-    /// go by.
+    /// go by, w how many of the first slots are kept fires.
     kind: Vec4,
 }
 
@@ -385,6 +339,7 @@ impl Puffs {
 
 pub fn plugin(app: &mut App) {
     seen::plugin(app);
+    light::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -392,7 +347,7 @@ pub fn plugin(app: &mut App) {
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, scorch)
-        .add_systems(PostUpdate, (keep, blow, show, light).chain());
+        .add_systems(PostUpdate, (keep, blow, show, light::light).chain());
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
@@ -639,15 +594,15 @@ fn setup(
         })
     });
     spawn_cards(&mut commands, &mut meshes, count, &fire, &smoke);
-    let lights = (0..LIGHTS)
+    let lights = (0..light::LIGHTS)
         .map(|i| {
             commands
                 .spawn((
                     Name::new(format!("Fire: light {i}")),
                     PointLight {
-                        color: BLAZE_LIGHT,
+                        color: Color::WHITE,
                         intensity: 0.0,
-                        range: LIGHT_RANGE_M,
+                        range: 1.0,
                         radius: 1.0,
                         shadow_maps_enabled: false,
                         ..default()
@@ -783,18 +738,14 @@ fn show(
 ) {
     let now = time.elapsed_secs_wrapped();
     let count = blazes.all().count().min(slots(*quality));
+    // The kept fires come first, told how many so they stand just where they are.
+    let kept = blazes.kept.len().min(count);
     if let Some(mut buffer) = buffers.get_mut(&drawn.slots) {
         let mut data: Vec<[f32; 4]> = Vec::with_capacity(slots(*quality) * 2);
-        // The kept fires first, marked so they stand just where they are.
-        let kept = blazes.kept.len();
-        for (i, blaze) in blazes.all().take(count).enumerate() {
+        for blaze in blazes.all().take(count) {
             data.push([blaze.at.x, blaze.at.y, blaze.at.z, blaze.tall]);
-            data.push([
-                blaze.heat,
-                blaze.seed,
-                blaze.wide,
-                f32::from(u8::from(i < kept)),
-            ]);
+            // Its flicker now, which its flames, embers and light all burn by (`light::glow`).
+            data.push([blaze.heat, blaze.seed, blaze.wide, light::glow(blaze, now)]);
         }
         data.resize(slots(*quality) * 2, [0.0; 4]);
         *buffer = ShaderBuffer::from(data);
@@ -824,7 +775,8 @@ fn show(
     let wind = drawn.wind.extend(drawn.wind.length());
     for (kind, handle) in drawn.fire.iter().enumerate() {
         if let Some(mut material) = fires.get_mut(handle) {
-            material.extension.uniform.kind = Vec4::new(kind as f32, count as f32, now, 0.0);
+            material.extension.uniform.kind =
+                Vec4::new(kind as f32, count as f32, now, kept as f32);
             material.extension.uniform.wind = wind;
             material.extension.uniform.jets = jets;
         }
@@ -832,140 +784,15 @@ fn show(
     for (kind, handle) in drawn.smoke.iter().enumerate() {
         if let Some(mut material) = smokes.get_mut(handle) {
             material.extension.uniform.wind = drawn.wind.extend(count as f32);
-            material.extension.uniform.kind = Vec4::new(kind as f32, now, 0.0, 0.0);
+            material.extension.uniform.kind = Vec4::new(kind as f32, now, 0.0, kept as f32);
         }
     }
 }
 
-/// One of the fires' lights.
-struct Lit {
-    at: Vec3,
-    lumens: f32,
-    color: Color,
-    range: f32,
-    lift: f32,
-    flickers: f32,
-}
-
-/// The fires' light: each of a few lights where the most fire is, gathered over cells of a
-/// few metres, at the cell's fire's middle and as bright as it burns, wavering; and a light
-/// at each jet's mouth and where it reaches.
-fn light(
-    time: Res<Time>,
-    blazes: Res<Blazes>,
-    drawn: Res<Drawn>,
-    mut lights: Query<(&mut PointLight, &mut Transform, &mut Visibility)>,
-) {
-    let t = time.elapsed_secs_wrapped();
-    let lit = lit(&blazes);
-    for (i, &entity) in drawn.lights.iter().enumerate() {
-        let Ok((mut light, mut transform, mut visibility)) = lights.get_mut(entity) else {
-            continue;
-        };
-        match lit.get(i) {
-            Some(lit) => {
-                let up = lit.at.normalize_or(Vec3::Y);
-                let (waver, bob) = flicker(t, i as f32 * 1.7, lit.flickers);
-                light.intensity = lit.lumens * waver;
-                light.range = lit.range;
-                light.color = lit.color;
-                transform.translation = lit.at + up * (lit.lift + bob * lit.lift / 1.5);
-                *visibility = Visibility::Inherited;
-            }
-            None => {
-                light.intensity = 0.0;
-                *visibility = Visibility::Hidden;
-            }
-        }
-    }
-}
-
-/// The lights the fires want, the brightest first after the jets' and the hearths'.
-fn lit(blazes: &Blazes) -> Vec<Lit> {
-    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32)> =
-        std::collections::BTreeMap::new();
-    let hearths = blazes.kept.len().min(HEARTHS);
-    for blaze in blazes.all().skip(hearths) {
-        let weight = blaze.tall * blaze.heat;
-        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
-        let cell = cells.entry(key).or_insert((Vec3::ZERO, 0.0));
-        cell.0 += blaze.at * weight;
-        cell.1 += weight;
-    }
-    // Each light: where, how many lumens, how far it reaches, how high over where it is it
-    // hangs, and how big a fire it flickers as.
-    let mut lit: Vec<Lit> = blazes
-        .jets
-        .iter()
-        .filter(|jet| jet.on)
-        .flat_map(|jet| {
-            let way = jet.way.normalize_or(Vec3::Z);
-            [0.06, 0.4, 0.85].map(|along| Lit {
-                at: jet.from + way * jet.reach * along,
-                lumens: JET_LUMENS,
-                color: JET_LIGHT,
-                range: JET_RANGE_M,
-                lift: 1.5,
-                flickers: JET_LUMENS,
-            })
-        })
-        .collect();
-    // A hearth's light hangs in its flames just clear of its logs' ends, so it lights the
-    // ground round it and the faces of those sat by it, and flickers as its tongues do: level
-    // with the ends (0.6 of its height) they were the brightest thing by it (lake film r6).
-    lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
-        let weight = blaze.tall * blaze.heat;
-        Lit {
-            at: blaze.at,
-            lumens: weight * HEARTH_LUMENS_A_METRE,
-            color: HEARTH_LIGHT,
-            range: HEARTH_RANGE_M,
-            lift: blaze.tall * 0.8,
-            flickers: weight * LUMENS_A_METRE * 0.25,
-        }
-    }));
-    // Each gathering's light hangs out from the middle of all that burns, on the outside of
-    // the walls its flames stand on: at the gathering's own middle, inside a burning building,
-    // it lit the inner faces and none of the stone the eye sees (castle film r8).
-    let (sum, weight) = cells
-        .values()
-        .fold((Vec3::ZERO, 0.0), |(s, w), (cs, cw)| (s + *cs, w + cw));
-    let middle = if weight > 0.0 {
-        sum / weight
-    } else {
-        Vec3::ZERO
-    };
-    let outward = |at: Vec3| {
-        let up = at.normalize_or(Vec3::Y);
-        let away = at - middle;
-        let flat = away - up * away.dot(up);
-        if flat.length() > 1.0 {
-            flat.normalize() * LIGHT_OUT_M
-        } else {
-            Vec3::ZERO
-        }
-    };
-    let mut gathered: Vec<Lit> = cells
-        .into_values()
-        .filter(|(_, weight)| *weight > 0.0)
-        .map(|(sum, weight)| {
-            let lumens = (weight * LUMENS_A_METRE).min(MOST_LUMENS);
-            Lit {
-                at: sum / weight + outward(sum / weight),
-                lumens,
-                color: BLAZE_LIGHT,
-                range: LIGHT_RANGE_M,
-                lift: 1.5,
-                flickers: lumens,
-            }
-        })
-        .collect();
-    gathered.sort_by(|a, b| b.lumens.total_cmp(&a.lumens));
-    lit.extend(gathered);
-    lit
-}
-
+mod light;
 mod seen;
+
+pub use light::{FireGlows, GLOWS};
 
 #[cfg(test)]
 mod tests;

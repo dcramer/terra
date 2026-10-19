@@ -68,6 +68,29 @@ var height_array: texture_2d_array<f32>;
 // joints 0; read texel by texel, unfiltered.
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
 var cells_array: texture_2d_array<f32>;
+// The fire lights (crates/terra_world/src/fire/light.rs `FireGlows`, GLOWS of them): xyz
+// where, w its flicker now, a share of its mean, 0 for none.
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var<storage, read> fire_glows: array<vec4<f32>, 16>;
+
+// How bright the fires round a place burn now, a share of their mean: each fire light's
+// flicker by how near it is, out to 12 m; 1 where none is near. One flicker per fire (D415):
+// burning char flares as the fire's light does, never on a pulse of its own.
+fn fire_glow(wp: vec3<f32>) -> f32 {
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var i = 0u; i < 16u; i++) {
+        let fire = fire_glows[i];
+        if fire.w <= 0.0 {
+            continue;
+        }
+        let d = distance(fire.xyz, wp);
+        let w = max(0.0, 1.0 - d / 12.0) / (1.0 + d * d);
+        sum += fire.w * w;
+        weight += w;
+    }
+    return select(1.0, sum / max(weight, 1.0e-6), weight > 1.0e-6);
+}
 
 // How much lighter or darker, and warmer or cooler, each piece of a shingled covering is.
 const PIECE_TONE: f32 = 0.18;
@@ -548,8 +571,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let charred = mix(black, vec3(0.006, 0.005, 0.004), crack * smoothstep(0.3, 0.8, char));
             pbr_input.material.base_color = vec4(mix(base, charred, smoothstep(0.0, 0.35, char)), 1.0);
             pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.92, char);
-            // Embers in the cracks, flickering, hotter in the deeper char.
-            let flicker = 0.55 + 0.45 * sin(globals.time * (3.0 + 4.0 * block) + block * 40.0);
+            // Embers in the cracks, hotter in the deeper char, some blocks more than others,
+            // flaring by three times the flicker of the fire burning them.
+            let flicker = (0.6 + 0.4 * block) * max(1.0 + 3.0 * (fire_glow(wp) - 1.0), 0.15);
             let heat = crack * smoothstep(0.35, 0.9, char) * flicker;
             let ember = vec3(1.0, 0.32, 0.06) * heat * 14.0 + vec3(0.6, 0.12, 0.02) * smoothstep(0.6, 1.0, char) * (1.0 - crack) * block * 1.5;
             pbr_input.material.emissive = vec4(ember, 1.0);

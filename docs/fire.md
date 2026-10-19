@@ -195,7 +195,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - A held torch always does.
   - Bevy's point light has no shadow strength. A light's shadows switch on and off with hysteresis while its power eases. Porting a shadow-fade (D184) is a later stage, if the switch shows.
 - **Fog.**
-  - Shadowed fire lights carry `VolumetricLight`, so Bevy 0.20's volumetric fog scatters them and samples their shadow map (`volumetric_fog.wesl`).
+  - Fire lights carry no `VolumetricLight`: in the haze's fog volume a blaze's tens of millions of lumens washed its whole frame orange at dusk and white at night (fire sheet, round 5). A fire's glow in the air waits for its own fog volume with a bounded scatter.
   - Each fire puts a `FogVolume` round itself: denser and absorbing where its smoke is, so the air near it glows orange and the smoke above it darkens.
   - Bevy's fog volumes have no emission term. Enshrouded's emissive fog volume is a later stage (D184).
 - **LOD.**
@@ -346,7 +346,7 @@ Each stage lands on main, passes the check, and shows a visible improvement on t
 |---|---|---|
 | 0. The check | `tools/fire/measure.ts` and its tests, `references.json` with at least eight photos a class, the xtask task `fire` with today's fires as presets | Today's fires measured. They are expected to fail on yellow and on red, soot and dim shares, and the table says where. |
 | 1. Curve and exposure | the tonemapper bake-off (Bevy's five and a Hable port), then the exposure weight | Bake-off table of bands per candidate and scene looks per candidate. The developers see the sheet before a camera-wide change. |
-| 2. Light | clustered fire lights; flicker with three-axis jitter; shadows near; `VolumetricLight`; a fog volume per fire; the flicker linked to fuel glow and sparks | The night sheet's lit-ground metric; a film of a campfire's swimming shadows; bench. |
+| 2. Light | clustered fire lights; flicker with three-axis jitter; shadows near; `VolumetricLight` tried and left out (it washed the frame out); a fog volume per fire; the flicker linked to fuel glow and sparks | The night sheet's lit-ground metric; a film of a campfire's swimming shadows; bench. |
 | 3. Channels and ramp | the flame map format, `ramp.ts` and the ramp, premultiplied drawing; `tools/fire/bake.ts` and the first Mantaflow sets (body, licks) | Band shares within range for campfire and building. |
 | 4. Smoke | the six-way smoke maps baked; lit, backlit, from-inside smoke; shadow caster | Soot over flame and edge soot within range; smoke reads dark by day on the sheet. |
 | 5. Small fires as presets | `fire.ron`; candle, torch, campfire, brazier, embers; flare and sparks | Every small kind passes the check at three hours. |

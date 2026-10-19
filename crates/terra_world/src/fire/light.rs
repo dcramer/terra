@@ -1,0 +1,494 @@
+//! The fires' light, by docs/fire.md's light rules (D415): one flicker per fire, the same
+//! signal driving the light's power, the flame's and embers' brightness and the char's glow;
+//! the light swaying on three axes by it, so the shadows it casts move as a real flame's do;
+//! shadows from the nearest few fire lights, which also shine in the volumetric fog; and a
+//! dozen lights however much burns, gathered over cells, chosen by what the eye is near and
+//! eased out by 40 m (D127).
+//!
+//! The flicker is a product of three incommensurate sines (Valheim's ratios, 1, 0.564 and
+//! 0.758) plus a low value noise, as fast and as deep as a fire that size puffs: a pool fire
+//! of width D puffs at about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md),
+//! a torch by a third either way, a campfire by about 15%, a house fire slower and shallower.
+
+use super::{Blaze, Blazes, HEARTHS};
+use crate::planet::MainCamera;
+use crate::quality::Quality;
+use bevy::{
+    prelude::*,
+    render::{
+        Render, RenderApp, RenderSystems,
+        extract_resource::{ExtractResource, ExtractResourcePlugin},
+        render_asset::RenderAssets,
+        renderer::RenderQueue,
+        storage::{GpuShaderBuffer, ShaderBuffer},
+    },
+};
+
+/// How many point lights the fires are lit by, and how far round each its fire is gathered,
+/// in metres.
+pub(super) const LIGHTS: usize = 12;
+const LIGHT_CELL_M: f32 = 9.0;
+/// How far out from the middle of all that burns a gathering's light hangs, metres.
+const LIGHT_OUT_M: f32 = 3.0;
+/// A blaze's light, in lumens for a blaze a metre tall at full heat, and the most one light
+/// gives: still some times a real fire's, for the film, but no longer so much that sunlit
+/// stone round a fire goes salmon pink; a breath's brighter, as every game that draws one
+/// well lights the ground under it. Eight lights at 3e7 left the walls round a burning keep
+/// unlit by it in daylight (castle film r7).
+pub(super) const LUMENS_A_METRE: f32 = 500_000.0;
+const MOST_LUMENS: f32 = 4.0e7;
+/// How far a blaze's light and a jet's reach, metres: at 55 every light tinted every sunlit
+/// wall of the burg a uniform salmon (r8's first probe), where firelight by day shows only
+/// close round the fire.
+const LIGHT_RANGE_M: f32 = 22.0;
+const JET_RANGE_M: f32 = 30.0;
+/// A jet's light just past the mouth, on the breather's head and neck, along its stream and
+/// where it strikes: at 1e7 the dragon and the wall it struck showed none of it by day
+/// (castle film r7). Its colour the stream's yellow, a blaze's the orange of burning timber.
+const JET_LUMENS: f32 = 5.0e7;
+const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
+const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
+/// A campfire's, wood's flame about 1,800 K: an orange, not the yellow the grass turned a
+/// timber blaze's (lake film r5).
+const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.5, 0.18);
+/// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
+const HEARTH_LUMENS_A_METRE: f32 = 280_000.0;
+const HEARTH_RANGE_M: f32 = 14.0;
+/// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
+const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
+/// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
+/// first, kept on until past the second, so a light at the edge does not blink (Valheim's 20 m).
+const SHADOW_M: [f32; 2] = [20.0, 23.0];
+/// How far a light sways for each metre of its flame's height, and the least and most.
+const SWAY_A_METRE: f32 = 0.07;
+const SWAY_M: [f32; 2] = [0.005, 0.4];
+/// How many fire lights' places and flickers the char and embers of what burns are told.
+pub const GLOWS: usize = 16;
+
+/// How a fire flickers: how deep (the most its light strays from its mean, a share) and how
+/// many times a second it puffs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Flicker {
+    pub depth: f32,
+    pub puffs_hz: f32,
+}
+
+impl Flicker {
+    /// A fire's flicker by how wide its flames are, metres: a torch's (0.1 m) a third deep at
+    /// about three puffs a second, a campfire's (0.7 m) 15% at 1.8, a house's (6 m) 7% at 0.6.
+    pub fn of(wide_m: f32) -> Flicker {
+        let wide = wide_m.clamp(0.02, 40.0);
+        let x = libm::log10f(wide);
+        let depth = if wide < 0.7 {
+            lerp(0.35, 0.15, (x + 1.0) / (libm::log10f(0.7) + 1.0))
+        } else {
+            lerp(
+                0.15,
+                0.07,
+                (x - libm::log10f(0.7)) / (libm::log10f(6.0) - libm::log10f(0.7)),
+            )
+        };
+        Flicker {
+            depth: depth.clamp(0.06, 0.35),
+            puffs_hz: (1.5 / libm::sqrtf(wide)).clamp(0.4, 3.0),
+        }
+    }
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t.clamp(0.0, 1.0)
+}
+
+/// A fire's flicker at a time, -1 to 1, from its own number: the shape every fire shares.
+fn wave(seed: f32, t: f32, flicker: Flicker) -> f32 {
+    // The product's turns come at about 1.8 times its first sine's rate.
+    let a = core::f32::consts::TAU * flicker.puffs_hz / 1.8 * t + seed * 40.0;
+    let sines = libm::sinf(a) * libm::sinf(0.564 * a + 2.1) * libm::cosf(0.758 * a + 0.7);
+    let x = t * flicker.puffs_hz * 0.7;
+    let cell = libm::floorf(x);
+    let f = x - cell;
+    let u = f * f * (3.0 - 2.0 * f);
+    let own = (seed.rem_euclid(1.0) * 65_536.0) as u32;
+    let at = |i: f32| terra_gen::hash::unit3(own, i as i32 as u32, 0x6669, 0x7265) * 2.0 - 1.0;
+    let noise = at(cell) * (1.0 - u) + at(cell + 1.0) * u;
+    (1.8 * sines + 0.3 * noise).clamp(-1.0, 1.0)
+}
+
+/// How bright a fire of its own number and flicker burns at a time, a share of its mean:
+/// what its light, its flames, its embers and its char are all multiplied by.
+pub fn signal(seed: f32, t: f32, flicker: Flicker) -> f32 {
+    1.0 + flicker.depth * wave(seed, t, flicker)
+}
+
+/// How far a fire's light is off its middle at a time, on three axes by the same signal at a
+/// third of a turn apart, `reach` at most.
+pub fn sway(seed: f32, t: f32, flicker: Flicker, reach: f32) -> Vec3 {
+    Vec3::new(
+        wave(seed, t, flicker),
+        wave(seed + 0.333, t, flicker),
+        wave(seed + 0.667, t, flicker),
+    ) * reach
+}
+
+/// How wide a blaze's flames are, metres.
+fn width(blaze: &Blaze) -> f32 {
+    if blaze.wide > 0.0 {
+        blaze.wide
+    } else {
+        blaze.tall * 0.5
+    }
+}
+
+/// How bright a blaze burns now, a share of its mean (`signal`): its slot's for the shaders.
+pub(super) fn glow(blaze: &Blaze, t: f32) -> f32 {
+    signal(blaze.seed, t, Flicker::of(width(blaze)))
+}
+
+/// One of the fires' lights, as it should be now.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Lit {
+    /// Where it hangs, its flicker's sway in it.
+    pub at: Vec3,
+    /// Its lumens now, its flicker in them.
+    pub lumens: f32,
+    pub color: Color,
+    pub range: f32,
+    /// Its flame's half-width, metres.
+    pub radius: f32,
+    /// Its flicker now, a share of its mean.
+    pub glow: f32,
+}
+
+/// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
+pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
+    // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
+    // heaviest blaze's number.
+    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
+        std::collections::BTreeMap::new();
+    let hearths = blazes.kept.len().min(HEARTHS);
+    for blaze in blazes.all().skip(hearths) {
+        let weight = blaze.tall * blaze.heat;
+        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
+        let cell = cells
+            .entry(key)
+            .or_insert((Vec3::ZERO, 0.0, 0.0, 0.0, (0.0, 0.0)));
+        cell.0 += blaze.at * weight;
+        cell.1 += weight;
+        cell.2 += glow(blaze, t) * weight;
+        cell.3 = cell.3.max(width(blaze));
+        if weight > cell.4.0 {
+            cell.4 = (weight, blaze.seed);
+        }
+    }
+    let up = |at: Vec3| at.normalize_or(Vec3::Y);
+    let mut lit: Vec<Lit> = blazes
+        .jets
+        .iter()
+        .filter(|jet| jet.on)
+        .enumerate()
+        .flat_map(|(j, jet)| {
+            let way = jet.way.normalize_or(Vec3::Z);
+            let flicker = Flicker::of(0.3);
+            [0.06, 0.4, 0.85].map(|along| {
+                let at = jet.from + way * jet.reach * along;
+                let seed = j as f32 * 0.37 + along;
+                let glow = signal(seed, t, flicker);
+                Lit {
+                    at: at + up(at) * 1.5 + sway(seed, t, flicker, 0.3),
+                    lumens: JET_LUMENS * glow,
+                    color: JET_LIGHT,
+                    range: JET_RANGE_M,
+                    radius: 0.5,
+                    glow,
+                }
+            })
+        })
+        .collect();
+    // A hearth's light hangs in its flames just clear of its logs' ends, so it lights the
+    // ground round it and the faces of those sat by it: level with the ends (0.6 of its
+    // height) they were the brightest thing by it (lake film r6).
+    lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
+        let flicker = Flicker::of(width(blaze));
+        let glow = signal(blaze.seed, t, flicker);
+        let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
+        Lit {
+            at: blaze.at + up(blaze.at) * blaze.tall * 0.8 + sway(blaze.seed, t, flicker, reach),
+            lumens: blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow,
+            color: HEARTH_LIGHT,
+            range: HEARTH_RANGE_M,
+            radius: width(blaze) * 0.5,
+            glow,
+        }
+    }));
+    // Each gathering's light hangs out from the middle of all that burns, on the outside of
+    // the walls its flames stand on: at the gathering's own middle, inside a burning building,
+    // it lit the inner faces and none of the stone the eye sees (castle film r8).
+    let (sum, weight) = cells
+        .values()
+        .fold((Vec3::ZERO, 0.0), |(s, w), c| (s + c.0, w + c.1));
+    let middle = if weight > 0.0 {
+        sum / weight
+    } else {
+        Vec3::ZERO
+    };
+    let outward = |at: Vec3| {
+        let away = at - middle;
+        let flat = away - up(at) * away.dot(up(at));
+        if flat.length() > 1.0 {
+            flat.normalize() * LIGHT_OUT_M
+        } else {
+            Vec3::ZERO
+        }
+    };
+    let mut gathered: Vec<Lit> = cells
+        .into_values()
+        .filter(|cell| cell.1 > 0.0)
+        .map(|(sum, weight, glows, wide, (_, seed))| {
+            let at = sum / weight;
+            // The cell's light is the sum of its fires', each at its own flicker; it sways as
+            // its biggest fire does, as far as a flame of the cell's whole height would.
+            let glow = glows / weight;
+            let tall = weight.sqrt();
+            let reach = (tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
+            Lit {
+                at: at + outward(at) + up(at) * 1.5 + sway(seed, t, Flicker::of(wide), reach),
+                lumens: (weight * LUMENS_A_METRE).min(MOST_LUMENS) * glow,
+                color: BLAZE_LIGHT,
+                range: LIGHT_RANGE_M,
+                radius: (wide * 0.5).min(2.0),
+                glow,
+            }
+        })
+        .collect();
+    gathered.sort_by(|a, b| b.lumens.total_cmp(&a.lumens));
+    lit.extend(gathered);
+    lit
+}
+
+/// How many fire lights cast shadows, by preset: two, four on the high (docs/fire.md), one on
+/// the low, whose GPUs a cube of six shadow maps a light costs most.
+pub fn shadowed(quality: Quality) -> usize {
+    match quality {
+        Quality::Low => 1,
+        Quality::Medium => 2,
+        Quality::High => 4,
+    }
+}
+
+/// What one of the light entities was last frame: where, and whether it cast shadows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Was {
+    pub at: Vec3,
+    pub on: bool,
+    pub shadows: bool,
+}
+
+/// A light to show: what it is, how far its distance has eased it, and whether it casts
+/// shadows (and so shines in the fog).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Shown {
+    pub lit: Lit,
+    pub fade: f32,
+    pub shadows: bool,
+}
+
+fn smooth(from: f32, to: f32, x: f32) -> f32 {
+    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The lights to show on each light entity: the most a fire's light matters where the eye is
+/// (its lumens over its distance, eased out from 30 to 40 m), each kept on the entity that
+/// showed the nearest of last frame's, so a light's shadows stay on it as fires come and go;
+/// the nearest `shadows` within 20 m cast shadows, kept to 23 m once on.
+pub(super) fn choose(
+    lit: Vec<Lit>,
+    eye: Option<Vec3>,
+    was: &[Was],
+    shadows: usize,
+) -> Vec<Option<Shown>> {
+    let far = |at: Vec3| eye.map_or(0.0, |eye| eye.distance(at));
+    let mut wanted: Vec<(f32, Shown)> = lit
+        .into_iter()
+        .filter_map(|lit| {
+            let d = far(lit.at);
+            let fade = 1.0 - smooth(LIGHT_FADE_M[0], LIGHT_FADE_M[1], d);
+            (fade > 0.0).then(|| {
+                let weight = lit.lumens * fade / (1.0 + (d / 10.0).powi(2));
+                (
+                    weight,
+                    Shown {
+                        lit,
+                        fade,
+                        shadows: false,
+                    },
+                )
+            })
+        })
+        .collect();
+    wanted.sort_by(|a, b| b.0.total_cmp(&a.0));
+    wanted.truncate(was.len());
+    let mut out: Vec<Option<Shown>> = vec![None; was.len()];
+    for (_, shown) in wanted {
+        let free = |i: &usize| out[*i].is_none();
+        let near = (0..was.len())
+            .filter(free)
+            .filter(|i| was[*i].on && was[*i].at.distance(shown.lit.at) < 4.0)
+            .min_by(|a, b| {
+                was[*a]
+                    .at
+                    .distance(shown.lit.at)
+                    .total_cmp(&was[*b].at.distance(shown.lit.at))
+            });
+        let slot = near
+            .or_else(|| (0..was.len()).filter(free).find(|i| !was[*i].on))
+            .or_else(|| (0..was.len()).find(free));
+        if let Some(slot) = slot {
+            out[slot] = Some(shown);
+        }
+    }
+    // Shadows: nearest first, a light that had them counted 3 m nearer, so two at much the
+    // same distance do not trade them back and forth.
+    let mut near: Vec<(f32, usize)> = out
+        .iter()
+        .enumerate()
+        .filter_map(|(i, shown)| {
+            let shown = shown.as_ref()?;
+            let d = far(shown.lit.at);
+            let had = was[i].shadows;
+            let within = if had { SHADOW_M[1] } else { SHADOW_M[0] };
+            (eye.is_some() && d < within).then_some((d - if had { 3.0 } else { 0.0 }, i))
+        })
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for &(_, i) in near.iter().take(shadows) {
+        if let Some(shown) = out[i].as_mut() {
+            shown.shadows = true;
+        }
+    }
+    out
+}
+
+/// The fire lights' places and flickers (`GLOWS` of them: xyz where, w its glow, 0 for
+/// none), for what burns to glow with: the char's cracks on a burning building flare as the
+/// fire nearest them does. A buffer of the render world, written each frame.
+#[derive(Resource, Clone, Debug)]
+pub struct FireGlows {
+    pub buffer: Handle<ShaderBuffer>,
+    pub glows: [[f32; 4]; GLOWS],
+}
+
+impl ExtractResource<RenderApp> for FireGlows {
+    type Source = FireGlows;
+
+    fn extract_resource(source: &FireGlows) -> Self {
+        source.clone()
+    }
+}
+
+pub(super) fn plugin(app: &mut App) {
+    let buffer = app
+        .world_mut()
+        .resource_mut::<Assets<ShaderBuffer>>()
+        .add(ShaderBuffer::from(vec![[0.0f32; 4]; GLOWS]));
+    app.insert_resource(FireGlows {
+        buffer,
+        glows: [[0.0; 4]; GLOWS],
+    });
+    if app.get_sub_app(RenderApp).is_none() {
+        return;
+    }
+    app.add_plugins(ExtractResourcePlugin::<FireGlows>::default());
+    app.sub_app_mut(RenderApp)
+        .add_systems(Render, write_glows.in_set(RenderSystems::PrepareResources));
+}
+
+fn write_glows(
+    glows: Option<Res<FireGlows>>,
+    buffers: Res<RenderAssets<GpuShaderBuffer>>,
+    queue: Res<RenderQueue>,
+) {
+    let Some(glows) = glows else {
+        return;
+    };
+    if let Some(target) = buffers.get(&glows.buffer) {
+        queue.write_buffer(
+            &target.buffer,
+            0,
+            &glows
+                .glows
+                .iter()
+                .flatten()
+                .flat_map(|v| v.to_le_bytes())
+                .collect::<Vec<u8>>(),
+        );
+    }
+}
+
+/// The fires' light, each frame: the lights the fires want, chosen for where the eye is, on
+/// the light entities, and their places and flickers told to what burns.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn light(
+    time: Res<Time>,
+    quality: Res<Quality>,
+    blazes: Res<Blazes>,
+    drawn: Res<super::Drawn>,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut lights: Query<(&mut PointLight, &mut Transform, &mut Visibility)>,
+    mut glows: ResMut<FireGlows>,
+) {
+    let t = time.elapsed_secs_wrapped();
+    let was: Vec<Was> = drawn
+        .lights
+        .iter()
+        .map(|&entity| {
+            lights.get(entity).map_or(
+                Was {
+                    at: Vec3::ZERO,
+                    on: false,
+                    shadows: false,
+                },
+                |(light, transform, visibility)| Was {
+                    at: transform.translation,
+                    on: *visibility != Visibility::Hidden,
+                    shadows: light.shadow_maps_enabled,
+                },
+            )
+        })
+        .collect();
+    let eye = camera.iter().next().map(GlobalTransform::translation);
+    let shown = choose(lit(&blazes, t), eye, &was, shadowed(*quality));
+    let mut told = [[0.0f32; 4]; GLOWS];
+    for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
+        let Ok((mut light, mut transform, mut visibility)) = lights.get_mut(entity) else {
+            continue;
+        };
+        match shown {
+            Some(Shown { lit, fade, shadows }) => {
+                light.intensity = lit.lumens * fade;
+                light.range = lit.range;
+                light.color = lit.color;
+                light.radius = lit.radius;
+                transform.translation = lit.at;
+                *visibility = Visibility::Inherited;
+                // No `VolumetricLight`: a blaze's tens of millions of lumens in the haze
+                // washed its whole frame orange at dusk and white at night (fire sheet, round 5).
+                light.shadow_maps_enabled = shadows;
+                if let Some(slot) = told.get_mut(i) {
+                    *slot = lit.at.extend(lit.glow * fade.max(0.01)).to_array();
+                }
+            }
+            None => {
+                light.intensity = 0.0;
+                light.shadow_maps_enabled = false;
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+    if told != glows.glows {
+        glows.glows = told;
+    }
+}
+
+#[cfg(test)]
+mod tests;

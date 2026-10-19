@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { imageMagick } from "../sandbox/client.ts";
+import type { Picture } from "../sandbox/png.ts";
 import { type Box, type Held, judge, load, measure, REFERENCES_FILE, references, said } from "./measure.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -133,6 +134,29 @@ export function belowHud(box: Box, height: number): Box {
   return { ...box, h: Math.max(0, Math.min(box.h, Math.floor(HUD_TOP * height) - box.y)) };
 }
 
+/// How lit the ground and walls round a fire are (docs/fire.md "The metrics"): the mean
+/// linear luminance of the band round its crop, out to its width either side and down to its
+/// height below, the crop itself left out; and how warm it is, red over blue. At dusk and at
+/// night it is read against the same band at noon, so a fire whose light reaches nothing round
+/// it reads near nought however bright its flame.
+export function surround(pic: Picture, box: Box): { light: number; warmth: number } {
+  const lin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const [x0, x1] = [Math.max(0, box.x - box.w), Math.min(pic.width, box.x + 2 * box.w)];
+  const [y0, y1] = [Math.max(0, box.y + Math.round(box.h / 2)), Math.min(pic.height, box.y + 2 * box.h)];
+  let [n, r, g, b] = [0, 0, 0, 0];
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++) {
+      if (x >= box.x && x < box.x + box.w && y >= box.y && y < box.y + box.h) continue;
+      const i = 4 * (y * pic.width + x);
+      [r, g, b, n] = [r + lin(pic.rgba[i]), g + lin(pic.rgba[i + 1]), b + lin(pic.rgba[i + 2]), n + 1];
+    }
+  if (!n) return { light: 0, warmth: 0 };
+  return { light: (0.2126 * r + 0.7152 * g + 0.0722 * b) / n, warmth: r / Math.max(b, 1e-6) };
+}
+
 /// What `fire.seen` said on a frame: each kind's box and the picture's size.
 export function seenAt(log: string, frame: number): Record<string, string> {
   const line = log.split("\n").find((l) => l.includes(`Calls: frame ${frame}: fire.seen: fire seen:`));
@@ -181,7 +205,7 @@ export function worseThan(rows: Row[], held: HeldOut): string[] {
   });
 }
 
-export type Row = { fire: string; class: string; hour: string; crop?: string; out: number; held: Held[]; tile?: string };
+export type Row = { fire: string; class: string; hour: string; crop?: string; out: number; held: Held[]; tile?: string; ground?: { light: number; warmth: number } };
 
 if (import.meta.main) {
   const argv = process.argv.slice(2);
@@ -234,8 +258,12 @@ if (import.meta.main) {
       const known = classes[fire.class];
       const held = known ? judge(measure(pic, box), known.bands) : [];
       const fails = held.filter((h) => !h.holds).length;
-      rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile });
+      const ground = surround(pic, box);
+      rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground });
       tell(`${fails || !known ? "✗" : "✓"} ${fire.name.padEnd(12)} ${hour.padEnd(6)} as ${fire.class}: ${known ? said(held) : "no such class in references.json"}`);
+      const noon = rows.find((r) => r.fire === fire.name && r.hour === "noon")?.ground;
+      if (hour !== "noon" && noon?.light)
+        tell(`  ${fire.name} ${hour}: the ground round it ${((100 * ground.light) / noon.light).toFixed(1)}% as lit as at noon, red over blue ${ground.warmth.toFixed(2)} (noon ${noon.warmth.toFixed(2)})`);
       spawnSync(...imageMagick(["convert", file, "-crop", `${crop}`, "+repage", "-resize", "x300", tile]));
     }
   }

@@ -124,7 +124,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let b = slots[slot * 2u + 1u];
     let tall = a.w;
     // A kept fire's smoke is a hearth's, of cards of its own.
-    let is_hearth = b.w > 0.5 && slot < HEARTHS;
+    let is_hearth = slot < min(u32(smoke.kind.w + 0.5), HEARTHS);
     if slot >= count || tall <= 0.0 || (phase >= 1.0) != is_hearth {
         out.position = vec4(0.0, 0.0, -1.0, 1.0);
         return out;
