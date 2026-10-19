@@ -116,7 +116,7 @@ The view is open: across the water, up the slopes. The lush forest's full densit
 
 **Far peaks:**
 - They are the voxel octree's own coarse chunks, already drawn to the whole planet. A separate far-field mesh, the way Ghost of Yōtei bakes its far mountains, comes only if the chunk count or meshing time fails the bench.
-- Past the last shadow cascade, the ground shades itself from a horizon map baked with each far chunk, so peaks cast shadow into far valleys at no cascade cost.
+- Past the last shadow cascade, the ground, the far forest and the lake shade themselves from a horizon map of the land round the camera (D416), so peaks cast shadow into far valleys at no cascade cost.
 
 **The far forest:**
 - Billboard cards, as `lush/far.rs` draws them, standing on the slope's height out to 2 km.
