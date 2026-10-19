@@ -43,6 +43,14 @@ test("grey and dark pixels are not flame", () => {
   assert.equal(m.flamePx, 0);
 });
 
+test("a lit pink stone by a fire is not flame; the flame beside it is", () => {
+  const STONE: Rgb = [252, 233, 222];
+  const PINK: Rgb = [195, 114, 123];
+  const m = measure(paint(64, 64, (x) => (x < 16 ? STONE : x < 32 ? PINK : YELLOW)));
+  assert.equal(m.flamePx, 32 * 64);
+  assert.equal(m.red, 0);
+});
+
 test("a flame ringed by black meets soot at all its edge; on grey, at none", () => {
   const ringed = measure(paint(100, 100, (x, y) => (inside(x, y, 30, 30, 70, 70) ? YELLOW : BLACK)));
   assert.ok(ringed.edgeSoot > 95, `edge soot ${ringed.edgeSoot}`);

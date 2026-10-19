@@ -12,77 +12,77 @@
     "white": {
      "median": 0.059,
      "min": 0,
-     "max": 3.315
+     "max": 3.613
     },
     "pale": {
-     "median": 0.23,
+     "median": 0.221,
      "min": 0,
-     "max": 3.798
+     "max": 3.414
     },
     "yellow": {
-     "median": 9.317,
+     "median": 11.249,
      "min": 1.605,
-     "max": 19.027
+     "max": 20.603
     },
     "orange": {
-     "median": 26.455,
-     "min": 19.259,
-     "max": 63.211
+     "median": 26.644,
+     "min": 20.908,
+     "max": 67.646
     },
     "red": {
-     "median": 54.869,
-     "min": 20.233,
+     "median": 54.859,
+     "min": 20.158,
      "max": 72.768
     },
     "redOrange": {
-     "median": 86.566,
-     "min": 74.039,
+     "median": 86.564,
+     "min": 73.194,
      "max": 98.395
     },
     "BR": {
-     "median": 0.202,
+     "median": 0.199,
      "min": 0.031,
-     "max": 0.555
+     "max": 0.417
     },
     "GR": {
      "median": 0.556,
      "min": 0.438,
-     "max": 0.781
+     "max": 0.722
     },
     "dim": {
-     "median": 38.945,
-     "min": 6.449,
-     "max": 60.049
+     "median": 38.937,
+     "min": 8.377,
+     "max": 60.041
     },
     "soot": {
      "median": 0.386,
-     "min": 0.127,
-     "max": 0.917
+     "min": 0.13,
+     "max": 0.922
     },
     "edgeSoot": {
      "median": 26.881,
-     "min": 6.335,
+     "min": 3.403,
      "max": 51.249
     },
     "pockets": {
      "median": 23.611,
-     "min": 5.05,
-     "max": 175.857
+     "min": 7.427,
+     "max": 166.691
     },
     "fine": {
      "median": 8.897,
-     "min": 6.104,
+     "min": 5.853,
      "max": 24.92
     },
     "mid": {
-     "median": 20.817,
-     "min": 14.568,
+     "median": 21.562,
+     "min": 16.259,
      "max": 33.811
     },
     "coarse": {
-     "median": 69.978,
+     "median": 69.994,
      "min": 41.269,
-     "max": 79.08
+     "max": 73.758
     }
    }
   },
@@ -95,78 +95,78 @@
    },
    "bands": {
     "white": {
-     "median": 0.026,
+     "median": 0.028,
      "min": 0,
-     "max": 18.448
+     "max": 18.579
     },
     "pale": {
-     "median": 2.895,
-     "min": 0.1,
-     "max": 7.01
+     "median": 2.318,
+     "min": 0.017,
+     "max": 6.33
     },
     "yellow": {
-     "median": 5.135,
-     "min": 1.163,
-     "max": 37.739
+     "median": 5.783,
+     "min": 0.308,
+     "max": 37.772
     },
     "orange": {
-     "median": 24.14,
-     "min": 16.147,
-     "max": 60.914
+     "median": 22.273,
+     "min": 14.005,
+     "max": 61.557
     },
     "red": {
-     "median": 64.981,
-     "min": 15.873,
-     "max": 79.89
+     "median": 68.668,
+     "min": 15.84,
+     "max": 82.234
     },
     "redOrange": {
-     "median": 88.996,
-     "min": 56.355,
-     "max": 98.208
+     "median": 88.71,
+     "min": 56.323,
+     "max": 99.648
     },
     "BR": {
-     "median": 0.302,
-     "min": 0.22,
-     "max": 0.475
+     "median": 0.29,
+     "min": 0.189,
+     "max": 0.465
     },
     "GR": {
-     "median": 0.584,
-     "min": 0.451,
+     "median": 0.581,
+     "min": 0.429,
      "max": 0.72
     },
     "dim": {
-     "median": 38.665,
-     "min": 4.9,
-     "max": 53.332
+     "median": 40.744,
+     "min": 5.025,
+     "max": 53.71
     },
     "soot": {
-     "median": 0.194,
+     "median": 0.207,
      "min": 0.003,
-     "max": 0.633
+     "max": 0.663
     },
     "edgeSoot": {
-     "median": 6.579,
-     "min": 0.826,
-     "max": 48.676
+     "median": 5.63,
+     "min": 0.42,
+     "max": 48.011
     },
     "pockets": {
-     "median": 7.918,
-     "min": 0.927,
-     "max": 40.306
+     "median": 9.736,
+     "min": 0.923,
+     "max": 50.282
     },
     "fine": {
-     "median": 6.275,
+     "median": 6.311,
      "min": 1.913,
-     "max": 10.59
+     "max": 12.205
     },
     "mid": {
-     "median": 19.612,
+     "median": 18.811,
      "min": 9.149,
-     "max": 28.744
+     "max": 28.878
     },
     "coarse": {
-     "median": 75.106,
-     "min": 60.667,
+     "median": 75.92,
+     "min": 58.917,
      "max": 88.938
     }
    }
@@ -179,79 +179,79 @@
    },
    "bands": {
     "white": {
-     "median": 0.161,
+     "median": 0.394,
      "min": 0,
-     "max": 43.039
+     "max": 69.291
     },
     "pale": {
-     "median": 5.249,
-     "min": 1.976,
-     "max": 31.177
+     "median": 2.666,
+     "min": 0.247,
+     "max": 33.82
     },
     "yellow": {
-     "median": 16.704,
-     "min": 2.607,
-     "max": 50.815
+     "median": 17.061,
+     "min": 0.901,
+     "max": 51.552
     },
     "orange": {
-     "median": 31.565,
-     "min": 17.112,
-     "max": 43.936
+     "median": 32.35,
+     "min": 11.341,
+     "max": 44.736
     },
     "red": {
-     "median": 19.075,
+     "median": 18.675,
      "min": 0,
-     "max": 63.026
+     "max": 62
     },
     "redOrange": {
-     "median": 53.732,
-     "min": 32.224,
-     "max": 95.048
+     "median": 53.966,
+     "min": 29.562,
+     "max": 95.145
     },
     "BR": {
-     "median": 0.579,
-     "min": 0.216,
-     "max": 0.885
+     "median": 0.565,
+     "min": 0.198,
+     "max": 0.9
     },
     "GR": {
-     "median": 0.771,
-     "min": 0.564,
-     "max": 0.936
+     "median": 0.723,
+     "min": 0.553,
+     "max": 0.944
     },
     "dim": {
-     "median": 16.541,
+     "median": 17.382,
      "min": 0,
-     "max": 44.79
+     "max": 45.998
     },
     "soot": {
      "median": 0.029,
      "min": 0,
-     "max": 0.088
+     "max": 0.092
     },
     "edgeSoot": {
-     "median": 0.653,
+     "median": 0.073,
      "min": 0,
-     "max": 6.528
+     "max": 4.874
     },
     "pockets": {
-     "median": 10.889,
-     "min": 0.577,
+     "median": 10.258,
+     "min": 0,
      "max": 53.339
     },
     "fine": {
-     "median": 4.869,
-     "min": 3.336,
+     "median": 4.603,
+     "min": 3.281,
      "max": 10.026
     },
     "mid": {
-     "median": 18.599,
-     "min": 16.22,
-     "max": 22.528
+     "median": 19.384,
+     "min": 13.951,
+     "max": 22.71
     },
     "coarse": {
-     "median": 75.996,
-     "min": 69.795,
-     "max": 79.837
+     "median": 75.594,
+     "min": 69.72,
+     "max": 81.167
     }
    }
   },
@@ -262,79 +262,79 @@
    },
    "bands": {
     "white": {
-     "median": 0.954,
-     "min": 0.007,
-     "max": 1.711
+     "median": 1.019,
+     "min": 0.009,
+     "max": 1.8
     },
     "pale": {
-     "median": 9.567,
-     "min": 2.344,
-     "max": 17.987
+     "median": 9.2,
+     "min": 2.236,
+     "max": 16.536
     },
     "yellow": {
-     "median": 24.184,
-     "min": 22.156,
-     "max": 39.996
+     "median": 25.853,
+     "min": 25.096,
+     "max": 42.696
     },
     "orange": {
-     "median": 25.54,
-     "min": 20.352,
-     "max": 61.271
+     "median": 24.986,
+     "min": 21.714,
+     "max": 63.776
     },
     "red": {
-     "median": 28.19,
-     "min": 10.158,
-     "max": 34.309
+     "median": 25.371,
+     "min": 7.092,
+     "max": 32.616
     },
     "redOrange": {
-     "median": 59.849,
-     "min": 48.543,
-     "max": 71.428
+     "median": 57.602,
+     "min": 47.085,
+     "max": 70.868
     },
     "BR": {
-     "median": 0.397,
-     "min": 0.336,
-     "max": 0.55
+     "median": 0.368,
+     "min": 0.31,
+     "max": 0.495
     },
     "GR": {
-     "median": 0.766,
-     "min": 0.723,
-     "max": 0.799
+     "median": 0.764,
+     "min": 0.715,
+     "max": 0.776
     },
     "dim": {
-     "median": 10.894,
-     "min": 10.697,
-     "max": 21.441
+     "median": 11.842,
+     "min": 8.791,
+     "max": 22.307
     },
     "soot": {
-     "median": 0.002,
+     "median": 0,
      "min": 0,
-     "max": 0.105
+     "max": 0.106
     },
     "edgeSoot": {
-     "median": 0.022,
+     "median": 0,
      "min": 0,
-     "max": 8.533
+     "max": 7.454
     },
     "pockets": {
      "median": 0,
      "min": 0,
-     "max": 42.786
+     "max": 45.506
     },
     "fine": {
-     "median": 4.466,
-     "min": 4.148,
-     "max": 8.701
+     "median": 4.656,
+     "min": 3.874,
+     "max": 8.616
     },
     "mid": {
-     "median": 16.858,
-     "min": 16.044,
-     "max": 21.968
+     "median": 18.631,
+     "min": 16.792,
+     "max": 22.599
     },
     "coarse": {
-     "median": 78.676,
-     "min": 69.332,
-     "max": 79.807
+     "median": 76.713,
+     "min": 68.785,
+     "max": 79.334
     }
    }
   },
@@ -350,74 +350,74 @@
      "max": 0.002
     },
     "pale": {
-     "median": 0.153,
-     "min": 0.006,
-     "max": 0.3
+     "median": 0.1,
+     "min": 0.001,
+     "max": 0.199
     },
     "yellow": {
-     "median": 3.3609999999999998,
-     "min": 1.89,
-     "max": 4.832
+     "median": 3.441,
+     "min": 2.008,
+     "max": 4.874
     },
     "orange": {
-     "median": 27.965500000000002,
-     "min": 17.914,
-     "max": 38.017
+     "median": 28.704,
+     "min": 18.615,
+     "max": 38.793
     },
     "red": {
-     "median": 68.25,
-     "min": 56.335,
-     "max": 80.165
+     "median": 67.754,
+     "min": 56.132,
+     "max": 79.376
     },
     "redOrange": {
-     "median": 96.21549999999999,
-     "min": 94.351,
-     "max": 98.08
+     "median": 96.458,
+     "min": 94.925,
+     "max": 97.991
     },
     "BR": {
-     "median": 0.279,
-     "min": 0.175,
-     "max": 0.383
+     "median": 0.258,
+     "min": 0.161,
+     "max": 0.355
     },
     "GR": {
-     "median": 0.5565,
-     "min": 0.516,
-     "max": 0.597
+     "median": 0.5465,
+     "min": 0.511,
+     "max": 0.582
     },
     "dim": {
-     "median": 22.2375,
-     "min": 7.415,
-     "max": 37.06
+     "median": 22.576,
+     "min": 7.769,
+     "max": 37.383
     },
     "soot": {
-     "median": 0.2165,
+     "median": 0.212,
      "min": 0,
-     "max": 0.433
+     "max": 0.424
     },
     "edgeSoot": {
-     "median": 6.9375,
+     "median": 6.453,
      "min": 0,
-     "max": 13.875
+     "max": 12.906
     },
     "pockets": {
-     "median": 7.8205,
+     "median": 7.5555,
      "min": 0,
-     "max": 15.641
+     "max": 15.111
     },
     "fine": {
-     "median": 6.264,
-     "min": 4.164,
-     "max": 8.364
+     "median": 6.3235,
+     "min": 4.568,
+     "max": 8.079
     },
     "mid": {
-     "median": 25.914,
-     "min": 17.628,
-     "max": 34.2
+     "median": 25.3685,
+     "min": 19.14,
+     "max": 31.597
     },
     "coarse": {
-     "median": 67.8215,
-     "min": 57.435,
-     "max": 78.208
+     "median": 68.30799999999999,
+     "min": 60.324,
+     "max": 76.292
     }
    }
   },
@@ -430,79 +430,79 @@
    },
    "bands": {
     "white": {
-     "median": 6.255,
+     "median": 6.304,
      "min": 0.06,
-     "max": 11.779
+     "max": 13.163
     },
     "pale": {
-     "median": 3.048,
-     "min": 0.123,
-     "max": 9.555
+     "median": 2.366,
+     "min": 0.096,
+     "max": 6.808
     },
     "yellow": {
-     "median": 23.044,
-     "min": 4.998,
-     "max": 30.605
+     "median": 23.186,
+     "min": 4.979,
+     "max": 34.181
     },
     "orange": {
-     "median": 34.526,
-     "min": 12.785,
-     "max": 65.569
+     "median": 34.452,
+     "min": 14.284,
+     "max": 66.043
     },
     "red": {
-     "median": 35.276,
-     "min": 2.085,
-     "max": 60.293
+     "median": 31.564,
+     "min": 2.099,
+     "max": 60.413
     },
     "redOrange": {
-     "median": 67.653,
-     "min": 48.061,
-     "max": 94.819
+     "median": 68.143,
+     "min": 45.849,
+     "max": 94.865
     },
     "BR": {
-     "median": 0.269,
-     "min": 0.166,
-     "max": 0.337
+     "median": 0.267,
+     "min": 0.161,
+     "max": 0.327
     },
     "GR": {
-     "median": 0.642,
-     "min": 0.551,
-     "max": 0.661
+     "median": 0.639,
+     "min": 0.55,
+     "max": 0.686
     },
     "dim": {
-     "median": 25.83,
-     "min": 24.946,
-     "max": 40.696
+     "median": 25.006,
+     "min": 21.009,
+     "max": 41.001
     },
     "soot": {
-     "median": 0.374,
-     "min": 0.113,
-     "max": 0.425
+     "median": 0.351,
+     "min": 0.123,
+     "max": 0.427
     },
     "edgeSoot": {
-     "median": 20.817,
-     "min": 17.42,
-     "max": 37.307
+     "median": 19.246,
+     "min": 7.767,
+     "max": 36.356
     },
     "pockets": {
-     "median": 4.487,
-     "min": 3.432,
-     "max": 5.375
+     "median": 4.636,
+     "min": 4.487,
+     "max": 5.491
     },
     "fine": {
-     "median": 6.943,
-     "min": 6.854,
-     "max": 7.223
+     "median": 7.377,
+     "min": 6.943,
+     "max": 7.555
     },
     "mid": {
-     "median": 20.14,
-     "min": 16.107,
+     "median": 20.107,
+     "min": 17.7,
      "max": 21.995
     },
     "coarse": {
-     "median": 72.637,
+     "median": 72.516,
      "min": 71.062,
-     "max": 77.039
+     "max": 74.746
     }
    }
   },
@@ -515,78 +515,78 @@
    },
    "bands": {
     "white": {
-     "median": 0.356,
+     "median": 0.3595,
      "min": 0.014,
-     "max": 3.943
+     "max": 4.114
     },
     "pale": {
-     "median": 4.1715,
-     "min": 0.218,
-     "max": 13.743
+     "median": 3.552,
+     "min": 0.163,
+     "max": 9.37
     },
     "yellow": {
-     "median": 13.1375,
-     "min": 6.21,
-     "max": 33.205
+     "median": 13.560500000000001,
+     "min": 6.267,
+     "max": 33.333
     },
     "orange": {
-     "median": 26.6515,
-     "min": 10.674,
-     "max": 44.92
+     "median": 25.820999999999998,
+     "min": 11.112,
+     "max": 48.094
     },
     "red": {
-     "median": 53.3665,
-     "min": 33.34,
-     "max": 72.426
+     "median": 53.063500000000005,
+     "min": 35.694,
+     "max": 72.52
     },
     "redOrange": {
-     "median": 80.1105,
-     "min": 64.243,
-     "max": 89.109
+     "median": 82.819,
+     "min": 64.446,
+     "max": 89.029
     },
     "BR": {
-     "median": 0.2395,
+     "median": 0.20750000000000002,
      "min": 0.042,
-     "max": 0.576
+     "max": 0.465
     },
     "GR": {
-     "median": 0.5765,
+     "median": 0.562,
      "min": 0.416,
-     "max": 0.727
+     "max": 0.657
     },
     "dim": {
-     "median": 37.9005,
-     "min": 23.263,
-     "max": 60.075
+     "median": 39.183499999999995,
+     "min": 24.78,
+     "max": 60.104
     },
     "soot": {
-     "median": 0.16749999999999998,
+     "median": 0.16799999999999998,
      "min": 0.033,
-     "max": 0.349
+     "max": 0.403
     },
     "edgeSoot": {
-     "median": 12.9045,
-     "min": 1.401,
-     "max": 26.691
+     "median": 13.041,
+     "min": 1.41,
+     "max": 28.651
     },
     "pockets": {
-     "median": 10.7965,
+     "median": 11.477,
      "min": 0,
-     "max": 64.167
+     "max": 71.96
     },
     "fine": {
-     "median": 9.9275,
-     "min": 5.537,
-     "max": 17.098
+     "median": 10.4155,
+     "min": 5.573,
+     "max": 17.847
     },
     "mid": {
-     "median": 20.320999999999998,
+     "median": 20.749,
      "min": 17.018,
-     "max": 21.733
+     "max": 22.555
     },
     "coarse": {
-     "median": 70.86699999999999,
-     "min": 61.598,
+     "median": 70.328,
+     "min": 59.598,
      "max": 75.74
     }
    }
@@ -600,77 +600,77 @@
    },
    "bands": {
     "white": {
-     "median": 10.597,
-     "min": 2.891,
-     "max": 52.593
+     "median": 11.862,
+     "min": 2.925,
+     "max": 55.108
     },
     "pale": {
-     "median": 6.322,
-     "min": 1.415,
-     "max": 28.616
+     "median": 4.357,
+     "min": 0.851,
+     "max": 16.437
     },
     "yellow": {
-     "median": 7.887,
-     "min": 2.11,
-     "max": 53.7
+     "median": 7.912,
+     "min": 2.212,
+     "max": 54.931
     },
     "orange": {
-     "median": 21.103,
-     "min": 5.455,
-     "max": 85.677
+     "median": 18.317,
+     "min": 5.798,
+     "max": 86.581
     },
     "red": {
-     "median": 19.151,
-     "min": 1.751,
-     "max": 68.28
+     "median": 19.172,
+     "min": 1.723,
+     "max": 66.711
     },
     "redOrange": {
-     "median": 73.735,
-     "min": 31.501,
-     "max": 87.428
+     "median": 72.509,
+     "min": 31.009,
+     "max": 88.305
     },
     "BR": {
-     "median": 0.503,
-     "min": 0.123,
-     "max": 0.728
+     "median": 0.47,
+     "min": 0.113,
+     "max": 0.654
     },
     "GR": {
-     "median": 0.727,
-     "min": 0.479,
-     "max": 0.909
+     "median": 0.723,
+     "min": 0.472,
+     "max": 0.882
     },
     "dim": {
-     "median": 17.201,
-     "min": 2.856,
-     "max": 59.313
+     "median": 17.942,
+     "min": 2.865,
+     "max": 60.06
     },
     "soot": {
-     "median": 0.086,
+     "median": 0.096,
      "min": 0,
-     "max": 0.862
+     "max": 0.906
     },
     "edgeSoot": {
-     "median": 8.772,
+     "median": 6.195,
      "min": 0,
-     "max": 58.321
+     "max": 50.755
     },
     "pockets": {
-     "median": 2.217,
+     "median": 2.198,
      "min": 0,
-     "max": 19.904
+     "max": 21.211
     },
     "fine": {
-     "median": 3.181,
+     "median": 3.193,
      "min": 2.285,
      "max": 9.146
     },
     "mid": {
-     "median": 18.067,
+     "median": 17.607,
      "min": 9.213,
      "max": 26.021
     },
     "coarse": {
-     "median": 78.752,
+     "median": 78.452,
      "min": 64.833,
      "max": 88.502
     }
@@ -683,19 +683,19 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 684912,
-    "white": 0.161,
-    "pale": 2.172,
-    "yellow": 2.607,
-    "orange": 32.022,
-    "red": 63.026,
-    "redOrange": 95.048,
-    "BR": 0.39,
-    "GR": 0.616,
-    "dim": 16.541,
-    "soot": 0.087,
-    "edgeSoot": 5.221,
-    "pockets": 19.512,
+    "flamePx": 653211,
+    "white": 0.169,
+    "pale": 2.015,
+    "yellow": 2.671,
+    "orange": 33.145,
+    "red": 62,
+    "redOrange": 95.145,
+    "BR": 0.369,
+    "GR": 0.604,
+    "dim": 17.382,
+    "soot": 0.09,
+    "edgeSoot": 4.817,
+    "pockets": 19.564,
     "fine": 6.135,
     "mid": 20.07,
     "coarse": 73.795
@@ -706,22 +706,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 116177,
-    "white": 43.039,
-    "pale": 8.997,
-    "yellow": 11.099,
-    "orange": 17.112,
-    "red": 19.075,
-    "redOrange": 36.187,
-    "BR": 0.885,
-    "GR": 0.936,
-    "dim": 4.126,
-    "soot": 0.001,
+    "flamePx": 72161,
+    "white": 69.291,
+    "pale": 0.247,
+    "yellow": 0.901,
+    "orange": 11.341,
+    "red": 18.22,
+    "redOrange": 29.562,
+    "BR": 0.9,
+    "GR": 0.944,
+    "dim": 2.526,
+    "soot": 0,
     "edgeSoot": 0,
-    "pockets": 3.597,
-    "fine": 3.53,
-    "mid": 16.632,
-    "coarse": 79.837
+    "pockets": 3.341,
+    "fine": 4.19,
+    "mid": 20.216,
+    "coarse": 75.594
    }
   },
   {
@@ -729,22 +729,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 38502,
+    "flamePx": 36986,
     "white": 0,
-    "pale": 27.902,
-    "yellow": 39.873,
-    "orange": 25.705,
-    "red": 6.519,
-    "redOrange": 32.224,
-    "BR": 0.579,
-    "GR": 0.855,
-    "dim": 3.582,
-    "soot": 0.035,
-    "edgeSoot": 0.653,
-    "pockets": 14.291,
-    "fine": 4.565,
-    "mid": 22.528,
-    "coarse": 72.907
+    "pale": 25.664,
+    "yellow": 40.97,
+    "orange": 26.586,
+    "red": 6.781,
+    "redOrange": 33.367,
+    "BR": 0.569,
+    "GR": 0.85,
+    "dim": 3.534,
+    "soot": 0.032,
+    "edgeSoot": 0.073,
+    "pockets": 14.278,
+    "fine": 4.603,
+    "mid": 22.71,
+    "coarse": 72.687
    }
   },
   {
@@ -752,22 +752,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 27927,
+    "flamePx": 27421,
     "white": 0,
-    "pale": 5.249,
-    "yellow": 50.815,
-    "orange": 43.936,
+    "pale": 3.712,
+    "yellow": 51.552,
+    "orange": 44.736,
     "red": 0,
-    "redOrange": 43.936,
-    "BR": 0.596,
-    "GR": 0.863,
+    "redOrange": 44.736,
+    "BR": 0.592,
+    "GR": 0.861,
     "dim": 0,
     "soot": 0.029,
     "edgeSoot": 0,
-    "pockets": 10.889,
-    "fine": 3.336,
-    "mid": 18.599,
-    "coarse": 78.065
+    "pockets": 10.258,
+    "fine": 3.281,
+    "mid": 17.934,
+    "coarse": 78.785
    }
   },
   {
@@ -775,22 +775,22 @@
    "class": "napalm",
    "light": "day",
    "metrics": {
-    "flamePx": 65734,
+    "flamePx": 64318,
     "white": 0.002,
-    "pale": 0.3,
-    "yellow": 4.832,
-    "orange": 38.017,
-    "red": 56.335,
-    "redOrange": 94.351,
-    "BR": 0.175,
-    "GR": 0.516,
-    "dim": 37.06,
-    "soot": 0.433,
-    "edgeSoot": 13.875,
-    "pockets": 15.641,
-    "fine": 8.364,
-    "mid": 34.2,
-    "coarse": 57.435
+    "pale": 0.199,
+    "yellow": 4.874,
+    "orange": 38.793,
+    "red": 56.132,
+    "redOrange": 94.925,
+    "BR": 0.161,
+    "GR": 0.511,
+    "dim": 37.383,
+    "soot": 0.424,
+    "edgeSoot": 12.906,
+    "pockets": 15.111,
+    "fine": 8.079,
+    "mid": 31.597,
+    "coarse": 60.324
    }
   },
   {
@@ -798,22 +798,22 @@
    "class": "napalm",
    "light": "day",
    "metrics": {
-    "flamePx": 126278,
+    "flamePx": 118762,
     "white": 0,
-    "pale": 0.006,
-    "yellow": 1.89,
-    "orange": 17.914,
-    "red": 80.165,
-    "redOrange": 98.08,
-    "BR": 0.383,
-    "GR": 0.597,
-    "dim": 7.415,
+    "pale": 0.001,
+    "yellow": 2.008,
+    "orange": 18.615,
+    "red": 79.376,
+    "redOrange": 97.991,
+    "BR": 0.355,
+    "GR": 0.582,
+    "dim": 7.769,
     "soot": 0,
     "edgeSoot": 0,
     "pockets": 0,
-    "fine": 4.164,
-    "mid": 17.628,
-    "coarse": 78.208
+    "fine": 4.568,
+    "mid": 19.14,
+    "coarse": 76.292
    }
   },
   {
@@ -821,22 +821,22 @@
    "class": "excluded",
    "light": "day",
    "metrics": {
-    "flamePx": 150951,
-    "white": 4.917,
+    "flamePx": 46061,
+    "white": 16.113,
     "pale": 0,
     "yellow": 0,
-    "orange": 0.007,
-    "red": 87.242,
-    "redOrange": 87.25,
-    "BR": 0.749,
-    "GR": 0.712,
-    "dim": 11.733,
-    "soot": 0.048,
-    "edgeSoot": 2.705,
-    "pockets": 64.186,
-    "fine": 16.343,
-    "mid": 19.177,
-    "coarse": 64.48
+    "orange": 0.009,
+    "red": 83.878,
+    "redOrange": 83.887,
+    "BR": 0.656,
+    "GR": 0.674,
+    "dim": 15.977,
+    "soot": 0.028,
+    "edgeSoot": 0.109,
+    "pockets": 23.292,
+    "fine": 18.332,
+    "mid": 22.694,
+    "coarse": 58.974
    }
   },
   {
@@ -844,22 +844,22 @@
    "class": "pool fire",
    "light": "day",
    "metrics": {
-    "flamePx": 87029,
+    "flamePx": 86764,
     "white": 0.06,
-    "pale": 0.123,
-    "yellow": 4.998,
-    "orange": 34.526,
-    "red": 60.293,
-    "redOrange": 94.819,
-    "BR": 0.269,
-    "GR": 0.551,
-    "dim": 24.946,
-    "soot": 0.374,
-    "edgeSoot": 20.817,
-    "pockets": 3.432,
-    "fine": 7.223,
-    "mid": 20.14,
-    "coarse": 72.637
+    "pale": 0.096,
+    "yellow": 4.979,
+    "orange": 34.452,
+    "red": 60.413,
+    "redOrange": 94.865,
+    "BR": 0.267,
+    "GR": 0.55,
+    "dim": 25.006,
+    "soot": 0.351,
+    "edgeSoot": 19.246,
+    "pockets": 5.491,
+    "fine": 7.377,
+    "mid": 20.107,
+    "coarse": 72.516
    }
   },
   {
@@ -867,18 +867,18 @@
    "class": "pool fire",
    "light": "dusk",
    "metrics": {
-    "flamePx": 499304,
-    "white": 6.255,
-    "pale": 3.048,
-    "yellow": 23.044,
-    "orange": 65.569,
-    "red": 2.085,
-    "redOrange": 67.653,
-    "BR": 0.166,
-    "GR": 0.642,
-    "dim": 40.696,
-    "soot": 0.425,
-    "edgeSoot": 37.307,
+    "flamePx": 495345,
+    "white": 6.304,
+    "pale": 2.366,
+    "yellow": 23.186,
+    "orange": 66.043,
+    "red": 2.099,
+    "redOrange": 68.143,
+    "BR": 0.161,
+    "GR": 0.639,
+    "dim": 41.001,
+    "soot": 0.427,
+    "edgeSoot": 36.356,
     "pockets": 4.487,
     "fine": 6.943,
     "mid": 21.995,
@@ -890,22 +890,22 @@
    "class": "pool fire",
    "light": "night",
    "metrics": {
-    "flamePx": 672513,
-    "white": 11.779,
-    "pale": 9.555,
-    "yellow": 30.605,
-    "orange": 12.785,
-    "red": 35.276,
-    "redOrange": 48.061,
-    "BR": 0.337,
-    "GR": 0.661,
-    "dim": 25.83,
-    "soot": 0.113,
-    "edgeSoot": 17.42,
-    "pockets": 5.375,
-    "fine": 6.854,
-    "mid": 16.107,
-    "coarse": 77.039
+    "flamePx": 601797,
+    "white": 13.163,
+    "pale": 6.808,
+    "yellow": 34.181,
+    "orange": 14.284,
+    "red": 31.564,
+    "redOrange": 45.849,
+    "BR": 0.327,
+    "GR": 0.686,
+    "dim": 21.009,
+    "soot": 0.123,
+    "edgeSoot": 7.767,
+    "pockets": 4.636,
+    "fine": 7.555,
+    "mid": 17.7,
+    "coarse": 74.746
    }
   },
   {
@@ -913,21 +913,21 @@
    "class": "structure",
    "light": "night",
    "metrics": {
-    "flamePx": 948583,
-    "white": 1.787,
-    "pale": 13.743,
-    "yellow": 6.21,
-    "orange": 44.92,
-    "red": 33.34,
-    "redOrange": 78.26,
-    "BR": 0.236,
-    "GR": 0.593,
-    "dim": 37.264,
-    "soot": 0.107,
-    "edgeSoot": 26.691,
+    "flamePx": 885986,
+    "white": 1.913,
+    "pale": 7.653,
+    "yellow": 6.646,
+    "orange": 48.094,
+    "red": 35.694,
+    "redOrange": 83.788,
+    "BR": 0.193,
+    "GR": 0.565,
+    "dim": 39.89,
+    "soot": 0.116,
+    "edgeSoot": 28.651,
     "pockets": 1.328,
-    "fine": 5.537,
-    "mid": 18.723,
+    "fine": 5.573,
+    "mid": 18.687,
     "coarse": 75.74
    }
   },
@@ -936,22 +936,22 @@
    "class": "structure",
    "light": "day",
    "metrics": {
-    "flamePx": 717165,
-    "white": 0.147,
-    "pale": 0.315,
-    "yellow": 10.429,
-    "orange": 30.613,
-    "red": 58.495,
-    "redOrange": 89.109,
-    "BR": 0.243,
-    "GR": 0.55,
-    "dim": 43.991,
+    "flamePx": 692262,
+    "white": 0.152,
+    "pale": 0.218,
+    "yellow": 10.74,
+    "orange": 29.366,
+    "red": 59.524,
+    "redOrange": 88.89,
+    "BR": 0.222,
+    "GR": 0.538,
+    "dim": 45.257,
     "soot": 0.033,
-    "edgeSoot": 7.604,
-    "pockets": 14.979,
-    "fine": 7.771,
-    "mid": 19.477,
-    "coarse": 72.752
+    "edgeSoot": 6.205,
+    "pockets": 16.34,
+    "fine": 7.73,
+    "mid": 19.475,
+    "coarse": 72.795
    }
   },
   {
@@ -959,22 +959,22 @@
    "class": "structure",
    "light": "day",
    "metrics": {
-    "flamePx": 66302,
+    "flamePx": 63728,
     "white": 0.014,
-    "pale": 9.172,
-    "yellow": 15.846,
-    "orange": 26.726,
-    "red": 48.238,
-    "redOrange": 74.965,
-    "BR": 0.399,
-    "GR": 0.639,
-    "dim": 35.409,
-    "soot": 0.056,
-    "edgeSoot": 1.401,
+    "pale": 9.37,
+    "yellow": 16.381,
+    "orange": 27.633,
+    "red": 46.603,
+    "redOrange": 74.236,
+    "BR": 0.395,
+    "GR": 0.645,
+    "dim": 33.345,
+    "soot": 0.046,
+    "edgeSoot": 1.41,
     "pockets": 0,
-    "fine": 7.431,
-    "mid": 21.733,
-    "coarse": 70.836
+    "fine": 6.932,
+    "mid": 20.333,
+    "coarse": 72.735
    }
   },
   {
@@ -982,22 +982,22 @@
    "class": "structure",
    "light": "dusk",
    "metrics": {
-    "flamePx": 71691,
-    "white": 3.943,
-    "pale": 5.62,
-    "yellow": 7.048,
-    "orange": 10.674,
-    "red": 72.426,
-    "redOrange": 83.1,
-    "BR": 0.425,
-    "GR": 0.624,
-    "dim": 41.319,
-    "soot": 0.349,
-    "edgeSoot": 17.736,
-    "pockets": 30.282,
-    "fine": 17.098,
-    "mid": 21.304,
-    "coarse": 61.598
+    "flamePx": 68719,
+    "white": 4.114,
+    "pale": 4.942,
+    "yellow": 7.312,
+    "orange": 11.112,
+    "red": 72.52,
+    "redOrange": 83.632,
+    "BR": 0.408,
+    "GR": 0.616,
+    "dim": 41.777,
+    "soot": 0.344,
+    "edgeSoot": 16.63,
+    "pockets": 30.91,
+    "fine": 17.847,
+    "mid": 22.555,
+    "coarse": 59.598
    }
   },
   {
@@ -1005,22 +1005,22 @@
    "class": "gas jet",
    "light": "day",
    "metrics": {
-    "flamePx": 53633,
-    "white": 0.007,
-    "pale": 17.987,
-    "yellow": 22.156,
-    "orange": 25.54,
-    "red": 34.309,
-    "redOrange": 59.849,
-    "BR": 0.55,
-    "GR": 0.799,
-    "dim": 10.697,
+    "flamePx": 45205,
+    "white": 0.009,
+    "pale": 16.536,
+    "yellow": 25.853,
+    "orange": 24.986,
+    "red": 32.616,
+    "redOrange": 57.602,
+    "BR": 0.495,
+    "GR": 0.776,
+    "dim": 11.842,
     "soot": 0,
     "edgeSoot": 0,
     "pockets": 0,
-    "fine": 4.466,
-    "mid": 16.858,
-    "coarse": 78.676
+    "fine": 3.874,
+    "mid": 16.792,
+    "coarse": 79.334
    }
   },
   {
@@ -1028,22 +1028,22 @@
    "class": "gas jet",
    "light": "day",
    "metrics": {
-    "flamePx": 1020842,
-    "white": 1.711,
-    "pale": 2.344,
-    "yellow": 24.184,
-    "orange": 61.271,
-    "red": 10.158,
-    "redOrange": 71.428,
-    "BR": 0.336,
-    "GR": 0.723,
-    "dim": 21.441,
-    "soot": 0.105,
-    "edgeSoot": 8.533,
-    "pockets": 42.786,
-    "fine": 8.701,
-    "mid": 21.968,
-    "coarse": 69.332
+    "flamePx": 970491,
+    "white": 1.8,
+    "pale": 2.236,
+    "yellow": 25.096,
+    "orange": 63.776,
+    "red": 7.092,
+    "redOrange": 70.868,
+    "BR": 0.31,
+    "GR": 0.715,
+    "dim": 22.307,
+    "soot": 0.106,
+    "edgeSoot": 7.454,
+    "pockets": 45.506,
+    "fine": 8.616,
+    "mid": 22.599,
+    "coarse": 68.785
    }
   },
   {
@@ -1051,22 +1051,22 @@
    "class": "gas jet",
    "light": "day",
    "metrics": {
-    "flamePx": 21167,
-    "white": 0.954,
-    "pale": 9.567,
-    "yellow": 39.996,
-    "orange": 20.352,
-    "red": 28.19,
-    "redOrange": 48.543,
-    "BR": 0.397,
-    "GR": 0.766,
-    "dim": 10.894,
-    "soot": 0.002,
-    "edgeSoot": 0.022,
+    "flamePx": 19826,
+    "white": 1.019,
+    "pale": 9.2,
+    "yellow": 42.696,
+    "orange": 21.714,
+    "red": 25.371,
+    "redOrange": 47.085,
+    "BR": 0.368,
+    "GR": 0.764,
+    "dim": 8.791,
+    "soot": 0,
+    "edgeSoot": 0,
     "pockets": 0,
-    "fine": 4.148,
-    "mid": 16.044,
-    "coarse": 79.807
+    "fine": 4.656,
+    "mid": 18.631,
+    "coarse": 76.713
    }
   },
   {
@@ -1074,22 +1074,22 @@
    "class": "campfire",
    "light": "day",
    "metrics": {
-    "flamePx": 1811489,
+    "flamePx": 1798351,
     "white": 0.015,
-    "pale": 0.23,
-    "yellow": 18.039,
-    "orange": 26.455,
-    "red": 55.261,
-    "redOrange": 81.716,
-    "BR": 0.202,
+    "pale": 0.221,
+    "yellow": 18.17,
+    "orange": 26.644,
+    "red": 54.95,
+    "redOrange": 81.594,
+    "BR": 0.199,
     "GR": 0.556,
-    "dim": 29.487,
-    "soot": 0.205,
-    "edgeSoot": 20.863,
-    "pockets": 54.644,
-    "fine": 9.943,
-    "mid": 20.078,
-    "coarse": 69.978
+    "dim": 29.039,
+    "soot": 0.206,
+    "edgeSoot": 20.919,
+    "pockets": 54.494,
+    "fine": 9.899,
+    "mid": 20.107,
+    "coarse": 69.994
    }
   },
   {
@@ -1097,18 +1097,18 @@
    "class": "campfire",
    "light": "night",
    "metrics": {
-    "flamePx": 266102,
-    "white": 0.696,
-    "pale": 3.798,
-    "yellow": 9.317,
-    "orange": 34.437,
-    "red": 51.752,
-    "redOrange": 86.19,
-    "BR": 0.155,
-    "GR": 0.504,
-    "dim": 48.234,
-    "soot": 0.917,
-    "edgeSoot": 43.892,
+    "flamePx": 264583,
+    "white": 0.7,
+    "pale": 3.414,
+    "yellow": 9.338,
+    "orange": 34.61,
+    "red": 51.938,
+    "redOrange": 86.548,
+    "BR": 0.151,
+    "GR": 0.501,
+    "dim": 47.668,
+    "soot": 0.922,
+    "edgeSoot": 42.442,
     "pockets": 73.443,
     "fine": 24.92,
     "mid": 33.811,
@@ -1143,16 +1143,16 @@
    "class": "campfire",
    "light": "night",
    "metrics": {
-    "flamePx": 656312,
+    "flamePx": 656171,
     "white": 0,
-    "pale": 0.01,
-    "yellow": 6.995,
-    "orange": 38.127,
-    "red": 54.869,
+    "pale": 0.009,
+    "yellow": 6.996,
+    "orange": 38.135,
+    "red": 54.859,
     "redOrange": 92.995,
     "BR": 0.031,
     "GR": 0.438,
-    "dim": 60.049,
+    "dim": 60.041,
     "soot": 0.386,
     "edgeSoot": 30.28,
     "pockets": 8.793,
@@ -1166,22 +1166,22 @@
    "class": "excluded",
    "light": "night",
    "metrics": {
-    "flamePx": 164362,
+    "flamePx": 72206,
     "white": 0,
-    "pale": 0.816,
-    "yellow": 1.705,
-    "orange": 83.277,
-    "red": 14.201,
-    "redOrange": 97.478,
-    "BR": 0.677,
-    "GR": 0.826,
-    "dim": 8.068,
-    "soot": 0.429,
-    "edgeSoot": 49.542,
-    "pockets": 10.318,
-    "fine": 7.158,
-    "mid": 24.73,
-    "coarse": 68.112
+    "pale": 0.201,
+    "yellow": 0.945,
+    "orange": 70.886,
+    "red": 27.969,
+    "redOrange": 98.855,
+    "BR": 0.452,
+    "GR": 0.692,
+    "dim": 17.791,
+    "soot": 0.969,
+    "edgeSoot": 24.828,
+    "pockets": 11.724,
+    "fine": 6.943,
+    "mid": 22.445,
+    "coarse": 70.613
    }
   },
   {
@@ -1189,22 +1189,22 @@
    "class": "campfire",
    "light": "day",
    "metrics": {
-    "flamePx": 103853,
-    "white": 0.577,
-    "pale": 1.997,
-    "yellow": 5.171,
-    "orange": 21.632,
-    "red": 70.514,
-    "redOrange": 92.146,
-    "BR": 0.378,
-    "GR": 0.574,
-    "dim": 49.6,
-    "soot": 0.503,
-    "edgeSoot": 14.529,
-    "pockets": 175.857,
-    "fine": 13.135,
-    "mid": 23.516,
-    "coarse": 63.349
+    "flamePx": 95993,
+    "white": 0.624,
+    "pale": 1.606,
+    "yellow": 5.408,
+    "orange": 22.44,
+    "red": 69.922,
+    "redOrange": 92.362,
+    "BR": 0.35,
+    "GR": 0.561,
+    "dim": 48.866,
+    "soot": 0.466,
+    "edgeSoot": 11.902,
+    "pockets": 166.691,
+    "fine": 12.821,
+    "mid": 23.96,
+    "coarse": 63.22
    }
   },
   {
@@ -1212,22 +1212,22 @@
    "class": "campfire",
    "light": "dusk",
    "metrics": {
-    "flamePx": 441353,
-    "white": 3.315,
-    "pale": 3.498,
-    "yellow": 19.027,
-    "orange": 19.259,
-    "red": 54.78,
-    "redOrange": 74.039,
-    "BR": 0.396,
-    "GR": 0.661,
-    "dim": 17.998,
-    "soot": 0.127,
-    "edgeSoot": 6.335,
-    "pockets": 32.854,
-    "fine": 6.351,
-    "mid": 14.568,
-    "coarse": 79.08
+    "flamePx": 404908,
+    "white": 3.613,
+    "pale": 2.59,
+    "yellow": 20.603,
+    "orange": 20.908,
+    "red": 52.285,
+    "redOrange": 73.194,
+    "BR": 0.366,
+    "GR": 0.655,
+    "dim": 16.342,
+    "soot": 0.13,
+    "edgeSoot": 3.403,
+    "pockets": 30.6,
+    "fine": 7.75,
+    "mid": 18.821,
+    "coarse": 73.428
    }
   },
   {
@@ -1235,22 +1235,22 @@
    "class": "campfire",
    "light": "dusk",
    "metrics": {
-    "flamePx": 243236,
-    "white": 0.386,
-    "pale": 0.096,
-    "yellow": 9.083,
-    "orange": 57.902,
-    "red": 32.441,
-    "redOrange": 90.344,
-    "BR": 0.555,
-    "GR": 0.781,
-    "dim": 6.449,
-    "soot": 0.157,
-    "edgeSoot": 21.618,
-    "pockets": 5.05,
-    "fine": 6.104,
-    "mid": 19.344,
-    "coarse": 74.552
+    "flamePx": 166164,
+    "white": 0.566,
+    "pale": 0.026,
+    "yellow": 11.249,
+    "orange": 67.646,
+    "red": 20.513,
+    "redOrange": 88.16,
+    "BR": 0.417,
+    "GR": 0.722,
+    "dim": 8.377,
+    "soot": 0.228,
+    "edgeSoot": 22.721,
+    "pockets": 7.427,
+    "fine": 5.853,
+    "mid": 21.562,
+    "coarse": 72.585
    }
   },
   {
@@ -1258,16 +1258,16 @@
    "class": "campfire",
    "light": "night",
    "metrics": {
-    "flamePx": 853267,
+    "flamePx": 853159,
     "white": 0,
     "pale": 0.077,
-    "yellow": 13.357,
-    "orange": 21.531,
-    "red": 65.034,
-    "redOrange": 86.566,
+    "yellow": 13.358,
+    "orange": 21.534,
+    "red": 65.03,
+    "redOrange": 86.564,
     "BR": 0.109,
     "GR": 0.466,
-    "dim": 38.945,
+    "dim": 38.937,
     "soot": 0.607,
     "edgeSoot": 51.249,
     "pockets": 22.973,
@@ -1281,18 +1281,18 @@
    "class": "campfire",
    "light": "dusk",
    "metrics": {
-    "flamePx": 28775,
+    "flamePx": 28689,
     "white": 0.059,
-    "pale": 2.738,
-    "yellow": 13.758,
-    "orange": 63.211,
-    "red": 20.233,
-    "redOrange": 83.444,
-    "BR": 0.263,
+    "pale": 2.607,
+    "yellow": 13.796,
+    "orange": 63.38,
+    "red": 20.158,
+    "redOrange": 83.537,
+    "BR": 0.262,
     "GR": 0.63,
-    "dim": 22.262,
-    "soot": 0.739,
-    "edgeSoot": 45.392,
+    "dim": 22.113,
+    "soot": 0.741,
+    "edgeSoot": 44.74,
     "pockets": 14.855,
     "fine": 8.897,
     "mid": 20.817,
@@ -1304,22 +1304,22 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 537934,
-    "white": 2.891,
-    "pale": 6.322,
-    "yellow": 3.358,
-    "orange": 85.677,
-    "red": 1.751,
-    "redOrange": 87.428,
-    "BR": 0.536,
-    "GR": 0.789,
-    "dim": 2.856,
-    "soot": 0.708,
-    "edgeSoot": 58.321,
-    "pockets": 2.217,
-    "fine": 8.195,
-    "mid": 23.833,
-    "coarse": 67.972
+    "flamePx": 531759,
+    "white": 2.925,
+    "pale": 5.415,
+    "yellow": 3.355,
+    "orange": 86.581,
+    "red": 1.723,
+    "redOrange": 88.305,
+    "BR": 0.533,
+    "GR": 0.787,
+    "dim": 2.865,
+    "soot": 0.716,
+    "edgeSoot": 50.755,
+    "pockets": 2.198,
+    "fine": 8.143,
+    "mid": 24,
+    "coarse": 67.856
    }
   },
   {
@@ -1327,18 +1327,18 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 338364,
-    "white": 8.157,
-    "pale": 11.799,
-    "yellow": 3.412,
-    "orange": 27.698,
-    "red": 48.919,
-    "redOrange": 76.617,
-    "BR": 0.6,
-    "GR": 0.781,
-    "dim": 7.358,
-    "soot": 0.862,
-    "edgeSoot": 42.645,
+    "flamePx": 324786,
+    "white": 8.499,
+    "pale": 8.868,
+    "yellow": 3.354,
+    "orange": 28.622,
+    "red": 50.658,
+    "redOrange": 79.28,
+    "BR": 0.589,
+    "GR": 0.773,
+    "dim": 7.501,
+    "soot": 0.906,
+    "edgeSoot": 31.928,
     "pockets": 0,
     "fine": 9.146,
     "mid": 26.021,
@@ -1350,19 +1350,19 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 116802,
-    "white": 52.593,
-    "pale": 8.018,
-    "yellow": 7.887,
-    "orange": 13.097,
-    "red": 18.404,
-    "redOrange": 31.501,
-    "BR": 0.65,
-    "GR": 0.819,
-    "dim": 17.201,
-    "soot": 0.301,
-    "edgeSoot": 20.809,
-    "pockets": 4.301,
+    "flamePx": 111472,
+    "white": 55.108,
+    "pale": 4.357,
+    "yellow": 7.912,
+    "orange": 13.451,
+    "red": 19.172,
+    "redOrange": 32.623,
+    "BR": 0.641,
+    "GR": 0.812,
+    "dim": 17.942,
+    "soot": 0.315,
+    "edgeSoot": 15.827,
+    "pockets": 4.268,
     "fine": 4.522,
     "mid": 20.159,
     "coarse": 75.319
@@ -1373,16 +1373,16 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 359267,
-    "white": 7.56,
-    "pale": 3.237,
-    "yellow": 10.35,
-    "orange": 21.679,
-    "red": 57.174,
-    "redOrange": 78.853,
-    "BR": 0.123,
-    "GR": 0.479,
-    "dim": 59.313,
+    "flamePx": 354799,
+    "white": 7.655,
+    "pale": 2.036,
+    "yellow": 10.468,
+    "orange": 21.948,
+    "red": 57.894,
+    "redOrange": 79.841,
+    "BR": 0.113,
+    "GR": 0.472,
+    "dim": 60.06,
     "soot": 0,
     "edgeSoot": 0,
     "pockets": 0,
@@ -1396,22 +1396,22 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 41166,
-    "white": 11.551,
-    "pale": 7.275,
-    "yellow": 6.95,
-    "orange": 62.644,
-    "red": 11.58,
-    "redOrange": 74.224,
-    "BR": 0.401,
-    "GR": 0.703,
-    "dim": 18.119,
+    "flamePx": 40085,
+    "white": 11.862,
+    "pale": 5.191,
+    "yellow": 6.96,
+    "orange": 64.139,
+    "red": 11.847,
+    "redOrange": 75.986,
+    "BR": 0.389,
+    "GR": 0.695,
+    "dim": 18.608,
     "soot": 0,
     "edgeSoot": 0,
     "pockets": 0,
-    "fine": 2.397,
-    "mid": 11.542,
-    "coarse": 86.062
+    "fine": 2.347,
+    "mid": 11.541,
+    "coarse": 86.112
    }
   },
   {
@@ -1419,22 +1419,22 @@
    "class": "torch",
    "light": "night",
    "metrics": {
-    "flamePx": 172293,
-    "white": 22.74,
-    "pale": 1.415,
-    "yellow": 2.11,
-    "orange": 5.455,
-    "red": 68.28,
-    "redOrange": 73.735,
-    "BR": 0.426,
-    "GR": 0.549,
-    "dim": 57.024,
+    "flamePx": 160386,
+    "white": 24.429,
+    "pale": 0.851,
+    "yellow": 2.212,
+    "orange": 5.798,
+    "red": 66.711,
+    "redOrange": 72.509,
+    "BR": 0.431,
+    "GR": 0.566,
+    "dim": 54.625,
     "soot": 0.085,
-    "edgeSoot": 8.901,
-    "pockets": 11.451,
-    "fine": 3.181,
-    "mid": 18.067,
-    "coarse": 78.752
+    "edgeSoot": 3.945,
+    "pockets": 12.537,
+    "fine": 3.193,
+    "mid": 16.947,
+    "coarse": 79.86
    }
   },
   {
@@ -1442,22 +1442,22 @@
    "class": "torch",
    "light": "day",
    "metrics": {
-    "flamePx": 29669,
-    "white": 10.597,
-    "pale": 28.616,
-    "yellow": 24.706,
-    "orange": 21.103,
-    "red": 14.972,
-    "redOrange": 36.075,
-    "BR": 0.728,
-    "GR": 0.909,
-    "dim": 3.023,
-    "soot": 0.003,
-    "edgeSoot": 0.793,
+    "flamePx": 18830,
+    "white": 16.697,
+    "pale": 16.437,
+    "yellow": 35.858,
+    "orange": 18.317,
+    "red": 12.693,
+    "redOrange": 31.009,
+    "BR": 0.654,
+    "GR": 0.882,
+    "dim": 4.742,
+    "soot": 0.006,
+    "edgeSoot": 0.823,
     "pockets": 0,
-    "fine": 3.807,
-    "mid": 15.959,
-    "coarse": 80.234
+    "fine": 3.941,
+    "mid": 17.607,
+    "coarse": 78.452
    }
   },
   {
@@ -1465,22 +1465,22 @@
    "class": "torch",
    "light": "dusk",
    "metrics": {
-    "flamePx": 71922,
-    "white": 27.926,
-    "pale": 2.326,
-    "yellow": 8.462,
-    "orange": 13.331,
-    "red": 45.528,
-    "redOrange": 58.86,
-    "BR": 0.503,
-    "GR": 0.68,
-    "dim": 33.805,
-    "soot": 0.086,
-    "edgeSoot": 6.443,
-    "pockets": 2.911,
-    "fine": 2.949,
-    "mid": 16.704,
-    "coarse": 80.347
+    "flamePx": 64871,
+    "white": 30.961,
+    "pale": 2.271,
+    "yellow": 9.362,
+    "orange": 14.732,
+    "red": 42.674,
+    "redOrange": 57.406,
+    "BR": 0.47,
+    "GR": 0.672,
+    "dim": 33.212,
+    "soot": 0.096,
+    "edgeSoot": 6.195,
+    "pockets": 2.896,
+    "fine": 2.956,
+    "mid": 16.693,
+    "coarse": 80.351
    }
   },
   {
@@ -1488,19 +1488,19 @@
    "class": "torch",
    "light": "dusk",
    "metrics": {
-    "flamePx": 11054,
-    "white": 4.985,
-    "pale": 4.207,
-    "yellow": 53.7,
-    "orange": 17.948,
-    "red": 19.151,
-    "redOrange": 37.1,
-    "BR": 0.169,
-    "GR": 0.727,
-    "dim": 16.139,
-    "soot": 0.103,
-    "edgeSoot": 8.772,
-    "pockets": 19.904,
+    "flamePx": 10739,
+    "white": 5.131,
+    "pale": 2.97,
+    "yellow": 54.931,
+    "orange": 18.205,
+    "red": 18.763,
+    "redOrange": 36.968,
+    "BR": 0.151,
+    "GR": 0.723,
+    "dim": 15.728,
+    "soot": 0.106,
+    "edgeSoot": 6.699,
+    "pockets": 21.211,
     "fine": 2.62,
     "mid": 19.528,
     "coarse": 77.852
@@ -1511,22 +1511,22 @@
    "class": "structure",
    "light": "day",
    "metrics": {
-    "flamePx": 53287,
-    "white": 0.576,
-    "pale": 4.875,
-    "yellow": 6.673,
-    "orange": 26.577,
-    "red": 61.214,
-    "redOrange": 87.791,
-    "BR": 0.576,
-    "GR": 0.727,
-    "dim": 23.263,
-    "soot": 0.297,
-    "edgeSoot": 15.749,
-    "pockets": 64.167,
-    "fine": 7.634,
-    "mid": 18.172,
-    "coarse": 74.193
+    "flamePx": 37545,
+    "white": 0.818,
+    "pale": 3.886,
+    "yellow": 6.267,
+    "orange": 24.009,
+    "red": 65.021,
+    "redOrange": 89.029,
+    "BR": 0.465,
+    "GR": 0.657,
+    "dim": 27.064,
+    "soot": 0.403,
+    "edgeSoot": 16.091,
+    "pockets": 71.96,
+    "fine": 8.747,
+    "mid": 21.495,
+    "coarse": 69.758
    }
   },
   {
@@ -1534,18 +1534,18 @@
    "class": "structure",
    "light": "night",
    "metrics": {
-    "flamePx": 319438,
+    "flamePx": 319215,
     "white": 0.083,
-    "pale": 0.218,
-    "yellow": 17.738,
-    "orange": 16.136,
-    "red": 65.826,
-    "redOrange": 81.961,
+    "pale": 0.163,
+    "yellow": 17.749,
+    "orange": 16.146,
+    "red": 65.86,
+    "redOrange": 82.006,
     "BR": 0.042,
     "GR": 0.416,
-    "dim": 60.075,
+    "dim": 60.104,
     "soot": 0.126,
-    "edgeSoot": 4.877,
+    "edgeSoot": 4.833,
     "pockets": 6.614,
     "fine": 16.218,
     "mid": 21.165,
@@ -1557,17 +1557,17 @@
    "class": "structure",
    "light": "night",
    "metrics": {
-    "flamePx": 1014658,
-    "white": 0.089,
-    "pale": 3.468,
-    "yellow": 19.741,
-    "orange": 34.507,
-    "red": 42.194,
-    "redOrange": 76.702,
-    "BR": 0.16,
-    "GR": 0.543,
-    "dim": 24.997,
-    "soot": 0.209,
+    "flamePx": 1010054,
+    "white": 0.09,
+    "pale": 3.218,
+    "yellow": 19.821,
+    "orange": 34.658,
+    "red": 42.213,
+    "redOrange": 76.871,
+    "BR": 0.158,
+    "GR": 0.542,
+    "dim": 24.78,
+    "soot": 0.21,
     "edgeSoot": 20.475,
     "pockets": 17.758,
     "fine": 12.249,
@@ -1580,18 +1580,18 @@
    "class": "structure",
    "light": "night",
    "metrics": {
-    "flamePx": 301429,
-    "white": 0.565,
-    "pale": 1.987,
-    "yellow": 33.205,
-    "orange": 22.858,
-    "red": 41.385,
-    "redOrange": 64.243,
-    "BR": 0.119,
-    "GR": 0.56,
-    "dim": 38.537,
-    "soot": 0.239,
-    "edgeSoot": 10.06,
+    "flamePx": 300199,
+    "white": 0.567,
+    "pale": 1.654,
+    "yellow": 33.333,
+    "orange": 22.947,
+    "red": 41.499,
+    "redOrange": 64.446,
+    "BR": 0.116,
+    "GR": 0.559,
+    "dim": 38.477,
+    "soot": 0.24,
+    "edgeSoot": 9.991,
     "pockets": 0,
     "fine": 12.084,
     "mid": 17.018,
@@ -1603,18 +1603,18 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 310626,
-    "white": 0.906,
-    "pale": 1.976,
-    "yellow": 35.12,
-    "orange": 43.407,
-    "red": 18.591,
-    "redOrange": 61.999,
-    "BR": 0.357,
-    "GR": 0.724,
-    "dim": 38.314,
-    "soot": 0.067,
-    "edgeSoot": 4.203,
+    "flamePx": 309024,
+    "white": 0.91,
+    "pale": 1.487,
+    "yellow": 35.3,
+    "orange": 43.628,
+    "red": 18.675,
+    "redOrange": 62.303,
+    "BR": 0.355,
+    "GR": 0.723,
+    "dim": 37.628,
+    "soot": 0.068,
+    "edgeSoot": 4.189,
     "pockets": 53.339,
     "fine": 10.026,
     "mid": 16.831,
@@ -1626,22 +1626,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 22728,
-    "white": 0.009,
-    "pale": 31.177,
-    "yellow": 24.239,
-    "orange": 31.565,
-    "red": 13.006,
-    "redOrange": 44.571,
-    "BR": 0.803,
-    "GR": 0.934,
-    "dim": 3.806,
-    "soot": 0.001,
+    "flamePx": 8980,
+    "white": 0.022,
+    "pale": 33.82,
+    "yellow": 17.082,
+    "orange": 32.35,
+    "red": 16.726,
+    "redOrange": 49.076,
+    "BR": 0.722,
+    "GR": 0.906,
+    "dim": 9.109,
+    "soot": 0,
     "edgeSoot": 0,
-    "pockets": 0.577,
-    "fine": 4.396,
-    "mid": 17.666,
-    "coarse": 77.938
+    "pockets": 0.293,
+    "fine": 4.548,
+    "mid": 18.336,
+    "coarse": 77.115
    }
   },
   {
@@ -1649,22 +1649,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 13072,
-    "white": 0.161,
-    "pale": 26.132,
-    "yellow": 11.146,
-    "orange": 20.502,
-    "red": 40.927,
-    "redOrange": 61.429,
-    "BR": 0.679,
-    "GR": 0.771,
-    "dim": 16.784,
+    "flamePx": 5335,
+    "white": 0.394,
+    "pale": 27.948,
+    "yellow": 8.154,
+    "orange": 20.694,
+    "red": 42.812,
+    "redOrange": 63.505,
+    "BR": 0.565,
+    "GR": 0.702,
+    "dim": 22.099,
     "soot": 0,
     "edgeSoot": 0,
-    "pockets": 0.862,
-    "fine": 4.869,
-    "mid": 19.136,
-    "coarse": 75.996
+    "pockets": 0,
+    "fine": 4.475,
+    "mid": 19.384,
+    "coarse": 76.141
    }
   },
   {
@@ -1672,22 +1672,22 @@
    "class": "flamethrower",
    "light": "day",
    "metrics": {
-    "flamePx": 573376,
-    "white": 1.986,
-    "pale": 3.113,
-    "yellow": 16.704,
-    "orange": 33.243,
-    "red": 44.954,
-    "redOrange": 78.197,
-    "BR": 0.216,
-    "GR": 0.564,
-    "dim": 44.79,
-    "soot": 0.088,
-    "edgeSoot": 6.528,
-    "pockets": 18.258,
-    "fine": 9.151,
-    "mid": 21.054,
-    "coarse": 69.795
+    "flamePx": 557330,
+    "white": 2.043,
+    "pale": 2.146,
+    "yellow": 17.061,
+    "orange": 33.048,
+    "red": 45.702,
+    "redOrange": 78.75,
+    "BR": 0.198,
+    "GR": 0.553,
+    "dim": 45.998,
+    "soot": 0.092,
+    "edgeSoot": 4.874,
+    "pockets": 16.367,
+    "fine": 9.189,
+    "mid": 21.091,
+    "coarse": 69.72
    }
   },
   {
@@ -1695,22 +1695,22 @@
    "class": "flamethrower",
    "light": "night",
    "metrics": {
-    "flamePx": 746773,
-    "white": 26.886,
-    "pale": 4.102,
-    "yellow": 15.259,
-    "orange": 29.847,
-    "red": 23.886,
-    "redOrange": 53.732,
-    "BR": 0.387,
+    "flamePx": 725223,
+    "white": 27.685,
+    "pale": 2.666,
+    "yellow": 15.683,
+    "orange": 30.687,
+    "red": 23.278,
+    "redOrange": 53.966,
+    "BR": 0.38,
     "GR": 0.692,
-    "dim": 30.341,
-    "soot": 0.013,
-    "edgeSoot": 2.313,
-    "pockets": 2.303,
-    "fine": 5.295,
-    "mid": 16.22,
-    "coarse": 78.485
+    "dim": 29.999,
+    "soot": 0.014,
+    "edgeSoot": 1.549,
+    "pockets": 2.308,
+    "fine": 4.882,
+    "mid": 13.951,
+    "coarse": 81.167
    }
   },
   {
@@ -1718,22 +1718,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 68569,
+    "flamePx": 55802,
     "white": 0,
-    "pale": 2.895,
-    "yellow": 4.235,
-    "orange": 26.998,
-    "red": 64.981,
-    "redOrange": 91.979,
-    "BR": 0.394,
-    "GR": 0.566,
-    "dim": 40.543,
-    "soot": 0.233,
-    "edgeSoot": 6.579,
-    "pockets": 26.181,
-    "fine": 5.281,
-    "mid": 19.612,
-    "coarse": 75.106
+    "pale": 0.525,
+    "yellow": 2.518,
+    "orange": 25.571,
+    "red": 71.386,
+    "redOrange": 96.957,
+    "BR": 0.3,
+    "GR": 0.502,
+    "dim": 40.744,
+    "soot": 0.207,
+    "edgeSoot": 5.63,
+    "pockets": 19.331,
+    "fine": 5.1,
+    "mid": 18.811,
+    "coarse": 76.089
    }
   },
   {
@@ -1741,22 +1741,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 234380,
-    "white": 0.026,
-    "pale": 0.574,
-    "yellow": 1.163,
-    "orange": 24.14,
-    "red": 74.068,
-    "redOrange": 98.208,
-    "BR": 0.247,
-    "GR": 0.507,
-    "dim": 38.665,
-    "soot": 0.194,
-    "edgeSoot": 4.976,
-    "pockets": 40.306,
-    "fine": 7.015,
-    "mid": 23.92,
-    "coarse": 69.064
+    "flamePx": 217517,
+    "white": 0.028,
+    "pale": 0.017,
+    "yellow": 0.308,
+    "orange": 21.289,
+    "red": 78.358,
+    "redOrange": 99.648,
+    "BR": 0.201,
+    "GR": 0.475,
+    "dim": 34.154,
+    "soot": 0.207,
+    "edgeSoot": 4.284,
+    "pockets": 50.282,
+    "fine": 6.864,
+    "mid": 21.735,
+    "coarse": 71.401
    }
   },
   {
@@ -1764,22 +1764,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 256802,
+    "flamePx": 243986,
     "white": 0.007,
-    "pale": 0.1,
-    "yellow": 3.846,
-    "orange": 16.147,
-    "red": 79.89,
-    "redOrange": 96.037,
-    "BR": 0.22,
-    "GR": 0.451,
-    "dim": 49.795,
-    "soot": 0.633,
-    "edgeSoot": 20.896,
-    "pockets": 26.1,
-    "fine": 10.59,
-    "mid": 28.744,
-    "coarse": 60.667
+    "pale": 0.018,
+    "yellow": 3.736,
+    "orange": 14.005,
+    "red": 82.234,
+    "redOrange": 96.239,
+    "BR": 0.189,
+    "GR": 0.429,
+    "dim": 52.054,
+    "soot": 0.663,
+    "edgeSoot": 21.274,
+    "pockets": 32.79,
+    "fine": 12.205,
+    "mid": 28.878,
+    "coarse": 58.917
    }
   },
   {
@@ -1787,22 +1787,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 188650,
-    "white": 0.602,
-    "pale": 4.18,
-    "yellow": 3.659,
-    "orange": 17.917,
-    "red": 73.623,
-    "redOrange": 91.539,
-    "BR": 0.317,
-    "GR": 0.542,
-    "dim": 48.784,
-    "soot": 0.019,
-    "edgeSoot": 0.826,
-    "pockets": 16.893,
-    "fine": 6.838,
-    "mid": 20.897,
-    "coarse": 72.265
+    "flamePx": 179058,
+    "white": 0.634,
+    "pale": 3.245,
+    "yellow": 3.766,
+    "orange": 18.342,
+    "red": 74.013,
+    "redOrange": 92.355,
+    "BR": 0.29,
+    "GR": 0.524,
+    "dim": 49.342,
+    "soot": 0.017,
+    "edgeSoot": 0.672,
+    "pockets": 13.837,
+    "fine": 6.814,
+    "mid": 20.985,
+    "coarse": 72.201
    }
   },
   {
@@ -1810,22 +1810,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 323484,
-    "white": 0.805,
-    "pale": 7.01,
-    "yellow": 5.135,
-    "orange": 20.561,
-    "red": 66.434,
-    "redOrange": 86.994,
-    "BR": 0.445,
-    "GR": 0.635,
-    "dim": 38.264,
-    "soot": 0.139,
-    "edgeSoot": 9.914,
-    "pockets": 7.918,
-    "fine": 6.275,
-    "mid": 22.412,
-    "coarse": 71.313
+    "flamePx": 284502,
+    "white": 0.915,
+    "pale": 5.876,
+    "yellow": 5.783,
+    "orange": 18.758,
+    "red": 68.668,
+    "redOrange": 87.426,
+    "BR": 0.39,
+    "GR": 0.597,
+    "dim": 42.141,
+    "soot": 0.138,
+    "edgeSoot": 7.695,
+    "pockets": 9.736,
+    "fine": 6.239,
+    "mid": 22.58,
+    "coarse": 71.181
    }
   },
   {
@@ -1833,22 +1833,22 @@
    "class": "fireball",
    "light": "night",
    "metrics": {
-    "flamePx": 703915,
-    "white": 1.008,
-    "pale": 6.894,
-    "yellow": 8.149,
-    "orange": 60.914,
-    "red": 23.035,
-    "redOrange": 83.949,
-    "BR": 0.23,
-    "GR": 0.6,
-    "dim": 34.393,
-    "soot": 0.238,
-    "edgeSoot": 27.506,
-    "pockets": 4.25,
-    "fine": 7.489,
-    "mid": 14.855,
-    "coarse": 77.657
+    "flamePx": 694233,
+    "white": 1.022,
+    "pale": 6.33,
+    "yellow": 7.737,
+    "orange": 61.557,
+    "red": 23.354,
+    "redOrange": 84.911,
+    "BR": 0.221,
+    "GR": 0.595,
+    "dim": 34.612,
+    "soot": 0.241,
+    "edgeSoot": 21.745,
+    "pockets": 2.844,
+    "fine": 7.413,
+    "mid": 14.463,
+    "coarse": 78.125
    }
   },
   {
@@ -1856,19 +1856,19 @@
    "class": "fireball",
    "light": "night",
    "metrics": {
-    "flamePx": 132033,
-    "white": 18.448,
-    "pale": 1.68,
-    "yellow": 8.267,
-    "orange": 22.118,
-    "red": 49.487,
-    "redOrange": 71.605,
-    "BR": 0.276,
-    "GR": 0.584,
-    "dim": 53.332,
+    "flamePx": 131103,
+    "white": 18.579,
+    "pale": 0.987,
+    "yellow": 8.322,
+    "orange": 22.273,
+    "red": 49.838,
+    "redOrange": 72.111,
+    "BR": 0.272,
+    "GR": 0.581,
+    "dim": 53.71,
     "soot": 0.026,
-    "edgeSoot": 2.661,
-    "pockets": 0.927,
+    "edgeSoot": 2.656,
+    "pockets": 0.923,
     "fine": 1.913,
     "mid": 9.149,
     "coarse": 88.938
@@ -1879,22 +1879,22 @@
    "class": "fireball",
    "light": "day",
    "metrics": {
-    "flamePx": 146376,
+    "flamePx": 142167,
     "white": 0,
-    "pale": 2.254,
-    "yellow": 8.749,
-    "orange": 50.577,
-    "red": 38.419,
-    "redOrange": 88.996,
-    "BR": 0.475,
-    "GR": 0.718,
-    "dim": 4.9,
+    "pale": 2.318,
+    "yellow": 8.971,
+    "orange": 50.282,
+    "red": 38.428,
+    "redOrange": 88.71,
+    "BR": 0.465,
+    "GR": 0.713,
+    "dim": 5.025,
     "soot": 0.003,
-    "edgeSoot": 1.024,
-    "pockets": 3.746,
-    "fine": 5.381,
-    "mid": 13.803,
-    "coarse": 80.816
+    "edgeSoot": 0.42,
+    "pockets": 3.723,
+    "fine": 6.311,
+    "mid": 17.769,
+    "coarse": 75.92
    }
   },
   {
@@ -1902,18 +1902,18 @@
    "class": "fireball",
    "light": "dusk",
    "metrics": {
-    "flamePx": 120565,
+    "flamePx": 120441,
     "white": 0.001,
-    "pale": 5.906,
-    "yellow": 37.739,
-    "orange": 40.482,
-    "red": 15.873,
-    "redOrange": 56.355,
+    "pale": 5.904,
+    "yellow": 37.772,
+    "orange": 40.483,
+    "red": 15.84,
+    "redOrange": 56.323,
     "BR": 0.302,
     "GR": 0.72,
-    "dim": 13.236,
-    "soot": 0.39,
-    "edgeSoot": 48.676,
+    "dim": 13.238,
+    "soot": 0.389,
+    "edgeSoot": 48.011,
     "pockets": 3.4,
     "fine": 5.285,
     "mid": 14.072,

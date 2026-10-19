@@ -4,10 +4,10 @@
 //
 //   node tools/fire/measure.ts <png|jpg> [WxH+X+Y] [--class structure] [--json]
 //
-// Flame = max channel >= 110 with red the largest and not grey (max - min >= 20), or near white
-// (min >= 235). Its bands (white, pale yellow, yellow, orange, red), B/R and G/R, and its dim
-// share (luma under 0.45 of its p99: thin, see-through flame) are taken at the picture's own
-// size, as they are shares. What depends on scale (soot round the flame, its edge, the dark
+// Flame = max channel >= 110 with red the largest, blue under green and saturated (max - min at
+// least 20 and a fifth of max, so a lit pink stone is not flame), or near white (min >= 235).
+// Its bands (white, pale yellow, yellow, orange, red), B/R and G/R, and its dim share (luma
+// under 0.45 of its p99: thin, see-through flame) are taken at the picture's own size, as they are shares. What depends on scale (soot round the flame, its edge, the dark
 // pockets in it, detail by octave) is taken after the crop is resampled so the flame's box is
 // `FLAME_H` pixels tall, so a small fire in a render and a frame-filling one in a photograph
 // compare. With --class it prints each number against that class's range in references.json
@@ -114,10 +114,15 @@ function cropRgb(pic: Picture, box?: Box): { w: number; h: number; px: Uint8Arra
   return { w, h, px };
 }
 
-const isFlame = (r: number, g: number, b: number) => {
+/// A coloured flame pixel's least saturation (chroma over its max): a lit stone or skin by a
+/// fire is pale and pinkish (252,233,222 is 0.12), real flame hardly ever (photographs' campfire
+/// crops: under 1%, but a dusk shot with the sky through it). A flame's blue never passes its
+/// green (a blackbody's does not), so a pink pixel (195,114,123) is a lit surface too.
+export const FLAME_SAT = 0.2;
+export const isFlame = (r: number, g: number, b: number) => {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  return min >= 235 || (max >= 110 && r >= max && max - min >= 20);
+  return min >= 235 || (max >= 110 && r >= max && g >= b && max - min >= Math.max(20, FLAME_SAT * max));
 };
 const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const pct = (a: ArrayLike<number>, q: number) => (a.length ? a[Math.min(a.length - 1, Math.floor(q * a.length))] : 0);
@@ -206,7 +211,7 @@ export function measure(pic: Picture, box?: Box): Metrics {
     if (hue >= 45 && hue <= 65 && sat < 0.45) band.pale++;
     else if (hue >= 40 && hue <= 65) band.yellow++;
     else if (hue >= 25 && hue < 40) band.orange++;
-    else if (hue < 25 || hue > 330) band.red++;
+    else band.red++;
   }
   fl.sort((a, b) => a - b);
   const p99 = pct(fl, 0.99);
