@@ -77,6 +77,8 @@ var climate_leaves_sampler: sampler;
 const SNOW_FULL_M: f32 = 0.5;
 // How far snow presses down what it covers, metres, beyond its depth.
 const BLADES_PRESSED_M: f32 = 0.25;
+// How far under the snow's surface, metres, a blade buried whole is drawn.
+const BURIED_BELOW_M: f32 = 0.05;
 // Snow caught on what still stands through it, linear, as the ground's snow.
 const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
 // Rime on grass's blades in a hard frost, linear.
@@ -220,8 +222,9 @@ fn shrunk(local: vec3<f32>, to_root: vec2<f32>, rise: f32, rank: f32, world_from
         gone = mix(t.w, t.y, (rank - t.z) / (t.x - t.z));
     }
     keep *= 1.0 - smoothstep(gone - 2.0, gone, far);
-    // Under snow only what stands above it shows (D327).
-    let sunk = min(rise * keep, snow_over(root_world));
+    // Under snow only what stands above it shows (D327); a blade buried whole goes a little
+    // under the white, or it lay flat on it as grey hatching (weather round 9).
+    let sunk = min(rise * keep + BURIED_BELOW_M, snow_over(root_world));
     return root + (local - root) * keep - vec3<f32>(0.0, sunk, 0.0);
 }
 
