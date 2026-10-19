@@ -110,15 +110,17 @@ impl Under {
         }
     }
 
-    /// How many stops the eye opens for this light: about half of those lost, so a dull day
-    /// reads duller than a clear one, as a photograph's does, without going black.
+    /// How many stops the eye opens for this light: most of those lost, as a camera's meter
+    /// takes them back, so a dull day reads a little duller than a clear one, not dark.
     pub fn opens_ev(&self) -> f32 {
         EYE_OPENS * libm::log2f(self.total.max(1e-3))
     }
 }
 
-/// The share of the stops lost to cloud that the eye takes back.
-const EYE_OPENS: f32 = 0.5;
+/// The share of the stops lost to cloud that the eye takes back. At a half, the snowfall's
+/// forest under a full deck had a mean of 0.25 against Sons of the Forest's winter's 0.37,
+/// its snow grey and its near trunks black (weather round 2).
+const EYE_OPENS: f32 = 0.8;
 
 /// How far one sees in falling rain and snow, metres, for so many millimetres an hour of each
 /// (snow as its water): the visibilities a METAR grades intensity by, light snow over a
@@ -348,9 +350,10 @@ mod tests {
     }
 
     #[test]
-    fn the_eye_opens_for_half_the_stops_lost() {
+    fn the_eye_opens_for_most_of_the_stops_lost() {
+        // A full deck lets through a quarter of the light, two stops under a clear day's.
         let overcast = Under::sky(1.0, 0.0);
-        assert!((overcast.opens_ev() + 1.0).abs() < 0.01);
+        assert!(overcast.opens_ev() < -1.0 && overcast.opens_ev() > -2.0);
         assert!(Under::sky(0.0, 0.0).opens_ev().abs() < 1e-5);
     }
 
