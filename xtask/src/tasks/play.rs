@@ -39,6 +39,13 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/sandbox/looks.ts", args),
     },
     Task {
+        name: "fire",
+        takes: "[--time noon,dusk,night] [--out shots/fire] [--from DIR] [--gate] [--hold]",
+        does: "the fire sheet: every fire the game draws at noon, dusk and night, each cropped from its projected bounds and measured against its class of real-fire photographs; --gate fails only where a fire is worse than tools/fire/held.json (D415)",
+        group: "Play and check",
+        run: |args| node("tools/fire/sheet.ts", args),
+    },
+    Task {
         name: "foliage",
         takes: "[--card <name>] [--draw <dir>]",
         does: "the foliage check (D368): every leaf, needle and frond card the plants wear measured from its atlas and normal map, leaves a card, texels a leaf, relief, tilt, detail, colour, held to what reads as leaves; --draw shows the leaves it counted (docs/art-style.md#places)",

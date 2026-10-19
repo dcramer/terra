@@ -76,6 +76,24 @@ const DOCS: &[&str] = &[
     "crates/README.md",
 ];
 
+/// What the fire sheet reads (docs/fire.md, "The automatic check"; D415): fire's code and
+/// shaders, its textures and presets, the building fire, the tonemapping patches it is drawn
+/// through, and the check's own tools. A change here runs the sheet before a push.
+pub(crate) const FIRE: &[&str] = &[
+    "crates/terra_world/src/fire.rs",
+    "crates/terra_world/src/fire/",
+    "crates/terra_world/src/smoke.rs",
+    "crates/terra_world/src/grading.rs",
+    "crates/terra_world/src/dither.rs",
+    "crates/terra_world/src/scene.rs",
+    "crates/terra_game/src/build/fire.rs",
+    "assets/shaders/fire.wesl",
+    "assets/shaders/fire_",
+    "assets/textures/fire/",
+    "assets/data/fire.ron",
+    "tools/fire/",
+];
+
 /// What a change touches.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Scope {
@@ -97,6 +115,8 @@ pub(crate) struct Scope {
     pub(crate) tools: BTreeSet<String>,
     /// A Python script changed (the Blender scripts' check).
     pub(crate) python: bool,
+    /// Something the fire sheet reads changed ([`FIRE`]).
+    pub(crate) fire: bool,
     /// A ratchet's baseline changed (`baselines::is_baseline`), which only the baselines
     /// stage reads.
     pub(crate) baselines: bool,
@@ -136,6 +156,9 @@ impl Scope {
                 self.tools.iter().cloned().collect::<Vec<_>>().join(",")
             ));
         }
+        if self.fire {
+            parts.push("fire".into());
+        }
         if self.baselines {
             parts.push("baselines".into());
         }
@@ -173,6 +196,7 @@ pub(crate) fn classify(files: &[String], packages: &BTreeSet<String>) -> Scope {
             continue;
         }
         scope.rust |= file.ends_with(".rs");
+        scope.fire |= FIRE.iter().any(|p| file.starts_with(p));
         for (prefix, readers) in READ_BY {
             if file.starts_with(prefix) {
                 scope.readers.extend(readers.iter().map(|r| r.to_string()));
@@ -368,6 +392,34 @@ mod tests {
         assert!(scope.changed.is_empty());
         assert_eq!(scope.readers, set(&["terra_land", "terra_build"]));
         assert_eq!(scope.tools, set(&["sandbox"]));
+    }
+
+    #[test]
+    fn fires_code_shaders_textures_and_tonemapping_run_the_fire_sheet_and_nothing_else_does() {
+        for file in [
+            "crates/terra_world/src/fire.rs",
+            "crates/terra_world/src/fire/seen.rs",
+            "assets/shaders/fire_smoke.wesl",
+            "assets/textures/fire/flames.ktx2",
+            "crates/terra_world/src/grading.rs",
+            "tools/fire/measure.ts",
+        ] {
+            assert!(
+                classify(&files(&[file]), &set(&["terra_world", "terra_game"])).fire,
+                "{file}"
+            );
+        }
+        for file in [
+            "crates/terra_world/src/firefly.rs",
+            "assets/shaders/water.wesl",
+            "tools/sandbox/places.ts",
+            "docs/fire.md",
+        ] {
+            assert!(
+                !classify(&files(&[file]), &set(&["terra_world", "terra_game"])).fire,
+                "{file}"
+            );
+        }
     }
 
     #[test]

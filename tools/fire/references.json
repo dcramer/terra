@@ -1,0 +1,1924 @@
+{
+ "about": "Real fire measured by tools/fire/measure.ts from the photographs in photos.json (node tools/fire/references.ts): per class, each number's median, least and most; a fire is held to min-max widened by each number's tolerance (METRICS).",
+ "classes": {
+  "campfire": {
+   "photos": 10,
+   "light": {
+    "day": 2,
+    "night": 5,
+    "dusk": 3
+   },
+   "bands": {
+    "white": {
+     "median": 0.037,
+     "min": 0,
+     "max": 3.315
+    },
+    "pale": {
+     "median": 0.523,
+     "min": 0,
+     "max": 3.798
+    },
+    "yellow": {
+     "median": 9.2,
+     "min": 1.605,
+     "max": 19.027
+    },
+    "orange": {
+     "median": 30.445999999999998,
+     "min": 19.259,
+     "max": 83.277
+    },
+    "red": {
+     "median": 54.8245,
+     "min": 14.201,
+     "max": 72.768
+    },
+    "redOrange": {
+     "median": 88.455,
+     "min": 74.039,
+     "max": 98.395
+    },
+    "BR": {
+     "median": 0.2325,
+     "min": 0.031,
+     "max": 0.677
+    },
+    "GR": {
+     "median": 0.565,
+     "min": 0.438,
+     "max": 0.826
+    },
+    "dim": {
+     "median": 34.216,
+     "min": 6.449,
+     "max": 60.049
+    },
+    "soot": {
+     "median": 0.4075,
+     "min": 0.127,
+     "max": 0.917
+    },
+    "edgeSoot": {
+     "median": 28.5805,
+     "min": 6.335,
+     "max": 51.249
+    },
+    "pockets": {
+     "median": 23.292,
+     "min": 5.05,
+     "max": 175.857
+    },
+    "fine": {
+     "median": 8.429,
+     "min": 6.104,
+     "max": 24.92
+    },
+    "mid": {
+     "median": 21.813499999999998,
+     "min": 14.568,
+     "max": 33.811
+    },
+    "coarse": {
+     "median": 69.6035,
+     "min": 41.269,
+     "max": 79.08
+    }
+   }
+  },
+  "fireball": {
+   "photos": 9,
+   "light": {
+    "day": 6,
+    "night": 2,
+    "dusk": 1
+   },
+   "bands": {
+    "white": {
+     "median": 0.026,
+     "min": 0,
+     "max": 18.448
+    },
+    "pale": {
+     "median": 2.895,
+     "min": 0.1,
+     "max": 7.01
+    },
+    "yellow": {
+     "median": 5.135,
+     "min": 1.163,
+     "max": 37.739
+    },
+    "orange": {
+     "median": 24.14,
+     "min": 16.147,
+     "max": 60.914
+    },
+    "red": {
+     "median": 64.981,
+     "min": 15.873,
+     "max": 79.89
+    },
+    "redOrange": {
+     "median": 88.996,
+     "min": 56.355,
+     "max": 98.208
+    },
+    "BR": {
+     "median": 0.302,
+     "min": 0.22,
+     "max": 0.475
+    },
+    "GR": {
+     "median": 0.584,
+     "min": 0.451,
+     "max": 0.72
+    },
+    "dim": {
+     "median": 38.665,
+     "min": 4.9,
+     "max": 53.332
+    },
+    "soot": {
+     "median": 0.194,
+     "min": 0.003,
+     "max": 0.633
+    },
+    "edgeSoot": {
+     "median": 6.579,
+     "min": 0.826,
+     "max": 48.676
+    },
+    "pockets": {
+     "median": 7.918,
+     "min": 0.927,
+     "max": 40.306
+    },
+    "fine": {
+     "median": 6.275,
+     "min": 1.913,
+     "max": 10.59
+    },
+    "mid": {
+     "median": 19.612,
+     "min": 9.149,
+     "max": 28.744
+    },
+    "coarse": {
+     "median": 75.106,
+     "min": 60.667,
+     "max": 88.938
+    }
+   }
+  },
+  "flamethrower": {
+   "photos": 9,
+   "light": {
+    "day": 8,
+    "night": 1
+   },
+   "bands": {
+    "white": {
+     "median": 0.161,
+     "min": 0,
+     "max": 43.039
+    },
+    "pale": {
+     "median": 5.249,
+     "min": 1.976,
+     "max": 31.177
+    },
+    "yellow": {
+     "median": 16.704,
+     "min": 2.607,
+     "max": 50.815
+    },
+    "orange": {
+     "median": 31.565,
+     "min": 17.112,
+     "max": 43.936
+    },
+    "red": {
+     "median": 19.075,
+     "min": 0,
+     "max": 63.026
+    },
+    "redOrange": {
+     "median": 53.732,
+     "min": 32.224,
+     "max": 95.048
+    },
+    "BR": {
+     "median": 0.579,
+     "min": 0.216,
+     "max": 0.885
+    },
+    "GR": {
+     "median": 0.771,
+     "min": 0.564,
+     "max": 0.936
+    },
+    "dim": {
+     "median": 16.541,
+     "min": 0,
+     "max": 44.79
+    },
+    "soot": {
+     "median": 0.029,
+     "min": 0,
+     "max": 0.088
+    },
+    "edgeSoot": {
+     "median": 0.653,
+     "min": 0,
+     "max": 6.528
+    },
+    "pockets": {
+     "median": 10.889,
+     "min": 0.577,
+     "max": 53.339
+    },
+    "fine": {
+     "median": 4.869,
+     "min": 3.336,
+     "max": 10.026
+    },
+    "mid": {
+     "median": 18.599,
+     "min": 16.22,
+     "max": 22.528
+    },
+    "coarse": {
+     "median": 75.996,
+     "min": 69.795,
+     "max": 79.837
+    }
+   }
+  },
+  "gas jet": {
+   "photos": 3,
+   "light": {
+    "day": 3
+   },
+   "bands": {
+    "white": {
+     "median": 0.954,
+     "min": 0.007,
+     "max": 1.711
+    },
+    "pale": {
+     "median": 9.567,
+     "min": 2.344,
+     "max": 17.987
+    },
+    "yellow": {
+     "median": 24.184,
+     "min": 22.156,
+     "max": 39.996
+    },
+    "orange": {
+     "median": 25.54,
+     "min": 20.352,
+     "max": 61.271
+    },
+    "red": {
+     "median": 28.19,
+     "min": 10.158,
+     "max": 34.309
+    },
+    "redOrange": {
+     "median": 59.849,
+     "min": 48.543,
+     "max": 71.428
+    },
+    "BR": {
+     "median": 0.397,
+     "min": 0.336,
+     "max": 0.55
+    },
+    "GR": {
+     "median": 0.766,
+     "min": 0.723,
+     "max": 0.799
+    },
+    "dim": {
+     "median": 10.894,
+     "min": 10.697,
+     "max": 21.441
+    },
+    "soot": {
+     "median": 0.002,
+     "min": 0,
+     "max": 0.105
+    },
+    "edgeSoot": {
+     "median": 0.022,
+     "min": 0,
+     "max": 8.533
+    },
+    "pockets": {
+     "median": 0,
+     "min": 0,
+     "max": 42.786
+    },
+    "fine": {
+     "median": 4.466,
+     "min": 4.148,
+     "max": 8.701
+    },
+    "mid": {
+     "median": 16.858,
+     "min": 16.044,
+     "max": 21.968
+    },
+    "coarse": {
+     "median": 78.676,
+     "min": 69.332,
+     "max": 79.807
+    }
+   }
+  },
+  "napalm": {
+   "photos": 2,
+   "light": {
+    "day": 2
+   },
+   "bands": {
+    "white": {
+     "median": 0.001,
+     "min": 0,
+     "max": 0.002
+    },
+    "pale": {
+     "median": 0.153,
+     "min": 0.006,
+     "max": 0.3
+    },
+    "yellow": {
+     "median": 3.3609999999999998,
+     "min": 1.89,
+     "max": 4.832
+    },
+    "orange": {
+     "median": 27.965500000000002,
+     "min": 17.914,
+     "max": 38.017
+    },
+    "red": {
+     "median": 68.25,
+     "min": 56.335,
+     "max": 80.165
+    },
+    "redOrange": {
+     "median": 96.21549999999999,
+     "min": 94.351,
+     "max": 98.08
+    },
+    "BR": {
+     "median": 0.279,
+     "min": 0.175,
+     "max": 0.383
+    },
+    "GR": {
+     "median": 0.5565,
+     "min": 0.516,
+     "max": 0.597
+    },
+    "dim": {
+     "median": 22.2375,
+     "min": 7.415,
+     "max": 37.06
+    },
+    "soot": {
+     "median": 0.2165,
+     "min": 0,
+     "max": 0.433
+    },
+    "edgeSoot": {
+     "median": 6.9375,
+     "min": 0,
+     "max": 13.875
+    },
+    "pockets": {
+     "median": 7.8205,
+     "min": 0,
+     "max": 15.641
+    },
+    "fine": {
+     "median": 6.264,
+     "min": 4.164,
+     "max": 8.364
+    },
+    "mid": {
+     "median": 25.914,
+     "min": 17.628,
+     "max": 34.2
+    },
+    "coarse": {
+     "median": 67.8215,
+     "min": 57.435,
+     "max": 78.208
+    }
+   }
+  },
+  "pool fire": {
+   "photos": 3,
+   "light": {
+    "day": 1,
+    "dusk": 1,
+    "night": 1
+   },
+   "bands": {
+    "white": {
+     "median": 6.255,
+     "min": 0.06,
+     "max": 11.779
+    },
+    "pale": {
+     "median": 3.048,
+     "min": 0.123,
+     "max": 9.555
+    },
+    "yellow": {
+     "median": 23.044,
+     "min": 4.998,
+     "max": 30.605
+    },
+    "orange": {
+     "median": 34.526,
+     "min": 12.785,
+     "max": 65.569
+    },
+    "red": {
+     "median": 35.276,
+     "min": 2.085,
+     "max": 60.293
+    },
+    "redOrange": {
+     "median": 67.653,
+     "min": 48.061,
+     "max": 94.819
+    },
+    "BR": {
+     "median": 0.269,
+     "min": 0.166,
+     "max": 0.337
+    },
+    "GR": {
+     "median": 0.642,
+     "min": 0.551,
+     "max": 0.661
+    },
+    "dim": {
+     "median": 25.83,
+     "min": 24.946,
+     "max": 40.696
+    },
+    "soot": {
+     "median": 0.374,
+     "min": 0.113,
+     "max": 0.425
+    },
+    "edgeSoot": {
+     "median": 20.817,
+     "min": 17.42,
+     "max": 37.307
+    },
+    "pockets": {
+     "median": 4.487,
+     "min": 3.432,
+     "max": 5.375
+    },
+    "fine": {
+     "median": 6.943,
+     "min": 6.854,
+     "max": 7.223
+    },
+    "mid": {
+     "median": 20.14,
+     "min": 16.107,
+     "max": 21.995
+    },
+    "coarse": {
+     "median": 72.637,
+     "min": 71.062,
+     "max": 77.039
+    }
+   }
+  },
+  "structure": {
+   "photos": 8,
+   "light": {
+    "night": 4,
+    "day": 3,
+    "dusk": 1
+   },
+   "bands": {
+    "white": {
+     "median": 0.356,
+     "min": 0.014,
+     "max": 3.943
+    },
+    "pale": {
+     "median": 4.1715,
+     "min": 0.218,
+     "max": 13.743
+    },
+    "yellow": {
+     "median": 13.1375,
+     "min": 6.21,
+     "max": 33.205
+    },
+    "orange": {
+     "median": 26.6515,
+     "min": 10.674,
+     "max": 44.92
+    },
+    "red": {
+     "median": 53.3665,
+     "min": 33.34,
+     "max": 72.426
+    },
+    "redOrange": {
+     "median": 80.1105,
+     "min": 64.243,
+     "max": 89.109
+    },
+    "BR": {
+     "median": 0.2395,
+     "min": 0.042,
+     "max": 0.576
+    },
+    "GR": {
+     "median": 0.5765,
+     "min": 0.416,
+     "max": 0.727
+    },
+    "dim": {
+     "median": 37.9005,
+     "min": 23.263,
+     "max": 60.075
+    },
+    "soot": {
+     "median": 0.16749999999999998,
+     "min": 0.033,
+     "max": 0.349
+    },
+    "edgeSoot": {
+     "median": 12.9045,
+     "min": 1.401,
+     "max": 26.691
+    },
+    "pockets": {
+     "median": 10.7965,
+     "min": 0,
+     "max": 64.167
+    },
+    "fine": {
+     "median": 9.9275,
+     "min": 5.537,
+     "max": 17.098
+    },
+    "mid": {
+     "median": 20.320999999999998,
+     "min": 17.018,
+     "max": 21.733
+    },
+    "coarse": {
+     "median": 70.86699999999999,
+     "min": 61.598,
+     "max": 75.74
+    }
+   }
+  },
+  "torch": {
+   "photos": 9,
+   "light": {
+    "night": 6,
+    "day": 1,
+    "dusk": 2
+   },
+   "bands": {
+    "white": {
+     "median": 10.597,
+     "min": 2.891,
+     "max": 52.593
+    },
+    "pale": {
+     "median": 6.322,
+     "min": 1.415,
+     "max": 28.616
+    },
+    "yellow": {
+     "median": 7.887,
+     "min": 2.11,
+     "max": 53.7
+    },
+    "orange": {
+     "median": 21.103,
+     "min": 5.455,
+     "max": 85.677
+    },
+    "red": {
+     "median": 19.151,
+     "min": 1.751,
+     "max": 68.28
+    },
+    "redOrange": {
+     "median": 73.735,
+     "min": 31.501,
+     "max": 87.428
+    },
+    "BR": {
+     "median": 0.503,
+     "min": 0.123,
+     "max": 0.728
+    },
+    "GR": {
+     "median": 0.727,
+     "min": 0.479,
+     "max": 0.909
+    },
+    "dim": {
+     "median": 17.201,
+     "min": 2.856,
+     "max": 59.313
+    },
+    "soot": {
+     "median": 0.086,
+     "min": 0,
+     "max": 0.862
+    },
+    "edgeSoot": {
+     "median": 8.772,
+     "min": 0,
+     "max": 58.321
+    },
+    "pockets": {
+     "median": 2.217,
+     "min": 0,
+     "max": 19.904
+    },
+    "fine": {
+     "median": 3.181,
+     "min": 2.285,
+     "max": 9.146
+    },
+    "mid": {
+     "median": 18.067,
+     "min": 9.213,
+     "max": 26.021
+    },
+    "coarse": {
+     "median": 78.752,
+     "min": 64.833,
+     "max": 88.502
+    }
+   }
+  }
+ },
+ "photos": [
+  {
+   "file": "m2-flamethrower-airshow-2019.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 684912,
+    "white": 0.161,
+    "pale": 2.172,
+    "yellow": 2.607,
+    "orange": 32.022,
+    "red": 63.026,
+    "redOrange": 95.048,
+    "BR": 0.39,
+    "GR": 0.616,
+    "dim": 16.541,
+    "soot": 0.087,
+    "edgeSoot": 5.221,
+    "pockets": 19.512,
+    "fine": 6.135,
+    "mid": 20.07,
+    "coarse": 73.795
+   }
+  },
+  {
+   "file": "m113-flamethrower-1967.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 116177,
+    "white": 43.039,
+    "pale": 8.997,
+    "yellow": 11.099,
+    "orange": 17.112,
+    "red": 19.075,
+    "redOrange": 36.187,
+    "BR": 0.885,
+    "GR": 0.936,
+    "dim": 4.126,
+    "soot": 0.001,
+    "edgeSoot": 0,
+    "pockets": 3.597,
+    "fine": 3.53,
+    "mid": 16.632,
+    "coarse": 79.837
+   }
+  },
+  {
+   "file": "m132-long-binh-jungle.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 38502,
+    "white": 0,
+    "pale": 27.902,
+    "yellow": 39.873,
+    "orange": 25.705,
+    "red": 6.519,
+    "redOrange": 32.224,
+    "BR": 0.579,
+    "GR": 0.855,
+    "dim": 3.582,
+    "soot": 0.035,
+    "edgeSoot": 0.653,
+    "pockets": 14.291,
+    "fine": 4.565,
+    "mid": 22.528,
+    "coarse": 72.907
+   }
+  },
+  {
+   "file": "m7-flamethrower-lai-khe.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 27927,
+    "white": 0,
+    "pale": 5.249,
+    "yellow": 50.815,
+    "orange": 43.936,
+    "red": 0,
+    "redOrange": 43.936,
+    "BR": 0.596,
+    "GR": 0.863,
+    "dim": 0,
+    "soot": 0.029,
+    "edgeSoot": 0,
+    "pockets": 10.889,
+    "fine": 3.336,
+    "mid": 18.599,
+    "coarse": 78.065
+   }
+  },
+  {
+   "file": "napalm-wall-of-fire-airshow.jpg",
+   "class": "napalm",
+   "light": "day",
+   "metrics": {
+    "flamePx": 65734,
+    "white": 0.002,
+    "pale": 0.3,
+    "yellow": 4.832,
+    "orange": 38.017,
+    "red": 56.335,
+    "redOrange": 94.351,
+    "BR": 0.175,
+    "GR": 0.516,
+    "dim": 37.06,
+    "soot": 0.433,
+    "edgeSoot": 13.875,
+    "pockets": 15.641,
+    "fine": 8.364,
+    "mid": 34.2,
+    "coarse": 57.435
+   }
+  },
+  {
+   "file": "napalm-wall-of-fire-avalon-2007.jpg",
+   "class": "napalm",
+   "light": "day",
+   "metrics": {
+    "flamePx": 126278,
+    "white": 0,
+    "pale": 0.006,
+    "yellow": 1.89,
+    "orange": 17.914,
+    "red": 80.165,
+    "redOrange": 98.08,
+    "BR": 0.383,
+    "GR": 0.597,
+    "dim": 7.415,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 4.164,
+    "mid": 17.628,
+    "coarse": 78.208
+   }
+  },
+  {
+   "file": "napalm-vietnam.jpg",
+   "class": "excluded",
+   "light": "day",
+   "metrics": {
+    "flamePx": 150951,
+    "white": 4.917,
+    "pale": 0,
+    "yellow": 0,
+    "orange": 0.007,
+    "red": 87.242,
+    "redOrange": 87.25,
+    "BR": 0.749,
+    "GR": 0.712,
+    "dim": 11.733,
+    "soot": 0.048,
+    "edgeSoot": 2.705,
+    "pockets": 64.186,
+    "fine": 16.343,
+    "mid": 19.177,
+    "coarse": 64.48
+   }
+  },
+  {
+   "file": "pool-fire-bulk-fuel-2013.jpg",
+   "class": "pool fire",
+   "light": "day",
+   "metrics": {
+    "flamePx": 87029,
+    "white": 0.06,
+    "pale": 0.123,
+    "yellow": 4.998,
+    "orange": 34.526,
+    "red": 60.293,
+    "redOrange": 94.819,
+    "BR": 0.269,
+    "GR": 0.551,
+    "dim": 24.946,
+    "soot": 0.374,
+    "edgeSoot": 20.817,
+    "pockets": 3.432,
+    "fine": 7.223,
+    "mid": 20.14,
+    "coarse": 72.637
+   }
+  },
+  {
+   "file": "pool-fire-arff-pit-dusk.jpg",
+   "class": "pool fire",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 499304,
+    "white": 6.255,
+    "pale": 3.048,
+    "yellow": 23.044,
+    "orange": 65.569,
+    "red": 2.085,
+    "redOrange": 67.653,
+    "BR": 0.166,
+    "GR": 0.642,
+    "dim": 40.696,
+    "soot": 0.425,
+    "edgeSoot": 37.307,
+    "pockets": 4.487,
+    "fine": 6.943,
+    "mid": 21.995,
+    "coarse": 71.062
+   }
+  },
+  {
+   "file": "pool-fire-fuel-fire-fury.jpg",
+   "class": "pool fire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 672513,
+    "white": 11.779,
+    "pale": 9.555,
+    "yellow": 30.605,
+    "orange": 12.785,
+    "red": 35.276,
+    "redOrange": 48.061,
+    "BR": 0.337,
+    "GR": 0.661,
+    "dim": 25.83,
+    "soot": 0.113,
+    "edgeSoot": 17.42,
+    "pockets": 5.375,
+    "fine": 6.854,
+    "mid": 16.107,
+    "coarse": 77.039
+   }
+  },
+  {
+   "file": "building-barn-fire.jpg",
+   "class": "structure",
+   "light": "night",
+   "metrics": {
+    "flamePx": 948583,
+    "white": 1.787,
+    "pale": 13.743,
+    "yellow": 6.21,
+    "orange": 44.92,
+    "red": 33.34,
+    "redOrange": 78.26,
+    "BR": 0.236,
+    "GR": 0.593,
+    "dim": 37.264,
+    "soot": 0.107,
+    "edgeSoot": 26.691,
+    "pockets": 1.328,
+    "fine": 5.537,
+    "mid": 18.723,
+    "coarse": 75.74
+   }
+  },
+  {
+   "file": "building-convent-fire-quebec.jpg",
+   "class": "structure",
+   "light": "day",
+   "metrics": {
+    "flamePx": 717165,
+    "white": 0.147,
+    "pale": 0.315,
+    "yellow": 10.429,
+    "orange": 30.613,
+    "red": 58.495,
+    "redOrange": 89.109,
+    "BR": 0.243,
+    "GR": 0.55,
+    "dim": 43.991,
+    "soot": 0.033,
+    "edgeSoot": 7.604,
+    "pockets": 14.979,
+    "fine": 7.771,
+    "mid": 19.477,
+    "coarse": 72.752
+   }
+  },
+  {
+   "file": "building-training-burn.jpg",
+   "class": "structure",
+   "light": "day",
+   "metrics": {
+    "flamePx": 66302,
+    "white": 0.014,
+    "pale": 9.172,
+    "yellow": 15.846,
+    "orange": 26.726,
+    "red": 48.238,
+    "redOrange": 74.965,
+    "BR": 0.399,
+    "GR": 0.639,
+    "dim": 35.409,
+    "soot": 0.056,
+    "edgeSoot": 1.401,
+    "pockets": 0,
+    "fine": 7.431,
+    "mid": 21.733,
+    "coarse": 70.836
+   }
+  },
+  {
+   "file": "building-adams-gray-house.jpg",
+   "class": "structure",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 71691,
+    "white": 3.943,
+    "pale": 5.62,
+    "yellow": 7.048,
+    "orange": 10.674,
+    "red": 72.426,
+    "redOrange": 83.1,
+    "BR": 0.425,
+    "GR": 0.624,
+    "dim": 41.319,
+    "soot": 0.349,
+    "edgeSoot": 17.736,
+    "pockets": 30.282,
+    "fine": 17.098,
+    "mid": 21.304,
+    "coarse": 61.598
+   }
+  },
+  {
+   "file": "oil-well-fire-kuwait-1991.jpg",
+   "class": "gas jet",
+   "light": "day",
+   "metrics": {
+    "flamePx": 53633,
+    "white": 0.007,
+    "pale": 17.987,
+    "yellow": 22.156,
+    "orange": 25.54,
+    "red": 34.309,
+    "redOrange": 59.849,
+    "BR": 0.55,
+    "GR": 0.799,
+    "dim": 10.697,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 4.466,
+    "mid": 16.858,
+    "coarse": 78.676
+   }
+  },
+  {
+   "file": "oil-well-fire-rumaila-2003.jpg",
+   "class": "gas jet",
+   "light": "day",
+   "metrics": {
+    "flamePx": 1020842,
+    "white": 1.711,
+    "pale": 2.344,
+    "yellow": 24.184,
+    "orange": 61.271,
+    "red": 10.158,
+    "redOrange": 71.428,
+    "BR": 0.336,
+    "GR": 0.723,
+    "dim": 21.441,
+    "soot": 0.105,
+    "edgeSoot": 8.533,
+    "pockets": 42.786,
+    "fine": 8.701,
+    "mid": 21.968,
+    "coarse": 69.332
+   }
+  },
+  {
+   "file": "gas-flare-lysekil.jpg",
+   "class": "gas jet",
+   "light": "day",
+   "metrics": {
+    "flamePx": 21167,
+    "white": 0.954,
+    "pale": 9.567,
+    "yellow": 39.996,
+    "orange": 20.352,
+    "red": 28.19,
+    "redOrange": 48.543,
+    "BR": 0.397,
+    "GR": 0.766,
+    "dim": 10.894,
+    "soot": 0.002,
+    "edgeSoot": 0.022,
+    "pockets": 0,
+    "fine": 4.148,
+    "mid": 16.044,
+    "coarse": 79.807
+   }
+  },
+  {
+   "file": "bonfire-midsummer.jpg",
+   "class": "campfire",
+   "light": "day",
+   "metrics": {
+    "flamePx": 1811489,
+    "white": 0.015,
+    "pale": 0.23,
+    "yellow": 18.039,
+    "orange": 26.455,
+    "red": 55.261,
+    "redOrange": 81.716,
+    "BR": 0.202,
+    "GR": 0.556,
+    "dim": 29.487,
+    "soot": 0.205,
+    "edgeSoot": 20.863,
+    "pockets": 54.644,
+    "fine": 9.943,
+    "mid": 20.078,
+    "coarse": 69.978
+   }
+  },
+  {
+   "file": "campfire-simple.jpg",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 266102,
+    "white": 0.696,
+    "pale": 3.798,
+    "yellow": 9.317,
+    "orange": 34.437,
+    "red": 51.752,
+    "redOrange": 86.19,
+    "BR": 0.155,
+    "GR": 0.504,
+    "dim": 48.234,
+    "soot": 0.917,
+    "edgeSoot": 43.892,
+    "pockets": 73.443,
+    "fine": 24.92,
+    "mid": 33.811,
+    "coarse": 41.269
+   }
+  },
+  {
+   "file": "campfire-bonfire-flames.jpg",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 1199210,
+    "white": 0,
+    "pale": 0,
+    "yellow": 1.605,
+    "orange": 25.628,
+    "red": 72.768,
+    "redOrange": 98.395,
+    "BR": 0.094,
+    "GR": 0.444,
+    "dim": 40.227,
+    "soot": 0.309,
+    "edgeSoot": 26.881,
+    "pockets": 23.611,
+    "fine": 7.961,
+    "mid": 22.81,
+    "coarse": 69.229
+   }
+  },
+  {
+   "file": "campfire-closeup-fire.jpg",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 656312,
+    "white": 0,
+    "pale": 0.01,
+    "yellow": 6.995,
+    "orange": 38.127,
+    "red": 54.869,
+    "redOrange": 92.995,
+    "BR": 0.031,
+    "GR": 0.438,
+    "dim": 60.049,
+    "soot": 0.386,
+    "edgeSoot": 30.28,
+    "pockets": 8.793,
+    "fine": 7.141,
+    "mid": 30.211,
+    "coarse": 62.649
+   }
+  },
+  {
+   "file": "campfire-logs-night.jpg",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 164362,
+    "white": 0,
+    "pale": 0.816,
+    "yellow": 1.705,
+    "orange": 83.277,
+    "red": 14.201,
+    "redOrange": 97.478,
+    "BR": 0.677,
+    "GR": 0.826,
+    "dim": 8.068,
+    "soot": 0.429,
+    "edgeSoot": 49.542,
+    "pockets": 10.318,
+    "fine": 7.158,
+    "mid": 24.73,
+    "coarse": 68.112
+   }
+  },
+  {
+   "file": "campfire-wood-pits.jpg",
+   "class": "campfire",
+   "light": "day",
+   "metrics": {
+    "flamePx": 103853,
+    "white": 0.577,
+    "pale": 1.997,
+    "yellow": 5.171,
+    "orange": 21.632,
+    "red": 70.514,
+    "redOrange": 92.146,
+    "BR": 0.378,
+    "GR": 0.574,
+    "dim": 49.6,
+    "soot": 0.503,
+    "edgeSoot": 14.529,
+    "pockets": 175.857,
+    "fine": 13.135,
+    "mid": 23.516,
+    "coarse": 63.349
+   }
+  },
+  {
+   "file": "campfire-easter-diemarden-2024.jpg",
+   "class": "campfire",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 441353,
+    "white": 3.315,
+    "pale": 3.498,
+    "yellow": 19.027,
+    "orange": 19.259,
+    "red": 54.78,
+    "redOrange": 74.039,
+    "BR": 0.396,
+    "GR": 0.661,
+    "dim": 17.998,
+    "soot": 0.127,
+    "edgeSoot": 6.335,
+    "pockets": 32.854,
+    "fine": 6.351,
+    "mid": 14.568,
+    "coarse": 79.08
+   }
+  },
+  {
+   "file": "campfire-midsummer-finland.jpg",
+   "class": "campfire",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 243236,
+    "white": 0.386,
+    "pale": 0.096,
+    "yellow": 9.083,
+    "orange": 57.902,
+    "red": 32.441,
+    "redOrange": 90.344,
+    "BR": 0.555,
+    "GR": 0.781,
+    "dim": 6.449,
+    "soot": 0.157,
+    "edgeSoot": 21.618,
+    "pockets": 5.05,
+    "fine": 6.104,
+    "mid": 19.344,
+    "coarse": 74.552
+   }
+  },
+  {
+   "file": "campfire-lag-baomer.jpg",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 853267,
+    "white": 0,
+    "pale": 0.077,
+    "yellow": 13.357,
+    "orange": 21.531,
+    "red": 65.034,
+    "redOrange": 86.566,
+    "BR": 0.109,
+    "GR": 0.466,
+    "dim": 38.945,
+    "soot": 0.607,
+    "edgeSoot": 51.249,
+    "pockets": 22.973,
+    "fine": 9.983,
+    "mid": 16.259,
+    "coarse": 73.758
+   }
+  },
+  {
+   "file": "campfire-sunset-campfire.jpg",
+   "class": "campfire",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 28775,
+    "white": 0.059,
+    "pale": 2.738,
+    "yellow": 13.758,
+    "orange": 63.211,
+    "red": 20.233,
+    "redOrange": 83.444,
+    "BR": 0.263,
+    "GR": 0.63,
+    "dim": 22.262,
+    "soot": 0.739,
+    "edgeSoot": 45.392,
+    "pockets": 14.855,
+    "fine": 8.897,
+    "mid": 20.817,
+    "coarse": 70.286
+   }
+  },
+  {
+   "file": "torch-tiki-kauai-2.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 537934,
+    "white": 2.891,
+    "pale": 6.322,
+    "yellow": 3.358,
+    "orange": 85.677,
+    "red": 1.751,
+    "redOrange": 87.428,
+    "BR": 0.536,
+    "GR": 0.789,
+    "dim": 2.856,
+    "soot": 0.708,
+    "edgeSoot": 58.321,
+    "pockets": 2.217,
+    "fine": 8.195,
+    "mid": 23.833,
+    "coarse": 67.972
+   }
+  },
+  {
+   "file": "torch-tiki-kona.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 338364,
+    "white": 8.157,
+    "pale": 11.799,
+    "yellow": 3.412,
+    "orange": 27.698,
+    "red": 48.919,
+    "redOrange": 76.617,
+    "BR": 0.6,
+    "GR": 0.781,
+    "dim": 7.358,
+    "soot": 0.862,
+    "edgeSoot": 42.645,
+    "pockets": 0,
+    "fine": 9.146,
+    "mid": 26.021,
+    "coarse": 64.833
+   }
+  },
+  {
+   "file": "torch-pochodnia.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 116802,
+    "white": 52.593,
+    "pale": 8.018,
+    "yellow": 7.887,
+    "orange": 13.097,
+    "red": 18.404,
+    "redOrange": 31.501,
+    "BR": 0.65,
+    "GR": 0.819,
+    "dim": 17.201,
+    "soot": 0.301,
+    "edgeSoot": 20.809,
+    "pockets": 4.301,
+    "fine": 4.522,
+    "mid": 20.159,
+    "coarse": 75.319
+   }
+  },
+  {
+   "file": "torch-lerwick-guizers.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 359267,
+    "white": 7.56,
+    "pale": 3.237,
+    "yellow": 10.35,
+    "orange": 21.679,
+    "red": 57.174,
+    "redOrange": 78.853,
+    "BR": 0.123,
+    "GR": 0.479,
+    "dim": 59.313,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 2.285,
+    "mid": 9.213,
+    "coarse": 88.502
+   }
+  },
+  {
+   "file": "torch-up-helly-aa-shed.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 41166,
+    "white": 11.551,
+    "pale": 7.275,
+    "yellow": 6.95,
+    "orange": 62.644,
+    "red": 11.58,
+    "redOrange": 74.224,
+    "BR": 0.401,
+    "GR": 0.703,
+    "dim": 18.119,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 2.397,
+    "mid": 11.542,
+    "coarse": 86.062
+   }
+  },
+  {
+   "file": "torch-fire-eater-srilanka.jpg",
+   "class": "torch",
+   "light": "night",
+   "metrics": {
+    "flamePx": 172293,
+    "white": 22.74,
+    "pale": 1.415,
+    "yellow": 2.11,
+    "orange": 5.455,
+    "red": 68.28,
+    "redOrange": 73.735,
+    "BR": 0.426,
+    "GR": 0.549,
+    "dim": 57.024,
+    "soot": 0.085,
+    "edgeSoot": 8.901,
+    "pockets": 11.451,
+    "fine": 3.181,
+    "mid": 18.067,
+    "coarse": 78.752
+   }
+  },
+  {
+   "file": "torch-day-forty-eight.jpg",
+   "class": "torch",
+   "light": "day",
+   "metrics": {
+    "flamePx": 29669,
+    "white": 10.597,
+    "pale": 28.616,
+    "yellow": 24.706,
+    "orange": 21.103,
+    "red": 14.972,
+    "redOrange": 36.075,
+    "BR": 0.728,
+    "GR": 0.909,
+    "dim": 3.023,
+    "soot": 0.003,
+    "edgeSoot": 0.793,
+    "pockets": 0,
+    "fine": 3.807,
+    "mid": 15.959,
+    "coarse": 80.234
+   }
+  },
+  {
+   "file": "torch-tiki-single.jpg",
+   "class": "torch",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 71922,
+    "white": 27.926,
+    "pale": 2.326,
+    "yellow": 8.462,
+    "orange": 13.331,
+    "red": 45.528,
+    "redOrange": 58.86,
+    "BR": 0.503,
+    "GR": 0.68,
+    "dim": 33.805,
+    "soot": 0.086,
+    "edgeSoot": 6.443,
+    "pockets": 2.911,
+    "fine": 2.949,
+    "mid": 16.704,
+    "coarse": 80.347
+   }
+  },
+  {
+   "file": "torch-tiki-time-unsplash.jpg",
+   "class": "torch",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 11054,
+    "white": 4.985,
+    "pale": 4.207,
+    "yellow": 53.7,
+    "orange": 17.948,
+    "red": 19.151,
+    "redOrange": 37.1,
+    "BR": 0.169,
+    "GR": 0.727,
+    "dim": 16.139,
+    "soot": 0.103,
+    "edgeSoot": 8.772,
+    "pockets": 19.904,
+    "fine": 2.62,
+    "mid": 19.528,
+    "coarse": 77.852
+   }
+  },
+  {
+   "file": "structure-rimutaka-training.jpg",
+   "class": "structure",
+   "light": "day",
+   "metrics": {
+    "flamePx": 53287,
+    "white": 0.576,
+    "pale": 4.875,
+    "yellow": 6.673,
+    "orange": 26.577,
+    "red": 61.214,
+    "redOrange": 87.791,
+    "BR": 0.576,
+    "GR": 0.727,
+    "dim": 23.263,
+    "soot": 0.297,
+    "edgeSoot": 15.749,
+    "pockets": 64.167,
+    "fine": 7.634,
+    "mid": 18.172,
+    "coarse": 74.193
+   }
+  },
+  {
+   "file": "structure-galley-up-helly-aa.jpg",
+   "class": "structure",
+   "light": "night",
+   "metrics": {
+    "flamePx": 319438,
+    "white": 0.083,
+    "pale": 0.218,
+    "yellow": 17.738,
+    "orange": 16.136,
+    "red": 65.826,
+    "redOrange": 81.961,
+    "BR": 0.042,
+    "GR": 0.416,
+    "dim": 60.075,
+    "soot": 0.126,
+    "edgeSoot": 4.877,
+    "pockets": 6.614,
+    "fine": 16.218,
+    "mid": 21.165,
+    "coarse": 62.617
+   }
+  },
+  {
+   "file": "structure-temple-burn-2016.jpg",
+   "class": "structure",
+   "light": "night",
+   "metrics": {
+    "flamePx": 1014658,
+    "white": 0.089,
+    "pale": 3.468,
+    "yellow": 19.741,
+    "orange": 34.507,
+    "red": 42.194,
+    "redOrange": 76.702,
+    "BR": 0.16,
+    "GR": 0.543,
+    "dim": 24.997,
+    "soot": 0.209,
+    "edgeSoot": 20.475,
+    "pockets": 17.758,
+    "fine": 12.249,
+    "mid": 21.174,
+    "coarse": 66.577
+   }
+  },
+  {
+   "file": "structure-temple-burn-panoramio.jpg",
+   "class": "structure",
+   "light": "night",
+   "metrics": {
+    "flamePx": 301429,
+    "white": 0.565,
+    "pale": 1.987,
+    "yellow": 33.205,
+    "orange": 22.858,
+    "red": 41.385,
+    "redOrange": 64.243,
+    "BR": 0.119,
+    "GR": 0.56,
+    "dim": 38.537,
+    "soot": 0.239,
+    "edgeSoot": 10.06,
+    "pockets": 0,
+    "fine": 12.084,
+    "mid": 17.018,
+    "coarse": 70.898
+   }
+  },
+  {
+   "file": "flamethrower-iraq.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 310626,
+    "white": 0.906,
+    "pale": 1.976,
+    "yellow": 35.12,
+    "orange": 43.407,
+    "red": 18.591,
+    "redOrange": 61.999,
+    "BR": 0.357,
+    "GR": 0.724,
+    "dim": 38.314,
+    "soot": 0.067,
+    "edgeSoot": 4.203,
+    "pockets": 53.339,
+    "fine": 10.026,
+    "mid": 16.831,
+    "coarse": 73.143
+   }
+  },
+  {
+   "file": "flamethrower-patrol-boat-1969.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 22728,
+    "white": 0.009,
+    "pale": 31.177,
+    "yellow": 24.239,
+    "orange": 31.565,
+    "red": 13.006,
+    "redOrange": 44.571,
+    "BR": 0.803,
+    "GR": 0.934,
+    "dim": 3.806,
+    "soot": 0.001,
+    "edgeSoot": 0,
+    "pockets": 0.577,
+    "fine": 4.396,
+    "mid": 17.666,
+    "coarse": 77.938
+   }
+  },
+  {
+   "file": "flamethrower-df-st-86.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 13072,
+    "white": 0.161,
+    "pale": 26.132,
+    "yellow": 11.146,
+    "orange": 20.502,
+    "red": 40.927,
+    "redOrange": 61.429,
+    "BR": 0.679,
+    "GR": 0.771,
+    "dim": 16.784,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0.862,
+    "fine": 4.869,
+    "mid": 19.136,
+    "coarse": 75.996
+   }
+  },
+  {
+   "file": "flamethrower-some-like-it-hot.jpg",
+   "class": "flamethrower",
+   "light": "day",
+   "metrics": {
+    "flamePx": 573376,
+    "white": 1.986,
+    "pale": 3.113,
+    "yellow": 16.704,
+    "orange": 33.243,
+    "red": 44.954,
+    "redOrange": 78.197,
+    "BR": 0.216,
+    "GR": 0.564,
+    "dim": 44.79,
+    "soot": 0.088,
+    "edgeSoot": 6.528,
+    "pockets": 18.258,
+    "fine": 9.151,
+    "mid": 21.054,
+    "coarse": 69.795
+   }
+  },
+  {
+   "file": "flamethrower-flickr-20559017243.jpg",
+   "class": "flamethrower",
+   "light": "night",
+   "metrics": {
+    "flamePx": 746773,
+    "white": 26.886,
+    "pale": 4.102,
+    "yellow": 15.259,
+    "orange": 29.847,
+    "red": 23.886,
+    "redOrange": 53.732,
+    "BR": 0.387,
+    "GR": 0.692,
+    "dim": 30.341,
+    "soot": 0.013,
+    "edgeSoot": 2.313,
+    "pockets": 2.303,
+    "fine": 5.295,
+    "mid": 16.22,
+    "coarse": 78.485
+   }
+  },
+  {
+   "file": "fireball-avalon-1.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 68569,
+    "white": 0,
+    "pale": 2.895,
+    "yellow": 4.235,
+    "orange": 26.998,
+    "red": 64.981,
+    "redOrange": 91.979,
+    "BR": 0.394,
+    "GR": 0.566,
+    "dim": 40.543,
+    "soot": 0.233,
+    "edgeSoot": 6.579,
+    "pockets": 26.181,
+    "fine": 5.281,
+    "mid": 19.612,
+    "coarse": 75.106
+   }
+  },
+  {
+   "file": "fireball-avalon-2.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 234380,
+    "white": 0.026,
+    "pale": 0.574,
+    "yellow": 1.163,
+    "orange": 24.14,
+    "red": 74.068,
+    "redOrange": 98.208,
+    "BR": 0.247,
+    "GR": 0.507,
+    "dim": 38.665,
+    "soot": 0.194,
+    "edgeSoot": 4.976,
+    "pockets": 40.306,
+    "fine": 7.015,
+    "mid": 23.92,
+    "coarse": 69.064
+   }
+  },
+  {
+   "file": "fireball-f35-demo-2019.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 256802,
+    "white": 0.007,
+    "pale": 0.1,
+    "yellow": 3.846,
+    "orange": 16.147,
+    "red": 79.89,
+    "redOrange": 96.037,
+    "BR": 0.22,
+    "GR": 0.451,
+    "dim": 49.795,
+    "soot": 0.633,
+    "edgeSoot": 20.896,
+    "pockets": 26.1,
+    "fine": 10.59,
+    "mid": 28.744,
+    "coarse": 60.667
+   }
+  },
+  {
+   "file": "fireball-miramar-airshow.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 188650,
+    "white": 0.602,
+    "pale": 4.18,
+    "yellow": 3.659,
+    "orange": 17.917,
+    "red": 73.623,
+    "redOrange": 91.539,
+    "BR": 0.317,
+    "GR": 0.542,
+    "dim": 48.784,
+    "soot": 0.019,
+    "edgeSoot": 0.826,
+    "pockets": 16.893,
+    "fine": 6.838,
+    "mid": 20.897,
+    "coarse": 72.265
+   }
+  },
+  {
+   "file": "fireball-mission-accomplished.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 323484,
+    "white": 0.805,
+    "pale": 7.01,
+    "yellow": 5.135,
+    "orange": 20.561,
+    "red": 66.434,
+    "redOrange": 86.994,
+    "BR": 0.445,
+    "GR": 0.635,
+    "dim": 38.264,
+    "soot": 0.139,
+    "edgeSoot": 9.914,
+    "pockets": 7.918,
+    "fine": 6.275,
+    "mid": 22.412,
+    "coarse": 71.313
+   }
+  },
+  {
+   "file": "fireball-focal-intent.jpg",
+   "class": "fireball",
+   "light": "night",
+   "metrics": {
+    "flamePx": 703915,
+    "white": 1.008,
+    "pale": 6.894,
+    "yellow": 8.149,
+    "orange": 60.914,
+    "red": 23.035,
+    "redOrange": 83.949,
+    "BR": 0.23,
+    "GR": 0.6,
+    "dim": 34.393,
+    "soot": 0.238,
+    "edgeSoot": 27.506,
+    "pockets": 4.25,
+    "fine": 7.489,
+    "mid": 14.855,
+    "coarse": 77.657
+   }
+  },
+  {
+   "file": "fireball-toronto-propane-2008.jpg",
+   "class": "fireball",
+   "light": "night",
+   "metrics": {
+    "flamePx": 132033,
+    "white": 18.448,
+    "pale": 1.68,
+    "yellow": 8.267,
+    "orange": 22.118,
+    "red": 49.487,
+    "redOrange": 71.605,
+    "BR": 0.276,
+    "GR": 0.584,
+    "dim": 53.332,
+    "soot": 0.026,
+    "edgeSoot": 2.661,
+    "pockets": 0.927,
+    "fine": 1.913,
+    "mid": 9.149,
+    "coarse": 88.938
+   }
+  },
+  {
+   "file": "fireball-breather-14.jpg",
+   "class": "fireball",
+   "light": "day",
+   "metrics": {
+    "flamePx": 146376,
+    "white": 0,
+    "pale": 2.254,
+    "yellow": 8.749,
+    "orange": 50.577,
+    "red": 38.419,
+    "redOrange": 88.996,
+    "BR": 0.475,
+    "GR": 0.718,
+    "dim": 4.9,
+    "soot": 0.003,
+    "edgeSoot": 1.024,
+    "pockets": 3.746,
+    "fine": 5.381,
+    "mid": 13.803,
+    "coarse": 80.816
+   }
+  },
+  {
+   "file": "fireball-fire-garden.jpg",
+   "class": "fireball",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 120565,
+    "white": 0.001,
+    "pale": 5.906,
+    "yellow": 37.739,
+    "orange": 40.482,
+    "red": 15.873,
+    "redOrange": 56.355,
+    "BR": 0.302,
+    "GR": 0.72,
+    "dim": 13.236,
+    "soot": 0.39,
+    "edgeSoot": 48.676,
+    "pockets": 3.4,
+    "fine": 5.285,
+    "mid": 14.072,
+    "coarse": 80.642
+   }
+  }
+ ]
+}

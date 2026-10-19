@@ -330,10 +330,10 @@ Every change to fire is measured against photographs of real fire before a perso
   - dark pockets in the flame;
   - detail by octave (fine, mid, coarse) relative to the flame's height;
   - at night, how much the ground round the fire is lit, against the same view by day.
-- **The fire sheet.** The new xtask task `fire` runs one scripted sandbox scene: every preset in a row, each at noon, dusk and night, against stone and against sky, from fixed cameras.
-  - Each fire's crop comes from its projected bounds, never from hand-drawn boxes.
-  - It writes `shots/fire/sheet.jpg` and a table: each preset's metrics against its class's range, with ✗ where one falls out.
-- **The gate.** The push check runs the fire sheet when what it reads changed: fire's code and shaders, `fire.ron`, the ramp, the flipbooks, the tonemapper (D398). A preset out of its class's range fails the push.
+- **The fire sheet.** The xtask task `fire` (`tools/fire/sheet.ts`) runs one scripted sandbox scene an hour on the yard, noon, dusk and night, each fire from a fixed camera: today a campfire, a log cabin alight, and a dragon's breath on a stone wall with its fireball. Once presets exist, every preset in a row, against stone and against sky.
+  - Each fire's crop comes from its projected bounds (`fire.seen`, `terra_world::fire::seen`), never from hand-drawn boxes.
+  - It writes `shots/fire/sheet.jpg` and a table: each fire's metrics against its class's range, with ✗ where one falls out.
+- **The gate.** The fire sheet runs (`cargo xtask fire --gate`) when what it reads changed. It is not yet a stage of the check: the full check now runs on CI, which has no GPU (D37), and a push's GPU-queue wait is minutes; where it runs is open. What it reads: fire's code and shaders, its textures, `fire.ron`, the building fire, the tonemapping patches and the check's tools (`FIRE` in `xtask/src/scope.rs`, D398). Until a stage brings a fire into its class, the push fails only where a fire is worse than held: a number out that `tools/fire/held.json` holds in, or a fire not seen. Each stage that brings numbers in writes the file again (`cargo xtask fire --hold`), so what it fixed stays fixed; once every fire holds, the file is empty and a fire out of its class's range fails the push.
   - Ranges are the class's min to max, widened by a tolerance. They are not the median: real fires vary.
 - **Film probes.** Any still from a film or probe run that has a fire crop beside it is measured the same way (`node tools/fire/measure.ts <still> --class building`), so the castle film's rounds are judged by the same numbers.
 - **Numbers do not replace eyes.** The adversarial review against the references still judges a milestone. The check only stops the obvious failures reaching it.

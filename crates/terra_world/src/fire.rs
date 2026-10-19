@@ -384,6 +384,7 @@ impl Puffs {
 }
 
 pub fn plugin(app: &mut App) {
+    seen::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -963,6 +964,8 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
     lit.extend(gathered);
     lit
 }
+
+mod seen;
 
 #[cfg(test)]
 mod tests;

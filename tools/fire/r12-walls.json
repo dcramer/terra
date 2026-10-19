@@ -1,0 +1,71 @@
+{
+ "about": "The castle film r12's wall fires (D377) as measure.ts measures them: known bad (yellow 4-6% where a burning building's is 6-16%, red+orange 91-94%), so the structure class must fail each.",
+ "walls": [
+  {
+   "still": "castle2/r12/q2/f-02352.png",
+   "crop": "800x240+540+520",
+   "metrics": {
+    "flamePx": 144744,
+    "white": 0.1845,
+    "pale": 1.5883,
+    "yellow": 4.2862,
+    "orange": 53.4537,
+    "red": 40.4873,
+    "redOrange": 93.941,
+    "BR": 0.397,
+    "GR": 0.6562,
+    "dim": 21.652,
+    "soot": 0.0546,
+    "edgeSoot": 10.2635,
+    "pockets": 27.5403,
+    "fine": 11.9883,
+    "mid": 24.9477,
+    "coarse": 63.064
+   }
+  },
+  {
+   "still": "castle2/r12/q2/f-02772.png",
+   "crop": "700x500+0+400",
+   "metrics": {
+    "flamePx": 233237,
+    "white": 0.0343,
+    "pale": 3.4351,
+    "yellow": 5.7337,
+    "orange": 23.4663,
+    "red": 67.3307,
+    "redOrange": 90.7969,
+    "BR": 0.3451,
+    "GR": 0.5837,
+    "dim": 35.1694,
+    "soot": 0.1177,
+    "edgeSoot": 14.133,
+    "pockets": 50.719,
+    "fine": 19.1743,
+    "mid": 24.5784,
+    "coarse": 56.2473
+   }
+  },
+  {
+   "still": "castle2/r12/q2/f-02862.png",
+   "crop": "800x500+0+420",
+   "metrics": {
+    "flamePx": 246881,
+    "white": 0.002,
+    "pale": 3.4976,
+    "yellow": 5.0162,
+    "orange": 21.8312,
+    "red": 69.653,
+    "redOrange": 91.4842,
+    "BR": 0.3451,
+    "GR": 0.5833,
+    "dim": 35.4628,
+    "soot": 0.1003,
+    "edgeSoot": 13.1315,
+    "pockets": 73.9939,
+    "fine": 17.8304,
+    "mid": 22.6684,
+    "coarse": 59.5012
+   }
+  }
+ ]
+}
