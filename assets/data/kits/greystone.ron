@@ -1,0 +1,11 @@
+// Greystone: the fieldstone of a town's works, its wall, towers, gates and castle, weathered
+// darker and greyer than a house's (data/packs/greystone.ron), under slate. A material of the
+// block pattern (D290), as stone.ron is.
+(
+    id: 7,
+    pattern: "block",
+    pack: "greystone",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+)

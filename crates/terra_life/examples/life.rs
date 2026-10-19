@@ -25,6 +25,7 @@ const KINDS: Kinds = Kinds {
     beams: Kind(3),
     cob: Kind(4),
     framed: Kind(5),
+    works: Kind(2),
     timber_roof: Kind(0x800),
     masonry_roof: Kind(0x801),
     beams_roof: Kind(0x802),

@@ -13,4 +13,5 @@
     beams: ["hewn"],
     cob: ["stone"],
     framed: ["hewn"],
+    works: ["greystone"],
 )

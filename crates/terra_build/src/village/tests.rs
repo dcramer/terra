@@ -1,0 +1,304 @@
+use super::*;
+use crate::Base;
+use std::collections::BTreeSet;
+
+const KINDS: Kinds = Kinds {
+    timber: Kind(1),
+    masonry: Kind(2),
+    beams: Kind(3),
+    cob: Kind(4),
+    framed: Kind(5),
+    works: Kind(2),
+    timber_roof: Kind(0x800),
+    masonry_roof: Kind(0x801),
+    beams_roof: Kind(0x802),
+};
+
+#[test]
+fn every_building_is_roofed_in_cubes_that_hold() {
+    for building in village(7, KINDS) {
+        let base = Base::from_shortcuts(&building.ops);
+        let roofed = base.cubes().filter(|(_, c)| c.kind.is_roof()).count();
+        let wants = !matches!(building.plan, Plan::Wall | Plan::Deck);
+        assert_eq!(roofed > 0, wants, "{}", building.name);
+        assert!(
+            base.floating().is_empty(),
+            "{}: {:?}",
+            building.name,
+            base.floating()
+        );
+    }
+}
+
+/// A building's cubes' columns where they stand in the village, in metres east and
+/// south, a cube's middle each.
+fn columns(building: &Building) -> Vec<[f32; 2]> {
+    let mut base = Base::default();
+    for &op in &building.ops {
+        base.apply(op);
+    }
+    let (s, c) = (libm::sinf(building.facing), libm::cosf(building.facing));
+    base.occupied_columns()
+        .map(|column| {
+            let (x, z) = (
+                (column.x as f32 + 0.5) * crate::CELL_M,
+                (column.y as f32 + 0.5) * crate::CELL_M,
+            );
+            // Turned so its +Z looks along `facing`.
+            [
+                building.at[0] + x * c + z * s,
+                building.at[1] - x * s + z * c,
+            ]
+        })
+        .collect()
+}
+
+#[test]
+fn a_village_is_the_same_from_the_same_seed_and_varies_with_it() {
+    assert_eq!(village(7, KINDS), village(7, KINDS));
+    assert_ne!(village(7, KINDS), village(8, KINDS));
+}
+
+#[test]
+fn every_scheme_and_plan_is_there_and_no_two_buildings_stand_in_one_another() {
+    let all = village(7, KINDS);
+    let schemes: BTreeSet<Scheme> = all.iter().map(|b| b.scheme).collect();
+    let plans: BTreeSet<Plan> = all.iter().map(|b| b.plan).collect();
+    assert_eq!(schemes.len(), 9, "{schemes:?}");
+    assert_eq!(plans.len(), 8, "{plans:?}");
+    assert!(variants() >= 150, "{}", variants());
+    let placed: Vec<Vec<[f32; 2]>> = all.iter().map(columns).collect();
+    for (i, a) in placed.iter().enumerate() {
+        for (j, b) in placed.iter().enumerate().skip(i + 1) {
+            // A metre apart at least; lengths of one garden wall may meet at a corner.
+            let apart = if all[i].plan == Plan::Wall && all[j].plan == Plan::Wall {
+                0.4
+            } else {
+                1.0
+            };
+            let near = a.iter().any(|p| {
+                b.iter()
+                    .any(|q| (p[0] - q[0]).abs() < apart && (p[1] - q[1]).abs() < apart)
+            });
+            assert!(!near, "{} stands in {}", all[i].name, all[j].name);
+        }
+    }
+}
+
+#[test]
+fn every_house_looks_onto_the_street_and_stands_off_it() {
+    for building in village(7, KINDS)
+        .iter()
+        .filter(|b| !matches!(b.plan, Plan::Wall | Plan::Deck))
+    {
+        // Its door looks toward the street's middle line, z = 0.
+        let toward = libm::cosf(building.facing) * -building.at[1].signum();
+        assert!(toward > 0.9, "{}: {toward}", building.name);
+        // Nothing of it in the street, three metres either side of its middle.
+        assert!(
+            columns(building).iter().all(|p| p[1].abs() > 3.0),
+            "{} stands in the street",
+            building.name
+        );
+    }
+}
+
+/// Whether any two buildings stand within a metre of one another, by the half-metre
+/// cells their columns are in.
+fn crowded(all: &[Building]) -> Option<(String, String)> {
+    let mut taken: std::collections::HashMap<[i32; 2], usize> = Default::default();
+    for (index, building) in all.iter().enumerate() {
+        for p in columns(building) {
+            let cell = [(p[0] / 0.5).floor() as i32, (p[1] / 0.5).floor() as i32];
+            for dx in -2..=2 {
+                for dz in -2..=2 {
+                    if let Some(&other) = taken.get(&[cell[0] + dx, cell[1] + dz])
+                        && other != index
+                    {
+                        return Some((building.name.clone(), all[other].name.clone()));
+                    }
+                }
+            }
+        }
+        for p in columns(building) {
+            taken.insert(
+                [(p[0] / 0.5).floor() as i32, (p[1] / 0.5).floor() as i32],
+                index,
+            );
+        }
+    }
+    None
+}
+
+#[test]
+fn a_town_mixes_every_scheme_and_plan_and_no_two_buildings_stand_in_one_another() {
+    let all = town(7, 90, KINDS);
+    assert_eq!(all.len(), 90);
+    let schemes: BTreeSet<Scheme> = all.iter().map(|b| b.scheme).collect();
+    let plans: BTreeSet<Plan> = all.iter().map(|b| b.plan).collect();
+    assert_eq!(schemes.len(), 9, "{schemes:?}");
+    assert!(plans.len() >= 5, "{plans:?}");
+    assert_eq!(crowded(&all), None);
+    assert!(every_building().len() >= 200, "{}", every_building().len());
+}
+
+#[test]
+fn a_town_of_many_materials_builds_each_house_of_one_and_uses_every_one() {
+    // Six stones, each with its own roof; one of every other role.
+    let stones: Vec<Kind> = (10..16).map(Kind).collect();
+    let roofs = stones
+        .iter()
+        .map(|&k| (k, Kind(0x800 + k.0)))
+        .chain([
+            (KINDS.timber, KINDS.timber_roof),
+            (KINDS.beams, KINDS.beams_roof),
+        ])
+        .collect();
+    let palette = Palette {
+        roles: [
+            vec![KINDS.timber],
+            stones.clone(),
+            vec![KINDS.beams],
+            vec![KINDS.cob],
+            vec![KINDS.framed],
+            vec![KINDS.works],
+        ],
+        roofs,
+    };
+    let all = town(7, 90, &palette);
+    let mut used = BTreeSet::new();
+    for building in &all {
+        let mut base = Base::default();
+        for &op in &building.ops {
+            base.apply(op);
+        }
+        let walls: BTreeSet<Kind> = base
+            .cubes()
+            .map(|(_, cube)| cube.kind)
+            .filter(|k| stones.contains(k))
+            .collect();
+        // A house is one stone throughout, and its roof the one that stone takes.
+        assert!(walls.len() <= 1, "{}: {walls:?}", building.name);
+        if let Some(&stone) = walls.first()
+            && building.scheme == Scheme::Masonry
+        {
+            assert!(
+                base.cubes()
+                    .any(|(_, cube)| cube.kind == Kind(0x800 + stone.0)),
+                "{}",
+                building.name
+            );
+        }
+        used.extend(walls);
+    }
+    assert_eq!(used.len(), stones.len(), "{used:?}");
+    assert_eq!(palette.first().masonry, stones[0]);
+}
+
+#[test]
+fn shortcuts_applied_together_lay_what_they_do_one_by_one() {
+    for building in village(7, KINDS) {
+        let mut one_by_one = Base::default();
+        for &op in &building.ops {
+            one_by_one.apply(op);
+        }
+        assert!(
+            Base::from_shortcuts(&building.ops) == one_by_one,
+            "{}",
+            building.name
+        );
+    }
+}
+
+#[test]
+fn hamlets_spread_out_to_their_radius() {
+    let all = hamlets(7, 60, 2000.0, KINDS);
+    assert_eq!(all.len(), 60);
+    let furthest = all
+        .iter()
+        .map(|b| libm::hypotf(b.at[0], b.at[1]))
+        .fold(0.0, f32::max);
+    assert!((1200.0..2050.0).contains(&furthest), "{furthest}");
+}
+
+#[test]
+fn a_two_storey_house_has_its_stair_up_to_a_landing_at_its_upper_door() {
+    let all = village(7, KINDS);
+    let two = all.iter().find(|b| b.plan == Plan::TwoStoreys).unwrap();
+    let mut base = Base::default();
+    for &op in &two.ops {
+        base.apply(op);
+    }
+    // A stair's top step a storey up, the landing beside it, and the door off that.
+    let stairs: Vec<_> = base
+        .cubes()
+        .filter(|(_, cube)| matches!(cube.shape, Shape::Stair(_)))
+        .map(|(at, _)| at.y)
+        .collect();
+    assert_eq!(stairs.iter().max(), Some(&(STOREY_CUBES - 1)));
+    assert!(
+        base.walls()
+            .any(|(tile, panel)| tile.y == 1 && panel == Panel::Door)
+    );
+}
+
+// Slow, a minute or two: lays and draws one of each sort of the village's buildings, which
+// the quick check before each commit skips and the full check runs (`SLOW_TESTS` in xtask).
+#[test]
+fn no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels() {
+    // One of each sort of the village's buildings, in the settlement's own materials as
+    // the game reads them, modelled pieces and all: none of their near meshes' faces lie
+    // in one plane over one another (`inspect::fights`, the checker's measure). The
+    // farmstead's lintels at a wall's end, the outside stair's stringers and the deck
+    // beside it, a doorway's posts on a footing, the lookout's rail, ridge caps cut to
+    // length and a verge under a higher roof's eave all did.
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+    };
+    let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
+        .expect("the kits")
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+        .collect();
+    paths.sort();
+    let mut names = std::collections::BTreeMap::new();
+    let mut kits = Vec::new();
+    for path in paths {
+        let stem = path.file_stem().unwrap().to_string_lossy().to_string();
+        let kit =
+            crate::kit::Kit::read(&format!("{}/{stem}.ron", crate::kit::MATERIALS), &read).unwrap();
+        names.insert(stem, kit.kind());
+        kits.push(kit);
+    }
+    let kits = crate::kit::Kits(kits);
+    let palette = Palette::read(&read, &|name| names.get(name).copied(), &kits).unwrap();
+    let maps = crate::relief::Maps::default();
+    let progress = crate::sections::Progress::Whole;
+    terra_gen::par::map(&each_sort(&palette), |(building, base)| {
+        let whole = crate::sections::Whole::lay(base, &kits);
+        let mut meshes = Vec::new();
+        for at in crate::sections::drawable(base) {
+            let section = crate::sections::Section {
+                base,
+                kits: &kits,
+                maps: &maps,
+                at: glam::IVec3::from_array(at),
+                progress: &progress,
+            };
+            let laid = crate::sections::lay(&section, &whole);
+            let near = crate::sections::draw(&section, &laid, crate::sections::Reach::Near);
+            for (&(kind, material), surface) in &near.near {
+                meshes.push((
+                    format!("{kind:?} {material:?}"),
+                    Some((kind, material)),
+                    surface.clone(),
+                ));
+            }
+            meshes.push(("plain".to_string(), None, near.plain));
+        }
+        let fights = crate::inspect::fights(meshes.iter().map(|(n, k, s)| (n.clone(), *k, s)));
+        assert!(fights.is_empty(), "{}: {fights:?}", building.name);
+    });
+}

@@ -9,9 +9,10 @@
 (
     about: "a market town rising from its clearing in a day",
     seconds: 20.0,
-    // An early morning, as the forest's own (trailer/runs/forest.json, 7.5 h): the sun low
-    // and warm, the mist about the clearing and its shafts through it, lifting a little.
-    hours: (7.5, 8.3),
+    // Golden hour, soon after sunrise: the sun 6-10 degrees up in the east-south-east, low
+    // and warm, behind the camera's right as it ends looking north, so the town's walls and
+    // towers throw long shadows (at 7.5-8.3 h, 20-28 degrees up, the review read noon).
+    hours: (6.0, 6.35),
     claim: 0.0,
     first: 0.3,
     last: 11.0,
@@ -32,10 +33,11 @@
         (item: "Log", at: (1.9, 1.72), lift: 0.4),
         (item: "Log", at: (1.9, 2.17), lift: 0.4),
     ],
-    steps_a_frame: 4000,
+    steps_a_frame: 6000,
     // Grown big, as the camera goes far out (the developer: "settlement can be bigger since
     // we are moving far far away, you can even imagine it finishing off with like castle
     // and walls"): eighty to ninety houses along streets half as long again as a market
-    // town's, then its wall, towers and gates going up from 11.5 s, the castle beside it last.
-    town: (buildings: (80, 90), streets: 1.6, walls: (11.5, 14.5)),
+    // town's, then its wall, towers and gates going up from 10.5 s, the castle beside it last
+    // from 12 s, finished with its scaffold struck by about 18 s.
+    town: (buildings: (80, 90), streets: 1.6, walls: (10.5, 12.0)),
 )

@@ -37,7 +37,7 @@ impl Town {
     pub(super) fn walls(&mut self, seed: u32, picks: impl Picks + Copy, heights: Heights) {
         let kinds = picks.pick(hash::of(&[seed, 0x3a11]));
         let m = burg::Materials {
-            stone: kinds.masonry,
+            stone: kinds.works,
             beams: kinds.beams,
             logs: kinds.timber,
             shakes: kinds.timber_roof,

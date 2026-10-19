@@ -1,0 +1,23 @@
+// Greystone's pack: a town's works, its wall, towers, gates and castle, of the same rough
+// fieldstone (Poly Haven's `stone_wall`, CC0, assets/materials/README.md) weathered darker and
+// greyer than a house's, as old curtain walls stand grey-brown under their grime: its face
+// multiplied toward grey-brown (the fieldstone's mean, sRGB 0.64, 0.57, 0.48, read cream at
+// 500 m under a low sun, settlement film r10), its dressed stone with it, and the dirt and
+// damp risen higher up its foot and darker.
+(
+    tint: (0.55, 0.58, 0.66),
+    textures: {
+        Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0), depth: 0.025),
+        Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8), depth: 0.008),
+    },
+    dress: (
+        tint: (0.55, 0.57, 0.62),
+        masks: (dirt: 1.4, dirt_tint: (0.4, 0.37, 0.32), wear: 0.1),
+    ),
+    reference: Some((
+        photo: "art/references/fieldstone.jpg",
+        source: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Stone_wall_old_farm_Dordogne.jpg/1920px-Stone_wall_old_farm_Dordogne.jpg",
+        licence: "CC0",
+        about: "A rubble stone wall of an old farm, Dordogne",
+    )),
+)
