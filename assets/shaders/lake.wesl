@@ -24,6 +24,7 @@
 // OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+import super::dusk::dusk_sky;
 import super::waves::{Surface, TRAINS, SWELL, noise, cats_paws, wave_slopes, wave_bend, wave_train, glint};
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -81,6 +82,9 @@ struct Lake {
     // sun (sky.wesl): the water mirrors them as the sky shows them.
     twilight: f32,
     glow: vec4<f32>,
+    // Toward the sun, below the horizon too, which the dusk's warm side faces; zero for the
+    // world's light's own way.
+    sun: vec4<f32>,
 }
 
 const RISES: u32 = 8u;
@@ -174,16 +178,14 @@ fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -
 var<uniform> lake: Lake;
 
 // The dusk's own colours the sky draws over the air along a direction where no cloud is
-// (sky.wesl, after sunset): its horizon's colour to its zenith's, the glow toward the sun.
+// (sky.wesl, after sunset, by the same function): mirrored from its own gradient, the water
+// was salmon under a sky that had lost it (lake film r10, sat 0.45 under 0.10).
 fn dusk(direction: vec3<f32>, up: vec3<f32>, sun: vec3<f32>) -> vec3<f32> {
     if lake.twilight <= 0.0 {
         return vec3<f32>(0.0);
     }
-    let lift = dot(direction, up);
-    let toward_sun = max(dot(direction, sun), 0.0);
-    var gradient = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
-    gradient += lake.glow.rgb * pow(toward_sun, 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.7, lift));
-    return gradient * lake.sky_brightness * lake.twilight;
+    return dusk_sky(direction, up, sun, lake.horizon.rgb, lake.zenith.rgb, lake.glow.rgb)
+        * lake.sky_brightness * lake.twilight;
 }
 
 // The reflection of what is on screen along a ray from a point of the water, and how much it
@@ -401,7 +403,11 @@ fn fragment(
     var seen: vec3<f32>;
     if lake.over_air != 0u {
         let level = normalize(reflected - up * dot(reflected, up) + up * 0.02);
-        let toward_sun = lights.directional_lights[0].direction_to_light;
+        // Once the sun is down the world's light is the moon's: the dusk faces the sun.
+        var toward_sun = lake.sun.xyz;
+        if dot(toward_sun, toward_sun) < 0.5 {
+            toward_sun = lights.directional_lights[0].direction_to_light;
+        }
         seen = mirrored(reflected, up, air_seen(reflected) + dusk(reflected, up, toward_sun),
             air_seen(level) + dusk(level, up, toward_sun));
     } else {

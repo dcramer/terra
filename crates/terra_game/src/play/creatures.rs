@@ -472,7 +472,11 @@ pub(super) fn spawn(
     let casts = about.body.radius >= CASTS_SHADOW_FROM_M;
     let feet = planet.ground_at(at);
     let up = feet.normalize();
-    let facing = up.any_orthonormal_vector();
+    // Each its own way: all facing one way, a fox met ahead sat square to the lens (lake
+    // film r10).
+    let bits = [feet.x.to_bits(), feet.y.to_bits(), feet.z.to_bits()];
+    let turn = terra_gen::hash::unit(terra_gen::hash::of(&bits)) * std::f32::consts::TAU;
+    let facing = Quat::from_axis_angle(up, turn) * up.any_orthonormal_vector();
     let creature = commands
         .spawn((
             Name::new(about.name.clone()),

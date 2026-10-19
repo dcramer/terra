@@ -112,6 +112,10 @@ pub struct LakeExtension {
     twilight: f32,
     #[uniform(100)]
     glow: LinearRgba,
+    /// Toward the sun, below the horizon too (`Sky::sun`), which the dusk's warm side faces:
+    /// the world's light is the moon's by then.
+    #[uniform(100)]
+    sun: Vec4,
     /// The air all round the camera (`air::AirPicture`), unexposed.
     #[texture(101, dimension = "cube")]
     #[sampler(102)]
@@ -148,6 +152,9 @@ impl LakeExtension {
         let (twilight, glow) = sky.map_or((0.0, LinearRgba::BLACK), |sky| {
             (sky.twilight, sky.glow.into())
         });
+        let sun = sky
+            .map_or(Vec3::ZERO, |sky| sky.sun.normalize_or_zero())
+            .extend(0.0);
         let lowland = mirror.lowland;
         let mix = |a: LinearRgba, b: LinearRgba| a.mix(&b, lowland);
         Self {
@@ -172,6 +179,7 @@ impl LakeExtension {
             over_air: air.is_some() as u32,
             twilight,
             glow,
+            sun,
             air,
         }
     }

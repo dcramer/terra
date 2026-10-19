@@ -13,7 +13,6 @@
 //! longer has them, the patch is not made and says so, and the fixed pattern stays.
 
 use bevy::prelude::*;
-use bevy::shader::{Shader, Source};
 
 /// Where Bevy keeps the library with the dither.
 const LIBRARY: &str = "embedded://bevy_pbr/render/pbr_functions.wesl";
@@ -35,56 +34,17 @@ const FRAME: &str = "
 ";
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, patch);
-}
-
-/// The library, held so it stays loaded, until it is patched.
-#[derive(Default)]
-enum Patching {
-    #[default]
-    Start,
-    Waiting(Handle<Shader>),
-    Done,
-}
-
-fn patch(
-    mut state: Local<Patching>,
-    assets: Res<AssetServer>,
-    mut shaders: ResMut<Assets<Shader>>,
-) {
-    match &*state {
-        Patching::Start => *state = Patching::Waiting(assets.load(LIBRARY)),
-        Patching::Waiting(handle) => {
-            let Some(shader) = shaders.get(handle) else {
-                return;
-            };
-            let patched = match &shader.source {
-                Source::Wesl(source) | Source::Wgsl(source) => patched(source),
-                Source::SpirV(_) => None,
-            };
-            match patched {
-                Some(source) => {
-                    if let Some(mut shader) = shaders.get_mut(handle) {
-                        shader.source = match shader.source {
-                            Source::Wgsl(_) => Source::Wgsl(source.into()),
-                            _ => Source::Wesl(source.into()),
-                        };
-                    }
-                }
-                None => warn!(
-                    "Bevy's crossfade dither was not found in {LIBRARY}: crossfades keep its fixed pattern, which TAA cannot resolve."
-                ),
-            }
-            *state = Patching::Done;
-        }
-        Patching::Done => {}
-    }
+    super::shader_patch::patch_library(
+        app,
+        LIBRARY,
+        patched,
+        "Bevy's crossfade dither was not found: crossfades keep its fixed pattern, which TAA cannot resolve",
+    );
 }
 
 /// The library with the moving threshold in place of the fixed one, if it has it.
 fn patched(source: &str) -> Option<String> {
-    let source = source.replace("\r\n", "\n");
-    (source.matches(FIXED).count() == 1).then(|| source.replace(FIXED, MOVING) + FRAME)
+    super::shader_patch::swap_once(source, FIXED, MOVING).map(|source| source + FRAME)
 }
 
 #[cfg(test)]

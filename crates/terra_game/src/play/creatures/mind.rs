@@ -25,6 +25,10 @@ const WATCHES_WITHIN: f32 = 2.5;
 /// and a fifth to a third of it vigilant: Childress and Lung 2003, Benhaiem et al. 2008).
 const STARES_WITHIN: f32 = 1.5;
 const FEEDS_ON: f32 = 0.75;
+/// How long a look at someone coming lasts at the most, seconds, before it goes back to its
+/// business or, them close, turns and walks off: an alert look lasts seconds, not the whole
+/// approach (a fox sat square to the lens through the lake film's last 2.5 s, r10).
+pub(super) const LOOKS_S: f32 = 1.2;
 /// How far ahead a creature reckons where someone on the move is going, in seconds.
 const RECKONS_AHEAD_S: f32 = 8.0;
 
@@ -335,22 +339,29 @@ fn shy(
                 && !creature.hurt =>
         {
             let close = s.near(flees_within_m * STARES_WITHIN);
+            let feeds = about.clips.eat.is_some();
             match creature.state {
                 State::Graze(left) if !close && left > 0.0 => State::Graze(left - s.dt),
-                State::Idle(left) if !close && left > 0.0 => {
+                State::Idle(left) if left > 0.0 => {
                     look_toward(creature, s);
-                    State::Idle(left - s.dt)
+                    State::Idle(left.min(LOOKS_S) - s.dt)
                 }
-                _ if !close && about.clips.eat.is_some() && dice.unit() < FEEDS_ON => {
+                State::Wander(to) if !close && (to - s.here).length() > 1.0 => State::Wander(to),
+                _ if !close && feeds && dice.unit() < FEEDS_ON => {
                     State::Graze(dice.range(4.0, 9.0))
                 }
+                // One that does not graze, a fox, goes about its business between looks,
+                // nosing along the ground away from them, as a grazer feeds.
+                _ if !close && dice.unit() < FEEDS_ON => about_its_business(s, dice),
                 _ if !close => {
                     look_toward(creature, s);
-                    State::Idle(dice.range(1.0, 2.5))
+                    State::Idle(dice.range(0.6, LOOKS_S))
                 }
+                // Them close and its look over, it turns and walks off.
+                State::Idle(_) => walk_off(creature, s, flees_s, dice),
                 _ => {
                     look_toward(creature, s);
-                    State::Idle(0.5)
+                    State::Idle(LOOKS_S)
                 }
             }
         }
@@ -360,10 +371,7 @@ fn shy(
         // straight away from one far off, a group of ducks paddled off as a row of clones in
         // step (lake film r5).
         _ if !creature.hurt && s.near(flees_within_m) && !s.near(bolts_m) => {
-            let off = Quat::from_axis_angle(s.up, dice.range(-0.5, 0.5));
-            (creature.bolt, creature.pace) =
-                (s.toward.map_or(Vec3::ZERO, |t| off * -t), Pace::Wary);
-            State::Flee(flees_s)
+            walk_off(creature, s, flees_s, dice)
         }
         _ if creature.hurt || s.near(flees_within_m) => {
             creature.pace = Pace::Startled.roused(true, creature.hurt);
@@ -374,6 +382,25 @@ fn shy(
         }
         _ => return None,
     })
+}
+
+/// Walks off from the nearest player, wary, within a quarter turn of straight away.
+fn walk_off(creature: &mut Creature, s: &Sense, flees_s: f32, dice: &mut Rng) -> State {
+    let off = Quat::from_axis_angle(s.up, dice.range(-0.5, 0.5));
+    (creature.bolt, creature.pace) = (s.toward.map_or(Vec3::ZERO, |t| off * -t), Pace::Wary);
+    State::Flee(flees_s)
+}
+
+/// A few metres on its own way, never toward the nearest player: a fox quartering a slope.
+fn about_its_business(s: &Sense, dice: &mut Rng) -> State {
+    let turn = Quat::from_axis_angle(s.up, dice.range(0.0, std::f32::consts::TAU));
+    let mut way = turn * s.up.any_orthonormal_vector();
+    if let Some(toward) = s.toward
+        && way.dot(toward) > 0.0
+    {
+        way = way.reject_from(toward) * 2.0 - way;
+    }
+    State::Wander(s.here + way * dice.range(4.0, 10.0))
 }
 
 /// Turns a creature a little more toward the nearest player, level, for the time it thinks.

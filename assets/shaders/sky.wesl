@@ -6,6 +6,7 @@ import bevy_pbr::render::{
     forward_io::VertexOutput,
     mesh_view_bindings::{globals, view},
 };
+import super::dusk::dusk_sky;
 
 // Field order must match SkyMaterial in sky.rs.
 struct Sky {
@@ -27,6 +28,8 @@ struct Sky {
     far_land: vec4<f32>,
     // How its ridges are shaped: 0 a forest's rolling hills, 1 a range's peaks.
     far_peaks: f32,
+    // Toward the sun, below the horizon too, for the dusk's colours.
+    dusk_sun: vec3<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
@@ -181,16 +184,19 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     let round = vec2<f32>(dot(level, east), dot(level, north));
     // The air just over the horizon: Bevy's tables darken the air's light below it, most of
     // all straight ahead, as if its own ground showed through.
-    let behind = air_seen(normalize(level + up * 0.02))
-        + (mix(sky.horizon.rgb, sky.zenith.rgb, 0.1) * sky.brightness * sky.twilight);
+    // After sunset the dusk's own colour there, as the sky draws it just over the horizon
+    // (dusk.wesl): warm toward the sun's bearing, pale elsewhere. The old horizon colour
+    // here kept the range magenta under a sky that had lost it (lake film r10, 111,72,111).
+    let sun = normalize(sky.sun_direction);
+    let over = normalize(level + up * 0.02);
+    let behind = air_seen(over)
+        + dusk_sky(over, up, sky.dusk_sun, sky.horizon.rgb, sky.zenith.rgb, sky.glow.rgb) * sky.brightness * sky.twilight;
     // The haze before a ridge after sunset: the low air lies in the earth's own shadow, lit
     // only by the sky over it, dimmer and bluer than the horizon's band behind, which is air
     // still sunlit far off and high up. As bright as that band, a range at dusk was as pale
     // and warm as the sky beside it (lake film r7; Bohinj's ridges at 46 and 29 against 133).
     let cool = normalize(sky.zenith.rgb + vec3<f32>(1.0e-4)) * length(behind);
-    let horizon = mix(behind, cool, DUSK_COOL * sky.twilight) * mix(1.0, EARTH_SHADOW, sky.twilight);
     // The forest on it, lit as the world's canopy is by the sun through the air and the sky.
-    let sun = normalize(sky.sun_direction);
     let canopy = sky.far_land.rgb;
     // A range's slopes face every way, most away from a low sun: half of them lit.
     let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 * (1.0 - 0.5 * sky.far_peaks) + air_seen(up) * 1.6) / 3.14159
@@ -227,7 +233,12 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // The crowns' light and shade, finer the farther.
         let grain = noise(vec3<f32>(round * (420.0 + 400.0 * f), rise * (420.0 + 400.0 * f) + f * 3.3));
         let land = lit * (0.8 + 0.4 * grain);
-        let seen = mix(horizon, land, left);
+        // Its haze: the farthest ridge nearly the sky behind it, a nearer one deeper in the
+        // earth's shadow, dimmer and bluer, so the range reads in layers.
+        let shadow = 1.0 - f / f32(RIDGES - 1u);
+        let haze = mix(behind, cool, DUSK_COOL * sky.twilight * (0.35 + 0.65 * shadow))
+            * mix(1.0, mix(0.85, EARTH_SHADOW, shadow), sky.twilight);
+        let seen = mix(haze, land, left);
         let take = inside * (1.0 - cover);
         colour += seen * take;
         cover += take;
@@ -276,21 +287,10 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     let cover = cloud * 0.9;
     var colour = cloud_colour * cover;
 
-    // After sunset, the dusk's and the night's own colours, where the clouds leave sky.
-    // The horizon's colour keeps to a low band and is warm toward the sun's bearing; above
-    // the band its light is pale, so the sky goes from the warm band through pale to the
-    // zenith's blue. Mixed straight into the far dimmer blue zenith, the salmon horizon's red
-    // carried up the whole sky with little green: the dusk sky was magenta overhead (lake film
-    // r9, its zenith 116,74,111; split, Bevy's air gave black here and this gradient all of it).
+    // After sunset, the dusk's and the night's own colours, where the clouds leave sky
+    // (dusk.wesl).
     if sky.twilight > 0.0 {
-        let flat_sun = normalize(sun - up * dot(sun, up) + up * 1e-4);
-        let flat_way = normalize(direction - up * lift + up * 1e-4);
-        let bearing = max(dot(flat_way, flat_sun), 0.0);
-        let band = 1.0 - smoothstep(0.0, 0.2, lift);
-        let pale = vec3<f32>(dot(sky.horizon.rgb, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(0.94, 1.0, 1.1);
-        let horizon = mix(pale, sky.horizon.rgb, band * mix(0.3, 1.0, bearing * bearing));
-        var gradient = mix(horizon, sky.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
-        gradient += sky.glow.rgb * pow(toward_sun, 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.7, lift));
+        let gradient = dusk_sky(direction, up, sky.dusk_sun, sky.horizon.rgb, sky.zenith.rgb, sky.glow.rgb);
         colour += gradient * sky.brightness * sky.twilight * (1.0 - cover);
     }
 

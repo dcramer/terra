@@ -596,6 +596,7 @@ fn shine(
     sky.brightness = light.sky;
     sky.night = light.night;
     sky.twilight = 1.0 - smoothstep(-1.0, 6.0, height);
+    sky.sun = sun;
     sky.spin_axis = path.pole();
     sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
     let lit = SkyLight {

@@ -1,5 +1,5 @@
 use super::gait::bolts_within;
-use super::mind::{ROOSTS_OVER_M, SENSE_M, nearest};
+use super::mind::{LOOKS_S, ROOSTS_OVER_M, SENSE_M, nearest};
 use super::*;
 use crate::play::species::Temper;
 use crate::play::tick::Ticks;
@@ -553,4 +553,33 @@ fn a_deer_crossing_ahead_keeps_to_a_walk_until_someone_comes_close() {
         ground + Vec3::X * bolts_within(flees_within_m) * 0.5;
     world.run_system_once(think).unwrap();
     assert_ne!(world.get::<Creature>(stag).unwrap().pace, Pace::Calm);
+}
+
+#[test]
+fn one_watching_someone_near_looks_a_moment_and_then_walks_off_from_them() {
+    // A fox met ahead sat square to the lens through the lake film's last 2.5 s (r10).
+    let ground = Vec3::Y * 2000.0;
+    let mut world = world();
+    let watcher = one(&mut world, false, ground);
+    let Temper::Shy { flees_within_m, .. } = temper(&world, watcher) else {
+        unreachable!()
+    };
+    world.get_mut::<Creature>(watcher).unwrap().state = State::Idle(5.0);
+    test_player(&mut world, ground + Vec3::X * flees_within_m * 1.2);
+    world.run_system_once(think).unwrap();
+    let State::Idle(left) = state(&world, watcher) else {
+        panic!("{:?}", state(&world, watcher))
+    };
+    assert!(left <= LOOKS_S, "a look of {left} s");
+    // Its look over, them still near, it walks off from them.
+    world.get_mut::<Creature>(watcher).unwrap().state = State::Idle(0.0);
+    world.run_system_once(think).unwrap();
+    assert!(
+        matches!(state(&world, watcher), State::Flee(_)),
+        "{:?}",
+        state(&world, watcher)
+    );
+    let creature = world.get::<Creature>(watcher).unwrap();
+    assert_eq!(creature.pace, Pace::Wary);
+    assert!(creature.bolt.dot(Vec3::X) < 0.0, "{:?}", creature.bolt);
 }

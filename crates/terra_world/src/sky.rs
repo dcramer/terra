@@ -32,6 +32,10 @@ pub struct Sky {
     /// real one glows for a while; the dusk and the night are drawn in the colours chosen
     /// for them.
     pub twilight: f32,
+    /// Toward the sun, below the horizon too, which the dusk's warm side faces: once it is
+    /// down the world's light (`Tweaks::sun_direction`) is the moon's, opposite it round the
+    /// sky, and the dusk glowed toward the moon (lake film r10). Zero for the light's own way.
+    pub sun: Vec3,
     /// How the stars have turned with the sky: about which axis, and how far, in radians.
     pub spin_axis: Vec3,
     pub spin: f32,
@@ -75,6 +79,7 @@ impl Sky {
             brightness,
             night: 0.0,
             twilight: 0.0,
+            sun: Vec3::ZERO,
             spin_axis: Vec3::Y,
             spin: 0.0,
             over_air: false,
@@ -120,6 +125,9 @@ struct SkyMaterial {
     /// How its ridges are shaped (`FarLand::peaks`).
     #[uniform(0)]
     far_peaks: f32,
+    /// Toward the sun, below the horizon too (`Sky::sun`), for the dusk's colours.
+    #[uniform(0)]
+    dusk_sun: Vec3,
     /// The air all round the camera, for the far land's haze.
     #[texture(1, dimension = "cube")]
     #[sampler(2)]
@@ -177,6 +185,11 @@ impl SkyMaterial {
                 * tweaks.sun_illuminance,
             over_air: sky.over_air as u32,
             twilight: sky.twilight,
+            dusk_sun: sky
+                .sun
+                .try_normalize()
+                .unwrap_or(tweaks.sun_direction)
+                .normalize_or(Vec3::Y),
         }
     }
 }
