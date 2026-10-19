@@ -1,0 +1,26 @@
+{
+  "about": "A campfire's body: logs laid across the fire, each throwing its own tongues that lick up, split and alternate with dark, over a bed of embers, with a thin plume of smoke. The campfire class's loop.",
+  "class": "campfire",
+  "kind": "loop",
+  "size": 256,
+  "frames": 64,
+  "crossfade": 16,
+  "warmup": 50,
+  "fps": 24,
+  "domain": {
+    "center": [0, 0, 1.1], "size": [1.6, 1.6, 2.4], "resolution": 96, "noise": 2, "noise_strength": 1.5,
+    "vorticity": 0.4, "alpha": 0.4, "beta": 1.6, "burning_rate": 0.95, "flame_smoke": 0.3,
+    "flame_vorticity": 1.0, "dissolve": 20
+  },
+  "sources": [
+    { "shape": "cylinder", "location": [-0.12, 0, 0.08], "rotation": [1.5708, 0, 1.35], "scale": [0.06, 0.06, 0.3],
+      "type": "FIRE", "fuel": 1.0, "surface": 1.2, "texture": { "scale": 0.08, "speed": 0.1, "contrast": 3.0 } },
+    { "shape": "cylinder", "location": [0.14, 0.03, 0.1], "rotation": [1.5708, 0, 1.75], "scale": [0.06, 0.06, 0.28],
+      "type": "FIRE", "fuel": 1.0, "surface": 1.2, "texture": { "scale": 0.08, "speed": 0.1, "contrast": 3.0 } },
+    { "shape": "cylinder", "location": [0, -0.04, 0.16], "rotation": [1.5708, 0, 1.55], "scale": [0.055, 0.055, 0.22],
+      "type": "BOTH", "fuel": 0.9, "density": 0.15, "surface": 1.2, "texture": { "scale": 0.08, "speed": 0.1, "contrast": 3.0 } },
+    { "shape": "sphere", "location": [0, 0, 0.04], "scale": [0.3, 0.12, 0.04], "type": "FIRE", "fuel": 0.5, "surface": 1.0 }
+  ],
+  "camera": { "center": [0, 0.9], "extent": 2.0 },
+  "passes": { "cover": 8, "soot": 4, "flame_mask": 4, "velocity_max": 12 }
+}

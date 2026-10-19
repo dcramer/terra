@@ -1,0 +1,21 @@
+{
+  "about": "An explosion: a charge of fuel blown out fast from the ground, a flash of flame that burns out within a second into a rolling soot ball rising on its own column. The fireball class's violent one-shot.",
+  "class": "fireball",
+  "kind": "oneshot",
+  "size": 256,
+  "frames": 64,
+  "warmup": 0,
+  "fps": 24,
+  "domain": {
+    "center": [0, 0, 2.6], "size": [5.0, 5.0, 5.6], "resolution": 112, "noise": 2, "noise_strength": 1.6,
+    "vorticity": 0.5, "alpha": 1.0, "beta": 1.8, "burning_rate": 0.9, "flame_smoke": 2.4,
+    "flame_vorticity": 1.0, "dissolve": 60
+  },
+  "sources": [
+    { "shape": "sphere", "location": [0, 0, 0.35], "scale": [0.45, 0.45, 0.3], "behavior": "INFLOW", "until": 3,
+      "type": "BOTH", "fuel": 2.5, "density": 1.2, "surface": 1.5, "normal": 7.0, "velocity": [0, 0, 2.5], "random": 0.6,
+      "texture": { "scale": 0.25, "speed": 0.0, "contrast": 1.6 } }
+  ],
+  "camera": { "center": [0, 2.6], "extent": 5.4 },
+  "passes": { "cover": 6, "soot": 3, "flame_mask": 4, "velocity_max": 30 }
+}

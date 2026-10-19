@@ -97,7 +97,42 @@ export function writePng(path: string, picture: Picture) {
   header.writeUInt32BE(height, 4);
   header[8] = 8;
   header[9] = 6;
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y++) Buffer.from(rgba.buffer, rgba.byteOffset + y * width * 4, width * 4).copy(raw, y * (width * 4 + 1) + 1);
-  writeFileSync(path, Buffer.concat([SIGNATURE, chunk("IHDR", header), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+  // Each row takes the filter whose bytes sum smallest as signed values, the heuristic the PNG
+  // specification recommends (libpng's): it halves the size of smooth pictures such as baked
+  // flipbooks against no filter.
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height);
+  const zero = new Uint8Array(stride);
+  const tries = [0, 1, 2, 3, 4].map(() => new Uint8Array(stride));
+  for (let y = 0; y < height; y++) {
+    const row = rgba.subarray(y * stride, (y + 1) * stride);
+    const up = y > 0 ? rgba.subarray((y - 1) * stride, y * stride) : zero;
+    let best = 0;
+    let bestSum = Infinity;
+    for (let f = 0; f < 5; f++) {
+      const out = tries[f];
+      let sum = 0;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= 4 ? row[i - 4] : 0;
+        const b = up[i];
+        const c = i >= 4 ? up[i - 4] : 0;
+        let pred = 0;
+        if (f === 1) pred = a;
+        else if (f === 2) pred = b;
+        else if (f === 3) pred = (a + b) >> 1;
+        else if (f === 4) {
+          const p = a + b - c;
+          const [pa, pb, pc] = [Math.abs(p - a), Math.abs(p - b), Math.abs(p - c)];
+          pred = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+        }
+        const v = (row[i] - pred) & 255;
+        out[i] = v;
+        sum += v < 128 ? v : 256 - v;
+      }
+      if (sum < bestSum) [best, bestSum] = [f, sum];
+    }
+    raw[y * (stride + 1)] = best;
+    raw.set(tries[best], y * (stride + 1) + 1);
+  }
+  writeFileSync(path, Buffer.concat([SIGNATURE, chunk("IHDR", header), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
 }

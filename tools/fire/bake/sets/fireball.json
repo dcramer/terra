@@ -1,0 +1,21 @@
+{
+  "about": "A fireball: a ball of fuel ignited at once, swelling and rolling up into a mushroom, its skin burning orange over a darkening core of soot. The fireball class's one-shot, for a breath's hit and burning drops.",
+  "class": "fireball",
+  "kind": "oneshot",
+  "size": 256,
+  "frames": 64,
+  "warmup": 0,
+  "fps": 24,
+  "domain": {
+    "center": [0, 0, 1.8], "size": [3.0, 3.0, 4.0], "resolution": 104, "noise": 2, "noise_strength": 1.5,
+    "vorticity": 0.4, "alpha": 0.6, "beta": 1.6, "burning_rate": 0.6, "flame_smoke": 1.8,
+    "flame_vorticity": 0.9, "dissolve": 45
+  },
+  "sources": [
+    { "shape": "sphere", "location": [0, 0, 0.55], "scale": [0.32, 0.32, 0.32], "behavior": "INFLOW", "until": 6,
+      "type": "BOTH", "fuel": 2.0, "density": 0.5, "surface": 1.5, "normal": 2.0, "velocity": [0, 0, 1.0], "random": 0.4,
+      "texture": { "scale": 0.15, "speed": 0.0, "contrast": 1.6 } }
+  ],
+  "camera": { "center": [0, 1.8], "extent": 3.6 },
+  "passes": { "cover": 10, "soot": 4, "flame_mask": 4, "velocity_max": 14 }
+}

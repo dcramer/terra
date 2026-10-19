@@ -1,0 +1,24 @@
+{
+  "set": "tongue",
+  "about": "A structure fire's licks: a burning beam's length of fuel throwing separate tall tongues that alternate with dark, with sooty smoke breaking off their tips. Shared by every burning building's sites; the structure class's loop.",
+  "kind": "loop",
+  "class": "structure",
+  "frames": 64,
+  "columns": 8,
+  "rows": 8,
+  "frame": 256,
+  "fps": 24,
+  "channels": "R heat, G cover, B soot, A distortion",
+  "motion": {
+    "file": "tongue.motion.png",
+    "frame": 128,
+    "scale": 0.02057,
+    "channels": "RG flow to the next frame in frame widths: (v - 0.5) * 2 * scale, y down"
+  },
+  "baked": {
+    "heat_scale": 1.3116,
+    "flow_gain": 0.849,
+    "flow_fit": 0.7,
+    "seam": 1.01
+  }
+}

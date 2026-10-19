@@ -104,28 +104,32 @@ Flipbooks are simulated, not filmed. Footage has no heat or cover of its own and
 - Blender is a program we call, so its GPL does not reach our repository. Its renders are ours.
 - The scripts are our own Python, run inside Blender (D121). We never copy Blender's or anyone's GPL code, or Unity's six-way add-on, into the repository; we write the six-way render ourselves from its published idea.
 
-*What a bake is.* `tools/fire/bake.ts <set>` reads a set's recipe in `tools/fire/sets/<set>.json`: the domain, fuel source, sim settings, length, loop and camera. It runs `tools/fire/bake.py` in Blender, which simulates and renders one pass per channel, each as its own render of the same frames:
-- **heat**: the volume's emission set to its temperature, greyscale, seen through its own density;
-- **cover**: the flame and smoke density as alpha, with no emission;
-- **soot**: the smoke density where the flame is cool;
-- **six-way**: the smoke under one white directional light from each of the six directions, no emission;
-- **inner glow**: the smoke lit only by the flame's emission (Houdini Labs' "emissive scatter");
-- **motion**: the sim's velocity rendered as colour and projected onto the camera. It gives exact motion vectors, with no optical-flow guessing.
+*What a bake is.* `node tools/fire/bake/bake.ts <set>... | --all [--draft] [--pack]` reads a set's recipe in `tools/fire/bake/sets/<set>.json`: the domain, fuel sources, sim settings, length, loop and camera. It runs `tools/fire/bake/bake.py` in Blender, which simulates and renders each frame three times on the CPU (so a bake takes no GPU memory), each an emission-and-absorption volume with no scattering, ray marched (`volume_biased`), so a pixel is an exact line integral through the grids:
+- **heat**: the flame's emission-weighted mean flame, seen through flame and smoke;
+- **motion**: the velocity in m/s (Mantaflow's is cells a second), weighted the same, projected onto the camera. It gives exact motion vectors, with no optical-flow guessing;
+- **depth**: the flame's and the smoke outside it's optical depths, so cover and soot are `1 - e^-depth`.
 
-`bake.ts` then:
-- crossfades the loop;
-- packs the channels into the format above;
-- writes `assets/textures/fire/<set>.ktx2` and its motion vectors.
+Six-way smoke and inner glow are stage 4's: the same tool, with scattering renders added.
+
+`pack.ts` then:
+- scales heat so the set's 99th percentile is 0.97;
+- crossfades a loop's last frames into its first, premultiplied;
+- writes `assets/textures/fire/<set>.png` (the flame map), `<set>.motion.png` (half size) and `<set>.json` (the sidecar the engine reads: grid, rate, motion scale).
+
+PNG, not KTX2, until the GPU compression step D188 names: a set is about 4.3 MB in the repository (2048² flame map 3.5 MB, motion 0.8 MB). Far sets are the hero's mips, not files of their own.
 
 It prints one line per set:
 - frames;
 - how much of the frame the flame covers;
-- the heat histogram's bands;
+- the heat by quarter;
 - the soot share;
-- the loop's seam error;
-- how high the fire reaches.
+- the loop's seam against an ordinary step;
+- how high the fire reaches;
+- the flow's check: the warp error with the vectors against none, and the best scale against the exact one.
 
-A bake takes minutes to an hour on the CPU and is run when a recipe changes, not by the gates. Its outputs are committed.
+`sheet.ts` draws each set's raw passes as a contact sheet beside the heat-to-ramp preview (`tools/fire/ramp.ts`, blackbody), and measures eight frames with `measure.ts` against the set's class, over the background most of its photographs have, at the exposure that fits best, through Hable and KhronosPbrNeutral.
+
+A bake takes 10-20 minutes on the CPU and is run when a recipe changes, not by the gates. Its outputs are committed.
 
 **If Mantaflow cannot reach the references** (too coarse, or too slow at the needed resolution), the fallback is our own offline pyro sim in TypeScript, `flames.ts` grown into one. It would add combustion, temperature, density and velocity on a 3D grid, and a simple volume renderer for the same passes. That is a step back to take only with a measured reason (stage 3).
 
@@ -347,7 +351,7 @@ Each stage lands on main, passes the check, and shows a visible improvement on t
 | 0. The check | `tools/fire/measure.ts` and its tests, `references.json` with at least eight photos a class, the xtask task `fire` with today's fires as presets | Today's fires measured. They are expected to fail on yellow and on red, soot and dim shares, and the table says where. |
 | 1. Curve and exposure | the tonemapper bake-off (Bevy's five and a Hable port), then the exposure weight | Bake-off table of bands per candidate and scene looks per candidate. The developers see the sheet before a camera-wide change. |
 | 2. Light | clustered fire lights; flicker with three-axis jitter; shadows near; `VolumetricLight` tried and left out (it washed the frame out); a fog volume per fire; the flicker linked to fuel glow and sparks | The night sheet's lit-ground metric; a film of a campfire's swimming shadows; bench. |
-| 3. Channels and ramp | the flame map format, `ramp.ts` and the ramp, premultiplied drawing; `tools/fire/bake.ts` and the first Mantaflow sets (body, licks) | Band shares within range for campfire and building. |
+| 3. Channels and ramp | the flame map format, `ramp.ts` and the ramp, premultiplied drawing; `tools/fire/bake/` and the first Mantaflow sets (body, licks) | Band shares within range for campfire and building. |
 | 4. Smoke | the six-way smoke maps baked; lit, backlit, from-inside smoke; shadow caster | Soot over flame and edge soot within range; smoke reads dark by day on the sheet. |
 | 5. Small fires as presets | `fire.ron`; candle, torch, campfire, brazier, embers; flare and sparks | Every small kind passes the check at three hours. |
 | 6. Structure fire | sites from the cellular sim, openings, columns, cinders; alight and charred looks linked to the flicker | The castle film's wall crops pass the building class. |
