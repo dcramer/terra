@@ -21,9 +21,11 @@ pub(super) struct Puff {
 }
 
 /// The billow a chunk raises where it lands, as big as it: none for a piece under
-/// [`BILLOW_FROM_M`] (its own small puff), else wider than it, lasting seconds, rolling on
-/// the way it was going (`along`) and up, as a collapse's cloud comes up from where its
-/// masses land (Battlefield's and films' falling towers), in lumps, not all at once.
+/// [`BILLOW_FROM_M`] (its own small puff), else wider than it, lasting seconds, rolling out
+/// low along the ground the way it was going (`along`) and every way round, rising slowly,
+/// as a collapse's cloud does: the air a falling mass pushes out carries its dust as a
+/// current heavier than the air round it, out along the ground at a few metres a second
+/// and only later up (films of falling towers and demolitions; Battlefield's collapses).
 pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
     if size < BILLOW_FROM_M {
         return None;
@@ -34,11 +36,15 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
         alpha: 1.0,
         wide: 2.0 + size * 3.5,
         life: 4.5 + size * 1.2,
-        drift: flat.clamp_length_max(4.0) * 0.4 + up * (0.6 + 0.35 * size),
+        drift: flat.normalize_or_zero() * (ROLLS_OUT + 0.4 * size).min(3.5)
+            + up * (0.12 + 0.06 * size),
         stir: 1.0 + 0.3 * size,
         spread: size * 0.8,
     })
 }
+
+/// How fast, in metres a second, a billow rolls out along the ground at least.
+const ROLLS_OUT: f32 = 1.2;
 
 /// How long, in seconds, a billow takes in the chunks landing near it, before it has
 /// drifted and thinned enough that a new one comes up there.
@@ -265,7 +271,7 @@ pub(super) fn billow_at(
             ((h >> 8) & 0xFFFF) as f32 / 65535.0
         };
         let drift = billow.drift
-            + (Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 1.2 + up * (0.25 + 0.35 * r(3)))
+            + (Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 2.4 + up * (0.08 + 0.15 * r(3)))
                 * billow.stir;
         commands.spawn((
             Name::new("Dust"),
@@ -285,7 +291,7 @@ pub(super) fn billow_at(
             // Spread over the billow in lumps, some higher.
             Transform::from_translation(
                 at + drift * 0.2
-                    + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0 + up * r(8) * 0.8)
+                    + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0 + up * r(8) * 0.3)
                         * billow.spread,
             )
             .with_scale(Vec3::splat(PUFF_M[0] * 0.5)),

@@ -79,7 +79,7 @@ What appears in view either builds in by its stages (D381's steps, each stage at
 
 ### Destruction: falls by physics
 
-Masonry has almost no tensile strength: a leaning tower opens on its tension side and breaks into courses as it goes, it does not tip as one. A fall becomes rigid bodies of a few cubes each, bonded by mortar that breaks under strain (Chaos's geometry collections with damage thresholds, Teardown's voxel bodies, Red Faction Guerrilla's structural stress, documentation and talks only), falling under gravity on the physics engine D33 settles on, with dust where they land (D305 keeps the rules of what falls). `fragments::topple`, a scripted rigid tip, goes.
+Masonry has almost no tensile strength: a leaning tower opens on its tension side and breaks into courses as it goes, it does not tip as one. A fall becomes rigid bodies of a few cubes each, bonded by mortar that breaks under strain (Chaos's geometry collections with damage thresholds, Teardown's voxel bodies, Red Faction Guerrilla's structural stress, documentation and talks only), falling under gravity on the physics engine D33 settles on, with dust where they land (D305 keeps the rules of what falls). `fragments::topple`, a scripted rigid tip, went on 2026-10-18 for rules of support on our own fragments (`fragments::collapse` and `fragments::Rubble`, D305): a fall tips only on one-sided support and slenderness and cracks apart within its material's angle, otherwise it crumbles in place onto its heap.
 
 ### Render runs: fresh, within budget, bounded
 

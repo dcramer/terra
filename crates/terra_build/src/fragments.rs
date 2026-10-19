@@ -27,9 +27,11 @@ use crate::{Base, CELL_M, Material, Surfaces};
 use glam::{IVec3, Quat, Vec3};
 use terra_gen::hash;
 
+mod collapse;
 mod fracture;
-mod topple;
-pub use topple::{Hinge, topple};
+mod rubble;
+pub use collapse::{Falls, Hinge, collapse, falls};
+pub use rubble::{REPOSE, Rubble};
 
 /// The most fragments a fall makes, and the most about at once, at the highest preset (a
 /// castle's towers and walls coming down together make some thousands): the
@@ -54,9 +56,15 @@ const SLIDES_AT: f32 = 0.36;
 const SLIDE_FRICTION: f32 = 0.35;
 const SLOPE_READ_M: f32 = 0.12;
 /// How long after what gave way a cube left hanging starts to fall, for each cube it stood
-/// above it, in seconds, and at most.
-const STAGGER_S: f32 = 0.035;
-const STAGGER_MOST_S: f32 = 0.6;
+/// above it, in seconds, and at most: the cracks running up through it as its support goes
+/// from the bottom up, quickly, so its courses part by a hand's breadth as they fall rather
+/// than a lattice opening (0.035 s a cube opened gaps of most of a cube at landing speed).
+const STAGGER_S: f32 = 0.012;
+const STAGGER_MOST_S: f32 = 0.3;
+/// How much of what a landing's impulse at its lowest corner would turn a fragment it is
+/// left with (a box's I = m s² / 6 about its middle), and the fastest it tumbles.
+const TUMBLE: f32 = 0.5;
+const MOST_SPIN: f32 = 14.0;
 
 pub use crate::pieces::Breaks;
 
@@ -96,13 +104,18 @@ pub struct Piece {
 }
 
 /// How a way of breaking looks: its pieces, how fast they are thrown and spun, and how much
-/// dust it puts up, from 0 to 1.
+/// dust it puts up, from 0 to 1; how many cubes a side, at least, a big fall of it comes
+/// down in (masonry along its joints in blocks of a metre or more, timber as its members,
+/// plaster and earth small); and how far over, in radians, a tipping fall of it cracks
+/// apart (masonry, with almost no tensile strength, within a few degrees; timber bends).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Look {
     pub pieces: &'static [Piece],
     pub throw: f32,
     pub spin: f32,
     pub dust: f32,
+    pub chunk: i32,
+    pub cracks: f32,
 }
 
 const fn piece(shape: Shape, least: [f32; 3], most: [f32; 3], count: u32) -> Piece {
@@ -143,24 +156,32 @@ impl Breaks {
                 throw: 1.0,
                 spin: 6.0,
                 dust: 1.0,
+                chunk: 2,
+                cracks: 0.12,
             },
             Breaks::Lengths => Look {
                 pieces: &LENGTHS,
                 throw: 0.8,
                 spin: 8.0,
                 dust: 0.45,
+                chunk: 1,
+                cracks: 0.35,
             },
             Breaks::Bits => Look {
                 pieces: &BITS,
                 throw: 1.2,
                 spin: 10.0,
                 dust: 0.8,
+                chunk: 1,
+                cracks: 0.08,
             },
             Breaks::Crumbs => Look {
                 pieces: &CRUMBS,
                 throw: 0.6,
                 spin: 4.0,
                 dust: 1.4,
+                chunk: 1,
+                cracks: 0.06,
             },
         }
     }
@@ -231,6 +252,29 @@ impl Fragment {
         (x.y.abs() + y.y.abs() + z.y.abs()) * 0.85
     }
 
+    /// The spin an upward kick of `kick` metres a second at what it lands on gives it: at
+    /// the middle of its lowest corners, so a box landing flat takes none and one landing on
+    /// a corner or an edge turns over it.
+    fn tumble(&self, kick: f32) -> Vec3 {
+        let half = self.size * 0.5;
+        let corners = (0..8).map(|i| {
+            let sign = Vec3::new(
+                if i & 1 == 0 { -1.0 } else { 1.0 },
+                if i & 2 == 0 { -1.0 } else { 1.0 },
+                if i & 4 == 0 { -1.0 } else { 1.0 },
+            );
+            self.turn * (half * sign)
+        });
+        let lowest = corners.clone().map(|c| c.y).fold(f32::MAX, f32::min);
+        let near = 0.05 * self.size.max_element();
+        let (sum, count) = corners
+            .filter(|c| c.y < lowest + near)
+            .fold((Vec3::ZERO, 0.0), |(sum, n), c| (sum + c, n + 1.0));
+        let r = sum / count;
+        let inertia = self.size.length_squared() / 18.0;
+        r.cross(Vec3::Y * kick) / inertia.max(1e-4) * TUMBLE
+    }
+
     /// Moves it on by `dt` seconds. `floor` says the height of what is under a point, in
     /// metres, and `solid` whether a point is inside something built, which a fragment
     /// thrown into it glances off.
@@ -255,9 +299,12 @@ impl Fragment {
             self.velocity = hinge.velocity(at);
             let grounded = self.at.y - self.reach_down() <= floor(self.at);
             if hinge.angle >= hinge.lets_go || grounded {
-                // On its own now, flung on as it was going, still turning over.
+                // On its own now, flung on as it was going, still turning over as the whole
+                // was, and as its crack threw it, so the blocks part rather than fly as one.
                 self.hinge = None;
-                self.spin = hinge.axis * hinge.rate;
+                let r = |salt: u32| unit(&[self.seed, salt]) - 0.5;
+                let kick = Vec3::new(r(41), r(42), r(43)) * hinge.rate.max(0.3);
+                self.spin = hinge.axis * hinge.rate + kick;
             } else {
                 self.hinge = Some(hinge);
                 return landing;
@@ -310,10 +357,13 @@ impl Fragment {
                 self.velocity.y = hit * BOUNCE;
                 self.velocity.x *= FRICTION;
                 self.velocity.z *= FRICTION;
+                // Landing on a corner or an edge turns it over that corner (Δω = r × J / I):
+                // a block tumbles off its heap rather than coming to rest as it fell.
+                let tumble = self.tumble(hit * (1.0 + BOUNCE));
                 // Rolling on along the floor rather than spinning in the air.
                 let along = self.velocity.with_y(0.0);
                 let roll = Vec3::Y.cross(along) / (down.max(0.03));
-                self.spin = self.spin * 0.4 + roll * 0.6;
+                self.spin = (self.spin * 0.4 + roll * 0.3 + tumble).clamp_length_max(MOST_SPIN);
             }
         }
         if sliding {
@@ -558,7 +608,7 @@ pub fn burst(
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
     let fallen: std::collections::BTreeSet<[i32; 3]> =
         fell.iter().map(|(at, _)| at.to_array()).collect();
-    let blocks = chunks_of(&hanging, left);
+    let blocks = chunks_of(&hanging, left, breaks);
     let every = blocks.len().div_ceil(left.max(1)).max(1);
     for (index, block) in blocks.iter().enumerate() {
         if index % every != 0 || out.len() >= most {
@@ -625,26 +675,51 @@ pub fn burst(
     out
 }
 
-/// The cubes left hanging cut into the chunks they fall as (`fracture::chunks`), so big as
-/// the fall's size says and bigger where there would be more than `left`, in order up the
-/// fall, so that past the budget it is every so many, evenly.
-fn chunks_of<'a>(hanging: &[&'a (IVec3, Cube)], left: usize) -> Vec<Vec<&'a (IVec3, Cube)>> {
+/// The cubes left hanging cut into the chunks they fall as (`fracture::chunks`), each way of
+/// breaking at its own size ([`Look::chunk`]) once the fall is big, bigger where there would
+/// be more than `left`, in order up the fall, so that past the budget it is every so many,
+/// evenly.
+fn chunks_of<'a>(
+    hanging: &[&'a (IVec3, Cube)],
+    left: usize,
+    breaks: &dyn Fn(Kind) -> Breaks,
+) -> Vec<Vec<&'a (IVec3, Cube)>> {
     let lowest = hanging.iter().map(|(at, _)| at.y).min().unwrap_or(0);
-    let places: Vec<IVec3> = hanging.iter().map(|(at, _)| *at).collect();
-    let seed = hash::of(&[places.len() as u32, lowest as u32]);
-    let cut = |across: i32| -> Vec<Vec<&(IVec3, Cube)>> {
+    let seed = hash::of(&[hanging.len() as u32, lowest as u32]);
+    let mut ways: Vec<(Breaks, Vec<&'a (IVec3, Cube)>)> = Vec::new();
+    for &entry in hanging {
+        let way = breaks(entry.1.kind);
+        match ways.iter_mut().find(|(of, _)| *of == way) {
+            Some((_, cubes)) => cubes.push(entry),
+            None => ways.push((way, vec![entry])),
+        }
+    }
+    let cut = |cubes: &[&'a (IVec3, Cube)], across: i32| -> Vec<Vec<&'a (IVec3, Cube)>> {
         // A small fall cube by cube.
         let below = if across == 1 { 2 } else { i32::MAX };
+        let places: Vec<IVec3> = cubes.iter().map(|(at, _)| *at).collect();
         fracture::chunks(&places, across, below, seed)
             .into_iter()
-            .map(|chunk| chunk.into_iter().map(|i| hanging[i]).collect())
+            .map(|chunk| chunk.into_iter().map(|i| cubes[i]).collect())
             .collect()
     };
-    let mut across = least_across(hanging.len());
-    let mut blocks = cut(across);
-    while blocks.len() > left && across < MOST_ACROSS {
-        across += 1;
-        blocks = cut(across);
+    let small = hanging.len() < CHUNKS_FROM;
+    let mut more = match hanging.len() {
+        0..BIG_CHUNKS_FROM => 0,
+        BIG_CHUNKS_FROM..HUGE_CHUNKS_FROM => 1,
+        _ => 2,
+    };
+    let mut blocks = Vec::new();
+    loop {
+        blocks.clear();
+        for (way, cubes) in &ways {
+            let least = if small { 1 } else { way.look().chunk };
+            blocks.extend(cut(cubes, (least + more).min(MOST_ACROSS)));
+        }
+        if blocks.len() <= left || more >= MOST_ACROSS {
+            break;
+        }
+        more += 1;
     }
     blocks.sort_by_key(|block| {
         let at = block[0].0;
@@ -658,24 +733,13 @@ fn chunks_of<'a>(hanging: &[&'a (IVec3, Cube)], left: usize) -> Vec<Vec<&'a (IVe
 const WHOLE_SHARE: f32 = 0.4;
 
 /// The most the least side of the chunks cubes left hanging fall as may grow to, to stay in
-/// the budget; and from how many cubes left hanging the chunks are two, three and four
-/// cubes a side at least (and up to twice that).
+/// the budget; from how many cubes left hanging they fall in chunks of their way of
+/// breaking's size, and from how many in chunks one and two cubes bigger than that: a big
+/// fall comes down in a few big chunks, which tip and tumble and break again where they land.
 const MOST_ACROSS: i32 = 6;
 const CHUNKS_FROM: usize = 300;
 const BIG_CHUNKS_FROM: usize = 2000;
 const HUGE_CHUNKS_FROM: usize = 4000;
-
-/// How many cubes a side the chunks so many cubes left hanging fall as are at least: a big
-/// fall comes down in a few big chunks, as masonry breaks along its joints into pieces of a
-/// metre to a few across, which tip and tumble and break again where they land.
-fn least_across(hanging: usize) -> i32 {
-    match hanging {
-        0..CHUNKS_FROM => 1,
-        CHUNKS_FROM..BIG_CHUNKS_FROM => 2,
-        BIG_CHUNKS_FROM..HUGE_CHUNKS_FROM => 3,
-        _ => 4,
-    }
-}
 
 impl Base {
     /// The height of the top of whatever is built under a point, in metres in the base's own

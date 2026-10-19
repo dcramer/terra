@@ -22,7 +22,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
-use terra_build::fragments::{self, Breaks, Fragment, Shape};
+use terra_build::fragments::{self, Breaks, Fragment, Rubble, Shape};
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Cube, Kind};
 use terra_world::quality::Quality;
@@ -97,9 +97,6 @@ pub struct Fallen {
     /// they had lost before and have now (D305): the stones, timber and shingles that came
     /// off them as they broke, falling from their open faces.
     pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
-    /// The middle of the base it came down from, in metres in its space: a tall fall tips
-    /// over away from it, as a tower or a wall falls outward (`fragments::topple`).
-    pub middle: Vec3,
 }
 
 /// Marks a fragment's entity.
@@ -164,6 +161,9 @@ struct Shards {
     puffs: usize,
     /// The billows raised lately, which chunks landing near them join.
     raised: dust::Raised,
+    /// Each build's heap of what fell, which what comes down after lands on, and its clock.
+    rubble: BTreeMap<Entity, Rubble>,
+    clock_s: f32,
     behind: f32,
     /// Whether every kind's meshes have been made, ahead of anything coming down, and drawn
     /// out of sight for a while so their pipelines are ready.
@@ -322,9 +322,9 @@ fn burst(
     let mut events: Vec<(Entity, Transform, Fallen)> = Vec::new();
     if !site.fallen.is_empty() {
         let site = site.bypass_change_detection();
-        let (root, frame, middle) = (site.root, site.frame, middle_of(&site.base));
+        let (root, frame) = (site.root, site.frame);
         for fallen in site.fallen.drain(..) {
-            events.push((root, frame, Fallen { middle, ..fallen }));
+            events.push((root, frame, fallen));
         }
     }
     for mut built in &mut builds {
@@ -332,9 +332,9 @@ fn burst(
             continue;
         }
         let built = built.bypass_change_detection();
-        let (root, frame, middle) = (built.root, built.frame, middle_of(&built.base));
+        let (root, frame) = (built.root, built.frame);
         for fallen in built.fallen.drain(..) {
-            events.push((root, frame, Fallen { middle, ..fallen }));
+            events.push((root, frame, fallen));
         }
     }
     let breaks = breaks_of(&look);
@@ -353,9 +353,9 @@ fn burst(
         let share = preset * if distance > FAR_M { FAR_SHARE } else { 1.0 };
         let destroyed = |at: IVec3| fallen.destroyed.contains(&at.to_array());
         let mut made = fragments::burst(&fallen.fell, &destroyed, &breaks, share, most);
-        // A tall fall tips over as one, outward from the middle of its base, before it
-        // breaks up.
-        fragments::topple(&mut made, &fallen.fell, lean(&fallen));
+        // Down where it stood, or tipping the way its support gave way and cracking up as it
+        // goes, by its support's rules (`fragments::collapse`).
+        fragments::collapse(&mut made, &fallen.fell, &destroyed, &breaks);
         // What came off a cube still standing: a few pieces a quarter of its health lost,
         // out of its open face, where its stones and shingles were.
         for (at, cube, from, to, out) in &fallen.chipped {
@@ -426,30 +426,6 @@ fn burst(
             began.elapsed().as_secs_f32() * 1000.0,
             shards.live.len()
         );
-    }
-}
-
-/// The middle of a base, in metres in its space.
-fn middle_of(base: &terra_build::Base) -> Vec3 {
-    base.bounds().map_or(Vec3::ZERO, |(low, high)| {
-        (low + high + IVec3::ONE).as_vec3() * 0.5 * CELL_M
-    })
-}
-
-/// The way a fall leans, on the level: from the middle of its base to the middle of what was
-/// left hanging; none when that stands about the middle itself, and goes its own way.
-fn lean(fallen: &Fallen) -> Vec3 {
-    let hung = fallen
-        .fell
-        .iter()
-        .filter(|(at, _)| !fallen.destroyed.contains(&at.to_array()))
-        .map(|(at, _)| (at.as_vec3() + 0.5) * CELL_M)
-        .fold((Vec3::ZERO, 0usize), |(sum, n), at| (sum + at, n + 1));
-    let lean = (hung.0 / hung.1.max(1) as f32 - fallen.middle).with_y(0.0);
-    if lean.length() > 4.0 {
-        lean
-    } else {
-        Vec3::ZERO
     }
 }
 
@@ -673,7 +649,10 @@ fn fall(
     let mut landed: Vec<Landed> = Vec::new();
     while shards.behind >= STEP_S && steps < MOST_STEPS {
         shards.behind -= STEP_S;
+        shards.clock_s += STEP_S;
+        let now = shards.clock_s;
         steps += 1;
+        let mut laid: Vec<(Entity, Fragment, f32)> = Vec::new();
         // The terrain under each column fragments are over, once a step.
         let mut terrain: BTreeMap<(Entity, [i32; 2]), f32> = BTreeMap::new();
         let mut room = most.saturating_sub(shards.live.len());
@@ -696,6 +675,7 @@ fn fall(
             let base = &build.base;
             let cells = std::cell::RefCell::new(&mut terrain);
             let root = live.root;
+            let heap = shards.rubble.get(&root);
             let floor = |at: Vec3| -> f32 {
                 let column = [
                     (at.x / CELL_M).floor() as i32,
@@ -709,7 +689,11 @@ fn fall(
                     );
                     -planet.distance(frame.transform_point(middle))
                 });
-                // On a roof, its covering as drawn, over its cubes' surface by its thickness.
+                // On the heap of what fell before, or on a roof, its covering as drawn, over
+                // its cubes' surface by its thickness.
+                let ground = heap
+                    .and_then(|heap| heap.top(at, now))
+                    .map_or(ground, |top| top.max(ground));
                 base.top_under_of(at).map_or(ground, |(top, kind)| {
                     let skin = if kind.is_roof() {
                         look.kits
@@ -734,6 +718,8 @@ fn fall(
                 along: frame.rotation * fragment.velocity.with_y(0.0),
             };
             if landing.breaks {
+                // What it breaks into lies where it landed, and raises the heap there.
+                laid.push((root, live.fragment, floor(live.fragment.at)));
                 let kind = live.fragment.kind;
                 let breaking = breaks(kind);
                 // Some of its pieces however full the budget is: the least worth make room
@@ -755,6 +741,13 @@ fn fall(
             {
                 landed.push(raised(&live.fragment, 0.35));
             }
+        }
+        for (root, fragment, under) in laid {
+            shards
+                .rubble
+                .entry(root)
+                .or_default()
+                .lay(&fragment, under, now);
         }
     }
     // What broke on landing: moving from now, drawn at the end with the rest.
@@ -927,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn a_chunk_landing_raises_a_billow_as_big_as_it_rolling_on_and_up_and_a_chip_none() {
+    fn a_chunk_landing_raises_a_billow_as_big_as_it_rolling_out_low_and_a_chip_none() {
         let up = Vec3::Y;
         assert!(landing(0.2, Vec3::X, up).is_none());
         let small = landing(1.0, Vec3::X * 3.0, up).expect("a chunk raises a billow");
@@ -935,8 +928,9 @@ mod tests {
         for (size, billow) in [(1.0, &small), (3.0, &big)] {
             assert!(billow.wide > size * 1.5, "{} for {size} m", billow.wide);
             assert!(billow.life >= 4.0, "{}", billow.life);
+            // Out along the ground faster than it rises, the way the chunk was going.
             assert!(
-                billow.drift.y > 0.0 && billow.drift.x > 0.0,
+                billow.drift.y > 0.0 && billow.drift.x > 2.0 * billow.drift.y,
                 "{}",
                 billow.drift
             );
