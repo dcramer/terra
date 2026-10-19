@@ -106,10 +106,10 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         let lit = lit(&blazes, t);
         assert_eq!(lit.len(), 2);
         let (hearth, roof) = (&lit[0], &lit[1]);
-        // In its flames over its logs, swayed a hand's breadth at most, not over the heads of
-        // those sat by it.
+        // In the body of its flames, over its 0.55 m logs, swayed a hand's breadth at most, not
+        // over the heads of those sat by it.
         let off = hearth.at - ground;
-        assert!(off.y > 0.9 && off.y < 1.5 && off.length() < 1.5, "{off}");
+        assert!(off.y > 0.6 && off.y < 1.2 && off.length() < 1.2, "{off}");
         assert!(hearth.range <= 15.0 && roof.range > hearth.range);
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
