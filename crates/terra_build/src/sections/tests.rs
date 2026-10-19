@@ -5,15 +5,16 @@ use crate::roofer::{self, Style};
 use crate::{BuildOp, Cube, Panel, STOREY_CUBES};
 
 /// The kits the game ships, every one, with their dressed pieces, as it reads them.
+/// The shipped kits these tests read, in this order.
+const SHIPPED: &str = "logs hewn stone earth wattle shakes slate thatch greystone";
+
 fn shipped() -> Kits {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let read = |path: &str| {
         std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
     };
     let mut kits = Vec::new();
-    for name in [
-        "logs", "hewn", "stone", "earth", "wattle", "shakes", "slate", "thatch",
-    ] {
+    for name in SHIPPED.split(' ') {
         let kit = Kit::read(&format!("data/kits/{name}.ron"), &read)
             .unwrap_or_else(|why| panic!("{name}: {why}"));
         kits.push(kit);
@@ -1606,12 +1607,7 @@ fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
     let kits = shipped();
     let maps = Maps::default();
     let named = |name: &str| {
-        let index = [
-            "logs", "hewn", "stone", "earth", "wattle", "shakes", "slate", "thatch",
-        ]
-        .iter()
-        .position(|n| *n == name)
-        .unwrap();
+        let index = SHIPPED.split(' ').position(|n| n == name).unwrap();
         kits.0[index].kind()
     };
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");

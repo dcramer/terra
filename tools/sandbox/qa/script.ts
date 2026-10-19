@@ -81,7 +81,8 @@ export function readKits(folder = KITS): Kit[] {
 /// The building baseline's wall materials (D333): those the settlement is built of, in
 /// assets/data/settlement.ron. The rest are frozen, filmed only when asked for by name.
 function readBaseline(): Set<string> {
-  const text = readFileSync(resolve(KITS, "../settlement.ron"), "utf8").replace(/\/\/.*$/gm, "");
+  // Its works' material is a house material another colour, held by the same checks.
+  const text = readFileSync(resolve(KITS, "../settlement.ron"), "utf8").replace(/\/\/.*$/gm, "").replace(/^\s*works:.*$/m, "");
   return new Set([...text.matchAll(/"(\w+)"/g)].map((match) => match[1]));
 }
 

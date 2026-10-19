@@ -6,7 +6,9 @@
 // The building baseline (D333) is wood and stone, and these are its materials: the fault
 // ratchet (`cargo xtask artifacts`) and the QA films' sets (`cargo xtask qa`) are of what
 // is named here. Earth, limewash, wattle and thatch are frozen, buildable by hand but in no
-// role, so the cob and framed houses are built in stone and hewn timber.
+// role, so the cob and framed houses are built in stone and hewn timber. The works (a walled
+// town's wall, towers, gates and castle) are of greystone, the stone weathered another
+// colour, its shape the same: outside the baseline, held by its checks of stone.
 (
     timber: ["logs"],
     masonry: ["stone"],

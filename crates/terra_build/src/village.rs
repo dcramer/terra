@@ -130,6 +130,13 @@ impl Palette {
         Ok(Palette { roles, roofs })
     }
 
+    /// What its houses are built of, every role's but the works': the building baseline
+    /// (D333). The works' material is a house material weathered another colour, its shape
+    /// the same, so the baseline's checks hold it too.
+    pub fn houses(&self) -> impl Iterator<Item = Kind> + '_ {
+        self.roles[..5].iter().flatten().copied()
+    }
+
     /// The first of each role's, as a building with no seed of its own takes.
     pub fn first(&self) -> Kinds {
         self.choose(|_, _| 0)

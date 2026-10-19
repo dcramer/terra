@@ -45,7 +45,7 @@ impl Materials {
             .map(|(file, kit)| (kit.kind(), file.clone()))
             .collect();
         let kits = if baseline {
-            let walls: Vec<Kind> = village.roles.iter().flatten().copied().collect();
+            let walls: Vec<Kind> = village.houses().collect();
             let roofs: Vec<Kind> = walls.iter().filter_map(|&k| kits.roof_for(k)).collect();
             Kits(
                 kits.0
