@@ -27,12 +27,11 @@ use std::sync::Arc;
 use terra_build::{Base, CELL_M};
 
 /// A campfire's flames, as the fire drawing draws them with their embers, smoke and light
-/// (terra_world::fire): over its logs, leaned 0.9 m high and 1.3 m across. The flipbook's
-/// body fills about 0.58 of `tall` and its tips 1.3 of it, so the body reaches the logs' tops
-/// and the tips lick a metre over them; any shorter and the logs hide the whole flame (lake
-/// film r3: a tall of 0.9 to 1.2 on a campfire drew nothing to be seen).
+/// (terra_world::fire): their tips licking 1.3 m over the stones, clearing its
+/// metre-tall teepee of logs as a teepee fire's do (at 0.8 and 1 the logs hid all but their tips);
+/// at 1.5 a 3.3 m card stood them over a seated troll (fire sheet, stage 3).
 const CAMPFIRE: terra_world::fire::Kindled = terra_world::fire::Kindled {
-    tall: 1.5,
+    tall: 1.3,
     wide: 0.7,
     heat: 0.9,
 };

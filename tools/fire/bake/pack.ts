@@ -269,6 +269,9 @@ export function pack(r: Recipe, raw: string, outDir: string): Packed {
     fps: meta.fps,
     // How wide and tall a frame stands in the world, so the engine plays it at its own pace.
     metres: meta.extent,
+    // How high up its frame the flame's tips reach at most, 0 to 1, so the engine stands a
+    // fire's card so its tips reach as high as the fire's flames are said to.
+    reach: +reach.toFixed(3),
     channels: "R heat, G cover, B soot, A distortion",
     motion: { file: `${r.name}.motion.png`, frame: m, scale: +motionScale.toFixed(5), channels: "RG flow to the next frame in frame widths: (v - 0.5) * 2 * scale, y down" },
     baked: { heat_scale: +heatScale.toFixed(4), flow_gain: +flow.gain.toFixed(3), flow_fit: +flow.fit.toFixed(2), seam: +seam.toFixed(2) },

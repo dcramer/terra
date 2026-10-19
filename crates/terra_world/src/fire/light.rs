@@ -53,8 +53,9 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's, wood's flame about 1,800 K: an orange, not the yellow the grass turned a
 /// timber blaze's (lake film r5).
 const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.5, 0.18);
-/// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
-const HEARTH_LUMENS_A_METRE: f32 = 280_000.0;
+/// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches:
+/// a campfire's 1.3 m given the light its 1.5 m gave before (280,000 a metre).
+const HEARTH_LUMENS_A_METRE: f32 = 323_000.0;
 const HEARTH_RANGE_M: f32 = 14.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];

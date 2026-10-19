@@ -8,18 +8,19 @@
   "rows": 8,
   "frame": 256,
   "fps": 24,
-  "metres": 0.9,
+  "metres": 1.2,
+  "reach": 0.895,
   "channels": "R heat, G cover, B soot, A distortion",
   "motion": {
     "file": "torch.motion.png",
     "frame": 128,
-    "scale": 0.0802,
+    "scale": 0.05963,
     "channels": "RG flow to the next frame in frame widths: (v - 0.5) * 2 * scale, y down"
   },
   "baked": {
-    "heat_scale": 1.5171,
-    "flow_gain": 1.391,
-    "flow_fit": 0.16,
-    "seam": 1.06
+    "heat_scale": 1.5231,
+    "flow_gain": 1.314,
+    "flow_fit": 0.21,
+    "seam": 1.05
   }
 }

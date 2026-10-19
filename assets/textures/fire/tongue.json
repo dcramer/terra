@@ -9,6 +9,7 @@
   "frame": 256,
   "fps": 24,
   "metres": 2.3,
+  "reach": 0.52,
   "channels": "R heat, G cover, B soot, A distortion",
   "motion": {
     "file": "tongue.motion.png",

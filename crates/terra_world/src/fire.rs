@@ -143,6 +143,13 @@ pub struct FireUniform {
     jets: [Vec4; JETS * 3],
     /// The exposure weight and the dusk it is drawn as tuned at (`FireExposure::packed`).
     exposure: Vec4,
+    /// Each flipbook set's rate, metres, motion scale and whether it blends along its vectors
+    /// (`books::Sidecar::told`), in the order of `books::SETS`.
+    sets: [Vec4; 3],
+    /// x the colour ramp's scale, y its rows.
+    ramp: Vec4,
+    /// How high up its frame each set's flame tips reach (`books::Sidecar::reach`).
+    reach: Vec4,
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -156,11 +163,10 @@ pub struct FireExtension {
     volume: bool,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
-    /// The flames' flipbook (`tools/textures/flames.ts`): a real fire filmed at night, frame by
-    /// frame its red and green, soot and cover, linear.
-    #[texture(102)]
+    /// The flames' flipbooks (`books`): a layer a set, its heat, cover, soot and distortion.
+    #[texture(102, dimension = "2d_array")]
     #[sampler(103)]
-    flipbook: Handle<Image>,
+    flames: Handle<Image>,
     /// The breaths' soot and drops (`Puffs`).
     #[storage(104, read_only)]
     puffs: Handle<ShaderBuffer>,
@@ -168,10 +174,14 @@ pub struct FireExtension {
     /// white on the screen whatever the adaptation does.
     #[storage(105, read_only)]
     adaptation: Handle<ShaderBuffer>,
+    /// Each set's motion to its next frame, at half size, loaded unfiltered.
+    #[texture(106, dimension = "2d_array")]
+    motions: Handle<Image>,
+    /// The colour ramp every flame's heat is coloured through.
+    #[texture(107)]
+    #[sampler(108)]
+    ramp: Handle<Image>,
 }
-
-/// The flames' flipbook.
-const FLIPBOOK: &str = "textures/fire/flames.png";
 
 /// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
 /// its far side stands behind the wall it strikes; its shader ends each ray at what the
@@ -504,20 +514,17 @@ fn setup(
     quality: Res<Quality>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut buffers: ResMut<Assets<ShaderBuffer>>,
-    assets: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
     adaptation: Res<Adaptation>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
 ) {
     let count = slots(*quality);
     let slots = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; count * 2]));
-    // Heat, not colour: read as it is stored.
-    let flipbook: Handle<Image> = assets
-        .load_builder()
-        .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
-            settings.is_srgb = false;
-        })
-        .load(FLIPBOOK);
+    let books = books::read();
+    let flames = images.add(books.flames);
+    let motions = images.add(books.motions);
+    let ramp = images.add(books.ramp);
     // Nothing let go yet: born an hour ago, long gone.
     let puffs = Puffs {
         buffer: buffers.add(ShaderBuffer::from(
@@ -535,10 +542,12 @@ fn setup(
         fires.add(FireMaterial {
             base: StandardMaterial {
                 base_color: Color::WHITE,
+                // Flames are light over what they cover, premultiplied (docs/fire.md, "The
+                // colour ramp"): `ONE, ONE_MINUS_SRC_ALPHA`.
                 alpha_mode: if haze {
                     AlphaMode::Blend
                 } else {
-                    AlphaMode::Add
+                    AlphaMode::Premultiplied
                 },
                 specular_transmission: if haze { 1.0 } else { 0.0 },
                 unlit: true,
@@ -567,11 +576,16 @@ fn setup(
             extension: FireExtension {
                 uniform: FireUniform {
                     kind: Vec4::new(kind, 0.0, 0.0, 0.0),
+                    sets: books.sets,
+                    ramp: books.ramp_scale,
+                    reach: books.reach,
                     ..default()
                 },
                 volume: kind == 2.0,
                 slots: slots.clone(),
-                flipbook: flipbook.clone(),
+                flames: flames.clone(),
+                motions: motions.clone(),
+                ramp: ramp.clone(),
                 puffs: puffs.buffer.clone(),
                 adaptation: adaptation.0.clone(),
             },
@@ -796,6 +810,7 @@ fn show(
     }
 }
 
+mod books;
 mod fog;
 mod light;
 mod seen;

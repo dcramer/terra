@@ -37,13 +37,26 @@ struct Fire {
     // The exposure weight, and the log2 of the exposure multiplier at dusk
     // (crates/terra_world/src/fire/exposure.rs).
     exposure: vec4<f32>,
+    // Each flipbook set's rate (frames a second as baked), how wide its frame stands in
+    // metres, its motion's scale, and whether its frames blend along their vectors (1).
+    sets: array<vec4<f32>, 3>,
+    // x what the ramp texture's RGB is multiplied by, y its rows.
+    ramp: vec4<f32>,
+    // How high up its frame each set's flame tips reach, 0 to 1 (its sidecar's `reach`):
+    // x the campfire's, y the tongue's, z the torch's.
+    reach: vec4<f32>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> fire: Fire;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var<storage, read> slots: array<vec4<f32>>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(102) var flipbook: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(103) var flipbook_sampler: sampler;
+// The flames' flipbooks (crates/terra_world/src/fire/books.rs), a set a layer: R heat, G
+// cover, B soot, A distortion; their motion to the next frame at half size; the colour ramp.
+@group(constants::MATERIAL_BIND_GROUP) @binding(102) var flames: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103) var flames_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(106) var motions: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107) var ramp: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(108) var ramp_sampler: sampler;
 // What breaths have let go: soot, then drops, each where and when, then its going and luck.
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<storage, read> puffs: array<vec4<f32>>;
 // The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
@@ -64,55 +77,64 @@ const SOOT_PUFFS: u32 = 320u;
 // How long a drop burns as it falls, in seconds.
 const DROP_S: f32 = 2.0;
 
-// The flipbook's frames, how many across its sheet, and how many it plays a second for a
-// flame two and a half metres tall (`tools/textures/flames.ts`): filmed at 29.97 a second, of
-// a wood fire whose flames stand about half a metre, slowed for a taller one as a flame's
-// time goes as the root of its size (Froude's scaling).
-const FLIPBOOK_FRAMES: f32 = 96.0;
-const FLIPBOOK_COLUMNS: f32 = 12.0;
-const FLIPBOOK_FPS: f32 = 13.4;
-// The filmed flame's blue, which the sheet does not keep, from its green (sRGB): it rises
-// only as the green nears white; must match BLUE_K and BLUE_P in flames.ts.
-const FOOTAGE_BLUE_K: f32 = 0.23;
-const FOOTAGE_BLUE_P: f32 = 4.0;
+// The flipbook sets, layers in the order of books.rs SETS.
+const SET_CAMPFIRE: i32 = 0;
+const SET_TONGUE: i32 = 1;
+const SET_TORCH: i32 = 2;
+// A set's frames and how many across (and down) its sheet; books.rs holds every set to them.
+const BOOK_FRAMES: f32 = 64.0;
+const BOOK_COLUMNS: f32 = 8.0;
+// How bright each kind's flame is drawn, its ramp's luminance 1 at its hottest, on the screen
+// whatever the eye is adapted to (a preset's, not the flipbook's): fitted on the baker's sheet
+// (tools/fire/bake/sheet.ts), each set's exposure through today's tonemapper.
+const HEARTH_BRIGHTNESS: f32 = 6.0;
+const TORCH_BRIGHTNESS: f32 = 3.3;
+const BLAZE_BRIGHTNESS: f32 = 2.1;
 
-// A frame of the flipbook at a place on its card, x across and y up, kept a hair inside the
+// Where a frame's place is on the sheet, x across and y up its card, kept a hair inside the
 // frame so its neighbours never bleed in.
-fn flipbook_at(frame: f32, x: f32, y: f32) -> vec4<f32> {
-    let column = frame % FLIPBOOK_COLUMNS;
-    let row = floor(frame / FLIPBOOK_COLUMNS);
-    let rows = FLIPBOOK_FRAMES / FLIPBOOK_COLUMNS;
-    let at = vec2((column + clamp(x, 0.01, 0.99)) / FLIPBOOK_COLUMNS, (row + 1.0 - clamp(y, 0.01, 0.99)) / rows);
-    return textureSampleLevel(flipbook, flipbook_sampler, at, 0.0);
+fn sheet_at(frame: f32, local: vec2<f32>) -> vec2<f32> {
+    let column = frame % BOOK_COLUMNS;
+    let row = floor(frame / BOOK_COLUMNS);
+    let l = clamp(local, vec2(0.004), vec2(0.996));
+    return vec2(column + l.x, row + 1.0 - l.y) / BOOK_COLUMNS;
 }
 
-// The filmed fire at a moment `f` (in frames, any real number) at a place on its card: its
-// light as filmed (linear, premultiplied by how much it covers), its soot and how much it
-// covers, 0 to 1; the two frames either side blended, which at the footage's own rate is
-// close to its motion.
-struct Filmed {
-    light: vec3<f32>,
-    soot: f32,
-    cover: f32,
+// How a set's texel moves to the next frame, in frame widths, up the card: its motion read
+// unfiltered, as SideFX Labs advises, since a filtered vector between two flows is neither.
+fn flow(layer: i32, frame: f32, local: vec2<f32>) -> vec2<f32> {
+    let size = vec2<f32>(textureDimensions(motions).xy);
+    let texel = vec2<i32>(min(sheet_at(frame, local) * size, size - 1.0));
+    let v = (textureLoad(motions, texel, layer, 0).rg - 0.5) * 2.0 * fire.sets[layer].z;
+    return vec2(v.x, -v.y);
 }
 
-fn footage_at(f: f32, x: f32, y: f32) -> Filmed {
+// A set at a moment `f` (in frames, any real number) at a place on its card: the frames either
+// side, each carried along its motion to the moment between them and blended (the motion-vector
+// flipbook blending of SideFX Labs and Unreal), so a tongue moves rather than fading from one
+// frame to the next; crossfaded where the set's vectors bring its frames no nearer (books.rs).
+fn flipbook(layer: i32, f: f32, local: vec2<f32>) -> vec4<f32> {
     let f0 = floor(f);
     let w = f - f0;
-    let f1 = (f0 + 1.0) % FLIPBOOK_FRAMES;
-    let t = mix(flipbook_at(f0, x, y), flipbook_at(f1, x, y), w);
-    // A dim or thin texel's green held under its red by how bright it is, as a dim flame is
-    // red: the luma key keeps the footage's dull yellow glow (lit smoke, motion blur) at a
-    // fraction of its cover, which over stone and sky read lime and olive (castle film r11's
-    // probe, sRGB about 90,95,40 among the tongues).
-    // A thin texel is held redder still, its fringe orange-brown and not olive over grass
-    // and trees; and a texel whose green nears white is given back the blue the sheet does
-    // not keep, so a core clips pale and white as a filmed fire's does.
-    let thin = mix(0.55, 1.0, smoothstep(0.15, 0.6, t.a));
-    let g = min(t.g, t.r * mix(0.3, 0.96, smoothstep(0.25, 0.85, t.r)) * thin);
-    let blue = max(FOOTAGE_BLUE_K * pow(g, FOOTAGE_BLUE_P), 0.75 * g * smoothstep(0.8, 1.0, g));
-    let srgb = vec3(t.r, g, blue);
-    return Filmed(pow(srgb, vec3(2.2)), t.b, t.a);
+    let f1 = (f0 + 1.0) % BOOK_FRAMES;
+    var a = local;
+    var b = local;
+    if fire.sets[layer].w > 0.5 {
+        a = local - flow(layer, f0, local) * w;
+        b = local + flow(layer, f1, local) * (1.0 - w);
+    }
+    let ta = textureSampleLevel(flames, flames_sampler, sheet_at(f0, a), layer, 0.0);
+    let tb = textureSampleLevel(flames, flames_sampler, sheet_at(f1, b), layer, 0.0);
+    return mix(ta, tb, w);
+}
+
+// The colour ramp at a heat (tools/fire/ramp.ts, its first row wood's): the emission there in
+// linear HDR, luminance 1 at its hottest, and how far it occludes rather than adds light.
+fn ramp_at(heat: f32) -> vec4<f32> {
+    let n = f32(textureDimensions(ramp).x);
+    let at = vec2((0.5 + saturate(heat) * (n - 1.0)) / n, 0.5 / fire.ramp.y);
+    let t = textureSampleLevel(ramp, ramp_sampler, at, 0.0);
+    return vec4(t.rgb * fire.ramp.x, t.a);
 }
 
 // A card's corner placed: where on screen, the corner across and up the card, how far
@@ -152,6 +174,8 @@ const WHITE_TO: f32 = 2.6;
 // straight edge where it goes into a wall or the ground: a flame's, an ember's, a jet's.
 // How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
 const HEARTHS: u32 = 16u;
+// A hearth whose flames stand lower than this, in metres, is a torch (books.rs SETS).
+const TORCH_M: f32 = 0.8;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -265,33 +289,18 @@ fn covers(light: vec3<f32>, alpha: f32) -> f32 {
 
 // The black of soot as the screen shows it, a little warm.
 const SOOT_BLACK: vec3<f32> = vec3<f32>(0.012, 0.01, 0.009);
-// A burning building's flame from the filmed fire: its light as filmed, brought to the screen
-// by FOOTAGE_GAIN whatever the eye is adapted to, as film exposes for fire; its green taken
-// down a little by FOOTAGE_GREEN for a cooler, sootier blaze than the filmed one (real building
-// fires by day are about half deep red-orange, research/2026-10-18-dragon-breath.md §4); and
-// its soot, the black wisps off its tongues' tips, laid over what is behind where there is no
-// flame.
-// The footage's hot cores, its yellow-white where its green nears its red, keep all their
-// green and are lifted past the tonemapper's knee to clip there as a barn fire's do: taken
-// down with the rest, every wall was 0-2% yellow against a building fire's 9%, its brightest
-// sRGB 211-221 against 235-252 (castle film r11).
-fn wall_flame(filmed: Filmed, heat: f32, soft: f32) -> vec4<f32> {
-    let hot = smoothstep(0.3, 0.7, filmed.light.g);
-    let green = mix(mix(FOOTAGE_GREEN * 0.8, FOOTAGE_GREEN, heat), 1.0, hot);
-    let gain = FOOTAGE_GAIN * mix(0.6, 1.0, heat) * mix(1.0, FOOTAGE_CORE_GAIN, hot);
-    let light = filmed.light * vec3(1.0, green, green) * gain * soft;
-    let flame = filmed.cover * soft;
-    let black = saturate(filmed.soot * WALL_SOOT) * (1.0 - flame) * soft;
-    let cover = flame + black * WALL_SOOT_COVER;
-    return vec4((light + SOOT_BLACK * black) * on_screen(), cover);
+
+// A baked texel drawn premultiplied by docs/fire.md's rule: its heat coloured through the
+// ramp, as bright as the cover over it and the kind's brightness, its soot dark over what is
+// behind; covering what is behind by its cover as far as its heat occludes, and by its soot.
+// Its emission and its cover are the sim's own, never one taken from the other.
+fn baked_flame(t: vec4<f32>, brightness: f32, fade: f32) -> vec4<f32> {
+    let cover = t.g * fade;
+    let soot = t.b * fade;
+    let r = ramp_at(t.r);
+    let light = r.rgb * cover * brightness + SOOT_BLACK * soot;
+    return vec4(light * on_screen(), min(1.0, cover * r.a + soot));
 }
-const FOOTAGE_GAIN: f32 = 1.25;
-// At 0.85 a wall's flame pixels were 71-73% deep red against a building fire's 53 (r12's
-// first probe).
-const FOOTAGE_GREEN: f32 = 0.95;
-const FOOTAGE_CORE_GAIN: f32 = 1.6;
-const WALL_SOOT: f32 = 1.2;
-const WALL_SOOT_COVER: f32 = 0.8;
 // A breath is drawn as a volume, not as cards (research/2026-10-18-dragon-breath.md §6): a
 // box round its stream and fireball, marched through along each ray from the eye, as
 // Unreal's Niagara fluids and EmberGen's volumes are drawn in real time. The gas in it is a
@@ -678,30 +687,34 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         out.size = h;
         return out;
     }
-    // Each tongue rises and falls with the fire's flicker, some more than others.
-    let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
-    // A fire is made as tall as its flames reach over its logs, which stand about four
-    // fifths as tall: each tongue must clear them, or the logs hide it (lake film r5).
-    var flame = tall * breathe * 1.1;
-    var at = foot;
-    var w = wide * 2.4;
-    if j > 1 {
-        // Round the ring over the logs, each lower than the middle one, licking up their
-        // outsides.
-        let a = f32(j) * 1.571 + seed * 6.283 + (luck - 0.5) * 0.8;
-        at = foot + (east * cos(a) + north * sin(a)) * wide * (0.28 + 0.15 * luck);
-        flame = tall * breathe * (0.72 + 0.3 * luck);
-        w = wide * (1.25 + 0.4 * luck);
+    // A baked set's frame is a whole fire, its own tongues alternating with dark (books.rs):
+    // a hearth is that body and a second one a little behind it at its own moment, so it has
+    // depth from every side; a torch (under TORCH_M) the one flame of its own set.
+    let torch = tall < TORCH_M;
+    if j > 2 || (torch && j > 1) {
+        return nowhere();
     }
-    let h = flame * 1.6;
+    // Each body rises and falls with the fire's flicker, the second more than the first.
+    let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
+    var flame = tall * breathe;
+    var at = foot;
+    if j == 2 {
+        let a = seed * 6.283 + luck * 2.0;
+        at = foot + (east * cos(a) + north * sin(a)) * wide * 0.18;
+        flame *= 0.8 + 0.1 * luck;
+    }
+    // The frame is square, and its set's tips reach `reach` up it, so the card stands as
+    // tall as the fire's flames over that: a campfire's 1.3 m tips stand 1.3 m, not the 2.2 m
+    // a 3.3 m card drew over a seated troll (fire sheet, stage 3).
+    let h = flame / select(fire.reach.x, fire.reach.z, torch);
     let lean = wind * 0.05 * flame;
-    let world = card(at - up * h * 0.06 + lean * 0.2, up, corner, w, h, true, 0.0);
+    let world = card(at - up * h * 0.05 + lean * 0.2, up, corner, h, h, true, 0.0);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
-    // Its first number past 1, so it is faded only very near what is behind it: a hearth's
-    // flames stand among its logs, and faded over a third of a metre they were a thin
-    // tongue over bare sticks (lake film r4).
-    out.life = vec4(1.5, heat, luck, 1.0);
+    // Its first number past 1 (past 2 a torch's), so it is faded only very near what is
+    // behind it: a hearth's flames stand among its logs, and faded over a third of a metre
+    // they were a thin tongue over bare sticks (lake film r4).
+    out.life = vec4(select(1.5, 2.5, torch), heat, luck, 1.0);
     out.size = h;
     return out;
 }
@@ -818,8 +831,8 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // A kept fire (a campfire) stands just where it is, not off a grid cell's middle.
         var at = foot + (east * (own.x - 0.5) + north * (own.y - 0.5)) * max(1.5, wide * 0.45) * (1.0 - kept_slot);
         if kept_slot < 0.5 {
-            // A grid's blaze is one filmed fire, a bonfire's width, and one in three is
-            // only its embers and smoke: each frame of the footage is a whole fire of many
+            // A grid's blaze is one baked fire, a bonfire's width, and one in three is
+            // only its embers and smoke: each frame of its set is a whole fire of many
             // tongues, so three to a blaze two metres apart, each wider than the cell, were
             // a hedge of overlapping flames (castle film r11), where a burning building is
             // separate fires with its timbers dark between them.
@@ -838,6 +851,10 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // are not one cut-out stamped along it (castle film r7).
         w *= 0.8 + 0.45 * fract(luck * 4.3);
         h *= 0.7 + 0.7 * pow(fract(luck * 6.1), 1.5);
+        // The tongue set's flames reach only `reach` up its frame (a low wall under smoke), so
+        // its cards stand so much taller, square, stretched no more than half again across.
+        h /= fire.reach.y;
+        w = clamp(w, h, 1.5 * h);
         let tilt = (fract(luck * 9.7) - 0.5) * 0.22;
         let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, tilt);
         out.clip = position_world_to_clip(world);
@@ -913,28 +930,30 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         light = soot(kelvin, alpha);
         cover = covers(light, alpha);
     } else if kind == 0 {
-        // The filmed fire's frame from the flipbook (`tools/textures/flames.ts`) at its own
-        // moment by the card's luck, mirrored for half of them, played at the rate a fire this
-        // tall moves (a flame's time goes as the root of its size, Froude's scaling): its light
-        // as filmed, see-through where it was dim, and its soot drawn dark over what is behind
-        // where there is no flame, the black wisps that break off a burning building's tongues.
+        // A flame from its kind's baked set (books.rs): a hearth's tongue (its first number
+        // past 1, `hearth`) the campfire's, a torch's past 2 its own, a burning building's
+        // the tongue's; each card at its own moment by its luck, mirrored for half of them,
+        // played at the pace a fire of its size moves from the rate and size it was baked at
+        // (a flame's time goes as the root of its size, Froude's scaling).
+        var layer = SET_TONGUE;
+        var brightness = BLAZE_BRIGHTNESS * mix(0.6, 1.0, heat);
+        if t > 2.0 {
+            layer = SET_TORCH;
+            brightness = TORCH_BRIGHTNESS * (0.85 + 0.15 * heat);
+        } else if t > 1.0 {
+            layer = SET_CAMPFIRE;
+            brightness = HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat);
+        }
+        let baked = fire.sets[layer];
         let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
-        let rate = FLIPBOOK_FPS * sqrt(2.5 / max(size, 0.5)) * (0.8 + 0.4 * fract(luck * 17.3));
-        let f = fract(time * rate / FLIPBOOK_FRAMES + luck * 5.17) * FLIPBOOK_FRAMES;
-        var filmed = footage_at(f, x, uv.y);
-        let foot = smoothstep(0.0, 0.03, uv.y);
-        filmed.cover *= foot;
-        filmed.light *= foot;
-        let drawn = wall_flame(filmed, heat, soft);
+        let rate = baked.x * sqrt(baked.y / max(size, 0.2)) * (0.85 + 0.3 * fract(luck * 17.3));
+        let f = fract(time * rate / BOOK_FRAMES + luck * 5.17) * BOOK_FRAMES;
+        // Faded out at the frame's foot, sides and top, where a set's smoke leaves the frame:
+        // cut off there, a burning building's soot was a grey square behind its flames.
+        let edges = smoothstep(0.0, 0.03, uv.y) * smoothstep(0.0, 0.15, x) * smoothstep(0.0, 0.15, 1.0 - x) * smoothstep(0.0, 0.25, 1.0 - uv.y);
+        let drawn = baked_flame(flipbook(layer, f, vec2(x, uv.y)), brightness, soft * edges);
         light = drawn.rgb;
         cover = drawn.a;
-        if t > 1.0 {
-            // A hearth's tongue (its first number past 1, `hearth`): a campfire's flames as
-            // filmed, the footage's own, solid through their body, without the soot or the
-            // cooling a building's blaze is given.
-            cover = filmed.cover * soft;
-            light = filmed.light * FOOTAGE_GAIN * (0.85 + 0.15 * heat) * soft * on_screen();
-        }
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));

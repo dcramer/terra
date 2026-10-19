@@ -17,15 +17,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Picture, writePng } from "../sandbox/png.ts";
 
-/// A fuel's row: the temperatures heat 0 and 1 stand for, in kelvin, and how steeply its
-/// brightness falls with heat (1 is the blackbody's own luminance, smaller is softer).
-export type Fuel = { cold: number; hot: number; contrast: number };
+/// A fuel's row: the temperatures heat 0 and 1 stand for, in kelvin, how steeply its
+/// brightness falls with heat (1 is the blackbody's own luminance, smaller is softer), and how
+/// far a camera exposes its hottest (`film`, see `ramp`).
+export type Fuel = { cold: number; hot: number; contrast: number; film: number };
 
 /// The rows (D377's 950-1670 K for wood).
 export const FUELS: Record<string, Fuel> = {
-  wood: { cold: 950, hot: 1670, contrast: 0.35 },
-  oil: { cold: 900, hot: 1500, contrast: 0.35 },
-  gas: { cold: 1100, hot: 1900, contrast: 0.3 },
+  wood: { cold: 950, hot: 1670, contrast: 0.6, film: 4.5 },
+  oil: { cold: 900, hot: 1500, contrast: 0.6, film: 4.5 },
+  gas: { cold: 1100, hot: 1900, contrast: 0.5, film: 6 },
 };
 
 const lobe = (l: number, mu: number, s1: number, s2: number) => {
@@ -65,13 +66,25 @@ export function blackbody(kelvin: number): [number, number, number] {
   return [rgb[0] / lum, rgb[1] / lum, rgb[2] / lum];
 }
 
+/// A fuel's blackbody at a heat as a photograph records it: each channel's exposure
+/// 1 - e^(-film x light), so as a flame brightens its red fills first and its green catches up,
+/// red to orange to yellow, and its hottest nears white. The photographs the fire is measured
+/// against (references.json) are of fire so exposed; a tonemapper that keeps hue
+/// (KhronosPbrNeutral) never makes that shift itself, and drew the blackbody's own deep red
+/// 90-99% red and salmon where it desaturated (fire sheet, stage 3).
+function filmed(h: number, fuel: Fuel): number[] {
+  const t = fuel.cold + h * (fuel.hot - fuel.cold);
+  const lum = (planckXYZ(t)[1] / planckXYZ(fuel.hot)[1]) ** fuel.contrast;
+  return blackbody(t).map((c) => 1 - Math.exp(-fuel.film * lum * c));
+}
+
 /// The ramp at a heat for a fuel: linear RGB (luminance 1 at the hottest) and its A.
 export function ramp(heat: number, fuel: Fuel = FUELS.wood): [number, number, number, number] {
   const h = Math.min(1, Math.max(0, heat));
-  const t = fuel.cold + h * (fuel.hot - fuel.cold);
-  const lum = (planckXYZ(t)[1] / planckXYZ(fuel.hot)[1]) ** fuel.contrast;
-  const c = blackbody(t);
-  return [c[0] * lum, c[1] * lum, c[2] * lum, (1 - h) * (1 - h)];
+  const top = filmed(1, fuel);
+  const y = 0.2126 * top[0] + 0.7152 * top[1] + 0.0722 * top[2];
+  const c = filmed(h, fuel);
+  return [c[0] / y, c[1] / y, c[2] / y, (1 - h) * (1 - h)];
 }
 
 /// The ramp tabulated at `n` heats, as games sample it from a texture.
