@@ -244,11 +244,16 @@ const SNOW_FULL_M: f32 = 0.5;
 const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
 // How much of a level spray's load shows seen from below, where only its edge overhangs.
 const BOUGH_UNDERSIDE: f32 = 0.35;
+// How many of the loads' clumps a metre, on a crown's cards.
+const LOAD_CLUMPS: f32 = 1.4;
+// How a green leaf still on through a snowy spell is shaded, darker and cooler: an evergreen's
+// needles read near black-green beside the white (Ghost of Yotei's, Red Dead 2's spruces).
+const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.42, 0.5, 0.55);
 // The height over a plant's foot, metres, from which its boughs carry more of the load, to
 // where they carry all of it.
 const BOUGH_HIGH_M: vec2<f32> = vec2<f32>(2.0, 10.0);
 // How much of bark's colour a frost greys, where snow lies (weather round 8).
-const BARK_FROST_GREY: f32 = 0.6;
+const BARK_FROST_GREY: f32 = 0.3;
 // The height over a stem's foot, metres, to which plastered snow is thickest and wraps
 // farthest round, and from which it is only the windward coat.
 const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
@@ -333,6 +338,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     let origin = mesh_functions::get_world_from_local(instance)[3].xyz;
     let at = climate_place(world);
     var colour = (*input).material.base_color.rgb;
+    var turned = 0.0;
     if wind.bark < 0.5 {
         let layer = card_layer(uv);
         if layer >= 0 {
@@ -343,6 +349,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
             let autumn = wind.climate.autumn[layer].rgb;
             let tone = autumn * grey / max(dot(autumn, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4) * AUTUMN_LIGHT;
             colour = mix(colour, tone, leaf);
+            turned = leaf;
         }
     }
     let weather = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0);
@@ -373,11 +380,18 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
             face_up = dot(seen, sky_up);
         }
         let level = smoothstep(0.3, 0.8, abs(face_up)) * select(BOUGH_UNDERSIDE, 1.0, face_up > 0.0);
+        // Seen from under, only a load's edge shows, on the crown's upper side as on a spray:
+        // whole there, the canopy overhead read as pale leaves (weather round 8).
+        let below = mix(1.0, BOUGH_UNDERSIDE, smoothstep(0.1, 0.5, -face_up));
         let high = smoothstep(BOUGH_HIGH_M.x, BOUGH_HIGH_M.y, dot(world - origin, sky_up));
-        let load = lying * (0.5 + 0.5 * high) * max(smoothstep(0.25, 0.7, up), level);
-        // Gated by the load itself: where clumps() is 0 the threshold alone is a half, and
-        // summer's cards went half white.
-        snow = smoothstep(-0.06, 0.06, load - clumps(world * 2.2 + 5.0)) * smoothstep(0.0, 0.1, load);
+        let load = lying * (0.5 + 0.5 * high) * max(smoothstep(0.25, 0.7, up) * below, level);
+        // In clumps half a metre and more across, a bough's load: finer, the white flecked the
+        // needles into a variegated leaf (weather round 8). Gated by the load itself: where
+        // clumps() is 0 the threshold alone is a half, and summer's cards went half white.
+        snow = smoothstep(-0.06, 0.06, load - clumps(world * LOAD_CLUMPS + 5.0)) * smoothstep(0.0, 0.1, load);
+        // Needles still on in a snowy spell are an evergreen's, dark and cool under the white:
+        // the spruce's sage, kept, read as a broadleaf in leaf (weather round 8).
+        colour *= mix(vec3<f32>(1.0), NEEDLES_UNDER_SNOW, lying * (1.0 - turned));
         colour = mix(colour, SNOW, snow);
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
@@ -403,9 +417,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
         let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
-        let windward = smoothstep(-0.1 - 0.4 * low, 0.5, dot((*input).N, into));
+        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot((*input).N, into));
         let blot = wander(across * 1.7 + foot_up * stem_h * 0.5 + seed) * 0.7 + wander(world * 6.0 + seed) * 0.3;
-        let plaster = smoothstep(0.4, 0.52, blot + 0.3 * low) * windward;
+        let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
         colour = mix(colour, SNOW, stuck);
