@@ -346,10 +346,12 @@ fn triangle(out: &mut Surface, corners: [Vec3; 3], toward: Vec3, colour: [f32; 3
 /// share of its kind's colour, at most `TONES` steps lighter or darker, its texture's own
 /// difference from its mean over the half metre it covers times `TONE_GAIN`, which a far
 /// face's relief and joints would deepen near. In one colour a stone wall's hull was a flat
-/// cream block from 120 m out, the town wall and castle blockout beside textured houses.
+/// cream block from 120 m out, the town wall and castle blockout beside textured houses; at
+/// three times the texture's difference and four steps either way, the castle's faces were
+/// a grid of dark cubes on pale stone from 500 m, not one masonry surface.
 const TONE_STEP: f32 = 0.07;
-const TONES: i32 = 4;
-const TONE_GAIN: f32 = 3.0;
+const TONES: i32 = 3;
+const TONE_GAIN: f32 = 2.0;
 /// A side within its kit's dirt's rise of the base's floor is that much of the way to its
 /// dirt's colour, as the near detail's masks darken a wall's foot (`dress::masks`): the
 /// dark band along a wall's foot that sets it on the ground far off.
@@ -402,6 +404,24 @@ impl<'a> Colours<'a> {
             across / texture.metres[0].max(0.01),
             -middle.y / texture.metres[1].max(0.01),
         ];
+        // Each tile of the texture read from a place of its own, so its joints fall
+        // somewhere else on each: read as laid, a castle's faces showed the same few dark
+        // cubes every two metres, a lattice like an egg crate from 500 m (`TONE_GAIN`).
+        let tile = [libm::floorf(uv[0]) as i32, libm::floorf(uv[1]) as i32];
+        // The plane the face lies in, so a wall's two faces and its neighbours differ.
+        let depth = (at * normal.abs()).element_sum();
+        let shift = |axis: u32| {
+            let salt = (depth as u32)
+                .wrapping_mul(16)
+                .wrapping_add(axis + 2 * dir as u32);
+            terra_gen::hash::unit(terra_gen::hash::mix3(
+                salt,
+                tile[0] as u32,
+                tile[1] as u32,
+                0,
+            ))
+        };
+        let uv = [uv[0] + shift(0), uv[1] + shift(1)];
         let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
         let mean = luma(swatch.mean()).max(1e-3);
         let here = luma(crate::sections::far::patch(swatch, uv));
@@ -667,5 +687,52 @@ mod tests {
             .map(|p| p.y)
             .fold(0.0, f32::max);
         assert_eq!(tallest, 1.0);
+    }
+
+    /// A stone texture's joints fall on other cubes in each of its tiles far off, so a long
+    /// wall's tones do not repeat every tile: read the same in each, a castle's faces were a
+    /// lattice of dark cubes two metres apart, an egg crate from 500 m.
+    #[test]
+    fn far_stone_does_not_repeat_its_joints_every_tile() {
+        let texture: crate::kit::Texture =
+            ron::from_str(r#"(path: "stone", metres: (2.0, 2.0))"#).expect("a texture");
+        let kit = crate::kit::Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            textures: [(Material::Masonry, texture)].into(),
+            ..Default::default()
+        };
+        let kits = Kits(vec![kit]);
+        // A joint every two metres: one dark column and one dark row of its texels in 16.
+        let texels = (0..16 * 16)
+            .map(|i| {
+                if i % 16 == 0 || i / 16 == 0 {
+                    [0.1; 3]
+                } else {
+                    [0.5; 3]
+                }
+            })
+            .collect();
+        let swatch = crate::relief::Swatch::new(16, 16, texels).expect("a swatch");
+        let mut maps = Maps::default();
+        maps.colours
+            .insert("stone".into(), std::sync::Arc::new(swatch));
+        let mut colours = Colours::new(&kits, &maps);
+        // A course along a wall 32 m long facing +z, a metre up: 16 tiles of 4 cubes.
+        let tiles: Vec<Vec<usize>> = (0..16)
+            .map(|tile| {
+                (0..4)
+                    .map(|i| colours.side(Kind(2), IVec3::new(tile * 4 + i, 2, 0), 4))
+                    .collect()
+            })
+            .collect();
+        let plain = colours.of(Kind(2), false);
+        let toned = tiles.iter().flatten().filter(|&&c| c != plain).count();
+        assert!(toned > 0, "the joints show far off");
+        let like_first = tiles.iter().filter(|tile| **tile == tiles[0]).count();
+        assert!(
+            like_first < 8,
+            "{like_first} of 16 tiles toned as the first"
+        );
     }
 }

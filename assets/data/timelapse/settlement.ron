@@ -9,10 +9,13 @@
 (
     about: "a market town rising from its clearing in a day",
     seconds: 20.0,
-    // Golden hour, soon after sunrise: the sun 6-10 degrees up in the east-south-east, low
-    // and warm, behind the camera's right as it ends looking north, so the town's walls and
-    // towers throw long shadows (at 7.5-8.3 h, 20-28 degrees up, the review read noon).
-    hours: (6.0, 6.35),
+    // Toward sunset: as measured in the game at this place, the sun sinks from 24 to 9
+    // degrees up in the west, azimuth 261-275, behind the camera as it starts looking east
+    // and beside it on the left as it ends looking north, so the light warms to the end and
+    // the mountain is lit warm on its west faces. From 17.1 h, under 12 degrees, the western
+    // forest's shadow covered the town all through the middle; at 6.0-6.35 h it stood due
+    // east and climbing, 12 to 15 degrees up: ahead of the camera, glaring, neutral by the end.
+    hours: (16.0, 17.4),
     claim: 0.0,
     first: 0.3,
     last: 11.0,
