@@ -15,7 +15,7 @@ The climate already knows the weather: fronts drift over the world, cloud builds
 - **Each rule in the system that makes the thing** (Systems apart, D58): the sky owns the deck, the light owns how cloud dims the sun, the air owns visibility, drift owns what falls, the ground and the plants own wetness and snow. A scene never tunes a rule; a film only chooses when it is shot.
 - **Physical numbers, cited.** Illuminance under cloud, visibility in rain and snow, fall speeds, a flash's flicker are measured quantities (the research note's), each a named constant with its source, so a tuning round adjusts a fact, not a fudge.
 - **Port, don't invent** (D196): techniques from the talks (Frostbite, Decima, RDR2, Ghost of Tsushima), code only from MIT, BSD, Apache or zlib sources.
-- **The grade stays neutral** (D370): a storm is darker and greyer because its light is, never because a grade says so.
+- **The grade stays neutral** (D370): a storm is darker and greyer because its light is, never because a grade says so. Falling snow alone grades cool, as data on its named weather (D419).
 
 ## What each part does
 

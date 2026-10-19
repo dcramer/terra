@@ -1,19 +1,25 @@
 // Named weathers (crates/terra_world/src/weather.rs, docs/weather.md, D418): what each name
 // means, as the least of each quantity, for a run to find a moment (`--weather snowfall`), a
-// forecast to name one and people to talk about. Nothing reads these to change what it does:
-// the weather is the climate's (`climate.ron`), and everything drawn reads its quantities.
+// forecast to name one and people to talk about. The weather is the climate's (`climate.ron`),
+// and everything drawn reads its quantities; a named weather changes only the grade, its own.
 //
 //   cloud      cloud at least, 0 to 1
 //   rain_mm_h  rain at least, millimetres an hour
 //   snow_mm_h  snow at least, as its water, millimetres an hour (a millimetre is about a
 //              centimetre of fresh snow)
 //   wind_m_s   wind at least, metres a second
+//   grade      the grade while it holds (D419), over the neutral one (D370): white balance as
+//              Bevy takes it (temperature below 0 toward blue, tint above 0 toward magenta, which
+//              keeps a cold balance off cyan) and saturation as a share. A heavier weather with no
+//              grade of its own takes the last listed one it also is.
 [
     (name: "overcast", cloud: 0.95),
     (name: "rain", cloud: 0.95, rain_mm_h: 0.5),
     (name: "heavy rain", cloud: 0.95, rain_mm_h: 2.0),
     (name: "storm", cloud: 0.95, rain_mm_h: 4.0, wind_m_s: 9.0),
-    (name: "snowfall", cloud: 0.95, snow_mm_h: 0.8),
+    // Snow falling grades cool, as the developers chose from side-by-side stills ("Cool").
+    (name: "snowfall", cloud: 0.95, snow_mm_h: 0.8,
+        grade: Some((temperature: -0.05, tint: 0.05, saturation: 0.9))),
     (name: "heavy snow", cloud: 0.95, snow_mm_h: 1.8),
     (name: "blizzard", cloud: 0.95, snow_mm_h: 1.2, wind_m_s: 9.0),
 ]

@@ -12,7 +12,9 @@
 //!
 //! A run can ask for a weather by name (`--weather snowfall`): the clock moves on from its date,
 //! a day at a time, to the first day whose hour has it at the start. The named weathers are
-//! queries (`assets/data/weather.ron`), never read to change what anything does.
+//! queries (`assets/data/weather.ron`). The one thing a named weather changes is the grade: a
+//! weather may carry its own (D419), as a colourist grades a snowfall cold, eased in while the
+//! weather at the eye is it.
 
 use crate::climate::ClimateFields;
 use crate::daylight::{Clock, Ticking};
@@ -180,8 +182,8 @@ pub fn under_deck(shade: Vec3, deck: f32) -> Vec3 {
     shade.lerp(grey, deck)
 }
 
-/// A named weather: what conditions it means, for finding a moment and for people to say. No
-/// system reads one to change what it does.
+/// A named weather: what conditions it means, for finding a moment and for people to say, and
+/// the grade it may carry.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Named {
@@ -197,6 +199,75 @@ pub struct Named {
     /// Wind at least, metres a second.
     #[serde(default)]
     pub wind_m_s: f32,
+    /// The grade while this weather holds (D419); none leaves the grade neutral (D370).
+    #[serde(default)]
+    pub grade: Option<Grade>,
+}
+
+/// A weather's grade over the camera's neutral one (D419): white balance as Bevy's
+/// `ColorGradingGlobal` takes it (temperature toward blue below 0, tint toward magenta above 0),
+/// and the saturation as a share of the neutral grade's.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Grade {
+    #[serde(default)]
+    pub temperature: f32,
+    #[serde(default)]
+    pub tint: f32,
+    #[serde(default = "Grade::full")]
+    pub saturation: f32,
+}
+
+impl Grade {
+    pub const NEUTRAL: Self = Self {
+        temperature: 0.0,
+        tint: 0.0,
+        saturation: 1.0,
+    };
+
+    fn full() -> f32 {
+        1.0
+    }
+
+    fn eased(self, to: Self, t: f32) -> Self {
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        Self {
+            temperature: mix(self.temperature, to.temperature),
+            tint: mix(self.tint, to.tint),
+            saturation: mix(self.saturation, to.saturation),
+        }
+    }
+
+    fn near(self, other: Self) -> bool {
+        (self.temperature - other.temperature).abs() < 1e-4
+            && (self.tint - other.tint).abs() < 1e-4
+            && (self.saturation - other.saturation).abs() < 1e-4
+    }
+}
+
+impl Default for Grade {
+    fn default() -> Self {
+        Self::NEUTRAL
+    }
+}
+
+/// The grade drawn now: the weather at the eye's own, eased as the weather is.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct WeatherGrade(pub Grade);
+
+/// The named weathers, read once.
+#[derive(Resource)]
+struct Names(Vec<Named>);
+
+/// The grade of the last named weather, in the file's order, that this weather is and that
+/// carries one; neutral when none does.
+pub fn grade_of(names: &[Named], weather: &Weather) -> Grade {
+    names
+        .iter()
+        .rev()
+        .filter(|n| n.holds(weather))
+        .find_map(|n| n.grade)
+        .unwrap_or_default()
 }
 
 impl Named {
@@ -204,7 +275,11 @@ impl Named {
 
     /// Whether these conditions are this weather.
     pub fn is(&self, now: &Conditions) -> bool {
-        let w = Weather::of(now);
+        self.holds(&Weather::of(now))
+    }
+
+    /// Whether the weather at the eye is this weather.
+    pub fn holds(&self, w: &Weather) -> bool {
         w.cloud >= self.cloud
             && w.rain_mm_h() >= self.rain_mm_h
             && w.snow_mm_h() >= self.snow_mm_h
@@ -221,8 +296,10 @@ const LOOKS_DAYS: i64 = 730;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Weather>()
+        .init_resource::<WeatherGrade>()
+        .insert_resource(Names(crate::data::read(Named::FILE)))
         .add_systems(PostStartup, pick_day)
-        .add_systems(Update, follow.before(Ticking));
+        .add_systems(Update, (follow, grade).chain().before(Ticking));
 }
 
 /// A run asking for a weather moves its clock on to the first day whose hour has it at the start.
@@ -318,6 +395,28 @@ fn follow(
     }
 }
 
+/// Eases the grade toward the weather's own at the rate the weather follows; a run starts in
+/// its weather's grade. Written only when it has moved, so the camera's grade changes only then.
+fn grade(
+    time: Res<Time>,
+    names: Res<Names>,
+    weather: Res<Weather>,
+    mut graded: ResMut<WeatherGrade>,
+    mut started: Local<bool>,
+) {
+    let wanted = grade_of(&names.0, &weather);
+    let t = if *started {
+        1.0 - libm::expf(-time.delta_secs() * FOLLOW * 4.0)
+    } else {
+        1.0
+    };
+    *started = true;
+    let eased = graded.0.eased(wanted, t);
+    if !eased.near(graded.0) {
+        graded.0 = eased;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +493,42 @@ mod tests {
         assert!(snowfall.is(&now));
         now.snow_share = 0.0;
         assert!(!snowfall.is(&now), "rain is not snowfall");
+    }
+
+    #[test]
+    fn only_falling_snow_grades_cold() {
+        // The developers chose a cool grade for snow (D419), and no other weather's look moves.
+        let named: Vec<Named> = crate::data::read(Named::FILE);
+        let of = |cloud: f32, falling_mm_h: f32, snow_share: f32, wind_m_s: f32| {
+            grade_of(
+                &named,
+                &Weather {
+                    cloud,
+                    falling_mm_h,
+                    snow_share,
+                    wind_m_s,
+                    temperature_c: 0.0,
+                },
+            )
+        };
+        for snow in [
+            of(0.95, 1.0, 1.0, 2.0),
+            of(1.0, 2.5, 1.0, 3.0),
+            of(1.0, 1.5, 1.0, 10.0),
+        ] {
+            assert!(snow.temperature < 0.0, "{snow:?}");
+            assert!(snow.saturation < 1.0, "{snow:?}");
+        }
+        for other in [
+            of(0.0, 0.0, 0.0, 0.0),
+            of(0.95, 0.0, 0.0, 2.0),
+            of(1.0, 1.0, 0.0, 2.0),
+            of(1.0, 5.0, 0.0, 12.0),
+            // Snow lying under a clear or grey sky, nothing falling.
+            of(0.2, 0.0, 1.0, 1.0),
+            of(1.0, 0.0, 1.0, 1.0),
+        ] {
+            assert_eq!(other, Grade::NEUTRAL);
+        }
     }
 }

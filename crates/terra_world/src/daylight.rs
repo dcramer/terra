@@ -490,10 +490,11 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet, weather): (
+    (eye, planet, weather, cast): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
         Option<Res<crate::weather::Weather>>,
+        Option<Res<crate::weather::WeatherGrade>>,
     ),
     mut clear_sky: Local<Option<f32>>,
 ) {
@@ -550,8 +551,9 @@ fn shine(
     }
     let dark = 1.0 - smoothstep(-12.0, 0.0, height);
     nightfall.set_if_neq(Nightfall(dark));
+    let cast = cast.map(|c| c.0).unwrap_or_default();
     for mut grade in &mut grading {
-        fade_colour(&mut grade, height);
+        fade_colour(&mut grade, height, cast);
     }
     // Out from under the trees, where the sky over the eye is open, the forest's haze gives
     // way to the open air's (D273): thinner, so the far forest and the land beyond show, and
@@ -648,8 +650,14 @@ fn mist_light(
 }
 
 /// Colour fading as the light goes (D302), for the sun so many degrees up.
-fn fade_colour(grade: &mut bevy::render::view::ColorGrading, height: f32) {
-    // The grade's white balance is left neutral (`scene`) at every hour and everywhere, as
+/// A weather may carry its own grade over it (`cast`, D419).
+fn fade_colour(
+    grade: &mut bevy::render::view::ColorGrading,
+    height: f32,
+    cast: crate::weather::Grade,
+) {
+    // The grade's white balance is left neutral (`scene`) at every hour and everywhere but
+    // in a weather with its own (falling snow grades cool, D419), as
     // a camera balanced for daylight (D65) sees (D370): a grey card in the noon sun stays
     // grey, the sky's shade is blue, the low sun warm and the light through leaves green,
     // all by the light itself. By night colour fades, as an eye's does in the dark (D302),
@@ -663,8 +671,15 @@ fn fade_colour(grade: &mut bevy::render::view::ColorGrading, height: f32) {
     // campfire lit at night kept 7% of its colour and stood grey (fire sheet, round 6).
     let day = smoothstep(-12.0, -4.0, height);
     let night = NIGHT_SATURATION + (1.0 - NIGHT_SATURATION) * day;
-    if (grade.global.post_saturation - super::scene::SATURATION).abs() > 1e-4 {
-        grade.global.post_saturation = super::scene::SATURATION;
+    let saturation = super::scene::SATURATION * cast.saturation;
+    if (grade.global.post_saturation - saturation).abs() > 1e-4 {
+        grade.global.post_saturation = saturation;
+    }
+    if (grade.global.temperature - cast.temperature).abs() > 1e-5 {
+        grade.global.temperature = cast.temperature;
+    }
+    if (grade.global.tint - cast.tint).abs() > 1e-5 {
+        grade.global.tint = cast.tint;
     }
     let lit = smoothstep(-3.0, 3.0, height);
     let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night;
