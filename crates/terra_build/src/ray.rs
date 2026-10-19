@@ -131,6 +131,7 @@ impl Base {
                     ray_box(origin, direction, corner, corner + Vec3::splat(CELL_M))
                     && distance <= max_distance
                 {
+                    let normal = self.open_face(cell, origin, direction, distance, normal, meets);
                     return Some((cell, distance, normal));
                 }
             }
@@ -150,6 +151,43 @@ impl Base {
                 return None;
             }
         }
+    }
+}
+
+impl Base {
+    /// The face a ray enters a cube by that opens onto a cube not met, so something set
+    /// against it goes where the ray came from. Where the ray enters by an edge or corner,
+    /// two or three faces at once, measuring the cube alone (`ray_box`) names one of them
+    /// by a rounding, and on a wall's seam that can be a face the next cube of the wall
+    /// covers, as a wall's end; the faces entered within a millimetre are weighed, an open
+    /// one taken.
+    fn open_face(
+        &self,
+        cell: IVec3,
+        origin: Vec3,
+        direction: Vec3,
+        distance: f32,
+        normal: IVec3,
+        meets: &dyn Fn(&Cube) -> bool,
+    ) -> IVec3 {
+        const TIE_M: f32 = 1e-3;
+        let met = |at: IVec3| self.cubes.get(at).is_some_and(|cube| meets(&cube));
+        if !met(cell + normal) {
+            return normal;
+        }
+        let corner = cell.as_vec3() * CELL_M;
+        (0..3)
+            .filter(|&axis| direction[axis].abs() >= 1e-9)
+            .filter_map(|axis| {
+                let into = direction[axis] > 0.0;
+                let plane = corner[axis] + if into { 0.0 } else { CELL_M };
+                let entered = (plane - origin[axis]) / direction[axis];
+                let mut face = IVec3::ZERO;
+                face[axis] = if into { -1 } else { 1 };
+                ((entered - distance).abs() <= TIE_M && !met(cell + face)).then_some(face)
+            })
+            .next()
+            .unwrap_or(normal)
     }
 }
 
@@ -229,6 +267,79 @@ impl Base {
 mod tests {
     use super::*;
     use crate::Kind;
+
+    #[test]
+    fn a_ray_striking_a_face_of_a_wall_gets_that_faces_outward_normal() {
+        // A wall standing alone, six tiles along x: its long faces look -z and +z, its ends
+        // -x and +x, its top +y. Rays from every way onto points of each face, on the seams
+        // between its cubes too (where the cube alone names a shared face by a rounding).
+        let mut base = Base::default();
+        for x in 0..6 {
+            base.apply(crate::BuildOp::SetWall {
+                tile: [x, 0, 0],
+                panel: Some(crate::Panel::Solid),
+                kind: Kind(1),
+            });
+        }
+        // The wall's own box: the base's bounds run to the sections it is in.
+        let (low, high) = base
+            .cubes()
+            .fold((IVec3::MAX, IVec3::MIN), |(low, high), (at, _)| {
+                (low.min(at), high.max(at))
+            });
+        assert_eq!((low.x, high.x, low.z, high.z), (0, 5, 0, 0));
+        let (low, high) = (low.as_vec3() * CELL_M, (high + 1).as_vec3() * CELL_M);
+        let mut random = terra_gen::Rng::new(terra_gen::Seed(5));
+        let mut struck = 0;
+        for normal in [IVec3::NEG_Z, IVec3::Z, IVec3::NEG_X, IVec3::X, IVec3::Y] {
+            let n = normal.as_vec3();
+            let axis = (0..3).find(|&a| normal[a] != 0).unwrap();
+            let plane = if normal[axis] > 0 {
+                high[axis]
+            } else {
+                low[axis]
+            };
+            for _ in 0..400 {
+                // A point on the face, half of them on a seam between cubes.
+                let mut point = Vec3::ZERO;
+                for a in (0..3).filter(|&a| a != axis) {
+                    let inset = 0.02;
+                    let t = low[a] + inset + random.unit() * (high[a] - low[a] - 2.0 * inset);
+                    point[a] = if random.unit() < 0.5 {
+                        ((t / CELL_M).round() * CELL_M).clamp(low[a] + inset, high[a] - inset)
+                    } else {
+                        t
+                    };
+                }
+                point[axis] = plane;
+                // Any way onto the face from outside it, grazing ones too.
+                let way = loop {
+                    let way = Vec3::new(
+                        random.range(-1.0, 1.0),
+                        random.range(-1.0, 1.0),
+                        random.range(-1.0, 1.0),
+                    )
+                    .normalize_or(-n);
+                    if way.dot(-n) > 0.03 {
+                        break way;
+                    }
+                };
+                let origin = point - way * 6.0;
+                let hit = base.raycast(origin, way, 20.0).expect("the wall is met");
+                assert!(
+                    (hit.distance - 6.0).abs() < 1e-3,
+                    "{normal} {point}: met at {}",
+                    hit.distance
+                );
+                assert_eq!(hit.normal, normal, "{normal} {point} {way}: {hit:?}");
+                if hit.wall {
+                    assert_eq!(hit.face.side, Side::of(normal), "{hit:?}");
+                }
+                struck += 1;
+            }
+        }
+        assert_eq!(struck, 2000);
+    }
 
     #[test]
     fn a_ray_walked_cell_by_cell_meets_the_cube_testing_every_cube_does() {
