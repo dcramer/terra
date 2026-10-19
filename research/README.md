@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Agent throughput: where the hours went](2026-10-19-agent-throughput.md) | 2026-10-19 |
 | [How games draw fire: four surveys combined](2026-10-19-how-games-draw-fire.md) | 2026-10-19 |
 | [Winter that reads: how shipped games draw a snowy forest](2026-10-19-winter-aaa.md) | 2026-10-19 |
 | [Binary art out of git history](2026-10-18-binary-art-out-of-history.md) | 2026-10-18 |
