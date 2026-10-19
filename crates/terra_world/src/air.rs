@@ -117,14 +117,23 @@ const OUTER_RADIUS_M: f32 = 6_460_000.0;
 /// nearer the true air has more (`dust_for`).
 const DUST: f32 = 1.5;
 
+/// The most dust a world's air holds, as Earth's clean continental air on a clear day: an
+/// aerosol optical depth of 0.064 at 550 nm (OPAC's "clean continental", Hess, Koepke and
+/// Schult 1998, BAMS 79), where a clear day's here is (3.996 + 0.444) x 1e-6 per metre over
+/// 1.2 km, 0.0053: twelve times. Alpine air is cleaner still (Jungfraujoch's about 0.03).
+const CLEAR_DAY_DUST: f32 = 12.0;
+
 /// The dust in a world's air: as much in each of the world's metres as the small planet's
 /// air at 18 times holds (D334), so far ridges whiten over kilometres as the hills do over
 /// hundreds of metres, and the sky over them is as pale, while the gases' blue stays the true
-/// air's. On the 30 km world with mountains, about 25 times a clear day's, a hazy summer's
-/// day with some 40 km of visibility; the photographs of Morskie Oko and Far Cry 5's frames
-/// show a sky twice as bright as the land and paler than the true air's clear blue.
+/// air's; but never more than a clean clear day's (`CLEAR_DAY_DUST`). On the 30 km world with
+/// mountains, whose air is nearly the true air, that is the cap: some 70 km of visibility on
+/// the valley floor, the range 5 to 10 km off standing dark under a paler sky, and 20 km of
+/// air still leaving only a third of the land's own light. Held to the small planet's
+/// per metre it was 25 times, a hazy day of 40 km, and the far range came out only 0.05
+/// darker than the sky where the references' is 0.2 (valley range, D426).
 fn dust_for(scale: AirScale) -> f32 {
-    DUST * HAZE_SCALE / scale.0
+    (DUST * HAZE_SCALE / scale.0).min(CLEAR_DAY_DUST)
 }
 
 /// How much of its dust's haze a day's air holds for how warm it is: the haze that whitens
@@ -404,12 +413,13 @@ mod tests {
         // Mountains 2.5 km high on the 30 km world see 12 km: nearly the true air.
         let mountains = AirScale::for_world(30_000.0, 2600.0).0;
         assert!((1.0..1.5).contains(&mountains), "{mountains}");
-        // The small planet's dust as tuned; among the mountains far more of it in the air's
-        // metres, the same in the world's.
+        // The small planet's dust as tuned; among the mountains more of it in the air's
+        // metres, but no more than a clean clear day's: an optical depth of 0.06 to 0.07.
         assert_eq!(dust_for(AirScale(HAZE_SCALE)), DUST);
         let among = dust_for(AirScale(mountains));
-        assert!(among > 10.0 * DUST, "{among}");
-        assert!((among * mountains - DUST * HAZE_SCALE).abs() < 1e-3);
+        assert!(among > 4.0 * DUST, "{among}");
+        let depth = (DUST_SCATTERS + DUST_ABSORBS) * among * DUST_HEIGHT_M;
+        assert!((0.055..0.075).contains(&depth), "{depth}");
         // Under trees never shorter than the true air.
         assert!(haze_scale(0.0, AirScale(1.0)) >= 1.0);
     }
