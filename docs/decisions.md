@@ -356,6 +356,7 @@ The look, models, bodies and gear, textures and audio.
 | [D370](decisions/D370.md) | A neutral grade, the colour from the light | Design | Developers | Decided | The colour grade is neutral everywhere and at every… |
 | [D383](decisions/D383.md) | How ore shows in a rock | Design | Developers | Decided | A rock with ore in it is the plain rock… |
 | [D392](decisions/D392.md) | Skylight is daylight, and the ground bounces the sun that reaches it | Tech | Agent | Decided | The painted sky the shade is lit by… |
+| [D423](decisions/D423.md) | Fire is lightly stylised, through the neutral camera | Design | Developers | Decided | Fire is drawn in the art style's lightly stylised… |
 
 ## Engine and code
 

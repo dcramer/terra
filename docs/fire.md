@@ -11,7 +11,7 @@ And: "BIG theme here is whether we can capture the rules in some static systems/
 So:
 - **One Fire module draws every fire in the game**: a candle, a torch, a campfire, a brazier, a house, a castle, a forest, a dragon's breath, an explosion.
 - **The rules shipped games follow are written into it once.** A new fire is a preset of data (D136), never new shader code or a hand lift.
-- **A machine check measures every fire against photographs of real fire**, so a bad one fails before a person sees it.
+- **A machine check measures every fire against photographs of real fire**, so a bad one fails before a person sees it. The look aimed at is lightly stylised (D423): AAA game frames are the target and win where their classes differ from the photographs', which stay a physical sanity check.
 
 What went wrong in twelve rounds, from the research:
 - the flame's emission and cover came from one luma channel;
@@ -192,7 +192,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - Measure the existing scene references (`tools/sandbox/looks/`: the forest by day, the lake at dusk) through each, so a curve that fixes fire but breaks the rest is seen.
   - Keep the candidate that brings the yellow and white cores back within range without moving a scene look out of its own.
 - **Prediction:** a per-channel curve (Hable or AcesFitted) wins on fire, and AgX is close to Neutral. The test decides.
-- **Since a change to the camera's curve changes how every scene looks, the developers see the comparison sheet before it lands (Open, art).**
+- **Decided by the developers (D423): the camera keeps KhronosPbrNeutral.** Fire is fixed at its source; the fire-only mask stays allowed. The bake-off above is history.
 
 ## The light rules
 
@@ -383,7 +383,6 @@ The change expected to matter most is stage 1, the tonemapper, since no tuning u
 
 ## Open for the developers
 
-- **A camera-wide tonemapper change**: it alters every scene's look. The bake-off sheet comes first.
 - **How much fire dominates at dawn against noon** (the exposure weight).
 - **The dragon's breath**: a gas jet or liquid fire.
 - **Wildfire**: do forests burn and spread in play?
