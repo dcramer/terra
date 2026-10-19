@@ -48,6 +48,41 @@ const ENTRY: &str = "fn tone_mapping(in: vec4<f32>, in_color_grading: ColorGradi
 /// (254, 233, 141); more and its middle loses its orange.
 pub(super) const CROSSTALK: f32 = 0.02;
 
+/// Where Bevy keeps its depth of field's shader.
+const DOF: &str = "embedded://bevy_post_process/dof/dof.wesl";
+
+/// Its passes' ends, each of which writes an alpha of 1 over the picture: a film's depth of
+/// field (`cine`, a shot's aperture) wiped the flames' mask before the tonemapper, so a filmed
+/// campfire went through the camera's curve and read milky pink (fire round 9; the stills,
+/// which have no depth of field, kept it). Each pass keeps the alpha it was given at its pixel.
+const DOF_ENDS: [(&str, &str); 4] = [
+    (
+        "    return gaussian_blur(color_texture_a, color_texture_sampler, in.position, coc, vec2(1.0, 0.0));",
+        "    return vec4(gaussian_blur(color_texture_a, color_texture_sampler, in.position, coc, vec2(1.0, 0.0)).rgb, terra_kept_alpha(in.position));",
+    ),
+    (
+        "    return gaussian_blur(color_texture_a, color_texture_sampler, in.position, coc, vec2(0.0, 1.0));",
+        "    return vec4(gaussian_blur(color_texture_a, color_texture_sampler, in.position, coc, vec2(0.0, 1.0)).rgb, terra_kept_alpha(in.position));",
+    ),
+    (
+        "    output.output_1 = mix(vertical, diagonal, 0.5);",
+        "    output.output_1 = mix(vertical, diagonal, 0.5);
+    output.output_0.a = terra_kept_alpha(in.position);
+    output.output_1.a = output.output_0.a;",
+    ),
+    (
+        "    return mix(output_0, output_1, 0.5);",
+        "    return vec4(mix(output_0, output_1, 0.5).rgb, terra_kept_alpha(in.position));",
+    ),
+];
+
+/// The alpha the pass was given at its pixel: in the bokeh's second pass its first's, kept.
+const KEPT_ALPHA: &str = "
+fn terra_kept_alpha(position: vec4<f32>) -> f32 {
+    return textureLoad(color_texture_a, vec2<i32>(floor(position.xy)), 0).a;
+}
+";
+
 pub(super) fn plugin(app: &mut App) {
     crate::shader_patch::patch_library(
         app,
@@ -55,6 +90,21 @@ pub(super) fn plugin(app: &mut App) {
         patched,
         "Bevy's tonemapping was not found where the flames' film goes: fire is tonemapped as the rest, and its hottest goes salmon",
     );
+    crate::shader_patch::patch_library(
+        app,
+        DOF,
+        dof_patched,
+        "Bevy's depth of field's ends were not found: a film's depth of field wipes the flames' mask, and its campfires go pink",
+    );
+}
+
+/// The depth of field keeping the alpha it was given, if it has each end once.
+fn dof_patched(source: &str) -> Option<String> {
+    let mut source = source.replace("\r\n", "\n");
+    for (from, to) in DOF_ENDS {
+        source = crate::shader_patch::swap_once(&source, from, to)?;
+    }
+    Some(source + KEPT_ALPHA)
 }
 
 /// The film for a graded colour, as the tonemapper draws a flame.
@@ -167,5 +217,19 @@ mod tests {
         assert!(out.contains(&format!("{:?}", 0.5 * CROSSTALK)));
         assert!(patched("fn a() {}").is_none());
         assert!(patched(&format!("{library}{library}")).is_none());
+    }
+
+    #[test]
+    fn the_depth_of_field_keeps_the_flames_mask_at_every_end() {
+        let source: String = DOF_ENDS
+            .iter()
+            .map(|(from, _)| format!("{from}\n"))
+            .collect();
+        let out = dof_patched(&source).unwrap();
+        // Every pass's end writes the alpha it was given, none Bevy's.
+        assert_eq!(out.matches("terra_kept_alpha(in.position)").count(), 4);
+        assert!(!out.contains("vec2(1.0, 0.0));\n") && !out.contains("output_1, 0.5);\n"));
+        assert!(out.contains("fn terra_kept_alpha("));
+        assert!(dof_patched(&source[1..]).is_none());
     }
 }
