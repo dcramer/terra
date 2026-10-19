@@ -351,12 +351,51 @@ fn triangle(out: &mut Surface, corners: [Vec3; 3], toward: Vec3, colour: [f32; 3
 /// a grid of dark cubes on pale stone from 500 m, not one masonry surface.
 const TONE_STEP: f32 = 0.07;
 const TONES: i32 = 3;
-const TONE_GAIN: f32 = 1.5;
-/// A masonry wall far off is laid in courses this tall, each a step lighter, darker or as
-/// its kind, the same all round a building at one height, as coursed stone reads from far
-/// off in its bands: toned by its texture alone, a castle's faces read as fine pebble-dash
-/// from 300 m (settlement film r12), its stones each a cube.
-const COURSE_M: f32 = 1.0;
+const TONE_GAIN: f32 = 1.0;
+/// A masonry wall far off is laid in courses of stones, as coursed rubble is: each course
+/// one to three cubes high (half a metre to a metre and a half) and a step lighter, darker or
+/// as its kind, the same all round a building at one height; and along it stones of two to
+/// five cubes, their joints staggered from the course's below, each a step lighter, darker
+/// or as its course. Toned by its texture alone, a castle's faces read as fine pebble-dash
+/// from 300 m (settlement film r12); in courses a metre high each one tone, as uniform
+/// siding near (r13).
+const COURSE_CUBES: (u32, u32) = (1, 3);
+const STONE_CUBES: (u32, u32) = (2, 5);
+/// The share of stones a step darker, and lighter, than their course.
+const STONE_TONED: f32 = 0.3;
+/// A masonry face's tone far off at cube `y` up and `along` its course (`COURSE_CUBES`):
+/// its course's step and its stone's.
+fn stone_tone(salt: u32, y: i32, along: i32) -> i32 {
+    let roll = |k: i32, what: u32| terra_gen::hash::mix3(salt, k as u32, what, 0x636f_7572);
+    let within = |h: u32, (low, high): (u32, u32)| (low + h % (high - low + 1)) as i32;
+    // Its course: counted up from the ground, each as high as its own roll; below it, a
+    // cube each.
+    let mut course = y.min(0);
+    let mut bottom = 0;
+    if y >= 0 {
+        loop {
+            let high = within(roll(course, 1), COURSE_CUBES);
+            if y < bottom + high {
+                break;
+            }
+            bottom += high;
+            course += 1;
+        }
+    }
+    let long = within(roll(course, 2), STONE_CUBES);
+    let stone = (along + (roll(course, 3) % long as u32) as i32).div_euclid(long);
+    let course_step = (terra_gen::hash::unit(roll(course, 4)) * 3.0) as i32 - 1;
+    let lot = terra_gen::hash::unit(terra_gen::hash::mix3(salt, course as u32, stone as u32, 5));
+    let stone_step = if lot < STONE_TONED {
+        -1
+    } else if lot > 1.0 - STONE_TONED {
+        1
+    } else {
+        0
+    };
+    course_step + stone_step
+}
+
 /// A side within its kit's dirt's rise of the base's floor is that much of the way to its
 /// dirt's colour, as the near detail's masks darken a wall's foot (`dress::masks`): the
 /// dark band along a wall's foot that sets it on the ground far off.
@@ -431,11 +470,10 @@ impl<'a> Colours<'a> {
         let mean = luma(swatch.mean()).max(1e-3);
         let here = luma(crate::sections::far::patch(swatch, uv));
         let tone = libm::roundf((here / mean - 1.0) * TONE_GAIN / TONE_STEP) as i32;
-        let course = libm::floorf(middle.y / COURSE_M) as i32;
         let band = match kit.pattern {
             Pattern::Masonry => {
-                let h = terra_gen::hash::mix3(u32::from(kind.0), course as u32, 0x636f_7572, 0);
-                (terra_gen::hash::unit(h) * 3.0) as i32 - 1
+                let along = if normal.x != 0 { at.z } else { at.x };
+                stone_tone(u32::from(kind.0), at.y, along)
             }
             _ => 0,
         };
@@ -749,10 +787,11 @@ mod tests {
         );
     }
 
-    /// A masonry wall far off is laid in courses: on a plain texture each metre-high course
-    /// is one tone all along it, and the courses are not all alike, so the wall shows bands.
+    /// A masonry wall far off is laid in courses of stones: on a plain texture each row of
+    /// cubes is of stones two cubes long at least, toned apart, and its joints are not those
+    /// of every other row, so the wall reads as coursed stone, not siding.
     #[test]
-    fn far_stone_is_laid_in_courses() {
+    fn far_stone_is_laid_in_courses_of_stones() {
         let texture: terra_build::kit::Texture =
             ron::from_str(r#"(path: "stone", metres: (2.0, 2.0))"#).expect("a texture");
         let kit = terra_build::kit::Kit {
@@ -775,17 +814,26 @@ mod tests {
                     .collect()
             })
             .collect();
+        let mut alike = 0;
         for (y, row) in rows.iter().enumerate() {
-            assert!(
-                row.iter().all(|&c| c == row[0]),
-                "row {y} is one tone along"
-            );
+            let tones: std::collections::BTreeSet<usize> = row.iter().copied().collect();
+            assert!(tones.len() >= 2, "row {y} is one tone along, as siding");
+            // Runs of a tone within the row, its ends left out: a stone at least two long.
+            let mut runs = vec![1];
+            for pair in row.windows(2) {
+                if pair[0] == pair[1] {
+                    *runs.last_mut().expect("a run") += 1;
+                } else {
+                    runs.push(1);
+                }
+            }
+            let inner = &runs[1..runs.len() - 1];
+            assert!(inner.iter().all(|&r| r >= 2), "row {y}: stones {runs:?}");
+            if y > 0 && rows[y - 1] == *row {
+                alike += 1;
+            }
         }
-        let courses: std::collections::BTreeSet<usize> = rows.iter().map(|row| row[0]).collect();
-        assert!(
-            courses.len() >= 2,
-            "the courses differ: {} tones",
-            courses.len()
-        );
+        // A course over a cube high has rows alike; not every row is.
+        assert!(alike < 16, "{alike} of 23 rows as the one below");
     }
 }

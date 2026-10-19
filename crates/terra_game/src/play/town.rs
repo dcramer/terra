@@ -465,6 +465,8 @@ struct TownCover {
     square: Vec<Vec2>,
     streets: Vec<(Vec<Vec2>, f32)>,
     yards: Vec<[Vec2; 4]>,
+    /// Its gardens within its wall, those laid out so far.
+    gardens: super::town_gardens::GardenGround,
     /// The ground of each building going up in a settlement rising (D381).
     plots: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
@@ -667,6 +669,7 @@ impl terra_world::cover::CoverSource for TownCover {
             growing.grass *= grass;
             growing.trodden = growing.trodden.max(trodden);
         }
+        self.gardens.grow(p, &mut growing);
         // A plot laid for a building going up, trodden to earth round its footings as
         // builders work about it (D381): not the blades cut away from a lawn.
         let plot_worn = self
@@ -749,6 +752,8 @@ pub struct Wear {
     whole: TownCover,
     doors: Vec<Option<usize>>,
     yards: Vec<usize>,
+    /// Its gardens, each laid out as its home is up.
+    gardens: terra_town::town::Gardens,
     /// Each building's ground, by the building.
     plots: Vec<(usize, [Vec2; 4])>,
 }
@@ -797,6 +802,7 @@ impl Wear {
                 .filter(|(_, b)| up(**b))
                 .map(|(yard, _)| *yard)
                 .collect(),
+            gardens: super::town_gardens::GardenGround::new(&self.gardens, &up),
             plots: self
                 .plots
                 .iter()
@@ -1409,6 +1415,7 @@ fn lay(
                 .map(|s| (s.points.clone(), s.wide))
                 .collect(),
             yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
+            gardens: super::town_gardens::GardenGround::new(&town.gardens, |_| true),
             plots: Vec::new(),
             doors: town
                 .things
@@ -1438,6 +1445,7 @@ fn lay(
                     .map(|t| t.building)
                     .collect(),
                 yards: town.yards.iter().map(|(b, _)| *b).collect(),
+                gardens: town.gardens.clone(),
                 plots: town
                     .footprints
                     .iter()

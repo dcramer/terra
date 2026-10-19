@@ -197,6 +197,7 @@ mod tests {
             paths: Paths::default(),
             works: 0,
             wall: Vec::new(),
+            gardens: crate::town::Gardens::default(),
         }
     }
 

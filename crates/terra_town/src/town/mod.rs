@@ -38,6 +38,7 @@ use terra_gen::hash;
 
 mod enclosure;
 mod furnish;
+mod gardens;
 mod geometry;
 mod market;
 mod paths;
@@ -47,6 +48,7 @@ mod svg;
 mod walls;
 pub use enclosure::{Enclosure, enclosure};
 pub use furnish::{FURNISHING, Fence, FenceKind, Furnishing};
+pub use gardens::{BALK_M, Garden, GardenKind, Gardens};
 use geometry::{along_line, from_street, line_length, turned_box};
 pub use geometry::{
     contour, facing_of, inside, looking, place, point_segment, polygons, segment_polygon, segments,
@@ -282,6 +284,8 @@ pub struct Town {
     /// The line of its wall's outer face, in order round it: round every house, yard and the
     /// square and round the castle. Empty if it is open.
     pub wall: Vec<Vec2>,
+    /// The gardens laid out within its wall, where nothing else stands; none if it is open.
+    pub gardens: Gardens,
 }
 
 /// How big a town is laid (D381): how many buildings, at least and at most, sheds and walls
@@ -381,6 +385,7 @@ pub fn town_sized(seed: u32, picks: impl Picks + Copy, heights: Heights, size: &
         paths: Paths::default(),
         works: 0,
         wall: Vec::new(),
+        gardens: Gardens::default(),
     };
     town.on_the_square(seed);
     town.plots(seed, picks, size.buildings);
@@ -390,6 +395,7 @@ pub fn town_sized(seed: u32, picks: impl Picks + Copy, heights: Heights, size: &
     town.works = town.buildings.len();
     if size.walled {
         town.walls(seed, picks, heights);
+        town.gardens(seed);
     }
     town.paths();
     town.unfurnish_cut_off();

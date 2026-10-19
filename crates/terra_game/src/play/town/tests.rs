@@ -72,6 +72,7 @@ fn a_plot_and_the_square_are_trodden_by_how_far_they_are_worn() {
         meadow_m: 0.0,
         reach_m: COVER_REACH_M,
         paved: false,
+        gardens: Default::default(),
     };
     let at = |cover: &TownCover, p: Vec2| {
         let ground = planet.ground_at(middle + east * p.x + south * p.y);

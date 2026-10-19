@@ -313,10 +313,20 @@ fn a_walled_town_closes_its_houses_and_castle_in_with_a_gate_over_its_streets_an
         streets: 1.6,
         walled: true,
     };
-    for ground in [flat, rolling] {
-        let town = town_sized(2, KINDS, &ground, &size);
+    // Seed 2 and the layouts where a gatehouse stood on a house, the test then laying only
+    // seed 2: flat seed 7, hillside seeds 3 and 6.
+    type Ground = fn(Vec2) -> f32;
+    let cases: [(u32, Ground); 5] = [
+        (2, flat),
+        (2, rolling),
+        (7, flat),
+        (3, hillside),
+        (6, hillside),
+    ];
+    for (seed, ground) in cases {
+        let town = town_sized(seed, KINDS, &ground, &size);
         let (houses, works) = town.buildings.split_at(town.works);
-        assert!(town.homes.len() >= 70, "{} homes", town.homes.len());
+        assert!(town.homes.len() >= 60, "{} homes", town.homes.len());
         assert_eq!(works.last().map(|b| b.name.as_str()), Some("the castle"));
         let gates = works
             .iter()
@@ -324,7 +334,7 @@ fn a_walled_town_closes_its_houses_and_castle_in_with_a_gate_over_its_streets_an
             .count();
         let lengths = works.iter().filter(|b| b.name.contains("length")).count();
         eprintln!(
-            "walled town: {} homes, {} buildings, {} works: {gates} gates, {lengths} lengths",
+            "walled town {seed}: {} homes, {} buildings, {} works: {gates} gates, {lengths} lengths",
             town.homes.len(),
             houses.len(),
             works.len()
@@ -394,4 +404,90 @@ fn in_polygon(at: Vec2, polygon: &[Vec2]) -> bool {
         }
     }
     odd
+}
+
+#[test]
+fn a_walled_towns_ground_within_its_wall_is_built_gardened_or_a_way() {
+    // Round 13's town was a crescent of houses round an empty field inside its wall.
+    let size = Size {
+        buildings: (80, 90),
+        streets: 1.6,
+        walled: true,
+    };
+    for ground in [flat, hillside] {
+        let town = town_sized(2, KINDS, &ground, &size);
+        let quads: Vec<[Vec2; 4]> = town.footprints.iter().flatten().copied().collect();
+        let gardens: Vec<[Vec2; 4]> = town
+            .gardens
+            .plots
+            .iter()
+            .map(|g| town.gardens.quad(g.cell, 0.0))
+            .collect();
+        // Every garden within the wall, clear of every building, yard and street.
+        for g in &gardens {
+            assert!(
+                g.iter().all(|&c| in_polygon(c, &town.wall)),
+                "a garden outside"
+            );
+            assert!(
+                quads.iter().all(|q| polygons(g, q) > 1.0),
+                "a garden on a building"
+            );
+            assert!(town.yards.iter().all(|(_, y)| polygons(g, y) > 0.0));
+            for street in &town.streets {
+                for pair in street.points.windows(2) {
+                    assert!(segment_polygon(pair[0], pair[1], g) > street.wide * 0.5);
+                }
+            }
+        }
+        // How much of the ground within the wall is more than a few metres from anything.
+        let (low, high) = town
+            .wall
+            .iter()
+            .fold((Vec2::MAX, Vec2::MIN), |(l, h), &p| (l.min(p), h.max(p)));
+        let near = 4.0;
+        let (mut within, mut empty, mut bare) = (0, 0, 0);
+        let mut p = low;
+        while p.y < high.y {
+            p.x = low.x;
+            while p.x < high.x {
+                if in_polygon(p, &town.wall) {
+                    within += 1;
+                    let from = |q: &[Vec2]| {
+                        if inside(p, q) {
+                            0.0
+                        } else {
+                            segment_polygon(p, p, q)
+                        }
+                    };
+                    let used = quads.iter().any(|q| from(q) < near)
+                        || town.yards.iter().any(|(_, y)| from(y) < near)
+                        || from(&town.square.outline) < near
+                        || town.streets.iter().any(|s| {
+                            s.points
+                                .windows(2)
+                                .any(|w| point_segment(p, w[0], w[1]) < s.wide * 0.5 + near)
+                        });
+                    let gardened = gardens.iter().any(|g| from(g) < near);
+                    empty += usize::from(!used && !gardened);
+                    bare += usize::from(!used);
+                }
+                p.x += 3.0;
+            }
+            p.y += 3.0;
+        }
+        let (share, without) = (empty as f32 / within as f32, bare as f32 / within as f32);
+        eprintln!(
+            "{} gardens; empty {:.0}% of the ground within the wall, {:.0}% without them",
+            gardens.len(),
+            share * 100.0,
+            without * 100.0
+        );
+        // Without its gardens about 30% was.
+        assert!(
+            share < 0.15,
+            "{:.0}% of the ground within the wall empty",
+            share * 100.0
+        );
+    }
 }

@@ -4,15 +4,18 @@
 // multiplied toward grey-brown (the fieldstone's mean, sRGB 0.64, 0.57, 0.48, read cream at
 // 500 m under a low sun, settlement film r10), its dressed stone with it, and the dirt and
 // damp risen higher up its foot and darker. Its tint is a warm grey: bluer (0.55, 0.58, 0.66),
-// the castle read lilac at 300 m under a low sun and blue-grey in shade (settlement film r12).
+// the castle read lilac at 300 m under a low sun and blue-grey in shade (settlement film r12);
+// at (0.60, 0.59, 0.60), its face the fieldstone's warm brown (red over blue by a third),
+// flat salmon at 150 m in the late sun (r13). Now a neutral grey-brown, red over blue by a
+// fifth and green above their middle, so it reads neither pink nor lilac.
 (
-    tint: (0.60, 0.59, 0.60),
+    tint: (0.60, 0.63, 0.66),
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0), depth: 0.025),
         Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8), depth: 0.008),
     },
     dress: (
-        tint: (0.60, 0.58, 0.58),
+        tint: (0.60, 0.62, 0.64),
         masks: (dirt: 1.4, dirt_tint: (0.4, 0.37, 0.32), wear: 0.1),
     ),
     reference: Some((

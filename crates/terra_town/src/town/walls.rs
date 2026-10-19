@@ -22,6 +22,12 @@ const TOWER_EVERY_M: f32 = 48.0;
 const TOWER_HALF_M: f32 = 2.5;
 const GATE_HALF_M: f32 = 4.0;
 const GAP_M: f32 = 0.1;
+/// How far a gatehouse may stand proud of the curtain, out toward the fields, to keep clear
+/// of the street's last house by `GATE_CLEAR_M`, in steps: at most four of its six metres'
+/// depth (`burg::town_gate`), so the curtain still meets its sides.
+const GATE_PROUD_STEP_M: f32 = 0.5;
+const GATE_PROUD_STEPS: usize = 9;
+const GATE_CLEAR_M: f32 = 0.3;
 /// How far out from the tower's foot the curtain's outer face runs (`burg::wall_tower`).
 const TOWER_OUT_M: f32 = 1.5;
 /// How far the castle's curtain keeps from the houses' line of wall, the least and the most;
@@ -118,11 +124,25 @@ impl Town {
                 .collect();
             let mut stops: Vec<(f32, f32)> = vec![(0.0, TOWER_HALF_M), (long, TOWER_HALF_M)];
             for &t in &gates {
+                // Its passage reaches `GATE_IN_M` in from the wall's line, and where a corner
+                // of the line is cut it can come down on the street's last house (flat seed 7,
+                // hillside 3 and 6): there it stands proud of the curtain, out toward the
+                // fields, as gatehouses are built out over the ditch, until it is clear.
+                let ops = burg::town_gate(m);
+                let mut at = a + along * t;
+                for _ in 0..GATE_PROUD_STEPS {
+                    let gate = work("a gatehouse of the town wall", at, facing_of(out), &ops);
+                    let quads = footprint(&gate, &ground_rects(&gate));
+                    if self.clear_of_houses(&quads) {
+                        break;
+                    }
+                    at += out * GATE_PROUD_STEP_M;
+                }
                 works.push((
                     "a gatehouse of the town wall".into(),
-                    a + along * t,
+                    at,
                     facing_of(out),
-                    burg::town_gate(m),
+                    ops,
                 ));
                 stops.push((t, GATE_HALF_M));
             }
@@ -166,14 +186,7 @@ impl Town {
             }
         }
         for (name, at, facing, ops) in works {
-            let building = village::Building {
-                name,
-                plan: Plan::Wall,
-                scheme: Scheme::Masonry,
-                at: at.to_array(),
-                facing,
-                ops,
-            };
+            let building = work(&name, at, facing, &ops);
             let rects = ground_rects(&building);
             self.footprints.push(footprint(&building, &rects));
             self.buildings.push(building);
@@ -183,6 +196,34 @@ impl Town {
             self.footprints.push(quads);
             self.buildings.push(building);
         }
+    }
+}
+
+impl Town {
+    /// Whether ground `quads` keep clear of every house and yard laid before the works.
+    fn clear_of_houses(&self, quads: &[[Vec2; 4]]) -> bool {
+        quads.iter().all(|q| {
+            self.footprints[..self.works]
+                .iter()
+                .flatten()
+                .all(|house| polygons(q, house) > GATE_CLEAR_M)
+                && self
+                    .yards
+                    .iter()
+                    .all(|(_, yard)| polygons(q, yard) > GATE_CLEAR_M)
+        })
+    }
+}
+
+/// One of the town's works, a building of stone.
+fn work(name: &str, at: Vec2, facing: f32, ops: &[BuildOp]) -> village::Building {
+    village::Building {
+        name: name.into(),
+        plan: Plan::Wall,
+        scheme: Scheme::Masonry,
+        at: at.to_array(),
+        facing,
+        ops: ops.to_vec(),
     }
 }
 

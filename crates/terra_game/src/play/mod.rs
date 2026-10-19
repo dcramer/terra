@@ -80,6 +80,7 @@ mod torchlight;
 pub mod town;
 mod town_animals;
 mod town_fences;
+mod town_gardens;
 mod town_sound;
 mod townsfolk;
 mod vitals;
