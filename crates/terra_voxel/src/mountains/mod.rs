@@ -96,6 +96,63 @@ pub struct Mountains {
     /// How high a talus apron piles against a wall's foot, in metres, its gullies running out
     /// into cones down it: 0 a wall dropping bare to its valley's floor.
     pub aprons_m: f32,
+    /// The kinds of rock face its walls stand in (D182, [`Faces`]), with how often each is
+    /// taken: each range takes one, its neighbours often another, blended over a range's
+    /// edge, never in its middle. Empty, a wall is as the slope leaves it.
+    pub faces: &'static [Faces],
+}
+
+/// A kind of rock face (research/2026-10-19-mountain-look.md, plan step 2): where a wall's
+/// slope passes its cliff angle, the ground stands up in risers over ledges, bed by bed of its
+/// rock, as Gaea's Stratify and World Machine's Terrace nodes step a heightfield, applied on the
+/// faces alone. The beds are warped and dip, so a ledge climbs and falls along a wall. Every
+/// ledge still falls outward a share of the wall's own fall, so it drains over its edge and
+/// holds no pond (the terraces of round one did).
+///
+/// What tells kinds apart, seen across a valley: how thick the beds are (a few great slabs or
+/// many thin bands), how much of each is a sheer riser, how hard the wall is stepped, and how
+/// steeply the beds dip.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Faces {
+    pub name: &'static str,
+    /// How often a range takes it, against the theme's other kinds.
+    pub weight: f32,
+    /// The slope, in degrees, from which a wall stands up in faces whole (`FACE_FROM_DEG`).
+    pub cliff_deg: f32,
+    /// How thick its rock's beds are, in metres: a riser and the ledge under it.
+    pub beds_m: f32,
+    /// The share of a bed its riser takes, the rest its ledge.
+    pub riser: f32,
+    /// How far a wall is stepped, 0 to 1: below 1 each ledge keeps that share less of the
+    /// wall's fall, so it still drains outward.
+    pub stepped: f32,
+    /// How steeply its beds dip, a metre in a metre, their way turning over kilometres.
+    pub dip: f32,
+}
+
+impl Faces {
+    /// Granite horns and arêtes, as the High Tatras' (D425): a few great slabby beds, their
+    /// risers sheer and broad, nearly level.
+    pub const HORNS: Faces = Faces {
+        name: "horns",
+        weight: 1.0,
+        cliff_deg: 40.0,
+        beds_m: 55.0,
+        riser: 0.5,
+        stepped: 0.65,
+        dip: 0.05,
+    };
+    /// Saw ridges of thin tilted beds, as the Witcher 3's Skellige and the Valais' schist (D425):
+    /// many bands, each a short riser over a ledge, steeply dipping, crumbling.
+    pub const SAW: Faces = Faces {
+        name: "saw",
+        weight: 1.0,
+        cliff_deg: 36.0,
+        beds_m: 22.0,
+        riser: 0.4,
+        stepped: 0.7,
+        dip: 0.09,
+    };
 }
 
 impl Mountains {
@@ -126,6 +183,7 @@ impl Mountains {
         slabs: 1.0,
         gully_depths: 1.0,
         aprons_m: 80.0,
+        faces: &[Faces::HORNS, Faces::SAW],
     };
 
     /// The most the mountains raise the land, in metres.
@@ -158,6 +216,8 @@ pub struct Range {
     faces: Noise,
     /// Where a range's separate tops stand (`Mountains::tops`).
     tops: Noise,
+    /// Which kind of face a range takes, and its beds' warp and dip (`Mountains::faces`).
+    strata: Noise,
     /// Spots the front's rules leave as they were (`Range::with_kept`): directions from the
     /// centre.
     kept: Vec<Vec3>,
@@ -280,6 +340,26 @@ const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
 /// fall over tens of metres, not the crease at a crest, so the gullies turn smoothly over one.
 const SLOPE_STEP_M: f32 = 20.0;
+/// How far across the patches are that take one kind of face (`Mountains::faces`), as a share
+/// of `range_m`, and how far either side of a kind's edge, on the noise, two are blended.
+const KINDS_ACROSS: f32 = 0.6;
+const KINDS_BLEND: f32 = 0.06;
+/// The beds' warp, in metres of height, over the first distance and the second, and how far
+/// across their dip turns, all in metres (`Faces`). Gentle, its fall at most a few hundredths
+/// of a metre a metre, so no ledge's outward fall is undone by it.
+/// How a riser climbs its bed: steepening to its lip, so it never stands above the ground's
+/// own climb and the faces only cut down.
+const RISER_POWER: f32 = 1.6;
+/// A face fades in from a slope of so many degrees, whole at its kind's cliff angle, and up a
+/// wall's height (`upper`), never across it: fading across a ledge lifts its outer part by the
+/// depth the face cut, and a face fading fast with the slope lifted ledges into lips that held
+/// ponds.
+const FACE_FROM_DEG: f32 = 12.0;
+const BEDS_WARP_M: (f32, f32) = (60.0, 6.0);
+const BEDS_WARP_ACROSS_M: (f32, f32) = (1900.0, 330.0);
+const DIP_TURNS_M: f32 = 4500.0;
+/// Within so many metres of a kept spot no face is stepped, whole past the second.
+const FACES_KEPT_M: (f32, f32) = (700.0, 1500.0);
 
 impl Range {
     pub fn new(mountains: Mountains, seed: Seed) -> Self {
@@ -291,6 +371,7 @@ impl Range {
             gullies: Noise::new(seed.derive("gullies")),
             faces: Noise::new(seed.derive("faces")),
             tops: Noise::new(seed.derive("tops")),
+            strata: Noise::new(seed.derive("strata")),
             kept: Vec::new(),
             kept_in_ranges: Vec::new(),
         }
@@ -675,14 +756,85 @@ impl Range {
                 slope += across * turn;
             }
         }
+        let height_m = ridged + carved + piled;
+        let height_m = height_m + self.stepped(point, height_m, slope, upper);
         Rise {
-            height_m: ridged + carved + piled,
+            height_m,
             bed: if deepest > 0.0 {
                 -carved / deepest
             } else {
                 0.0
             },
         }
+    }
+
+    /// How much a wall's faces (`Mountains::faces`) raise or lower ground of this height and
+    /// fall, in metres: 0 under the kinds' cliff angles and round the kept spots.
+    fn stepped(&self, point: Vec3, height_m: f32, slope: Vec3, upper: f32) -> f32 {
+        let steepness = slope.length();
+        let kinds = self.mountains.faces;
+        if kinds.is_empty() || upper <= 0.0 || steepness < 0.2 {
+            return 0.0;
+        }
+        let away = self.away_from_kept(point, FACES_KEPT_M);
+        if away <= 0.0 {
+            return 0.0;
+        }
+        // Which kind: the kinds' weights laid end to end over a noise patches some kilometres
+        // across, each its share of it, blended only near the edges between.
+        let pick = self
+            .strata
+            .fbm(point / (self.mountains.range_m * KINDS_ACROSS), 2, 2.0, 0.5);
+        let pick = smoothstep(-0.35, 0.35, pick);
+        let total: f32 = kinds.iter().map(|k| k.weight).sum();
+        let mut from = 0.0;
+        let mut below = 1.0;
+        let mut sum = 0.0;
+        for (i, kind) in kinds.iter().enumerate() {
+            from += kind.weight / total;
+            let above = if i + 1 == kinds.len() {
+                0.0
+            } else {
+                smoothstep(from - KINDS_BLEND, from + KINDS_BLEND, pick)
+            };
+            let share = below - above;
+            below = above;
+            if share > 1e-4 {
+                sum += share * self.stepped_by(kind, point, height_m, slope);
+            }
+        }
+        sum * away * upper
+    }
+
+    /// [`Range::stepped`] for one kind of face.
+    fn stepped_by(&self, kind: &Faces, point: Vec3, height_m: f32, slope: Vec3) -> f32 {
+        let steepness = slope.length();
+        let face = smoothstep(
+            libm::tanf(FACE_FROM_DEG.to_radians()),
+            libm::tanf(kind.cliff_deg.to_radians()),
+            steepness,
+        );
+        if face <= 0.0 || kind.stepped <= 0.0 || kind.beds_m <= 0.0 {
+            return 0.0;
+        }
+        let s = &self.strata;
+        let warp = BEDS_WARP_M.0 * s.sample(point / BEDS_WARP_ACROSS_M.0 + Vec3::splat(3.1))
+            + BEDS_WARP_M.1 * s.sample(point / BEDS_WARP_ACROSS_M.1 + Vec3::splat(7.7));
+        let turn = s.sample(point / DIP_TURNS_M + Vec3::splat(11.3)) * std::f32::consts::TAU;
+        // The beds dip along the wall only, across its fall: dipping down it, a ledge's dip
+        // could undo its outward fall and hold a pond.
+        let dip = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn));
+        let fall = slope / steepness;
+        let dip = (dip - fall * dip.dot(fall)) * kind.dip;
+        let bed = (height_m + warp + point.dot(dip)) / kind.beds_m;
+        let within = bed - libm::floorf(bed);
+        // A ledge, then its riser climbing the whole bed: the ground's own climb kept by the
+        // share left, so the ledge still falls outward.
+        let riser = libm::powf(
+            ((within - (1.0 - kind.riser)) / kind.riser).max(0.0),
+            RISER_POWER,
+        );
+        face * kind.stepped * kind.beds_m * (riser - within)
     }
 
     /// How a face shapes its gullies, each 0 round the kept spots and their ranges, whose

@@ -217,3 +217,72 @@ fn the_ground_is_smooth_within_a_voxel() {
     assert!(share(0.99) < 0.05, "1% rough by {} m", share(0.99));
     assert!(share(0.999) < 0.1, "0.1% rough by {} m", share(0.999));
 }
+
+#[test]
+fn faces_stand_sheer_over_ledges_that_still_drain() {
+    // Gullies all but off, so a walk down the ridges' fall line crosses none.
+    let m = Mountains {
+        gullies_m: 1e-3,
+        couloirs_m: 0.0,
+        aprons_m: 0.0,
+        ..Mountains::START
+    };
+    let range = Range::new(m, Seed(1));
+    let plain = Range::new(Mountains { faces: &[], ..m }, Seed(1));
+    let whole = libm::tanf(46.0_f32.to_radians());
+    let (mut walks, mut sheer, mut ledges, mut steps) = (0, 0, 0, 0);
+    for d in directions(40_000) {
+        let mut point = d * RADIUS;
+        let fall = |p: Vec3| {
+            let up = p.normalize();
+            let g = Vec3::new(
+                range.ridged(p + Vec3::X) - range.ridged(p - Vec3::X),
+                range.ridged(p + Vec3::Y) - range.ridged(p - Vec3::Y),
+                range.ridged(p + Vec3::Z) - range.ridged(p - Vec3::Z),
+            ) * 0.5;
+            g - up * g.dot(up)
+        };
+        if fall(point).length() < whole || range.inside(point) < 0.5 {
+            continue;
+        }
+        walks += 1;
+        let mut height = range.rise(point.normalize(), RADIUS).height_m;
+        let mut plain_height = plain.rise(point.normalize(), RADIUS).height_m;
+        for _ in 0..80 {
+            let g = fall(point);
+            if g.length() < 0.2 {
+                break;
+            }
+            point -= g.normalize();
+            point = point.normalize() * RADIUS;
+            let next = range.rise(point.normalize(), RADIUS).height_m;
+            let drop = height - next;
+            let plain_next = plain.rise(point.normalize(), RADIUS).height_m;
+            let plain_drop = plain_height - plain_next;
+            plain_height = plain_next;
+            // Down the fall line the faces never make the ground climb: every ledge drains
+            // over its edge.
+            assert!(
+                drop > plain_drop.min(0.0) - 0.05,
+                "climbs {} m at {point}, {} without faces",
+                -drop,
+                -plain_drop
+            );
+            steps += 1;
+            if drop > libm::tanf(62.0_f32.to_radians()) {
+                sheer += 1;
+            }
+            if drop < libm::tanf(30.0_f32.to_radians()) {
+                ledges += 1;
+            }
+            height = next;
+        }
+        if walks >= 60 {
+            break;
+        }
+    }
+    assert!(walks >= 30, "{walks} walls found");
+    // Both risers past 62 degrees and ledges under 30 down the same walls.
+    assert!(sheer * 10 > steps, "{sheer} of {steps} steps sheer");
+    assert!(ledges * 10 > steps, "{ledges} of {steps} steps ledges");
+}

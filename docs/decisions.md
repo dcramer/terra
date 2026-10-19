@@ -432,6 +432,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D418](decisions/D418.md) | The weather at the eye drives the sky, the light, the air and what falls | Tech | Agent | Decided | One `Weather` resource holds the climate's cloud… |
 | [D420](decisions/D420.md) | GPU memory in pages, made once, uploaded over frames | Tech | Agent | Decided | What the GPU holds is made at its size once and in… |
 | [D424](decisions/D424.md) | A creature's clip plays within 0.8-1.2 of its own rate | Tech | Agent | Decided | Every creature on foot plays its gait's clip at its… |
+| [D426](decisions/D426.md) | A mountain's walls stand in stepped faces by range kind, in the height | Tech | Agent | Decided | Plan step 2 of the mountain look note, amends D403… |
 
 ## Tools and workflow
 

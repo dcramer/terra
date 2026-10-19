@@ -539,9 +539,14 @@ impl Field for GeneratedPlanet {
         HeightMemo::coarse(spacing_m)
     }
 
-    /// Mountains' walls stand to about 72 degrees (D322).
+    /// Mountains' walls stand to about 72 degrees (D322), and their faces' risers to about 80
+    /// (`terra_voxel::Faces`).
     fn steepest(&self) -> f32 {
-        if self.range.is_some() { 3.0 } else { 1.5 }
+        match &self.range {
+            Some(range) if !range.mountains.faces.is_empty() => 5.5,
+            Some(_) => 3.0,
+            None => 1.5,
+        }
     }
 
     fn distance_in(&self, point: Vec3, memo: &mut HeightMemo) -> f32 {

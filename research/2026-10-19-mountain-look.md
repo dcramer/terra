@@ -118,6 +118,7 @@ Our ground is a density field asked per point (D322), meshed in an octree of chu
    - On those faces only, the surface is pushed in and out by beds of the rock kind's thickness (warped, tilted), which makes overhangs and ledges.
    - Ledges on a face drain over their edge, so no ponds, unlike the terraces cut into the height everywhere in round one.
    - The near mesh holds them within about 1 km; past that, D403's tiers shade the same beds.
+   - Done (D426): `Faces::HORNS` and `Faces::SAW` step the walls in the height, only cutting down, every ledge draining (tested). The valley's far contrast rose from 0.041 to 0.077 (bar 0.12); far under sky stayed at 0.05, so the far band is still as bright as the sky: the air (step 6) and the rock's shade (step 4) are the next levers, not more relief.
 3. **Debris where it falls.** Thermal erosion on the same grid. Talus cones at 33 to 37° at the couloirs' mouths and along each face's foot, as a real raise of the ground, scree on top (D322's layer), and boulders placed on it by size down the cone.
 4. **Values by slope.**
    - Snow lies only under about 50°, deepest in concave ground, on ledges and lees, and thinnest on convex crests.

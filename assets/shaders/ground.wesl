@@ -986,7 +986,7 @@ fn fragment(
             var weathered = mix(vec3<f32>(1.0), vec3<f32>(1.22, 0.98, 0.72), rust);
             weathered *= mix(vec3<f32>(1.0), vec3<f32>(0.4, 0.45, 0.4), lichen);
             weathered = mix(weathered, vec3<f32>(1.65, 1.62, 1.55), scar);
-            let far_wall = mix(1.0, 0.78, smoothstep(300.0, 900.0, far_off));
+            let far_wall = mix(1.0, 0.64, smoothstep(300.0, 900.0, far_off));
             face_tint = mix(vec3<f32>(1.0), weathered * band_tone * far_wall, rocky);
         }
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
