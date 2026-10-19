@@ -16,6 +16,12 @@ whose cracks glow (alligatoring). So, in the textured material's maps:
   colour map and an orange emissive map, a few percent of the wood, so the model never glows
   broadly beside the game's own fire.
 - Wood is matte: roughness high, metal none.
+- The logs are laid low and open: the generator stacks a tall closed teepee, which hid all but
+  the tips of the game's flames (fire sheet, 3/10 review). A campfire's flames stand 0.5 to
+  1 m over a stack half a metre high (refs/fire-real, the campfire class), so the wood and the
+  Fire part are pressed to LOG_HEIGHT of their height and their tops spread by LOG_SPREAD, the
+  stones left as they are: the model ends lower than its `dims`, which its catalogue entry
+  states (assets/data/builds.ron).
 
 Everything else of the file, its mesh, normals, normal map and the Fire material, is kept.
 """
@@ -43,6 +49,9 @@ CRACK_GLOW = np.array([1.0, 0.42, 0.10])
 CRACK_STRENGTH = 3.0
 CRACK_ALBEDO = np.array([0.55, 0.20, 0.06])
 WOOD_ROUGHNESS = 0.93
+# The logs pressed to this share of their height, and spread out by this share at their tops.
+LOG_HEIGHT = 0.6
+LOG_SPREAD = 0.18
 
 
 def srgb_pixels(image):
@@ -255,6 +264,7 @@ def char(ob):
         mr.pixels.foreach_set(mp.ravel())
         mr.update()
 
+    lay_low(me, kind)
     stone = owner == 1
     print(
         "CHAR",
@@ -264,6 +274,34 @@ def char(ob):
         f"stone {np.round(out[stone].mean(axis=0) * 255).astype(int).tolist()}",
     )
     return kind
+
+
+def lay_low(me, kind):
+    """The wood and the Fire part pressed down to LOG_HEIGHT and their tops spread outward, a
+    vertex moved if any face it bounds is not stone, its normals turned to match."""
+    moved = np.zeros(len(me.vertices), dtype=bool)
+    for poly in me.polygons:
+        if kind[poly.index] != 1:
+            moved[list(poly.vertices)] = True
+    top = max(v.co.z for i, v in enumerate(me.vertices) if moved[i])
+    normals = [tuple(n.vector) for n in me.corner_normals]
+    for i, v in enumerate(me.vertices):
+        if moved[i]:
+            up = v.co.z / top
+            spread = 1.0 + LOG_SPREAD * up
+            v.co.x *= spread
+            v.co.y *= spread
+            v.co.z *= LOG_HEIGHT
+    # A normal under a squash goes by the inverse transpose: up-facing more, by 1/LOG_HEIGHT.
+    turned = []
+    for loop, n in zip(me.loops, normals):
+        if moved[loop.vertex_index]:
+            n = np.array([n[0], n[1], n[2] / LOG_HEIGHT])
+            n = tuple(n / np.linalg.norm(n))
+        turned.append(n)
+    me.normals_split_custom_set(turned)
+    me.update()
+    print("LOW", f"wood top {top:.2f} m -> {top * LOG_HEIGHT:.2f} m, {int(moved.sum())} vertices")
 
 
 if __name__ == "__main__":

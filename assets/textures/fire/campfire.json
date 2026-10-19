@@ -1,6 +1,6 @@
 {
   "set": "campfire",
-  "about": "A campfire's flames, about 0.8 m over its logs: logs laid apart, each throwing its own tongues that lick up, split and alternate with dark over a thin bed of embers, turbulent and short-lived (fast reaction, strong vorticity) so they do not merge into one bushy body. The campfire class's loop.",
+  "about": "A campfire's flames, 0.5 to 1 m over a low stack of logs: five small burning places spread across the logs, thin front to back, each throwing its own tongue that licks up, splits and alternates with dark, the middle one tallest, with no broad bed of fuel under them, so the flames read as separate tongues and not one bushy body (fire sheet review, 3/10). The campfire class's loop.",
   "kind": "loop",
   "class": "campfire",
   "frames": 64,
@@ -9,18 +9,18 @@
   "frame": 256,
   "fps": 24,
   "metres": 1.4,
-  "reach": 0.672,
+  "reach": 0.773,
   "channels": "R heat, G cover, B soot, A distortion",
   "motion": {
     "file": "campfire.motion.png",
     "frame": 128,
-    "scale": 0.0609,
+    "scale": 0.05759,
     "channels": "RG flow to the next frame in frame widths: (v - 0.5) * 2 * scale, y down"
   },
   "baked": {
-    "heat_scale": 1.6026,
-    "flow_gain": 1.618,
-    "flow_fit": 0.21,
-    "seam": 0.91
+    "heat_scale": 1.5405,
+    "flow_gain": 1.344,
+    "flow_fit": 0.18,
+    "seam": 1
   }
 }

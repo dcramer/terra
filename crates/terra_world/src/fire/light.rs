@@ -270,15 +270,17 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
             })
         })
         .collect();
-    // A hearth's light hangs in its flames just clear of its logs' ends, so it lights the
-    // ground round it and the faces of those sat by it: level with the ends (0.6 of its
-    // height) they were the brightest thing by it (lake film r6).
+    // A hearth's light hangs in the body of its flames, clear of its logs' ends, so it lights
+    // the ground round it and the faces of those sat by it, and its glow in the air (`fog`) is
+    // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
+    // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
+    // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
     lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
         let flicker = Flicker::of(width(blaze));
         let glow = signal(blaze.seed, t, flicker);
         let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
         Lit {
-            at: blaze.at + up(blaze.at) * blaze.tall * 0.8 + sway(blaze.seed, t, flicker, reach),
+            at: blaze.at + up(blaze.at) * blaze.tall * 0.6 + sway(blaze.seed, t, flicker, reach),
             lumens: blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow,
             color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,

@@ -24,8 +24,9 @@ use bevy::{
 pub(super) const FOGS: usize = 4;
 /// How thick the air round a fire is at its flames, at full night: at 0.015 the glow was a
 /// salmon ball over the logs brighter than its flames, its air lit past where the tonemapper
-/// keeps orange (fire sheet, stage 4); a real fire's is a faint warm halo.
-const DENSITY: f32 = 0.004;
+/// keeps orange (fire sheet, stage 4), and at 0.004 still a ball over the campfire (review,
+/// 3/10); a real fire's is a faint warm halo.
+const DENSITY: f32 = 0.0012;
 /// How far round a fire's light its glow reaches, for each metre of its flames' half-width,
 /// and the least and most, metres.
 const REACH_A_METRE: f32 = 6.0;

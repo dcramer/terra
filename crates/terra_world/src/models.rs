@@ -38,6 +38,9 @@ pub struct Textures {
     /// Roughness in green and metalness in blue, as glTF packs them.
     pub metallic_roughness: Option<usize>,
     pub occlusion: Option<usize>,
+    /// What glows of it, as a burning log's cracks do: drawn only by what is told how bright
+    /// its fire burns now (the game's burning props), dark otherwise.
+    pub emissive: Option<usize>,
     pub metallic: f32,
     pub roughness: f32,
     /// Drawn from both sides, as a thin cloth or an open shell must be.
@@ -62,6 +65,9 @@ fn textures_of(material: &gltf::Material) -> Option<Textures> {
             .and_then(|info| first(info.texture().index(), info.tex_coord())),
         occlusion: material
             .occlusion_texture()
+            .and_then(|info| first(info.texture().index(), info.tex_coord())),
+        emissive: material
+            .emissive_texture()
             .and_then(|info| first(info.texture().index(), info.tex_coord())),
         metallic: pbr.metallic_factor(),
         roughness: pbr.roughness_factor(),

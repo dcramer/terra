@@ -27,9 +27,10 @@ use std::sync::Arc;
 use terra_build::{Base, CELL_M};
 
 /// A campfire's flames, as the fire drawing draws them with their embers, smoke and light
-/// (terra_world::fire): their tips licking 1.3 m over the stones, clearing its
-/// metre-tall teepee of logs as a teepee fire's do (at 0.8 and 1 the logs hid all but their tips);
-/// at 1.5 a 3.3 m card stood them over a seated troll (fire sheet, stage 3).
+/// (terra_world::fire): their tips licking 1.3 m over the stones, 0.75 m over its low
+/// teepee of logs (0.55 m, tools/props/char.py), as a campfire's do in photographs (at 0.9 m
+/// the logs hid all but their tips, fire sheet review 3/10); at 1.5 a 3.3 m card stood them
+/// over a seated troll (fire sheet, stage 3).
 const CAMPFIRE: terra_world::fire::Kindled = terra_world::fire::Kindled {
     tall: 1.3,
     wide: 0.7,
@@ -128,6 +129,9 @@ pub struct Piece {
     pub material: Handle<StandardMaterial>,
     /// It glows, as a forge's coals do, and so casts no shadow.
     pub glows: bool,
+    /// It has an emissive map, as a campfire's logs' glowing cracks: on a burning prop they
+    /// glow as its fire burns now (`Embers`), on any other they stay dark.
+    pub embers: bool,
 }
 
 impl Model {
@@ -169,7 +173,67 @@ struct CheckedFor(u64);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, (load, start_checking))
-        .add_systems(Update, (keep_clear, settle));
+        .add_systems(Update, (keep_clear, settle, (kindle, smoulder).chain()));
+}
+
+/// A burning prop's part whose emissive map glows as its fire burns now, as a campfire's
+/// logs' cracks do, on a material of its own (`kindle`): one flicker drives the fire's light,
+/// its flames and its embers, as Sons of the Forest links its fires' (D415).
+#[derive(Component)]
+struct Embers;
+
+/// How bright the embers glow at the fire's mean, on their map's colour: as a burning
+/// building's char's cracks (build.wesl, 14), so a campfire's logs glow as a house's beams.
+const EMBER_GLOW: f32 = 14.0;
+/// How far a fire lights the embers of what burns: a prop's own fire stands at its foot.
+const EMBER_REACH_M: f32 = 2.0;
+
+/// Each burning part given its own material, so its embers flicker with its own fire.
+fn kindle(
+    mut commands: Commands,
+    added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<Embers>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (entity, material) in &added {
+        let Some(own) = materials.get(&material.0).cloned() else {
+            continue;
+        };
+        commands
+            .entity(entity)
+            .insert(MeshMaterial3d(materials.add(own)));
+    }
+}
+
+/// The embers brighten and dim with the nearest fire's flicker, by three times as much as
+/// its light, as a burning building's char does (build.wesl `fire_glow`); dark with no fire
+/// near.
+fn smoulder(
+    embers: Query<(&MeshMaterial3d<StandardMaterial>, &GlobalTransform), With<Embers>>,
+    glows: Option<Res<terra_world::fire::FireGlows>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(glows) = glows else {
+        return;
+    };
+    for (material, at) in &embers {
+        let here = at.translation();
+        let glow = glows
+            .glows
+            .iter()
+            .filter(|fire| fire[3] > 0.0)
+            .map(|fire| (Vec3::new(fire[0], fire[1], fire[2]).distance(here), fire[3]))
+            .filter(|(d, _)| *d < EMBER_REACH_M)
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map_or(0.0, |(_, glow)| (1.0 + 3.0 * (glow - 1.0)).max(0.15));
+        let emissive = LinearRgba::rgb(EMBER_GLOW, EMBER_GLOW, EMBER_GLOW) * glow;
+        // Only when it changed, so a material is not written again for nothing.
+        let changed = materials
+            .get(&material.0)
+            .is_some_and(|m| m.emissive != emissive);
+        if changed && let Some(mut m) = materials.get_mut(&material.0) {
+            m.emissive = emissive;
+        }
+    }
 }
 
 /// Our colour for a flat-coloured part of a prop, as it should look on screen, and whether
@@ -351,7 +415,12 @@ fn textured_material(
         } else {
             LinearRgba::BLACK
         },
-        emissive_texture: glows.then_some(colour),
+        // A part's own emissive map, dark until a fire tells it how bright (`smoulder`).
+        emissive_texture: if glows {
+            Some(colour)
+        } else {
+            textures.emissive.map(load)
+        },
         ..lit()
     }
 }
@@ -373,6 +442,7 @@ fn make(file: &str, shape: Shape, making: &mut Making) -> Model {
             mesh: making.meshes.add(textured_mesh(part, textures)),
             material: making.materials.add(material),
             glows: glowing,
+            embers: !glowing && textures.emissive.is_some(),
         });
     }
     for glowing in [false, true] {
@@ -390,6 +460,7 @@ fn make(file: &str, shape: Shape, making: &mut Making) -> Model {
                     making.lit.clone()
                 },
                 glows: glowing,
+                embers: false,
             });
         }
     }
@@ -556,6 +627,8 @@ pub fn place(
         );
         if piece.glows {
             prop.with_child((drawn, NotShadowCaster));
+        } else if piece.embers && matches!(item.light, Light::Fire) {
+            prop.with_child((drawn, Embers));
         } else {
             prop.with_child(drawn);
         }

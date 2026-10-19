@@ -16,7 +16,10 @@
 //! white dot in the glow round every campfire (fire sheet, stage 4). A fire's light is not a
 //! point but its flames, as wide as its `radius`; inside a sphere light the illuminance stops
 //! rising (Lagarde and de Rousiers, "Moving Frostbite to PBR", SIGGRAPH 2014, the sphere
-//! light's illuminance), so the distance is held at least the light's radius.
+//! light's illuminance), so the light's radius is added to the distance, squared, as Unreal's
+//! source radius softens its falloff: held at the radius (`max`), the air inside it was lit
+//! evenly and showed as a ball with an edge over every campfire (fire sheet review, 3/10);
+//! added, the glow is as bright at the light and fades with no edge.
 
 use bevy::prelude::*;
 
@@ -34,8 +37,8 @@ const RIGHT: &str = "let light_color_per_step = (*light).color_inverse_square_ra
 /// Bevy's fall-off of a point light's in-scatter, held to a centimetre.
 const POINT: &str = "let distance_atten = getDistanceAttenuation(distance_square, (*light).color_inverse_square_range.w);";
 
-/// The same held to the light's radius, as a sphere light's is.
-const SPHERE: &str = "let distance_atten = getDistanceAttenuation(max(distance_square, (*light).position_radius.w * (*light).position_radius.w), (*light).color_inverse_square_range.w);";
+/// The same softened by the light's radius, as a sphere light's is.
+const SPHERE: &str = "let distance_atten = getDistanceAttenuation(distance_square + (*light).position_radius.w * (*light).position_radius.w, (*light).color_inverse_square_range.w);";
 
 pub fn plugin(app: &mut App) {
     super::shader_patch::patch_library(
@@ -61,9 +64,9 @@ mod tests {
         let shader = format!("fn f() {{\n            {POINT}\n            {WRONG}\n}}\n");
         let out = patched(&shader).unwrap();
         assert!(out.contains("henyey_greenstein(dot(L, V))") && !out.contains(WRONG));
-        // And its fall-off stops rising inside the light's radius.
+        // And its fall-off is softened by the light's radius.
         assert!(
-            out.contains("max(distance_square, (*light).position_radius.w") && !out.contains(POINT)
+            out.contains("distance_square + (*light).position_radius.w") && !out.contains(POINT)
         );
         // Not there, or there twice: left alone.
         assert!(patched("fn f() {}").is_none());
