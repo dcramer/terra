@@ -1,8 +1,7 @@
 name: CI
 
-# Off until we need it (D37): run by hand from the Actions tab. To turn it back on, add
-#   push:
-#     branches: [main]
+# By hand (D37): the full check on Linux, macOS and Windows, started from the Actions tab. The
+# full check on every push to main is main.yml, on Linux alone.
 on:
   workflow_dispatch:
 
@@ -32,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cargo xtask check
+      - run: cargo xtask check --all
 
   windows:
     # The check job runs natively on Windows; this covers the toolchain we cross-compile

@@ -209,7 +209,7 @@ pub(crate) fn doctor() -> bool {
 /// indexes' merge driver (D409), both set by any `cargo xtask` task.
 fn git_setup(report: &mut Report) {
     report.item(
-        "git runs the quick check before each commit and the full one before each push",
+        "git runs the quick check before each commit and the push's check before each push",
         output("git", &["config", "--get", "core.hooksPath"]).as_deref() == Some(".githooks"),
         true,
         "git config core.hooksPath .githooks   (any cargo xtask task sets it)",

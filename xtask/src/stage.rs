@@ -175,7 +175,7 @@ impl Step {
         for (name, took) in slow.into_iter().filter(|(_, took)| took.as_secs() > over) {
             self.say(&format!(
                 "  ⚠ {name} took {}, over {over}s: parallelise it, split it or sample it \
-                 before a push (D406)",
+                 (D406)",
                 duration(took)
             ));
         }

@@ -1,7 +1,7 @@
 //! `cargo xtask check` (D37, D398): what has to pass before a commit and a push, each scoped
-//! to what the change touches (`scope`), and the gates only it runs: the tools' tests, the
-//! Blender scripts, and the shared crates kept free of Bevy (D28) and of the clock and the
-//! system's randomness.
+//! to what the change touches (`scope`), and the full check CI runs on every push to main; and
+//! the gates only it runs: the tools' tests, the Blender scripts, and the shared crates kept
+//! free of Bevy (D28) and of the clock and the system's randomness.
 //!
 //! Each stage runs quietly (D388, `stage`): a line when it passes, only what is needed to fix
 //! it when it fails, everything in `target/check/<stage>.log`. `--verbose`, or
@@ -20,8 +20,8 @@ use std::time::Instant;
 /// The task this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "check",
-    takes: "[--quick] [--all] [--pushing] [--verbose]",
-    does: "what every change must pass, scoped to what it touches (D398): before each push, lints and every test of the crates changed and those depending on them, and the kit, foliage, artifact, fuzz, Blender, docs and dependency checks that can see it; --quick, before each commit, linters and the fast tests of the crates changed in a 30 s budget; --all runs everything",
+    takes: "[--quick | --full] [--all] [--pushing] [--verbose]",
+    does: "what every change must pass, scoped to what it touches (D37, D398): before each push, formatting, lints and the fast tests of the crates changed since main; --quick, before each commit, the same on the staged files in a 30 s budget; --full adds the crates depending on them, the slow tests, and the kit, foliage, artifact, fuzz and Blender checks that can see it; --all is the full check over everything, as CI runs it on main",
     group: "Play and check",
     run: check,
 }];
@@ -32,8 +32,9 @@ const BEVY_CRATES: [&str; 3] = ["terra_game", "terra_sandbox", "terra_world"];
 
 /// Tests too slow for the check before a commit, by the exact name the test harness prints:
 /// sweeps over every case of something, and tests that lay a town, a village or a stretch of
-/// land, each over five seconds on the loaded 24-core machine (2026-10-17, D398). The check
-/// before a commit skips them; the check before a push, and `cargo test`, run them. Each is
+/// land, each over five seconds on the loaded 24-core machine (2026-10-17, D398). The checks
+/// before a commit and a push skip them; the full check (CI on main, D37) and `cargo test` run
+/// them. Each is
 /// marked where it is written too. A test that slows past that joins them.
 const SLOW_TESTS: &[&str] = &[
     // terra_build's drawing swept over every case: minutes each.
@@ -89,8 +90,8 @@ const SLOW_TESTS: &[&str] = &[
     "planet::tests::what_to_draw_again_holds_everything_the_edits_changed_near_the_surface",
 ];
 
-/// A test the check names when it runs longer, in seconds (D406): the push waits on its
-/// slowest test, so one over this sets how long every push touching it takes.
+/// A test the check names when it runs longer, in seconds (D406): the full check waits on its
+/// slowest test, so one over this sets how long CI's run on main takes.
 const SLOW_TEST_SECS: u64 = 120;
 
 /// Where the check's stages keep their logs, relative to the root.
@@ -108,20 +109,34 @@ enum How {
     Skip(&'static str),
 }
 
-/// Which gate is running: the one before a commit, or the one before a push.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Which gate is running: the one before a commit, the one before a push, or the full check
+/// CI runs on main (D37).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tier {
     Commit,
     Push,
+    Full,
+}
+
+/// Why a stage only the full check runs is not run here.
+const ON_MAIN: &str = "the full check's, run by CI on main";
+
+/// Whether a tier reads and writes the stamp (D413): the push's alone, since a stamp says its
+/// tree passed that tier, and a full check narrowed by a fast push's stamp would leave out
+/// what the push never ran.
+fn stamps(tier: Tier, all: bool) -> bool {
+    tier == Tier::Push && !all
 }
 
 /// The gate (D37, D398). Before a commit (`--quick`), on the staged files, only what is fast:
 /// formatting, the code-health gates, clippy and the quick tests of the crates changed, the
 /// tests of the tools changed, the docs check and the shared crates' rules. Before a push
-/// (no flag), on everything that differs from origin/main: clippy and every test of the crates
-/// changed and every crate depending on them, the tools' tests, and the kit, foliage,
-/// artifacts, fuzz and Blender checks when what they read changed. `--all` runs a tier over
-/// everything. The stages run in order and the first to fail ends it.
+/// (no flag), the same over everything that differs from origin/main, with the crates reading
+/// a changed file. The full check (`--full`) adds every crate depending on them, the slow
+/// tests, every tool's tests, and the kit, foliage, artifacts, fuzz and Blender checks when
+/// what they read changed. `--all` runs a tier over everything, the full one unless `--quick`
+/// says otherwise: what CI runs on every push to main. The stages run in order and the first
+/// to fail ends it.
 pub(crate) fn check(args: &[String]) -> bool {
     let mut tier = Tier::Push;
     let mut all = false;
@@ -129,19 +144,25 @@ pub(crate) fn check(args: &[String]) -> bool {
     for arg in args {
         match arg.as_str() {
             "--quick" => tier = Tier::Commit,
+            "--full" => tier = Tier::Full,
             "--pushing" => pushing = true,
             "--all" => all = true,
             "--verbose" => stage::set_verbose(),
             _ => {
-                eprintln!("usage: cargo xtask check [--quick] [--all] [--pushing] [--verbose]");
+                eprintln!(
+                    "usage: cargo xtask check [--quick | --full] [--all] [--pushing] [--verbose]"
+                );
                 return false;
             }
         }
     }
+    if all && tier == Tier::Push {
+        tier = Tier::Full;
+    }
     let started = Instant::now();
     // The hook's check of a push to main holds the turn to land (D413), or stops before
     // checking what git would refuse.
-    let _turn = if pushing && tier == Tier::Push {
+    let _turn = if pushing && tier != Tier::Commit {
         match land::hold_for_push() {
             Ok(turn) => turn,
             Err(why) => {
@@ -155,21 +176,20 @@ pub(crate) fn check(args: &[String]) -> bool {
     let scope = match (all, tier) {
         (true, _) => Scope::everything("--all"),
         (false, Tier::Commit) => scope::commit(),
-        (false, Tier::Push) => scope::push(),
+        (false, Tier::Push | Tier::Full) => scope::push(),
     };
     let name = match tier {
         Tier::Commit => "quick check",
         Tier::Push => "check",
+        Tier::Full => "full check",
     };
     println!("{name} over {}", scope.summary());
-    let push = tier == Tier::Push;
+    let push = tier != Tier::Commit;
+    let stamped = stamps(tier, all);
     // The tree read, to stamp if it passes, and what changed since one stamped (D413).
-    let tree = if push { stamp::clean_tree() } else { None };
+    let tree = if stamped { stamp::clean_tree() } else { None };
     let mut plan = Plan::of(tier, &scope);
-    if push
-        && !all
-        && let Some((passed, since)) = stamp::since()
-    {
+    if stamped && let Some((passed, since)) = stamp::since() {
         if since.all() {
             println!(
                 "  passed on {passed} before; running it all again: {}",
@@ -224,12 +244,14 @@ pub(crate) fn check(args: &[String]) -> bool {
             };
             println!(
                 "✓ quick check passed in {} (budget {COMMIT_BUDGET_SECS}s){over}. The push's \
-                 check adds the crates depending on these, {} slow tests, the kit, foliage, \
-                 artifacts, fuzz and Blender checks.",
+                 check runs it over everything since main; CI's full check on main adds the \
+                 crates depending on these, {} slow tests, the kit, foliage, artifacts, fuzz \
+                 and Blender checks (D37).",
                 stage::duration(took),
                 SLOW_TESTS.len()
             );
         }
+        Tier::Full => println!("✓ full check passed in {}", stage::duration(took)),
         Tier::Push => {
             // Stamped only if what was read is still what it was when the check began.
             if let Some(tree) = tree
@@ -237,7 +259,10 @@ pub(crate) fn check(args: &[String]) -> bool {
             {
                 stamp::write(&tree);
             }
-            println!("✓ check passed in {}", stage::duration(took));
+            println!(
+                "✓ check passed in {}; CI runs the full check on main (D37)",
+                stage::duration(took)
+            );
         }
     }
     true
@@ -285,10 +310,18 @@ struct Plan {
     manifests: Run,
 }
 
+/// The packages depending on these, with these (`scope::with_dependents`); `None` when they
+/// cannot be found.
+type Dependents = fn(&BTreeSet<String>) -> Option<BTreeSet<String>>;
+
 impl Plan {
     fn of(tier: Tier, scope: &Scope) -> Self {
+        Plan::of_with(tier, scope, scope::with_dependents)
+    }
+
+    fn of_with(tier: Tier, scope: &Scope, dependents: Dependents) -> Self {
         let all = scope.all();
-        let packages = packages(tier, scope);
+        let packages = packages(tier, scope, dependents);
         // Building, or what it stands on, changed, or the tasks that run its checks did (xtask
         // is among the packages tested whenever any Rust changed, so its own change is asked
         // of the scope).
@@ -313,11 +346,18 @@ impl Plan {
         }
     }
 
-    /// What a push's check would run over what changed since the stamp, as a change's scope,
+    /// What the full check would run over what changed since the stamp, as a change's scope,
     /// except that xtask among it is the tasks' data, not the code that runs building's
-    /// checks: a change to that narrows nothing (`stamp::since`).
+    /// checks: a change to that narrows nothing (`stamp::since`). It is the full check's, with
+    /// the crates depending on what changed, though the push tests only the crates changed: a
+    /// crate the push holds whose dependency the rebase changed is among it only as a
+    /// dependent, and must be tested again.
     fn since(scope: &Scope) -> Self {
-        let mut plan = Plan::of(Tier::Push, scope);
+        Plan::since_with(scope, scope::with_dependents)
+    }
+
+    fn since_with(scope: &Scope, dependents: Dependents) -> Self {
+        let mut plan = Plan::of_with(Tier::Full, scope, dependents);
         if plan.builds == Run::Yes
             && !scope.all()
             && plan
@@ -366,19 +406,22 @@ impl Plan {
 }
 
 /// The packages a tier lints and tests: before a commit those changed, before a push those
-/// changed or reading a changed file and every package depending on them, with xtask, whose
-/// tests read every Rust source, whenever Rust changed. `None` is the whole workspace.
-fn packages(tier: Tier, scope: &Scope) -> Option<BTreeSet<String>> {
+/// changed or reading a changed file, and in the full check those and every package depending
+/// on them, with xtask, whose tests read every Rust source, whenever Rust changed. `None` is
+/// the whole workspace.
+fn packages(tier: Tier, scope: &Scope, dependents: Dependents) -> Option<BTreeSet<String>> {
     if scope.all() {
         return None;
     }
-    if tier == Tier::Commit {
-        return Some(scope.changed.clone());
-    }
     let mut asked: BTreeSet<String> = scope.changed.union(&scope.readers).cloned().collect();
+    match tier {
+        Tier::Commit => return Some(scope.changed.clone()),
+        Tier::Push => return Some(asked),
+        Tier::Full => {}
+    }
     // Cargo's tree knows the crates, not the tasks: xtask depends on none of them.
     let tasks = asked.remove("xtask");
-    let mut found = scope::with_dependents(&asked)?;
+    let mut found = dependents(&asked)?;
     if tasks || scope.rust || !found.is_empty() {
         found.insert("xtask".into());
     }
@@ -411,7 +454,7 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
         command.args(args);
         command
     };
-    let push = tier == Tier::Push;
+    let full = tier == Tier::Full;
     let selected = match &plan.packages {
         None => vec!["--workspace".to_string()],
         Some(names) => scope::package_args(names),
@@ -420,9 +463,9 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
     let mut clippy = selected.clone();
     clippy.extend(["--all-targets", "--", "-D", "warnings"].map(String::from));
     let mut tests = selected.clone();
-    if !push {
-        // Before a commit: the crates' own tests, not their examples' builds or doc tests,
-        // and not the slow ones.
+    if !full {
+        // Before a commit or a push: the crates' own tests, not their examples' builds or doc
+        // tests, and not the slow ones.
         tests.extend(["--tests", "--", "--exact"].map(String::from));
         for name in SLOW_TESTS {
             tests.extend(["--skip".to_string(), name.to_string()]);
@@ -447,11 +490,12 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
             (step, How::Skip(plan.idle))
         }
     };
-    let push_only = |step: Step, run: Run, how: How| -> (Step, How) {
-        match (push, run) {
-            (false, _) => (step, How::Skip("before a push")),
+    // A stage only the full check runs; how it runs is asked only when it does.
+    let full_only = |step: Step, run: Run, how: &dyn Fn() -> (Step, How)| -> (Step, How) {
+        match (full, run) {
+            (false, _) => (step, How::Skip(ON_MAIN)),
             (true, Run::No(why)) => (step, How::Skip(why)),
-            (true, Run::Yes) => (step, how),
+            (true, Run::Yes) => how(),
         }
     };
     let mut stages = vec![
@@ -460,49 +504,49 @@ fn stages(tier: Tier, scope: &Scope, plan: &Plan) -> Vec<(Step, How)> {
             Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
             How::Here(crate::sizes::sizes_hold),
         ),
-        baselines(push),
+        baselines(tier != Tier::Commit),
         (
             Step::new("one definition", Said::Printed, LOGS),
             How::Here(crate::primitives::one_definition),
         ),
         lint_and_test("clippy", How::Command(cargo("clippy", &clippy))),
         lint_and_test("tests", How::Command(test_command)),
-        tools_tests(push || scope.all(), &scope.tools),
-        push_only(
-            Step::new("kits", Said::Cargo, LOGS).rerun("cargo xtask kits"),
-            plan.builds,
-            How::Command(command("cargo", KITS)),
-        ),
-        push_only(
-            Step::new("foliage", Said::Printed, LOGS).rerun("cargo xtask foliage"),
-            plan.foliage,
-            How::Command(command("node", &["tools/textures/foliage.ts"])),
-        ),
+        tools_tests(full || scope.all(), &scope.tools),
     ];
-    let artifacts = artifacts_command(&["--quick".into(), "--ratchet".into()]);
-    let fuzz = artifacts_command(&fuzz_args(&["--ratchet".into()]));
-    for (name, rerun, (program, args)) in [
+    let kits = || Step::new("kits", Said::Cargo, LOGS).rerun("cargo xtask kits");
+    stages.push(full_only(kits(), plan.builds, &|| {
+        (kits(), How::Command(command("cargo", KITS)))
+    }));
+    let foliage = || Step::new("foliage", Said::Printed, LOGS).rerun("cargo xtask foliage");
+    stages.push(full_only(foliage(), plan.foliage, &|| {
+        let node = command("node", &["tools/textures/foliage.ts"]);
+        (foliage(), How::Command(node))
+    }));
+    for (name, rerun, args) in [
         (
             "artifacts",
             "cargo xtask artifacts --quick --ratchet",
-            artifacts,
+            vec!["--quick".to_string(), "--ratchet".into()],
         ),
-        ("fuzz", "cargo xtask fuzz --ratchet", fuzz),
+        (
+            "fuzz",
+            "cargo xtask fuzz --ratchet",
+            fuzz_args(&["--ratchet".into()]),
+        ),
     ] {
-        let mut run = niced(program);
-        run.args(args);
-        stages.push(push_only(
-            Step::new(name, Said::Cargo, LOGS).rerun(rerun),
-            plan.builds,
-            How::Command(run),
-        ));
+        let step = || Step::new(name, Said::Cargo, LOGS).rerun(rerun);
+        stages.push(full_only(step(), plan.builds, &|| {
+            let (program, args) = artifacts_command(&args);
+            let mut run = niced(program);
+            run.args(args);
+            (step(), How::Command(run))
+        }));
     }
     stages.push((
         Step::new("docs", Said::Printed, LOGS).rerun("node tools/docs/docs.ts"),
         How::Command(command("node", &["tools/docs/docs.ts"])),
     ));
-    let (step, how) = blender_scripts();
-    stages.push(push_only(step, plan.blender, how));
+    stages.push(full_only(blender_step(), plan.blender, &blender_scripts));
     stages.push((
         Step::new("shared crates free of Bevy", Said::Printed, LOGS),
         match plan.manifests {
@@ -596,8 +640,7 @@ fn tools_tests(every: bool, changed: &BTreeSet<String>) -> (Step, How) {
 /// The Blender scripts (D121) compile and find what they import, checked inside the pinned
 /// Blender without running them. A machine with no Blender skips this.
 fn blender_scripts() -> (Step, How) {
-    let step = Step::new("Blender scripts", Said::Printed, LOGS)
-        .rerun("tools/blender/run.sh tools/blender/check.py $(git ls-files 'tools/**/*.py')");
+    let step = blender_step();
     if output("tools/blender/run.sh", &["--find"]).is_none() {
         return (step, How::Skip("no Blender here (cargo xtask doctor)"));
     }
@@ -613,6 +656,11 @@ fn blender_scripts() -> (Step, How) {
     let mut run = Command::new("tools/blender/run.sh");
     run.arg("tools/blender/check.py").args(files.lines());
     (step, How::Command(run))
+}
+
+fn blender_step() -> Step {
+    Step::new("Blender scripts", Said::Printed, LOGS)
+        .rerun("tools/blender/run.sh tools/blender/check.py $(git ls-files 'tools/**/*.py')")
 }
 
 /// The crates that must not depend on Bevy, by name and folder, or `None` when the crates
@@ -785,82 +833,7 @@ mod task_tests {
     }
 }
 
+/// The gate's tiers and plans: what each runs over a change, and what a stamp narrows.
 #[cfg(test)]
-mod gate_tests {
-    use super::*;
-
-    fn plan(packages: Option<&[&str]>, builds: bool) -> Plan {
-        Plan {
-            packages: packages.map(|names| names.iter().map(|n| n.to_string()).collect()),
-            idle: "no crate changed",
-            builds: Run::when(builds, "building unchanged"),
-            foliage: Run::No("no assets or textures tool changed"),
-            blender: Run::Yes,
-            manifests: Run::Yes,
-        }
-    }
-
-    /// After a rebase a stage runs again only if the push holds it and what it reads changed
-    /// since the stamp (D413); a package outside the push is not the push's to test.
-    #[test]
-    fn a_stamped_push_runs_only_what_it_holds_and_the_rebase_changed() {
-        // The push changed terra_core, which building stands on; the rebase brought a change to
-        // building alone.
-        let push = plan(
-            Some(&["terra_core", "terra_build", "terra_game", "xtask"]),
-            true,
-        );
-        let since = plan(Some(&["terra_build", "terra_game", "xtask"]), true);
-        let run = push.clone().and(&since);
-        assert_eq!(
-            run.packages,
-            plan(Some(&["terra_build", "terra_game", "xtask"]), true).packages
-        );
-        assert_eq!(run.builds, Run::Yes);
-        // A rebase that brought only docs: nothing heavy is run again, and it says why.
-        let docs = Plan {
-            blender: Run::No("no Blender script changed"),
-            ..plan(Some(&[]), false)
-        };
-        let run = push.clone().and(&docs);
-        assert!(!run.heavy());
-        assert_eq!(
-            (run.idle, run.builds, run.blender),
-            (UNCHANGED, Run::No(UNCHANGED), Run::No(UNCHANGED))
-        );
-        // What the push does not hold stays out with its own reason, whatever the rebase did.
-        assert_eq!(run.foliage, Run::No("no assets or textures tool changed"));
-        // The whole workspace on either side is the other side's packages; on both, all of it.
-        assert_eq!(plan(None, true).and(&since).packages, since.packages);
-        assert_eq!(push.clone().and(&plan(None, true)).packages, push.packages);
-        assert_eq!(plan(None, true).and(&plan(None, true)).packages, None);
-    }
-
-    #[test]
-    fn only_an_answer_without_bevy_passes() {
-        let tree = "terra_gen v0.1.0\nglam v0.30.0\nlibm v0.2.15";
-        assert_eq!(bevy_verdict(Some(tree)), "ok");
-        let with = "terra_gen v0.1.0\nglam v0.30.0\nbevy_math v0.17.0";
-        assert_ne!(bevy_verdict(Some(with)), "ok");
-        // No answer from cargo is a failure, not a pass.
-        assert_ne!(bevy_verdict(None), "ok");
-    }
-
-    #[test]
-    fn the_clock_and_the_systems_randomness_are_found_by_line() {
-        let text = "let a = 1;\nlet t = Instant::now();\nlet b = 2;\nlet r = rand::random::<u8>();";
-        assert_eq!(
-            unrepeatable(text),
-            vec![(2, "Instant::now"), (4, "rand::random")]
-        );
-        assert!(unrepeatable("let seed = Seed(1).rng();").is_empty());
-    }
-
-    #[test]
-    fn the_shared_crates_are_found_and_the_bevy_ones_are_not() {
-        let crates = shared_crates().expect("the crates folder is readable");
-        let names: Vec<&str> = crates.iter().map(|(name, _)| name.as_str()).collect();
-        assert!(names.contains(&"terra_core") && names.contains(&"terra_voxel"));
-        assert!(BEVY_CRATES.iter().all(|bevy| !names.contains(bevy)));
-    }
-}
+#[path = "check/tests.rs"]
+mod gate_tests;

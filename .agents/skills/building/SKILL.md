@@ -16,7 +16,7 @@ The baseline is **wood and stone, built by hand and destroyed, with infinite pre
 AGENTS.md's routine, plus for building:
 
 - At the start, check the latest commits of anyone working in the same files.
-- A push touching building runs the artifacts and fuzz ratchets (D398); if the rebase before it brought anything in, run the checks again.
+- A push no longer runs building's slow sweeps or the kits, artifacts and fuzz ratchets: CI's full check does, on main after it lands (D37). For a change to geometry, drawing or kits, run `cargo xtask check --full` before landing; if the rebase before it brought anything in, run it again.
 
 ## Where each concern lives
 
@@ -39,7 +39,7 @@ AGENTS.md's routine, plus for building:
 
 ## Which checks, for which change
 
-Every change: `cargo xtask check` (quick before a commit, full before a push).
+Every change: `cargo xtask check` (quick before a commit, fast before a push, full on main by CI; `--full` by hand before landing building).
 
 - **Geometry** (layout, roles, a shape, a junction): the module's tests; `cargo xtask artifacts <name>` for the scenes it touches, then `--quick --ratchet`; `cargo xtask fuzz` (seeds 0 to 200; `--seeds N` for more). A new scene goes in `scenes::registry` and nowhere else: the checks find it. A junction closed or opened changes `docs/building-voxels.json` (its rule, code, tests, registered cases) and `node tools/docs/docs.ts --render`; a fault found and not fixed is a numbered gap with its rule. Fixed faults: leave the baseline (`crates/terra_build/examples/artifacts-baseline/`), a fall passes and the full run on main (`cargo xtask nightly`) lowers it; the check refuses a lowering (D414). A rise that is meant: `--raise "<why>"` on the same command (`cargo xtask artifacts --quick`, `cargo xtask artifacts`, `cargo xtask fuzz`), which writes only what rose, with the why.
 - **Look** (a texture, relief, a piece's model): `cargo xtask material <material>` first (D386: fixed vantages beside its reference and a grey card, its numbers against the pattern's targets, failing on a regression), `cargo xtask kits`, `cargo xtask texels <name>`, the kit sheet (`cargo xtask yard --kit-sheet --sheet-rows "<row>"`, then `--vantage` as it logs and `--shot`), a material's preview (`node tools/kits/preview.ts <name>`), and `cargo xtask artifacts --frames` on the GPU. Judge against [docs/art-style.md](../../../docs/art-style.md) and the material's reference.

@@ -25,7 +25,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 - **Start**: the session hook fast-forwards a clean main checkout, updates the shared seed and seeds your worktree (D183). On failure run `cargo xtask doctor` and fix it before building. Entered a worktree mid-session, or ran `--done` there: `cargo xtask seed` first.
 - **Land on `main` after each incremental change**, no pull requests: commit on the branch, then `cargo xtask land` (rebases, checks, takes this machine's turn to land, pushes; D413), with a long timeout. Never force-push `main`.
-- **Hooks are the gate** (D37): commit runs `cargo xtask check --quick`, push `cargo xtask check`. Never `--no-verify`. Any `cargo xtask` task switches them on; CI is off.
+- **Hooks are the gate, CI the full check** (D37): commit runs `cargo xtask check --quick`, push the fast `cargo xtask check`. Never `--no-verify`. Any `cargo xtask` task switches them on. GitHub Actions runs `cargo xtask check --all` on every push to main and bisects a failure to its commit (a failing status on it, the issue "main fails the full check"); whoever broke main fixes it first.
 - **Baselines**: lowering one is `cargo xtask nightly`'s alone, run by hand on main (D414, D411); its report, with the first bad commit of a failure, is `.git/terra-nightly/report.txt`.
 - **Finish**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259).
 - A lead session runs at most three or four agents at once.
@@ -33,7 +33,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 ## Gates and tool output
 
-- **Gates scale with the change** (D398): a commit lints and unit-tests the changed crates in 30 s; a push tests them and what reads or depends on them, and runs the slow checks only when what they read changed. A push touching building takes minutes: give it a long timeout. `--all` runs everything. Keep a test to a few seconds or mark it `SLOW_TESTS`; a sweep over many cases runs them on every core (`terra_gen::par::map`, D406), and the push names a test over 120 s.
+- **Gates scale with the change** (D398): a commit lints and unit-tests the changed crates in 30 s; a push does the same over everything since main, with what reads a changed file; the full check adds what depends on them, the slow tests and the kit, foliage, artifacts and fuzz checks when what they read changed. `--full` runs it over a change (worth it before landing a risky one), `--all` over everything. Keep a test to a few seconds or mark it `SLOW_TESTS`; a sweep over many cases runs them on every core (`terra_gen::par::map`, D406), and the check names a test over 120 s.
 - **Gates are quiet** (D388): a line a stage. On failure read only what follows `✗`, then `target/check/<stage>.log`. `TERRA_VERBOSE=1` shows everything.
 - **A new tool or task prints the same way** (D388): a line a stage on success, only what fixes a failure, the rest in a log it names.
 - **Code health is gated** (D396): split a file over 1,000 lines or a function over 150 (`cargo xtask sizes`); call a shared primitive from its home (`terra_gen::hash`), never copy it.

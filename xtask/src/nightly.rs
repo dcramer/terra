@@ -10,7 +10,9 @@
 //! the new main, three times at most. When a stage fails, `git bisect` finds the first commit
 //! since the last passing run where it fails. Either way `.git/terra-nightly/report.txt` says
 //! what happened. `TERRA_NIGHTLY=0`
-//! turns it off. `--probe` is bisect's: one stage at the commit checked out.
+//! turns it off. `--probe` is bisect's: one stage at the commit checked out. `--bisect <stage>
+//! <good>` is CI's on main (D37): the same bisect, in the checkout it runs in, from `good` to
+//! HEAD, of a stage as the check names it.
 
 use crate::baselines::{self, ARTIFACTS, JOB, SIZES};
 use crate::check::niced;
@@ -195,6 +197,85 @@ const STAGES: &[Stage] = &[
     },
 ];
 
+const FMT: &[&str] = &["cargo", "fmt", "--all", "--check"];
+const TOOLS_TESTS: &[&str] = &[
+    "sh",
+    "-c",
+    "node --test $(git ls-files 'tools/**/*.test.ts' 'tools/**/*.test.mjs')",
+];
+const FOLIAGE: &[&str] = &["node", "tools/textures/foliage.ts"];
+
+/// Stages of the check that the run leaves out but a bisect from CI probes (`--bisect`), each
+/// as the check runs it over everything; none builds anything.
+const PROBES: &[Stage] = &[
+    Stage {
+        name: "fmt",
+        said: Said::Fmt,
+        build: &[],
+        run: FMT,
+        hold: FMT,
+    },
+    Stage {
+        name: "tools tests",
+        said: Said::NodeTest,
+        build: &[],
+        run: TOOLS_TESTS,
+        hold: TOOLS_TESTS,
+    },
+    Stage {
+        name: "foliage",
+        said: Said::Printed,
+        build: &[],
+        run: FOLIAGE,
+        hold: FOLIAGE,
+    },
+];
+
+/// The probe for a stage as the check names it when it fails (`✗ … failed at <stage>`): the
+/// run's stage of that name, the check's artifacts being the run's quick one, or one of
+/// [`PROBES`]. `None`: nothing probes it alone.
+fn probe_name(check_stage: &str) -> Option<&'static str> {
+    let name = match check_stage {
+        "artifacts" => "artifacts quick",
+        other => other,
+    };
+    STAGES
+        .iter()
+        .chain(PROBES)
+        .find(|s| s.name == name)
+        .map(|s| s.name)
+}
+
+/// `--bisect <stage> <good>`, CI's on main (D37): bisects the check's stage in this checkout
+/// from `good` to HEAD with the run's probe, and ends with a line `bisect: <what it found>`.
+fn bisect_here(check_stage: &str, good: &str) -> bool {
+    let Some(name) = probe_name(check_stage) else {
+        println!("bisect: not bisected: nothing probes the check's {check_stage} alone");
+        return false;
+    };
+    let Ok(src) = std::env::current_dir() else {
+        println!("bisect: not bisected: no folder to run in");
+        return false;
+    };
+    let state = git_output(
+        &src,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .map(|common| PathBuf::from(common.trim()).join(STATE));
+    let tip = git_output(&src, &["rev-parse", "HEAD"]).map(|tip| tip.trim().to_string());
+    let (Some(state), Some(tip)) = (state, tip) else {
+        println!("bisect: not bisected: git has no repository here");
+        return false;
+    };
+    if std::fs::create_dir_all(state.join("logs")).is_err() {
+        println!("bisect: not bisected: cannot make {}", state.display());
+        return false;
+    }
+    let found = bisect(&src, &state, name, Some(good), &tip);
+    println!("bisect: {found}");
+    found.starts_with("first fails at")
+}
+
 /// How a stage ended: whether it passed, and the lines of its log that say why it failed.
 struct Outcome {
     name: &'static str,
@@ -207,8 +288,9 @@ pub(crate) fn nightly(args: &[String]) -> bool {
     match args {
         [] => {}
         [flag, name, tip] if flag == "--probe" => std::process::exit(probe(name, tip)),
+        [flag, stage, good] if flag == "--bisect" => return bisect_here(stage, good),
         _ => {
-            eprintln!("usage: cargo xtask nightly");
+            eprintln!("usage: cargo xtask nightly [--bisect <stage> <good>]");
             return false;
         }
     }
@@ -477,7 +559,7 @@ fn probe_exit(overlaid: bool, built: bool, passed: bool) -> i32 {
 /// Bisect's probe: one stage held to the tip's baselines at the commit checked out here.
 fn probe(name: &str, tip: &str) -> i32 {
     let (Some(stage), Ok(here)) = (
-        STAGES.iter().find(|s| s.name == name),
+        STAGES.iter().chain(PROBES).find(|s| s.name == name),
         std::env::current_dir(),
     ) else {
         eprintln!("nightly --probe: no stage {name}");
@@ -737,6 +819,35 @@ mod tests {
             lowering, 4,
             "artifacts quick and full, fuzz and sizes lower"
         );
+    }
+
+    /// CI bisects whichever stage of the check fails on main; each that can fail there on its
+    /// own has a probe, the check's artifacts the quick ratchet it runs.
+    #[test]
+    fn every_stage_the_check_can_fail_at_on_main_has_a_probe() {
+        for stage in [
+            "fmt",
+            "sizes",
+            "clippy",
+            "tests",
+            "tools tests",
+            "kits",
+            "foliage",
+            "fuzz",
+            "docs",
+        ] {
+            assert_eq!(probe_name(stage), Some(stage));
+        }
+        assert_eq!(probe_name("artifacts"), Some("artifacts quick"));
+        assert_eq!(probe_name("one definition"), None);
+        for probe in PROBES {
+            assert!(
+                STAGES.iter().all(|s| s.name != probe.name),
+                "{}",
+                probe.name
+            );
+            assert!(probe.build.is_empty() && probe.run == probe.hold);
+        }
     }
 
     #[test]

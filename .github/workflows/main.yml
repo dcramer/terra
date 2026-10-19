@@ -1,0 +1,148 @@
+name: main
+
+# The full check on every push to main (D37): `cargo xtask check --all` on Linux, with no GPU or
+# Blender (the stages that need them skip and say why). The pre-push hook runs only the fast
+# check, so this is where the dependents' tests, the slow tests, the kits, foliage, artifacts and
+# fuzz run. A failure is bisected between the last passing run's commit and this one with the
+# failing stage alone (`cargo xtask nightly --bisect`, the probe D411's run bisects with); the
+# culprit gets a failing commit status and the issue "main fails the full check" says what broke.
+# Nothing is reverted: a revert of a commit others built on is the developers' call.
+#
+# By hand (Actions tab, or `gh workflow run main.yml --ref <branch> -f stage=<stage> -f
+# good=<sha>`): bisect the branch's tip from `good` without the check, to try the bisect; it sets
+# the culprit's status and writes the summary, but opens no issue.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "a stage of the check to bisect alone (as `failed at <stage>` names it)"
+        required: true
+      good:
+        description: "a commit where the stage passes, before the branch's tip"
+        required: true
+
+# One run at a time on main, none cancelled: each push is checked, and a run queued behind
+# another is replaced by a newer one, whose bisect then covers the commits it skipped.
+concurrency:
+  group: main-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  statuses: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # GitHub's limit is 360 minutes a job; a cold build and the check take about an hour, and a
+    # bisect a probe a step.
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: main fails the full check
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every commit since the last passing run, for the bisect.
+          fetch-depth: 0
+      # A debug and a release build of the workspace outgrow the runner's free disk.
+      - name: Make room on the disk
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Install the libraries Bevy needs on Linux
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+      # Installs the compiler pinned in rust-toolchain.toml.
+      - run: rustup toolchain install
+      # Dependencies unoptimised, as the check builds them under CI, so the bisect's probes
+      # build on the same artifacts.
+      - name: Build dependencies unoptimised
+        run: printf '[profile.dev.package."*"]\nopt-level = 0\n' >> "${CARGO_HOME:-$HOME/.cargo}/config.toml"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      # The check runs the TypeScript tools' tests too; 22 is the oldest line they support.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The full check
+        id: check
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo xtask check --all 2>&1 | tee "$RUNNER_TEMP/check.log"
+      - name: The commit this run is to bisect from
+        id: range
+        if: failure() || github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          INPUT_STAGE: ${{ inputs.stage }}
+          INPUT_GOOD: ${{ inputs.good }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            stage=$INPUT_STAGE
+            good=$INPUT_GOOD
+          else
+            stage=$(sed -n 's/^✗ [a-z ]*check failed at \(.*\) ([0-9]* of [0-9]* stages passed.*/\1/p' "$RUNNER_TEMP/check.log" | head -1)
+            good=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/main.yml/runs?branch=main&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty')
+          fi
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+          echo "good=$good" >> "$GITHUB_OUTPUT"
+          echo "stage '$stage', last passing commit '${good:-none}'"
+      - name: Bisect the failing stage
+        id: bisect
+        if: (failure() || github.event_name == 'workflow_dispatch') && steps.range.outputs.stage != '' && steps.range.outputs.good != ''
+        shell: bash
+        env:
+          STAGE: ${{ steps.range.outputs.stage }}
+          GOOD: ${{ steps.range.outputs.good }}
+        run: |
+          set -o pipefail
+          cargo xtask nightly --bisect "$STAGE" "$GOOD" 2>&1 | tee "$RUNNER_TEMP/bisect.log" || true
+          found=$(grep '^bisect: ' "$RUNNER_TEMP/bisect.log" | tail -1 | sed 's/^bisect: //')
+          culprit=$(sed -n 's/^bisect: first fails at \([0-9a-f]*\) .*/\1/p' "$RUNNER_TEMP/bisect.log" | tail -1)
+          if [ -n "$culprit" ]; then culprit=$(git rev-parse "$culprit"); fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+          echo "culprit=$culprit" >> "$GITHUB_OUTPUT"
+      - name: Say what broke
+        if: failure() || github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          STAGE: ${{ steps.range.outputs.stage }}
+          GOOD: ${{ steps.range.outputs.good }}
+          FOUND: ${{ steps.bisect.outputs.found }}
+          CULPRIT: ${{ steps.bisect.outputs.culprit }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          rerun=$(grep -m1 'run it alone:' "$RUNNER_TEMP/check.log" 2>/dev/null | sed 's/^ *//' || true)
+          {
+            echo "The full check fails on $GITHUB_REF_NAME at $GITHUB_SHA, at stage '${STAGE:-unknown}'."
+            echo
+            echo "- bisected from the last passing run's ${GOOD:-(none)}: ${FOUND:-not bisected}"
+            [ -n "$rerun" ] && echo "- $rerun"
+            echo "- run: $RUN"
+          } > "$RUNNER_TEMP/body.md"
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$CULPRIT" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$CULPRIT" -f state=failure \
+              -f context="main / first to fail $STAGE" -f target_url="$RUN" \
+              -f description="the first commit where '$STAGE' fails (bisected)" > /dev/null
+          fi
+          [ "$GITHUB_EVENT_NAME" = push ] || exit 0
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$ISSUE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE" --body-file "$RUNNER_TEMP/body.md"
+          fi
+      - name: Close the issue once main passes
+        if: success() && github.event_name == 'push'
+        shell: bash
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$ISSUE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" --comment "The full check passes on main at $GITHUB_SHA."
+          fi
