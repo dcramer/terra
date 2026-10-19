@@ -145,7 +145,8 @@ A bake takes 10-20 minutes on the CPU and is run when a recipe changes, not by t
 One ramp texture for every fire in the game, after Skull and Bones: `assets/textures/fire/ramp.png`, 256 wide, one row per fuel.
 - The rows are wood, oil and pitch, gas, and a spare row each realm may add (D14: a realm changes materials and light, never the rules).
 - A row's RGB is the emission at that heat, in linear HDR relative units.
-- Its A is how far that heat adds light rather than occludes: hot texels near 0 (additive), cool rims and soot near 1 (over).
+- Its A is how far that heat covers what is behind it rather than adds to it: 1 from the orange up, 0.4 at the dull red rims (2026-10-19). A flame is alpha-blended, as Unity's BonFire and NVIDIA's Vulcan demo draw theirs: added over the blue-grey world, its hot end took that world's blue (the pro flipbook's own B/R 0.03-0.10 came out 0.64; research/2026-10-19-fire-step-back.md).
+- Its hottest has the blue a camera's blown core takes, a quarter of red (linear), rising as the fourth power of green's exposure so the orange keeps almost none (`BLOWN_BLUE`): the night photographs' core is 253,224,133, where a 1,670 K blackbody has no blue in sRGB.
 - It is drawn premultiplied (`ONE, ONE_MINUS_SRC_ALPHA`):
   - `rgb = ramp(heat).rgb × cover × brightness + soot_colour × soot`;
   - `a = cover × ramp(heat).a + soot`.

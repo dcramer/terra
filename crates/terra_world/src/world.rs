@@ -5,9 +5,9 @@
 //! through (`walk`), and test it there.
 
 use super::{
-    adaptation, air, cine, climate, cover, data, daylight, detail, dither, drift, fire, flora,
-    grading, grown, hable, lod, parting, quality, rises, scatter, scene, sky_occlusion, skylight,
-    smoke, tick, upscale, wakes, weather, wind, woods,
+    adaptation, air, cine, climate, cover, data, daylight, detail, dither, drift, falloff, fire,
+    flora, grading, grown, hable, lod, parting, quality, rises, scatter, scene, sky_occlusion,
+    skylight, smoke, tick, upscale, wakes, weather, wind, woods,
 };
 use bevy::prelude::*;
 
@@ -23,6 +23,7 @@ impl Plugin for WorldPlugin {
         grading::plugin(app);
         hable::plugin(app);
         scatter::plugin(app);
+        falloff::plugin(app);
         air::plugin(app);
         skylight::plugin(app);
         sky_occlusion::plugin(app);

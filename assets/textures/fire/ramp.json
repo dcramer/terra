@@ -1,9 +1,9 @@
 {
-  "about": "The fire's colour ramp (tools/fire/ramp.ts): a row a fuel, RGB sRGB-encoded over scale, A how far a heat occludes",
+  "about": "The fire's colour ramp (tools/fire/ramp.ts): a row a fuel, RGB sRGB-encoded over scale, A how far a heat covers what is behind it",
   "rows": [
     "wood",
     "oil",
     "gas"
   ],
-  "scale": 1.1946
+  "scale": 1.1746
 }

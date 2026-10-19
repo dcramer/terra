@@ -56,9 +56,14 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// stones' hue under 25 degrees, red, where with none the campfire's night crop is 38%
 /// orange and 59% red, not 25 and 72 (fire sheet, campfire round 2026-10-19).
 const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.514, 0.0);
-/// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches:
-/// a campfire's 1.3 m given the light its 1.5 m gave before (280,000 a metre).
-const HEARTH_LUMENS_A_METRE: f32 = 323_000.0;
+/// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
+/// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
+/// (some 0.5 m² of flame at 10^4 cd/m²), so the flame stays the brightest thing by it, its
+/// stones at a metre some four stops under its core (research/2026-10-19-fire-step-back.md,
+/// plan step 1). At 323,000 a metre, and 2.5 stops more by night, the stones drew past the
+/// tonemapper's white, as bright as the flame (night stills: stones 251,232,227 against a
+/// flame of 253,243,205; at this light and no night boost 195,114,123 against 254,235,119).
+const HEARTH_LUMENS_A_METRE: f32 = 100_000.0;
 const HEARTH_RANGE_M: f32 = 14.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
@@ -74,7 +79,9 @@ const SWAY_M: [f32; 2] = [0.005, 0.4];
 /// bright as by day lit the ground round a campfire about as much as the moon did, grey and
 /// barely there (fire sheet, round 5: 380,000 lm, about 1,000 lux at 3 m), where in every
 /// game's night and every photograph a campfire's ground glows orange a few metres out; and
-/// as bright by day as by night, sunlit stone round it went salmon.
+/// as bright by day as by night, sunlit stone round it went salmon. Not a kept fire's
+/// (a hearth's or torch's): boosted so, a campfire's stones out-shone its flame
+/// (`HEARTH_LUMENS_A_METRE`).
 const NIGHT_STOPS: f32 = 2.5;
 
 /// How many times brighter a fire's light is so far into the night (`Sky::night`, 0 by day,
@@ -287,7 +294,9 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
             lumens: blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow,
             color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,
-            radius: width(blaze) * 0.5,
+            // Its flames as a disc light as wide as they are (`crate::falloff`): its fall-off
+            // levels off over the stones at its foot rather than rising inverse-square.
+            radius: width(blaze),
             glow,
             kept: true,
         }
@@ -551,7 +560,9 @@ pub(super) fn light(
         };
         match shown {
             Some(Shown { lit, fade, shadows }) => {
-                light.intensity = lit.lumens * fade * by_night;
+                // A kept fire's light is a real one's by night as by day: its flame, drawn on
+                // the screen's scale, is what the night is seen by (D415's exposure rule).
+                light.intensity = lit.lumens * fade * if lit.kept { 1.0 } else { by_night };
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;

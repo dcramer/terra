@@ -9,7 +9,7 @@ test("the ramp is a blackbody's colour: white at D65, red with no blue at 1000 K
   assert.ok(r > 4 * g && b === 0);
 });
 
-test("the ramp brightens with heat, keeps its chroma as it dims and adds light when hot", () => {
+test("the ramp brightens with heat, keeps its chroma as it dims and covers most when hot", () => {
   let last = -1;
   for (let h = 0; h <= 1; h += 0.1) {
     const [r, g, b] = ramp(h);
@@ -18,8 +18,17 @@ test("the ramp brightens with heat, keeps its chroma as it dims and adds light w
     last = lum;
     assert.ok(r > g && g >= b, "red leads at every heat, never grey");
   }
-  assert.equal(ramp(0)[3], 1);
-  assert.equal(ramp(1)[3], 0);
+  assert.ok(ramp(0)[3] < 0.5, "a dull red rim covers least");
+  assert.equal(ramp(1)[3], 1, "the hottest covers what is behind it");
+});
+
+test("the hottest is the photographs' white-yellow core, the orange keeps almost no blue", () => {
+  // Night photographs' campfire core, sRGB 253,224,133: blue about a quarter of red, linear.
+  const [r, g, b] = ramp(1);
+  assert.ok(b / r > 0.15 && b / r < 0.35, `hottest B/R ${b / r}`);
+  assert.ok(g / r > 0.7 && g / r <= 1, `hottest G/R ${g / r}`);
+  const [ro, , bo] = ramp(0.6);
+  assert.ok(bo / ro < 0.03, `orange B/R ${bo / ro}`);
 });
 
 test("the ramp's texture decodes to the ramp: sRGB over its scale, the dim red end kept", () => {

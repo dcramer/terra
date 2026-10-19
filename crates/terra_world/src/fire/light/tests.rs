@@ -114,8 +114,8 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
         seen = (seen.0.min(hearth.at.x), seen.1.max(hearth.at.x));
-        // Its shadows soften as a flame that wide's.
-        assert!((hearth.radius - 0.35).abs() < 1e-6);
+        // Its shadows and fall-off soften as a disc as wide as its flames (`crate::falloff`).
+        assert!((hearth.radius - 0.7).abs() < 1e-6);
     }
     // It moves, so the shadows it casts sway.
     assert!(seen.1 - seen.0 > 0.04, "{seen:?}");
@@ -225,7 +225,7 @@ fn on_ground(lit: &Lit, foot: Vec3, out: f32, lumens: f32) -> f32 {
 }
 
 #[test]
-fn by_night_a_campfire_lights_the_ground_round_it_brighter_than_the_moon_and_by_day_barely() {
+fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon() {
     // The fire sheet's campfire: 1.5 m of flame at 0.9 heat, 0.7 m wide.
     let foot = Vec3::new(0.0, 2000.0, 0.0);
     let blazes = Blazes {
@@ -240,17 +240,25 @@ fn by_night_a_campfire_lights_the_ground_round_it_brighter_than_the_moon_and_by_
     };
     let lit = lit(&blazes, 0.0).remove(0);
     assert!(lit.kept);
-    // By full night the ground 3 m out is lit several times as brightly as the moon lights
-    // it (round 5: about as brightly, and it stood grey), and 5 m out still more brightly.
+    // A real campfire's light, about 10^4 cd, by night as by day: the stones at its foot take
+    // some tens of thousands of lux, so at their albedo they stand some four stops under a
+    // flame of 10^5 cd/m² (research/2026-10-19-fire-step-back.md); at 2.5 stops more by night
+    // they took hundreds of thousands and out-shone it.
+    let candela = lit.lumens / (4.0 * core::f32::consts::PI);
+    assert!((3_000.0..30_000.0).contains(&candela), "{candela} cd");
+    let stones = on_ground(&lit, foot, 0.55, lit.lumens);
+    assert!(stones < 60_000.0, "{stones} lux on the stones");
+    // The ground 3 m out still takes about the moon's light, warmer, and past that falls dark,
+    // as a night photograph exposed for the flame shows it.
     let moon = crate::daylight::illuminance(-18.0);
-    let night = lit.lumens * by_night(1.0);
-    let near = on_ground(&lit, foot, 3.0, night);
-    assert!(near > 3.0 * moon, "{near} lux at 3 m by a {moon} lux moon");
-    assert!(on_ground(&lit, foot, 5.0, night) > moon);
+    let near = on_ground(&lit, foot, 3.0, lit.lumens);
+    assert!(
+        near > 0.2 * moon && near < 3.0 * moon,
+        "{near} lux at 3 m by a {moon} lux moon"
+    );
     // By day a few percent of the sun's, so sunlit stone round it keeps its colour.
     let sun = crate::daylight::illuminance(50.0);
-    let day = on_ground(&lit, foot, 3.0, lit.lumens * by_night(0.0));
-    assert!(day < 0.05 * sun, "{day} lux at 3 m in a {sun} lux sun");
+    assert!(near < 0.05 * sun, "{near} lux at 3 m in a {sun} lux sun");
 }
 
 #[test]

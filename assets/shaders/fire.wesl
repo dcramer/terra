@@ -90,8 +90,9 @@ const BOOK_COLUMNS: f32 = 8.0;
 // How bright each kind's flame is drawn, its ramp's luminance 1 at its hottest, on the screen
 // whatever the eye is adapted to (a preset's, not the flipbook's): fitted on the baker's sheet
 // (tools/fire/bake/sheet.ts), each set's exposure through today's tonemapper.
-// The campfire set rebaked as separate tongues holds 14/15 at x8 under Neutral.
-const HEARTH_BRIGHTNESS: f32 = 8.0;
+// The campfire at 32, its light a real one's, draws its core as the night photographs' (sRGB
+// 254,235,133 against 253,224,133), its stones under it (research/2026-10-19-fire-step-back.md).
+const HEARTH_BRIGHTNESS: f32 = 32.0;
 const TORCH_BRIGHTNESS: f32 = 3.3;
 const BLAZE_BRIGHTNESS: f32 = 2.1;
 // A breath's: its puffs along the stream, the fireball where it strikes, the blast when it

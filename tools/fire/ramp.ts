@@ -2,8 +2,8 @@
 // heat, from blackbody glow, as data with a source rather than a painted file. A row is a fuel;
 // heat 0 to 1 runs over its temperatures, its colour is a blackbody's at that temperature (so
 // it stays saturated as it dims: a thin flame goes deep red, never grey), its brightness a
-// softened power of the blackbody's own luminance, and its A how far that heat occludes rather
-// than adds light (hot near 0, cool near 1).
+// softened power of the blackbody's own luminance, and its A how far that heat covers what is
+// behind it rather than adds to it (hot near 1, cool rims less).
 //
 // The blackbody's colour is Planck's law integrated against the CIE 1931 observer, through
 // Wyman, Sloan and Shirley's multi-lobe fit of it ("Simple Analytic Approximations to the CIE
@@ -66,16 +66,38 @@ export function blackbody(kelvin: number): [number, number, number] {
   return [rgb[0] / lum, rgb[1] / lum, rgb[2] / lum];
 }
 
+/// How much blue a camera's blown flame core takes: none in its orange, about a quarter of its
+/// red (linear) where its green has caught up, as night photographs of a campfire record their
+/// core (253,224,133 sRGB) while their orange keeps almost none (the class's B/R 0.03-0.16). A
+/// 1,670 K blackbody has no blue in sRGB, so without it the ramp's hottest was pure yellow and
+/// only the tonemapper's mix toward white gave it blue, as salmon
+/// (research/2026-10-19-fire-step-back.md, difference 2). It rises as the fourth power of the
+/// green's exposure, so it comes only once two channels near full, as a sensor's highlight
+/// goes white-yellow.
+export const BLOWN_BLUE = 0.34;
+
 /// A fuel's blackbody at a heat as a photograph records it: each channel's exposure
 /// 1 - e^(-film x light), so as a flame brightens its red fills first and its green catches up,
-/// red to orange to yellow, and its hottest nears white. The photographs the fire is measured
-/// against (references.json) are of fire so exposed; a tonemapper that keeps hue
-/// (KhronosPbrNeutral) never makes that shift itself, and drew the blackbody's own deep red
-/// 90-99% red and salmon where it desaturated (fire sheet, stage 3).
+/// red to orange to yellow, and its hottest nears white-yellow with the blue its blown core
+/// takes (`BLOWN_BLUE`). The photographs the fire is measured against (references.json) are of
+/// fire so exposed; a tonemapper that keeps hue (KhronosPbrNeutral) never makes that shift
+/// itself, and drew the blackbody's own deep red 90-99% red and salmon where it desaturated
+/// (fire sheet, stage 3).
 function filmed(h: number, fuel: Fuel): number[] {
   const t = fuel.cold + h * (fuel.hot - fuel.cold);
   const lum = (planckXYZ(t)[1] / planckXYZ(fuel.hot)[1]) ** fuel.contrast;
-  return blackbody(t).map((c) => 1 - Math.exp(-fuel.film * lum * c));
+  const [r, g, b] = blackbody(t).map((c) => 1 - Math.exp(-fuel.film * lum * c));
+  return [r, g, Math.min(1, b + BLOWN_BLUE * g ** 4)];
+}
+
+/// How far a heat covers what is behind it: a flame is drawn alpha-blended, premultiplied, as
+/// Unity's BonFire and NVIDIA's Vulcan demo draw theirs, since added over a blue-grey world a
+/// flame takes that world's blue (the pro book's own B/R 0.03-0.10 was 0.64 through our
+/// additive hot end; the step back's difference 3). Its thin, dull red rims cover least, as
+/// the coals and drops do (fire.wesl `covers`): 0.4 cold, all of it from the orange up.
+export function covering(h: number): number {
+  const t = Math.min(1, Math.max(0, (h - 0.25) / 0.5));
+  return 0.4 + 0.6 * t * t * (3 - 2 * t);
 }
 
 /// The ramp at a heat for a fuel: linear RGB (luminance 1 at the hottest) and its A.
@@ -84,7 +106,7 @@ export function ramp(heat: number, fuel: Fuel = FUELS.wood): [number, number, nu
   const top = filmed(1, fuel);
   const y = 0.2126 * top[0] + 0.7152 * top[1] + 0.0722 * top[2];
   const c = filmed(h, fuel);
-  return [c[0] / y, c[1] / y, c[2] / y, (1 - h) * (1 - h)];
+  return [c[0] / y, c[1] / y, c[2] / y, covering(h)];
 }
 
 /// The ramp tabulated at `n` heats, as games sample it from a texture.
@@ -119,7 +141,7 @@ if (import.meta.main) {
   const dir = join(dirname(fileURLToPath(import.meta.url)), "../../assets/textures/fire");
   const { picture, scale } = texture();
   writePng(join(dir, "ramp.png"), picture);
-  const about = "The fire's colour ramp (tools/fire/ramp.ts): a row a fuel, RGB sRGB-encoded over scale, A how far a heat occludes";
+  const about = "The fire's colour ramp (tools/fire/ramp.ts): a row a fuel, RGB sRGB-encoded over scale, A how far a heat covers what is behind it";
   writeFileSync(join(dir, "ramp.json"), `${JSON.stringify({ about, rows: ROWS, scale: +scale.toFixed(4) }, null, 2)}\n`);
   console.log(`ramp: ${ROWS.length} rows of ${picture.width}, scale ${scale.toFixed(3)}`);
 }
