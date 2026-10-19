@@ -10,7 +10,7 @@
 |---|---|---|
 | Rules tests | Each rule below that the operations' own tests did not already walk through; a known failure is `#[ignore]`d with its reason and run here with `--include-ignored` | `crates/terra_build/tests/rules.rs` |
 | Random operations | `random_operations_keep_every_rule` over 64 seeds (`TERRA_SEEDS=64`): after every step nothing floats, nothing is in over a cube partly in, every prop in a hole, refunds exact, undo and redo exact, laid twice the same, snapshots and replays the same | `crates/terra_build/src/ops/tests.rs` |
-| Drawing audit | One of each sort of village building (D229), in all nine kits with their dress: every section drawn twice at near, middle and far; coplanar overlaps that would z-fight; one cube out of a wall; an operation's cost | `crates/terra_build/examples/drawing.rs` |
+| Drawing audit | One of each sort of village building (D229), in all nine kits with their dress: every section drawn twice at near, middle and far; coplanar overlaps that would z-fight; one cube out of a wall; an operation's cost | `crates/terra_build_scenes/examples/drawing.rs` |
 | Live | The rules over the remote in an optimised build on the Windows GPU, a roof built and pictured half up and done, timings | `tools/sandbox/rules.ts`, pictures in `shots/rules-*.png` |
 
 Also run for this audit: `cargo xtask check`, `cabin` (every step ok), `kits` (every kit ok), `sections`, `demo` and `bench village village-bare` on both GPUs. `lodcheck` and `pops` are the forest's and did not finish: lodcheck's lush run exited as it began (winit's "Exit Failure"), and pops' scripted walk had saved no frame after 40 minutes and was stopped; both to run again on a quiet machine. The machine was shared with other agents' builds (load 30 to 70 on 32 cores), so every frame time below is slower and less even than on a quiet machine; GPU times and counts are not.
@@ -85,7 +85,7 @@ Coplanar overlaps facing the same way, of over a square centimetre, in the near 
 | roof boards / roof boards (shakes, slate, thatch) | 460, 597, 337 | 243, 205, 95 cm² |
 | log boards / log ends | 1,208 | 58 cm² |
 
-Small overlaps where a member's sawn end lies in the plane of the daub or infill beside it are hidden or flicker only at a grazing angle; the hundreds of square centimetres where two dress profiles or two roof boards lie in one plane are real z-fighting where both show. `cargo run --release -p terra_build --example drawing` names the building, section and place of the largest of each. Not fixed here: the dress and roofs are other agents' work in progress.
+Small overlaps where a member's sawn end lies in the plane of the daub or infill beside it are hidden or flicker only at a grazing angle; the hundreds of square centimetres where two dress profiles or two roof boards lie in one plane are real z-fighting where both show. `cargo run --release -p terra_build_scenes --example drawing` names the building, section and place of the largest of each. Not fixed here: the dress and roofs are other agents' work in progress.
 
 ## Efficiency
 

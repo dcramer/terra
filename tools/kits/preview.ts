@@ -2,7 +2,7 @@
 // A material's preview sheet (D349, docs/proposals/construction-002.md): one picture of it
 // on every role and shape its pattern lays, from 10 m and from 2 m, at noon and in the
 // evening, for a developer to look over once when the material is added. The kit sheet lays
-// its preview alone (`--sheet-rows "<name>: preview"`, crates/terra_build/src/scenes/sheet.rs):
+// its preview alone (`--sheet-rows "<name>: preview"`, crates/terra_build_scenes/src/sheet.rs):
 // a house with a doorway, windows, a foot on the ground, a gable and a floor, beside a
 // platform with a flight of steps, a top, a slab and a wall part-built, a hole carved in the
 // house's front and its corner damaged; for a roof covering, an L of stone walls under a hip

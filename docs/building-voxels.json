@@ -258,7 +258,7 @@
           "junction": "A timber cube boarded as a box: upside down, an upper half, a corner slope",
           "rule": "Butt joints, as a carpenter boxes it: the courses of a side facing east or west run through to the cube's edges; every other board ending or edging where a side is clad (a course facing north or south, a top or underside board, a riser) stops against that cladding's inside face; a raking underside's head stops under the top's deck and its foot, cut plumb, at the cladding inside the side it falls to",
           "code": ["layout::shapes"],
-          "tests": ["scenes::fuzz::fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar", "layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar", "layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
           "cases": [],
           "status": "Closed"
         },
@@ -348,7 +348,7 @@
           "junction": "A roof falling to a wall (an eave or a hip's end against it)",
           "rule": "A back gutter (`Gutter`), the covering tucked; the wall under the edge stops under the roof where it comes down to its top, blocked to the roof (its own blocking, into the corner where a crossing row's would leave the space against the wall open), and runs on in the wall beyond, every other course a hair short there as at a free end (`runs::under_roofs`)",
           "code": ["layout::roofs::Gutter", "layout::runs::under_roofs"],
-          "tests": ["layout::runs::a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables"],
+          "tests": ["terra_build_scenes::tests::a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables"],
           "cases": ["roofs and walls: a roof falling to a wall"],
           "status": "Closed"
         },
@@ -380,7 +380,7 @@
           "junction": "A roof's eave over timber walls whichever way it falls, a room's flat top beside them",
           "rule": "The courses left out under it blocked to the roof whichever axis its wall runs along; a row leaves a corner to the crossing row's blocking only where that row is a wall under the eave too, never a floor or a flat top beside it, nor a gable the roof rises along, where its own blocking runs on into the corner",
           "code": ["layout::runs::under_roofs"],
-          "tests": ["layout::runs::a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises"],
+          "tests": ["terra_build_scenes::tests::a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises"],
           "cases": [],
           "status": "Closed"
         },
@@ -410,7 +410,7 @@
           "junction": "Eaves, verges and where they meet",
           "rule": "Each open side exactly one edge piece; a hip's foot mitred; verges at an apex take no cap",
           "code": ["layout::roofs::lines", "roofing"],
-          "tests": ["layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece", "roofing::a_hips_capping_is_mitred_to_the_eaves_at_its_foot", "roofing::an_eave_is_cut_plumb_through_the_coverings_thickness", "sections::verges_meeting_at_an_apex_take_no_cap_there"],
+          "tests": ["layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece", "roofing::a_hips_capping_is_mitred_to_the_eaves_at_its_foot", "roofing::an_eave_is_cut_plumb_through_the_coverings_thickness", "terra_build_scenes::tests::verges_meeting_at_an_apex_take_no_cap_there"],
           "cases": ["rectangle, hip roof"],
           "status": "Closed"
         },
@@ -458,7 +458,7 @@
           "junction": "A roof kind's corner square laid by hand where no roof is",
           "rule": "Its eaves carried on past each open side; round a corner of two open sides only as one plane or a hip's crease running down off the roof, never a valley out past an outside corner nor a crease rising out past the roof, so no beam or cap stands past its edge",
           "code": ["layout::roofs"],
-          "tests": ["layout::roofs::a_lone_corner_square_carries_no_crease_out_past_its_edges"],
+          "tests": ["terra_build_scenes::tests::a_lone_corner_square_carries_no_crease_out_past_its_edges"],
           "cases": [],
           "status": "Closed"
         },
@@ -475,7 +475,7 @@
           "junction": "A roof's eave over a wall running on past it, the wall's top at the eave",
           "rule": "A level edge of the roof's own cubes with a whole wall cube past it, its top where the edge is, is against that wall: flashed, never an eave whose board stands on the wall's top past the eaves the wall stops (R4)",
           "code": ["layout::roofs"],
-          "tests": ["layout::roofs::an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it"],
+          "tests": ["terra_build_scenes::tests::an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it"],
           "cases": [],
           "status": "Closed"
         },
@@ -529,7 +529,7 @@
           "junction": "Damage",
           "rule": "A stone hole has sides and a back (D305); timber and roofs break in the shader",
           "code": ["loss", "sections::blocks"],
-          "tests": ["sections::a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed", "sections::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in"],
+          "tests": ["sections::a_stone_wall_is_holed_where_its_stones_have_fallen_and_flat_where_not_harmed", "terra_build_scenes::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in"],
           "cases": ["rectangle under a gable, damaged"],
           "also": "the frames check's *damaged* (`cargo xtask artifacts --frames --checks damaged`): timber's and a roof's damage held still and shown",
           "status": "Closed"
@@ -538,7 +538,7 @@
           "junction": "What is left after a collapse",
           "rule": "Any arrangement is drawn (D192 rule 3); plans hanging from what fell go with it; a lintel left over air stops at its cube (`roles::End::Free`)",
           "code": ["loss", "layout::roles::End::Free"],
-          "tests": ["loss::knocking_out_a_walls_base_course_brings_down_what_it_alone_held", "loss::plans_hanging_from_what_falls_go_with_it_and_no_others", "sections::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in"],
+          "tests": ["loss::knocking_out_a_walls_base_course_brings_down_what_it_alone_held", "loss::plans_hanging_from_what_falls_go_with_it_and_no_others", "terra_build_scenes::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in"],
           "cases": ["rectangle under a gable, after a collapse"],
           "status": "Closed"
         }
@@ -559,7 +559,7 @@
           "junction": "A plan; a building going up",
           "rule": "What is in laid from what is built (D358): a top, an end and a corner where it stops, a cube going in a top at its fill, all laid away as it is built on; ghosts drawn from the plan; what is in hides what is not; a wall carried up into a roof's cube in with the roof's first stage, an upright in with its first cube",
           "code": ["sections::ghosts", "layout"],
-          "tests": ["sections::a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit", "sections::a_plan_so_far_through_lights_one_piece_not_one_a_kit", "sections::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in", "sections::a_stone_wall_built_halfway_along_has_an_end_and_a_top_where_it_stops", "sections::a_middle_cube_built_alone_has_its_edges_and_finishing_its_neighbour_takes_them_away", "sections::a_log_wall_going_up_ends_its_courses_where_what_is_in_stops", "sections::a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole"],
+          "tests": ["sections::a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit", "sections::a_plan_so_far_through_lights_one_piece_not_one_a_kit", "terra_build_scenes::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in", "sections::a_stone_wall_built_halfway_along_has_an_end_and_a_top_where_it_stops", "sections::a_middle_cube_built_alone_has_its_edges_and_finishing_its_neighbour_takes_them_away", "sections::a_log_wall_going_up_ends_its_courses_where_what_is_in_stops", "sections::a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole"],
           "cases": ["rectangle under a gable, as a plan", "rectangle under a gable, walls going up", "rectangle under a gable, roof going on"],
           "also": "the frames check's *going up*",
           "status": "Closed"

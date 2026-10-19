@@ -69,7 +69,7 @@ const BUILDS: &[&[&str]] = &[
         "build",
         "--release",
         "-p",
-        "terra_build",
+        "terra_build_scenes",
         "--example",
         "artifacts",
     ],

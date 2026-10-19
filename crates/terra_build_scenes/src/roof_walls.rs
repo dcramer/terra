@@ -6,10 +6,10 @@
 //! a roof left on, a roof against a wall on every side and in a corner, shapes and posts on
 //! and through a roof, and a roof going up under walls standing on it.
 
-use crate::roofer::Style;
-use crate::scenes::example::{Plan, plan, roof_over};
-use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, STOREY_CUBES, Shape};
 use glam::IVec3;
+use terra_build::example::{Plan, plan, roof_over};
+use terra_build::roofer::Style;
+use terra_build::{Base, BuildOp, Cube, Facing, Fill, Kind, STOREY_CUBES, Shape};
 
 /// The rows, each named, in `wall` under a roof of `roof`, and `other`, a kind of another
 /// pattern its chimney in a gable is built of, where there is one: a timber wall's courses

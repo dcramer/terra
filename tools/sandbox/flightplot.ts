@@ -114,7 +114,7 @@ let columns: [number, number, number][] = [];
 const sceneName = example && SCENES[example];
 if (sceneName) {
   const rays = aims.map(([, a], i) => ({ from: mouths[i], to: a, reach }));
-  const out = execFileSync("cargo", ["run", "-q", "-p", "terra_build", "--example", "rays", "--", sceneName], { input: JSON.stringify(rays), maxBuffer: 1 << 26 });
+  const out = execFileSync("cargo", ["run", "-q", "-p", "terra_build_scenes", "--example", "rays", "--", sceneName], { input: JSON.stringify(rays), maxBuffer: 1 << 26 });
   ({ met, columns } = JSON.parse(String(out)));
 } else console.log(`${name}: no building to cast its breaths into${example ? ` (no scene for ${example})` : ""}`);
 // Each breath said: how many of its aims strike, how far, and at what.

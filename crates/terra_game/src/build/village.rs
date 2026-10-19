@@ -9,7 +9,7 @@
 //! and says how long they took.
 //!
 //! The scale scenes lay theirs here too, from `terra_build::village` and
-//! `terra_build::scenes::castle`: with `--town N` a town of N buildings on a grid of streets
+//! `terra_build::castle`: with `--town N` a town of N buildings on a grid of streets
 //! north of the start, `--castle` one base of a castle north of it, and `--far N` N
 //! buildings in hamlets spread round the start out to two kilometres.
 
@@ -205,11 +205,7 @@ pub(super) fn lay_scale(
                 facing: 0.0,
                 ops: {
                     let first = kinds.first();
-                    terra_build::scenes::castle::castle(
-                        first.masonry,
-                        first.beams,
-                        first.masonry_roof,
-                    )
+                    terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
                 },
             },
             [0.0, -CASTLE_NORTH_M],

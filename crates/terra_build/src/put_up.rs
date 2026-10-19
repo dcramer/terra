@@ -157,7 +157,7 @@ mod tests {
             .collect();
         all.push((
             "castle".into(),
-            crate::scenes::castle::castle(KINDS.masonry, KINDS.beams, KINDS.masonry_roof),
+            crate::castle::castle(KINDS.masonry, KINDS.beams, KINDS.masonry_roof),
         ));
         for (name, ops) in all {
             let shortcuts = Base::from_shortcuts(&ops);

@@ -15,7 +15,7 @@
 //! metres, with which way those triangles face; then each modelled module as baked, before
 //! it is laid, so a stretch is told apart from one the laying makes. Every roof over every
 //! plan in each wall kind and every two kinds mixed, and every other scene of the registry
-//! (`terra_build::scenes::registry`), in every kit, as `cargo xtask artifacts` lays them;
+//! (`terra_build_scenes::registry`), in every kit, as `cargo xtask artifacts` lays them;
 //! a name given keeps only the scenes whose names hold it, as `"logs: rectangle"`. `--worst N`
 //! lists N places.
 //!
@@ -63,7 +63,7 @@ fn main() -> ExitCode {
         .enumerate()
         .find(|(i, a)| !a.starts_with("--") && (*i == 0 || args[i - 1] != "--worst"))
         .map(|(_, a)| a.clone());
-    let materials = terra_build::scenes::registry::Materials {
+    let materials = terra_build_scenes::registry::Materials {
         kits: kits.clone(),
         names: names
             .iter()
@@ -71,7 +71,7 @@ fn main() -> ExitCode {
             .collect(),
         village: None,
     };
-    let cases: Vec<_> = terra_build::scenes::registry::registry(&materials)
+    let cases: Vec<_> = terra_build_scenes::registry::registry(&materials)
         .into_iter()
         .filter(|scene| {
             only.as_ref()

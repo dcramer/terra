@@ -8,7 +8,7 @@
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use terra_build::scenes::registry::{Materials, registry};
+use terra_build_scenes::registry::{Materials, registry};
 
 #[derive(Deserialize)]
 struct Contract {
@@ -34,14 +34,25 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
+/// The building crate whose modules and tests the rows name (D407: the contract is proved
+/// there; these fixtures are a crate above it).
+fn building() -> PathBuf {
+    root().join("../terra_build")
+}
+
 /// The source files of a module by its path under `src/` (`layout::roofs`), or of an
 /// integration test (`tests::rules`): its own file, and with `inner`, every file under its
 /// folder too; its tests' files (`tests.rs`, `tests/`) either way.
 fn files(module: &str, inner: bool) -> Vec<PathBuf> {
+    // A module of these fixtures is named with the crate's name first.
+    let (crate_, module) = match module.strip_prefix("terra_build_scenes::") {
+        Some(module) => (root(), module),
+        None => (building(), module),
+    };
     if let Some(test) = module.strip_prefix("tests::") {
-        return vec![root().join("tests").join(format!("{test}.rs"))];
+        return vec![crate_.join("tests").join(format!("{test}.rs"))];
     }
-    let path = root().join("src").join(module.replace("::", "/"));
+    let path = crate_.join("src").join(module.replace("::", "/"));
     let mut out: Vec<PathBuf> = [
         path.with_extension("rs"),
         path.join("mod.rs"),

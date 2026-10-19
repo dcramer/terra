@@ -242,16 +242,14 @@ pub fn black(surface: &Surface) -> Option<usize> {
 
 /// A base's near drawing, to cast lines at in a test: whether a junction is closed at
 /// every place across it, not only where the checker's few lines go.
-#[cfg(test)]
-pub(crate) struct Lines {
+pub struct Lines {
     drawn: Drawn,
     grid: Grid,
 }
 
-#[cfg(test)]
 impl Lines {
     /// The base built whole, drawn near with no relief.
-    pub(crate) fn of(base: &Base, kits: &Kits) -> Lines {
+    pub fn of(base: &Base, kits: &Kits) -> Lines {
         let maps = Maps::default();
         let whole = sections::Whole::lay(base, kits);
         let progress = Progress::Cubes {
@@ -283,7 +281,7 @@ impl Lines {
     }
 
     /// Whether a line from a point meets anything drawn within so far.
-    pub(crate) fn meets(&self, from: Vec3, dir: Vec3, far: f32) -> bool {
+    pub fn meets(&self, from: Vec3, dir: Vec3, far: f32) -> bool {
         self.grid.hit(&self.drawn, from, dir, 0.0, far).is_some()
     }
 }

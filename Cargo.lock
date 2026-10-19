@@ -5828,6 +5828,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_build_scenes"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "serde",
+ "serde_json",
+ "terra_build",
+ "terra_gen",
+ "zune-core",
+ "zune-jpeg",
+]
+
+[[package]]
 name = "terra_climate"
 version = "0.1.0"
 dependencies = [
@@ -5859,6 +5872,7 @@ dependencies = [
  "serde",
  "serde_json",
  "terra_build",
+ "terra_build_scenes",
  "terra_climate",
  "terra_core",
  "terra_gen",

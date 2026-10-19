@@ -1,5 +1,5 @@
 //! The drawing audit, `cargo xtask rules` (research/building-audit.md): every scene the
-//! registry holds before a push (`terra_build::scenes::registry`, `Gate::Push`): one of each
+//! registry holds before a push (`terra_build_scenes::registry`, `Gate::Push`): one of each
 //! sort of the village's buildings (D229), the QA cabins, the junctions, roofs and walls and
 //! the rectangles (the kit sheet's only by name while gap 19 is open), in the building
 //! baseline's kits with their dressed pieces, laid and drawn section by section as the
@@ -27,7 +27,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 use terra_build::inspect;
 use terra_build::kit::Kits;
-use terra_build::scenes::registry::{Family, Gate, Materials, ratchet};
+use terra_build_scenes::registry::{Family, Gate, Materials, ratchet};
 
 use terra_build::relief::Maps;
 use terra_build::sections::{self, Progress, Reach, Section};

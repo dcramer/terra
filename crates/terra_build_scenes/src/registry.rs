@@ -10,11 +10,11 @@
 //! "burg"); its base is built only when asked for, on ground falling across it and on its
 //! footings.
 
-use crate::kit::{Kit, Kits, Pattern};
-use crate::village::Palette;
-use crate::{Base, BuildOp, Kind};
 use glam::IVec3;
 use std::collections::BTreeMap;
+use terra_build::kit::{Kit, Kits, Pattern};
+use terra_build::village::Palette;
+use terra_build::{Base, BuildOp, Kind};
 
 /// What the scenes are built of: the kits in scope, their files' names, and the settlement's
 /// palette where there is one, which the village's buildings are built of.
@@ -195,7 +195,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
         }
     };
     for kit in &walls {
-        for (row, plan) in crate::roof_rows(&[kit.kind()], false, &roof) {
+        for (row, plan) in terra_build::roof_rows(&[kit.kind()], false, &roof) {
             let gate = first(&row);
             add(
                 format!("{}: {row}", m.name(kit.kind())),
@@ -211,7 +211,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
         .flat_map(|(i, a)| walls[i + 1..].iter().map(move |b| (*a, *b)))
         .collect();
     for &(a, b) in &pairs {
-        for (row, plan) in crate::roof_rows(&[a.kind(), b.kind()], true, &roof) {
+        for (row, plan) in terra_build::roof_rows(&[a.kind(), b.kind()], true, &roof) {
             let name = format!("{} with {}: {row}", m.name(a.kind()), m.name(b.kind()));
             add(name, Family::Mixed, first(&row), plan);
         }
@@ -224,7 +224,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
         let other = roofs
             .get((at + 1) % roofs.len().max(1))
             .map_or(own, |r| r.kind());
-        for (row, base) in crate::junctions::junctions(kit.kind(), own, other) {
+        for (row, base) in terra_build::junctions::junctions(kit.kind(), own, other) {
             let name = format!("{}: junction, {row}", m.name(kit.kind()));
             add(name, Family::Junctions, Gate::Push, base);
         }
@@ -260,7 +260,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
             name,
             Family::Example,
             Gate::Full,
-            crate::example(kit.kind()),
+            terra_build::example(kit.kind()),
         );
     }
     // The castle in the footings' stone with each kind of long members for its timber, and
@@ -272,13 +272,14 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
                 m.name(stone.kind()),
                 m.name(timber.kind())
             );
-            let castle = super::castle::castle(stone.kind(), timber.kind(), roof(stone.kind()));
+            let castle =
+                terra_build::castle::castle(stone.kind(), timber.kind(), roof(stone.kind()));
             add(name, Family::Castle, Gate::Full, castle);
         }
     }
     if let Some(palette) = &m.village {
         let first = palette.first();
-        let burg = super::burg::burg(super::burg::Materials {
+        let burg = terra_build::burg::burg(terra_build::burg::Materials {
             stone: first.masonry,
             beams: first.beams,
             logs: first.timber,
@@ -304,7 +305,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
                     gate: Gate::Full,
                     build: Box::new(move || {
                         let mut base = on_ground(kits, &plan);
-                        let _ = base.act_all(&acts, &crate::ops::Context::free(&rules));
+                        let _ = base.act_all(&acts, &terra_build::ops::Context::free(&rules));
                         base
                     }),
                 });
@@ -323,7 +324,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
                     gate: Gate::Full,
                     build: Box::new(move || {
                         let mut base = on_ground(kits, &plan);
-                        let _ = base.act_all(&acts, &crate::ops::Context::free(&rules));
+                        let _ = base.act_all(&acts, &terra_build::ops::Context::free(&rules));
                         base
                     }),
                 });
@@ -385,7 +386,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
     // base is drawn in (docs/building-voxels.md, gap 8).
     let mut rectangles: Vec<(String, Vec<BuildOp>)> = Vec::new();
     for kit in &walls {
-        if let Some((_, plan)) = crate::roof_rows(&[kit.kind()], false, &roof)
+        if let Some((_, plan)) = terra_build::roof_rows(&[kit.kind()], false, &roof)
             .into_iter()
             .next()
         {
@@ -393,7 +394,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
         }
     }
     for &(a, b) in &pairs {
-        if let Some((_, plan)) = crate::roof_rows(&[a.kind(), b.kind()], true, &roof)
+        if let Some((_, plan)) = terra_build::roof_rows(&[a.kind(), b.kind()], true, &roof)
             .into_iter()
             .next()
         {
@@ -421,12 +422,12 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
     // One of each sort of the village's buildings, in the settlement's own materials: the
     // shipped scene the game builds most of.
     if let Some(palette) = &m.village {
-        for building in crate::village::sorts(palette) {
+        for building in terra_build::village::sorts(palette) {
             out.push(Scene {
                 name: format!("village: {}", building.name),
                 family: Family::Village,
                 gate: Gate::Push,
-                build: Box::new(move || crate::village::standing(&building, palette)),
+                build: Box::new(move || terra_build::village::standing(&building, palette)),
             });
         }
     }
@@ -448,8 +449,8 @@ pub const STATES: [&str; 5] = [
 /// wall's lowest course knocked out, what it alone held come down.
 pub fn states(kits: &Kits, finished: &Base) -> Vec<Base> {
     let rules = kits.rules();
-    let cx = crate::ops::Context::free(&rules);
-    let refilled = |level: &dyn Fn(IVec3, &crate::Cube) -> u8| {
+    let cx = terra_build::ops::Context::free(&rules);
+    let refilled = |level: &dyn Fn(IVec3, &terra_build::Cube) -> u8| {
         let mut base = finished.clone();
         for (at, cube) in finished.cubes() {
             base.apply(BuildOp::Fill {
@@ -461,7 +462,7 @@ pub fn states(kits: &Kits, finished: &Base) -> Vec<Base> {
         base
     };
     let low = finished.cubes().map(|(at, _)| at.y).min().unwrap_or(0);
-    let full = crate::cubes::FULL;
+    let full = terra_build::cubes::FULL;
     let plan = refilled(&|_, _| 0);
     let walls = refilled(&|at, cube| {
         if cube.kind.is_roof() || at.y > low + 3 {
@@ -488,7 +489,7 @@ pub fn states(kits: &Kits, finished: &Base) -> Vec<Base> {
             let health = rules.toughness(cube.kind).health;
             let amount = (health * quarters / 4).max(1);
             let _ = base.act(
-                &crate::ops::Op::Damage {
+                &terra_build::ops::Op::Damage {
                     cubes: vec![at],
                     amount,
                 },
@@ -509,7 +510,7 @@ pub fn states(kits: &Kits, finished: &Base) -> Vec<Base> {
             .cube(IVec3::from_array(hole))
             .map_or(1, |cube| rules.toughness(cube.kind).health);
         let _ = damaged.act(
-            &crate::ops::Op::Damage {
+            &terra_build::ops::Op::Damage {
                 cubes: vec![hole],
                 amount: health,
             },
@@ -540,7 +541,7 @@ pub fn on_ground(kits: &Kits, ops: &[BuildOp]) -> Base {
     }
     let height = |[x, z]: [i32; 2]| (-(x as f32) * 4.0 - z as f32 * 2.0) as i16;
     let ring = base.ground_ring();
-    base.sample_ground(ring.into_iter().map(|column| crate::Sample {
+    base.sample_ground(ring.into_iter().map(|column| terra_build::Sample {
         column,
         height_cm: height(column),
     }));
@@ -603,7 +604,7 @@ mod tests {
             .filter(|s| s.family == Family::Sheet)
             .map(|s| s.name)
             .collect();
-        let (placed, _) = super::super::sheet::placed(&materials.kits, &materials.names);
+        let (placed, _) = crate::sheet::placed(&materials.kits, &materials.names);
         assert!(!placed.is_empty());
         for (row, ..) in placed {
             assert!(names.contains(&format!("sheet: {row}")), "{row}");

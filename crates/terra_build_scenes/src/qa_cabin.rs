@@ -6,13 +6,13 @@
 //! stairs up to it. What the film knocks down and mends, and the roof it takes off before
 //! the storey goes on, leave it as this.
 
-use crate::kit::Kits;
-use crate::ops::{Context, Op};
-use crate::plans::{self, Footings};
-use crate::roofer::Style;
-use crate::{Base, Facing, Kind, Panel, Sample, Shape};
 use glam::{IVec2, IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::Kits;
+use terra_build::ops::{Context, Op};
+use terra_build::plans::{self, Footings};
+use terra_build::roofer::Style;
+use terra_build::{Base, Facing, Kind, Panel, Sample, Shape};
 
 /// The cabin's corner tiles, as the film's: five metres east to west, four north to south.
 const X0: i32 = 4;
@@ -39,7 +39,7 @@ pub fn cabin(
     let footed: BTreeSet<Kind> = kits
         .0
         .iter()
-        .filter(|kit| kit.pattern == crate::kit::Pattern::Masonry && kit.framing.is_none())
+        .filter(|kit| kit.pattern == terra_build::kit::Pattern::Masonry && kit.framing.is_none())
         .map(|kit| kit.kind())
         .collect();
     let families: BTreeMap<Kind, u8> = kits
@@ -171,7 +171,7 @@ pub fn cabin(
         &base,
         IVec3::new(18, -1, 17),
         Facing::North,
-        crate::cells(1.0),
+        terra_build::cells(1.0),
         Shape::Stair(Facing::North),
         deck,
         footings(),
@@ -197,7 +197,7 @@ pub(crate) fn build(base: &mut Base, cx: &Context, blocks: &dyn Fn(Kind) -> bool
         {
             continue;
         }
-        let mut parts: Vec<(i32, crate::PartId, Vec<[i32; 3]>)> = base
+        let mut parts: Vec<(i32, terra_build::PartId, Vec<[i32; 3]>)> = base
             .parts()
             .filter_map(|(id, _)| {
                 let cubes = base.next_in(id, near, false)?;
@@ -235,7 +235,7 @@ pub(crate) fn build(base: &mut Base, cx: &Context, blocks: &dyn Fn(Kind) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Fill;
+    use terra_build::Fill;
 
     #[test]
     fn the_cabin_is_built_whole_with_its_storey_dormer_and_deck() {
@@ -246,7 +246,9 @@ mod tests {
         let kits = Kits(
             ["logs", "hewn", "stone", "shakes", "slate"]
                 .iter()
-                .map(|name| crate::kit::Kit::read(&format!("data/kits/{name}.ron"), &read).unwrap())
+                .map(|name| {
+                    terra_build::kit::Kit::read(&format!("data/kits/{name}.ron"), &read).unwrap()
+                })
                 .collect(),
         );
         let logs = kits.0[0].kind();

@@ -4,21 +4,21 @@
 //! `terra_game::build::sheet`), placing and lighting them; what each row is lives here,
 //! with the other scenes, so tests and tools can build it without Bevy.
 
-use crate::kit::{Kit, Pattern};
-use crate::ops::Op;
-use crate::roofer::Style;
-use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 use glam::{IVec3, Vec3};
+use terra_build::kit::{Kit, Pattern};
+use terra_build::ops::Op;
+use terra_build::roofer::Style;
+use terra_build::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 
-/// A roof's parts, as [`super::example::roof_over`] takes them.
+/// A roof's parts, as [`terra_build::example::roof_over`] takes them.
 type Parts = [([i32; 2], [i32; 2], Style, bool)];
 
 fn roof_over(ops: &[BuildOp], storey: i32, parts: &Parts, kind: Kind) -> Vec<BuildOp> {
-    super::example::roof_over(ops, storey, &parts.to_vec(), kind)
+    terra_build::example::roof_over(ops, storey, &parts.to_vec(), kind)
 }
 
 fn with_roof(ops: Vec<BuildOp>, parts: &Parts, kind: Kind) -> Vec<BuildOp> {
-    super::example::with_roof(ops, &parts.to_vec(), kind)
+    terra_build::example::with_roof(ops, &parts.to_vec(), kind)
 }
 
 /// A row of wall tiles from `from` to `to` east, on the row `z` south, in cubes.
@@ -672,10 +672,10 @@ pub type Placed = (String, Vec<BuildOp>, usize, usize);
 /// of. `names` are the kits' files' names. The game lays these (`--kit-sheet`), and the
 /// scene registry (`super::registry`) holds each to the mesh checker.
 pub fn placed(
-    kits: &crate::kit::Kits,
+    kits: &terra_build::kit::Kits,
     names: &std::collections::BTreeMap<Kind, String>,
 ) -> (Vec<Placed>, usize) {
-    use crate::kit::Profile;
+    use terra_build::kit::Profile;
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
     let stone = kits.footing().map(|kit| kit.kind());
     let hewn = kits
@@ -732,7 +732,7 @@ pub fn placed(
     }
     if let Some(stone) = stone {
         group += 1;
-        for (row, (row_name, ops)) in crate::roof_rows(&[laying, stone], true, &roof)
+        for (row, (row_name, ops)) in terra_build::roof_rows(&[laying, stone], true, &roof)
             .into_iter()
             .enumerate()
         {
@@ -790,7 +790,7 @@ pub fn placed(
 
 /// The kind a chimney in a gable of `kit` is built of in the roofs-and-walls rows: of another
 /// pattern, the stone's in a timber wall and the first timber's in a stone one.
-pub fn other_pattern(kits: &crate::kit::Kits, kit: &Kit) -> Option<Kind> {
+pub fn other_pattern(kits: &terra_build::kit::Kits, kit: &Kit) -> Option<Kind> {
     let block = kit.pattern == Pattern::Masonry;
     kits.0
         .iter()
@@ -941,7 +941,7 @@ fn changed(to: Kind) -> [Vec<Op>; 3] {
     let marked = vec![Op::Replace {
         cubes: block.clone(),
         kind: to,
-        part: Some(crate::PartId(900)),
+        part: Some(terra_build::PartId(900)),
     }];
     let mut going = marked.clone();
     going.extend([
@@ -987,7 +987,7 @@ pub fn roof_cube_rows(walls: Kind, roof: Kind) -> Vec<(String, Vec<BuildOp>)> {
         ));
     }
     for shape in ["L", "T", "U"] {
-        let (rooms, parts) = super::example::plan(shape, Style::Gable, Style::Gable);
+        let (rooms, parts) = terra_build::example::plan(shape, Style::Gable, Style::Gable);
         let mut ops: Vec<BuildOp> = rooms.iter().map(|&(min, max)| room(min, max)).collect();
         door(&mut ops, [4, 5], 0);
         rows.push((shape.to_string(), with_roof(ops, &parts, roof)));
@@ -1063,7 +1063,7 @@ pub fn preview(
     kit: &Kit,
     stone: Kind,
     roof: Kind,
-    rules: &crate::Rules,
+    rules: &terra_build::Rules,
 ) -> Vec<(Vec<BuildOp>, Vec<Op>, f32)> {
     // Only the acts the rules let through, as a player's would be, each tried in turn: a
     // course of logs comes out of every cube it spans at once, so a cube may be empty before
@@ -1075,7 +1075,7 @@ pub fn preview(
             for &op in &ops {
                 base.apply(op);
             }
-            let cx = crate::ops::Context::free(rules);
+            let cx = terra_build::ops::Context::free(rules);
             let held = acts
                 .into_iter()
                 .filter(|act| base.act(act, &cx).is_ok())
@@ -1102,7 +1102,7 @@ fn wanted_preview(kit: &Kit, stone: Kind, roof: Kind) -> Vec<(Vec<BuildOp>, Vec<
             .collect()
     };
     if kind.is_roof() {
-        let (rooms, parts) = super::example::plan("L", Style::Hip, Style::Gable);
+        let (rooms, parts) = terra_build::example::plan("L", Style::Hip, Style::Gable);
         let mut ops: Vec<BuildOp> = rooms
             .iter()
             .map(|&(min, max)| BuildOp::AddRoom {

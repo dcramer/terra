@@ -167,7 +167,7 @@ And three junctions the voxel contract found ([building-voxels.md](building-voxe
 | A plan on a roof, a roof part-built under a wall | As its roof's stage | Laid once the cube over has a step in | Goes in with the cube over it | As its stage |
 | Damage, collapse, carving | As any cube's (D305) | | | |
 
-Every case is a row of the kit sheet (`--sheet-rows "roofs and walls"`, each wall kind under its own roof) and an inspected base of `cargo xtask artifacts` (`terra_build::roof_walls`, each wall kit, logs, hewn and stone, under each roof, shakes and slate, at every detail, held at no fault by the ratchet); besides the faults every base is held to, the checker casts lines into the wedge under what stands on a roof, as far in as its own face, and down past a timber wall's or post's face where a roof meets it, either of which meeting nothing is a gap (`inspect::junctions`).
+Every case is a row of the kit sheet (`--sheet-rows "roofs and walls"`, each wall kind under its own roof) and an inspected base of `cargo xtask artifacts` (`terra_build_scenes::roof_walls`, each wall kit, logs, hewn and stone, under each roof, shakes and slate, at every detail, held at no fault by the ratchet); besides the faults every base is held to, the checker casts lines into the wedge under what stands on a roof, as far in as its own face, and down past a timber wall's or post's face where a roof meets it, either of which meeting nothing is a gap (`inspect::junctions`).
 
 ## Checking it
 

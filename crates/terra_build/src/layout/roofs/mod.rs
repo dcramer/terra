@@ -263,7 +263,7 @@ impl Roofs {
     /// whole, so every piece of them is laid as laying the whole base would. Worked out once
     /// for the same roofs while laying is [`remembered`]: every roof kit's layout, and every
     /// log kit's cut under them, asks for the same.
-    pub(crate) fn whole(base: &Base, kits: &Kits, near: Scope) -> std::rc::Rc<Roofs> {
+    pub fn whole(base: &Base, kits: &Kits, near: Scope) -> std::rc::Rc<Roofs> {
         let mut found: BTreeSet<[i32; 3]> = BTreeSet::new();
         let mut frontier: Vec<IVec3> = near
             .cubes_where(base, None, |cube| cube.kind.is_roof())

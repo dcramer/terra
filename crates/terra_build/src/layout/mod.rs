@@ -929,7 +929,7 @@ fn lay_scoped(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
 /// could give a piece there (a whole row of logs, a whole roof, a whole deck), so what it
 /// lays there is what laying the whole base would.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Scope {
+pub struct Scope {
     pub low: IVec3,
     pub high: IVec3,
 }

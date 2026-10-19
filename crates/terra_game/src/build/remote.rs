@@ -261,7 +261,7 @@ struct Example {
 }
 
 /// Puts up an example building whole as the player's base, in place of what is there: the
-/// castle (`terra_build::scenes::castle`, some 140,000 cubes), so edits to a base of its size are made
+/// castle (`terra_build::castle`, some 140,000 cubes), so edits to a base of its size are made
 /// and timed to the screen as the hammer makes them (D185).
 fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Example { name } = parse_some(params)?;
@@ -275,14 +275,14 @@ fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             let kinds = super::village_kinds(&kits)
                 .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
             let first = kinds.first();
-            terra_build::scenes::castle::castle(first.masonry, first.beams, first.masonry_roof)
+            terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
         }
         // The castle built to burn (D377), in the materials its parts are of.
         "burg" => {
             let kinds = super::village_kinds(&kits)
                 .ok_or_else(|| refused("the burg needs the settlement's materials"))?
                 .first();
-            terra_build::scenes::burg::burg(terra_build::scenes::burg::Materials {
+            terra_build::burg::burg(terra_build::burg::Materials {
                 stone: kinds.masonry,
                 beams: kinds.beams,
                 logs: kinds.timber,

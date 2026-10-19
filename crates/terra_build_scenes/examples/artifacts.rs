@@ -1,6 +1,6 @@
 //! What a renderer would show as junk in what the kits draw, found from the meshes
 //! (`terra_build::inspect`), `cargo xtask artifacts`: every scene of the registry
-//! (`terra_build::scenes::registry`) in the building baseline's materials (D333), on sloping
+//! (`terra_build_scenes::registry`) in the building baseline's materials (D333), on sloping
 //! ground, at every level of detail. Prints how many of each fault it found at each detail
 //! and the first few of each (every one with `--all`), and fails if there is any. A name
 //! given keeps only the scenes whose names hold it, in every material, as `"logs: rectangle"`.
@@ -20,8 +20,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use terra_build::inspect::{self, Fault};
 use terra_build::relief::Maps;
-use terra_build::scenes::registry::{Gate, Materials, ratchet};
 use terra_build::sections::Detail;
+use terra_build_scenes::registry::{Gate, Materials, ratchet};
 
 fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -70,7 +70,7 @@ fn main() -> ExitCode {
         }
         return fuzz(seeds, (&scope, &every), &maps, hold.as_ref());
     }
-    // The scene registry's (`terra_build::scenes::registry`): before a push those it gates
+    // The scene registry's (`terra_build_scenes::registry`): before a push those it gates
     // so, else every one, or those whose names hold the name given.
     let gate = if quick { Gate::Push } else { Gate::Full };
     let cases: Vec<_> = ratchet(&scope, gate)
@@ -230,7 +230,7 @@ fn main() -> ExitCode {
 /// a desktop's 32 threads.
 const FUZZ_SEEDS: u64 = 200;
 
-/// The fuzz pass (`terra_build::scenes::fuzz`, `cargo xtask fuzz`): a small base built at
+/// The fuzz pass (`terra_build_scenes::fuzz`, `cargo xtask fuzz`): a small base built at
 /// random from each seed in the baseline's materials (`scope`), drawn by every kit, each
 /// inspected on a thread of its own. A base with a fault, a sort of fault at a time, is
 /// shrunk to the fewest elements still showing it and printed as a test to paste: every
@@ -242,7 +242,7 @@ fn fuzz(
     maps: &Maps,
     hold: Option<&baseline::Hold>,
 ) -> ExitCode {
-    use terra_build::scenes::fuzz::{as_rust, build, elements, shrink};
+    use terra_build_scenes::fuzz::{as_rust, build, elements, shrink};
     let kits = &every.kits;
     let started = std::time::Instant::now();
     let count = seeds.end - seeds.start;
@@ -356,7 +356,7 @@ fn fuzz(
             })
             .collect();
         println!(
-            "\n  shrunk from {} elements to {} in {tries} bases; as a test (crates/terra_build/src/scenes/fuzz.rs):\n\n#[test]\nfn fuzz_seed_{seed}_is_drawn_without_{}() {{\n    // Found by `cargo xtask fuzz` at seed {seed}, shrunk:\n{}\n    let materials = baseline();\n    let kind = |name: &str| materials.names.iter().find(|(_, n)| n.as_str() == name).map(|(&k, _)| k).unwrap();\n    let base = build(&materials.kits, &{});\n    let report = crate::inspect::inspect(&base, &materials.kits, &crate::relief::Maps::worst(&materials.kits, false));\n    assert_eq!(report.count(crate::inspect::Fault::{fault:?}), 0);\n}}\n",
+            "\n  shrunk from {} elements to {} in {tries} bases; as a test (crates/terra_build_scenes/src/fuzz.rs):\n\n#[test]\nfn fuzz_seed_{seed}_is_drawn_without_{}() {{\n    // Found by `cargo xtask fuzz` at seed {seed}, shrunk:\n{}\n    let materials = baseline();\n    let kind = |name: &str| materials.names.iter().find(|(_, n)| n.as_str() == name).map(|(&k, _)| k).unwrap();\n    let base = build(&materials.kits, &{});\n    let report = crate::inspect::inspect(&base, &materials.kits, &crate::relief::Maps::worst(&materials.kits, false));\n    assert_eq!(report.count(crate::inspect::Fault::{fault:?}), 0);\n}}\n",
             all.len(),
             kept.len(),
             format!("{fault:?}").to_lowercase(),

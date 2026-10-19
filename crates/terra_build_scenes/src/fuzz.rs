@@ -12,13 +12,13 @@
 //! is fixed, or listed in the voxel contract's Gaps (docs/building-voxels.md) with the rule
 //! it needs and its seeds' faults recorded in the baseline until it is closed.
 
-use crate::kit::{Kits, Pattern};
-use crate::ops::{Context, Op};
-use crate::plans::{self, Footings};
-use crate::roofer::Style;
-use crate::{Base, Facing, Kind, Panel, STOREY_CUBES, Sample, Shape};
 use glam::{IVec2, IVec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Kits, Pattern};
+use terra_build::ops::{Context, Op};
+use terra_build::plans::{self, Footings};
+use terra_build::roofer::Style;
+use terra_build::{Base, Facing, Kind, Panel, STOREY_CUBES, Sample, Shape};
 
 /// A stream of numbers from a seed (SplitMix64): enough for picking, and the same on every
 /// platform.
@@ -398,7 +398,7 @@ pub fn build(kits: &Kits, elements: &[Element]) -> Base {
                 along_x,
                 kind,
             } => {
-                let inside = IVec3::new(tile[0], crate::wall_layer(storey), tile[1]);
+                let inside = IVec3::new(tile[0], terra_build::wall_layer(storey), tile[1]);
                 let footprint = plans::room_footprint(&base, inside);
                 plans::roof(&base, &footprint, storey, style, along_x, kind)
             }
@@ -612,7 +612,7 @@ pub fn as_rust(elements: &[Element], kinds: &dyn Fn(Kind) -> String) -> String {
 mod tests {
     use super::Element::*;
     use super::*;
-    use crate::scenes::registry::Materials;
+    use crate::registry::Materials;
 
     fn baseline() -> Materials {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -672,12 +672,12 @@ mod tests {
         );
         let waiting = base
             .cubes()
-            .filter(|(_, cube)| cube.fill != crate::Fill::Open && !cube.is_built())
+            .filter(|(_, cube)| cube.fill != terra_build::Fill::Open && !cube.is_built())
             .count();
         assert_eq!(waiting, 0, "everything laid is built");
         assert!(base.kinds().any(|kind| kind == named("shakes")), "the roof");
         let door = base.cube(IVec3::new(2, 1, 0)).map(|cube| cube.fill);
-        assert_eq!(door, Some(crate::Fill::Open), "the doorway");
+        assert_eq!(door, Some(terra_build::Fill::Open), "the doorway");
     }
 
     #[test]
@@ -721,15 +721,15 @@ mod tests {
             }
         }
         let base = build(&materials.kits, &elements);
-        let report = crate::inspect::inspect(
+        let report = terra_build::inspect::inspect(
             &base,
             &materials.kits,
-            &crate::relief::Maps::worst(&materials.kits, false),
+            &terra_build::relief::Maps::worst(&materials.kits, false),
         );
         let fought: Vec<_> = report
             .findings
             .iter()
-            .filter(|f| f.fault == crate::inspect::Fault::Coplanar)
+            .filter(|f| f.fault == terra_build::inspect::Fault::Coplanar)
             .collect();
         assert!(fought.is_empty(), "{fought:#?}");
     }

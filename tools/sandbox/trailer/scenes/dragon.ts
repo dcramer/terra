@@ -131,7 +131,7 @@ function drift(s: Script, from: number, to: number, a: Vec3, b: Vec3, lookA: Vec
 
 /// The keep: the middle of its foot, its faces' half width, the middle of its jettied timber
 /// storey's height; and in cubes its extent and its course of bond timbers over its ground
-/// storey (`terra_build::scenes::burg`).
+/// storey (`terra_build::burg`).
 const KEEP: Vec3 = [0, 0, -19.75];
 const KEEP_HALF = 4.5;
 const KEEP_JETTY = 16.5;
@@ -231,7 +231,7 @@ function script(s: Script) {
   s.frame = fall(30);
 }
 
-/// The flanking towers' corners, in cubes (`terra_build::scenes::burg`): each a ring 14 a
+/// The flanking towers' corners, in cubes (`terra_build::burg`): each a ring 14 a
 /// side from there, a cube clear of the curtain all round.
 const TOWER = 14;
 const SW: [number, number] = [-48, -10];

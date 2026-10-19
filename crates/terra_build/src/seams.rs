@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 
 /// The rules: what a base is and how it changes, with no layout or art.
 const RULES: &[&str] = &[
+    // The example bases, built from the rules alone, which every building crate's tests lay
+    // (a crate's tests see only the crates below it, D407).
+    "burg",
+    "castle",
+    "example", //
     "construct",
     "cost",
     "cubes",
@@ -31,10 +36,11 @@ const RULES: &[&str] = &[
     "save",
     "shortcuts",
     "support",
+    "testing",
 ];
 
 /// What stands over the rules: the layout (where pieces go, which a server needs), the
-/// drawing, the settlements and the fixtures.
+/// drawing and the settlements. The fixtures are `terra_build_scenes`.
 const ABOVE: &[&str] = &[
     // The layout.
     "fitting",
@@ -57,10 +63,7 @@ const ABOVE: &[&str] = &[
     "surface",
     "timber", //
     // The settlements (the town is terra_town).
-    "village", //
-    // The fixtures.
-    "roof_walls",
-    "scenes",
+    "village",
 ];
 
 /// This test's own module.

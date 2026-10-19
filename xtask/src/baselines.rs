@@ -4,7 +4,7 @@
 
 /// The artifacts ratchet's baseline, a file a set and group: `<set>/<group>.tsv`, rows
 /// group, fault, count, why.
-pub(crate) const ARTIFACTS: &str = "crates/terra_build/examples/artifacts-baseline";
+pub(crate) const ARTIFACTS: &str = "crates/terra_build_scenes/examples/artifacts-baseline";
 
 /// The size ratchet's baseline (D396): path, function, lines.
 pub(crate) const SIZES: &str = "xtask/sizes-baseline.tsv";

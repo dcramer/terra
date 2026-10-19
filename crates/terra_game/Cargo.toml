@@ -18,6 +18,8 @@ serde_json = "1"
 # The version Bevy itself reads models with, used here to read model shapes directly.
 gltf = { version = "1.4", default-features = false, features = ["utils"] }
 terra_build.workspace = true
+# The kit sheet's rows the build sheet lays (terra_build_scenes::sheet, D407).
+terra_build_scenes.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true

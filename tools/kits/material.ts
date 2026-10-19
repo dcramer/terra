@@ -122,7 +122,7 @@ export function onScreen(view: View, point: Vec3): [number, number] {
   return [960 + dot(to, right) * pixels, 540 - dot(to, up) * pixels];
 }
 
-// A wall material's preview (crates/terra_build/src/scenes/sheet.rs, `preview`): a house 5 m
+// A wall material's preview (crates/terra_build_scenes/src/sheet.rs, `preview`): a house 5 m
 // east by 4 m south, its walls 3 m, its front (south) with a window, the doorway, a carved hole
 // and a damaged east end, a window in its west and north walls, a gable east and west; 8.5 m
 // east of it a platform 4 m by 3 m, its front a clean face 1.5 m high from 2 m to 4 m along.
@@ -459,7 +459,7 @@ function texels(chosen: Material[]): Map<string, Map<string, [number, number]>> 
         ? kits.find((kit) => kit.roof === chosen[0].name && kit.baseline) ?? kits.find((kit) => kit.roof === chosen[0].name)
         : kits.find((kit) => kit.name === chosen[0].name)
       : undefined;
-  const args = ["run", "-q", "--release", "-p", "terra_build", "--example", "texels", "--", "--worst", "0", ...(filter ? [`${filter.id}: `] : [])];
+  const args = ["run", "-q", "--release", "-p", "terra_build_scenes", "--example", "texels", "--", "--worst", "0", ...(filter ? [`${filter.id}: `] : [])];
   const done = spawnSync("cargo", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (done.status !== 0) throw new Error(`texels: ${done.stderr}`);
   return parseTexels(done.stdout);

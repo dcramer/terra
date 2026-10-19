@@ -109,7 +109,7 @@ const ARTIFACTS_BUILD: &[&str] = &[
     "-q",
     "--release",
     "-p",
-    "terra_build",
+    "terra_build_scenes",
     "--example",
     "artifacts",
 ];
@@ -117,7 +117,7 @@ const ARTIFACTS_BUILD: &[&str] = &[
 /// The artifacts checker's command with its own arguments.
 macro_rules! artifacts {
     ($($arg:literal),*) => {
-        &["cargo", "run", "-q", "--release", "-p", "terra_build", "--example", "artifacts", "--", $($arg),*]
+        &["cargo", "run", "-q", "--release", "-p", "terra_build_scenes", "--example", "artifacts", "--", $($arg),*]
     };
 }
 

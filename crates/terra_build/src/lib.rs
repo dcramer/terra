@@ -35,6 +35,8 @@
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
+pub mod burg;
+pub mod castle;
 pub mod cells;
 pub mod checker;
 pub mod construct;
@@ -42,6 +44,7 @@ pub mod cost;
 pub mod cubes;
 pub mod draw;
 pub mod dress;
+pub mod example;
 pub mod fire;
 pub use fire::Scorch;
 pub mod fitting;
@@ -66,16 +69,15 @@ pub mod plans;
 pub mod put_up;
 mod ray;
 pub mod relief;
-pub mod roof_walls;
 pub mod roofer;
 pub mod roofing;
 pub mod rooms;
 pub mod save;
-pub mod scenes;
 pub mod sections;
 mod shortcuts;
 pub mod support;
 pub mod surface;
+pub mod testing;
 pub mod timber;
 pub mod village;
 mod walk;
@@ -85,14 +87,14 @@ mod seams;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms, Toughness};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
+pub use example::{
+    RoofParts, VILLAGE_HOUSES, bench_village, example, plan as roof_plan, roof_over, roof_rows,
+    with_roof,
+};
 pub use ground::{Ground, Sample};
 pub use mesh::{Indexed, Surface};
 pub use order::Progress;
 pub use ray::BuildHit;
-pub use scenes::example::{
-    RoofParts, VILLAGE_HOUSES, bench_village, example, plan as roof_plan, roof_over, roof_rows,
-    with_roof,
-};
 pub use shortcuts::{BuildOp, Panel, corners};
 pub use terra_core::Walker;
 

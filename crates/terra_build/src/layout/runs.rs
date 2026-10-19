@@ -1895,49 +1895,6 @@ mod tests {
     }
 
     #[test]
-    fn a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables() {
-        // A lean-to falling to a taller wall (`roof_walls`, a roof falling to a wall), in each
-        // shipped coursed material: at each gable's end under the roof's lowest cube, where
-        // the gable's course is left out under the roof and meets the blocking along the
-        // eave, lines in through the gable a centimetre apart, from the wall's top to the
-        // roof's underside, all meet something. Hewn beams' course stopped 4 cm short of the
-        // eave's blocking there (docs/building-voxels.md, a roof falling to a wall).
-        let kits = shipped();
-        let shakes = kits.0[2].kind();
-        for wall in [kits.0[0].kind(), kits.0[1].kind()] {
-            let (_, ops) = crate::roof_walls::rows(wall, shakes, None)
-                .into_iter()
-                .find(|(row, _)| row == "a roof falling to a wall")
-                .expect("the row");
-            let mut base = Base::default();
-            for op in ops {
-                base.apply(op);
-            }
-            let lines = crate::inspect::Lines::of(&base, &kits);
-            let roofs = Roofs::whole(&base, &kits, super::super::Scope::ALL);
-            let eave = crate::STOREY_CUBES as f32 * CELL_M;
-            for (x, out) in [(0, -1.0f32), (9, 1.0)] {
-                let face = (x as f32 + 0.5 + out * 0.5) * CELL_M;
-                let middle = (x as f32 + 0.5) * CELL_M;
-                for k in 0..50 {
-                    let z = 5.0 * CELL_M + 0.005 + k as f32 * 0.01;
-                    let under = roofs.under_over(middle, z, eave).expect("the roof");
-                    let mut y = eave + 0.01;
-                    while y < under - 0.03 {
-                        let from = Vec3::new(face + out * 0.3, y, z);
-                        assert!(
-                            lines.meets(from, Vec3::X * -out, 0.3 + CELL_M + 0.02),
-                            "kind {}: open under the roof at ({face}, {y:.3}, {z:.3})",
-                            wall.0
-                        );
-                        y += 0.01;
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it() {
         // A wall two cubes thick and four long, its top decked, a pier rising from its west
         // end, standing in the ground, as the QA cabin's garden wall: the pier's members are
@@ -1997,74 +1954,6 @@ mod tests {
                     let ground = if foot.x < 0.25 { -0.6 } else { -0.5 };
                     assert!(foot.y <= ground, "a corner post's foot at {foot}");
                 }
-            }
-        }
-    }
-
-    #[test] // Slow: minutes.
-    fn a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises() {
-        // Found by `cargo xtask fuzz` (seeds 28, 110; docs/building-voxels.md, gap 12): a log
-        // room laid with its flat top, roofed over it by a lean-to rising north to south and
-        // a hip whose ridge runs east and west. The walls along the north and south under the
-        // eaves were left to a crossing row's blocking where the room's flat top stood beside
-        // them, which is a floor and lays none, and sky showed under the roof.
-        use crate::scenes::fuzz::{Element::*, build};
-        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let materials =
-            crate::scenes::registry::Materials::read(&assets, true).expect("the baseline");
-        let kind = |name: &str| {
-            materials
-                .names
-                .iter()
-                .find(|(_, n)| n.as_str() == name)
-                .map(|(&k, _)| k)
-                .expect(name)
-        };
-        let maps = crate::relief::Maps::worst(&materials.kits, false);
-        for elements in [
-            vec![
-                Room {
-                    min: [1, 4],
-                    max: [8, 7],
-                    storey: 0,
-                    kind: kind("logs"),
-                },
-                Roof {
-                    tile: [4, 5],
-                    storey: 0,
-                    style: Style::LeanTo,
-                    along_x: Some(false),
-                    kind: kind("shakes"),
-                },
-            ],
-            vec![
-                Room {
-                    min: [1, 1],
-                    max: [7, 7],
-                    storey: 0,
-                    kind: kind("logs"),
-                },
-                Roof {
-                    tile: [4, 4],
-                    storey: 0,
-                    style: Style::Hip,
-                    along_x: Some(true),
-                    kind: kind("shakes"),
-                },
-            ],
-        ] {
-            let base = build(&materials.kits, &elements);
-            let report = crate::inspect::inspect(&base, &materials.kits, &maps);
-            for fault in [
-                crate::inspect::Fault::SeeThrough,
-                crate::inspect::Fault::UnderRoof,
-            ] {
-                assert_eq!(
-                    report.count(fault),
-                    0,
-                    "{elements:?}: {:?}",
-                    report.findings
-                );
             }
         }
     }

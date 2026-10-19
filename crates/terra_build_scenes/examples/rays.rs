@@ -1,4 +1,4 @@
-//! What rays meet in a registered scene (`terra_build::scenes::registry`), for the flight
+//! What rays meet in a registered scene (`terra_build_scenes::registry`), for the flight
 //! plot (tools/sandbox/flightplot.ts, D382) to say whether each breath strikes the building:
 //! the scene named, and on standard input a JSON array of rays in its base's own metres,
 //! `[{"from": [x, y, z], "to": [x, y, z], "reach": metres}]`; on standard output, JSON:
@@ -7,7 +7,7 @@
 //! and `columns`, the building's footprint, each column it stands on as `[x, z, top]` in
 //! metres, its middle and the top of its highest cube, for a plot to draw it under a course.
 //!
-//!   cargo run -q -p terra_build --example rays -- "burg: built to burn" < rays.json
+//!   cargo run -q -p terra_build_scenes --example rays -- "burg: built to burn" < rays.json
 
 use glam::Vec3;
 use serde_json::{Value, json};
@@ -15,7 +15,7 @@ use std::io::Read;
 use std::path::Path;
 use std::process::ExitCode;
 use terra_build::CELL_M;
-use terra_build::scenes::registry::{Materials, registry};
+use terra_build_scenes::registry::{Materials, registry};
 
 fn main() -> ExitCode {
     let Some(name) = std::env::args().nth(1) else {

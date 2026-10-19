@@ -1,0 +1,25 @@
+[package]
+name = "terra_build_scenes"
+description = "Building's fixtures: the scenes the tests, the mesh checker, the drawing audit, the voxel contract and the kit sheet lay (the registry, the fuzz bases, the QA cabin), and the checks over them. A dev dependency for most; no engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+# Seeded random streams for the fuzz bases (D407).
+terra_gen.workspace = true
+# The rules the scenes are laid by, and the layout and drawing the checks read.
+terra_build.workspace = true
+
+[dev-dependencies]
+# The texel check reads a material's maps (`examples/texels.rs`).
+zune-jpeg.workspace = true
+zune-core.workspace = true
+# The voxel contract's matrix, JSON the docs check reads too (`tests/contract.rs`, D348).
+serde.workspace = true
+serde_json = "1"
+
+[lints]
+workspace = true

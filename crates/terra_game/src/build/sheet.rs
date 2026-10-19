@@ -26,8 +26,8 @@ use bevy::prelude::*;
 use std::sync::Arc;
 use terra_build::kit::Kits;
 use terra_build::ops::Op;
-use terra_build::scenes::sheet::{acted_rows, placed, preview};
 use terra_build::{Base, BuildOp, Kind};
+use terra_build_scenes::sheet::{acted_rows, placed, preview};
 use terra_core::Operation;
 
 /// How far apart the rows are, and the three states along each, in metres.
@@ -222,7 +222,7 @@ fn lay_row(
     sheet: &mut Laying,
     planet: &Planet,
     wanted: &[String],
-    (name, ops, group, row): terra_build::scenes::sheet::Placed,
+    (name, ops, group, row): terra_build_scenes::sheet::Placed,
 ) {
     // Only the rows asked for, each where it always is.
     if !wanted.is_empty() && !wanted.iter().any(|text| name.contains(text.as_str())) {
@@ -293,7 +293,7 @@ fn lay_acted(
     sheet: &mut Laying,
     planet: &mut ResMut<Planet>,
     (options, rules): (&Options, &terra_build::Rules),
-    row: &terra_build::scenes::sheet::Acted,
+    row: &terra_build_scenes::sheet::Acted,
     north: f32,
 ) {
     let site = sheet.site;

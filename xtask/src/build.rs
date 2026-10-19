@@ -109,7 +109,7 @@ pub(crate) fn sections(args: &[String]) -> bool {
     run("cargo", &cargo)
 }
 
-/// Where building's textures are stretched (`crates/terra_build/examples/texels.rs`): a name
+/// Where building's textures are stretched (`crates/terra_build_scenes/examples/texels.rs`): a name
 /// keeps only the bases whose names hold it.
 pub(crate) fn texels(args: &[String]) -> bool {
     let mut cargo = vec![
@@ -117,7 +117,7 @@ pub(crate) fn texels(args: &[String]) -> bool {
         "-q",
         "--release",
         "-p",
-        "terra_build",
+        "terra_build_scenes",
         "--example",
         "texels",
         "--",
@@ -174,7 +174,7 @@ pub(crate) fn rules(args: &[String]) -> bool {
                     "-q",
                     "--release",
                     "-p",
-                    "terra_build",
+                    "terra_build_scenes",
                     "--example",
                     "drawing",
                 ],
@@ -214,7 +214,7 @@ pub(crate) fn artifacts_command(args: &[String]) -> (&'static str, Vec<String>) 
         "-q",
         "--release",
         "-p",
-        "terra_build",
+        "terra_build_scenes",
         "--example",
         "artifacts",
         "--",
@@ -225,7 +225,7 @@ pub(crate) fn artifacts_command(args: &[String]) -> (&'static str, Vec<String>) 
     ("cargo", cargo)
 }
 
-/// The fuzz pass (`terra_build::scenes::fuzz`): small bases built at random from seeds, as
+/// The fuzz pass (`terra_build_scenes::fuzz`): small bases built at random from seeds, as
 /// a player builds, each through the mesh checker; a base with a fault shrunk to its fewest
 /// elements and printed as a test. `--seeds N` and `--from S` say which; `--ratchet` holds
 /// the check's seeds to the baseline, `--raise "<why>"` writes what rose (D414).

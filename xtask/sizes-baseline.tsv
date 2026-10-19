@@ -2,8 +2,8 @@
 # ratchet began, as it is now (D396). Each may shrink, never grow, and nothing is added:
 # the full run on main (`cargo xtask nightly`) (`cargo xtask sizes --lower`, D414) lowers it and drops what is under.
 # path	function (- for the file)	lines
-crates/terra_build/examples/artifacts.rs	main	202
-crates/terra_build/examples/drawing.rs	main	204
+crates/terra_build_scenes/examples/artifacts.rs	main	202
+crates/terra_build_scenes/examples/drawing.rs	main	204
 crates/terra_build/examples/sections.rs	main	196
 crates/terra_build/src/checker.rs	check	197
 crates/terra_build/src/cubes.rs	-	1240
@@ -37,11 +37,11 @@ crates/terra_build/src/packs.rs	-	1298
 crates/terra_build/src/plans.rs	-	1678
 crates/terra_build/src/roofing.rs	-	1167
 crates/terra_build/src/roofing.rs	draw_as	155
-crates/terra_build/src/scenes/castle.rs	castle	162
-crates/terra_build/src/scenes/fuzz.rs	elements	223
-crates/terra_build/src/scenes/qa_cabin.rs	cabin	156
-crates/terra_build/src/scenes/registry.rs	registry	261
-crates/terra_build/src/scenes/sheet.rs	-	1181
+crates/terra_build/src/castle.rs	castle	162
+crates/terra_build_scenes/src/fuzz.rs	elements	223
+crates/terra_build_scenes/src/qa_cabin.rs	cabin	156
+crates/terra_build_scenes/src/registry.rs	registry	261
+crates/terra_build_scenes/src/sheet.rs	-	1181
 crates/terra_build/src/sections/details.rs	draw_details	281
 crates/terra_build/src/sections/ghosts.rs	ghost	156
 crates/terra_build/src/sections/parts.rs	cluster_keys	212

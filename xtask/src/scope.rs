@@ -20,18 +20,21 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     // The demos' places, `include_str!`ed by the site queries.
     ("tools/sandbox/places.ts", &["terra_land"]),
     // The voxel contract, proved row by row by building's contract test.
-    ("docs/building-voxels.json", &["terra_build"]),
+    ("docs/building-voxels.json", &["terra_build_scenes"]),
     // The kits' models and references, which the kit checker and the material bench read.
     ("art/", &["terra_build"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     ("assets/", &["terra_world", "terra_game", "terra_sandbox"]),
     // Building's kits, packs, items and settlement, and the materials its kits name, which the
     // kit checker and the packs' tests read.
-    ("assets/data/kits/", &["terra_build"]),
+    ("assets/data/kits/", &["terra_build", "terra_build_scenes"]),
     ("assets/data/packs/", &["terra_build"]),
     ("assets/data/items.ron", &["terra_build"]),
-    ("assets/data/settlement.ron", &["terra_build"]),
-    ("assets/materials/", &["terra_build"]),
+    (
+        "assets/data/settlement.ron",
+        &["terra_build", "terra_build_scenes"],
+    ),
+    ("assets/materials/", &["terra_build", "terra_build_scenes"]),
     // The town's market and the catalogue its stalls are sized from, and its people's day.
     ("assets/data/market.ron", &["terra_town"]),
     ("assets/data/builds.ron", &["terra_town"]),
@@ -323,10 +326,16 @@ mod tests {
     use super::*;
 
     fn crates() -> BTreeSet<String> {
-        ["terra_build", "terra_core", "terra_land", "terra_game"]
-            .into_iter()
-            .map(String::from)
-            .collect()
+        [
+            "terra_build",
+            "terra_build_scenes",
+            "terra_core",
+            "terra_land",
+            "terra_game",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect()
     }
 
     fn files(list: &[&str]) -> Vec<String> {
@@ -376,7 +385,7 @@ mod tests {
             &crates(),
         );
         assert!(scope.changed.is_empty());
-        assert_eq!(scope.readers, set(&["terra_land", "terra_build"]));
+        assert_eq!(scope.readers, set(&["terra_land", "terra_build_scenes"]));
         assert_eq!(scope.tools, set(&["sandbox"]));
     }
 
@@ -413,7 +422,10 @@ mod tests {
         let bevy = ["terra_world", "terra_game", "terra_sandbox"];
         let scope = classify(&files(&["assets/data/kits/log.ron"]), &crates());
         assert!(scope.assets);
-        assert_eq!(scope.readers, set(&[&bevy[..], &["terra_build"]].concat()));
+        assert_eq!(
+            scope.readers,
+            set(&[&bevy[..], &["terra_build", "terra_build_scenes"]].concat())
+        );
         let scope = classify(&files(&["assets/models/tree/pine.glb"]), &crates());
         assert_eq!(scope.readers, set(&bevy));
         let scope = classify(&files(&["assets/data/life.ron"]), &crates());
@@ -440,8 +452,8 @@ mod tests {
         // The scheduled run's lowering commit: the check's cheap stages and nothing else.
         let scope = classify(
             &files(&[
-                "crates/terra_build/examples/artifacts-baseline/fuzz/seed-2.tsv",
-                "crates/terra_build/examples/artifacts-baseline/all/sheet.tsv",
+                "crates/terra_build_scenes/examples/artifacts-baseline/fuzz/seed-2.tsv",
+                "crates/terra_build_scenes/examples/artifacts-baseline/all/sheet.tsv",
                 "xtask/sizes-baseline.tsv",
                 "docs/decisions.md",
             ]),
@@ -458,10 +470,13 @@ mod tests {
         // Beside them, the checker and the tasks are still their crates, and a file only
         // named like the folder is not in it.
         for (file, crate_) in [
-            ("crates/terra_build/examples/artifacts.rs", "terra_build"),
             (
-                "crates/terra_build/examples/artifacts-baseline.tsv",
-                "terra_build",
+                "crates/terra_build_scenes/examples/artifacts.rs",
+                "terra_build_scenes",
+            ),
+            (
+                "crates/terra_build_scenes/examples/artifacts-baseline.tsv",
+                "terra_build_scenes",
             ),
             ("xtask/src/sizes.rs", "xtask"),
         ] {

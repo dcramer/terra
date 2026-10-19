@@ -1185,19 +1185,7 @@ impl Kit {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-
-    pub(crate) fn assets() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
-    }
-
-    pub(crate) fn shipped(name: &str) -> Kit {
-        let read = |path: &str| {
-            std::fs::read_to_string(assets().join(path)).map_err(|why| format!("{path}: {why}"))
-        };
-        let mut kit = Kit::read(&format!("{MATERIALS}/{name}"), &read).unwrap();
-        kit.dress.made = None;
-        kit
-    }
+    pub(crate) use crate::testing::{assets, shipped};
 
     #[test]
     fn a_block_materials_dressed_stone_is_its_own_wall_unless_it_gives_one() {
