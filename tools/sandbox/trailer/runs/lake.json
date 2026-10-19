@@ -10,6 +10,15 @@
     "tilt": 7,
     "face": "225,14"
   },
+  "meetings": [
+    {
+      "kind": "Red fox",
+      "behaviour": "crossing",
+      "at": 11,
+      "ahead": 26,
+      "bearing": -24
+    }
+  ],
   "look": {
     "shutter": 90,
     "exposure_bias": 0.2

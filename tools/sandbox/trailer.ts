@@ -55,6 +55,10 @@ type Shot = {
   /// route, made over it.
   scene?: string;
   look?: { letterbox?: number };
+  /// Wildlife meetings the film asks for, put out and timed by the game (play's wildlife/asked.rs,
+  /// D384): the kind, what it does, when (seconds of the run) and where (metres ahead of the camera,
+  /// degrees off its axis to the right), and how many.
+  meetings?: { kind: string; behaviour: "crossing" | "grazing" | "fleeing"; at: number; ahead: number; bearing?: number; group?: number }[];
   /// Its sound bed's layers, as `terra_sandbox --sound-bed` takes them, without their times.
   sound?: string[];
   music?: string;
@@ -238,6 +242,31 @@ function wildlifeSeen(log: string, from: number, seconds: number): string | unde
   );
 }
 
+/// An asked meeting is seen when it is so big on the picture for so long (seconds) of the film.
+const MEETING_PX = 40;
+const MEETING_S = 2;
+
+/// Whether each meeting the run asked for was seen, a line each, from the run's log (play's
+/// sighted.rs tells each asked one's size twice a second; wildlife's asked.rs when it was staged).
+function meetingsSeen(log: string, shot: Shot, from: number): string[] {
+  return (shot.meetings ?? []).map((meeting, index) => {
+    const name = `meeting ${meeting.kind}`;
+    const gaveUp = log.match(new RegExp(`Wildlife: meeting ${index} \\([^)]*\\) not staged: ([^\\n]*)`));
+    if (gaveUp) return `✗ ${name}: not staged, ${gaveUp[1].replace(/\.$/, "")}`;
+    if (!new RegExp(`Wildlife: meeting ${index} \\(`).test(log)) return `✗ ${name}: never staged (its time, ${meeting.at} s, not reached?)`;
+    const px = [...log.matchAll(new RegExp(`Meeting ${index} seen at ([\\d.]+) s: (\\d+) px`, "g"))]
+      .map((m) => ({ t: Number(m[1]), px: Number(m[2]) }))
+      .filter((s) => s.t >= from && s.t <= from + shot.seconds)
+      .map((s) => s.px);
+    if (!px.length) return `✗ ${name}: staged, never seen unhidden in the film`;
+    const big = px.filter((p) => p >= MEETING_PX);
+    const seconds = big.length * 0.5;
+    const range = (all: number[]) => `${Math.min(...all)}-${Math.max(...all)} px`;
+    if (seconds >= MEETING_S) return `${name}: seen ${seconds.toFixed(1)} s at ${range(big)}`;
+    return `✗ ${name}: seen ${(px.length * 0.5).toFixed(1)} s at ${range(px)}, only ${seconds.toFixed(1)} s at ${MEETING_PX} px or more (${MEETING_S} s asked)`;
+  });
+}
+
 function renderShot(name: string, n: number) {
   const shot = shots.get(name) as Shot;
   const file = join(shotsDir, `${name}.json`);
@@ -299,6 +328,8 @@ function renderShot(name: string, n: number) {
   if (gaveUp.length) console.log(`trailer: ${name}: the route was blocked: ${gaveUp.join("; ")}`);
   const seen = wildlifeSeen(`${run.stdout}${run.stderr}`, shot.scene && !shot.player.route ? 0 : (shot.lead_in ?? 1.5), shot.seconds);
   if (seen) console.log(`trailer: ${name}: ${seen}`);
+  const filmFrom = shot.scene && !shot.player.route ? 0 : (shot.lead_in ?? 1.5);
+  for (const line of meetingsSeen(`${run.stdout}${run.stderr}`, shot, filmFrom)) console.log(`trailer: ${name}: ${line}`);
   if (stills) {
     console.log(`trailer: ${name}: stills in ${((Date.now() - started) / 1000).toFixed(0)} s`);
     return;

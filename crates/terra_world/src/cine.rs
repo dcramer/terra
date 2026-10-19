@@ -100,6 +100,10 @@ pub struct Shot {
     pub look: Look,
     #[serde(default)]
     pub player: Filmed,
+    /// The rest of the file, for the game to read what it asks of a shot (the wildlife
+    /// meetings a run asks for, D384) without the camera knowing of it.
+    #[serde(flatten)]
+    pub more: serde_json::Map<String, serde_json::Value>,
     /// The frame it rolls on, counted as `--press` counts them (`--cine file@frame`).
     #[serde(skip)]
     pub rolls_at: u32,

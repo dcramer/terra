@@ -36,7 +36,7 @@ use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
-pub use gait::{Pace, bolts_within};
+pub use gait::{Pace, bolts_within, keeps_to};
 use mind::think;
 use std::time::Duration;
 use terra_gen::{Rng, Seed};
@@ -158,12 +158,19 @@ impl Creature {
         self.state = State::Roost { at, left };
     }
 
-    /// Going a way for so long, calmly, as one already put up by something and crossing a
-    /// player's way (wildlife's crossings), until they come near.
-    pub fn dash(&mut self, way: Vec3, for_s: f32) {
-        (self.bolt, self.pace) = (way, Pace::Calm);
+    /// Going a way for so long at a pace, as one already put up by something and crossing a
+    /// player's way calmly (wildlife's crossings) until they come near, or one a film asks to
+    /// see fleeing, startled.
+    pub fn dash(&mut self, way: Vec3, for_s: f32, pace: Pace) {
+        (self.bolt, self.pace) = (way, pace);
         self.facing = way;
         self.state = State::Flee(for_s);
+    }
+
+    /// Walking to a point, unhurried, and about its day there, as one a film asks to see
+    /// grazing comes into sight.
+    pub fn walk_to(&mut self, to: Vec3) {
+        self.state = State::Wander(to);
     }
 
     /// On the wing from one place to another, calmly.

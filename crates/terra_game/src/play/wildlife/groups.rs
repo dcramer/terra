@@ -106,7 +106,7 @@ pub(super) fn cross(
                     if flies {
                         animal.fly(from, to);
                     } else {
-                        animal.dash(way, for_s);
+                        animal.dash(way, for_s, creatures::Pace::Calm);
                     }
                 });
             put.push(animal);

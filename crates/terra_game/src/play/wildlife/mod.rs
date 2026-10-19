@@ -10,8 +10,10 @@
 //! it is rolled from its own seed, so the same walk meets the same animals. A cell nobody is
 //! near any more lets its animals go. Far from every player nothing here runs at all (D145).
 
+mod asked;
 mod groups;
 mod meet;
+pub use asked::Asked;
 use meet::{Band, Way, eye_at, meet, shows_from};
 
 use super::creatures::{self, Kinds};
@@ -139,7 +141,14 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
-        .add_systems(Update, populate.run_if(something_grows).run_if(wild_shown));
+        .init_resource::<asked::Asking>()
+        .add_systems(
+            Update,
+            (populate, asked::ask)
+                .chain()
+                .run_if(something_grows)
+                .run_if(wild_shown),
+        );
 }
 
 /// Whether wild animals are put out: not in a time-lapse without people (D381).

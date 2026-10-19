@@ -13,7 +13,7 @@
 use super::creatures::Creature;
 use super::town_animals::Beast;
 use super::walker::IsLocalPlayer;
-use super::wildlife::Surroundings;
+use super::wildlife::{Asked, Surroundings};
 use crate::planet::MainCamera;
 use bevy::{
     camera::{primitives::Aabb, visibility::VisibilitySystems},
@@ -60,7 +60,10 @@ fn watch(
     around: Surroundings,
     camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     player: Query<&GlobalTransform, IsLocalPlayer>,
-    animals: Query<(Entity, &Name, &GlobalTransform), Or<(With<Creature>, With<Beast>)>>,
+    animals: Query<
+        (Entity, &Name, &GlobalTransform, Option<&Asked>),
+        Or<(With<Creature>, With<Beast>)>,
+    >,
     children: Query<&Children>,
     meshes: Query<
         (
@@ -88,7 +91,9 @@ fn watch(
     let body = player.single().ok().map(|at| at.translation());
     let mut seen = Vec::new();
     let mut hidden = 0;
-    for (entity, name, root) in &animals {
+    // The biggest seen of each meeting the shot asked for (wildlife's `Asked`).
+    let mut asked: Vec<(usize, f32)> = Vec::new();
+    for (entity, name, root, meeting) in &animals {
         // Its bones where it has them, else its meshes' boxes.
         let mut points = Vec::new();
         let mut drawn = false;
@@ -148,12 +153,19 @@ fn watch(
             hidden += 1;
             continue;
         }
+        let px = (high - low).max_element() * FUR;
+        if let Some(&Asked(index)) = meeting {
+            match asked.iter_mut().find(|(each, _)| *each == index) {
+                Some((_, most)) => *most = most.max(px),
+                None => asked.push((index, px)),
+            }
+        }
         seen.push(Seen {
             // A town's animals are named with their number in the town: "Hen 12".
             name: name
                 .trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ')
                 .to_string(),
-            px: (high - low).max_element() * FUR,
+            px,
             metres: from.distance(middle),
         });
     }
@@ -169,6 +181,10 @@ fn watch(
         if list.is_empty() { "" } else { ": " },
         list.join(", ")
     );
+    asked.sort_by_key(|(index, _)| *index);
+    for (index, px) in asked {
+        info!("Meeting {index} seen at {t:.1} s: {px:.0} px");
+    }
 }
 
 /// Whether the line from an eye to a point passes behind a person standing with their feet at
