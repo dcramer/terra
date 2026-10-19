@@ -1210,9 +1210,9 @@ fn pad(dice: &mut Rng, tree: &mut Tree, end: Vec3, direction: Vec3, id: usize) {
     let fan = dice.range(2.6, 3.6);
     for _ in 0..shoots {
         let a = dice.range(-0.5, 0.5) * fan;
-        // Most turned up, some level or hanging, so a pad's edge is a ragged fringe, not a
-        // dome (D359).
-        let rise = dice.range(-0.35, 0.95);
+        // Most near level, a few turned up or hanging, so a pad is a flat plate with a ragged
+        // fringe, not a dome, and reads as one with sky between at 40 m (D359).
+        let rise = dice.range(-0.1, 0.5);
         let heading = ((ahead * libm::cosf(a) + side * libm::sinf(a)) * libm::cosf(rise)
             + Vec3::Y * libm::sinf(rise))
         .normalize();
@@ -1343,7 +1343,7 @@ fn card(
             // tuft has body from below as from the side; the first lies flat, its face to the
             // sky and to a walker under it (D318).
             let up =
-                (along + Vec3::Y * dice.range(0.1, 0.45) + dice.unit_vector() * 0.25).normalize();
+                (along + Vec3::Y * dice.range(0.0, 0.25) + dice.unit_vector() * 0.25).normalize();
             // Its stalk back along the shoot, so the tuft clothes the shoot it is on.
             let base = tip - up * size * 0.35 + dice.unit_vector() * 0.05;
             let flat = (Vec3::Y - up * Vec3::Y.dot(up)).normalize_or(up.any_orthonormal_vector());

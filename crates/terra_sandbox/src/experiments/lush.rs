@@ -949,8 +949,10 @@ fn grow(
     for card in cards.iter_mut().flatten() {
         card.tint *= tint;
     }
-    // How many cards a clump its crown keeps far off.
-    let keep = if species == Species::Pine { 1 } else { 2 };
+    // How many cards a clump its crown keeps far off: two for every kind. One for a Scots
+    // pine, grown about twice to cover its clump, merged its separate tufts into a blob as
+    // wide as a broadleaf's at 40 m (D318).
+    let keep = 2;
     let near = crown_near(&cards, keep);
     let far = crown_far(&cards, keep);
     let shadow = crown_stand_in(&cards);
@@ -2286,8 +2288,7 @@ fn crown_near(cards: &[Vec<Card>], keep: usize) -> Build {
 }
 
 /// A crown far off: `keep` cards a clump, the first of its near crown's, grown as they are
-/// there when the rest have dropped out (D223): two, or one for a Scots pine, whose tufts
-/// crowd in pads (D318).
+/// there when the rest have dropped out (D223): two (D318).
 fn crown_far(cards: &[Vec<Card>], keep: usize) -> Build {
     let mut build = Build::default();
     for tip in cards {

@@ -1,9 +1,12 @@
 {
   "form": "needles",
-  "leaves": 5,
-  "length": [0.045, 0.06],
-  "shoots": 16,
-  "twig": [0.3, 0.2, 0.13],
+  "leaves": 4,
+  "length": [0.04, 0.055],
+  "stalk": 0.95,
+  "shoots": 18,
+  "spread": [1.0, 1.35],
+  "shoot": { "from": [0.06, 0.9], "length": [0.36, 0.5], "bend": [-0.7, -0.35] },
+  "twig": [0.32, 0.21, 0.13],
   "thickness": 0.006,
   "tone": 0.3,
   "young": 0,
@@ -11,6 +14,6 @@
   "underside": 0,
   "saturation": 1,
   "value": 1,
-  "needle": { "colour": [0.075, 0.14, 0.085], "young": [0.15, 0.24, 0.11], "width": 0.0032, "every": 0.0045 },
+  "needle": { "colour": [0.06, 0.12, 0.075], "young": [0.13, 0.22, 0.1], "width": 0.0032, "every": 0.0038, "lean": [0.7, 1.1], "per": 3 },
   "seed": 7
 }

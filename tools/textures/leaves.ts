@@ -45,8 +45,9 @@ export type Recipe = {
    * needle's width at its base as a share of the card, and how far apart needles are along
    * a twig, as a share of the card; how far, in radians, a needle leans forward off its twig,
    * least and most (0.5 to 1.0 by default, a spruce's), and how many leave each place along it
-   * (3: a Scots pine's stand in pairs, so a brush of them is thicker). */
-  needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number; lean?: [number, number]; per?: number };
+   * (3: a Scots pine's stand in pairs, so a brush of them is thicker); how much of the main
+   * twig from its foot is bare (none by default). */
+  needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number; lean?: [number, number]; per?: number; bare?: number };
   /** For `needles`: how far the side shoots turn off the main twig, in radians, least and
    * most (0.8 to 1.15 by default, a spruce's flat spray): a Scots pine's run forward and up,
    * a tuft. Its `shoot` says where along the main twig they leave it (0.08 to 0.88) and how
@@ -61,7 +62,19 @@ export type Recipe = {
    * they are, as shares of the card: by default a quarter to two thirds along, a third to a
    * half of the card long. Small
    * leaves need the shoots spread wider to fill the card. */
-  shoot?: { from: [number, number]; length: [number, number] };
+  shoot?: {
+    from: [number, number];
+    length: [number, number];
+    /** How far a shoot curves over its length, least and most (radians): toward the main
+     * twig's tip where positive, as a feather's barbs; back toward its foot where negative,
+     * as a Norway spruce's side shoots hang. 0.15 to 0.45 by default. */
+    bend?: [number, number];
+    /** For `needles`: a line across the card, as a share of it up from the foot, that every
+     * shoot climbing toward it ends near, so the card's top is level, as a Scots pine's pad's
+     * tufts stand to one height; without it, shoots shorten toward the tip and the card is
+     * pointed. */
+    level?: number;
+  };
   twig: [number, number, number];
   /** The twig's thickness where it enters the card. */
   thickness: number;
@@ -789,8 +802,16 @@ function needles(recipe: Recipe, size: number): Composed {
     const side = k % 2 ? 1 : -1;
     const [far, farthest] = recipe.shoot?.length ?? [0.42, 0.58];
     const [least, most] = recipe.spread ?? [0.8, 1.15];
-    const reach = big * roll.range(far, farthest) * (1.15 - 0.85 * t);
-    const shoot = curve(from.at, from.heading + side * roll.range(least, most), reach, -side * roll.range(0.15, 0.45), 10);
+    const heading = from.heading + side * roll.range(least, most);
+    let reach = big * roll.range(far, farthest) * (1.15 - 0.85 * t);
+    const level = recipe.shoot?.level;
+    const climbs = -Math.sin(heading);
+    if (level !== undefined && climbs > 0.3) {
+      const top = room + big * (0.98 - level);
+      reach = Math.min(big * farthest * 1.4, Math.max(big * far * 0.4, ((from.at[1] - top) / climbs) * roll.range(0.9, 1.04)));
+    }
+    const [bendLeast, bendMost] = recipe.shoot?.bend ?? [0.15, 0.45];
+    const shoot = curve(from.at, heading, reach, -side * roll.range(bendLeast, bendMost), 10);
     twigs.push({ points: shoot, rank: 1 });
     const own = Math.floor(roll.unit() * (recipe.leaves + 1));
     for (let j = 0; j < own; j++) {
@@ -807,6 +828,9 @@ function needles(recipe: Recipe, size: number): Composed {
     const steps = Math.max(3, Math.round(total / (needle.every * big)));
     for (let i = 0; i < steps; i++) {
       const t = Math.min(1, (i + roll.unit()) / steps);
+      // A Scots pine keeps its needles three years, so the main twig is bare behind its
+      // tufts, a branch's line under them (`bare`, a share of it from its foot).
+      if (twig.rank === 0 && t < (needle.bare ?? 0)) continue;
       const { at, heading } = along(twig.points, t);
       const [forward0, forward1] = needle.lean ?? [0.5, 1.0];
       for (let n = 0; n < (needle.per ?? 3); n++) {

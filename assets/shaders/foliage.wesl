@@ -173,8 +173,8 @@ fn give(weights: vec2<f32>) -> f32 {
 // pass, which Bevy measures from the camera too.
 fn dropped(local: vec3<f32>, tangent: vec4<f32>, tree: vec3<f32>) -> vec3<f32> {
     let rank = floor(tangent.w);
-    // Its count in hundredths, and in thousandths how many its clump keeps far off: two, or
-    // one for a Scots pine's crowded tufts (D318).
+    // Its count in hundredths, and in thousandths how many its clump keeps far off (two,
+    // D318).
     let counted = fract(tangent.w) * 100.0;
     let count = floor(counted + 0.02);
     let least = max(round((counted - count) * 10.0), 1.0);
