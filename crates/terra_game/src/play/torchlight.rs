@@ -3,7 +3,7 @@
 //! hand as any held thing's is (`held`); this only sets it alight.
 
 use super::Player;
-use super::held::Grip;
+use super::figure::Grip;
 use super::inventory::{self, Backpack, Bar, Items};
 use crate::character::Held;
 use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};

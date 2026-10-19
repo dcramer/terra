@@ -5,30 +5,20 @@
 //! any one tool. Every player's figure shows what that player holds.
 
 use super::Player;
+use super::figure::Grip;
 use super::inventory::{Backpack, Bar, Items};
 use crate::character;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use terra_items::ItemKind;
 
-/// The socket in a figure's right hand (`character::HAND_R`), and whose hand it is. Held
-/// looks are its children.
-#[derive(Component)]
-pub struct Grip {
-    pub player: Entity,
+/// What a figure's hand (its [`Grip`], which requires this once the plugin is in) shows.
+/// Held looks are the grip's children.
+#[derive(Component, Default)]
+pub struct InHand {
     /// The kind of item shown in it, once something has been decided.
     showing: Option<Option<ItemKind>>,
     /// A sword is drawn (D405): the bar's item is put away while it is.
     pub drawn: bool,
-}
-
-impl Grip {
-    pub fn of(player: Entity) -> Self {
-        Self {
-            player,
-            showing: None,
-            drawn: false,
-        }
-    }
 }
 
 /// A look shown in hand.
@@ -36,6 +26,7 @@ impl Grip {
 struct Shown;
 
 pub fn plugin(app: &mut App) {
+    app.register_required_components::<Grip, InHand>();
     app.add_systems(Update, show);
 }
 
@@ -45,12 +36,12 @@ fn show(
     mut commands: Commands,
     items: Res<Items>,
     players: Query<(&Backpack, &Bar), With<Player>>,
-    mut grips: Query<(Entity, &mut Grip)>,
+    mut grips: Query<(Entity, &Grip, &mut InHand)>,
     children: Query<&Children>,
     shown: Query<(), With<Shown>>,
     assets: Res<AssetServer>,
 ) {
-    for (hand, mut grip) in &mut grips {
+    for (hand, grip, mut in_hand) in &mut grips {
         let Ok((backpack, bar)) = players.get(grip.player) else {
             continue;
         };
@@ -58,11 +49,11 @@ fn show(
             .0
             .in_hand(&backpack.0)
             .map(|item| item.kind)
-            .filter(|_| !grip.drawn);
-        if grip.showing == Some(holding) {
+            .filter(|_| !in_hand.drawn);
+        if in_hand.showing == Some(holding) {
             continue;
         }
-        grip.showing = Some(holding);
+        in_hand.showing = Some(holding);
         for look in children
             .iter_descendants(hand)
             .filter(|&each| shown.contains(each))
@@ -79,5 +70,24 @@ fn show(
             hand,
         );
         commands.entity(look).insert(Shown);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_grip_shows_what_is_in_hand_with_no_sword_drawn() {
+        let mut app = App::new();
+        plugin(&mut app);
+        let player = app.world_mut().spawn_empty().id();
+        let hand = app.world_mut().spawn(Grip { player }).id();
+        let in_hand = app
+            .world()
+            .get::<InHand>(hand)
+            .expect("held makes a grip show");
+        assert!(!in_hand.drawn);
+        assert_eq!(in_hand.showing, None);
     }
 }

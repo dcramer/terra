@@ -10,7 +10,6 @@
 //! skeleton), two of each so a clip played again blends from itself. A layer above may ask
 //! for a clip in place of what walking shows (`Acting`), as the sword fight does (`melee`).
 
-use super::held::Grip;
 use super::{Downed, Motion, Player, Stance};
 use crate::character::{CARRIED_IN, Carrying};
 use crate::loading::Loading;
@@ -90,6 +89,13 @@ impl Moves {
     pub(super) fn pace(&self, clip: &str) -> Option<f32> {
         self.paces.get(clip).copied()
     }
+}
+
+/// The socket in a figure's right hand (`character::HAND_R`), and whose hand it is. What is
+/// in hand is drawn as its children, by the layers that know what it is (`held`, `melee`).
+#[derive(Component)]
+pub struct Grip {
+    pub player: Entity,
 }
 
 /// On a figure's animation player: whose figure it is, its hand, what it is animated as
@@ -277,7 +283,7 @@ fn dress(
         Some(hand) => {
             commands
                 .entity(hand)
-                .insert((Grip::of(player), Carrying(true)));
+                .insert((Grip { player }, Carrying(true)));
         }
         None => warn!("The figure has no {}.", crate::character::HAND_R),
     }

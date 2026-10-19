@@ -15,8 +15,8 @@ pub mod moves;
 mod partner;
 
 use super::controls::Action;
-use super::figure::{Act, Acting, Moves};
-use super::held::Grip;
+use super::figure::{Act, Acting, Grip, Moves};
+use super::held::InHand;
 use super::intent::Intent;
 use super::inventory::HandsFull;
 use super::staged::pose::Bends;
@@ -153,7 +153,7 @@ fn draw(
         ),
         With<Player>,
     >,
-    mut grips: Query<(Entity, &mut Grip)>,
+    mut grips: Query<(Entity, &Grip, &mut InHand)>,
     partners: Query<&Transform, With<partner::Partner>>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -162,15 +162,15 @@ fn draw(
         if !intent.pressed(Action::Draw) || intent.busy {
             continue;
         }
-        let grip = grips.iter_mut().find(|(_, grip)| grip.player == player);
-        let Some((hand, mut grip)) = grip else {
+        let grip = grips.iter_mut().find(|(_, grip, _)| grip.player == player);
+        let Some((hand, _, mut in_hand)) = grip else {
             continue;
         };
         if let Some(drawn) = drawn {
             for &look in &drawn.looks {
                 commands.entity(look).despawn();
             }
-            grip.drawn = false;
+            in_hand.drawn = false;
             stance.steer = Steer::default();
             commands
                 .entity(player)
@@ -179,7 +179,7 @@ fn draw(
             info!("Melee: sheathed");
             continue;
         }
-        grip.drawn = true;
+        in_hand.drawn = true;
         let sword = character::hold(
             &mut commands,
             assets.load(GltfAssetLabel::Scene(0).from_asset(SWORD)),
