@@ -75,6 +75,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D321](decisions/D321.md) | Biome demos: a mountain lake, a tundra, a living town | Design | Agent | Leaning | The next demos after the lush forest, as demos.md says… |
 | [D350](decisions/D350.md) | The market town paved, with shops, women and a horizon | Design | Developers | Decided | The town's streets and square are paved… |
 | [D365](decisions/D365.md) | Townsfolk dressed by role, sex and seed | Tech | Agent | Decided | Serves D350's varied people, women among them. |
+| [D419](decisions/D419.md) | Winter strips the plants; the grade is tried both ways; trails are shared and fade | Design | Developers | Decided | In winter the land is in its winter state. |
 
 ## The player and survival
 
