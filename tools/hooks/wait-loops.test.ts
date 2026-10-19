@@ -15,8 +15,21 @@ const refused = [
   `for i in 1 2; do echo a; done; while true; do pgrep -f x || break; sleep 3; done`,
   `while true; do for f in *.log; do echo $f; done; sleep 5; done`,
 ];
+const pgrepPid = [
+  `tail --pid=$(pgrep -f "xtask bench" | head -1) -f /dev/null`,
+  "tail --pid=`pgrep -f 'xtask bench' | head -1` -f /dev/null",
+  `tail --pid="$(pgrep -f terra_sandbox | head -1)" -f /dev/null`,
+  `P=$(pgrep -f "xtask bench" | head -1); tail --pid=$P -f /dev/null`,
+  `P=$(pgrep -f "xtask bench" | head -1)\ntail --pid="\${P}" -f /dev/null`,
+  "PID=`pgrep -f x`; timeout 600 tail --pid=$PID -f /dev/null",
+];
 const passed = [
   "tail --pid=12345 -f /dev/null",
+  "tail --pid=$! -f /dev/null",
+  "P=$!; tail --pid=$P -f /dev/null",
+  "P=$(pgrep -f x | head -1); echo $P",
+  `echo "tail --pid=$(pgrep -f x) is refused"`,
+  "pgrep -f terra_sandbox | head -1",
   "cargo xtask gpu still -- target/release/terra_sandbox --offscreen &\ntail --pid=$! -f /dev/null",
   "sleep 2",
   "sleep 2 && echo ready",
@@ -36,6 +49,17 @@ test("hanging and polling waits are refused, with the way out", () => {
   for (const command of refused) {
     const why = refusal(command);
     assert.match(why, /^Refused: .*tail --pid=<pid> -f \/dev\/null/, command);
+    assert.equal(why.split("\n").length, 1, command);
+  }
+});
+
+test("tail --pid from pgrep is refused, naming the alternatives", () => {
+  for (const command of pgrepPid) {
+    const why = refusal(command);
+    assert.match(why, /^Refused: .*own pid/, command);
+    assert.match(why, /`\$!`/, command);
+    assert.match(why, /completion notice/, command);
+    assert.match(why, /cargo xtask gpu --status/, command);
     assert.equal(why.split("\n").length, 1, command);
   }
 });

@@ -58,8 +58,27 @@ function loops(src: string): { condition: string; whole: string }[] {
   return found;
 }
 
+const PID_FROM_PGREP =
+  "Refused: `tail --pid=$(pgrep ...)` takes the waiting shell's own pid when the pattern is in its command line, and never ends; " +
+  "take the pid from `$!` when you start the job, or wait on the background task's completion notice (`cargo xtask gpu --status` lists job pids).";
+
+/** `tail --pid=$(pgrep …)`, the backtick form, or `P=$(pgrep …); tail --pid=$P`: the pid is
+ *  pgrep's, and pgrep finds the waiting shell itself. */
+function pidFromPgrep(command: string): boolean {
+  // `--pid="$P"` is quoted, and `code` blanks quotes: drop the quotes around the pid first.
+  const text = code(command.replace(/(--pid[= ]\s*)(["'])(.*?)\2/g, "$1$3"));
+  const sub = String.raw`(?:\$\(|\x60)\s*pgrep\b`;
+  if (new RegExp(String.raw`\btail\b[^\n;&|]*--pid[= ]\s*${sub}`).test(text)) return true;
+  for (const m of text.matchAll(new RegExp(String.raw`\b(\w+)=${sub}`, "g"))) {
+    const use = String.raw`\btail\b[^\n;&|]*--pid[= ]\s*\$(?:${m[1]}\b|\{${m[1]}\b)`;
+    if (new RegExp(use).test(text)) return true;
+  }
+  return false;
+}
+
 /** Why the command is refused, or "" when it passes. */
 export function refusal(command: string): string {
+  if (pidFromPgrep(command)) return PID_FROM_PGREP;
   const src = code(command);
   // `bash -c '...'` and its kin: the quoted script is a command of its own.
   const inner = [...src.matchAll(/\s-[a-z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g)].map(
