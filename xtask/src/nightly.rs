@@ -24,13 +24,22 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// The task this module runs (D410).
-pub(crate) const TASKS: &[Task] = &[Task {
-    name: "nightly",
-    takes: "",
-    does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
-    group: "Play and check",
-    run: nightly,
-}];
+pub(crate) const TASKS: &[Task] = &[
+    Task {
+        name: "nightly",
+        takes: "",
+        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
+        group: "Play and check",
+        run: nightly,
+    },
+    Task {
+        name: "ci",
+        takes: "[--dry-run] [--no-run] | --watch [minutes]",
+        does: "the CI agent (docs/ci-agent.md): runs nightly and turns its report into GitHub issues labelled ci-agent, one a failing stage, closed when it passes, and a status issue; `--watch` runs it whenever origin/main moves, as its container does (tools/ci)",
+        group: "Play and check",
+        run: |args| crate::node("tools/ci/ci.ts", args),
+    },
+];
 
 /// Set to 0, the run does nothing (D411).
 const OFF: &str = "TERRA_NIGHTLY";

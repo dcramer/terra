@@ -81,6 +81,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [engine.md](engine.md) | The engine's parts, what each needs, and the parallel tracks they are built in. |
 | [terrain.md](terrain.md) | Brief for the first component, the voxel terrain crate. |
 | [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output, developer tools, and QA our agents can run. |
+| [ci-agent.md](ci-agent.md) | The CI agent: the container that runs the slow checks whenever main moves and files what breaks as GitHub issues. |
 | [trailer.md](trailer.md) | The trailer: one run through each of the four places, the hour and route of each and why, and how it is filmed (D357). |
 | [troll-fight.md](troll-fight.md) | The troll fight, a demo scene on the lake shore: a 4 m troll against a man with sword and shield, its beats and how it is filmed (D402). |
 | [prototypes.md](prototypes.md) | The builds so far and the milestones ahead, with their pass criteria. |

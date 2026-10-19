@@ -474,7 +474,7 @@ Checks, developer tools, languages and the repository.
 | [D408](decisions/D408.md) | Release builds our crates incrementally; bench builds them whole | Tech | Agent | Decided | Our own crates build incrementally in the release… |
 | [D409](decisions/D409.md) | Rendered indexes merge row by row | Tech | Agent | Decided | An index of files that live on their own is rendered… |
 | [D410](decisions/D410.md) | Tasks register from their own modules | Tech | Agent | Decided | Each xtask module that owns tasks lists them in its own… |
-| [D411](decisions/D411.md) | A full run on main, by hand, lowers the baselines and bisects what breaks | Tech | Agent | Decided | `cargo xtask nightly` (`xtask/src/nightly.rs`) runs what… |
+| [D411](decisions/D411.md) | A full run on main, on one box, lowers the baselines and bisects what breaks | Tech | Agent | Decided | `cargo xtask nightly` (`xtask/src/nightly.rs`) runs what… |
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
 | [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
 | [D414](decisions/D414.md) | A ratchet's baseline is raised by a change with its why, and lowered only by the full run on main | Tech | Agent | Decided | A ratchet's baseline (the artifacts and fuzz counts… |

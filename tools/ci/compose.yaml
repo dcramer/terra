@@ -1,0 +1,16 @@
+# The CI agent (docs/ci-agent.md). From tools/ci, with .env written: `docker compose up -d --build`;
+# `docker compose logs -f` shows it; `docker compose run --rm ci --dry-run` tries one run.
+services:
+  ci:
+    build: .
+    image: terra-ci
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # The clone, its builds and nightly's state (.git/terra-nightly, .git/terra-ci).
+      - work:/work
+      # Downloaded crates, kept across image rebuilds.
+      - cargo-registry:/usr/local/cargo/registry
+volumes:
+  work:
+  cargo-registry:
