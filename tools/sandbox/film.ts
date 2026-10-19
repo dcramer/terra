@@ -7,7 +7,8 @@
 //   node tools/sandbox/film.ts [--place lush|lake] [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- <sandbox options>]
 //
 // Without sandbox options it walks the bench's route through the lush forest, the world
-// and the walker alone; with --place, that place's own route (places.ts). Needs ffmpeg. Node 22.18
+// and the walker alone; with --place, that place's own route (places.ts), any sandbox options
+// added to the place's. Needs ffmpeg. Node 22.18
 // or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
@@ -23,6 +24,13 @@ const LOOK = ["--press", "up@1500-1545", "--press", "down@1650-1695"];
 const args = process.argv.slice(2);
 const dash = args.indexOf("--");
 const own = dash < 0 ? args : args.slice(0, dash);
+if (own.includes("--help") || own.includes("-h")) {
+  console.log(
+    "film.ts [--place <name>] [--frames 300-2700] [--time 15] [--date 10-15] [--out shots/film.mp4] [-- <sandbox options>]\n" +
+      "  with --place, options after -- add to the place's own; without, they are the whole run",
+  );
+  process.exit(0);
+}
 const arg = (name: string, fallback: string) => {
   const at = own.indexOf(name);
   return at >= 0 ? own[at + 1] : fallback;
@@ -36,8 +44,14 @@ const placed = own.includes("--place") ? place(arg("--place", "lush")) : undefin
 const walked = placed?.route
   ? [...placed.args, "--time", hour, ...dated, "--at", placed.route.at, "--face", placed.route.face, ...placed.route.through.split(";").flatMap((at) => ["--route", at])]
   : undefined;
-const sandbox =
-  dash >= 0 ? args.slice(dash + 1) : (walked ?? ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK]);
+// After `--`, options add to a place's own (a `--weather` on its route); without `--place`
+// they are the whole run, a route of one's own in place of the bench's walk.
+const extra = dash >= 0 ? args.slice(dash + 1) : [];
+const sandbox = walked
+  ? [...walked, ...extra]
+  : dash >= 0
+    ? extra
+    : ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK];
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
 const frames = resolve(dirname(out), "film-frames");
