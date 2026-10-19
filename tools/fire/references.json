@@ -2,85 +2,85 @@
  "about": "Real fire measured by tools/fire/measure.ts from the photographs in photos.json (node tools/fire/references.ts): per class, each number's median, least and most; a fire is held to min-max widened by each number's tolerance (METRICS).",
  "classes": {
   "campfire": {
-   "photos": 10,
+   "photos": 9,
    "light": {
     "day": 2,
-    "night": 5,
+    "night": 4,
     "dusk": 3
    },
    "bands": {
     "white": {
-     "median": 0.037,
+     "median": 0.059,
      "min": 0,
      "max": 3.315
     },
     "pale": {
-     "median": 0.523,
+     "median": 0.23,
      "min": 0,
      "max": 3.798
     },
     "yellow": {
-     "median": 9.2,
+     "median": 9.317,
      "min": 1.605,
      "max": 19.027
     },
     "orange": {
-     "median": 30.445999999999998,
+     "median": 26.455,
      "min": 19.259,
-     "max": 83.277
+     "max": 63.211
     },
     "red": {
-     "median": 54.8245,
-     "min": 14.201,
+     "median": 54.869,
+     "min": 20.233,
      "max": 72.768
     },
     "redOrange": {
-     "median": 88.455,
+     "median": 86.566,
      "min": 74.039,
      "max": 98.395
     },
     "BR": {
-     "median": 0.2325,
+     "median": 0.202,
      "min": 0.031,
-     "max": 0.677
+     "max": 0.555
     },
     "GR": {
-     "median": 0.565,
+     "median": 0.556,
      "min": 0.438,
-     "max": 0.826
+     "max": 0.781
     },
     "dim": {
-     "median": 34.216,
+     "median": 38.945,
      "min": 6.449,
      "max": 60.049
     },
     "soot": {
-     "median": 0.4075,
+     "median": 0.386,
      "min": 0.127,
      "max": 0.917
     },
     "edgeSoot": {
-     "median": 28.5805,
+     "median": 26.881,
      "min": 6.335,
      "max": 51.249
     },
     "pockets": {
-     "median": 23.292,
+     "median": 23.611,
      "min": 5.05,
      "max": 175.857
     },
     "fine": {
-     "median": 8.429,
+     "median": 8.897,
      "min": 6.104,
      "max": 24.92
     },
     "mid": {
-     "median": 21.813499999999998,
+     "median": 20.817,
      "min": 14.568,
      "max": 33.811
     },
     "coarse": {
-     "median": 69.6035,
+     "median": 69.978,
      "min": 41.269,
      "max": 79.08
     }
@@ -1163,7 +1163,7 @@
   },
   {
    "file": "campfire-logs-night.jpg",
-   "class": "campfire",
+   "class": "excluded",
    "light": "night",
    "metrics": {
     "flamePx": 164362,

@@ -2,8 +2,9 @@
 //! each of the nearest few kept fires, which only their own lights shine in. In the haze's
 //! fog volume, which reaches every way for 120 m, a blaze's tens of millions of lumens lit a
 //! ball of air brighter than the burning house it stood in (fire sheet, round 5 and round 6);
-//! the haze's air is thin and its box so big that Bevy's light through it (`exp(-density x
-//! the box's radius)`) leaves a campfire's glow in it unseen. A volume of its own, a few
+//! a campfire's light in the haze, which is mist-thick by the ground, was the salmon ball over
+//! its logs whatever this volume held, until its in-scatter there was taken at a fraction
+//! (`scatter::LOCAL_SCATTER`; fire sheet A/B, 2026-10-19). A volume of its own, a few
 //! metres across and densest at the flames, glows round the fire and nowhere else, as
 //! RDR2's and Unreal's local fog volumes do round a fire (research/fire, `aaa-vfx.md`).
 //!

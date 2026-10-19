@@ -72,8 +72,14 @@ pub fn plugin(app: &mut App) {
 
 /// The library with Reinhard's body Hable's, if it has Reinhard's.
 fn patched(source: &str) -> Option<String> {
-    let hable = format!(
-        "fn tonemapping_reinhard(color: vec3<f32>) -> vec3<f32> {{
+    super::shader_patch::swap_once(source, REINHARD, &wgsl("tonemapping_reinhard"))
+}
+
+/// The curve in WGSL, a function `name` of a colour taking each channel on its own: the
+/// camera's (`HABLE`) and the flames' (`fire::film`).
+pub fn wgsl(name: &str) -> String {
+    format!(
+        "fn {name}(color: vec3<f32>) -> vec3<f32> {{
     // Hable's filmic curve, ported from Godot (crates/terra_world/src/hable.rs, MIT).
     let c = max(color, vec3(0.0));
     let mapped = ((c * ({A:?} * c + {CB:?}) + {DE:?}) / (c * ({A:?} * c + {B:?}) + {DF:?})) - {EF:?};
@@ -84,8 +90,7 @@ fn patched(source: &str) -> Option<String> {
         DF = D * F,
         EF = E / F,
         white = curve(WHITE),
-    );
-    super::shader_patch::swap_once(source, REINHARD, &hable)
+    )
 }
 
 #[cfg(test)]

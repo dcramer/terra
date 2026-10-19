@@ -32,7 +32,18 @@ const WRONG: &str =
 
 /// The same weighed by the fog's phase for the light's direction (`L`, toward the light) and
 /// the ray's (`V`), as the directional light's is.
-const RIGHT: &str = "let light_color_per_step = (*light).color_inverse_square_range.rgb * light_factors_per_step * henyey_greenstein(dot(L, V));";
+fn right() -> String {
+    format!(
+        "let light_color_per_step = (*light).color_inverse_square_range.rgb * light_factors_per_step * henyey_greenstein(dot(L, V)) * {LOCAL_SCATTER:?};"
+    )
+}
+
+/// How much of a fire light's in-scatter the air takes, in `right`: the haze is mist-thick by the
+/// ground (0.03 to 0.2 a metre, scattering forward at 0.7) for the sun's shafts, and a hearth's
+/// light in it was a ball over the logs past the tonemapper's white, sRGB 241,157,125 at its
+/// middle with the fire's own fog volumes off and gone with its light out of the fog (fire
+/// sheet, 2026-10-19). At 0.15 it is a faint warm glow over the flames, under the knee.
+const LOCAL_SCATTER: f32 = 0.15;
 
 /// Bevy's fall-off of a point light's in-scatter, held to a centimetre.
 const POINT: &str = "let distance_atten = getDistanceAttenuation(distance_square, (*light).color_inverse_square_range.w);";
@@ -51,7 +62,7 @@ pub fn plugin(app: &mut App) {
 
 /// The fog's shader with its point lights' in-scatter weighed by the phase, if it has Bevy's.
 fn patched(source: &str) -> Option<String> {
-    let phased = super::shader_patch::swap_once(source, WRONG, RIGHT)?;
+    let phased = super::shader_patch::swap_once(source, WRONG, &right())?;
     super::shader_patch::swap_once(&phased, POINT, SPHERE)
 }
 
@@ -64,6 +75,9 @@ mod tests {
         let shader = format!("fn f() {{\n            {POINT}\n            {WRONG}\n}}\n");
         let out = patched(&shader).unwrap();
         assert!(out.contains("henyey_greenstein(dot(L, V))") && !out.contains(WRONG));
+        assert!(out.contains(&format!(
+            "henyey_greenstein(dot(L, V)) * {LOCAL_SCATTER:?};"
+        )));
         // And its fall-off is softened by the light's radius.
         assert!(
             out.contains("distance_square + (*light).position_radius.w") && !out.contains(POINT)

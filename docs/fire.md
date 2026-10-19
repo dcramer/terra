@@ -175,7 +175,12 @@ A preset gives a fire's luminance in absolute units (a candle about 10^4 cd/m²,
 
 ## The tonemapper
 
-The camera's tonemapper is chosen by measurement, for the whole camera. Fire is never tonemapped apart from the world: Battlefield 3's lesson is that particles lit and tonemapped apart are "the wrong color" against the world.
+The camera's tonemapper is chosen by measurement, for the whole camera. Fire is exposed and graded with the world (Battlefield 3's lesson: particles lit and tonemapped apart are "the wrong color" against it), and only a hearth's or torch's flame past the white takes a film's shoulder of its own (2026-10-19, `fire::film`):
+
+- **Why**: KhronosPbrNeutral mixes whatever is past its white toward white in every channel alike, so a flame with no blue (the ramp's hottest is B/R 0) gains blue there: a hot campfire texel came out 254,233,208 (B/R 0.64), salmon. The grade's `post_saturation` 0.82 after it floors blue at a fifth of brightness. Night photographs of campfires go yellow at their brightest (254,233,141; B/R 0.03-0.15).
+- **The mask**: the hearth flames are drawn a second time (`FIRE_MASK`), their colour untouched, adding `min(1, red)` to the HDR picture's alpha past the 1 the scene holds. TAA, bloom and the volumetric fog keep the alpha, and smoke blended over a flame takes its share back.
+- **The shoulder**: in Bevy's `tone_mapping` (patched, D184; the tonemapping pass only, not a material tonemapped in its own shader), the masked share of a pixel goes through the Hable curve (`hable.rs`) per channel, with 2% of each channel caught by the other two as a film's layers catch each other's (AgX's inset does the same). So red runs out first, then green, then blue: orange, yellow, white. That share skips `post_saturation`. Below about 0.7 Hable and Neutral nearly agree for a colour with no blue, so a flame's dim edge and its mask's soft edge meet the world without a seam.
+- **Not the breath or a blaze**: their sprites' brightness is their heat and they are tuned through Neutral; they keep it until measured otherwise.
 
 - **Candidates**:
   - Bevy 0.20's own: AcesFitted (per-channel, hue-shifting, the nearest Bevy has to Hable), AgX, TonyMcMapface, BlenderFilmic and KhronosPbrNeutral (today's).
@@ -210,7 +215,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 - **Fog.**
   - Bevy's volumetric fog scattered a point light with no phase function (`terra_world::scatter` patches it with the directional light's Henyey-Greenstein).
   - A blaze's light stays out of the fog: in the haze its tens of millions of lumens lit a ball of air brighter than the house (fire sheet, rounds 5 and 6).
-  - Each of the nearest kept fires with a shadowed light (four at most) puts a small `FogVolume` round its light (`fire::fog`): a ball of air densest at the flames, a few metres across, thickening as night comes, which of the fire lights only kept fires' shine in. It is a faint warm halo, not a ball: its air thin enough that the tonemapper keeps it orange, and a fire light's in-scatter held to its radius as a sphere light's is (Frostbite's), so there is no hot white dot at the light. The haze's own box is too big for a campfire's glow to show in it.
+  - Each of the nearest kept fires with a shadowed light (four at most) puts a small `FogVolume` round its light (`fire::fog`): a ball of air densest at the flames, a few metres across, thickening as night comes, which of the fire lights only kept fires' shine in. It is a faint warm halo, not a ball: its air thin enough that the tonemapper keeps it orange, and a fire light's in-scatter held to its radius as a sphere light's is (Frostbite's), so there is no hot white dot at the light. The haze is mist-thick by the ground and scatters forward, so a fire light's in-scatter there is taken at 0.15 (`scatter::LOCAL_SCATTER`): at full it was the salmon ball over every campfire, past the tonemapper's white, whatever the fire's own volume held (A/B 2026-10-19: the ball stayed with the fire's volumes off and went with its light out of the fog).
   - Its smoke's absorption, darkening the air above, and Enshrouded's emissive fog volume are later stages (D184).
 - **LOD.**
   - Light to 40 m, shadows to 20 m (Valheim), eased, never popped.

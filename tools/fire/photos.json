@@ -232,10 +232,10 @@
  },
  {
   "file": "campfire-logs-night.jpg",
-  "class": "campfire",
+  "class": "excluded",
   "crop": "480x743+840+286",
   "light": "night",
-  "note": "teepee log fire on a beach",
+  "note": "teepee log fire on a beach; blown out (B/R 0.68, G/R 0.83 against the other night campfires' 0.03-0.16), it alone widened the campfire class's B/R to 0.68 and its red to 14%",
   "title": "Fire and logs at night (Unsplash).jpg",
   "author": "Sandis Helvigs sandishelvigs",
   "source": "https://commons.wikimedia.org/wiki/File:Fire_and_logs_at_night_(Unsplash).jpg",

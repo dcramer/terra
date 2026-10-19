@@ -1356,5 +1356,14 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         soft = smoothstep(0.0, reach, behind);
     }
     out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft, in.world_position.w);
+@if(FIRE_MASK)
+    {
+        // The hearths' mask (crates/terra_world/src/fire/film.rs): where a hearth's or torch's
+        // flame (its life's first number past 1, not its bed of coals) gives light, so much of
+        // the pixel the tonemapper takes through the film, all of it by a red of 1. Its blend
+        // adds this to the alpha and leaves the colour.
+        let flame = in.world_normal.x > 1.0 && in.uv_b.x < 2.5;
+        out.color = vec4(0.0, 0.0, 0.0, select(0.0, min(out.color.r, 1.0), flame));
+    }
     return out;
 }

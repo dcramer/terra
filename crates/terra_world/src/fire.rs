@@ -172,6 +172,9 @@ pub struct FireExtension {
     uniform: FireUniform,
     /// Whether these are the breaths' hulls, marched through as volumes (`hulls`).
     volume: bool,
+    /// Whether this is the hearths' flames' mask, which says where they are to the
+    /// tonemapper (`film`).
+    mask: bool,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
     /// The flames' flipbooks (`books`): a layer a set, its heat, cover, soot and distortion.
@@ -196,17 +199,19 @@ pub struct FireExtension {
 
 /// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
 /// its far side stands behind the wall it strikes; its shader ends each ray at what the
-/// depth prepass holds instead.
+/// depth prepass holds instead. The hearths' mask writes only the picture's alpha (`film`).
 #[repr(C)]
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub struct FireKey {
     volume: bool,
+    mask: bool,
 }
 
 impl From<&FireExtension> for FireKey {
     fn from(fire: &FireExtension) -> Self {
         FireKey {
             volume: fire.volume,
+            mask: fire.mask,
         }
     }
 }
@@ -223,6 +228,28 @@ impl MaterialExtension for FireExtension {
         {
             depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Always);
             depth.depth_write_enabled = Some(false);
+        }
+        if key.bind_group_data.mask
+            && let Some(fragment) = descriptor.fragment.as_mut()
+        {
+            use bevy::render::render_resource::{BlendComponent, BlendFactor, BlendState};
+            // The colour left as it is; the mask added to the alpha, past the 1 the scene
+            // holds there (`film`).
+            fragment.shader_defs.push("FIRE_MASK".into());
+            for target in fragment.targets.iter_mut().flatten() {
+                target.blend = Some(BlendState {
+                    color: BlendComponent {
+                        src_factor: BlendFactor::Zero,
+                        dst_factor: BlendFactor::One,
+                        ..default()
+                    },
+                    alpha: BlendComponent {
+                        src_factor: BlendFactor::One,
+                        dst_factor: BlendFactor::One,
+                        ..default()
+                    },
+                });
+            }
         }
         Ok(())
     }
@@ -246,6 +273,20 @@ impl MaterialExtension for FireExtension {
 
 pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
 
+/// The fire materials: one a kind of card (the shader's `kind`), then the hearths' mask.
+const KINDS: usize = 7;
+/// The hearths' and torches' flames drawn again, into the picture's alpha only (`film`).
+const MASK: usize = 6;
+
+/// The kind of card a fire material's shader draws: the mask draws the flames' (0).
+fn drawn_kind(material: usize) -> f32 {
+    if material == MASK {
+        0.0
+    } else {
+        material as f32
+    }
+}
+
 use smoke::{FireSmokeExtension, FireSmokeUniform};
 
 pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtension>;
@@ -254,7 +295,7 @@ pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtensi
 #[derive(Resource)]
 struct Drawn {
     slots: Handle<ShaderBuffer>,
-    fire: [Handle<FireMaterial>; 6],
+    fire: [Handle<FireMaterial>; KINDS],
     smoke: [Handle<FireSmokeMaterial>; 2],
     puffs: Puffs,
     lights: Vec<Entity>,
@@ -348,6 +389,7 @@ pub fn plugin(app: &mut App) {
     seen::plugin(app);
     light::plugin(app);
     fog::plugin(app);
+    film::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -442,7 +484,7 @@ fn spawn_cards(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     count: usize,
-    fire: &[Handle<FireMaterial>; 6],
+    fire: &[Handle<FireMaterial>; KINDS],
     smoke: &[Handle<FireSmokeMaterial>; 2],
 ) {
     // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
@@ -465,6 +507,11 @@ fn spawn_cards(
         "Fire: hearth flames",
         cards(HEARTHS.min(count), HEARTH_FLAME_CARDS, 1.0),
         fire[0].clone(),
+    );
+    spawn(
+        "Fire: hearth flames' mask",
+        cards(HEARTHS.min(count), HEARTH_FLAME_CARDS, 1.0),
+        fire[MASK].clone(),
     );
     spawn(
         "Fire: embers",
@@ -537,7 +584,8 @@ fn setup(
         owed: [0.0, 0.0],
         luck: 0,
     };
-    let fire = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0].map(|kind| {
+    let fire = std::array::from_fn::<_, KINDS, _>(|i| {
+        let kind = drawn_kind(i);
         // The haze reads the opaque scene as Bevy copies it for transmissive materials, so it
         // is drawn among them, blended over it.
         let haze = kind == 3.0;
@@ -590,6 +638,7 @@ fn setup(
                     ..default()
                 },
                 volume: kind == 2.0,
+                mask: i == MASK,
                 slots: slots.clone(),
                 flames: flames.clone(),
                 motions: motions.clone(),
@@ -820,7 +869,7 @@ fn show(
     for (kind, handle) in drawn.fire.iter().enumerate() {
         if let Some(mut material) = fires.get_mut(handle) {
             material.extension.uniform.kind =
-                Vec4::new(kind as f32, count as f32, now, kept as f32);
+                Vec4::new(drawn_kind(kind), count as f32, now, kept as f32);
             material.extension.uniform.wind = wind;
             material.extension.uniform.jets = jets;
             material.extension.uniform.exposure = exposure;
@@ -839,6 +888,7 @@ fn show(
 }
 
 mod books;
+mod film;
 mod fog;
 mod light;
 mod seen;
