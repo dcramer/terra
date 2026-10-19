@@ -1,0 +1,19 @@
+[package]
+name = "mountain_erosion"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+glam = { version = "0.33", features = ["libm"] }
+libm = "0.2"
+png = "0.18"
+terra_core = { path = "../../crates/terra_core" }
+terra_gen = { path = "../../crates/terra_gen" }
+terra_land = { path = "../../crates/terra_land" }
+terra_voxel = { path = "../../crates/terra_voxel" }
+
+[profile.release]
+debug = false
