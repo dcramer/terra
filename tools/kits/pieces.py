@@ -7,9 +7,9 @@ swept from a section along +X and shaped as they go, each at a near and a far bu
 a cap for where its line stops; its profiles, each a polyline in
 (out, up) metres from the edge it is swept along, the corners named rounded by Blender's
 vertex bevel. Corner stones are not made here: the game makes them from each material's own
-wall (`terra_build::dress::corner`, D215 as amended).
+wall (`terra_build_mesh::dress::corner`, D215 as amended).
 
-Writes the game's file, RON as `terra_build::dress::Pieces` reads it: the profiles as points,
+Writes the game's file, RON as `terra_build_mesh::dress::Pieces` reads it: the profiles as points,
 the modules as indexed triangles with their normals. Game space: Y up. Nothing else is
 written; the file is committed with the kit, as the props' models are.
 """

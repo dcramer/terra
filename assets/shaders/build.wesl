@@ -101,7 +101,7 @@ const PIECE_FADE: vec2<f32> = vec2(6.0, 14.0);
 // How many texels a side the cells are (`arrays::cells::CELLS`).
 const CELLS: f32 = 512.0;
 const TAU: f32 = 6.2831853;
-// The cells' distances, steps a texel (`terra_build::cells::DISTANCE_SCALE`).
+// The cells' distances, steps a texel (`terra_build_mesh::cells::DISTANCE_SCALE`).
 const DISTANCE_SCALE: f32 = 16.0;
 
 // A number from 0 to 1 for a point of a lattice, by integer hashing (a sine's hash loses
@@ -160,7 +160,7 @@ fn given(uv: vec2<f32>, slot: i32, lost: f32, slope: vec2<f32>, begin: f32, span
 }
 
 // How far inside its cell a point is, in texels of the cells, read between the four texels
-// round it from their distance fields (`terra_build::cells::standing`): below 0 in a
+// round it from their distance fields (`terra_build_mesh::cells::standing`): below 0 in a
 // joint, so a stone's edge runs smooth however near.
 fn in_cell(uv: vec2<f32>, slot: i32) -> f32 {
     let p = uv * CELLS - 0.5;
@@ -205,7 +205,7 @@ const RELIEF_CURVED: vec2<f32> = vec2(10.0, 18.0);
 // Timber's damage at a point (D305): how much of it is a split along the grain, how deep
 // it goes as a share of the relief's depth, and its torn lips. A split is a straight crack
 // down the grain, its sides parallel, tapering shut at its ends, longer and wider as more is
-// lost; what is broken out of timber is its geometry's (`terra_build::timber::break_up`).
+// lost; what is broken out of timber is its geometry's (`terra_build_mesh::timber::break_up`).
 fn grain_cut(uv: vec2<f32>, splits: f32, l: f32, aa: f32) -> vec4<f32> {
     let a = uv.x * splits + 0.37;
     let lane = floor(a);
@@ -424,7 +424,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             // Laid stones: the joints first, then the stones' edges, then whole stones, each
             // leaving its hollow: the mortar bed and rubble behind it, in shade at its rim.
             // Where a stone has gone the wall's surface is sunk, its corners marked so
-            // (`terra_build::surface`, their wear), each stone judged once, whole or gone: the
+            // (`terra_build_mesh::surface`, their wear), each stone judged once, whole or gone: the
             // hollow is drawn where it is sunk and nowhere else. Every edge's shape is read
             // from the cells' distance field, so it runs smooth however near.
             // How wide a pixel is in texels of the cells, to soften an edge over.

@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 terra_build = { path = "crates/terra_build" }
+terra_build_mesh = { path = "crates/terra_build_mesh" }
 terra_build_scenes = { path = "crates/terra_build_scenes" }
 terra_climate = { path = "crates/terra_climate" }
 terra_game = { path = "crates/terra_game" }
@@ -43,7 +44,7 @@ transvoxel = "2.0"
 # PNG pictures written by tools without the engine (the field maps). The version Bevy's image
 # loading already builds.
 png = "0.18"
-# JPEG decoding for the kit checker's look at a material's maps (terra_build::packs, D349),
+# JPEG decoding for the kit checker's look at a material's maps (terra_build_mesh::packs, D349),
 # the version Bevy's image loading already builds, with its core types.
 zune-jpeg = "0.5"
 zune-core = "0.5"
@@ -87,6 +88,10 @@ opt-level = 3
 # A town laid whole, and a day lived in it, are sweeps of the same kind (D406); a
 # workspace member is not covered by `package."*"`.
 [profile.dev.package.terra_town]
+opt-level = 3
+
+# The drawing's tests sweep every kit and shape, as building's do.
+[profile.dev.package.terra_build_mesh]
 opt-level = 3
 
 # The scenes' checks sweep every scene of the registry, as building's do.

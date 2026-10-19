@@ -34,7 +34,7 @@ A **kit is data** (D136, D290): a material file in `assets/data/kits/`, a few li
 
 ## Where junk comes from, and what keeps it out
 
-A frame shows a fault only from some views; the meshes show all of them. `cargo xtask artifacts` reads every mesh the baseline's kits draw (D333: the materials `data/settlement.ron` builds in and their roofs; a frozen kit by name), over every roof on every plan in each kind and every two kinds mixed, at every detail, with no GPU (`terra_build::inspect`), and prints how many of each fault and where. `cargo xtask rules` audits the village's buildings for z-fighting too, measured as the checker measures it (`inspect::fights`, over a building's sections together), and that each lays the same twice (D257).
+A frame shows a fault only from some views; the meshes show all of them. `cargo xtask artifacts` reads every mesh the baseline's kits draw (D333: the materials `data/settlement.ron` builds in and their roofs; a frozen kit by name), over every roof on every plan in each kind and every two kinds mixed, at every detail, with no GPU (`terra_build_mesh::inspect`), and prints how many of each fault and where. `cargo xtask rules` audits the village's buildings for z-fighting too, measured as the checker measures it (`inspect::fights`, over a building's sections together), and that each lays the same twice (D257).
 
 | Fault | What it looks like | Where it comes from | The rule that keeps it out |
 |---|---|---|---|

@@ -9,7 +9,7 @@
 
 use super::super::store::{self, Drawn, OnScreen};
 use super::*;
-use terra_build::sections::Detail;
+use terra_build_mesh::sections::Detail;
 
 /// A group's details, finest first: each one slot of [`Drawn::parts`].
 pub(in crate::build) const DETAILS: [Detail; 4] =

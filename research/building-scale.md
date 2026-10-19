@@ -59,7 +59,7 @@ Profiled with Bevy's Chrome trace on the street walk (5090): the main thread's u
 
 ## What was changed (D278)
 
-- **A hull past the far detail**: from 180 m a section is the hull of its cubes (`terra_build::hull`, Unreal's approximated mesh), coplanar faces merged, roofs at their pitch, its kits' mean colours: a few hundred triangles a house.
+- **A hull past the far detail**: from 180 m a section is the hull of its cubes (`terra_build_mesh::hull`, Unreal's approximated mesh), coplanar faces merged, roofs at their pitch, its kits' mean colours: a few hundred triangles a house.
 - **Merged cells to the horizon**: from 600 m each cell of a base, four sections a side, is one hull, to 3 km. Bases are seen as silhouettes out to where the haze takes them, where before nothing was drawn past 600 m.
 - **Streaming**: sections past 740 m are let go and not laid, and laid again inside 690 m; a base with nothing laid lets go of its copy and its pieces.
 - **A memory count** per base, CPU and GPU (`build.memory`, and `Builds hold:` at the end of a benchmark).

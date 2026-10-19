@@ -64,7 +64,7 @@ const SEED: &str = "terra-seed";
 const BUILDS: &[&[&str]] = &[
     &["clippy", "--workspace", "--all-targets"],
     &["test", "--workspace", "--no-run"],
-    &["build", "-p", "terra_build", "--example", "kits"],
+    &["build", "-p", "terra_build_mesh", "--example", "kits"],
     &[
         "build",
         "--release",

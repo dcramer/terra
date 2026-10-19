@@ -12,6 +12,7 @@ glam.workspace = true
 terra_gen.workspace = true
 # The rules the scenes are laid by, and the layout and drawing the checks read.
 terra_build.workspace = true
+terra_build_mesh.workspace = true
 
 [dev-dependencies]
 # The texel check reads a material's maps (`examples/texels.rs`).

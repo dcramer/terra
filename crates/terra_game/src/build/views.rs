@@ -47,8 +47,8 @@ use std::collections::BTreeMap;
 use terra_build::layout::roles::{Beyond, Dir, Role, Roles};
 use terra_build::layout::roofs::RoofPart;
 use terra_build::layout::{self, Piece};
-use terra_build::sections::{CLUSTER, Detail, Reach};
 use terra_build::{CELL_M, Fill, Kind};
+use terra_build_mesh::sections::{CLUSTER, Detail, Reach};
 
 /// The screen pixels a texel should cover seen square on from a metre off: one, a texel a
 /// pixel, as a 2,048-texel stone wall two metres a copy lays at 1080p (D362,
@@ -1004,7 +1004,7 @@ fn roles_near(build: &Build, eye: Vec3) -> (Option<Mesh>, Vec<Line>) {
         }
     }
     // The roofs' lines, from their kits' pieces in the sections near.
-    let sections: Vec<IVec3> = terra_build::sections::drawable(base)
+    let sections: Vec<IVec3> = terra_build_mesh::sections::drawable(base)
         .into_iter()
         .map(IVec3::from_array)
         .filter(|at| {

@@ -84,13 +84,13 @@ pub(crate) fn contract() -> bool {
 
 /// The kit checker (docs/building-plan.md): every kit file in `assets/data/kits/` has the
 /// materials its pattern needs, life-size numbers, and keeps to the style guide's budgets
-/// (`terra_build::checker`).
+/// (`terra_build_mesh::checker`).
 pub(crate) fn kits() -> bool {
     run("cargo", KITS)
 }
 
 /// The kit checker's command, after `cargo`.
-pub(crate) const KITS: &[&str] = &["run", "-q", "-p", "terra_build", "--example", "kits"];
+pub(crate) const KITS: &[&str] = &["run", "-q", "-p", "terra_build_mesh", "--example", "kits"];
 
 /// How long the village's buildings take to lay whole and their sections to cut and merge,
 /// on one thread, as the game's workers do (docs/building-plan.md, checking it); a name
@@ -101,7 +101,7 @@ pub(crate) fn sections(args: &[String]) -> bool {
         "-q",
         "--release",
         "-p",
-        "terra_build",
+        "terra_build_mesh",
         "--example",
         "sections",
     ];
@@ -194,7 +194,7 @@ pub(crate) fn rules(args: &[String]) -> bool {
 }
 
 /// What a renderer would show as junk in the meshes building draws, every roof over every
-/// plan in each kind and every two kinds mixed, at every detail (`terra_build::inspect`); a
+/// plan in each kind and every two kinds mixed, at every detail (`terra_build_mesh::inspect`); a
 /// name keeps only the bases whose names hold it, and `--all` lists every fault found. With
 /// `--frames`, what only frames show, from scripted runs on the GPU (`tools/sandbox/artifacts.ts`).
 pub(crate) fn artifacts(args: &[String]) -> bool {

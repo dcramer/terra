@@ -9,7 +9,7 @@ Seven shapes of half-metre cubes, laid by the game's own layout (`terra_build::l
 - **Reference, Tripo logs.** The kit's three Tripo log models (`art/props/kit-log`, two everyday lengths and a long one, 1,500 triangles each), placed, stretched and turned by seed exactly as the game's `build/pieces.rs` does, with the game's daub.
 - **A, generated round logs.** Per log: a tube along the layout's run, tapered from one end, bowed, its section a little uneven, 18 sides by a ring every 8 cm; displaced 2 cm by Poly Haven's `pine_bark` height map (CC0) and textured with it; chamfered sawn ends capped with the `log_end` grain, turned by seed; daub in the groove under it. Corners are the layout's: the two walls' courses half a course apart, ends flush at the corner cube's face, so the crossing reads as a saddle-notched corner of stacked ends; no notch is cut, as it is hidden inside the crossing.
 - **B, generated hewn timber.** Per log: a squared beam with rounded edges that wander as the axe met the tree's round, faces gently waved and scalloped by the adze, in `rough_wood`; squared ends showing the middle of the `log_end` grain; a little lower than a course, so a band of daub shows between beams. Corners are lapped, the beams crossing alternately.
-- **C, timber as surface.** The block kinds' surface (D197, `terra_build::surface`) over the log cubes, as the stone kit draws stone, with Poly Haven's `beam_wall_01` (a wall of weathered peeled logs, CC0) for its colour, normals and height, scaled so one log falls in each 0.25 m course, bevelled 6 cm, displaced 7 cm.
+- **C, timber as surface.** The block kinds' surface (D197, `terra_build_mesh::surface`) over the log cubes, as the stone kit draws stone, with Poly Haven's `beam_wall_01` (a wall of weathered peeled logs, CC0) for its colour, normals and height, scaled so one log falls in each 0.25 m course, bevelled 6 cm, displaced 7 cm.
 
 Triangles, Reference / A / B / C: straight wall 18.1k / 18.6k / 22.1k / 19.2k; L 37.8k / 38.8k / 46.1k / 33.2k; T 65.0k / 53.4k / 62.3k / 44.4k; door and window 48.3k / 35.2k / 40.6k / 37.4k (each including the 3k-triangle door and window). Comparable throughout; about 500 a cube.
 
@@ -42,5 +42,5 @@ One light (afternoon on the yard), one wood each, judged on stills by an agent; 
 
 ## Outcome
 
-2026-10-13: the developers chose A with B as a second profile (D200). The generator moved into the workspace, `terra_build::timber`, driven by the kit file (`assets/data/kits/logs.ron`'s `timber`), with more variation per log by seed; the spike and the Tripo log models were deleted. The daub became a pale lime strip (Poly Haven's `white_stucco`), recessed between the logs, rather than the brown clay strip.
+2026-10-13: the developers chose A with B as a second profile (D200). The generator moved into the workspace, `terra_build_mesh::timber`, driven by the kit file (`assets/data/kits/logs.ron`'s `timber`), with more variation per log by seed; the spike and the Tripo log models were deleted. The daub became a pale lime strip (Poly Haven's `white_stucco`), recessed between the logs, rather than the brown clay strip.
 

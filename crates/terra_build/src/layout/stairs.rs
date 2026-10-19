@@ -20,7 +20,7 @@ use terra_gen::hash;
 
 /// What tops a step's column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Cap {
+pub enum Cap {
     /// A whole cube: one tread at its top.
     Whole,
     /// A cube cut as a stair: two treads, half a cube apart.
@@ -32,7 +32,7 @@ pub(super) enum Cap {
 /// A step's column: its cubes from `bottom` to `top`, the way its nose looks out, and what
 /// tops it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Step {
+pub struct Step {
     pub bottom: i32,
     pub top: i32,
     pub out: Dir,
@@ -75,12 +75,7 @@ const CLEAT_M: (f32, f32) = (0.05, 0.03);
 /// Every step of a base's flights in a kit's kind, by column: every column topped by a cube
 /// cut as a stair or a slope, and where the kit dresses a nose with a member, every stack
 /// stepping up.
-pub(super) fn find(
-    base: &Base,
-    kit: &Kit,
-    kits: &Kits,
-    within: super::Scope,
-) -> BTreeMap<[i32; 2], Step> {
+pub fn find(base: &Base, kit: &Kit, kits: &Kits, within: super::Scope) -> BTreeMap<[i32; 2], Step> {
     let mut steps = BTreeMap::new();
     let ours = |at: IVec3| {
         base.cube(at)
@@ -431,7 +426,7 @@ mod tests {
     use super::*;
     use crate::kit::{Dress, Profile};
     use crate::layout::lay;
-    use crate::mesh::Material;
+    use crate::pieces::Material;
     use crate::{BuildOp, Cube};
 
     fn kit() -> Kit {
@@ -445,142 +440,6 @@ mod tests {
             .into_iter()
             .collect();
         kit
-    }
-
-    #[test]
-    fn a_stringers_foot_is_cut_plumb_at_the_flights_front() {
-        // Three stairs two cubes wide rising north, each cut to two steps on the cubes under
-        // it: the lowest nose so near the floor the stringer starts at the flight's front,
-        // and its lower edge, its depth down the slope from its line, is cut plumb there
-        // rather than standing out in front over whatever is below.
-        let mut base = Base::default();
-        for step in 0..3 {
-            if step > 0 {
-                base.apply(BuildOp::Fill {
-                    min: [0, 0, -step],
-                    max: [1, step - 1, -step],
-                    cube: Some(Cube::new(kit().kind(), Fill::Solid)),
-                });
-            }
-            base.apply(BuildOp::Fill {
-                min: [0, step, -step],
-                max: [1, step, -step],
-                cube: Some(Cube {
-                    shape: crate::Shape::Stair(crate::Facing::North),
-                    ..Cube::new(kit().kind(), Fill::Solid)
-                }),
-            });
-        }
-        let layout = lay(&base, &kit());
-        let mut stringers = 0;
-        for piece in layout
-            .pieces
-            .iter()
-            .filter(|p| matches!(p, Piece::Plank { from, to, .. } if from.0[1] != to.0[1]))
-        {
-            stringers += 1;
-            let mut surfaces = crate::mesh::Surfaces::default();
-            crate::draw::draw(piece, &kit(), None, &mut surfaces);
-            for p in surfaces.0.values().flat_map(|s| &s.positions) {
-                assert!(
-                    p.z <= crate::CELL_M + 1e-3,
-                    "{p} out in front of the flight"
-                );
-            }
-        }
-        assert_eq!(stringers, 2);
-    }
-
-    #[test]
-    fn a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts() {
-        // Four steps two cubes wide, rising north, each a cube higher.
-        let mut base = Base::default();
-        for step in 0..4 {
-            base.apply(BuildOp::Fill {
-                min: [0, 0, -step],
-                max: [1, step, -step],
-                cube: Some(Cube::new(kit().kind(), Fill::Solid)),
-            });
-        }
-        let kits = Kits(vec![kit()]);
-        let steps = find(&base, &kit(), &kits, crate::layout::Scope::ALL);
-        assert_eq!(steps.len(), 8, "{steps:?}");
-        assert!(steps.values().all(|step| step.out == Dir::South));
-        let layout = lay(&base, &kit());
-        let logs: Vec<&Piece> = layout
-            .pieces
-            .iter()
-            .filter(|p| matches!(p, Piece::Log { .. }))
-            .collect();
-        // No log lies across the flight: nothing under the treads but posts.
-        for piece in &logs {
-            let Piece::Log { from, to, role, .. } = piece else {
-                unreachable!()
-            };
-            assert_eq!(*role, Some(Role::Jamb), "{piece:?}");
-            assert!(
-                from.0[0] == to.0[0] && from.0[2] == to.0[2],
-                "{piece:?} is no post"
-            );
-        }
-        // A stringer up each side, rising from the floor at the flight's foot.
-        let stringers: Vec<_> = layout
-            .pieces
-            .iter()
-            .filter_map(|p| match p {
-                Piece::Plank { from, to, .. } if from.0[1] != to.0[1] => {
-                    Some((from.metres(), to.metres()))
-                }
-                _ => None,
-            })
-            .collect();
-        assert_eq!(stringers.len(), 2);
-        for (from, to) in &stringers {
-            let (low, high) = if from.y < to.y {
-                (from, to)
-            } else {
-                (to, from)
-            };
-            assert!(low.y < 0.2, "{low}");
-            assert!(high.y > 1.5, "{high}");
-        }
-        // Drawn, nothing of a stringer stands over the top step's cube, as its head is cut
-        // level with what it climbs to; nor out of the flight's side further than a trim.
-        for piece in layout
-            .pieces
-            .iter()
-            .filter(|p| matches!(p, Piece::Plank { from, to, .. } if from.0[1] != to.0[1]))
-        {
-            let mut surfaces = crate::mesh::Surfaces::default();
-            crate::draw::draw(piece, &kit(), None, &mut surfaces);
-            for surface in surfaces.0.values() {
-                for p in &surface.positions {
-                    assert!(p.y <= 4.0 * crate::CELL_M + 1e-3, "{p} over the top step");
-                    assert!(p.x > -0.0625 && p.x < 2.0 * crate::CELL_M + 0.0625, "{p}");
-                }
-            }
-        }
-        // Posts under them where the flight stands high: upright, from the floor.
-        let posts = logs
-            .iter()
-            .filter(|p| matches!(p, Piece::Log { from, to, .. } if from.0[0] == to.0[0] && from.0[2] == to.0[2]))
-            .count();
-        assert!(posts >= 2, "{posts} posts");
-        // A tread a step, as wide as the flight.
-        let treads: Vec<_> = layout
-            .pieces
-            .iter()
-            .filter_map(|p| match p {
-                Piece::Plank { from, to, .. } if from.0[1] == to.0[1] => {
-                    Some((from.metres(), to.metres()))
-                }
-                _ => None,
-            })
-            .collect();
-        assert_eq!(treads.len(), 4);
-        for (from, to) in treads {
-            assert!((from.x.min(to.x) - 0.0).abs() < 1e-3 && (from.x.max(to.x) - 1.0).abs() < 1e-3);
-        }
     }
 
     #[test]

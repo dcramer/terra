@@ -123,7 +123,7 @@ pub(super) fn decks(walls: &Walls, kit: &Kit, scope: super::Scope, layout: &mut 
 /// How far in from its cube's face a timber kind's members stand at their narrowest, in
 /// metres: its seed's thinnest beam, a round log's round, or, in a column standing `alone`,
 /// a post; none for a kind whose members are not long ones, which fills its cube.
-pub(crate) fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
+pub fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
     if kit.pattern != Pattern::Logs {
         return None;
     }
@@ -147,13 +147,13 @@ pub(crate) fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
 
 /// The kind a cube is laid as a deck in, if it is: a whole, solid cube of a timber kind
 /// whose kit lays decks, not in a wall (`Walls::walled`), with no cube cut to a shape on it.
-pub(crate) fn decked(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
+pub fn decked(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
     let cube = base.cube(at)?;
     if cube.shape != Shape::Whole || super::drawn_fill(&cube) != Fill::Solid {
         return None;
     }
     let kit = kits.of(cube.kind)?;
-    if kit.pattern != Pattern::Logs || !kit.textures.contains_key(&crate::mesh::Material::Floor) {
+    if kit.pattern != Pattern::Logs || !kit.textures.contains_key(&crate::pieces::Material::Floor) {
         return None;
     }
     if base
@@ -175,7 +175,7 @@ pub(crate) fn decked(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
 /// laid over it and the post ends under it, carrying the deck's bearer, as a builder sets a
 /// deck on its posts: so a post a storey high, as the hammer lays one, with a floor laid at
 /// its top, stands under the floor and not up through its corner.
-pub(crate) fn post_in_deck(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
+pub fn post_in_deck(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
     let cube = base.cube(at)?;
     if cube.shape != Shape::Post || cube.fill != Fill::Solid {
         return None;
@@ -1061,65 +1061,6 @@ mod tests {
         assert!((high.x - (7.0 * CELL_M + reach)).abs() < 0.01, "{high}");
         assert!((low.z - (CELL_M - reach)).abs() < 0.01, "{low}");
         assert!((high.z - (5.0 * CELL_M + reach)).abs() < 0.01, "{high}");
-    }
-
-    #[test]
-    fn a_lookouts_deck_is_closed_under_its_rail_and_beside_its_corner_posts() {
-        // A deck on posts at its corners with a rail of its own beams along one edge, the
-        // posts running up into the rail's corners, as the village's lookout: the rail's
-        // beams are narrower than its cubes, so the deck's boards run on under them, and the
-        // deck's rims, ending at the corner posts, run on into them. Lines up through the
-        // deck under the rail, and in through its side beside a corner post, all meet
-        // something; slots 4 to 12 cm wide were open there.
-        let hewn = crate::kit::tests::shipped("hewn.ron");
-        let kits = Kits(vec![hewn.clone()]);
-        let cube = |shape: Shape| {
-            Some(crate::Cube {
-                shape,
-                ..crate::Cube::new(hewn.kind(), Fill::Solid)
-            })
-        };
-        let mut base = Base::default();
-        let mut fill = |min: [i32; 3], max: [i32; 3], shape: Shape| {
-            base.apply(BuildOp::Fill {
-                min,
-                max,
-                cube: cube(shape),
-            })
-        };
-        for [x, z] in [[0, 0], [5, 0], [0, 3], [5, 3]] {
-            fill([x, 0, z], [x, 0, z], Shape::Post);
-        }
-        fill([0, 1, 0], [5, 1, 3], Shape::Whole);
-        fill([0, 2, 0], [5, 2, 0], Shape::Whole);
-        let lines = crate::inspect::Lines::of(&base, &kits);
-        // Up through the deck under the rail, its cubes but the corners'.
-        for i in 0..=200 {
-            let x = 0.55 + i as f32 * 0.0095;
-            for j in 0..=50 {
-                let z = 0.0 + j as f32 * 0.01;
-                assert!(
-                    lines.meets(Vec3::new(x, 0.3, z), Vec3::Y, 2.0),
-                    "open under the rail at ({x:.3}, {z:.3})"
-                );
-            }
-        }
-        // In through the deck's side beside the corner post, under its boards, as closed as
-        // the rim beside it.
-        let heights: Vec<f32> = (0..=45)
-            .map(|j| 0.5 + j as f32 * 0.01)
-            .filter(|&y| lines.meets(Vec3::new(1.25, y, -0.3), Vec3::Z, 0.6))
-            .collect();
-        assert!(heights.len() > 5, "the deck's rim");
-        for i in 0..=14 {
-            let x = 0.36 + i as f32 * 0.01;
-            for &y in &heights {
-                assert!(
-                    lines.meets(Vec3::new(x, y, -0.3), Vec3::Z, 0.6),
-                    "open beside the corner post at ({x:.2}, {y:.2})"
-                );
-            }
-        }
     }
 
     #[test]

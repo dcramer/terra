@@ -15,8 +15,8 @@ use glam::{IVec2, IVec3, Vec3};
 const SLIVER_M: f32 = 0.05;
 
 /// How thick a roof's cube is under its top, as a fraction of the cube: the roof's own
-/// thickness (`mesh::ROOF_THICK_M`), so its underside is where it is drawn.
-const ROOF_SHELL: f32 = crate::mesh::ROOF_THICK_M / CELL_M;
+/// thickness (`pieces::ROOF_THICK_M`), so its underside is where it is drawn.
+const ROOF_SHELL: f32 = crate::pieces::ROOF_THICK_M / CELL_M;
 
 /// How far from the middle of a walker's feet, as a fraction of their radius, what is
 /// under them holds them up.
@@ -493,7 +493,7 @@ mod tests {
         );
         assert!(near(base.support(Vec3::new(2.0, ridge, 1.5), &w), ridge));
         // Inside, the floor holds you up, and the roof's underside is over you.
-        let thick = crate::mesh::ROOF_THICK_M;
+        let thick = crate::pieces::ROOF_THICK_M;
         assert_eq!(base.support(Vec3::new(2.0, 0.0, 1.0), &w), Some(0.0));
         assert!(near(
             base.ceiling(Vec3::new(2.0, 0.0, 0.9)),

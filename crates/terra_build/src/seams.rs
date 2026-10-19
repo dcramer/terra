@@ -39,29 +39,11 @@ const RULES: &[&str] = &[
     "testing",
 ];
 
-/// What stands over the rules: the layout (where pieces go, which a server needs), the
-/// drawing and the settlements. The fixtures are `terra_build_scenes`.
+/// What stands over the rules: the layout (where pieces go, which a server needs) and the
+/// settlements. The drawing is `terra_build_mesh`, the fixtures `terra_build_scenes`.
 const ABOVE: &[&str] = &[
     // The layout.
-    "fitting",
-    "layout",
-    "walk", //
-    // The drawing.
-    "cells",
-    "checker",
-    "draw",
-    "dress",
-    "fragments",
-    "hull",
-    "inspect",
-    "mesh",
-    "modules",
-    "packs",
-    "relief",
-    "roofing",
-    "sections",
-    "surface",
-    "timber", //
+    "fitting", "layout", "walk", //
     // The settlements (the town is terra_town).
     "village",
 ];
@@ -353,12 +335,12 @@ fn the_rules_never_name_the_layout_or_the_drawing() {
 #[test]
 fn it_sees_a_module_named_every_way() {
     let code = code_of(
-        "use crate::layout::Piece;\nuse crate::{Base, mesh::Surface};\nfn f() { timber::draw(); }\n\
-         // crate::dress in a comment\nconst S: &str = \"crate::draw\";\nfn g() { a::layout::b(); }\n\
-         #[cfg(test)]\nmod tests { use crate::inspect; }\n",
+        "use crate::layout::Piece;\nuse crate::{Base, walk::Surface};\nfn f() { village::draw(); }\n\
+         // crate::fitting in a comment\nconst S: &str = \"crate::walk\";\nfn g() { a::layout::b(); }\n\
+         #[cfg(test)]\nmod tests { use crate::village; }\n",
     );
     assert_eq!(
         named(&code),
-        vec![(1, "layout"), (2, "mesh"), (3, "timber")]
+        vec![(1, "layout"), (2, "walk"), (3, "village")]
     );
 }

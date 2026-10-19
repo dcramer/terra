@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
-use terra_build::sections::{self, Detail, Reach, Section};
+use terra_build_mesh::sections::{self, Detail, Reach, Section};
 
 /// The steps of drawing builds, in order.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -301,7 +301,7 @@ fn launch(
         let progress = build.progress();
         let frame = build.frame;
         let root = build.root;
-        let in_order = matches!(progress, terra_build::sections::Progress::Fraction(_));
+        let in_order = matches!(progress, terra_build_mesh::sections::Progress::Fraction(_));
         let sections = &mut build.sections;
         if sections.waiting.is_empty() || sections.whole.is_some() {
             continue;

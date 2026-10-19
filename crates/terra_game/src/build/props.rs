@@ -86,7 +86,7 @@ fn spawn_frame(
         return;
     };
     let surfaces: BTreeMap<_, _> =
-        terra_build::fitting::frame_surfaces(prop, face, kit, foot(prop))
+        terra_build_mesh::frames::frame_surfaces(prop, face, kit, foot(prop))
             .0
             .into_iter()
             .map(|(material, surface)| ((kind, material), surface))

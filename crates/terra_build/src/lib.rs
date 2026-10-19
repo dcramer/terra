@@ -37,48 +37,33 @@
 
 pub mod burg;
 pub mod castle;
-pub mod cells;
-pub mod checker;
 pub mod construct;
 pub mod cost;
 pub mod cubes;
-pub mod draw;
-pub mod dress;
 pub mod example;
 pub mod fire;
 pub use fire::Scorch;
 pub mod fitting;
-pub mod fragments;
 pub mod ground;
-pub mod hull;
-pub mod inspect;
 pub mod junctions;
 pub mod kit;
 pub mod layers;
 pub mod layout;
 pub mod look;
 pub mod loss;
-mod mesh;
-pub mod modules;
 pub mod ops;
 pub mod order;
-pub mod packs;
 pub mod parts;
 pub mod pieces;
 pub mod plans;
 pub mod put_up;
 mod ray;
-pub mod relief;
 pub mod roofer;
-pub mod roofing;
 pub mod rooms;
 pub mod save;
-pub mod sections;
 mod shortcuts;
 pub mod support;
-pub mod surface;
 pub mod testing;
-pub mod timber;
 pub mod village;
 mod walk;
 
@@ -92,7 +77,6 @@ pub use example::{
     with_roof,
 };
 pub use ground::{Ground, Sample};
-pub use mesh::{Indexed, Surface};
 pub use order::Progress;
 pub use ray::BuildHit;
 pub use shortcuts::{BuildOp, Panel, corners};
@@ -839,7 +823,7 @@ impl Base {
     }
 }
 
-pub use mesh::{Material, Surfaces};
+pub use pieces::Material;
 
 /// Whether a cube is part of what stands: something of it in, or an opening, or being
 /// carved, which is drawn open whatever is in.

@@ -1,4 +1,4 @@
-//! The maps kits' pieces are made with on the CPU (D197, D200; `terra_build::relief::Maps`):
+//! The maps kits' pieces are made with on the CPU (D197, D200; `terra_build_mesh::relief::Maps`):
 //! a block kind's `Masonry` material's height, which its surface is displaced by, and its
 //! `Floor` material's, which its tops are; a timber kind's `Log` material's, which its bark
 //! stands out by; and every material's colours, small, which a section far off is painted
@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::Kits;
-use terra_build::relief::{Maps, Relief, Swatch, cored_by, shaped_by, topped_by};
+use terra_build_mesh::relief::{Maps, Relief, Swatch, cored_by, shaped_by, topped_by};
 
 /// How many texels across and down a material's colours are kept, each the average of a
 /// patch of its texture.

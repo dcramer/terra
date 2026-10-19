@@ -22,19 +22,28 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     // The voxel contract, proved row by row by building's contract test.
     ("docs/building-voxels.json", &["terra_build_scenes"]),
     // The kits' models and references, which the kit checker and the material bench read.
-    ("art/", &["terra_build"]),
+    ("art/", &["terra_build", "terra_build_mesh"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     ("assets/", &["terra_world", "terra_game", "terra_sandbox"]),
     // Building's kits, packs, items and settlement, and the materials its kits name, which the
     // kit checker and the packs' tests read.
-    ("assets/data/kits/", &["terra_build", "terra_build_scenes"]),
-    ("assets/data/packs/", &["terra_build"]),
-    ("assets/data/items.ron", &["terra_build"]),
+    (
+        "assets/data/kits/",
+        &["terra_build", "terra_build_mesh", "terra_build_scenes"],
+    ),
+    ("assets/data/packs/", &["terra_build", "terra_build_mesh"]),
+    (
+        "assets/data/items.ron",
+        &["terra_build", "terra_build_mesh"],
+    ),
     (
         "assets/data/settlement.ron",
         &["terra_build", "terra_build_scenes"],
     ),
-    ("assets/materials/", &["terra_build", "terra_build_scenes"]),
+    (
+        "assets/materials/",
+        &["terra_build", "terra_build_mesh", "terra_build_scenes"],
+    ),
     // The town's market and the catalogue its stalls are sized from, and its people's day.
     ("assets/data/market.ron", &["terra_town"]),
     ("assets/data/builds.ron", &["terra_town"]),
@@ -328,6 +337,7 @@ mod tests {
     fn crates() -> BTreeSet<String> {
         [
             "terra_build",
+            "terra_build_mesh",
             "terra_build_scenes",
             "terra_core",
             "terra_land",
@@ -424,7 +434,11 @@ mod tests {
         assert!(scope.assets);
         assert_eq!(
             scope.readers,
-            set(&[&bevy[..], &["terra_build", "terra_build_scenes"]].concat())
+            set(&[
+                &bevy[..],
+                &["terra_build", "terra_build_mesh", "terra_build_scenes"]
+            ]
+            .concat())
         );
         let scope = classify(&files(&["assets/models/tree/pine.glb"]), &crates());
         assert_eq!(scope.readers, set(&bevy));

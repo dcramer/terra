@@ -3,7 +3,7 @@
 //! with a [`Section`] and what is drawn of it under that. When the base changes, the
 //! sections its change marks (`terra_build::Base::take_dirty`, a cube's section and its
 //! neighbours on an edge) and the rest of the building they are in wait to be laid again
-//! (`terra_build::sections::affected`); `layout` lays them on the workers, nearest the
+//! (`terra_build_mesh::sections::affected`); `layout` lays them on the workers, nearest the
 //! camera first, and `draw` puts what they give on screen, a few a frame.
 
 use super::{Build, Built, Shown, Site};
@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use terra_build::Base;
-use terra_build::sections::{Reach, drawable};
+use terra_build_mesh::sections::{Reach, drawable};
 
 /// A base's entity: where it stands, its sections its children.
 #[derive(Component)]
@@ -31,13 +31,13 @@ pub(super) struct Drawn {
     pub entity: Option<Entity>,
     /// The job it came from: while the section's latest is another, it is being laid.
     pub ticket: u64,
-    /// What it was laid as (`terra_build::sections::Laid::key`).
+    /// What it was laid as (`terra_build_mesh::sections::Laid::key`).
     pub key: u64,
     /// How finely it is drawn.
     pub reach: Reach,
     /// How it was drawn, piece by piece and face by face, for the player's own base, so an
     /// edit draws again only what it reached (`sections::draw_again`).
-    pub drawing: Option<Arc<terra_build::sections::Drawing>>,
+    pub drawing: Option<Arc<terra_build_mesh::sections::Drawing>>,
     /// How many bytes its meshes take on the GPU.
     pub gpu_bytes: usize,
     /// A group's sections with anything in them, as a box in its base's own space: what
@@ -108,11 +108,11 @@ pub(super) struct Sections {
     pub generation: u64,
     /// The snapshot laid whole, which its sections are cut from, once a worker has laid it;
     /// and the worker laying it.
-    pub whole: Option<Arc<terra_build::sections::Whole>>,
+    pub whole: Option<Arc<terra_build_mesh::sections::Whole>>,
     pub laying: Option<bevy::tasks::Task<super::layout::Laying>>,
     /// The base as last laid and how, and the sections marked since: a change lays again
     /// only the buildings it marked (`Whole::lay_again`), not every one in the claim.
-    pub last_laid: Option<(Arc<Base>, Arc<terra_build::sections::Whole>)>,
+    pub last_laid: Option<(Arc<Base>, Arc<terra_build_mesh::sections::Whole>)>,
     pub marked_since: BTreeSet<[i32; 3]>,
     /// The sections of cubes lit or no longer lit as what goes in next since the base was
     /// last laid: the worker laying it again works out what they reach.
@@ -248,10 +248,9 @@ fn noticed(build: &mut Build) {
         }
         if let (Shown::Plan(fraction), Some(kits)) = (build.shown, build.kits.clone()) {
             let base = build.base.clone();
-            sections.standing = Some(
-                bevy::tasks::AsyncComputeTaskPool::get()
-                    .spawn(async move { terra_build::sections::standing(&base, &kits, fraction) }),
-            );
+            sections.standing = Some(bevy::tasks::AsyncComputeTaskPool::get().spawn(async move {
+                terra_build_mesh::sections::standing(&base, &kits, fraction)
+            }));
         }
         return;
     }

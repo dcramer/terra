@@ -1,5 +1,5 @@
 //! What a renderer would show as junk in what the kits draw, found from the meshes
-//! (`terra_build::inspect`), `cargo xtask artifacts`: every scene of the registry
+//! (`terra_build_mesh::inspect`), `cargo xtask artifacts`: every scene of the registry
 //! (`terra_build_scenes::registry`) in the building baseline's materials (D333), on sloping
 //! ground, at every level of detail. Prints how many of each fault it found at each detail
 //! and the first few of each (every one with `--all`), and fails if there is any. A name
@@ -18,9 +18,9 @@
 
 use std::path::Path;
 use std::process::ExitCode;
-use terra_build::inspect::{self, Fault};
-use terra_build::relief::Maps;
-use terra_build::sections::Detail;
+use terra_build_mesh::inspect::{self, Fault};
+use terra_build_mesh::relief::Maps;
+use terra_build_mesh::sections::Detail;
 use terra_build_scenes::registry::{Gate, Materials, ratchet};
 
 fn main() -> ExitCode {

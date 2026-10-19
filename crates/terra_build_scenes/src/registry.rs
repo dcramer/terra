@@ -185,8 +185,7 @@ pub fn registry(m: &Materials) -> Vec<Scene<'_>> {
             build: Box::new(move || on_ground(kits, &ops)),
         });
     };
-    // Every roof over every plan, in each wall kind and each two mixed; the first, the
-    // rectangle under a gable, before every push.
+    // Every roof over every plan, in each wall kind and each two mixed; a gable first, every push.
     let first = |row: &str| {
         if row == "rectangle, gable roof" {
             Gate::Push

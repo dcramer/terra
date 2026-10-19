@@ -48,9 +48,9 @@ use bevy::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
-use terra_build::cells::CELLS;
 use terra_build::kit::Kits;
 use terra_build::{Kind, Material};
+use terra_build_mesh::cells::CELLS;
 use terra_world::quality::Quality;
 
 /// The side of a texture set's occlusion-roughness-metal and height in the arrays, and its
@@ -438,7 +438,7 @@ pub struct Arrays {
 /// The slot of the arrays the shared damage mask is kept in.
 const DAMAGE_SLOT: u32 = 0;
 /// How much darker a damaged cube all but gone is where the mask is not drawn, as
-/// `terra_build::loss` darkens one far off.
+/// `terra_build_mesh::mesh::wear` darkens one far off.
 const DAMAGE_DARK: f32 = 0.34;
 
 /// The shared damage mask's way to its slot: its maps being made and compressed on a
@@ -994,7 +994,7 @@ pub fn stream(
                         // CPU finds them from the same picture; none, one cell.
                         if i == 3 {
                             found = match &map {
-                                Some((data, w, h, channels)) => terra_build::cells::label(
+                                Some((data, w, h, channels)) => terra_build_mesh::cells::label(
                                     data,
                                     *w as usize,
                                     *h as usize,

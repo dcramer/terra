@@ -96,7 +96,7 @@ const KITS: &[&str] = &[
     "run",
     "-q",
     "-p",
-    "terra_build",
+    "terra_build_mesh",
     "--example",
     "kits",
 ];
@@ -151,7 +151,7 @@ const STAGES: &[Stage] = &[
             "build",
             "-q",
             "-p",
-            "terra_build",
+            "terra_build_mesh",
             "--example",
             "kits",
         ],
@@ -537,7 +537,8 @@ fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
 }
 
 /// Whether a change touches what building's checks read, as `cargo xtask check` decides
-/// whether its kit, artifacts and fuzz stages run.
+/// whether its kit, artifacts and fuzz stages run: what the scenes' crate, which reads the
+/// rules, the layout and the drawing, depends on (D407).
 fn building_touched(since: &BTreeSet<String>) -> bool {
     let files: Vec<String> = since.iter().cloned().collect();
     let scope = scope::classify(&files, &scope::packages());
@@ -545,7 +546,7 @@ fn building_touched(since: &BTreeSet<String>) -> bool {
         return true;
     }
     let asked: BTreeSet<String> = scope.changed.union(&scope.readers).cloned().collect();
-    scope::with_dependents(&asked).is_none_or(|found| found.contains("terra_build"))
+    scope::with_dependents(&asked).is_none_or(|found| found.contains("terra_build_scenes"))
 }
 
 /// The files the run changed that it commits: the baselines and the rendered indexes. Any

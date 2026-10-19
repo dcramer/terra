@@ -1,7 +1,7 @@
 //! A base far off as a few merged meshes (docs/building-plan.md, drawing), as Unreal's
 //! hierarchical levels of detail merge a cell's meshes into one: past where a section's own
 //! proxy ends (`draw::PROXY_M`) to the horizon, each cell of a base, [`CELL`] sections a side
-//! counted from its lowest, is one mesh: the hull of its cubes (`terra_build::hull`), as a
+//! counted from its lowest, is one mesh: the hull of its cubes (`terra_build_mesh::hull`), as a
 //! section's own proxy is, its materials' colours baked in. A house is one cell, a castle a
 //! few dozen. They are made on a worker from the cubes alone, with nothing laid, first when
 //! the base appears and again after it changes, once the camera is far enough off that a
@@ -145,7 +145,7 @@ fn make(
                     let side = terra_build::cubes::SECTION;
                     let from = (low + IVec3::from_array(cell) * CELL) * side;
                     let to = from + IVec3::splat(CELL * side - 1);
-                    let hull = terra_build::hull::hull(&snapshot, &kits, &maps, from, to);
+                    let hull = terra_build_mesh::hull::hull(&snapshot, &kits, &maps, from, to);
                     // Measured from the middle of its sections, as each of them is.
                     let middles: Vec<Vec3> = members.into_iter().map(store::centre).collect();
                     let centre = middles.iter().sum::<Vec3>() / middles.len().max(1) as f32;

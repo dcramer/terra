@@ -16,26 +16,28 @@ The baseline is **wood and stone, built by hand and destroyed, with infinite pre
 AGENTS.md's routine, plus for building:
 
 - At the start, check the latest commits of anyone working in the same files.
-- The hooks only format and lint (D37); the scheduled full check on main runs the rest. For a change to geometry, drawing or kits, run `cargo test -p terra_build`, `cargo xtask kits` and `cargo xtask artifacts --quick --ratchet` yourself before landing.
+- The hooks only format and lint (D37); the scheduled full check on main runs the rest. For a change to geometry, drawing or kits, run `cargo test -p terra_build -p terra_build_mesh -p terra_build_scenes`, `cargo xtask kits` and `cargo xtask artifacts --quick --ratchet` yourself before landing.
 
 ## Where each concern lives
+
+The rules and the layout are `crates/terra_build/src`; the drawing and its checks `crates/terra_build_mesh/src`; the fixtures `crates/terra_build_scenes/src` (D407).
 
 | Concern | Where |
 |---|---|
 | Cubes, shapes, kinds, fill | `crates/terra_build/src/cubes.rs`; who owns each face and edge: the contract's §2 |
 | Patterns (block, coursed, frame, roof) | `assets/data/kits/patterns/*.ron`; their code is the layout below |
-| Materials and packs | `assets/data/kits/*.ron` over `assets/data/packs/*.ron`, textures in `assets/materials/`; read by `kit.rs`, checked by `packs.rs`; made by `cargo xtask pack` |
+| Materials and packs | `assets/data/kits/*.ron` over `assets/data/packs/*.ron`, textures in `assets/materials/`; read by `kit.rs`, checked by the drawing's `packs.rs`; made by `cargo xtask pack` |
 | Roles (arris, crest, foot, quoin, jamb…) | `layout/roles.rs` |
 | Layout of pieces | `layout/`: `runs.rs` (coursed walls, under roofs), `blocks.rs` (stone openings, lintels), `trims.rs` (frames, end boards), `floors.rs` (floors, decks), `stairs.rs`, `shapes.rs`, `frames.rs`, `roofs/` (squares, lines, flashing, standing on roofs) |
-| Block surface | `surface.rs`, `surface/slots.rs` |
+| Block surface (drawing) | `surface.rs`, `surface/slots.rs` |
 | Timber members | `timber/` (cuts, planks, sweeps, harm) |
 | Roof covering | `roofing.rs` |
 | Dressed pieces | `dress/`, `modules.rs` |
 | Sections, detail levels, ghosts | `sections.rs`, `sections/` (far, ghosts, laying, blocks) |
 | Player's tools as operations | `plans.rs` → `ops.rs`; loss and collapse in `loss.rs` |
-| Scenes | `scenes/`: the registry (`registry.rs`) holds every scene the game ships or a check looks at; sheet, QA cabin, castle, burg, fuzz |
+| Scenes | `terra_build_scenes`: the registry (`registry.rs`) holds every scene the game ships or a check looks at; sheet, QA cabin, castle, burg, fuzz |
 | The contract | `docs/building-voxels.md`, its matrix data `docs/building-voxels.json` |
-| The mesh checker | `inspect.rs`, its families `junctions.rs` and `roof_walls.rs` |
+| The mesh checker | the drawing's `inspect.rs`; its families the rules' `junctions.rs` and the fixtures' `roof_walls.rs` |
 
 ## Which checks, for which change
 

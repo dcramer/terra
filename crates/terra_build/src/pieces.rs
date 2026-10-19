@@ -58,6 +58,10 @@ impl Role {
 /// trims, a step of its fill each (`kit.cost.steps`).
 pub const ROOF_STAGES: u8 = 4;
 
+/// How thick a pitched roof is under its covering: its rafters and battens. Walls and their
+/// gables stop under it, and a walker stands on it where it is drawn (`walk`).
+pub const ROOF_THICK_M: f32 = 0.15;
+
 /// How far a roof cube is up, by its fill: nothing, then its frame, battens, covering and
 /// trims, a quarter of the cube each.
 pub fn stage_of(cube: &Cube) -> u8 {
@@ -172,7 +176,7 @@ pub enum Breaks {
 }
 
 /// A hewn member's half width, as a fraction of its kit's log.
-pub(crate) const HEWN_WIDE: f32 = 0.45;
+pub const HEWN_WIDE: f32 = 0.45;
 
 /// How wide and how high a member laid for a role is as this code draws it, before its seed
 /// varies it a little, in metres: what a layout needs to set what rests on it, or what it
@@ -196,7 +200,7 @@ pub fn section(kit: &Kit, role: Option<Role>) -> (f32, f32) {
 
 /// A hewn member's half height: half a course less its joint, so the daub between courses
 /// shows as a line `joint` tall.
-pub(crate) fn hewn_high(kit: &Kit) -> f32 {
+pub fn hewn_high(kit: &Kit) -> f32 {
     ((kit.course - kit.timber.joint.max(0.0)) * 0.5).max(0.01)
 }
 
@@ -525,13 +529,13 @@ fn unlap(mesh: &mut Stone) {
 }
 
 /// A point in a plane square to `n`, by two axes in it.
-pub(crate) fn flatten(n: Vec3) -> impl Fn(Vec3) -> glam::Vec2 {
+pub fn flatten(n: Vec3) -> impl Fn(Vec3) -> glam::Vec2 {
     let u = n.any_orthonormal_vector();
     let v = n.cross(u);
     move |p| glam::Vec2::new(p.dot(u), p.dot(v))
 }
 
-pub(crate) fn polygon_area(polygon: &[glam::Vec2]) -> f32 {
+pub fn polygon_area(polygon: &[glam::Vec2]) -> f32 {
     if polygon.len() < 3 {
         return 0.0;
     }
@@ -572,7 +576,7 @@ fn counter_clockwise(t: &[glam::Vec2; 3]) -> [glam::Vec2; 3] {
 }
 
 /// What of a convex polygon lies inside a triangle.
-pub(crate) fn clip_inside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<glam::Vec2> {
+pub fn clip_inside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<glam::Vec2> {
     let t = counter_clockwise(triangle);
     let mut rest = polygon.to_vec();
     for e in 0..3 {
@@ -586,7 +590,7 @@ pub(crate) fn clip_inside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) ->
 
 /// What of a convex polygon lies outside a triangle, as convex pieces: beyond its first edge,
 /// then within that and beyond its second, then within both and beyond its third.
-pub(crate) fn outside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<Vec<glam::Vec2>> {
+pub fn outside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<Vec<glam::Vec2>> {
     let t = counter_clockwise(triangle);
     let mut rest = polygon.to_vec();
     let mut out = Vec::new();

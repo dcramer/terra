@@ -44,10 +44,13 @@ fn building() -> PathBuf {
 /// integration test (`tests::rules`): its own file, and with `inner`, every file under its
 /// folder too; its tests' files (`tests.rs`, `tests/`) either way.
 fn files(module: &str, inner: bool) -> Vec<PathBuf> {
-    // A module of these fixtures is named with the crate's name first.
-    let (crate_, module) = match module.strip_prefix("terra_build_scenes::") {
-        Some(module) => (root(), module),
-        None => (building(), module),
+    // A module of another building crate (these fixtures, the drawing) is named with the
+    // crate's name first; the rules' and the layout's without.
+    let (crate_, module) = match module.split_once("::") {
+        Some((name, module)) if name.starts_with("terra_build_") => {
+            (root().join("..").join(name), module)
+        }
+        _ => (building(), module),
     };
     if let Some(test) = module.strip_prefix("tests::") {
         return vec![crate_.join("tests").join(format!("{test}.rs"))];

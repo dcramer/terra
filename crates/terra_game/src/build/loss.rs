@@ -1,4 +1,4 @@
-//! Loss and repair in the game (D193, D305; `terra_build::loss`, `terra_build::fragments`):
+//! Loss and repair in the game (D193, D305; `terra_build::loss`, `terra_build_mesh::fragments`):
 //! what comes down breaks into fragments of its own material that fly, tumble, bounce,
 //! roll off ledges, settle and shrink away, with a puff of dust where it broke and where
 //! big pieces land, and the view shaken when a big collapse is near; and, until attacks
@@ -22,9 +22,9 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
-use terra_build::fragments::{self, Breaks, Fragment, Rubble, Shape};
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Cube, Kind};
+use terra_build_mesh::fragments::{self, Breaking, Breaks, Fragment, Rubble, Shape};
 use terra_world::quality::Quality;
 
 mod dust;

@@ -185,7 +185,7 @@ impl PlaceTable {
 /// foot on the roof cube's top (not an upper half or an upside-down shape hung over it). It
 /// is carried down into the roof's cube to the roof's deck, and the roof is flashed round
 /// its foot (docs/building-plan.md, where roofs and walls meet).
-pub(crate) fn standing_on(base: &Base, roof: IVec3) -> Option<Cube> {
+pub fn standing_on(base: &Base, roof: IVec3) -> Option<Cube> {
     base.cube(roof + IVec3::Y).filter(|over| {
         !over.kind.is_roof()
             && over.level() > 0
@@ -242,7 +242,7 @@ thread_local! {
 
 /// Runs a laying of one base, every roof it asks for ([`Roofs::whole`]) worked out once,
 /// and forgotten after.
-pub(crate) fn remembered<T>(run: impl FnOnce() -> T) -> T {
+pub fn remembered<T>(run: impl FnOnce() -> T) -> T {
     let outer = MEMO.with(|memo| {
         let mut memo = memo.borrow_mut();
         let outer = memo.is_some();
@@ -732,7 +732,7 @@ impl Roofs {
 
     /// A number for everything a point's place on the roofs depends on ([`Roofs::place_of`]):
     /// every square, how far in from an edge each is, and each roof's span.
-    pub(crate) fn fingerprint(&self) -> u64 {
+    pub fn fingerprint(&self) -> u64 {
         *self.fingerprinted.get_or_init(|| self.fingerprint_of())
     }
 
@@ -822,7 +822,7 @@ fn level_cut(t: &[Vec3; 3], height: f32) -> Option<(Vec3, Vec3)> {
 }
 
 /// The normal of the plane through a line and a point beside it, facing up.
-pub(crate) fn planar_normal(from: Vec3, to: Vec3, beside: Vec3) -> Vec3 {
+pub fn planar_normal(from: Vec3, to: Vec3, beside: Vec3) -> Vec3 {
     let n = (to - from).cross(beside - from).normalize_or(Vec3::Y);
     if n.y < 0.0 { -n } else { n }
 }
@@ -839,7 +839,7 @@ struct Segment {
 
 /// Lays a roof kind's roofs: every piece of each square of them of the kit's kind, in the
 /// order they go up.
-pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
+pub fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
     if kit.pattern != crate::kit::Pattern::Roof {
         return;
     }

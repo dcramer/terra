@@ -404,42 +404,6 @@ fn a_log_course_part_in_loses_what_went_into_it() {
 }
 
 #[test]
-fn a_damaged_cubes_surface_is_drawn_darker_the_more_it_has_lost_and_no_other() {
-    // A face of the cube at the origin and one of the cube two along, each a fine grid of
-    // triangles, as a wall's surface is.
-    let face = |x0: f32| {
-        let mut surface = crate::Surface::default();
-        for i in 0..10 {
-            for j in 0..10 {
-                let (u, v) = (x0 + i as f32 * 0.05, j as f32 * 0.05);
-                let corners = [
-                    glam::Vec3::new(u, v, 0.5),
-                    glam::Vec3::new(u + 0.05, v, 0.5),
-                    glam::Vec3::new(u + 0.05, v + 0.05, 0.5),
-                    glam::Vec3::new(u, v + 0.05, 0.5),
-                ];
-                surface.quad(corners, glam::Vec3::Z, [0.8; 3]);
-            }
-        }
-        surface
-    };
-    let mean = |surface: &crate::Surface| {
-        surface.colours.iter().map(|c| c[0]).sum::<f32>() / surface.colours.len() as f32
-    };
-    let worn = |quarters: u8, x0: f32| {
-        let mut surface = face(x0);
-        wear(&mut surface, &[([0, 0, 0], quarters)]);
-        mean(&surface)
-    };
-    // Untouched where it is not damaged; darker by quarters lost where it is.
-    assert!((worn(4, 1.0) - 0.8).abs() < 1e-5);
-    assert!(worn(1, 0.0) < 0.8);
-    assert!(worn(2, 0.0) < worn(1, 0.0));
-    assert!(worn(4, 0.0) < worn(2, 0.0));
-    assert!(worn(4, 0.0) > 0.2, "still its material, only worn");
-}
-
-#[test]
 fn damage_spreads_a_little_into_the_cubes_beside_a_damaged_one_and_no_further() {
     // One cube at the origin all but gone, its face looking south (+Z) at z = 0.5 m.
     let worn = BTreeMap::from([([0, 0, 0], 4u8)]);

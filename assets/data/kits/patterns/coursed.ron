@@ -1,6 +1,6 @@
 // The coursed pattern (D178, D200, D262, D290): courses of long members, logs or beams,
 // crossing at the corners; each member a profile swept along the run the layout gives,
-// shaped by these numbers and its own seed (crates/terra_build/src/timber.rs), so no two
+// shaped by these numbers and its own seed (crates/terra_build_mesh/src/timber.rs), so no two
 // are alike, and wearing its material's bake. A material of it (pine logs, hewn oak) is a
 // few lines naming this pattern and its pack. Sizes in metres; colours as on screen (sRGB).
 //

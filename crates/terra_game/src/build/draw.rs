@@ -25,9 +25,9 @@ use bevy::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use terra_build::kit::Kits;
-use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape};
-use terra_build::{Kind, Material, Surface};
+use terra_build::{Kind, Material, kit::Kits};
+use terra_build_mesh::Surface;
+use terra_build_mesh::sections::{Drawn as Merged, Ghost, Reach, Shape};
 use terra_world::detail::DetailScale;
 
 pub(super) mod detail;
@@ -417,7 +417,7 @@ pub(super) fn in_arrays_scorched(
     used: &mut BTreeSet<u16>,
 ) -> (Option<Mesh>, Vec<(Kind, Material, Mesh)>) {
     let mut rest = Vec::new();
-    let mut all = terra_build::Indexed::default();
+    let mut all = terra_build_mesh::Indexed::default();
     let mut tangents: Vec<[f32; 4]> = Vec::new();
     let mut ids: Vec<[f32; 2]> = Vec::new();
     for (&(kind, material), surface) in surfaces {
@@ -493,10 +493,10 @@ pub(super) fn parts(
 ) -> Parts {
     let pack = |mesh: Mesh| Staged::Made(Box::new(if pack { packed(mesh) } else { mesh }));
     // A surface whose colours came out near black, as a mask reading the real maps can make
-    // it, is drawn black in any light: said once a run (`terra_build::inspect`).
+    // it, is drawn black in any light: said once a run (`terra_build_mesh::inspect`).
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     for (&(kind, material), surface) in drawn.near_by.iter().flatten() {
-        if let Some(dark) = terra_build::inspect::black(surface)
+        if let Some(dark) = terra_build_mesh::inspect::black(surface)
             && !SAID.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
             warn!(
@@ -544,19 +544,19 @@ pub(super) fn parts(
         })
     };
     // A section's parts drawn again together are made into meshes side by side, on the
-    // threads spare (`terra_build::sections::Spare`): welding, tangents and packing are
+    // threads spare (`terra_build_mesh::sections::Spare`): welding, tangents and packing are
     // most of a near section's time on its worker, and the parts are apart (D308).
     let chosen: Vec<usize> = (0..count)
         .filter(|&c| only.get(c).copied().unwrap_or(true))
         .collect();
-    let spare = terra_build::sections::Spare::take(chosen.len().saturating_sub(1));
+    let spare = terra_build_mesh::sections::Spare::take(chosen.len().saturating_sub(1));
     let mut parts: Vec<Option<Part>> = (0..count).map(|_| None).collect();
     if spare.count() == 0 {
         for c in chosen {
             parts[c] = part(c);
         }
     } else {
-        let shares = terra_build::sections::shares(&chosen, spare.count() + 1);
+        let shares = terra_build_mesh::sections::shares(&chosen, spare.count() + 1);
         let made: Vec<(usize, Option<Part>)> = std::thread::scope(|scope| {
             let threads: Vec<_> = shares[1..]
                 .iter()
@@ -722,7 +722,7 @@ fn linear(c: f32) -> f32 {
 
 /// Triangles with shared corners as a mesh about a point, its colours linear; its tangents
 /// are the caller's.
-fn mesh_of(all: terra_build::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
+fn mesh_of(all: terra_build_mesh::Indexed, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     if all.indices.is_empty() {
         return None;
     }

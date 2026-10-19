@@ -27,10 +27,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
+use terra_build::Material;
 use terra_build::kit::{Kit, Kits};
-use terra_build::relief::{Maps, Relief, Swatch, cored_by, shaped_by, topped_by};
-use terra_build::sections::{self, Progress, Reach, Section};
-use terra_build::{Material, Surface};
+use terra_build_mesh::Surface;
+use terra_build_mesh::relief::{Maps, Relief, Swatch, cored_by, shaped_by, topped_by};
+use terra_build_mesh::sections::{self, Progress, Reach, Section};
 
 /// Stretched past this reads as smeared; past the second, as a streak.
 const SMEARED: f32 = 1.5;

@@ -25,13 +25,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
-use terra_build::inspect;
 use terra_build::kit::Kits;
+use terra_build_mesh::inspect;
 use terra_build_scenes::registry::{Family, Gate, Materials, ratchet};
 
-use terra_build::relief::Maps;
-use terra_build::sections::{self, Progress, Reach, Section};
-use terra_build::{Base, BuildOp, Kind, Material, Surface};
+use terra_build::{Base, BuildOp, Kind, Material};
+use terra_build_mesh::Surface;
+use terra_build_mesh::relief::Maps;
+use terra_build_mesh::sections::{self, Progress, Reach, Section};
 
 /// A mesh a section draws near: its name, its kind and material where it has one, and it.
 type Mesh = (String, Option<(Kind, Material)>, Surface);

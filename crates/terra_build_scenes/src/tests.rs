@@ -6,10 +6,10 @@ use glam::Vec3;
 use terra_build::kit::{Kit, Kits};
 use terra_build::layout::Piece;
 use terra_build::layout::roofs::Roofs;
-use terra_build::relief::Maps;
 use terra_build::roofer::Style;
 use terra_build::testing;
 use terra_build::{Base, CELL_M};
+use terra_build_mesh::relief::Maps;
 
 /// The shipped kits the drawing's tests lay, by their files' names.
 const SHIPPED: &str = "logs hewn stone earth wattle shakes slate thatch greystone";
@@ -60,7 +60,7 @@ fn a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in() {
         }
         let (name, base) = (&scene.name, scene.base());
         states += 1;
-        let report = terra_build::inspect::inspect(&base, kits, &maps);
+        let report = terra_build_mesh::inspect::inspect(&base, kits, &maps);
         found.extend(
             report
                 .findings
@@ -139,7 +139,7 @@ fn a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables() {
         for op in ops {
             base.apply(op);
         }
-        let lines = terra_build::inspect::Lines::of(&base, &kits);
+        let lines = terra_build_mesh::inspect::Lines::of(&base, &kits);
         let roofs = Roofs::whole(&base, &kits, terra_build::layout::Scope::ALL);
         let eave = terra_build::STOREY_CUBES as f32 * CELL_M;
         for (x, out) in [(0, -1.0f32), (9, 1.0)] {
@@ -181,7 +181,7 @@ fn a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises() 
             .map(|(&k, _)| k)
             .expect(name)
     };
-    let maps = terra_build::relief::Maps::worst(&materials.kits, false);
+    let maps = terra_build_mesh::relief::Maps::worst(&materials.kits, false);
     for elements in [
         vec![
             Room {
@@ -215,10 +215,10 @@ fn a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises() 
         ],
     ] {
         let base = build(&materials.kits, &elements);
-        let report = terra_build::inspect::inspect(&base, &materials.kits, &maps);
+        let report = terra_build_mesh::inspect::inspect(&base, &materials.kits, &maps);
         for fault in [
-            terra_build::inspect::Fault::SeeThrough,
-            terra_build::inspect::Fault::UnderRoof,
+            terra_build_mesh::inspect::Fault::SeeThrough,
+            terra_build_mesh::inspect::Fault::UnderRoof,
         ] {
             assert_eq!(
                 report.count(fault),
@@ -250,7 +250,7 @@ fn a_lone_corner_square_carries_no_crease_out_past_its_edges() {
             .map(|(&k, _)| k)
             .expect(name)
     };
-    let maps = terra_build::relief::Maps::worst(&materials.kits, false);
+    let maps = terra_build_mesh::relief::Maps::worst(&materials.kits, false);
     for (at, shape, roof) in [
         ([4, 0, 8], Shape::InnerCorner(Facing::North), "shakes"),
         ([-1, 0, 11], Shape::InnerCorner(Facing::West), "slate"),
@@ -264,7 +264,7 @@ fn a_lone_corner_square_carries_no_crease_out_past_its_edges() {
             kind: kind(roof),
         }];
         let base = build(&materials.kits, &elements);
-        let report = terra_build::inspect::inspect(&base, &materials.kits, &maps);
+        let report = terra_build_mesh::inspect::inspect(&base, &materials.kits, &maps);
         assert!(
             report.findings.is_empty(),
             "{shape:?} in {roof}: {:?}",
@@ -290,7 +290,7 @@ fn an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it() {
             .map(|(&k, _)| k)
             .expect(name)
     };
-    let maps = terra_build::relief::Maps::worst(&materials.kits, false);
+    let maps = terra_build_mesh::relief::Maps::worst(&materials.kits, false);
     let cases = [
         ([2, 4], [7, 9], [7, 9], [11, 9], "slate"),
         ([0, 2], [6, 7], [5, 3], [7, 3], "shakes"),
@@ -318,8 +318,84 @@ fn an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it() {
             },
         ];
         let base = build(&materials.kits, &elements);
-        let report = terra_build::inspect::inspect(&base, &materials.kits, &maps);
-        let out = report.count(terra_build::inspect::Fault::PokesOut);
+        let report = terra_build_mesh::inspect::inspect(&base, &materials.kits, &maps);
+        let out = report.count(terra_build_mesh::inspect::Fault::PokesOut);
         assert_eq!(out, 0, "{roof}: {:?}", report.findings);
     }
+}
+
+// ---- from crates/terra_build/src/village/tests.rs
+
+// Slow, a minute or two: lays and draws one of each sort of the village's buildings.
+#[test]
+fn no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels() {
+    // One of each sort of the village's buildings, in the settlement's own materials as
+    // the game reads them, modelled pieces and all: none of their near meshes' faces lie
+    // in one plane over one another (`inspect::fights`, the checker's measure). The
+    // farmstead's lintels at a wall's end, the outside stair's stringers and the deck
+    // beside it, a doorway's posts on a footing, the lookout's rail, ridge caps cut to
+    // length and a verge under a higher roof's eave all did.
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+    };
+    let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
+        .expect("the kits")
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+        .collect();
+    paths.sort();
+    let mut names = std::collections::BTreeMap::new();
+    let mut kits = Vec::new();
+    for path in paths {
+        let stem = path.file_stem().unwrap().to_string_lossy().to_string();
+        let kit = terra_build::kit::Kit::read(
+            &format!("{}/{stem}.ron", terra_build::kit::MATERIALS),
+            &read,
+        )
+        .unwrap();
+        names.insert(stem, kit.kind());
+        kits.push(kit);
+    }
+    let kits = terra_build::kit::Kits(kits);
+    let palette =
+        terra_build::village::Palette::read(&read, &|name| names.get(name).copied(), &kits)
+            .unwrap();
+    let maps = terra_build_mesh::relief::Maps::default();
+    let progress = terra_build_mesh::sections::Progress::Whole;
+    terra_gen::par::map(
+        &terra_build::village::each_sort(&palette),
+        |(building, base)| {
+            let whole = terra_build_mesh::sections::Whole::lay(base, &kits);
+            let mut meshes = Vec::new();
+            for at in terra_build_mesh::sections::drawable(base) {
+                let section = terra_build_mesh::sections::Section {
+                    base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: glam::IVec3::from_array(at),
+                    progress: &progress,
+                };
+                let laid = terra_build_mesh::sections::lay(&section, &whole);
+                let near = terra_build_mesh::sections::draw(
+                    &section,
+                    &laid,
+                    terra_build_mesh::sections::Reach::Near,
+                );
+                for (&(kind, material), surface) in &near.near {
+                    meshes.push((
+                        format!("{kind:?} {material:?}"),
+                        Some((kind, material)),
+                        surface.clone(),
+                    ));
+                }
+                meshes.push(("plain".to_string(), None, near.plain));
+            }
+            let fights = terra_build_mesh::inspect::fights(
+                meshes.iter().map(|(n, k, s)| (n.clone(), *k, s)),
+            );
+            assert!(fights.is_empty(), "{}: {fights:?}", building.name);
+        },
+    );
 }

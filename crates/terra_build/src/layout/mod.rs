@@ -15,11 +15,11 @@
 pub mod blocks;
 mod dressing;
 mod floors;
-pub(crate) use floors::{decked, member_face, post_in_deck};
+pub use floors::{decked, member_face, post_in_deck};
 
 /// Every cube of the base's flights laid as open timber stairs, on stringers, by a kit of
 /// long members: what is drawn of them is steps, not the cubes' mass.
-pub(crate) fn open_flights(base: &crate::Base, kits: &crate::kit::Kits) -> BTreeSet<[i32; 3]> {
+pub fn open_flights(base: &crate::Base, kits: &crate::kit::Kits) -> BTreeSet<[i32; 3]> {
     kits.0
         .iter()
         .filter(|kit| kit.pattern == crate::kit::Pattern::Logs)
@@ -31,7 +31,7 @@ pub mod roles;
 pub mod roofs;
 pub mod runs;
 mod shapes;
-mod stairs;
+pub mod stairs;
 mod trims;
 
 use crate::kit::{Kit, Kits, Pattern};
@@ -520,7 +520,7 @@ struct Walls<'a> {
 
 /// How far across the floor, in cubes, a place looks each way for the building round it
 /// (`enclosed`): a room of a building is never wider.
-pub(crate) const ENCLOSE_REACH: i32 = 16;
+pub const ENCLOSE_REACH: i32 = 16;
 
 /// Whether a place is within a building, for which side of its walls the weather is on
 /// (D261 as amended): something built over it, and something standing each way along the
@@ -1138,12 +1138,12 @@ fn runs_of(
 }
 
 /// A step of SplitMix64's stream: the state moved on by its increment and mixed.
-pub(crate) fn splitmix(x: u64) -> u64 {
+pub fn splitmix(x: u64) -> u64 {
     terra_gen::hash::splitmix64(x.wrapping_add(0x9e37_79b9_7f4a_7c15))
 }
 
 /// A seeded run of numbers, for one piece.
-pub(crate) struct Random(pub u32);
+pub struct Random(pub u32);
 
 impl Random {
     fn next(&mut self) -> u32 {
@@ -1165,33 +1165,9 @@ impl Random {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::kit::Texture;
     use crate::{BuildOp, Cube, Panel};
 
-    pub(crate) fn kit() -> Kit {
-        Kit::default()
-    }
-
-    /// A cabin four metres by three outside.
-    pub(crate) fn cabin() -> Base {
-        let mut base = Base::default();
-        base.apply(BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [7, 0, 5],
-            kind: kit().kind(),
-        });
-        base
-    }
-
-    pub(crate) fn wall(base: &mut Base, tiles: impl IntoIterator<Item = [i32; 3]>, panel: Panel) {
-        for tile in tiles {
-            base.apply(BuildOp::SetWall {
-                tile,
-                panel: Some(panel),
-                kind: kit().kind(),
-            });
-        }
-    }
+    pub(crate) use crate::testing::{cabin, kit, textured, wall};
 
     pub(crate) fn logs(layout: &Layout) -> Vec<(Vec3, Vec3, Split)> {
         layout
@@ -1212,23 +1188,6 @@ pub(crate) mod tests {
             .iter()
             .filter(|p| matches!(p, Piece::Board { .. }))
             .count()
-    }
-
-    /// A kit with a texture for floors, so it lays them.
-    pub(crate) fn textured() -> Kit {
-        let texture = |path: &str| Texture {
-            path: path.into(),
-            metres: [1.0, 1.0],
-            depth: 0.0,
-            reflectance: crate::kit::matte(),
-            strips: None,
-            cells: 1,
-            worn: None,
-        };
-        Kit {
-            textures: BTreeMap::from([(Material::Floor, texture("floor"))]),
-            ..kit()
-        }
     }
 
     #[test]

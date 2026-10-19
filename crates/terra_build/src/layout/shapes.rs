@@ -42,7 +42,7 @@ pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: 
             }
         }
     }
-    if !halves.is_empty() && kit.textures.contains_key(&crate::mesh::Material::Floor) {
+    if !halves.is_empty() && kit.textures.contains_key(&crate::pieces::Material::Floor) {
         super::floors::regions(walls, kit, &halves, CELL_M * 0.5, scope, layout);
     }
     // Each column of posts reaching into the scope, from its foot.

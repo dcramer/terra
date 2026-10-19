@@ -1,6 +1,7 @@
 //! Casting a ray into a base's cubes: what the hammer aims at.
 
-use crate::{Base, CELL_M, Cube, Face, Fill, Side, storey_of};
+use crate::cubes::FULL;
+use crate::{Base, CELL_M, Cube, Face, Fill, Kind, Side, storey_of};
 use glam::{IVec3, Vec3};
 
 /// Where a ray met a base.
@@ -177,6 +178,51 @@ fn ray_box(origin: Vec3, direction: Vec3, low: Vec3, high: Vec3) -> Option<(f32,
         far = far.min(leave);
     }
     (near <= far && near > 0.0).then_some((near, normal))
+}
+
+impl Base {
+    /// A box holding every cube, in cubes, to the sections they are in, if there are any.
+    pub fn bounds(&self) -> Option<(IVec3, IVec3)> {
+        self.cubes.bounds()
+    }
+
+    /// The height of the top of whatever is built under a point, in metres in the base's own
+    /// space: the highest cube with something in it at or below it in its column, by its
+    /// shape and how far in it is, within a storey and a half; none if nothing is.
+    pub fn top_under(&self, at: Vec3) -> Option<f32> {
+        self.top_under_of(at).map(|(top, _)| top)
+    }
+
+    /// As [`Base::top_under`], with the kind of the cube it is the top of: a roof's is drawn
+    /// higher, by its covering (`Roofing::thick`).
+    pub fn top_under_of(&self, at: Vec3) -> Option<(f32, Kind)> {
+        let cell = (at / CELL_M).floor().as_ivec3();
+        let (u, w) = (at.x / CELL_M - cell.x as f32, at.z / CELL_M - cell.z as f32);
+        for y in (cell.y - 9..=cell.y).rev() {
+            let place = IVec3::new(cell.x, y, cell.z);
+            let Some(cube) = self.cube(place).filter(Cube::is_in) else {
+                continue;
+            };
+            let fill = f32::from(cube.level()) / f32::from(FULL);
+            let top = cube.shape.top(u, w).min(fill);
+            return Some(((y as f32 + top) * CELL_M, cube.kind));
+        }
+        None
+    }
+
+    /// Whether a point is inside a cube with something in it, under its top.
+    pub fn solid_at(&self, at: Vec3) -> bool {
+        let cell = (at / CELL_M).floor().as_ivec3();
+        let Some(cube) = self.cube(cell).filter(Cube::is_in) else {
+            return false;
+        };
+        let (u, v, w) = (
+            at.x / CELL_M - cell.x as f32,
+            at.y / CELL_M - cell.y as f32,
+            at.z / CELL_M - cell.z as f32,
+        );
+        v <= cube.shape.top(u, w) && v >= cube.shape.bottom(u, w)
+    }
 }
 
 #[cfg(test)]

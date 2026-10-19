@@ -721,15 +721,15 @@ mod tests {
             }
         }
         let base = build(&materials.kits, &elements);
-        let report = terra_build::inspect::inspect(
+        let report = terra_build_mesh::inspect::inspect(
             &base,
             &materials.kits,
-            &terra_build::relief::Maps::worst(&materials.kits, false),
+            &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
         );
         let fought: Vec<_> = report
             .findings
             .iter()
-            .filter(|f| f.fault == terra_build::inspect::Fault::Coplanar)
+            .filter(|f| f.fault == terra_build_mesh::inspect::Fault::Coplanar)
             .collect();
         assert!(fought.is_empty(), "{fought:#?}");
     }

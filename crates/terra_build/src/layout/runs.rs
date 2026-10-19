@@ -1271,7 +1271,7 @@ const END_STAGGER_M: f32 = 0.006;
 /// How far along a row, in cubes, laying a log depends on its cubes: a log is at most a
 /// stretch's limit long, and where its stretch is jointed depends on its stretch's ends,
 /// that far again. An edit reaches no further along a row than this (D281).
-pub(crate) fn reach_cubes(kit: &Kit) -> i32 {
+pub fn reach_cubes(kit: &Kit) -> i32 {
     let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
     (2.0 * limit / CELL_M).ceil() as i32 + 2
 }
@@ -1880,80 +1880,6 @@ mod tests {
                     cubes.contains(&column),
                     "{from} {to} leaves its cubes at {p}"
                 );
-            }
-        }
-    }
-
-    /// The shipped coursed materials and the roof over them, as the game reads them.
-    fn shipped() -> Kits {
-        Kits(
-            ["logs.ron", "hewn.ron", "shakes.ron"]
-                .iter()
-                .map(|name| crate::kit::tests::shipped(name))
-                .collect(),
-        )
-    }
-
-    #[test]
-    fn a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it() {
-        // A wall two cubes thick and four long, its top decked, a pier rising from its west
-        // end, standing in the ground, as the QA cabin's garden wall: the pier's members are
-        // narrower than its cube, so the deck's rim runs on into it. Lines through the wall's
-        // thickness beside the pier, from the course under the deck to its boards, all meet
-        // something; a slot 10 to 15 cm wide was open there, the ground showing through.
-        let kits = shipped();
-        for kit in &kits.0[..2] {
-            let mut base = Base::default();
-            let cube = Some(Cube::new(kit.kind(), Fill::Solid));
-            for (min, max) in [([0, -2, 0], [3, -1, 1]), ([0, 0, 0], [0, 1, 1])] {
-                base.apply(BuildOp::Fill { min, max, cube });
-            }
-            let ring = base.ground_ring();
-            base.sample_ground(ring.into_iter().map(|column| crate::Sample {
-                column,
-                height_cm: -60,
-            }));
-            let lines = crate::inspect::Lines::of(&base, &kits);
-            // As closed as the rim along the deck's own cubes is at each height: the seams
-            // between its beams are the deck's, not this junction's.
-            let heights: Vec<f32> = (0..=36)
-                .map(|j| -0.45 + j as f32 * 0.01)
-                .filter(|&y| lines.meets(Vec3::new(0.75, y, -0.3), Vec3::Z, 1.6))
-                .collect();
-            assert!(heights.len() > 30, "the deck's rim");
-            for i in 0..=30 {
-                let x = 0.25 + i as f32 * 0.01;
-                for &y in &heights {
-                    assert!(
-                        lines.meets(Vec3::new(x, y, -0.3), Vec3::Z, 1.6),
-                        "kind {}: open beside the pier at ({x:.2}, {y:.2})",
-                        kit.id
-                    );
-                }
-            }
-            // A corner post over the pier's corners, where the kit dresses them, runs down
-            // past the deck beside it to the course under the deck, and at its free end, over
-            // the courses' ends, on to the ground, not stopping over the air where the ground
-            // falls under the cubes it stands in.
-            if kit.dress.member(Role::Arris).is_some() {
-                let laid = lay(&base, kit);
-                let feet: Vec<Vec3> = laid
-                    .pieces
-                    .iter()
-                    .filter_map(|piece| match piece {
-                        Piece::Log {
-                            from,
-                            role: Some(Role::Arris),
-                            ..
-                        } => Some(from.metres()),
-                        _ => None,
-                    })
-                    .collect();
-                assert_eq!(feet.len(), 4, "the pier's corner posts");
-                for foot in feet {
-                    let ground = if foot.x < 0.25 { -0.6 } else { -0.5 };
-                    assert!(foot.y <= ground, "a corner post's foot at {foot}");
-                }
             }
         }
     }

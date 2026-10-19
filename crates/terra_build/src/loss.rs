@@ -448,14 +448,6 @@ impl Base {
     }
 }
 
-/// How much darker a cube that has lost all its health is drawn, and the most of its
-/// surface broken into dark flecks then.
-const WORN_DARK: f32 = 0.34;
-const WORN_FLECKS: f32 = 0.5;
-/// How dark a fleck is, and how far across, in metres.
-const FLECK_DARK: f32 = 0.42;
-const FLECK_M: f32 = 0.07;
-
 /// How much of its health the cube a point of a surface belongs to has lost, from 0 to 1:
 /// the cube it lies in a little in from its face (`normal`).
 pub fn lost(worn: &BTreeMap<[i32; 3], u8>, at: glam::Vec3, normal: glam::Vec3) -> f32 {
@@ -568,49 +560,6 @@ fn patch(at: glam::Vec3, normal: glam::Vec3) -> f32 {
 /// much of its loss it carries there at their shared edge.
 const SPREAD: f32 = 0.45;
 const SPREAD_SHARE: f32 = 0.7;
-
-/// Wears a drawn surface where its cubes are damaged, by how many quarters of their health
-/// they have lost: darker, and broken up in dark flecks that spread as more is lost, as a
-/// battered wall is scorched, split and chipped, in whatever material it is (D14): each
-/// corner by the cube it is part of, a little in from its face.
-pub fn wear(surface: &mut crate::Surface, worn: &[([i32; 3], u8)]) {
-    let worn: BTreeMap<[i32; 3], u8> = worn.iter().copied().collect();
-    let shade = |at: glam::Vec3, normal: glam::Vec3| -> f32 {
-        let inside = at - normal * 0.02;
-        let cube = (inside / crate::CELL_M).floor().as_ivec3().to_array();
-        let Some(&quarters) = worn.get(&cube) else {
-            return 1.0;
-        };
-        let lost = f32::from(quarters.min(4)) / 4.0;
-        let fleck = (at / FLECK_M).floor().as_ivec3();
-        let fleck = if unit(fleck) < lost * WORN_FLECKS {
-            FLECK_DARK
-        } else {
-            1.0
-        };
-        (1.0 - WORN_DARK * lost) * fleck
-    };
-    let darken = |colour: &mut [f32; 3], by: f32| {
-        for channel in colour.iter_mut() {
-            *channel *= by;
-        }
-    };
-    for index in 0..surface.positions.len() {
-        let normal = surface.normals.get(index).copied().unwrap_or(glam::Vec3::Y);
-        let by = shade(surface.positions[index], normal);
-        if let Some(colour) = surface.colours.get_mut(index) {
-            darken(colour, by);
-        }
-    }
-    let shared = &mut surface.shared;
-    for index in 0..shared.positions.len() {
-        let normal = shared.normals.get(index).copied().unwrap_or(glam::Vec3::Y);
-        let by = shade(shared.positions[index], normal);
-        if let Some(colour) = shared.colours.get_mut(index) {
-            darken(colour, by);
-        }
-    }
-}
 
 /// A number from 0 to 1 for a place, the same on every machine.
 fn unit(at: IVec3) -> f32 {

@@ -47,8 +47,8 @@ mod views;
 mod village;
 
 use draw::{KitMaterials, kit_materials};
-use terra_build::relief::Maps;
-use terra_build::sections::Progress;
+use terra_build_mesh::relief::Maps;
+use terra_build_mesh::sections::Progress;
 
 const REACH_M: f32 = 300.0;
 

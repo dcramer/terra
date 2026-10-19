@@ -172,8 +172,8 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Ingredient | Where it comes from | State |
 |---|---|---|
 | Models | Concept, Tripo with its normal, roughness and metal maps, clean-up keeping them at a budget by size: 2K colour and normal maps for a prop 1.5 m or more, 1K below, roughness and metal at half (`tools/props`, D304); drawn in their own textures, a part named `Fire` glowing in its own colours (`play::props`); made to [the model contract](#the-model-contract) (D303) | Working for every prop the game places, doors and shutters among them; tools and trees still flat colour |
-| Long members | Logs and beams generated from their kit's numbers and each one's seed, a real bark or wood material displacing and texturing them (`terra_build::timber`, D200), bark in patches over weathered wood and shade baked into the grooves (D262) | Working: round logs (`logs.ron`) and hewn timber (`hewn.ron`) |
-| Block kinds | Stone and the like drawn as their cubes' surface, rounded and displaced by a real material (`terra_build::surface`, D197) | Working: fieldstone |
+| Long members | Logs and beams generated from their kit's numbers and each one's seed, a real bark or wood material displacing and texturing them (`terra_build_mesh::timber`, D200), bark in patches over weathered wood and shade baked into the grooves (D262) | Working: round logs (`logs.ron`) and hewn timber (`hewn.ron`) |
+| Block kinds | Stone and the like drawn as their cubes' surface, rounded and displaced by a real material (`terra_build_mesh::surface`, D197) | Working: fieldstone |
 | Tileable materials | CC0 libraries first, generated where they lack one (`tools/textures`, D191) | Working for building kits and the ground |
 | Crease-aware normals | Normals smooth across curves, split at creases over about 50 degrees | Working: the clean-up shades them so |
 | No shimmer | Mipmaps and anisotropic filtering for every model's and material's textures | Working |
