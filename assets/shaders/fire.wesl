@@ -92,8 +92,13 @@ fn footage_at(f: f32, x: f32, y: f32) -> Filmed {
     // red: the luma key keeps the footage's dull yellow glow (lit smoke, motion blur) at a
     // fraction of its cover, which over stone and sky read lime and olive (castle film r11's
     // probe, sRGB about 90,95,40 among the tongues).
-    let g = min(t.g, t.r * mix(0.3, 0.92, smoothstep(0.25, 0.95, t.r)));
-    let srgb = vec3(t.r, g, FOOTAGE_BLUE_K * pow(g, FOOTAGE_BLUE_P));
+    // A thin texel is held redder still, its fringe orange-brown and not olive over grass
+    // and trees; and a texel whose green nears white is given back the blue the sheet does
+    // not keep, so a core clips pale and white as a filmed fire's does.
+    let thin = mix(0.55, 1.0, smoothstep(0.15, 0.6, t.a));
+    let g = min(t.g, t.r * mix(0.3, 0.96, smoothstep(0.25, 0.85, t.r)) * thin);
+    let blue = max(FOOTAGE_BLUE_K * pow(g, FOOTAGE_BLUE_P), 0.75 * g * smoothstep(0.8, 1.0, g));
+    let srgb = vec3(t.r, g, blue);
     return Filmed(pow(srgb, vec3(2.2)), t.b, t.a);
 }
 
@@ -251,16 +256,25 @@ const SOOT_BLACK: vec3<f32> = vec3<f32>(0.012, 0.01, 0.009);
 // fires by day are about half deep red-orange, research/2026-10-18-dragon-breath.md §4); and
 // its soot, the black wisps off its tongues' tips, laid over what is behind where there is no
 // flame.
+// The footage's hot cores, its yellow-white where its green nears its red, keep all their
+// green and are lifted past the tonemapper's knee to clip there as a barn fire's do: taken
+// down with the rest, every wall was 0-2% yellow against a building fire's 9%, its brightest
+// sRGB 211-221 against 235-252 (castle film r11).
 fn wall_flame(filmed: Filmed, heat: f32, soft: f32) -> vec4<f32> {
-    let green = mix(FOOTAGE_GREEN * 0.8, FOOTAGE_GREEN, heat);
-    let light = filmed.light * vec3(1.0, green, green) * FOOTAGE_GAIN * mix(0.6, 1.0, heat) * soft;
+    let hot = smoothstep(0.3, 0.7, filmed.light.g);
+    let green = mix(mix(FOOTAGE_GREEN * 0.8, FOOTAGE_GREEN, heat), 1.0, hot);
+    let gain = FOOTAGE_GAIN * mix(0.6, 1.0, heat) * mix(1.0, FOOTAGE_CORE_GAIN, hot);
+    let light = filmed.light * vec3(1.0, green, green) * gain * soft;
     let flame = filmed.cover * soft;
     let black = saturate(filmed.soot * WALL_SOOT) * (1.0 - flame) * soft;
     let cover = flame + black * WALL_SOOT_COVER;
     return vec4((light + SOOT_BLACK * black) / exp2(adapted.x), cover);
 }
 const FOOTAGE_GAIN: f32 = 1.25;
-const FOOTAGE_GREEN: f32 = 0.85;
+// At 0.85 a wall's flame pixels were 71-73% deep red against a building fire's 53 (r12's
+// first probe).
+const FOOTAGE_GREEN: f32 = 0.95;
+const FOOTAGE_CORE_GAIN: f32 = 1.6;
 const WALL_SOOT: f32 = 1.2;
 const WALL_SOOT_COVER: f32 = 0.8;
 // A breath is drawn as a volume, not as cards (research/2026-10-18-dragon-breath.md §6): a
@@ -284,6 +298,10 @@ const JET_SPEED: f32 = 24.0;
 const BREATH_EXTINCTION: f32 = 18.0;
 const BREATH_RIM_EXTINCTION: f32 = 5.0;
 const SOOT_EXTINCTION: f32 = 6.0;
+// The fireball is opaque at its face, so the eye sees its outer gas and not the soot inside
+// it: as thin as the stream's rims, a ray ended early on the tower inside it showed a brighter
+// front with the tower's straight edges, in a ball brown with the soot behind (castle film r11).
+const BALL_EXTINCTION: f32 = 26.0;
 // The most steps a ray takes through a breath.
 const BREATH_STEPS: i32 = 128;
 
@@ -411,7 +429,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // Solid to near its edge, the edge sharp and torn by the noise, as a fuel jet's on film
     // is a rope of nearly even light whose edge meets the sky (refs/fire-real MEASURED.md
     // §4); a soft edge let the sky through its whole width as salmon pink (castle film r11).
-    let u = length(q) + (e - 0.5) * mix(0.35, 1.0, open);
+    let u = length(q) + (e - 0.5) * mix(0.7, 1.3, open);
     var stream = 1.0 - smoothstep(0.78, 1.0, u);
     // Its tip tears apart into flying blobs that burn out.
     let tear = smoothstep(0.55, 1.0, zf) * 0.75;
@@ -421,11 +439,15 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // Hottest on its line, white-yellow at the jaw and yellow through the first half of its
     // core, orange round that and deep red-orange at its rims, cooling along it to orange at
     // the tip: a burning fuel jet is about a quarter yellow (MEASURED.md §2).
-    // Even through the body and falling off only in a thin rim, since the gas is opaque and
-    // what the eye sees is its outer layer: graded from the axis out, the core was hidden
-    // under orange (castle film r12's first probe, yellow 0-7%).
-    let core = mix(0.93, 0.68, smoothstep(0.3, 1.0, zf)) + 0.08 * (1.0 - smoothstep(0.0, 0.12, zf));
-    let hot_s = core * (1.0 - 0.38 * smoothstep(0.6, 1.0, u)) + 0.2 * (e - 0.5);
+    // Even through the body and falling off only in its outer tenth, since the gas is opaque
+    // and what the eye sees is its outer layer: graded from the axis out the core was hidden
+    // under orange (castle film r12's first probe, yellow 0-7%), and from 0.93 at the jaw to
+    // 0.68 at the tip, cooling from u 0.6, the stream was a khaki cone (r11, yellow 0%).
+    // Streaked along its flow and boiling at its edge, so it is a rope of burning fuel with
+    // yellow and orange strands, not a smooth glassy cone (held at 0.12, r12's first probe).
+    let core = mix(0.95, 0.8, smoothstep(0.2, 1.0, zf)) + 0.05 * (1.0 - smoothstep(0.0, 0.2, zf));
+    let streak = noise3(vec3(q * 1.7 + 5.3, flow * 0.35));
+    let hot_s = core * (1.0 - 0.3 * smoothstep(0.85, 1.05, u)) + 0.3 * (e - 0.5) + 0.16 * (streak - 0.5);
     // The fireball, billowing up and rolling as it burns: overlapping balls with yellow and
     // orange faces under a black cap of soot (the M2's end, MEASURED.md §11), its surface
     // broken by warped noise into lumps, not one smooth ball.
@@ -441,7 +463,11 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
         let high = dot(rel, b.up) / rb;
         // Bright faces and dark red folds between the lumps, as film shows a fuel fireball:
         // with half this spread its face was one flat orange (castle film r12).
-        hot_b = 0.9 - 0.3 * d + 1.3 * (nb - 0.5) + 1.2 * (lumps - 0.5) - 0.9 * smoothstep(-0.1, 0.9, high);
+        // A lump stands out where `lumps` and `nb` are low, so that is where it is hottest:
+        // signed the other way, its bulges were its coolest gas and the surface the eye sees
+        // was brown (castle film r11, yellow 0%). Its top cools to the cap of soot.
+        // At 0.9 its faces were cream and white with no cap (r12's first probe).
+        hot_b = 0.82 - 0.1 * d - 1.4 * (lumps - 0.5) - 0.9 * (nb - 0.5) - 0.9 * smoothstep(0.1, 0.85, high);
         // The stream goes into the ball and is lost in it: kept where the ball was half
         // dense, its hotter gas lifted the ball's colour inside its cone, a pale wedge with
         // straight edges (castle film r12).
@@ -456,17 +482,22 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // its tip, all over the fireball's cooled cap; a fuel jet near the jaw is a clean rope.
     let sooty = mix(smoothstep(0.3, 0.8, zf) * smoothstep(0.75, 1.0, u + 0.4 * zf), 1.0, ball / dense);
     let soot_part = (1.0 - smoothstep(0.3, 0.45, hot)) * sooty;
-    return vec4(min(dense, 1.0) * b.left, hot, soot_part, 0.0);
+    // Its last, negative so a march still reads only a positive one as empty air: how much
+    // of the gas is the fireball's.
+    return vec4(min(dense, 1.0) * b.left, hot, soot_part, -ball / dense);
 }
 
 // The breath's gas as the screen shows it by how hot it is: the fire's gradient without the
 // gain a card's flame is given for the sky it lets through, since the gas is opaque: lifted
 // 1.7 times past the tonemapper's knee, its orange came out desaturated, a flat salmon
 // (sRGB 230,142,82, castle film r12's first probe), and its yellow no yellower than that.
-// Only the white-hot jaw goes past the knee.
+// Its yellows and pales are lifted 1.5 past the knee, where the tonemapper keeps a yellow
+// yellow and takes a pale toward white, and the white-hot jaw past its peak: held at the knee,
+// the stream's core was a dim khaki, 0% yellow against a flamethrower's 25% (castle film r11).
 fn breath_colour(h: f32) -> vec3<f32> {
     let c = flame_colour(h);
-    return mix(c / FLAME_GAIN, c, smoothstep(0.93, 1.0, h));
+    let lift = mix(1.0, 1.5, smoothstep(0.72, 0.88, h)) / FLAME_GAIN;
+    return mix(c * lift, c, smoothstep(0.95, 1.0, h));
 }
 
 // Its soot: black where it has cooled, brown-grey and faintly lit where it still wraps
@@ -536,7 +567,8 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         ds = min(ds, far - s);
         if gas.x > 0.0 {
             let soot_part = gas.z;
-            let flame = mix(BREATH_RIM_EXTINCTION, BREATH_EXTINCTION, smoothstep(0.55, 0.8, gas.y));
+            let stream = mix(BREATH_RIM_EXTINCTION, BREATH_EXTINCTION, smoothstep(0.55, 0.8, gas.y));
+            let flame = mix(stream, BALL_EXTINCTION, -gas.w);
             let sigma = gas.x * mix(flame, SOOT_EXTINCTION, soot_part);
             let a = 1.0 - exp(-sigma * ds);
             let c = mix(breath_colour(saturate(gas.y)), breath_soot(gas.y), soot_part);
@@ -555,7 +587,8 @@ fn breath(in: VertexOutput) -> vec4<f32> {
 // The hull round a breath, in its frame: across both ways and along, its least and most.
 fn hull_box(b: Breath) -> array<vec3<f32>, 2> {
     let rb = ball_radius(b);
-    let wide = max(2.0 * stream_radius(b.reach, b), rb * 1.95) + 0.3;
+    // The ball reaches 1.55 of its radius from a middle up to 0.45 of it off the stream's line.
+    let wide = max(2.0 * stream_radius(b.reach, b), rb * 2.1) + 0.5;
     return array<vec3<f32>, 2>(vec3(-wide, -wide, -0.5), vec3(wide, wide, b.reach + rb * 1.6));
 }
 

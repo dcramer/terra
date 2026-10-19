@@ -585,7 +585,17 @@ fn setup(
                 // Drawn after the smoke, which is sorted with it by the same middle: smoke
                 // drawn over its own flames greyed and dimmed their yellow hearts to olive
                 // (castle film r5 and r6). A fire's flames show through the smoke over it.
-                depth_bias: if haze { 0.0 } else { 1.0 },
+                // A breath is drawn after the flames too, as it is opaque and stands nearer
+                // the eye than the walls it strikes: tied with them, a burning tower's flame
+                // cards behind its fireball were drawn over it, a lighter patch with their
+                // straight edges, and smoke behind it browned it (castle film r11).
+                depth_bias: if haze {
+                    0.0
+                } else if kind == 2.0 {
+                    2.0
+                } else {
+                    1.0
+                },
                 // A breath's hull is drawn from its far side, so it shows with the eye in it.
                 cull_mode: if kind == 2.0 {
                     Some(Face::Front)
