@@ -65,6 +65,23 @@ const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.514, 0.0);
 /// flame of 253,243,205; at this light and no night boost 195,114,123 against 254,235,119).
 const HEARTH_LUMENS_A_METRE: f32 = 100_000.0;
 const HEARTH_RANGE_M: f32 = 14.0;
+/// How many stops brighter a kept fire's light is by night, as Witcher 3 keys a fire to the
+/// hour: by its real lumens the yard's ground took a 1.2x pool at 1 m and none past 1.5 m
+/// against the night's moonlit ground, drawn some stops over a real night's; the Witcher 3 and
+/// RDR2 pools read to 3-4 m. At 3.2 stops, with `HEARTH_SPREAD`, the 6 m view's ground is
+/// 3.4x the far ground at 2 m and 1.6x at 4 m, its stones 1.7 stops under the flame
+/// (fire round 7, 2026-10-19).
+const HEARTH_NIGHT_STOPS: f32 = 3.2;
+/// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
+/// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
+/// night's boost and the stones less.
+const HEARTH_SPREAD: f32 = 3.0;
+/// How far up its flames a hearth's light hangs: in their body, over the logs' ends.
+const HEARTH_LIGHT_UP: f32 = 0.75;
+/// The share of a hearth's light that casts no shadows: all of it shadowed, its own stones
+/// threw black lobes a metre out over the lit ground (round 7's side view), where the games'
+/// are soft. Bevy's PCSS on the cube map (`soft_shadows_enabled`) softened nothing seen.
+const HEARTH_FILL: f32 = 0.5;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -79,10 +96,14 @@ const SWAY_M: [f32; 2] = [0.005, 0.4];
 /// bright as by day lit the ground round a campfire about as much as the moon did, grey and
 /// barely there (fire sheet, round 5: 380,000 lm, about 1,000 lux at 3 m), where in every
 /// game's night and every photograph a campfire's ground glows orange a few metres out; and
-/// as bright by day as by night, sunlit stone round it went salmon. Not a kept fire's
-/// (a hearth's or torch's): boosted so, a campfire's stones out-shone its flame
-/// (`HEARTH_LUMENS_A_METRE`).
+/// as bright by day as by night, sunlit stone round it went salmon. A kept fire (a hearth's
+/// or torch's) has its own (`HEARTH_NIGHT_STOPS`), with a wider disc.
 const NIGHT_STOPS: f32 = 2.5;
+
+/// How many times brighter a kept fire's light is so far into the night.
+pub(super) fn hearth_by_night(night: f32) -> f32 {
+    libm::exp2f(HEARTH_NIGHT_STOPS * night.clamp(0.0, 1.0))
+}
 
 /// How many times brighter a fire's light is so far into the night (`Sky::night`, 0 by day,
 /// 1 in full dark) than by day.
@@ -187,6 +208,8 @@ pub(super) struct Lit {
     pub glow: f32,
     /// Whether it is a kept fire's, which glows in the air round it (`fog`).
     pub kept: bool,
+    /// Whether it never casts shadows: a hearth's fill (`HEARTH_FILL`).
+    pub shadowless: bool,
 }
 
 /// The flash where a jet's stream first strikes (docs/fire.md, "Composites": 0.1 to 0.3 s),
@@ -228,6 +251,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     radius: 2.0,
                     glow: 1.0 + share,
                     kept: false,
+                    shadowless: false,
                 }
             })
         })
@@ -276,6 +300,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
                     radius: 0.5,
                     glow,
                     kept: false,
+                    shadowless: false,
                 }
             })
         })
@@ -285,21 +310,32 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
     // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
     // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
     // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
-    lit.extend(blazes.kept.iter().take(hearths).map(|blaze| {
+    // Two lights: one shadowed, one its fill (`HEARTH_FILL`).
+    lit.extend(blazes.kept.iter().take(hearths).flat_map(|blaze| {
         let flicker = Flicker::of(width(blaze));
         let glow = signal(blaze.seed, t, flicker);
         let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
-        Lit {
-            at: blaze.at + up(blaze.at) * blaze.tall * 0.6 + sway(blaze.seed, t, flicker, reach),
-            lumens: blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow,
+        let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
+        let main = Lit {
+            at: blaze.at
+                + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP
+                + sway(blaze.seed, t, flicker, reach),
+            lumens: lumens * (1.0 - HEARTH_FILL),
             color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,
-            // Its flames as a disc light as wide as they are (`crate::falloff`): its fall-off
-            // levels off over the stones at its foot rather than rising inverse-square.
-            radius: width(blaze),
+            // Its flames as a disc light (`crate::falloff`), wider than they are
+            // (`HEARTH_SPREAD`): its fall-off levels off over the stones at its foot.
+            radius: width(blaze) * HEARTH_SPREAD,
             glow,
             kept: true,
-        }
+            shadowless: false,
+        };
+        let fill = Lit {
+            lumens: lumens * HEARTH_FILL,
+            shadowless: true,
+            ..main.clone()
+        };
+        [main, fill]
     }));
     // Each gathering's light hangs out from the middle of all that burns, on the outside of
     // the walls its flames stand on: at the gathering's own middle, inside a burning building,
@@ -339,6 +375,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
                 radius: (wide * 0.5).min(2.0),
                 glow,
                 kept: false,
+                shadowless: false,
             }
         })
         .collect();
@@ -435,7 +472,7 @@ pub(super) fn choose(
         .iter()
         .enumerate()
         .filter_map(|(i, shown)| {
-            let shown = shown.as_ref()?;
+            let shown = shown.as_ref().filter(|shown| !shown.lit.shadowless)?;
             let d = far(shown.lit.at);
             let had = was[i].shadows;
             let within = if had { SHADOW_M[1] } else { SHADOW_M[0] };
@@ -550,7 +587,8 @@ pub(super) fn light(
     let mut wants = flashes(&blazes, &drawn.jets, t);
     wants.extend(lit(&blazes, t));
     let shown = choose(wants, eye, &was, shadowed(*quality));
-    let by_night = by_night(sky.map_or(0.0, |sky| sky.night));
+    let night = sky.map_or(0.0, |sky| sky.night);
+    let by_night = by_night(night);
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
@@ -560,9 +598,15 @@ pub(super) fn light(
         };
         match shown {
             Some(Shown { lit, fade, shadows }) => {
-                // A kept fire's light is a real one's by night as by day: its flame, drawn on
-                // the screen's scale, is what the night is seen by (D415's exposure rule).
-                light.intensity = lit.lumens * fade * if lit.kept { 1.0 } else { by_night };
+                // A kept fire's light is brighter by night by its own stops (`hearth_by_night`),
+                // fewer than a blaze's, so its flame stays the brightest thing by it (D415).
+                light.intensity = lit.lumens
+                    * fade
+                    * if lit.kept {
+                        hearth_by_night(night)
+                    } else {
+                        by_night
+                    };
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;

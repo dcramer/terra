@@ -35,6 +35,9 @@ const NIGHT_SATURATION: f32 = 0.45;
 /// From sunset, how much of its colour what is dimly lit keeps against what is bright, the
 /// grade's shadows against its midtones (D302).
 const DIM_SATURATION: f32 = 0.2;
+/// By night, where the grade's midtones start (Bevy's 0.2 by day), its shadows wholly under
+/// it less 0.1 (D302).
+const NIGHT_MIDTONES: f32 = 0.12;
 /// Through the dusk, how much the grade lifts every colour before the tonemapper (D302).
 /// Khronos PBR Neutral's toe takes a dark colour's least channel down to 6.25 times its
 /// square (x - 6.25x² under 0.08), so a dim colour leaves it far more saturated than it came:
@@ -685,6 +688,14 @@ fn fade_colour(
     let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night;
     if (grade.shadows.saturation - dim).abs() > 1e-4 {
         grade.shadows.saturation = dim;
+    }
+    // By night the dim is the moonlit, not what a fire lights: the midtones start lower, so
+    // ground a campfire lights (level 0.08 to 0.2) keeps its colour while the moonlit land
+    // (0.02) stays faded. From Bevy's 0.2 the firelit yard kept 9% of its colour and stood
+    // grey (R/B 1.1 at 1.5 m; 0.12: 3.6; 0.05 coloured the moonlit grass green, fire round 7).
+    let start = 0.2 + (NIGHT_MIDTONES - 0.2) * (1.0 - lit);
+    if (grade.global.midtones_range.start - start).abs() > 1e-4 {
+        grade.global.midtones_range.start = start;
     }
     // The same lift for every section: Bevy blends its sections at their edges, so one lifted
     // alone would step where the shadows end.

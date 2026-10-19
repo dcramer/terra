@@ -104,18 +104,21 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
     for i in 0..400 {
         let t = i as f32 * 0.05;
         let lit = lit(&blazes, t);
-        assert_eq!(lit.len(), 2);
-        let (hearth, roof) = (&lit[0], &lit[1]);
+        assert_eq!(lit.len(), 3);
+        let (hearth, fill, roof) = (&lit[0], &lit[1], &lit[2]);
+        // Half its light casts shadows, half is a fill that casts none, at the same place.
+        assert!(!hearth.shadowless && fill.shadowless && fill.at == hearth.at);
+        assert!((fill.lumens - hearth.lumens).abs() < 1e-3 * hearth.lumens);
         // In the body of its flames, over its 0.55 m logs, swayed a hand's breadth at most, not
         // over the heads of those sat by it.
         let off = hearth.at - ground;
-        assert!(off.y > 0.6 && off.y < 1.2 && off.length() < 1.2, "{off}");
+        assert!(off.y > 0.6 && off.y < 1.3 && off.length() < 1.3, "{off}");
         assert!(hearth.range <= 15.0 && roof.range > hearth.range);
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
         seen = (seen.0.min(hearth.at.x), seen.1.max(hearth.at.x));
-        // Its shadows and fall-off soften as a disc as wide as its flames (`crate::falloff`).
-        assert!((hearth.radius - 0.7).abs() < 1e-6);
+        // Its shadows and fall-off soften as a disc wider than its flames (`crate::falloff`).
+        assert!(hearth.radius > 0.7 && hearth.radius < 3.0);
     }
     // It moves, so the shadows it casts sway.
     assert!(seen.1 - seen.0 > 0.04, "{seen:?}");
@@ -131,6 +134,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         radius: 0.5,
         glow: 1.0,
         kept: false,
+        shadowless: false,
     }
 }
 
