@@ -9,16 +9,14 @@
 //!   In the inventory, point at a tool and press 1 to 8 to put it in that slot; click
 //!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
-use super::IsLocalPlayer;
-use super::build_menu::BuildMenu;
 use super::button::{button, left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::controls::{Action, Settings};
-use super::dial::Dial;
 use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, SLOTS};
 use super::options::OptionsMenu;
 use super::told::Notice;
 use super::vitals::Vitals;
+use super::{Hands, IsLocalPlayer};
 use crate::{character, icons};
 use bevy::{
     picking::hover::Hovered,
@@ -429,8 +427,7 @@ fn use_keys(
     mouse: Res<ButtonInput<MouseButton>>,
     settings: Res<Settings>,
     menu: Res<OptionsMenu>,
-    dial: Res<Dial>,
-    build_menu: Res<BuildMenu>,
+    hands: Res<Hands>,
     shown: Query<(&Hovered, Has<Pressed>, &Shown)>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
@@ -451,9 +448,9 @@ fn use_keys(
         // steering the view when it closes.
         grab_mouse(&mut cursor, !screen.open && window.focused);
     }
-    // While the dial is open the numbers pick parts from it instead.
-    // While the build menu is open the numbers pick its tabs instead.
-    if dial.open || build_menu.open {
+    // While the player is choosing (the dial, or the build menu) the numbers pick from
+    // that instead.
+    if hands.choosing {
         return;
     }
     let pointed = shown

@@ -358,3 +358,34 @@ fn test_player(world: &mut World, at: Vec3) -> Entity {
         ))
         .id()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn the_hands_are_choosing_while_the_dial_or_the_build_menu_is_open() {
+        let mut world = test_world();
+        let builds = {
+            let items = world.resource::<inventory::Items>();
+            catalogue::Builds::read(items, &crafting::Stations::read())
+        };
+        world.insert_resource(builds);
+        world.init_resource::<inventory::InventoryScreen>();
+        world.init_resource::<build_menu::BuildMenu>();
+        world.init_resource::<dial::Dial>();
+        world.init_resource::<Hands>();
+        for (dial_open, menu_open) in [(false, false), (true, false), (false, true), (true, true)] {
+            world.resource_mut::<dial::Dial>().open = dial_open;
+            world.resource_mut::<build_menu::BuildMenu>().open = menu_open;
+            world.run_system_once(claim_hands).unwrap();
+            let choosing = world.resource::<Hands>().choosing;
+            assert_eq!(
+                choosing,
+                dial_open || menu_open,
+                "dial {dial_open}, menu {menu_open}"
+            );
+        }
+    }
+}
