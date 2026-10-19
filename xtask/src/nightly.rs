@@ -41,6 +41,13 @@ pub(crate) const TASKS: &[Task] = &[
         group: "Play and check",
         run: |args| crate::node("tools/ci/ci.ts", args),
     },
+    Task {
+        name: "continuous",
+        takes: "[--watch [minutes] | --install [minutes]]",
+        does: "the heavy checks no hook runs (the fire sheet first; tools/continuous/checks.json), on this GPU machine at origin/main's tip in their own worktree, each when what it reads changed; a regression names its commit range; .git/terra-continuous/status.txt. `--watch` loops, `--install` a systemd user timer (D37, D398)",
+        group: "Play and check",
+        run: |args| crate::node("tools/continuous/continuous.ts", args),
+    },
 ];
 
 /// Set to 0, the run does nothing (D411).

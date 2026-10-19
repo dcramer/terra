@@ -1,0 +1,9 @@
+[
+  {
+    "name": "fire",
+    "does": "the fire sheet against its held baseline, tools/fire/held.json (D415)",
+    "run": ["cargo", "xtask", "fire", "--gate"],
+    "reads": "FIRE",
+    "minutes": 60
+  }
+]
