@@ -252,3 +252,16 @@ fn by_night_a_campfire_lights_the_ground_round_it_brighter_than_the_moon_and_by_
     let day = on_ground(&lit, foot, 3.0, lit.lumens * by_night(0.0));
     assert!(day < 0.05 * sun, "{day} lux at 3 m in a {sun} lux sun");
 }
+
+#[test]
+fn a_hearth_lights_as_a_blackbody_of_wood_flame_with_no_blue() {
+    // Mitchell Charity's blackbody table (sRGB, CIE 1964 10 degree): 1,800 K #ff7e00 and
+    // 2,000 K #ff8912. A wood fire's light lies between, and a blackbody that cool has next
+    // to no blue: with some, the stones it lit read red-pink, not orange (fire sheet,
+    // 2026-10-19).
+    let c = HEARTH_LIGHT.to_srgba();
+    let (k1800, k2000) = (126.0 / 255.0, 137.0 / 255.0);
+    assert!(c.red > 0.99, "{c:?}");
+    assert!((k1800 - 0.01..=k2000 + 0.01).contains(&c.green), "{c:?}");
+    assert!(c.blue <= 18.0 / 255.0, "{c:?}");
+}

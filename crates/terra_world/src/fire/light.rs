@@ -50,9 +50,12 @@ const JET_RANGE_M: f32 = 30.0;
 const JET_LUMENS: f32 = 5.0e7;
 const JET_LIGHT: Color = Color::srgb(1.0, 0.72, 0.38);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
-/// A campfire's, wood's flame about 1,800 K: an orange, not the yellow the grass turned a
-/// timber blaze's (lake film r5).
-const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.5, 0.18);
+/// A campfire's, wood's flame about 1,900 K: an orange, not the yellow the grass turned a
+/// timber blaze's (lake film r5), and with no blue, as a blackbody that cool has none
+/// (Mitchell Charity's table, 1,900 K #ff8300): at sRGB 1.0, 0.5, 0.18 its blue put the lit
+/// stones' hue under 25 degrees, red, where with none the campfire's night crop is 38%
+/// orange and 59% red, not 25 and 72 (fire sheet, campfire round 2026-10-19).
+const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.514, 0.0);
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches:
 /// a campfire's 1.3 m given the light its 1.5 m gave before (280,000 a metre).
 const HEARTH_LUMENS_A_METRE: f32 = 323_000.0;

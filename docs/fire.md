@@ -196,6 +196,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 ## The light rules
 
 - **One light per cluster.** Fires within a few metres merge into one light at their heat-weighted centre, its power the sum of theirs. A burning village is a dozen lights, not hundreds (D127).
+- **A blackbody's colour.** A hearth's light is wood flame's, about 1,900 K, with no blue (a blackbody that cool has none): with some, the stones and ground it lit read red-pink, not orange.
 - **One flicker per fire.**
   - The signal is a product of three incommensurate sines (Valheim's 1, 0.564 and 0.758) plus a low noise, with a random phase per fire.
   - Its depth and rate come from the preset:
