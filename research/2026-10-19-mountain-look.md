@@ -153,7 +153,7 @@ Our ground is a density field asked per point (D322), meshed in an octree of chu
 
 **Answer: no.** It is fast enough and leaves no new lakes, but it gives no branching spurs. It deepens and smooths the valleys the ridge noise already laid out. On the wall, the water runs straight down the fall lines.
 
-**How it was tested.** The spike is in git at c757b01b (`spike/mountain-erosion`, deleted since).
+**How it was tested.** The spike is in git at 17349017 (`spike/mountain-erosion`, deleted since).
 - **Grid.** 938² cells of 32 m, 30 km across, centred on the settlement's site (town@2.22,2.12).
 - **Ground.** Sampled twice: as it is, and without its per-point gullies (`gullies_m` and `couloirs_m` at 0). The second was eroded, then the first's gullies were added back over it.
 - **Solver.** Braun and Willett's implicit stream-power scheme (2013, from the paper), with m = 0.5 and n = 1. It drains over a Priority-Flood fill with an epsilon (Barnes et al. 2014). The erosion law follows [Schott et al.'s code](https://github.com/H-Schott/StreamPowerErosion) (MIT): a hillslope Laplacian, erodibility noise of ±25%, and area spread over the lower neighbours by slope. fastscapelib is GPL-3, so we used only its papers.
