@@ -10,12 +10,11 @@
 //!
 //! With the `play` experiment on, a player's builder tool drives this instead.
 
-use crate::planet::MainCamera;
-use crate::planet::Planet;
+use crate::planet::{MainCamera, Planet};
 use crate::play::Footprint;
 use crate::start::Start;
-pub(crate) use crate::start::lifted;
 use bevy::prelude::*;
+pub(crate) use footing::lifted;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -29,6 +28,7 @@ pub(crate) mod act;
 mod arrays;
 mod atlases;
 mod draw;
+mod footing;
 pub(crate) use draw::PlanGhost;
 pub(crate) mod fire;
 mod going_up;

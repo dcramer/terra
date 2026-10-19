@@ -95,7 +95,7 @@ pub use scenes::example::{
     with_roof,
 };
 pub use shortcuts::{BuildOp, Panel, corners};
-pub use walk::Walker;
+pub use terra_core::Walker;
 
 use glam::{IVec2, IVec3};
 use std::collections::{BTreeMap, BTreeSet};

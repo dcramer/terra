@@ -11,16 +11,20 @@
 mod ground;
 mod mesh;
 mod operation;
+mod plot;
 mod solid;
 mod stand_in;
+mod walker;
 
 pub use glam::{IVec3, Vec3};
 pub use ground::{Ground, RayHit, Water};
 pub use mesh::{ChunkId, ChunkMesh, MaterialWeights};
 pub use operation::{Harvested, KindId, ObjectId, Operation, Yield};
+pub use plot::Plot;
 pub use solid::{Piece, Placement, Relief, Solid, convex_hull};
 pub use stand_in::StandInPlanet;
 pub use terra_gen::Seed;
+pub use walker::Walker;
 
 /// What a planet is, before anything is generated from it.
 #[derive(Clone, Copy, Debug, PartialEq)]

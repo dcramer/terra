@@ -454,14 +454,10 @@ mod tests {
     #[test]
     fn cargo_finds_the_crates_depending_on_one() {
         let found = with_dependents(&set(&["terra_build"])).expect("cargo tree answers");
-        // Known from the manifests: the world draws buildings, the game and the sandbox
-        // stand on the world, and the generator is below building.
-        assert!(found.is_superset(&set(&[
-            "terra_build",
-            "terra_world",
-            "terra_game",
-            "terra_sandbox"
-        ])));
+        // Known from the manifests: the game draws buildings and the sandbox stands on the
+        // game; the world and the generator are below building (D407).
+        assert!(found.is_superset(&set(&["terra_build", "terra_game", "terra_sandbox"])));
+        assert!(!found.contains("terra_world"));
         assert!(!found.contains("terra_gen"));
     }
 

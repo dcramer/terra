@@ -1,6 +1,6 @@
 [package]
 name = "terra_core"
-description = "The contracts the engine's parts share: planet, ground, water, chunk meshes and operations."
+description = "The contracts the engine's parts share: planet, ground, water, chunk meshes, operations, a walker's size and the start's plot."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

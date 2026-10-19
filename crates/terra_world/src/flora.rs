@@ -30,8 +30,7 @@ use bevy::{
     shader::ShaderRef,
     tasks::{AsyncComputeTaskPool, Task, TaskPool, block_on, poll_once},
 };
-use terra_build::Walker;
-use terra_core::{Piece, Solid};
+use terra_core::{Piece, Solid, Walker};
 use terra_gen::{Noise, Rng, Seed};
 
 /// Grass is planted this far from the base, thinning out over the last stretch.

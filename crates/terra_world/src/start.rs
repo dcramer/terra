@@ -1,12 +1,12 @@
 //! The start: the fixed place on the planet that every position given as metres east and
 //! south is measured from, by scripts, the map, the log and what is placed around it. It is
 //! the world's, not any system's: chosen once from the planet, as the most level ground near
-//! the planet's own start that the example base fits on, so a run with no building in it
-//! starts in the same place as one with.
+//! the planet's own start that the start's plot fits on (`Plot::START`, the example base's
+//! ground floor), so a run with no building in it starts in the same place as one with.
 
 use crate::planet::Planet;
 use bevy::prelude::*;
-use terra_build::{Base, CELL_M, Kind, example};
+use terra_core::Plot;
 
 /// A base's floor clears the highest ground under it by this much.
 pub const FLOOR_CLEARANCE_M: f32 = 0.12;
@@ -20,17 +20,15 @@ impl Start {
     /// The start of a planet. On the yard, the flat test level, it is the planet's own
     /// start, facing east.
     pub fn choose(planet: &Planet, yard: bool) -> Self {
-        let mut footprint = Base::default();
-        for op in example(Kind::PLAIN) {
-            footprint.apply(op);
-        }
+        let plot = Plot::START;
         Self(if yard {
             let start = planet.start();
             let up = start.normalize();
             let east = up.cross(Vec3::X).normalize();
             Transform::from_translation(start + up * FLOOR_CLEARANCE_M).looking_to(east, up)
         } else {
-            lifted(choose_site(planet, &footprint), &footprint, planet)
+            let floor = floor_points(plot.squares(), plot.square_m);
+            lifted(choose_site(planet, &plot), floor, planet)
         })
     }
 
@@ -252,25 +250,24 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
     }
 }
 
-/// Where to stand a base: the most level ground near the start that is clear of the sea,
-/// turned so its door looks out over the water if there is any.
-fn choose_site(planet: &Planet, base: &Base) -> Transform {
+/// Where to stand a plot: the most level ground near the start that is clear of the sea,
+/// turned so its +Z side, a base's door, looks out over the water if there is any.
+fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
     let start = planet.start();
     let up = start.normalize();
     let east = up.cross(Vec3::X).normalize();
     let north = east.cross(up);
     let sea = planet.sea_radius_m();
 
-    let ground_floor = || {
-        base.room_cells()
-            .filter(|(at, _)| at.y == 0)
-            .map(|(at, room)| (at.with_y(0), room))
+    let squares = || {
+        plot.squares()
+            .map(|[east, south]| IVec3::new(east, 0, south))
     };
-    let low = ground_floor().fold(IVec3::MAX, |low, (tile, _)| low.min(tile));
-    let high = ground_floor().fold(IVec3::MIN, |high, (tile, _)| high.max(tile));
+    let low = squares().fold(IVec3::MAX, IVec3::min);
+    let high = squares().fold(IVec3::MIN, IVec3::max);
     let (low, high) = (
-        low.as_vec3() * CELL_M - 3.0,
-        (high + 1).as_vec3() * CELL_M + 3.0,
+        low.as_vec3() * plot.square_m - 3.0,
+        (high + 1).as_vec3() * plot.square_m + 3.0,
     );
     let middle = (low + high) * 0.5;
 
@@ -342,40 +339,38 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     })
 }
 
-/// Raises a build's frame until its floor clears the highest ground under it: under its
-/// rooms, or with none, as a floor laid alone, under its floor. The stand-in planet cannot
-/// be dug, so a build has to stay out of the ground's way; a foundation and steps make up
-/// the difference.
-pub fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Transform {
-    let mut columns: Vec<IVec3> = base
-        .room_cells()
-        .filter(|(at, _)| at.y == 0)
-        .map(|(at, _)| at)
-        .collect();
-    if columns.is_empty() {
-        let floor = terra_build::floor_layer(0);
-        columns = base
-            .cubes()
-            .filter(|(at, _)| at.y == floor)
-            .map(|(at, _)| at.with_y(0))
-            .collect();
-    }
-    if columns.is_empty() {
-        return frame;
-    }
-    let highest_ground = columns
-        .into_iter()
-        .flat_map(|tile| {
-            [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
-                let on_floor = Vec3::new(
-                    (tile.x as f32 + dx) * CELL_M,
-                    0.0,
-                    (tile.z as f32 + dz) * CELL_M,
-                );
-                -planet.distance(frame.transform_point(on_floor))
-            })
+/// The points a floor over these squares of the grid rests on, in metres east and south:
+/// each square's corners and middle.
+pub fn floor_points(
+    squares: impl IntoIterator<Item = [i32; 2]>,
+    square_m: f32,
+) -> impl Iterator<Item = Vec2> {
+    squares.into_iter().flat_map(move |[east, south]| {
+        [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
+            Vec2::new(
+                (east as f32 + dx) * square_m,
+                (south as f32 + dz) * square_m,
+            )
         })
-        .fold(f32::MIN, f32::max);
+    })
+}
+
+/// Raises a frame until a floor resting on these points (`floor_points`) clears the highest
+/// ground under them. The stand-in planet cannot be dug, so a build has to stay out of the
+/// ground's way; a foundation and steps make up the difference. With no points the frame
+/// stays where it is.
+pub fn lifted(
+    mut frame: Transform,
+    floor: impl IntoIterator<Item = Vec2>,
+    planet: &Planet,
+) -> Transform {
+    let highest_ground = floor
+        .into_iter()
+        .map(|point| -planet.distance(frame.transform_point(Vec3::new(point.x, 0.0, point.y))))
+        .reduce(f32::max);
+    let Some(highest_ground) = highest_ground else {
+        return frame;
+    };
     let up = *frame.up();
     frame.translation += up * (highest_ground + FLOOR_CLEARANCE_M);
     frame

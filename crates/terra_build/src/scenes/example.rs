@@ -1,5 +1,5 @@
-//! The example base, laid by the build experiment and the yard, and the footprint the start
-//! is chosen for, so the place every test position is measured from stays where it is.
+//! The example base, laid by the build experiment and the yard, on the plot the start
+//! is chosen for (`Plot::START`), so the place every test position is measured from stays.
 
 use crate::roofer::{self, Rectangle, Style};
 use crate::{Base, BuildOp, CELL_M, Cube, Fill, Kind, Panel, STOREY_CUBES, Side};
@@ -219,4 +219,31 @@ pub fn bench_village(
     }
     all.truncate(VILLAGE_HOUSES);
     all
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use terra_core::Plot;
+
+    /// The world chooses its start as ground the start's plot fits on, so the example base,
+    /// laid at the start, must cover just that plot's squares with its ground floor's rooms, inside their walls.
+    #[test]
+    fn the_example_base_fits_the_starts_plot() {
+        let plot = Plot::START;
+        assert_eq!(plot.square_m, CELL_M);
+        let mut base = crate::Base::default();
+        for op in example(Kind::PLAIN) {
+            base.apply(op);
+        }
+        let floor: BTreeSet<[i32; 2]> = base
+            .room_cells()
+            .filter(|(at, _)| at.y == 0)
+            .map(|(at, _)| [at.x, at.z])
+            .collect();
+        let squares: BTreeSet<[i32; 2]> = plot.squares().collect();
+        let apart: Vec<_> = floor.symmetric_difference(&squares).collect();
+        assert!(apart.is_empty(), "on one but not the other: {apart:?}");
+    }
 }

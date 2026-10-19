@@ -8,7 +8,7 @@
 use crate::cubes::{Cube, Cubes, FULL};
 use crate::kit::Kits;
 use crate::layout::Piece;
-use crate::{Base, CELL_M};
+use crate::{Base, CELL_M, Walker};
 use glam::{IVec2, IVec3, Vec3};
 
 /// How far into a cube a piece must reach to stand in it.
@@ -26,25 +26,6 @@ const FOOT_REACH: f32 = 0.6;
 /// widest any kit draws one (a stone pillar's 36 cm), not its whole cube, so a walker passes
 /// close by a post as they would a real one.
 pub const POST_M: f32 = 0.36;
-
-/// The size of something walking through a base.
-#[derive(Clone, Copy, Debug)]
-pub struct Walker {
-    pub radius: f32,
-    pub height: f32,
-    /// The tallest step that can be walked up without jumping.
-    pub step_up: f32,
-}
-
-impl Default for Walker {
-    fn default() -> Self {
-        Walker {
-            radius: 0.3,
-            height: 1.8,
-            step_up: 0.4,
-        }
-    }
-}
 
 /// The column of cubes a point is over.
 fn column_at(point: Vec3) -> IVec2 {

@@ -16,6 +16,9 @@ ron.workspace = true
 # The hash mixers every crate shares (terra_gen::hash), and seeded random streams for the
 # property tests over random operations.
 terra_gen.workspace = true
+# The contracts building shares with the world: a walker's size and the start's plot
+# (D407).
+terra_core.workspace = true
 
 [dev-dependencies]
 # The kit checker reads a material's maps to check them as it is added (`packs`, D349).

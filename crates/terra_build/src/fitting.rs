@@ -779,7 +779,7 @@ mod tests {
 
     #[test]
     fn a_walker_meets_shutters_where_they_are_drawn_on_every_wall() {
-        let walker = crate::walk::Walker {
+        let walker = crate::Walker {
             radius: 0.3,
             height: 0.8,
             step_up: 0.1,
