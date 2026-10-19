@@ -73,6 +73,19 @@ The sheet is 1920 by 2560 RGBA8 (19.7 MB on the GPU). The game's three channel-f
 
 [P] The smoke streaks at 18-21 s were not the anti-aliasing. They were the same with TAA off, and r8 found them the same with no motion blur. They were the sky's clouds: drawn over the atmosphere, the sky sphere is premultiplied and so sorted among the see-through things by its middle, which is the camera, so it came last and laid its clouds over the smoke in front, since smoke writes no depth to stop it. The sky is now drawn first.
 
+## 6. Real footage and a volume, rounds 11 and 12
+
+[I] A wall's flames are frames of a public-domain wood fire filmed at night (Wikimedia Commons "File:Fire.ogv"), keyed by luma in `tools/textures/flames.ts`. Each frame is a whole fire of many tongues, so three cards to a blaze on a two-metre grid made a hedge; one card a blaze, with a third of the blazes left as embers and smoke, shows dark timber between separate fires. The key keeps dull yellow glow at partial cover, which read lime and olive over stone and sky. Holding a dim texel's green under its red, by how bright it is, takes that out, since a dim flame is red.
+
+[I] The breath is marched as a volume (128 steps at most, empty space skipped). Three things made it a flat salmon ball (r11) and then a flat orange one (r12's first probes):
+- **Too thin.** At 5 a metre the sky showed through. Now the core is 18 a metre and the rims 5.
+- **Graded from the axis.** In an opaque gas the eye sees only the outer layer, so the yellow core was hidden. Now the temperature is even through the body and falls off only in a thin rim.
+- **Past the knee.** The cards' gain of 1.7 lifted the gas past the tonemapper's knee, which desaturated orange to salmon (sRGB 230,142,82).
+
+[I] Centred on the struck wall, half the fireball was behind the stone. Rays ended after a sliver of its thin edge, so windows showed through it. It now stands 0.85 of its radius back from the wall. Its face takes wide noise in temperature, which gives bright lumps, dark red folds and soot pockets.
+
+[P] Still open after r12: inside the fireball, a lighter patch with straight edges. It is not the stream: cutting the stream out of the ball left it unchanged. Suspects are the heat haze, which reads the opaque scene copy without the breath, and a smoke card's edge. The rope is also smoother than a real jet.
+
 ## Limits
 
 - The game and film breakdowns are from talks, interviews and footage the author knows, not frame measurements. No reference sheet was measured with `tools/sandbox/look.ts`.

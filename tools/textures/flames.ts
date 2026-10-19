@@ -1,248 +1,49 @@
-// The flames' flipbook (D377): a fire simulated as a fluid and its temperature saved frame
-// by frame, as shipped games' fire is drawn from EmberGen's or Houdini's simulated sheets
-// (research/2026-10-16-real-time-fire-rendering.md). Jos Stam's stable fluids on a grid
-// twice as tall as wide: velocity advected semi-Lagrangian, buoyancy from the heat,
-// vorticity confinement for the curls a flame's edge breaks into, made divergence-free by a
-// Jacobi pressure solve; heat fed in along a ragged, wandering fuel bed at the foot,
-// advected and cooling as it rises; and soot, made where the body burns rich, burnt away where
-// the gas is hot and carried on as black smoke where it cools, so dark wisps break off between
-// the tongues as they do over a burning building or a pool fire. One fire, its loop its second
-// half crossfaded into its first; each texel its temperature (red), its soot (green) and how
-// far the gas there moves to the next frame (blue across, alpha up), so the shader blends one
-// frame into the next along the flow rather than crossfading them (motion-vector flipbooks, as
-// Unreal's and EmberGen's are played). The fire's shader (assets/shaders/fire.wesl) colours
-// a texel's temperature through a heat gradient and draws its soot dark over what is behind.
+// The flames' flipbook (D377): real fire, filmed against the night, its frames keyed and laid
+// on a sheet, as games draw fire from filmed flipbooks where a simulation cannot match it
+// (research/2026-10-18-dragon-breath.md §6). Real flames carry their own colour bands,
+// translucency and turbulence: a simulated fire's temperature coloured through a gradient
+// stayed a pastel hedge after four rounds of tuning (castle films r7 to r10, 6 to 6.5 of 10).
+//
+// The footage is Wikimedia Commons' "Fire.ogv" by Cary Bass, released into the public domain
+// (https://commons.wikimedia.org/wiki/File:Fire.ogv): a wood fire at night, 480x640 at
+// 29.97 frames a second. It is downloaded once into the system's temporary folder; ffmpeg
+// decodes it. Each frame is cropped round the fire (the union of its frames' bounds), scaled to
+// 160 by 320 and keyed by its brightness (fire against black is light over nothing, so its
+// alpha is how bright it is over the black), its colour kept premultiplied. Its loop is its
+// last frames crossfaded into its first. Soot is a pass of its own: what was flame a few
+// frames before, risen and blurred, where there is no flame now, so dark wisps break off the
+// tongues' tips and rise as they do over a burning building. Each texel is the flame's red and
+// green (sRGB, premultiplied: blue is worked out from green, `BLUE` below, in the shader), its
+// soot (blue) and its cover (alpha).
 //
 //   node tools/textures/flames.ts [out.png]     # assets/textures/fire/flames.png by default
 
 import { deflateSync } from "node:zlib";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
-/// The grid the fire is simulated on, cells across and up.
-const W = 160;
-const H = 320;
-/// The grid's cells to the first fire's (96 across), for constants tuned on that one.
-const S = W / 96;
-/// The frames saved, a sheet COLUMNS across, and each frame's size in texels.
+const SOURCE = "https://upload.wikimedia.org/wikipedia/commons/8/8f/Fire.ogv";
+/// The frames on the sheet, how many across, and each's size in texels.
 const FRAMES = 96;
 const COLUMNS = 12;
-const FW = W;
-const FH = H;
-/// The most a texel moves frame to frame, of the frame's size, that its motion stores; the
-/// shader's FLIPBOOK_MOTION must match.
-const MOTION = 0.08;
-/// Steps of the simulation a frame, and a step's length (in the grid's own time).
-const SUBSTEPS = 2;
-const DT = 0.5;
-/// How high the flame's gas burns above its bed at most, in cells, and how fast it makes
-/// heat there.
-const BODY = Math.round(H * 0.42);
-const BURN = 0.35;
-/// How much faster the heat cools at the top of the frame than in the body.
-const TIPS = 0.22;
-/// How fast the body makes soot where it burns, and how fast hot gas burns it away.
-const SOOT_MAKE = 0.05;
-const SOOT_BURN = 0.08;
-/// Steps run before the first frame is kept, so the fire is burning steadily.
-const WARM = 240;
-
-/// A small seeded random number source (mulberry32).
-function random(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/// Smooth 1D noise from a table of random values, repeating every `n`.
-function noise1(table: Float32Array, x: number): number {
-  const n = table.length;
-  const i = Math.floor(x);
-  const f = x - i;
-  const a = table[((i % n) + n) % n];
-  const b = table[(((i + 1) % n) + n) % n];
-  const u = f * f * (3 - 2 * f);
-  return a + (b - a) * u;
-}
-
-const at = (x: number, y: number) => y * W + x;
-
-/// A field sampled bilinearly at a place in cells, clamped to the grid.
-function sample(f: Float32Array, x: number, y: number): number {
-  x = Math.min(Math.max(x, 0), W - 1.001);
-  y = Math.min(Math.max(y, 0), H - 1.001);
-  const i = Math.floor(x);
-  const j = Math.floor(y);
-  const fx = x - i;
-  const fy = y - j;
-  const a = f[at(i, j)] + (f[at(i + 1, j)] - f[at(i, j)]) * fx;
-  const b = f[at(i, j + 1)] + (f[at(i + 1, j + 1)] - f[at(i, j + 1)]) * fx;
-  return a + (b - a) * fy;
-}
-
-/// Moves a field along the velocity for a step: each cell takes what was where the flow
-/// carried it from.
-function advect(f: Float32Array, u: Float32Array, v: Float32Array, out: Float32Array) {
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const k = at(x, y);
-      out[k] = sample(f, x - u[k] * DT, y - v[k] * DT);
-    }
-  }
-}
-
-/// One fire, simulated: its heat each frame, `FRAMES * 2` of them.
-type Frame = { heat: Float32Array; soot: Float32Array; u: Float32Array; v: Float32Array };
-
-function simulate(seed: number): Frame[] {
-  const rand = random(seed);
-  const table = new Float32Array(64).map(() => rand());
-  const wander = new Float32Array(64).map(() => rand());
-  let u = new Float32Array(W * H);
-  let v = new Float32Array(W * H);
-  let heat = new Float32Array(W * H);
-  const soot = new Float32Array(W * H);
-  const scratch = new Float32Array(W * H);
-  const scratch2 = new Float32Array(W * H);
-  const pressure = new Float32Array(W * H);
-  const divergence = new Float32Array(W * H);
-  const curl = new Float32Array(W * H);
-  const frames: Frame[] = [];
-  const steps = WARM + FRAMES * 2 * SUBSTEPS;
-  for (let step = 0; step < steps; step++) {
-    const time = step * DT;
-    // The fuel bed: heat fed in over the foot, ragged across and wandering in time, wider
-    // in the middle, with a little upward push where it burns hottest.
-    for (let x = 0; x < W; x++) {
-      const across = (x - W / 2) / (W * 0.4);
-      const xs = x / S;
-      if (Math.abs(across) >= 1) continue;
-      // Burning hardest in a few places along it, which wander, so it rises as a few
-      // tongues rather than one column.
-      const drift = noise1(wander, time * 0.02) * 20;
-      const tongues = 0.25 + 0.75 * Math.min(1, Math.max(0, (noise1(table, xs * 0.11 + time * 0.035 + drift) - 0.3) / 0.4));
-      const bed = (1 - across * across) * tongues * (0.65 + 0.35 * noise1(table, xs * 0.3 + time * 0.12 + drift + 7));
-      // Above the bed the fuel's gas still burns, as a real flame's continuous region does to
-      // about half its height: heat made through a body whose top is ragged and moves, so
-      // the flame is solid low down and breaks into licks above.
-      const body = BODY * (0.35 + 0.65 * tongues) * (0.6 + 0.4 * noise1(table, xs * 0.07 + time * 0.05 + drift + 3));
-      for (let y = 1; y < Math.max(9 * S, body); y++) {
-        const k = at(x, y);
-        const ys = y / S;
-        if (ys < 9) {
-          heat[k] = Math.max(heat[k], bed * 1.15);
-          v[k] += bed * 0.25 * S * DT;
-        } else {
-          // In pockets that rise through it, so the body is never one flat glow.
-          const pocket = noise1(wander, ys * 0.11 - time * 0.3 + xs * 0.06) * noise1(table, xs * 0.17 + ys * 0.03 + drift + 11);
-          heat[k] = Math.min(1.1, heat[k] + bed * (1 - y / body) * BURN * (0.3 + 1.4 * pocket) * DT);
-          // Soot where it burns rich: in the upper body, where fuel rises faster than air
-          // reaches it, and in the pockets that burn least.
-          soot[k] = Math.min(1, soot[k] + bed * (y / body) * SOOT_MAKE * (1.4 - pocket) * DT);
-        }
-      }
-    }
-    // Buoyancy: hot gas rises.
-    for (let k = 0; k < W * H; k++) v[k] += heat[k] * 0.8 * S * DT;
-    // Vorticity confinement: the curls a flame's edge breaks into, put back where the grid's
-    // own smoothing would lose them.
-    for (let y = 1; y < H - 1; y++) {
-      for (let x = 1; x < W - 1; x++) {
-        curl[at(x, y)] = (v[at(x + 1, y)] - v[at(x - 1, y)] - (u[at(x, y + 1)] - u[at(x, y - 1)])) * 0.5;
-      }
-    }
-    for (let y = 2; y < H - 2; y++) {
-      for (let x = 2; x < W - 2; x++) {
-        const gx = (Math.abs(curl[at(x + 1, y)]) - Math.abs(curl[at(x - 1, y)])) * 0.5;
-        const gy = (Math.abs(curl[at(x, y + 1)]) - Math.abs(curl[at(x, y - 1)])) * 0.5;
-        const len = Math.hypot(gx, gy) + 1e-5;
-        const w = curl[at(x, y)];
-        const eps = 0.75 * S;
-        u[at(x, y)] += (gy / len) * w * eps * DT;
-        v[at(x, y)] -= (gx / len) * w * eps * DT;
-      }
-    }
-    // Advect the velocity by itself.
-    advect(u, u, v, scratch);
-    advect(v, u, v, scratch2);
-    u.set(scratch);
-    v.set(scratch2);
-    // Make it divergence-free: open at the top and sides, closed at the foot.
-    for (let y = 1; y < H - 1; y++) {
-      for (let x = 1; x < W - 1; x++) {
-        divergence[at(x, y)] = -0.5 * (u[at(x + 1, y)] - u[at(x - 1, y)] + v[at(x, y + 1)] - v[at(x, y - 1)]);
-      }
-    }
-    pressure.fill(0);
-    for (let iteration = 0; iteration < 70; iteration++) {
-      for (let y = 1; y < H - 1; y++) {
-        for (let x = 1; x < W - 1; x++) {
-          pressure[at(x, y)] = (divergence[at(x, y)] + pressure[at(x - 1, y)] + pressure[at(x + 1, y)] + pressure[at(x, y - 1)] + pressure[at(x, y + 1)]) * 0.25;
-        }
-      }
-      for (let x = 0; x < W; x++) pressure[at(x, 0)] = pressure[at(x, 1)];
-    }
-    for (let y = 1; y < H - 1; y++) {
-      for (let x = 1; x < W - 1; x++) {
-        u[at(x, y)] -= 0.5 * (pressure[at(x + 1, y)] - pressure[at(x - 1, y)]);
-        v[at(x, y)] -= 0.5 * (pressure[at(x, y + 1)] - pressure[at(x, y - 1)]);
-      }
-    }
-    for (let x = 0; x < W; x++) v[at(x, 0)] = 0;
-    // The heat carried with the gas and cooling as it goes, more where it is thin, so the
-    // flame's tips break into licks that wink out; and past the burning body faster the
-    // higher it rises, as soot there no longer glows for long, so the tips break off as
-    // flamelets and are gone by about three quarters of the frame.
-    advect(soot, u, v, scratch2);
-    soot.set(scratch2);
-    advect(heat, u, v, scratch);
-    for (let k = 0; k < W * H; k++) {
-      const hot = scratch[k];
-      soot[k] = Math.max(0, soot[k] - DT * (0.002 + SOOT_BURN * hot * hot * soot[k]));
-      const h = scratch[k];
-      const high = Math.min(1, Math.max(0, (Math.floor(k / W) / H - 0.3) / 0.45));
-      heat[k] = Math.max(0, h - DT * (0.012 + 0.015 * h + TIPS * high * high));
-    }
-    // Damp what is left near the sides, so no flame reaches a card's edge.
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const edge = Math.min(x, W - 1 - x, H - 1 - y) / (8 * S);
-        if (edge < 1) {
-          const k = at(x, y);
-          heat[k] *= edge;
-          soot[k] *= edge;
-          u[k] *= 0.9 + 0.1 * edge;
-          v[k] *= 0.9 + 0.1 * edge;
-        }
-      }
-    }
-    if (step >= WARM && (step - WARM) % SUBSTEPS === SUBSTEPS - 1) {
-      // How far the gas moves to the next frame, of the frame's size.
-      const moved = DT * SUBSTEPS;
-      frames.push({ heat: heat.slice(), soot: soot.slice(), u: u.map((x) => (x * moved) / W), v: v.map((y) => (y * moved) / H) });
-    }
-  }
-  return frames;
-}
-
-/// The frames looped: the second half crossfaded into the first, so the last runs on into
-/// the first.
-function looped(frames: Frame[]): Frame[] {
-  const out: Frame[] = [];
-  for (let i = 0; i < FRAMES; i++) {
-    const w = i / FRAMES;
-    const a = frames[FRAMES + i];
-    const b = frames[i];
-    const mix = (p: Float32Array, q: Float32Array) => p.map((value, k) => value * (1 - w) + q[k] * w);
-    out.push({ heat: mix(a.heat, b.heat), soot: mix(a.soot, b.soot), u: mix(a.u, b.u), v: mix(a.v, b.v) });
-  }
-  return out;
-}
+const FW = 160;
+const FH = 320;
+/// The first frame of the footage used, and how many after the last are crossfaded into the
+/// first so it loops.
+const START = 40;
+const LOOP = 18;
+/// The footage's black and the brightness at which a flame covers wholly (sRGB, weighted as
+/// the eye weighs it): a dull red rim is see-through, as a thin flame is, an orange one mostly
+/// covers and a yellow one wholly.
+const BLACK = 0.07;
+const SOLID = 0.75;
+/// The soot pass: how many frames back it looks, how far the soot rises a frame (of the
+/// frame's height), and how dark.
+const SOOT_BACK = [3, 6, 10, 15];
+const SOOT_RISE = 0.006;
+const SOOT = 1.6;
 
 /// A PNG of 8-bit RGBA texels.
 function png(width: number, height: number, rgba: Uint8Array): Buffer {
@@ -282,68 +83,157 @@ function png(width: number, height: number, rgba: Uint8Array): Buffer {
   ]);
 }
 
-/// How far up its frame a fire reaches: where it stops being solid (the height at which, on
-/// average over its frames, fewer than half as many cells glow as at its widest), and where
-/// its tips end (the highest row any cell glows in on one frame in ten); each of the frame's
-/// height. The shader sizes its cards on these (`fire.wesl`: a flame fills about the lower
-/// two thirds of its card).
-function reach(fire: Frame[]): [number, number] {
-  const frames = fire.map((f) => f.heat);
-  const glows = 0.25;
-  const rows = new Float32Array(H);
-  const highest: number[] = [];
-  for (const f of frames) {
-    let top = 0;
-    for (let y = 0; y < H; y++) {
-      let n = 0;
-      for (let x = 0; x < W; x++) if (f[at(x, y)] > glows) n++;
-      rows[y] += n / frames.length;
-      if (n > 0) top = y;
-    }
-    highest.push(top);
+/// The footage, downloaded once.
+async function footage(): Promise<string> {
+  const path = join(tmpdir(), "terra-fire-footage.ogv");
+  if (!existsSync(path)) {
+    const reply = await fetch(SOURCE, { headers: { "User-Agent": "terra-tools/1.0" } });
+    if (!reply.ok) throw new Error(`flames: ${SOURCE} answered ${reply.status}`);
+    writeFileSync(path, Buffer.from(await reply.arrayBuffer()));
   }
-  const widest = Math.max(...rows);
-  let solid = 0;
-  for (let y = 0; y < H; y++) if (rows[y] >= widest * 0.5) solid = y;
-  highest.sort((a, b) => a - b);
-  return [solid / H, highest[Math.floor(highest.length * 0.9)] / H];
+  return path;
 }
 
-function main() {
+/// So many frames from a frame on, RGB bytes, through ffmpeg's filter.
+function decode(video: string, from: number, count: number, filter: string, w: number, h: number): Uint8Array[] {
+  const raw = execFileSync(
+    "ffmpeg",
+    ["-v", "error", "-i", video, "-vf", `trim=start_frame=${from}:end_frame=${from + count},${filter}`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    { maxBuffer: 1 << 30 },
+  );
+  const size = w * h * 3;
+  if (raw.length < size * count) throw new Error(`flames: ffmpeg gave ${Math.floor(raw.length / size)} frames, wanted ${count}`);
+  return Array.from({ length: count }, (_, i) => raw.subarray(i * size, (i + 1) * size));
+}
+
+const smooth = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+
+/// How much a pixel of so bright a colour covers.
+const cover = (r: number, g: number, b: number) => smooth((0.3 * r + 0.6 * g + 0.1 * b - BLACK) / (SOLID - BLACK));
+
+/// The crop round the fire, of the frame's aspect: the union of every frame's bounds (where
+/// it covers more than half: its glowing bed is left out), its foot at the bounds' foot, in
+/// the footage's pixels.
+function crop(video: string, count: number): string {
+  const [w, h] = [480, 640];
+  const frames = decode(video, START, count, "null", w, h);
+  let [x0, x1, y0, y1] = [w, 0, h, 0];
+  for (const f of frames)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const k = (y * w + x) * 3;
+        if (cover(f[k] / 255, f[k + 1] / 255, f[k + 2] / 255) > 0.5) {
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x);
+          y0 = Math.min(y0, y);
+          y1 = Math.max(y1, y);
+        }
+      }
+  const ch = Math.min(h, y1 - y0 + 8);
+  const cw = Math.round((ch * FW) / FH);
+  const cx = Math.max(0, Math.min(w - cw, Math.round((x0 + x1 - cw) / 2)));
+  const cy = Math.max(0, Math.min(h - Math.round(ch), y1 + 4 - Math.round(ch)));
+  return `crop=${cw}:${Math.round(ch)}:${cx}:${cy}`;
+}
+
+/// A box blur of a frame's cover, so far each way.
+function blur(a: Float32Array, r: number): Float32Array {
+  const out = new Float32Array(a.length);
+  const tmp = new Float32Array(a.length);
+  for (let y = 0; y < FH; y++)
+    for (let x = 0; x < FW; x++) {
+      let s = 0;
+      for (let d = -r; d <= r; d++) s += a[y * FW + Math.min(FW - 1, Math.max(0, x + d))];
+      tmp[y * FW + x] = s / (2 * r + 1);
+    }
+  for (let y = 0; y < FH; y++)
+    for (let x = 0; x < FW; x++) {
+      let s = 0;
+      for (let d = -r; d <= r; d++) s += tmp[Math.min(FH - 1, Math.max(0, y + d)) * FW + x];
+      out[y * FW + x] = s / (2 * r + 1);
+    }
+  return out;
+}
+
+async function main() {
   const out = process.argv[2] ?? "assets/textures/fire/flames.png";
-  const fire = looped(simulate(23));
+  const video = await footage();
+  const count = FRAMES + LOOP;
+  const box = crop(video, count);
+  const src = decode(video, START, count, `${box},scale=${FW}:${FH}:flags=area`, FW, FH);
+  // Looped: the frames past the last crossfaded into the first.
+  const frames = Array.from({ length: FRAMES }, (_, f) => {
+    const px = new Float32Array(FW * FH * 3);
+    const w = f < LOOP ? f / LOOP : 1;
+    for (let i = 0; i < px.length; i++) px[i] = (f < LOOP ? src[f][i] * w + src[f + FRAMES][i] * (1 - w) : src[f][i]) / 255;
+    return px;
+  });
+  const covers = frames.map((px) => {
+    const a = new Float32Array(FW * FH);
+    for (let i = 0; i < a.length; i++) a[i] = cover(px[i * 3], px[i * 3 + 1], px[i * 3 + 2]);
+    return a;
+  });
+  const blurred = covers.map((a) => blur(a, 4));
   const rows = FRAMES / COLUMNS;
   const width = COLUMNS * FW;
   const height = rows * FH;
   const rgba = new Uint8Array(width * height * 4);
   const byte = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 255);
-  let clipped = 0;
-  let sooty = 0;
+  // How well blue goes as green does among the flame's texels: b = BLUE_K * g^BLUE_P.
+  const fit = { n: 0, err: 0 };
+  let [sooty, covered, yellow] = [0, 0, 0];
   for (let f = 0; f < FRAMES; f++) {
     const ox = (f % COLUMNS) * FW;
     const oy = Math.floor(f / COLUMNS) * FH;
-    const { heat, soot, u, v } = fire[f];
+    const px = frames[f];
+    const a = covers[f];
     for (let y = 0; y < FH; y++) {
       for (let x = 0; x < FW; x++) {
-        // The frame's top row is the fire's top: the grid's y runs up.
-        const g = at(x, H - 1 - y);
+        const i = y * FW + x;
+        // What was flame a few frames before, risen, where there is none now; more of it
+        // higher up, where the gas has cooled.
+        let s = 0;
+        for (const [n, back] of SOOT_BACK.entries()) {
+          const ry = Math.round(y + back * SOOT_RISE * FH);
+          if (ry >= FH) continue;
+          s = Math.max(s, blurred[(f - back + FRAMES * 4) % FRAMES][ry * FW + x] * (1 - n / (SOOT_BACK.length + 1)));
+        }
+        const high = smooth((FH - y) / FH / 0.55);
+        const soot = Math.max(0, s * SOOT - a[i] * 1.6) * high;
         const k = ((oy + y) * width + ox + x) * 4;
-        rgba[k] = byte(heat[g]);
-        rgba[k + 1] = byte(soot[g]);
-        if (soot[g] > 0.25 && heat[g] < 0.25) sooty++;
-        if (Math.max(Math.abs(u[g]), Math.abs(v[g])) > MOTION) clipped++;
-        rgba[k + 2] = byte(0.5 + (0.5 * u[g]) / MOTION);
-        rgba[k + 3] = byte(0.5 + (0.5 * v[g]) / MOTION);
+        // Faded out at the frame's sides, where the crop cuts the widest tongues.
+        const side = smooth(Math.min(x, FW - 1 - x) / 10);
+        a[i] *= side;
+        const lift = (c: number) => (side * Math.max(0, c - BLACK * (1 - a[i]))) / (1 - BLACK);
+        const [r, g, b] = [lift(px[i * 3]), lift(px[i * 3 + 1]), lift(px[i * 3 + 2])];
+        rgba[k] = byte(r);
+        rgba[k + 1] = byte(g);
+        rgba[k + 2] = byte(soot);
+        rgba[k + 3] = byte(a[i]);
+        if (a[i] > 0.3) {
+          covered++;
+          if (g > 0.7 * r) yellow++;
+          fit.n++;
+          fit.err += (b - BLUE_K * g ** BLUE_P) ** 2;
+        }
+        if (soot > 0.25) sooty++;
       }
     }
   }
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, png(width, height, rgba));
-  const [solid, tips] = reach(fire);
-  const share = (n: number) => ((100 * n) / (FRAMES * FW * FH)).toFixed(1);
+  const share = (n: number, of: number) => ((100 * n) / of).toFixed(1);
   console.log(
-    `flames: ${out}, ${FRAMES} frames of ${FW}x${FH} on ${width}x${height}; solid to ${solid.toFixed(2)}, tips to ${tips.toFixed(2)} of the frame; dark soot ${share(sooty)}% of texels; motion past its range ${share(clipped)}%`,
+    `flames: ${out}, ${FRAMES} frames of ${FW}x${FH} on ${width}x${height} from ${box}; flame covers ${share(covered, FRAMES * FW * FH)}% of texels, ${share(yellow, covered)}% of it yellow; soot ${share(sooty, FRAMES * FW * FH)}%; blue from green off by ${Math.sqrt(fit.err / Math.max(1, fit.n)).toFixed(3)} rms`,
   );
 }
 
-main();
+/// Blue as the shader works it out from green (`fire.wesl`, FOOTAGE_BLUE), sRGB: a flame's blue
+/// rises only as its green nears white. Fitted over this footage's flame: 0.11 off, rms.
+const BLUE_K = 0.23;
+const BLUE_P = 4.0;
+
+await main();

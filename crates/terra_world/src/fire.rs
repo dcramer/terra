@@ -29,7 +29,10 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
-    render::{render_resource::AsBindGroup, storage::ShaderBuffer},
+    render::{
+        render_resource::{AsBindGroup, Face},
+        storage::ShaderBuffer,
+    },
     shader::ShaderRef,
 };
 
@@ -132,7 +135,6 @@ const HEARTH_EMBER_CARDS: usize = 16;
 const HEARTH_LUMENS_A_METRE: f32 = 280_000.0;
 const HEARTH_RANGE_M: f32 = 14.0;
 /// How many cards a jet is, and how many jets are drawn.
-const JET_CARDS: usize = 640;
 const JETS: usize = 2;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
 /// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
@@ -189,13 +191,16 @@ pub struct FireUniform {
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
 /// material as smoke is, its shaders ours.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[bind_group_data(FireKey)]
 pub struct FireExtension {
     #[uniform(100)]
     uniform: FireUniform,
+    /// Whether these are the breaths' hulls, marched through as volumes (`hulls`).
+    volume: bool,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
-    /// The flames' flipbook (`tools/textures/flames.ts`): a simulated fire's temperature, soot
-    /// and motion frame by frame, linear.
+    /// The flames' flipbook (`tools/textures/flames.ts`): a real fire filmed at night, frame by
+    /// frame its red and green, soot and cover, linear.
     #[texture(102)]
     #[sampler(103)]
     flipbook: Handle<Image>,
@@ -211,7 +216,39 @@ pub struct FireExtension {
 /// The flames' flipbook.
 const FLIPBOOK: &str = "textures/fire/flames.png";
 
+/// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
+/// its far side stands behind the wall it strikes; its shader ends each ray at what the
+/// depth prepass holds instead.
+#[repr(C)]
+#[derive(Eq, PartialEq, Hash, Copy, Clone)]
+pub struct FireKey {
+    volume: bool,
+}
+
+impl From<&FireExtension> for FireKey {
+    fn from(fire: &FireExtension) -> Self {
+        FireKey {
+            volume: fire.volume,
+        }
+    }
+}
+
 impl MaterialExtension for FireExtension {
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        if key.bind_group_data.volume
+            && let Some(depth) = descriptor.depth_stencil.as_mut()
+        {
+            depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Always);
+            depth.depth_write_enabled = Some(false);
+        }
+        Ok(())
+    }
+
     fn vertex_shader() -> ShaderRef {
         "shaders/fire.wesl".into()
     }
@@ -390,6 +427,52 @@ fn cards(slots: usize, each: usize, from: f32) -> Mesh {
     .with_inserted_indices(Indices::U32(indices))
 }
 
+/// The breaths' hulls: a box for each jet, its corners 0 to 1 on each axis (its position),
+/// which the shader stretches round the jet's stream and fireball and marches through
+/// (`fire.wesl`, `breath`), its back faces drawn so it shows with the eye inside it too.
+fn hulls(slots: usize) -> Mesh {
+    let mut positions = Vec::with_capacity(slots * 24);
+    let mut normals = Vec::with_capacity(slots * 24);
+    let mut ids = Vec::with_capacity(slots * 24);
+    let mut indices = Vec::with_capacity(slots * 36);
+    for slot in 0..slots {
+        for axis in 0..3 {
+            for side in [0.0f32, 1.0] {
+                // (u, v, axis) turn as x, y, z do, so the face runs anticlockwise seen from
+                // its outside when it is at 1, and is turned over when it is at 0.
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                let first = positions.len() as u32;
+                for (a, b) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
+                    let mut p = [0.0f32; 3];
+                    p[axis] = side;
+                    p[u] = a;
+                    p[v] = b;
+                    let mut n = [0.0f32; 3];
+                    n[axis] = side * 2.0 - 1.0;
+                    positions.push(p);
+                    normals.push(n);
+                    ids.push([slot as f32, 0.0]);
+                }
+                if side > 0.5 {
+                    indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
+                } else {
+                    indices.extend([first, first + 2, first + 1, first, first + 3, first + 2]);
+                }
+            }
+        }
+    }
+    let corners = vec![[0.0f32, 0.0]; positions.len()];
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
 /// The cards of every kind, each a mesh of its own drawn wherever the fires are.
 fn spawn_cards(
     commands: &mut Commands,
@@ -429,7 +512,7 @@ fn spawn_cards(
         cards(HEARTHS.min(count), HEARTH_EMBER_CARDS, 1.0),
         fire[1].clone(),
     );
-    spawn("Fire: jets", cards(JETS, JET_CARDS, 0.0), fire[2].clone());
+    spawn("Fire: jets", hulls(JETS), fire[2].clone());
     spawn("Fire: haze", cards(count, HAZE_CARDS, 0.0), fire[3].clone());
     spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
     for (name, mesh, material) in [
@@ -503,6 +586,12 @@ fn setup(
                 // drawn over its own flames greyed and dimmed their yellow hearts to olive
                 // (castle film r5 and r6). A fire's flames show through the smoke over it.
                 depth_bias: if haze { 0.0 } else { 1.0 },
+                // A breath's hull is drawn from its far side, so it shows with the eye in it.
+                cull_mode: if kind == 2.0 {
+                    Some(Face::Front)
+                } else {
+                    Some(Face::Back)
+                },
                 ..default()
             },
             extension: FireExtension {
@@ -510,6 +599,7 @@ fn setup(
                     kind: Vec4::new(kind, 0.0, 0.0, 0.0),
                     ..default()
                 },
+                volume: kind == 2.0,
                 slots: slots.clone(),
                 flipbook: flipbook.clone(),
                 puffs: puffs.buffer.clone(),
@@ -865,105 +955,4 @@ fn lit(blazes: &Blazes) -> Vec<Lit> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_campfire_clears_the_ground_a_stride_past_its_stones_and_no_farther() {
-        let fire = Kindled {
-            tall: 1.5,
-            wide: 0.7,
-            heat: 0.9,
-        };
-        let at = Transform::from_translation(Vec3::new(3.0, 2000.0, -4.0));
-        let ground = scorched(&fire, &at);
-        let out = |m: f32| at.translation + Vec3::new(m * 0.6, 0.0, m * 0.8);
-        assert!(ground.covers(at.translation, 0.0));
-        assert!(ground.covers(out(1.8), 0.0));
-        assert!(!ground.covers(out(2.4), 0.0));
-    }
-
-    /// How far a light wavers over ten seconds, and how many times a second it turns.
-    fn wavers(lumens: f32) -> (f32, f32) {
-        let samples: Vec<f32> = (0..10_000)
-            .map(|i| flicker(i as f32 * 0.001, 0.0, lumens).0)
-            .collect();
-        let (low, high) = samples
-            .iter()
-            .fold((f32::MAX, f32::MIN), |(l, h), &w| (l.min(w), h.max(w)));
-        let turns = samples
-            .windows(3)
-            .filter(|w| (w[1] - w[0]) * (w[2] - w[1]) < 0.0)
-            .count();
-        (high - low, turns as f32 / 10.0)
-    }
-
-    #[test]
-    fn a_kindled_fire_burns_where_it_stands_while_it_is_there() {
-        use bevy::ecs::system::RunSystemOnce;
-        let mut world = World::new();
-        world.init_resource::<Blazes>();
-        let at = Vec3::new(3.0, 2000.0, -4.0);
-        let fire = Kindled {
-            tall: 0.6,
-            wide: 0.4,
-            heat: 0.9,
-        };
-        let lit = world
-            .spawn((fire, GlobalTransform::from_translation(at)))
-            .id();
-        world.run_system_once(keep).unwrap();
-        let drawn: Vec<Blaze> = world.resource::<Blazes>().all().copied().collect();
-        assert_eq!(drawn.len(), 1);
-        assert_eq!((drawn[0].at, drawn[0].tall, drawn[0].wide), (at, 0.6, 0.4));
-        world.despawn(lit);
-        world.run_system_once(keep).unwrap();
-        assert_eq!(world.resource::<Blazes>().all().count(), 0);
-    }
-
-    #[test]
-    fn a_campfire_lights_round_it_from_its_flames_and_a_burning_roof_across_the_way() {
-        let ground = Vec3::new(0.0, 2000.0, 0.0);
-        let blazes = Blazes {
-            kept: vec![Blaze {
-                at: ground,
-                tall: 1.5,
-                heat: 0.9,
-                seed: 0.3,
-                wide: 0.7,
-            }],
-            blazes: vec![Blaze {
-                at: ground + Vec3::X * 40.0,
-                tall: 1.5,
-                heat: 0.9,
-                seed: 0.6,
-                wide: 0.0,
-            }],
-            ..default()
-        };
-        let lit = lit(&blazes);
-        assert_eq!(lit.len(), 2);
-        let (hearth, roof) = (&lit[0], &lit[1]);
-        assert_eq!(hearth.at, ground);
-        // In its flames, over its logs, not over the heads of those sat by it.
-        assert!(hearth.lift < 1.5, "{}", hearth.lift);
-        // Lighting a ring round it, not the far shore; a burning roof's light reaches farther.
-        assert!(hearth.range <= 15.0 && roof.range > hearth.range);
-        assert!(hearth.lumens > 0.0);
-    }
-
-    #[test]
-    fn a_small_fires_light_flickers_quicker_and_further_than_a_big_ones() {
-        let (small_reach, small_turns) = wavers(LUMENS_A_METRE * 0.5);
-        let (big_reach, big_turns) = wavers(LUMENS_A_METRE * 40.0);
-        assert!(small_reach > big_reach * 1.5, "{small_reach} {big_reach}");
-        assert!(small_turns > big_turns * 1.5, "{small_turns} {big_turns}");
-        // Never out, never doubled.
-        for lumens in [LUMENS_A_METRE * 0.1, LUMENS_A_METRE * 100.0] {
-            for i in 0..1000 {
-                let (waver, _) = flicker(i as f32 * 0.01, 1.0, lumens);
-                assert!((0.6..=1.4).contains(&waver), "{waver}");
-            }
-        }
-    }
-}
+mod tests;
