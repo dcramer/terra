@@ -45,6 +45,7 @@ Every change: `cargo xtask check` (quick before a commit, fast before a push, fu
 - **Look** (a texture, relief, a piece's model): `cargo xtask material <material>` first (D386: fixed vantages beside its reference and a grey card, its numbers against the pattern's targets, failing on a regression), `cargo xtask kits`, `cargo xtask texels <name>`, the kit sheet (`cargo xtask yard --kit-sheet --sheet-rows "<row>"`, then `--vantage` as it logs and `--shot`), a material's preview (`node tools/kits/preview.ts <name>`), and `cargo xtask artifacts --frames` on the GPU. Judge against [docs/art-style.md](../../../docs/art-style.md) and the material's reference.
 - **Performance**: `cargo xtask sections` (laying and merging against the 2 ms bar), `cargo xtask bench village going-up rising town300` (D185), `cargo xtask qa clips` traces; both load-aware (`--runs 3`).
 - **Material** (a new or changed file): `cargo xtask pack`, `cargo xtask kits`, `cargo xtask material <material>`, and `cargo xtask artifacts <name>` for it, as a material outside the settlement is in no ratchet.
+- **Fire** (the building fire, char, burning, `terra_world::fire`, its shaders, textures or presets, or a tonemapping patch): `cargo xtask fire --gate` before landing (D415); a change that brings a fire's numbers in rewrites the held baseline with `--hold` and commits it.
 - **Rules** (support, refusals, collapse): `cargo xtask rules` (tests with known failures, random operations, the drawing audit, live rules).
 
 ## Measuring
