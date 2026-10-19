@@ -145,5 +145,44 @@
             season_c: (-10.0, 8.0),
             hours: [(0.0, 24.0)],
         ),
+        (
+            // Snow falling (D418): flakes of a few millimetres to a centimetre, aggregated, at
+            // about a metre a second, swaying as they come and carried by the wind; all of
+            // them at 2 mm/h of water, heavy snow, and fewer below. Near the eye, the big ones
+            // drifting past.
+            name: "Snowfall",
+            count: 7000,
+            look: Speck,
+            size_m: 0.013,
+            colour: (0.95, 0.96, 0.98),
+            glow: 1.5,
+            opacity: 0.9,
+            motion: Fall(fall_mps: 1.0, sway_m: 0.3, spin_hz: 0.0, carried: 0.85),
+            box_m: (7.0, 4.0),
+            woods: 1.0,
+            open: 1.0,
+            water: 1.0,
+            season_c: (-40.0, 40.0),
+            hours: [(0.0, 24.0)],
+            falls: Some((snow: true, full_mm_h: 2.0)),
+        ),
+        (
+            // The same snow farther off, filling the view to where the haze takes over.
+            name: "Snowfall far",
+            count: 30000,
+            look: Speck,
+            size_m: 0.018,
+            colour: (0.95, 0.96, 0.98),
+            glow: 1.5,
+            opacity: 0.85,
+            motion: Fall(fall_mps: 1.0, sway_m: 0.4, spin_hz: 0.0, carried: 0.85),
+            box_m: (26.0, 11.0),
+            woods: 1.0,
+            open: 1.0,
+            water: 1.0,
+            season_c: (-40.0, 40.0),
+            hours: [(0.0, 24.0)],
+            falls: Some((snow: true, full_mm_h: 2.0)),
+        ),
     ],
 )

@@ -177,6 +177,7 @@ In code (D327): two maps a kilometre across round the camera, a 32 m cell a texe
 3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at. Built (D327): `terra_world::climate`, kinds' years in `assets/data/plant_years.ron`, and `--date 10-15` (a day of an Earth calendar, as that share of the world's year) or `--date 40` (a day of the clock); the log says what the climate is at the camera once its maps are painted.
 4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill). Built (D327): judged at four dates in research/2026-10-15-seasons.md, with what is left to do.
 5. **Body temperature** (D153), and snow and mud under a walker. Built (D328): the first of the effects, the stakes.
+6. **The weather drawn:** the sky, the light, the air and what falls following the weather at the eye, storms and winter first: [weather.md](weather.md) (D418).
 
 ## Open questions
 

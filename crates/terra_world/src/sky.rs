@@ -21,6 +21,9 @@ pub struct Sky {
     pub glow: Color,
     /// How much of the sky is cloud, from none to overcast.
     pub cloudiness: f32,
+    /// The overcast deck (`weather::deck`, D418): how much of the sky it covers, how dark rain
+    /// has made it, its brightness from below and the wind driving its scud.
+    pub deck: Vec4,
     /// The camera is exposed for sunlit ground, which is far brighter than a colour on a
     /// screen; this lifts the sky to sit with it.
     pub brightness: f32,
@@ -76,6 +79,7 @@ impl Sky {
             zenith,
             glow,
             cloudiness,
+            deck: Vec4::ZERO,
             brightness,
             night: 0.0,
             twilight: 0.0,
@@ -128,6 +132,9 @@ struct SkyMaterial {
     /// Toward the sun, below the horizon too (`Sky::sun`), for the dusk's colours.
     #[uniform(0)]
     dusk_sun: Vec3,
+    /// The overcast deck (`Sky::deck`).
+    #[uniform(0)]
+    deck: Vec4,
     /// The air all round the camera, for the far land's haze.
     #[texture(1, dimension = "cube")]
     #[sampler(2)]
@@ -190,6 +197,7 @@ impl SkyMaterial {
                 .try_normalize()
                 .unwrap_or(tweaks.sun_direction)
                 .normalize_or(Vec3::Y),
+            deck: sky.deck,
         }
     }
 }

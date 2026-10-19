@@ -30,6 +30,9 @@ struct Sky {
     far_peaks: f32,
     // Toward the sun, below the horizon too, for the dusk's colours.
     dusk_sun: vec3<f32>,
+    // The overcast deck (weather.rs, D418): how much of the sky it covers, how dark rain has
+    // made it, its brightness seen from below, and the wind, m/s.
+    deck: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
@@ -284,8 +287,31 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
         * normalize(sky.zenith.rgb * 0.6 + sky.horizon.rgb * 0.4 + 0.05);
     let silver = 0.55 + 0.45 * pow(toward_sun, 2.0);
     let cloud_colour = mix(shaded, sunlit, lit * silver) * view.exposure;
-    let cover = cloud * 0.9;
+    var cover = cloud * 0.9;
     var colour = cloud_colour * cover;
+
+    // The overcast deck (D418): one grey layer lit from above and seen from below, as bright
+    // as the sky's light it gives the ground. Its thicker bellies are darker and its seams
+    // paler, the more so as rain thickens it; it is brightest where the sun is behind it and
+    // lowest and evenest toward the horizon. Scud under it runs with the wind.
+    if sky.deck.x > 0.0 {
+        let wind = sky.deck.w;
+        let run = vec3<f32>(globals.time, 0.0, globals.time * 0.45) * (0.0015 + 0.0009 * wind);
+        let broad = billow(p * 0.28 + run);
+        let fine = billow(p * 1.3 + run * 2.6 + 3.1);
+        let rain = sky.deck.y;
+        let body = (broad - 0.5) * 2.4 + (fine - 0.5) * (0.8 + 1.4 * rain);
+        let flat = smoothstep(0.02, 0.35, lift);
+        var shade = 1.0 - clamp(body, -0.6, 1.0) * (0.22 + 0.4 * rain) * flat;
+        shade *= 1.0 + 0.5 * pow(toward_sun, 6.0) * (1.0 - rain);
+        // Toward the horizon one sees the deck's underside from far off, through more air:
+        // paler and flatter.
+        shade = mix(1.08, shade, flat);
+        let grey = vec3<f32>(0.92, 0.95, 1.0) * sky.deck.z * shade * view.exposure;
+        let deck = sky.deck.x * smoothstep(-0.12, 0.02, lift);
+        colour = mix(colour, grey, deck);
+        cover = mix(cover, 1.0, deck);
+    }
 
     // After sunset, the dusk's and the night's own colours, where the clouds leave sky
     // (dusk.wesl).
@@ -295,12 +321,13 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     }
 
     if sky.night > 0.0 {
-        let clear = (1.0 - cloud) * smoothstep(0.0, 0.25, lift);
+        let hidden = min(cover / 0.9, 1.0);
+        let clear = (1.0 - hidden) * smoothstep(0.0, 0.25, lift);
         colour += vec3<f32>(0.85, 0.9, 1.0) * stars(direction) * clear * sky.night * 0.6;
         let toward_moon = max(dot(direction, -sun), 0.0);
         let disc = smoothstep(0.99955, 0.9998, toward_moon);
         let halo = pow(toward_moon, 60.0) * 0.12;
-        colour += vec3<f32>(0.8, 0.85, 0.95) * (disc * 1.2 + halo) * sky.night * (1.0 - cloud * 0.7);
+        colour += vec3<f32>(0.8, 0.85, 0.95) * (disc * 1.2 + halo) * sky.night * (1.0 - hidden * 0.7);
     }
     // The far land stands in front of all of it.
     let land = far_land(direction, up, eye, sunlight);

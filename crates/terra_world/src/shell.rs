@@ -151,6 +151,7 @@ usage: terra_sandbox [options]
                         that share of the world's year after midwinter (21 December),
                         or a day of the clock itself, such as 0, when it starts, in late
                         August (docs/climate.md)
+  --weather <name>      start on the first day with this weather, such as snowfall (D418)
   --site <place>        start at a place the land's rules make, found by its query:
                         lake, a mountain lake under the tree line with peaks a kilometre
                         over it, the start its shore, facing the water; tundra, level
@@ -331,6 +332,8 @@ pub struct Options {
     pub time: Option<f32>,
     /// The date the world's clock is set to, if not its own (`--date`).
     pub date: Option<Date>,
+    /// A weather to start in (`--weather`): the first day from the date that has it (D418).
+    pub weather: Option<String>,
     /// A place the land's rules make to start at, found by its query (`--site`): `lake`, a
     /// mountain lake under the tree line with peaks a kilometre over it, `tundra`, or `town`
     /// (docs/demos.md), pinned to a spot with `@<east km>,<north km>` (D393).
@@ -485,6 +488,7 @@ impl Options {
             start_at: None,
             time: None,
             date: None,
+            weather: None,
             site: None,
             start_facing: None,
             warps: Vec::new(),
@@ -551,16 +555,12 @@ impl Options {
                 }
                 "--time" => {
                     let text = value("--time")?;
-                    let hour = text
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|hour| (0.0..=24.0).contains(hour))
-                        .ok_or_else(|| {
-                            format!("--time wants an hour from 0 to 24, like 22, not `{text}`")
-                        })?;
-                    options.time = Some(hour);
+                    let hour = text.parse().ok().filter(|h: &f32| (0.0..=24.0).contains(h));
+                    let wrong = format!("--time wants an hour from 0 to 24, not `{text}`");
+                    options.time = Some(hour.ok_or(wrong)?);
                 }
                 "--date" => options.date = Some(Date::parse(&value("--date")?)?),
+                "--weather" => options.weather = Some(value("--weather")?),
                 "--site" => options.site = Some(value("--site")?),
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),

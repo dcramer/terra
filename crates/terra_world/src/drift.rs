@@ -71,6 +71,19 @@ pub struct DriftKind {
     pub air_c: f32,
     /// The hours it is about, of the clock: one or more spans.
     pub hours: Vec<(f32, f32)>,
+    /// What must be falling for it to be seen, for rain and snow (D418); none for a kind the
+    /// weather does not bring.
+    #[serde(default)]
+    pub falls: Option<Falls>,
+}
+
+/// A kind the weather brings: rain or snow, all of its cards seen at so many millimetres an hour
+/// of water and fewer below, so a light fall is fewer flakes, not fainter ones.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Falls {
+    pub snow: bool,
+    pub full_mm_h: f32,
 }
 
 fn any_air() -> f32 {
@@ -200,6 +213,9 @@ pub struct Round {
     pub hour: f32,
     /// How high the eye is over the ground, metres.
     pub above_m: f32,
+    /// Rain and snow falling, as water, millimetres an hour (`weather::Weather`).
+    pub rain_mm_h: f32,
+    pub snow_mm_h: f32,
 }
 
 impl DriftKind {
@@ -208,7 +224,8 @@ impl DriftKind {
     /// so an eye high over a meadow, a crane or a bird's-eye shot, has none of it round it;
     /// flocks fly over whatever height the eye is at.
     pub fn aloft(&self, above_m: f32) -> f32 {
-        if matches!(self.motion, Motion::Flock { .. }) {
+        // Flocks fly over whatever height the eye is at, and rain and snow fall through it.
+        if matches!(self.motion, Motion::Flock { .. }) || self.falls.is_some() {
             return 1.0;
         }
         let low = self.box_m.1 + 1.0;
@@ -238,7 +255,15 @@ impl DriftKind {
         let place = (self.woods * round.woods)
             .max(self.open * round.open)
             .max(self.water * round.water);
-        season * air * hours * place * self.aloft(round.above_m)
+        let falling = self.falls.map_or(1.0, |falls| {
+            let rate = if falls.snow {
+                round.snow_mm_h
+            } else {
+                round.rain_mm_h
+            };
+            (rate / falls.full_mm_h.max(1e-3)).clamp(0.0, 1.0)
+        });
+        season * air * hours * place * falling * self.aloft(round.above_m)
     }
 }
 
@@ -372,7 +397,8 @@ fn sow(
                         Look::Bird => 2.0,
                     },
                     kind.opacity,
-                    0.0,
+                    // A fall thins by its cards, not by fading them.
+                    if kind.falls.is_some() { 1.0 } else { 0.0 },
                     0.0,
                 ),
                 flock,
@@ -449,6 +475,7 @@ fn sense(
     mut materials: ResMut<Assets<DriftMaterial>>,
     mut since: Local<f32>,
     mut wind: Local<Vec3>,
+    weather: Option<Res<crate::weather::Weather>>,
 ) {
     let (Some(planet), Some(eye)) = (
         planet,
@@ -470,6 +497,10 @@ fn sense(
             ground,
         );
         round.above_m = (eye.length() - ground.length()).max(0.0);
+        if let Some(weather) = weather.as_deref() {
+            round.rain_mm_h = weather.rain_mm_h();
+            round.snow_mm_h = weather.snow_mm_h();
+        }
         for (mut field, _) in &mut fields {
             field.wanted = drifts.kinds[field.kind].amount(&round);
         }
@@ -549,6 +580,8 @@ fn round_at(
         air_c,
         hour: clock.hour,
         above_m: 0.0,
+        rain_mm_h: 0.0,
+        snow_mm_h: 0.0,
     }
 }
 
@@ -577,6 +610,8 @@ mod tests {
             air_c: 14.0,
             hour: 7.5,
             above_m: 1.7,
+            rain_mm_h: 0.0,
+            snow_mm_h: 0.0,
         }
     }
 
@@ -663,5 +698,32 @@ mod tests {
             }
         }
         assert!(kind("Dust motes").amount(&low) > 0.1);
+    }
+
+    #[test]
+    fn snow_falls_only_when_snow_does_and_more_of_it_the_harder() {
+        let flakes = kind("Snowfall");
+        let mut winter = Round {
+            season_c: 12.0,
+            air_c: -4.0,
+            hour: 11.0,
+            ..forest_morning()
+        };
+        assert_eq!(flakes.amount(&winter), 0.0, "nothing falling");
+        winter.rain_mm_h = 2.0;
+        assert_eq!(flakes.amount(&winter), 0.0, "rain is not snow");
+        winter.rain_mm_h = 0.0;
+        winter.snow_mm_h = 0.3;
+        let light = flakes.amount(&winter);
+        winter.snow_mm_h = 3.0;
+        let heavy = flakes.amount(&winter);
+        assert!(
+            light > 0.0 && heavy > light && heavy <= 1.0,
+            "{light} {heavy}"
+        );
+        // Open ground and the wood alike.
+        winter.woods = 0.0;
+        winter.open = 1.0;
+        assert_eq!(flakes.amount(&winter), heavy);
     }
 }

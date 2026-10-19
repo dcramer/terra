@@ -1,0 +1,19 @@
+// Named weathers (crates/terra_world/src/weather.rs, docs/weather.md, D418): what each name
+// means, as the least of each quantity, for a run to find a moment (`--weather snowfall`), a
+// forecast to name one and people to talk about. Nothing reads these to change what it does:
+// the weather is the climate's (`climate.ron`), and everything drawn reads its quantities.
+//
+//   cloud      cloud at least, 0 to 1
+//   rain_mm_h  rain at least, millimetres an hour
+//   snow_mm_h  snow at least, as its water, millimetres an hour (a millimetre is about a
+//              centimetre of fresh snow)
+//   wind_m_s   wind at least, metres a second
+[
+    (name: "overcast", cloud: 0.95),
+    (name: "rain", cloud: 0.95, rain_mm_h: 0.5),
+    (name: "heavy rain", cloud: 0.95, rain_mm_h: 2.0),
+    (name: "storm", cloud: 0.95, rain_mm_h: 4.0, wind_m_s: 9.0),
+    (name: "snowfall", cloud: 0.95, snow_mm_h: 0.8),
+    (name: "heavy snow", cloud: 0.95, snow_mm_h: 1.8),
+    (name: "blizzard", cloud: 0.95, snow_mm_h: 1.2, wind_m_s: 9.0),
+]

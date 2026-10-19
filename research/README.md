@@ -18,6 +18,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | [Dragon breath and a burning castle: what makes them read as real](2026-10-18-dragon-breath.md) | 2026-10-18 |
 | [How structures collapse, in games and in the world](2026-10-18-how-structures-collapse.md) | 2026-10-18 |
 | [Recurring film defects: what came back, how often, and how engines stop it](2026-10-18-recurring-film-defects.md) | 2026-10-18 |
+| [Storms and winter: how games draw weather](2026-10-18-storms-and-winter.md) | 2026-10-18 |
 | [Large fliers: how games and films make a heavy flier move smoothly](2026-10-17-large-flier-motion.md) | 2026-10-17 |
 | [How shipped games move and fight their characters and monsters](2026-10-17-movement-and-fighting.md) | 2026-10-17 |
 | [How shipped melee makes a blow feel heavy](melee-feel.md) | 2026-10-17 |

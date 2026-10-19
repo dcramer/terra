@@ -208,7 +208,13 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.position = position_world_to_clip(world);
     out.world_position = vec4<f32>(world, 1.0);
     out.uv = vertex.uv;
-    out.uv_b = vec2<f32>(fade * drift.field.w, flip);
+    // A fall of rain or snow thins by its cards, so a light fall is fewer flakes, not fainter
+    // ones (D418); anything else fades as a whole.
+    var shown = drift.field.w;
+    if drift.look.z > 0.5 {
+        shown = select(0.0, 1.0, order < drift.field.w);
+    }
+    out.uv_b = vec2<f32>(fade * shown, flip);
 @if(PREPASS_PIPELINE) {
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
     out.world_normal = to_eye;

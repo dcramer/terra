@@ -494,10 +494,12 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet): (
+    (eye, planet, weather): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
+        Option<Res<crate::weather::Weather>>,
     ),
+    mut clear_sky: Local<Option<f32>>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -506,6 +508,11 @@ fn shine(
     let height = path.height(clock.hour);
     let light = light_at(height);
     let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
+    // Under cloud (D418): the sun's beam thins to nothing under a deck, the sky's light stays
+    // near a clear sky's, and the shade takes the deck's grey.
+    let weather = weather.as_deref().copied().unwrap_or_default();
+    let under = weather.light();
+    let deck = crate::weather::deck_cover(weather.cloud);
     // Above the horizon the light comes from the sun; below it, from the moon.
     tweaks.sun_direction = if height > -1.0 {
         sun
@@ -513,11 +520,12 @@ fn shine(
         path.moon((clock.hour * SUN_STEPS).round() / SUN_STEPS)
     };
     tweaks.sun_color = colour(light.light);
-    tweaks.sun_illuminance = if height > -1.0 {
-        light.illuminance
-    } else {
-        moonlight(height)
-    };
+    tweaks.sun_illuminance = under.direct
+        * if height > -1.0 {
+            light.illuminance
+        } else {
+            moonlight(height)
+        };
     sky.horizon = colour(light.horizon);
     // The haze between the trees (D224): the horizon's colour, greyed toward the green the
     // canopy lets through and dimmed by the shade it hangs in, so trees fade into it with
@@ -559,44 +567,35 @@ fn shine(
         .as_deref()
         .is_some_and(|scale| scale.0 < crate::air::HAZE_SCALE);
     let open = open.map_or(if far_seeing { 1.0 } else { 0.0 }, |open| open.0);
-    // The volumetric haze's own sky light, likewise (D310): under the trees the little that
-    // comes through the leaves, green; out in the open the whole sky's, its shade's colour,
-    // so mist over a lake glows pale in the morning seen with the sun behind, not hanging
-    // as a dark brown smear where no sunbeam crosses it.
     let night_air = 1.0 - smoothstep(-12.0, 0.0, path.height(clock.hour));
-    for mut air in &mut volumetric {
-        let wanted = super::scene::HAZE_AMBIENT
-            * (1.0 + (OPEN_HAZE_GLOW - 1.0) * open)
-            * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
-        if (air.ambient_intensity - wanted).abs() > 1e-6 {
-            air.ambient_intensity = wanted;
-        }
-        // The open sky's light on the mist is skylight, on the daylight locus by day, as the
-        // painted sky's is (`skylight`): the low sun's lilac shade key tinted the mist lilac.
-        let day = 1.0 - night_air;
-        let sky_tint = light
-            .shade
-            .lerp(crate::skylight::srgb_on_daylight_locus(light.shade), day);
-        let tint = super::scene::HAZE_TINT.lerp(sky_tint, open);
-        let tint = colour(tint);
-        if air.ambient_color != tint {
-            air.ambient_color = tint;
-        }
-    }
+    mist_light(&mut volumetric, light.shade, open, night_air);
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
     let level = NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark);
+    let set = open_exposure(light.exposure, open, far_seeing, dark) + under.opens_ev();
     for mut fog in &mut haze {
         let air_scale = air_scale
             .as_deref()
             .copied()
             .unwrap_or(crate::air::AirScale(crate::air::HAZE_SCALE));
         let (air, visible) = haze_for(light.horizon, open, air_scale);
-        fog.color = colour(air.lerp(MOON_HAZE, dark) * level);
-        fog.directional_light_color = colour(light.light * 0.55).with_alpha(0.5);
+        // Under a deck the haze is the deck's light on the air, as bright on screen as the
+        // deck at the horizon, so the far land fades into the sky rather than a band; what
+        // falls shortens how far one sees (D418).
+        let veil = crate::weather::veil(light.ambient * SKY_LIGHT_GAIN * under.diffuse, set);
+        let air = air.lerp(MOON_HAZE, dark) * level;
+        fog.color = colour(air.lerp(veil, deck));
+        fog.directional_light_color = colour(light.light * 0.55 * under.direct).with_alpha(0.5);
+        let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
+    let base = *clear_sky.get_or_insert(sky.cloudiness);
+    let cloudiness = base.max(weather.cloud);
+    if sky.cloudiness != cloudiness {
+        sky.cloudiness = cloudiness;
+    }
+    sky.deck = crate::weather::deck(&weather, light.ambient * SKY_LIGHT_GAIN * under.diffuse);
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);
     sky.brightness = light.sky;
@@ -606,16 +605,44 @@ fn shine(
     sky.spin_axis = path.pole();
     sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
     let lit = SkyLight {
-        shade: colour(light.shade),
-        brightness: light.ambient * SKY_LIGHT_GAIN,
+        shade: colour(crate::weather::under_deck(light.shade, deck)),
+        brightness: light.ambient * SKY_LIGHT_GAIN * under.diffuse,
     };
     // Set only when it changes, so the sky is painted again only then.
     skylight.set_if_neq(lit);
-    let set = open_exposure(light.exposure, open, far_seeing, dark);
     for mut camera in &mut exposure {
         let ev = set;
         if camera.ev100 != ev {
             camera.ev100 = ev;
+        }
+    }
+}
+
+/// The volumetric haze's own sky light (D310): under the trees the little that
+/// comes through the leaves, green; out in the open the whole sky's, its shade's colour,
+/// so mist over a lake glows pale in the morning seen with the sun behind, not hanging
+/// as a dark brown smear where no sunbeam crosses it.
+fn mist_light(
+    volumetric: &mut Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
+    shade: Vec3,
+    open: f32,
+    night_air: f32,
+) {
+    for mut air in volumetric.iter_mut() {
+        let wanted = super::scene::HAZE_AMBIENT
+            * (1.0 + (OPEN_HAZE_GLOW - 1.0) * open)
+            * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
+        if (air.ambient_intensity - wanted).abs() > 1e-6 {
+            air.ambient_intensity = wanted;
+        }
+        // The open sky's light on the mist is skylight, on the daylight locus by day, as the
+        // painted sky's is (`skylight`): the low sun's lilac shade key tinted the mist lilac.
+        let day = 1.0 - night_air;
+        let sky_tint = shade.lerp(crate::skylight::srgb_on_daylight_locus(shade), day);
+        let tint = super::scene::HAZE_TINT.lerp(sky_tint, open);
+        let tint = Color::srgb(tint.x, tint.y, tint.z);
+        if air.ambient_color != tint {
+            air.ambient_color = tint;
         }
     }
 }
