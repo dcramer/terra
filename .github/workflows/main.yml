@@ -1,14 +1,12 @@
 name: main
 
-# The full check on main a few times a day (D37): `cargo xtask check --all` on Linux, with no GPU
+# The full check on main, started by hand (D37; no schedule while we are pre-release): `cargo xtask check --all` on Linux, with no GPU
 # or Blender (the stages that need them skip and say why). The pre-push hook runs only the fast
 # check, so this is where the dependents' tests, the slow tests, the kits, foliage, artifacts and
 # fuzz run. A failure opens, or comments on, the issue "main fails the full check"; the next
 # passing run closes it. Nothing is bisected or reverted. By hand: the Actions tab, or
 # `gh workflow run main.yml`.
 on:
-  schedule:
-    - cron: "17 */8 * * *"
   workflow_dispatch:
 
 # One run at a time; a run started while one runs waits, and a newer one replaces it.
