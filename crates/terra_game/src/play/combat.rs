@@ -9,6 +9,7 @@
 
 use super::controls::Action;
 use super::creatures::{self, Bitten, Creature, Species};
+use super::harvest::Swing;
 use super::intent::Intent;
 use super::inventory::{self, Belongings, Broke, Gear, Items};
 use super::kinds::ToolDef;
@@ -55,18 +56,6 @@ pub struct Blow {
     pub skill: Skill,
 }
 
-/// When a player last swung, so another waits its turn and gathering waits for it.
-#[derive(Component)]
-pub struct Swing {
-    pub since: f32,
-}
-
-impl Default for Swing {
-    fn default() -> Self {
-        Self { since: f32::MAX }
-    }
-}
-
 /// A blow landed on a creature: which, where on it, and whether it fell.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Struck {
@@ -88,7 +77,6 @@ pub struct Hurt {
 pub fn plugin(app: &mut App) {
     app.add_message::<Struck>()
         .add_message::<Hurt>()
-        .register_required_components::<Player, Swing>()
         .add_systems(
             FixedUpdate,
             (

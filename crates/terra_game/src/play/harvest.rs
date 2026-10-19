@@ -4,7 +4,6 @@
 //! tool's material decides what it can work (D96): a stone axe will not fell a great
 //! tree.
 
-use super::combat::Swing;
 use super::controls::{Action, Settings};
 use super::flora::{Growth, Obstacles};
 use super::intent::Intent;
@@ -43,6 +42,19 @@ impl Cutting {
     }
 }
 
+/// When a player last swung the tool in hand, at a creature (`combat`) as with a cut, so
+/// another waits its turn and gathering waits for it.
+#[derive(Component)]
+pub struct Swing {
+    pub since: f32,
+}
+
+impl Default for Swing {
+    fn default() -> Self {
+        Self { since: f32::MAX }
+    }
+}
+
 /// Something being cut: how it stood before it started to shake.
 #[derive(Component)]
 struct Shaken(Quat);
@@ -70,6 +82,7 @@ pub struct Harvesting;
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Cutting>()
+        .register_required_components::<Player, Swing>()
         .add_systems(FixedUpdate, cut.in_set(Harvesting).in_set(Sim::Act))
         .add_systems(Update, fall);
 }
@@ -316,5 +329,22 @@ pub fn prompt(
         None => tool
             .hint(&settings.key(Action::Use), &settings.hold(Action::Use))
             .unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_player_comes_with_a_swing_long_past_so_the_first_click_may_cut() {
+        let mut app = App::new();
+        plugin(&mut app);
+        let player = app.world_mut().spawn(Player).id();
+        let swing = app
+            .world()
+            .get::<Swing>(player)
+            .expect("gathering gives a swing");
+        assert!(swing.since > 0.6);
     }
 }

@@ -170,11 +170,6 @@ const PLACES: &[(&str, Crate)] = {
 /// them from `Village` (1), then those found since (10 on).
 const NOT_YET_CUT: &[(&str, &str, &str)] = &[
     (
-        "play/harvest",
-        "play/combat",
-        "6: combat::Swing into survival",
-    ),
-    (
         "play/registries",
         "play/species",
         "7: creatures read their own bestiary",
