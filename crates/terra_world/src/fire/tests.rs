@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn the_shaders_and_the_lights_fly_a_breath_at_one_speed_and_draw_its_sprites_alike() {
+    let shader = std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
+    assert!(shader.contains(&format!("const JET_SPEED: f32 = {JET_SPEED_MPS:.1};")));
+    assert!(shader.contains(&format!("const BREATH_CARDS: f32 = {BREATH_CARDS}.0;")));
+}
+
+#[test]
+fn a_blast_flashes_for_a_moment_then_is_gone() {
+    assert!(light::flash(0.0) > 0.99);
+    assert!(light::flash(0.1) > 0.0 && light::flash(0.1) < light::flash(0.02));
+    assert_eq!(light::flash(0.3), 0.0);
+    assert_eq!(light::flash(-0.01), 0.0);
+}
+
+#[test]
 fn a_campfire_clears_the_ground_a_stride_past_its_stones_and_no_farther() {
     let fire = Kindled {
         tall: 1.5,

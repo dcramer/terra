@@ -179,6 +179,51 @@ pub(super) struct Lit {
     pub kept: bool,
 }
 
+/// The flash where a jet's stream first strikes (docs/fire.md, "Composites": 0.1 to 0.3 s),
+/// as bright as the blast it lights, then gone: `FLASH_S` long, easing out, its light the
+/// white of the blast's hottest.
+const FLASH_LUMENS: f32 = 4.0e8;
+const FLASH_S: f32 = 0.25;
+const FLASH_LIGHT: Color = Color::srgb(1.0, 0.85, 0.62);
+
+/// How bright a flash is `age` seconds after its stream struck, a share of its peak.
+pub(super) fn flash(age: f32) -> f32 {
+    if !(0.0..FLASH_S).contains(&age) {
+        return 0.0;
+    }
+    let left = 1.0 - age / FLASH_S;
+    left * left
+}
+
+/// Each jet's flash, while it lasts: `jets` each one's state as `Drawn` keeps it (on, since
+/// when, when it last came on).
+pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec<Lit> {
+    blazes
+        .jets
+        .iter()
+        .zip(jets)
+        .filter_map(|(jet, &(on, since, came_on))| {
+            let struck = came_on + jet.reach / super::JET_SPEED_MPS;
+            // Struck only if it was still on when its front got there.
+            let reached = on || struck <= since;
+            let share = flash(t - struck);
+            (reached && share > 0.0).then(|| {
+                let way = jet.way.normalize_or(Vec3::Z);
+                let at = jet.from + way * (jet.reach - 1.5) + jet.from.normalize_or(Vec3::Y) * 1.5;
+                Lit {
+                    at,
+                    lumens: FLASH_LUMENS * share,
+                    color: FLASH_LIGHT,
+                    range: JET_RANGE_M * 1.5,
+                    radius: 2.0,
+                    glow: 1.0 + share,
+                    kept: false,
+                }
+            })
+        })
+        .collect()
+}
+
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
 pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
     // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
@@ -488,7 +533,9 @@ pub(super) fn light(
         })
         .collect();
     let eye = camera.iter().next().map(GlobalTransform::translation);
-    let shown = choose(lit(&blazes, t), eye, &was, shadowed(*quality));
+    let mut wants = flashes(&blazes, &drawn.jets, t);
+    wants.extend(lit(&blazes, t));
+    let shown = choose(wants, eye, &was, shadowed(*quality));
     let by_night = by_night(sky.map_or(0.0, |sky| sky.night));
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();

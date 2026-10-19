@@ -16,11 +16,22 @@ use serde::Deserialize;
 
 /// The sets the cards are drawn from, a layer each in this order (`fire.wesl`'s `SET_*`):
 /// a hearth's flames (`campfire`), a burning building's (`tongue`) and a torch's, a hearth
-/// under `fire.wesl`'s `TORCH_M` tall (docs/fire.md, "The kinds"). The breath's puffs, its fireball and
-/// an explosion have sets baked too (`breath-puff`, `fireball`, `explosion`), but are drawn as
-/// the breath's marched volume until their composites (stages 7 and 8) put sprites on them;
-/// they are left out of the array until then, as each set is 16 MB of the GPU's.
-pub const SETS: [&str; 3] = ["campfire", "tongue", "torch"];
+/// under `fire.wesl`'s `TORCH_M` tall (docs/fire.md, "The kinds"); then the one-shots a
+/// breath's composite is drawn from (stages 7 and 8): the puffs along its stream
+/// (`breath-puff`), the fireball rolling where it strikes and the blast when it first does
+/// (`fireball`, `explosion`). Each set is 16 MB of the GPU's.
+pub const SETS: [&str; 6] = [
+    "campfire",
+    "tongue",
+    "torch",
+    "breath-puff",
+    "fireball",
+    "explosion",
+];
+/// How many of the first sets loop, standing a card by how high their flames reach; the
+/// rest are one-shots, drawn whole.
+#[cfg(test)]
+const LOOPS: usize = 3;
 
 /// The frames a set has, and how many across its sheet, as `fire.wesl` reads them.
 const FRAMES: u32 = 64;
@@ -38,7 +49,9 @@ pub struct Sidecar {
     pub fps: f32,
     /// How wide and tall a frame stands in the world, as baked.
     pub metres: f32,
-    /// How high up its frame the flame's tips reach at most, 0 to 1.
+    /// How high up its frame the flame's tips reach at most, 0 to 1: a loop's; a one-shot's
+    /// sidecar has none, as its card stands whole.
+    #[serde(default = "whole")]
     pub reach: f32,
     pub motion: Motion,
     pub baked: Baked,
@@ -68,6 +81,10 @@ impl Sidecar {
     }
 }
 
+fn whole() -> f32 {
+    1.0
+}
+
 /// The colour ramp's sidecar (`tools/fire/ramp.ts`).
 #[derive(Deserialize, Debug)]
 pub struct RampSidecar {
@@ -82,7 +99,7 @@ pub struct Books {
     pub motions: Image,
     pub ramp: Image,
     /// A set's [`Sidecar::told`], in the order of [`SETS`].
-    pub sets: [Vec4; 3],
+    pub sets: [Vec4; SETS.len()],
     /// x the ramp's scale.
     pub ramp_scale: Vec4,
     /// Each set's [`Sidecar::reach`], x y z in the order of [`SETS`].
@@ -226,7 +243,7 @@ mod tests {
         let shader =
             std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
         for (layer, set) in SETS.iter().enumerate() {
-            let name = set.to_uppercase();
+            let name = set.to_uppercase().replace('-', "_");
             assert!(
                 shader.contains(&format!("const SET_{name}: i32 = {layer};")),
                 "{set}"
@@ -236,15 +253,15 @@ mod tests {
 
     #[test]
     fn every_drawn_set_has_a_sidecar_the_shader_can_read() {
-        for set in SETS {
+        for (i, set) in SETS.iter().enumerate() {
             let read = sidecar(set);
             assert!(
-                read.fps > 0.0
-                    && read.metres > 0.0
-                    && read.motion.scale > 0.0
-                    && read.reach > 0.2
-                    && read.reach < 1.0,
+                read.fps > 0.0 && read.metres > 0.0 && read.motion.scale > 0.0,
                 "{set}"
+            );
+            assert!(
+                i >= LOOPS || (read.reach > 0.2 && read.reach < 1.0),
+                "{set}: a loop says how high its flames reach"
             );
             assert!(
                 file(&format!("{set}.png")).exists() && file(&format!("{set}.motion.png")).exists(),

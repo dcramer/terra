@@ -39,7 +39,7 @@ struct Fire {
     exposure: vec4<f32>,
     // Each flipbook set's rate (frames a second as baked), how wide its frame stands in
     // metres, its motion's scale, and whether its frames blend along their vectors (1).
-    sets: array<vec4<f32>, 3>,
+    sets: array<vec4<f32>, 6>,
     // x what the ramp texture's RGB is multiplied by, y its rows.
     ramp: vec4<f32>,
     // How high up its frame each set's flame tips reach, 0 to 1 (its sidecar's `reach`):
@@ -81,6 +81,9 @@ const DROP_S: f32 = 2.0;
 const SET_CAMPFIRE: i32 = 0;
 const SET_TONGUE: i32 = 1;
 const SET_TORCH: i32 = 2;
+const SET_BREATH_PUFF: i32 = 3;
+const SET_FIREBALL: i32 = 4;
+const SET_EXPLOSION: i32 = 5;
 // A set's frames and how many across (and down) its sheet; books.rs holds every set to them.
 const BOOK_FRAMES: f32 = 64.0;
 const BOOK_COLUMNS: f32 = 8.0;
@@ -90,6 +93,18 @@ const BOOK_COLUMNS: f32 = 8.0;
 const HEARTH_BRIGHTNESS: f32 = 6.0;
 const TORCH_BRIGHTNESS: f32 = 3.3;
 const BLAZE_BRIGHTNESS: f32 = 2.1;
+// A breath's: its puffs along the stream, the fireball where it strikes, the blast when it
+// first does.
+const PUFF_BRIGHTNESS: f32 = 3.5;
+const BALL_BRIGHTNESS: f32 = 3.5;
+// How much hotter than baked a breath's sets burn: brightness alone took its stream paler,
+// not yellower (breath r3: 9 against 5.5, yellow 3% both, B/R 0.66 to 0.72), as the
+// tonemapper keeps a hue; a fuel jet's flame is mostly yellow (MEASURED.md §2). At 1.5 it
+// went 74% pale (r4), at 1.25 33% (r5).
+const BREATH_HEAT: f32 = 1.2;
+const BLAST_BRIGHTNESS: f32 = 5.0;
+// Which of the ramp's rows (ramp.json) a breath burns by.
+const BREATH_ROW: f32 = 0.0;
 
 // Where a frame's place is on the sheet, x across and y up its card, kept a hair inside the
 // frame so its neighbours never bleed in.
@@ -128,13 +143,18 @@ fn flipbook(layer: i32, f: f32, local: vec2<f32>) -> vec4<f32> {
     return mix(ta, tb, w);
 }
 
-// The colour ramp at a heat (tools/fire/ramp.ts, its first row wood's): the emission there in
-// linear HDR, luminance 1 at its hottest, and how far it occludes rather than adds light.
-fn ramp_at(heat: f32) -> vec4<f32> {
+// The colour ramp at a heat (tools/fire/ramp.ts) on a fuel's row, its first wood's: the
+// emission there in linear HDR, luminance 1 at its hottest, and how far it occludes rather
+// than adds light.
+fn ramp_row(heat: f32, row: f32) -> vec4<f32> {
     let n = f32(textureDimensions(ramp).x);
-    let at = vec2((0.5 + saturate(heat) * (n - 1.0)) / n, 0.5 / fire.ramp.y);
+    let at = vec2((0.5 + saturate(heat) * (n - 1.0)) / n, (row + 0.5) / fire.ramp.y);
     let t = textureSampleLevel(ramp, ramp_sampler, at, 0.0);
     return vec4(t.rgb * fire.ramp.x, t.a);
+}
+
+fn ramp_at(heat: f32) -> vec4<f32> {
+    return ramp_row(heat, 0.0);
 }
 
 // A card's corner placed: where on screen, the corner across and up the card, how far
@@ -295,13 +315,21 @@ const SOOT_BLACK: vec3<f32> = vec3<f32>(0.012, 0.01, 0.009);
 // behind; covering what is behind by its cover as far as its heat occludes, and by its soot.
 // Its emission and its cover are the sim's own, never one taken from the other.
 fn baked_flame(t: vec4<f32>, brightness: f32, fade: f32) -> vec4<f32> {
+    return baked_fuel(t, brightness, fade, 0.0);
+}
+
+fn baked_fuel(t: vec4<f32>, brightness: f32, fade: f32, row: f32) -> vec4<f32> {
     let cover = t.g * fade;
     let soot = t.b * fade;
-    let r = ramp_at(t.r);
+    let r = ramp_row(t.r, row);
     let light = r.rgb * cover * brightness + SOOT_BLACK * soot;
     return vec4(light * on_screen(), min(1.0, cover * r.a + soot));
 }
-// A breath is drawn as a volume, not as cards (research/2026-10-18-dragon-breath.md §6): a
+// A breath is a composite (docs/fire.md, "Composites"; Monster Hunter World's Zeno Jiva): a
+// hot rod from the jaw, marched as a volume (below), wrapped in flame sprites from the baked
+// sets (`breath_sprite`), with soot, drops and a light of its own.
+//
+// Its rod is drawn as a volume, not as cards (research/2026-10-18-dragon-breath.md §6): a
 // box round its stream and fireball, marched through along each ray from the eye, as
 // Unreal's Niagara fluids and EmberGen's volumes are drawn in real time. The gas in it is a
 // field of 3D noise carried along the stream from the mouth, so each parcel keeps its
@@ -400,15 +428,18 @@ fn breath_of(slot: u32) -> Breath {
     b.front = select(1.0e5, flown, on);
     b.back = select(-1.0, flown, !on);
     b.left = select(saturate(1.0 - (time - since) / 0.45), 1.0, on);
-    // The fireball where it strikes rolls up as the stream's front reaches it.
-    b.ball = select(1.0, smoothstep(b.reach * 0.85, b.reach * 1.25, flown), on) * b.left;
+    // The fireball where it strikes is the sprites' (`breath_sprite`), no longer marched.
+    b.ball = 0.0;
     return b;
 }
 
-// The stream's radius so far along it, in metres: a tight rope at the jaw, opening into a
-// cone that widens as it slows.
+// The rod's radius so far along it, in metres: a tight rope at the jaw, opening a little,
+// inside the sprites that carry the stream's turbulence; it burns out by `ROD_ENDS` of the
+// way, where the stream is all puffs.
+const ROD_WIDTH: f32 = 0.35;
+const ROD_ENDS: f32 = 0.6;
 fn stream_radius(z: f32, b: Breath) -> f32 {
-    return 0.22 + b.spread * z * (0.7 + 0.5 * saturate(z / b.reach));
+    return (0.22 + b.spread * z * (0.7 + 0.5 * saturate(z / b.reach))) * ROD_WIDTH;
 }
 
 // The fireball's radius, 2 to 3 times the stream's width where it strikes.
@@ -460,6 +491,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     let blobs = noise3(vec3(q * 0.8 + 3.1, flow * 0.16 + 11.0));
     stream *= smoothstep(tear - 0.12, tear + 0.12, blobs + 0.12 * (1.0 - zf));
     stream *= smoothstep(-0.25, 0.25, l.z) * (1.0 - smoothstep(b.front - 1.5, b.front + 0.5, l.z)) * smoothstep(b.back - 0.5, b.back + 1.5, l.z);
+    stream *= 1.0 - smoothstep(ROD_ENDS * 0.5, ROD_ENDS, zf);
     // Hottest on its line, white-yellow at the jaw and yellow through the first half of its
     // core, orange round that and deep red-orange at its rims, cooling along it to orange at
     // the tip: a burning fuel jet is about a quarter yellow (MEASURED.md §2).
@@ -644,6 +676,181 @@ fn nowhere() -> Out {
     return out;
 }
 
+// A breath's sprites (crates/terra_world/src/fire.rs BREATH_CARDS), in index order, which is
+// the order they are drawn in: the stream's puffs, oldest first so the hot young ones near the
+// jaw lie over the soot they become; the fireball rolling where it strikes; the blast when the
+// stream first strikes, and its flash.
+const BREATH_CARDS: f32 = 150.0;
+const PUFF_CARDS: f32 = 112.0;
+const BALL_CARDS: f32 = 33.0;
+const BLAST_CARDS: f32 = 5.0;
+// How long a puff burns on past where the stream strikes or ends, seconds: rolling out and
+// up as black soot.
+const PUFF_LINGER_S: f32 = 0.9;
+// How long a fireball's own puff lives, seconds at the set's size (Froude: as the root of
+// its size), and the blast's.
+const BALL_S: f32 = 2.67;
+
+// A card turned to the eye about the line `up`, its middle at `at`, `w` across and `h` along,
+// turned by `spin` on the screen.
+fn sprite(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, spin: f32) -> vec3<f32> {
+    let to_eye = normalize(view.world_position - at);
+    var right = cross(up, to_eye);
+    if dot(right, right) < 1.0e-6 {
+        right = cross(vec3(1.0, 0.0, 0.0), to_eye);
+    }
+    right = normalize(right);
+    let along = cross(to_eye, right);
+    let c = corner - 0.5;
+    let turned = vec2(c.x * cos(spin) - c.y * sin(spin), c.x * sin(spin) + c.y * cos(spin));
+    return at + right * turned.x * w + along * turned.y * h;
+}
+
+// Whether a puff born at `born` was breathed: after the jet last came on, and before it went
+// off if it is off.
+fn breathed(j: u32, born: f32) -> bool {
+    let on = fire.jets[j * 3u + 2u].x > 0.5;
+    let since = fire.jets[j * 3u + 2u].y;
+    let came_on = fire.jets[j * 3u + 2u].z;
+    return born >= came_on && (on || born <= since);
+}
+
+fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
+    let b = breath_of(jet);
+    if b.reach <= 0.0 {
+        return nowhere();
+    }
+    let time = fire.kind.z;
+    let k = floor(phase * BREATH_CARDS + 0.5);
+    let up = normalize(b.mouth);
+    // The stream's flight to where it strikes, and how wide the puffs spread round its line
+    // there: a flamethrower's rope opening to a few metres where it lands.
+    let flight = b.reach / JET_SPEED;
+    let spread = 0.12 + b.spread * 0.45 * b.reach;
+    let hit = b.mouth + b.way * b.reach;
+    var out: Out;
+    if k < PUFF_CARDS {
+        // A puff of burning fuel thrown from the jaw at the stream's speed, slowing, opening
+        // out from its line, burning through the set's flame (its first dozen frames) on its
+        // way and rolling out as soot where it lands.
+        let life = flight + PUFF_LINGER_S;
+        let rate = PUFF_CARDS / life;
+        let tick = time * rate;
+        let rank = PUFF_CARDS - 1.0 - k;
+        let age = (fract(tick) + rank) / rate;
+        let n = floor(tick) - rank;
+        if !breathed(jet, time - age) {
+            return nowhere();
+        }
+        let h1 = hash(vec2(n, f32(jet) + 0.5));
+        let h2 = hash(vec2(n + 0.37, 3.1));
+        let h3 = hash(vec2(n + 0.71, 7.7));
+        let h4 = hash(vec2(n + 0.13, 11.3));
+        let s = age / flight;
+        let gone = min(s, 1.0);
+        let d = b.reach * gone * (1.35 - 0.35 * gone);
+        let post = max(age - flight, 0.0);
+        let a = h1 * 6.2831853;
+        let out_of_line = b.lift * cos(a) + b.side * sin(a);
+        let r = (0.08 + b.spread * 0.45 * d) * sqrt(h2) * 0.9;
+        // Landed, it splashes out along what it struck, rolls back off it and rises.
+        let splash = out_of_line * post * (3.0 + 3.0 * h3) + up * post * (2.0 + 1.5 * h4) - b.way * post * 1.5;
+        let at = b.mouth + b.way * d + out_of_line * r + splash;
+        // As big as the stream is wide there, and swelling as it burns out.
+        // The set's puff fills a fifth of its frame as it flares.
+        let wide = (0.35 + 0.2 * d) * (0.75 + 0.5 * h3) + post * 2.5;
+        let card_m = wide / 0.2;
+        // Drawn along the stream as it flies, stretched along it near the jaw; its smoke
+        // rising once landed.
+        let line = normalize(mix(b.way, up, smoothstep(0.75, 1.15, s)));
+        let stretch = mix(2.4, 1.0, smoothstep(0.0, 0.6, s));
+        let spin = (h4 - 0.5) * 0.9;
+        let world = sprite(at, line, corner, card_m, card_m * stretch, spin);
+        let frame = select(12.0 * pow(s, 0.85), 12.0 + 34.0 * post / PUFF_LINGER_S, s >= 1.0);
+        let fade = smoothstep(0.0, 0.04, age) * (1.0 - smoothstep(0.6, 1.0, post / PUFF_LINGER_S)) * b.left;
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(frame, PUFF_BRIGHTNESS * mix(1.25, 0.85, gone), h3, f32(SET_BREATH_PUFF));
+        out.size = card_m;
+        out.glow = max(fade, 1.0e-3);
+        return out;
+    }
+    // Where it strikes: a fireball's puffs, one after another, rolling up off what it struck
+    // and burning out to a cap of soot rising over it, as long as the stream feeds it.
+    let ball = 0.8 + spread * 0.9;
+    let middle = hit - b.way * ball * 0.6 + up * ball * 0.3;
+    if k < PUFF_CARDS + BALL_CARDS {
+        let card_m = ball * 4.2;
+        let life = BALL_S * sqrt(card_m / fire.sets[SET_FIREBALL].y);
+        let rate = BALL_CARDS / life;
+        let tick = time * rate;
+        let rank = PUFF_CARDS + BALL_CARDS - 1.0 - k;
+        let age = (fract(tick) + rank) / rate;
+        let n = floor(tick) - rank;
+        // Fed by what has reached it: born once the stream's front struck.
+        if !breathed(jet, time - age - flight) {
+            return nowhere();
+        }
+        let h1 = hash(vec2(n, f32(jet) + 9.5));
+        let h2 = hash(vec2(n + 0.37, 13.1));
+        let h3 = hash(vec2(n + 0.71, 17.7));
+        let h4 = hash(vec2(n + 0.13, 21.3));
+        let a = h1 * 6.2831853;
+        let around = (b.lift * cos(a) + b.side * sin(a)) * ball * 0.7 * sqrt(h2);
+        let at = middle + around + up * (age * 1.2 + ball * 0.25 * (h4 - 0.5));
+        let size = card_m * (0.7 + 0.5 * h3);
+        let world = sprite(at, up, corner, size, size, (h4 - 0.5) * 0.6);
+        let fade = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.8, 1.0, age / life));
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(63.0 * age / life, BALL_BRIGHTNESS, h3, f32(SET_FIREBALL));
+        out.size = size;
+        out.glow = max(fade, 1.0e-3);
+        return out;
+    }
+    // The blast when the stream's front first strikes: the explosion set played once, a few
+    // cards of it a moment apart, and a flash over them.
+    let came_on = fire.jets[jet * 3u + 2u].z;
+    let struck = came_on + flight;
+    let i = k - PUFF_CARDS - BALL_CARDS;
+    if !breathed(jet, came_on) || time < struck {
+        return nowhere();
+    }
+    let card_m = ball * 5.0 * (1.0 + 0.15 * i);
+    if i >= BLAST_CARDS - 1.0 {
+        // The flash: a ball of light as wide as the blast for a tenth of a second or so.
+        let age = time - struck;
+        if age > FLASH_S {
+            return nowhere();
+        }
+        let world = sprite(middle, up, corner, card_m, card_m, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(age / FLASH_S, BLAST_BRIGHTNESS, 0.5, -1.0);
+        out.size = card_m;
+        out.glow = 1.0;
+        return out;
+    }
+    let age = time - struck - i * 0.09;
+    let life = BALL_S * sqrt(card_m / fire.sets[SET_EXPLOSION].y);
+    if age < 0.0 || age > life {
+        return nowhere();
+    }
+    let h = hash(vec2(i, came_on));
+    let a = h * 6.2831853;
+    let at = middle + (b.lift * cos(a) + b.side * sin(a)) * ball * 0.4 * min(i, 1.0) + up * card_m * 0.1;
+    let world = sprite(at, up, corner, card_m, card_m, (h - 0.5) * 0.5);
+    let fade = smoothstep(0.0, 0.03, age) * (1.0 - smoothstep(0.8, 1.0, age / life));
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    out.life = vec4(63.0 * age / life, BLAST_BRIGHTNESS, h, f32(SET_EXPLOSION));
+    out.size = card_m;
+    out.glow = max(fade, 1.0e-3);
+    return out;
+}
+// How long a blast's flash lasts, seconds (docs/fire.md: 0.1 to 0.3 s).
+const FLASH_S: f32 = 0.15;
+
 // A card at a point, `w` wide and `h` tall, its foot or middle there, upright about `up`
 // or turned wholly to the eye.
 fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright: bool, spin: f32) -> vec3<f32> {
@@ -726,6 +933,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let phase = id.y;
     let wind = fire.wind.xyz;
     var out: Out;
+    if kind == 5 {
+        return breath_sprite(corner, slot, phase);
+    }
     if kind == 4 {
         // A burning drop of the breath's fuel, falling from where it left the stream: going
         // on as the stream went, slowed by the air, and falling, stretched along its flight
@@ -748,10 +958,12 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         }
         // Long enough to read as a falling streak forty metres off, as drops of burning fuel
         // do in footage, smeared by the camera's shutter.
-        let streak = clamp(length(along) * 0.09, 0.6, 3.2);
+        // Thin as a drop is: at 0.3 to 0.5 m across they read as flat orange tiles round
+        // the wall the breath struck (breath r1).
+        let streak = clamp(length(along) * 0.06, 0.3, 2.2);
         along = normalize(along);
         let across = normalize(cross(along, to_eye));
-        let size = 0.28 + 0.2 * going.w;
+        let size = 0.09 + 0.07 * going.w;
         let world = at + across * (corner.x - 0.5) * size + along * (corner.y - 0.8) * streak;
         out.clip = position_world_to_clip(world);
         out.uv = corner;
@@ -954,6 +1166,26 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let drawn = baked_flame(flipbook(layer, f, vec2(x, uv.y)), brightness, soft * edges);
         light = drawn.rgb;
         cover = drawn.a;
+    } else if kind == 5 {
+        // A breath's sprite (`breath_sprite`): its set at its own frame, mirrored for half
+        // of them, faded at the frame's edges and by its age (its `glow`); or the blast's
+        // flash, a soft ball of white-hot light going out.
+        let layer = i32(life.w + 0.5);
+        if life.w < -0.5 {
+            let p = length(uv - 0.5) * 2.0;
+            let ball = (1.0 - smoothstep(0.0, 1.0, p)) * (1.0 - t) * (1.0 - t);
+            let r = ramp_row(1.0, BREATH_ROW);
+            light = r.rgb * ball * heat * on_screen();
+            cover = 0.0;
+        } else {
+            let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
+            let edges = smoothstep(0.0, 0.1, uv.y) * smoothstep(0.0, 0.12, x) * smoothstep(0.0, 0.12, 1.0 - x) * smoothstep(0.0, 0.12, 1.0 - uv.y);
+            var texel = flipbook(layer, clamp(t, 0.0, BOOK_FRAMES - 1.001), vec2(x, uv.y));
+            texel.r = saturate(texel.r * BREATH_HEAT);
+            let drawn = baked_fuel(texel, heat, soft * edges * glow, BREATH_ROW);
+            light = drawn.rgb;
+            cover = drawn.a;
+        }
     } else if kind == 1 {
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
@@ -1059,6 +1291,11 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         var reach = select(select(SOFT_M.z, SOFT_M.y, kind == 1 || kind == 4), SOFT_M.x, kind == 0);
         if kind == 0 && in.world_normal.x > 1.0 {
             reach = 0.06;
+        }
+        // A breath's sprites are metres across: faded over a metre, so a puff against the
+        // wall it strikes never shows the line it cuts.
+        if kind == 5 {
+            reach = 1.2;
         }
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);

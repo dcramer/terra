@@ -116,8 +116,13 @@ const HEARTH_FLAME_CARDS: usize = 6;
 const HEARTH_SMOKE_CARDS: usize = 24;
 /// A hearth's sparks, ten or so a second rising from its coals, a few seen at once.
 const HEARTH_EMBER_CARDS: usize = 16;
-/// How many cards a jet is, and how many jets are drawn.
+/// How many jets are drawn.
 const JETS: usize = 2;
+/// A breath's flame sprites, as Monster Hunter World draws Zeno Jiva's (docs/fire.md,
+/// "Composites"): puffs of burning fuel along its stream, each its own age, the fireball
+/// rolling where it strikes and the blast when it first does, round the hot rod its hull
+/// marches. Must match `BREATH_CARDS` in fire.wesl.
+const BREATH_CARDS: usize = 150;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
 /// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
 /// Each is let go where the stream is when it is born and then moves on its own, so it stays
@@ -127,25 +132,31 @@ const SOOT_PUFFS: usize = 320;
 const DROPS: usize = 112;
 const SOOT_A_SECOND: f32 = 55.0;
 const DROPS_A_SECOND: f32 = 45.0;
+/// How many burning drops a blast throws out where the stream first strikes, as debris.
+const DEBRIS: usize = 36;
+/// How fast a breath's stream flies from the jaw, metres a second; must match `JET_SPEED`
+/// in fire.wesl, which says why.
+const JET_SPEED_MPS: f32 = 24.0;
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
 
 /// What a fire's material is told. Field order must match `fire.wesl`.
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
 pub struct FireUniform {
-    /// x which cards (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time
-    /// the cards move by, w how many of the first slots are kept fires.
+    /// x which cards (0 flames, 1 embers, 2 jets' rods, 3 haze, 4 drops, 5 jets' sprites), y
+    /// how many slots are filled, z the time the cards move by, w how many of the first slots
+    /// are kept fires.
     kind: Vec4,
     /// The wind where the fire is, metres a second in the world, and its strength.
     wind: Vec4,
-    /// Each jet: from, and its reach; its way, and its spread; whether it is on (1) or since
-    /// when off, and when it came on.
+    /// Each jet: from, and its reach; its way, and its spread; whether it is on (1), since
+    /// when it is on or off, and when it last came on.
     jets: [Vec4; JETS * 3],
     /// The exposure weight and the dusk it is drawn as tuned at (`FireExposure::packed`).
     exposure: Vec4,
     /// Each flipbook set's rate, metres, motion scale and whether it blends along its vectors
     /// (`books::Sidecar::told`), in the order of `books::SETS`.
-    sets: [Vec4; 3],
+    sets: [Vec4; books::SETS.len()],
     /// x the colour ramp's scale, y its rows.
     ramp: Vec4,
     /// How high up its frame each set's flame tips reach (`books::Sidecar::reach`).
@@ -280,12 +291,13 @@ pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtensi
 #[derive(Resource)]
 struct Drawn {
     slots: Handle<ShaderBuffer>,
-    fire: [Handle<FireMaterial>; 5],
+    fire: [Handle<FireMaterial>; 6],
     smoke: [Handle<FireSmokeMaterial>; 2],
     puffs: Puffs,
     lights: Vec<Entity>,
-    /// When each jet came on or went off, by the cards' clock.
-    jets: [(bool, f32); JETS],
+    /// Whether each jet is on, since when it is on or off, and when it last came on, by the
+    /// cards' clock.
+    jets: [(bool, f32, f32); JETS],
     wind: Vec3,
     wind_due: f32,
 }
@@ -306,6 +318,25 @@ impl Puffs {
     fn roll(&mut self) -> f32 {
         self.luck = self.luck.wrapping_add(1);
         (terra_gen::hash::lowbias32(self.luck) >> 8) as f32 / (1u32 << 24) as f32
+    }
+
+    /// Throws a blast's debris out where a stream struck, `at`, the world's up there `up`:
+    /// burning drops flung out and up, falling as the stream's do.
+    fn throw(&mut self, at: Vec3, up: Vec3, now: f32) {
+        let side = up.any_orthonormal_vector();
+        let other = up.cross(side);
+        for _ in 0..DEBRIS {
+            let a = self.roll() * core::f32::consts::TAU;
+            let rise = 0.2 + 0.8 * self.roll();
+            let speed = 7.0 + 9.0 * self.roll();
+            let out = (side * libm::cosf(a) + other * libm::sinf(a)) * (1.0 - rise * 0.6);
+            let going = (out + up * rise).normalize_or(up) * speed;
+            let luck = self.roll();
+            let i = SOOT_PUFFS + self.next[1];
+            self.next[1] = (self.next[1] + 1) % DROPS;
+            self.data[i * 2] = at.extend(now).to_array();
+            self.data[i * 2 + 1] = going.extend(luck).to_array();
+        }
     }
 
     /// Let go of what each breath sheds this frame, `step` seconds long, at time `now`.
@@ -448,7 +479,7 @@ fn spawn_cards(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     count: usize,
-    fire: &[Handle<FireMaterial>; 5],
+    fire: &[Handle<FireMaterial>; 6],
     smoke: &[Handle<FireSmokeMaterial>; 2],
 ) {
     // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
@@ -483,6 +514,11 @@ fn spawn_cards(
         fire[1].clone(),
     );
     spawn("Fire: jets", hulls(JETS), fire[2].clone());
+    spawn(
+        "Fire: jets' sprites",
+        cards(JETS, BREATH_CARDS, 0.0),
+        fire[5].clone(),
+    );
     spawn("Fire: haze", cards(count, HAZE_CARDS, 0.0), fire[3].clone());
     spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
     for (name, mesh, material) in [
@@ -535,7 +571,7 @@ fn setup(
         owed: [0.0, 0.0],
         luck: 0,
     };
-    let fire = [0.0, 1.0, 2.0, 3.0, 4.0].map(|kind| {
+    let fire = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0].map(|kind| {
         // The haze reads the opaque scene as Bevy copies it for transmissive materials, so it
         // is drawn among them, blended over it.
         let haze = kind == 3.0;
@@ -557,17 +593,23 @@ fn setup(
                 // A breath is drawn after the flames too, as it is opaque and stands nearer
                 // the eye than the walls it strikes: tied with them, a burning tower's flame
                 // cards behind its fireball were drawn over it, a lighter patch with their
-                // straight edges, and smoke behind it browned it (castle film r11).
+                // straight edges, and smoke behind it browned it (castle film r11). Its
+                // sprites go first, its hot rod last, so the rod shows through their soot.
                 depth_bias: if haze {
                     0.0
                 } else if kind == 2.0 {
+                    2.5
+                } else if kind == 5.0 {
                     2.0
                 } else {
                     1.0
                 },
-                // A breath's hull is drawn from its far side, so it shows with the eye in it.
+                // A breath's hull is drawn from its far side, so it shows with the eye in it;
+                // its sprites, turned any way, from both.
                 cull_mode: if kind == 2.0 {
                     Some(Face::Front)
+                } else if kind == 5.0 {
+                    None
                 } else {
                     Some(Face::Back)
                 },
@@ -637,7 +679,7 @@ fn setup(
         smoke,
         puffs,
         lights,
-        jets: [(false, -100.0); JETS],
+        jets: [(false, -100.0, -100.0); JETS],
         wind: Vec3::ZERO,
         wind_due: 0.0,
     });
@@ -771,11 +813,13 @@ fn show(
         *buffer = ShaderBuffer::from(data);
     }
     let mut jets = [Vec4::ZERO; JETS * 3];
+    let mut debris = Vec::new();
     for (i, state) in drawn.jets.iter_mut().enumerate() {
         let jet = blazes.jets.get(i).copied();
         let on = jet.is_some_and(|jet| jet.on);
         if on != state.0 {
-            *state = (on, now);
+            let came_on = if on { now } else { state.2 };
+            *state = (on, now, came_on);
         }
         let jet = jet.unwrap_or(Jet {
             from: Vec3::ZERO,
@@ -786,7 +830,17 @@ fn show(
         });
         jets[i * 3] = jet.from.extend(jet.reach);
         jets[i * 3 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
-        jets[i * 3 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, 0.0, 0.0);
+        jets[i * 3 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, state.2, 0.0);
+        // The blast where its front first strikes throws its debris.
+        let struck = state.2 + jet.reach / JET_SPEED_MPS;
+        if state.0 && jet.reach > 0.0 && (now - time.delta_secs()..now).contains(&struck) {
+            let up = jet.from.normalize_or(Vec3::Y);
+            let at = jet.from + jet.way.normalize_or(Vec3::Z) * (jet.reach - 1.0);
+            debris.push((at, up));
+        }
+    }
+    for (at, up) in debris {
+        drawn.puffs.throw(at, up, now);
     }
     drawn.puffs.shed(&blazes.jets, time.delta_secs(), now);
     if let Some(mut buffer) = buffers.get_mut(&drawn.puffs.buffer) {
