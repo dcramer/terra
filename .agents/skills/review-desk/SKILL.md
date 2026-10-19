@@ -20,7 +20,10 @@ The desk (`tools/review-desk/`, D422) is where the developer answers questions a
 
 ## Add an item
 
-Use the ArtifactData tool on the desk's `url`: `set` one document in `items` (`batch` for several). The shape is in [tools/review-desk/README.md](../../../tools/review-desk/README.md): `kind` (`question` or `review`), `area`, `status: "open"`, `createdAt` (ISO time), `title`, `body`, `options: [{label, detail}]`, `images`, `videos`, and empty `answer` and `note`.
+Use the ArtifactData tool on the desk's `url`: `set` one document in `items` (`batch` for several). The shape is in [tools/review-desk/README.md](../../../tools/review-desk/README.md): `kind` (`question` or `review`), `area`, `status: "open"`, `createdAt` (ISO time), `title`, `body`, `ask`, `options: [{label, detail}]`, `images: [{url,caption}]`, `videos: [{url,caption}]`, and empty `answer` and `note`.
+
+- **Every item carries `ask`**: one sentence saying exactly what the developer should decide or look at (shown as "What I need from you"). An item without it leaves the developer guessing.
+- **A composite still's caption says where each panel is** ("top row: A, B, C; row 2: D, E"), so the developer can tell which is which; the page opens a still larger on click.
 
 - **A question**: the title is the question, the body the context a cold reader needs, two to four options with your recommendation in the detail. A design question is also recorded as an Open decision; build nothing on it until answered (AGENTS.md, Decisions).
 - **A review**: what to look at and what you want judged ("does the fire read as warm?"), with its stills and films.

@@ -12,6 +12,7 @@ An item is one document in `items`:
 ```json
 {"kind": "question|review", "area": "…", "status": "open|answered", "createdAt": "ISO time",
  "title": "…", "body": "…", "options": [{"label": "…", "detail": "…"}],
+ "ask": "one sentence: what to decide or look at",
  "images": [{"url": "…", "caption": "…"}], "videos": [{"url": "…", "caption": "…"}],
  "answer": "", "note": "", "answeredAt": ""}
 ```

@@ -34,7 +34,16 @@ header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
 .card h2{font:600 18px/1.3 var(--body);margin:0;text-wrap:balance}
 .card .body{margin:0;color:var(--fg);white-space:pre-wrap;max-width:68ch}
 .imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.imgs a{display:block;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.thumb{display:block;padding:0;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:none;cursor:zoom-in;width:100%}
+.thumb:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.ask{margin:0;padding:10px 12px;border-radius:8px;background:var(--ember-soft);color:var(--fg);max-width:68ch}
+.box{position:fixed;inset:0;z-index:10;background:rgba(10,10,8,.92);display:flex;flex-direction:column;gap:8px;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.box .stage{flex:1;overflow:auto;min-height:0}
+.box .stage img{max-width:none;display:block;cursor:zoom-out}
+.box .stage.fit img{max-width:100%;max-height:100%;margin:auto;cursor:zoom-in}
+.box .bar{display:flex;gap:10px;align-items:center;color:#eee;font:13px var(--mono)}
+.box .bar button{font:600 13px var(--body);padding:6px 12px;border-radius:6px;border:1px solid #666;background:#222;color:#eee;cursor:pointer}
 .imgs img{display:block;width:100%;height:auto}
 .cap{font:12px var(--mono);color:var(--muted);margin-top:4px}
 .opts{display:flex;flex-direction:column;gap:8px}
@@ -98,11 +107,12 @@ function card(it) {
     el("span", {class:"chip " + (done ? "done" : it.kind), text: done ? "answered" : it.kind}),
     el("span", {text: it.area || ""}), el("span", {text: when(it.createdAt)})));
   c.append(el("h2", {text: it.title || ""}));
+  if (it.ask && !done) c.append(el("p", {class:"ask"}, el("b", {text:"What I need from you: "}), document.createTextNode(it.ask)));
   if (it.body) c.append(el("p", {class:"body", text: it.body}));
   if (Array.isArray(it.images) && it.images.length) {
     const g = el("div", {class:"imgs"});
     for (const im of it.images) {
-      const a = el("a", {href: im.url, target:"_blank", rel:"noopener"}, el("img", {src: im.url, alt: im.caption || it.title || "still", loading:"lazy"}));
+      const a = el("button", {type:"button", class:"thumb", "aria-label":"Enlarge " + (im.caption || "still"), onclick: () => openBox(im)}, el("img", {src: im.url, alt: im.caption || it.title || "still", loading:"lazy"}));
       g.append(el("div", {}, a, im.caption ? el("div", {class:"cap", text: im.caption}) : null));
     }
     c.append(g);
@@ -143,6 +153,21 @@ function card(it) {
   btn.disabled = !(d.choice || d.note.trim());
   c.append(ta, el("div", {class:"row"}, btn, st));
   return c;
+}
+
+function openBox(im) {
+  const stage = el("div", {class:"stage fit"});
+  const img = el("img", {src: im.url, alt: im.caption || "still"});
+  img.addEventListener("click", () => stage.classList.toggle("fit"));
+  stage.append(img);
+  const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const box = el("div", {class:"box", role:"dialog", "aria-label": im.caption || "Still"},
+    el("div", {class:"bar"}, el("button", {type:"button", text:"Close", onclick: close}),
+      el("span", {text: (im.caption || "") + "  ·  click the picture for full size, scroll to pan"})), stage);
+  document.addEventListener("keydown", onKey);
+  document.body.append(box);
+  box.querySelector("button").focus();
 }
 
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
