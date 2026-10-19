@@ -21,7 +21,7 @@ export const PROBES: Record<string, string> = {
   "build-rules": "crates/terra_build/src/cubes.rs",
   "build-layout": "crates/terra_build/src/layout/runs.rs",
   "build-mesh": "crates/terra_build/src/sections.rs",
-  town: "crates/terra_build/src/town/streets.rs",
+  town: "crates/terra_town/src/town/streets.rs",
   world: "crates/terra_world/src/flora.rs",
   walker: "crates/terra_game/src/play/movement.rs",
   creatures: "crates/terra_game/src/play/creatures.rs",

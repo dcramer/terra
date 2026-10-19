@@ -3,7 +3,7 @@
 //! from the frame it rolls on, its buildings go up one after another from the square out,
 //! each from its plan to its last trim by the building system's own steps in the order the
 //! hammer takes them (`terra_build::construct`), its builders hammering at its sites while it
-//! rises (`terra_life`'s `Build`), and the clock runs through the day. As each is finished its
+//! rises (`terra_town`'s `Build`), and the clock runs through the day. As each is finished its
 //! hearth smokes, its household comes out of its door, and its yard, fences and torch are
 //! there; the square's well, benches and stalls come as the settlement reaches them.
 //!
@@ -28,7 +28,7 @@ use terra_build::Base;
 use terra_build::construct;
 use terra_build::fitting::Hang;
 use terra_build::ops::{Context, Op};
-use terra_build::town::ThingKind;
+use terra_town::town::ThingKind;
 
 /// What a time-lapse does when, as its file says.
 #[derive(Deserialize, Clone, Debug)]
@@ -102,8 +102,8 @@ pub struct Grown {
 }
 
 impl Grown {
-    pub fn size(&self) -> terra_build::town::Size {
-        terra_build::town::Size {
+    pub fn size(&self) -> terra_town::town::Size {
+        terra_town::town::Size {
             buildings: self.buildings,
             streets: self.streets,
             walled: self.walls.is_some(),
@@ -337,7 +337,7 @@ impl Rising {
 
     /// Whether the settlement has reached a place in the town: its building settled, or for
     /// a place of no building, its time come, from the square out.
-    pub fn reached(&self, town: &terra_build::town::Town, at: Vec2) -> bool {
+    pub fn reached(&self, town: &terra_town::town::Town, at: Vec2) -> bool {
         match owner(town, at) {
             Some(building) => self.settled(building),
             None => self.t >= self.common_at(at),
@@ -352,13 +352,13 @@ impl Rising {
 
 /// Whose a place in the town is: the building whose ground or yard it is on or within a
 /// couple of metres of, if any.
-pub fn owner(town: &terra_build::town::Town, at: Vec2) -> Option<usize> {
+pub fn owner(town: &terra_town::town::Town, at: Vec2) -> Option<usize> {
     let near = |quad: &[Vec2; 4]| {
-        if terra_build::town::inside(at, quad) {
+        if terra_town::town::inside(at, quad) {
             return 0.0;
         }
         (0..4)
-            .map(|i| terra_build::town::point_segment(at, quad[i], quad[(i + 1) % 4]))
+            .map(|i| terra_town::town::point_segment(at, quad[i], quad[(i + 1) % 4]))
             .fold(f32::MAX, f32::min)
     };
     let mut best = (2.5, None);
@@ -668,10 +668,10 @@ fn build(
                         warn!("Time-lapse: {} is not in the catalogue.", thing.item);
                         continue;
                     };
-                    let at = terra_build::town::place(door, facing, Vec2::from(thing.at));
+                    let at = terra_town::town::place(door, facing, Vec2::from(thing.at));
                     let point = to_site
                         .transform_point3(market.middle + market.east * at.x + market.south * at.y);
-                    let way = terra_build::town::looking(facing + thing.turn.to_radians());
+                    let way = terra_town::town::looking(facing + thing.turn.to_radians());
                     let front =
                         to_site.transform_vector3(market.east * way.x + market.south * way.y);
                     let turn = libm::atan2f(front.x, front.z).to_degrees();
@@ -789,12 +789,12 @@ fn report(rising: Res<Rising>, market: Res<Market>, mut said: Local<f32>) {
     let building = (0..life.people.len())
         .filter(|&p| {
             life.activity(p) == Some("Build")
-                && matches!(life.people[p].state, terra_life::State::Doing { .. })
+                && matches!(life.people[p].state, terra_town::State::Doing { .. })
         })
         .count();
     let about = (0..life.people.len())
         .filter(|&p| {
-            rising.about(&market, p) && !matches!(life.shows(p), terra_life::Shows::Hidden)
+            rising.about(&market, p) && !matches!(life.shows(p), terra_town::Shows::Hidden)
         })
         .count();
     let rising_now = (0..rising.times.len())

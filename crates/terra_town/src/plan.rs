@@ -15,7 +15,7 @@ pub const FILE: &str = "data/life.ron";
 pub struct Plan {
     /// How many live in each home, at least and at most.
     pub household: (u32, u32),
-    /// What can be done round each kind of thing, by its name (`terra_build::town::ThingKind`).
+    /// What can be done round each kind of thing, by its name (`crate::town::ThingKind`).
     pub things: BTreeMap<String, Vec<SpotPlan>>,
     pub activities: BTreeMap<String, Activity>,
     /// The roles, those taken first first: each takes its count of the town's people.

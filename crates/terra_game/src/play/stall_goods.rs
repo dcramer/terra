@@ -1,5 +1,5 @@
 //! The goods on a town's market stalls (D352): what each stall sells and where each good
-//! goes is `terra_build::town::market`'s, from `assets/data/market.ron`; here each is
+//! goes is `terra_town::town::market`'s, from `assets/data/market.ron`; here each is
 //! placed as the town's catalogue items are, a counter's on the stall's counter top (its
 //! model's `counter` socket), the rest on the ground beside it.
 
@@ -8,7 +8,7 @@ use super::props::{self, Models, Theirs};
 use crate::build::Site;
 use crate::planet::Planet;
 use bevy::prelude::*;
-use terra_build::town::{Market, ThingKind, Town};
+use terra_town::town::{Market, ThingKind, Town};
 
 /// The catalogue item a stall is drawn as, whose counter goods are laid on.
 const STALL: &str = "MarketStall";

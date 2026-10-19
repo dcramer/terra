@@ -6,7 +6,7 @@ What in this repository comes from other projects, and the terms it comes under.
 
 | Where | From | Licence |
 |---|---|---|
-| `crates/terra_life/src/orca.rs` | [RVO2 Library](https://gamma.cs.unc.edu/RVO2/) 2.0.3 (University of North Carolina at Chapel Hill): optimal reciprocal collision avoidance, `Agent.cpp`'s `computeNewVelocity` and linear programs, and the obstacle query of `KdTree.cpp`, ported to Rust | Apache-2.0; its notice is kept in the file, with what was changed |
+| `crates/terra_town/src/orca.rs` | [RVO2 Library](https://gamma.cs.unc.edu/RVO2/) 2.0.3 (University of North Carolina at Chapel Hill): optimal reciprocal collision avoidance, `Agent.cpp`'s `computeNewVelocity` and linear programs, and the obstacle query of `KdTree.cpp`, ported to Rust | Apache-2.0; its notice is kept in the file, with what was changed |
 | `assets/shaders/lake.wesl` | [boujie_water_shader](https://github.com/Chrisknyfe/boujie_water_shader) for Godot 4 by Zach Bernal and contributors (2023): its depth under the water from the depth buffer, Beer's law depth fog faded with distance, and shore foam, ported to WGSL (D322) | MIT; its notice is in the file |
 
 `terra_voxel` will be a port of parts of Voxel Tools. Ported files carry a comment naming the original file, and this table gets a row for the crate.

@@ -7,7 +7,7 @@
 // weld, walnut and oak-gall browns, as a market town's would be.
 #![enable(implicit_some)]
 (
-    // How each kind of the town's animals is drawn (terra_life's `animals`): its model, its
+    // How each kind of the town's animals is drawn (terra_town's `animals`): its model, its
     // scale, its clips, and its walk's own pace in metres a second. A kind not here is kept
     // by the town but not drawn until it has a model.
     animals: {

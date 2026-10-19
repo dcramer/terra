@@ -22,8 +22,8 @@ terra_climate.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
-# A town's people's days (D324).
-terra_life.workspace = true
+# Settlements: a town laid out and its people's days (D324).
+terra_town.workspace = true
 terra_voxel.workspace = true
 terra_world.workspace = true
 

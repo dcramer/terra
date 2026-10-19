@@ -172,9 +172,9 @@ NPCs, factions, claims, recruits and outposts.
 | [D170](decisions/D170.md) | Handing a plan to the tribe | Design | Developers | Leaning | Agreed for now, perhaps to be revisited… |
 | [D297](decisions/D297.md) | Recruits at a build | Design | — | Open | D161 says recruits help by carrying to a build… |
 | [D324](decisions/D324.md) | Town life in code | Tech | Agent | Decided | A person's day is a schedule of activities by role in… |
-| [D330](decisions/D330.md) | A market town's layout | Tech | Agent | Decided | `terra_build::town` lays a market town from its seed and… |
+| [D330](decisions/D330.md) | A market town's layout | Tech | Agent | Decided | `terra_town::town` lays a market town from its seed and… |
 | [D344](decisions/D344.md) | A town's ground worn, its smoke grey, its people carrying their tools and going round visitors | Tech | Agent | Decided | The ground cover says how trodden a place is… |
-| [D346](decisions/D346.md) | A town's furnishing by rules | Tech | Agent | Decided | `terra_build::town` lays, after the yards and by its… |
+| [D346](decisions/D346.md) | A town's furnishing by rules | Tech | Agent | Decided | `terra_town::town` lays, after the yards and by its… |
 | [D352](decisions/D352.md) | A market's stalls and their goods: CC0 scans by recipe, a trade a stall by the seed | Tech | Agent | Decided | For D350's stalls with varied goods… |
 
 ## Building

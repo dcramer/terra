@@ -1,4 +1,4 @@
-// People's days in a settlement (terra_life, docs/demos.md, D324): what can be done round
+// People's days in a settlement (terra_town, docs/demos.md, D324): what can be done round
 // each thing a town has, the activities and the clip each plays, and the roles, each a day
 // of windows. Hours are the world's clock (0 to 24); a stay is game minutes at one place
 // before another is picked, as The Witcher 3's people move between pooled spots.

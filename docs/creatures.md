@@ -41,7 +41,7 @@ Someone coming within a kind's flight distance, an animal first walks, paddles o
 | Arctic fox | up to 7 °C, open ground | Barks and runs |
 | House sparrow | 5 °C and up, ground trodden by people | Chirps and flies a little way |
 | Feral pigeon | 5 °C and up, ground trodden by people, in flocks | Clatters up together and lands a little way off |
-| Dog | the town's, at its owner's heels (`terra_life::animals`) | — |
+| Dog | the town's, at its owner's heels (`terra_town::animals`) | — |
 
 So the lush forest has red deer, wild boar, squirrels, chaffinches, hares and foxes; the mountain lake ducks and a heron, with the forest's kinds in its shore woods; the tundra mountain hares, ptarmigan and arctic foxes; the town sparrows and pigeons on its streets and its dogs. A new land gets its animals where its climate and cover put them, with no list for any map.
 

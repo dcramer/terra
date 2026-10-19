@@ -1,7 +1,7 @@
 //! A market town and its life (docs/demos.md, a living town; D324, D330): asked for at a
-//! place ([`Wanted`]), laid out from its seed on the ground there (`terra_build::town`),
+//! place ([`Wanted`]), laid out from its seed on the ground there (`terra_town::town`),
 //! every building put up by the shortcuts a player's base is, its things placed as
-//! catalogue items are; and its people living their days by `terra_life`, ticked with the
+//! catalogue items are; and its people living their days by `terra_town`, ticked with the
 //! world, the camera and every viewpoint their viewers (D145), drawn by `townsfolk`.
 //!
 //! Places in the town are metres east and south of its square's middle, as the layout gives
@@ -18,10 +18,10 @@ use crate::planet::{MainCamera, Planet};
 use crate::start::Start;
 use bevy::prelude::*;
 use terra_build::fitting::Hang;
-use terra_build::town::{Size, ThingKind};
 use terra_build::{Base, CELL_M};
 use terra_gen::smoothstep;
-use terra_life::{Animals, Life, Plan};
+use terra_town::town::{Size, ThingKind};
+use terra_town::{Animals, Life, Plan};
 use terra_world::lod::Viewpoint;
 use terra_world::smoke::{Burning, Smoke};
 
@@ -260,7 +260,7 @@ fn burn(
         let home = door.is_some_and(|door| {
             life.people.iter().any(|p| {
                 p.home == door
-                    && (p.state == terra_life::State::Inside
+                    && (p.state == terra_town::State::Inside
                         || p.at.distance(life.town.things[door].at) < 12.0)
             })
         });
@@ -284,7 +284,7 @@ fn burn(
         }
         let worked = (0..life.people.len()).any(|p| {
             life.activity(p) == Some("Smith")
-                && matches!(life.people[p].state, terra_life::State::Doing { .. })
+                && matches!(life.people[p].state, terra_town::State::Doing { .. })
                 && life.people[p]
                     .spot
                     .is_some_and(|s| life.spots[s].thing == forge.thing)
@@ -333,7 +333,7 @@ fn light(
         let home = door.is_some_and(|door| {
             life.people.iter().any(|p| {
                 p.home == door
-                    && (p.state == terra_life::State::Inside
+                    && (p.state == terra_town::State::Inside
                         || p.at.distance(life.town.things[door].at) < 12.0)
             })
         });
@@ -408,7 +408,7 @@ fn report(
     let in_front = |at: Vec2| (at - here).dot(ahead) > 0.0;
     let life = &market.life;
     let out: Vec<usize> = (0..life.people.len())
-        .filter(|&p| !matches!(life.shows(p), terra_life::Shows::Hidden))
+        .filter(|&p| !matches!(life.shows(p), terra_town::Shows::Hidden))
         .collect();
     let within = |metres: f32| {
         out.iter()
@@ -423,7 +423,7 @@ fn report(
         .filter(|&&p| {
             matches!(
                 life.shows(p),
-                terra_life::Shows::Walk(_) | terra_life::Shows::Run(_)
+                terra_town::Shows::Walk(_) | terra_town::Shows::Run(_)
             )
         })
         .count();
@@ -599,17 +599,17 @@ impl terra_world::cover::CoverSource for TownCover {
             .map(|(points, wide)| {
                 points
                     .windows(2)
-                    .map(|pair| terra_build::town::point_segment(p, pair[0], pair[1]) - wide * 0.5)
+                    .map(|pair| terra_town::town::point_segment(p, pair[0], pair[1]) - wide * 0.5)
                     .fold(f32::MAX, f32::min)
             })
             .fold(f32::MAX, f32::min);
         // No square laid yet, none: a polygon of no corners holds every point.
         let square = if self.square.len() < 3 {
             f32::MAX
-        } else if terra_build::town::inside(p, &self.square) {
+        } else if terra_town::town::inside(p, &self.square) {
             -1.0
         } else {
-            terra_build::town::segment_polygon(p, p, &self.square)
+            terra_town::town::segment_polygon(p, p, &self.square)
         };
         let door = self
             .doors
@@ -659,7 +659,7 @@ impl terra_world::cover::CoverSource for TownCover {
         if self
             .yards
             .iter()
-            .any(|yard| terra_build::town::inside(p, yard))
+            .any(|yard| terra_town::town::inside(p, yard))
         {
             // Worn by hens and feet, straw strewn about; a new settlement's still mostly
             // grass, grazed short.
@@ -674,10 +674,9 @@ impl terra_world::cover::CoverSource for TownCover {
             .iter()
             .enumerate()
             .filter(|(_, plot)| {
-                terra_build::town::inside(p, &plot[..])
+                terra_town::town::inside(p, &plot[..])
                     || (0..4).any(|i| {
-                        terra_build::town::point_segment(p, plot[i], plot[(i + 1) % 4])
-                            < PLOT_WORN_M
+                        terra_town::town::point_segment(p, plot[i], plot[(i + 1) % 4]) < PLOT_WORN_M
                     })
             })
             .map(|(i, _)| self.plots_worn.get(i).copied().unwrap_or(1.0))
@@ -892,7 +891,7 @@ pub struct Live;
 /// says they are.
 #[allow(clippy::too_many_arguments)]
 /// The corners of a box round a town's ways, ten metres out past them.
-fn ways_bounds(town: &terra_build::town::Town) -> (Vec2, Vec2) {
+fn ways_bounds(town: &terra_town::town::Town) -> (Vec2, Vec2) {
     let nodes = || town.paths.nodes.iter().map(|n| n.0);
     let low = nodes().reduce(Vec2::min).unwrap_or_default();
     (
@@ -944,7 +943,7 @@ fn lay(
     // A settlement rising has as many builders as its time-lapse asks (D381).
     if let Some(builders) = rising.as_ref().and_then(|r| r.lapse.builders) {
         for role in plan.roles.iter_mut().filter(|r| r.name == "builder") {
-            role.count = terra_life::plan::Count::Fixed(builders);
+            role.count = terra_town::plan::Count::Fixed(builders);
         }
     }
     let place = site_for(&planet, &start, wanted.near, wanted.within);
@@ -967,7 +966,7 @@ fn lay(
         .and_then(|r| r.lapse.town)
         .map_or(Size::MARKET, |g| g.size());
     let grown = size.streets;
-    let mut town = terra_build::town::town_sized(wanted.seed, &palette, &heights, &size);
+    let mut town = terra_town::town::town_sized(wanted.seed, &palette, &heights, &size);
     let at = |p: Vec2| planet.ground_at(middle + east * p.x + south * p.y);
 
     // The streets and the square, their plants cleared and kept off, trodden bare.
@@ -990,10 +989,10 @@ fn lay(
     let mut ground = bevy::platform::collections::HashSet::new();
     let (low, high) = ways_bounds(&town);
     let on_way = |p: Vec2| {
-        terra_build::town::inside(p, &town.square.outline)
+        terra_town::town::inside(p, &town.square.outline)
             || town.streets.iter().any(|street| {
                 street.points.windows(2).any(|pair| {
-                    terra_build::town::point_segment(p, pair[0], pair[1]) < street.wide * 0.5
+                    terra_town::town::point_segment(p, pair[0], pair[1]) < street.wide * 0.5
                 })
             })
     };
@@ -1140,7 +1139,7 @@ fn lay(
     let looks: std::collections::HashMap<usize, String> =
         std::fs::read_to_string(terra_world::data::path("market.ron"))
             .ok()
-            .and_then(|text| terra_build::town::Market::parse(&text).ok())
+            .and_then(|text| terra_town::town::Market::parse(&text).ok())
             .map(|market| market.looks(&town, wanted.seed).into_iter().collect())
             .unwrap_or_default();
     for (index, thing) in town.things.iter().enumerate() {
@@ -1196,7 +1195,7 @@ fn lay(
     // The goods on and by the market's stalls (D352), placed as its things are.
     let on_site = |p: Vec2, facing: f32| {
         let point = to_site.transform_point3(middle + east * p.x + south * p.y);
-        let way = terra_build::town::looking(facing);
+        let way = terra_town::town::looking(facing);
         let front = to_site.transform_vector3(east * way.x + south * way.y);
         (
             point.with_y(0.0),
@@ -1529,7 +1528,7 @@ fn live(
     // so nobody walks through a player or into the lens.
     let visitors = visitors
         .iter()
-        .map(|(seen, lens)| terra_life::orca::Body {
+        .map(|(seen, lens)| terra_town::orca::Body {
             at: market.local(seen.translation()),
             velocity: Vec2::ZERO,
             radius: if lens { LENS_M } else { VISITOR_M },

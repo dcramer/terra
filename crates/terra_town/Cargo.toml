@@ -1,0 +1,21 @@
+[package]
+name = "terra_town"
+description = "Settlements, laid out and lived in: a town's streets, plots, market and walls on the building rules, and people's days in it (schedules by role at smart objects, walking its path graph with A* and ORCA avoidance ported from RVO2). No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+serde.workspace = true
+# The hash mixers every crate shares (terra_gen::hash).
+terra_gen.workspace = true
+ron.workspace = true
+# What a town is built of and how: its buildings (terra_build::village), their parts,
+# kits and shortcuts, and the burg its walls are of.
+terra_build.workspace = true
+
+[lints]
+workspace = true

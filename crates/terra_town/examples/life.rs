@@ -1,6 +1,6 @@
-//! The life check (D326), headless: a market town from its seed (`terra_build::town`), its
+//! The life check (D326), headless: a market town from its seed (`terra_town::town`), its
 //! people from `assets/data/life.ron`, run through a game day at a fast clock on the CPU,
-//! watched step by step (`terra_life::check`). It prints the hours' counts, every fault, and
+//! watched step by step (`terra_town::check`). It prints the hours' counts, every fault, and
 //! a verdict, and fails if anything went wrong: anyone stuck, in a wall, inside another,
 //! sliding their feet, or late for their day.
 //!
@@ -8,16 +8,16 @@
 //!       [--from HOUR] [--hours N]
 //!
 //! The viewer stands on the square, so everyone in the town is ticked; people beyond
-//! `terra_life::REDUCED_M` would be placed from the clock instead.
+//! `terra_town::REDUCED_M` would be placed from the clock instead.
 
 use glam::Vec2;
 use std::process::ExitCode;
 use std::time::Instant;
 use terra_build::Kind;
-use terra_build::town::Mark;
 use terra_build::village::Kinds;
-use terra_life::check::Watch;
-use terra_life::{Life, Plan, Shows};
+use terra_town::check::Watch;
+use terra_town::town::Mark;
+use terra_town::{Life, Plan, Shows};
 
 const KINDS: Kinds = Kinds {
     timber: Kind(1),
@@ -131,7 +131,7 @@ fn day(
     from: f64,
     span: f64,
 ) -> bool {
-    let town = terra_build::town::town(seed, KINDS, heights);
+    let town = terra_town::town::town(seed, KINDS, heights);
     let viewer =
         town.square.outline.iter().copied().sum::<Vec2>() / town.square.outline.len() as f32;
     let mut life = Life::new(town, plan, seed, SECONDS_AN_HOUR);
@@ -329,7 +329,7 @@ fn day(
     );
     let out = format!("shots/life-{seed}-{ground}.svg");
     let _ = std::fs::create_dir_all("shots");
-    match std::fs::write(&out, terra_build::town::svg(&life.town, heights, &marks)) {
+    match std::fs::write(&out, terra_town::town::svg(&life.town, heights, &marks)) {
         Ok(()) => println!(
             "  drawn to {out}: people at {MORNING_H:.0}:00 (white walking, blue running, green at a spot) and faults (red stuck, black in a wall, purple through another, orange sliding)"
         ),

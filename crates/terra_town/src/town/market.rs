@@ -287,9 +287,9 @@ fn shuffle(items: &mut [usize], seed: u32, salt: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Kind;
-    use crate::village::Kinds;
     use std::collections::HashMap;
+    use terra_build::Kind;
+    use terra_build::village::Kinds;
 
     const KINDS: Kinds = Kinds {
         timber: Kind(1),

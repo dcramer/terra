@@ -141,7 +141,7 @@ mod tests {
     mod before {
         /// terra_gen's `seed::mix`, terra_voxel's `patterned::hash`, terra_world's
         /// `cover::blades::hash`, terra_build's `layout::splitmix` and `scenes::fuzz`'s `Rng`,
-        /// and terra_life's `life::unit`.
+        /// and terra_town's `life::unit`.
         pub fn splitmix64(mut z: u64) -> u64 {
             z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
             z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
@@ -177,7 +177,7 @@ mod tests {
             h
         }
 
-        /// terra_build's `layout::mix3`, terra_life's `animals::unit` (after its FNV step) and
+        /// terra_build's `layout::mix3`, terra_town's `animals::unit` (after its FNV step) and
         /// the game's `town::patch`.
         pub fn prospector32_round(mut h: u32) -> u32 {
             h ^= h >> 15;

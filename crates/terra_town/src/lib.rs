@@ -1,12 +1,14 @@
-//! People's days in a settlement (docs/demos.md, a living town; D324), the same on every
-//! machine and on a server with no window (D28, D52).
+//! Settlements, laid out and lived in (D407): a town from its seed and its ground, [`town`],
+//! and people's days in it (docs/demos.md, a living town; D324), the same on every machine
+//! and on a server with no window (D28, D52). A town's buildings are building's own
+//! (`terra_build::village`), put up by the same rules as a player's.
 //!
 //! - **What a day is made of** is data, [`plan`]: the things of a town and the places round
 //!   each where something is done (smart objects, as The Sims' objects advertise and The
 //!   Witcher 3's people pool spots), the activities and their clips, and the roles, each a
 //!   day of time windows, as Skyrim's packages are (`assets/data/life.ron`).
 //! - **Walking** is a route on the town's own path graph ([`graph`], A*), the layout's
-//!   (`terra_build::town`), with walkers kept out of each other's way and off what is built
+//!   ([`town`]), with walkers kept out of each other's way and off what is built
 //!   by ORCA, ported from the RVO2 Library ([`orca`]). No navmesh: nothing supports one on
 //!   Bevy 0.20, and a town's layout knows its streets.
 //! - **A town's people**, [`Life`]: households in every home, each person a role; each
@@ -21,6 +23,7 @@ pub mod graph;
 mod life;
 pub mod orca;
 pub mod plan;
+pub mod town;
 
 pub mod check;
 

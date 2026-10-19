@@ -1,10 +1,10 @@
 //! A town's life, tested on a town from the layout and the plan the game reads.
 
 use crate::check::Watch;
+use crate::town::{ThingKind, town};
 use crate::{Life, Plan, State};
 use glam::Vec2;
 use terra_build::Kind;
-use terra_build::town::{ThingKind, town};
 use terra_build::village::Kinds;
 
 const KINDS: Kinds = Kinds {
@@ -201,7 +201,7 @@ fn hens_keep_to_their_yard_and_dogs_to_their_owners_heels() {
             assert!(
                 yards
                     .iter()
-                    .any(|yard| terra_build::town::inside(animal.at, yard)),
+                    .any(|yard| crate::town::inside(animal.at, yard)),
                 "a {} left its yard at {:?}",
                 animal.kind,
                 animal.at

@@ -1,6 +1,6 @@
 //! The living town demo (docs/demos.md, a living town): a market town of thirty to forty
 //! buildings out in the world, and its people about their day (`terra_game::play::town`,
-//! `terra_life`). With `--site town` on the mountain world, the town stands where the land's
+//! `terra_town`). With `--site town` on the mountain world, the town stands where the land's
 //! rules make room for one, below the range with the forest past its fields
 //! (`terra_land::town`); without, its square goes on the most level ground a few hundred
 //! metres from the start. With `play`:

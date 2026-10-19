@@ -10,8 +10,8 @@
 use crate::graph::Graph;
 use crate::orca::{self, Body, Horizons, Mover, Walls};
 use crate::plan::{Count, Plan};
+use crate::town::{self, On, ThingKind, Town};
 use glam::Vec2;
-use terra_build::town::{self, On, ThingKind, Town};
 
 /// How near the nearest viewer someone is ticked in full, and at all (D145's distances).
 pub const FULL_M: f32 = 64.0;

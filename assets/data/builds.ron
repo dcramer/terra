@@ -151,7 +151,7 @@
             (name: "Market stall, ochre", file: "MarketStallOchre", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
             (name: "Stall lantern", file: "Lantern", dims: (0.216, 0.528, 0.235), cost: [("Wood", 1), ("Iron", 1)]),
         ])),
-        // A town's furnishing (terra_build::town, D346): its trough, barrels, carts and the
+        // A town's furnishing (terra_town::town, D346): its trough, barrels, carts and the
         // fence modules round its yards, each fence fitted between its start and end sockets.
         (name: "Trough", tab: Hidden, kind: Items([
             (name: "Trough", file: "Trough", dims: (2.0, 0.6, 0.7), cost: [("Stone", 10)]),

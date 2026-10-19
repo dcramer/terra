@@ -1,5 +1,5 @@
 use super::*;
-use crate::Kind;
+use terra_build::Kind;
 
 const KINDS: Kinds = Kinds {
     timber: Kind(1),

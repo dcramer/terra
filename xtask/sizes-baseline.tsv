@@ -51,8 +51,6 @@ crates/terra_build/src/surface/slots.rs	-	1701
 crates/terra_build/src/surface/slots.rs	face	265
 crates/terra_build/src/surface/slots.rs	of	159
 crates/terra_build/src/timber/shapes.rs	round	174
-crates/terra_build/src/town/paths.rs	paths	183
-crates/terra_build/src/town/svg.rs	svg	194
 crates/terra_build/src/village.rs	-	1293
 crates/terra_build/src/village.rs	village	197
 crates/terra_build/tests/decks.rs	check	231
@@ -95,10 +93,6 @@ crates/terra_items/src/lib.rs	counts_change_only_by_what_goes_in_or_out	161
 crates/terra_land/src/bin/fields.rs	run	644
 crates/terra_land/src/site.rs	shore_walk	152
 crates/terra_land/src/town.rs	market_town_searched	231
-crates/terra_life/examples/life.rs	day	214
-crates/terra_life/src/life.rs	-	1412
-crates/terra_life/src/life.rs	walk	159
-crates/terra_life/src/orca.rs	velocity	236
 crates/terra_sandbox/src/experiments/lush.rs	-	2529
 crates/terra_sandbox/src/experiments/lush.rs	plant	570
 crates/terra_sandbox/src/experiments/lush/floor.rs	-	2370
@@ -108,6 +102,12 @@ crates/terra_sandbox/src/experiments/lush/species.rs	-	1761
 crates/terra_sandbox/src/experiments/lush/species.rs	conifer	508
 crates/terra_sandbox/src/experiments/lush/species.rs	oak	230
 crates/terra_sandbox/src/experiments/workbench/mod.rs	spawn	177
+crates/terra_town/examples/life.rs	day	214
+crates/terra_town/src/life.rs	-	1412
+crates/terra_town/src/life.rs	walk	159
+crates/terra_town/src/orca.rs	velocity	236
+crates/terra_town/src/town/paths.rs	paths	183
+crates/terra_town/src/town/svg.rs	svg	194
 crates/terra_world/src/audio/synth.rs	-	1105
 crates/terra_world/src/cover/blades.rs	square	271
 crates/terra_world/src/cover/mod.rs	grow	297

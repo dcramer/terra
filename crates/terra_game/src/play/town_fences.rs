@@ -1,5 +1,5 @@
 //! A town's fences drawn and made solid (D346): each module the layout gives
-//! (`terra_build::town::Fence`) is its model fitted between the module's ends, as the model
+//! (`terra_town::town::Fence`) is its model fitted between the module's ends, as the model
 //! contract fits a module along +X from its start socket to its end (D303), stretched only
 //! along its line; and a capsule along it among the obstacles, so the player and every body
 //! are stopped by it as by a trunk.
@@ -10,8 +10,8 @@ use super::props::Models;
 use crate::planet::Planet;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use terra_build::town::{FURNISHING, Fence, FenceKind};
 use terra_core::{Piece, Solid};
+use terra_town::town::{FURNISHING, Fence, FenceKind};
 
 /// A module of a town's fences, drawn.
 #[derive(Component)]

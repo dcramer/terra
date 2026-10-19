@@ -7,8 +7,8 @@
 //! towns that grew rich did.
 
 use super::*;
-use crate::BuildOp;
-use crate::scenes::burg;
+use terra_build::BuildOp;
+use terra_build::scenes::burg;
 
 /// How far out past its outermost building, yard or the square the wall's outer face runs.
 const WALL_OUT_M: f32 = 8.0;

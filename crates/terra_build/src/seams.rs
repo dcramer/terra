@@ -56,8 +56,7 @@ const ABOVE: &[&str] = &[
     "sections",
     "surface",
     "timber", //
-    // The settlements.
-    "town",
+    // The settlements (the town is terra_town).
     "village", //
     // The fixtures.
     "roof_walls",

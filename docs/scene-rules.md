@@ -67,7 +67,7 @@ Every camera, the game's boom (D274, D285) and a film's keyed path (`--cine`, D3
 
 ### Town layout: constraints, not tuning
 
-`terra_build::town` (D330) states its layout as constraints and tests them: the castle stands inside the curtain or forms one side of it (Carcassonne's château inside the Cité, Conwy's castle in its walls); the curtain hugs what it encloses, leaving no walled meadow wider than a yard; the castle is laid first on the highest ground and the town round it, as such towns grew. watabou's town generator (GPL) is documentation only. Mountains near a place are capped by the place's view (question 2).
+`terra_town::town` (D330) states its layout as constraints and tests them: the castle stands inside the curtain or forms one side of it (Carcassonne's château inside the Cité, Conwy's castle in its walls); the curtain hugs what it encloses, leaving no walled meadow wider than a yard; the castle is laid first on the highest ground and the town round it, as such towns grew. watabou's town generator (GPL) is documentation only. Mountains near a place are capped by the place's view (question 2).
 
 ### Far bake: far reads as near
 

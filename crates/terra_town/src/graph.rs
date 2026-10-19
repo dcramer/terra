@@ -1,4 +1,4 @@
-//! Routes on a town's path graph (`terra_build::town::Paths`): A* from one node to another,
+//! Routes on a town's path graph (`crate::town::Paths`): A* from one node to another,
 //! the straight walks between them already known clear of anything built.
 
 use glam::Vec2;

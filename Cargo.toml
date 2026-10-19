@@ -18,8 +18,8 @@ terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_land = { path = "crates/terra_land" }
-terra_life = { path = "crates/terra_life" }
 terra_sim = { path = "crates/terra_sim" }
+terra_town = { path = "crates/terra_town" }
 terra_voxel = { path = "crates/terra_voxel" }
 terra_world = { path = "crates/terra_world" }
 # The same version Bevy 0.20 uses, so vectors pass between our crates and Bevy unchanged.
@@ -81,6 +81,11 @@ opt-level = 3
 # 152 s, and the roof and face sweeps in 27 s and 9 s, for 20 to 40 s more on a whole rebuild
 # of the crate; a small edit compiles in the same few seconds either way (D406).
 [profile.dev.package.terra_build]
+opt-level = 3
+
+# A town laid whole, and a day lived in it, are sweeps of the same kind (D406); a
+# workspace member is not covered by `package."*"`.
+[profile.dev.package.terra_town]
 opt-level = 3
 
 # Our own crates build incrementally in release too: every shot, film, look and the artifacts

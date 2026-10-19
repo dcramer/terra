@@ -1,4 +1,4 @@
-// What a town's market sells (terra_build::town::market, D352). Each stall sells one trade,
+// What a town's market sells (terra_town::town::market, D352). Each stall sells one trade,
 // the trades dealt to the stalls in an order the town's seed draws, so a market sells no
 // trade twice while it has no more stalls than there are trades. On its counter it lays four
 // to six of its trade's `counter` goods side by side, as many as fit, one again where it has fewer; on the ground under its awning

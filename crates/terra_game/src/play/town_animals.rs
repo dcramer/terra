@@ -1,5 +1,5 @@
 //! A town's animals drawn (docs/demos.md, a living town): each kind that has a model
-//! (`animals` in `assets/data/townsfolk.ron`) stood where `terra_life::Animals` has it,
+//! (`animals` in `assets/data/townsfolk.ron`) stood where `terra_town::Animals` has it,
 //! playing its walk, run or rest. A kind with no model yet is kept by the town's life but
 //! not drawn.
 
@@ -13,7 +13,7 @@ use bevy::{
 };
 use serde::Deserialize;
 use std::time::Duration;
-use terra_life::animals::Doing;
+use terra_town::animals::Doing;
 
 const LOOKS: &str = "townsfolk.ron";
 const BLEND: Duration = Duration::from_millis(250);

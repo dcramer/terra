@@ -1,5 +1,5 @@
 //! A town's people drawn (D324): each on the base body, shaped and dressed by their role's
-//! look (`assets/data/townsfolk.ron`) from their seed, standing where `terra_life` has them,
+//! look (`assets/data/townsfolk.ron`) from their seed, standing where `terra_town` has them,
 //! playing the clip of what they are doing, a walk or a run at the speed they go so their
 //! feet keep to the ground (`pace.rs`). Indoors, out at the fields or beyond every viewer,
 //! nobody is drawn.
@@ -16,8 +16,8 @@ use bevy::{
 };
 use serde::Deserialize;
 use std::time::Duration;
-use terra_build::town::ThingKind;
-use terra_life::{Detail, Shows};
+use terra_town::town::ThingKind;
+use terra_town::{Detail, Shows};
 
 /// How someone's clips blend into each other.
 const BLEND: Duration = Duration::from_millis(300);
@@ -483,7 +483,7 @@ fn on_the_boards(
     feet: Vec3,
 ) -> Option<(Vec3, Vec3)> {
     let person = market.life.people.get(index)?;
-    if !matches!(person.state, terra_life::State::Doing { .. }) || person.seed % 3 == 0 {
+    if !matches!(person.state, terra_town::State::Doing { .. }) || person.seed % 3 == 0 {
         return None;
     }
     let thing = &market.life.town.things[market.life.spots.get(person.spot?)?.thing];
@@ -826,7 +826,7 @@ mod tests {
             &std::fs::read_to_string(crate::model_files::asset("data/townsfolk.ron")).unwrap(),
         )
         .unwrap();
-        let plan = terra_life::Plan::parse(
+        let plan = terra_town::Plan::parse(
             &std::fs::read_to_string(crate::model_files::asset("data/life.ron")).unwrap(),
         )
         .unwrap();

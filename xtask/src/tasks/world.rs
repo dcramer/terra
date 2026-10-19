@@ -7,16 +7,16 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "town",
         takes: "[--seed N | --seeds A-B] [--ground flat|hillside|rolling|all] [--out shots/town.svg]",
-        does: "a market town's plan from its seed, drawn as an SVG: square, streets, buildings, yards, the things its day is done at and its path graph; CPU only (terra_build::town)",
+        does: "a market town's plan from its seed, drawn as an SVG: square, streets, buildings, yards, the things its day is done at and its path graph; CPU only (terra_town::town)",
         group: "Look at things",
-        run: |args| cargo_example("terra_build", "town", args, false),
+        run: |args| cargo_example("terra_town", "town", args, false),
     },
     Task {
         name: "life",
         takes: "[--seed N | --seeds A-B] [--ground flat|hillside|rolling|all] [--from HOUR] [--hours N]",
-        does: "the life check (D326): a market town's people through a game day on the CPU, failing on anyone stuck, in a wall, inside another, sliding their feet or late for their day; counts by hour and a map in shots/life-*.svg (terra_life)",
+        does: "the life check (D326): a market town's people through a game day on the CPU, failing on anyone stuck, in a wall, inside another, sliding their feet or late for their day; counts by hour and a map in shots/life-*.svg (terra_town)",
         group: "Play and check",
-        run: |args| cargo_example("terra_life", "life", args, true),
+        run: |args| cargo_example("terra_town", "life", args, true),
     },
     Task {
         name: "fields",

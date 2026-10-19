@@ -9,9 +9,9 @@
 //! activity.
 
 use crate::life::{Arrival, JOG_PACE, Life, State, WALK_PACE};
+use crate::town::inside;
 use glam::Vec2;
 use std::collections::BTreeMap;
-use terra_build::town::inside;
 
 /// How long a walker may make no headway, in seconds.
 pub const STUCK_S: f32 = 5.0;

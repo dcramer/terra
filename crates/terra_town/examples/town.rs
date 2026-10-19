@@ -1,4 +1,4 @@
-//! A market town's plan (`terra_build::town`), drawn as an SVG to look at: the square, the
+//! A market town's plan (`terra_town::town`), drawn as an SVG to look at: the square, the
 //! streets, every building's ground, the yards, the things a day is done at, and the path
 //! graph its people walk, with a legend and the counts. CPU only, in a moment.
 //!
@@ -10,8 +10,8 @@
 
 use glam::Vec2;
 use terra_build::Kind;
-use terra_build::town::{self, ThingKind, Town};
 use terra_build::village::Kinds;
+use terra_town::town::{self, ThingKind, Town};
 
 const KINDS: Kinds = Kinds {
     timber: Kind(1),

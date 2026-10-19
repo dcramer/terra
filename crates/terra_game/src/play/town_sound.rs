@@ -10,7 +10,7 @@ use super::noise::{Cue, Noise};
 use super::town::Market;
 use crate::planet::MainCamera;
 use bevy::prelude::*;
-use terra_life::Shows;
+use terra_town::Shows;
 use terra_world::audio::{
     self, Bus, Fade, Mix, Voice,
     synth::{Sound, Synth},
@@ -137,7 +137,7 @@ fn work(
             }
         };
         let p = &life.people[person];
-        if !matches!(p.state, terra_life::State::Doing { .. }) || p.at.distance(here) > HEARD_M {
+        if !matches!(p.state, terra_town::State::Doing { .. }) || p.at.distance(here) > HEARD_M {
             continue;
         }
         let beat = beats

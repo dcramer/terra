@@ -5,9 +5,9 @@
 //! viewer: there they are wherever their seed and the clock put them in their yard.
 
 use crate::life::{Life, State};
+use crate::town::{ThingKind, inside};
 use glam::Vec2;
 use serde::Deserialize;
-use terra_build::town::{ThingKind, inside};
 
 /// Where a kind of animal lives.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]

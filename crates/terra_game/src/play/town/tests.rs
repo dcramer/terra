@@ -111,7 +111,7 @@ fn a_house_smokes_from_over_its_ridge() {
         masonry_roof: terra_build::Kind(0x801),
         beams_roof: terra_build::Kind(0x802),
     };
-    let town = terra_build::town::town(3, kinds, &|_| 0.0);
+    let town = terra_town::town::town(3, kinds, &|_| 0.0);
     let house = town
         .buildings
         .iter()
@@ -142,7 +142,7 @@ fn most_of_a_towns_buildings_have_a_ridge_along_their_top_for_birds() {
         masonry_roof: terra_build::Kind(0x801),
         beams_roof: terra_build::Kind(0x802),
     };
-    let town = terra_build::town::town(3, kinds, &|_| 0.0);
+    let town = terra_town::town::town(3, kinds, &|_| 0.0);
     let mut ridged = 0;
     for building in &town.buildings {
         let base = Base::from_shortcuts(&building.ops);
