@@ -36,13 +36,13 @@ mod lines;
 mod standing;
 
 use super::{Piece, Place, Scope};
-use crate::kit::{Kit, Kits};
-use crate::{Base, CELL_M, Cube, Fill, Kind, Shape};
 use flashing::{flashing, flashing_butted, flashing_wide};
 use frame::rafters;
 use glam::{IVec3, Vec2, Vec3};
 use lines::{NEAR_SCOPE, crease_met, edge_met, join, ridges_a_cube_wide};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Kit, Kits};
+use terra_build::{Base, CELL_M, Cube, Fill, Kind, Shape};
 use terra_gen::hash;
 use terra_gen::hash::QuickMap;
 
@@ -55,7 +55,7 @@ pub(crate) use standing::{curbs, gables, underside};
 pub const STEP_M: f32 = CELL_M * 0.5;
 /// How far a roof of a kind with no kit is carried on past its edges.
 pub const EAVES_M: f32 = 0.5;
-pub use crate::pieces::{ROOF_STAGES, RoofPart, stage_of};
+pub use terra_build::pieces::{ROOF_STAGES, RoofPart, stage_of};
 
 /// Which roof cube a piece of roof goes up with, and in which of its stages: 1 its frame,
 /// 2 its battens, 3 its covering, 4 its trims.
@@ -840,7 +840,7 @@ struct Segment {
 /// Lays a roof kind's roofs: every piece of each square of them of the kit's kind, in the
 /// order they go up.
 pub fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
-    if kit.pattern != crate::kit::Pattern::Roof {
+    if kit.pattern != terra_build::kit::Pattern::Roof {
         return;
     }
     // Only the roofs with a cube of the kind near the scope, whole, so their long pieces

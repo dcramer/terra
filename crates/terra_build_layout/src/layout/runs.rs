@@ -14,10 +14,10 @@
 use super::roles::{Dir, Role};
 use super::roofs::Roofs;
 use super::{Axis, Layout, Piece, Place, Split, Spot, TICKS, Walls, hash, metres, ticks, unit};
-use crate::kit::{Kit, Kits};
-use crate::{CELL_M, Fill};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeMap;
+use terra_build::kit::{Kit, Kits};
+use terra_build::{CELL_M, Fill};
 
 /// How finely a gable's logs are fitted under its roof, in metres along the wall.
 const GABLE_STEP_M: f32 = 0.02;
@@ -219,7 +219,7 @@ pub(super) fn courses(
 pub(super) fn corner_posts(
     walls: &Walls,
     kit: &Kit,
-    kits: &crate::kit::Kits,
+    kits: &terra_build::kit::Kits,
     ours: &[IVec3],
     layout: &mut Layout,
 ) {
@@ -434,7 +434,7 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
         // it to its slope (`Piece::Log`'s lean, for an upright), as a gable's logs are.
         if from.x == to.x && from.z == to.z && length > 1e-3 {
             let (bottom, top) = (from.y.min(to.y), from.y.max(to.y));
-            let half = crate::pieces::section(kit, role).0 * 0.5;
+            let half = terra_build::pieces::section(kit, role).0 * 0.5;
             let under = |dx: f32, dz: f32| roofs.under_over(from.x + dx, from.z + dz, bottom);
             let (Some(middle), Some(east), Some(west), Some(south), Some(north)) = (
                 under(0.0, 0.0),
@@ -626,7 +626,7 @@ pub(super) fn under_roofs(walls: &Walls, kits: &Kits, kit: &Kit, layout: &mut La
                 let cube = (p / CELL_M).floor().as_ivec3();
                 // A wall of ours crossing it there, which lays that blocking: not a floor or
                 // a flat roof of ours beside it, which lays none.
-                let ours = |c: IVec3| walls.ours(c) == Some(crate::Fill::Solid);
+                let ours = |c: IVec3| walls.ours(c) == Some(terra_build::Fill::Solid);
                 // And only where the roof falls across that wall too, a cube along it, as
                 // at a hip's corner, so it is blocked: at a gable's foot, the roof rising
                 // along the wall that crosses, nothing of that one's reaches the roof over
@@ -861,12 +861,12 @@ fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, crest: bool, layout: &
     // A little inside the member's width, a log's or a hewn beam's, so its sides are not in
     // the planes of the members' faces under it, and its foot a little into the course under
     // it.
-    let wide = crate::pieces::section(kit, None).0 * 0.5;
+    let wide = terra_build::pieces::section(kit, None).0 * 0.5;
     let half = wide.min(radius) - inset;
     // Its face to the weather: all but flush with a round log's widest; behind a hewn
     // beam's flat face as narrow as its seed makes one, and as far as its faces' lattice
     // may move it out, so it is never in the plane of a beam's face under it.
-    let weather = if kit.timber.profile == crate::kit::Profile::Hewn {
+    let weather = if kit.timber.profile == terra_build::kit::Profile::Hewn {
         wide * (1.0 - kit.timber.variation.thickness) - BLOCKING_OUT_M - metres(4)
     } else {
         radius - BLOCKING_OUT_M
@@ -1281,10 +1281,10 @@ mod tests {
     use super::super::lay;
     use super::super::tests::{cabin, kit, logs, wall};
     use super::*;
-    use crate::kit::Kits;
-    use crate::roofer::{self, Style};
-    use crate::{Base, BuildOp, Cube, Kind, Panel, STOREY_M};
     use std::collections::BTreeSet;
+    use terra_build::kit::Kits;
+    use terra_build::roofer::{self, Style};
+    use terra_build::{Base, BuildOp, Cube, Kind, Panel, STOREY_M};
 
     /// The cabin under a roof of cubes the roofer lays, its gables of logs.
     fn roofed_cabin(style: Style) -> Base {
@@ -1469,7 +1469,7 @@ mod tests {
             let mut base = Base::default();
             base.apply(BuildOp::Fill {
                 min: [0, 0, 0],
-                max: [9, crate::STOREY_CUBES - 1, thick - 1],
+                max: [9, terra_build::STOREY_CUBES - 1, thick - 1],
                 cube: Some(Cube::new(kit().kind(), Fill::Solid)),
             });
             let logs = logs(&lay(&base, &kit()));
@@ -1656,7 +1656,7 @@ mod tests {
         // different places; and a lean-to, whose high end's crest stands under the roof
         // where only the high wall's courses are carried up.
         let kit = kit();
-        for (_, ops) in crate::roof_rows(&[kit.kind()], false, &|_| Kind::FIRST_ROOF)
+        for (_, ops) in terra_build::roof_rows(&[kit.kind()], false, &|_| Kind::FIRST_ROOF)
             .into_iter()
             .filter(|(row, _)| ["L, gable roof", "rectangle, lean-to roof"].contains(&row.as_str()))
         {

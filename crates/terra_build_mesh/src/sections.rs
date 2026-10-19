@@ -15,9 +15,9 @@ use glam::{IVec3, Mat3, Quat, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use terra_build::kit::{Kit, Kits, Pattern, Profile};
-use terra_build::layout::roofs::RoofPart;
-use terra_build::layout::{self, Piece};
 use terra_build::{Base, CELL_M, Fill, Kind};
+use terra_build_layout::layout::roofs::RoofPart;
+use terra_build_layout::layout::{self, Piece};
 
 mod reaching;
 pub use reaching::*;

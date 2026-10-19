@@ -29,7 +29,12 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     // kit checker and the packs' tests read.
     (
         "assets/data/kits/",
-        &["terra_build", "terra_build_mesh", "terra_build_scenes"],
+        &[
+            "terra_build",
+            "terra_build_layout",
+            "terra_build_mesh",
+            "terra_build_scenes",
+        ],
     ),
     ("assets/data/packs/", &["terra_build", "terra_build_mesh"]),
     (
@@ -42,7 +47,12 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ),
     (
         "assets/materials/",
-        &["terra_build", "terra_build_mesh", "terra_build_scenes"],
+        &[
+            "terra_build",
+            "terra_build_layout",
+            "terra_build_mesh",
+            "terra_build_scenes",
+        ],
     ),
     // The town's market and the catalogue its stalls are sized from, and its people's day.
     ("assets/data/market.ron", &["terra_town"]),
@@ -436,7 +446,12 @@ mod tests {
             scope.readers,
             set(&[
                 &bevy[..],
-                &["terra_build", "terra_build_mesh", "terra_build_scenes"]
+                &[
+                    "terra_build",
+                    "terra_build_layout",
+                    "terra_build_mesh",
+                    "terra_build_scenes"
+                ]
             ]
             .concat())
         );

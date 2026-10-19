@@ -1,8 +1,8 @@
 use super::*;
 use terra_build::kit::Kits;
-use terra_build::layout::lay_among;
 use terra_build::roofer::{self, Style};
 use terra_build::{BuildOp, Cube, Panel, STOREY_CUBES};
+use terra_build_layout::layout::lay_among;
 
 /// The kits the game ships, every one, with their dressed pieces, as it reads them.
 /// The shipped kits these tests read, in this order.
@@ -1611,7 +1611,7 @@ fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
         kind: named("stone"),
     });
     bases.push(("a walled yard".to_string(), yard));
-    let mut random = terra_build::layout::Random(7);
+    let mut random = terra_build_layout::layout::Random(7);
     let (mut edits, mut kept) = (0, 0);
     for (name, mut before) in bases {
         before.take_dirty();

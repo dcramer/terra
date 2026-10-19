@@ -5,18 +5,18 @@
 //! stop them, while openings, doorways and windows, let them through. Coordinates are the base's own,
 //! in metres, with `y` at the feet.
 
-use crate::cubes::{Cube, Cubes, FULL};
-use crate::kit::Kits;
 use crate::layout::Piece;
-use crate::{Base, CELL_M, Walker};
 use glam::{IVec2, IVec3, Vec3};
+use terra_build::cubes::{Cube, Cubes, FULL};
+use terra_build::kit::Kits;
+use terra_build::{Base, CELL_M, Walker};
 
 /// How far into a cube a piece must reach to stand in it.
 const SLIVER_M: f32 = 0.05;
 
 /// How thick a roof's cube is under its top, as a fraction of the cube: the roof's own
 /// thickness (`pieces::ROOF_THICK_M`), so its underside is where it is drawn.
-const ROOF_SHELL: f32 = crate::pieces::ROOF_THICK_M / CELL_M;
+const ROOF_SHELL: f32 = terra_build::pieces::ROOF_THICK_M / CELL_M;
 
 /// How far from the middle of a walker's feet, as a fraction of their radius, what is
 /// under them holds them up.
@@ -35,11 +35,40 @@ fn column_at(point: Vec3) -> IVec2 {
     )
 }
 
-impl Base {
+/// Walking a base: what holds a walker up and what stops them. A trait, as the base is the
+/// rules' type and the walking the layout's (D407).
+pub trait Walking {
     /// The base as far as it stands while it goes up: only the cubes the pieces in so far
     /// stand in, so a plan's ghost is walked through and what is built stops a walker
     /// (docs/building-kits.md); a roof's cube once any piece of it is in.
-    pub fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>) -> Base {
+    fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>) -> Base;
+
+    /// The height of whatever would hold up feet at `point`: the highest top of a cube in
+    /// that column that is no more than a step above them. `None` if the base offers
+    /// nothing there, in which case the ground decides.
+    fn support(&self, point: Vec3, walker: &Walker) -> Option<f32>;
+
+    /// The height of the ceiling over a point: the lowest cube's underside over it, a
+    /// roof's too.
+    fn ceiling(&self, point: Vec3) -> Option<f32>;
+
+    /// Moves a walker along the floor from `from` toward `to`, stopping at walls and
+    /// windows and passing through openings. Returns where they end up. Height is taken
+    /// from `to` unchanged; use [`Walking::support`] for that. With the kits it is laid by, a
+    /// door's or shutters' leaves are met where they are drawn, on their wall's own face.
+    fn walk(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3;
+}
+
+/// The walking's own steps.
+trait Inner {
+    fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_;
+    fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3;
+    fn off_posts(&self, at: Vec3, axis: usize, start: f32, feet: f32, walker: &Walker) -> Vec3;
+    fn blocks(&self, at: Vec3, feet: f32, walker: &Walker) -> bool;
+}
+
+impl Walking for Base {
+    fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>) -> Base {
         let mut cubes = Cubes::default();
         let mut bounds = Vec::new();
         for piece in done {
@@ -70,40 +99,7 @@ impl Base {
         Base::from_cubes(cubes)
     }
 
-    /// The layers of a column of cubes that hold a walker up or stop them, with their
-    /// bottoms and tops at a point over it: each cube to its fill, as high as its shape's
-    /// top there (a stair's step, a slope's ramp, a half); a roof's cube only its shell, as
-    /// thick as a roof under its top, so a walker stands under a roof's slope inside it
-    /// (D241). Openings and planned cubes with nothing in them are walked through.
-    fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_ {
-        let column = column_at(at);
-        let (u, v) = (
-            (at.x / CELL_M - column.x as f32).clamp(0.0, 1.0),
-            (at.z / CELL_M - column.y as f32).clamp(0.0, 1.0),
-        );
-        // Within a post's box, or outside it.
-        let off_post = (u - 0.5).abs().max((v - 0.5).abs()) * CELL_M > POST_M * 0.5;
-        self.column(column.x, column.y).filter_map(move |layer| {
-            let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
-            if !cube.is_in() || (cube.shape == crate::Shape::Post && off_post) {
-                return None;
-            }
-            let foot = layer as f32 * CELL_M;
-            let fill = f32::from(cube.level()) / f32::from(FULL);
-            // From its underside, an upper half's or an inverted slope's (D231), up
-            // to its top or as far as it is filled.
-            let (mut bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
-            if cube.kind.is_roof() {
-                bottom = bottom.max(cube.shape.top(u, v) - ROOF_SHELL);
-            }
-            (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
-        })
-    }
-
-    /// The height of whatever would hold up feet at `point`: the highest top of a cube in
-    /// that column that is no more than a step above them. `None` if the base offers
-    /// nothing there, in which case the ground decides.
-    pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
+    fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
         // Under the feet, which are as wide as the body is near enough: a step's edge a
         // little ahead is stood on as the body reaches it, as a capsule climbs a stair.
         let reach = walker.radius * FOOT_REACH;
@@ -121,9 +117,7 @@ impl Base {
             .max_by(|a, b| a.total_cmp(b))
     }
 
-    /// The height of the ceiling over a point: the lowest cube's underside over it, a
-    /// roof's too.
-    pub fn ceiling(&self, point: Vec3) -> Option<f32> {
+    fn ceiling(&self, point: Vec3) -> Option<f32> {
         let above = point.y + 0.1;
         self.solid_layers(point)
             .map(|(bottom, _)| bottom)
@@ -131,11 +125,7 @@ impl Base {
             .min_by(|a, b| a.total_cmp(b))
     }
 
-    /// Moves a walker along the floor from `from` toward `to`, stopping at walls and
-    /// windows and passing through openings. Returns where they end up. Height is taken
-    /// from `to` unchanged; use [`Base::support`] for that. With the kits it is laid by, a
-    /// door's or shutters' leaves are met where they are drawn, on their wall's own face.
-    pub fn walk(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3 {
+    fn walk(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3 {
         // A door's or shutters' leaves stop them where they stand, shut or open (D207);
         // the cubes have the last word.
         let to = self.off_leaves(from, to, walker, kits);
@@ -200,6 +190,38 @@ impl Base {
         at.y = to.y;
         at
     }
+}
+
+impl Inner for Base {
+    /// The layers of a column of cubes that hold a walker up or stop them, with their
+    /// bottoms and tops at a point over it: each cube to its fill, as high as its shape's
+    /// top there (a stair's step, a slope's ramp, a half); a roof's cube only its shell, as
+    /// thick as a roof under its top, so a walker stands under a roof's slope inside it
+    /// (D241). Openings and planned cubes with nothing in them are walked through.
+    fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_ {
+        let column = column_at(at);
+        let (u, v) = (
+            (at.x / CELL_M - column.x as f32).clamp(0.0, 1.0),
+            (at.z / CELL_M - column.y as f32).clamp(0.0, 1.0),
+        );
+        // Within a post's box, or outside it.
+        let off_post = (u - 0.5).abs().max((v - 0.5).abs()) * CELL_M > POST_M * 0.5;
+        self.column(column.x, column.y).filter_map(move |layer| {
+            let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
+            if !cube.is_in() || (cube.shape == terra_build::Shape::Post && off_post) {
+                return None;
+            }
+            let foot = layer as f32 * CELL_M;
+            let fill = f32::from(cube.level()) / f32::from(FULL);
+            // From its underside, an upper half's or an inverted slope's (D231), up
+            // to its top or as far as it is filled.
+            let (mut bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
+            if cube.kind.is_roof() {
+                bottom = bottom.max(cube.shape.top(u, v) - ROOF_SHELL);
+            }
+            (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
+        })
+    }
 
     /// Where a walker going from one place to another ends up, kept out of the leaves of
     /// every door and shutters near, as they stand (`fitting::push_off`): each leaf where it
@@ -207,7 +229,7 @@ impl Base {
     /// a stone wall's cubes.
     fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3 {
         let reach = walker.radius + 2.5;
-        let near = |prop: &&crate::Prop| {
+        let near = |prop: &&terra_build::Prop| {
             let low = IVec3::from_array(prop.min).as_vec3() * CELL_M - reach;
             let high = (IVec3::from_array(prop.max) + IVec3::ONE).as_vec3() * CELL_M + reach;
             to.x > low.x && to.x < high.x && to.z > low.z && to.z < high.z
@@ -244,7 +266,7 @@ impl Base {
                 let post = self.column(x, z).any(|layer| {
                     self.cube(IVec3::new(x, layer, z)).is_some_and(|cube| {
                         cube.is_in()
-                            && cube.shape == crate::Shape::Post
+                            && cube.shape == terra_build::Shape::Post
                             && (layer as f32 * CELL_M) < high
                             && ((layer + 1) as f32 * CELL_M) > low
                     })
@@ -286,7 +308,7 @@ impl Base {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BuildOp, Kind, Panel, STOREY_M, cells};
+    use terra_build::{BuildOp, Kind, Panel, STOREY_M, cells};
 
     /// A room nine metres square outside on the ground, with a doorway a metre wide in its
     /// south wall and a window in its east wall. These tests are written in metres and
@@ -332,7 +354,7 @@ mod tests {
 
     /// A wall of logs four metres long, as the log kit lays it, east and west.
     fn log_wall() -> (Base, Vec<Piece>) {
-        let kit = crate::kit::Kit::default();
+        let kit = terra_build::kit::Kit::default();
         let mut base = Base::default();
         for x in 0..8 {
             base.apply(BuildOp::SetWall {
@@ -454,7 +476,7 @@ mod tests {
 
     #[test]
     fn a_roof_of_cubes_is_stood_on_and_its_underside_is_the_ceiling_under_it() {
-        use crate::{Cube, Fill};
+        use terra_build::{Cube, Fill};
         // A room four metres by three, under a gable of roof cubes rising a cube a cube in
         // from its north and south sides, its flat roof off.
         let mut base = Base::default();
@@ -469,7 +491,8 @@ mod tests {
             cube: None,
         });
         let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
-        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        let plan =
+            terra_build::roofer::over(&footprint, 6, terra_build::roofer::Style::Gable, None);
         for (at, shape) in plan.roof {
             base.apply(BuildOp::Fill {
                 min: at.to_array(),
@@ -493,7 +516,7 @@ mod tests {
         );
         assert!(near(base.support(Vec3::new(2.0, ridge, 1.5), &w), ridge));
         // Inside, the floor holds you up, and the roof's underside is over you.
-        let thick = crate::pieces::ROOF_THICK_M;
+        let thick = terra_build::pieces::ROOF_THICK_M;
         assert_eq!(base.support(Vec3::new(2.0, 0.0, 1.0), &w), Some(0.0));
         assert!(near(
             base.ceiling(Vec3::new(2.0, 0.0, 0.9)),
@@ -516,8 +539,8 @@ mod tests {
     }
 
     /// A base of one cube of a shape at the origin.
-    fn shaped(shape: crate::Shape) -> Base {
-        use crate::{Cube, Fill};
+    fn shaped(shape: terra_build::Shape) -> Base {
+        use terra_build::{Cube, Fill};
         let mut base = Base::default();
         base.apply(BuildOp::Fill {
             min: [0, 0, 0],
@@ -532,7 +555,7 @@ mod tests {
 
     #[test]
     fn a_half_cube_is_stepped_onto_and_a_whole_one_or_a_stair_or_slope_from_its_top_is_not() {
-        use crate::{Facing, Shape};
+        use terra_build::{Facing, Shape};
         let w = walker();
         // Each walked at from the west; the stair and slope rise toward the west, so their
         // high side faces the walker.
@@ -554,7 +577,7 @@ mod tests {
 
     #[test]
     fn a_post_stops_a_walker_by_its_own_width_not_its_cube() {
-        let base = shaped(crate::Shape::Post);
+        let base = shaped(terra_build::Shape::Post);
         // Straight at it, stopped touching it.
         let at = stroll(&base, Vec3::new(-1.0, 0.0, 0.25), Vec3::new(1.5, 0.0, 0.25));
         let face = CELL_M * 0.5 - POST_M * 0.5;
@@ -568,7 +591,7 @@ mod tests {
 
     #[test]
     fn a_stair_holds_a_walker_on_its_two_steps_and_a_slope_on_its_ramp() {
-        use crate::{Facing, Shape};
+        use terra_build::{Facing, Shape};
         let w = walker();
         // Rising east: the west half is the lower step, the east half the upper.
         let stair = shaped(Shape::Stair(Facing::East));
@@ -593,7 +616,7 @@ mod tests {
 
     #[test]
     fn a_corner_slope_holds_a_walker_on_its_ramps_and_an_upper_half_is_walked_under() {
-        use crate::{Facing, Shape};
+        use terra_build::{Facing, Shape};
         let point = Walker {
             radius: 0.0,
             ..walker()
@@ -625,9 +648,9 @@ mod tests {
         high.apply(BuildOp::Fill {
             min: [0, 4, 0],
             max: [0, 4, 3],
-            cube: Some(crate::Cube {
+            cube: Some(terra_build::Cube {
                 shape: Shape::UpperHalf,
-                ..crate::Cube::new(Kind::PLAIN, crate::Fill::Solid)
+                ..terra_build::Cube::new(Kind::PLAIN, terra_build::Fill::Solid)
             }),
         });
         let (from, to) = (Vec3::new(-1.0, 0.0, 0.75), Vec3::new(1.5, 0.0, 0.75));
@@ -651,7 +674,7 @@ mod tests {
 
     #[test]
     fn a_flight_of_stairs_or_a_ramp_is_walked_up_a_storey() {
-        use crate::{Cube, Facing, Fill, Shape};
+        use terra_build::{Cube, Facing, Fill, Shape};
         for top in [Shape::Stair(Facing::North), Shape::Slope(Facing::North)] {
             // Six columns rising north, each a cube higher, whole cubes under each top.
             let mut base = Base::default();

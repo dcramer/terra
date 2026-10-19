@@ -45,10 +45,10 @@
 
 use super::roles::Dir;
 use super::{Piece, Place, Scope, drawn_fill, hash, ticks};
-use crate::kit::{Braces, Framing, Kit};
-use crate::{Base, CELL_M, Fill, STOREY_CUBES, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Braces, Framing, Kit};
+use terra_build::{Base, CELL_M, Fill, STOREY_CUBES, Shape};
 
 /// How far round a scope a frame is worked out, level and up and down, in cubes: further
 /// than a face's members reach from the cube that owns them (a plate is cut every
@@ -1116,8 +1116,8 @@ mod tests {
 
     /// How far a tick is.
     const TICK_M: f32 = CELL_M / TICKS as f32;
-    use crate::kit::Pattern;
-    use crate::{BuildOp, Kind, Panel};
+    use terra_build::kit::Pattern;
+    use terra_build::{BuildOp, Kind, Panel};
 
     fn kit() -> Kit {
         Kit {
@@ -1273,8 +1273,8 @@ mod tests {
 
     #[test]
     fn a_gable_is_framed_with_studs_rails_and_braces_under_its_roof_not_up_its_steps() {
-        use crate::roofer::{self, Style};
-        use crate::{Cube, Kind};
+        use terra_build::roofer::{self, Style};
+        use terra_build::{Cube, Kind};
         let kind = kit().kind();
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {

@@ -1277,7 +1277,14 @@ pub(crate) mod tests {
         assert!(names.iter().any(|n| n == "ridge"), "{names:?}");
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut found = Vec::new();
-        for krate in [root.to_path_buf(), root.join("../terra_game")] {
+        for krate in [
+            "",
+            "../terra_build_layout",
+            "../terra_build_mesh",
+            "../terra_game",
+        ]
+        .map(|c| root.join(c))
+        {
             for (path, code) in sources(&krate) {
                 for (n, line) in code.lines().enumerate() {
                     let line = line.trim();

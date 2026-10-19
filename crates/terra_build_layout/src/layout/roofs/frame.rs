@@ -4,10 +4,10 @@
 
 use super::lines::crease_met;
 use super::{Beside, RoofPart, Roofs, STEP_M, Segment, join, normal, planar_normal};
-use crate::kit::Kit;
 use crate::layout::{Piece, Place};
-use crate::{Base, CELL_M, Fill};
 use glam::{IVec3, Vec3};
+use terra_build::kit::Kit;
+use terra_build::{Base, CELL_M, Fill};
 use terra_gen::hash;
 
 /// How far a beam drawn from the kit's rafter module reaches from its line: as it is

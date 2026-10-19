@@ -14,6 +14,7 @@ libm.workspace = true
 terra_gen.workspace = true
 # The rules and the layout this draws (D407).
 terra_build.workspace = true
+terra_build_layout.workspace = true
 
 [dev-dependencies]
 # The kit checker reads a material's maps to check them as it is added (`packs`, D349).

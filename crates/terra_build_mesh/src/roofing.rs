@@ -21,8 +21,8 @@ use crate::modules::{self, Line, Look, Seat};
 use crate::relief::Relief;
 use glam::Vec3;
 use terra_build::kit::{Kit, Part};
-use terra_build::layout::roofs::{RoofPart, planar_normal};
-use terra_build::layout::{Piece, Place, metres};
+use terra_build_layout::layout::roofs::{RoofPart, planar_normal};
+use terra_build_layout::layout::{Piece, Place, metres};
 use terra_gen::hash;
 
 /// The size in metres of a kit's texture for a material, or a metre square if it has none.
@@ -82,7 +82,7 @@ pub fn draw_as(
             // A step or a back gutter is the pattern's flashing where its kit names no piece
             // of its own for it.
             let Some(spec) = kit.roof.parts.get(&part).or_else(|| {
-                terra_build::layout::roofs::is_flashing(part)
+                terra_build_layout::layout::roofs::is_flashing(part)
                     .then(|| kit.roof.parts.get(&RoofPart::Flashing))
                     .flatten()
             }) else {
@@ -625,9 +625,9 @@ fn side(out: &mut Surface, quad: [Vec3; 4], outward: Vec3, metres: [f32; 2], col
 #[cfg(test)]
 mod tests {
     use super::*;
-    use terra_build::layout::roofs;
     use terra_build::roofer::{self, Style};
     use terra_build::{Base, BuildOp, Cube, Fill, Kind, STOREY_M};
+    use terra_build_layout::layout::roofs;
 
     #[test]
     fn a_capping_bent_over_a_ridge_keeps_its_top_near_its_modelled_width() {
@@ -756,7 +756,7 @@ mod tests {
             base,
             kit,
             &terra_build::kit::Kits(vec![kit.clone()]),
-            terra_build::layout::Scope::ALL,
+            terra_build_layout::layout::Scope::ALL,
             &mut pieces,
         );
         let mut surfaces = Surfaces::default();
@@ -855,7 +855,7 @@ mod tests {
             &base,
             &kit,
             &terra_build::kit::Kits(vec![kit.clone()]),
-            terra_build::layout::Scope::ALL,
+            terra_build_layout::layout::Scope::ALL,
             &mut pieces,
         );
         let mut surfaces = Surfaces::default();
@@ -901,7 +901,7 @@ mod tests {
                 &cabin(Style::Gable),
                 &kit,
                 &terra_build::kit::Kits(vec![kit.clone()]),
-                terra_build::layout::Scope::ALL,
+                terra_build_layout::layout::Scope::ALL,
                 &mut pieces,
             );
             let top = STOREY_M + 2.0;
@@ -1050,7 +1050,7 @@ mod tests {
                 &cabin(Style::Hip),
                 &kit,
                 &terra_build::kit::Kits(vec![kit.clone()]),
-                terra_build::layout::Scope::ALL,
+                terra_build_layout::layout::Scope::ALL,
                 &mut pieces,
             );
             let mut looked = 0;

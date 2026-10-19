@@ -11,7 +11,7 @@ pub(super) const STONE_SHARE: f32 = 0.22;
 pub(super) fn draw(
     cube: IVec3,
     (role, faces, courses, shared, seed): (
-        terra_build::layout::Role,
+        terra_build_layout::layout::Role,
         [Dir; 2],
         [bool; 2],
         [bool; 2],

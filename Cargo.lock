@@ -5828,6 +5828,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_build_layout"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "serde",
+ "terra_build",
+ "terra_gen",
+]
+
+[[package]]
 name = "terra_build_mesh"
 version = "0.1.0"
 dependencies = [
@@ -5836,6 +5847,7 @@ dependencies = [
  "ron",
  "serde",
  "terra_build",
+ "terra_build_layout",
  "terra_gen",
  "terra_town",
  "zune-core",
@@ -5850,6 +5862,7 @@ dependencies = [
  "serde",
  "serde_json",
  "terra_build",
+ "terra_build_layout",
  "terra_build_mesh",
  "terra_gen",
  "terra_town",
@@ -5889,6 +5902,7 @@ dependencies = [
  "serde",
  "serde_json",
  "terra_build",
+ "terra_build_layout",
  "terra_build_mesh",
  "terra_build_scenes",
  "terra_climate",

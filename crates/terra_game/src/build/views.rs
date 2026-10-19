@@ -6,7 +6,7 @@
 //!
 //! - **texels**: screen pixels a texel seen from a metre off, against [`AIM_PIXELS`], hatched
 //!   where a texel is spread over more than a pixel where it is seen now.
-//! - **roles**: each edge a cube has coloured by its role (`terra_build::layout::roles`),
+//! - **roles**: each edge a cube has coloured by its role (`terra_build_layout::layout::roles`),
 //!   each roof line by its part, faces tinted by what is beyond them; within [`ROLES_M`].
 //! - **detail**: each mesh by the detail it draws (near, middle, far, hull, cell), each
 //!   section's box by the detail it is laid for, and the parts an edit draws again.
@@ -44,10 +44,10 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use terra_build::layout::roles::{Beyond, Dir, Role, Roles};
-use terra_build::layout::roofs::RoofPart;
-use terra_build::layout::{self, Piece};
 use terra_build::{CELL_M, Fill, Kind};
+use terra_build_layout::layout::roles::{Beyond, Dir, Role, Roles};
+use terra_build_layout::layout::roofs::RoofPart;
+use terra_build_layout::layout::{self, Piece};
 use terra_build_mesh::sections::{CLUSTER, Detail, Reach};
 
 /// The screen pixels a texel should cover seen square on from a metre off: one, a texel a

@@ -1,10 +1,10 @@
 use super::*;
 use crate::draw::tests::facing_out;
 use terra_build::kit::Timber;
-use terra_build::layout::roles::Dir;
-use terra_build::layout::{Place, lay};
 use terra_build::testing as layouts;
 use terra_build::{CELL_M, Panel};
+use terra_build_layout::layout::roles::Dir;
+use terra_build_layout::layout::{Place, lay};
 
 fn log(seed: u32, split: Split) -> Piece {
     Piece::Log {
@@ -12,7 +12,7 @@ fn log(seed: u32, split: Split) -> Piece {
         to: Place::near(Vec3::new(3.0, 0.125, 0.25)),
         split,
         seed,
-        chinking: Some((0, terra_build::layout::ticks(3.0))),
+        chinking: Some((0, terra_build_layout::layout::ticks(3.0))),
         lean: [0, 0],
         lift: [0, 0],
         role: None,
@@ -94,7 +94,7 @@ fn courses_of_a_wall_sit_tight_showing_no_more_than_a_thin_line_between() {
                     to: Place::near(Vec3::new(3.0, y, 0.25)),
                     split: Split::Whole,
                     seed: seed * 7 + n as u32,
-                    chinking: Some((0, terra_build::layout::ticks(3.0))),
+                    chinking: Some((0, terra_build_layout::layout::ticks(3.0))),
                     lean: [0, 0],
                     lift: [0, 0],
                     role: None,
@@ -333,7 +333,7 @@ fn a_stringers_head_is_cut_level_under_the_top_of_the_cube_it_reaches() {
     // top, as the village's outside stair to an upper door has; cut in that plane, the
     // two fought for 58 cm².
     let kit = pinned(Profile::Hewn);
-    let ticks = |m: f32| terra_build::layout::ticks(m);
+    let ticks = |m: f32| terra_build_layout::layout::ticks(m);
     let stringer = Piece::Plank {
         from: Place::near(Vec3::new(0.0, 0.1, 0.0)),
         to: Place::near(Vec3::new(0.0, 3.0, 2.9)),
@@ -365,7 +365,7 @@ fn a_plank_drawn_from_one_board_of_its_texture_is_not_smeared_down_its_sides() {
         },
     );
     // A joist, 5 cm wide and 20 cm deep, three metres long.
-    let ticks = |m: f32| terra_build::layout::ticks(m);
+    let ticks = |m: f32| terra_build_layout::layout::ticks(m);
     let joist = Piece::Plank {
         from: Place::near(Vec3::new(0.0, 0.0, 0.0)),
         to: Place::near(Vec3::new(3.0, 0.0, 0.0)),

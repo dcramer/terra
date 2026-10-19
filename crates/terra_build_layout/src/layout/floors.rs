@@ -17,10 +17,11 @@
 
 use super::roles::Role;
 use super::{Layout, Piece, Place, Random, Walls, hash, ticks};
-use crate::kit::{Kit, Kits, Pattern};
-use crate::{Base, CELL_M, Fill, Kind, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Kit, Kits, Pattern, Profile};
+use terra_build::pieces;
+use terra_build::{Base, CELL_M, Fill, Kind, Shape};
 
 /// How thick a board is, and how far its top stands over its cube's, clear of the relief of
 /// a stone footing it runs onto, and of the flats of a stone wall's border band lying on the
@@ -129,7 +130,7 @@ pub fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
     }
     // A wall of round logs: where its round stands back from its cube's face, the boards
     // under it out of sight however far its logs bulge.
-    if !alone && kit.timber.profile == crate::kit::Profile::Round {
+    if !alone && kit.timber.profile == Profile::Round {
         return Some(((CELL_M - kit.diameter) * 0.5).max(0.0));
     }
     let roles: &[Option<Role>] = if alone {
@@ -139,7 +140,7 @@ pub fn member_face(kit: &Kit, alone: bool) -> Option<f32> {
     };
     let narrowest = roles
         .iter()
-        .map(|&role| crate::pieces::section(kit, role).0 * 0.5)
+        .map(|&role| pieces::section(kit, role).0 * 0.5)
         .fold(f32::MAX, f32::min)
         * (1.0 - kit.timber.variation.thickness);
     Some((CELL_M * 0.5 - narrowest).max(0.0))
@@ -153,7 +154,7 @@ pub fn decked(base: &Base, kits: &Kits, at: IVec3) -> Option<Kind> {
         return None;
     }
     let kit = kits.of(cube.kind)?;
-    if kit.pattern != Pattern::Logs || !kit.textures.contains_key(&crate::pieces::Material::Floor) {
+    if kit.pattern != Pattern::Logs || !kit.textures.contains_key(&pieces::Material::Floor) {
         return None;
     }
     if base
@@ -411,7 +412,7 @@ impl Deck<'_> {
         };
         self.boards(along, across, (low, high), top, layout);
         // The bearers' depth, and the joists' over them up to the boards.
-        let (_, bearer_high) = crate::pieces::section(self.kit, Some(Role::Crest));
+        let (_, bearer_high) = pieces::section(self.kit, Some(Role::Crest));
         let joist_foot = if whole { foot + bearer_high } else { foot };
         let joist_deep = (top - BOARD_THICK_M - joist_foot).max(JOIST_LEAST_M);
         let joist_foot = top - BOARD_THICK_M - joist_deep;
@@ -795,7 +796,7 @@ impl Deck<'_> {
                     let widened_flat = (first..=last).any(|a| {
                         base.cube(cell(a, beside))
                             .and_then(|cube| self.walls.kits.of(cube.kind))
-                            .is_some_and(|kit| kit.timber.profile == crate::kit::Profile::Hewn)
+                            .is_some_and(|kit| kit.timber.profile == Profile::Hewn)
                     });
                     let out = |k: i32| {
                         let at = cell(k, b);
@@ -918,9 +919,7 @@ impl Deck<'_> {
         let Some(kit) = base
             .cube(beyond)
             .and_then(|cube| self.walls.kits.of(cube.kind))
-            .filter(|kit| {
-                kit.pattern == Pattern::Logs && kit.timber.profile == crate::kit::Profile::Round
-            })
+            .filter(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Round)
         else {
             return 0.0;
         };
@@ -950,7 +949,7 @@ mod tests {
     use super::super::lay;
     use super::super::tests::{cabin, kit, textured};
     use super::*;
-    use crate::{BuildOp, Kind};
+    use terra_build::{BuildOp, Kind};
 
     fn planks(layout: &Layout) -> Vec<(Vec3, Vec3, i32, i32)> {
         layout
@@ -1069,7 +1068,7 @@ mod tests {
         // door: the deck's boards run on under a wall beside them, but not over the
         // flight's top step, whose tread is the deck's edge there; run on over it, its
         // boards lay in the plane of the tread's end.
-        let hewn = crate::kit::tests::shipped("hewn.ron");
+        let hewn = terra_build::testing::shipped("hewn.ron");
         let mut base = Base::default();
         base.apply(BuildOp::SetFloor {
             min: [0, 1, 0],
@@ -1082,9 +1081,9 @@ mod tests {
             base.apply(BuildOp::Fill {
                 min: [1, y, z],
                 max: [1, y, z],
-                cube: Some(crate::Cube {
-                    shape: Shape::Stair(crate::Facing::North),
-                    ..crate::Cube::new(hewn.kind(), Fill::Solid)
+                cube: Some(terra_build::Cube {
+                    shape: Shape::Stair(terra_build::Facing::North),
+                    ..terra_build::Cube::new(hewn.kind(), Fill::Solid)
                 }),
             });
         }

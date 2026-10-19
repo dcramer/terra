@@ -7,63 +7,63 @@
         {
           "junction": "Side by side, in a run",
           "rule": "Block: faces between culled, one surface. Coursed: a log a course along the run",
-          "code": ["terra_build_mesh::surface", "layout::runs"],
-          "tests": ["terra_build_mesh::surface::cubes_side_by_side_are_one_surface_with_no_face_between", "layout::runs::a_room_has_a_log_a_course_on_every_wall_and_stays_inside_its_cubes"],
+          "code": ["terra_build_mesh::surface", "terra_build_layout::layout::runs"],
+          "tests": ["terra_build_mesh::surface::cubes_side_by_side_are_one_surface_with_no_face_between", "terra_build_layout::layout::runs::a_room_has_a_log_a_course_on_every_wall_and_stays_inside_its_cubes"],
           "cases": ["logs: rectangle, gable roof"],
           "status": "Closed"
         },
         {
           "junction": "A free end",
           "rule": "Arris up it; logs cut flush, every other course a hair short",
-          "code": ["layout::roles::End::Free", "layout::runs"],
-          "tests": ["layout::roles::a_free_wall_has_arrises_up_its_ends_crests_along_its_top_and_a_foot", "layout::runs::a_free_end_is_cut_flush_every_other_course_a_hair_short"],
+          "code": ["terra_build_layout::layout::roles::End::Free", "terra_build_layout::layout::runs"],
+          "tests": ["terra_build_layout::layout::roles::a_free_wall_has_arrises_up_its_ends_crests_along_its_top_and_a_foot", "terra_build_layout::layout::runs::a_free_end_is_cut_flush_every_other_course_a_hair_short"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "L, outside and inside",
           "rule": "Arris and Inside, crests mitred out and back; logs interlock by axis, half a course apart",
-          "code": ["layout::roles", "layout::runs"],
-          "tests": ["layout::roles::an_l_has_an_inside_corner_whose_crests_mitre_back_into_it", "layout::runs::walls_either_way_never_share_a_course"],
+          "code": ["terra_build_layout::layout::roles", "terra_build_layout::layout::runs"],
+          "tests": ["terra_build_layout::layout::roles::an_l_has_an_inside_corner_whose_crests_mitre_back_into_it", "terra_build_layout::layout::runs::walls_either_way_never_share_a_course"],
           "cases": ["L, gable roof"],
           "status": "Closed"
         },
         {
           "junction": "T and cross",
           "rule": "The through wall runs on, no joint where another crosses",
-          "code": ["layout::runs"],
-          "tests": ["layout::runs::no_joint_falls_where_another_wall_crosses"],
+          "code": ["terra_build_layout::layout::runs"],
+          "tests": ["terra_build_layout::layout::runs::no_joint_falls_where_another_wall_crosses"],
           "cases": ["T, gable roof", "U, gable roof"],
           "status": "Closed"
         },
         {
           "junction": "Walls of different heights; a wall's top",
           "rule": "A crest where nothing is over it",
-          "code": ["layout::roles"],
-          "tests": ["layout::roles::a_free_wall_has_arrises_up_its_ends_crests_along_its_top_and_a_foot"],
+          "code": ["terra_build_layout::layout::roles"],
+          "tests": ["terra_build_layout::layout::roles::a_free_wall_has_arrises_up_its_ends_crests_along_its_top_and_a_foot"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "A wall two or three thick, a pier",
           "rule": "Block: one mass, an opening's head sunk behind each face's lintel through its cube. Coursed: skins along the faces, crossing only at the ends (D263); a solid mass's top a deck whose rims meet at its corners, the one along the joists' ends running through and the other butting it; where a pier or wall rises from the mass, the deck's rim runs on into it under its members, and its corner posts run down past the deck, and at a free end on to the ground",
-          "code": ["layout::blocks", "layout::runs", "layout::floors"],
-          "tests": ["layout::runs::a_thick_wall_shows_logs_along_its_faces_and_sawn_ends_only_at_its_ends", "terra_build_mesh::tests::a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it", "terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
+          "code": ["terra_build_layout::layout::blocks", "terra_build_layout::layout::runs", "terra_build_layout::layout::floors"],
+          "tests": ["terra_build_layout::layout::runs::a_thick_wall_shows_logs_along_its_faces_and_sawn_ends_only_at_its_ends", "terra_build_mesh::tests::a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it", "terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
           "cases": ["junction, a thick wall with a window"],
           "status": "Closed"
         },
         {
           "junction": "A post in a wall, or alone",
           "rule": "A column alone is a post: one upright; a wall's logs stop at it",
-          "code": ["layout::runs", "layout::shapes"],
-          "tests": ["layout::runs::a_column_of_cubes_alone_is_a_post", "layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
+          "code": ["terra_build_layout::layout::runs", "terra_build_layout::layout::shapes"],
+          "tests": ["terra_build_layout::layout::runs::a_column_of_cubes_alone_is_a_post", "terra_build_layout::layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
           "cases": ["junction, a roof on posts"],
           "status": "Closed"
         },
         {
           "junction": "Two cubes of a kind meeting only along an edge",
           "rule": "Neither dresses the shared edge; each turns round its own outside corner there, its part in the wall mitred out and its part out of the face cut at the plane halfway between the two",
-          "code": ["layout::roles::End::Shared"],
+          "code": ["terra_build_layout::layout::roles::End::Shared"],
           "tests": ["terra_build_mesh::sections::cubes_of_a_kind_meeting_only_along_an_edge_each_dress_their_own_side", "terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
           "cases": ["junction, cubes meeting along an upright edge", "junction, cubes meeting along a level edge"],
           "status": "Closed"
@@ -71,8 +71,8 @@
         {
           "junction": "Every edge with a role",
           "rule": "Dressed once, by its owner",
-          "code": ["layout::roles"],
-          "tests": ["layout::roles::every_edge_with_a_role_is_dressed_by_one_cube_only"],
+          "code": ["terra_build_layout::layout::roles"],
+          "tests": ["terra_build_layout::layout::roles::every_edge_with_a_role_is_dressed_by_one_cube_only"],
           "cases": [],
           "status": "Closed"
         }
@@ -84,31 +84,31 @@
         {
           "junction": "Heavier and lighter, in an L, a T or in line",
           "rule": "The heavier runs through, quoined; the lighter ends with its end board",
-          "code": ["kit::Kits::through", "kit::Joint", "layout::trims::ends"],
-          "tests": ["layout::trims::logs_ending_against_stone_have_an_end_board_up_the_joint", "layout::trims::a_stone_wall_ending_against_a_log_walls_side_is_met_by_a_board", "layout::roles::how_kinds_meet_is_the_kits_table_not_their_pattern"],
+          "code": ["kit::Kits::through", "kit::Joint", "terra_build_layout::layout::trims::ends"],
+          "tests": ["terra_build_layout::layout::trims::logs_ending_against_stone_have_an_end_board_up_the_joint", "terra_build_layout::layout::trims::a_stone_wall_ending_against_a_log_walls_side_is_met_by_a_board", "terra_build_layout::layout::roles::how_kinds_meet_is_the_kits_table_not_their_pattern"],
           "cases": ["logs with stone: rectangle, gable roof", "logs with stone: T, hip roof"],
           "status": "Closed"
         },
         {
           "junction": "Lighter on heavier (logs on a stone plinth)",
           "rule": "The heavier's cap (`Meet`)",
-          "code": ["layout::roles::Meet", "layout::blocks"],
-          "tests": ["layout::roles::logs_on_stone_meet_it_with_a_cap_and_stone_quoined_beside_logs", "layout::blocks::a_thinner_wall_of_another_kind_on_stone_meets_it_with_a_cap"],
+          "code": ["terra_build_layout::layout::roles::Meet", "terra_build_layout::layout::blocks"],
+          "tests": ["terra_build_layout::layout::roles::logs_on_stone_meet_it_with_a_cap_and_stone_quoined_beside_logs", "terra_build_layout::layout::blocks::a_thinner_wall_of_another_kind_on_stone_meets_it_with_a_cap"],
           "cases": ["village: timber on a masonry plinth house"],
           "status": "Closed"
         },
         {
           "junction": "Heavier on lighter",
           "rule": "Its foot does not sink over the lighter",
-          "code": ["layout::roles"],
-          "tests": ["layout::roles::stone_over_logs_changed_into_a_wall_has_a_foot_that_does_not_sink_over_them"],
+          "code": ["terra_build_layout::layout::roles"],
+          "tests": ["terra_build_layout::layout::roles::stone_over_logs_changed_into_a_wall_has_a_foot_that_does_not_sink_over_them"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "As heavy as each other (logs and hewn)",
           "rule": "Each ends with its own end board",
-          "code": ["kit::Kits::end", "layout::trims::ends"],
+          "code": ["kit::Kits::end", "terra_build_layout::layout::trims::ends"],
           "tests": [],
           "cases": ["hewn with logs: rectangle, gable roof", "hewn with logs: L, gable roof"],
           "status": "Closed"
@@ -116,15 +116,15 @@
         {
           "junction": "A wall on another kind's footing",
           "rule": "One plinth, the footing's",
-          "code": ["layout::roles"],
-          "tests": ["layout::roles::a_wall_with_a_plinth_on_a_footing_with_its_own_takes_none"],
+          "code": ["terra_build_layout::layout::roles"],
+          "tests": ["terra_build_layout::layout::roles::a_wall_with_a_plinth_on_a_footing_with_its_own_takes_none"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "Walls or rooms crossing or overlapping",
           "rule": "Not yet closed: a floor's boards in the plane of a log wall run along or through the room, an end board in the plane of a log's sawn end where a stone wall runs through a log room, floor boards in one another where two rooms overlap, a dressed stone in the plane of a board where a hewn wall runs into a carved stone room",
-          "code": ["layout::trims::ends", "layout::floors"],
+          "code": ["terra_build_layout::layout::trims::ends", "terra_build_layout::layout::floors"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 12, 16, 47, 82, 192, 266",
@@ -133,7 +133,7 @@
         {
           "junction": "A block of stone cut to a corner or a stair beside timber",
           "rule": "Not yet closed: dressed stone 8 cm out of its cubes, or a fifth of it under the block surface's relief",
-          "code": ["layout::blocks", "terra_build_mesh::sections::blocks"],
+          "code": ["terra_build_layout::layout::blocks", "terra_build_mesh::sections::blocks"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 75, 178, 216",
@@ -147,39 +147,39 @@
         {
           "junction": "A hole in a coursed wall",
           "rule": "Courses end at it, framed with jambs, head and sill boards",
-          "code": ["layout::trims::frames"],
-          "tests": ["layout::trims::a_door_cuts_the_courses_it_crosses_and_is_framed", "layout::trims::a_window_has_a_sill_and_a_cube_carved_out_is_framed_too", "layout::trims::a_jamb_post_with_nothing_of_its_kind_under_it_stands_a_hair_into_what_it_stands_on"],
+          "code": ["terra_build_layout::layout::trims::frames"],
+          "tests": ["terra_build_layout::layout::trims::a_door_cuts_the_courses_it_crosses_and_is_framed", "terra_build_layout::layout::trims::a_window_has_a_sill_and_a_cube_carved_out_is_framed_too", "terra_build_layout::layout::trims::a_jamb_post_with_nothing_of_its_kind_under_it_stands_a_hair_into_what_it_stands_on"],
           "cases": ["QA cabin"],
           "status": "Closed"
         },
         {
           "junction": "A hole in a block wall",
           "rule": "Jamb stones, one lintel and one sill across its full width, the wall sunk behind them",
-          "code": ["layout::blocks", "terra_build_mesh::sections::blocks"],
-          "tests": ["layout::blocks::a_window_in_stone_has_a_lintel_a_sill_and_jamb_stones_and_no_timber_lintel", "layout::blocks::a_cross_carved_in_a_wall_has_one_lintel_and_one_sill_across_its_width", "layout::blocks::a_lintel_over_an_opening_at_a_walls_end_turns_its_corner_and_runs_on_past_none", "terra_build_mesh::sections::an_openings_head_is_sunk_behind_its_lintels_underside"],
+          "code": ["terra_build_layout::layout::blocks", "terra_build_mesh::sections::blocks"],
+          "tests": ["terra_build_layout::layout::blocks::a_window_in_stone_has_a_lintel_a_sill_and_jamb_stones_and_no_timber_lintel", "terra_build_layout::layout::blocks::a_cross_carved_in_a_wall_has_one_lintel_and_one_sill_across_its_width", "terra_build_layout::layout::blocks::a_lintel_over_an_opening_at_a_walls_end_turns_its_corner_and_runs_on_past_none", "terra_build_mesh::sections::an_openings_head_is_sunk_behind_its_lintels_underside"],
           "cases": ["stone: rectangle, gable roof"],
           "status": "Closed"
         },
         {
           "junction": "Any carved shape; a notch at a foot or a top",
           "rule": "Framed along its own edges",
-          "code": ["layout::roles", "layout::trims::frames"],
-          "tests": ["layout::roles::a_hole_has_jambs_a_sill_and_a_head", "layout::a_wall_being_carved_is_cut_and_framed_at_the_first_cut"],
+          "code": ["terra_build_layout::layout::roles", "terra_build_layout::layout::trims::frames"],
+          "tests": ["terra_build_layout::layout::roles::a_hole_has_jambs_a_sill_and_a_head", "terra_build_layout::layout::a_wall_being_carved_is_cut_and_framed_at_the_first_cut"],
           "cases": ["QA cabin"],
           "status": "Closed"
         },
         {
           "junction": "A door or shutters fitted",
           "rule": "The prop's own frame, sized to its hole; the kit lays none there",
-          "code": ["fitting"],
-          "tests": ["fitting::a_frame_fills_its_hole_and_its_leaves_are_centred_in_it", "fitting::shutters_are_centred_in_their_frame_and_seated_on_the_walls_face"],
+          "code": ["terra_build_layout::fitting"],
+          "tests": ["terra_build_layout::fitting::a_frame_fills_its_hole_and_its_leaves_are_centred_in_it", "terra_build_layout::fitting::shutters_are_centred_in_their_frame_and_seated_on_the_walls_face"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "A hole whose top is a roof cube",
           "rule": "The roof's cube is its head: a coursed wall's head board under it, cut a hair under the roof's deck (`trims::frames`); a block wall's opening closed by the roof's deck and the gable carried up either side, a lintel there standing through the covering at an eave",
-          "code": ["layout::trims::frames", "layout::roofs::standing"],
+          "code": ["terra_build_layout::layout::trims::frames", "terra_build_layout::layout::roofs::standing"],
           "tests": [],
           "cases": ["roofs and walls: openings up to a roof"],
           "status": "Closed"
@@ -187,7 +187,7 @@
         {
           "junction": "An opening or a carve at a timber wall's corner",
           "rule": "Not yet closed: a window at a room's corner tile, or a box carved through a corner at its foot, leaves a jamb or head board a centimetre out of its cubes",
-          "code": ["layout::trims::frames"],
+          "code": ["terra_build_layout::layout::trims::frames"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 2, 127",
@@ -201,23 +201,23 @@
         {
           "junction": "A floor under a wall",
           "rule": "Block: a border inside, a foot outside. Deck: boards run on under the members past where they stand back at their narrowest (`layout::member_face`), and beside round logs a strip under their edge on past a log bowed its furthest away; or they stop at another kind's. A thick wall's cubes beside a floor are walls drawn to their face, never its mass's undrawn inside; no slot between a floor's boards and a wall beside them",
-          "code": ["layout::roles", "layout::floors", "layout::floors::member_face"],
-          "tests": ["layout::roles::a_wall_on_a_floor_has_a_border_inside_and_a_foot_outside", "layout::floors::a_floor_inside_stone_footings_runs_on_under_its_log_walls_to_their_faces", "terra_build_mesh::sections::a_log_floor_in_a_stone_tower_stops_at_its_walls_faces", "terra_build_mesh::inspect::a_slot_between_a_floors_boards_and_a_log_wall_beside_them_is_seen", "terra_build_mesh::inspect::a_thick_wall_beside_a_floor_is_drawn_where_the_floor_meets_it"],
+          "code": ["terra_build_layout::layout::roles", "terra_build_layout::layout::floors", "terra_build_layout::layout::floors::member_face"],
+          "tests": ["terra_build_layout::layout::roles::a_wall_on_a_floor_has_a_border_inside_and_a_foot_outside", "terra_build_layout::layout::floors::a_floor_inside_stone_footings_runs_on_under_its_log_walls_to_their_faces", "terra_build_mesh::sections::a_log_floor_in_a_stone_tower_stops_at_its_walls_faces", "terra_build_mesh::inspect::a_slot_between_a_floors_boards_and_a_log_wall_beside_them_is_seen", "terra_build_mesh::inspect::a_thick_wall_beside_a_floor_is_drawn_where_the_floor_meets_it"],
           "cases": ["village: masonry and timber house of two storeys"],
           "status": "Closed"
         },
         {
           "junction": "A floor's open edge",
           "rule": "Block: rounded, flagged; deck: a rim, joists where in the air",
-          "code": ["layout::floors::decks"],
-          "tests": ["layout::floors::a_deck_out_in_the_open_has_rims_round_it_and_joists_under_it_in_the_air", "layout::floors::a_floor_is_boarded_over_every_open_cube_and_nowhere_else"],
+          "code": ["terra_build_layout::layout::floors::decks"],
+          "tests": ["terra_build_layout::layout::floors::a_deck_out_in_the_open_has_rims_round_it_and_joists_under_it_in_the_air", "terra_build_layout::layout::floors::a_floor_is_boarded_over_every_open_cube_and_nowhere_else"],
           "cases": ["junction, a floor with a stairwell and a balcony"],
           "status": "Closed"
         },
         {
           "junction": "A floor with a stairwell, or reaching past the wall under it",
           "rule": "Block: soffit and rounding. Deck: rims round the hole and the overhang, butting at their corners; out over the air, open under its joists as a deck is",
-          "code": ["layout::floors::decks", "terra_build_mesh::surface"],
+          "code": ["terra_build_layout::layout::floors::decks", "terra_build_mesh::surface"],
           "tests": ["terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
           "cases": ["junction, a floor with a stairwell and a balcony"],
           "status": "Closed"
@@ -225,23 +225,23 @@
         {
           "junction": "A deck on posts; a post's top in a deck",
           "rule": "Bearers on the posts, joists, rim (D306); the post's top cube is the deck's. A rail of the deck's own members stands on it, boarded under; its rims run on into the posts rising at its corners, and its boards under each post past where it stands back at its narrowest (`layout::member_face`); no slot between its boards and a post beside them",
-          "code": ["layout::floors::decks", "layout::floors::post_in_deck", "layout::floors::member_face"],
-          "tests": ["terra_build_mesh::inspect::a_posts_top_in_a_deck_is_as_solid_as_the_deck", "terra_build_mesh::tests::a_lookouts_deck_is_closed_under_its_rail_and_beside_its_corner_posts", "terra_build_mesh::inspect::a_slot_between_a_floors_boards_and_a_post_beside_them_is_seen", "tests::decks::stairs_up_each_side_bear_on_the_rim_and_the_ground"],
+          "code": ["terra_build_layout::layout::floors::decks", "terra_build_layout::layout::floors::post_in_deck", "terra_build_layout::layout::floors::member_face"],
+          "tests": ["terra_build_mesh::inspect::a_posts_top_in_a_deck_is_as_solid_as_the_deck", "terra_build_mesh::tests::a_lookouts_deck_is_closed_under_its_rail_and_beside_its_corner_posts", "terra_build_mesh::inspect::a_slot_between_a_floors_boards_and_a_post_beside_them_is_seen", "terra_build_layout::tests::decks::stairs_up_each_side_bear_on_the_rim_and_the_ground"],
           "cases": ["village: squared timber lookout deck on posts"],
           "status": "Closed"
         },
         {
           "junction": "Stairs onto a deck, and from the ground",
           "rule": "Stringers bear on the deck's rim and the ground; a stringer's head a hair under the deck's top, the deck's boards not run on over the flight's top step",
-          "code": ["layout::stairs", "terra_build_mesh::timber"],
-          "tests": ["tests::decks::stairs_up_each_side_bear_on_the_rim_and_the_ground", "terra_build_mesh::tests::a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts", "terra_build_mesh::timber::a_stringers_head_is_cut_level_under_the_top_of_the_cube_it_reaches", "layout::floors::a_decks_boards_stop_at_a_flights_top_step_beside_it"],
+          "code": ["terra_build_layout::layout::stairs", "terra_build_mesh::timber"],
+          "tests": ["terra_build_layout::tests::decks::stairs_up_each_side_bear_on_the_rim_and_the_ground", "terra_build_mesh::tests::a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts", "terra_build_mesh::timber::a_stringers_head_is_cut_level_under_the_top_of_the_cube_it_reaches", "terra_build_layout::layout::floors::a_decks_boards_stop_at_a_flights_top_step_beside_it"],
           "cases": ["QA cabin"],
           "status": "Closed"
         },
         {
           "junction": "Stairs against a wall",
           "rule": "The flight's own stringer or stone beside the wall's face; a stone stair's nose reaching back no further than its step and a hair into what rises behind it",
-          "code": ["layout::stairs", "terra_build_mesh::sections::blocks"],
+          "code": ["terra_build_layout::layout::stairs", "terra_build_mesh::sections::blocks"],
           "tests": ["terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault", "terra_build_mesh::sections::a_stone_stairs_noses_keep_out_of_the_flight_over_them"],
           "cases": ["junction, stairs against a wall"],
           "status": "Closed"
@@ -249,7 +249,7 @@
         {
           "junction": "A cut cube beside a whole one",
           "rule": "A cut side shows over a lower cut; copings run on and mitre at a ramp's head and foot",
-          "code": ["terra_build_mesh::surface::draw_cut", "layout::shapes"],
+          "code": ["terra_build_mesh::surface::draw_cut", "terra_build_layout::layout::shapes"],
           "tests": ["terra_build_mesh::surface::a_side_shows_over_a_lower_cut_beside_it", "terra_build_mesh::sections::every_shape_is_drawn_in_every_kit_within_its_cut", "terra_build_mesh::sections::a_ramps_coping_is_mitred_to_the_level_coping_at_its_head_and_its_foot"],
           "cases": ["junction, stairs against a wall"],
           "status": "Closed"
@@ -257,15 +257,15 @@
         {
           "junction": "A timber cube boarded as a box: upside down, an upper half, a corner slope",
           "rule": "Butt joints, as a carpenter boxes it: the courses of a side facing east or west run through to the cube's edges; every other board ending or edging where a side is clad (a course facing north or south, a top or underside board, a riser) stops against that cladding's inside face; a raking underside's head stops under the top's deck and its foot, cut plumb, at the cladding inside the side it falls to",
-          "code": ["layout::shapes"],
-          "tests": ["terra_build_scenes::fuzz::fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar", "layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
+          "code": ["terra_build_layout::layout::shapes"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seeds_0_3_and_37_every_boarded_timber_cube_alone_is_drawn_without_coplanar", "terra_build_layout::layout::shapes::a_post_is_one_upright_under_a_bolster_and_a_half_a_low_deck"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "A boarded timber cube on a wall or a floor",
           "rule": "Not yet closed: an inner corner slope on a log room's wall shows sky past it, an upside-down slope beside a log wall's window has a log in the plane of its boards, and far off a deck's board ends in the plane of a corner slope's cladding over it",
-          "code": ["layout::shapes", "layout::runs"],
+          "code": ["terra_build_layout::layout::shapes", "terra_build_layout::layout::runs"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 18, 89, 166",
@@ -274,7 +274,7 @@
         {
           "junction": "A deck against another kind's deck or wall",
           "rule": "Not yet closed: a deck's log ends in the plane of another kind's deck's, a post's log over the roof beside an eave, sky through a stone room's far drawing beside a deck",
-          "code": ["layout::floors::decks"],
+          "code": ["terra_build_layout::layout::floors::decks"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 45, 51, 162, 171",
@@ -283,7 +283,7 @@
         {
           "junction": "Stairs or a ramp against a wall or up to a doorway",
           "rule": "Not yet closed: a log's sawn end under a ramp's block surface; a board in the plane of the floor at a doorway a flight comes up to",
-          "code": ["layout::stairs", "terra_build_mesh::sections::blocks"],
+          "code": ["terra_build_layout::layout::stairs", "terra_build_mesh::sections::blocks"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 150, 164",
@@ -298,8 +298,8 @@
         {
           "junction": "A wall under a roof cube: a gable, the wedge under an eave",
           "rule": "Carried up to the deck: a block surface cut at it, courses cut to the slope, eave blocking cut to the roof; no dress at the gable's steps",
-          "code": ["layout::roofs::standing::gables", "layout::runs::under_roofs", "layout::roles"],
-          "tests": ["terra_build_mesh::sections::a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it", "layout::roofs::a_stone_gable_rises_into_the_roof_cubes_over_it", "layout::runs::a_gable_end_is_logs_that_shorten_toward_the_ridge", "layout::runs::a_wall_under_a_roof_is_closed_to_it_and_its_blocking_meets", "layout::roles::a_gable_carried_up_into_its_roof_has_no_edge_at_its_steps"],
+          "code": ["terra_build_layout::layout::roofs::standing::gables", "terra_build_layout::layout::runs::under_roofs", "terra_build_layout::layout::roles"],
+          "tests": ["terra_build_mesh::sections::a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it", "terra_build_layout::layout::roofs::a_stone_gable_rises_into_the_roof_cubes_over_it", "terra_build_layout::layout::runs::a_gable_end_is_logs_that_shorten_toward_the_ridge", "terra_build_layout::layout::runs::a_wall_under_a_roof_is_closed_to_it_and_its_blocking_meets", "terra_build_layout::layout::roles::a_gable_carried_up_into_its_roof_has_no_edge_at_its_steps"],
           "cases": ["rectangle, gable roof", "rectangle, hip roof"],
           "also": "the checker's under-the-roof rays",
           "status": "Closed"
@@ -307,23 +307,23 @@
         {
           "junction": "A roof's frame at a wall",
           "rule": "Stops at the wall's face, never through a gable or out under a verge",
-          "code": ["layout::roofs::frame"],
-          "tests": ["layout::roofs::no_piece_of_a_frame_crosses_a_gable_or_ends_in_the_air_past_it", "layout::roofs::a_level_piece_of_frame_runs_only_over_the_rooms_of_any_plan"],
+          "code": ["terra_build_layout::layout::roofs::frame"],
+          "tests": ["terra_build_layout::layout::roofs::no_piece_of_a_frame_crosses_a_gable_or_ends_in_the_air_past_it", "terra_build_layout::layout::roofs::a_level_piece_of_frame_runs_only_over_the_rooms_of_any_plan"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "Logs reaching a roof",
           "rule": "Cut where the roof begins",
-          "code": ["layout::runs::under_roofs"],
-          "tests": ["layout::runs::no_log_passes_through_a_roof"],
+          "code": ["terra_build_layout::layout::runs::under_roofs"],
+          "tests": ["terra_build_layout::layout::runs::no_log_passes_through_a_roof"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "A roof on a cut wall cube or on posts",
           "rule": "The roof stands on it; nothing to carry up",
-          "code": ["layout::roofs"],
+          "code": ["terra_build_layout::layout::roofs"],
           "tests": ["terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
           "cases": ["junction, a roof on posts", "junction, a roof on cut wall cubes"],
           "status": "Closed"
@@ -331,15 +331,15 @@
         {
           "junction": "A roof against a wall upslope (a lean-to's head)",
           "rule": "An apron (`Flashing`); the covering tucked 15 cm into the wall (R3)",
-          "code": ["layout::roofs::Flashing", "layout::roofs::flashing"],
-          "tests": ["layout::roofs::a_roof_against_a_taller_wall_is_flashed_and_its_cubes_hold_by_their_ramp", "layout::roofs::the_covering_is_tucked_into_a_wall_beside_the_roof", "layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece"],
+          "code": ["terra_build_layout::layout::roofs::Flashing", "terra_build_layout::layout::roofs::flashing"],
+          "tests": ["terra_build_layout::layout::roofs::a_roof_against_a_taller_wall_is_flashed_and_its_cubes_hold_by_their_ramp", "terra_build_layout::layout::roofs::the_covering_is_tucked_into_a_wall_beside_the_roof", "terra_build_layout::layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece"],
           "cases": ["roofs and walls: a roof rising to a wall"],
           "status": "Closed"
         },
         {
           "junction": "A roof's verge against a wall",
           "rule": "Steps (`Step`) along the sloping edge, the covering tucked",
-          "code": ["layout::roofs::Step", "layout::roofs::flashing"],
+          "code": ["terra_build_layout::layout::roofs::Step", "terra_build_layout::layout::roofs::flashing"],
           "tests": [],
           "cases": ["roofs and walls: a verge against a wall"],
           "status": "Closed"
@@ -347,7 +347,7 @@
         {
           "junction": "A roof falling to a wall (an eave or a hip's end against it)",
           "rule": "A back gutter (`Gutter`), the covering tucked; the wall under the edge stops under the roof where it comes down to its top, blocked to the roof (its own blocking, into the corner where a crossing row's would leave the space against the wall open), and runs on in the wall beyond, every other course a hair short there as at a free end (`runs::under_roofs`)",
-          "code": ["layout::roofs::Gutter", "layout::runs::under_roofs"],
+          "code": ["terra_build_layout::layout::roofs::Gutter", "terra_build_layout::layout::runs::under_roofs"],
           "tests": ["terra_build_scenes::tests::a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables"],
           "cases": ["roofs and walls: a roof falling to a wall"],
           "status": "Closed"
@@ -355,15 +355,15 @@
         {
           "junction": "A valley or inside corner at a wall; a hip or ridge at a wall",
           "rule": "R4: the board along the north and south butts the other's side in an inside corner, each stops at an outside one; a crease's cap ends uncapped at the face; a board narrowed where the roof folds away under it",
-          "code": ["layout::roofs::flashing::flashing_butted", "layout::roofs::flashing::flashing_wide"],
-          "tests": ["layout::roofs::flashing_in_an_inside_corner_butts_and_does_not_lie_in_the_other"],
+          "code": ["terra_build_layout::layout::roofs::flashing::flashing_butted", "terra_build_layout::layout::roofs::flashing::flashing_wide"],
+          "tests": ["terra_build_layout::layout::roofs::flashing_in_an_inside_corner_butts_and_does_not_lie_in_the_other"],
           "cases": ["roofs and walls: a roof in the corner of two walls", "roofs and walls: on hips and valleys"],
           "status": "Closed"
         },
         {
           "junction": "A wall or chimney up through a slope, a ridge or an eave (beside roof cubes)",
           "rule": "The covering tucked into it on every side and flashed: an apron below, steps up its sides, a back gutter above (R3, R4); a timber wall's end board against another kind's chimney stops at the roof's cube and is carried up into it cut under the deck (`trims::ends`); a chimney's dress over the roof is its own, not a piece through the roof",
-          "code": ["layout::roofs::flashing", "layout::trims::ends"],
+          "code": ["terra_build_layout::layout::roofs::flashing", "terra_build_layout::layout::trims::ends"],
           "tests": [],
           "cases": ["roofs and walls: through a roof", "roofs and walls: a chimney of another kind in a gable"],
           "status": "Closed"
@@ -371,15 +371,15 @@
         {
           "junction": "A wall on a roof cube: on a slope, a corner, a ridge, a hip, a valley; a storey on the eaves",
           "rule": "The roof whole under it (R1), it carried down to the deck: a block surface cut there, a timber curb (R2); its foot flashed; the hull draws the roof cube whole (R6); held as any cube is (R7)",
-          "code": ["layout::roofs::standing::curbs", "layout::roofs::standing::carried_cut", "terra_build_mesh::hull"],
-          "tests": ["layout::roofs::a_wall_standing_on_a_slope_leaves_the_roof_whole_under_it_and_is_flashed_round", "layout::roofs::a_wall_standing_on_a_roof_is_carried_down_to_its_deck", "tests::rules::a_wall_stands_on_a_roof_and_is_held_by_what_holds_the_roof", "tests::rules::a_storey_goes_up_over_a_roof_left_on"],
+          "code": ["terra_build_layout::layout::roofs::standing::curbs", "terra_build_layout::layout::roofs::standing::carried_cut", "terra_build_mesh::hull"],
+          "tests": ["terra_build_layout::layout::roofs::a_wall_standing_on_a_slope_leaves_the_roof_whole_under_it_and_is_flashed_round", "terra_build_layout::layout::roofs::a_wall_standing_on_a_roof_is_carried_down_to_its_deck", "terra_build_layout::tests::rules::a_wall_stands_on_a_roof_and_is_held_by_what_holds_the_roof", "terra_build_layout::tests::rules::a_storey_goes_up_over_a_roof_left_on"],
           "cases": ["roofs and walls: standing on a roof", "roofs and walls: on hips and valleys", "roofs and walls: a storey over a roof", "roofs and walls: shapes on a roof", "roofs and walls: going up"],
           "status": "Closed"
         },
         {
           "junction": "A roof's eave over timber walls whichever way it falls, a room's flat top beside them",
           "rule": "The courses left out under it blocked to the roof whichever axis its wall runs along; a row leaves a corner to the crossing row's blocking only where that row is a wall under the eave too, never a floor or a flat top beside it, nor a gable the roof rises along, where its own blocking runs on into the corner",
-          "code": ["layout::runs::under_roofs"],
+          "code": ["terra_build_layout::layout::runs::under_roofs"],
           "tests": ["terra_build_scenes::tests::a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises"],
           "cases": [],
           "status": "Closed"
@@ -387,7 +387,7 @@
         {
           "junction": "A lean-to's high corner over a timber gable rising north or south",
           "rule": "Not yet closed: over the gable's crest at the high wall's corner a slot 5 cm high is left between the eave blocking's weather face and the wall's",
-          "code": ["layout::runs::under_roofs"],
+          "code": ["terra_build_layout::layout::runs::under_roofs"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seed 168",
@@ -401,39 +401,39 @@
         {
           "junction": "Ridge, hip, valley; a ridge a cube wide",
           "rule": "Creases between squares, capped once; a modelled cap's faces cut to length or joined to its cap, never left over one another",
-          "code": ["layout::roofs::lines", "terra_build_mesh::modules::clean"],
-          "tests": ["layout::roofs::a_gable_of_cubes_has_one_ridge_two_eaves_and_four_verges", "layout::roofs::a_hip_of_cubes_has_four_hips_and_a_short_ridge", "layout::roofs::an_l_of_cubes_has_a_valley_where_its_wings_meet_and_eaves_that_meet_in_it", "layout::roofs::an_odd_span_is_capped_by_one_ridge_down_its_flat_middle", "terra_build_mesh::modules::faces_of_a_laid_piece_over_one_another_with_no_corner_shared_are_cut_back_too"],
+          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_mesh::modules::clean"],
+          "tests": ["terra_build_layout::layout::roofs::a_gable_of_cubes_has_one_ridge_two_eaves_and_four_verges", "terra_build_layout::layout::roofs::a_hip_of_cubes_has_four_hips_and_a_short_ridge", "terra_build_layout::layout::roofs::an_l_of_cubes_has_a_valley_where_its_wings_meet_and_eaves_that_meet_in_it", "terra_build_layout::layout::roofs::an_odd_span_is_capped_by_one_ridge_down_its_flat_middle", "terra_build_mesh::modules::faces_of_a_laid_piece_over_one_another_with_no_corner_shared_are_cut_back_too"],
           "cases": ["L, hip roof"],
           "status": "Closed"
         },
         {
           "junction": "Eaves, verges and where they meet",
           "rule": "Each open side exactly one edge piece; a hip's foot mitred; verges at an apex take no cap",
-          "code": ["layout::roofs::lines", "terra_build_mesh::roofing"],
-          "tests": ["layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece", "terra_build_mesh::roofing::a_hips_capping_is_mitred_to_the_eaves_at_its_foot", "terra_build_mesh::roofing::an_eave_is_cut_plumb_through_the_coverings_thickness", "terra_build_scenes::tests::verges_meeting_at_an_apex_take_no_cap_there"],
+          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_mesh::roofing"],
+          "tests": ["terra_build_layout::layout::roofs::every_open_side_of_a_roofs_covering_is_closed_by_one_edge_piece", "terra_build_mesh::roofing::a_hips_capping_is_mitred_to_the_eaves_at_its_foot", "terra_build_mesh::roofing::an_eave_is_cut_plumb_through_the_coverings_thickness", "terra_build_scenes::tests::verges_meeting_at_an_apex_take_no_cap_there"],
           "cases": ["rectangle, hip roof"],
           "status": "Closed"
         },
         {
           "junction": "A wing's ridge into the main roof; a dormer",
           "rule": "One roof: valleys where they meet, the wing's beam butting the main one",
-          "code": ["layout::roofs::frame"],
-          "tests": ["layout::roofs::a_wings_ridge_beam_butts_the_main_ones_side"],
+          "code": ["terra_build_layout::layout::roofs::frame"],
+          "tests": ["terra_build_layout::layout::roofs::a_wings_ridge_beam_butts_the_main_ones_side"],
           "cases": ["L, gable roof", "T, gable roof", "U, gable roof", "QA cabin"],
           "status": "Closed"
         },
         {
           "junction": "A roof over a roof, apart; an eave over a lower roof",
           "rule": "Squares carry on only where their corners meet, so roofs at two heights stay apart",
-          "code": ["layout::roofs"],
-          "tests": ["layout::roofs::a_storey_built_over_a_roof_stops_it_and_a_second_roof_over_it_is_apart", "terra_build_mesh::inspect::a_roofs_eave_over_a_lower_roof_is_measured_from_its_own_roof"],
+          "code": ["terra_build_layout::layout::roofs"],
+          "tests": ["terra_build_layout::layout::roofs::a_storey_built_over_a_roof_stops_it_and_a_second_roof_over_it_is_apart", "terra_build_mesh::inspect::a_roofs_eave_over_a_lower_roof_is_measured_from_its_own_roof"],
           "cases": ["QA cabin, its storey over its roof left on"],
           "status": "Closed"
         },
         {
           "junction": "Two roof kinds meeting",
           "rule": "As one roof; each square in its own kind",
-          "code": ["layout::roofs"],
+          "code": ["terra_build_layout::layout::roofs"],
           "tests": ["terra_build_mesh::sections::every_junction_case_is_drawn_without_a_fault"],
           "cases": ["junction, two roof kinds meeting"],
           "status": "Closed"
@@ -442,22 +442,22 @@
           "junction": "A roof kind cut to a stair, an upper half or a post",
           "rule": "Refused, \"A roof is cut only to slopes, corners and halves.\" (`Shape::roofs`), by plan, reshape or change of kind",
           "code": ["cubes::Shape::roofs"],
-          "tests": ["tests::rules::a_roof_is_cut_only_to_the_shapes_a_roof_has"],
+          "tests": ["terra_build_layout::tests::rules::a_roof_is_cut_only_to_the_shapes_a_roof_has"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "A hole carved in a roof",
           "rule": "Something standing beside the roof to its squares, a cube or two across: flashed round, no eaves carried into it, open at every detail",
-          "code": ["layout::roofs::flashing", "terra_build_mesh::hull"],
-          "tests": ["layout::roofs::a_hole_in_a_roof_is_flashed_round_and_takes_no_eaves"],
+          "code": ["terra_build_layout::layout::roofs::flashing", "terra_build_mesh::hull"],
+          "tests": ["terra_build_layout::layout::roofs::a_hole_in_a_roof_is_flashed_round_and_takes_no_eaves"],
           "cases": ["roofs and walls: holes in a roof"],
           "status": "Closed"
         },
         {
           "junction": "A roof kind's corner square laid by hand where no roof is",
           "rule": "Its eaves carried on past each open side; round a corner of two open sides only as one plane or a hip's crease running down off the roof, never a valley out past an outside corner nor a crease rising out past the roof, so no beam or cap stands past its edge",
-          "code": ["layout::roofs"],
+          "code": ["terra_build_layout::layout::roofs"],
           "tests": ["terra_build_scenes::tests::a_lone_corner_square_carries_no_crease_out_past_its_edges"],
           "cases": [],
           "status": "Closed"
@@ -465,7 +465,7 @@
         {
           "junction": "A roof kind laid by hand where no roof is: a whole or half square on the ground, slopes and corners stacked two high",
           "rule": "Not yet closed: a whole or half square's boards under its deck in one another; a box of slopes or corners two cubes high draws its upper layer's edge pieces and frame 10 to 30 cm over the layer under it",
-          "code": ["layout::roofs::lines", "terra_build_mesh::roofing"],
+          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_mesh::roofing"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 35, 36, 39, 54, 61, 68, 72, 115, 128, 150, 180, 184, 196, 197",
@@ -474,7 +474,7 @@
         {
           "junction": "A roof's eave over a wall running on past it, the wall's top at the eave",
           "rule": "A level edge of the roof's own cubes with a whole wall cube past it, its top where the edge is, is against that wall: flashed, never an eave whose board stands on the wall's top past the eaves the wall stops (R4)",
-          "code": ["layout::roofs"],
+          "code": ["terra_build_layout::layout::roofs"],
           "tests": ["terra_build_scenes::tests::an_eave_over_a_wall_running_on_from_the_room_is_flashed_against_it"],
           "cases": [],
           "status": "Closed"
@@ -482,7 +482,7 @@
         {
           "junction": "A roof square laid on another roof",
           "rule": "Not yet closed: a corner square of one kind laid on a gable of another stands its board, covering and trims 8 cm out past both roofs' edges",
-          "code": ["layout::roofs::lines", "layout::roofs::flashing"],
+          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_layout::layout::roofs::flashing"],
           "tests": [],
           "cases": [],
           "also": "the fuzz pass, seeds 97, 104, 105",
@@ -496,8 +496,8 @@
         {
           "junction": "A wall's foot on the ground or a slope",
           "rule": "A plinth stepping a course at a time and run on down into it; footings to the cube the ground passes through, set into it",
-          "code": ["layout::roles", "ground::Base::lay_footings"],
-          "tests": ["layout::roles::a_foot_on_a_slope_steps_with_the_ground", "tests::decks::on_falling_ground_posts_stand_on_footings_at_the_ground_and_the_flight_reaches_the_deck"],
+          "code": ["terra_build_layout::layout::roles", "ground::Base::lay_footings"],
+          "tests": ["terra_build_layout::layout::roles::a_foot_on_a_slope_steps_with_the_ground", "terra_build_layout::tests::decks::on_falling_ground_posts_stand_on_footings_at_the_ground_and_the_flight_reaches_the_deck"],
           "cases": ["rectangle, gable roof"],
           "status": "Closed"
         },
@@ -505,15 +505,15 @@
           "junction": "A doorway above the ground",
           "rule": "Door steps are cubes of the footing kind (D261)",
           "code": ["ground"],
-          "tests": ["tests::rules::everything_a_walker_stands_on_is_a_cube"],
+          "tests": ["terra_build_layout::tests::rules::everything_a_walker_stands_on_is_a_cube"],
           "cases": [],
           "status": "Closed"
         },
         {
           "junction": "Carving, a cube at a time",
           "rule": "The kit lays itself again round the gap, cut and framed at the first cut",
-          "code": ["layout", "layout::trims::frames"],
-          "tests": ["layout::a_wall_being_carved_is_cut_and_framed_at_the_first_cut", "terra_build_mesh::surface::an_l_and_a_carved_wall_stay_closed_with_relief"],
+          "code": ["terra_build_layout::layout", "terra_build_layout::layout::trims::frames"],
+          "tests": ["terra_build_layout::layout::a_wall_being_carved_is_cut_and_framed_at_the_first_cut", "terra_build_mesh::surface::an_l_and_a_carved_wall_stay_closed_with_relief"],
           "cases": ["QA cabin"],
           "status": "Closed"
         },
@@ -537,7 +537,7 @@
         {
           "junction": "What is left after a collapse",
           "rule": "Any arrangement is drawn (D192 rule 3); plans hanging from what fell go with it; a lintel left over air stops at its cube (`roles::End::Free`)",
-          "code": ["loss", "layout::roles::End::Free"],
+          "code": ["loss", "terra_build_layout::layout::roles::End::Free"],
           "tests": ["loss::knocking_out_a_walls_base_course_brings_down_what_it_alone_held", "loss::plans_hanging_from_what_falls_go_with_it_and_no_others", "terra_build_scenes::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in"],
           "cases": ["rectangle under a gable, after a collapse"],
           "status": "Closed"
@@ -558,7 +558,7 @@
         {
           "junction": "A plan; a building going up",
           "rule": "What is in laid from what is built (D358): a top, an end and a corner where it stops, a cube going in a top at its fill, all laid away as it is built on; ghosts drawn from the plan; what is in hides what is not; a wall carried up into a roof's cube in with the roof's first stage, an upright in with its first cube",
-          "code": ["terra_build_mesh::sections::ghosts", "layout"],
+          "code": ["terra_build_mesh::sections::ghosts", "terra_build_layout::layout"],
           "tests": ["terra_build_mesh::sections::a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit", "terra_build_mesh::sections::a_plan_so_far_through_lights_one_piece_not_one_a_kit", "terra_build_scenes::tests::a_rectangle_is_drawn_closed_in_every_state_it_is_drawn_in", "terra_build_mesh::sections::a_stone_wall_built_halfway_along_has_an_end_and_a_top_where_it_stops", "terra_build_mesh::sections::a_middle_cube_built_alone_has_its_edges_and_finishing_its_neighbour_takes_them_away", "terra_build_mesh::sections::a_log_wall_going_up_ends_its_courses_where_what_is_in_stops", "terra_build_mesh::sections::a_house_going_up_laid_again_a_fill_at_a_time_is_as_laid_whole"],
           "cases": ["rectangle under a gable, as a plan", "rectangle under a gable, walls going up", "rectangle under a gable, roof going on"],
           "also": "the frames check's *going up*",

@@ -7,7 +7,8 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Exists |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and the stand-in planet whose hills the terrain uses | No | Exists |
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits. Brief: [docs/terrain.md](../docs/terrain.md) | No | Exists |
-| `terra_build` | Construction: half-metre cubes on a base's grid, the rooms they close in, roofs, and the kits that lay them ([docs/building-tech.md](../docs/building-tech.md)) | No | Exists |
+| `terra_build` | Construction's rules (D407): half-metre cubes on a base's grid, the operations that change them and their checks, support, the rooms they close in, roofs, plans, costs, loss, saves and the kits' data ([docs/building-tech.md](../docs/building-tech.md)) | No | Exists |
+| `terra_build_layout` | Building laid out (D407): where a base's pieces go by its kits' rules (courses, blocks, frames, trims, floors, stairs, roofs), how doors and shutters hang in their holes, and walking a base; the rules tests (`cargo xtask rules`) | No | Exists |
 | `terra_build_mesh` | Building drawn (D407): a base's laid pieces made into surfaces by material, a section at a time at each detail, dressed, worn and broken into fragments; the kit checker (`cargo xtask kits`), the packs' checks and the mesh inspector | No | Exists |
 | `terra_build_scenes` | Building's fixtures (D407): the scene registry, the fuzz bases, the kit sheet's rows and the QA cabin, and the checks over them (the mesh checker `cargo xtask artifacts`, the drawing audit, the texel check, the voxel contract) | No | Exists |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |

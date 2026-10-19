@@ -24,8 +24,8 @@ use crate::mesh::{Material, Surface, Surfaces};
 use glam::Vec3;
 use std::f32::consts::{PI, TAU};
 use terra_build::kit::{Kit, Notch, Profile};
-use terra_build::layout::{self, Piece, Random, Split};
 use terra_build::pieces::{HEWN_WIDE, hewn_high, section};
+use terra_build_layout::layout::{self, Piece, Random, Split};
 
 /// Faces that meet at more than about 50 degrees are shaded apart, as a crease; less, smooth
 /// across (docs/art-style.md).

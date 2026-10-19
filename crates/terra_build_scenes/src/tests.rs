@@ -4,11 +4,11 @@
 
 use glam::Vec3;
 use terra_build::kit::{Kit, Kits};
-use terra_build::layout::Piece;
-use terra_build::layout::roofs::Roofs;
 use terra_build::roofer::Style;
 use terra_build::testing;
 use terra_build::{Base, CELL_M};
+use terra_build_layout::layout::Piece;
+use terra_build_layout::layout::roofs::Roofs;
 use terra_build_mesh::relief::Maps;
 
 /// The shipped kits the drawing's tests lay, by their files' names.
@@ -93,9 +93,9 @@ fn verges_meeting_at_an_apex_take_no_cap_there() {
             base.cubes().map(|(at, _)| at.y + 1).max().unwrap_or(0) as f32 * terra_build::CELL_M;
         let mut verges = 0;
         for kit in &kits.0 {
-            for piece in terra_build::layout::lay_among(&base, kit, kits).pieces {
+            for piece in terra_build_layout::layout::lay_among(&base, kit, kits).pieces {
                 let Piece::Roof {
-                    part: terra_build::layout::roofs::RoofPart::Verge,
+                    part: terra_build_layout::layout::roofs::RoofPart::Verge,
                     from,
                     to,
                     capped,
@@ -140,7 +140,7 @@ fn a_roof_falling_to_a_coursed_wall_is_closed_to_it_at_the_gables() {
             base.apply(op);
         }
         let lines = terra_build_mesh::inspect::Lines::of(&base, &kits);
-        let roofs = Roofs::whole(&base, &kits, terra_build::layout::Scope::ALL);
+        let roofs = Roofs::whole(&base, &kits, terra_build_layout::layout::Scope::ALL);
         let eave = terra_build::STOREY_CUBES as f32 * CELL_M;
         for (x, out) in [(0, -1.0f32), (9, 1.0)] {
             let face = (x as f32 + 0.5 + out * 0.5) * CELL_M;

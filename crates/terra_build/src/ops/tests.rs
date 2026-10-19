@@ -1,14 +1,11 @@
 //! The operations' rules, case by case, and properties over random operations: after
 //! every step nothing floats, nothing is taken while held, what comes out gives back
-//! exactly what went in, layouts are the same laid twice, and undo returns the state. A
-//! failure names its seed and step, so it can be run again exactly.
+//! exactly what went in, and undo returns the state. A failure names its seed and step, so
+//! it can be run again exactly.
 
 use super::*;
-use crate::Walker;
 use crate::cost::{Amount, PropKind, Terms};
 use crate::cubes::Facing;
-use crate::kit::{Kit, Pattern};
-use crate::layout::lay;
 use glam::Vec3;
 use terra_gen::{Rng, Seed};
 
@@ -126,36 +123,6 @@ fn stone_wall(base: &mut Base, high: i32, cx: &Context) {
         )
         .unwrap();
     }
-}
-
-#[test]
-fn a_log_course_goes_in_across_its_cubes_and_stands_to_its_fill() {
-    let rules = rules();
-    let cx = Context::free(&rules);
-    let mut base = Base::default();
-    base.act(&row(0, LOGS, [0, 0, 4], IVec3::X, 8), &cx)
-        .unwrap();
-    let course = Op::Fill {
-        cubes: line([0, 0, 4], IVec3::X, 8),
-    };
-    // The plan is walked through.
-    let walker = Walker::default();
-    let (from, to) = (Vec3::new(2.0, 0.0, 0.5), Vec3::new(2.0, 0.0, 4.0));
-    assert!((base.walk(from, to, &walker, None) - to).length() < 1e-3);
-    // One course: a quarter of a metre, stepped over; it took one log.
-    let done = base.act(&course, &cx).unwrap();
-    assert_eq!(done.took, Bill::of("Log", Amount::whole(1)));
-    let at = Vec3::new(2.0, 0.1, 2.25);
-    assert_eq!(base.support(at, &walker), Some(0.25));
-    // Two: built, a half metre, and the plan no longer planned.
-    base.act(&course, &cx).unwrap();
-    assert!(base.cube(IVec3::new(3, 0, 4)).unwrap().is_built());
-    assert_eq!(base.store().planned(), 0);
-    assert_eq!(base.support(at, &walker), Some(0.5));
-    assert_eq!(
-        base.act(&course, &cx),
-        Err(Refusal::AlreadyBuilt(IVec3::new(0, 0, 4)))
-    );
 }
 
 #[test]
@@ -997,76 +964,6 @@ fn shaped_cubes_are_built_held_and_taken_apart_as_whole_ones_are() {
     }
 }
 
-#[test]
-fn a_post_holds_up_what_rests_on_it() {
-    let rules = rules();
-    let cx = Context::free(&rules);
-    let mut base = Base::default();
-    // A post three cubes high, and a beam of stone across its top, out into the air.
-    let post: Vec<Planned> = (0..3)
-        .map(|y| Planned {
-            at: [0, y, 0],
-            shape: Shape::Post,
-        })
-        .collect();
-    base.act(
-        &Op::LayPlan {
-            part: Some(PartId(0)),
-            kind: STONE,
-            cubes: post,
-            ground: vec![Sample {
-                column: [0, 0],
-                height_cm: 0,
-            }],
-        },
-        &cx,
-    )
-    .unwrap();
-    base.act(&row(1, STONE, [0, 3, 0], IVec3::X, 3), &cx)
-        .unwrap();
-    // The beam waits for the post under it.
-    assert!(
-        base.act(
-            &Op::Fill {
-                cubes: vec![[0, 3, 0]]
-            },
-            &cx
-        )
-        .is_err()
-    );
-    for y in 0..3 {
-        base.act(
-            &Op::Fill {
-                cubes: vec![[0, y, 0]],
-            },
-            &cx,
-        )
-        .unwrap();
-    }
-    base.act(
-        &Op::Fill {
-            cubes: line([0, 3, 0], IVec3::X, 3),
-        },
-        &cx,
-    )
-    .unwrap();
-    assert!(base.floating().is_empty());
-    // Nothing of the post comes out while the beam rests on it.
-    let refused = base.act(
-        &Op::Empty {
-            cubes: vec![[0, 2, 0]],
-        },
-        &cx,
-    );
-    assert!(refused.is_err(), "{refused:?}");
-    // A walker meets it as a whole cube.
-    let walker = Walker::default();
-    assert_eq!(
-        base.support(Vec3::new(0.25, 0.3, 0.25), &walker),
-        Some(crate::CELL_M)
-    );
-}
-
 // Random operations.
 
 /// The ground's height under a column for a seed, in centimetres: a slope with bumps.
@@ -1443,12 +1340,6 @@ const SEEDS: u64 = 4;
 #[test]
 fn random_operations_keep_every_rule() {
     let rules = rules();
-    let kit = Kit::default();
-    let stone_kit = Kit {
-        id: STONE.0,
-        pattern: Pattern::Masonry,
-        ..Kit::default()
-    };
     let claim = Claim {
         min: [LOW.x, LOW.z],
         max: [HIGH.x, HIGH.z],
@@ -1635,10 +1526,6 @@ fn random_operations_keep_every_rule() {
                 "{at}: what is in and what came out is not what went in"
             );
             if step % 300 == 299 {
-                // Laid twice, the same.
-                for kit in [&kit, &stone_kit] {
-                    assert_eq!(lay(&base, kit).pieces, lay(&base, kit).pieces, "{at}");
-                }
                 // A snapshot reads back the same.
                 let snapshot = base.snapshot();
                 assert_eq!(Base::from_snapshot(&snapshot).as_ref(), Ok(&base), "{at}");
@@ -1719,72 +1606,6 @@ fn wall_with_a_doorway(base: &mut Base, cx: &Context) {
             .collect();
         base.act(&Op::Fill { cubes: course }, cx).unwrap();
     }
-}
-
-#[test]
-fn an_opening_is_planned_into_a_wall_and_a_door_fits_it_once_built() {
-    let rules = rules();
-    let cx = Context::free(&rules);
-    let mut base = Base::default();
-    wall_with_a_doorway(&mut base, &cx);
-    // An opening is not filled, and is walked through.
-    assert_eq!(
-        base.act(
-            &Op::Fill {
-                cubes: vec![[2, 0, 0]]
-            },
-            &cx
-        ),
-        Err(Refusal::Opening(IVec3::new(2, 0, 0)))
-    );
-    let door = Prop {
-        kind: DOOR,
-        min: [2, 0, 0],
-        max: [2, 3, 0],
-        open: false,
-        opens: [0, 0, 1],
-        ..Prop::default()
-    };
-    base.act(&Op::FitProp(door), &cx).unwrap();
-    // Shut, it stops a walker in the doorway; open, it lets them in as far as where it
-    // stands open.
-    let walker = Walker {
-        radius: 0.2,
-        ..Walker::default()
-    };
-    let (from, to) = (Vec3::new(1.25, 0.0, -0.3), Vec3::new(1.25, 0.0, 0.05));
-    assert!(base.walk(from, to, &walker, None).z < 0.04);
-    base.act(
-        &Op::SetOpen {
-            at: [2, 0, 0],
-            open: true,
-        },
-        &cx,
-    )
-    .unwrap();
-    assert!((base.walk(from, to, &walker, None) - to).length() < 1e-3);
-    // A fitted opening cannot be closed, and a closed one is planned again.
-    assert_eq!(
-        base.act(
-            &Op::Close {
-                cubes: vec![[2, 0, 0]]
-            },
-            &cx
-        ),
-        Err(Refusal::PropThere(IVec3::new(2, 0, 0)))
-    );
-    base.act(&Op::RemoveProp { at: [2, 0, 0] }, &cx).unwrap();
-    let closed = base
-        .act(
-            &Op::Close {
-                cubes: line([2, 0, 0], IVec3::Y, 4),
-            },
-            &cx,
-        )
-        .unwrap();
-    assert_eq!(base.cube(IVec3::new(2, 0, 0)).unwrap().level(), 0);
-    base.act_all(&closed.undo, &cx).unwrap();
-    assert_eq!(base.cube(IVec3::new(2, 0, 0)).unwrap().fill, Fill::Open);
 }
 
 #[test]

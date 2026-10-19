@@ -141,7 +141,7 @@ pub(crate) fn rules(args: &[String]) -> bool {
                     "test",
                     "-q",
                     "-p",
-                    "terra_build",
+                    "terra_build_layout",
                     "--test",
                     "rules",
                     "--",

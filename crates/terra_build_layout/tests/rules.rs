@@ -1,8 +1,8 @@
 //! The construction rules audited case by case (research/building-audit.md, `cargo xtask
 //! rules`): the cases construction-001 and D193 name that the operations' own tests do not
 //! already walk through. Each test is one rule; a rule known to fail today is `#[ignore]`d
-//! with its reason, so `cargo xtask check` stays the gate for what holds and
-//! `cargo xtask rules` runs the ignored ones too and reports them.
+//! with its reason, so `cargo xtask check` stays the gate for what holds and `cargo xtask
+//! rules` runs the ignored ones too and reports them.
 
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -12,6 +12,7 @@ use terra_build::{
     Amount, Base, Bill, CELL_M, Cube, Facing, Fill, Kind, PartId, Prop, PropKind, Rules, Sample,
     Shape, Terms, Walker,
 };
+use terra_build_layout::walk::Walking;
 
 const LOGS: Kind = Kind(1);
 const STONE: Kind = Kind(2);
@@ -558,8 +559,7 @@ fn shapes_overhead_stop_a_walker_where_their_underside_is_lower_than_their_head(
 #[test]
 fn trims_standing_out_of_a_wall_never_stop_a_walker_short_of_its_cubes() {
     // A walker meets the cubes, never the pieces drawn on them (D192 as amended): walked
-    // at a wall, they stop their radius short of its cubes' face, whatever its kit hangs
-    // there.
+    // at a wall, they stop their radius short of its cubes' face, whatever its kit hangs there.
     let mut base = Base::default();
     base.apply(terra_build::BuildOp::Fill {
         min: [4, 0, -4],

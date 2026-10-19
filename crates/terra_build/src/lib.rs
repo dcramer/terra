@@ -18,7 +18,7 @@
 //!   slopes and corners, laid by hand or by the roofer ([`roofer`]) and drawn as a roof
 //!   from their neighbours (`layout::roofs`): no wall tile, floor or room of their own.
 //! - **Doors and shutters are props** ([`Prop`]) fitted into holes in built walls, their
-//!   leaves hung on the hole's sides ([`fitting`]).
+//!   leaves hung on the hole's sides (`terra_build_layout::fitting`).
 //! - **Cubes take damage and are repaired** ([`loss`], D193): one destroyed, what then
 //!   hangs from nothing comes down, bursting into fragments as the game draws it.
 //! - **Everything a player does is an operation** ([`ops::Op`]), checked by one pure
@@ -43,12 +43,10 @@ pub mod cubes;
 pub mod example;
 pub mod fire;
 pub use fire::Scorch;
-pub mod fitting;
 pub mod ground;
 pub mod junctions;
 pub mod kit;
 pub mod layers;
-pub mod layout;
 pub mod look;
 pub mod loss;
 pub mod ops;
@@ -64,10 +62,6 @@ pub mod save;
 mod shortcuts;
 pub mod support;
 pub mod testing;
-mod walk;
-
-#[cfg(test)]
-mod seams;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms, Toughness};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
@@ -216,7 +210,7 @@ impl Part {
 }
 
 /// A door or shutters fitted into a hole in a wall (construction-001, gap 15), filling
-/// the cubes from `min` to `max`, and how it hangs there ([`fitting`]).
+/// the cubes from `min` to `max`, and how it hangs there (`terra_build_layout::fitting`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Prop {
     pub kind: PropKind,
@@ -525,7 +519,7 @@ impl Base {
     }
 
     /// A base of these cubes, with its walls and rooms worked out.
-    fn from_cubes(cubes: Cubes) -> Base {
+    pub fn from_cubes(cubes: Cubes) -> Base {
         let mut base = Base {
             cubes,
             ..Base::default()

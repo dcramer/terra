@@ -3,10 +3,10 @@
 //! folds away under it.
 
 use super::{RoofPart, Roofs, Segment, planar_normal};
-use crate::CELL_M;
-use crate::kit::Kit;
 use crate::layout::{Place, ticks};
 use glam::Vec3;
+use terra_build::CELL_M;
+use terra_build::kit::Kit;
 
 /// Which flashing a line where the covering meets something standing is, by the line and
 /// the roof's triangle on its open side: a step up a sloping line, else an apron where the

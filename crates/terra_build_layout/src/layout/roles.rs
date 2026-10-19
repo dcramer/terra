@@ -30,11 +30,11 @@
 //! Distances it gives are in ticks of the grid (D208), so machines agree.
 
 use super::{TICKS, drawn_fill};
-use crate::kit::{Kits, Pattern};
-use crate::{Base, Fill, Kind};
 use glam::IVec3;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use terra_build::kit::{Kits, Pattern};
+use terra_build::{Base, Fill, Kind};
 
 /// A way out of a cube along an axis, in `surface`'s order of faces.
 #[derive(
@@ -106,12 +106,12 @@ impl Dir {
     }
 
     /// The level way a stair or slope rises toward.
-    pub fn facing(facing: crate::Facing) -> Dir {
+    pub fn facing(facing: terra_build::Facing) -> Dir {
         match facing {
-            crate::Facing::North => Dir::North,
-            crate::Facing::East => Dir::East,
-            crate::Facing::South => Dir::South,
-            crate::Facing::West => Dir::West,
+            terra_build::Facing::North => Dir::North,
+            terra_build::Facing::East => Dir::East,
+            terra_build::Facing::South => Dir::South,
+            terra_build::Facing::West => Dir::West,
         }
     }
 }
@@ -135,7 +135,7 @@ impl Beyond {
     }
 }
 
-pub use crate::pieces::Role;
+pub use terra_build::pieces::Role;
 
 /// An edge of a cube with a role: between its face `side`, which it looks out of, and
 /// `other`: up or down for a level edge; for an upright one, the face north or south of it
@@ -239,19 +239,20 @@ impl<'a> Roles<'a> {
         let capped = kits
             .0
             .iter()
-            .filter(|kit| kits.carries(kind, kit.kind()) == crate::kit::Joint::Cap)
+            .filter(|kit| kits.carries(kind, kit.kind()) == terra_build::kit::Joint::Cap)
             .map(|kit| kit.kind())
             .collect();
         let plinth = kits.of(kind).is_some_and(|kit| {
             matches!(
                 kit.dress.roles.get(&Role::Foot),
-                Some(crate::kit::Dress::Profile { .. })
+                Some(terra_build::kit::Dress::Profile { .. })
             )
         });
         // A profile's lowest and highest, in ticks, where the kit dresses a role with one.
         let span = |role: Role| {
             let kit = kits.of(kind)?;
-            let Some(crate::kit::Dress::Profile { name, .. }) = kit.dress.roles.get(&role) else {
+            let Some(terra_build::kit::Dress::Profile { name, .. }) = kit.dress.roles.get(&role)
+            else {
                 return None;
             };
             let profile = kit.dress.made.as_deref()?.profiles.get(name)?;
@@ -610,7 +611,7 @@ impl<'a> Roles<'a> {
             self.base.cube(at).is_some_and(|c| {
                 c.kind == self.kind
                     && c.fill == Fill::Solid
-                    && matches!(c.shape, crate::Shape::Slope(f) if Dir::facing(f) == rises)
+                    && matches!(c.shape, terra_build::Shape::Slope(f) if Dir::facing(f) == rises)
             }) && self.beyond(at + side.step()).open()
         };
         if slope(next, along.opposite()) {
@@ -619,7 +620,7 @@ impl<'a> Roles<'a> {
         let whole = self
             .base
             .cube(next)
-            .is_some_and(|c| c.kind == self.kind && c.shape == crate::Shape::Whole);
+            .is_some_and(|c| c.kind == self.kind && c.shape == terra_build::Shape::Whole);
         if whole && slope(next + IVec3::Y, along) {
             return Some(End::Under);
         }
@@ -639,7 +640,7 @@ impl<'a> Roles<'a> {
 /// `Ground::height_cm` gives it (D367).
 pub fn ground_ticks(base: &Base, column: [i32; 2]) -> i32 {
     let cm = i32::from(base.ground().height_cm(column));
-    (cm * TICKS).div_euclid(crate::ground::cube_cm())
+    (cm * TICKS).div_euclid(terra_build::ground::cube_cm())
 }
 
 /// Where a cube's edge is, in ticks: the point it starts at, low along its axis, and the
@@ -659,8 +660,8 @@ pub fn line(cube: IVec3, edge: Edge) -> ([i32; 3], [i32; 3]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kit::Kit;
-    use crate::{BuildOp, Cube};
+    use terra_build::kit::Kit;
+    use terra_build::{BuildOp, Cube};
 
     const STONE: Kind = Kind(2);
     const LOGS: Kind = Kind(1);
@@ -729,7 +730,8 @@ mod tests {
         // Under a gable of roof cubes, none: the roof is over them, and a coping there
         // would stand up through it.
         let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
-        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        let plan =
+            terra_build::roofer::over(&footprint, 6, terra_build::roofer::Style::Gable, None);
         for (at, shape) in plan.roof {
             base.apply(BuildOp::Fill {
                 min: at.to_array(),
@@ -764,7 +766,8 @@ mod tests {
             kind: STONE,
         });
         let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
-        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        let plan =
+            terra_build::roofer::over(&footprint, 6, terra_build::roofer::Style::Gable, None);
         for (at, shape) in plan.roof {
             base.apply(BuildOp::Fill {
                 min: at.to_array(),
@@ -947,7 +950,7 @@ mod tests {
             };
             kit.dress.roles.insert(
                 Role::Foot,
-                crate::kit::Dress::Profile {
+                terra_build::kit::Dress::Profile {
                     name: "plinth".into(),
                     extend: 0.0,
                     joints: true,
@@ -1020,7 +1023,7 @@ mod tests {
 
     #[test]
     fn how_kinds_meet_is_the_kits_table_not_their_pattern() {
-        use crate::kit::{Joint, Meet, Meets};
+        use terra_build::kit::{Joint, Meet, Meets};
         let mut base = base(&[([0, 0, 0], [5, 0, 0])]);
         fill(&mut base, [0, 1, 0], [3, 3, 0], LOGS);
         fill(&mut base, [4, 1, 0], [5, 3, 0], STONE);
@@ -1060,13 +1063,13 @@ mod tests {
     fn a_foot_on_a_slope_steps_with_the_ground() {
         // A wall along x on footings down into ground rising a quarter cube a cube east.
         let mut base = Base::default();
-        let cm = crate::ground::cube_cm();
+        let cm = terra_build::ground::cube_cm();
         for x in 0..8 {
             fill(&mut base, [x, -1, 0], [x, 3, 0], STONE);
         }
         // Sampled once the cubes are there: a base keeps samples only under its cubes.
         for x in -1..9 {
-            base.sample_ground((-1..=1).map(|z| crate::Sample {
+            base.sample_ground((-1..=1).map(|z| terra_build::Sample {
                 column: [x, z],
                 height_cm: (x * cm / 4) as i16,
             }));

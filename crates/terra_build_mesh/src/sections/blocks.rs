@@ -457,8 +457,9 @@ impl Holes {
         for (index, near) in round_it(cube).enumerate() {
             if let Some(&quarters) = self.worn.get(&near.to_array()) {
                 most = most.max(quarters);
-                key =
-                    terra_build::layout::splitmix(key ^ u64::from(quarters) ^ (index as u64) << 8);
+                key = terra_build_layout::layout::splitmix(
+                    key ^ u64::from(quarters) ^ (index as u64) << 8,
+                );
             }
         }
         // None where no cube round it has lost enough for a stone to go anywhere.

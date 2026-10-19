@@ -11,8 +11,8 @@ use super::inventory::{Cost, Items};
 use bevy::prelude::{Resource, Vec3};
 use serde::Deserialize;
 use std::sync::Arc;
-use terra_build::fitting::Hang;
 use terra_build::{Panel, PropKind};
+use terra_build_layout::fitting::Hang;
 use terra_items::ItemKind;
 
 const FILE: &str = "builds.ron";
@@ -314,7 +314,7 @@ pub struct Fitting {
     /// The kind of prop it is, as the base keeps it.
     pub kind: PropKind,
     /// The material its frame is drawn in, a kit's name: a door or shutters come with their
-    /// frame (`terra_build::fitting::Prop::frame`).
+    /// frame (`terra_build_layout::fitting::Prop::frame`).
     pub frame: Option<String>,
 }
 

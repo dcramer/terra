@@ -19,7 +19,7 @@ const LOG = join(OUT, "cargo.log");
 export const PROBES: Record<string, string> = {
   core: "crates/terra_core/src/lib.rs",
   "build-rules": "crates/terra_build/src/cubes.rs",
-  "build-layout": "crates/terra_build/src/layout/runs.rs",
+  "build-layout": "crates/terra_build_layout/src/layout/runs.rs",
   "build-mesh": "crates/terra_build_mesh/src/sections.rs",
   town: "crates/terra_town/src/town/streets.rs",
   world: "crates/terra_world/src/flora.rs",

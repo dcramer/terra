@@ -393,7 +393,7 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
 /// ceiling sees the roof's underside, not the sky, which lit the worn pale tops of logs on a
 /// gable and indoors blue-white. Up to `SHELTERED` darker for a face looking straight up
 /// with a roof close over it, fading with the roof's height over it to `SHELTER_REACH_M`.
-pub fn sheltered(surface: &mut Surface, roofs: &terra_build::layout::roofs::Roofs) {
+pub fn sheltered(surface: &mut Surface, roofs: &terra_build_layout::layout::roofs::Roofs) {
     if roofs.is_empty() {
         return;
     }
@@ -440,7 +440,11 @@ pub(super) const SHELTER_REACH_M: f32 = 4.0;
 /// covering greened by moss and lichen in blotches; up toward its ridge and hips greyed by
 /// the sun and weather, as timber is; along its eaves and verges, its edges worn lighter.
 /// Where each point is on its roof is `roofs`'s to say.
-pub fn roof_mask(surface: &mut Surface, kit: &Kit, roofs: &terra_build::layout::roofs::Roofs) {
+pub fn roof_mask(
+    surface: &mut Surface,
+    kit: &Kit,
+    roofs: &terra_build_layout::layout::roofs::Roofs,
+) {
     let masks = &kit.dress.masks;
     if masks.moss <= 0.0 && masks.weather <= 0.0 && masks.wear <= 0.0 {
         return;

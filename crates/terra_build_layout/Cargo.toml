@@ -1,0 +1,19 @@
+[package]
+name = "terra_build_layout"
+description = "Building laid out: where a base's pieces go by its kits' rules (courses, blocks, frames, trims, floors, stairs and roofs), how a door or shutters hang in their hole, and walking a base. What a server needs of building past the rules. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+serde.workspace = true
+# The hash mixers every crate shares (terra_gen::hash).
+terra_gen.workspace = true
+# The rules this lays out (D407).
+terra_build.workspace = true
+
+[lints]
+workspace = true

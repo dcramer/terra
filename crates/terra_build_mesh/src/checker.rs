@@ -12,9 +12,9 @@ use crate::Surfaces;
 use crate::mesh::Material;
 use std::collections::BTreeMap;
 use terra_build::kit::{Kit, Pattern};
-use terra_build::layout::roofs::RoofPart;
-use terra_build::layout::{self, Piece};
 use terra_build::{Base, BuildOp, CELL_M, Cube, Fill, Kind};
+use terra_build_layout::layout::roofs::RoofPart;
+use terra_build_layout::layout::{self, Piece};
 
 /// The style guide's budgets for what kits draw (docs/art-style.md, Budgets): triangles in
 /// a metre of a long member, and in a square metre of roof, its covering, battens, boards
@@ -191,10 +191,10 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
     if steps == 0 || !terra_build::cubes::FULL.is_multiple_of(steps) {
         fail(format!("{steps} steps do not fill a cube"));
     }
-    if kit.pattern == Pattern::Roof && steps != terra_build::layout::roofs::ROOF_STAGES {
+    if kit.pattern == Pattern::Roof && steps != terra_build_layout::layout::roofs::ROOF_STAGES {
         fail(format!(
             "a roof goes up in {} stages, not {steps} steps",
-            terra_build::layout::roofs::ROOF_STAGES
+            terra_build_layout::layout::roofs::ROOF_STAGES
         ));
     }
     for (thing, num, den) in &kit.cost.step {
@@ -360,7 +360,7 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
                     fail(format!("its profile {name} has too few points"));
                 }
                 // Out from its face; a floor's border lies on the floor, so up from it.
-                let axis = usize::from(*role == terra_build::layout::Role::Border);
+                let axis = usize::from(*role == terra_build_layout::layout::Role::Border);
                 let out = profile.iter().map(|p| p[axis]).fold(f32::MIN, f32::max);
                 if out > CELL_M / 8.0 + 1e-3 {
                     fail(format!(
@@ -415,7 +415,7 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
                 }
             }
             Dress::Pillar { width } => {
-                if *role != terra_build::layout::Role::Post {
+                if *role != terra_build_layout::layout::Role::Post {
                     fail(format!(
                         "dresses {role:?} with a pillar, which only posts are"
                     ));
@@ -828,7 +828,7 @@ mod tests {
         ] {
             kit.dress
                 .roles
-                .insert(terra_build::layout::Role::Arris, dress);
+                .insert(terra_build_layout::layout::Role::Arris, dress);
             let said = check(&kit, &|_| true, &[]).problems.join("; ");
             assert!(said.contains(words), "{words}: {said}");
         }
@@ -904,7 +904,7 @@ mod tests {
             .map(|(_, kit)| kit.clone())
             .unwrap();
         stone.dress.roles.insert(
-            terra_build::layout::Role::Inside,
+            terra_build_layout::layout::Role::Inside,
             terra_build::kit::Dress::Profile {
                 name: "cornice".into(),
                 extend: 0.0,

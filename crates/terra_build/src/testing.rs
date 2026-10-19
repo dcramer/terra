@@ -65,3 +65,9 @@ pub fn textured() -> Kit {
         ..kit()
     }
 }
+
+/// A prop put straight into a base, unchecked by the operations, for a test of how it hangs
+/// whatever stands round it (the layout's `fitting` tests).
+pub fn put_prop(base: &mut Base, prop: crate::Prop) {
+    base.props.insert(prop.min, prop);
+}

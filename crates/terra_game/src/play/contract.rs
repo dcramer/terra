@@ -9,7 +9,7 @@
 //! - **Sockets.** The points code attaches to are empties in its file, `socket.<name>`,
 //!   and each kind has the ones code needs ([`Entry::sockets`]).
 //! - **Fit.** A door's or shutters' leaf is made for the leaf the first hole it fits takes, within
-//!   an eighth of it, and is stretched to that leaf (`terra_build::fitting`): a door's inside
+//!   an eighth of it, and is stretched to that leaf (`terra_build_layout::fitting`): a door's inside
 //!   the frame it comes with, shutters over the hole and a little past its edges; it stays
 //!   within the wall's faces (doors) or on its outer half (shutters).
 //!
@@ -19,8 +19,8 @@
 use super::catalogue::{Builds, Rest};
 use super::props::{Shape, read_shape, socket};
 use bevy::prelude::*;
-use terra_build::fitting::Hang;
 use terra_build::{CELL_M, Prop, PropKind};
+use terra_build_layout::fitting::{Hang, Hanging};
 
 /// Where a model's origin is, by its kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -191,8 +191,8 @@ fn check_fit(entry: &Entry, hang: Hang, (wide, high): (i32, i32)) -> Vec<String>
         let (low, top) = match hang {
             Hang::Door => (-middle, middle),
             Hang::Shutters => (
-                middle + terra_build::fitting::FRAME_PROUD_M,
-                middle + terra_build::fitting::FRAME_PROUD_M + entry.dims.z,
+                middle + terra_build_layout::fitting::FRAME_PROUD_M,
+                middle + terra_build_layout::fitting::FRAME_PROUD_M + entry.dims.z,
             ),
         };
         if back < low - 1e-3 || front > top + 1e-3 {

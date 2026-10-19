@@ -12,10 +12,10 @@
 
 use super::roles::Role;
 use super::{Piece, Place, Scope, dressing};
-use crate::kit::{Kit, Kits};
-use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
+use terra_build::kit::{Kit, Kits};
+use terra_build::{Base, CELL_M, Fill, Kind};
 
 /// How deep a timber lintel is over an opening, and how far it runs into the wall either
 /// side.
@@ -44,8 +44,8 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Vec<Piec
     if let Some(framing) = &kit.framing {
         if framing.core.is_some() {
             pieces.extend(cubes.iter().filter_map(|&(at, cube)| {
-                let whole = cube.kind == kind && cube.shape == crate::Shape::Whole;
-                let cutting = cube.pending == crate::Pending::Carve
+                let whole = cube.kind == kind && cube.shape == terra_build::Shape::Whole;
+                let cutting = cube.pending == terra_build::Pending::Carve
                     && cube.fill == Fill::Solid
                     && cube.level() > 0;
                 (whole && (solid(at) || cutting)).then_some(Piece::Wattle { cube: at })
@@ -141,8 +141,8 @@ fn openings(
 mod tests {
     use super::super::roles::{Dir, End};
     use super::*;
-    use crate::kit::Pattern;
-    use crate::{BuildOp, Panel};
+    use terra_build::kit::Pattern;
+    use terra_build::{BuildOp, Panel};
 
     fn kit() -> Kit {
         Kit {
@@ -205,7 +205,7 @@ mod tests {
 
     /// The stone kit dressing its roles as `stone.ron` does.
     fn dressed() -> Kit {
-        use crate::kit::Dress;
+        use terra_build::kit::Dress;
         let profile = |name: &str| Dress::Profile {
             name: name.into(),
             extend: 0.0,
@@ -348,7 +348,9 @@ mod tests {
             });
         }
         let mut kit = dressed();
-        kit.dress.roles.insert(Role::Jamb, crate::kit::Dress::Off);
+        kit.dress
+            .roles
+            .insert(Role::Jamb, terra_build::kit::Dress::Off);
         let pieces = lay(&base, &kit, &Kits(vec![kit.clone()]), Scope::ALL);
         assert!(!pieces.iter().any(|p| matches!(
             p,
@@ -368,10 +370,10 @@ mod tests {
         base.apply(BuildOp::Fill {
             min: [0, 0, 0],
             max: [6, 6, 0],
-            cube: Some(crate::Cube::new(kit.kind(), Fill::Solid)),
+            cube: Some(terra_build::Cube::new(kit.kind(), Fill::Solid)),
         });
         // A cross: an upright three cubes high at x = 3 and an arm across it at y = 3.
-        let open = Some(crate::Cube::new(kit.kind(), Fill::Open));
+        let open = Some(terra_build::Cube::new(kit.kind(), Fill::Open));
         for (min, max) in [([3, 2, 0], [3, 4, 0]), ([2, 3, 0], [4, 3, 0])] {
             base.apply(BuildOp::Fill {
                 min,
@@ -430,7 +432,7 @@ mod tests {
         base.apply(BuildOp::Fill {
             min: [0, 0, 0],
             max: [3, 1, 0],
-            cube: Some(crate::Cube::new(kit().kind(), Fill::Solid)),
+            cube: Some(terra_build::Cube::new(kit().kind(), Fill::Solid)),
         });
         let kits = Kits(vec![Kit::default(), dressed()]);
         let pieces = lay(&base, &dressed(), &kits, Scope::ALL);

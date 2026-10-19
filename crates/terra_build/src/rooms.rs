@@ -585,7 +585,7 @@ mod tests {
         let _ = base.room_cubes();
         // Cubes knocked out and put back at random through the walls, floors and roofs, and
         // inside: holes open rooms to the outside and to each other, and close them again.
-        let mut random = crate::layout::Random(7);
+        let mut random = terra_gen::Rng::new(terra_gen::Seed(7));
         let (mut again, mut asked, mut changes) = (0, 0, 0);
         for step in 0..400 {
             let at = [

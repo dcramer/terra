@@ -10,8 +10,8 @@
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
 use terra_build::kit::{Kit, Kits};
-use terra_build::layout::{self, Piece, Role};
 use terra_build::{Base, BuildOp, CELL_M, Cube, Facing, Fill, Kind, Shape};
+use terra_build_layout::layout::{self, Piece, Role};
 
 const LOGS: Kind = Kind(1);
 const STONE: Kind = Kind(2);

@@ -1,10 +1,11 @@
 //! A door's or shutters' frame drawn (D192, D225): its jambs, head and threshold or sill as
-//! boxes in the kit's squared timber, where `terra_build::fitting` stands them in the wall.
+//! boxes in the kit's squared timber, where `terra_build_layout::fitting` stands them in the wall.
 
 use crate::mesh::Surfaces;
 use glam::Vec3;
 use terra_build::Prop;
 use terra_build::kit::Kit;
+use terra_build_layout::fitting::Hanging;
 
 /// A frame drawn, on a wall whose face stands `face` out from its middle: its boxes in a
 /// kit's material (squared timber's, `fragments`'), about `origin`, each face's texture laid

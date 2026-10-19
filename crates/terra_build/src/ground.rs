@@ -461,11 +461,6 @@ mod tests {
         assert_eq!(ground.height_cm([2, -2]), 400);
         // Nothing near: the base's level.
         assert_eq!(ground.height_cm([9, 9]), super::LEVEL_CM);
-        // What is dressed reads the same ground.
-        assert_eq!(
-            crate::layout::roles::ground_ticks(&base, [0, 0]),
-            -75 * crate::layout::TICKS / super::cube_cm()
-        );
     }
 
     #[test]

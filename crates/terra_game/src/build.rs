@@ -606,7 +606,7 @@ impl Build {
     /// The height of whatever the base offers to stand on at a point in its own space: a
     /// floor, a roof, a stair or a slope, whichever is highest within a step of the feet.
     pub(super) fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
-        self.walkable().support(point, walker)
+        terra_build_layout::walk::Walking::support(self.walkable(), point, walker)
     }
 
     /// What a walker meets: what stands of the base so far.

@@ -1,8 +1,8 @@
 use super::standing::deck;
 use super::*;
-use crate::kit::Pattern;
-use crate::roofer::{self, Style};
-use crate::{BuildOp, STOREY_M};
+use terra_build::kit::Pattern;
+use terra_build::roofer::{self, Style};
+use terra_build::{BuildOp, STOREY_M};
 
 const ROOF: Kind = Kind::FIRST_ROOF;
 
@@ -240,7 +240,7 @@ fn a_batten_jointed_to_the_next_of_its_line_takes_no_cap_there() {
 fn a_wings_ridge_beam_butts_the_main_ones_side() {
     // A T: the wing's ridge meets the main ridge along it, the beams under them at one
     // height, the wing's ending at the main one's side, not in it.
-    let (_, ops) = crate::roof_rows(&[Kind::PLAIN], false, &|_| ROOF)
+    let (_, ops) = terra_build::roof_rows(&[Kind::PLAIN], false, &|_| ROOF)
         .into_iter()
         .find(|(row, _)| row == "T, gable roof")
         .expect("a T under a gable");
@@ -508,7 +508,7 @@ fn a_level_piece_of_frame_runs_only_over_the_rooms_of_any_plan() {
     // An L, a T and a U of gables: no batten or ridge beam in a wall, gable or not, nor
     // out past the walls under an eave or a verge.
     for shape in ["L", "T", "U"] {
-        let (rooms, _) = crate::roof_plan(shape, Style::Gable, Style::Gable);
+        let (rooms, _) = terra_build::roof_plan(shape, Style::Gable, Style::Gable);
         let rooms: Vec<([i32; 3], [i32; 3])> = rooms.to_vec();
         let base = roofed(&rooms, Style::Gable);
         // In the plan, and not in its outer walls: every column round it in the plan too.

@@ -12,6 +12,7 @@ glam.workspace = true
 terra_gen.workspace = true
 # The rules the scenes are laid by, and the layout and drawing the checks read.
 terra_build.workspace = true
+terra_build_layout.workspace = true
 terra_build_mesh.workspace = true
 # The village's buildings the registry lays, in the settlement's own materials (D407).
 terra_town.workspace = true

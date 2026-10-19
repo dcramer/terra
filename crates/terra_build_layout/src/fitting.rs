@@ -15,11 +15,11 @@
 //! strap hinges; a hole 0.75 m wide or more takes a pair. This is how real ones hang, and
 //! how Valheim's and Enshrouded's doors do.
 
-use crate::kit::{Kit, Kits};
-use crate::{Base, CELL_M, Fill, Kind, Prop};
 use glam::{IVec3, Vec2, Vec3};
+use terra_build::kit::{Kit, Kits};
+use terra_build::{Base, CELL_M, Fill, Kind, Prop};
 
-pub use crate::pieces::Hang;
+pub use terra_build::pieces::Hang;
 
 /// How far a frame reaches past the hole's edges into the wall round it: so what is fitted
 /// fills its hole whatever stands round it, a log wall's courses or a stone wall's dressed
@@ -42,10 +42,6 @@ pub const SHUTTER_THICK_M: f32 = 0.05;
 /// the frame and the wall beside it.
 const DOOR_SWING_DEGREES: f32 = 92.0;
 const SHUTTER_SWING_DEGREES: f32 = 180.0;
-/// How wide a hole takes a pair of leaves rather than one, in metres: a door from 1.5 m,
-/// shutters from 0.75 m.
-const DOOR_PAIR_M: f32 = 1.5;
-const SHUTTER_PAIR_M: f32 = 0.75;
 
 /// One leaf of a door or of shutters, in the base's own space, in metres.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -110,54 +106,25 @@ impl Leaf {
     }
 }
 
-impl Prop {
-    /// The way across the wall it is fitted in, out of the wall's face: the way it opens
-    /// if it was given one, else south or east by the shape of its hole.
-    fn across_wall(&self) -> IVec3 {
-        let opens = IVec3::from_array(self.opens);
-        if opens != IVec3::ZERO {
-            return opens;
-        }
-        if self.max[0] > self.min[0] {
-            IVec3::Z
-        } else {
-            IVec3::X
-        }
-    }
+/// A prop's frame and leaves as they hang in its hole. A trait, as the prop is the rules' type
+/// and its hanging the layout's (D407).
+pub trait Hanging {
+    /// Its frame on a wall whose face stands `face` out from its middle ([`wall_face`]), as
+    /// boxes in the base's own space, each its low and high corners.
+    fn frame(&self, face: f32) -> Vec<(Vec3, Vec3)>;
+    /// Its leaves, as they hang in its frame on a wall whose face stands `face` out from its
+    /// middle.
+    fn leaves(&self, face: f32) -> Vec<Leaf>;
+}
 
-    /// The hole it is fitted in, in the base's own space, in metres: the way out of the wall
-    /// (the way a door opens), the way along it, its low and high corners, and the wall's
-    /// middle through its thickness.
-    fn hole(&self) -> (Vec3, Vec3, Vec3, Vec3, f32) {
-        let opens = self.across_wall().as_vec3().normalize_or(Vec3::Z);
-        let along = Vec3::new(opens.z.abs(), 0.0, opens.x.abs());
-        let low = IVec3::from_array(self.min).as_vec3() * CELL_M;
-        let high = (IVec3::from_array(self.max) + IVec3::ONE).as_vec3() * CELL_M;
-        let depth = ((low + high) * 0.5).dot(opens.abs());
-        (opens, along, low, high, depth)
-    }
-
-    /// How many leaves it hangs: a pair in a hole wide enough, else one.
-    pub fn leaf_count(&self) -> usize {
-        let (_, along, low, high, _) = self.hole();
-        let pair = match self.hang {
-            Hang::Door => DOOR_PAIR_M,
-            Hang::Shutters => SHUTTER_PAIR_M,
-        };
-        if (high - low).dot(along) >= pair - 1e-3 {
-            2
-        } else {
-            1
-        }
-    }
-
+impl Hanging for Prop {
     /// Its frame on a wall whose face stands `face` out from its middle ([`wall_face`]), as
     /// boxes in the base's own space, each its low and high corners: a jamb up each side and
     /// a head over the hole, their outer edges `OVERLAP_M` into the wall past the hole's,
     /// through the wall's thickness and `FRAME_PROUD_M` proud of its face either side; and
     /// between the jambs a door's threshold on the floor, or under shutters a sill reaching
     /// down into the wall as the head reaches up.
-    pub fn frame(&self, face: f32) -> Vec<(Vec3, Vec3)> {
+    fn frame(&self, face: f32) -> Vec<(Vec3, Vec3)> {
         let (opens, along, low, high, depth) = self.hole();
         let through = opens.abs();
         let (start, end) = (low.dot(along) - OVERLAP_M, high.dot(along) + OVERLAP_M);
@@ -186,7 +153,7 @@ impl Prop {
     /// threshold all round, hinged on a jamb's inner face, in the middle of the wall's
     /// thickness; shutters shut against the frame's outer face, over the hole to the middle
     /// of its members all round, hinged on the jambs. A pair meets in the middle.
-    pub fn leaves(&self, face: f32) -> Vec<Leaf> {
+    fn leaves(&self, face: f32) -> Vec<Leaf> {
         let (opens, along, low, high, depth) = self.hole();
         let door = self.hang == Hang::Door;
         // How far each leaf's edges stand in from the hole's, the frame's outer edges being
@@ -349,7 +316,8 @@ pub fn push_off(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PropKind;
+    use crate::walk::Walking;
+    use terra_build::PropKind;
 
     fn prop(min: [i32; 3], max: [i32; 3], opens: [i32; 3], hang: Hang) -> Prop {
         Prop {
@@ -693,10 +661,10 @@ mod tests {
                 } else {
                     Fill::Solid
                 };
-                base.apply(crate::BuildOp::Fill {
+                base.apply(terra_build::BuildOp::Fill {
                     min: [x, y, 0],
                     max: [x, y, 0],
-                    cube: Some(crate::Cube::new(kind, fill)),
+                    cube: Some(terra_build::Cube::new(kind, fill)),
                 });
             }
         }
@@ -714,7 +682,7 @@ mod tests {
 
     #[test]
     fn a_walker_meets_shutters_where_they_are_drawn_on_every_wall() {
-        let walker = crate::Walker {
+        let walker = terra_build::Walker {
             radius: 0.3,
             height: 0.8,
             step_up: 0.1,
@@ -729,15 +697,15 @@ mod tests {
                 for y in 0..6 {
                     let hole = (2..=3).contains(&x) && (2..=3).contains(&y);
                     let fill = if hole { Fill::Open } else { Fill::Solid };
-                    base.apply(crate::BuildOp::Fill {
+                    base.apply(terra_build::BuildOp::Fill {
                         min: [x, y, 0],
                         max: [x, y, 0],
-                        cube: Some(crate::Cube::new(kit.kind(), fill)),
+                        cube: Some(terra_build::Cube::new(kit.kind(), fill)),
                     });
                 }
             }
             let mut window = prop([2, 2, 0], [3, 3, 0], [0, 0, -1], Hang::Shutters);
-            base.props.insert(window.min, window);
+            terra_build::testing::put_prop(&mut base, window);
             // Where they are drawn: the frame on the wall's face, its outer face nearest
             // the walker, the leaves' backs on it.
             let frame_out = window
@@ -764,7 +732,7 @@ mod tests {
             // Open, they pass into the window, and beside it meet the leaf folded back
             // on the wall, or the wall's cubes where those stand further out.
             window.open = true;
-            base.props.insert(window.min, window);
+            terra_build::testing::put_prop(&mut base, window);
             assert!(walk(&base, 1.5) > 0.2, "{name}: open");
             let stopped = walk(&base, 0.75);
             let nearest = drawn.min(0.0);

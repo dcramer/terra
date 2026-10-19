@@ -2,9 +2,9 @@
 //! an opening of any shape, a frame of boards along its edges, jambs, a head and a sill.
 
 use super::{Axis, Layout, Piece, Place, Walls, runs_of};
-use crate::kit::Kit;
-use crate::{CELL_M, Fill};
 use std::collections::BTreeSet;
+use terra_build::kit::Kit;
+use terra_build::{CELL_M, Fill};
 
 /// A frame of boards round every opening in a row, of whatever shape: a board along each
 /// edge where an open cube meets the wall, edges in a line one board. Up the
@@ -202,7 +202,7 @@ pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut
                     && !walls.runs(at, axis.other())
                     && walls.base.cube(other).is_some_and(|cube| {
                         cube.kind != walls.kind
-                            && cube.kind != crate::Kind::PLAIN
+                            && cube.kind != terra_build::Kind::PLAIN
                             && cube.fill == Fill::Solid
                             && !cube.kind.is_roof()
                             && walls.base.in_wall(other)
@@ -343,8 +343,8 @@ mod tests {
     use super::super::tests::{boards, cabin, kit, logs, wall};
     use super::super::{Layout, lay};
     use super::*;
-    use crate::{BuildOp, Cube, DOOR_HEIGHT_M, Panel, STOREY_CUBES};
     use glam::Vec3;
+    use terra_build::{BuildOp, Cube, DOOR_HEIGHT_M, Panel, STOREY_CUBES};
 
     #[test]
     fn a_jamb_post_with_nothing_of_its_kind_under_it_stands_a_hair_into_what_it_stands_on() {
@@ -352,8 +352,8 @@ mod tests {
         // footing: the posts up its sides stand a hair into what is under them, as a corner
         // post does, out of the plane of the foot's sill laid on the same; standing on it,
         // the two feet fought where they met (the village's squared timber L-shaped house).
-        let kit = crate::kit::tests::shipped("hewn.ron");
-        let mut base = crate::Base::default();
+        let kit = terra_build::testing::shipped("hewn.ron");
+        let mut base = terra_build::Base::default();
         for x in 0..6 {
             base.apply(BuildOp::SetWall {
                 tile: [x, 0, 0],
@@ -406,16 +406,16 @@ mod tests {
         // Two jambs and a head; a doorway needs no sill.
         assert_eq!(boards(&layout), 3);
         // A door fitted in it comes with its own frame: the kit's boards round it go.
-        let rules = crate::Rules::default();
-        let door = crate::Prop {
+        let rules = terra_build::Rules::default();
+        let door = terra_build::Prop {
             min: [3, 0, 5],
             max: [4, 3, 5],
             opens: [0, 0, 1],
-            ..crate::Prop::default()
+            ..terra_build::Prop::default()
         };
         base.act(
-            &crate::ops::Op::FitProp(door),
-            &crate::ops::Context::free(&rules),
+            &terra_build::ops::Op::FitProp(door),
+            &terra_build::ops::Context::free(&rules),
         )
         .unwrap();
         let fitted = lay(&base, &kit);
@@ -443,18 +443,18 @@ mod tests {
         assert_eq!(boards(&before), 4);
         // Shutters fitted over it come with their own frame: the kit's boards round it go.
         let mut fitted = base.clone();
-        let shutters = crate::Prop {
+        let shutters = terra_build::Prop {
             min: [0, 2, 2],
             max: [0, 3, 2],
             opens: [-1, 0, 0],
             hang: crate::fitting::Hang::Shutters,
-            ..crate::Prop::default()
+            ..terra_build::Prop::default()
         };
-        let rules = crate::Rules::default();
+        let rules = terra_build::Rules::default();
         fitted
             .act(
-                &crate::ops::Op::FitProp(shutters),
-                &crate::ops::Context::free(&rules),
+                &terra_build::ops::Op::FitProp(shutters),
+                &terra_build::ops::Context::free(&rules),
             )
             .unwrap();
         assert_eq!(boards(&lay(&fitted, &kit)), 0);
@@ -479,8 +479,8 @@ mod tests {
 
     #[test]
     fn logs_ending_against_stone_have_an_end_board_up_the_joint() {
-        let mut base = crate::Base::default();
-        let stone = crate::Kind(2);
+        let mut base = terra_build::Base::default();
+        let stone = terra_build::Kind(2);
         wall(&mut base, (0..6).map(|x| [x, 0, 0]), Panel::Solid);
         // Its east end a stone pillar.
         base.apply(BuildOp::Fill {
@@ -505,7 +505,7 @@ mod tests {
             "{a} {b}"
         );
         assert!(
-            a.y.abs() < 0.01 && (b.y - crate::STOREY_M).abs() < 0.01,
+            a.y.abs() < 0.01 && (b.y - terra_build::STOREY_M).abs() < 0.01,
             "{a} {b}"
         );
         // The logs' sawn ends inside it, not in the plane of its face against the stone.
@@ -524,8 +524,8 @@ mod tests {
         // A log wall along x, and a stone wall coming in square against its south side: the
         // logs, narrower than their cubes, leave a slot between their face and the stone's
         // end, which a board up the joint fills, from the logs' face to the cube's.
-        let mut base = crate::Base::default();
-        let stone = crate::Kind(2);
+        let mut base = terra_build::Base::default();
+        let stone = terra_build::Kind(2);
         wall(&mut base, (0..6).map(|x| [x, 0, 0]), Panel::Solid);
         base.apply(BuildOp::Fill {
             min: [2, 0, 1],
@@ -551,6 +551,6 @@ mod tests {
             (a.x - 1.0).abs() < 0.02 && (b.x - 1.5).abs() < 0.02,
             "{a} {b}"
         );
-        assert!(a.y < 0.01 && b.y > crate::STOREY_M - 0.01, "{a} {b}");
+        assert!(a.y < 0.01 && b.y > terra_build::STOREY_M - 0.01, "{a} {b}");
     }
 }

@@ -37,7 +37,7 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
     // A roof cube something stands on is drawn whole, in what stands on it: the wall
     // carried down into it to the roof's deck (D343).
     let carried = |at: IVec3, cube: Cube| -> Cube {
-        match terra_build::layout::roofs::standing_on(base, at) {
+        match terra_build_layout::layout::roofs::standing_on(base, at) {
             Some(over) if cube.kind.is_roof() && cube.is_in() => Cube {
                 kind: over.kind,
                 shape: Shape::Whole,

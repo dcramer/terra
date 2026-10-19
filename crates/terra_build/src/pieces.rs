@@ -6,9 +6,9 @@
 //! cleans a mesh. Plain data and the rules' own arithmetic, so the rules name none of what lays
 //! or draws them.
 
-use crate::Cube;
 use crate::kit::{Kit, Profile};
-use glam::Vec3;
+use crate::{CELL_M, Cube};
+use glam::{IVec3, Vec3};
 use std::collections::BTreeMap;
 
 /// What an edge of a cube is, by where it is (the module's comment).
@@ -159,6 +159,53 @@ pub enum Hang {
     #[default]
     Door,
     Shutters,
+}
+
+/// How wide a hole takes a pair of leaves rather than one, in metres: a door from 1.5 m,
+/// shutters from 0.75 m.
+const DOOR_PAIR_M: f32 = 1.5;
+const SHUTTER_PAIR_M: f32 = 0.75;
+
+impl crate::Prop {
+    /// The way across the wall it is fitted in, out of the wall's face: the way it opens
+    /// if it was given one, else south or east by the shape of its hole.
+    pub fn across_wall(&self) -> IVec3 {
+        let opens = IVec3::from_array(self.opens);
+        if opens != IVec3::ZERO {
+            return opens;
+        }
+        if self.max[0] > self.min[0] {
+            IVec3::Z
+        } else {
+            IVec3::X
+        }
+    }
+
+    /// The hole it is fitted in, in the base's own space, in metres: the way out of the wall
+    /// (the way a door opens), the way along it, its low and high corners, and the wall's
+    /// middle through its thickness.
+    pub fn hole(&self) -> (Vec3, Vec3, Vec3, Vec3, f32) {
+        let opens = self.across_wall().as_vec3().normalize_or(Vec3::Z);
+        let along = Vec3::new(opens.z.abs(), 0.0, opens.x.abs());
+        let low = IVec3::from_array(self.min).as_vec3() * CELL_M;
+        let high = (IVec3::from_array(self.max) + IVec3::ONE).as_vec3() * CELL_M;
+        let depth = ((low + high) * 0.5).dot(opens.abs());
+        (opens, along, low, high, depth)
+    }
+
+    /// How many leaves it hangs: a pair in a hole wide enough, else one.
+    pub fn leaf_count(&self) -> usize {
+        let (_, along, low, high, _) = self.hole();
+        let pair = match self.hang {
+            Hang::Door => DOOR_PAIR_M,
+            Hang::Shutters => SHUTTER_PAIR_M,
+        };
+        if (high - low).dot(along) >= pair - 1e-3 {
+            2
+        } else {
+            1
+        }
+    }
 }
 
 /// How a kind breaks (D305): data on its kit, by its pattern unless its material says.

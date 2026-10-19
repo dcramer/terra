@@ -26,8 +26,8 @@ use serde::Deserialize;
 use std::path::Path;
 use terra_build::Base;
 use terra_build::construct;
-use terra_build::fitting::Hang;
 use terra_build::ops::{Context, Op};
+use terra_build_layout::fitting::Hang;
 use terra_town::town::ThingKind;
 
 /// What a time-lapse does when, as its file says.

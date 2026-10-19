@@ -31,8 +31,8 @@ use glam::{IVec3, Mat3, Vec3};
 use profiles::stone_look;
 use std::collections::BTreeMap;
 use terra_build::kit::{Dress, Kit, Masks};
-use terra_build::layout::{self, Dir, End, Piece, TICKS};
 use terra_build::{Base, CELL_M, Fill};
+use terra_build_layout::layout::{self, Dir, End, Piece, TICKS};
 use terra_gen::hash;
 
 pub use masks::{ground_at, mask, roof_mask, sheltered};

@@ -3,10 +3,10 @@
 //! walls, posts and shapes on curbs cut to the roof's deck.
 
 use super::{on_top, standing_on, surface};
-use crate::kit::Kit;
 use crate::layout::{Piece, Place, Scope, ticks};
-use crate::{Base, CELL_M, Cube, Fill, Shape};
 use glam::{IVec3, Vec3};
+use terra_build::kit::Kit;
+use terra_build::{Base, CELL_M, Cube, Fill, Shape};
 
 /// A block kind's cubes carried into the roof cubes they meet (`Piece::Gable`), each to the
 /// roof's deck: up into every roof cube standing on one of its whole cubes, as a gable end
@@ -101,7 +101,7 @@ pub(crate) fn curbs(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece
     };
     // Half a member's widest across, less a hair: an upright's section stands either way.
     let half_of = |role: Option<crate::layout::Role>| {
-        let (wide, high) = crate::pieces::section(kit, role);
+        let (wide, high) = terra_build::pieces::section(kit, role);
         wide.max(high) * 0.5 - CURB_IN_M
     };
     // A wall's foot on the roof is its sill where the kit dresses one, wider than its logs.

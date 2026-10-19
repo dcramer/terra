@@ -16,10 +16,10 @@
 
 use super::roles::{Beyond, Dir, Dressed, Edge, End, Role, Roles};
 use super::{Piece, Place, Scope, TICKS};
-use crate::kit::{Dress, Kit, Kits};
-use crate::{Base, Fill, Shape};
 use glam::IVec3;
 use std::collections::BTreeSet;
+use terra_build::kit::{Dress, Kit, Kits};
+use terra_build::{Base, Fill, Shape};
 use terra_gen::hash;
 
 /// Whether a kit dresses any role with pieces of its own.

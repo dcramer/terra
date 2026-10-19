@@ -367,7 +367,7 @@ impl<'a> Neighbourhood<'a> {
                     i / grid.size.x % grid.size.y,
                     i / (grid.size.x * grid.size.y),
                 );
-            terra_build::layout::splitmix(
+            terra_build_layout::layout::splitmix(
                 u64::from(at.x as u32)
                     ^ u64::from(at.y as u32).rotate_left(21)
                     ^ u64::from(at.z as u32).rotate_left(42)
@@ -378,7 +378,7 @@ impl<'a> Neighbourhood<'a> {
         let states: Vec<u64> = (0..cells).map(|i| zobrist(i, state(i) + 1)).collect();
         let cuts: Vec<u64> = (0..cells)
             .map(|i| match (member[i] && cut_of[i], cut_keys[i]) {
-                (true, Some(key)) => terra_build::layout::splitmix(zobrist(i, 7) ^ key),
+                (true, Some(key)) => terra_build_layout::layout::splitmix(zobrist(i, 7) ^ key),
                 _ => 0,
             })
             .collect();
@@ -403,11 +403,11 @@ impl<'a> Neighbourhood<'a> {
         }
         let cut = cuts.xor(grid, cube, 2);
         let beds = heights.bed_key.map_or(0, |bed_key| {
-            terra_build::layout::splitmix(bed_key(cube) ^ 0x5bed)
+            terra_build_layout::layout::splitmix(bed_key(cube) ^ 0x5bed)
         }) ^ heights
             .holed
             .and_then(|holed| holed(cube))
-            .map_or(0, |key| terra_build::layout::splitmix(key ^ 0x401e));
+            .map_or(0, |key| terra_build_layout::layout::splitmix(key ^ 0x401e));
         Some(Signature {
             shape: states.xor(grid, cube, 2) ^ cut ^ beds,
             whole: states.xor(grid, cube, 3) ^ cut ^ beds ^ 0x3,

@@ -4,10 +4,10 @@
 
 use super::frame::CREST_FALL_M;
 use super::{Beside, COVERING, RoofPart, Roofs, SIDES, Segment, level_cut, normal};
-use crate::kit::Kit;
 use crate::layout::{Piece, Place, ticks};
-use crate::{Base, CELL_M, Fill, Shape};
 use glam::{IVec3, Vec3};
+use terra_build::kit::Kit;
+use terra_build::{Base, CELL_M, Fill, Shape};
 
 /// Lays the covering of a roof kind's squares, a square at a time, tucked into whatever
 /// stands beside each, and gives back the battens under it, a line under the foot of every
@@ -25,7 +25,7 @@ pub(super) fn lay(
     // course's rise apart up from each roof's lowest edge.
     let texture = kit
         .textures
-        .get(&crate::Material::Covering)
+        .get(&terra_build::Material::Covering)
         .map_or(1.0, |texture| texture.metres[1]);
     let exposure = r.exposure(texture);
     // Every slope rises a cube a cube: a course's rise is its exposure up a 45° slope.

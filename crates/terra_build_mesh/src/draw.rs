@@ -9,7 +9,7 @@ use crate::mesh::{Material, Surface, Surfaces};
 use crate::relief::Relief;
 use glam::Vec3;
 use terra_build::kit::Kit;
-use terra_build::layout::Piece;
+use terra_build_layout::layout::Piece;
 
 /// The size in metres of a kit's texture for a material, or a metre square if it has none.
 fn metres(kit: &Kit, material: Material) -> [f32; 2] {
@@ -59,7 +59,7 @@ pub fn draw_harmed(
         Piece::Blocking { min, max, top } => wedge(
             surfaces.of(Material::Board),
             (min.metres(), max.metres()),
-            top.map(terra_build::layout::metres),
+            top.map(terra_build_layout::layout::metres),
             metres(kit, Material::Board),
             [1.0; 3],
         ),
@@ -89,7 +89,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
     let Piece::Log {
         from,
         to,
-        split: terra_build::layout::Split::Whole,
+        split: terra_build_layout::layout::Split::Whole,
         seed,
         lean: [0, 0],
         lift: [0, 0],
@@ -171,8 +171,8 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
     let out = (normal - axis * normal.dot(axis)).normalize_or(Vec3::Y);
     let t = &kit.timber;
     let (wide, deep) = (
-        terra_build::layout::metres(wide),
-        terra_build::layout::metres(deep),
+        terra_build_layout::layout::metres(wide),
+        terra_build_layout::layout::metres(deep),
     );
     // A member through the wall, lining an opening, is far deeper than the timber was
     // modelled: stretched to it, the model's waves would swell to centimetres and break
@@ -363,7 +363,8 @@ pub(crate) fn curb(
         libm::floorf((min.z + max.z) * 0.5 / CELL_M) as i32,
     );
     let deck = |p: Vec2| {
-        terra_build::layout::roofs::gable_cut(cube, under, Vec3::new(p.x, 0.0, p.y)).min(max.y)
+        terra_build_layout::layout::roofs::gable_cut(cube, under, Vec3::new(p.x, 0.0, p.y))
+            .min(max.y)
     };
     let mut face = |t: [Vec3; 3], out: Vec3| {
         let n = (t[1] - t[0]).cross(t[2] - t[0]);
@@ -566,8 +567,8 @@ pub(crate) mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use terra_build::Panel;
-    use terra_build::layout::lay;
     use terra_build::testing::{cabin, textured, wall};
+    use terra_build_layout::layout::lay;
 
     /// Each triangle of a shape with no hollows in it faces away from its middle, and its
     /// corners wind the way its normals point; how many there were.
@@ -649,8 +650,8 @@ pub(crate) mod tests {
             .unwrap();
         let module = kit.dress.made.as_ref().unwrap().modules["member"].clone();
         let log = |split| Piece::Log {
-            from: terra_build::layout::Place::near(Vec3::ZERO),
-            to: terra_build::layout::Place::near(Vec3::X * 2.0),
+            from: terra_build_layout::layout::Place::near(Vec3::ZERO),
+            to: terra_build_layout::layout::Place::near(Vec3::X * 2.0),
             split,
             seed: 1,
             chinking: None,
@@ -667,15 +668,15 @@ pub(crate) mod tests {
                 .get(&Material::Log)
                 .map_or(0, |s| s.triangle_count())
         };
-        let generated = count(&kit, &log(terra_build::layout::Split::Whole));
+        let generated = count(&kit, &log(terra_build_layout::layout::Split::Whole));
         kit.timber.module = Some("member".into());
-        let made = count(&kit, &log(terra_build::layout::Split::Whole));
+        let made = count(&kit, &log(terra_build_layout::layout::Split::Whole));
         assert_ne!(made, generated);
         // Two copies of the module along two metres, with nothing generated.
         let cap = module.cap.as_ref().map_or(0, |c| c.triangles.len());
         assert!(made <= (module.triangles() + cap) * 2, "{made}");
         assert_eq!(
-            count(&kit, &log(terra_build::layout::Split::Top)),
+            count(&kit, &log(terra_build_layout::layout::Split::Top)),
             count(
                 &Kit {
                     timber: terra_build::kit::Timber {
@@ -684,7 +685,7 @@ pub(crate) mod tests {
                     },
                     ..kit.clone()
                 },
-                &log(terra_build::layout::Split::Top)
+                &log(terra_build_layout::layout::Split::Top)
             )
         );
     }

@@ -3,10 +3,10 @@
 
 use glam::Vec3;
 use terra_build::kit::{Dress, Kit, Kits, Profile};
-use terra_build::layout::stairs::find;
-use terra_build::layout::{Dir, Piece, Role, lay};
 use terra_build::pieces::Material;
 use terra_build::{Base, BuildOp, Cube, Fill, Shape};
+use terra_build_layout::layout::stairs::find;
+use terra_build_layout::layout::{Dir, Piece, Role, lay};
 
 // ---- from crates/terra_build/src/layout/stairs.rs
 
@@ -80,7 +80,12 @@ fn a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts() {
         });
     }
     let kits = Kits(vec![stairs_kit()]);
-    let steps = find(&base, &stairs_kit(), &kits, terra_build::layout::Scope::ALL);
+    let steps = find(
+        &base,
+        &stairs_kit(),
+        &kits,
+        terra_build_layout::layout::Scope::ALL,
+    );
     assert_eq!(steps.len(), 8, "{steps:?}");
     assert!(steps.values().all(|step| step.out == Dir::South));
     let layout = lay(&base, &stairs_kit());

@@ -72,10 +72,10 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use terra_build::fitting::Hang;
 use terra_build::ops::{Done, Op, Refusal};
 use terra_build::roofer::Style;
 use terra_build::{CELL_M, Facing, Fill, Panel, STOREY_M, Shape};
+use terra_build_layout::fitting::Hang;
 
 pub fn plugin(app: &mut App) {
     method(app, "build.state", state);
@@ -892,10 +892,10 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         .collect();
     // Its roof cubes (D241): how many, of what shapes, how many built, and how many at each
     // stage, nothing in to trims on.
-    let mut stages = [0usize; 1 + terra_build::layout::roofs::ROOF_STAGES as usize];
+    let mut stages = [0usize; 1 + terra_build_layout::layout::roofs::ROOF_STAGES as usize];
     let mut shapes: std::collections::BTreeMap<String, usize> = Default::default();
     for (_, cube) in base.cubes().filter(|(_, cube)| cube.kind.is_roof()) {
-        stages[usize::from(terra_build::layout::roofs::stage_of(&cube))] += 1;
+        stages[usize::from(terra_build_layout::layout::roofs::stage_of(&cube))] += 1;
         let shape = format!("{:?}", cube.shape);
         let shape = shape.split('(').next().unwrap_or("").to_string();
         *shapes.entry(shape).or_default() += 1;

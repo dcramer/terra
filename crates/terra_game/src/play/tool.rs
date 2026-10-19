@@ -719,7 +719,7 @@ fn price(
         }
         bill
     };
-    // A leaf of each door and shutters (a pair costs two, terra_build::fitting).
+    // A leaf of each door and shutters (a pair costs two, terra_build_layout::fitting).
     for fitting in builds.fittings() {
         rules.rules.props.insert(fitting.kind, bill(&fitting.cost));
     }

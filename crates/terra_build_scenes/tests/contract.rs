@@ -45,7 +45,7 @@ fn building() -> PathBuf {
 /// folder too; its tests' files (`tests.rs`, `tests/`) either way.
 fn files(module: &str, inner: bool) -> Vec<PathBuf> {
     // A module of another building crate (these fixtures, the drawing) is named with the
-    // crate's name first; the rules' and the layout's without.
+    // crate's name first; the rules' without.
     let (crate_, module) = match module.split_once("::") {
         Some((name, module)) if name.starts_with("terra_build_") => {
             (root().join("..").join(name), module)
@@ -227,17 +227,25 @@ fn a_contract_fault_is_seen_for_what_is_not_there() {
     // Known answers from the code itself: a test that is there and run, one that is not
     // there, a type and its variant, and a name no module has.
     assert_eq!(
-        test_fault("tests::rules::a_roof_is_cut_only_to_the_shapes_a_roof_has"),
+        test_fault("terra_build_layout::tests::rules::a_roof_is_cut_only_to_the_shapes_a_roof_has"),
         None
     );
-    assert!(test_fault("layout::roles::no_such_test_anywhere_at_all").is_some());
-    assert!(test_fault("layout::roles::how_kinds_meet").is_some());
+    assert!(
+        test_fault("terra_build_layout::layout::roles::no_such_test_anywhere_at_all").is_some()
+    );
+    assert!(test_fault("terra_build_layout::layout::roles::how_kinds_meet").is_some());
     let text = "    #[test]\n    fn a() {}\n\n#[test]\n// Fails today.\n#[ignore = \"why\"]\nfn b() {}\n\nfn c() {}\n";
     assert_eq!(unrun(text, "a", "a"), None);
     assert!(unrun(text, "b", "b").is_some_and(|why| why.contains("ignored")));
     assert!(unrun(text, "c", "c").is_some_and(|why| why.contains("not a #[test]")));
-    assert_eq!(code_fault("layout::roles::End::Shared"), None);
-    assert_eq!(code_fault("layout::roofs::Gutter"), None);
-    assert!(code_fault("layout::roles::End::Nowhere").is_some());
+    assert_eq!(
+        code_fault("terra_build_layout::layout::roles::End::Shared"),
+        None
+    );
+    assert_eq!(
+        code_fault("terra_build_layout::layout::roofs::Gutter"),
+        None
+    );
+    assert!(code_fault("terra_build_layout::layout::roles::End::Nowhere").is_some());
     assert!(code_fault("nowhere::at_all").is_some());
 }

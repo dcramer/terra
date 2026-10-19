@@ -19,10 +19,10 @@ pub use floors::{decked, member_face, post_in_deck};
 
 /// Every cube of the base's flights laid as open timber stairs, on stringers, by a kit of
 /// long members: what is drawn of them is steps, not the cubes' mass.
-pub fn open_flights(base: &crate::Base, kits: &crate::kit::Kits) -> BTreeSet<[i32; 3]> {
+pub fn open_flights(base: &terra_build::Base, kits: &terra_build::kit::Kits) -> BTreeSet<[i32; 3]> {
     kits.0
         .iter()
-        .filter(|kit| kit.pattern == crate::kit::Pattern::Logs)
+        .filter(|kit| kit.pattern == terra_build::kit::Pattern::Logs)
         .flat_map(|kit| stairs::cubes(&stairs::find(base, kit, kits, Scope::ALL)))
         .collect()
 }
@@ -34,12 +34,12 @@ mod shapes;
 pub mod stairs;
 mod trims;
 
-use crate::kit::{Kit, Kits, Pattern};
-use crate::pieces::Material;
-use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
 pub use roles::{Dir, End, Role};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Kit, Kits, Pattern};
+use terra_build::pieces::Material;
+use terra_build::{Base, CELL_M, Fill, Kind};
 use terra_gen::hash::{self, unit};
 
 /// Which way a wall is carried into a roof cube to the roof's deck (D241, D343).
@@ -355,7 +355,7 @@ impl Piece {
 
     /// The section that owns it: the one its [`anchor`](Piece::anchor) is in.
     pub fn section(&self) -> IVec3 {
-        crate::cubes::section_of(self.anchor())
+        terra_build::cubes::section_of(self.anchor())
     }
 
     /// The roof cube it goes up with, and in which stage, if it is part of a roof.
@@ -770,9 +770,9 @@ impl Walls<'_> {
         let (from, to) = (low.max(bottom), high.min(bottom + CELL_M));
         let middle = ((from + to) * 0.5 - bottom) / CELL_M;
         cube.level()
-            >= (middle * f32::from(crate::cubes::FULL))
+            >= (middle * f32::from(terra_build::cubes::FULL))
                 .ceil()
-                .clamp(1.0, f32::from(crate::cubes::FULL)) as u8
+                .clamp(1.0, f32::from(terra_build::cubes::FULL)) as u8
     }
 
     /// What a course is at a cube of a row: a log where the cubes it lies in are solid and
@@ -808,10 +808,10 @@ impl Walls<'_> {
     fn board_against(&self, at: IVec3) -> bool {
         self.base.cube(at).is_some_and(|cube| {
             cube.kind != self.kind
-                && cube.kind != crate::Kind::PLAIN
+                && cube.kind != terra_build::Kind::PLAIN
                 && cube.fill == Fill::Solid
                 && self.base.in_wall(at)
-                && self.kits.end(self.kind, cube.kind) == crate::kit::Joint::Board
+                && self.kits.end(self.kind, cube.kind) == terra_build::kit::Joint::Board
         })
     }
 
@@ -827,7 +827,7 @@ pub(crate) fn framed(base: &Base, at: IVec3) -> bool {
     base.prop_in(at).is_some()
 }
 
-pub use crate::drawn_fill;
+pub use terra_build::drawn_fill;
 
 /// Lays everything of a base in the kit's kind, as [`lay_among`] does, with the kit the
 /// only one there is.
@@ -860,12 +860,12 @@ pub fn lay_section_and_edge(
     section: IVec3,
 ) -> (Layout, Vec<Piece>) {
     let mut layout = lay_scoped(base, kit, kits, Scope::section(section));
-    let low = section * crate::cubes::SECTION - IVec3::ONE;
-    let high = low + IVec3::splat(crate::cubes::SECTION + 1);
+    let low = section * terra_build::cubes::SECTION - IVec3::ONE;
+    let high = low + IVec3::splat(terra_build::cubes::SECTION + 1);
     let (mut own, mut edge) = (Vec::new(), Vec::new());
     for piece in layout.pieces.drain(..) {
         let at = piece.anchor();
-        if crate::cubes::section_of(at) == section {
+        if terra_build::cubes::section_of(at) == section {
             own.push(piece);
         } else if at.cmpge(low).all() && at.cmple(high).all() {
             edge.push(piece);
@@ -887,7 +887,7 @@ pub fn lay_sections(base: &Base, kit: &Kit, kits: &Kits, sections: &BTreeSet<[i3
     ) else {
         return Layout::default();
     };
-    let side = crate::cubes::SECTION;
+    let side = terra_build::cubes::SECTION;
     let scope = Scope {
         low: low * side - IVec3::splat(Scope::MARGIN),
         high: (high + IVec3::ONE) * side - IVec3::ONE + IVec3::splat(Scope::MARGIN),
@@ -944,10 +944,10 @@ impl Scope {
     const MARGIN: i32 = 2;
 
     fn section(section: IVec3) -> Scope {
-        let low = section * crate::cubes::SECTION;
+        let low = section * terra_build::cubes::SECTION;
         Scope {
             low: low - IVec3::splat(Self::MARGIN),
-            high: low + IVec3::splat(crate::cubes::SECTION - 1 + Self::MARGIN),
+            high: low + IVec3::splat(terra_build::cubes::SECTION - 1 + Self::MARGIN),
         }
     }
 
@@ -957,7 +957,11 @@ impl Scope {
     }
 
     /// Its cubes in a base, sorted, within a box as well if given.
-    pub fn cubes(&self, base: &Base, within: Option<(IVec3, IVec3)>) -> Vec<(IVec3, crate::Cube)> {
+    pub fn cubes(
+        &self,
+        base: &Base,
+        within: Option<(IVec3, IVec3)>,
+    ) -> Vec<(IVec3, terra_build::Cube)> {
         self.cubes_where(base, within, |_| true)
     }
 
@@ -966,8 +970,8 @@ impl Scope {
         &self,
         base: &Base,
         within: Option<(IVec3, IVec3)>,
-        keep: impl Fn(&crate::Cube) -> bool,
-    ) -> Vec<(IVec3, crate::Cube)> {
+        keep: impl Fn(&terra_build::Cube) -> bool,
+    ) -> Vec<(IVec3, terra_build::Cube)> {
         let Some((low, high)) = base.store().bounds() else {
             return Vec::new();
         };
@@ -983,7 +987,7 @@ impl Scope {
 
     /// A row's cubes of the base along an axis, wherever they are along it: the row
     /// whose cross-coordinate is `row`.
-    fn row_cubes(base: &Base, axis: Axis, row: i32) -> Vec<(IVec3, crate::Cube)> {
+    fn row_cubes(base: &Base, axis: Axis, row: i32) -> Vec<(IVec3, terra_build::Cube)> {
         let (low, high) = match axis {
             Axis::X => (
                 IVec3::new(i32::MIN / 4, i32::MIN / 4, row),
@@ -1165,9 +1169,9 @@ impl Random {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{BuildOp, Cube, Panel};
+    use terra_build::{BuildOp, Cube, Panel};
 
-    pub(crate) use crate::testing::{cabin, kit, textured, wall};
+    pub(crate) use terra_build::testing::{cabin, kit, textured, wall};
 
     pub(crate) fn logs(layout: &Layout) -> Vec<(Vec3, Vec3, Split)> {
         layout
@@ -1199,7 +1203,7 @@ pub(crate) mod tests {
         let walkway = |y: i32| {
             let mut base = Base::default();
             let post = Cube {
-                shape: crate::Shape::Post,
+                shape: terra_build::Shape::Post,
                 ..Cube::new(kit.kind(), Fill::Solid)
             };
             for x in [0, 7] {
@@ -1249,8 +1253,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_wall_being_carved_is_cut_and_framed_at_the_first_cut() {
-        use crate::ops::{Context, Op};
-        let rules = crate::Rules::default();
+        use terra_build::ops::{Context, Op};
+        let rules = terra_build::Rules::default();
         let cx = Context::free(&rules);
         let mut base = cabin();
         let whole = lay(&base, &kit());

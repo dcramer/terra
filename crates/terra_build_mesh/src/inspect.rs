@@ -30,7 +30,8 @@ use crate::{hull, relief::Maps};
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::BTreeMap;
 use terra_build::kit::{self, Kits, Pattern};
-use terra_build::{Base, CELL_M, Fill, Kind, Shape, layout};
+use terra_build::{Base, CELL_M, Fill, Kind, Shape};
+use terra_build_layout::layout;
 
 /// A fault, by its kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1337,7 +1338,7 @@ const EDGE_M: f32 = 0.08;
 /// verge's and eave's modules are modelled out past the edge they are laid along (a thatch
 /// verge's bound bundle wraps the covering's cut edge, D258), and a board's hang at least.
 fn edge_reach(kit: &kit::Kit) -> f32 {
-    use terra_build::layout::roofs::RoofPart;
+    use terra_build_layout::layout::roofs::RoofPart;
     let pieces = kit.dress.made.as_deref();
     let out = kit
         .roof
@@ -1833,7 +1834,7 @@ mod tests {
         // A roof kind whose verge is modelled standing 0.2 m out past the edge it is laid
         // along, as thatch's bound bundle wraps its covering's cut edge; one roof cube, with
         // no eaves, its top half a metre up over x and z from 0 to 0.5.
-        use terra_build::layout::roofs::RoofPart;
+        use terra_build_layout::layout::roofs::RoofPart;
         let verge = crate::dress::Stone {
             positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.2], [0.0, 0.1, 0.0]],
             normals: vec![[0.0, 1.0, 0.0]; 3],

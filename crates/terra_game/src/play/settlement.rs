@@ -25,8 +25,8 @@ use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::prelude::*;
-use terra_build::fitting::Hang;
 use terra_build::{Base, CELL_M};
+use terra_build_layout::fitting::Hang;
 
 /// An item from the catalogue the village has: what it is, where it stands from the
 /// middle in metres east and south, and how many degrees it is turned.

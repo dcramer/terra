@@ -250,7 +250,7 @@ mod tests {
                 .min_by(|a, b| a.1.total_cmp(&b.1))
         }
         let kinds = |_| Kind::FIRST_ROOF;
-        let mut random = crate::layout::Random(11);
+        let mut random = terra_gen::Rng::new(terra_gen::Seed(11));
         let (mut hits, mut misses) = (0, 0);
         for (_, ops) in crate::bench_village(Kind(1), Kind(2), Kind(3), &kinds)
             .into_iter()
@@ -267,7 +267,11 @@ mod tests {
                     low.y - 2.0 + random.unit() * (high.y - low.y + 4.0),
                     low.z - 4.0 + random.unit() * (high.z - low.z + 8.0),
                 );
-                let mut direction = Vec3::new(random.signed(), random.signed(), random.signed());
+                let mut direction = Vec3::new(
+                    random.range(-1.0, 1.0),
+                    random.range(-1.0, 1.0),
+                    random.range(-1.0, 1.0),
+                );
                 if random.unit() < 0.1 {
                     direction = Vec3::new(direction.x, 0.0, 0.0);
                 }

@@ -9,6 +9,7 @@ use crate::build::{self, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_build::Walker;
+use terra_build_layout::walk::Walking;
 use terra_world::climate::ClimateSample;
 
 pub(super) const JOG_SPEED: f32 = 4.3;

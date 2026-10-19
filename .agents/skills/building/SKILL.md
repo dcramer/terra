@@ -20,7 +20,7 @@ AGENTS.md's routine, plus for building:
 
 ## Where each concern lives
 
-The rules and the layout are `crates/terra_build/src`; the drawing and its checks `crates/terra_build_mesh/src`; the fixtures `crates/terra_build_scenes/src` (D407).
+The rules are `crates/terra_build/src`; the layout (with walking and how props hang) `crates/terra_build_layout/src`; the drawing and its checks `crates/terra_build_mesh/src`; the fixtures `crates/terra_build_scenes/src` (D407).
 
 | Concern | Where |
 |---|---|

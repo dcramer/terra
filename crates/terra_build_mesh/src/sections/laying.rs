@@ -2,6 +2,7 @@
 //! far each is in ([`lay`]).
 
 use super::*;
+use terra_build_layout::walk::Walking;
 
 impl Whole {
     /// Whether it was laid by these kits, in this order, so its pieces' kits are theirs.

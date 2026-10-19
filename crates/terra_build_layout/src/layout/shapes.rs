@@ -6,10 +6,10 @@
 
 use super::roles::Role;
 use super::{Layout, Piece, Place, Scope, Split, Walls, runs, ticks};
-use crate::kit::{Kit, Kits};
-use crate::{CELL_M, Facing, Fill, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
+use terra_build::kit::{Kit, Kits};
+use terra_build::{CELL_M, Facing, Fill, Shape};
 use terra_gen::hash;
 
 /// A post's pad: how far across, as a fraction of the cube, and how thick.
@@ -20,7 +20,7 @@ const PAD_M: f32 = 0.06;
 pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: &mut Layout) {
     let base = walls.base;
     let kind = kit.kind();
-    let solid = |cube: &crate::Cube| cube.kind == kind && cube.fill == Fill::Solid;
+    let solid = |cube: &terra_build::Cube| cube.kind == kind && cube.fill == Fill::Solid;
     let is = |at: IVec3, shape: Shape| base.cube(at).is_some_and(|c| solid(&c) && c.shape == shape);
     // Its cubes in the scope, not the base's: a castle's are a hundred thousand.
     let mine = scope.cubes_where(base, None, solid);
@@ -42,7 +42,11 @@ pub(super) fn lay(walls: &Walls, kit: &Kit, _kits: &Kits, scope: Scope, layout: 
             }
         }
     }
-    if !halves.is_empty() && kit.textures.contains_key(&crate::pieces::Material::Floor) {
+    if !halves.is_empty()
+        && kit
+            .textures
+            .contains_key(&terra_build::pieces::Material::Floor)
+    {
         super::floors::regions(walls, kit, &halves, CELL_M * 0.5, scope, layout);
     }
     // Each column of posts reaching into the scope, from its foot.
@@ -104,7 +108,7 @@ const BOX_BOARDS: i32 = 4;
 /// side is clad, a course of a side facing north or south, a board of its top or its
 /// underside, a riser, stops against that cladding's inside face, so no board's sawn end
 /// lies in the plane of another's face (the voxel contract's gap 10).
-fn board(base: &crate::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
+fn board(base: &terra_build::Base, at: IVec3, shape: Shape, layout: &mut Layout) {
     let low = at.as_vec3() * CELL_M;
     // A point of the cube in fractions of it: east, up, south.
     let point = |p: Vec3| low + p * CELL_M;
@@ -394,7 +398,7 @@ fn post(walls: &Walls, kit: &Kit, foot: IVec3, top: IVec3, layout: &mut Layout) 
         && base
             .cube(above)
             .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape != Shape::Post);
-    let (_, bolster) = crate::pieces::section(kit, Some(Role::Crest));
+    let (_, bolster) = terra_build::pieces::section(kit, Some(Role::Crest));
     let bolster = bolster.min(CELL_M * 0.7);
     let shaft_top = if carries { height - bolster } else { height };
     let mut shaft = runs::log(
@@ -436,7 +440,7 @@ mod tests {
     use super::super::lay;
     use super::super::tests::textured;
     use super::*;
-    use crate::{Base, BuildOp, Cube};
+    use terra_build::{Base, BuildOp, Cube};
 
     fn put(base: &mut Base, min: [i32; 3], max: [i32; 3], shape: Shape) {
         base.apply(BuildOp::Fill {

@@ -12,10 +12,10 @@
 
 use super::roles::{Dir, Role, Roles};
 use super::{Layout, Piece, Place, Split, runs, ticks};
-use crate::kit::{Kit, Kits};
-use crate::{Base, CELL_M, Fill, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
+use terra_build::kit::{Kit, Kits};
+use terra_build::{Base, CELL_M, Fill, Shape};
 use terra_gen::hash;
 
 /// What tops a step's column.
@@ -424,10 +424,10 @@ fn stringers(base: &Base, kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kit::{Dress, Profile};
     use crate::layout::lay;
-    use crate::pieces::Material;
-    use crate::{BuildOp, Cube};
+    use terra_build::kit::{Dress, Profile};
+    use terra_build::pieces::Material;
+    use terra_build::{BuildOp, Cube};
 
     fn kit() -> Kit {
         let mut kit = Kit::default();
@@ -456,8 +456,16 @@ mod tests {
                 }),
             });
         };
-        put(&mut base, [0, 0, 0], Shape::Stair(crate::Facing::North));
-        put(&mut base, [4, 0, 0], Shape::Slope(crate::Facing::North));
+        put(
+            &mut base,
+            [0, 0, 0],
+            Shape::Stair(terra_build::Facing::North),
+        );
+        put(
+            &mut base,
+            [4, 0, 0],
+            Shape::Slope(terra_build::Facing::North),
+        );
         put(&mut base, [0, 1, 0], Shape::Whole);
         put(&mut base, [4, 1, 0], Shape::Whole);
         let layout = lay(&base, &kit());

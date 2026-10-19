@@ -1,7 +1,7 @@
 //! Doors and shutters (construction-001, rule 7 and gap 15; D192, D207, D225): props a
 //! base holds in a hole of built cubes, fitted by `terra_build`'s operations. Each is drawn
 //! from its kind's model, a leaf or a pair hung on the hole's sides as
-//! `terra_build::fitting` says, so what is seen is what stops a walker; it swings open and
+//! `terra_build_layout::fitting` says, so what is seen is what stops a walker; it swings open and
 //! shut when used, the player's through the same operation the remote uses, a village's
 //! straight on its house. The kinds and their models are the catalogue's (`builds.ron`'s
 //! `fittings`), told to this layer as [`FittingLooks`].
@@ -15,9 +15,9 @@ use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::collections::BTreeMap;
-use terra_build::fitting::{Hang, Leaf};
 use terra_build::ops::{Context, Op};
 use terra_build::{Prop, PropKind, Rules};
+use terra_build_layout::fitting::{Hang, Hanging, Leaf};
 
 /// How long a leaf takes to swing all the way, in seconds.
 const SWING_S: f32 = 0.7;
@@ -39,7 +39,7 @@ pub struct FittingLook {
     /// The foot of its hinge, in its own space: its origin, as the contract has it.
     pub hinge: Vec3,
     /// The kit whose material its frame is drawn in, by name: a door's or shutters' frame
-    /// (`terra_build::fitting::Prop::frame`).
+    /// (`terra_build_layout::fitting::Prop::frame`).
     pub frame: Option<String>,
 }
 
@@ -370,7 +370,7 @@ fn show(
     // in: the wall built in another material, its frame is seated on that one's.
     let kits = build_look.kits.clone();
     let face = |base: &terra_build::Base, prop: &Prop| {
-        terra_build::fitting::wall_face(base, prop, kits.as_deref())
+        terra_build_layout::fitting::wall_face(base, prop, kits.as_deref())
     };
     let mut wanted: BTreeMap<(Option<Entity>, [i32; 3]), (Prop, f32)> = changed
         .iter()
@@ -506,7 +506,8 @@ fn preview(
         ))
         .id();
     let ghost = MeshMaterial3d(look.looks.ghost());
-    let face = terra_build::fitting::wall_face(&site.build.base, &prop, look.kits.as_deref());
+    let face =
+        terra_build_layout::fitting::wall_face(&site.build.base, &prop, look.kits.as_deref());
     spawn_leaves(
         &mut commands,
         parent,

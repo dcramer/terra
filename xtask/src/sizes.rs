@@ -379,7 +379,7 @@ const SPLIT: [&str; 6] = [
     "- a long function: name its steps and make each its own function, with a struct for what",
     "  they share; a long match: a function per arm; a long test: a helper for its setup",
     "- a long file: a folder module, `name/mod.rs` with a file per concern beside it, its tests",
-    "  in `name/tests.rs`; see how `terra_build::layout` and `xtask/src` are split",
+    "  in `name/tests.rs`; see how `terra_build_layout::layout` and `xtask/src` are split",
     "An offender in the baseline may shrink; leave its entry, the full run on main (`cargo xtask nightly`) lowers it (D414).",
 ];
 

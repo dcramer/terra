@@ -3,10 +3,10 @@
 //! along them.
 
 use super::{Beside, RoofPart, Roofs, SIDES, STEP_M, Segment, crease, flashing, is_flashing};
-use crate::CELL_M;
 use crate::layout::Place;
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::BTreeMap;
+use terra_build::CELL_M;
 
 /// The lines of a roof's squares, before they are joined: each square's creases between its
 /// own triangles and with the squares beside it, and its edges, an eave, a verge or flashing
@@ -229,7 +229,7 @@ pub(super) fn ridges_a_cube_wide(mut segments: Vec<Segment>) -> Vec<Segment> {
 
 /// How far round a layout's scope a roof's squares are worked on, in cubes: past the reach
 /// of a square's pieces, its eaves included.
-pub(super) const NEAR_SCOPE: i32 = crate::cubes::SECTION + 4;
+pub(super) const NEAR_SCOPE: i32 = terra_build::cubes::SECTION + 4;
 
 /// Segments joined end to end along each line into long pieces, as a builder runs a board
 /// or a ridge's cap on, jointed where a line passes a section's edge but for within two
@@ -326,7 +326,7 @@ pub(super) fn join(segments: Vec<Segment>) -> Vec<Segment> {
 /// Where a long piece of a roof is jointed, along its line: at every section's edge, in the
 /// units a line is measured in (ticks along it, across both axes for a diagonal), but for
 /// within two metres, in ticks, of its ends, so no short piece is left at an end.
-pub(super) const JOINT_EVERY: i64 = (crate::cubes::SECTION * crate::layout::TICKS) as i64;
+pub(super) const JOINT_EVERY: i64 = (terra_build::cubes::SECTION * crate::layout::TICKS) as i64;
 pub(super) const JOINT_CLEAR: i64 = 4 * crate::layout::TICKS as i64;
 
 pub(super) fn gcd(a: i32, b: i32) -> i32 {
