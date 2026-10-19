@@ -6,8 +6,8 @@
 
 use super::{
     adaptation, air, cine, climate, cover, data, daylight, detail, dither, drift, fire, flora,
-    grading, grown, hable, lod, parting, quality, rises, scatter, scene, sky_occlusion, skylight, smoke,
-    tick, upscale, wind, woods,
+    grading, grown, hable, lod, parting, quality, rises, scatter, scene, sky_occlusion, skylight,
+    smoke, tick, upscale, wind, woods,
 };
 use bevy::prelude::*;
 
