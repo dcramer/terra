@@ -22,8 +22,10 @@ use bevy::{
 /// How many kept fires glow in the air at once: as many as cast shadows on the high preset,
 /// the nearest.
 pub(super) const FOGS: usize = 4;
-/// How thick the air round a fire is at its flames, at full night.
-const DENSITY: f32 = 0.015;
+/// How thick the air round a fire is at its flames, at full night: at 0.015 the glow was a
+/// salmon ball over the logs brighter than its flames, its air lit past where the tonemapper
+/// keeps orange (fire sheet, stage 4); a real fire's is a faint warm halo.
+const DENSITY: f32 = 0.004;
 /// How far round a fire's light its glow reaches, for each metre of its flames' half-width,
 /// and the least and most, metres.
 const REACH_A_METRE: f32 = 6.0;
@@ -91,7 +93,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(Volumes(volumes));
 }
 
-/// A ball of air in its box, densest at its middle and none at its edge, so no box shows.
+/// A ball of air in its box, densest at its middle and none at its edge, so no box shows,
+/// falling off as a cube so the halo has no edge of its own.
 fn falloff() -> Image {
     const N: u32 = 16;
     let mut data = Vec::with_capacity((N * N * N) as usize);
@@ -100,7 +103,7 @@ fn falloff() -> Image {
             for x in 0..N {
                 let p = (Vec3::new(x as f32, y as f32, z as f32) + 0.5) / N as f32 * 2.0 - 1.0;
                 let t = (1.0 - p.length()).clamp(0.0, 1.0);
-                data.push((t * t * 255.0).round() as u8);
+                data.push((t * t * t * 255.0).round() as u8);
             }
         }
     }

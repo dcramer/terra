@@ -205,7 +205,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 - **Fog.**
   - Bevy's volumetric fog scattered a point light with no phase function (`terra_world::scatter` patches it with the directional light's Henyey-Greenstein).
   - A blaze's light stays out of the fog: in the haze its tens of millions of lumens lit a ball of air brighter than the house (fire sheet, rounds 5 and 6).
-  - Each of the nearest kept fires with a shadowed light (four at most) puts a small `FogVolume` round its light (`fire::fog`): a ball of air densest at the flames, a few metres across, thickening as night comes, which of the fire lights only kept fires' shine in. The haze's own box is too big for a campfire's glow to show in it.
+  - Each of the nearest kept fires with a shadowed light (four at most) puts a small `FogVolume` round its light (`fire::fog`): a ball of air densest at the flames, a few metres across, thickening as night comes, which of the fire lights only kept fires' shine in. It is a faint warm halo, not a ball: its air thin enough that the tonemapper keeps it orange, and a fire light's in-scatter held to its radius as a sphere light's is (Frostbite's), so there is no hot white dot at the light. The haze's own box is too big for a campfire's glow to show in it.
   - Its smoke's absorption, darkening the air above, and Enshrouded's emissive fog volume are later stages (D184).
 - **LOD.**
   - Light to 40 m, shadows to 20 m (Valheim), eased, never popped.

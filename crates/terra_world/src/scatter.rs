@@ -10,6 +10,13 @@
 //! the same Henyey-Greenstein phase as its sun (its Volumetric Fog docs and Wronski's
 //! SIGGRAPH 2014 talk), so the one line is given the phase the directional light's has: a fire
 //! glows in the haze round itself, brightest looking toward it.
+//!
+//! Its in-scatter also falls off as `1 / max(d², 0.0001)`, a light a centimetre across: the
+//! air within a hand of a fire light took thousands of times its light and showed as a hot
+//! white dot in the glow round every campfire (fire sheet, stage 4). A fire's light is not a
+//! point but its flames, as wide as its `radius`; inside a sphere light the illuminance stops
+//! rising (Lagarde and de Rousiers, "Moving Frostbite to PBR", SIGGRAPH 2014, the sphere
+//! light's illuminance), so the distance is held at least the light's radius.
 
 use bevy::prelude::*;
 
@@ -24,6 +31,12 @@ const WRONG: &str =
 /// the ray's (`V`), as the directional light's is.
 const RIGHT: &str = "let light_color_per_step = (*light).color_inverse_square_range.rgb * light_factors_per_step * henyey_greenstein(dot(L, V));";
 
+/// Bevy's fall-off of a point light's in-scatter, held to a centimetre.
+const POINT: &str = "let distance_atten = getDistanceAttenuation(distance_square, (*light).color_inverse_square_range.w);";
+
+/// The same held to the light's radius, as a sphere light's is.
+const SPHERE: &str = "let distance_atten = getDistanceAttenuation(max(distance_square, (*light).position_radius.w * (*light).position_radius.w), (*light).color_inverse_square_range.w);";
+
 pub fn plugin(app: &mut App) {
     super::shader_patch::patch_library(
         app,
@@ -35,7 +48,8 @@ pub fn plugin(app: &mut App) {
 
 /// The fog's shader with its point lights' in-scatter weighed by the phase, if it has Bevy's.
 fn patched(source: &str) -> Option<String> {
-    super::shader_patch::swap_once(source, WRONG, RIGHT)
+    let phased = super::shader_patch::swap_once(source, WRONG, RIGHT)?;
+    super::shader_patch::swap_once(&phased, POINT, SPHERE)
 }
 
 #[cfg(test)]
@@ -44,9 +58,13 @@ mod tests {
 
     #[test]
     fn a_point_light_scatters_by_the_phase_as_the_sun_does() {
-        let shader = format!("fn f() {{\n            {WRONG}\n}}\n");
+        let shader = format!("fn f() {{\n            {POINT}\n            {WRONG}\n}}\n");
         let out = patched(&shader).unwrap();
         assert!(out.contains("henyey_greenstein(dot(L, V))") && !out.contains(WRONG));
+        // And its fall-off stops rising inside the light's radius.
+        assert!(
+            out.contains("max(distance_square, (*light).position_radius.w") && !out.contains(POINT)
+        );
         // Not there, or there twice: left alone.
         assert!(patched("fn f() {}").is_none());
         assert!(patched(&format!("{shader}{shader}")).is_none());
