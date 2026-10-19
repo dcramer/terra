@@ -88,6 +88,6 @@ Every byte an agent reads is paid again each turn.
 ## Checking your work
 
 - **Checkable without a person** (D69): scripted runs (`--press`, `--shot`, `--vantage`, `--bench`), workbench sheets, `cargo xtask loop`, `cargo xtask remote`. Not done until an agent can drive it and see it worked.
-- **Look at it**: `cargo xtask sandbox --experiment play --shot <file.png>` (CPU-rendered under WSL; add `--offscreen` on macOS), `cargo xtask workbench` for models. Close every run you start.
+- **Look at it**: `cargo xtask sandbox --offscreen --experiment play --shot <file.png>` (CPU-rendered under WSL; offscreen opens no window, so no "not responding" dialog, D417), `cargo xtask workbench` for models. Close every run you start.
 - **After a panic** (D399), read the `summary.txt` the run's last line names before any backtrace; see what an action changed with `r snap` and `r diff` ([tools/sandbox](tools/sandbox/README.md)).
 - **Measure with `cargo xtask bench`** (D185): release, offscreen at 1920x1080, real GPU (under WSL the Windows build), against the last result; report the integrated GPU too. Software rendering's numbers mean nothing.

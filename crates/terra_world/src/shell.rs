@@ -266,7 +266,7 @@ pub struct Options {
     pub background: bool,
     /// An unattended run's window floats above the others, so it is drawn.
     pub on_top: bool,
-    /// Draw into a picture instead of the window, which stays hidden (`--offscreen`).
+    /// Draw into a picture instead of the window (`--offscreen`); unattended, no window opens.
     pub offscreen: bool,
     pub remote_token: String,
     /// No readout on screen.
@@ -882,7 +882,6 @@ impl Plugin for ShellPlugin {
                 (false, _) => WindowLevel::Normal,
             },
             resolution: (1600u32, 900u32).into(),
-            visible: !(options.offscreen && options.unattended()),
             // Vsync hides how long a frame really takes, so benchmarks turn it off.
             present_mode: if options.bench {
                 PresentMode::AutoNoVsync
@@ -916,8 +915,9 @@ impl Plugin for ShellPlugin {
         );
         let sound = options.sound_on();
         // Bevy's glTF loader behind a gate, so models loading together never nest on an IO
-        // thread's stack (gltf_gate.rs).
-        let engine = crate::gltf_gate::replace(DefaultPlugins.build())
+        // thread's stack (gltf_gate.rs); offscreen and unattended, no window (headless.rs).
+        let windowless = options.offscreen && options.unattended();
+        let engine = crate::gltf_gate::replace(crate::headless::engine(app, windowless))
             .set(WindowPlugin {
                 primary_window: Some(window),
                 ..default()
