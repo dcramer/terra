@@ -37,6 +37,12 @@ struct Layer {
     normal: vec3<f32>,
 }
 
+// A tangent-space normal from a map's x and y alone, as a cooked map is BC5 (D188).
+fn unpacked(t: vec4<f32>) -> vec3<f32> {
+    let xy = t.xy * 2.0 - 1.0;
+    return vec3<f32>(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
+}
+
 fn facing(n: vec3<f32>) -> vec3<f32> {
     let w = pow(abs(n), vec3<f32>(4.0));
     return w / (w.x + w.y + w.z);
@@ -63,7 +69,7 @@ fn layer(index: u32, tint: vec3<f32>, p_m: vec3<f32>, gx: vec3<f32>, gy: vec3<f3
         let ddx = vec2<f32>(dx.z * side.x, dx.y);
         let ddy = vec2<f32>(dy.z * side.x, dy.y);
         colour += textureSampleGrad(flora_color, flora_sampler, uv, index, ddx, ddy).rgb * w.x;
-        tx = textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        tx = unpacked(textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy));
         tx.x *= side.x;
     }
     {
@@ -71,7 +77,7 @@ fn layer(index: u32, tint: vec3<f32>, p_m: vec3<f32>, gx: vec3<f32>, gy: vec3<f3
         let ddx = vec2<f32>(dx.x * side.y, dx.z);
         let ddy = vec2<f32>(dy.x * side.y, dy.z);
         colour += textureSampleGrad(flora_color, flora_sampler, uv, index, ddx, ddy).rgb * w.y;
-        ty = textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        ty = unpacked(textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy));
         ty.x *= side.y;
     }
     {
@@ -79,7 +85,7 @@ fn layer(index: u32, tint: vec3<f32>, p_m: vec3<f32>, gx: vec3<f32>, gy: vec3<f3
         let ddx = vec2<f32>(-dx.x * side.z, dx.y);
         let ddy = vec2<f32>(-dy.x * side.z, dy.y);
         colour += textureSampleGrad(flora_color, flora_sampler, uv, index, ddx, ddy).rgb * w.z;
-        tz = textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        tz = unpacked(textureSampleGrad(flora_normal, flora_sampler, uv, index, ddx, ddy));
         tz.x *= -side.z;
     }
     let nx = vec3<f32>(n.x, tx.y + n.y, tx.x + n.z);

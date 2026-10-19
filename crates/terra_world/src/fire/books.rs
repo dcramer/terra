@@ -4,17 +4,20 @@
 //! array textures so one draw reads every set; the one colour ramp every fire's heat is
 //! coloured through (`tools/fire/ramp.ts`); and which set each kind of fire is drawn from.
 //! The smoke's puffs are sets of their own, six-way lightmaps (`tools/fire/bake/smoke.ts`),
-//! stacked the same way ([`read_smoke`]).
+//! stacked the same way ([`read_smoke`]). Each is read cooked where the bake has made it
+//! (D188, `terra_core::cooked`): the maps BC7 and the motion BC5, a quarter of their bytes on
+//! the GPU, top level only as the shaders read no other.
 
 use bevy::{
     asset::RenderAssetUsages,
-    image::{CompressedImageFormats, ImageSampler, ImageType},
+    image::{CompressedImageFormats, ImageFormat, ImageSampler, ImageType},
     prelude::*,
     render::render_resource::{
         Extent3d, TextureDimension, TextureViewDescriptor, TextureViewDimension,
     },
 };
 use serde::Deserialize;
+use terra_core::cooked::{Cook, Kind};
 
 /// The sets the cards are drawn from, a layer each in this order (`fire.wesl`'s `SET_*`):
 /// a hearth's flames (`campfire`), a burning building's (`tongue`) and a torch's, a hearth
@@ -139,13 +142,11 @@ const SMOKE_FRAME: u32 = 128;
 pub fn read_smoke() -> SmokeBooks {
     let sidecars = SMOKE_SETS.map(smoke_sidecar);
     let maps = |suffix: &str| {
-        stack(
-            SMOKE_SETS
-                .iter()
-                .map(|set| picture(&format!("{set}{suffix}.png"), false))
-                .collect(),
-            ImageSampler::linear(),
-        )
+        let paths: Vec<String> = SMOKE_SETS
+            .iter()
+            .map(|set| format!("{set}{suffix}.png"))
+            .collect();
+        stack(layers(&paths, Kind::Data), ImageSampler::linear())
     };
     SmokeBooks {
         near: maps(""),
@@ -213,6 +214,37 @@ fn picture(path: &str, srgb: bool) -> Image {
     .unwrap_or_else(|problem| panic!("{}: {problem}", at.display()))
 }
 
+/// The pictures at `paths`, every one cooked as `kind` where all are, else every one as made.
+fn layers(paths: &[String], kind: Kind) -> Vec<Image> {
+    let cook = Cook {
+        kind,
+        layers: 1,
+        mips: false,
+    };
+    let cooked: Option<Vec<Image>> = crate::cooked::folder().and_then(|folder| {
+        paths
+            .iter()
+            .map(|path| cooked(&folder, path, cook))
+            .collect()
+    });
+    cooked.unwrap_or_else(|| paths.iter().map(|path| picture(path, false)).collect())
+}
+
+/// The cooked copy of a picture under textures/fire, if the bake has made one for its bytes.
+fn cooked(folder: &std::path::Path, path: &str, cook: Cook) -> Option<Image> {
+    let bytes = std::fs::read(file(path)).ok()?;
+    let at = terra_core::cooked::find(folder, &terra_core::cooked::picture_name(&bytes, cook))?;
+    Image::from_buffer(
+        &std::fs::read(at).ok()?,
+        ImageType::Format(ImageFormat::Ktx2),
+        CompressedImageFormats::BC,
+        false,
+        ImageSampler::linear(),
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .ok()
+}
+
 /// Pictures of one size stacked as the layers of an array texture.
 fn stack(layers: Vec<Image>, sampler: ImageSampler) -> Image {
     let size = layers[0].texture_descriptor.size;
@@ -248,16 +280,12 @@ fn stack(layers: Vec<Image>, sampler: ImageSampler) -> Image {
 pub fn read() -> Books {
     let sidecars = SETS.map(sidecar);
     let flames = stack(
-        SETS.iter()
-            .map(|set| picture(&format!("{set}.png"), false))
-            .collect(),
+        layers(&SETS.map(|set| format!("{set}.png")), Kind::Data),
         ImageSampler::linear(),
     );
     // Sampled unfiltered (SideFX Labs' advice): `fire.wesl` loads its texels.
     let motions = stack(
-        SETS.iter()
-            .map(|set| picture(&format!("{set}.motion.png"), false))
-            .collect(),
+        layers(&SETS.map(|set| format!("{set}.motion.png")), Kind::Two),
         ImageSampler::nearest(),
     );
     let path = file("ramp.json");

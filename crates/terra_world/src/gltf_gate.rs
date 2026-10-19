@@ -11,12 +11,21 @@
 //! gate yields to the pool instead of running inside the scope that picked it up, so one
 //! thread holds at most that many loads on its stack however many models are asked for,
 //! and a model's images still decode in parallel.
+//!
+//! The gate also reads a model's cooked copy where the bake has made one (D188,
+//! `terra_core::cooked`): the same model with its pictures block-compressed with their
+//! mipmaps, found by the key of the bytes asked for, so a changed model is read as it is
+//! until it is cooked again. Only where the GPU samples BC; elsewhere (a software renderer)
+//! the model as made.
 
 use std::sync::Arc;
 
 use async_lock::Semaphore;
 use bevy::{
-    asset::{AssetLoader, LoadContext, io::Reader},
+    asset::{
+        AssetLoader, LoadContext,
+        io::{Reader, SliceReader},
+    },
     gltf::{
         DefaultGltfImageSampler, Gltf, GltfError, GltfLoader, GltfLoaderSettings, GltfMaterial,
         GltfMesh, GltfNode, GltfPlugin, GltfPrimitive, GltfSkin, extensions::GltfExtensionHandlers,
@@ -72,9 +81,11 @@ impl Plugin for GatedGltfPlugin {
             default_mesh_compression: settings.mesh_compression.clone(),
         };
         let threads = IoTaskPool::try_get().map_or(1, |pool| pool.thread_num().max(1));
+        let cooked = crate::cooked::enable(supported_compressed_formats);
         app.register_asset_loader(GatedGltfLoader {
             loader,
             gate: Arc::new(Semaphore::new(threads)),
+            cooked,
         });
     }
 }
@@ -84,6 +95,8 @@ impl Plugin for GatedGltfPlugin {
 pub struct GatedGltfLoader {
     loader: GltfLoader,
     gate: Arc<Semaphore>,
+    /// Where cooked models are kept, where the GPU can sample them.
+    cooked: Option<std::path::PathBuf>,
 }
 
 impl AssetLoader for GatedGltfLoader {
@@ -98,7 +111,14 @@ impl AssetLoader for GatedGltfLoader {
         load_context: &mut LoadContext<'_>,
     ) -> Result<Gltf, GltfError> {
         let _through = self.gate.acquire().await;
-        self.loader.load(reader, settings, load_context).await
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+        let cooked = self.cooked.as_ref().and_then(|folder| {
+            let path = terra_core::cooked::find(folder, &terra_core::cooked::model_name(&bytes))?;
+            std::fs::read(path).ok()
+        });
+        let mut read = SliceReader::new(cooked.as_deref().unwrap_or(&bytes));
+        self.loader.load(&mut read, settings, load_context).await
     }
 
     fn extensions(&self) -> &[&str] {

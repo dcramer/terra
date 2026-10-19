@@ -913,6 +913,7 @@ impl Plugin for ShellPlugin {
             crate::data::CPU_ONLY,
             bevy::asset::io::AssetSourceBuilder::platform_default(&assets_folder, None),
         );
+        crate::cooked::register(app);
         let sound = options.sound_on();
         // Bevy's glTF loader behind a gate, so models loading together never nest on an IO
         // thread's stack (gltf_gate.rs); offscreen and unattended, no window (headless.rs).

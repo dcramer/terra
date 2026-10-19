@@ -18,6 +18,7 @@ pub mod audio;
 pub mod cache;
 pub mod cine;
 pub mod climate;
+pub mod cooked;
 pub mod cover;
 pub mod crash;
 pub mod data;

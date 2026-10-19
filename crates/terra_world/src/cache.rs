@@ -6,9 +6,5 @@ use std::path::PathBuf;
 
 /// `terra/` in the user's cache folder; none where there is no such folder.
 pub fn folder() -> Option<PathBuf> {
-    let cache = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))?;
-    Some(cache.join("terra"))
+    terra_core::cooked::cache_folder()
 }

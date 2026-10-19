@@ -373,7 +373,7 @@ fn grow(
         let cards = crate::grown::Cards::read_file(litter::FILE);
         let litter = litter_materials.add(litter::LitterMaterial {
             base: StandardMaterial {
-                base_color_texture: Some(assets.load(cards.atlas.clone())),
+                base_color_texture: Some(crate::grown::atlas(&cards, &assets)),
                 normal_map_texture: Some(crate::grown::leaf_normals(&cards, &assets)),
                 alpha_mode: AlphaMode::Mask(cards.cut),
                 perceptual_roughness: 0.85,

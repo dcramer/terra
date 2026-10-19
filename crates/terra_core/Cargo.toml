@@ -8,7 +8,9 @@ publish.workspace = true
 
 [dependencies]
 glam.workspace = true
+libm.workspace = true
 terra_gen.workspace = true
+twox-hash.workspace = true
 
 [lints]
 workspace = true

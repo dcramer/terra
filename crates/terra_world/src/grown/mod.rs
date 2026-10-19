@@ -31,6 +31,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use serde::Deserialize;
+use terra_core::cooked;
 use terra_gen::Seed;
 
 /// Where a 20 m tree's detail drops, in metres from the camera: full, then fewer branches
@@ -376,10 +377,31 @@ pub const LEAF_REFLECTANCE: f32 = 0.28;
 
 /// The card atlas's normal map, read as numbers rather than colours.
 pub fn leaf_normals(cards: &Cards, assets: &AssetServer) -> Handle<Image> {
-    assets
-        .load_builder()
-        .with_settings(|settings: &mut ImageLoaderSettings| settings.is_srgb = false)
-        .load(cards.normals.clone())
+    // Its alpha is each pixel's roughness (D292), so it keeps all four channels.
+    crate::cooked::picture(
+        assets,
+        &cards.normals,
+        cooked::Cook {
+            kind: cooked::Kind::Data,
+            layers: 1,
+            mips: true,
+        },
+        |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+    )
+}
+
+/// The card atlas, its colour cut out by its alpha.
+pub fn atlas(cards: &Cards, assets: &AssetServer) -> Handle<Image> {
+    crate::cooked::picture(
+        assets,
+        &cards.atlas,
+        cooked::Cook {
+            kind: cooked::Kind::Colour,
+            layers: 1,
+            mips: true,
+        },
+        |_: &mut ImageLoaderSettings| {},
+    )
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -474,7 +496,7 @@ impl Looks {
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
-                base_color_texture: Some(assets.load(cards.atlas.clone())),
+                base_color_texture: Some(atlas(&cards, &assets)),
                 alpha_mode: AlphaMode::Mask(cards.cut),
                 // Seen from both sides, but with the same normal on both, which leans out of
                 // the crown, so a card does not flip from lit to dark as it turns.
@@ -524,20 +546,27 @@ impl Looks {
         }
         let linear = |settings: &mut ImageLoaderSettings| settings.is_srgb = false;
         let map = |file: &str| format!("materials/{name}/{file}");
-        let arm: Handle<Image> = assets
-            .load_builder()
-            .with_settings(linear)
-            .load(map("arm.jpg"));
+        let cook = |kind| cooked::Cook {
+            kind,
+            layers: 1,
+            mips: true,
+        };
+        let arm = crate::cooked::picture(assets, &map("arm.jpg"), cook(cooked::Kind::Data), linear);
         let handle = foliage.add(Foliage {
             base: StandardMaterial {
                 base_color: tint,
-                base_color_texture: Some(assets.load(map("color.jpg"))),
-                normal_map_texture: Some(
-                    assets
-                        .load_builder()
-                        .with_settings(linear)
-                        .load(map("normal.jpg")),
-                ),
+                base_color_texture: Some(crate::cooked::picture(
+                    assets,
+                    &map("color.jpg"),
+                    cook(cooked::Kind::Colour),
+                    |_: &mut ImageLoaderSettings| {},
+                )),
+                normal_map_texture: Some(crate::cooked::picture(
+                    assets,
+                    &map("normal.jpg"),
+                    cook(cooked::Kind::Normal),
+                    linear,
+                )),
                 occlusion_texture: Some(arm.clone()),
                 metallic_roughness_texture: Some(arm),
                 perceptual_roughness: 1.0,
@@ -819,7 +848,7 @@ fn follow_climate(
     let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
         return;
     };
-    let atlas: Handle<Image> = assets.load(cards.atlas.clone());
+    let atlas: Handle<Image> = atlas(&cards, &assets);
     let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
     let other = FoliageClimate::from_maps(&maps, None, None);
     let stale: Vec<_> = materials

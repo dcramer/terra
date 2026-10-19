@@ -99,15 +99,24 @@ fn flora_textures(assets: &AssetServer) -> (Handle<Image>, Handle<Image>) {
             settings.is_srgb = !linear;
         }
     };
+    let cook = |kind| terra_core::cooked::Cook {
+        kind,
+        layers: MATERIALS.len() as u32,
+        mips: true,
+    };
     (
-        assets
-            .load_builder()
-            .with_settings(layers(false))
-            .load("materials/flora/color.jpg"),
-        assets
-            .load_builder()
-            .with_settings(layers(true))
-            .load("materials/flora/normal.jpg"),
+        crate::cooked::picture(
+            assets,
+            "materials/flora/color.jpg",
+            cook(terra_core::cooked::Kind::Colour),
+            layers(false),
+        ),
+        crate::cooked::picture(
+            assets,
+            "materials/flora/normal.jpg",
+            cook(terra_core::cooked::Kind::Normal),
+            layers(true),
+        ),
     )
 }
 

@@ -9,6 +9,7 @@
 //! origin.
 
 mod avoid;
+pub mod cooked;
 mod ground;
 mod mesh;
 mod operation;

@@ -18,6 +18,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_net` | Network messages and transport | No | Not created yet (track D) |
 | `terra_body` | Appearance data into joints and morph weights ([docs/characters.md](../docs/characters.md)) | No | Not created yet |
+| `terra_bake` | The texture bake (D188), `cargo xtask cook`: models', materials' and the fire's pictures cooked into BC7, BC5 and BC4 KTX2 with mipmaps into the cache `terra_core::cooked` names, read by the game where fresh | No | Exists |
 | `terra_world` | The world on screen in Bevy: the shell every run starts in (window, options, scripted runs, the remote protocol, sound), the planet, terrain, sky and the start, and the world layer (light, the day, what grows, the tick, levels of detail; D198). Builds and tests alone. [README](terra_world/README.md) | Yes | Exists |
 | `terra_game` | The game in Bevy, on `terra_world`: the walker and gameplay layers (D198): the player, items, building, creatures, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |

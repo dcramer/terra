@@ -211,8 +211,10 @@ struct Texel {
 
 fn fetch(uv: vec2<f32>, ddx: vec2<f32>, ddy: vec2<f32>, index: u32) -> Texel {
     let colour = textureSampleGrad(ground_color, ground_sampler, uv, index, ddx, ddy).rgb;
-    let normal = textureSampleGrad(ground_normal, ground_sampler, uv, index, ddx, ddy).xyz;
-    return Texel(colour, normal.xy * 2.0 - 1.0, normal.z);
+    // x and y only: a cooked normal map is BC5, its two components (D188); z is made from
+    // them, stored as the map would have it.
+    let xy = textureSampleGrad(ground_normal, ground_sampler, uv, index, ddx, ddy).xy * 2.0 - 1.0;
+    return Texel(colour, xy, sqrt(max(1.0 - dot(xy, xy), 0.0)) * 0.5 + 0.5);
 }
 
 fn turned(v: vec2<f32>, angle: f32) -> vec2<f32> {

@@ -26,6 +26,17 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/textures/textures.ts", args),
     },
     Task {
+        name: "cook",
+        takes: "[--force]",
+        does: "the texture bake (D188): models', materials' and the fire's pictures cooked into BC7, BC5 and BC4 KTX2 with mipmaps, into the cache the game reads them from; what is cooked is kept (terra_bake)",
+        group: "Make art",
+        run: |args| {
+            let mut cargo = vec!["run", "-q", "--release", "-p", "terra_bake", "--"];
+            cargo.extend(args.iter().map(String::as_str));
+            run("cargo", &cargo)
+        },
+    },
+    Task {
         name: "pack",
         takes: "<name> --from <source> [--pattern block|frame|coursed|roof]",
         does: "make a construction material in one command: its pack from a CC0 scan, an image or a reference model, checked and credited, and its file (tools/kits, D290)",

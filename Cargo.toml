@@ -49,6 +49,14 @@ png = "0.18"
 # the version Bevy's image loading already builds, with its core types.
 zune-jpeg = "0.5"
 zune-core = "0.5"
+# XXH3, the key a cooked texture is kept under (terra_core::cooked, D188): the version
+# Bevy's dependencies already build, MIT.
+twox-hash = { version = "2.1", default-features = false, features = ["xxhash3_64"] }
+# The texture bake's encoders (terra_bake, D188): bc7enc-rdo's BC7 and Intel's ISPC BC4/BC5,
+# with mipmaps and KTX2 written; MIT/Apache/Zlib, by wgpu's maintainer, 0.6 of 2026-09.
+ctt = { version = "0.6", default-features = false, features = ["encoder-bc7enc", "encoder-intel", "ispc-prebuilt", "rayon"] }
+# Decoding the pictures the bake cooks: the version Bevy's image loading already builds.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

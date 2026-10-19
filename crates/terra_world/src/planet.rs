@@ -571,15 +571,24 @@ impl GroundTextures {
                 settings.is_srgb = !linear;
             }
         };
+        let cook = |kind| terra_core::cooked::Cook {
+            kind,
+            layers: GROUND_LAYERS,
+            mips: true,
+        };
         GroundTextures {
-            color: assets
-                .load_builder()
-                .with_settings(layers(false))
-                .load("materials/ground/color.jpg"),
-            normal: assets
-                .load_builder()
-                .with_settings(layers(true))
-                .load("materials/ground/normal.jpg"),
+            color: crate::cooked::picture(
+                assets,
+                "materials/ground/color.jpg",
+                cook(terra_core::cooked::Kind::Colour),
+                layers(false),
+            ),
+            normal: crate::cooked::picture(
+                assets,
+                "materials/ground/normal.jpg",
+                cook(terra_core::cooked::Kind::Normal),
+                layers(true),
+            ),
         }
     }
 }
