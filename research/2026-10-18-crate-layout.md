@@ -181,6 +181,23 @@ No building probe compiles the world any more (0 s, from 11 to 22 s), and a buil
 
 **After step 4** (f3c257ef, `terra_town`; load 11 to 13, so lower than above for the load alone): a town (`terra_town/src/town/streets.rs`) 9 s, game 5, sandbox 2, and no longer building (0 s, from 9); building's rules (`cubes.rs`) 9 s, game 4, sandbox 2, build 2, the town under 1 s.
 
+### Measured: after step 5
+
+At f8536e3c, building cut into the rules, layout, drawing and scenes and the village in the town (step 5 on main), on the same Mac under load 6 to 9, dev only (`cargo xtask rebuilds --dev`). The load is a tenth of the earlier runs', so the seconds fall with it; what to compare is which crates compile. A crate not named was not compiled:
+
+| Probe | Dev | Of which | After step 3 | Baseline |
+|---|---|---|---|---|
+| core (`terra_core/src/lib.rs`) | 13 | game 6, world 5, sandbox 3, build 0.9, build_mesh 0.7, build_layout 0.5, town 0.5; land, build_scenes, voxel and core under 0.4 | 50: game 23, world 21, sandbox 10, build 8 | 54: game 25, world 19, sandbox 13 |
+| building's rules (`cubes.rs`) | 9 | game 4, sandbox 2, build 1, build_mesh 1, town 0.5, build_layout 0.5, build_scenes 0.3 | 38: game 21, sandbox 10, build 7 | 58: world 22, game 21, build 11, sandbox 9 |
+| building's layout (`layout/runs.rs`) | 8 | game 4, sandbox 2, build_mesh 0.7, build_layout 0.4, build_scenes 0.3 | 50: game 28, sandbox 13, build 8 | 48: game 19, world 18, build 9, sandbox 7 |
+| building's drawing (`sections.rs`) | 8 | game 4, sandbox 2, build_mesh 0.6, build_scenes 0.3 | (waited): game 35, sandbox 14, build 11 | 46: world 16, game 15, sandbox 9, build 8 |
+| a town (`town/streets.rs`) | 8 | game 4, sandbox 2, town 0.5, build_scenes 0.3 | (waited): game 28, build 9, sandbox 7 | 38: game 14, world 11, build 8, sandbox 7 |
+| the world (`flora.rs`) | 10 | game 4, world 4, sandbox 2 | (waited): world 22, game 21, sandbox 9 | 43: game 21, world 16, sandbox 10 |
+| the walker (`play/movement.rs`) | 7 | game 4, sandbox 2 | (waited): game 28, sandbox 13 | 44: game 29, sandbox 13 |
+| a creature (`play/creatures.rs`) | 7 | game 4, sandbox 2 | 73: game 32, sandbox 19 | 38: game 26, sandbox 10 |
+
+Against the baseline, no building or town change compiles the world, and against step 3, a change to building's layout, drawing or a town no longer compiles the rules (`terra_build`): the layout compiles only what is above it (the drawing, the scenes), the drawing only itself and the scenes, a town only itself and the scenes, and a building push's gate tests those crates rather than one crate of everything. Every building crate together is under 2.5 s of a rebuild; the game and the sandbox are 6 of every probe's 7 to 10 s, since `terra_game` is still one crate that names building throughout, which step 8 cuts.
+
 ## How shipped projects do it
 
 Read at their sources on 2026-10-18: Veloren master at c1e20929 (its manifests and `cargo metadata`), Bevy main at 85503941 (0.20.0-dev; 0.20.0 the latest release), Cargo master at 3022244f; line counts ours, with tests.
@@ -210,7 +227,7 @@ Each step is one push that builds, passes the gate and changes no behaviour. A m
 3. **Take the world off building**: `Walker` to `terra_core`, the start's plot as data, the example's fit as a test. `terra_world`'s manifest loses `terra_build`. One push; the first measured gain. Done: f0062671, measured above.
 4. **`terra_town`**: move `town` and `village`, merge `terra_life` in, as the developers chose. One push. Done for `town` and `terra_life` (2026-10-19); `village` followed in step 5. It waited because the scene registry (`scenes::registry`, whose village scenes the mesh checker, the drawing audit and the voxel contract check), `construct` and `put_up`'s tests and a sections test lay its buildings, so it moved once the scenes were a crate of their own that could stand on `terra_town`, its plans, schemes, roofs and the settlement's palette with it, since nothing below the town names them.
 5. **`terra_build_scenes`**, then **`terra_build_mesh`**, then `village` into `terra_town`, then **`terra_build_layout`**: four pushes of moves, `terra_build` left as the rules. From the top, since the drawing names the layout and the scenes name both, and a crate's tests can lay only what is below it: each push moves the tests that lay what leaves into the crate that can see both. The example bases built from the rules alone (the example cabin, the bench village, the castle, the burg, the junctions) stay in `terra_build`, whose tests and every crate's above lay them. `terra_build_scenes` done (2026-10-19); `terra_build_mesh` done (2026-10-19), with the layout's tests that draw what they lay moved up into its tests and the village's drawing audit into the scenes'. `village` into `terra_town` done (2026-10-19), with `construct` and `put_up`'s tests that put its buildings up moved into its tests. `terra_build_layout` done (2026-10-19): the walking and a prop's frame and leaves are traits on the rules' types (`Walking`, `Hanging`), a prop's hole and leaf count went to the rules (`pieces`), the operations' cases that walk what they build and the rules and decks integration tests moved up, and the `seams` test went, Cargo holding its line. Step 5 done.
-6. **Measure** again; write the result here.
+6. **Measure** again; write the result here. Done: f8536e3c, measured above (after step 5).
 7. **The game's seams**, one or two a push, in the order of the table above, each with the asker owning the type; `Village` first, since it is what lets building play fork from the townsfolk.
 8. **`terra_bases`**, **`terra_walker`**, **`terra_survival`**, **`terra_creatures`**, **`terra_folk`**, **`terra_building`**: one push each, bottom up, what is left in `terra_game` being the app. D28's list, `BEVY_CRATES`, `READ_BY`, `crates/README.md`, docs/tech.md's layers and each crate's README move with the push that makes the crate.
 9. **Measure** again, and decide the drawing's second cut and whether `terra_world`'s shell (window, launch options, scripted runs, remote, sound, films; some 9k) is worth its own crate.
