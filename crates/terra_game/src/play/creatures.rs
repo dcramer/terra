@@ -601,7 +601,8 @@ fn walk(
                     // Across the ground to its foot first.
                     let way = toward(trunk.foot);
                     creature.facing = way;
-                    let next = planet.ground_at(here + way * about.run_mps * dt);
+                    let next =
+                        planet.ground_at(here + way * gait::keeps_to(about.run_mps, about) * dt);
                     *at = Transform::from_translation(next)
                         .looking_to(way, next.normalize())
                         .with_scale(scale);
@@ -648,8 +649,8 @@ fn walk(
             .and_then(|player| players.get(player).ok())
             .map(|at| toward(at.translation));
         let (direction, speed) = match (creature.state, quarry) {
-            (State::Wander(to), _) => (toward(to), about.walk_mps),
-            (State::Return, _) => (toward(creature.home), about.walk_mps),
+            (State::Wander(to), _) => (toward(to), gait::keeps_to(about.walk_mps, about)),
+            (State::Return, _) => (toward(creature.home), gait::keeps_to(about.walk_mps, about)),
             // The way it broke when startled; hurt from afar with nobody near, the way it
             // faces.
             (State::Flee(_), quarry) => (
@@ -660,7 +661,7 @@ fn walk(
                 },
                 creature.pace.runs_mps(about),
             ),
-            (State::Chase, Some(toward)) => (toward, about.run_mps),
+            (State::Chase, Some(toward)) => (toward, gait::keeps_to(about.run_mps, about)),
             (State::Attack(_), Some(toward)) => (toward, 0.0),
             _ => (Vec3::ZERO, 0.0),
         };
@@ -787,15 +788,16 @@ fn animate(
         let (wanted, speed) = match creature.state {
             State::Idle(_) | State::Perch { .. } | State::Roost { .. } => (clips.idle, beat),
             State::Graze(_) => (clips.eat, beat),
-            State::Wander(_) | State::Return => {
-                (clips.walk, gait::on_foot(about.walk_mps, about).1)
-            }
+            State::Wander(_) | State::Return => (
+                clips.walk,
+                gait::on_foot(gait::keeps_to(about.walk_mps, about), about).1,
+            ),
             State::Flee(_) | State::Chase => {
                 let fleeing = matches!(creature.state, State::Flee(_));
                 let speed = if fleeing {
                     creature.pace.runs_mps(about)
                 } else {
-                    about.run_mps
+                    gait::keeps_to(about.run_mps, about)
                 };
                 let (walks, rate) = gait::on_foot(speed, about);
                 (if walks { clips.walk } else { clips.run }, rate)

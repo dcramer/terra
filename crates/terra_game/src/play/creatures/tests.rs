@@ -642,8 +642,12 @@ fn a_fox_running_through_a_wood_goes_round_every_trunk_and_rock() {
                 );
             }
         }
+        // Out beyond the wood's last row of trunks.
         let gone = (world.get::<Transform>(fox).unwrap().translation - ground).dot(east);
-        assert!(gone > 20.0, "aimed {aim}: only {gone:.1} m on");
+        assert!(
+            gone > 3.0 + 5.0 * 2.5 + 1.0,
+            "aimed {aim}: only {gone:.1} m on"
+        );
         world.despawn(fox);
     }
 }

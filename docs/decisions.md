@@ -430,6 +430,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D416](decisions/D416.md) | The ground shades and mirrors what the camera does not see from a horizon map of the land, not from what is drawn | Tech | Agent | Leaning | What lies off screen already casts… |
 | [D418](decisions/D418.md) | The weather at the eye drives the sky, the light, the air and what falls | Tech | Agent | Decided | One `Weather` resource holds the climate's cloud… |
 | [D420](decisions/D420.md) | GPU memory in pages, made once, uploaded over frames | Tech | Agent | Decided | What the GPU holds is made at its size once and in… |
+| [D424](decisions/D424.md) | A creature's clip plays within 0.8-1.2 of its own rate | Tech | Agent | Decided | Every creature on foot plays its gait's clip at its… |
 
 ## Tools and workflow
 
