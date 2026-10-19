@@ -17,8 +17,11 @@
   "G/R",
   "dim %"
  ],
- "breath dusk": [],
+ "breath dusk": [
+  "coarse %"
+ ],
  "fireball dusk": [
+  "pale %",
   "B/R",
   "G/R"
  ],
@@ -33,7 +36,9 @@
   "edge soot %",
   "mid %"
  ],
- "breath night": [],
+ "breath night": [
+  "edge soot %"
+ ],
  "fireball night": [
   "pale %",
   "B/R",
