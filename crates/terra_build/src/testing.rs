@@ -2,6 +2,8 @@
 //! (D407: a crate's tests see only the crates below it, so what they share is here, not in a
 //! test module): not the game's, which loads them through its asset server.
 
+pub mod random;
+
 use crate::kit::{Kit, MATERIALS, Texture};
 use crate::pieces::Material;
 use crate::{Base, BuildOp, Panel};

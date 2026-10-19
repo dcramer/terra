@@ -31,7 +31,7 @@ crates/terra_build/src/lib.rs	-	1210
 crates/terra_build_mesh/src/modules.rs	-	2071
 crates/terra_build/src/ops.rs	-	1271
 crates/terra_build/src/ops/tests.rs	-	1892
-crates/terra_build/src/ops/tests.rs	random_op	280
+crates/terra_build/src/testing/random.rs	random_op	280
 crates/terra_build/src/ops/tests.rs	random_operations_keep_every_rule	243
 crates/terra_build_mesh/src/packs.rs	-	1298
 crates/terra_build/src/plans.rs	-	1678

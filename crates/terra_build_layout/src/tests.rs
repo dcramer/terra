@@ -30,3 +30,38 @@ fn what_is_dressed_reads_the_same_ground_as_the_rules() {
         -75 * crate::layout::TICKS / cube_cm()
     );
 }
+
+// ---- from crates/terra_build/src/ops/tests.rs (random operations)
+
+#[test]
+fn random_bases_laid_twice_are_laid_the_same() {
+    // Layout is the same on every machine and every run: the bases random operations build
+    // (the rules' property test's, every 300 steps), each laid twice by a log kit and a
+    // masonry one, give the same pieces.
+    use terra_build::kit::{Kit, Pattern};
+    use terra_build::testing::random;
+    let kits = [
+        Kit::default(),
+        Kit {
+            id: random::STONE.0,
+            pattern: Pattern::Masonry,
+            ..Kit::default()
+        },
+    ];
+    let mut laid = 0;
+    for seed in 0..random::seeds() {
+        for (i, base) in random::bases(seed, 1200, 300).iter().enumerate() {
+            for kit in &kits {
+                let pieces = crate::layout::lay(base, kit).pieces;
+                assert_eq!(
+                    pieces,
+                    crate::layout::lay(base, kit).pieces,
+                    "seed {seed} base {i}, {:?}",
+                    kit.pattern
+                );
+                laid += usize::from(!pieces.is_empty());
+            }
+        }
+    }
+    assert!(laid > 0, "the random bases laid nothing");
+}

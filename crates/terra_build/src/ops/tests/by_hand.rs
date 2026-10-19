@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::support::FACES;
+use terra_gen::Seed;
 
 /// Whether every part is in one piece, and no two cubes of a kind face to face are in
 /// different parts laid on the same terms.

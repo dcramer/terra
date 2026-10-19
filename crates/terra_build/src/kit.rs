@@ -1219,7 +1219,8 @@ pub(crate) mod tests {
         assert!(!roof.textures.contains_key(&Material::Dressed));
     }
 
-    /// Every Rust file of a crate's source, outside its tests.
+    /// Every Rust file of a crate's source, outside its tests and what they share
+    /// (`testing/`, whose random operations number their own kinds).
     fn sources(crate_dir: &std::path::Path) -> Vec<(std::path::PathBuf, String)> {
         let mut out = Vec::new();
         let mut folders = vec![crate_dir.join("src")];
@@ -1228,7 +1229,7 @@ pub(crate) mod tests {
                 let path = entry.path();
                 let name = path.file_name().unwrap().to_string_lossy().to_string();
                 if path.is_dir() {
-                    if name != "tests" {
+                    if name != "tests" && name != "testing" {
                         folders.push(path);
                     }
                 } else if name.ends_with(".rs") && name != "tests.rs" {
