@@ -1,6 +1,6 @@
 # Fire
 
-Status: Leaning (D415), the agents' technical design. The design questions are marked Open and listed at the end for the developers. The findings behind it are in [research/2026-10-19-how-games-draw-fire.md](../research/2026-10-19-how-games-draw-fire.md).
+Status: Leaning (D415), the agents' technical design. The design questions are marked Open and listed at the end for the developers. The findings behind it are in [research/2026-10-19-how-games-draw-fire.md](../research/2026-10-19-how-games-draw-fire.md). A step back after about 30 rounds, with a professional flipbook put through our path and a ranked plan, is in [research/2026-10-19-fire-step-back.md](../research/2026-10-19-fire-step-back.md).
 
 ## Intent
 
