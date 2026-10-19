@@ -2,7 +2,7 @@
 
 2026-10-18. Question: how should Terra's Rust crates be segmented the way a large Rust/Bevy game is, so a change rebuilds and tests less, a dedicated server (D52) compiles without the art, and the layer rule (D198) is held by Cargo rather than by convention?
 
-**Agreed by the developers on 2026-10-18 (D407)**, who added that the point is as much smaller, better-scoped modules as build time. The migration below is under way; the names and whether `terra_life` merges are still theirs to settle.
+**Agreed by the developers on 2026-10-18 (D407)**, who added that the point is as much smaller, better-scoped modules as build time. The migration below is under way, with these names and `terra_life` merged into `terra_town` (2026-10-19).
 
 How it was done: line counts with tests at d85a5fbe; each module's `crate::`/`super::` names outside tests, gathered by a script and grouped into the crates proposed below, every name that would point from a lower crate to a higher one listed (the "seams"); rebuild times from the investigation the same morning; Veloren's, Bevy's and the community's layouts read at their sources ([below](#how-shipped-projects-do-it)).
 
@@ -206,7 +206,7 @@ Each step is one push that builds, passes the gate and changes no behaviour. A m
 1. **Measure** the baseline (above).
 2. **Cut building's seams inside the crate**: the hashers to `terra_gen::hash`; `stage_of`, `Role`, `RoofPart`, `timber::section`, `Material`, `Hang` into the rules' modules; a kit's look out of `Kit`. A test in `terra_build` fails when a rules module names a layout or drawing module, so the line holds before any move. Two or three pushes. Done: a5135e5b (the hashers), c7b331ac (the rest into a rules module, `pieces`, the kit's modelled pieces and `Breaks` moved down as plain data rather than taken out of `Kit`, and the test `seams`).
 3. **Take the world off building**: `Walker` to `terra_core`, the start's plot as data, the example's fit as a test. `terra_world`'s manifest loses `terra_build`. One push; the first measured gain. Done: f0062671, measured above.
-4. **`terra_town`**: move `town` and `village`, merge `terra_life` in (or leave it beside, depending on `terra_town`, if the developers prefer it apart). One push.
+4. **`terra_town`**: move `town` and `village`, merge `terra_life` in, as the developers chose. One push.
 5. **`terra_build_scenes`**, then **`terra_build_layout`**, then **`terra_build_mesh`**: three pushes of moves, `terra_build` left as the rules.
 6. **Measure** again; write the result here.
 7. **The game's seams**, one or two a push, in the order of the table above, each with the asker owning the type; `Village` first, since it is what lets building play fork from the townsfolk.
