@@ -242,8 +242,7 @@ fn a_two_storey_house_has_its_stair_up_to_a_landing_at_its_upper_door() {
     );
 }
 
-// Slow, a minute or two: lays and draws one of each sort of the village's buildings, which
-// the quick check before each commit skips and the full check runs (`SLOW_TESTS` in xtask).
+// Slow, a minute or two: lays and draws one of each sort of the village's buildings.
 #[test]
 fn no_two_faces_of_the_villages_buildings_fight_for_the_same_pixels() {
     // One of each sort of the village's buildings, in the settlement's own materials as

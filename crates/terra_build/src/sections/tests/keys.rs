@@ -17,8 +17,7 @@ struct Case<'a> {
     at: [i32; 3],
 }
 
-// Slow, about a minute on every core: a sweep the quick check before each commit skips and the
-// full check runs (`SLOW_TESTS` in xtask).
+// Slow, about a minute on every core: a sweep.
 #[test]
 fn a_part_whose_key_is_as_it_was_draws_as_it_was_and_parts_drawn_alone_draw_as_with_the_rest() {
     let kits = shipped();

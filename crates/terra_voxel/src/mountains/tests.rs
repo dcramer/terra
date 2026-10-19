@@ -92,7 +92,7 @@ fn the_ridged_sum_spreads_as_valleys_and_crests_assume() {
     );
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn the_mountains_never_jump() {
     // Ground two centimetres apart is never more than a quarter of a metre apart, as on a
     // crease steeper than any wall: no step where a cell, a set of gullies or a measuring
@@ -192,7 +192,7 @@ fn flat_land_in_a_range_has_no_gullies() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn the_ground_is_smooth_within_a_voxel() {
     // How far the rise over 2 cm departs from a tenth of the rise over 20 cm: none on a
     // smooth slope. A single holds a point on a planet this size to about 2 mm, and the

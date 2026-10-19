@@ -471,7 +471,7 @@ mod tests {
         assert_ne!(one.sample(ground + up), reversed.sample(ground + up));
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn what_to_draw_again_holds_everything_the_edits_changed_near_the_surface() {
         let mut planet = planet();
         let (ground, up) = surface(&planet);

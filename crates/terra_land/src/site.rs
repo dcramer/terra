@@ -511,7 +511,7 @@ mod tests {
         )
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn the_lake_found_meets_what_was_asked_of_it() {
         let land = land(30_000.0);
         let want = MountainLake::DEMO;
@@ -537,7 +537,7 @@ mod tests {
         );
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn a_pinned_lake_is_the_one_found_there_and_none_where_none_fits() {
         let land = land(30_000.0);
         let (found, everywhere) = land.mountain_lake_searched(PLANET_START, &MountainLake::DEMO);
@@ -561,7 +561,7 @@ mod tests {
         assert_eq!(searched.off_pin, everywhere.fit);
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn the_shore_walk_keeps_to_dry_shore_below_the_trees() {
         // The lake the demo walks round, where it is pinned: the best lake the query finds
         // over the whole world changes as the ranges' rules do (D395).

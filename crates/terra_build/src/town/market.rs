@@ -373,7 +373,7 @@ mod tests {
         }
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn neighbouring_stalls_sell_different_things_and_seeds_differ() {
         let market = market();
         let mut deals = Vec::new();
@@ -401,7 +401,7 @@ mod tests {
         );
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn a_counters_goods_are_its_trades_and_lie_on_it_apart() {
         let market = market();
         let sizes = sizes();
@@ -464,7 +464,7 @@ mod tests {
         }
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn the_ground_beside_a_stall_shows_its_own_trades_goods() {
         let market = market();
         let sizes = sizes();
@@ -499,7 +499,7 @@ mod tests {
         );
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn neighbouring_stalls_wear_different_awnings() {
         let mut market = market();
         market.stalls = vec!["A".into(), "B".into(), "C".into()];
@@ -515,7 +515,7 @@ mod tests {
         }
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn some_stalls_hang_a_lantern_and_others_not() {
         let market = market();
         let (mut hung, mut all) = (0, 0);

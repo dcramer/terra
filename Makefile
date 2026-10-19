@@ -65,7 +65,7 @@ node:
 	  echo "  Install it with: brew install node   (or: nvm install 22)"; \
 	  echo "  The game builds and plays without it."; }
 
-# Git runs the quick check before each commit and the full one before each push (part of setup).
+# Git runs the formatter before each commit and the formatter and clippy before each push (part of setup).
 hooks:
 	@git config core.hooksPath .githooks
 
@@ -93,10 +93,10 @@ doctor: ## Say what this machine is missing, with the command that fixes each
 tools: ## List every cargo xtask task
 	cargo xtask tools
 
-quick: ## The quick check, as git runs before a commit
-	cargo xtask check --quick
+quick: ## Formatting, as git checks before a commit
+	cargo fmt --all --check
 
-check: ## The full check, as git runs before a push (several minutes)
+check: ## Formatting and clippy of what changed, as git runs before a push (seconds)
 	cargo xtask check
 
 test: ## Every test

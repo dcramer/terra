@@ -1,7 +1,7 @@
 name: CI
 
 # By hand (D37): the full check on Linux, macOS and Windows, started from the Actions tab. The
-# full check on every push to main is main.yml, on Linux alone.
+# scheduled full check on main is main.yml, on Linux alone.
 on:
   workflow_dispatch:
 

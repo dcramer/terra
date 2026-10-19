@@ -9,7 +9,6 @@ mod bench;
 mod build;
 mod check;
 mod doctor;
-mod land;
 mod load;
 mod nightly;
 mod primitives;
@@ -17,9 +16,7 @@ mod scenes;
 mod scope;
 mod seed;
 mod sizes;
-mod slot;
 mod stage;
-mod stamp;
 mod tasks;
 mod windows;
 mod worktrees;
@@ -45,7 +42,6 @@ const MODULES: &[&[Task]] = &[
     tasks::play::TASKS,
     bench::TASKS,
     check::TASKS,
-    land::TASKS,
     sizes::TASKS,
     build::TASKS,
     nightly::TASKS,
@@ -127,8 +123,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// Points git at the repository's hooks, so `cargo xtask check --quick` runs before every commit
-/// and `cargo xtask check`, the fast one, before every push (D37), and at the merge driver of the rendered
+/// Points git at the repository's hooks, so `cargo fmt` checks every commit and `cargo xtask check`
+/// (formatting and clippy) every push (D37), and at the merge driver of the rendered
 /// indexes (D409, `.gitattributes`).
 /// Any task does it, so a new clone has it as soon as anyone runs one; worktrees share it.
 fn use_hooks() {
@@ -148,7 +144,7 @@ fn use_hooks() {
         let set = output("git", &["config", "core.hooksPath", ".githooks"]).is_some();
         if set {
             eprintln!(
-                "git now runs the quick check before each commit and the push's check before each push (.githooks)"
+                "git now runs the formatter before each commit and the formatter and clippy before each push (.githooks)"
             );
         }
     }

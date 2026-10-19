@@ -560,7 +560,7 @@ mod tests {
         Materials::read(&assets, true).expect("the baseline's materials")
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn every_registered_scene_is_in_the_ratchet_and_every_family_before_a_push() {
         let materials = baseline();
         let all: Vec<String> = registry(&materials).into_iter().map(|s| s.name).collect();

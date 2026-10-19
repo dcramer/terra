@@ -462,7 +462,7 @@ mod tests {
         assert!(above.density > 0.0 && above.krummholz(), "{above:?}");
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn the_seasons_worked_out_ahead_are_the_seasons() {
         let climate = crate::start_climate().unwrap();
         let fields = terra_climate::Fields::new(climate, terra_gen::Seed(1));
@@ -511,7 +511,7 @@ mod tests {
         assert!(scree > 0.0 && scree < 0.3);
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn round_a_mountain_lake_spruce_holds_the_shade_and_pine_the_sun() {
         use crate::site::MountainLake;
         let climate = crate::start_climate().unwrap();

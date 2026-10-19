@@ -38,7 +38,7 @@ fn towns() -> Vec<Town> {
     all
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn the_same_seed_and_ground_make_the_same_town_and_others_differ() {
     assert_eq!(town(5, KINDS, &hillside), town(5, KINDS, &hillside));
     let a = town(5, KINDS, &hillside);
@@ -87,7 +87,7 @@ fn a_house_covers_its_walls_and_floor_and_a_yard_before_a_u_stays_open() {
     assert!(covered(Vec2::new(0.0, -2.0)), "its floor is covered");
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn a_town_has_its_count_of_houses_a_market_a_forge_and_gates() {
     for town in towns() {
         let shape = town.square.shape;
@@ -113,7 +113,7 @@ fn a_town_has_its_count_of_houses_a_market_a_forge_and_gates() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn nothing_built_stands_on_another_or_in_a_street_or_on_the_square() {
     for town in towns() {
         let quads: Vec<(usize, &[Vec2; 4])> = town
@@ -151,7 +151,7 @@ fn nothing_built_stands_on_another_or_in_a_street_or_on_the_square() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn streets_follow_the_contour_rather_than_climb() {
     // Straight up the hillside a street would climb 6 in 100. The main street runs along
     // it; a side street leaves the square up or down it, then turns along it.
@@ -180,7 +180,7 @@ fn streets_follow_the_contour_rather_than_climb() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn every_door_opens_onto_a_street_or_the_square() {
     for town in towns() {
         for door in town.things.iter().filter(|t| t.kind == ThingKind::Door) {
@@ -214,7 +214,7 @@ fn every_door_opens_onto_a_street_or_the_square() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn the_path_graph_is_one_and_every_walk_on_it_is_clear() {
     for town in towns() {
         let parts = town.paths.parts();
@@ -257,7 +257,7 @@ fn the_path_graph_is_one_and_every_walk_on_it_is_clear() {
     }
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn builders_sites_stand_outside_every_building_facing_their_own() {
     // D381: a settlement being built has places to work round each building, out of every
     // building's ground and every thing's, each facing the wall it is by, so a builder

@@ -621,7 +621,7 @@ mod tests {
         )
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn the_town_found_is_level_warm_wooded_round_and_under_peaks() {
         let land = land(30_000.0);
         let want = MarketTown::DEMO;

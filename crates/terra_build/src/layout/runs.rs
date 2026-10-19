@@ -2001,7 +2001,7 @@ mod tests {
         }
     }
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn a_roof_over_a_rooms_flat_top_is_closed_to_its_walls_whichever_way_it_rises() {
         // Found by `cargo xtask fuzz` (seeds 28, 110; docs/building-voxels.md, gap 12): a log
         // room laid with its flat top, roofed over it by a lean-to rising north to south and

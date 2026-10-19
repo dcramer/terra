@@ -469,7 +469,7 @@ Checks, developer tools, languages and the repository.
 | [D393](decisions/D393.md) | A demo's place pinned where its query found it | Tech | Agent | Decided | A place the land's rules make is found by its query once… |
 | [D396](decisions/D396.md) | Code health is gated, not reviewed | Tech | Agent | Decided | The classes of code-health fault the reviews kept… |
 | [D397](decisions/D397.md) | Subagents keep their prompt cache an hour | Tech | Developers | Decided | `.claude/settings.json` sets `subagentPromptCacheTtl` to… |
-| [D398](decisions/D398.md) | The gates scale with the change | Tech | Developers | Decided | The check before a commit is linters and at most fast… |
+| [D398](decisions/D398.md) | The gates scale with the change | Tech | Developers | Decided | Since 2026-10-19 (D37) the hooks only format and lint… |
 | [D399](decisions/D399.md) | A crash leaves a capsule; state is snapped and diffed | Tech | Agent | Decided | A panic in the sandbox, and so in the play experiment… |
 | [D400](decisions/D400.md) | Agents' tasks are bounded | Tech | Developers | Decided | Every agent's brief says when it stops: a score bar… |
 | [D406](decisions/D406.md) | The slow sweeps run on every core, optimised, and an asset is read only by the crates that read it | Tech | Agent | Decided | A test that sweeps many independent cases runs them on… |
@@ -478,7 +478,6 @@ Checks, developer tools, languages and the repository.
 | [D410](decisions/D410.md) | Tasks register from their own modules | Tech | Agent | Decided | Each xtask module that owns tasks lists them in its own… |
 | [D411](decisions/D411.md) | A full run on main, on one box, lowers the baselines and bisects what breaks | Tech | Agent | Decided | `cargo xtask nightly` (`xtask/src/nightly.rs`) runs what… |
 | [D412](decisions/D412.md) | A design call is settled by the developers | Tech | Agent | Decided | The docs check fails a decision with Owner Design and… |
-| [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | Agent | Decided | When the check before a push passes on a commit's tree… |
 | [D414](decisions/D414.md) | A ratchet's baseline is raised by a change with its why, and lowered only by the full run on main | Tech | Agent | Decided | A ratchet's baseline (the artifacts and fuzz counts… |
 | [D417](decisions/D417.md) | Offscreen runs open no window | Tech | Agent | Decided | An unattended run drawing into a picture… |
 
@@ -506,5 +505,6 @@ Kept so their numbers still resolve. They no longer bind anything.
 | [D79](decisions/D79.md) | Terraform rating | Design | — | Superseded by D89 | A terraformable planet's rating of how far along it is. |
 | [D209](decisions/D209.md) | How roofs are laid and drawn | Tech | — | Superseded by D241 | Was: a kit laid pitched roofs from roof sections… |
 | [D369](decisions/D369.md) | A grey card grey at noon in the open | Tech | — | Superseded by D370 | Was: the day grade warmed only under a closed canopy… |
+| [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | — | Superseded by D37 | Was: a push's check that passed stamped its tree… |
 
 <!-- end of rendered -->

@@ -1,11 +1,10 @@
-//! What a change touches, so `cargo xtask check` runs only the stages that can see it (D398).
-//!
-//! Before a commit the change is the tracked files that differ from HEAD; before a push,
-//! everything that differs from where HEAD left origin/main (`git merge-base`), the working
+//! What a change touches (D398): the crates the hook before a push formats and lints, and what
+//! `cargo xtask nightly` and the continuous checks look at. The change is everything that
+//! differs from where HEAD left origin/main (`git merge-base`), the working
 //! tree's changes included. Each file is placed: a crate's own folder is that crate, files outside
 //! the crates (`assets/` among them) are read by the crates in [`READ_BY`],
 //! `tools/`, the docs and the agents' folders by their own checks, a ratchet's baseline by the
-//! baselines stage alone (D411). A file the rules cannot
+//! nightly (D411). A file the rules cannot
 //! place, or a change to the build itself (the workspace's manifest, its lock, the compiler,
 //! cargo's or clippy's settings), runs everything, as `--all` does.
 
@@ -188,9 +187,9 @@ pub(crate) fn classify(files: &[String], packages: &BTreeSet<String>) -> Scope {
             return Scope::everything(&format!("{file} changed"));
         }
         // A ratchet's baseline is its own class (D411), not a change to the crate or the
-        // tasks holding it: the baselines stage, which always runs, holds its rules; a raise
+        // tasks holding it: a raise
         // only loosens a ratchet and only the full run on main (`cargo xtask nightly`) lowers one, having measured
-        // it. So the run's lowering commit is checked in seconds and lands before main moves.
+        // it.
         if crate::baselines::is_baseline(file) {
             scope.baselines = true;
             continue;
@@ -251,19 +250,6 @@ fn lines(text: Option<String>) -> Option<Vec<String>> {
             .map(String::from)
             .collect()
     })
-}
-
-/// What a commit holds: the files changed against HEAD, staged or not, since the check reads
-/// the working tree; old and new names of a rename both. Files git does not track are in no
-/// commit and left out.
-pub(crate) fn commit() -> Scope {
-    match lines(output(
-        "git",
-        &["diff", "HEAD", "--name-only", "--no-renames"],
-    )) {
-        Some(files) => classify(&files, &packages()),
-        None => Scope::everything("git cannot say what changed"),
-    }
 }
 
 /// What a push holds: everything that differs from where HEAD left origin/main, committed or

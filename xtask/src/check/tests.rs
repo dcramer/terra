@@ -1,61 +1,5 @@
 use super::*;
 
-fn plan(packages: Option<&[&str]>, builds: bool) -> Plan {
-    Plan {
-        packages: packages.map(|names| names.iter().map(|n| n.to_string()).collect()),
-        idle: "no crate changed",
-        builds: Run::when(builds, "building unchanged"),
-        foliage: Run::No("no assets or textures tool changed"),
-        blender: Run::Yes,
-        manifests: Run::Yes,
-    }
-}
-
-/// After a rebase a stage runs again only if the push holds it and what it reads changed
-/// since the stamp (D413); a package outside the push is not the push's to test.
-#[test]
-fn a_stamped_push_runs_only_what_it_holds_and_the_rebase_changed() {
-    // The push changed terra_core, which building stands on; the rebase brought a change to
-    // building alone.
-    let push = plan(
-        Some(&["terra_core", "terra_build", "terra_game", "xtask"]),
-        true,
-    );
-    let since = plan(Some(&["terra_build", "terra_game", "xtask"]), true);
-    let run = push.clone().and(&since);
-    assert_eq!(
-        run.packages,
-        plan(Some(&["terra_build", "terra_game", "xtask"]), true).packages
-    );
-    assert_eq!(run.builds, Run::Yes);
-    // A rebase that brought only docs: nothing heavy is run again, and it says why.
-    let docs = Plan {
-        blender: Run::No("no Blender script changed"),
-        ..plan(Some(&[]), false)
-    };
-    let run = push.clone().and(&docs);
-    assert!(!run.heavy());
-    assert_eq!(
-        (run.idle, run.builds, run.blender),
-        (UNCHANGED, Run::No(UNCHANGED), Run::No(UNCHANGED))
-    );
-    // What the push does not hold stays out with its own reason, whatever the rebase did.
-    assert_eq!(run.foliage, Run::No("no assets or textures tool changed"));
-    // The whole workspace on either side is the other side's packages; on both, all of it.
-    assert_eq!(plan(None, true).and(&since).packages, since.packages);
-    assert_eq!(push.clone().and(&plan(None, true)).packages, push.packages);
-    assert_eq!(plan(None, true).and(&plan(None, true)).packages, None);
-}
-
-/// A dependency graph to test with: building stands on terra_core.
-fn dependents(names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
-    let mut found = names.clone();
-    if names.contains("terra_core") {
-        found.insert("terra_build".into());
-    }
-    Some(found)
-}
-
 fn changed(names: &[&str]) -> Scope {
     Scope {
         files: names.len(),
@@ -65,70 +9,55 @@ fn changed(names: &[&str]) -> Scope {
     }
 }
 
-/// The push tests the crates changed and none of the slow tests, and leaves the stages
-/// that need the dependents or building's drawing to the full check on main (D37), even
-/// where the full check would run them.
+fn names(stages: &[(Step, How)]) -> Vec<String> {
+    stages
+        .iter()
+        .filter(|(_, how)| !matches!(how, How::Skip(_)))
+        .map(|(step, _)| step.name().to_string())
+        .collect()
+}
+
+/// The hook formats and lints the crates changed and runs nothing else (D37): no test, no
+/// ratchet, no other crate's build.
 #[test]
-fn the_push_tests_only_the_crates_changed_and_leaves_the_rest_to_main() {
-    let scope = changed(&["terra_core"]);
-    let push = Plan::of_with(Tier::Push, &scope, dependents);
-    assert_eq!(
-        push.packages,
-        Some(BTreeSet::from(["terra_core".to_string()]))
-    );
-    let full = Plan::of_with(Tier::Full, &scope, dependents);
-    let names = full.packages.clone().unwrap_or_default();
-    assert!(names.contains("terra_build") && names.contains("xtask"));
-    assert_eq!(full.builds, Run::Yes);
-    let mut seen = 0;
-    for (step, how) in stages(Tier::Push, &scope, &full) {
-        match (step.name(), how) {
-            ("kits" | "foliage" | "artifacts" | "fuzz" | "Blender scripts", how) => {
-                assert!(
-                    matches!(how, How::Skip(why) if why == ON_MAIN),
-                    "{} runs before a push",
-                    step.name()
-                );
-                seen += 1;
-            }
-            ("tests", How::Command(tests)) => {
-                let args: Vec<String> = tests
-                    .get_args()
-                    .map(|a| a.to_string_lossy().into_owned())
-                    .collect();
-                for slow in SLOW_TESTS {
-                    assert!(args.iter().any(|a| a == slow), "{slow} runs before a push");
-                }
-                seen += 1;
-            }
-            _ => {}
-        }
+fn the_hook_formats_and_lints_only_the_crates_changed() {
+    let stages = hook(&changed(&["terra_core"]));
+    assert_eq!(names(&stages), ["fmt", "clippy"]);
+    for (step, how) in &stages {
+        let How::Command(command) = how else {
+            panic!("{} does not run a command", step.name());
+        };
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.iter().any(|a| a == "terra_core"), "{args:?}");
+        assert!(!args.iter().any(|a| a == "--workspace"), "{args:?}");
     }
-    assert_eq!(seen, 6);
+    // Docs alone: nothing to format or lint.
+    let docs = Scope {
+        files: 1,
+        ..Scope::default()
+    };
+    assert!(names(&hook(&docs)).is_empty());
 }
 
-/// After a rebase that changed terra_core, building, which the push holds, is tested again
-/// though terra_core is not among the push's crates: what changed since the stamp keeps the
-/// crates depending on it (D413).
+/// The full check runs every stage, the tests and the ratchets among them.
 #[test]
-fn a_rebase_changing_a_dependency_tests_again_the_crate_the_push_holds() {
-    let push = Plan::of_with(Tier::Push, &changed(&["terra_build"]), dependents);
-    let since = Plan::since_with(&changed(&["terra_core"]), dependents);
-    let run = push.and(&since);
-    assert!(
-        run.packages
-            .is_some_and(|names| names.contains("terra_build"))
-    );
-}
-
-/// A stamp says its tree passed the push's check: the full check neither narrows to one
-/// nor writes one, so a fast push never stands in for it.
-#[test]
-fn only_the_push_reads_and_writes_the_stamp() {
-    assert!(stamps(Tier::Push, false));
-    assert!(!stamps(Tier::Full, false));
-    assert!(!stamps(Tier::Push, true));
-    assert!(!stamps(Tier::Commit, false));
+fn the_full_check_runs_the_tests_and_the_ratchets() {
+    let stages = full();
+    let ran = names(&stages);
+    for stage in ["fmt", "clippy", "tests", "tools tests", "kits", "foliage"] {
+        assert!(ran.iter().any(|name| name == stage), "{stage}: {ran:?}");
+    }
+    // Blender's skips where there is none.
+    let all: Vec<String> = stages
+        .iter()
+        .map(|(step, _)| step.name().to_string())
+        .collect();
+    for stage in ["artifacts", "fuzz", "docs", "Blender scripts"] {
+        assert!(all.iter().any(|name| name == stage), "{stage}: {all:?}");
+    }
 }
 
 #[test]

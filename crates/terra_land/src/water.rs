@@ -163,7 +163,7 @@ mod tests {
     use crate::{PLANET_START, ground, start_climate};
     use terra_core::{PlanetSpec, Seed, Water};
 
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn a_lake_stands_at_its_level_over_its_own_ground_and_the_sea_elsewhere() {
         let land = Land::new(
             ground::world(PlanetSpec {

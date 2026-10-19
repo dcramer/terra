@@ -1,9 +1,9 @@
 //! The size ratchet (D396): no Rust file over [`FILE_LINES`] lines and no function over
 //! [`FN_LINES`], except those already over when it began, kept in [`BASELINE`], which may
-//! shrink and drop out but never grow. `cargo xtask check --quick` runs it, and
+//! shrink and drop out but never grow. The full check (`cargo xtask check --all`) runs it, and
 //! `cargo xtask sizes` runs it alone; `--lower`, the full run on main (`cargo xtask nightly`)'s alone (D414), lowers
 //! the baseline to what is there now, dropping what is under the limits, and never adds to it
-//! or raises it; the check refuses a baseline lowered anywhere else.
+//! or raises it.
 //!
 //! Functions are found by reading the source, not parsing it: each `fn name` and its body's
 //! braces, skipping strings, characters and comments. A function's lines run from the line
@@ -17,7 +17,7 @@ use std::fmt::Write as _;
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "sizes",
     takes: "[--lower]",
-    does: "the size ratchet the quick check runs: no Rust file over 1,000 lines or function over 150 but those in xtask/sizes-baseline.tsv, which never grow; --lower, the full run on main (`cargo xtask nightly`)'s alone (D414), lowers the baseline to what is there",
+    does: "the size ratchet the full check runs: no Rust file over 1,000 lines or function over 150 but those in xtask/sizes-baseline.tsv, which never grow; --lower, the full run on main (`cargo xtask nightly`)'s alone (D414), lowers the baseline to what is there",
     group: "Play and check",
     run: sizes,
 }];

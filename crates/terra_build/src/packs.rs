@@ -1241,7 +1241,7 @@ mod tests {
     /// Every shipped material passes, its real maps read; and a real scan planted wrong
     /// (flipped, cropped so it does not tile, laid at the wrong size) fails as the made ones
     /// do.
-    #[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+    #[test] // Slow: minutes.
     fn every_shipped_material_passes_and_a_real_scan_planted_wrong_fails() {
         let mut measures: BTreeMap<String, Option<Measured>> = BTreeMap::new();
         for (name, kit, given) in shipped() {

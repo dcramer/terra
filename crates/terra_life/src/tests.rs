@@ -249,7 +249,7 @@ fn on_market_morning_the_dogs_are_out_at_their_owners_heels_from_the_start() {
     );
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn the_same_town_and_seed_live_the_same_day() {
     let viewer = |life: &Life| square(life);
     let mut a = life(4);
@@ -261,7 +261,7 @@ fn the_same_town_and_seed_live_the_same_day() {
     assert_eq!(at(&a), at(&b));
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn walkers_go_round_a_visitor_standing_in_their_way() {
     // Where someone walks a few minutes into the morning, found without a visitor; then the
     // same morning with one standing there.
@@ -326,7 +326,7 @@ fn walking_after(life: &mut Life, hours: f64) -> f32 {
     walking as f32 / seen as f32
 }
 
-#[test] // Slow: run before a push, not a commit (SLOW_TESTS in xtask).
+#[test] // Slow: minutes.
 fn a_town_started_settled_is_in_mid_flow_not_stood_still() {
     let mut cold = life(2);
     cold.start(8.5);
