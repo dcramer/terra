@@ -14,6 +14,7 @@ mod appear;
 mod gait;
 mod mind;
 mod steer;
+mod wake;
 
 use super::Player;
 use super::bodies::Body;
@@ -251,7 +252,7 @@ pub fn plugin(app: &mut App) {
     app.add_message::<Bitten>()
         .add_message::<Form>()
         .insert_resource(Dice(Seed(31).derive("creatures").rng()))
-        .add_plugins(appear::plugin)
+        .add_plugins((appear::plugin, wake::plugin))
         .add_systems(Startup, load)
         .add_systems(
             Update,

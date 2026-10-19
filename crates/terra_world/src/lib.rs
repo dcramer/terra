@@ -64,6 +64,7 @@ pub mod start;
 pub mod terrain;
 pub mod tick;
 pub mod upscale;
+pub mod wakes;
 pub mod waves;
 pub mod weather;
 pub mod wind;

@@ -463,7 +463,10 @@
         body: (radius: 0.15, weight: 0.3),
         temper: Shy(flees_within_m: 14.0, flees_s: 6.0),
         refuge: Flies(25.0, 70.0),
-        moves: Swims(0.1),
+        // Its feet 0.16 m under, so the water meets its body at the middle of its flanks, in
+        // the Float clip's pose (body 0.08-0.26 m over its toes): at 0.1 its belly rode clear of
+        // the water on its legs, a duck standing on the lake (lake film r13).
+        moves: Swims(0.16),
         lives: About(per_ha: 4.0, group: (2, 5)),
         niche: (warmth_c: (6.0, 30.0), haunts: [Water]),
         seen_m: 120.0,

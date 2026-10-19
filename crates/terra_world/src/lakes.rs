@@ -8,6 +8,7 @@ use crate::daylight::Clock;
 use crate::planet::Planet;
 use crate::rises::{RISES, Rises};
 use crate::sky::Sky;
+use crate::wakes::{WAKES, Wakes};
 use crate::waves::{self, TRAINS};
 use bevy::color::Mix;
 use bevy::{
@@ -102,6 +103,12 @@ pub struct LakeExtension {
     /// when it began by the shader's clock, none when 0.
     #[uniform(100)]
     rises: [Vec4; RISES],
+    /// The wakes behind what swims (`wakes`): each swimmer where it is from `origin` and how
+    /// fast it goes, and which way it heads and how wide it is.
+    #[uniform(100)]
+    wakes_at: [Vec4; WAKES],
+    #[uniform(100)]
+    wakes_way: [Vec4; WAKES],
     /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
     /// draws, exposed as it is, rather than the painted sky's two colours.
     #[uniform(100)]
@@ -177,6 +184,8 @@ impl LakeExtension {
             skyline: mirror.skyline,
             trains: waves::trains(),
             rises: [Vec4::ZERO; RISES],
+            wakes_at: [Vec4::ZERO; WAKES],
+            wakes_way: [Vec4::ZERO; WAKES],
             over_air: air.is_some() as u32,
             twilight,
             glow,
@@ -212,7 +221,12 @@ pub fn plugin(app: &mut App) {
         .add_plugins(MaterialPlugin::<MistMaterial>::default())
         .add_systems(
             Update,
-            (follow_sky_and_wind, follow_rises, mist_follows_the_morning),
+            (
+                follow_sky_and_wind,
+                follow_rises,
+                follow_wakes,
+                mist_follows_the_morning,
+            ),
         );
 }
 
@@ -498,6 +512,8 @@ fn follow_sky_and_wind(
     let mut extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
     // The rings spreading now stay.
     extension.rises = material.extension.rises;
+    extension.wakes_at = material.extension.wakes_at;
+    extension.wakes_way = material.extension.wakes_way;
     if let Some(peat) = &look.2
         && let Some(mut material) = materials.get_mut(peat)
     {
@@ -533,6 +549,35 @@ fn follow_rises(
         && material.extension.rises != rings
     {
         material.extension.rises = rings;
+    }
+}
+
+/// The wakes behind what swims, told the lakes' material as they move, from the point the
+/// lakes are laid out from.
+fn follow_wakes(
+    look: Option<Res<LakeLook>>,
+    wakes: Option<Res<Wakes>>,
+    mut materials: ResMut<Assets<LakeMaterial>>,
+) {
+    let (Some(look), Some(wakes)) = (look, wakes) else {
+        return;
+    };
+    if !wakes.is_changed() {
+        return;
+    }
+    let origin = look.1.origin;
+    let at = wakes.at.map(|at| {
+        if at.w > 0.0 {
+            (at.truncate() - origin).extend(at.w)
+        } else {
+            Vec4::ZERO
+        }
+    });
+    if let Some(mut material) = materials.get_mut(&look.0)
+        && (material.extension.wakes_at != at || material.extension.wakes_way != wakes.way)
+    {
+        material.extension.wakes_at = at;
+        material.extension.wakes_way = wakes.way;
     }
 }
 
