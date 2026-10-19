@@ -136,6 +136,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.quit", quit);
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
+    crate::gpu_memory::remote(app);
     if listen {
         info!("remote: listening on localhost:{port}");
     }

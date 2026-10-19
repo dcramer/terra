@@ -31,6 +31,7 @@ pub mod flora;
 pub mod flora_kinds;
 pub mod footprint;
 pub mod gltf_gate;
+pub mod gpu_memory;
 pub mod gpu_turn;
 pub mod grading;
 pub mod grown;

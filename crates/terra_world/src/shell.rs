@@ -949,6 +949,7 @@ impl Plugin for ShellPlugin {
                 // On by default, screenshots included, so it is there when it is needed.
                 debug::plugin(readout),
                 crate::pacing::plugin,
+                crate::gpu_memory::plugin,
             ))
             // F1: every entity, resource and asset in the world, editable live.
             .add_plugins(
