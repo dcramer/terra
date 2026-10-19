@@ -10,8 +10,10 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
+mod appear;
 mod gait;
 mod mind;
+mod steer;
 
 use super::Player;
 use super::bodies::Body;
@@ -28,6 +30,7 @@ use super::told::Told;
 use crate::loading::Loading;
 use crate::planet::Planet;
 use crate::start::Start;
+pub use appear::{Shown, leave};
 use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
@@ -36,7 +39,7 @@ pub use gait::{Pace, bolts_within};
 use mind::think;
 use std::time::Duration;
 use terra_gen::{Rng, Seed};
-use terra_world::flora::Trunk;
+use terra_world::flora::{Obstacles, Trunk, Trunks};
 
 const BLEND: Duration = Duration::from_millis(200);
 /// A creature casts a shadow from so wide a body, in metres of its radius.
@@ -248,6 +251,7 @@ pub fn plugin(app: &mut App) {
     app.add_message::<Bitten>()
         .add_message::<Form>()
         .insert_resource(Dice(Seed(31).derive("creatures").rng()))
+        .add_plugins(appear::plugin)
         .add_systems(Startup, load)
         .add_systems(
             Update,
@@ -496,6 +500,8 @@ pub(super) fn spawn(
             bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
+            // Into sight over a moment, never whole in a frame.
+            Shown::new(seen_m),
         ))
         .id();
     let (graph, clips) = (graph.clone(), *clips);
@@ -514,17 +520,20 @@ pub(super) fn spawn(
                   mut commands: Commands,
                   children: Query<&Children>,
                   players: Query<(), With<AnimationPlayer>>,
-                  meshes: Query<(), With<Mesh3d>>| {
+                  meshes: Query<(), With<Mesh3d>>,
+                  mut shown: Query<&mut Shown>| {
+                // Drawn as far into sight as it is: unseen until its fade begins.
+                let range = shown
+                    .get_mut(creature)
+                    .map_or(appear::whole(seen_m), |mut shown| {
+                        appear::meshes_in(&mut shown)
+                    });
                 for mesh in children
                     .iter_descendants(ready.entity)
                     .filter(|&child| meshes.contains(child))
                 {
                     let mut mesh = commands.entity(mesh);
-                    mesh.insert(bevy::camera::visibility::VisibilityRange {
-                        start_margin: 0.0..0.0,
-                        end_margin: seen_m..seen_m + 4.0,
-                        use_aabb: false,
-                    });
+                    mesh.insert(range.clone());
                     if !casts {
                         mesh.insert(bevy::light::NotShadowCaster);
                     }
@@ -563,6 +572,7 @@ fn walk(
     planet: Res<Planet>,
     players: Query<&Transform, With<Player>>,
     mut creatures: Query<(&mut Creature, &mut Transform, &Detail), Without<Player>>,
+    (trunks, obstacles): (Res<Trunks>, Res<Obstacles>),
 ) {
     let dt = time.delta_secs().min(0.1);
     for (mut creature, mut at, detail) in &mut creatures {
@@ -576,31 +586,8 @@ fn walk(
         let scale = at.scale;
         match creature.state {
             State::Fly { from, to, along } => {
-                let speed = creature.pace.flies_mps(match about.moves {
-                    Moves::Flies(mps) => mps,
-                    // A swimmer that takes to the air when startled, as a duck does.
-                    _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
-                    _ => about.run_mps,
-                });
-                let length = (to - from).length().max(0.5);
-                let along = (along + speed * dt / length).min(1.0);
-                // Up off the ground and down onto it again, as high over the way as a tenth of
-                // its length and never lower than the ground.
-                let s = along;
-                let lift = (length * 0.12).clamp(1.5, 14.0) * libm::sinf(std::f32::consts::PI * s);
-                let line = from.lerp(to, s);
-                let ground = planet.ground_at(line);
-                let high = (line.length() + lift)
-                    .max(ground.length() + 0.4 * libm::sinf(std::f32::consts::PI * s));
-                let point = line.normalize() * high;
-                let ahead = (to - from)
-                    .reject_from(point.normalize())
-                    .normalize_or(creature.facing);
-                creature.facing = ahead;
-                creature.state = State::Fly { from, to, along };
-                *at = Transform::from_translation(point)
-                    .looking_to(ahead, point.normalize())
-                    .with_scale(scale);
+                *at =
+                    fly_on(&mut creature, about, &planet, (from, to, along), dt).with_scale(scale);
                 continue;
             }
             State::Climb { trunk, height } => {
@@ -674,6 +661,14 @@ fn walk(
             (State::Attack(_), Some(toward)) => (toward, 0.0),
             _ => (Vec3::ZERO, 0.0),
         };
+        // Round the trunks, rocks and logs in its way, never through one.
+        let solids = (&*trunks, &*obstacles);
+        let (direction, speed) = steer::round(
+            solids,
+            here,
+            about.body.radius,
+            (creature.facing, direction, speed),
+        );
         if direction != Vec3::ZERO {
             let turn = 1.0 - libm::expf(-dt * 6.0);
             creature.facing = creature
@@ -682,7 +677,12 @@ fn walk(
                 .reject_from(up)
                 .normalize_or(direction);
         }
-        let mut next = here + direction * speed * dt;
+        let mut next = steer::out_of(
+            solids,
+            here + direction * speed * dt,
+            about.body.radius,
+            speed,
+        );
         // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it.
         let depth = |point: Vec3| planet.water_radius_m(point) - planet.ground_at(point).length();
         let swims = matches!(about.moves, Moves::Swims(_));
@@ -711,6 +711,39 @@ fn walk(
             .looking_to(creature.facing, place.normalize())
             .with_scale(scale);
     }
+}
+
+/// A flier on its way from one point to another, so far along: where it is a step on.
+fn fly_on(
+    creature: &mut Creature,
+    about: &super::species::SpeciesDef,
+    planet: &Planet,
+    (from, to, along): (Vec3, Vec3, f32),
+    dt: f32,
+) -> Transform {
+    let speed = creature.pace.flies_mps(match about.moves {
+        Moves::Flies(mps) => mps,
+        // A swimmer that takes to the air when startled, as a duck does.
+        _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
+        _ => about.run_mps,
+    });
+    let length = (to - from).length().max(0.5);
+    let along = (along + speed * dt / length).min(1.0);
+    // Up off the ground and down onto it again, as high over the way as a tenth of its length
+    // and never lower than the ground.
+    let s = along;
+    let lift = (length * 0.12).clamp(1.5, 14.0) * libm::sinf(std::f32::consts::PI * s);
+    let line = from.lerp(to, s);
+    let ground = planet.ground_at(line);
+    let high =
+        (line.length() + lift).max(ground.length() + 0.4 * libm::sinf(std::f32::consts::PI * s));
+    let point = line.normalize() * high;
+    let ahead = (to - from)
+        .reject_from(point.normalize())
+        .normalize_or(creature.facing);
+    creature.facing = ahead;
+    creature.state = State::Fly { from, to, along };
+    Transform::from_translation(point).looking_to(ahead, point.normalize())
 }
 
 /// A climber on a trunk at its height, belly to the bark, head up or down it.
@@ -858,14 +891,14 @@ fn butcher(
         info!("Butchered it for {}.", given.join(", "));
         told.write(Told::new(used.player, "Butchered it"));
         did.write(Did(used.player, carcass.needs.skill(), ONCE));
-        commands.entity(entity).despawn();
+        leave(&mut commands, entity);
     }
     // Bodies left long enough are gone.
     for (entity, creature) in &bodies {
         if let State::Dead(lying) = creature.state
             && lying > bestiary.get(creature.species).lies_s
         {
-            commands.entity(entity).despawn();
+            leave(&mut commands, entity);
         }
     }
 }

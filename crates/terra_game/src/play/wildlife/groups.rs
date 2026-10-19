@@ -69,7 +69,10 @@ pub(super) fn cross(
         }
         let eye = |s: f32| super::eye_at(around, here + ahead * speed * timed * s, ahead);
         let shows = |s: f32| super::shows_from(around, eye(s), start.lerp(point, s) + lift);
-        let seen = shows(1.0) && (shows(0.5) || shows(0.75));
+        // Unseen where it breaks from: it comes into sight running.
+        let seen = shows(1.0)
+            && (shows(0.5) || shows(0.75))
+            && !around.seen_now(start + lift, f32::INFINITY);
         seen.then_some((start, point, way, timed))
     })?;
     let past = around.ground(point + way * dice.range(10.0, 22.0));

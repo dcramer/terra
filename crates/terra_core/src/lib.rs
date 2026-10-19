@@ -8,6 +8,7 @@
 //! Positions are in metres, in planet-local coordinates with the planet's centre at the
 //! origin.
 
+mod avoid;
 mod ground;
 mod mesh;
 mod operation;
@@ -16,6 +17,7 @@ mod solid;
 mod stand_in;
 mod walker;
 
+pub use avoid::{Avoidance, Round};
 pub use glam::{IVec3, Vec3};
 pub use ground::{Ground, RayHit, Water};
 pub use mesh::{ChunkId, ChunkMesh, MaterialWeights};

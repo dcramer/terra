@@ -243,6 +243,10 @@ fn try_spots(
         let spot =
             around.ground(here + ahead * dice.range(band.ahead_m.0, band.ahead_m.1) + aside * off);
         let eyes = seen_coming_on(around, here, ahead, spot);
+        // Unseen where it is put out, seen as the player comes on (docs/scene-rules.md).
+        if around.seen_now(spot + up * 0.4, f32::INFINITY) {
+            continue;
+        }
         if eyes > 0 || staging.big {
             let place = around.place(spot);
             // In a patch of sunlight most of all, as a shaft through the trees picks one out.

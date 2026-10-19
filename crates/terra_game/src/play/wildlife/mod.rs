@@ -28,6 +28,7 @@ use terra_world::cover::CoverRules;
 use terra_world::daylight::{Clock, SkyPath};
 use terra_world::flora::{Obstacles, Trunk, Trunks};
 use terra_world::parting::ObstructionFade;
+use terra_world::planet::MainCamera;
 use terra_world::sky_occlusion::SkyOccluders;
 use terra_world::spatial::SpatialHash;
 
@@ -126,6 +127,9 @@ const TELL_EVERY_S: f32 = 5.0;
 /// The growing season cools by this much a metre up, where the land has no seasons of its own
 /// worked out (the start's lapse rate, `climate.ron`).
 const LAPSE_C_PER_M: f32 = 0.0065;
+/// A point this far past the picture's middle to its edge, as a share, counts as seen: a
+/// body half out of the frame still shows.
+const PICTURE_EDGE: f32 = 1.15;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Cells>()
@@ -226,6 +230,8 @@ pub struct Surroundings<'w, 's> {
     /// Where the sun is, for what stands in its light.
     sky: Option<Res<'w, SkyPath>>,
     clock: Res<'w, Clock>,
+    /// The cameras drawing the world now, for what they see.
+    eyes: Query<'w, 's, (&'static GlobalTransform, &'static Projection), With<MainCamera>>,
 }
 
 /// The bushes and young trees whose leaves hide what is behind them (those the camera fades,
@@ -387,6 +393,36 @@ impl Surroundings<'_, '_> {
     /// Whether nothing is between an eye and a point: no trunk, rock or log, no tree's crown
     /// (a young tree's beside a path is a thicket of leaves to the ground), and not the
     /// ground.
+    /// Whether a camera sees a point now, within so far of it: in its picture, a little
+    /// past its edges, and nothing hiding it (`in_view`). An animal is put out where none
+    /// does, and walks into sight (docs/scene-rules.md, Wildlife).
+    pub fn seen_now(&self, at: Vec3, within_m: f32) -> bool {
+        self.eyes.iter().any(|(eye, projection)| {
+            let from = eye.translation();
+            if from.distance(at) > within_m {
+                return false;
+            }
+            let local = eye.affine().inverse().transform_point3(at);
+            let in_picture = match projection {
+                Projection::Perspective(lens) => {
+                    let tall = libm::tanf(lens.fov * 0.5) * PICTURE_EDGE;
+                    let deep = -local.z;
+                    deep > 0.0
+                        && local.y.abs() <= deep * tall
+                        && local.x.abs() <= deep * tall * lens.aspect_ratio
+                }
+                _ => true,
+            };
+            in_picture && self.in_view(from, at)
+        })
+    }
+
+    /// Whether a place fits a niche and no camera sees an animal there, one drawn so far off:
+    /// never put out before a camera's eyes, it comes into sight walking.
+    pub fn fits_unseen(&self, niche: &Niche, at: Vec3, seen_m: f32) -> bool {
+        self.fits(niche, at) && !self.seen_now(at + at.normalize_or(Vec3::Y) * 0.4, seen_m + 4.0)
+    }
+
     pub fn in_view(&self, eye: Vec3, at: Vec3) -> bool {
         let line = at - eye;
         let length = line.length();
@@ -549,7 +585,7 @@ fn populate(
     // roofs too. Asked every frame, so the change is not missed.
     if around.new_ridges() {
         for animal in cells.looked.drain().flat_map(|(_, put)| put) {
-            commands.entity(animal).try_despawn();
+            creatures::leave(&mut commands, animal);
         }
         info!("Wildlife: {} ridges to sit on.", around.perches.0.len());
     }
@@ -577,7 +613,7 @@ fn populate(
         .collect();
     for cell in gone {
         for animal in cells.looked.remove(&cell).unwrap_or_default() {
-            commands.entity(animal).try_despawn();
+            creatures::leave(&mut commands, animal);
         }
     }
     let wild: Vec<_> = bestiary
@@ -637,7 +673,7 @@ fn populate(
                     + east * dice.range(-0.5, 0.5) * CELL_M
                     + north * dice.range(-0.5, 0.5) * CELL_M;
                 let at = around.ground(at);
-                if !around.fits(niche, at) {
+                if !around.fits_unseen(niche, at, bestiary.get(species).seen_m()) {
                     continue;
                 }
                 let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
@@ -670,7 +706,7 @@ fn populate(
             .get(animal)
             .is_ok_and(|(at, _)| near(at.translation, MET_RELEASE_M));
         if !kept {
-            commands.entity(animal).try_despawn();
+            creatures::leave(&mut commands, animal);
         }
         kept
     });
@@ -846,5 +882,51 @@ mod tests {
         assert!((middle - point).abs().max_element() <= CELL_M * 0.5);
         assert_eq!(cell_of(middle), cell);
         assert_ne!(cell_key(cell), cell_key(cell + IVec3::X));
+    }
+
+    #[test]
+    fn an_animal_is_seen_now_only_in_a_cameras_picture_within_reach_and_not_hidden() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let planet = Planet::smooth(terra_core::PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        world.insert_resource(Start::choose(&planet, true));
+        let ground = planet.ground_at(Vec3::Y * 2000.0);
+        world.insert_resource(planet);
+        world.init_resource::<Trunks>();
+        world.init_resource::<Obstacles>();
+        world.init_resource::<Warmth>();
+        world.init_resource::<Perches>();
+        world.init_resource::<Thickets>();
+        world.init_resource::<Clock>();
+        let up = ground.normalize();
+        let eye = ground + up * 2.0;
+        world.spawn((
+            MainCamera,
+            GlobalTransform::from(Transform::from_translation(eye).looking_to(Vec3::X, up)),
+            Projection::Perspective(PerspectiveProjection::default()),
+        ));
+        // A trunk a metre wide 10 m off to the north-east, between the eye and a spot.
+        let hidden = eye + (Vec3::X + Vec3::Z * 0.5).normalize() * 20.0;
+        let trunk = ground + (Vec3::X + Vec3::Z * 0.5).normalize() * 10.0;
+        world.resource_mut::<Obstacles>().add(trunk, 0.6);
+        let seen = world
+            .run_system_once(move |around: Surroundings| {
+                [
+                    around.seen_now(eye + Vec3::X * 20.0, 100.0),
+                    around.seen_now(eye - Vec3::X * 20.0, 100.0),
+                    around.seen_now(eye + Vec3::Z * 20.0, 100.0),
+                    around.seen_now(eye + Vec3::X * 20.0, 15.0),
+                    around.seen_now(hidden, 100.0),
+                ]
+            })
+            .unwrap();
+        assert_eq!(
+            seen,
+            [true, false, false, false, false],
+            "ahead; behind; out to the side; beyond reach; behind a trunk"
+        );
     }
 }

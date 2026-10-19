@@ -583,3 +583,67 @@ fn one_watching_someone_near_looks_a_moment_and_then_walks_off_from_them() {
     assert_eq!(creature.pace, Pace::Wary);
     assert!(creature.bolt.dot(Vec3::X) < 0.0, "{:?}", creature.bolt);
 }
+
+#[test]
+fn a_fox_running_through_a_wood_goes_round_every_trunk_and_rock() {
+    // The lake film's fox ran through a tree (2026-10-18): the land's woods file their trunks
+    // with no solid, so nothing a walker collides with stood in its way.
+    let mut world = world();
+    let ground = world.resource::<Planet>().ground_at(Vec3::Y * 2000.0);
+    let up = ground.normalize();
+    let (east, north) = (Vec3::X, Vec3::Z);
+    let mut rounds = Vec::new();
+    for i in 0..6_i32 {
+        for j in -2..=2 {
+            let at = world.resource::<Planet>().ground_at(
+                ground
+                    + east * (3.0 + i as f32 * 2.5)
+                    + north * (j as f32 * 2.5 + 0.3 * (i % 2) as f32),
+            );
+            let radius_m = 0.25 + 0.05 * (i + j).rem_euclid(3) as f32;
+            world.resource_mut::<Trunks>().add(Trunk {
+                foot: at,
+                radius_m,
+                height_m: 18.0,
+                solid: false,
+            });
+            rounds.push((at, radius_m));
+        }
+    }
+    // And a boulder on its line, a solid of the flora's.
+    let rock = world
+        .resource::<Planet>()
+        .ground_at(ground + east * 9.0 + north * 1.2);
+    world.resource_mut::<Obstacles>().add(rock, 0.6);
+    rounds.push((rock, 0.6));
+    for aim in [0.0, 0.4, -0.7] {
+        let fox = kind(&mut world, "Red fox", ground);
+        let species = world.get::<Creature>(fox).unwrap().species;
+        let body = world.resource::<Bestiary>().get(species).body.radius;
+        world.entity_mut(fox).insert(Detail::default());
+        {
+            let mut creature = world.get_mut::<Creature>(fox).unwrap();
+            creature.state = State::Flee(30.0);
+            creature.bolt = (east + north * aim).normalize();
+            creature.facing = creature.bolt;
+        }
+        for _ in 0..240 {
+            world
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_secs_f32(1.0 / 30.0));
+            world.run_system_once(walk).unwrap();
+            let at = world.get::<Transform>(fox).unwrap().translation;
+            for &(middle, radius) in &rounds {
+                let apart = (at - middle).reject_from(up).length();
+                assert!(
+                    apart >= radius + body * 0.9,
+                    "aimed {aim}: {apart:.2} m from a trunk of {radius} m at {:?}",
+                    at - ground
+                );
+            }
+        }
+        let gone = (world.get::<Transform>(fox).unwrap().translation - ground).dot(east);
+        assert!(gone > 20.0, "aimed {aim}: only {gone:.1} m on");
+        world.despawn(fox);
+    }
+}
