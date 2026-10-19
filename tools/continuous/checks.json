@@ -5,5 +5,11 @@
     "run": ["cargo", "xtask", "fire", "--gate"],
     "reads": "FIRE",
     "minutes": 60
+  },
+  {
+    "name": "groundlight",
+    "does": "a campfire's hearth light brightens the yard's ground beside it, against the far ground (tools/sandbox/groundlight.ts)",
+    "run": ["node", "tools/sandbox/groundlight.ts"],
+    "minutes": 20
   }
 ]
