@@ -9,14 +9,15 @@
 (
     about: "a market town rising from its clearing in a day",
     seconds: 20.0,
-    // Toward sunset: as measured in the game at this place, the sun sinks from about 29 to 13
-    // degrees up in the west, azimuth 255-271, behind the camera as it starts looking east
-    // and beside it on the left as it ends looking north, so the light warms to the end and
-    // the mountain is lit warm on its west faces. Run on to 17.4 h, the western forest's
-    // shadow reached the castle as it was finished (its luma down a third at 18 s); from
-    // 17.1 h, under 12 degrees, it covered the town all through the middle; at 6.0-6.35 h
-    // the sun stood due east and climbing: ahead of the camera, glaring.
-    hours: (15.5, 17.0),
+    // Morning, the sun climbing in the east-south-east from about 19 to 36 degrees (azimuth
+    // about 100-110): beside the camera through the middle as it looks north, and behind it
+    // as it ends looking north-west over the castle, so the castle's face is lit from within
+    // 45 degrees of the camera's back and the sun is never within the frame's half-diagonal
+    // plus 15 degrees (docs/scene-rules.md, "Key light from behind the camera"). Toward
+    // sunset (15.5-17 h) it ended beside the camera on the left, the castle backlit and the
+    // left third washed out by glare (settlement r14); at 6.0-6.35 h, due east and low, it
+    // stood ahead of the camera as it started looking east.
+    hours: (7.2, 8.7),
     claim: 0.0,
     first: 0.3,
     last: 11.0,
