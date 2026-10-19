@@ -210,6 +210,15 @@ const WHITE_TO: f32 = 2.6;
 const HEARTHS: u32 = 16u;
 // A hearth whose flames stand lower than this, in metres, is a torch (books.rs SETS).
 const TORCH_M: f32 = 0.8;
+// A hearth's ground card's half width over the fire's width: inside its ring of stones, so
+// its edge is under them; how dark its char is there; and its licks' place out from its
+// middle (over its width) and height (over its body's).
+const GROUND_WIDE: f32 = 0.95;
+const CHAR_COVER: f32 = 0.45;
+const LICK_OUT: f32 = 0.3;
+const LICK_TALL: f32 = 0.35;
+// How much hotter a hearth's brightest coals glow over its dullest, kelvin.
+const COAL_HOT: f32 = 560.0;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -933,9 +942,11 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
 
 // A hearth's flames (crates/terra_world/src/fire.rs HEARTHS), as a campfire burns in
 // footage and in The Witcher 3, Red Dead Redemption 2 and Kingdom Come: its first card the
-// bed of coals glowing among its logs, low and wide; then a tongue over its middle as tall as
-// it was made, and four shorter ones round it over the logs, each of its own height and its
-// own moment of the flipbook, leaning and licking as they will.
+// ground under it, charred and strewn with embers fallen from its logs, lying flat; then the
+// bed of coals glowing among its logs, low and wide; then its body as tall as it was made,
+// a second a little behind it, and two short licks on its logs, each at its own moment of the
+// flipbook, leaning and licking as they will (step back plan step 3: on the fire sheet the
+// body reads fuller at noon and night; the ground and coals hide behind the stones at 6 m).
 fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32) -> Out {
     var out: Out;
     let wide = select(clamp(tall * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
@@ -943,7 +954,22 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     let luck = fract(seed * 0.618 + f32(j) * 0.379);
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
+    let torch = tall < TORCH_M;
     if j == 0 {
+        // The ground: flat, a little over it, inside the ring of stones round the logs.
+        if torch {
+            return nowhere();
+        }
+        let r = wide * GROUND_WIDE;
+        let c = corner - vec2(0.5);
+        let world = foot + up * 0.03 + (east * c.x + north * c.y) * 2.0 * r;
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(1.5, heat, luck, 4.0);
+        out.size = r;
+        return out;
+    }
+    if j == 1 {
         let w = wide * 1.4;
         let h = max(0.3, tall * 0.32);
         let world = card(foot - up * h * 0.25, up, corner, w, h, true, 0.0);
@@ -956,18 +982,22 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     // A baked set's frame is a whole fire, its own tongues alternating with dark (books.rs):
     // a hearth is that body and a second one a little behind it at its own moment, so it has
     // depth from every side; a torch (under TORCH_M) the one flame of its own set.
-    let torch = tall < TORCH_M;
-    if j > 2 || (torch && j > 1) {
+    if torch && j > 2 {
         return nowhere();
     }
     // Each body rises and falls with the fire's flicker, the second more than the first.
     let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
     var flame = tall * breathe;
     var at = foot;
-    if j == 2 {
+    if j == 3 {
         let a = seed * 6.283 + luck * 2.0;
         at = foot + (east * cos(a) + north * sin(a)) * wide * 0.18;
         flame *= 0.8 + 0.1 * luck;
+    } else if j > 3 {
+        // A lick on the logs, off the middle on opposite sides, a third to a half as tall.
+        let a = seed * 6.283 + f32(j) * 3.14 + luck;
+        at = foot + (east * cos(a) + north * sin(a)) * wide * LICK_OUT;
+        flame *= LICK_TALL + 0.15 * luck;
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
     // tall as the fire's flames over that: a campfire's 1.3 m tips stand 1.3 m, not the 2.2 m
@@ -1184,7 +1214,19 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     // What it gives, already exposed, and how much of what is behind it it covers.
     var light = vec3(0.0);
     var cover = 0.0;
-    if kind == 0 && life.w > 2.5 {
+    if kind == 0 && life.w > 3.5 {
+        // A hearth's ground: ash and embers fallen from its logs, glowing under them in spots
+        // that brighten as the fire flares, and charred dark out past its stones.
+        let p = (uv - vec2(0.5)) * 2.0;
+        let d = length(p);
+        let char = 1.0 - smoothstep(0.55, 1.0, d);
+        let spots = fbm(uv * 16.0 + vec2(luck * 31.0, 0.0));
+        let under = 1.0 - smoothstep(0.2, 0.55, d);
+        let breath = max(1.0 + 2.0 * (glow - 1.0), 0.2);
+        let ember = under * smoothstep(0.45, 0.75, spots) * breath;
+        light = soot(1150.0 + 350.0 * ember, ember);
+        cover = max(covers(light, ember), CHAR_COVER * char);
+    } else if kind == 0 && life.w > 2.5 {
         // A hearth's bed of coals: a low glow among its logs, broken by noise into coals
         // brighter and darker, each brightening and dimming slowly as air reaches it, deep
         // red at the bed's edges and orange in its middle, under the flames it feeds.
@@ -1197,7 +1239,9 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let alpha = smoothstep(0.02, 0.35, glow) * soft;
         // Hot enough to read orange by day: at 1000 to 1500 K it was a dull red lost under
         // the logs (lake film r5).
-        let kelvin = 1150.0 + 420.0 * glow * (0.6 + 0.4 * heat) + 120.0 * bed;
+        // Its hottest coals orange-yellow, as a bed glows in the games' campfires (Witcher 3,
+        // RDR2): at 1690 K at most they read dull under the logs (fire sheet, step back r2).
+        let kelvin = 1200.0 + COAL_HOT * glow * (0.6 + 0.4 * heat) + 120.0 * bed;
         light = soot(kelvin, alpha);
         cover = covers(light, alpha);
     } else if kind == 0 {
