@@ -56,6 +56,15 @@ fn is_bird() -> bool {
     return drift.look.x > 1.5;
 }
 
+// Rain or snow falling (D418), thinned by its cards and drawn as streaks.
+fn is_fall() -> bool {
+    return drift.look.z > 0.5;
+}
+
+// How long a camera's shutter is open, seconds: half a frame at 30 a second, as a film
+// camera's 180 degree shutter, so a flake moving across the view draws a short streak.
+const SHUTTER_S: f32 = 1.0 / 60.0;
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> drift: Drift;
 
@@ -168,9 +177,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     }
     let middle = origin + frame * (eye + rel);
     // Faded toward the box's sides, so none is seen to come or go, and over the few metres
-    // nearest the eye, where a speck would be a big bright fleck across the picture.
+    // nearest the eye, where a speck would be a big bright fleck across the picture. A
+    // flake of snow is seen big and soft as it passes within a metre or two, as a camera
+    // sees one, so only the nearest half metre is faded.
     let distance = length(view.world_position - middle);
-    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * smoothstep(1.5, 4.0, distance) * about;
+    let near = select(smoothstep(1.5, 4.0, distance), smoothstep(0.3, 0.8, distance), is_fall());
+    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * near * about;
     // Never smaller than a pixel and a half on screen; one drawn bigger is fainter, so a
     // far mote does not flicker in and out.
     let pixel_m = distance * 2.0 / (view.clip_from_view[1][1] * view.viewport.w);
@@ -186,10 +198,27 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         right = cross(frame[0], to_eye);
     }
     right = normalize(right);
-    let card_up = cross(to_eye, right);
+    var card_up = cross(to_eye, right);
     var corner = (vertex.uv - vec2<f32>(0.5)) * size;
     var turned = corner;
     var flip = 1.0;
+    if is_fall() && !is_leaf() {
+        // A streak along the way it moves across the view while the shutter is open, its
+        // length carried to the fragment as the card's length over its width; a flake's
+        // light is spread along it, so a long streak is fainter.
+        let dt = 0.05;
+        let moving = frame * (place(luck, order, seconds) - place(luck, order, seconds - dt)) / dt;
+        let across = moving - to_eye * dot(moving, to_eye);
+        let streak = length(across) * SHUTTER_S;
+        if streak > 0.05 * size {
+            card_up = across / length(across);
+            right = cross(card_up, to_eye);
+            flip = 1.0 + streak / size;
+            corner.y *= flip;
+            turned = corner;
+            fade *= inverseSqrt(flip);
+        }
+    }
     if is_bird() {
         // Its wings' beat, each bird at its own phase, carried to the fragment.
         flip = sin(globals.time * drift.flock.z * 6.283 + luck * 6.283);
@@ -215,13 +244,15 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         shown = select(0.0, 1.0, order < drift.field.w);
     }
     out.uv_b = vec2<f32>(fade * shown, flip);
+    // Snow is lit as the snow lying round it is, by the sky over it.
+    let facing = select(to_eye, up, is_fall());
 @if(PREPASS_PIPELINE) {
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
-    out.world_normal = to_eye;
+    out.world_normal = facing;
 @if(MOTION_VECTOR_PREPASS)
     out.previous_world_position = out.world_position;
 } @else {
-    out.world_normal = to_eye;
+    out.world_normal = facing;
 }
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_in.instance_index;
@@ -233,7 +264,16 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 fn coverage(uv: vec2<f32>, flap: f32) -> f32 {
     let p = uv - vec2<f32>(0.5);
     if drift.look.x < 0.5 {
-        let r = length(p) * 2.0;
+        // A streak is a round speck drawn along its card's length: the distance is to the
+        // line its middle moved along, in widths.
+        let q = vec2<f32>(p.x, p.y * flap);
+        let along = max(abs(q.y) - 0.5 * (flap - 1.0), 0.0);
+        let r = length(vec2<f32>(q.x, along)) * 2.0;
+        if is_fall() {
+            // A flake is an opaque clump with a soft rim, not a glow: as a soft round it
+            // covered a third of its card and read as a faint speck.
+            return 1.0 - smoothstep(0.45, 1.0, r);
+        }
         return pow(clamp(1.0 - r, 0.0, 1.0), 1.5);
     }
     if is_bird() {

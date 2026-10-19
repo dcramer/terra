@@ -57,7 +57,9 @@
             hours: [(5.0, 11.0), (16.5, 21.5)],
         ),
         (
-            // A few dry leaves coming down under broadleaf and mixed crowns, turning over.
+            // A few dry leaves coming down under broadleaf and mixed crowns, turning over; in a
+            // frost the few still hanging stay frozen on, so none tumble through falling snow
+            // (round 4's January forest read them as dark flakes).
             name: "Falling leaves",
             count: 140,
             look: Leaf,
@@ -71,6 +73,7 @@
             open: 0.0,
             water: 0.0,
             season_c: (7.0, 40.0),
+            air_c: 2.0,
             hours: [(0.0, 24.0)],
         ),
         (
@@ -146,14 +149,15 @@
             hours: [(0.0, 24.0)],
         ),
         (
-            // Snow falling (D418): flakes of a few millimetres to a centimetre, aggregated, at
-            // about a metre a second, swaying as they come and carried by the wind; all of
-            // them at 2 mm/h of water, heavy snow, and fewer below. Near the eye, the big ones
-            // drifting past.
+            // Snow falling (D418): aggregated flakes of a few millimetres to two or three
+            // centimetres, at about a metre a second, swaying as they come and carried by the
+            // wind; all of them at 2 mm/h of water, heavy snow, and fewer below. Near the eye,
+            // the big ones drifting past, some five a cubic metre in a moderate fall, so a few
+            // hundred are seen within 4 m at 6 to 12 px (round 2 drew some 30, of 1 to 2 px).
             name: "Snowfall",
-            count: 7000,
+            count: 16000,
             look: Speck,
-            size_m: 0.013,
+            size_m: 0.022,
             colour: (0.95, 0.96, 0.98),
             glow: 1.5,
             opacity: 0.9,

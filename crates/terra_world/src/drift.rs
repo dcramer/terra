@@ -270,6 +270,10 @@ impl DriftKind {
 /// How often the place round the eye is looked at again, and how fast a field follows it.
 const LOOK_EVERY_S: f32 = 0.5;
 const FOLLOW: f32 = 0.4;
+/// How much of the wind the crowns take away at a person's height among trees: under a closed
+/// canopy the wind is some 10 to 30% of the open's (Cionco 1965), so snow there falls slanted
+/// at 30 to 60 degrees in a 5 m/s wind, not near level.
+const SHELTERED: f32 = 0.75;
 /// A wood is so many trunks within so far of the eye's ground.
 const WOODED: (f32, f32) = (5.0, 12.0);
 /// Water within so far counts as by the water.
@@ -511,7 +515,8 @@ fn sense(
                 let north = climate.frame.north(ground);
                 let east = north.cross(up);
                 let to = -(north * libm::cosf(now.from) + east * libm::sinf(now.from));
-                to * now.speed_m_s.min(12.0)
+                // Under the crowns the wind at a person's height is a fraction of the open's.
+                to * now.speed_m_s.min(12.0) * (1.0 - SHELTERED * round.woods)
             }
             None => Vec3::new(0.6, 0.0, 0.3),
         };
@@ -658,6 +663,12 @@ mod tests {
         };
         assert!(leaves.amount(&forest_morning()) > 0.5);
         assert_eq!(leaves.amount(&open), 0.0);
+        // In a frost the dry leaves still hanging stay frozen on.
+        let frost = Round {
+            air_c: -2.0,
+            ..forest_morning()
+        };
+        assert_eq!(leaves.amount(&frost), 0.0);
     }
 
     #[test]
