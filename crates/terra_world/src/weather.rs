@@ -297,6 +297,10 @@ fn follow(
     }
     let Some((_, wanted)) = *taken else { return };
     if first {
+        info!(
+            "weather: cloud {:.2}, {:.2} mm/h falling, wind {:.1} m/s",
+            wanted.cloud, wanted.falling_mm_h, wanted.wind_m_s
+        );
         *weather = wanted;
         return;
     }
