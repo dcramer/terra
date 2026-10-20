@@ -65,8 +65,10 @@ const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.6, 0.12);
 /// plan step 1). At 323,000 a metre, and 2.5 stops more by night, the stones drew past the
 /// tonemapper's white, as bright as the flame (night stills: stones 251,232,227 against a
 /// flame of 253,243,205; at this light and no night boost 195,114,123 against 254,235,119).
-const HEARTH_LUMENS_A_METRE: f32 = 100_000.0;
-const HEARTH_RANGE_M: f32 = 14.0;
+/// Tightened with the pool (fire round 19): 50,000 a metre (58,500 lm) and a 7 m reach, the light's
+/// disc as wide as its flames, keep the pool inside 4-5 m.
+const HEARTH_LUMENS_A_METRE: f32 = 50_000.0;
+const HEARTH_RANGE_M: f32 = 7.0;
 /// How many stops brighter a kept fire's light is by night, as Witcher 3 keys a fire to the
 /// hour: by its real lumens the yard's ground took a 1.2x pool at 1 m and none past 1.5 m
 /// against the night's moonlit ground, drawn some stops over a real night's; the Witcher 3 and
@@ -84,14 +86,19 @@ const HEARTH_RANGE_M: f32 = 14.0;
 const HEARTH_NIGHT_STOPS: f32 = 2.0;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
-/// night's boost and the stones less.
-const HEARTH_SPREAD: f32 = 3.0;
+/// night's boost and the stones less. At 3 times its 1.3 m flames the disc's 1/(d²+r²) stayed
+/// level out to some 4 m, so the ground had no pool, only an even tint to the horizon; as wide
+/// as its flames, the pool falls off past the stones (blind review 5/10 against 4, fire round 19).
+const HEARTH_SPREAD: f32 = 1.0;
 /// How far up its flames a hearth's light hangs: in their body, over the logs' ends.
 const HEARTH_LIGHT_UP: f32 = 0.75;
 /// The share of a hearth's light that casts no shadows: all of it shadowed, its own stones
 /// threw black lobes a metre out over the lit ground (round 7's side view), where the games'
-/// are soft. Bevy's PCSS on the cube map (`soft_shadows_enabled`) softened nothing seen.
-const HEARTH_FILL: f32 = 0.5;
+/// are soft. Bevy's PCSS on the cube map (`soft_shadows_enabled`) softened nothing seen. At a
+/// half, with `HEARTH_FILL_GAIN` 4, four fifths of what the ground took had no shadow, so the
+/// stones cast none and the pool had no edge; at 0.3 they shadow the ground outside the ring
+/// (fire round 19).
+const HEARTH_FILL: f32 = 0.3;
 /// How high over its fire a hearth's fill hangs, over its flames' height, and how much
 /// brighter it is than its share (`HEARTH_FILL`): the pool of firelit ground the games show
 /// to 3-4 m, without the stones at the fire's foot passing the tonemapper's shoulder. Hung in
@@ -100,8 +107,10 @@ const HEARTH_FILL: f32 = 0.5;
 /// hung high, the ground takes it more nearly straight down and the stones farther off. At
 /// 2.2 and 4 times, the ground 2.5-3.5 m out takes three times the light by night and the
 /// stones' lit faces 1.6 times, still warm brown (sRGB 113,82,51; fire round 14; landed alone in round 15).
-const HEARTH_FILL_UP: f32 = 2.2;
-const HEARTH_FILL_GAIN: f32 = 4.0;
+/// With the tighter disc, 1.6 and 1.5 times: the pool's near ground kept, the far left dark
+/// (fire round 19).
+const HEARTH_FILL_UP: f32 = 1.6;
+const HEARTH_FILL_GAIN: f32 = 1.5;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the

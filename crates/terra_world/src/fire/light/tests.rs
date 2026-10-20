@@ -106,11 +106,12 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         let lit = lit(&blazes, t);
         assert_eq!(lit.len(), 3);
         let (hearth, fill, roof) = (&lit[0], &lit[1], &lit[2]);
-        // One light casts shadows; a brighter fill casts none, hung high over the fire so it
+        // One light casts shadows and carries most of it, so the ring of stones shadows the
+        // ground outside it (`HEARTH_FILL`); a fill casts none, hung high over the fire so it
         // lights the ground metres out more, and the stones at its foot less, than the
         // shadowed light does for each lumen (`HEARTH_FILL_UP`).
         assert!(!hearth.shadowless && fill.shadowless);
-        assert!(fill.lumens > hearth.lumens && fill.at.y > hearth.at.y + 1.0);
+        assert!(fill.lumens < hearth.lumens && fill.at.y > hearth.at.y + 1.0);
         let pool = |l: &Lit| on_ground(l, ground, 3.0, 1.0) / on_ground(l, ground, 0.55, 1.0);
         assert!(
             pool(fill) > 2.0 * pool(hearth),
@@ -126,8 +127,9 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
         seen = (seen.0.min(hearth.at.x), seen.1.max(hearth.at.x));
-        // Its shadows and fall-off soften as a disc wider than its flames (`crate::falloff`).
-        assert!(hearth.radius > 0.7 && hearth.radius < 3.0);
+        // Its shadows and fall-off soften as a disc as wide as its flames (`crate::falloff`),
+        // no wider, or its fall-off levels off past its stones and there is no pool.
+        assert!(hearth.radius >= campfire.wide * 0.9 && hearth.radius <= campfire.wide * 1.5);
     }
     // It moves, so the shadows it casts sway.
     assert!(seen.1 - seen.0 > 0.04, "{seen:?}");
