@@ -151,9 +151,15 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// Whether wild animals are put out: not in a time-lapse without people (D381).
-fn wild_shown(rising: Option<Res<super::rising::Rising>>) -> bool {
-    rising.is_none_or(|r| r.wildlife())
+/// Wild animals kept off the land: none are put out while it stands. A time-lapse without
+/// its people asks it (D381), which shows the buildings alone (a deer walking through a
+/// film of the town's day reads as a figure moving at a sprint).
+#[derive(Resource)]
+pub struct Withheld;
+
+/// Whether wild animals are put out: not while they are withheld.
+fn wild_shown(withheld: Option<Res<Withheld>>) -> bool {
+    withheld.is_none()
 }
 
 /// Whether the world grows anything: anywhere but the yard, the flat test level, unless a

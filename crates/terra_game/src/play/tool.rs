@@ -1,6 +1,7 @@
 //! The builder tool: what it is aimed at, what it would do there, and doing it. Its parts
 //! are in `tool/`: `aim` (what it is on, and what that would cost), `act` (doing it),
-//! `show` (outlines and ghosts before it is done) and `prompt` (what it says).
+//! `show` (outlines and ghosts before it is done), `prompt` (what it says) and `place` (the
+//! remote's `storage.place`).
 //!
 //! The controls follow the habit of Subnautica and games like it, as far as we could
 //! confirm it (research/subnautica-2-building.md): the right mouse button is the menu,
@@ -57,6 +58,7 @@ use terra_items::ItemKind;
 
 mod act;
 mod aim;
+mod place;
 mod prompt;
 mod show;
 
@@ -606,6 +608,7 @@ impl Builder {
 }
 
 pub fn plugin(app: &mut App) {
+    place::plugin(app);
     app.register_required_components::<Player, Builder>()
         .add_systems(Startup, setup)
         .add_systems(PostStartup, price)

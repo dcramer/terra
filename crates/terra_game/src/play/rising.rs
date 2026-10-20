@@ -424,6 +424,15 @@ pub fn plugin(app: &mut App) {
     );
 }
 
+/// Starts a time-lapse; one without its people keeps the wild animals off the land
+/// (wildlife's `Withheld`), as it shows the buildings alone.
+fn start(commands: &mut Commands, rising: Rising) {
+    if !rising.wildlife() {
+        commands.insert_resource(super::wildlife::Withheld);
+    }
+    commands.insert_resource(rising);
+}
+
 fn read(mut commands: Commands, options: Res<Options>) {
     let Some(arg) = options.timelapse.as_deref() else {
         return;
@@ -434,7 +443,7 @@ fn read(mut commands: Commands, options: Res<Options>) {
                 "Time-lapse: {}: {} s, {:.1}h to {:.1}h, rolling on frame {rolls_at}.",
                 lapse.about, lapse.seconds, lapse.hours.0, lapse.hours.1
             );
-            commands.insert_resource(Rising::new(lapse, rolls_at));
+            start(&mut commands, Rising::new(lapse, rolls_at));
         }
         Err(why) => error!("Time-lapse: {why}"),
     }

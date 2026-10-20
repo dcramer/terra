@@ -220,16 +220,6 @@ const NOT_YET_CUT: &[(&str, &str, &str)] = &[
         "build/fire",
         "11: a flier breathes fire (BreathesFire)",
     ),
-    (
-        "play/storage",
-        "build/act",
-        "14: storage acts on a base (act::Building)",
-    ),
-    (
-        "play/wildlife",
-        "play/rising",
-        "15: wildlife and a rising town (Rising)",
-    ),
 ];
 
 /// This test's own module.

@@ -89,6 +89,27 @@ fn a_time_lapse_without_people_shows_nobody_however_built() {
 }
 
 #[test]
+fn a_time_lapse_without_people_keeps_the_wild_animals_away_and_one_with_them_does_not() {
+    use bevy::ecs::system::RunSystemOnce;
+    let without = Timelapse::parse(
+        "(seconds: 40.0, hours: (7.0, 17.0), first: 2.0, last: 26.0, takes: (6.0, 12.0), common: (10.0, 30.0), people: false)",
+    )
+    .unwrap();
+    for (lapse, wild) in [(lapse(), true), (without, false)] {
+        let mut world = World::new();
+        let mut rising = Some(Rising::new(lapse, 0));
+        world
+            .run_system_once(move |mut commands: Commands| {
+                start(&mut commands, rising.take().unwrap());
+            })
+            .unwrap();
+        assert!(world.contains_resource::<Rising>());
+        let withheld = world.contains_resource::<crate::play::wildlife::Withheld>();
+        assert_eq!(withheld, !wild, "wild animals about: {wild}");
+    }
+}
+
+#[test]
 fn the_clock_runs_from_its_first_hour_to_its_last() {
     let lapse = lapse();
     assert_eq!(lapse.hour(-1.0), 7.0);
