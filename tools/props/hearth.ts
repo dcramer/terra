@@ -454,7 +454,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const scorch = smooth(0.1, 0.3, x), char = smooth(0.27, 0.4, x);
   let c = mix(c0, mix(c0.map((v) => v * 0.5), [52, 34, 24], 0.6), scorch);
   if (char <= 0) return [c, DARK, r0, h0];
-  const hot = smooth(0.45, 0.9, x);
+  const hot = smooth(0.4, 0.82, x);
   const [crack, inside, id] = checks(a, b, hot, seed + 11, stretch);
   const deep = Math.max(crack, groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
@@ -463,7 +463,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
   const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id);
-  const glow = mix([150, 28, 4], HOTTEST, Math.min(1, deep * hot * 1.2)).map((v) => v * g);
+  const glow = mix([175, 40, 5], HOTTEST, Math.min(1, deep * hot * 1.5)).map((v) => v * g);
   return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 
@@ -487,11 +487,12 @@ function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
   const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
-  const foot = smooth(0.3, 0.0, f) * (0.6 + 0.55 * under);
+  const foot = smooth(0.42, 0.0, f) * (0.72 + 0.6 * under);
   const lick = under * under * (0.58 + 0.25 * f);
   // Smoke and heat scorch it all over and char what the camera sees of its upper half too
-  // (fire round 25: its raw upper faces read as pale planks).
-  const all = 0.3 + 0.2 * f;
+  // (fire round 25: its raw upper faces read as pale planks); its lower half, toward the coals,
+  // hot enough that its cracks glow on the faces seen (fire round 30: dark bark from 6 m).
+  const all = 0.3 + 0.2 * f + 0.36 * smooth(0.5, 0.12, f);
   return Math.max(top, foot, lick, all);
 }
 
