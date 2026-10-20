@@ -458,15 +458,23 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   let c = mix(c0, mix(c0.map((v) => v * 0.5), [52, 34, 24], 0.6), scorch);
   if (char <= 0) return [c, DARK, r0, h0];
   const hot = smooth(0.4, 0.82, x);
-  const [crack, inside, id] = checks(a, b, hot, seed + 11, stretch);
+  // How far toward the coals: the cracks open wider and burn hotter there.
+  const feet = smooth(0.55, 1.25, x);
+  const [crack, inside, id] = checks(a, b, hot * (0.6 + 1.6 * feet), seed + 11, stretch);
   const deep = Math.max(crack, groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks where it burns hottest.
   block = mix(block, [92, 88, 84], 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59)));
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
-  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id);
-  const glow = mix([175, 40, 5], HOTTEST, Math.min(1, deep * hot * 1.5)).map((v) => v * g);
+  // A fissure's heat: its deepest middle and toward the coals the hottest, dull orange-red at
+  // its lips up the log, through ember orange to yellow-white in the deepest seams at the feet
+  // (fire round 31: an even-width pink-red neon mesh, its red near pure, which the night's
+  // grade takes to pink).
+  const t = Math.min(1, deep * deep * hot * (0.55 + 0.6 * feet));
+  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
+  const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
+  const glow = tone.map((v) => v * g);
   return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 

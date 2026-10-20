@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bed } from "./coals.ts";
-import { BUDGET, HALF, hearth, STONE_TONES, TALL } from "./hearth.ts";
+import { BUDGET, HALF, hearth, layout, STONE_TONES, TALL, woodMaps } from "./hearth.ts";
 
 const { wood, stone, logs, stones } = hearth();
 const tris = (m: { idx: number[] }) => m.idx.length / 3;
@@ -64,4 +64,15 @@ test("each stone is one of the field stone's tones, lighter or darker, never tin
     });
     assert.ok(near, `stone tone ${s.tone.map(Math.round)} is a palette tone scaled`);
   }
+});
+
+test("its logs' cracks glow orange-red at their dullest and yellow-white at their brightest, never pure red", () => {
+  const glow = woodMaps(layout().logs)[1];
+  const lit: [number, number][] = [];
+  for (let i = 0; i < glow.length; i += 4) if (glow[i] >= 12) lit.push([glow[i], glow[i + 1]]);
+  lit.sort((a, b) => a[0] - b[0]);
+  const tenth = Math.floor(lit.length / 10);
+  const greenToRed = (px: [number, number][]) => px.reduce((s, p) => s + p[1], 0) / px.reduce((s, p) => s + p[0], 0);
+  assert.ok(greenToRed(lit.slice(0, tenth)) > 0.25, "its dullest cracks near pure red");
+  assert.ok(greenToRed(lit.slice(-tenth)) > 0.6, "its brightest cracks not yellow-white");
 });
