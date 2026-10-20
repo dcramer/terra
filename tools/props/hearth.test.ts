@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bed } from "./coals.ts";
-import { BUDGET, HALF, hearth, TALL } from "./hearth.ts";
+import { BUDGET, HALF, hearth, STONE_TONES, TALL } from "./hearth.ts";
 
 const { wood, stone, logs, stones } = hearth();
 const tris = (m: { idx: number[] }) => m.idx.length / 3;
@@ -53,5 +53,15 @@ test("every face of it faces out: its logs from their axes, its stones from thei
     const r = sub(at, l.foot), t = dot(r, l.axis);
     const off = t <= 0.001 ? l.axis.map((v) => -v) : t >= l.L - 0.001 ? l.axis : sub(r, l.axis.map((v) => v * t));
     assert.ok(dot(n, off) > -1e-6, "a log's normal turned in");
+  }
+});
+
+test("each stone is one of the field stone's tones, lighter or darker, never tinted", () => {
+  for (const s of stones) {
+    const near = STONE_TONES.some((t) => {
+      const k = s.tone[0] / t[0];
+      return k > 0.89 && k < 1.11 && t.every((c, i) => Math.abs(s.tone[i] - c * k) < 1e-6);
+    });
+    assert.ok(near, `stone tone ${s.tone.map(Math.round)} is a palette tone scaled`);
   }
 });

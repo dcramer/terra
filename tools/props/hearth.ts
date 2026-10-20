@@ -80,6 +80,9 @@ function section(kind: number, R: number): Run[] {
   });
 }
 
+/** The stones' tones, sRGB 0-255: field stone, granite and sandstone greys. */
+export const STONE_TONES: readonly (readonly number[])[] = [[128, 121, 111], [114, 115, 112], [126, 112, 98], [104, 101, 96], [136, 130, 120]];
+
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   const rnd = random(seed);
@@ -110,13 +113,16 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   });
   pack(logs);
   const stones: Stone[] = [];
-  const tones = [[128, 121, 111], [114, 115, 112], [126, 112, 98], [104, 101, 96], [136, 130, 120]];
+  // Each stone a tone of the field stone's, lighter or darker by one scale for all its channels:
+  // a scale each tinted them lavender and blue (fire round 20). Three draws still, so the ring
+  // is laid as it was.
+  const toned = (tone: readonly number[], k: number[]) => tone.map((c) => c * (0.9 + (0.2 * (k[0] + k[1] + k[2])) / 3));
   for (let i = 0; i < STONES; i++) {
     const phi = (i / STONES) * 2 * Math.PI + 0.22 * (rnd() - 0.5);
     const long = 0.105 + 0.045 * rnd();
     const size: V3 = [long, 0.065 + 0.03 * rnd(), Math.min(0.075 + 0.03 * rnd(), HALF - RING_R - 0.005)];
     const r = RING_R + 0.02 * (rnd() - 0.5);
-    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.3 * (rnd() - 0.5), tone: tones[Math.floor(rnd() * tones.length)].map((c) => c * (0.9 + 0.2 * rnd())), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.3 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
   }
   return { logs, stones };
 }
