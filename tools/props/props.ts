@@ -11,6 +11,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { addBed } from "./coals.ts";
+import { campfire } from "./hearth.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "props");
@@ -134,6 +135,9 @@ export type Prop = {
   char?: boolean;
   // A fire's coal bed added after char by coals.ts: an ash mound inside its logs, chunky
   // glowing coals heaped on it (a campfire, fire round 17).
+  // Made by hearth.ts rather than Tripo: a campfire as a hero prop, split firewood in a ring of
+  // rounded stones (fire round 18); then its coal bed, as `coals` says.
+  hearth?: boolean;
   coals?: boolean;
 };
 
@@ -232,6 +236,11 @@ export function hasPbr(glb: Buffer): boolean {
 }
 
 function refine(name: string, prop: Prop) {
+  if (prop.hearth) {
+    const out = join(ROOT, "assets", "models", prop.into ?? "props", `${prop.file}.glb`);
+    writeFileSync(out, prop.coals ? addBed(campfire()) : campfire());
+    return;
+  }
   const glb = join(ART, name, "model.glb");
   if (!existsSync(glb)) throw new Error(`${name}: no model yet; make one with the model step`);
   mkdirSync(OUT, { recursive: true });

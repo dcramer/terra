@@ -93,6 +93,7 @@ These are triangles in the game's file, starting from what the bake-off and the 
 | A small item: a tool's head, a cup, an ore lump | 300 to 800 |
 | A prop: a chair, a barrel, a bench | 600 to 1,500 |
 | A large prop or station: a forge, a bed, a machine | 1,500 to 2,500 |
+| A hero prop the player sits beside, such as a campfire, its parts included (D427) | 6,000 to 10,000 |
 | A creature, wolf-sized | 1,500 to 3,000 |
 | A character body | 2,500 to 5,000 |
 | A rock | 100 to 600 |
