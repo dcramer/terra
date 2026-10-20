@@ -1,8 +1,8 @@
 // A fire's coal bed, added to its refined model (`coals` in prop.json, after `char`): a low ash
 // mound inside its logs with chunky rounded coals heaped on it, densest and highest under the
 // apex, as Red Dead Redemption 2's and Enshrouded's ember beds are. Each coal is dark crust,
-// grey ash on what faces up, its cracks soft glowing seams and its underside glowing where it
-// sits in the bed; the ash between glows dull red where the heap is. Its own material, `Coals`,
+// grey ash on what faces up, its cracks narrow glowing seams, sunk in the bed, its underside only dull;
+// the ash between a crackle of glowing seams where the heap is. Its own material, `Coals`,
 // with an emissive map, so a burning prop's embers (`props::Embers`) flicker it with the fire.
 // Every glow is at most 1,440 K's colour, orange-red: past it a coal reads salmon-pink through
 // the tonemapper (fire round 11). Run it once on a freshly refined model.
@@ -136,7 +136,7 @@ function addMound(bed: Bed, rnd: () => number) {
 function addCoal(bed: Bed, at: number[], size: number, big: boolean, tile: number, rnd: () => number) {
   const { v, f } = SPHERES[1];
   const base = bed.pos.length / 3;
-  const turn = rnd() * Math.PI * 2, tilt = (rnd() - 0.5) * 0.7, long = 1.05 + 0.3 * rnd(), squat = 0.8 + 0.15 * rnd();
+  const turn = rnd() * Math.PI * 2, tilt = (rnd() - 0.5) * 0.7, long = 1.05 + 0.3 * rnd(), squat = 0.55 + 0.15 * rnd();
   const lumps = [rnd() * 6, rnd() * 6, rnd() * 6];
   const P = v.map(([x, y, z], i) => {
     const k = 1 + 0.1 * Math.sin(x * 2.6 + lumps[0]) * Math.sin(z * 2.2 + lumps[1]) + 0.07 * Math.sin(y * 3.1 + lumps[2]) + 0.05 * (hash(i, tile, base) - 0.5);
@@ -175,7 +175,7 @@ export function bed(seed = 1): Bed {
     const size = big ? 0.06 + 0.02 * rnd() : (0.035 + 0.016 * rnd()) * (1.1 - 0.3 * (r / HEAP_R));
     const [x, z] = [Math.cos(a) * r, Math.sin(a) * r];
     // Rests on what is under it: sunk a third into the ash, or on a coal it overlaps.
-    let y = mound(r) + size * 0.35;
+    let y = mound(r) + size * 0.1;
     for (const c of out.coals) {
       const d = Math.hypot(c.at[0] - x, c.at[2] - z), reach = (c.size + size) * 0.85;
       if (d < reach) y = Math.max(y, c.at[1] + Math.sqrt(reach * reach - d * d) * 0.3);
@@ -191,7 +191,7 @@ export function bed(seed = 1): Bed {
 // A glow's colour, sRGB, at a heat from 0 (dark) to 1 (1,440 K): deep red, then orange.
 // At most so bright, sRGB: half the logs' cracks' light, as the embers' strength is theirs
 // (`EMBER_GLOW`); at the logs' a coal went past the tonemapper's shoulder to salmon-red.
-const BRIGHTEST = 0.9;
+const BRIGHTEST = 1.0;
 export function glowColour(heat: number): number[] {
   const h = Math.min(Math.max(heat, 0), 1);
   const red = [HOTTEST[0] * Math.pow(h, 0.7), HOTTEST[1] * Math.pow(h, 1.2), HOTTEST[2] * h * h];
@@ -227,7 +227,11 @@ export function maps(seed = 1): Uint8Array[] {
       const patchy = (0.45 + 0.55 * smooth(0.3, 0.65, fbm(X * 7, Z * 7, 8))) * (1 - 0.5 * smooth(0.75, 0.95, edge) * (1 - smooth(0.4, 0.6, fbm(X * 16, Z * 16, 10))));
       const skirt = smooth(0.5, 0.74, r) * (1 - smooth(0.68, 1.04, edge)) * patchy;
       const grey = (22 + 14 * n) * (1 - 0.5 * char) * (1 - skirt) + (50 + 16 * n - 10 * smooth(0.6, 0.8, speck)) * skirt;
-      const smoulder = char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 1.1 + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
+      // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
+      // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
+      const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));
+      const crackle = char * Math.max(ridge(7, 11), 0.8 * ridge(15, 12));
+      const smoulder = Math.max(char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.4, crackle * 1.3) + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
       put(x, 2 * T + y, [grey * 1.02 + 12 * smoulder, grey * 0.96, grey * 0.89], glowColour(smoulder), 0.95);
     }
   }
@@ -238,7 +242,7 @@ export function maps(seed = 1): Uint8Array[] {
     const band = Math.floor(tile / 4);
     const heat = [1.35, 1.05, 0.75][band] + 0.1 * rnd();
     const ashy = [0.2, 0.6, 1.1][band];
-    const cells = Array.from({ length: 7 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.35 ? 0.45 + 0.2 * rnd() : 0 }));
+    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.2 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
         const d = unoctahedral((x - 2) / (T - 4), (y - 2) / (T - 4));
@@ -251,10 +255,10 @@ export function maps(seed = 1): Uint8Array[] {
         const wob = fbm(d[0] * 5 + tile, d[2] * 5 + d[1] * 3, 4) - 0.5;
         const gap = d2 - d1 + 0.12 * wob;
         // The seam: a hot core with a soft falloff into the crust, not a hard line.
-        const seam = 1 - smooth(0.0, 0.12, gap), halo = 1 - smooth(0.0, 0.35, gap);
+        const seam = 1 - smooth(0.0, 0.07, gap), halo = 1 - smooth(0.0, 0.2, gap);
         const under = smooth(0.15, -0.55, d[1]);
         const mottle = fbm(d[0] * 4 + tile * 3, d[2] * 4 - d[1] * 2, 5);
-        const glow = heat * Math.max(seam * (1 - 0.25 * smooth(0.3, 0.9, d[1])), halo * 0.7, under * (0.7 + 0.3 * mottle), hot * (0.7 + 0.5 * mottle));
+        const glow = heat * Math.max(1.3 * seam * (1 - 0.25 * smooth(0.3, 0.9, d[1])), halo * 0.4, under * (0.15 + 0.1 * mottle), hot * (0.7 + 0.5 * mottle));
         const ash = Math.min(1, ashy * (hot ? 0 : 1) * smooth(0.4, 0.9, d[1]) * smooth(0.45, 0.65, fbm(d[0] * 6 + tile, d[2] * 6, 6)) * (1 - halo));
         const crust = 16 + 12 * mottle;
         const grey = crust + ash * (50 + 25 * mottle);

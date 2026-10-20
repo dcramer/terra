@@ -187,8 +187,10 @@ pub(crate) struct Embers;
 
 /// How bright the embers glow at the fire's mean, on their map's colour. At 14 (a burning
 /// building's char's, build.wesl) a campfire's cracks and coals went past the tonemapper's
-/// shoulder to pink-white; at 2 they read red-orange (fire round 10).
-const EMBER_GLOW: f32 = 2.0;
+/// shoulder to pink-white; at 2 they read red-orange (fire round 10). Since the firelit
+/// shoulder is taken a channel at a time (fire round 28) a brighter ember goes orange, not
+/// pink, so 4, with the coal bed's crackle (tools/props/coals.ts, fire round 29).
+const EMBER_GLOW: f32 = 4.0;
 /// How far a fire lights the embers of what burns: a prop's own fire stands at its foot.
 const EMBER_REACH_M: f32 = 2.0;
 /// The embers' exposure weight (docs/fire.md, "The exposure rule"): 0, physical, so by day,
