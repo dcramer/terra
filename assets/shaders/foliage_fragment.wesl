@@ -252,6 +252,15 @@ const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.42, 0.5, 0.55);
 // The height over a plant's foot, metres, from which its boughs carry more of the load, to
 // where they carry all of it.
 const BOUGH_HIGH_M: vec2<f32> = vec2<f32>(2.0, 10.0);
+// The height over a plant's foot, metres, below which its leaves are undergrowth's in winter,
+// to where they are a crown's (winter round 12).
+const UNDERGROWTH_M: vec2<f32> = vec2<f32>(0.6, 2.2);
+// How far a frost rimes what is still green low down, and the rime's colour.
+const UNDERGROWTH_RIME: f32 = 0.55;
+const FROST: vec3<f32> = vec3<f32>(0.62, 0.66, 0.7);
+// How much of the snow's depth the climate gives lies on a forest floor, so how high it
+// buries what grows there (ground.wesl's SNOW_UNDER_CROWNS takes some under the crowns).
+const UNDER_SNOW_SHARE: f32 = 0.6;
 // How much of bark's colour a frost greys, where snow lies (weather round 8).
 const BARK_FROST_GREY: f32 = 0.3;
 // The height over a stem's foot, metres, to which plastered snow is thickest and wraps
@@ -413,8 +422,16 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // Seen from under, only a load's edge shows, on the crown's upper side as on a spray:
         // whole there, the canopy overhead read as pale leaves (weather round 8).
         let below = mix(1.0, BOUGH_UNDERSIDE, smoothstep(0.1, 0.5, -face_up));
-        let high = smoothstep(BOUGH_HIGH_M.x, BOUGH_HIGH_M.y, dot(world - origin, sky_up));
-        let load = lying * (0.5 + 0.5 * high) * max(smoothstep(0.25, 0.7, up) * below, level);
+        let rise = dot(world - origin, sky_up);
+        let high = smoothstep(BOUGH_HIGH_M.x, BOUGH_HIGH_M.y, rise);
+        // Winter on what grows low, a rule every kind takes by where its leaf is, not by its
+        // name (D419; winter round 12's judge: "the ferns, broadleaf clumps and saplings read
+        // as summer plants"): a sapling's or shrub's boughs, near the floor, are not under a
+        // crown's shelter, so they carry a load as heavy as a crown's top; what still has
+        // green on it is rimed, most low, where the cold air lies; and what stands lower than
+        // the snow is under it, its foot buried in a ragged line.
+        let low = 1.0 - smoothstep(UNDERGROWTH_M.x, UNDERGROWTH_M.y, rise);
+        let load = lying * max(0.5 + 0.5 * high, low) * max(smoothstep(0.25, 0.7, up) * below, level * (1.0 + 0.5 * low));
         // In clumps half a metre and more across, a bough's load: finer, the white flecked the
         // needles into a variegated leaf (weather round 8). Gated by the load itself: where
         // clumps() is 0 the threshold alone is a half, and summer's cards went half white.
@@ -425,7 +442,13 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         snow = max(snow, lying * (0.6 + 0.4 * high) * shelf_edge(uv, world, sky_up));
         // Needles still on in a snowy spell are an evergreen's, dark and cool under the white:
         // the spruce's sage, kept, read as a broadleaf in leaf (weather round 8).
-        colour *= mix(vec3<f32>(1.0), NEEDLES_UNDER_SNOW, lying * (1.0 - turned));
+        let green = lying * (1.0 - turned);
+        colour *= mix(vec3<f32>(1.0), NEEDLES_UNDER_SNOW, green * (1.0 - 0.5 * low));
+        let rimed = green * (0.4 + 0.6 * weather.a) * (0.3 + 0.7 * low) * (0.6 + 0.4 * clumps(world * 9.0 + 3.0));
+        colour = mix(colour, FROST, rimed * UNDERGROWTH_RIME);
+        let depth = weather.r * SNOW_FULL_M * UNDER_SNOW_SHARE;
+        let buried = 1.0 - smoothstep(0.7, 1.0, (rise + 0.1 * (clumps(world * 3.0 + 17.0) - 0.5)) / max(depth, 0.01));
+        snow = max(snow, buried * smoothstep(0.03, 0.08, depth) * lying);
         colour = mix(colour, SNOW, snow);
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
@@ -453,10 +476,19 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
         let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
-        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot((*input).N, into));
-        let blot = wander(across * 1.7 + foot_up * stem_h * 0.5 + seed) * 0.7 + wander(world * 6.0 + seed) * 0.3;
-        let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
-        let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
+        // Snow the wind drives onto a stem sticks in streaks down its windward side and in its
+        // cracks, on the ledges of the bark's own relief that face up or into the wind (winter
+        // round 12's judge: "plaster-white sleeves"; the UE5 pines' and Red Dead 2's trunks).
+        let windward = smoothstep(-0.1 - 0.3 * low, 0.7, dot((*input).world_normal, into));
+        let relief = (*input).N - (*input).world_normal;
+        let ledge = smoothstep(0.1, 0.4, dot(relief, sky_up) + 0.7 * dot(relief, into));
+        let streak = wander(across * 3.0 + foot_up * stem_h * 0.3 + seed) * 0.75 + wander(world * 7.0 + seed) * 0.25;
+        let streaked = smoothstep(0.42, 0.66, streak + 0.12 * low) * windward * (0.55 + 0.45 * ledge);
+        let caught = ledge * smoothstep(-0.3, 0.4, dot((*input).world_normal, into)) * (0.35 + 0.65 * low);
+        let plaster = max(streaked, caught * 0.85);
+        // At its foot the well's snow fades up into the bark a hand or two, ragged, held
+        // highest in the cracks and on the windward side: not a sleeve.
+        let bank = (1.0 - smoothstep(0.0, 0.2 + 0.15 * windward, stem_h - 0.15 * ledge + 0.15 * (wander(across * 6.0 + seed) - 0.5))) * (0.55 + 0.45 * ledge);
         let stuck = lying * max(plaster, bank);
         colour = mix(colour, SNOW, stuck);
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.

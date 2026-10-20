@@ -71,6 +71,45 @@ fn grass_is_pushed_back_from_a_trunk_by_duff_and_roots() {
 }
 
 #[test]
+fn a_trunk_stands_near_its_foot_and_not_metres_off() {
+    let (_, at) = map_with(&[]);
+    let young = Stand::of(at, at, 2.0, Species::Oak, true, 0.4);
+    let (map, _) = map_with(&[young]);
+    let foot = map.growing(at + Vec2::X * 0.55);
+    let off = map.growing(at + Vec2::X * 4.0);
+    assert!(foot.stands > 0.6, "a tree well lies at its foot: {foot:?}");
+    assert_eq!(off.stands, 0.0, "nothing stands four metres off: {off:?}");
+}
+
+#[test]
+fn a_big_conifers_well_reaches_farther_than_a_saplings() {
+    let (_, at) = map_with(&[]);
+    let sapling = Stand::of(at, at, 0.6, Species::Spruce, true, 0.05);
+    let big = Stand::of(at, at, 4.0, Species::Spruce, false, 0.5);
+    let (small_map, _) = map_with(&[sapling]);
+    let (big_map, _) = map_with(&[big]);
+    // Round the whole ring, so no one lobe of the well's uneven edge decides it.
+    let ring = |map: &Map, r: f32| {
+        (0..12)
+            .map(|i| {
+                let turn = i as f32 * core::f32::consts::TAU / 12.0;
+                map.growing(at + Vec2::new(libm::cosf(turn), libm::sinf(turn)) * r)
+                    .stands
+            })
+            .sum::<f32>()
+            / 12.0
+    };
+    assert!(
+        ring(&big_map, 1.8) > 0.3,
+        "a big spruce's well reaches under its boughs"
+    );
+    assert!(
+        ring(&small_map, 1.8) < 0.05,
+        "a sapling's well is a hand or two round it"
+    );
+}
+
+#[test]
 fn rocks_learn_the_snow_cover_when_it_moves_and_not_for_a_trifle() {
     use bevy::ecs::system::RunSystemOnce;
     let mut world = World::new();

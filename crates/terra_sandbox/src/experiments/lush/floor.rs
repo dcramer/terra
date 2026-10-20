@@ -231,6 +231,8 @@ pub(super) const MEADOW_M: f32 = 70.0;
 const FLOOR_SQUARE_M: f32 = 8.0;
 /// How far round a place the canopy over it is looked for: the widest crown.
 const CROWN_REACH: i32 = 2;
+/// How far a log's or rock's snow well reaches past its edge, metres.
+const LOG_WELL_M: f32 = 0.8;
 /// How many variants of each kind of undergrowth are grown, each its own tint.
 const VARIANTS: u64 = 6;
 
@@ -249,6 +251,27 @@ pub(super) struct Stand {
 }
 
 impl Stand {
+    /// How deep in this tree's well `at` is, 1 at its bark to 0 at the well's edge (winter
+    /// round 12): a crown intercepts the snow over its foot and the trunk shelters it, so the
+    /// well reaches about as far as the thickest boughs, near a canopy wide under a big
+    /// conifer, a hand or two round a sapling, and further one way than another, as the
+    /// boughs hang, as the tree wells round a snowy forest's trunks lie.
+    fn well(&self, at: Vec2) -> f32 {
+        let off = at - self.at;
+        let d = off.length() - self.trunk_m;
+        let held = if self.conifer { 0.45 } else { 0.2 };
+        let reach = (0.25 + 1.2 * self.trunk_m + held * self.crown_m).clamp(0.35, 3.2);
+        if d > reach * 1.4 {
+            return 0.0;
+        }
+        let turn = libm::atan2f(off.y, off.x);
+        let phase = (self.at.x * 0.731 + self.at.y * 1.917).rem_euclid(core::f32::consts::TAU);
+        let lobes = 1.0
+            + 0.22 * libm::sinf(2.0 * turn + phase)
+            + 0.12 * libm::sinf(3.0 * turn + 2.3 * phase);
+        1.0 - smoothstep(0.0, reach * lobes, d)
+    }
+
     /// A tree of a species standing at `at`, its crown's middle at `crown_at` reaching
     /// `crown_m` round it: an oak's crown hides most of the sky under it, a Scots pine's a
     /// little less, a spruce's nearly all; a young tree's less.
@@ -322,6 +345,8 @@ struct Over {
     /// light comes through them (D294).
     leaves: f32,
     bark: f32,
+    /// How deep in a tree well this is, 1 at the bark to 0 at the well's edge (`Stand::well`).
+    well: f32,
 }
 
 impl Crowns {
@@ -334,7 +359,7 @@ impl Crowns {
 
     fn over(&self, at: Vec2) -> Over {
         let (i, j) = square(at, FLOOR_SQUARE_M);
-        let (mut light, mut needles_miss, mut bark) = (1.0f32, 1.0f32, 8.0f32);
+        let (mut light, mut needles_miss, mut bark, mut well) = (1.0f32, 1.0f32, 8.0f32, 0.0f32);
         // Under a broadleaf crown its own leaves fall over the needles.
         let mut leaves_miss = 1.0f32;
         let mut spruce_miss = 1.0f32;
@@ -344,6 +369,7 @@ impl Crowns {
             for dj in -CROWN_REACH..=CROWN_REACH {
                 for stand in self.filed.get(&(i + di, j + dj)).into_iter().flatten() {
                     bark = bark.min(stand.at.distance(at) - stand.trunk_m);
+                    well = well.max(stand.well(at));
                     light *= 1.0 - stand.under(at) * stand.closes;
                     if stand.conifer {
                         // Needles fall a little past the crown.
@@ -368,6 +394,7 @@ impl Crowns {
             spruce: 1.0 - spruce_miss,
             leaves: 1.0 - fallen_miss,
             bark,
+            well,
         }
     }
 }
@@ -422,6 +449,7 @@ struct Here {
     /// How far the nearest bark, the nearest log or rock's edge, and the nearest path's
     /// edge are.
     bark: f32,
+    well: f32,
     lying: f32,
     path: f32,
     /// Damp hollows, where ferns and moss grow best.
@@ -454,6 +482,7 @@ impl Map {
             spruce: over.spruce,
             leaves: over.leaves,
             bark: over.bark,
+            well: over.well,
             lying: self.lying.edge(at),
             path,
             wet: smoothstep(0.35, 0.75, self.noise(at, 61.0, 13.0)),
@@ -546,6 +575,7 @@ impl Map {
             heath_moss: 0.0,
             // Litter heaps against trunks, logs and rocks, its edge wandering (D294).
             heap: 1.0 - smoothstep(0.0, 0.9, here.bark.min(here.lying) + wander * 0.25),
+            stands: here.well.max(1.0 - smoothstep(0.0, LOG_WELL_M, here.lying)),
             // Tall meadow grass in patches where the sun reaches; in the shade, clumps of
             // taller sedge among the short grass, so it is not one height (D293).
             tall: (smoothstep(0.7, 0.95, here.light)

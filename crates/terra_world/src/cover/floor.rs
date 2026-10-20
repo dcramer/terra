@@ -38,10 +38,11 @@ const REPAINT_M: f32 = 32.0;
 struct Floor {
     image: Handle<Image>,
     more: Handle<Image>,
+    stood: Handle<Image>,
     /// The middle of the map now drawn, east and south of the start, and how wide its
     /// texels are.
     middle: Option<(Vec2, f32)>,
-    painting: Option<(Vec2, f32, Task<[Vec<u8>; 2]>)>,
+    painting: Option<(Vec2, f32, Task<[Vec<u8>; 3]>)>,
 }
 
 pub(super) fn plugin(app: &mut App) {
@@ -134,6 +135,7 @@ fn paint(
         commands.insert_resource(Floor {
             image: picture([255, 128, 0, 0]),
             more: picture([0, 0, 0, 0]),
+            stood: picture([0, 0, 0, 0]),
             middle: None,
             painting: None,
         });
@@ -153,16 +155,20 @@ fn paint(
         let (middle, texel) = (*middle, *texel);
         floor.painting = None;
         floor.middle = Some((middle, texel));
-        let [first, second] = pixels;
+        let [first, second, third] = pixels;
         if let Some(mut image) = images.get_mut(&floor.image) {
             image.data = Some(first);
         }
         if let Some(mut image) = images.get_mut(&floor.more) {
             image.data = Some(second);
         }
+        if let Some(mut image) = images.get_mut(&floor.stood) {
+            image.data = Some(third);
+        }
         *map = GroundCoverMap {
             image: Some(floor.image.clone()),
             more: Some(floor.more.clone()),
+            stood: Some(floor.stood.clone()),
             from_world: from_world(&start, middle, texel),
             sows: rules.source.sows(),
         };
@@ -196,6 +202,7 @@ fn paint(
             let near = Built::near(&built, &start, corner + Vec2::splat(size / 2.0), size / 2.0);
             let mut pixels = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
             let mut more = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
+            let mut stood = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
             for b in 0..TEXELS {
                 for a in 0..TEXELS {
                     let at = corner + (Vec2::new(a as f32, b as f32) + 0.5) * texel_m;
@@ -215,9 +222,10 @@ fn paint(
                         byte(growing.shade),
                         byte(growing.trodden),
                     ]);
+                    stood.extend([byte(growing.stands), 0, 0, 0]);
                 }
             }
-            [pixels, more]
+            [pixels, more, stood]
         });
         floor.painting = Some((middle, texel_m, task));
         *changed = false;

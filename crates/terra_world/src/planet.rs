@@ -440,6 +440,9 @@ pub struct GroundExtension {
     #[texture(106)]
     #[sampler(107)]
     cover_more: Option<Handle<Image>>,
+    #[texture(114)]
+    #[sampler(115)]
+    cover_stood: Option<Handle<Image>>,
     /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point
     /// in the world to its place on the maps, whether there are maps, and the leaves map's
     /// layer for the broadleaves whose fallen leaves lie on it, or -1. The maps are painted
@@ -527,6 +530,8 @@ impl LandMap {
 pub struct GroundCoverMap {
     pub image: Option<Handle<Image>>,
     pub more: Option<Handle<Image>>,
+    /// And a third: how near a trunk, log or rock stands, in red (`Growing::stands`).
+    pub stood: Option<Handle<Image>>,
     /// From a point in the world to the map: its x and y are where on the picture, from 0
     /// to 1.
     pub from_world: Mat4,
@@ -678,6 +683,7 @@ impl GroundExtension {
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
             cover_more: Some(cover.more.clone().unwrap_or_default()),
+            cover_stood: Some(cover.stood.clone().unwrap_or_default()),
             climate_from_world: climate.from_world,
             climate_on: climate.ground.is_some() as u32,
             fallen_layer: climate.fallen_layer,

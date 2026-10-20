@@ -92,6 +92,11 @@ var cover_sampler: sampler;
 var cover_more: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var cover_more_sampler: sampler;
+// And a third: how near a trunk, log or rock stands, in red.
+@group(constants::MATERIAL_BIND_GROUP) @binding(114)
+var cover_stood: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(115)
+var cover_stood_sampler: sampler;
 // What the climate leaves round the camera, a 32 m cell a texel (climate.rs): snow's depth in
 // red, its brightest SNOW_FULL_M; the ground's wetness in green; rain falling now in blue;
 // frost in alpha. And each kind's leaves, a layer a kind: how many it has early and late in
@@ -373,6 +378,17 @@ fn hash(p: vec3<f32>) -> f32 {
     return fract((r.x + r.y) * r.z);
 }
 
+// How near a trunk, log or rock stands, 1 against it to 0 two metres off, as the cover's
+// third map says (`Growing::stands`).
+fn stands_at(world: vec3<f32>) -> f32 {
+    if ground.cover_on == 0u {
+        return 0.0;
+    }
+    let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
+    let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
+    return textureSampleLevel(cover_stood, cover_stood_sampler, at, 0.0).r * inside;
+}
+
 // How much of a canopy stands over a place, as the cover map says.
 fn canopy_over(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
@@ -502,6 +518,20 @@ const SNOW_COVERS_M: f32 = 0.06;
 // How level, the normal's dot with up, ground must be for snow to start to lie, and to lie
 // whole: a bank of 50 degrees holds snow; without, banks along the path stood black.
 const SNOW_SLOPE: vec2<f32> = vec2<f32>(0.35, 0.7);
+// A tree well's shade at its deepest, its sky half hidden: cooler and darker, bluest on the
+// side the trunk keeps the sun from (winter round 12).
+const WELL_SHADE: vec3<f32> = vec3<f32>(0.74, 0.82, 0.95);
+const WELL_OCCLUDES: f32 = 0.35;
+// How far a well and a rim tilt the snow, by how the nearness changes across a metre.
+const WELL_LEAN: f32 = 2.2;
+const RIM_LEAN: f32 = 1.1;
+// Wind ripples on open snow: how many a metre, and how far they tilt it (winter round 12).
+const RIPPLE_PER_M: f32 = 3.2;
+const RIPPLE_LEAN: f32 = 0.35;
+// Glints in lying snow: cells this many a metre, and the share of them a crystal turned to
+// flash (winter round 10).
+const GLINT_PER_M: f32 = 65.0;
+const GLINT_SHARE: f32 = 0.04;
 fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
     let lying = depth_m * (1.0 - SNOW_UNDER_CROWNS * under);
     let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
@@ -1594,7 +1624,71 @@ fn fragment(
             noise(world * 0.15 + tangent * 1.5 + 41.0) - noise(world * 0.15 - tangent * 1.5 + 41.0),
             noise(world * 0.15 + bitangent * 1.5 + 41.0) - noise(world * 0.15 - bitangent * 1.5 + 41.0),
         ) * 0.9;
-    let drifted = normalize(geometric + tangent * swell.x + bitangent * swell.y);
+    // The broad swells' hollows hold a cooler shade, the sky over them a little hidden.
+    let hollow = 1.0 - smoothstep(0.3, 0.7, noise(world * 0.15 + 41.0));
+    colour = mix(colour, colour * vec3<f32>(0.9, 0.94, 1.0), hollow * snow * 0.6);
+    // Where the floor lies open, the wind shapes it (winter round 12's judge: "a flat sheet"):
+    // ripples across the wind, a gentle windward face and a steep lee, in patches; and long
+    // sastrugi-like ridges along it, so a low light streaks the open snow. One prevailing way
+    // over a place, as the ground is not told the weather's wind. Faded where a pixel holds a
+    // ripple or more, which would only shimmer, and under the crowns, which still the air.
+    let open = (1.0 - smoothstep(0.2, 0.6, canopy_over(world))) * snow;
+    var ripple = vec2<f32>(0.0);
+    if open > 0.01 {
+        let way = normalize(tangent * 0.8 + bitangent * 0.6);
+        let side = cross(geometric, way);
+        let bend = noise(world * 0.3 + 23.0) * 2.4;
+        let phase = fract(dot(world, way) * RIPPLE_PER_M + bend + 0.6 * noise(world * 1.3 + 5.0));
+        let face = select(-3.0, 1.0, phase < 0.75) * smoothstep(0.0, 0.08, phase) * (1.0 - smoothstep(0.92, 1.0, phase));
+        let patchy = smoothstep(0.35, 0.75, noise(world * 0.22 + 61.0));
+        let seen = 1.0 - smoothstep(0.25, 0.6, length(fwidth(world)) * RIPPLE_PER_M);
+        let q = world + way * dot(world, way) * -0.8 + side * dot(world, side) * 1.5;
+        let ridge = noise(q * 0.9 + side * 0.25 + 77.0) - noise(q * 0.9 - side * 0.25 + 77.0);
+        let r = way * (face * RIPPLE_LEAN * patchy * seen) + side * (ridge * 1.6);
+        ripple = vec2<f32>(dot(r, tangent), dot(r, bitangent)) * open;
+    }
+    // Round a trunk's, log's or rock's foot the snow lies in a well, as far as the crown keeps
+    // the snow off (`Stand::well`, sized to the tree), deepest at the bark and bluest on the
+    // side its trunk keeps the sun from, its edge broken; and banks up in a soft rounded lip
+    // beyond, lit where it faces the light. Its slope from how the nearness changes half a
+    // metre either way: a well leans toward what stands, the lip's outer face away.
+    let stands = stands_at(world) + (noise(world * 1.9 + 31.0) - 0.5) * 0.18;
+    var lean = vec2<f32>(0.0);
+    var well = 0.0;
+    if stands > 0.02 && snow > 0.0 {
+        let toward = vec2<f32>(
+            stands_at(world + tangent * 0.5) - stands_at(world - tangent * 0.5),
+            stands_at(world + bitangent * 0.5) - stands_at(world - bitangent * 0.5),
+        );
+        well = smoothstep(0.3, 1.0, stands);
+        let rim = smoothstep(0.04, 0.2, stands) * (1.0 - smoothstep(0.22, 0.42, stands));
+        lean = toward * (WELL_LEAN * well - RIM_LEAN * rim);
+        var behind = 0.5;
+        if lights.n_directional_lights > 0u && dot(toward, toward) > 1e-6 {
+            let L = lights.directional_lights[0].direction_to_light;
+            let level_toward = normalize(toward.x * tangent + toward.y * bitangent);
+            behind = 0.5 + 0.5 * dot(level_toward, normalize(L - geometric * dot(L, geometric)));
+        }
+        let deep = well * well * (0.6 + 0.5 * behind);
+        colour = mix(colour, colour * WELL_SHADE, clamp(deep, 0.0, 1.0) * snow);
+        colour *= 1.0 + 0.05 * rim * snow;
+        pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - WELL_OCCLUDES * deep * snow);
+    }
+    var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x) + bitangent * (swell.y + lean.y + ripple.y));
+    // Glints: a crystal here and there, a facet a centimetre and a half across turned its own
+    // way, mirror-smooth, so where it turns the sun to the eye it flashes, and in shade or
+    // under an overcast it does not (Bevy's own sun specular and shadow); its sky reflection
+    // kept to the snow's. Faded out where a pixel holds several, which would only shimmer.
+    let cell = floor(world * GLINT_PER_M);
+    let resolved = 1.0 - smoothstep(0.6, 1.4, length(fwidth(world)) * GLINT_PER_M);
+    let glint = step(1.0 - GLINT_SHARE, hash(cell + 0.5)) * resolved * snow * (1.0 - well);
+    if glint > 0.0 {
+        let tilt = vec3<f32>(hash(cell + 1.7), hash(cell + 3.1), hash(cell + 5.3)) - vec3<f32>(0.5);
+        drifted = normalize(mix(drifted, normalize(geometric + tilt * 1.4), glint));
+        pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.06, glint);
+        pbr_input.material.reflectance = mix(pbr_input.material.reflectance, vec3<f32>(1.0), glint);
+        pbr_input.specular_occlusion *= 1.0 - 0.8 * glint;
+    }
     pbr_input.N = normalize(mix(pbr_input.N, drifted, snow));
 }
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
