@@ -264,6 +264,16 @@ const HEARTH_COLUMNS: i32 = 4;
 const COLUMN_WINDOW: f32 = 0.36;
 const COLUMN_OUT: f32 = 0.55;
 const HEARTH_BASE_HOT: f32 = 0.25;
+// A hearth's glow round its flames' core (fire round 23): its radius and centre over its foot
+// in its flames' heights, its card's height over its width, how fast it falls off, the ramp's
+// heat it is coloured by, and its peak as a share of the flame's brightness: at 0.05 and
+// 0.55 it was a ball of orange light as wide as the fire.
+const HEARTH_GLOW_M: f32 = 0.45;
+const HEARTH_GLOW_UP: f32 = 0.32;
+const HEARTH_GLOW_TALL: f32 = 1.2;
+const HEARTH_GLOW_FALL: f32 = 6.0;
+const HEARTH_GLOW_HEAT: f32 = 0.7;
+const HEARTH_GLOW: f32 = 0.012;
 // How much hotter a hearth's brightest coals glow over its dullest, kelvin.
 const COAL_HOT: f32 = 420.0;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
@@ -1365,6 +1375,18 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     }
     // Each column rises and falls with the fire's flicker, each by its own share.
     let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
+    // Its last card the glow round its flames' core: the light the air and the eye scatter
+    // round a bright flame (bloom), small and centred on the hottest part of its body.
+    if j == i32(HEARTH_CARDS) - 1 && !torch {
+        let r = tall * HEARTH_GLOW_M * breathe;
+        let centre = foot + up * (wide * HEARTH_BODY_UP + tall * HEARTH_GLOW_UP);
+        let world = card(centre, up, corner, r * 2.0, r * 2.0 * HEARTH_GLOW_TALL, false, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(0.9, heat, luck, 5.0);
+        out.size = r;
+        return out;
+    }
     if j > 1 + HEARTH_COLUMNS {
         return hearth_tongue(corner, foot, up, east, north, tall, heat, wide, seed, f32(j - 2 - HEARTH_COLUMNS), breathe);
     }
@@ -1603,7 +1625,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     // What it gives, already exposed, and how much of what is behind it it covers.
     var light = vec3(0.0);
     var cover = 0.0;
-    if kind == 0 && life.w > 3.5 {
+    if kind == 0 && life.w > 4.5 {
+        // A hearth's glow (`hearth`): a soft warm ball of light, adding only, brightest at its
+        // middle and gone well inside its card, flickering with the fire.
+        let d = length((uv - 0.5) * 2.0);
+        let ball = exp(-HEARTH_GLOW_FALL * d * d) * (1.0 - smoothstep(0.7, 1.0, d));
+        let r = ramp_at(HEARTH_GLOW_HEAT);
+        light = r.rgb * ball * HEARTH_BRIGHTNESS * HEARTH_GLOW * (0.8 + 0.2 * heat) * clamp(glow, 0.6, 1.4) * soft * on_screen();
+        cover = 0.0;
+    } else if kind == 0 && life.w > 3.5 {
         // A hearth's ground: ash and embers fallen from its logs, glowing under them in spots
         // that brighten as the fire flares, and charred dark out past its stones.
         let p = (uv - vec2(0.5)) * 2.0;
