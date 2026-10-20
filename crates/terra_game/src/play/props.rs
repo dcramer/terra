@@ -130,8 +130,9 @@ pub struct Piece {
     pub material: Handle<StandardMaterial>,
     /// It glows, as a forge's coals do, and so casts no shadow.
     pub glows: bool,
-    /// It has an emissive map, as a campfire's logs' glowing cracks: on a burning prop they
-    /// glow as its fire burns now (`Embers`), on any other they stay dark.
+    /// It has an emissive map, as a campfire's logs' glowing cracks or its painted coals: on
+    /// a burning prop they glow as its fire burns now (`Embers`); on any other a crack map
+    /// stays dark and painted coals glow steadily.
     pub embers: bool,
 }
 
@@ -184,9 +185,10 @@ pub fn plugin(app: &mut App) {
 #[derive(Component)]
 pub(crate) struct Embers;
 
-/// How bright the embers glow at the fire's mean, on their map's colour: as a burning
-/// building's char's cracks (build.wesl, 14), so a campfire's logs glow as a house's beams.
-const EMBER_GLOW: f32 = 14.0;
+/// How bright the embers glow at the fire's mean, on their map's colour. At 14 (a burning
+/// building's char's, build.wesl) a campfire's cracks and coals went past the tonemapper's
+/// shoulder to pink-white; at 2 they read red-orange (fire round 10).
+const EMBER_GLOW: f32 = 2.0;
 /// How far a fire lights the embers of what burns: a prop's own fire stands at its foot.
 const EMBER_REACH_M: f32 = 2.0;
 
@@ -446,7 +448,8 @@ fn make(file: &str, shape: Shape, making: &mut Making) -> Model {
             mesh: making.meshes.add(textured_mesh(part, textures)),
             material: making.materials.add(material),
             glows: glowing,
-            embers: !glowing && textures.emissive.is_some(),
+            // A glowing part's emissive map is its own colour (`textured_material`).
+            embers: glowing || textures.emissive.is_some(),
         });
     }
     for glowing in [false, true] {
@@ -620,22 +623,24 @@ pub fn place(
             Storage(terra_items::Grid::new(w, h)),
         ));
     }
+    let burning = matches!(item.light, Light::Fire);
     for piece in &model.pieces {
-        // A burning prop's modelled flame gives way to the fire drawn in its place.
-        if piece.glows && matches!(item.light, Light::Fire) {
+        // A burning prop's flat-coloured flame gives way to the fire drawn in its place; its
+        // painted glowing parts are its coals and burning faces (a campfire's `Fire` faces
+        // are cut from its logs, fire round 10), which glow with its fire.
+        if piece.glows && burning && !piece.embers {
             continue;
         }
         let drawn = (
             Mesh3d(piece.mesh.clone()),
             MeshMaterial3d(piece.material.clone()),
         );
-        if piece.glows {
-            prop.with_child((drawn, NotShadowCaster));
-        } else if piece.embers && matches!(item.light, Light::Fire) {
-            prop.with_child((drawn, Embers));
-        } else {
-            prop.with_child(drawn);
-        }
+        match (piece.glows, piece.embers && burning) {
+            (true, true) => prop.with_child((drawn, NotShadowCaster, Embers)),
+            (true, false) => prop.with_child((drawn, NotShadowCaster)),
+            (false, true) => prop.with_child((drawn, Embers)),
+            (false, false) => prop.with_child(drawn),
+        };
     }
     match item.light {
         Light::None => {}

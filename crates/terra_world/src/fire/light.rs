@@ -73,8 +73,9 @@ const HEARTH_RANGE_M: f32 = 14.0;
 /// against the night's moonlit ground, drawn some stops over a real night's; the Witcher 3 and
 /// RDR2 pools read to 3-4 m. At 3.2 stops, with `HEARTH_SPREAD`, the 6 m view's ground is
 /// 3.4x the far ground at 2 m and 1.6x at 4 m, its stones 1.7 stops under the flame
-/// (fire round 7, 2026-10-19).
-const HEARTH_NIGHT_STOPS: f32 = 3.2;
+/// (fire round 7, 2026-10-19). With the night's moon at a quarter (fire round 10), 2.2: at
+/// 3.2 the firelit stones and logs went past the tonemapper's shoulder and read salmon-pink.
+const HEARTH_NIGHT_STOPS: f32 = 2.2;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less.

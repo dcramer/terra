@@ -251,7 +251,10 @@ impl Light {
 ///
 /// The sun's light is as it is above the air: the air (`air`) dims and warms it on its
 /// way down, the more the lower the sun, and below the horizon it lights only the sky,
-/// as twilight. There it hands over to the moon, which fades in as the sky darkens.
+/// as twilight. There it hands over to the moon, which fades in as the sky darkens. Deep
+/// night's moon and ambient are a quarter of what they were (fire round 10): the yard's 6 m
+/// night view had its median at sRGB 34 and 28% of it under 20, against RDR2's and Sons of
+/// the Forest's campfire frames' 2-27 and 59-88%; now 10 and 74%.
 fn keys() -> [(f32, Light); 6] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
@@ -260,12 +263,12 @@ fn keys() -> [(f32, Light); 6] {
             -18.0,
             Light {
                 light: moon,
-                illuminance: 700.0,
+                illuminance: 175.0,
                 horizon: v(0.07, 0.09, 0.17),
                 zenith: v(0.015, 0.02, 0.06),
                 glow: v(0.25, 0.3, 0.45),
                 shade: v(0.42, 0.52, 0.9),
-                ambient: 300.0,
+                ambient: 75.0,
                 sky: 1.6,
                 night: 1.0,
                 exposure: 9.0,
