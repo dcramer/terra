@@ -266,14 +266,14 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
 }
 
 #[test]
-fn a_hearth_lights_as_a_blackbody_of_wood_flame_with_no_blue() {
-    // Mitchell Charity's blackbody table (sRGB, CIE 1964 10 degree): 1,800 K #ff7e00 and
-    // 2,000 K #ff8912. A wood fire's light lies between, and a blackbody that cool has next
-    // to no blue: with some, the stones it lit read red-pink, not orange (fire sheet,
-    // 2026-10-19).
+fn a_hearth_lights_wood_flame_orange_with_its_green_kept() {
+    // Mitchell Charity's blackbody table (sRGB, CIE 1964 10 degree): 2,200 K #ff932c and
+    // 2,500 K #ffa148, as the games white-balance firelight. At 1,900 K (#ff8300) its green
+    // was so low that the lit stones went salmon pink by night (fire round 13); its blue stays
+    // under the blackbody's, so they don't go pink the other way.
     let c = HEARTH_LIGHT.to_srgba();
-    let (k1800, k2000) = (126.0 / 255.0, 137.0 / 255.0);
+    let (k2200, k2500) = (147.0 / 255.0, 161.0 / 255.0);
     assert!(c.red > 0.99, "{c:?}");
-    assert!((k1800 - 0.01..=k2000 + 0.01).contains(&c.green), "{c:?}");
-    assert!(c.blue <= 18.0 / 255.0, "{c:?}");
+    assert!((k2200 - 0.01..=k2500 + 0.01).contains(&c.green), "{c:?}");
+    assert!(c.blue < 44.0 / 255.0, "{c:?}");
 }

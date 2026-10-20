@@ -219,7 +219,7 @@ const TORCH_M: f32 = 0.8;
 const GROUND_WIDE: f32 = 0.95;
 const CHAR_COVER: f32 = 0.45;
 // A hearth's cards (crates/terra_world/src/fire.rs HEARTH_FLAME_CARDS): its ground, its coals,
-// two bodies, then its tongues on the logs.
+// its body's columns (`HEARTH_COLUMNS`), then its tongues on the logs.
 const HEARTH_CARDS: f32 = 16.0;
 // Its body's height over its tallest tips (`tall`): standing about as high again over its
 // logs as they are high, as the games' campfires do (research/2026-10-19-fire-step-back.md,
@@ -238,8 +238,18 @@ const TONGUE_LEAN: f32 = 0.3;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
-const HEARTH_ERODE: f32 = 0.45;
-const HEARTH_SEE: f32 = 0.45;
+const HEARTH_ERODE: f32 = 0.6;
+const HEARTH_SEE: f32 = 0.8;
+// The erosion's feather, and its floor: the threshold under the body's whole height, so its
+// faint rim is eaten too and the flame has an edge, not an orange halo round it.
+const HEARTH_FEATHER: f32 = 0.07;
+const HEARTH_ERODE_FLOOR: f32 = 0.12;
+// Its body as a few overlapping columns of flame round the stack, not one sheet behind it:
+// how many, how much of the baked frame's width each shows, and how far out from the middle
+// they stand, over the fire's width (some in front of the logs from any side).
+const HEARTH_COLUMNS: i32 = 4;
+const COLUMN_WINDOW: f32 = 0.36;
+const COLUMN_OUT: f32 = 0.55;
 const HEARTH_BASE_HOT: f32 = 0.15;
 // How much hotter a hearth's brightest coals glow over its dullest, kelvin.
 const COAL_HOT: f32 = 420.0;
@@ -1103,9 +1113,9 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
 // footage and in The Witcher 3, Red Dead Redemption 2 and Kingdom Come: its first card the
 // ground under it, charred and strewn with embers fallen from its logs, lying flat; then the
 // bed of coals glowing among its logs, low and wide; then its body, about as high again over
-// its logs as they are, and a second a little behind it, each at its own moment of the
-// flipbook; then a dozen small tongues licking up the logs (`hearth_tongue`). Its body's tips
-// are eaten away and its upper part let through (round 12's step back: one opaque cone twice
+// its logs as they are, as a few columns of flame round its stack (`HEARTH_COLUMNS`), each at
+// its own moment of the flipbook; then ten small tongues licking up the logs (`hearth_tongue`). Its
+// columns' tips and torn sides are eaten away sharply (round 12's step back: one opaque cone twice
 // the games' height, standing behind the logs as a backdrop, its crown an orange haze).
 fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32) -> Out {
     var out: Out;
@@ -1140,15 +1150,15 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         return out;
     }
     // A baked set's frame is a whole fire, its own tongues alternating with dark (books.rs):
-    // a hearth is that body and a second one a little behind it at its own moment, so it has
+    // a hearth's body is a few columns, each a slice of that frame at its own moment, so it has
     // depth from every side; a torch (under TORCH_M) the one flame of its own set.
     if torch && j > 2 {
         return nowhere();
     }
-    // Each body rises and falls with the fire's flicker, the second more than the first.
+    // Each column rises and falls with the fire's flicker, each by its own share.
     let breathe = 1.0 + (glow - 1.0) * (0.8 + 0.5 * luck);
-    if j > 3 {
-        return hearth_tongue(corner, foot, up, east, north, tall, heat, wide, seed, f32(j - 4), breathe);
+    if j > 1 + HEARTH_COLUMNS {
+        return hearth_tongue(corner, foot, up, east, north, tall, heat, wide, seed, f32(j - 2 - HEARTH_COLUMNS), breathe);
     }
     // A campfire's body stands about as tall as its logs are high, its tallest tips reaching
     // `tall` only now and then (research/2026-10-19-fire-step-back.md, round 12): drawn as
@@ -1158,23 +1168,31 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         flame = tall * breathe;
     }
     var at = foot + up * select(wide * HEARTH_BODY_UP, 0.0, torch);
-    if j == 3 {
-        let a = seed * 6.283 + luck * 2.0;
-        at += (east * cos(a) + north * sin(a)) * wide * 0.18;
-        flame *= 0.8 + 0.1 * luck;
+    var window = 1.0;
+    if !torch {
+        // Its columns spread round the stack by the golden angle, the first in the middle and
+        // tallest, the others out among the logs and lower, their feet on the logs' tops.
+        let k = f32(j - 2);
+        let a = seed * 6.283 + k * 2.39996 + luck * 0.6;
+        let r = select(wide * COLUMN_OUT * (0.6 + 0.4 * fract(luck * 5.1)), wide * 0.04, j == 2);
+        let logs = wide * TEEPEE.x * max(1.0 - r / (wide * TEEPEE.y), 0.0);
+        at = foot + (east * cos(a) + north * sin(a)) * r + up * max(wide * HEARTH_BODY_UP, logs * 0.55);
+        flame *= select(0.62 + 0.2 * luck, 1.0, j == 2);
+        window = COLUMN_WINDOW * select(0.85 + 0.3 * fract(luck * 3.3), 1.15, j == 2);
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
     // tall as the fire's flames over that: a campfire's 1.3 m tips stand 1.3 m, not the 2.2 m
     // a 3.3 m card drew over a seated troll (fire sheet, stage 3).
     let h = flame / select(fire.reach.x, fire.reach.z, torch);
     let lean = wind * 0.05 * flame;
-    let world = card(at - up * h * 0.05 + lean * 0.2, up, corner, h, h, true, 0.0);
+    let world = card(at - up * h * 0.05 + lean * 0.2, up, corner, h * window, h, true, 0.0);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
     // Its first number past 1 (past 2 a torch's), so it is faded only very near what is
     // behind it: a hearth's flames stand among its logs, and faded over a third of a metre
     // they were a thin tongue over bare sticks (lake film r4).
-    out.life = vec4(select(1.5, 2.5, torch), heat, luck, 1.0);
+    // Its last number past 1 by half the share of the frame's width a column shows.
+    out.life = vec4(select(1.5, 2.5, torch), heat, luck, 1.0 + select(window, 0.0, torch) * 0.5);
     out.size = h;
     return out;
 }
@@ -1424,7 +1442,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let body = 1.0 - smoothstep(0.45, 1.0, across);
         let n = fbm(vec2(xx * 5.0 + luck * 11.0, y * 2.2 - time * 2.8));
         let edge = 0.1 + 0.7 * pow(y, 1.3) + 0.4 * age;
-        let shape = smoothstep(edge - 0.1, edge + 0.1, body * (0.45 + 0.8 * n));
+        let shape = smoothstep(edge - 0.05, edge + 0.05, body * (0.45 + 0.8 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         let heat_here = saturate(0.5 + 0.4 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
         let drawn = baked_flame(vec4(heat_here, shape * born, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
@@ -1446,7 +1464,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             brightness = HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat);
         }
         let baked = fire.sets[layer];
-        let x = select(uv.x, 1.0 - uv.x, fract(luck * 7.3) > 0.5);
+        // A campfire's column (`hearth`) shows a slice of the frame's width, round a middle
+        // of its own, so each is a few tongues of the whole fire.
+        let window = (life.w - 1.0) * 2.0;
+        let column = layer == SET_CAMPFIRE && window > 0.02;
+        var across = uv.x;
+        if column {
+            across = 0.5 + (fract(luck * 3.7) - 0.5) * 0.4 + (uv.x - 0.5) * window;
+        }
+        let x = select(across, 1.0 - across, fract(luck * 7.3) > 0.5);
         let rate = baked.x * sqrt(baked.y / max(size, 0.2)) * (0.85 + 0.3 * fract(luck * 17.3));
         let f = fract(time * rate / BOOK_FRAMES + luck * 5.17) * BOOK_FRAMES;
         // Faded out at the frame's foot, sides and top, where a set's smoke leaves the frame:
@@ -1462,6 +1488,13 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             foot = smoothstep(0.0, 0.16, uv.y + 0.12 * (rag - 0.5));
             sides = smoothstep(0.1, 0.32, min(x, 1.0 - x) + 0.2 * (rag - 0.5) + 0.1 * uv.y);
         }
+        if column {
+            // Its own sides torn and narrowing up it, so dark shows between the columns.
+            let half = 0.5 * (1.0 - 0.45 * uv.y);
+            let tear = fbm(vec2(uv.x * 4.0 + luck * 7.0, uv.y * 6.0 - time * 2.0));
+            let off = abs(uv.x - 0.5) / half + 0.3 * (rag - 0.5) + 0.5 * (tear - 0.5);
+            sides = 1.0 - smoothstep(0.5, 1.0, off);
+        }
         let edges = foot * sides * smoothstep(0.0, 0.25, 1.0 - uv.y);
         var texel = flipbook(layer, f, vec2(x, uv.y));
         if layer == SET_CAMPFIRE {
@@ -1473,12 +1506,12 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let n = fbm(vec2(x * 5.0 + luck * 9.0, hy * 2.6 - time * 1.7));
             // Its cover taken over the set's thin median (0.16), so the threshold eats its
             // thin tips and leaves its body: on the raw cover it ate the whole flame.
-            let erode = HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
-            texel.g *= smoothstep(erode, erode + 0.2, saturate(texel.g * 3.0) * (0.5 + n));
+            let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
+            texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
             texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.85, hy));
         }
-        let drawn = baked_flame(texel, brightness, soft * edges);
+        let drawn = baked_flame(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE));
         light = drawn.rgb;
         cover = drawn.a;
     } else if kind == 5 {

@@ -53,12 +53,11 @@ const JET_RANGE_M: f32 = 30.0;
 const JET_LUMENS: f32 = 4.0e6;
 const JET_LIGHT: Color = Color::srgb(1.0, 0.58, 0.22);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
-/// A campfire's, wood's flame about 1,900 K: an orange, not the yellow the grass turned a
-/// timber blaze's (lake film r5), and with no blue, as a blackbody that cool has none
-/// (Mitchell Charity's table, 1,900 K #ff8300): at sRGB 1.0, 0.5, 0.18 its blue put the lit
-/// stones' hue under 25 degrees, red, where with none the campfire's night crop is 38%
-/// orange and 59% red, not 25 and 72 (fire sheet, campfire round 2026-10-19).
-const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.514, 0.0);
+/// A campfire's light: wood flame's orange, warmer than a blaze's, as the games white-balance
+/// firelight (about 2,300 K, Mitchell Charity's table: 2,200 K #ff932c, 2,500 K #ffa148), its
+/// blue under the blackbody's. At 1,900 K (#ff8300) its green was so low that the night's
+/// blue on the lit stones and the tonemapper's shoulder took them salmon pink (fire round 13).
+const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.6, 0.12);
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
 /// (some 0.5 m² of flame at 10^4 cd/m²), so the flame stays the brightest thing by it, its
@@ -78,8 +77,11 @@ const HEARTH_RANGE_M: f32 = 14.0;
 /// With the night's moon back at a half (fire round 11), 3.0: at 2.2 the ground round the
 /// stones had no firelit pool (linear luma 0.058 at 0.8 m in the 2.5 m view), at 3.0 it is
 /// 0.12, warm (R/B 6.4), as the games' pools read (fire round 12). Hung lower (0.35 of its
-/// flames), the ring of stones shadowed the ground outside it: the pool halved.
-const HEARTH_NIGHT_STOPS: f32 = 3.0;
+/// flames), the ring of stones shadowed the ground outside it: the pool halved. With a
+/// greener light, 2.0: at 3.0 the lit stones still passed the shoulder
+/// (sRGB 232,126,88), at 2.0 they are 192,106,61, warm brown (blind review 6/10 against 3,
+/// fire round 13).
+const HEARTH_NIGHT_STOPS: f32 = 2.0;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less.
