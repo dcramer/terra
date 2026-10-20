@@ -12,7 +12,13 @@
 //              Bevy takes it (temperature below 0 toward blue, tint above 0 toward magenta, which
 //              keeps a cold balance off cyan) and saturation as a share. A heavier weather with no
 //              grade of its own takes the last listed one it also is.
-[
+//
+// snow_lying_opens_ev  stops the camera opens with the ground round the eye under snow, scaled
+//              by how much of it is (D419: "Yes, about +0.5 EV"), so snow reads white, not
+//              grey; bare ground, so summer and every weather without snow on the ground, keeps
+//              its exposure.
+(
+named: [
     (name: "overcast", cloud: 0.95),
     (name: "rain", cloud: 0.95, rain_mm_h: 0.5),
     (name: "heavy rain", cloud: 0.95, rain_mm_h: 2.0),
@@ -22,4 +28,6 @@
         grade: Some((temperature: -0.05, tint: 0.05, saturation: 0.9))),
     (name: "heavy snow", cloud: 0.95, snow_mm_h: 1.8),
     (name: "blizzard", cloud: 0.95, snow_mm_h: 1.2, wind_m_s: 9.0),
-]
+],
+snow_lying_opens_ev: 0.5,
+)

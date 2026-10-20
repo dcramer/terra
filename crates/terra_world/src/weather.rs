@@ -259,6 +259,36 @@ pub struct WeatherGrade(pub Grade);
 #[derive(Resource)]
 struct Names(Vec<Named>);
 
+/// `weather.ron`: the named weathers, and how far snow lying round the eye opens the camera.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct WeatherFile {
+    pub named: Vec<Named>,
+    /// Stops the exposure opens with the ground round the eye under snow, scaled by how much
+    /// of it is (D419): a camera's meter reads snow as grey, so an eye on a snowfield opens
+    /// up to keep it white. Ground with no snow on it is not moved.
+    #[serde(default)]
+    pub snow_lying_opens_ev: f32,
+}
+
+impl WeatherFile {
+    pub fn read() -> Self {
+        crate::data::read(Named::FILE)
+    }
+
+    /// Stops the exposure opens for so much of the ground round the eye under snow, 0 to 1.
+    pub fn snow_opens_ev(&self, cover: f32) -> f32 {
+        self.snow_lying_opens_ev * cover.clamp(0.0, 1.0)
+    }
+}
+
+/// Stops the exposure opens now for the snow lying round the eye (D419), eased as the grade is.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct SnowOpens(pub f32);
+
+#[derive(Resource)]
+struct SnowLyingOpens(f32);
+
 /// The grade of the last named weather, in the file's order, that this weather is and that
 /// carries one; neutral when none does.
 pub fn grade_of(names: &[Named], weather: &Weather) -> Grade {
@@ -295,9 +325,12 @@ const FOLLOW: f32 = 0.25;
 const LOOKS_DAYS: i64 = 730;
 
 pub fn plugin(app: &mut App) {
+    let file = WeatherFile::read();
     app.init_resource::<Weather>()
         .init_resource::<WeatherGrade>()
-        .insert_resource(Names(crate::data::read(Named::FILE)))
+        .init_resource::<SnowOpens>()
+        .insert_resource(SnowLyingOpens(file.snow_lying_opens_ev))
+        .insert_resource(Names(file.named))
         .add_systems(PostStartup, pick_day)
         .add_systems(Update, (follow, grade).chain().before(Ticking));
 }
@@ -316,7 +349,7 @@ fn pick_day(
         warn!("--weather {name}: no climate here to find it in");
         return;
     };
-    let named: Vec<Named> = crate::data::read(Named::FILE);
+    let named = WeatherFile::read().named;
     let Some(wanted) = named.iter().find(|w| w.name == name) else {
         let known: Vec<&str> = named.iter().map(|w| w.name.as_str()).collect();
         panic!(
@@ -402,6 +435,11 @@ fn grade(
     names: Res<Names>,
     weather: Res<Weather>,
     mut graded: ResMut<WeatherGrade>,
+    (lying, cover, mut opens): (
+        Res<SnowLyingOpens>,
+        Option<Res<crate::climate::SnowCover>>,
+        ResMut<SnowOpens>,
+    ),
     mut started: Local<bool>,
 ) {
     let wanted = grade_of(&names.0, &weather);
@@ -415,6 +453,15 @@ fn grade(
     if !eased.near(graded.0) {
         graded.0 = eased;
     }
+    let cover = cover.map_or(0.0, |c| c.0.clamp(0.0, 1.0));
+    let wanted = lying.0 * cover;
+    let eased = opens.0 + (wanted - opens.0) * t;
+    let eased = if (eased - wanted).abs() < 1e-4 {
+        wanted
+    } else {
+        eased
+    };
+    opens.set_if_neq(SnowOpens(eased));
 }
 
 #[cfg(test)]
@@ -474,7 +521,7 @@ mod tests {
 
     #[test]
     fn the_weather_file_reads_and_snowfall_is_snow() {
-        let named: Vec<Named> = crate::data::read(Named::FILE);
+        let named = WeatherFile::read().named;
         let snowfall = named.iter().find(|w| w.name == "snowfall").unwrap();
         let mut now = Conditions {
             temperature_c: -4.0,
@@ -498,7 +545,7 @@ mod tests {
     #[test]
     fn only_falling_snow_grades_cold() {
         // The developers chose a cool grade for snow (D419), and no other weather's look moves.
-        let named: Vec<Named> = crate::data::read(Named::FILE);
+        let named = WeatherFile::read().named;
         let of = |cloud: f32, falling_mm_h: f32, snow_share: f32, wind_m_s: f32| {
             grade_of(
                 &named,
@@ -530,5 +577,17 @@ mod tests {
         ] {
             assert_eq!(other, Grade::NEUTRAL);
         }
+    }
+
+    #[test]
+    fn snow_lying_opens_the_exposure_and_bare_ground_does_not() {
+        // The developers, on opening the exposure when snow lies: "Yes, about +0.5 EV" (D419).
+        // Summer and every weather over bare ground keep the exposure they had.
+        let file = WeatherFile::read();
+        assert_eq!(file.snow_opens_ev(0.0), 0.0, "bare ground is not moved");
+        let full = file.snow_opens_ev(1.0);
+        assert!((0.25..=0.75).contains(&full), "about half a stop: {full}");
+        assert!(file.snow_opens_ev(0.5) < full && file.snow_opens_ev(0.5) > 0.0);
+        assert_eq!(file.snow_opens_ev(3.0), full, "no more than all the ground");
     }
 }

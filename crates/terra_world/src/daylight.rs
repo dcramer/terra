@@ -498,11 +498,12 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet, weather, cast): (
+    (eye, planet, weather, cast, snow_opens): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
         Option<Res<crate::weather::Weather>>,
         Option<Res<crate::weather::WeatherGrade>>,
+        Option<Res<crate::weather::SnowOpens>>,
     ),
     mut clear_sky: Local<Option<f32>>,
 ) {
@@ -579,7 +580,9 @@ fn shine(
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
     let level = NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark);
-    let set = open_exposure(light.exposure, open, far_seeing, dark) + under.opens_ev();
+    // Snow lying round the eye opens the camera about half a stop, so it reads white (D419).
+    let snow_opens = snow_opens.map_or(0.0, |s| s.0);
+    let set = open_exposure(light.exposure, open, far_seeing, dark) + under.opens_ev() - snow_opens;
     for mut fog in &mut haze {
         let air_scale = air_scale
             .as_deref()
