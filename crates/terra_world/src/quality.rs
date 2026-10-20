@@ -177,7 +177,7 @@ impl Quality {
 
     /// How far each level of detail reaches, as a share of the distances it is made for:
     /// buildings', trees' and plants' finer details give way sooner. It is the
-    /// `detail::DetailScale` the preset sets (D230).
+    /// `detail::DetailScale` the preset sets (D230); a shot's bias takes the larger, not the product (D428).
     pub fn detail_reach(self) -> f32 {
         match self {
             // Twice as far: The Witcher 3's Ultra+ and Unreal's cinematic view distance

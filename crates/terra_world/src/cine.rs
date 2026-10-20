@@ -792,13 +792,13 @@ fn film(
     }
 }
 
-/// Every level of detail's distances as the preset sets them, times the shot's bias.
+/// Every level of detail's distances as the preset sets them, with the shot's bias.
 fn bias_detail(
     cine: Res<Cine>,
     quality: Res<crate::quality::Quality>,
     mut scale: ResMut<crate::detail::DetailScale>,
 ) {
-    let wanted = quality.detail_reach() * cine.shot.look.detail.max(0.1);
+    let wanted = biased_reach(quality.detail_reach(), cine.shot.look.detail);
     if (scale.0 - wanted).abs() > 1.0e-4 {
         scale.0 = wanted;
     }
@@ -844,3 +844,13 @@ fn hold_exposure(
 
 #[cfg(test)]
 mod tests;
+
+/// A preset's level-of-detail reach with a shot's bias (D428). Two raises do not stack: a
+/// shot asking for 1.35 under ultra's 2.0 gets 2.0, the larger, as Unreal's
+/// `r.ViewDistanceScale` is set by whichever of the scalability group and the cinematic asks
+/// further; multiplied, 2.7 overran the 10 GB card's memory at the settlement's pull-back. A
+/// cut still scales: a lower preset's reach or a shot's bias under 1 multiplies.
+fn biased_reach(reach: f32, bias: f32) -> f32 {
+    let bias = bias.max(0.1);
+    (reach * bias).min(reach.max(bias))
+}

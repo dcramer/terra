@@ -313,3 +313,21 @@ fn a_shot_hides_the_screens_ui() {
     // The panel inherits from its root rather than being hidden itself.
     assert_eq!(seen(panel), Visibility::Inherited);
 }
+
+/// Two raises of the level of detail's reach take the larger; a cut still multiplies (D428).
+#[test]
+fn two_raises_take_the_larger_and_a_cut_still_cuts() {
+    // Ultra's 2.0 with a shot's 1.35: no further than the preset alone.
+    assert_eq!(biased_reach(2.0, 1.35), 2.0);
+    // High's 1.0 with the same shot: the shot's own reach.
+    assert_eq!(biased_reach(1.0, 1.35), 1.35);
+    // A shot reaching further than the preset wins.
+    assert_eq!(biased_reach(1.2, 1.5), 1.5);
+    // A lower preset still cuts the shot's bias, and a bias under 1 still cuts the preset.
+    assert!((biased_reach(0.5, 1.35) - 0.675).abs() < 1.0e-6);
+    assert!((biased_reach(2.0, 0.5) - 1.0).abs() < 1.0e-6);
+    // Unbiased is the preset's own.
+    for reach in [0.5, 0.8, 1.0, 2.0] {
+        assert_eq!(biased_reach(reach, 1.0), reach);
+    }
+}
