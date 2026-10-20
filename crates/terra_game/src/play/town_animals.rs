@@ -3,6 +3,7 @@
 //! playing its walk, run or rest. A kind with no model yet is kept by the town's life but
 //! not drawn.
 
+use super::creatures::Tame;
 use super::tick::{Sim, Smoothed};
 use super::town::{Live, Market};
 use crate::planet::Planet;
@@ -47,7 +48,7 @@ struct Looks {
 
 /// One of the town's animals: which, in the town's life.
 #[derive(Component)]
-#[require(Smoothed)]
+#[require(Smoothed, Tame)]
 pub struct Beast {
     pub index: usize,
 }
@@ -297,5 +298,17 @@ fn animate(
         if let Some(active) = player.animation_mut(wanted) {
             active.set_speed(rate * rising.as_ref().map_or(1.0, |r| r.lapse.pace));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_town_animal_is_tame_so_a_film_sees_it_with_the_wild_ones() {
+        let mut world = World::new();
+        let beast = world.spawn(Beast { index: 0 }).id();
+        assert!(world.entity(beast).contains::<Tame>());
     }
 }

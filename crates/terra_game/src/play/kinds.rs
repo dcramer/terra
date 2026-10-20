@@ -56,6 +56,11 @@ fn one_cell() -> (u8, u8) {
     (1, 1)
 }
 
+/// How fast an arrow leaves a bow at full draw, in metres a second, and how hard it hits:
+/// one for every bow today. Archery shoots by them; a station's screen shows them.
+pub const BOW_SPEED: f32 = 42.0;
+pub const BOW_DAMAGE: f32 = 16.0;
+
 /// What an item does in hand.
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]

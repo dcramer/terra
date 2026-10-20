@@ -13,6 +13,7 @@ use super::controls::Action;
 use super::creatures::Creature;
 use super::intent::Intent;
 use super::inventory::Belongings;
+use super::kinds::{BOW_DAMAGE as FULL_DAMAGE, BOW_SPEED as FULL_SPEED};
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
@@ -29,9 +30,6 @@ use bevy::prelude::*;
 const FULL_DRAW_S: f32 = 0.9;
 /// A draw shorter than this is let go without a shot.
 const LEAST_DRAW_S: f32 = 0.15;
-/// How fast an arrow leaves a full draw, in metres a second, and how hard it hits.
-const FULL_SPEED: f32 = 42.0;
-const FULL_DAMAGE: f32 = 16.0;
 const GRAVITY: f32 = 9.8;
 /// How long an arrow flies before it is given up, and lies where it stuck.
 const FLIES_S: f32 = 6.0;
@@ -40,11 +38,6 @@ const STUCK_S: f32 = 20.0;
 const AIM_M: f32 = 80.0;
 /// How near an arrow has to pass a body to hit it, beyond the body's own size.
 const GRAZE_M: f32 = 0.12;
-
-/// How hard a bow hits and how fast it shoots at full draw, for a station's screen.
-pub fn bow() -> (f32, f32) {
-    (FULL_DAMAGE, FULL_SPEED)
-}
 
 /// How far a player has drawn a bow.
 #[derive(Component, Default)]
@@ -349,7 +342,7 @@ mod tests {
             .tool(items.kind("Spear"))
             .and_then(|tool| tool.strikes())
             .unwrap();
-        let (bow, _) = bow();
+        let bow = FULL_DAMAGE;
         assert!(
             bow < spear && bow > spear * 0.6,
             "a bow is a different way to fight, not a better one"

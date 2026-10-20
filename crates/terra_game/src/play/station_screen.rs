@@ -364,7 +364,7 @@ fn about(items: &Items, made: Made) -> String {
     let said = def.about.clone().unwrap_or_default();
     match &def.tool {
         Some(tool) if tool.shoots.is_some() => {
-            let (damage, speed) = super::archery::bow();
+            let (damage, speed) = (super::kinds::BOW_DAMAGE, super::kinds::BOW_SPEED);
             format!("{said}. Hits for {damage:.0} at a full draw, at {speed:.0} m a second")
         }
         Some(tool) => match tool.strikes() {

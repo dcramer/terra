@@ -10,8 +10,7 @@
 //! picture, as posed, so a hare sitting up and one stretched out running are each measured as
 //! they are.
 
-use super::creatures::Creature;
-use super::town_animals::Beast;
+use super::creatures::{Creature, Tame};
 use super::walker::IsLocalPlayer;
 use super::wildlife::{Asked, Surroundings};
 use crate::planet::MainCamera;
@@ -62,7 +61,7 @@ fn watch(
     player: Query<&GlobalTransform, IsLocalPlayer>,
     animals: Query<
         (Entity, &Name, &GlobalTransform, Option<&Asked>),
-        Or<(With<Creature>, With<Beast>)>,
+        Or<(With<Creature>, With<Tame>)>,
     >,
     children: Query<&Children>,
     meshes: Query<

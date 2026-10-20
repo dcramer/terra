@@ -110,6 +110,11 @@ pub struct Frightful {
     pub within_m: f32,
 }
 
+/// An animal kept by people, as a town's are: no wild `Creature`, minded by its keepers'
+/// days, but an animal all the same to what watches for animals (a film's `sighted`).
+#[derive(Component, Default)]
+pub struct Tame;
+
 #[derive(Component)]
 #[require(Smoothed, Detail)]
 pub struct Creature {
