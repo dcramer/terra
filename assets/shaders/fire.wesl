@@ -897,13 +897,14 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         sun = s.color.rgb * view.exposure * (mix(SOOT_ALBEDO, SOOT_AGED_ALBEDO, smoothstep(0.3, 1.5, b.since_off)) / 3.14159265);
     }
     let across = max(length(dl.xy), 0.25);
-    // Drawn again as the film mask, only the flame's share is wanted, soft: the gas coarse,
-    // in steps twice as long, and no sun; the march's whole cost was paid twice.
+    // Drawn again as the film mask, only the flame's share is wanted: in steps twice as long,
+    // and no sun; the march's whole cost was paid twice. Its gas keeps its detail: marched
+    // coarse, its thin outer lobes, which the fine noise shapes, were missing from the mask, so
+    // they went through the camera's curve and read pale pink (vol8's P2: red-orange-yellow).
     var detail = true;
     var coarse = 1.0;
 @if(FIRE_MASK)
     {
-        detail = false;
         coarse = 2.0;
         sun = vec3(0.0);
     }
