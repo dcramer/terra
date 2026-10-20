@@ -11,9 +11,11 @@
 const CF_HALF: f32 = 0.5;
 const CF_TALL: f32 = 1.5;
 // Light at full temperature, on the ramp's luminance, as `HEARTH_BRIGHTNESS` is for a card.
-const CF_BRIGHT: f32 = 12.0;
+const CF_BRIGHT: f32 = 4.0;
+// How many tongues stand round the stack.
+const CF_TONGUES: f32 = 7.0;
 // Extinction a metre at density 1.
-const CF_K: f32 = 10.0;
+const CF_K: f32 = 14.0;
 const CF_STEPS: i32 = 56;
 // How fast the gas rises, metres a second, and how far the curl field sweeps it.
 const CF_RISE: f32 = 1.5;
@@ -77,17 +79,27 @@ fn cf_gas(l: vec3<f32>, t: f32, seed: f32, tall: f32) -> vec2<f32> {
     }
     // Carried up with the gas and swept by the curl field the more the higher it has risen.
     let swept = l + cf_curl(l * vec3(1.0, 1.0, 0.7) - vec3(0.0, 0.0, t * 0.6), t) * CF_SWIRL * (0.25 + h);
-    let s = vec3(3.4, 3.4, 1.35);
+    let s = vec3(5.0, 5.0, 1.6);
     let o = vec3(seed * 17.0, seed * 31.0, 0.0);
     let n0 = noise3(swept * s + o - vec3(0.0, 0.0, t * CF_RISE * s.z));
     let n1 = noise3(swept * s * 2.03 + o + vec3(17.1, 3.7, 9.2) - vec3(0.0, 0.0, t * CF_RISE * 1.4 * s.z * 2.03));
     let n2 = noise3(swept * s * 4.07 + o + vec3(5.3, 29.4, 1.9) - vec3(0.0, 0.0, t * CF_RISE * 1.9 * s.z * 4.07));
-    let n = (n0 * 0.5714 + n1 * 0.2857 + n2 * 0.1429 - 0.5) * 2.6;
-    // Burning where the noise clears a threshold rising with height: whole over the coals,
-    // separate licks with dark between them higher, only the odd tip near the top.
-    let f = n + 0.75 * pow(1.0 - h, 1.5) * env - 0.3 - 0.75 * h - 0.4 * (1.0 - env);
-    let temp = saturate(f / 0.45) * smoothstep(0.0, 0.06, l.z);
-    return vec2(temp, temp * sqrt(temp));
+    let n = (n0 * 0.5714 + n1 * 0.2857 + n2 * 0.1429 - 0.5) * 4.0;
+    // Separate tongues with dark between them: the stack's round split into CF_TONGUES wedges,
+    // wobbling as they rise, each its own height now, narrowing toward its tip; the noise
+    // breaks each up. Under them a root of flame over the coals, always alight.
+    let wob = (noise3(vec3(l.xy * 2.0, l.z * 1.5 - t * 1.2) + o) - 0.5) * 0.9 + 0.12 * sin(t * 0.7 + seed);
+    let a = atan2(l.y - sway.y, l.x - sway.x) * (CF_TONGUES / 6.2831853) + wob;
+    let k = (i32(floor(a)) % i32(CF_TONGUES) + i32(CF_TONGUES)) % i32(CF_TONGUES);
+    let off = abs(fract(a) - 0.5) * 2.0;
+    let width = mix(0.6, 0.25, h);
+    let tongue = 1.0 - smoothstep(width * 0.55, width, off);
+    let top = 0.42 + 0.42 * noise3(vec3(f32(k) * 7.13 + seed * 13.0, t * 1.6, 0.5));
+    let tip = 1.0 - smoothstep(top - 0.22, top, h);
+    let root = (1.0 - smoothstep(0.12, 0.3, h)) * (1.0 - smoothstep(0.08, 0.22, rho));
+    let f = max(tongue * tip, root) * env * (0.8 + 0.6 * n) + 0.15 * n * (1.0 - h);
+    let temp = smoothstep(0.32, 0.5, f) * smoothstep(0.0, 0.06, l.z);
+    return vec2(temp, temp * sqrt(temp) * sqrt(1.0 - h));
 }
 
 @if(!PREPASS_PIPELINE)
@@ -148,8 +160,10 @@ fn campfire_volume(in: VertexOutput) -> vec4<f32> {
             let st = min(ds, far - s);
             let alpha = 1.0 - exp(-gas.y * CF_K * st);
             // Hottest over the coals, cooling up the tongue and out to its edges.
-            let hue = saturate(gas.x * mix(1.05, 0.7, saturate(l.z / tall)));
-            light += through * alpha * ramp_row(hue, 0.0).rgb;
+            let up_it = saturate(l.z / tall);
+            let hue = mix(0.3, 0.8, gas.x * gas.x) * (1.0 - 0.4 * up_it);
+            // Brightest at its root in the coals.
+            light += through * alpha * ramp_row(hue, 0.0).rgb * (1.5 - up_it);
             through *= 1.0 - alpha;
         }
         s += ds;
@@ -164,6 +178,8 @@ fn campfire_volume(in: VertexOutput) -> vec4<f32> {
     let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
     light = mix(light, mix(light, vec3(luma) * vec3(1.15, 0.95, 0.55), 0.4), day) * mix(1.0, 0.5, day);
     cover *= mix(1.0, 0.3, day);
-    CF_SHARE = cover;
+    // The film mask as the cards write it, by the flame's red (`fragment`'s FIRE_MASK): by
+    // its cover, thin gas went half through the plain tonemapper and read peach.
+    CF_SHARE = min(light.r, 1.0);
     return vec4(light, cover);
 }
