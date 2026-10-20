@@ -753,15 +753,22 @@ const WOODED_VEIL: f32 = 0.62;
 /// measured 0.55 and 0.45, as a photographer opens up for a bright open view a forest's
 /// meter would stop down for.
 const OPEN_EYE_EV: f32 = 1.5;
+/// And by night, on the open moonlit land of a far-seeing world (fire round 24): with the deep
+/// night's moon and ambient at 0.6 (`keys`), tuned for the yard's campfire to sit in a pool of
+/// its own light, the town's street and the mountain lake's shore went to silhouettes (the lake
+/// at mean sRGB 2-5, every pixel under 8%). The small planet's yard, where the campfire's pool
+/// is judged, keeps the key.
+const OPEN_NIGHT_EV: f32 = 1.0;
 
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
 /// that sees far or not, so far into the night: the key in a forest, under trees and by night;
-/// opened up by day in the open air of a far-seeing world.
+/// opened up in the open air of a far-seeing world, by day and less by night.
 fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
     if !far_seeing {
         return key;
     }
-    key - OPEN_EYE_EV * smoothstep(0.55, 0.98, open) * (1.0 - night)
+    let night = night.clamp(0.0, 1.0);
+    key - smoothstep(0.55, 0.98, open) * (OPEN_EYE_EV * (1.0 - night) + OPEN_NIGHT_EV * night)
 }
 
 #[cfg(test)]
@@ -789,12 +796,18 @@ mod tests {
     }
 
     #[test]
-    fn the_eye_opens_up_by_day_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
+    fn the_eye_opens_up_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
         let key = 11.8;
-        // The lush forest's world and any world's forest keep the key; so does the night.
+        // The lush forest's world and any world's forest keep the key, by day and by night.
         assert_eq!(open_exposure(key, 1.0, false, 0.0), key);
+        assert_eq!(open_exposure(key, 1.0, false, 1.0), key);
         assert_eq!(open_exposure(key, 0.2, true, 0.0), key);
-        assert_eq!(open_exposure(key, 1.0, true, 1.0), key);
+        assert_eq!(open_exposure(key, 0.2, true, 1.0), key);
+        // Open moonlit land on a far-seeing world opens up too, less than by day, so a
+        // town's street and a lake's shore at night are not silhouettes.
+        let moonlit = open_exposure(key, 1.0, true, 1.0);
+        assert!(moonlit < key - 0.5, "{moonlit}");
+        assert!(moonlit > open_exposure(key, 1.0, true, 0.0), "{moonlit}");
         // Out on a mountain lake's shore by day, brighter: a lower EV.
         let open = open_exposure(key, 1.0, true, 0.0);
         assert!(open < key - 1.0, "{open}");
