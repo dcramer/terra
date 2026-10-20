@@ -144,6 +144,7 @@ fn show(
     mut fills: Query<(&Fill, &mut Node)>,
     mut whiteout: Query<&mut BackgroundColor, With<Whiteout>>,
     filming: Option<Res<terra_world::cine::Cine>>,
+    options: Option<Res<crate::shell::Options>>,
 ) {
     let (fighter, drawn) = ours.map_or((None, false), |ours| {
         let (fighter, drawn) = ours.into_inner();
@@ -156,11 +157,13 @@ fn show(
             Visibility::Hidden
         }
     };
+    // The bars and controls are for someone playing, never in a film's picture or a fixed
+    // camera's shot, which show the scene alone (`shows_interface`).
+    let playing = filming.is_none() && options.is_none_or(|options| options.shows_interface());
     for mut visible in &mut bars {
-        visible.set_if_neq(shown(drawn));
+        visible.set_if_neq(shown(playing && drawn));
     }
-    // The controls are for someone playing, never in a film's picture.
-    let hint = filming.is_none() && (drawn || time.elapsed_secs() < HINT_S);
+    let hint = playing && (drawn || time.elapsed_secs() < HINT_S);
     for mut visible in &mut panel {
         visible.set_if_neq(shown(hint));
     }
