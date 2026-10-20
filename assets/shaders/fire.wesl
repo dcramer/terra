@@ -263,7 +263,7 @@ const HEARTH_ERODE_FLOOR: f32 = 0.12;
 const HEARTH_COLUMNS: i32 = 4;
 const COLUMN_WINDOW: f32 = 0.36;
 const COLUMN_OUT: f32 = 0.55;
-const HEARTH_BASE_HOT: f32 = 0.15;
+const HEARTH_BASE_HOT: f32 = 0.25;
 // How much hotter a hearth's brightest coals glow over its dullest, kelvin.
 const COAL_HOT: f32 = 420.0;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
@@ -1637,7 +1637,9 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         cover = max(covers(light, alpha), ash);
     } else if kind == 0 && life.w > 1.5 {
         // A tongue licking up the logs (`hearth_tongue`): a teardrop swaying more toward its
-        // tip, its cover a noise rising through it eaten away by a threshold that climbs with
+        // tip, its cover a slice of the campfire's baked flipbook and a noise rising through
+        // it (as a procedural teardrop alone, a smooth pale petal: fire round 23, blind 5/10
+        // against 4), eaten away by a threshold that climbs with
         // height and with the tongue's age, so its tip tears into wisps and pinches off first
         // (alpha erosion, as Unreal's and Unity's fire materials do it); white-hot at its foot
         // over the coals, orange up it, and dimmer and thinner toward its tip.
@@ -1647,12 +1649,23 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let xx = uv.x - 0.5 - wob;
         let w = 0.4 * pow(saturate(1.0 - y), 0.75) * smoothstep(-0.1, 0.25, y);
         let across = abs(xx) / max(w, 1.0e-3);
-        let body = 1.0 - smoothstep(0.45, 1.0, across);
-        let n = fbm(vec2(xx * 5.0 + luck * 11.0, y * 2.2 - time * 2.8));
-        let edge = 0.1 + 0.7 * pow(y, 1.3) + 0.4 * age;
-        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * (0.45 + 0.8 * n));
+        // Its teardrop only an envelope: its silhouette and inner detail a narrow slice of
+        // the campfire's baked flipbook (books.rs) at its own moment, so its sides and tip are
+        // the simulation's torn licks, never a smooth petal (fire round 23).
+        let body = 1.0 - smoothstep(0.3, 1.15, across);
+        let book = fire.sets[SET_CAMPFIRE];
+        let rate = book.x * sqrt(book.y / max(size, 0.2)) * (0.85 + 0.3 * fract(luck * 17.3));
+        let f = fract(time * rate / BOOK_FRAMES + luck * 5.17) * BOOK_FRAMES;
+        let bx = 0.5 + (fract(luck * 3.7) - 0.5) * 0.3 + xx * 0.45;
+        let tex = flipbook(SET_CAMPFIRE, f, vec2(select(bx, 1.0 - bx, fract(luck * 7.3) > 0.5), mix(0.04, 0.75, y)));
+        let n = fbm(vec2(xx * 9.0 + luck * 11.0, y * 4.5 - time * 3.4));
+        let edge = 0.12 + 0.65 * pow(y, 1.2) + 0.4 * age;
+        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
-        let heat_here = saturate(0.5 + 0.4 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
+        // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
+        // its torn tip, as the references' licks are.
+        let root = 1.0 - smoothstep(0.0, 0.18, y);
+        let heat_here = saturate(0.22 + 0.3 * tex.r + 0.45 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) + 0.2 * root - 0.15 * age - 0.2 * smoothstep(0.45, 1.0, y));
         let drawn = baked_flame(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
         light = drawn.rgb;
         cover = drawn.a;
@@ -1709,7 +1722,8 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // A campfire's body torn toward its tips rather than fading to a haze: its cover
             // eaten by a threshold rising with height through a noise climbing up it (alpha
             // erosion); its upper part thinner, so the dark shows through it; its foot over the
-            // coals hotter, white-hot, and its top dimmer (round 12's step back).
+            // coals hotter, white-hot, and its top dimmer and redder (round 12's step back;
+            // round 23's red tips).
             let hy = saturate(uv.y / max(fire.reach.x, 0.1));
             let n = fbm(vec2(x * 5.0 + luck * 9.0, hy * 2.6 - time * 1.7));
             // Its cover taken over the set's thin median (0.16), so the threshold eats its
@@ -1717,7 +1731,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.85, hy));
+            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.3, 1.0, hy)));
         }
         let drawn = baked_flame(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE));
         light = drawn.rgb;
