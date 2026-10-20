@@ -557,19 +557,19 @@ fn shine(
     let weather = weather.as_deref().copied().unwrap_or_default();
     let under = weather.light();
     let deck = crate::weather::deck_cover(weather.cloud);
-    // Above the horizon the light comes from the sun; below it, from the moon.
-    tweaks.sun_direction = if height > -1.0 {
-        sun
-    } else {
-        path.moon((clock.hour * SUN_STEPS).round() / SUN_STEPS)
-    };
-    tweaks.sun_color = colour(light.light);
-    tweaks.sun_illuminance = under.direct
-        * if height > -1.0 {
-            light.illuminance
-        } else {
-            moonlight(height)
-        };
+    let up = eye
+        .iter()
+        .next()
+        .map_or(Vec3::Y, |eye| eye.translation().normalize_or(Vec3::Y));
+    let at = (clock.hour * SUN_STEPS).round() / SUN_STEPS;
+    light_the_world(
+        &mut tweaks,
+        &path,
+        (sun, at, height, up),
+        &light,
+        under,
+        deck,
+    );
     sky.horizon = colour(light.horizon);
     // The haze between the trees (D224): the horizon's colour, greyed toward the green the
     // canopy lets through and dimmed by the shade it hangs in, so trees fade into it with
@@ -698,6 +698,42 @@ fn mist_light(
     }
 }
 
+/// The world's light: above the horizon the sun's, below it the moon's, its beam as thin as
+/// the cloud leaves it, and under a deck the key from high overhead (`keyed`), for the sun
+/// so many degrees up at `height`, seen by an eye whose up is `up`.
+fn light_the_world(
+    tweaks: &mut Tweaks,
+    path: &SkyPath,
+    (sun, at, height, up): (Vec3, f32, f32, Vec3),
+    light: &Light,
+    under: crate::weather::Under,
+    deck: f32,
+) {
+    tweaks.sun_direction = if height > -1.0 { sun } else { path.moon(at) };
+    tweaks.sun_color = Color::srgb(light.light.x, light.light.y, light.light.z);
+    let (direct, toward) = keyed(under, deck, tweaks.sun_direction, up);
+    let beam = if height > -1.0 {
+        light.illuminance
+    } else {
+        moonlight(height)
+    };
+    tweaks.sun_illuminance = direct * beam;
+    tweaks.light_direction = toward;
+}
+
+/// Under a deck the sky is brightest overhead (CIE overcast, `skylight`), and what faces up
+/// takes that light where nothing over it hides it: a crown's top, not its underside. The
+/// irradiance volume's cells are too coarse to see that, so a share of the deck's light comes
+/// as a key from high over the sun's side, and the crowns shade what lies under them.
+/// The world's light as a share of the sun's beam under a clear sky, and the direction it
+/// comes from: the sun's beam, and under a deck a key from high overhead toward the sun's side.
+fn keyed(under: crate::weather::Under, deck: f32, sun: Vec3, up: Vec3) -> (f32, Vec3) {
+    let key = OVERHEAD_KEY * deck * under.total;
+    let direct = under.direct + key;
+    let turned = key / direct.max(1e-6);
+    (direct, sun.lerp(up, turned * KEY_UP).normalize_or(up))
+}
+
 /// Colour fading as the light goes (D302), for the sun so many degrees up.
 /// A weather may carry its own grade over it (`cast`, D419).
 fn fade_colour(
@@ -784,6 +820,12 @@ const OPEN_HAZE_GLOW: f32 = 4.0;
 /// Under a deck, how bright the haze among the trees is beside the open air's: the forest's
 /// own haze is dimmed so by the shade it hangs in (`haze_for`).
 const WOODED_VEIL: f32 = 0.62;
+/// Of the light under a full deck, the share that comes as a key from high overhead. At 0.3
+/// the snowfall's crowns took luma 197 at their 95th percentile (172 without), and the snow
+/// read white over the trunks' darks (weather round 20).
+const OVERHEAD_KEY: f32 = 0.3;
+/// How far toward the zenith that key turns from the sun's direction.
+const KEY_UP: f32 = 0.8;
 
 /// How many stops brighter the eye is set by day out in the open on a world whose views reach
 /// kilometres (D338). The day's exposures were tuned under the lush forest's canopy against

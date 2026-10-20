@@ -340,6 +340,9 @@ pub struct Tweaks {
     pub sun_color: Color,
     #[inspector(min = 0.0, max = 100_000.0)]
     pub sun_illuminance: f32,
+    /// Direction toward where the world's light comes from: the sun's, or under a deck turned
+    /// up toward the sky's brightest part, overhead (`daylight`). Zero for the sun's own.
+    pub light_direction: Vec3,
     pub sea: bool,
     /// Sea level relative to the planet's nominal radius, in metres.
     #[inspector(min = -150.0, max = 150.0)]
@@ -724,6 +727,7 @@ pub fn plugin(app: &mut App) {
         sun_direction: Vec3::new(0.5, 0.75, 0.45),
         sun_color: Color::WHITE,
         sun_illuminance: 12_000.0,
+        light_direction: Vec3::ZERO,
         sea: !yard,
         sea_level_m: SEA_LEVEL_M,
         sea_shallow: Color::srgb(0.1, 0.38, 0.5),
@@ -903,7 +907,10 @@ fn apply_tweaks(
     quality: Res<crate::quality::Quality>,
     land: Option<Res<LandMap>>,
 ) {
-    let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
+    let toward_sun = tweaks
+        .light_direction
+        .try_normalize()
+        .unwrap_or(tweaks.sun_direction.normalize_or(Vec3::Y));
     sun.0.color = tweaks.sun_color;
     sun.0.illuminance = tweaks.sun_illuminance;
     *sun.1 = Transform::from_translation(toward_sun).looking_at(Vec3::ZERO, Vec3::Y);

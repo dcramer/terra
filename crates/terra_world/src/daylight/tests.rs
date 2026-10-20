@@ -258,3 +258,28 @@ fn the_sun_warms_as_it_sinks_toward_a_black_bodys_colour() {
     let twelve = light_at(12.0).light;
     assert!(twelve.y / twelve.x < 0.82, "{twelve}");
 }
+
+#[test]
+fn under_a_deck_the_light_comes_from_high_overhead_and_under_a_clear_sky_from_the_sun() {
+    let up = Vec3::Y;
+    let sun = Vec3::new(1.0, 0.25, 0.0).normalize();
+    // A clear sky: the sun's own beam, from the sun.
+    let clear = crate::weather::Under::sky(0.0, 0.0);
+    let (direct, toward) = keyed(clear, 0.0, sun, up);
+    assert_eq!(direct, clear.direct);
+    assert!(toward.dot(sun) > 0.999);
+    // A full deck in falling snow: the beam is all but gone, yet a key stays, from far higher
+    // than the sun stands, and still on the sun's side.
+    let snowfall = crate::weather::Under::sky(0.95, 0.8);
+    let (direct, toward) = keyed(snowfall, crate::weather::deck_cover(0.95), sun, up);
+    assert!(
+        direct > 3.0 * snowfall.direct,
+        "{direct} {}",
+        snowfall.direct
+    );
+    assert!(
+        direct < snowfall.total,
+        "the key is a share of the deck's light"
+    );
+    assert!(toward.dot(up) > 0.8 && toward.x > 0.0, "{toward}");
+}
