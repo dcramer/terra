@@ -248,7 +248,7 @@ const SNOW: vec3<f32> = vec3<f32>(0.92, 0.94, 0.97);
 // How much of a level spray's load shows seen from below, where only its edge overhangs.
 const BOUGH_UNDERSIDE: f32 = 0.12;
 // How many of the loads' clumps a metre, on a crown's cards.
-const LOAD_CLUMPS: f32 = 1.4;
+const LOAD_CLUMPS: f32 = 0.55;
 // How a green leaf still on through a snowy spell is shaded, darker and cooler: an evergreen's
 // needles read near black-green beside the white (Ghost of Yotei's, Red Dead 2's spruces).
 const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.32, 0.4, 0.45);
@@ -405,6 +405,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * (0.55 + 0.45 * weather.a) * (1.0 - weather.b);
     let sky_up = normalize(world);
     let up = dot((*input).N, sky_up);
+    // A load lies on the bough, not on each needle the normal map draws: by it, the loads
+    // broke into specks (weather round 18).
+    let bough_up = dot((*input).world_normal, sky_up);
     var snow = 0.0;
     if wind.bark < 0.5 {
         // A bough's load, as Unreal's world-normal blend and Ghost of Yotei's snow on trees
@@ -437,11 +440,12 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // Most on what faces straight up and high in the crown, the sides and undersides
         // dark needles in shade (weather round 16's judge: "snow sits on undersides and sides
         // as much as on tops").
-        let load = lying * max(0.3 + 0.7 * high, low) * max(smoothstep(0.45, 0.9, up) * below, level * (1.0 + 0.5 * low));
-        // In clumps half a metre and more across, a bough's load: finer, the white flecked the
-        // needles into a variegated leaf (weather round 8). Gated by the load itself: where
-        // clumps() is 0 the threshold alone is a half, and summer's cards went half white.
-        snow = smoothstep(-0.06, 0.06, load - clumps(world * LOAD_CLUMPS + 5.0)) * smoothstep(0.0, 0.1, load);
+        let load = lying * max(0.3 + 0.7 * high, low) * max(smoothstep(0.45, 0.9, bough_up) * below, level * (1.0 + 0.5 * low));
+        // In clumps a couple of metres across, a bough's load: finer, the white flecked the
+        // needles into a variegated leaf (weather round 8) or specks (round 18). A full load
+        // fills a spray's top whatever the clumps say, a thin one only their gaps. Gated by
+        // the load itself, so summer's cards stay green.
+        snow = smoothstep(-0.05, 0.05, load * 1.8 - 0.1 - 0.6 * clumps(world * LOAD_CLUMPS + 5.0)) * smoothstep(0.0, 0.1, load);
         // And as a shelf along each spray's upper edge, where the card's picture has nothing
         // over it a few centimetres up: the load sits on the boughs, not scattered over their
         // faces (weather round 9's judge: "snow sits scattered across the card face").
