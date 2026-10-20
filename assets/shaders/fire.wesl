@@ -666,10 +666,10 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     var fine = 0.5;
     if detail {
         w = vec3(noise3(p * 0.6 + 4.1), noise3(p * 0.6 + 9.7), noise3(p * 0.6 + 2.3)) - 0.5;
-        fine = noise3(p * 3.1 + w * 1.5 + 13.0) * 0.7 + noise3(p * 7.3 + w * 2.0 + 29.0) * 0.3;
+        fine = noise3(p * 3.7 + w * 1.8 + 13.0) * 0.6 + noise3(p * 9.1 + w * 2.4 + 29.0) * 0.4;
     }
     let e = fbm3(p + w * mix(0.8, 2.2, open));
-    let u = length(q) + (e - 0.5) * mix(0.7, 1.9, open) + (fine - 0.5) * 0.35 * open;
+    let u = length(q) + (e - 0.5) * mix(0.7, 1.9, open) + (fine - 0.5) * 0.55 * open;
     var stream = 1.0 - smoothstep(0.7, 0.95, u);
     // Its tip breaks into blobs.
     let tear = smoothstep(0.5, 1.0, zf) * 0.6;
@@ -681,7 +681,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     // its first metres; cooled at its skin from the start, it read mid-orange from the mouth
     // on (vol3's review). The strands come in as it opens.
     let skin = mix(0.3, 0.75, smoothstep(0.05, 0.5, zf));
-    let hot_s = core * (1.0 - skin * smoothstep(0.1, 0.95, u)) + mix(0.2, 0.45, open) * (e - 0.5) + 0.25 * (fine - 0.5);
+    let hot_s = core * (1.0 - skin * smoothstep(0.1, 0.95, u)) + mix(0.2, 0.45, open) * (e - 0.5) + 0.35 * (fine - 0.5);
     // The fireball where it strikes: lumpy balls rolling up off the face, hot inside and at
     // the contact, cooling up to a cap of soot.
     var ball = 0.0;
@@ -699,11 +699,13 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         var nb = 0.5;
         if detail {
             wb = vec3(noise3(pb * 1.8 + 3.3), noise3(pb * 1.8 + 7.9), noise3(pb * 1.8 + 1.4)) - 0.5;
-            nb = noise3(pb * 6.0 + wb * 2.0) * 0.7 + noise3(pb * 13.0 + wb * 2.5) * 0.3;
+            // Fine swirls, an octave above the lumps: at 6 and 13 a radius the ball read as
+            // smooth soft lobes (round 4's review).
+            nb = noise3(pb * 7.0 + wb * 2.4) * 0.6 + noise3(pb * 17.0 + wb * 3.0) * 0.4;
         }
         let lumps = fbm3(pb * 2.2 + wb * 1.6);
         let d = length(rel) / rb;
-        ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.35)) * b.ball;
+        ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6)) * b.ball;
         // The smoke thins as it spreads, wispier at its edge than in its middle.
         ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
         // Seen down the stream, the ball rolls out from where it strikes in rings of vortices,
@@ -715,13 +717,13 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         let around = rel.xy / max(length(rel.xy), 1.0e-3);
         var rings = 0.5;
         if detail {
-            rings = noise3(vec3(around * 2.4 + wb.xy * 0.9, rp * 3.8 - time * 1.7 + rel.z / rb * 1.4));
+            rings = noise3(vec3(around * 2.4 + wb.xy * 0.9, rp * 3.8 - time * 1.7 + rel.z / rb * 1.4 + (nb - 0.5) * 1.2));
         }
         let roll = smoothstep(0.32, 0.68, rings);
         ball *= mix(0.3, 1.0, roll);
         let middle = 1.0 - smoothstep(0.0, 0.75, rp);
         let high = dot(rel, b.up) / rb;
-        hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.6 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
+        hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.9 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
         hot_b += 0.45 * middle + 0.5 * (roll - 0.5);
         // Once off it burns out from the outside in over a second, to soot.
         hot_b -= 1.1 * saturate(b.since_off / 1.0);
