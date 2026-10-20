@@ -84,7 +84,9 @@ function section(kind: number, R: number): Run[] {
 /** The stones' tones, sRGB 0-255: warm to neutral grey-brown field stone, granite and sandstone
  * greys of mid albedo; paler, they passed the tonemapper's shoulder by firelight and read
  * salmon-pink (fire round 21). */
-export const STONE_TONES: readonly (readonly number[])[] = [[116, 109, 99], [106, 101, 93], [122, 110, 95], [98, 93, 86], [112, 106, 97]];
+// Grey-brown field stones, from blue-grey granite to brown sandstone, darker than the beige
+// of before (fire round 25: identical beige ovals in the firelight).
+export const STONE_TONES: readonly (readonly number[])[] = [[96, 90, 82], [82, 81, 78], [106, 95, 80], [72, 70, 68], [92, 85, 76], [112, 106, 98], [84, 76, 66]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
@@ -122,10 +124,10 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   const toned = (tone: readonly number[], k: number[]) => tone.map((c) => c * (0.9 + (0.2 * (k[0] + k[1] + k[2])) / 3));
   for (let i = 0; i < STONES; i++) {
     const phi = (i / STONES) * 2 * Math.PI + 0.22 * (rnd() - 0.5);
-    const long = 0.105 + 0.045 * rnd();
-    const size: V3 = [long, 0.065 + 0.03 * rnd(), Math.min(0.075 + 0.03 * rnd(), HALF - RING_R - 0.005)];
+    const long = 0.08 + 0.075 * rnd();
+    const size: V3 = [long, 0.048 + 0.06 * rnd(), Math.min(0.06 + 0.05 * rnd(), HALF - RING_R - 0.005)];
     const r = RING_R + 0.02 * (rnd() - 0.5);
-    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.3 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
   }
   return { logs, stones };
 }
@@ -249,11 +251,15 @@ function n3(p: V3, s: number): number {
 
 // A stone's surface in its own frame, for a direction from its middle.
 function stoneLocal(st: Stone, d: V3): V3 {
-  const r = 1 + 0.22 * (n3(mul(d, 1.6), st.seed) - 0.5) + 0.08 * (n3(mul(d, 3.5), st.seed + 5) - 0.5);
+  const r = 1 + 0.34 * (n3(mul(d, 1.3), st.seed) - 0.5) + 0.1 * (n3(mul(d, 3.5), st.seed + 5) - 0.5);
   let p = mul(d, r);
-  // A broken face: what passes a plane is pressed back onto it, its edge rounded.
+  // Broken faces: what passes a plane is pressed back onto it, its edge rounded; a second
+  // across the first, so no two stones share an egg's outline.
   const over = dot(p, st.cut) - 0.62;
   if (over > 0) p = sub(p, mul(st.cut, over * 0.85));
+  const cut2 = norm([-st.cut[2] + 0.6 * (hash(st.seed, 3, 1) - 0.5), 0.2, st.cut[0]]);
+  const over2 = dot(p, cut2) - (0.55 + 0.25 * hash(st.seed, 4, 1));
+  if (over2 > 0) p = sub(p, mul(cut2, over2 * 0.8));
   return [p[0] * st.size[0], p[1] * st.size[1], p[2] * st.size[2]];
 }
 // Its frame in the fire's: its long side round the ring, its depth along the radius.
@@ -560,6 +566,8 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         const top = smooth(0.35, 0.8, d[1]) * smooth(0.5, -0.4, d[2]) * 0.7;
         const soot = Math.min(1, Math.max(inner, top) * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
         c = mix(c, [22, 20, 19], 0.85 * soot);
+        // The smoke's stain over its upper half, broken, darkest toward the fire.
+        c = mix(c, [40, 37, 34], 0.35 * smooth(-0.1, 0.6, d[1]) * smooth(0.6, -0.5, d[2]) * smooth(0.25, 0.65, n3(mul(p, 5), st.seed + 25)));
         c = mix(c, [78, 64, 48], 0.7 * smooth(-0.05, -0.45, d[1]));
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));
