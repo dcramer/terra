@@ -69,7 +69,7 @@ const SMOKE_HOUSE: i32 = 1;
 // grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
 const PUFF_FROM: f32 = 4.0;
 const PUFF_TO: f32 = 34.0;
-const HEARTH_THIN: f32 = 0.6;
+const HEARTH_THIN: f32 = 1.0;
 const PI: f32 = 3.14159265;
 // How long a breath's soot hangs, in seconds.
 const SOOT_S: f32 = 5.5;
@@ -181,7 +181,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
         let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.15 + 1.2 * t);
-        let middle = foot + up * (tall * 0.7 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
+        let middle = foot + up * (tall * 0.55 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
         let size = mix(0.15 + tall * 0.12, 0.9 + tall * 0.4, sqrt(t)) * (0.75 + 0.5 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
@@ -347,7 +347,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         life = smoothstep(0.03, 0.2, t) * pow(1.0 - t, 1.3) * mix(0.6, 0.4, t);
     }
     if hearth {
-        life = smoothstep(0.03, 0.14, t) * pow(1.0 - t, 2.2) * HEARTH_THIN;
+        life = smoothstep(0.012, 0.07, t) * pow(1.0 - t, 1.5) * HEARTH_THIN;
     }
     let p = abs(in.uv - vec2(0.5));
     let window = 1.0 - smoothstep(0.42, 0.5, max(p.x, p.y));
@@ -375,7 +375,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         albedo = mix(vec3(0.03, 0.019, 0.012), vec3(0.1, 0.07, 0.05), smoothstep(0.2, 1.0, t));
     }
     if hearth {
-        albedo = mix(vec3(0.08, 0.082, 0.088), vec3(0.3, 0.31, 0.33), smoothstep(0.05, 0.6, t));
+        albedo = mix(vec3(0.14, 0.14, 0.145), vec3(0.42, 0.42, 0.43), smoothstep(0.05, 0.5, t));
     }
     var light = vec3(0.0);
     // The sun (and moon), through the atmosphere and the shadows, as Bevy lights a surface
