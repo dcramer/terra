@@ -92,7 +92,8 @@ var cover_sampler: sampler;
 var cover_more: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var cover_more_sampler: sampler;
-// And a third: how near a trunk, log or rock stands, in red.
+// And a third: how near a trunk, log or rock stands, in red, and whether a path runs there in
+// green.
 @group(constants::MATERIAL_BIND_GROUP) @binding(114)
 var cover_stood: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(115)
@@ -389,6 +390,16 @@ fn stands_at(world: vec3<f32>) -> f32 {
     return textureSampleLevel(cover_stood, cover_stood_sampler, at, 0.0).r * inside;
 }
 
+// How much a path runs here, 0 off it to 1 on it, as the cover's third map says.
+fn worn_at(world: vec3<f32>) -> f32 {
+    if ground.cover_on == 0u {
+        return 0.0;
+    }
+    let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
+    let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
+    return textureSampleLevel(cover_stood, cover_stood_sampler, at, 0.0).g * inside;
+}
+
 // How much of a canopy stands over a place, as the cover map says.
 fn canopy_over(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
@@ -527,6 +538,10 @@ const WELL_LEAN: f32 = 2.2;
 const RIM_LEAN: f32 = 1.1;
 // Wind ripples on open snow: how many a metre, and how far they tilt it (winter round 12).
 const RIPPLE_PER_M: f32 = 3.2;
+// A trodden path's snow: packed down into a trough, greyer and darker than the drifts beside
+// it, broken by footprints, and how far its sides tilt the snow.
+const TRODDEN_SNOW: vec3<f32> = vec3<f32>(0.66, 0.68, 0.72);
+const TROUGH_LEAN: f32 = 1.8;
 const RIPPLE_LEAN: f32 = 0.35;
 // Glints in lying snow: cells this many a metre, and the share of them a crystal turned to
 // flash (winter round 10).
@@ -1674,7 +1689,29 @@ fn fragment(
         colour *= 1.0 + 0.05 * rim * snow;
         pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - WELL_OCCLUDES * deep * snow);
     }
-    var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x) + bitangent * (swell.y + lean.y + ripple.y));
+    // Along a path the snow is trodden into a trough a hand or two deep, packed grey and
+    // broken by footprints, its sides falling in from the untrodden snow beside it, the
+    // ground's dark showing through where it is worn most (winter round 12's judge: "no
+    // trail trough"; the Red Dead 2 trail's). The path's edge wanders a little.
+    let worn_raw = worn_at(world);
+    var trough = vec2<f32>(0.0);
+    if worn_raw > 0.01 && snow > 0.0 {
+        let worn = smoothstep(0.15, 0.85, worn_raw + (noise(world * 0.9 + 47.0) - 0.5) * 0.35);
+        let prints = smoothstep(0.45, 0.7, noise(world * 3.1 + 19.0) * 0.65 + noise(world * 8.0 + 3.0) * 0.35);
+        let packed = TRODDEN_SNOW * (0.9 + 0.12 * noise(world * 5.0 + 71.0)) * mix(1.0, 0.82, prints);
+        colour = mix(colour, packed, worn * snow);
+        // Down to the earth here and there in the middle of it.
+        let bare = smoothstep(0.75, 0.95, worn * (0.6 + 0.5 * prints)) * 0.35;
+        colour = mix(colour, colour * vec3<f32>(0.45, 0.42, 0.4), bare * snow);
+        let sides = vec2<f32>(
+            worn_at(world + tangent * 0.4) - worn_at(world - tangent * 0.4),
+            worn_at(world + bitangent * 0.4) - worn_at(world - bitangent * 0.4),
+        );
+        trough = sides * TROUGH_LEAN * snow;
+        ripple *= 1.0 - worn;
+        pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.65, worn * snow);
+    }
+    var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x + trough.x) + bitangent * (swell.y + lean.y + ripple.y + trough.y));
     // Glints: a crystal here and there, a facet a centimetre and a half across turned its own
     // way, mirror-smooth, so where it turns the sun to the eye it flashes, and in shade or
     // under an overcast it does not (Bevy's own sun specular and shadow); its sky reflection

@@ -222,7 +222,8 @@ fn paint(
                         byte(growing.shade),
                         byte(growing.trodden),
                     ]);
-                    stood.extend([byte(growing.stands), 0, 0, 0]);
+                    // And whether a path runs there, where snow lies trodden in a trough.
+                    stood.extend([byte(growing.stands), byte(growing.path as u8 as f32), 0, 0]);
                 }
             }
             [pixels, more, stood]
