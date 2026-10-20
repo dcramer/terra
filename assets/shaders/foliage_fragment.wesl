@@ -245,6 +245,8 @@ var climate_leaves_sampler: sampler;
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
 const SNOW: vec3<f32> = vec3<f32>(0.92, 0.94, 0.97);
+// A bough's load where it faces up to the sky.
+const SNOW_TOP: vec3<f32> = vec3<f32>(1.0, 0.95, 0.86);
 // How much of a level spray's load shows seen from below, where only its edge overhangs.
 const BOUGH_UNDERSIDE: f32 = 0.12;
 // How many of the loads' clumps a metre, on a crown's cards.
@@ -459,7 +461,11 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let depth = weather.r * SNOW_FULL_M * UNDER_SNOW_SHARE;
         let buried = 1.0 - smoothstep(0.7, 1.0, (rise + 0.1 * (clumps(world * 3.0 + 17.0) - 0.5)) / max(depth, 0.01));
         snow = max(snow, buried * smoothstep(0.03, 0.08, depth) * lying);
-        colour = mix(colour, SNOW, snow);
+        // A load's top, turned up to the deck, is lit by the bright sky overhead and reads
+        // near white beside the blue of what faces out or down (Horizon Forbidden West's
+        // snowfall); by the bough's own facing and the spray's, whichever turns more up.
+        let facing = smoothstep(0.2, 0.8, max(bough_up, face_up));
+        colour = mix(colour, mix(SNOW, SNOW_TOP, facing), snow);
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
         // A log's or limb's upper face carries a cap with an edge, as snow has a thickness:
