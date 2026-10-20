@@ -259,7 +259,8 @@ impl Light {
 /// lake's shore and hills to silhouettes (fire round 11). At 0.6 of that (fire round 23), with
 /// the campfire's light two and a half stops up by night, the yard's field out of its reach is
 /// half as bright (sRGB 14 against 26) and the fire sits in a pool of its own light (blind
-/// 5.5/10 against 4.5).
+/// 5.5/10 against 4.5). Its ambient at a third (fire round 25), that field is sRGB 4.4, not 14:
+/// the sky lit the grass to the frame's edge (blind 6/10 against 5).
 fn keys() -> [(f32, Light); 6] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
@@ -273,7 +274,7 @@ fn keys() -> [(f32, Light); 6] {
                 zenith: v(0.015, 0.02, 0.06),
                 glow: v(0.25, 0.3, 0.45),
                 shade: v(0.42, 0.52, 0.9),
-                ambient: 90.0,
+                ambient: 30.0,
                 sky: 1.6,
                 night: 1.0,
                 exposure: 9.0,
@@ -757,8 +758,9 @@ const OPEN_EYE_EV: f32 = 1.5;
 /// night's moon and ambient at 0.6 (`keys`), tuned for the yard's campfire to sit in a pool of
 /// its own light, the town's street and the mountain lake's shore went to silhouettes (the lake
 /// at mean sRGB 2-5, every pixel under 8%). The small planet's yard, where the campfire's pool
-/// is judged, keeps the key.
-const OPEN_NIGHT_EV: f32 = 1.0;
+/// is judged, keeps the key. With the ambient at a third (round 25), 1.45, under the day's: at
+/// 1.6 the town's street was mean sRGB 14, 84% under 8%, against 18/69%, the lake 5.8 v 4.4.
+const OPEN_NIGHT_EV: f32 = 1.45;
 
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
 /// that sees far or not, so far into the night: the key in a forest, under trees and by night;
