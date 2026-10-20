@@ -412,10 +412,14 @@ fn breath_ramp(h: f32) -> vec3<f32> {
 fn breath_eroded(heat: f32, body: f32, smoke: f32, keep: f32, luck: f32, uv: vec2<f32>) -> vec4<f32> {
     let n = noise(uv * 11.0 + vec2(luck * 31.0, luck * 17.0));
     let m = noise(uv * 4.0 - vec2(luck * 13.0, luck * 29.0));
-    let e = saturate(1.0 - keep) * 0.85 + 0.04;
+    // Wholly gone as the last of it goes: at 0.89 the threshold left a card's densest body,
+    // so a fireball's puffs no longer fed rose on over the wall as flat salmon blobs after the
+    // breath stopped (breath r31's review).
+    let out = 1.0 - smoothstep(0.0, 0.15, keep);
+    let e = saturate(1.0 - keep) * 0.85 + 0.04 + 0.3 * out;
     let d = body + 0.18 * (n - 0.5);
     let flame = smoothstep(e, e + 0.04, d);
-    let sm = smoothstep(e * 0.8, e * 0.8 + 0.3, smoke) * 0.9;
+    let sm = smoothstep(e * 0.8, e * 0.8 + 0.3, smoke) * 0.9 * (1.0 - out);
     // Cooler toward the eroding rim and as it burns out, but a flame's rim is red, never
     // brown: hard-edged and dark at the rim, every puff was outlined as a cartoon (r30/a).
     let h = heat * mix(0.8, 1.0, smoothstep(e, e + 0.35, d)) * mix(0.75, 1.0, saturate(keep)) + 0.22 * (m - 0.5);
