@@ -69,11 +69,14 @@ const SMOKE_HOUSE: i32 = 1;
 // grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
 const PUFF_FROM: f32 = 4.0;
 const PUFF_TO: f32 = 34.0;
-const HEARTH_THIN: f32 = 0.4;
+const HEARTH_THIN: f32 = 0.32;
 // A hearth's baked puff's alpha opened out (to this power) and mixed so far with a soft round
 // fall-off over its card, so each puff's edge reaches the next ones' and the wisp is one
 // thread: the bake's own alpha is a small ball in its card, and the puffs read as beads with
-// sky between them although the cards overlap (fire round 22).
+// sky between them although the cards overlap (fire round 22). Higher up it frays: the soft
+// fall-off gives way to the bake's own broken alpha, opened less (to 1.25), so the thread breaks
+// into wisps as it climbs, thinner (0.32 against 0.4), narrower and fading sooner (fire round
+// 24: blind 5.5/10 against 5, the old column a dense tan tube to the top of the frame).
 const HEARTH_OPEN: f32 = 0.6;
 const HEARTH_SOFT: f32 = 0.3;
 // How many times a hearth's wisp gives back the sun and sky its single-scattering bake does.
@@ -190,7 +193,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         let north = cross(east, up);
         let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.15 + 1.2 * t);
         let middle = foot + up * (tall * 0.55 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
-        let size = mix(0.15 + tall * 0.12, 0.9 + tall * 0.4, sqrt(t)) * (0.9 + 0.2 * luck);
+        let size = mix(0.15 + tall * 0.12, 0.65 + tall * 0.3, sqrt(t)) * (0.9 + 0.2 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
         if dot(right, right) < 1.0e-6 {
@@ -355,14 +358,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         life = smoothstep(0.03, 0.2, t) * pow(1.0 - t, 1.3) * mix(0.6, 0.4, t);
     }
     if hearth {
-        life = smoothstep(0.012, 0.07, t) * pow(1.0 - t, 1.5) * HEARTH_THIN;
+        life = smoothstep(0.012, 0.07, t) * pow(1.0 - t, 2.4) * HEARTH_THIN;
     }
     let p = abs(in.uv - vec2(0.5));
     let window = 1.0 - smoothstep(0.42, 0.5, max(p.x, p.y));
     var cover = near.a;
     if hearth {
         let r = (in.uv - vec2(0.5)) * 2.0;
-        cover = mix(pow(near.a, HEARTH_OPEN), exp(-3.0 * dot(r, r)), HEARTH_SOFT);
+        let wisp = smoothstep(0.08, 0.55, t);
+        cover = mix(pow(near.a, mix(HEARTH_OPEN, 1.25, wisp)), exp(-3.0 * dot(r, r)), HEARTH_SOFT * (1.0 - wisp));
     }
     var alpha = cover * life * window;
     // Faded in over its last metre and a half in front of what is behind it.
@@ -443,7 +447,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let r = (*lamp).position_radius.w;
         let e = (*lamp).color_inverse_square_range.rgb * lighting::getRangeFalloff(d2, (*lamp).color_inverse_square_range.w) / max(d2, max(r * r, 1.0e-4));
         let L = to * inverseSqrt(max(d2, 1.0e-8));
-        fire_light += e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
+        // A hearth's light reaches only its smoke's first metre (`t` 0.08-0.22 of its five
+        // seconds): its fill hangs 1.6 flame heights up, in the smoke, and lit the column
+        // orange to the top (fire round 24).
+        let warm_reach = select(1.0, 1.0 - smoothstep(0.08, 0.22, t), hearth);
+        fire_light += warm_reach * e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
     }
     // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.
     light += (2.0 / 3.0) * (near_m.r * sky_from(T) + far_m.r * sky_from(-T)
