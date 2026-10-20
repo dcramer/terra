@@ -65,11 +65,12 @@ const ENTRY: &str = "fn tone_mapping(in: vec4<f32>, in_color_grading: ColorGradi
 /// (254, 233, 141); more and its middle loses its orange.
 pub(super) const CROSSTALK: f32 = 0.02;
 
-/// How far under 1 the alpha goes where a marched breath's light falls on a surface near the
-/// face it strikes (`fire.wesl`, `breath_lit`): its share, so little that a flame's mask past
-/// 1 loses nothing by it, and only in a band just under 1, so a sky's or anything's alpha of
-/// 0 is not counted firelit. As a campfire's stones once were (453a6321): KhronosPbrNeutral
-/// mixed the strike's orange on the wall toward white and it read salmon (vol6's C).
+/// How far under 1 the alpha goes where a fire's light falls on a surface (`fire.wesl`'s
+/// `lit_mask`, its one writer): a hearth's stones, logs and ground within 1.3 m of it
+/// (453a6321) and the wall and ground a marched breath strikes (957c0c79). Its share, so
+/// little that a flame's mask past 1 loses nothing by it, and only in a band just under 1, so
+/// a sky's or anything's alpha of 0 is not counted firelit. KhronosPbrNeutral mixed their red
+/// toward white past its shoulder and they read salmon (fire round 27, vol6's C).
 pub(super) const LIT_SHARE: f32 = 0.05;
 
 /// Where Bevy keeps its depth of field's shader.
@@ -302,19 +303,24 @@ mod tests {
     }
 
     #[test]
-    fn a_breath_lit_wall_stays_orange_where_the_camera_mixes_it_toward_white() {
-        // A wall's face by the strike before the tonemapper: its red twice the shoulder,
-        // little green, almost no blue (the strike light's orange on grey stone).
-        let wall = Vec3::new(2.0, 0.6, 0.1);
-        let pale = neutral(wall).map(srgb);
-        let lit = lit_neutral(wall).map(srgb);
-        // The camera's mixes white in: its blue past 0.4 of its red.
-        assert!(pale.z / pale.x > 0.4, "{pale}");
-        // Through its shoulder a channel at a time, it stays orange and as bright.
-        assert!(
-            lit.z / lit.x < 0.35 && lit.x >= pale.x - 1.0,
-            "{lit} against {pale}"
-        );
+    fn a_firelit_surface_stays_orange_where_the_camera_mixes_it_toward_white() {
+        // Before the tonemapper, red twice the shoulder, little green, almost no blue: a
+        // campfire's stone face nearest its flames, and a wall's face by a breath's strike.
+        for (what, surface) in [
+            ("stone", Vec3::new(2.0, 0.42, 0.08)),
+            ("wall", Vec3::new(2.0, 0.6, 0.1)),
+        ] {
+            let pale = neutral(surface).map(srgb);
+            let lit = lit_neutral(surface).map(srgb);
+            // The camera's mixes white in: its blue past 0.4 of its red.
+            assert!(pale.z / pale.x > 0.4, "{what}: {pale}");
+            // Through its shoulder a channel at a time, it stays orange, its green kept, and
+            // as bright.
+            assert!(
+                lit.z / lit.x < 0.35 && lit.y > pale.y && lit.x >= pale.x - 1.0,
+                "{what}: {lit} against {pale}"
+            );
+        }
         // Under the shoulder, the camera's own curve, so the lit mask's edge never shows.
         for c in [
             Vec3::new(0.5, 0.3, 0.1),
@@ -329,9 +335,22 @@ mod tests {
     }
 
     #[test]
-    fn the_breaths_lit_mask_writes_the_share_the_tonemapper_reads() {
+    fn every_firelit_surface_writes_the_share_the_tonemapper_reads() {
         let shader = include_str!("../../../../assets/shaders/fire.wesl");
-        assert!(shader.contains(&format!("-{LIT_SHARE:?} * lit")));
+        // One writer, at the share the film reads.
+        assert!(shader.contains(&format!("const LIT_SHARE: f32 = {LIT_SHARE:?};")));
+        assert!(shader.contains("return -LIT_SHARE * saturate(lit);"));
+        // A hearth's lit card and a marched breath both write through it: a stale copy of the
+        // shader that drops either one's (b743f619 dropped the hearth's) fails here.
+        let fragment = &shader[shader.rfind("fn fragment(").unwrap()..];
+        let hearth = fragment.contains("out.color = vec4(0.0, 0.0, 0.0, lit_mask(lit));");
+        let breath = fragment.contains("out.color = vec4(0.0, 0.0, 0.0, flame + lit_mask(lit));");
+        assert!(hearth && breath, "hearth {hearth}, breath {breath}");
+        // The hearth's card that carries it, drawn in its free card's place (j 1).
+        assert!(
+            shader.contains("out.life = vec4(0.0, heat, luck, 6.0);")
+                && fragment.contains("in.uv_b.x > 5.5 && in.uv_b.x < 6.5")
+        );
     }
 
     #[test]
