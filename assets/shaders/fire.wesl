@@ -784,6 +784,15 @@ var<private> FLAME_SHARE: f32 = 0.0;
 // Where the march's gas first hid half of what is behind it, as a depth, written for what
 // reads the depth after it (`MARCHED_DEPTH`'s `fragment`).
 var<private> BREATH_DEPTH: f32 = 0.0;
+// How much the surface behind the pixel is lit by the breath near the face it strikes, for the
+// film mask's lit share (film.rs `LIT_SHARE`): the strike's orange on the wall and ground past
+// the camera's shoulder went salmon there (vol6's C), so it takes the shoulder a channel at a
+// time, as a campfire's stones once did (453a6321). Within BREATH_LIT_M of the stream from a
+// metre out of the jaw to the face, full to BREATH_LIT_FULL_M; below the shoulder the camera's
+// own curve, so the edge never shows.
+var<private> BREATH_LIT: f32 = 0.0;
+const BREATH_LIT_M: f32 = 6.0;
+const BREATH_LIT_FULL_M: f32 = 4.0;
 // The volume's flame as bright as a hearth's (`HEARTH_BRIGHTNESS`) took it a pale yellow-white
 // blob through the film; at 12 it took colour (the volume note).
 const VOLUME_BRIGHTNESS: f32 = 12.0;
@@ -846,6 +855,16 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         BREATH_DEPTH = prepass_depth(in.position, 0u);
         let scene = depth_ndc_to_view_z(BREATH_DEPTH);
         far = min(far, far * scene / min(here, -1.0e-4));
+@if(FIRE_MASK)
+        {
+            if BREATH_DEPTH > 0.0 && scene > here {
+                let f = face_of(b);
+                let p = eye + dir * far - b.mouth;
+                let along = clamp(dot(p, b.way), 1.0, max(f.along, 1.0));
+                let d = length(p - b.way * along);
+                BREATH_LIT = 1.0 - smoothstep(BREATH_LIT_FULL_M, BREATH_LIT_M, d);
+            }
+        }
     }
     let o = eye - b.mouth;
     let ol = vec3(dot(o, b.lift), dot(o, b.side), dot(o, b.way));
@@ -856,6 +875,10 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     let t1 = (box[1] - ol) * inv;
     let near = max(max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z)), 0.0);
     if near >= far {
+        // No gas before the surface, which may still be lit by it (the mask's `BREATH_LIT`).
+        if BREATH_LIT > 0.0 {
+            return vec4(0.0);
+        }
         discard;
     }
     // The sun in the jet's frame, and what its light gives a white surface facing it, exposed
@@ -944,6 +967,9 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     }
     let cover = 1.0 - through;
     if cover < 0.002 {
+        if BREATH_LIT > 0.0 {
+            return vec4(0.0);
+        }
         discard;
     }
     // The flame's share of the pixel's light, not of its cover: thin hot gas covers little
@@ -2131,7 +2157,11 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         // share of the pixel, so the tonemapper takes it through the film as a hearth's.
 @if(FIRE_MASK)
         {
-            out.color = vec4(0.0, 0.0, 0.0, saturate(FLAME_SHARE));
+            // And just under 1, the lit share of the surface behind where the flame is thin
+            // (`BREATH_LIT`): what the film reads as firelit.
+            let flame = saturate(FLAME_SHARE);
+            let lit = BREATH_LIT * (1.0 - smoothstep(0.0, 0.1, flame));
+            out.color = vec4(0.0, 0.0, 0.0, flame + -0.05 * lit);
         }
         return out;
     }

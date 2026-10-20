@@ -300,3 +300,33 @@ fn a_hearth_lights_wood_flame_orange_with_its_green_kept() {
     assert!((k2200 - 0.01..=k2700 + 0.01).contains(&c.green), "{c:?}");
     assert!(c.blue < 44.0 / 255.0, "{c:?}");
 }
+
+#[test]
+fn a_marched_fireball_lights_the_face_it_strikes_from_in_front_once_it_has_struck() {
+    use crate::fire::{BreathTier, Jet};
+    let from = Vec3::new(0.0, 2000.0, 0.0);
+    let jet = Jet {
+        from,
+        way: Vec3::Z,
+        reach: 10.0,
+        spread: 0.2,
+        on: true,
+        face: 10.0,
+        normal: -Vec3::Z,
+    };
+    let blazes = Blazes {
+        jets: vec![jet],
+        ..default()
+    };
+    // On at 0 s, its front strikes 10 m out at 10 / 24 s.
+    let state = [(true, 0.0, 0.0)];
+    assert!(strikes(&blazes, &state, 0.3, BreathTier::Marched).is_empty());
+    assert!(strikes(&blazes, &state, 2.0, BreathTier::Cards).is_empty());
+    let lit = strikes(&blazes, &state, 2.0, BreathTier::Marched);
+    assert_eq!(lit.len(), 1);
+    // In front of the face, on the breather's side, above the stream: never behind the stone.
+    assert!(lit[0].at.z < 10.0 - 1.0, "{:?}", lit[0].at);
+    assert!(lit[0].at.y > from.y, "{:?}", lit[0].at);
+    // Off, its fireball's light goes with it.
+    assert!(strikes(&blazes, &[(false, 1.0, 0.0)], 2.0, BreathTier::Marched).is_empty());
+}

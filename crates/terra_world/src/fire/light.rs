@@ -309,6 +309,56 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
         .collect()
 }
 
+/// A marched breath's fireball's light on the face it strikes (D430): its jet's lights hang
+/// over the stream, the nearest most of a metre from the face, so the wall showed a small
+/// patch of weak orange and the ground none (vol5's review), where the references' walls and
+/// ground glow orange metres round the hit. It stands out from the face, so it spreads wide
+/// and even rather than burning one patch past the tonemapper's shoulder, orange rather than
+/// yellow, and grows in with the fireball over the 0.6 s after the stream strikes.
+const STRIKE_LUMENS: f32 = 2.0e6;
+const STRIKE_LIGHT: Color = Color::srgb(1.0, 0.52, 0.16);
+const STRIKE_OUT_M: f32 = 3.0;
+const STRIKE_GROW_S: f32 = 0.6;
+
+/// Each marched jet's fireball light while it burns: `jets` each one's state as `Drawn` keeps
+/// it (on, since when, when it last came on).
+pub(super) fn strikes(
+    blazes: &Blazes,
+    jets: &[(bool, f32, f32)],
+    t: f32,
+    tier: super::BreathTier,
+) -> Vec<Lit> {
+    if tier != super::BreathTier::Marched {
+        return Vec::new();
+    }
+    blazes
+        .jets
+        .iter()
+        .zip(jets)
+        .filter_map(|(jet, &(on, since, _))| {
+            let struck = since + jet.face / super::JET_SPEED_MPS;
+            let grown = ((t - struck) / STRIKE_GROW_S).clamp(0.0, 1.0);
+            (on && jet.face > 0.0 && grown > 0.0).then(|| {
+                let way = jet.way.normalize_or(Vec3::Z);
+                let hit = jet.from + way * jet.face;
+                let normal = jet.normal.normalize_or(-way);
+                let flicker = Flicker::of(0.3);
+                let glow = signal(7.1, t, flicker);
+                Lit {
+                    at: hit + normal * STRIKE_OUT_M + hit.normalize_or(Vec3::Y) * 1.0,
+                    lumens: STRIKE_LUMENS * grown * glow,
+                    color: STRIKE_LIGHT,
+                    range: JET_RANGE_M,
+                    radius: 1.5,
+                    glow,
+                    kept: false,
+                    shadowless: false,
+                }
+            })
+        })
+        .collect()
+}
+
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
 pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
     let (jet_lumens, jet_light) = jet_light(tier);
@@ -643,6 +693,7 @@ pub(super) fn light(
         .collect();
     let eye = camera.iter().next().map(GlobalTransform::translation);
     let mut wants = flashes(&blazes, &drawn.jets, t);
+    wants.extend(strikes(&blazes, &drawn.jets, t, *tier));
     wants.extend(lit(&blazes, t, *tier));
     let shown = choose(wants, eye, &was, shadowed(*quality));
     let night = sky.map_or(0.0, |sky| sky.night);
