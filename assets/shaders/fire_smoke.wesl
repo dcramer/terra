@@ -341,6 +341,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // flames before it shows (born over them it lay a pale smear across them, lake film r6)
     // and thinning to nothing as it climbs, so its top fades into the air rather than ending.
     var life = smoothstep(0.0, 0.06, t) * pow(1.0 - t, 1.3) * select(mix(1.0, 0.5, t), mix(1.0, 0.65, t), soot);
+    // A breath's soot thickens only once it has risen off the flame, and never as a wall:
+    // at once and whole it stood black in front of the flame (breath r28's review).
+    if soot {
+        life = smoothstep(0.03, 0.2, t) * pow(1.0 - t, 1.3) * mix(0.6, 0.4, t);
+    }
     if hearth {
         life = smoothstep(0.03, 0.14, t) * pow(1.0 - t, 2.2) * HEARTH_THIN;
     }
@@ -366,7 +371,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // light turned salmon.
     var albedo = mix(vec3(0.03, 0.028, 0.026), vec3(0.15, 0.145, 0.14), smoothstep(0.2, 0.9, t));
     if soot {
-        albedo = mix(vec3(0.025, 0.022, 0.02), vec3(0.12, 0.11, 0.1), smoothstep(0.2, 1.0, t));
+        // Warm, brown going black: a neutral grey by the fire read olive at dusk (breath r30/a).
+        albedo = mix(vec3(0.03, 0.019, 0.012), vec3(0.1, 0.07, 0.05), smoothstep(0.2, 1.0, t));
     }
     if hearth {
         albedo = mix(vec3(0.08, 0.082, 0.088), vec3(0.3, 0.31, 0.33), smoothstep(0.05, 0.6, t));
@@ -414,7 +420,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         + far_m.b * sky_from(F) + near_m.b * sky_from(-F));
     // Its hot core's own light, where it is young over the fire: dimly in a hearth's first half
     // metre, a blaze's column at its foot, a breath's soot its first moments.
-    var glow = select(pow(1.0 - t, 18.0) * heat, pow(1.0 - t, 14.0) * 1.5, soot) * 900.0;
+    // A breath's soot glows only just off the flame: at the 14th power it still glowed orange
+    // over the wall 1.5 s after the breath stopped (breath r30/b).
+    var glow = select(pow(1.0 - t, 18.0) * heat, pow(1.0 - t, 30.0) * 1.5, soot) * 900.0;
     if hearth {
         glow = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 36.0;
     }

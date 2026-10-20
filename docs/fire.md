@@ -250,9 +250,11 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 ## Composites
 
 - **Breath** (Monster Hunter World's Zeno Jiva, Elden Ring):
-  - a hot rod at the jaw;
+  - its main stream, drawn as games draw a flamethrower's (a beam of a few cards along the stream's line, each turned to the eye about it, panning noise flying with the gas), half a metre wide at the jaw and over a metre at the face: opaque, white-yellow on its line at the jaw, orange-red down its length and at its torn edge, grown out of its core when the breath starts and eroded back to it when it stops (`breath_beam`). It replaced the marched rod, which read as a smooth cream tube;
+  - 36 flame puffs in all (26 along the stream, 10 in the fireball), dissolved over their life by a hard-edged threshold on their cover (erosion), never faded by alpha, and coloured by heat alone through `breath_ramp` (white, yellow, orange, red, brown, black, never a dimmed yellow, which reads khaki); what is behind them fades them by erosion too, and before the struck face by their distance off its plane, so the wall's top never shows through as a level line;
   - flame sprites along the stream, each with its own age and size, growing and cooling with distance;
-  - soot puffs breaking off its top and edges;
+  - soot only above the hit: 10 puffs a second off where it strikes, warm brown-black, and a landed puff's own soot once it has burnt a while on the face; a puff cools through red and brown to black as it fades and as soot takes it, never a thinned yellow, which reads olive;
+  - white-yellow and opaque where it strikes, as every reference is;
   - embers and, if the breath is liquid, burning drops falling from its underside;
   - a light riding its front.
   - A ray cast finds where it hits. A hit spawns a blast, lingering fire sites on what burns, and a scorch.

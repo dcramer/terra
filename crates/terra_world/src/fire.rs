@@ -141,7 +141,7 @@ const JETS: usize = 2;
 /// rolling where it strikes, the blast when it first does and the soot it leaves on what it
 /// strikes, round the hot rod its hull
 /// marches. Must match `BREATH_CARDS` in fire.wesl.
-const BREATH_CARDS: usize = 152;
+const BREATH_CARDS: usize = 46;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
 /// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
 /// Each is let go where the stream is when it is born and then moves on its own, so it stays
@@ -149,7 +149,7 @@ const BREATH_CARDS: usize = 152;
 /// a breath lets go.
 const SOOT_PUFFS: usize = 320;
 const DROPS: usize = 112;
-const SOOT_A_SECOND: f32 = 55.0;
+const SOOT_A_SECOND: f32 = 10.0;
 const DROPS_A_SECOND: f32 = 45.0;
 /// How many burning drops a blast throws out where the stream first strikes, as debris.
 const DEBRIS: usize = 36;
@@ -385,9 +385,10 @@ impl Puffs {
                     let lift = way.cross(side);
                     let a = self.roll() * core::f32::consts::TAU;
                     let (along, out, speed) = if ring == 0 {
-                        // Soot rolls off the stream's outer two thirds and most where it
-                        // strikes, carried on a while by the stream.
-                        (0.3 + 0.7 * self.roll().sqrt(), 1.0, 9.0)
+                        // Soot rises only off where it strikes, a few big puffs a second, as
+                        // shipped flamethrowers' smoke is: off its last third at 30 a second,
+                        // a sooty cloud hung over the stream (breath r29's review).
+                        (0.95 + 0.05 * self.roll(), 1.0, 9.0)
                     } else {
                         // Drops fall from its underside, from near the mouth to its end,
                         // still going most of the stream's speed.
