@@ -317,16 +317,18 @@ fn found(
 
 /// Where the village goes, and which way its street runs east: of places 75 to 115 m from
 /// the start round it, and a street turned every way there, the one whose buildings and
-/// street stand on the most level ground, all of it dry and well away from the lair, so
-/// it sits on the land rather than on tall footings down a hillside. The same on every
-/// machine: the planet and the village's plan decide it.
+/// street stand on the most level ground, all of it dry, out of the sea and every lake, and
+/// well away from the lair, so it sits on the land rather than on tall footings down a
+/// hillside. The same on every machine: the planet and the village's plan decide it.
 fn site_for(
     planet: &Planet,
     start: &Start,
     lair: Vec3,
     buildings: &[terra_town::village::Building],
 ) -> Option<(Vec3, Vec3)> {
-    let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.5;
+    // Over the highest water at or beside it, a lake's as well as the sea's: kept to the sea
+    // alone, the village by the mountain lake went down on its bed, 20 m under its water.
+    let dry = |point: Vec3| point.length() > planet.water_near_m(point) + 1.5;
     let samples = reaches(buildings);
     let mut best: Option<(f32, Vec3, Vec3)> = None;
     for radius in [75.0_f32, 95.0, 115.0] {
@@ -509,4 +511,53 @@ pub(crate) fn fit_all(
         }
     }
     fitted
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_town::village::Kinds;
+
+    #[test] // Slow: about a minute (the mountain world's land round the lake, the village).
+    fn the_village_by_the_mountain_lake_stands_on_dry_land_not_its_bed() {
+        // The lake's site as the sandbox looks at it (`--site lake@-15.34,1.68`): the village
+        // went down on the lake's bed, drowned under its water, since the rule kept only the
+        // sea off it (the lake wedge's shots, 2026-10-20).
+        let mut planet = Planet::new(terra_core::PlanetSpec {
+            seed: terra_gen::Seed(1),
+            radius_m: 30_000.0,
+        });
+        let found = crate::start::find_site(&planet, "lake@-15.34,1.68");
+        planet.look_round(found.middle(), 3_000.0, 0);
+        let start = found.start(&planet);
+        let kinds = Kinds {
+            timber: terra_build::Kind(1),
+            masonry: terra_build::Kind(2),
+            beams: terra_build::Kind(3),
+            cob: terra_build::Kind(4),
+            framed: terra_build::Kind(5),
+            works: terra_build::Kind(2),
+            timber_roof: terra_build::Kind(0x800),
+            masonry_roof: terra_build::Kind(0x801),
+            beams_roof: terra_build::Kind(0x802),
+        };
+        let buildings =
+            terra_town::village::village(planet.seed().derive("village").0 as u32, kinds);
+        assert!(
+            planet.waters().is_some_and(|w| !w.lakes().is_empty()),
+            "no lake round the site"
+        );
+        let (middle, east) =
+            site_for(&planet, &start, Vec3::ZERO, &buildings).expect("no dry ground");
+        let up = middle.normalize();
+        let south = east.cross(up);
+        for [e, s] in reaches(&buildings) {
+            let ground = planet.ground_at(middle + east * e + south * s);
+            let over = ground.length() - planet.water_near_m(ground);
+            assert!(
+                over > 1.0,
+                "the village at {e}, {s} stands {over:.1} m over the water"
+            );
+        }
+    }
 }
