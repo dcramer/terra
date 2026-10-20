@@ -223,23 +223,24 @@ const CHAR_COVER: f32 = 0.45;
 const HEARTH_CARDS: f32 = 16.0;
 // Its body's height over its tallest tips (`tall`): standing about as high again over its
 // logs as they are high, as the games' campfires do (research/2026-10-19-fire-step-back.md,
-// round 12); at 0.55 to 0.7 the logs hid all but its tips. Its foot stands a little up
+// round 12); at 0.55 to 0.7 the logs hid all but its tips, at 0.8 it read short (blind
+// review 5/10 against 6/10 at 0.95). Its foot stands a little up
 // among the logs (`HEARTH_BODY_UP`, over the fire's width), its hot base over the coals.
-const HEARTH_BODY: f32 = 0.8;
+const HEARTH_BODY: f32 = 0.95;
 const HEARTH_BODY_UP: f32 = 0.15;
 // Its tongues: their heights over `tall`, least and most; how far out from the middle they
 // rise, over the fire's width (the logs' teepee); how far they lean in along the logs; and the
 // teepee's height over the fire's width, so each rises from the logs' top where it stands and
 // not inside them, hidden (round 12's first try).
-const TONGUE_TALL: vec2<f32> = vec2<f32>(0.2, 0.42);
+const TONGUE_TALL: vec2<f32> = vec2<f32>(0.26, 0.55);
 const TONGUE_OUT: f32 = 0.5;
 const TONGUE_LEAN: f32 = 0.3;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
 const HEARTH_ERODE: f32 = 0.45;
-const HEARTH_SEE: f32 = 0.6;
-const HEARTH_BASE_HOT: f32 = 0.3;
+const HEARTH_SEE: f32 = 0.45;
+const HEARTH_BASE_HOT: f32 = 0.15;
 // How much hotter a hearth's brightest coals glow over its dullest, kelvin.
 const COAL_HOT: f32 = 420.0;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
@@ -1424,8 +1425,8 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let n = fbm(vec2(xx * 5.0 + luck * 11.0, y * 2.2 - time * 2.8));
         let edge = 0.1 + 0.7 * pow(y, 1.3) + 0.4 * age;
         let shape = smoothstep(edge - 0.1, edge + 0.1, body * (0.45 + 0.8 * n));
-        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y);
-        let heat_here = saturate(0.5 + 0.48 * pow(1.0 - y, 0.8) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
+        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
+        let heat_here = saturate(0.5 + 0.4 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
         let drawn = baked_flame(vec4(heat_here, shape * born, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
         light = drawn.rgb;
         cover = drawn.a;
@@ -1475,7 +1476,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let erode = HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
             texel.g *= smoothstep(erode, erode + 0.2, saturate(texel.g * 3.0) * (0.5 + n));
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.4, hy))) * mix(1.0, 0.85, hy));
+            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.85, hy));
         }
         let drawn = baked_flame(texel, brightness, soft * edges);
         light = drawn.rgb;

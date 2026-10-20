@@ -150,6 +150,13 @@ No frame-by-frame capture of the Red Dead Redemption 2, Witcher 3 or Sons of the
 9. **Light:** one shadowed point light about 0.4 m above the coals at 1300-1900 K, with a shape radius about the pile's. Flicker it with a swing of about 2 Hz plus small fast noise, in step with the flame's emission. For moving light on the ground, a flickering ground decal is cheaper than many lights.
 10. **Coals and ground:** an emissive coal bed and char mask on the logs, with a firelit ground pool or decal. These hold the bright base when the flame cards are thin.
 
+**Applied in round 12 (measured on the yard, night, 2.5 m and 6 m views):**
+- The body at 0.55-0.7 of `tall` hid behind the 0.45 m teepee: only its tips showed. At 0.8, with its foot raised among the logs, it read short; at 0.95 it stands about as high again over them.
+- Erosion on the raw cover ate the whole flame: the set's median cover is 0.16. Taken over three times the cover, it tears only the tips.
+- Tongues placed inside the pile were hidden by the logs. They must rise from the logs' tops where they stand.
+- Our light 0.4 m up, as BonFire's, halved the ground pool: the ring of stones shadows the ground outside it. Kept at 0.75 of the flames, 3 stops by night doubled it (0.058 to 0.12 linear at 0.8 m).
+- Blind reviews: 0.8 against the old cone 6/10 to 5/10; 0.95 (tongues 0.26-0.55 of `tall`, white only at the foot, the tops thinner) against 0.8 6/10 to 5/10.
+
 ## Plan to AAA, ranked
 
 Each step is checked by the same one-job A/B (ours, the pro book and the photographs at noon, dusk and night), with measurements that judge the flame band and the lit surroundings apart.
