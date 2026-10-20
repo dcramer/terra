@@ -18,7 +18,7 @@
 //! - **Hovering**, which nothing so big really can, short and with deep beats; **and
 //!   breathing fire** in a strafing pass or hovering, after rearing its head back for a
 //!   moment, the tell, the breath a cone of flame from its mouth that sets alight what it
-//!   meets (`build::fire::BreathesFire`).
+//!   meets (`hazards::BreathesFire`, which a base's fire reads).
 //!
 //! Until monsters think (creatures.md), what it does is told it: over the remote,
 //! `flight.spawn`, `flight.path`, `flight.hover`, `flight.breathe` and `flight.roar`, so a
@@ -27,7 +27,7 @@
 mod plan;
 mod spine;
 
-use crate::build::fire::BreathesFire;
+use super::hazards::{BreathesFire, Frightful};
 use crate::remote::{method, refused};
 use bevy::{
     ecs::system::SystemState,
@@ -602,7 +602,7 @@ fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .spawn((
             Name::new(format!("Flier: {}", def.name)),
             // What it flies over runs from it.
-            super::Frightful { within_m: 70.0 },
+            Frightful { within_m: 70.0 },
             Flier::new(kind, Flight::Hover { at, face }),
             Transform::from_translation(at).looking_to(
                 (face - at)

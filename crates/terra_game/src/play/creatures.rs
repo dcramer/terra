@@ -102,14 +102,6 @@ pub enum State {
     },
 }
 
-/// Something every shy creature runs from when it comes within so many metres, as from a
-/// player it is shy of: a dragon on the wing, a fire (D382, D377). A shy creature startled by
-/// it flees as its kind does, a bird taking wing away from it.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct Frightful {
-    pub within_m: f32,
-}
-
 /// An animal kept by people, as a town's are: no wild `Creature`, minded by its keepers'
 /// days, but an animal all the same to what watches for animals (a film's `sighted`).
 #[derive(Component, Default)]

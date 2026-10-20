@@ -105,6 +105,7 @@ const PLACES: &[(&str, Crate)] = {
         ("play/dig", Survival),
         ("play/gains", Survival),
         ("play/harvest", Survival),
+        ("play/hazards", Survival),
         ("play/held", Survival),
         ("play/interact", Survival),
         ("play/inventory", Survival),
@@ -209,16 +210,6 @@ const NOT_YET_CUT: &[(&str, &str, &str)] = &[
         "build",
         "build/village",
         "10: the base's plugin adds building play's",
-    ),
-    (
-        "build/fire",
-        "play/creatures",
-        "11: a fire frightens creatures (Frightful)",
-    ),
-    (
-        "play/fliers",
-        "build/fire",
-        "11: a flier breathes fire (BreathesFire)",
     ),
 ];
 

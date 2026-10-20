@@ -3,7 +3,8 @@
 //! else what it gets on with (`settle`).
 
 use super::gait::{CROSSES, Pace, bolt, bolts_within};
-use super::{Bitten, CLIMB_REACH_M, Creature, Dice, Frightful, State};
+use super::{Bitten, CLIMB_REACH_M, Creature, Dice, State};
+use crate::play::hazards::Frightful;
 use crate::play::lod::Detail;
 use crate::play::species::{Bestiary, Moves, Refuge, SpeciesDef, Temper};
 use crate::play::tick::Ticks;

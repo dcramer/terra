@@ -1,6 +1,7 @@
 use super::gait::bolts_within;
 use super::mind::{LOOKS_S, ROOSTS_OVER_M, SENSE_M, nearest};
 use super::*;
+use crate::play::hazards::Frightful;
 use crate::play::species::Temper;
 use crate::play::tick::Ticks;
 use crate::play::walker::Motion;

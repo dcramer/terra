@@ -11,6 +11,7 @@
 
 use super::Site;
 use super::act::Building;
+use crate::play::hazards::{BreathesFire, Frightful};
 use crate::remote::{method, refused};
 use bevy::{
     ecs::system::SystemState,
@@ -27,21 +28,6 @@ use terra_build::{CELL_M, Kind};
 use terra_world::climate::ClimateFields;
 use terra_world::daylight::Clock;
 use terra_world::fire::{Blaze, Blazes, Jet};
-
-/// Something breathing fire from where it is, along its own forward (-Z, as Bevy's
-/// transforms look): how far its flame reaches, how wide it spreads (the tangent of its half
-/// angle), how hot it is (heat a second given what it meets, as a burning cube's full flame
-/// gives the cube over it), and whether it is breathing now.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct BreathesFire {
-    pub reach_m: f32,
-    pub spread: f32,
-    pub heat: f32,
-    pub on: bool,
-    /// What it is breathing at, in the world, if anything: its flame goes there, not along
-    /// its forward.
-    pub aim: Option<Vec3>,
-}
 
 /// The base's fire, what each kind burns as, and its blazes as last worked out.
 #[derive(Resource, Default)]
@@ -391,7 +377,7 @@ fn blazes(
     fire: Res<SiteFire>,
     mut drawn: ResMut<Blazes>,
     mut fright: Local<Option<Entity>>,
-    mut frights: Query<(&mut Transform, &mut crate::play::Frightful)>,
+    mut frights: Query<(&mut Transform, &mut Frightful)>,
 ) {
     let splashes = fire.splashes.len();
     if fire.is_changed() || drawn.blazes.len() != fire.blazes.len() + splashes {
@@ -416,7 +402,7 @@ fn blazes(
             .spawn((
                 Name::new("Fire: fright"),
                 Transform::IDENTITY,
-                crate::play::Frightful { within_m: 0.0 },
+                Frightful { within_m: 0.0 },
             ))
             .id()
     });
