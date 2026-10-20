@@ -171,6 +171,21 @@ fn lying(
     let lake = round.water_near(up, crate::shore::REACH_CELLS);
     let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
     let snow = round.snow_m(point, normal);
+    // Avalanches off a range's walls feed its couloirs and the cirque floors and ledges under
+    // them, so in summer their snow lies well below the snowline, as it lies there some
+    // hundreds of metres higher: the Tatras' and the Alps' summer snow patches. Without, the
+    // snowline the climate gives left only the horns' tips white (the r6 review).
+    let snow = if planet.has_mountains()
+        && matches!(
+            made_of,
+            material::STONE | material::SCREE | material::GRAVEL
+        ) {
+        let fed = round.snow_m(point + up * FED_M, up) * FED_SHARE;
+        let level = smoothstep(STEEP_SNOW.0, STEEP_SNOW.1, normal.dot(up));
+        snow.max(fed * level.max(smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
+    } else {
+        snow
+    };
     // On a mountain's steep faces a summer's snow lies in its gullies' beds and is gone from
     // the ribs between, so from across a valley it streaks down the couloirs rather than
     // capping every bump of the wall (D395).
@@ -202,9 +217,17 @@ fn lying(
 /// How far above a lake a vertex is said to be when no lake is near.
 const DRY_M: f32 = 50.0;
 
+/// How much higher a range's avalanche-fed snow lies as, in metres, and the share of that
+/// depth it keeps: from 350 m the horns kept only their tips white, short of the third of the
+/// range above the tree line D425 asks.
+const FED_M: f32 = 900.0;
+const FED_SHARE: f32 = 1.0;
+
 /// Snow keeps to the gullies on ground steeper than the first of these, how far a vertex's
-/// normal points up (about 46 degrees), wholly past the second (about 30 degrees)...
-const STEEP_SNOW: (f32, f32) = (0.7, 0.87);
+/// normal points up (about 53 degrees), lying whole under the second (about 42 degrees), as
+/// it lies on faces under about 50 degrees (D425): from 30 degrees it left the horns' shoulders
+/// and cirque floors bare (the r6 review)...
+const STEEP_SNOW: (f32, f32) = (0.6, 0.74);
 /// ...lying from the first of these shares of the way down into a gully's bed, deep from the
 /// second: low, as most gullies are cut shallow (`Mountains::gully_depths`), their beds a
 /// share of the deepest's, and buttresses narrow them to slots.

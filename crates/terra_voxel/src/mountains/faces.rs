@@ -76,6 +76,9 @@ const FACE_FROM_DEG: f32 = 12.0;
 const BEDS_WARP_M: [f32; 3] = [120.0, 45.0, 6.0];
 const BEDS_WARP_ACROSS_M: [f32; 3] = [2000.0, 800.0, 330.0];
 const DIP_TURNS_M: f32 = 4500.0;
+/// About the most the beds' warp tilts them, a metre in a metre: each fold's height over its
+/// width, by the noise's steepest climb, about three (a ledge climbed 0.42 m in a metre).
+const BEDS_TILT: f32 = 0.45;
 /// How far each bed's top strays from where even beds would put it, as a share of a bed: so
 /// beds run from a third of the kind's thickness to five thirds, thin bands between massive
 /// ones, as a real wall's strata do; even, the wall read as a terraced hill's contours.
@@ -180,6 +183,11 @@ impl Range {
         // ledge's fall is the same in a thin bed as in a thick one, and the ground meets
         // itself at every bed's top.
         let riser = libm::powf(((within - (1.0 - share)) / share).max(0.0), RISER_POWER);
-        face * kind.stepped * kind.beds_m * thick * (riser - within)
+        // The beds' own tilt, their warp and dip, climbs across a ledge too: on the gentler
+        // walls a ledge keeps only so much of the fall that it still drains over its edge
+        // with the beds tilted back against it as far as they ever are.
+        let tilt = BEDS_TILT + kind.dip;
+        let stepped = kind.stepped.min(steepness / (steepness + tilt));
+        face * stepped * kind.beds_m * thick * (riser - within)
     }
 }

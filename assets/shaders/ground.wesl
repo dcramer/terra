@@ -622,26 +622,38 @@ fn fall_stripes(world: vec3<f32>, across: vec3<f32>, spacing: f32, which: f32) -
     return vec2<f32>((cosine + 0.02) / (weights + 0.02), -(sine / (weights + 0.02)) * 6.2831853 / spacing);
 }
 
-/// How a rock facet turns the normal at a point: the nearest of a jittered lattice of sites
-/// `size` metres apart (a Voronoi cell, as Gaea's and World Machine's "facet" and Quilez's
-/// cellular noise make), each its own turn across the ground, up to about 25 degrees.
-fn facet_turn(world: vec3<f32>, up: vec3<f32>, size: f32) -> vec3<f32> {
+/// How rock facets turn the normal at a point, and how near it lies to a crack between two:
+/// a jittered lattice of sites `size` metres apart, each its own plane turned across the
+/// ground up to about 25 degrees, blended smoothly near their borders (Quilez's smooth
+/// Voronoi, as Gaea's and World Machine's "facet" are cellular noise) so a face reads as
+/// slabs shaded each by its own lean rather than flat-shaded polygons; `w` is 1 on the crack
+/// between the nearest two (the second-nearest's distance less the nearest's), 0 inside.
+fn facet_turn(world: vec3<f32>, up: vec3<f32>, size: f32) -> vec4<f32> {
     let cell = world / size;
     let base = floor(cell);
     var nearest = 9.0;
+    var second = 9.0;
     var turn = vec3<f32>(0.0);
+    var weights = 0.0;
     for (var i = 0; i < 27; i++) {
         let c = base + vec3<f32>(f32(i % 3 - 1), f32((i / 3) % 3 - 1), f32(i / 9 - 1));
         let j = vec3<f32>(hash(c + 3.3), hash(c + 17.9), hash(c + 29.1));
         let d = cell - (c + j);
         let far = dot(d, d);
         if far < nearest {
+            second = nearest;
             nearest = far;
-            turn = vec3<f32>(hash(c + 41.7), hash(c + 53.3), hash(c + 67.1)) - 0.5;
+        } else if far < second {
+            second = far;
         }
+        let w = exp(-9.0 * far);
+        turn += w * (vec3<f32>(hash(c + 41.7), hash(c + 53.3), hash(c + 67.1)) - 0.5);
+        weights += w;
     }
+    turn /= max(weights, 1e-4);
     let flat = turn - up * dot(turn, up);
-    return flat * 0.9;
+    let crack = 1.0 - smoothstep(0.0, 0.04, sqrt(second) - sqrt(nearest));
+    return vec4<f32>(flat * 1.4, crack);
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -1158,7 +1170,10 @@ fn fragment(
             // bare, `Rise::wall`), thin snow keeps to the couloirs whether or not this set of
             // them is drawn here; a deep snowfield stays, and so do the summits' caps, which
             // are not wall (keyed by height, they were lost under the range's tops, r5).
-            ledge_cut = ribbed * bare * (1.0 - smoothstep(0.4, 1.2, in_snow_m));
+            // Only on the walls past about 50 degrees: keyed to bare rock alone, it took the snow
+            // off the horns' gentler shoulders, saddles and cirque floors, which the land lays
+            // in stone too, and the summits stood bare (the r6 review).
+            ledge_cut = ribbed * bare * (1.0 - smoothstep(0.4, 1.2, in_snow_m)) * (1.0 - smoothstep(0.6, 0.72, flatness));
             snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), max(ribbed * mix(0.75, 1.0, steep) * couloirs_drawn, 0.9 * ledge_cut));
             wet_far = smoothstep(-0.3, -0.85, gullies_far) * smoothstep(0.45, 0.7, noise(world * 0.0031 + 113.0)) * ribbed * rocky;
             fan = smoothstep(0.0, -0.55, couloirs + (blotch - 0.5) * 0.3) * couloirs_drawn;
@@ -1186,7 +1201,7 @@ fn fragment(
             // most: cut alike, the steep summits came out barer than the lower tops behind
             // them, a snowline running backwards (the r3 review).
             let held = smoothstep(2000.0, 2500.0, above_sea_m) * 0.25 + smoothstep(0.3, 2.0, in_snow_m) * 0.15;
-            let breaks = smoothstep(0.6, 0.64, outcrop + (0.9 - flatness) * 0.35 - held);
+            let breaks = smoothstep(0.66, 0.7, outcrop + (0.9 - flatness) * 0.35 - held);
             snow *= 1.0 - breaks * far_snow;
             // Its edge sharpened, a fade over a few metres rather than tens.
             snow = mix(snow, smoothstep(0.02, 0.15, snow), far_snow);
@@ -1607,7 +1622,19 @@ fn fragment(
             // The rock broken into facets tens of metres across, each a plane turned its own way,
             // so a far wall reads by crisp light and shade between its buttresses and slabs, as
             // the Tatras' granite does (the r5 review's gap 4), rather than one smooth sheet.
-            let facets = facet_turn(world, up, 70.0) * rocky * (1.0 - snow);
+            // Two sizes, slabs a couple of hundred metres across split by blocks of forty, the
+            // finer fading out before a pixel holds a block: one size at 70 m read as a
+            // decimated low-poly mesh (the r6 review). Steeper rock turns more: a slab of the
+            // shoulders lies near its slope.
+            let slabs = facet_turn(world, up, 190.0);
+            let blocks = facet_turn(world + 37.0, up, 45.0);
+            let fine = 1.0 - smoothstep(2.0, 5.0, footprint);
+            let faceted = rocky * (1.0 - snow) * mix(0.5, 1.0, steep);
+            let facets = (slabs.xyz * 0.8 + blocks.xyz * 0.32 * fine) * faceted;
+            // Dark in some of the cracks between them, the fractures a face is seen to be made
+            // of: dark round every slab, they drew a web of crazy paving over the walls.
+            let cracked = smoothstep(0.5, 0.75, noise(world * 0.0045 + 191.0) * 0.7 + noise(world * 0.017 + 193.0) * 0.3);
+            colour *= 1.0 - (0.3 * slabs.w + 0.15 * blocks.w * fine) * cracked * faceted * ribbed;
             // The gullies' ribs strong on some faces and faint on others: alike everywhere they
             // combed the walls into an even curtain of streaks (the r5 review).
             let combed = 0.3 + 0.7 * smoothstep(0.4, 0.7, noise(world * 0.0011 + 171.0));

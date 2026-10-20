@@ -141,7 +141,7 @@ impl Mountains {
         gully_depths: 1.0,
         aprons_m: 80.0,
         horns_m: 950.0,
-        horns_across_m: 2600.0,
+        horns_across_m: 1900.0,
         faces: &[Faces::HORNS, Faces::SAW],
     };
 
@@ -303,11 +303,13 @@ const APRON_CONES: f32 = 0.5;
 /// Horns (`Range::horns`): from how far up the ridges' crests they rise; how far a horn's
 /// faces reach, as a share of the lattice; how far a site strays in its cell; the share of
 /// sites that stand; how deep a cirque's bowl is hollowed across its face; the headwall's
-/// concave profile.
-const HORNS_FROM: (f32, f32) = (0.6, 0.9);
-const HORN_REACH: f32 = 0.32;
+/// concave profile; how deep, as a share of `horns_m`, the cirques between the horns are cut
+/// into the massif.
+const HORNS_FROM: (f32, f32) = (0.42, 0.8);
+const HORN_REACH: f32 = 0.44;
 const HORN_JITTER: f32 = 0.6;
-const HORNS_KEPT: f32 = 0.8;
+const HORNS_KEPT: f32 = 0.9;
+const CIRQUES: f32 = 0.35;
 const HORN_BOWL: f32 = 0.45;
 const HORN_PROFILE: f32 = 1.3;
 
@@ -553,7 +555,8 @@ impl Range {
         (height - lowered + horns, upper, foot)
     }
 
-    /// How much the horns raise the ground at a point (`Mountains::horns_m`), in metres.
+    /// How much the horns raise the ground at a point, or the cirques between them lower it
+    /// (`Mountains::horns_m`), in metres.
     ///
     /// A horn is a top three or four cirques have eaten back into from its sides, as the
     /// Matterhorn's and the Tatras' Mnich and Krywań are: each cirque's headwall a face
@@ -585,6 +588,8 @@ impl Range {
         let up = point.normalize_or(Vec3::Y);
         let cell = (point / across).floor().as_ivec3();
         let mut highest: f32 = 0.0;
+        // How much of a horn stands over the point, 0 between them to 1 at a point.
+        let mut shape: f32 = 0.0;
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for dz in -1..=1 {
@@ -623,11 +628,16 @@ impl Range {
                     let x = (d / reach).clamp(0.0, 1.0);
                     let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
                     let height = m.horns_m * (0.7 + 0.3 * jitter.y);
-                    highest = highest.max(height * libm::powf(1.0 - x, HORN_PROFILE) * fade);
+                    let standing = libm::powf(1.0 - x, HORN_PROFILE) * fade;
+                    highest = highest.max(height * standing);
+                    shape = shape.max(standing);
                 }
             }
         }
-        highest * crest * kept
+        // The ground the horns leave between them is cut down into cirques, so the massif's
+        // upper slopes are eaten back into bowls under arêtes and cols rather than standing
+        // as a dome the horns sit on (the r6 review).
+        (highest - CIRQUES * m.horns_m * (1.0 - shape)) * crest * kept
     }
 
     /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
