@@ -195,6 +195,12 @@ pub struct FireExtension {
     /// Whether this is the hearths' flames' mask, which says where they are to the
     /// tonemapper (`film`).
     mask: bool,
+    /// Whether these are the breaths' sprites, which write their depth: drawn opaque or not
+    /// at all (`breath_eroded`), they stand where the eye sees them for what reads the depth
+    /// after them. Left out of it, the volumetric fog marched each ray on to the wall or the
+    /// sky behind the flame, and fogged it more over the sky than over the wall, a level band
+    /// along the wall's top and the horizon (breath r31's debug tints).
+    depth: bool,
     #[storage(101, read_only)]
     slots: Handle<ShaderBuffer>,
     /// The flames' flipbooks (`books`): a layer a set, its heat, cover, soot and distortion.
@@ -225,6 +231,7 @@ pub struct FireExtension {
 pub struct FireKey {
     volume: bool,
     mask: bool,
+    depth: bool,
 }
 
 impl From<&FireExtension> for FireKey {
@@ -232,6 +239,7 @@ impl From<&FireExtension> for FireKey {
         FireKey {
             volume: fire.volume,
             mask: fire.mask,
+            depth: fire.depth,
         }
     }
 }
@@ -248,6 +256,11 @@ impl MaterialExtension for FireExtension {
         {
             depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Always);
             depth.depth_write_enabled = Some(false);
+        }
+        if key.bind_group_data.depth
+            && let Some(depth) = descriptor.depth_stencil.as_mut()
+        {
+            depth.depth_write_enabled = Some(true);
         }
         if key.bind_group_data.mask
             && let Some(fragment) = descriptor.fragment.as_mut()
@@ -653,6 +666,7 @@ fn setup(
                 },
                 volume: kind == 2.0,
                 mask: i == MASK,
+                depth: kind == 5.0 && i != MASK,
                 slots: slots.clone(),
                 flames: flames.clone(),
                 motions: motions.clone(),

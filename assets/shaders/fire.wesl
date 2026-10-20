@@ -856,8 +856,16 @@ fn breath_beam(corner: vec2<f32>, b: Breath, jet: u32, i: f32) -> Out {
     let w = 3.6 * beam_radius(z1, b, layer);
     let start = z0 - 0.1;
     let to = z1 + 0.5 * w;
+    // A ribbon along the line itself, turned to the eye only about it, as a beam's is: a
+    // card turned wholly to the eye leaned toward it, so a stream seen at a slant spanned only
+    // its middle stretch, never the jaw, one flat banded oval with a seam (breath r31's tints).
     let at = b.mouth + b.way * 0.5 * (start + to);
-    let world = sprite(at, b.way, corner, w, to - start, 0.0);
+    var right = cross(b.way, normalize(view.world_position - at));
+    if dot(right, right) < 1.0e-6 {
+        right = b.side;
+    }
+    right = normalize(right);
+    let world = b.mouth + b.way * mix(start, to, corner.y) + right * (corner.x - 0.5) * w;
     var out: Out;
     out.clip = position_world_to_clip(world);
     out.uv = corner;
@@ -900,7 +908,10 @@ fn breath_beam_shade(p: vec3<f32>, uv: vec2<f32>, life: vec4<f32>, soft: f32) ->
     let jet = u32(life.x - 2.0 + 0.5);
     let came_on = fire.jets[jet * 4u + 2u].z;
     let grown = smoothstep(0.0, 0.35, time - came_on) * b.left;
-    let thr = mix(0.92, 0.04, grown * soft);
+    // Gone as the eye looks along it, where a ribbon is seen edge on; the puffs round it
+    // carry the stream there, as a shipped beam's do.
+    let along = abs(dot(normalize(p - view.world_position), b.way));
+    let thr = mix(0.92, 0.04, grown * soft * (1.0 - smoothstep(0.88, 0.98, along)));
     let cover = smoothstep(thr, thr + 0.08, body + 0.12 * (f - 0.5));
     if cover < 0.003 {
         discard;
@@ -1713,7 +1724,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // A fireball's and a blast's only in their last frames, once risen over the hit:
             // opaque from their first, they were black holes in the fireball (r30/a).
             let smoke = (1.0 - exp(-thick * texel.b)) * select(smoothstep(28.0, 48.0, t), smoothstep(16.0, 26.0, t), puff);
-            let heat_of = saturate(texel.r * 1.25 * BREATH_HEAT * (1.0 + 0.35 * hot) * min(0.9 + 0.04 * heat, 1.15));
+            let heat_of = saturate(texel.r * 1.35 * BREATH_HEAT * (1.0 + 0.35 * hot) * min(0.9 + 0.04 * heat, 1.15));
             // Faded before what is behind it by erosion too, so it is never see-through: thinned
             // by alpha near the face it struck, it showed the wall below the wall's top and the
             // sky above it, a level line (r30/b).
@@ -1836,6 +1847,12 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         out.color = breath_beam_shade(in.world_position.xyz, in.uv, vec4(in.world_normal, in.uv_b.x), soft);
     } else {
         out.color = shade(in.uv, vec4(in.world_normal, in.uv_b.x), in.uv_b.y, soft, in.world_position.w);
+    }
+    // A breath's sprite writes its depth (crates/terra_world/src/fire.rs, `FireExtension`'s
+    // `depth`), so where it is eroded away or never drawn it is no fragment at all: what is
+    // left of a card stands in the depth, not its whole quad.
+    if i32(fire.kind.x + 0.5) == 5 && out.color.a < 0.1 && max(out.color.r, max(out.color.g, out.color.b)) < 0.004 {
+        discard;
     }
 @if(FIRE_MASK)
     {
