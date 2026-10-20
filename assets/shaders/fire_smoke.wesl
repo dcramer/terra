@@ -70,6 +70,8 @@ const SMOKE_HOUSE: i32 = 1;
 const PUFF_FROM: f32 = 4.0;
 const PUFF_TO: f32 = 34.0;
 const HEARTH_THIN: f32 = 1.0;
+// How many times a hearth's wisp gives back the sun and sky its single-scattering bake does.
+const HEARTH_SCATTER: f32 = 6.0;
 const PI: f32 = 3.14159265;
 // How long a breath's soot hangs, in seconds.
 const SOOT_S: f32 = 5.5;
@@ -374,10 +376,28 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // Warm, brown going black: a neutral grey by the fire read olive at dusk (breath r30/a).
         albedo = mix(vec3(0.03, 0.019, 0.012), vec3(0.1, 0.07, 0.05), smoothstep(0.2, 1.0, t));
     }
+    // By the sun and the sky a hearth's smoke is wood smoke's pale blue-grey (its fine tar and ash
+    // scatter nearly all they take, single-scattering albedo near 0.9): at 0.14 to 0.42 the
+    // column by day read as dark beads across the sky (fire round 20). Its fire's light reaches
+    // only its young, sooty underside, so takes the grey, never the pale that firelight turned
+    // salmon.
+    var albedo_sky = albedo;
+    // And what its wisp gives back of the sun and sky past single scattering: the bake is single
+    // scattering, which leaves a wisp of a near-white medium as dark as soot, where its light
+    // scattered again and again is several times as much (Wrenninge 2013's octaves, Hillaire
+    // 2016's Frostbite clouds). Measured: at single scattering its light was a quarter of the
+    // sky behind it, so it read as dark beads (fire round 21). By day only, from the camera's
+    // EV100 (night's about 9, noon's 13 or more): by night our moon is drawn some stops brighter
+    // than a real one, and the plume went milky lavender, brighter than the stones (round 21).
+    var scatter = 1.0;
     if hearth {
+        let ev100 = -log2(view.exposure * 1.2);
+        scatter = mix(1.0, HEARTH_SCATTER, smoothstep(10.5, 12.5, ev100));
         albedo = mix(vec3(0.14, 0.14, 0.145), vec3(0.42, 0.42, 0.43), smoothstep(0.05, 0.5, t));
+        albedo_sky = mix(vec3(0.5, 0.5, 0.51), vec3(0.8, 0.82, 0.86), smoothstep(0.05, 0.5, t));
     }
     var light = vec3(0.0);
+    var fire_light = vec3(0.0);
     // The sun (and moon), through the atmosphere and the shadows, as Bevy lights a surface
     // facing it: directional_light gives colour times transmittance over pi for a white one.
     let view_z = dot(vec4(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), vec4(P, 1.0));
@@ -412,7 +432,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let r = (*lamp).position_radius.w;
         let e = (*lamp).color_inverse_square_range.rgb * lighting::getRangeFalloff(d2, (*lamp).color_inverse_square_range.w) / max(d2, max(r * r, 1.0e-4));
         let L = to * inverseSqrt(max(d2, 1.0e-8));
-        light += e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
+        fire_light += e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
     }
     // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.
     light += (2.0 / 3.0) * (near_m.r * sky_from(T) + far_m.r * sky_from(-T)
@@ -426,7 +446,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if hearth {
         glow = heat * (1.0 - smoothstep(0.0, 0.06, t)) * 36.0;
     }
-    let lit = (albedo * light + vec3(1.0, 0.3, 0.06) * glow * far.a) * view.exposure;
+    let lit = (albedo_sky * light * scatter + albedo * fire_light + vec3(1.0, 0.3, 0.06) * glow * far.a) * view.exposure;
     var input = pbr_input_from_standard_material(in, is_front);
     input.N = F;
     input.world_normal = F;
