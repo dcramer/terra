@@ -133,9 +133,13 @@ const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
 // straw dropped about their edges.
 const TRODDEN: vec3<f32> = vec3<f32>(0.15, 0.132, 0.108);
 // Ground trodden lightly, a new settlement's plots and ways (D381): turned earth still brown
-// with its soil, not yet ground to a street's grey dust.
-const TURNED: vec3<f32> = vec3<f32>(0.105, 0.08, 0.055);
-const STRAW: vec3<f32> = vec3<f32>(0.34, 0.27, 0.13);
+// with its soil, not yet ground to a street's grey dust. The town's ground keeps to earth
+// colours: red over blue under 1.5, or the low sun turns an empty plot to a red-orange
+// patch (at 0.105, 0.08, 0.055, red over blue 1.9: settlement r19).
+const TURNED: vec3<f32> = vec3<f32>(0.11, 0.096, 0.077);
+// Straw on the ground, no brighter than the sunlit earth by more than half: at twice it (0.34,
+// 0.27, 0.13) every fleck stood out from high as yellow confetti on the plots (settlement r19).
+const STRAW: vec3<f32> = vec3<f32>(0.2, 0.17, 0.105);
 // A settlement's paved streets and square (D350), linear: grey-brown setts of the local stone,
 // dulled by the dirt ground into them; Kingdom Come's sunlit streets measure about 0.25 sRGB,
 // near grey, where clean light stone (0.15 linear) stood at twice that in our frames.
@@ -1313,7 +1317,7 @@ fn fragment(
                 pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.92, paved);
             }
             // Straw about a way's edges and the yards, and a little scattered over the paving.
-            let straw = smoothstep(0.62, 0.8, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * mix(1.0, 0.55, smoothstep(0.55, 0.95, trodden)) * worn;
+            let straw = smoothstep(0.7, 0.86, noise(world * 1.3 + 61.0) * 0.6 + fleck * 0.4) * mix(1.0, 0.55, smoothstep(0.55, 0.95, trodden)) * worn;
             if straw > 0.0 {
                 ground_is = settle(ground_is, layer(LITTER, 0.6, STRAW * (0.8 + 0.4 * fleck), world + 67.0, gx, gy, n, 1.0), straw);
             }

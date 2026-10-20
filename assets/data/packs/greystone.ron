@@ -7,15 +7,17 @@
 // the castle read lilac at 300 m under a low sun and blue-grey in shade (settlement film r12);
 // at (0.60, 0.59, 0.60), its face the fieldstone's warm brown (red over blue by a third),
 // flat salmon at 150 m in the late sun (r13). Now a neutral grey-brown, red over blue by a
-// fifth and green above their middle, so it reads neither pink nor lilac.
+// fifth and green above their middle, so it reads neither pink nor lilac; a sixth darker
+// than that, as the town's houses at 300 m under the dusk sun were the same beige as the
+// castle and its wall (settlement r19): the works stand a value under the houses.
 (
-    tint: (0.60, 0.63, 0.66),
+    tint: (0.50, 0.53, 0.58),
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0), depth: 0.025),
         Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8), depth: 0.008),
     },
     dress: (
-        tint: (0.60, 0.62, 0.64),
+        tint: (0.52, 0.54, 0.58),
         masks: (dirt: 1.4, dirt_tint: (0.4, 0.37, 0.32), wear: 0.1),
     ),
     reference: Some((

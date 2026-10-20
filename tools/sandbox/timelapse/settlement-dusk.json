@@ -1,5 +1,5 @@
 {
-  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous shot: close over its first house as its walls go up, then pulling back fast and rising while it turns about the town, as the settlement spreads out from that house to the whole market town, and on out until the town sits in its landscape, the lake, the forests round it and the mountains on the skyline At dusk the last four keys stand mirrored across their aim, west of the town looking north-east, so the setting sun lights the castle from the front, not from behind it (settlement r19).",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous shot: close over its first house as its walls go up, then pulling back fast and rising while it turns about the town, as the settlement spreads out from that house to the whole market town, and on out until the town sits in its landscape, the lake, the forests round it and the mountains on the skyline At dusk the end holds the 17 s framing, the castle gold-lit about 450 px wide, and rises from it while it turns a little east, so the sun low in the west stands behind the camera to its left and lights the town and the castle front (settlement r20).",
   "seconds": 20,
   "keys": [
     {
@@ -257,44 +257,44 @@
     {
       "t": 18,
       "at": [
-        -168.3,
-        70.5,
-        -224.8
+        -58,
+        68,
+        -190
       ],
       "look": [
-        -21,
-        12.5,
-        -407.5
+        14,
+        19.5,
+        -362
       ],
-      "lens": 14.6
+      "lens": 15.8
     },
     {
       "t": 19,
       "at": [
-        -288.1,
-        82.1,
-        -257.6
+        -68,
+        78,
+        -188
       ],
       "look": [
-        -44.2,
-        5.1,
-        -444.6
+        26,
+        19,
+        -354
       ],
-      "lens": 13.6
+      "lens": 16.1
     },
     {
       "t": 20,
       "at": [
-        -370,
-        90,
-        -280
+        -78,
+        88,
+        -186
       ],
       "look": [
-        -60,
-        0,
-        -470
+        36,
+        18.5,
+        -348
       ],
-      "lens": 13
+      "lens": 16.4
     }
   ],
   "ease": "none",

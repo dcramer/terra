@@ -225,6 +225,12 @@ struct Light {
     /// The camera's exposure (EV at ISO 100): set for sunlit ground by day, opening up a
     /// little through the dusk so that the twilight sky still shows, as an eye adapts.
     exposure: f32,
+    /// How much of its colour the land in the grade's shadows and midtones keeps: under a
+    /// low sun the meadow greys and the light's warmth carries the colour, as in a dusk
+    /// photograph, while the bright sky and the sunlit faces (the highlights) keep theirs.
+    /// At full colour the end of the dusk film read as a mid-afternoon's lawn green under a
+    /// pink sky (settlement r19).
+    colour: f32,
 }
 
 impl Light {
@@ -241,6 +247,7 @@ impl Light {
             sky: f(self.sky, other.sky),
             night: f(self.night, other.night),
             exposure: f(self.exposure, other.exposure),
+            colour: f(self.colour, other.colour),
         }
     }
 }
@@ -261,7 +268,7 @@ impl Light {
 /// half as bright (sRGB 14 against 26) and the fire sits in a pool of its own light (blind
 /// 5.5/10 against 4.5). Its ambient at a third (fire round 25), that field is sRGB 4.4, not 14:
 /// the sky lit the grass to the frame's edge (blind 6/10 against 5).
-fn keys() -> [(f32, Light); 6] {
+fn keys() -> [(f32, Light); 7] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
     [
@@ -278,6 +285,7 @@ fn keys() -> [(f32, Light); 6] {
                 sky: 1.6,
                 night: 1.0,
                 exposure: 9.0,
+                colour: 1.0,
             },
         ),
         (
@@ -293,6 +301,7 @@ fn keys() -> [(f32, Light); 6] {
                 sky: 1.6,
                 night: 0.6,
                 exposure: 9.0,
+                colour: 0.8,
             },
         ),
         (
@@ -303,11 +312,12 @@ fn keys() -> [(f32, Light); 6] {
                 horizon: v(0.95, 0.55, 0.38),
                 zenith: v(0.16, 0.24, 0.52),
                 glow: v(1.0, 0.45, 0.22),
-                shade: v(0.68, 0.66, 0.9),
+                shade: v(0.8, 0.66, 0.86),
                 ambient: 1_150.0,
                 sky: 1.7,
                 night: 0.0,
                 exposure: 10.0,
+                colour: 0.74,
             },
         ),
         (
@@ -318,11 +328,28 @@ fn keys() -> [(f32, Light); 6] {
                 horizon: v(1.0, 0.72, 0.52),
                 zenith: v(0.2, 0.36, 0.72),
                 glow: v(1.0, 0.6, 0.32),
-                shade: v(0.66, 0.72, 0.98),
+                shade: v(0.76, 0.68, 0.92),
                 ambient: 1_550.0,
                 sky: 1.6,
                 night: 0.0,
                 exposure: 10.4,
+                colour: 0.74,
+            },
+        ),
+        (
+            12.0,
+            Light {
+                light: v(1.0, 0.94, 0.86),
+                illuminance: 30_000.0,
+                horizon: v(1.0, 0.8, 0.62),
+                zenith: v(0.21, 0.4, 0.78),
+                glow: v(1.0, 0.66, 0.38),
+                shade: v(0.72, 0.72, 0.96),
+                ambient: 1_660.0,
+                sky: 1.6,
+                night: 0.0,
+                exposure: 10.4 + (EXPOSURE_EV100 - 10.4) * 0.43,
+                colour: 0.84,
             },
         ),
         (
@@ -338,6 +365,7 @@ fn keys() -> [(f32, Light); 6] {
                 sky: 1.6,
                 night: 0.0,
                 exposure: EXPOSURE_EV100,
+                colour: 1.0,
             },
         ),
         (
@@ -353,6 +381,7 @@ fn keys() -> [(f32, Light); 6] {
                 sky: 1.6,
                 night: 0.0,
                 exposure: EXPOSURE_EV100 + 1.0,
+                colour: 1.0,
             },
         ),
     ]
@@ -566,7 +595,7 @@ fn shine(
     nightfall.set_if_neq(Nightfall(dark));
     let cast = cast.map(|c| c.0).unwrap_or_default();
     for mut grade in &mut grading {
-        fade_colour(&mut grade, height, cast);
+        fade_colour(&mut grade, height, light.colour, cast);
     }
     // Out from under the trees, where the sky over the eye is open, the forest's haze gives
     // way to the open air's (D273): thinner, so the far forest and the land beyond show, and
@@ -669,6 +698,7 @@ fn mist_light(
 fn fade_colour(
     grade: &mut bevy::render::view::ColorGrading,
     height: f32,
+    kept: f32,
     cast: crate::weather::Grade,
 ) {
     // The grade's white balance is left neutral (`scene`) at every hour and everywhere but
@@ -697,7 +727,10 @@ fn fade_colour(
         grade.global.tint = cast.tint;
     }
     let lit = smoothstep(-3.0, 3.0, height);
-    let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night;
+    let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night * kept;
+    if (grade.midtones.saturation - kept).abs() > 1e-4 {
+        grade.midtones.saturation = kept;
+    }
     if (grade.shadows.saturation - dim).abs() > 1e-4 {
         grade.shadows.saturation = dim;
     }
@@ -774,226 +807,4 @@ fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::scene::SUN_DIRECTION;
-
-    fn path() -> SkyPath {
-        SkyPath::over(Vec3::new(0.1, 1.0, 0.2), climate().declination(0))
-    }
-
-    #[test]
-    fn the_mist_is_drawn_as_thick_round_a_walker_and_thinner_for_an_eye_above_it() {
-        // A walker, and a rider, stand in the mist as it was tuned.
-        assert_eq!(above_mist(1.7), 1.0);
-        assert_eq!(above_mist(3.0), 1.0);
-        // From a bird's-eye height the haze between the eye and the ground is thinner, the
-        // higher the thinner, and never gone.
-        let (low, high, higher) = (above_mist(12.0), above_mist(25.0), above_mist(60.0));
-        assert!(
-            low < 1.0 && high < low && higher <= high,
-            "{low} {high} {higher}"
-        );
-        assert!(higher > 0.2, "{higher}");
-    }
-
-    #[test]
-    fn the_eye_opens_up_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
-        let key = 11.8;
-        // The lush forest's world and any world's forest keep the key, by day and by night.
-        assert_eq!(open_exposure(key, 1.0, false, 0.0), key);
-        assert_eq!(open_exposure(key, 1.0, false, 1.0), key);
-        assert_eq!(open_exposure(key, 0.2, true, 0.0), key);
-        assert_eq!(open_exposure(key, 0.2, true, 1.0), key);
-        // Open moonlit land on a far-seeing world opens up too, less than by day, so a
-        // town's street and a lake's shore at night are not silhouettes.
-        let moonlit = open_exposure(key, 1.0, true, 1.0);
-        assert!(moonlit < key - 0.5, "{moonlit}");
-        assert!(moonlit > open_exposure(key, 1.0, true, 0.0), "{moonlit}");
-        // Out on a mountain lake's shore by day, brighter: a lower EV.
-        let open = open_exposure(key, 1.0, true, 0.0);
-        assert!(open < key - 1.0, "{open}");
-        // And smoothly between, as one walks out of the trees.
-        let mut last = key;
-        for k in 0..=20 {
-            let now = open_exposure(key, k as f32 / 20.0, true, 0.0);
-            assert!(now <= last && last - now < 0.3, "{last} then {now}");
-            last = now;
-        }
-    }
-
-    #[test]
-    fn out_of_the_trees_the_haze_is_thinner_and_takes_the_horizons_colour() {
-        let horizon = Vec3::new(0.9, 0.86, 0.8);
-        let small = crate::air::AirScale(crate::air::HAZE_SCALE);
-        let (under, near) = haze_for(horizon, 0.1, small);
-        let (out, far) = haze_for(horizon, 1.0, small);
-        assert_eq!(near, super::super::scene::HAZE_VISIBLE_M);
-        assert!(far > near * 8.0, "{far} against {near}");
-        // Under the canopy green and dim; out of it the horizon's own hue.
-        assert!(under.y > under.x && under.y > under.z, "{under}");
-        let hue = |c: Vec3| c / c.max_element();
-        assert!(
-            (hue(out) - hue(horizon)).abs().max_element() < 1e-4,
-            "{out}"
-        );
-        // Between, it changes smoothly as the eye walks out.
-        let mut last = near;
-        for k in 1..=20 {
-            let (_, now) = haze_for(horizon, k as f32 / 20.0, small);
-            assert!(now >= last && now < last * 1.6, "{last} then {now}");
-            last = now;
-        }
-    }
-
-    #[test]
-    fn the_sun_rises_stands_high_at_noon_and_sets() {
-        let path = path();
-        assert!(path.height(MORNING) > 10.0 && path.height(MORNING) < 30.0);
-        assert!(
-            path.height(9.0) > path.height(MORNING),
-            "the morning sun climbs"
-        );
-        // At noon the sun is as far from overhead as the latitude, less its declination.
-        let noon = path.height(12.0);
-        let highest = 90.0 - LATITUDE.to_degrees() + path.declination.to_degrees();
-        assert!((noon - highest).abs() < 0.5, "noon {noon}, not {highest}");
-        assert!(path.height(0.0) < -30.0, "midnight is dark");
-        // As long up as the sunrise equation says: cos h = -tan latitude tan declination,
-        // with h the hour angle from sunrise to noon. In summer, longer than the night.
-        let sunrise = libm::acosf(-libm::tanf(LATITUDE) * libm::tanf(path.declination));
-        let day_tenths = sunrise / TAU * 2.0 * 240.0;
-        let up = (0..240)
-            .filter(|i| path.height(*i as f32 / 10.0) > 0.0)
-            .count();
-        assert!(
-            (up as f32 - day_tenths).abs() <= 2.0,
-            "{up} tenths of an hour of day, not {day_tenths}"
-        );
-        assert!(up > 120);
-        // East in the morning, west in the evening.
-        assert!(path.sun(7.0).dot(path.east) > 0.5);
-        assert!(path.sun(17.0).dot(path.east) < -0.5);
-    }
-
-    #[test]
-    fn the_morning_sun_stands_where_the_art_put_it() {
-        let path = path();
-        let toward = SUN_DIRECTION.reject_from(path.up).normalize();
-        let sun = path.sun(MORNING).reject_from(path.up).normalize();
-        assert!(sun.dot(toward) > 0.999);
-    }
-
-    #[test]
-    fn the_light_is_the_art_at_twenty_degrees_and_dark_at_night() {
-        let keys = keys();
-        let (_, art) = keys.iter().find(|(height, _)| *height == 20.0).unwrap();
-        let (_, deepest) = keys[0];
-        let close = |a: f32, b: f32| (a - b).abs() <= 1e-3 * b.abs().max(1.0);
-        // At each key the light is the key's, and past the last ones it stays.
-        for (height, light) in keys {
-            let at = light_at(height);
-            assert!(close(at.illuminance, light.illuminance), "{height}");
-            assert!(close(at.ambient, light.ambient), "{height}");
-            assert!(at.zenith.distance(light.zenith) < 1e-4, "{height}");
-        }
-        let night = light_at(-90.0);
-        assert_eq!(night, deepest);
-        assert_eq!(night.night, 1.0);
-        assert!(night.illuminance < art.illuminance && night.ambient < art.ambient);
-        // Most of the night's light is the moon's, so it lights the night from one side and
-        // casts shadows; the sky's light under it is a glow (D310).
-        assert!(night.illuminance > night.ambient);
-        // Halfway between two keys, the light is halfway between theirs.
-        for pair in keys.windows(2) {
-            let ((low, a), (high, b)) = (pair[0], pair[1]);
-            let between = light_at((low + high) / 2.0);
-            let halfway = (a.illuminance + b.illuminance) / 2.0;
-            assert!(close(between.illuminance, halfway), "{low} to {high}");
-            assert!(close(between.sky, (a.sky + b.sky) / 2.0), "{low} to {high}");
-        }
-    }
-
-    #[test]
-    fn the_moon_rises_from_nothing_as_the_sun_sets() {
-        // Not till the dusk has gone, so the afterglow is not lit from the far side (D310).
-        assert_eq!(moonlight(-1.0), 0.0);
-        assert_eq!(moonlight(-8.0), 0.0);
-        assert!(moonlight(-10.0) < moonlight(-13.0));
-        assert_eq!(moonlight(-14.0), light_at(-14.0).illuminance);
-        assert_eq!(moonlight(-18.0), light_at(-18.0).illuminance);
-    }
-
-    #[test]
-    fn the_moon_stands_high_on_the_far_side_of_the_sky_from_the_sun() {
-        let path = SkyPath::over(Vec3::Y, climate().declination(0));
-        for hour in [21.0, 23.5, 1.0, 3.0] {
-            let moon = path.moon(hour);
-            let up = libm::asinf(moon.dot(Vec3::Y));
-            assert!((up - MOON_HEIGHT).abs() < 1e-3, "{hour}: {up}");
-            let sun = path.sun(hour).reject_from(Vec3::Y);
-            assert!(
-                moon.reject_from(Vec3::Y).dot(sun) < 0.0,
-                "{hour}: on the sun's side"
-            );
-        }
-    }
-
-    #[test]
-    fn a_place_east_of_the_start_keeps_a_later_hour_by_its_own_sun() {
-        let path = SkyPath::over(Vec3::Y, climate().declination(160));
-        // A place 15 degrees round the pole to the east: its sky an hour on from the start's.
-        let east = Quat::from_axis_angle(path.pole(), 15f32.to_radians()) * Vec3::Y;
-        assert!(east.dot(path.east) > 0.0, "the turn goes east");
-        let there = path.seen_from(east);
-        for hour in [6.0, 9.0, 13.0, 17.5] {
-            assert!(
-                (path.local_hour(hour) - hour).abs() < 1e-4,
-                "the start keeps the clock"
-            );
-            let local = there.local_hour(hour);
-            assert!((local - (hour + 1.0)).abs() < 1e-3, "{hour}: {local}");
-            // And its sun stands as the start's does at that hour.
-            assert!(
-                (there.height(hour) - path.height(hour + 1.0)).abs() < 0.05,
-                "{hour}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_clock_goes_round() {
-        let mut clock = Clock { day: 3, hour: 23.9 };
-        clock.advance(DAY_SECONDS / 24.0 * 0.2);
-        assert!((clock.hour - 0.1).abs() < 1e-3);
-        assert_eq!(clock.day, 4);
-        assert_eq!(clock.time().day(), 4);
-        assert!((clock.time().hour() - 0.1).abs() < 1e-3);
-    }
-
-    fn climate() -> WorldClimate {
-        WorldClimate(crate::data::read(WorldClimate::FILE))
-    }
-
-    #[test]
-    fn the_clock_starts_on_the_sun_the_art_was_made_for_and_then_follows_the_year() {
-        // The art was made under a sun 10° north of the equator (D315).
-        let climate = climate();
-        let first = climate.declination(0);
-        assert!(
-            (first.to_degrees() - 10.0).abs() < 0.1,
-            "{}",
-            first.to_degrees()
-        );
-        // Through the year the noon sun climbs higher than that, at midsummer, and lower,
-        // at midwinter, and the morning sun stays where the art put it on the first day.
-        let year = climate.0.year;
-        let after = |phase: f64| {
-            let days = ((phase - year.start).rem_euclid(1.0) * year.days) as i64;
-            path().on(climate.declination(days)).height(12.0)
-        };
-        let first_noon = path().height(12.0);
-        assert!(after(0.5) > first_noon + 10.0, "{}", after(0.5));
-        assert!(after(0.0) < first_noon - 25.0, "{}", after(0.0));
-    }
-}
+mod tests;
