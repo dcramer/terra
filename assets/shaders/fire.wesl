@@ -92,7 +92,9 @@ const BOOK_COLUMNS: f32 = 8.0;
 // (tools/fire/bake/sheet.ts), each set's exposure through today's tonemapper.
 // The campfire at 32, its light a real one's, draws its core as the night photographs' (sRGB
 // 254,235,133 against 253,224,133), its stones under it (research/2026-10-19-fire-step-back.md).
-const HEARTH_BRIGHTNESS: f32 = 32.0;
+// At 22 and its torn edges softer (`HEARTH_FEATHER`, `TONGUE_FEATHER`, `COLUMN_SIDES`) its tongues keep
+// orange edges and tips, where at 32 they read cream-yellow with six times the near-white (fire round 26).
+const HEARTH_BRIGHTNESS: f32 = 22.0;
 const TORCH_BRIGHTNESS: f32 = 3.3;
 const BLAZE_BRIGHTNESS: f32 = 2.1;
 // A breath's: its puffs along the stream, the fireball where it strikes, the blast when it
@@ -252,10 +254,10 @@ const HEARTH_SEE: f32 = 0.8;
 // faint rim is eaten too and the flame has an edge, not an orange halo round it. The feather
 // soft enough that the edge is wispy where it meets the dark: at 0.07 it was cut out (blind
 // review, fire round 16: 6/10 against 5 at 0.2, with the tongues' and columns' sides softer).
-const HEARTH_FEATHER: f32 = 0.2;
+const HEARTH_FEATHER: f32 = 0.32;
 // A tongue's erosion feather, and how far in a column's torn sides start to thin.
-const TONGUE_FEATHER: f32 = 0.14;
-const COLUMN_SIDES: f32 = 0.25;
+const TONGUE_FEATHER: f32 = 0.24;
+const COLUMN_SIDES: f32 = 0.4;
 const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // Its body as a few overlapping columns of flame round the stack, not one sheet behind it:
 // how many, how much of the baked frame's width each shows, and how far out from the middle
