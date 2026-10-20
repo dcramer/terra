@@ -141,8 +141,8 @@ impl Plugin for GameplayPlugin {
         // The kinds of thing gameplay runs on, after the world's.
         registries::plugin(app);
         // A player needs something to build on, and takes over from the build keys.
-        build::plugin(app);
-        build::player_plugin(app);
+        build::building::plugin(app);
+        build::building::player_plugin(app);
         torchlight::plugin(app);
         wear::plugin(app);
         pile::plugin(app);

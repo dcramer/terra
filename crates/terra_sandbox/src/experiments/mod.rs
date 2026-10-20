@@ -35,7 +35,7 @@ pub const ALL: &[Experiment] = &[
     Experiment {
         name: "build",
         about: "Construction: a base of walls, floors and roofs. V cycles a wall cell through windows and doors, B adds a room.",
-        add: terra_game::build::plugin,
+        add: terra_game::build::building::plugin,
     },
     Experiment {
         name: "forest",

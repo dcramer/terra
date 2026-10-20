@@ -21,12 +21,13 @@ use std::time::SystemTime;
 use terra_build::kit::{Kit, Kits, Pattern};
 use terra_build::ops::{Context, Done, Op, Refusal};
 use terra_build::save::Snapshot;
-use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, Rules, STOREY_M, Walker, example};
+use terra_build::{Base, BuildOp, CELL_M, Cube, Kind, Panel, Rules, STOREY_M, Walker, example};
 use terra_core::Operation;
 
 pub(crate) mod act;
 mod arrays;
 mod atlases;
+pub mod building;
 mod draw;
 mod footing;
 pub(crate) use draw::PlanGhost;
@@ -98,7 +99,7 @@ pub(super) struct Build {
     /// Its sections: what is drawn of each, and what is to be laid again.
     sections: store::Sections,
     /// What came down since it was last burst into fragments (`loss`).
-    pub fallen: Vec<loss::Fallen>,
+    pub fallen: Vec<Fallen>,
 }
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
@@ -110,6 +111,18 @@ pub enum Shown {
     Plan(f32),
 }
 
+/// What came down in an act, for its fragments (`loss`): every cube as it was, and those harm
+/// destroyed, which burst where they were; the rest hung from them and fall whole.
+#[derive(Clone, Debug, Default)]
+pub struct Fallen {
+    pub fell: Vec<(IVec3, Cube)>,
+    pub destroyed: BTreeSet<[i32; 3]>,
+    /// Cubes harmed and still standing, as they are, with how many quarters of their health
+    /// they had lost before and have now (D305): the stones, timber and shingles that came
+    /// off them as they broke, falling from their open faces.
+    pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
+}
+
 /// How many operations are kept before they are folded into a snapshot.
 const FOLD_AFTER: usize = 400;
 
@@ -119,7 +132,7 @@ const FOLD_AFTER: usize = 400;
 pub(super) struct Applied {
     pub base: Base,
     pub done: Done,
-    pub fallen: Vec<loss::Fallen>,
+    pub fallen: Vec<Fallen>,
     pub repainted: Vec<([i32; 3], Kind, Kind)>,
     pub ops: Vec<Op>,
 }
@@ -176,7 +189,7 @@ pub(super) fn work_out(
         chipped.push((at, cube, before, now, out));
     }
     if !chipped.is_empty() {
-        fallen.push(loss::Fallen {
+        fallen.push(Fallen {
             chipped,
             ..default()
         });
@@ -191,7 +204,7 @@ pub(super) fn work_out(
             })
             .flatten()
             .collect();
-        fallen.push(loss::Fallen {
+        fallen.push(Fallen {
             destroyed: done
                 .fell
                 .iter()
@@ -456,8 +469,6 @@ pub fn plugin(app: &mut App) {
     }
     let free = not(resource_exists::<DrivenByPlayer>);
     app.insert_resource(Added)
-        .init_resource::<act::BuildRules>()
-        .init_resource::<act::Offcuts>()
         .add_systems(Startup, (setup, make_arrays).chain())
         .add_systems(
             PostStartup,
@@ -473,9 +484,6 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 reload_kit,
-                sheet::lay,
-                village::lay,
-                village::lay_scale,
                 maps::load,
                 arrays::stream.run_if(resource_exists::<arrays::Arrays>),
                 atlases::compress.run_if(resource_exists::<BuildLook>),
@@ -488,7 +496,6 @@ pub fn plugin(app: &mut App) {
     hlod::plugin(app);
     memory::plugin(app);
     light::plugin(app);
-    fire::plugin(app);
     views::plugin(app);
     app.add_systems(
         Update,
@@ -499,18 +506,6 @@ pub fn plugin(app: &mut App) {
         )
             .chain(),
     );
-}
-
-/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, its
-/// doors and shutters and every village house's, and drawing it again as it changes. Only where a player
-/// builds, so a run of the build keys alone needs nothing of the player.
-pub(crate) fn player_plugin(app: &mut App) {
-    act::plugin(app);
-    props::plugin(app);
-    loss::plugin(app);
-    remote::plugin(app);
-    memory::remote(app);
-    going_up::plugin(app);
 }
 
 /// A point just outside the example base's door, in the base's own space.
@@ -1012,31 +1007,6 @@ fn setup(
     // The player's base is built by plans, drawn as far as each cube is in.
     build.by_cubes = driven.is_some();
     build.by_plans = driven.is_some();
-    if let Some(kits) = look.kits.as_deref() {
-        commands.insert_resource(act::BuildRules {
-            rules: kits.rules(),
-            blocks: kits
-                .0
-                .iter()
-                .map(|kit| kit.kind())
-                .filter(|&kind| kits.one_at_a_time(kind))
-                .collect(),
-            footed: kits
-                .0
-                .iter()
-                .filter(|kit| kit.pattern == Pattern::Masonry && kit.framing.is_none())
-                .map(|kit| kit.kind())
-                .collect(),
-            names: kit_names(),
-            budgets: Vec::new(),
-            footing: footing_kind(kits),
-            families: kits
-                .0
-                .iter()
-                .map(|kit| (kit.kind(), plans::family(kit)))
-                .collect(),
-        });
-    }
     let operations = if driven.is_some() {
         Vec::new()
     } else {

@@ -14,7 +14,7 @@
 use super::act::Building;
 use super::arrays::{Arrays, BuildMaterial};
 use super::draw;
-use super::{Build, BuildLook, Built, Site};
+use super::{Build, BuildLook, Built, Fallen, Site};
 use crate::planet::{MainCamera, Planet};
 use crate::play::{Builder, LocalPlayer, Player, Shake};
 use bevy::camera::visibility::NoFrustumCulling;
@@ -85,18 +85,6 @@ pub fn plugin(app: &mut App) {
             .chain()
             .after(super::layout::Drawing::Upload),
     );
-}
-
-/// What came down in an act, for its fragments: every cube as it was, and those harm
-/// destroyed, which burst where they were; the rest hung from them and fall whole.
-#[derive(Clone, Debug, Default)]
-pub struct Fallen {
-    pub fell: Vec<(IVec3, Cube)>,
-    pub destroyed: BTreeSet<[i32; 3]>,
-    /// Cubes harmed and still standing, as they are, with how many quarters of their health
-    /// they had lost before and have now (D305): the stones, timber and shingles that came
-    /// off them as they broke, falling from their open faces.
-    pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
 }
 
 /// Marks a fragment's entity.

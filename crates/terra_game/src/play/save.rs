@@ -777,7 +777,7 @@ mod tests {
             .init_resource::<Clock>()
             .init_resource::<Waiting>();
         registries::plugin(&mut app);
-        crate::build::plugin(&mut app);
+        crate::build::building::plugin(&mut app);
         props::plugin(&mut app);
         app.world_mut().run_schedule(Startup);
         app

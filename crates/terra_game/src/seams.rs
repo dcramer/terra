@@ -2,8 +2,8 @@
 //! until step 8 makes them crates and Cargo holds them: every module is placed in the crate
 //! it is to move to (research/2026-10-18-crate-layout.md, "On Bevy"), and a module naming
 //! one in a crate above its own, or beside it (building play beside creatures and
-//! townsfolk), fails, unless the crossing is one step 7 has not cut yet, listed with its
-//! seam in [`NOT_YET_CUT`]. A new module is placed here; a seam cut takes its rows out.
+//! townsfolk), fails: step 7 cut every crossing, so none may come back. A new module is
+//! placed here.
 //! Tests and test-only items may name anything. The check reads the sources; it builds
 //! nothing.
 
@@ -154,6 +154,7 @@ const PLACES: &[(&str, Crate)] = {
         ("play/townsfolk", Folk),
         // Building play.
         ("build/act", Building),
+        ("build/building", Building),
         ("build/fire", Building),
         ("build/going_up", Building),
         ("build/loss", Building),
@@ -166,52 +167,6 @@ const PLACES: &[(&str, Crate)] = {
         ("play/tool", Building),
     ]
 };
-
-/// The crossings step 7 has not cut yet: the module that names, the module it names, and
-/// the seam that cuts it, numbered as the research's "Where the shared types go" lists
-/// them from `Village` (1), then those found since (10 on).
-const NOT_YET_CUT: &[(&str, &str, &str)] = &[
-    (
-        "build",
-        "build/act",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/fire",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/going_up",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/loss",
-        "10: the base's plugin adds building play's; Built::fallen",
-    ),
-    (
-        "build",
-        "build/props",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/remote",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/sheet",
-        "10: the base's plugin adds building play's",
-    ),
-    (
-        "build",
-        "build/village",
-        "10: the base's plugin adds building play's",
-    ),
-];
 
 /// This test's own module.
 const OWN: &str = "seams";
@@ -669,31 +624,12 @@ fn every_module_is_placed() {
 
 #[test]
 fn no_module_names_one_above_or_beside_it() {
-    let found = crossings();
-    let mut new = Vec::new();
-    for (asker, target, at) in &found {
-        if !NOT_YET_CUT
-            .iter()
-            .any(|(a, t, _)| a == asker && t == target)
-        {
-            new.push(at.clone());
-        }
-    }
-    let cut: Vec<String> = NOT_YET_CUT
-        .iter()
-        .filter(|(a, t, _)| !found.iter().any(|(fa, ft, _)| fa == a && ft == t))
-        .map(|(a, t, seam)| format!("{a} -> {t} ({seam})"))
-        .collect();
+    let found: Vec<String> = crossings().into_iter().map(|(_, _, at)| at).collect();
     assert!(
-        new.is_empty(),
+        found.is_empty(),
         "a module names one in a crate above or beside its own (D407): move the type it needs \
          down to the side that asks, or the code up beside what it names:\n  {}",
-        new.join("\n  ")
-    );
-    assert!(
-        cut.is_empty(),
-        "these seams are cut: take their rows out of src/seams.rs's NOT_YET_CUT:\n  {}",
-        cut.join("\n  ")
+        found.join("\n  ")
     );
 }
 
