@@ -217,21 +217,23 @@ fn paint(
     let through = crate::air::sun_through(libm::asinf(sun_height), dust.map_or(1.0, |d| d.0));
     let bare = linear(tweaks.grass_lush).lerp(linear(tweaks.ground_low), 0.4);
     let cover = snow.map_or(0.0, |snow| snow.0);
-    let colours = Colours {
+    let mut colours = Colours {
         low,
         day: 1.0 - nightfall.map_or(0.0, |n| n.0),
         shade: linear(light.shade),
         horizon: linear(sky.horizon),
         zenith: linear(sky.zenith),
-        // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky
-        // too; under snow, the snow's white (D327).
-        ground: bare.lerp(SNOW_BOUNCE, cover)
-            * (linear(tweaks.sun_color)
-                * through
-                * (tweaks.sun_illuminance * sun_height
-                    / (std::f32::consts::PI * light.brightness.max(1.0))))
-            + bare.lerp(SNOW_ALBEDO, cover),
+        ground: Vec3::ZERO,
     };
+    // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky too, in
+    // the sky's colour (white, the grass bounced its own green into a low sun's shade); under
+    // snow, the snow's white (D327).
+    colours.ground = bare.lerp(SNOW_BOUNCE, cover)
+        * (linear(tweaks.sun_color)
+            * through
+            * (tweaks.sun_illuminance * sun_height
+                / (std::f32::consts::PI * light.brightness.max(1.0))))
+        + bare.lerp(SNOW_ALBEDO, cover) * colours.overhead();
     if open.brightness != light.brightness {
         open.brightness = light.brightness;
     }
@@ -369,13 +371,35 @@ impl Colours {
             let mixed = hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low));
             // By day on the daylight locus: mixed along a straight line from the horizon's orange
             // to the zenith's blue, it passed through magenta, and the shade it lit read lilac.
-            mixed.lerp(on_daylight_locus(mixed), self.day) * (1.15 - 0.35 * e.max(0.0))
+            // Not while the sun is low: twilight's sky lies off the locus toward violet, the
+            // ozone's Chappuis band taking its orange (Hulburt 1953), and moved onto it the
+            // shade keys' warm violet came out a neutral grey the green ground bounce tinted
+            // (settlement r21).
+            // Squared, so a dawn of 10 degrees and up (the forest's 07:30) keeps most of it.
+            mixed.lerp(
+                on_daylight_locus(mixed),
+                self.day * (1.0 - self.low * self.low),
+            ) * (1.15 - 0.35 * e.max(0.0))
         };
         if up >= 0.0 {
             sky(up)
         } else {
             sky(0.0).lerp(self.ground, (-up / 0.15).clamp(0.0, 1.0))
         }
+    }
+
+    /// The hue of the light the sky sheds on open ground, at a luma of 1.
+    /// The sky is the same all round, so the cosine-weighted sum over the upper hemisphere is
+    /// one over its height: even in height is even in area, each height weighted by itself.
+    fn overhead(&self) -> Vec3 {
+        const N: usize = 16;
+        let mut sum = Vec3::ZERO;
+        for i in 0..N {
+            let y = (i as f32 + 0.5) / N as f32;
+            let across = (1.0 - y * y).max(0.0).sqrt();
+            sum += self.toward(Vec3::new(across, y, 0.0)) * y;
+        }
+        sum / sum.dot(Vec3::new(0.2126, 0.7152, 0.0722)).max(1e-4)
     }
 
     /// The diffuse light toward each of +X, -X, +Y, -Y, +Z, -Z, from the sky above the horizon
@@ -526,6 +550,33 @@ mod tests {
     }
 
     #[test]
+    fn a_low_sun_keeps_the_shade_violet_and_the_ground_lit_by_the_sky_is_not_green() {
+        // The settlement's dusk: an orange horizon, a violet shade key, grass on the ground.
+        let mut c = Colours {
+            low: 1.0,
+            day: 1.0,
+            shade: srgb_linear(0.76, 0.68, 0.92),
+            horizon: srgb_linear(1.0, 0.8, 0.62),
+            zenith: srgb_linear(0.35, 0.45, 0.75),
+            ground: Vec3::ZERO,
+        };
+        let sky = c.overhead();
+        // Violet: red and blue both over green, as the keys give it; on the locus green sat
+        // between them and the shade read grey.
+        assert!(sky.y < sky.x && sky.y < sky.z, "{sky}");
+        // Grass lit by that sky gives back a grey, not its own green.
+        let grass = Vec3::new(0.05, 0.09, 0.03);
+        c.ground = grass * sky;
+        let lit = c.ground / c.ground.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let unlit = grass / grass.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        assert!(lit.y < unlit.y, "{lit} {unlit}");
+        // By day it stays on the locus.
+        c.low = 0.0;
+        let day = c.overhead();
+        assert!(day.y >= day.x.min(day.z), "{day}");
+    }
+
+    #[test]
     fn a_colour_on_the_locus_is_never_magenta_and_keeps_its_brightness() {
         let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
         let lilac = Vec3::new(0.45, 0.4, 0.8);
@@ -542,11 +593,11 @@ mod tests {
     }
 
     #[test]
-    fn a_low_suns_sky_lights_the_shade_blue_not_lilac() {
-        // The keys a low sun gives (`daylight`): an orange horizon, a blue zenith and a lilac
-        // shade colour; every way up into the sky and the light toward each side is daylight.
+    fn above_twilight_an_orange_and_lilac_sky_lights_the_shade_daylight_not_lilac() {
+        // An orange horizon, a blue zenith and a lilac shade colour, with the sun above
+        // twilight; every way up into the sky and the light toward each side is daylight.
         let c = Colours {
-            low: 1.0,
+            low: 0.0,
             day: 1.0,
             shade: srgb_linear(0.68, 0.66, 0.9),
             horizon: srgb_linear(0.95, 0.55, 0.38),
