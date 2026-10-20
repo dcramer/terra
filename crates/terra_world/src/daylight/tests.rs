@@ -283,3 +283,15 @@ fn under_a_deck_the_light_comes_from_high_overhead_and_under_a_clear_sky_from_th
     );
     assert!(toward.dot(up) > 0.8 && toward.x > 0.0, "{toward}");
 }
+
+#[test]
+fn the_sun_casts_crisp_shadows_and_a_deck_soft_ones() {
+    assert_eq!(
+        light_size(0.0),
+        0.0,
+        "a clear sky keeps the sun's crisp edges"
+    );
+    let deck = light_size(crate::weather::deck_cover(0.95));
+    assert!(deck > 10.0, "a full deck's key is a wide source: {deck}");
+    assert!(light_size(crate::weather::deck_cover(0.5)) < deck);
+}

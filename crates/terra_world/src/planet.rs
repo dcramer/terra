@@ -343,6 +343,10 @@ pub struct Tweaks {
     /// Direction toward where the world's light comes from: the sun's, or under a deck turned
     /// up toward the sky's brightest part, overhead (`daylight`). Zero for the sun's own.
     pub light_direction: Vec3,
+    /// How wide the world's light is as a source, for its shadows' penumbrae (Bevy's PCSS):
+    /// zero for the sun's crisp edges, wide under a deck, whose light comes from the whole sky
+    /// (`daylight`).
+    pub light_size: f32,
     pub sea: bool,
     /// Sea level relative to the planet's nominal radius, in metres.
     #[inspector(min = -150.0, max = 150.0)]
@@ -728,6 +732,7 @@ pub fn plugin(app: &mut App) {
         sun_color: Color::WHITE,
         sun_illuminance: 12_000.0,
         light_direction: Vec3::ZERO,
+        light_size: 0.0,
         sea: !yard,
         sea_level_m: SEA_LEVEL_M,
         sea_shallow: Color::srgb(0.1, 0.38, 0.5),
@@ -913,6 +918,7 @@ fn apply_tweaks(
         .unwrap_or(tweaks.sun_direction.normalize_or(Vec3::Y));
     sun.0.color = tweaks.sun_color;
     sun.0.illuminance = tweaks.sun_illuminance;
+    sun.0.soft_shadow_size = (tweaks.light_size > 0.0).then_some(tweaks.light_size);
     *sun.1 = Transform::from_translation(toward_sun).looking_at(Vec3::ZERO, Vec3::Y);
 
     sea.0.scale = Vec3::splat(planet.radius_m() + tweaks.sea_level_m);

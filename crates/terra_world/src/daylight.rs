@@ -719,6 +719,15 @@ fn light_the_world(
     };
     tweaks.sun_illuminance = direct * beam;
     tweaks.light_direction = toward;
+    tweaks.light_size = light_size(deck);
+}
+
+/// How wide the world's light is as a source under a deck so much of the sky: the sun's own
+/// disc under a clear sky, crisp; under a deck the key is the sky's light, so what the crowns
+/// cast is a soft shade, not the sun's dapples (as Unreal's directional light's Source Angle
+/// widens under overcast).
+fn light_size(deck: f32) -> f32 {
+    DECK_LIGHT_SIZE * deck
 }
 
 /// Under a deck the sky is brightest overhead (CIE overcast, `skylight`), and what faces up
@@ -826,6 +835,10 @@ const WOODED_VEIL: f32 = 0.62;
 const OVERHEAD_KEY: f32 = 0.3;
 /// How far toward the zenith that key turns from the sun's direction.
 const KEY_UP: f32 = 0.8;
+/// How wide the key is as a source under a full deck, as Bevy's PCSS light size. From 10 up
+/// the crowns' dapples on the snow went to a soft shade, keeping a trunk's contact darkening;
+/// 40 won blind over the crisp key (weather round 21).
+const DECK_LIGHT_SIZE: f32 = 40.0;
 
 /// How many stops brighter the eye is set by day out in the open on a world whose views reach
 /// kilometres (D338). The day's exposures were tuned under the lush forest's canopy against

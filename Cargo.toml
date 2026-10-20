@@ -30,7 +30,7 @@ terra_world = { path = "crates/terra_world" }
 glam = { version = "0.33", features = ["libm"] }
 # Pinned by policy (D31): upgrade once the crates we depend on support the new release.
 # `jpeg`: models made with Tripo carry JPEG textures.
-bevy = { version = "0.20", features = ["free_camera", "bevy_dev_tools", "file_watcher", "jpeg"] }
+bevy = { version = "0.20", features = ["free_camera", "bevy_dev_tools", "file_watcher", "jpeg", "experimental_pbr_pcss"] }
 # No release of the inspector supports Bevy 0.20 yet (0.37 is for 0.19), so this is the
 # open pull request that ports it (jakobhellermann/bevy-inspector-egui#324), pinned to an
 # exact commit. Return to a crates.io release as soon as one supports Bevy 0.20 (D31).
