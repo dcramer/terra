@@ -15,7 +15,7 @@ test("it stands inside its catalogue footprint and height, on the ground", () =>
   for (const m of [wood, stone]) {
     for (let i = 0; i < m.pos.length; i += 3) {
       assert.ok(Math.hypot(m.pos[i], m.pos[i + 2]) <= HALF, `${m.pos[i]}, ${m.pos[i + 2]} past the footprint`);
-      assert.ok(m.pos[i + 1] <= TALL && m.pos[i + 1] >= -0.03, `height ${m.pos[i + 1]}`);
+      assert.ok(m.pos[i + 1] <= TALL && m.pos[i + 1] >= 0,`height ${m.pos[i + 1]}`);
     }
   }
 });

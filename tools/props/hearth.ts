@@ -26,7 +26,8 @@ import { fbm, hash, HOTTEST, noise, random, smooth } from "./coals.ts";
 /// The triangles it may have, its coal bed's included: a hero prop's, as a near tree's
 /// (art-style.md's budgets, D427).
 export const BUDGET = 10_000;
-/// Its footprint's half width and its height, metres: the catalogue's 1.3 x 0.55 x 1.3.
+/// The footprint's half width and the height it is made within, metres; the catalogue's
+/// `dims` are what it comes to (the contract's test holds them to the file).
 export const HALF = 0.65;
 export const TALL = 0.55;
 const LOGS = 7;
@@ -265,7 +266,9 @@ function stoneWorld(st: Stone, p: V3): V3 {
 function addStone(m: Mesh, st: Stone, tile: number) {
   st.from = m.idx.length / 3;
   const pts = SPHERE.v.map((d) => stoneWorld(st, stoneLocal(st, d)));
-  const ground = -0.012;
+  // Cut flush at its base, where the contract puts its origin: what is sunk lies under the
+  // ground it stands on, never under its origin (play::contract).
+  const ground = 0;
   // Smooth normals on the stone as shaped, then a vertex a corner, for its folded mapping.
   const nrm: V3[] = pts.map(() => [0, 0, 0]);
   for (const [a, b, c] of SPHERE.f) {
