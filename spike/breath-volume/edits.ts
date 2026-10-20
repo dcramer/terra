@@ -31,6 +31,7 @@ const edits: [string, string][] = [
         }
         return out;`,
   ],
+  ["    return 0.6 + 1.4 * stream_radius(b.reach, b);", "    // SPIKE: the stream full width, its ball no longer 2-3 times the rod.\n    return 0.8 + 0.55 * stream_radius(b.reach, b);"],
 ];
 for (const [a, b] of edits) {
   const n = s.split(a).length - 1;

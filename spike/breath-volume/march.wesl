@@ -2,7 +2,7 @@
 // mask (`FIRE_MASK`, crates/terra_world/src/fire/film.rs), as a hearth's flame says it.
 var<private> FLAME_SHARE: f32 = 0.0;
 // The volume's flame as bright as a hearth's (`HEARTH_BRIGHTNESS`), through the same film.
-const VOLUME_BRIGHTNESS: f32 = 32.0;
+const VOLUME_BRIGHTNESS: f32 = 12.0;
 // Extinction a metre at density 1: flame gas, and soot.
 const VOLUME_FLAME_K: f32 = 9.0;
 const VOLUME_SOOT_K: f32 = 14.0;
