@@ -476,19 +476,10 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
         let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
-        // Snow the wind drives onto a stem sticks in streaks down its windward side and in its
-        // cracks, on the ledges of the bark's own relief that face up or into the wind (winter
-        // round 12's judge: "plaster-white sleeves"; the UE5 pines' and Red Dead 2's trunks).
-        let windward = smoothstep(-0.1 - 0.3 * low, 0.7, dot((*input).world_normal, into));
-        let relief = (*input).N - (*input).world_normal;
-        let ledge = smoothstep(0.1, 0.4, dot(relief, sky_up) + 0.7 * dot(relief, into));
-        let streak = wander(across * 3.0 + foot_up * stem_h * 0.3 + seed) * 0.75 + wander(world * 7.0 + seed) * 0.25;
-        let streaked = smoothstep(0.42, 0.66, streak + 0.12 * low) * windward * (0.55 + 0.45 * ledge);
-        let caught = ledge * smoothstep(-0.3, 0.4, dot((*input).world_normal, into)) * (0.35 + 0.65 * low);
-        let plaster = max(streaked, caught * 0.85);
-        // At its foot the well's snow fades up into the bark a hand or two, ragged, held
-        // highest in the cracks and on the windward side: not a sleeve.
-        let bank = (1.0 - smoothstep(0.0, 0.2 + 0.15 * windward, stem_h - 0.15 * ledge + 0.15 * (wander(across * 6.0 + seed) - 0.5))) * (0.55 + 0.45 * ledge);
+        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot((*input).N, into));
+        let blot = wander(across * 1.7 + foot_up * stem_h * 0.5 + seed) * 0.7 + wander(world * 6.0 + seed) * 0.3;
+        let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
+        let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
         colour = mix(colour, SNOW, stuck);
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
