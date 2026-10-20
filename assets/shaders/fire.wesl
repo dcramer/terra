@@ -706,11 +706,27 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.35)) * b.ball;
         // The smoke thins as it spreads, wispier at its edge than in its middle.
         ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
+        // Seen down the stream, the ball rolls out from where it strikes in rings of vortices,
+        // each a bright roll with a darker, sootier lick in the crease behind it, hottest in
+        // the middle where the stream feeds it: a ball of even lumps read head-on as one flat
+        // orange wash (vol5's review). The rings are noise in the face's polar frame, carried
+        // outward with time.
+        let rp = length(rel.xy) / rb;
+        let around = rel.xy / max(length(rel.xy), 1.0e-3);
+        var rings = 0.5;
+        if detail {
+            rings = noise3(vec3(around * 2.4 + wb.xy * 0.9, rp * 3.8 - time * 1.7 + rel.z / rb * 1.4));
+        }
+        let roll = smoothstep(0.32, 0.68, rings);
+        ball *= mix(0.3, 1.0, roll);
+        let middle = 1.0 - smoothstep(0.0, 0.75, rp);
         let high = dot(rel, b.up) / rb;
         hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.6 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
+        hot_b += 0.45 * middle + 0.5 * (roll - 0.5);
         // Once off it burns out from the outside in over a second, to soot.
         hot_b -= 1.1 * saturate(b.since_off / 1.0);
         soot_b = smoothstep(0.1, 0.7, high + 0.5 * (lumps - 0.5)) * smoothstep(0.4, 0.9, d + 0.3 * (nb - 0.5));
+        soot_b = max(soot_b, 0.9 * (1.0 - smoothstep(0.22, 0.45, rings)) * smoothstep(0.15, 0.55, rp));
         stream *= 1.0 - smoothstep(0.05, 0.4, ball);
     }
     // Nothing behind the face it strikes: the ball flattens on it as on a wall. Let through
@@ -727,7 +743,10 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     }
     let hot = (stream * hot_s + ball * hot_b) / dense;
     // Soot where the stream has cooled toward its tip.
-    let soot_s = smoothstep(0.35, 0.9, zf) * (1.0 - smoothstep(0.2, 0.45, hot_s));
+    var soot_s = smoothstep(0.35, 0.9, zf) * (1.0 - smoothstep(0.2, 0.45, hot_s));
+    // And in the creases between its strands at its skin once it opens: dark licks between
+    // bright rolls, so seen end-on it reads as turbulent gas round a hot core, not one wash.
+    soot_s = max(soot_s, 0.75 * open * (1.0 - smoothstep(0.3, 0.45, e)) * smoothstep(0.45, 0.85, u));
     // And wherever the gas has cooled past burning.
     var soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
     // Once off, the ball's gas is all soot within a second: a fifth of it left as cooled flame
