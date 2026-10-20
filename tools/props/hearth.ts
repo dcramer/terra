@@ -80,8 +80,10 @@ function section(kind: number, R: number): Run[] {
   });
 }
 
-/** The stones' tones, sRGB 0-255: field stone, granite and sandstone greys. */
-export const STONE_TONES: readonly (readonly number[])[] = [[128, 121, 111], [114, 115, 112], [126, 112, 98], [104, 101, 96], [136, 130, 120]];
+/** The stones' tones, sRGB 0-255: warm to neutral grey-brown field stone, granite and sandstone
+ * greys of mid albedo; paler, they passed the tonemapper's shoulder by firelight and read
+ * salmon-pink (fire round 21). */
+export const STONE_TONES: readonly (readonly number[])[] = [[116, 109, 99], [106, 101, 93], [122, 110, 95], [98, 93, 86], [112, 106, 97]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
@@ -542,13 +544,16 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         const mottle = n3(mul(p, 4), st.seed + 20), grain = n3(mul(p, 70), st.seed + 21), vein = n3(mul(p, 9), st.seed + 22);
         let c = st.tone.map((v) => v * (0.82 + 0.36 * mottle));
         c = mix(c, [58, 56, 54], smooth(0.7, 0.78, grain) * 0.8);
-        c = mix(c, [176, 172, 164], smooth(0.3, 0.22, grain) * 0.6);
+        c = mix(c, [146, 140, 130], smooth(0.3, 0.22, grain) * 0.45);
         c = mix(c, c.map((v) => v * 1.15), smooth(0.48, 0.52, vein) * (1 - smooth(0.52, 0.56, vein)));
         // Lichen on what faces up, away from the fire's heat.
         c = mix(c, [132, 138, 112], 0.55 * smooth(0.2, 0.5, d[1]) * smooth(0.6, 0.68, n3(mul(p, 6), st.seed + 23)) * smooth(-0.2, 0.3, d[2]));
-        // Soot on the face toward the fire (its -z, inward), most at its top; earth at its foot.
-        const soot = smooth(-0.1, -0.7, d[2]) * (0.55 + 0.45 * smooth(-0.3, 0.5, d[1])) * (0.7 + 0.3 * mottle);
-        c = mix(c, [30, 27, 25], 0.75 * soot);
+        // Black soot on the face toward the fire (its -z, inward), most at its top, and over
+        // its top from that side, broken by its mottle; earth at its foot.
+        const inner = smooth(-0.05, -0.65, d[2]) * (0.6 + 0.4 * smooth(-0.3, 0.5, d[1]));
+        const top = smooth(0.35, 0.8, d[1]) * smooth(0.5, -0.4, d[2]) * 0.7;
+        const soot = Math.min(1, Math.max(inner, top) * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
+        c = mix(c, [22, 20, 19], 0.85 * soot);
         c = mix(c, [78, 64, 48], 0.7 * smooth(-0.05, -0.45, d[1]));
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));

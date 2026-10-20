@@ -221,11 +221,14 @@ export function maps(seed = 1): Uint8Array[] {
       const [X, Z] = [(x / (2 * T) - 0.5) / 0.49, (y / (2 * T) - 0.5) / 0.49];
       const r = Math.hypot(X, Z), n = fbm(X * 9, Z * 9, 1), speck = fbm(X * 30, Z * 30, 2);
       const char = 1 - smooth(0.35, 0.8, r);
-      // A grey-white ash skirt round the heap, broken at its rim into the earth.
-      const skirt = smooth(0.55, 0.78, r) * (1 - smooth(0.9, 1.0, r + 0.12 * (fbm(X * 4, Z * 4, 4) - 0.5)));
-      const grey = (48 + 26 * n) * (1 - 0.6 * char) * (1 - skirt) + (128 + 48 * n - 40 * smooth(0.6, 0.8, speck)) * skirt;
+      // A warm dark grey ash skirt round the heap, its edge soft and broken into the earth in
+      // patches: pale and even, it was a disc that went salmon-pink by firelight (fire round 20).
+      const edge = r + 0.2 * (fbm(X * 4, Z * 4, 4) - 0.5) + 0.1 * (fbm(X * 14, Z * 14, 9) - 0.5);
+      const patchy = (0.45 + 0.55 * smooth(0.3, 0.65, fbm(X * 7, Z * 7, 8))) * (1 - 0.5 * smooth(0.75, 0.95, edge) * (1 - smooth(0.4, 0.6, fbm(X * 16, Z * 16, 10))));
+      const skirt = smooth(0.5, 0.74, r) * (1 - smooth(0.68, 1.04, edge)) * patchy;
+      const grey = (48 + 26 * n) * (1 - 0.6 * char) * (1 - skirt) + (96 + 24 * n - 16 * smooth(0.6, 0.8, speck)) * skirt;
       const smoulder = char * smooth(0.4, 0.7, fbm(X * 5, Z * 5, 3)) * 0.9 + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
-      put(x, 2 * T + y, [grey + 12 * smoulder, grey * 0.97, grey * 0.93], glowColour(smoulder), 0.95);
+      put(x, 2 * T + y, [grey * 1.02 + 12 * smoulder, grey * 0.96, grey * 0.89], glowColour(smoulder), 0.95);
     }
   }
   // The coals: a tile each of several, read by direction (octahedral), top at the middle.

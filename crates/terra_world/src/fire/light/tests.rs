@@ -281,10 +281,11 @@ fn a_hearth_lights_wood_flame_orange_with_its_green_kept() {
     // Mitchell Charity's blackbody table (sRGB, CIE 1964 10 degree): 2,200 K #ff932c and
     // 2,500 K #ffa148, as the games white-balance firelight. At 1,900 K (#ff8300) its green
     // was so low that the lit stones went salmon pink by night (fire round 13); its blue stays
-    // under the blackbody's, so they don't go pink the other way.
+    // under the blackbody's, so they don't go pink the other way. At 2,200-2,500 K's green
+    // they still read pink-salmon, so it may reach 2,700 K's (#ffa957, fire round 21).
     let c = HEARTH_LIGHT.to_srgba();
-    let (k2200, k2500) = (147.0 / 255.0, 161.0 / 255.0);
+    let (k2200, k2700) = (147.0 / 255.0, 169.0 / 255.0);
     assert!(c.red > 0.99, "{c:?}");
-    assert!((k2200 - 0.01..=k2500 + 0.01).contains(&c.green), "{c:?}");
+    assert!((k2200 - 0.01..=k2700 + 0.01).contains(&c.green), "{c:?}");
     assert!(c.blue < 44.0 / 255.0, "{c:?}");
 }
