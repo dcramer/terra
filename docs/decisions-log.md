@@ -609,3 +609,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-20**: D430 amended (by the agent, breath volume round 5): the marched breath's swirls finer, its fine noise an octave higher and stronger at the ball's edge, its yellow-white core kept.
 - **2026-10-20**: D426 amended (by the agent, mountains round 8): far walls cut into jointed blocks with hard-edged fracture faces and dark joints in the shader, snow on the blocks' lips; the range's rock carries snow 1200 m higher up to about 70 degrees.
 - **2026-10-20**: D430 amended (by the agent, breath volume round 5): the marched breath's strike lights the wall and ground orange through a per-channel shoulder (its lit share in the film mask), not salmon.
+- **2026-10-20**: D430 amended (by the agent, breath volume round 5): dark smoke frames the marched breath's top and back, and its smoke after the stop ages grey.

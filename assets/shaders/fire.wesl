@@ -705,7 +705,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         }
         let lumps = fbm3(pb * 2.2 + wb * 1.6);
         let d = length(rel) / rb;
-        ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6)) * b.ball;
+        ball = (1.0 - smoothstep(0.75, 0.95, d - 0.15 * saturate(dot(rel, b.up) / rb) + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6)) * b.ball;
         // The smoke thins as it spreads, wispier at its edge than in its middle.
         ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
         // Seen down the stream, the ball rolls out from where it strikes in rings of vortices,
@@ -727,7 +727,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         hot_b += 0.45 * middle + 0.5 * (roll - 0.5);
         // Once off it burns out from the outside in over a second, to soot.
         hot_b -= 1.1 * saturate(b.since_off / 1.0);
-        soot_b = smoothstep(0.1, 0.7, high + 0.5 * (lumps - 0.5)) * smoothstep(0.4, 0.9, d + 0.3 * (nb - 0.5));
+        soot_b = smoothstep(-0.15, 0.5, high + 0.5 * (lumps - 0.5)) * smoothstep(0.3, 0.8, d + 0.3 * (nb - 0.5));
         soot_b = max(soot_b, 0.9 * (1.0 - smoothstep(0.22, 0.45, rings)) * smoothstep(0.15, 0.55, rp));
         stream *= 1.0 - smoothstep(0.05, 0.4, ball);
     }
@@ -749,6 +749,8 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     // And in the creases between its strands at its skin once it opens: dark licks between
     // bright rolls, so seen end-on it reads as turbulent gas round a hot core, not one wash.
     soot_s = max(soot_s, 0.75 * open * (1.0 - smoothstep(0.3, 0.45, e)) * smoothstep(0.45, 0.85, u));
+    // And a sheath of smoke over its top from halfway, framing the flame dark.
+    soot_s = max(soot_s, 0.8 * smoothstep(0.3, 0.7, zf) * smoothstep(0.5, 0.85, u) * smoothstep(-0.1, 0.6, dot(q, b.up.xy)));
     // And wherever the gas has cooled past burning.
     var soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
     // Once off, the ball's gas is all soot within a second: a fifth of it left as cooled flame
@@ -806,7 +808,10 @@ const BEHIND: f32 = 0.5;
 // albedo 0.2 to 0.3, Bond and Bergstrom 2006); at 0.32 its crown stood pale grey as a cloud at noon.
 const SOOT_ALBEDO: f32 = 0.12;
 // The sky's fill on the soot, a share of the sun's, unshadowed: an overcast underside.
-const SOOT_SKY: f32 = 0.18;
+const SOOT_SKY: f32 = 0.32;
+// Once off, its smoke ages grey over a second: diluted soot scatters more than a fuel-rich
+// flame's (round 4's after-stop smoke was flat black).
+const SOOT_AGED_ALBEDO: f32 = 0.34;
 // The shadow ray toward the sun, from a sooty step: its taps, metres out along it, each
 // standing for the length up to the next, as Nubis and Unreal's Heterogeneous Volumes march a
 // few steps toward the light for a volume's self-shadow.
@@ -889,7 +894,7 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         let s = lights.directional_lights[0];
         let L = s.direction_to_light;
         to_sun = vec3(dot(L, b.lift), dot(L, b.side), dot(L, b.way));
-        sun = s.color.rgb * view.exposure * (SOOT_ALBEDO / 3.14159265);
+        sun = s.color.rgb * view.exposure * (mix(SOOT_ALBEDO, SOOT_AGED_ALBEDO, smoothstep(0.3, 1.5, b.since_off)) / 3.14159265);
     }
     let across = max(length(dl.xy), 0.25);
     // Drawn again as the film mask, only the flame's share is wanted, soft: the gas coarse,
