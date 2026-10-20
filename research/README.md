@@ -16,6 +16,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | [Fire step back: a professional flipbook in our engine](2026-10-19-fire-step-back.md) | 2026-10-19 |
 | [How games draw fire: four surveys combined](2026-10-19-how-games-draw-fire.md) | 2026-10-19 |
 | [Mountains that look proper: ours against real ranges and shipped games (2026-10-19)](2026-10-19-mountain-look.md) | 2026-10-19 |
+| [A raymarched breath for the cinematic tier](2026-10-19-raymarched-breath.md) | 2026-10-19 |
 | [Winter that reads: how shipped games draw a snowy forest](2026-10-19-winter-aaa.md) | 2026-10-19 |
 | [Binary art out of git history](2026-10-18-binary-art-out-of-history.md) | 2026-10-18 |
 | [How the crates should be cut](2026-10-18-crate-layout.md) | 2026-10-18 |
