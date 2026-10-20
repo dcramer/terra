@@ -199,19 +199,27 @@ const EMBER_REACH_M: f32 = 2.0;
 /// logs at noon (fire round 11).
 const EMBER_WEIGHT: f32 = 0.0;
 
-/// Each burning part given its own material, so its embers flicker with its own fire.
+/// Each burning part given its own material, so its embers flicker with its own fire, and
+/// drawn as a glow (`fire::GlowMaterial`): its glow's share of its light tonemapped as a
+/// flame's, out of the night's grade (D415).
 fn kindle(
     mut commands: Commands,
     added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<Embers>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    standard: Res<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<terra_world::fire::GlowMaterial>>,
 ) {
     for (entity, material) in &added {
-        let Some(own) = materials.get(&material.0).cloned() else {
+        let Some(own) = standard.get(&material.0).cloned() else {
             continue;
+        };
+        let glow = terra_world::fire::GlowMaterial {
+            base: own,
+            extension: terra_world::fire::Glow::default(),
         };
         commands
             .entity(entity)
-            .insert(MeshMaterial3d(materials.add(own)));
+            .remove::<MeshMaterial3d<StandardMaterial>>()
+            .insert(MeshMaterial3d(materials.add(glow)));
     }
 }
 
@@ -219,10 +227,16 @@ fn kindle(
 /// its light, as a burning building's char does (build.wesl `fire_glow`); dark with no fire
 /// near.
 fn smoulder(
-    embers: Query<(&MeshMaterial3d<StandardMaterial>, &GlobalTransform), With<Embers>>,
+    embers: Query<
+        (
+            &MeshMaterial3d<terra_world::fire::GlowMaterial>,
+            &GlobalTransform,
+        ),
+        With<Embers>,
+    >,
     glows: Option<Res<terra_world::fire::FireGlows>>,
     camera: Query<&bevy::camera::Exposure, With<terra_world::planet::MainCamera>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<terra_world::fire::GlowMaterial>>,
 ) {
     let Some(glows) = glows else {
         return;
@@ -253,9 +267,9 @@ fn smoulder(
         // Only when it changed, so a material is not written again for nothing.
         let changed = materials
             .get(&material.0)
-            .is_some_and(|m| m.emissive != emissive);
+            .is_some_and(|m| m.base.emissive != emissive);
         if changed && let Some(mut m) = materials.get_mut(&material.0) {
-            m.emissive = emissive;
+            m.base.emissive = emissive;
         }
     }
 }

@@ -429,6 +429,7 @@ pub fn plugin(app: &mut App) {
     fog::plugin(app);
     haze::plugin(app);
     film::plugin(app);
+    glow::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -923,11 +924,13 @@ fn show(
 mod books;
 mod film;
 mod fog;
+mod glow;
 mod haze;
 mod light;
 mod seen;
 mod smoke;
 
+pub use glow::{Glow, GlowMaterial};
 pub use light::{FireGlows, GLOWS};
 
 mod exposure;

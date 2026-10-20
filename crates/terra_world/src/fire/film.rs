@@ -6,7 +6,8 @@
 //! so a flame goes orange, yellow, then white, as night photographs of a campfire do (their
 //! brightest tenth B/R 0.03 to 0.15). Frostbite and The Witcher 3 tonemap their fire apart so.
 //!
-//! The flames say where they are in the HDR picture's alpha (`fire.wesl`, `FIRE_MASK`): their
+//! The flames say where they are in the HDR picture's alpha (`fire.wesl`, `FIRE_MASK`), as the
+//! glowing parts of what burns do for their glow's share (`glow`): their
 //! mask draw adds to it past 1, which nothing else of ours writes, and TAA, bloom and the
 //! volumetric fog keep it to the tonemapper; what is drawn blended over a flame (its smoke)
 //! takes its share back. Patched into Bevy's `tone_mapping` (D184), for the tonemapping pass
@@ -17,14 +18,16 @@ use bevy::prelude::*;
 /// Where Bevy keeps the library with the tonemapping.
 const LIBRARY: &str = "embedded://bevy_core_pipeline/tonemapping.wesl";
 
-/// Where Bevy's tonemapping starts, the colour graded.
-const BEFORE: &str = "    // tone_mapping
-@if(TONEMAP_METHOD_LINEAR) {";
+/// Where Bevy's sectional grading starts, the colour white-balanced.
+const BEFORE: &str = "@if(SECTIONAL_COLOR_GRADING) {
+    color = sectional_color_grading(color, &color_grading);";
 
-/// The graded colour kept for the flames.
-const BEFORE_KEPT: &str = "    let graded = color;
-    // tone_mapping
-@if(TONEMAP_METHOD_LINEAR) {";
+/// The colour kept for the flames and glows before the sections' grade, exposed: the night's
+/// grade fades the dim's colour, and a dull coal's glow is dim, so its red went pink (fire
+/// round 31); a fire keeps its colour by night as an eye's cones see it (`daylight`).
+const BEFORE_KEPT: &str = "    let graded = color * powsafe(vec3(2.0), color_grading.exposure);
+@if(SECTIONAL_COLOR_GRADING) {
+    color = sectional_color_grading(color, &color_grading);";
 
 /// Bevy's grade after its tonemapping.
 const AFTER: &str = "    color = saturation(color, color_grading.post_saturation);";
@@ -32,7 +35,8 @@ const AFTER: &str = "    color = saturation(color, color_grading.post_saturation
 /// The flames through the film, ungraded after it.
 const AFTER_FLAMES: &str = "    var post_saturation = color_grading.post_saturation;
 @if(!TONEMAP_IN_SHADER) {
-    // A flame's share, from its mask past 1 in the alpha (crates/terra_world/src/fire/film.rs).
+    // A flame's or a glow's share, from its mask past 1 in the alpha
+    // (crates/terra_world/src/fire/film.rs).
     let flame = clamp(in.a - 1.0, 0.0, 1.0);
     color = mix(color, terra_flame_film(graded), flame);
     post_saturation = mix(post_saturation, 1.0, flame);
@@ -203,13 +207,57 @@ mod tests {
         }
     }
 
+    /// HSV hue of an sRGB colour, degrees.
+    fn hue(c: Vec3) -> f32 {
+        let (hi, lo) = (c.max_element(), c.min_element());
+        if hi - lo < 1e-6 {
+            return 0.0;
+        }
+        let h = if hi == c.x {
+            (c.y - c.z) / (hi - lo)
+        } else if hi == c.y {
+            2.0 + (c.z - c.x) / (hi - lo)
+        } else {
+            4.0 + (c.x - c.y) / (hi - lo)
+        };
+        (h * 60.0).rem_euclid(360.0)
+    }
+
+    #[test]
+    fn a_dull_coal_keeps_its_orange_red_by_night() {
+        // A dull coal's glow, linear: tools/props/coals.ts `glowColour(0.4)`, sRGB (107, 39, 3).
+        let coal = Vec3::new(0.146, 0.0205, 0.0011);
+        // The night's grade on the dim (daylight.rs: NIGHT_SATURATION 0.45 times
+        // DIM_SATURATION 0.2) fades it to a pinkish grey, its blue near its green: why the
+        // glow is kept out of it (`glow`, the mask).
+        let luma = coal.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let faded = (Vec3::splat(luma) + (coal - Vec3::splat(luma)) * 0.09).map(srgb);
+        assert!(faded.z / faded.y > 0.9, "{faded}");
+        // Through the film, ungraded, at every brightness a coal glows by night: orange-red,
+        // its green past a quarter of its red and its blue under its green.
+        for k in [0.3, 1.0, 3.0, 10.0] {
+            let shown = film(coal * k).map(srgb);
+            let h = hue(shown);
+            assert!((5.0..35.0).contains(&h), "{k}: {shown} hue {h}");
+            assert!(
+                shown.y / shown.x > 0.25 && shown.z < shown.y,
+                "{k}: {shown}"
+            );
+        }
+    }
+
     #[test]
     fn the_film_goes_in_once_for_the_tonemapping_pass_only() {
         let library = format!(
             "fn saturation() {{}}\n{ENTRY}\n    var color = in.rgb;\n{BEFORE}\n}}\n{AFTER}\n    return vec4(color, in.a);\n}}\n"
         );
         let out = patched(&library).unwrap();
-        assert!(out.contains("let graded = color;") && out.contains("terra_flame_film(graded)"));
+        // The film takes the colour from before the sections' grade, exposed.
+        assert!(
+            out.contains("let graded = color * powsafe(")
+                && out.contains("terra_flame_film(graded)")
+        );
+        assert!(out.find("let graded").unwrap() < out.find("sectional_color_grading(").unwrap());
         assert!(out.contains("@if(!TONEMAP_IN_SHADER)"));
         assert!(out.matches(ENTRY).count() == 1 && out.contains("fn terra_flame_curve("));
         // The film is defined before the function that calls it.
