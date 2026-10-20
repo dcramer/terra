@@ -194,7 +194,13 @@ export function bed(seed = 1): Bed {
 const BRIGHTEST = 1.0;
 export function glowColour(heat: number): number[] {
   const h = Math.min(Math.max(heat, 0), 1);
-  const red = [HOTTEST[0] * Math.pow(h, 0.7), HOTTEST[1] * Math.pow(h, 1.2), HOTTEST[2] * h * h];
+  // Its green falls nearly as its red does (h^1.1 against h^0.95), so a dull coal is a deep
+  // orange-red, the core still yellower than the edge: with the green
+  // falling faster (h^1.2 against h^0.7) a dim coal was near pure red, which the night's
+  // desaturation turned pink (fire round 31: "pink pebbles on a pink-magenta base").
+  const r = HOTTEST[0] * Math.pow(h, 0.95);
+  // Never yellower than the core's own orange-yellow, as the dimmest would be.
+  const red = [r, Math.min(HOTTEST[1] * Math.pow(h, 1.1), 0.6 * r), HOTTEST[2] * h * h];
   // Past 1, toward the orange-yellow of the bed's hottest middle; its blue kept low, so it
   // goes yellow through the tonemapper rather than salmon.
   const y = smooth(1, 1.3, heat);

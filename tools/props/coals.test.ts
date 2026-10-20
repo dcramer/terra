@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BED_BUDGET, bed, maps, TILES, YELLOW } from "./coals.ts";
+import { BED_BUDGET, bed, glowColour, maps, TILES, YELLOW } from "./coals.ts";
+
+test("a dull coal glows deep orange-red, never near pure red, which the night's grade turns pink", () => {
+  for (const h of [0.2, 0.4, 0.6, 0.8, 1]) {
+    const [r, g, b] = glowColour(h);
+    assert.ok(g / r > 0.3, `at heat ${h} its green ${g.toFixed(0)} against red ${r.toFixed(0)}`);
+    assert.ok(b < g * 0.5, `at heat ${h} its blue stays low`);
+  }
+});
 
 test("a coal bed keeps to its triangle budget", () => {
   assert.ok(bed().idx.length / 3 <= BED_BUDGET);
@@ -57,6 +65,7 @@ test("its glow is red to orange-yellow, never salmon, and hottest in the middle"
     for (const [ox, oy] of tiles.map((t) => TILES[t])) for (let y = oy; y < oy + 128; y++) for (let x = ox; x < ox + 128; x++) [r, g] = [r + emissive[(y * 512 + x) * 4], g + emissive[(y * 512 + x) * 4 + 1]];
     return g / r;
   };
-  assert.ok(yellow([0, 1, 2, 3]) > yellow([8, 9, 10, 11]) * 1.3, "no hotter core");
+  // (1.3 before fire round 31, whose dull coals went orange-red from near pure red.)
+  assert.ok(yellow([0, 1, 2, 3]) > yellow([8, 9, 10, 11]) * 1.15, "no hotter core");
   assert.ok(lit > emissive.length / 4 / 20, "it hardly glows");
 });
