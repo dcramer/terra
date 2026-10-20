@@ -130,7 +130,7 @@ const SMOKE_CARDS: usize = 4;
 /// and so many puffs of smoke, close enough in time to rise as one column.
 const HEARTHS: usize = 16;
 const HEARTH_FLAME_CARDS: usize = 16;
-const HEARTH_SMOKE_CARDS: usize = 24;
+const HEARTH_SMOKE_CARDS: usize = 72;
 /// A hearth's sparks, thirty or more seen at once, most dying low (fire review, round 2:
 /// 30 to 60 small points, not a file of a few streaks).
 const HEARTH_EMBER_CARDS: usize = 48;

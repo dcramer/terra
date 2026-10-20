@@ -69,7 +69,13 @@ const SMOKE_HOUSE: i32 = 1;
 // grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
 const PUFF_FROM: f32 = 4.0;
 const PUFF_TO: f32 = 34.0;
-const HEARTH_THIN: f32 = 1.0;
+const HEARTH_THIN: f32 = 0.4;
+// A hearth's baked puff's alpha opened out (to this power) and mixed so far with a soft round
+// fall-off over its card, so each puff's edge reaches the next ones' and the wisp is one
+// thread: the bake's own alpha is a small ball in its card, and the puffs read as beads with
+// sky between them although the cards overlap (fire round 22).
+const HEARTH_OPEN: f32 = 0.6;
+const HEARTH_SOFT: f32 = 0.3;
 // How many times a hearth's wisp gives back the sun and sky its single-scattering bake does.
 const HEARTH_SCATTER: f32 = 6.0;
 const PI: f32 = 3.14159265;
@@ -184,7 +190,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         let north = cross(east, up);
         let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.15 + 1.2 * t);
         let middle = foot + up * (tall * 0.55 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
-        let size = mix(0.15 + tall * 0.12, 0.9 + tall * 0.4, sqrt(t)) * (0.75 + 0.5 * luck);
+        let size = mix(0.15 + tall * 0.12, 0.9 + tall * 0.4, sqrt(t)) * (0.9 + 0.2 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
         if dot(right, right) < 1.0e-6 {
@@ -192,9 +198,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         }
         right = normalize(right);
         let card_up = cross(to_eye, right);
-        let spin = (luck - 0.5) * 0.6 + seconds * (luck - 0.5) * 0.15;
+        let spin = (luck - 0.5) * 0.25 + seconds * (luck - 0.5) * 0.06;
         // Drawn out along its rise, a wisp more than a ball.
-        let corner = (vertex.uv - vec2(0.5)) * vec2(size, size * 1.7);
+        let corner = (vertex.uv - vec2(0.5)) * vec2(size, size * 2.0);
         let turned = vec2(corner.x * cos(spin) - corner.y * sin(spin), corner.x * sin(spin) + corner.y * cos(spin));
         let world = middle + right * turned.x + card_up * turned.y;
         out.position = position_world_to_clip(world);
@@ -353,7 +359,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
     let p = abs(in.uv - vec2(0.5));
     let window = 1.0 - smoothstep(0.42, 0.5, max(p.x, p.y));
-    var alpha = near.a * life * window;
+    var cover = near.a;
+    if hearth {
+        let r = (in.uv - vec2(0.5)) * 2.0;
+        cover = mix(pow(near.a, HEARTH_OPEN), exp(-3.0 * dot(r, r)), HEARTH_SOFT);
+    }
+    var alpha = cover * life * window;
     // Faded in over its last metre and a half in front of what is behind it.
 @if(DEPTH_PREPASS)
     {
