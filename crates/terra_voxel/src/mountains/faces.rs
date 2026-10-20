@@ -39,9 +39,9 @@ impl Faces {
         name: "horns",
         weight: 1.0,
         cliff_deg: 40.0,
-        beds_m: 55.0,
+        beds_m: 75.0,
         riser: 0.5,
-        stepped: 0.65,
+        stepped: 0.6,
         dip: 0.05,
     };
     /// Saw ridges of thin tilted beds, as the Witcher 3's Skellige and the Valais' schist (D425):
@@ -73,8 +73,8 @@ const FACE_FROM_DEG: f32 = 12.0;
 /// turns, all in metres (`Faces`): the first two fold the beds over kilometres and hundreds of
 /// metres, the last wavers them. Gentle, its fall at most a few tenths of a metre a metre, so
 /// no ledge's outward fall (a third of a wall's) is undone by it.
-const BEDS_WARP_M: [f32; 3] = [60.0, 30.0, 6.0];
-const BEDS_WARP_ACROSS_M: [f32; 3] = [1900.0, 700.0, 330.0];
+const BEDS_WARP_M: [f32; 3] = [120.0, 45.0, 6.0];
+const BEDS_WARP_ACROSS_M: [f32; 3] = [2000.0, 800.0, 330.0];
 const DIP_TURNS_M: f32 = 4500.0;
 /// How far each bed's top strays from where even beds would put it, as a share of a bed: so
 /// beds run from a third of the kind's thickness to five thirds, thin bands between massive
@@ -153,11 +153,12 @@ impl Range {
             warp += m * s.sample(point / across + Vec3::splat(3.1 + 4.6 * i as f32));
         }
         let turn = s.sample(point / DIP_TURNS_M + Vec3::splat(11.3)) * std::f32::consts::TAU;
-        // The beds dip along the wall only, across its fall: dipping down it, a ledge's dip
-        // could undo its outward fall and hold a pond.
-        let dip = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn));
-        let fall = slope / steepness;
-        let dip = (dip - fall * dip.dot(fall)) * kind.dip;
+        // The beds dip as a plane: `point` lies along the up, so its dot with a level direction
+        // climbs across the ground as that direction's share in the ground's plane. Taking the
+        // fall's share out of it did nothing but add the point's tiny lean off the plane times
+        // the planet's radius, which jumped where the fall turned at a crease (a 0.3 m step).
+        // A kind's dip is kept under the share of a wall's fall its ledges keep, so they drain.
+        let dip = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn)) * kind.dip;
         let level = (height_m + warp + point.dot(dip)) / kind.beds_m;
         // Which bed, its tops strayed each by its own hash, so the beds run thick and thin.
         let top = |k: i32| k as f32 + BED_STRAY * (s.point_in(k, 41, 0).x - 0.5);
