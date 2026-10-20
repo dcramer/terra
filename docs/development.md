@@ -315,6 +315,8 @@ A behaviour you rely on gets a test. A test earns its place by failing when the 
 
 ## Continuous integration
 
+**Land by rebase, never by copying files** (D431). Commit your work, then `git pull --rebase origin main` and `git push origin HEAD:main`; never write files from another checkout, a patch's whole-file copy or an old branch over a fresh main, which silently undoes whatever landed since (b743f619 undid five agents' commits so). Before pushing, `git diff origin/main --stat` lists only the files you meant to change. The push hook warns, without failing, of a commit that deletes every line another recent commit added to a file its message doesn't name (`node tools/git/undone.ts [range]`, [tools/git](../tools/git/README.md)); if the undo is meant, name the file or the commit.
+
 The hooks only format and lint (D37). Heavy tests (GPU renders, the fire sheet, look checks, benches) run continuously on main, by `cargo xtask continuous` on the GPU machine, each a row of `tools/continuous/checks.json`.
 
 `.github/workflows/main.yml` runs the full check, `cargo xtask check --all`, only when started by hand (`gh workflow run main.yml`; no schedule while we are pre-release), on Linux with no GPU or Blender, in about an hour from a cold cache. A failure opens, or comments on, the issue "main fails the full check", with each stage's log as the run's artifact `check-logs`; the next passing run closes it. Beside it the CI agent ([ci-agent.md](ci-agent.md)) runs `cargo xtask nightly` continuously, and is the one place a baseline is lowered (D411, D414). `ci.yml`, by hand, runs the full check on Linux, macOS and Windows, and a compile check for the Windows target we cross-compile from WSL.

@@ -491,6 +491,7 @@ Checks, developer tools, languages and the repository.
 | [D417](decisions/D417.md) | Offscreen runs open no window | Tech | Agent | Decided | An unattended run drawing into a picture… |
 | [D421](decisions/D421.md) | Demo and film places leave out the combat lair | Design | Developers | Decided | Play keeps its lair of combat creatures… |
 | [D422](decisions/D422.md) | The review desk, one per developer | Tech | Agent | Decided | Each developer runs their own review desk… |
+| [D431](decisions/D431.md) | A push warns when it silently undoes another's recent commit | Tech | Agent | Decided | Work lands by `git pull --rebase origin main` onto one's… |
 
 ## Superseded and rejected
 
