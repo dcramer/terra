@@ -249,8 +249,13 @@ const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 const HEARTH_ERODE: f32 = 0.6;
 const HEARTH_SEE: f32 = 0.8;
 // The erosion's feather, and its floor: the threshold under the body's whole height, so its
-// faint rim is eaten too and the flame has an edge, not an orange halo round it.
-const HEARTH_FEATHER: f32 = 0.07;
+// faint rim is eaten too and the flame has an edge, not an orange halo round it. The feather
+// soft enough that the edge is wispy where it meets the dark: at 0.07 it was cut out (blind
+// review, fire round 16: 6/10 against 5 at 0.2, with the tongues' and columns' sides softer).
+const HEARTH_FEATHER: f32 = 0.2;
+// A tongue's erosion feather, and how far in a column's torn sides start to thin.
+const TONGUE_FEATHER: f32 = 0.14;
+const COLUMN_SIDES: f32 = 0.25;
 const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // Its body as a few overlapping columns of flame round the stack, not one sheet behind it:
 // how many, how much of the baked frame's width each shows, and how far out from the middle
@@ -1602,7 +1607,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let body = 1.0 - smoothstep(0.45, 1.0, across);
         let n = fbm(vec2(xx * 5.0 + luck * 11.0, y * 2.2 - time * 2.8));
         let edge = 0.1 + 0.7 * pow(y, 1.3) + 0.4 * age;
-        let shape = smoothstep(edge - 0.05, edge + 0.05, body * (0.45 + 0.8 * n));
+        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * (0.45 + 0.8 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         let heat_here = saturate(0.5 + 0.4 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
         let drawn = baked_flame(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
@@ -1653,7 +1658,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let half = 0.5 * (1.0 - 0.45 * uv.y);
             let tear = fbm(vec2(uv.x * 4.0 + luck * 7.0, uv.y * 6.0 - time * 2.0));
             let off = abs(uv.x - 0.5) / half + 0.3 * (rag - 0.5) + 0.5 * (tear - 0.5);
-            sides = 1.0 - smoothstep(0.5, 1.0, off);
+            sides = 1.0 - smoothstep(COLUMN_SIDES, 1.0, off);
         }
         let edges = foot * sides * smoothstep(0.0, 0.25, 1.0 - uv.y);
         var texel = flipbook(layer, f, vec2(x, uv.y));
