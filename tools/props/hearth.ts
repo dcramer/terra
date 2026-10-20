@@ -458,10 +458,12 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   let c = mix(c0, mix(c0.map((v) => v * 0.5), [52, 34, 24], 0.6), scorch);
   if (char <= 0) return [c, DARK, r0, h0];
   const hot = smooth(0.4, 0.82, x);
-  // How far toward the coals: the cracks open wider and burn hotter there.
+  // How far toward the coals: the cracks burn hotter there, opening only a little wider
+  // (fire round 32: opened 2.2 times, the feet's fissures stood as even pale stripes, "like a
+  // barcode"); the bark's furrows glow dull, never as deep as a fissure.
   const feet = smooth(0.55, 1.25, x);
-  const [crack, inside, id] = checks(a, b, hot * (0.6 + 1.6 * feet), seed + 11, stretch);
-  const deep = Math.max(crack, groove * smooth(0.35, 0.7, x));
+  const [crack, inside, id] = checks(a, b, hot * (0.6 + 0.5 * feet), seed + 11, stretch);
+  const deep = Math.max(crack, 0.55 * groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks where it burns hottest.
   block = mix(block, [92, 88, 84], 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59)));
@@ -471,14 +473,18 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // its lips up the log, through ember orange to yellow-white in the deepest seams at the feet
   // (fire round 31: an even-width pink-red neon mesh, its red near pure, which the night's
   // grade takes to pink).
-  const t = Math.min(1, deep * deep * hot * (0.55 + 0.6 * feet));
+  // Some runs of a seam burn hot and some dull, in patches along it, so its yellow is few and
+  // irregular; never past halfway from the ember's orange to the yellow-white.
+  const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
+  const t = Math.min(0.72, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
   const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
   // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
   // over its blocks, brightest at the hottest, broken by the char's mottle (fire round 31: dark
   // logs standing on the bed).
-  const bed = smooth(0.78, 1.2, x) * (0.45 + 0.55 * fbm(a * 9, b * 3, seed + 61)) * (0.55 + 0.45 * inside);
-  const glow = tone.map((v, i) => v * g + [200, 66, 8][i] * 0.35 * bed);
+  // A soft orange gradient rising from the coals, its mottle broad (fire round 32).
+  const bed = smooth(0.6, 1.3, x) * (0.6 + 0.4 * fbm(a * 4, b * 1.5, seed + 61)) * (0.7 + 0.3 * inside);
+  const glow = tone.map((v, i) => v * g + [214, 92, 16][i] * 0.5 * bed);
   return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 
