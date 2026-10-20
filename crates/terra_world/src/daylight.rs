@@ -637,7 +637,11 @@ fn shine(
             * (1.0 - (1.0 - WOODED_VEIL) * wooded);
         let air = air.lerp(MOON_HAZE, dark) * level;
         fog.color = colour(air.lerp(veil, deck));
-        fog.directional_light_color = colour(light.light * 0.55 * under.direct).with_alpha(0.5);
+        // Under a deck the near metres are kept clear of it (haze_start.rs).
+        fog.directional_light_color = crate::haze_start::directional(
+            colour(light.light * 0.55 * under.direct).to_linear(),
+            deck,
+        );
         let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
