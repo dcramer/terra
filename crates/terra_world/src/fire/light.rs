@@ -354,10 +354,14 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
         let glow = signal(blaze.seed, t, flicker);
         let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
         let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
+        // It sways up from where it hangs, never down: swayed a hand's breadth below, the
+        // shadowed light passed under a log's end, whose shadow ballooned for a fifth of a
+        // second into a hard black wedge over the ground (fire round 30, clip frames 198-208).
+        let swayed = sway(blaze.seed, t, flicker, reach);
+        let rise = swayed.dot(up(blaze.at));
+        let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
         let main = Lit {
-            at: blaze.at
-                + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP
-                + sway(blaze.seed, t, flicker, reach),
+            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP + swayed,
             lumens: lumens * (1.0 - HEARTH_FILL),
             color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,
@@ -371,9 +375,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
         let fill = Lit {
             lumens: lumens * HEARTH_FILL * HEARTH_FILL_GAIN,
             shadowless: true,
-            at: blaze.at
-                + up(blaze.at) * blaze.tall * HEARTH_FILL_UP
-                + sway(blaze.seed, t, flicker, reach),
+            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_FILL_UP + swayed,
             ..main.clone()
         };
         [main, fill]

@@ -101,6 +101,7 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         ..default()
     };
     let mut seen = (f32::MAX, f32::MIN);
+    let (mut low, mut high) = (f32::MAX, f32::MIN);
     for i in 0..400 {
         let t = i as f32 * 0.05;
         let lit = lit(&blazes, t);
@@ -130,12 +131,19 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
         seen = (seen.0.min(hearth.at.x), seen.1.max(hearth.at.x));
+        // It never sways below where it hangs, into the logs' ends, whose shadow from a light
+        // under them balloons over the ground (fire round 30).
+        let hangs = 1.5 * HEARTH_LIGHT_UP;
+        assert!(off.y >= hangs - 1e-4, "{} under {hangs}", off.y);
+        low = low.min(off.y);
+        high = high.max(off.y);
         // Its shadows and fall-off soften as a disc as wide as its flames (`crate::falloff`),
         // no wider, or its fall-off levels off past its stones and there is no pool.
         assert!(hearth.radius >= campfire.wide * 0.9 && hearth.radius <= campfire.wide * 1.5);
     }
-    // It moves, so the shadows it casts sway.
+    // It moves, so the shadows it casts sway, up and down as well as across.
     assert!(seen.1 - seen.0 > 0.04, "{seen:?}");
+    assert!(high - low > 0.04, "{low} {high}");
 }
 
 /// A light of so many lumens at a place.
