@@ -677,7 +677,11 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     stream *= smoothstep(-0.2, 0.2, l.z) * (1.0 - smoothstep(b.front - 1.5, b.front + 0.5, l.z)) * smoothstep(b.back - 0.5, b.back + 1.5, l.z);
     // Hottest on its line at the jaw, cooling outward in hot and cool strands, and along it.
     let core = mix(1.0, 0.78, smoothstep(0.1, 1.0, zf));
-    let hot_s = core * (1.0 - 0.75 * smoothstep(0.1, 0.95, u)) + 0.45 * (e - 0.5) + 0.25 * (fine - 0.5);
+    // Near the jaw it is hot through to its skin, a yellow-white jet a flamethrower's is for
+    // its first metres; cooled at its skin from the start, it read mid-orange from the mouth
+    // on (vol3's review). The strands come in as it opens.
+    let skin = mix(0.3, 0.75, smoothstep(0.05, 0.5, zf));
+    let hot_s = core * (1.0 - skin * smoothstep(0.1, 0.95, u)) + mix(0.2, 0.45, open) * (e - 0.5) + 0.25 * (fine - 0.5);
     // The fireball where it strikes: lumpy balls rolling up off the face, hot inside and at
     // the contact, cooling up to a cap of soot.
     var ball = 0.0;
@@ -756,6 +760,9 @@ fn breath_soot(h: f32) -> vec3<f32> {
 // How much of the pixel the march found flame (not soot), for the tonemapper's film mask
 // (`FIRE_MASK`, crates/terra_world/src/fire/film.rs), as a hearth's flame says it.
 var<private> FLAME_SHARE: f32 = 0.0;
+// Where the march's gas first hid half of what is behind it, as a depth, written for what
+// reads the depth after it (`MARCHED_DEPTH`'s `fragment`).
+var<private> BREATH_DEPTH: f32 = 0.0;
 // The volume's flame as bright as a hearth's (`HEARTH_BRIGHTNESS`) took it a pale yellow-white
 // blob through the film; at 12 it took colour (the volume note).
 const VOLUME_BRIGHTNESS: f32 = 12.0;
@@ -763,6 +770,8 @@ const VOLUME_BRIGHTNESS: f32 = 12.0;
 const VOLUME_FLAME_K: f32 = 9.0;
 const VOLUME_SOOT_K: f32 = 14.0;
 const VOLUME_STEPS: i32 = 96;
+// What is behind the breath, exposed, as the film mask takes it: a wall lit by the breath.
+const BEHIND: f32 = 0.5;
 // The soot's albedo: smoke from a fuel-rich flame is near black (soot's single-scattering
 // albedo 0.2 to 0.3, Bond and Bergstrom 2006); at 0.32 its crown stood pale grey as a cloud at noon.
 const SOOT_ALBEDO: f32 = 0.12;
@@ -808,10 +817,13 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     let far_side = in.world_position.xyz;
     let dir = normalize(far_side - eye);
     var far = distance(eye, far_side);
+    // Without the scene's depth, the hull's far side; with it, what stands behind.
+    BREATH_DEPTH = in.position.z;
 @if(DEPTH_PREPASS)
     {
         let here = depth_ndc_to_view_z(in.position.z);
-        let scene = depth_ndc_to_view_z(prepass_depth(in.position, 0u));
+        BREATH_DEPTH = prepass_depth(in.position, 0u);
+        let scene = depth_ndc_to_view_z(BREATH_DEPTH);
         far = min(far, far * scene / min(here, -1.0e-4));
     }
     let o = eye - b.mouth;
@@ -857,6 +869,7 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     var lit = vec3(0.0);
     var through = 1.0;
     var share = 0.0;
+    var glow = 0.0;
     for (var i = 0; i < VOLUME_STEPS; i++) {
         if s >= far || through < 0.01 {
             break;
@@ -876,9 +889,12 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         }
         ds = min(ds, far - s);
         if gas.x > 0.0 {
-            let sigma = gas.x * mix(VOLUME_FLAME_K, VOLUME_SOOT_K, gas.z);
+            // The hottest gas is the thinnest, so a white core glows through its yellow skin.
+            let sigma = gas.x * mix(VOLUME_FLAME_K * mix(1.0, 0.5, smoothstep(0.75, 1.0, gas.y)), VOLUME_SOOT_K, gas.z);
             let a = 1.0 - exp(-sigma * ds);
-            let flame = ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS;
+            // The hottest gas brighter again, as a blackbody's light climbs with its heat: the
+            // film takes it past orange to yellow and white (D415).
+            let flame = ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS * mix(1.0, 2.5, smoothstep(0.8, 1.0, gas.y));
             // Soot is black, faintly lit by the flame it still wraps.
             let soot = SOOT_BLACK + ramp_row(min(gas.y + 0.15, 1.0), BREATH_ROW).rgb * VOLUME_BRIGHTNESS * 0.015;
             light += through * a * mix(flame, soot, gas.z);
@@ -891,6 +907,11 @@ fn breath(in: VertexOutput) -> vec4<f32> {
                 lit += through * a * gas.z * sun * (shaded + SOOT_SKY);
             }
             share += through * a * (1.0 - gas.z);
+            glow += through * a * (1.0 - gas.z) * dot(flame, vec3(0.2126, 0.7152, 0.0722));
+            if through >= 0.5 && through * (1.0 - a) < 0.5 {
+                let at = view.clip_from_world * vec4(eye + dir * s, 1.0);
+                BREATH_DEPTH = at.z / at.w;
+            }
             through *= 1.0 - a;
         }
         s += ds;
@@ -899,7 +920,11 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     if cover < 0.002 {
         discard;
     }
-    FLAME_SHARE = share;
+    // The flame's share of the pixel's light, not of its cover: thin hot gas covers little
+    // but outshines what is behind it, and taken by its cover it went through the camera's
+    // curve, which mixes a bright orange toward white in every channel alike, and read salmon
+    // (vol4's hotter jet). What is behind is taken as a dim lit wall's light (`BEHIND`).
+    FLAME_SHARE = max(share, glow / (glow + through * BEHIND + 0.02));
     return vec4(light * on_screen() + lit, cover);
 }
 
@@ -2051,7 +2076,26 @@ fn fragment(in: VertexOutput) {
     discard;
 }
 
-@if(!PREPASS_PIPELINE)
+// A marched breath's light and its depth where it is dense (crates/terra_world/src/fire.rs,
+// `FireKey::volume`): the volumetric fog runs after the transparent pass and marches each ray
+// to the depth, so with none written it fogged the flame on to the wall or the sky behind
+// it, more over the sky, a level line along the wall's top seen head-on (vol5's opaque
+// flame showed it no thinner), as the cards' sprites once did (breath r31).
+struct BreathOutput {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+}
+
+@if(!PREPASS_PIPELINE && MARCHED_DEPTH)
+@fragment
+fn fragment(in: VertexOutput) -> BreathOutput {
+    var out: BreathOutput;
+    out.color = breath(in);
+    out.depth = BREATH_DEPTH;
+    return out;
+}
+
+@if(!PREPASS_PIPELINE && !MARCHED_DEPTH)
 @fragment
 fn fragment(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;

@@ -268,6 +268,21 @@ impl MaterialExtension for FireExtension {
         {
             depth.depth_write_enabled = Some(true);
         }
+        // A marched breath writes its depth where its gas grows dense (`MARCHED_DEPTH` in
+        // fire.wesl), for the volumetric fog after it; its mask draw writes none.
+        let prepass = descriptor.fragment.as_ref().is_some_and(|f| {
+            f.shader_defs.iter().any(|d| {
+                matches!(d, bevy::shader::ShaderDefVal::Bool(n, true) if n == "PREPASS_PIPELINE")
+            })
+        });
+        if key.bind_group_data.volume && !key.bind_group_data.mask && !prepass {
+            if let Some(fragment) = descriptor.fragment.as_mut() {
+                fragment.shader_defs.push("MARCHED_DEPTH".into());
+            }
+            if let Some(depth) = descriptor.depth_stencil.as_mut() {
+                depth.depth_write_enabled = Some(true);
+            }
+        }
         if key.bind_group_data.mask
             && let Some(fragment) = descriptor.fragment.as_mut()
         {
