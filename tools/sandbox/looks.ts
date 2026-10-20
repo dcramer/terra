@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT } from "./client.ts";
-import { type Bands, type Look, type Reference, bands, look, reference } from "./look.ts";
+import { type Bands, type Look, type Reference, bands, look, reference, waterMask } from "./look.ts";
 import { PLACES, place } from "./places.ts";
 import { readPng } from "./png.ts";
 
@@ -209,8 +209,12 @@ if (import.meta.main) {
       console.log(`looks: ${n}: shot in ${((Date.now() - started) / 1000).toFixed(0)} s`);
     }
     const views = where.measured.map((view) => {
-      const p = readPng(files.get(view)!);
-      return { view, numbers: numbers(look(p), ref.bands ? bands(p) : undefined) };
+      const file = files.get(view)!;
+      const p = readPng(file);
+      // The water as the game drew it, beside the view's picture when the run took it.
+      const mask = file.replace(/\.png$/, ".water.png");
+      const water = existsSync(mask) ? waterMask(p, readPng(mask)) : undefined;
+      return { view, numbers: numbers(look(p, undefined, water), ref.bands ? bands(p) : undefined) };
     });
     const judged = judge(kept.places[n].hold, numbers(ref.look, ref.bands), views);
     console.log(table(n, where.about, ref, where.measured, hour, judged, kept.rules));

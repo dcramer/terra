@@ -58,7 +58,7 @@ export function shootViews(place: Place, hour: string, out: string, dated: strin
   const prefix = resolve(out, `run-${hour}`);
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", ...made, "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
+    ["--offscreen", "--clean", "--water-mask", ...made, "--time", hour, ...dated, ...vantages, "--shots", `${prefix}@${frames}`],
     // Run outside Cargo, so told where assets/ is, as Cargo would.
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );
@@ -70,7 +70,10 @@ export function shootViews(place: Place, hour: string, out: string, dated: strin
   }
   const files = place.views.map(([name], index): [string, string] => {
     const file = resolve(out, `${hour}-${name}.png`);
-    renameSync(`${prefix}-${String(index * HOLD + HOLD - 10).padStart(5, "0")}.png`, file);
+    const shot = `${prefix}-${String(index * HOLD + HOLD - 10).padStart(5, "0")}`;
+    renameSync(`${shot}.png`, file);
+    // What the water covers, for the looks check's debug-tint rule (D429).
+    renameSync(`${shot}.water.png`, file.replace(/\.png$/, ".water.png"));
     return [name, file];
   });
   return { files, said };

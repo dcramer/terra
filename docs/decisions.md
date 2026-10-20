@@ -359,6 +359,7 @@ The look, models, bodies and gear, textures and audio.
 | [D392](decisions/D392.md) | Skylight is daylight, and the ground bounces the sun that reaches it | Tech | Agent | Decided | The painted sky the shade is lit by… |
 | [D423](decisions/D423.md) | Fire is lightly stylised, through the neutral camera | Design | Developers | Decided | Fire is drawn in the art style's lightly stylised… |
 | [D427](decisions/D427.md) | A hero prop's triangle budget | Tech | Agent | Decided | A prop the player sits beside or works at for minutes… |
+| [D429](decisions/D429.md) | The looks check knows water by what draws it | Tech | Agent | Decided | The looks check's debug-tint rule… |
 
 ## Engine and code
 

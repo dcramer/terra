@@ -124,6 +124,9 @@ pub struct LakeExtension {
     /// the world's light is the moon's by then.
     #[uniform(100)]
     sun: Vec4,
+    /// 1 while the water is drawn as a flat mask for the looks check (`WaterMask`), else 0.
+    #[uniform(100)]
+    mask: f32,
     /// The air all round the camera (`air::AirPicture`), unexposed.
     #[texture(101, dimension = "cube")]
     #[sampler(102)]
@@ -190,10 +193,17 @@ impl LakeExtension {
             twilight,
             glow,
             sun,
+            mask: 0.0,
             air,
         }
     }
 }
+
+/// While set, every lake draws itself as a flat magenta (`MASK` in lake.wesl) rather than
+/// water: a shot then shows what the water covers, by what draws it, so the looks check can
+/// leave the water's smooth colour out of its debug-tint rule (`--water-mask`, D429).
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WaterMask(pub bool);
 
 /// The lakes' material, the patterned ground's pools' (peaty), and what they mirror.
 #[derive(Resource)]
@@ -495,10 +505,16 @@ fn follow_sky_and_wind(
     sky: Option<Res<Sky>>,
     air: Option<Res<AirPicture>>,
     wind: Option<Res<crate::wind::WorldWind>>,
+    masked: Option<Res<WaterMask>>,
     mut materials: ResMut<Assets<LakeMaterial>>,
 ) {
     let Some(look) = look else {
         return;
+    };
+    let mask = if masked.is_some_and(|masked| masked.0) {
+        1.0
+    } else {
+        0.0
     };
     let wind = waves::over_water(wind.as_deref());
     let sky_changed = sky.as_ref().is_some_and(|sky| sky.is_changed())
@@ -506,10 +522,11 @@ fn follow_sky_and_wind(
     let Some(material) = materials.get(&look.0) else {
         return;
     };
-    if !sky_changed && material.extension.wind == wind {
+    if !sky_changed && material.extension.wind == wind && material.extension.mask == mask {
         return;
     }
     let mut extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
+    extension.mask = mask;
     // The rings spreading now stay.
     extension.rises = material.extension.rises;
     extension.wakes_at = material.extension.wakes_at;

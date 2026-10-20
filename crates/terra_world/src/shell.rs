@@ -48,6 +48,9 @@ usage: terra_sandbox [options]
                         counts them, as <prefix>-<frame>.png, then exit: a list and
                         ranges, like out/walk@300-320,600, so what pops in or out shows
                         between one frame and the next; a range may step, 600-2400/2
+  --water-mask          with each of --shots, a second picture WATER_MASK_FRAMES later
+                        with the lakes drawn flat magenta, <prefix>-<frame>.water.png:
+                        what the water covers, by what draws it (the looks check, D429)
   --clean               leave the frame-time readout off the screen, for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
@@ -271,6 +274,8 @@ pub struct Options {
     pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
+    /// With each of `shots`, a picture of what the lakes cover (`--water-mask`, D429).
+    pub water_mask: bool,
     /// The quality preset asked for, rather than the GPU's (`--quality`).
     pub quality: Option<crate::quality::Quality>,
     /// Keep the loading screen up, to look at it.
@@ -436,7 +441,31 @@ impl Shots {
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
         self.prefix.with_file_name(format!("{name}-{frame:05}.png"))
     }
+
+    /// Where the water's mask taken after a frame's shot goes (`--water-mask`).
+    pub fn water_path(&self, frame: u32) -> PathBuf {
+        self.path(frame).with_extension("water.png")
+    }
+
+    /// With `--water-mask`, whether the lakes are drawn as their mask on a frame, and the
+    /// shot whose mask is taken on it: each shot's mask on the frames after it, its picture on
+    /// the last of them, so the temporal antialiasing has let go of the water's own colour.
+    pub fn water_masking(&self, frame: u32) -> (bool, Option<u32>) {
+        let of = self
+            .frames
+            .iter()
+            .copied()
+            .find(|&shot| frame > shot && frame <= shot + WATER_MASK_FRAMES);
+        (
+            of.is_some(),
+            of.filter(|&shot| frame == shot + WATER_MASK_FRAMES),
+        )
+    }
 }
+
+/// How many frames after a shot its water's mask is taken (`--water-mask`): fewer than the
+/// 10 the looks check's views are held after their shots (vantage.ts's `HOLD`).
+pub const WATER_MASK_FRAMES: u32 = 6;
 
 /// Which frame of a scripted run this is, counted as `--press` counts them.
 #[derive(Resource, Default)]
@@ -462,6 +491,7 @@ impl Options {
             offscreen: false,
             remote_token: String::new(),
             clean: false,
+            water_mask: false,
             hold_loading: false,
             mute: false,
             sound: false,
@@ -537,6 +567,7 @@ impl Options {
                 "--on-top" => options.on_top = true,
                 "--offscreen" => options.offscreen = true,
                 "--clean" => options.clean = true,
+                "--water-mask" => options.water_mask = true,
                 "--quality" => {
                     let name = value("--quality")?;
                     options.quality = Some(crate::quality::Quality::from_name(&name).ok_or(
@@ -1445,11 +1476,27 @@ fn take_shots(
             .spawn(screenshot(picture))
             .observe(save_to_disk(shots.path(frame)));
     }
-    let last = *shots.frames.last().expect("a sequence has frames");
+    if options.water_mask {
+        let (masked, of) = shots.water_masking(frame);
+        commands.insert_resource(crate::lakes::WaterMask(masked));
+        if let Some(shot) = of {
+            commands
+                .spawn(screenshot(picture))
+                .observe(save_to_disk(shots.water_path(shot)));
+        }
+    }
+    let last = *shots.frames.last().expect("a sequence has frames")
+        + if options.water_mask {
+            WATER_MASK_FRAMES
+        } else {
+            0
+        };
     if frame <= last || options.bench || options.shot.is_some() {
         return;
     }
-    if shots.frames.iter().all(|&at| shots.path(at).exists()) {
+    if shots.frames.iter().all(|&at| {
+        shots.path(at).exists() && (!options.water_mask || shots.water_path(at).exists())
+    }) {
         println!(
             "SANDBOX saved {} screenshots as {}-*.png",
             shots.frames.len(),
@@ -1650,6 +1697,26 @@ mod tests {
             .unwrap();
         assert_eq!(every_other.frames, [10, 12, 14, 16]);
         assert_eq!(shots.path(301), PathBuf::from("out/walk-00301.png"));
+        // A shot's water mask: the lakes masked from the frame after it, pictured on the
+        // last masked frame, and drawn as water again on the next; never on the shot itself.
+        let masked = parse(&["--shots", "out/look@100,200", "--water-mask"]).unwrap();
+        let looks = masked.shots.as_ref().unwrap();
+        assert!(masked.water_mask);
+        assert_eq!(
+            looks.water_path(100),
+            PathBuf::from("out/look-00100.water.png")
+        );
+        assert_eq!(looks.water_masking(100), (false, None));
+        assert_eq!(looks.water_masking(101), (true, None));
+        assert_eq!(
+            looks.water_masking(100 + WATER_MASK_FRAMES),
+            (true, Some(100))
+        );
+        assert_eq!(looks.water_masking(101 + WATER_MASK_FRAMES), (false, None));
+        assert_eq!(
+            looks.water_masking(200 + WATER_MASK_FRAMES),
+            (true, Some(200))
+        );
         assert!(
             sequence.shot.is_none() && parse(&["--shots", "out/walk@300-302"]).unwrap().scripted()
         );

@@ -89,9 +89,13 @@ struct Lake {
     // Toward the sun, below the horizon too, which the dusk's warm side faces; zero for the
     // world's light's own way.
     sun: vec4<f32>,
+    // 1 while the water is drawn as its mask for the looks check (lakes.rs `WaterMask`).
+    mask: f32,
 }
 
 const RISES: u32 = 8u;
+// The water's mask colour, bright enough to stay magenta through the haze and tonemapping.
+const MASK: vec3<f32> = vec3<f32>(4.0, 0.0, 4.0);
 const WAKES: u32 = 8u;
 // The tangent of Kelvin's half angle, 19.47 degrees, at which a wake's arms open (wakes.rs).
 const KELVIN: f32 = 0.3536;
@@ -505,5 +509,9 @@ fn fragment(
     let film = WET_FILM * (1.0 - edge) * (1.0 - smoothstep(40.0, 120.0, distance));
     let alpha = 1.0 - (1.0 - covers) * (1.0 - film);
     out.color = vec4<f32>(out.color.rgb * covers / max(alpha, 1e-4), alpha);
+    // The looks check's mask (D429): the water flat magenta, so a shot shows what it covers.
+    if lake.mask > 0.5 {
+        out.color = vec4<f32>(MASK, alpha);
+    }
     return out;
 }

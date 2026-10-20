@@ -259,3 +259,17 @@ test("a picture without leaves enough has no flat foliage, and sky over leaves i
   const under = foliage(sized(256, 256, (_, y) => (y < 64 ? [110, 160, 230] : [45, 60, 20])));
   near(under.flatFoliage!, 1);
 });
+
+test("a lake's flat teal is left out of the debug tint where the game drew water, and a teal fill on land is not (D429)", async () => {
+  const { tints, waterMask } = await import("./look.ts");
+  // The lower half is water, smooth teal; the upper half a teal fill on land, the same colour.
+  const teal: [number, number, number] = [30, 150, 135];
+  const shot = sized(64, 64, () => teal);
+  // The same view with the lakes drawn flat magenta: only the water turns.
+  const masked = sized(64, 64, (_x, y) => (y >= 32 ? [250, 20, 250] : teal));
+  near(tints(shot).tint, 1);
+  near(tints(shot, undefined, waterMask(shot, masked)).tint, 0.5);
+  // A magenta flower in both pictures is not water.
+  const flower = sized(64, 64, () => [230, 30, 220]);
+  near(tints(flower, undefined, waterMask(flower, flower)).tint, 1);
+});

@@ -102,8 +102,8 @@ export function references(): string[] {
 export const SOTF: Look = reference("sotf-forest-day").look;
 
 /// The picture's look; `masked` pixels (such as the placeholder player in a film) are left
-/// out.
-export function look(p: Picture, masked: (x: number, y: number) => boolean = () => false): Look {
+/// out, and `water` pixels out of the debug-tint rule alone (`tints`).
+export function look(p: Picture, masked: (x: number, y: number) => boolean = () => false, water?: (x: number, y: number) => boolean): Look {
   const { width: W, height: H, rgba } = p;
   const luma = new Float32Array(W * H);
   const ys: number[] = [];
@@ -195,7 +195,7 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     middleBlueOverGreen: middle[1] ? middle[2] / middle[1] : 0,
     limeTop: top ? lime / top : 0,
     trunkMiddle: centre ? brown / centre : 0,
-    ...tints(p, masked),
+    ...tints(p, masked, water),
     hardEdges: hardEdges(p, masked),
     facets: facets(p, masked),
     flat: flat(p, masked),
@@ -267,14 +267,31 @@ function hsv(r: number, g: number, b: number): [number, number, number] {
   return [h, d / high, high];
 }
 
+/// Which pixels of a picture are water, from the same view shot again with the lakes drawn
+/// flat magenta (the sandbox's `--water-mask`, D429): those that turned magenta, by what
+/// draws them rather than by their colour. Magenta in both pictures, a flower's, is not water.
+export function waterMask(p: Picture, masked: Picture): (x: number, y: number) => boolean {
+  const { width: W, height: H } = p;
+  if (masked.width !== W || masked.height !== H) throw new Error("the water's mask is not the picture's size");
+  const water = new Uint8Array(W * H);
+  const magenta = (rgba: Uint8Array, i: number) => rgba[i] + rgba[i + 2] - 2 * rgba[i + 1];
+  for (let i = 0; i < W * H; i++) {
+    const m = masked.rgba;
+    if (m[i * 4] - m[i * 4 + 1] > 40 && m[i * 4 + 2] - m[i * 4 + 1] > 40 && magenta(m, i * 4) - magenta(p.rgba, i * 4) > 80) water[i] = 1;
+  }
+  return (x, y) => water[y * W + x] === 1;
+}
+
 /// Debug tints (docs/art-style.md, "Nothing reads as a debug tint"). `tint`: of the 8-pixel
 /// squares below the skyline, the share that are a saturated fill: their mean colour saturated
 /// past 0.45 and brighter than 0.3 in HSV, and their brightness smooth, spread under 4% of it,
 /// as orange rocks and a lime log were. Real saturated things, autumn leaves, flowers, painted
-/// cloth, are textured, and water's sky blue (195 to 245 degrees) is left out. `lilac`: the
+/// cloth, are textured, and water's sky blue (195 to 245 degrees) is never a fill, nor is any
+/// square with `water` in it: the water as the game says it drew it (`waterMask`, D429), so
+/// a lake's smooth teal is not taken for a fill, while a teal fill on land still is. `lilac`: the
 /// share of the picture that is lilac, a hue from 255 to 335 degrees saturated past 0.12 and
 /// brighter than 0.25, which nothing in our places' references is but a flower.
-export function tints(p: Picture, masked: (x: number, y: number) => boolean = () => false): { tint: number; lilac: number } {
+export function tints(p: Picture, masked: (x: number, y: number) => boolean = () => false, water: (x: number, y: number) => boolean = () => false): { tint: number; lilac: number } {
   const { width: W, height: H, rgba } = p;
   let n = 0, lilac = 0;
   for (let y = 0; y < H; y++) {
@@ -290,13 +307,14 @@ export function tints(p: Picture, masked: (x: number, y: number) => boolean = ()
   let squares = 0, fills = 0;
   for (let by = 0; by + 8 <= H; by += 8) {
     for (let bx = 0; bx + 8 <= W; bx += 8) {
-      let r = 0, g = 0, b = 0, m = 0, m2 = 0, out = false;
+      let r = 0, g = 0, b = 0, m = 0, m2 = 0, out = false, wet = false;
       for (let y = by; y < by + 8 && !out; y++) {
         for (let x = bx; x < bx + 8; x++) {
           if (masked(x, y) || y < line[x]) {
             out = true;
             break;
           }
+          wet ||= water(x, y);
           const i = (y * W + x) * 4;
           r += rgba[i];
           g += rgba[i + 1];
@@ -311,7 +329,7 @@ export function tints(p: Picture, masked: (x: number, y: number) => boolean = ()
       const [h, s, v] = hsv(r / (64 * 255), g / (64 * 255), b / (64 * 255));
       m /= 64;
       const spread = Math.sqrt(Math.max(0, m2 / 64 - m * m)) / Math.max(m, 0.02);
-      if (s > 0.45 && v > 0.3 && !(h >= 195 && h < 245) && spread < 0.04) fills++;
+      if (!wet && s > 0.45 && v > 0.3 && !(h >= 195 && h < 245) && spread < 0.04) fills++;
     }
   }
   return { tint: squares ? fills / squares : 0, lilac: n ? lilac / n : 0 };
