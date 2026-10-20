@@ -24,6 +24,15 @@ struct Moss {
     colour: vec4<f32>,
 }
 
+// How much of the ground round the camera snow covers in x (climate::SnowCover).
+struct RockSnow {
+    cover: vec4<f32>,
+}
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var<uniform> rock_snow: RockSnow;
+// As ground.wesl's lying snow.
+const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> moss: Moss;
 // The ground's layers (planet.rs), of which the moss is one.
@@ -185,6 +194,20 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.reflectance = mix(pbr_input.material.reflectance, vec3<f32>(0.1), grows);
         pbr_input.N = normalize(mix(pbr_input.N, relief, grows));
         pbr_input.diffuse_occlusion *= vec3<f32>(mix(1.0, mix(0.55, 1.0, cavity), grows));
+    }
+    // Snow caps the tops over the moss, as it lies on the ground beside them: more of the
+    // rock's shoulders the more lies, with an edge, since a cap has a thickness; smooth and
+    // white over the stone's grain (Unreal's and Ghost of Tsushima's world-normal snow).
+    let cover = rock_snow.cover.x;
+    if cover > 0.0 {
+        let level = dot(geometric, up) + (patches - 0.5) * 0.35 + (heap - 0.5) * 0.2;
+        let cap = smoothstep(0.62 - 0.3 * cover, 0.7 - 0.3 * cover, level) * smoothstep(0.05, 0.4, cover);
+        let snow_colour = SNOW * (0.94 + 0.06 * noise(world * 9.0 + 31.0));
+        pbr_input.material.base_color = vec4<f32>(mix(pbr_input.material.base_color.rgb, snow_colour, cap), pbr_input.material.base_color.a);
+        pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.75, cap);
+        pbr_input.material.reflectance = mix(pbr_input.material.reflectance, vec3<f32>(0.5), cap);
+        pbr_input.N = normalize(mix(pbr_input.N, geometric, cap * 0.8));
+        pbr_input.diffuse_occlusion = mix(pbr_input.diffuse_occlusion, vec3<f32>(1.0), cap);
     }
     pbr_input.material.base_color = alpha_discard(
         pbr_input.material.flags,

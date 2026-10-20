@@ -34,6 +34,7 @@ use bevy::{
 };
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
+use terra_world::climate::SnowCover;
 use terra_world::cover::Growing;
 use terra_world::detail::DetailScale;
 use terra_world::flora::Growth;
@@ -57,6 +58,34 @@ pub(super) struct MossExtension {
     ground_color: Option<Handle<Image>>,
     #[texture(103, dimension = "2d_array")]
     ground_normal: Option<Handle<Image>>,
+    /// How much of the ground round the camera snow covers (`climate::SnowCover`) in x: snow
+    /// lies on a rock's tops as on the ground beside it (winter round 11).
+    #[uniform(104)]
+    snow: Vec4,
+}
+
+/// The rocks' snow is told again only when the cover has moved by this much, so an eased
+/// cover does not rewrite every rock's material each frame.
+const SNOW_TOLD_BY: f32 = 0.02;
+
+/// Every rock's material learns how much snow lies round the camera, when that has changed.
+fn follow_snow(cover: Option<Res<SnowCover>>, mut mossy: ResMut<Assets<Mossy>>) {
+    let Some(cover) = cover.filter(|cover| cover.is_changed()) else {
+        return;
+    };
+    let stale: Vec<_> = mossy
+        .iter()
+        .filter(|(_, material)| {
+            let told = material.extension.snow.x;
+            (told - cover.0).abs() > SNOW_TOLD_BY || (cover.0 == 0.0 && told != 0.0)
+        })
+        .map(|(id, _)| id)
+        .collect();
+    for id in stale {
+        if let Some(mut material) = mossy.get_mut(id) {
+            material.extension.snow.x = cover.0;
+        }
+    }
 }
 
 impl MaterialExtension for MossExtension {
@@ -75,7 +104,15 @@ pub(super) fn plugin(app: &mut App) {
         .init_resource::<FloorShadows>()
         // After the scene has set the open world's soil.
         .add_systems(PostStartup, forest_soil)
-        .add_systems(Update, (dress_mossy, follow_shadows, shade::follow_camera));
+        .add_systems(
+            Update,
+            (
+                dress_mossy,
+                follow_snow,
+                follow_shadows,
+                shade::follow_camera,
+            ),
+        );
     terra_world::remote::method(app, "lush.undergrowth", show_undergrowth);
 }
 
@@ -1046,6 +1083,7 @@ impl Lay<'_, '_, '_> {
                 .extend(moss),
                 ground_color: None,
                 ground_normal: None,
+                snow: Vec4::ZERO,
             },
         });
         self.mossy_scans.0.push((
@@ -2297,74 +2335,5 @@ fn bracken(dice: &mut Rng, leaf: &terra_world::grown::Card, tint: Vec3) -> grown
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A map with these trees and the forest's own paths, and a place well off them.
-    fn map_with(stands: &[Stand]) -> (Map, Vec2) {
-        let mut canopy = Crowns::default();
-        for stand in stands {
-            canopy.add(*stand);
-        }
-        let map = Map {
-            path: Path::new(Seed(3)),
-            canopy,
-            lying: Lying::default(),
-            noise: Noise::new(Seed(4)),
-        };
-        let away = (0..400)
-            .map(|k| Vec2::new((k % 20) as f32 * 9.0 - 90.0, (k / 20) as f32 * 9.0 - 90.0))
-            .find(|at| map.path.edge_distance(*at) > 11.0)
-            .expect("somewhere off the paths");
-        (map, away)
-    }
-
-    /// Trees of a kind in a ring round `at`, closing the canopy over it.
-    fn stand_round(at: Vec2, species: Species) -> Vec<Stand> {
-        (0..6)
-            .map(|k| {
-                let angle = k as f32 / 6.0 * TAU;
-                let foot = at + Vec2::new(libm::cosf(angle), libm::sinf(angle)) * 3.5;
-                Stand::of(foot, foot, 7.0, species, false, 0.5)
-            })
-            .collect()
-    }
-
-    #[test]
-    fn grass_grows_thick_in_the_open_and_thinner_under_a_closed_canopy() {
-        let (open, at) = map_with(&[]);
-        let lit = open.growing(at);
-        assert!(lit.grass > 0.4, "{lit:?}");
-        assert!(lit.shade < 0.05, "{lit:?}");
-        let (shaded, _) = map_with(&stand_round(at, Species::Oak));
-        let growing = shaded.growing(at);
-        // Thinner, but still covering most of the floor, as shade grass does (D293).
-        assert!(
-            growing.grass < lit.grass * 0.85,
-            "{growing:?} against {lit:?}"
-        );
-        assert!(growing.grass > 0.25, "{growing:?}");
-        assert!(growing.shade > 0.6, "{growing:?}");
-        assert!(growing.litter > 0.5, "leaves under oaks: {growing:?}");
-        assert!(growing.needles < 0.1, "{growing:?}");
-    }
-
-    #[test]
-    fn needles_lie_under_conifers() {
-        let (_, at) = map_with(&[]);
-        let (map, _) = map_with(&stand_round(at, Species::Spruce));
-        let growing = map.growing(at);
-        assert!(growing.needles > 0.6, "{growing:?}");
-        assert!(growing.litter < 0.4, "{growing:?}");
-    }
-
-    #[test]
-    fn grass_is_pushed_back_from_a_trunk_by_duff_and_roots() {
-        let (_, at) = map_with(&[]);
-        let young = Stand::of(at, at, 2.0, Species::Oak, true, 0.4);
-        let (map, _) = map_with(&[young]);
-        let foot = map.growing(at + Vec2::X * 0.55);
-        assert!(foot.grass < 0.1, "{foot:?}");
-        assert!(foot.roots > 0.5, "{foot:?}");
-    }
-}
+#[path = "floor_tests.rs"]
+mod tests;

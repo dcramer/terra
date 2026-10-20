@@ -429,9 +429,11 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         colour = mix(colour, SNOW, snow);
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
-        let clumped = smoothstep(0.25 - 0.2 * lying, 0.6 - 0.2 * lying, wander(world * 1.3));
-        snow = lying * smoothstep(0.3, 0.75, up) * clumped;
-        colour = mix(colour, SNOW, snow * 0.92);
+        // A log's or limb's upper face carries a cap with an edge, as snow has a thickness:
+        // a soft gradient over the face read as a stain, not a load (winter round 11).
+        let clumped = smoothstep(0.15 - 0.15 * lying, 0.45 - 0.15 * lying, wander(world * 1.3));
+        snow = smoothstep(0.2, 0.42, lying * smoothstep(0.2, 0.55, up) * clumped);
+        colour = mix(colour, SNOW, snow * 0.95);
         // Bark in a frost is dry and grey, and the moss on it dull under the rime: its green
         // read as a summer wood's beside the snow (weather round 7).
         let bark_grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));

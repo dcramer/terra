@@ -1587,7 +1587,13 @@ fn fragment(
     let swell = vec2<f32>(
         noise(world * 0.6 + tangent * 0.4 + 7.0) - noise(world * 0.6 - tangent * 0.4 + 7.0),
         noise(world * 0.6 + bitangent * 0.4 + 7.0) - noise(world * 0.6 - bitangent * 0.4 + 7.0),
-    ) * 2.2 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.25;
+    ) * 2.2 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.25
+        // And broad undulations five to ten metres across, so a low sun shades the floor in
+        // long soft swells, not one even plane (winter round 9's judge).
+        + vec2<f32>(
+            noise(world * 0.15 + tangent * 1.5 + 41.0) - noise(world * 0.15 - tangent * 1.5 + 41.0),
+            noise(world * 0.15 + bitangent * 1.5 + 41.0) - noise(world * 0.15 - bitangent * 1.5 + 41.0),
+        ) * 0.9;
     let drifted = normalize(geometric + tangent * swell.x + bitangent * swell.y);
     pbr_input.N = normalize(mix(pbr_input.N, drifted, snow));
 }
