@@ -439,7 +439,7 @@ fn textured_material(
             .load(GltfAssetLabel::Texture(index).from_asset(path.to_string()))
     };
     let colour = load(textures.colour);
-    StandardMaterial {
+    as_prop(&StandardMaterial {
         base_color_texture: Some(colour.clone()),
         normal_map_texture: textures.normal.map(load),
         metallic_roughness_texture: textures.metallic_roughness.map(load),
@@ -459,6 +459,29 @@ fn textured_material(
         } else {
             textures.emissive.map(load)
         },
+        ..default()
+    })
+}
+
+/// A textured part's material as a prop draws it: its own maps and factors, the rest the
+/// props' light response (`lit`). The one path for a prop's textured part, placed
+/// (`textured_material`) or staged from its glTF (`staged::quench`): Bevy's glTF loader gives
+/// a reflectance of 0.5, which drew a staged campfire's char brighter than a placed one's 0.3
+/// (fire round 37).
+pub(in crate::play) fn as_prop(own: &StandardMaterial) -> StandardMaterial {
+    StandardMaterial {
+        base_color: own.base_color,
+        base_color_texture: own.base_color_texture.clone(),
+        normal_map_texture: own.normal_map_texture.clone(),
+        metallic_roughness_texture: own.metallic_roughness_texture.clone(),
+        occlusion_texture: own.occlusion_texture.clone(),
+        emissive: own.emissive,
+        emissive_texture: own.emissive_texture.clone(),
+        metallic: own.metallic,
+        perceptual_roughness: own.perceptual_roughness,
+        alpha_mode: own.alpha_mode,
+        double_sided: own.double_sided,
+        cull_mode: own.cull_mode,
         ..lit()
     }
 }
@@ -767,5 +790,32 @@ fn keep_clear(
         } else {
             Visibility::Hidden
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_staged_part_from_its_gltf_is_lit_as_a_placed_prop() {
+        // As Bevy's glTF loader makes a part: reflectance 0.5, the file's maps and factors.
+        let map = Handle::<Image>::default();
+        let loaded = StandardMaterial {
+            base_color_texture: Some(map.clone()),
+            emissive_texture: Some(map.clone()),
+            metallic_roughness_texture: Some(map.clone()),
+            perceptual_roughness: 0.95,
+            reflectance: 0.5,
+            ..default()
+        };
+        let drawn = as_prop(&loaded);
+        assert_eq!(drawn.reflectance, lit().reflectance);
+        assert!(drawn.reflectance < 0.5);
+        // Its own maps and roughness kept.
+        assert_eq!(drawn.base_color_texture, Some(map.clone()));
+        assert_eq!(drawn.emissive_texture, Some(map.clone()));
+        assert_eq!(drawn.metallic_roughness_texture, Some(map));
+        assert_eq!(drawn.perceptual_roughness, 0.95);
     }
 }

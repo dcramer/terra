@@ -466,7 +466,8 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const deep = Math.max(crack, 0.55 * groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks where it burns hottest.
-  block = mix(block, [92, 88, 84], 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59)));
+  const ash = 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59));
+  block = mix(block, [92, 88, 84], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
   // A fissure's heat: its deepest middle and toward the coals the hottest, dull orange-red at
@@ -485,7 +486,11 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // A soft orange gradient rising from the coals, its mottle broad (fire round 32).
   const bed = smooth(0.6, 1.3, x) * (0.6 + 0.4 * fbm(a * 4, b * 1.5, seed + 61)) * (0.7 + 0.3 * inside);
   const glow = tone.map((v, i) => v * g + [214, 92, 16][i] * 0.5 * bed);
-  return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
+  // Charcoal is matte: its blocks' faces about 0.86 for their faint sheen, its fissures and
+  // ash rougher still (fire round 37: at 0.6 the char took the fire's light as a gloss, and
+  // read as glossy fresh-cut wood).
+  const rc = Math.min(1, 0.86 + 0.06 * (1 - inside) + 0.08 * deep + 0.1 * ash);
+  return [c, glow, r0 + (rc - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 
 // A log's section at s round it: the point, its outward normal in the plane, and bark or not.
@@ -518,17 +523,44 @@ function heat(l: Log, t: number, n: V3): number {
   return Math.max(top, foot, lick, all);
 }
 
+/** Edge padding, as a baker dilates its islands: each unpainted texel within `reach` (here the
+ * whole gutter) of an island takes its nearest painted neighbour's values, so no mip averages the
+ * gutter into an island's edge (fire round 37: the white gutter drew pale lines along each log's
+ * seams from a few metres, and its height a ridge in the normals). */
+function bleed(maps: Uint8Array[], height: Float32Array, painted: Uint8Array, reach: number) {
+  let front: number[] = [];
+  for (let i = 0; i < W * W; i++) if (painted[i]) front.push(i);
+  for (let step = 0; step < reach && front.length; step++) {
+    const next: number[] = [];
+    for (const i of front) {
+      const [x, y] = [i % W, Math.floor(i / W)];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const [u, v] = [x + dx, y + dy];
+        if (u < 0 || v < 0 || u >= W || v >= W || painted[v * W + u]) continue;
+        const j = v * W + u;
+        painted[j] = 1;
+        for (const m of maps) m.copyWithin(j * 4, i * 4, i * 4 + 4);
+        height[j] = height[i];
+        next.push(j);
+      }
+    }
+    front = next;
+  }
+}
+
 /** The wood atlas's colour, emissive, metal-roughness and normal maps, RGBA a byte each. */
 export function woodMaps(logs: Log[]): Uint8Array[] {
   const out = [0, 1, 2, 3].map(() => new Uint8Array(W * W * 4).fill(255));
   out[1].fill(0);
   const height = new Float32Array(W * W).fill(0.5);
+  const painted = new Uint8Array(W * W);
   const put = (x: number, y: number, [c, g, r, h]: Texel) => {
     const o = (y * W + x) * 4;
     for (let i = 0; i < 3; i++) [out[0][o + i], out[1][o + i]] = [Math.round(Math.min(255, c[i])), Math.round(Math.min(255, g[i]))];
     out[1][o + 3] = 255;
     out[2].set([0, Math.round(r * 255), 0], o);
     height[y * W + x] = h;
+    painted[y * W + x] = 1;
   };
   for (const l of logs) {
     // Its side: s round it, t along it.
@@ -556,6 +588,7 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
       }
     });
   }
+  bleed([out[0], out[1], out[2]], height, painted, W);
   // The normal map from the height: relief of about 3 mm a unit, +Y up the image.
   const k = 3;
   for (let y = 1; y < W - 1; y++) {

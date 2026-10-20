@@ -81,3 +81,21 @@ test("its logs' cracks glow orange-red at their dullest and orange-yellow at the
   const blueToRed = bright.reduce((s, p) => s + p[2], 0) / bright.reduce((s, p) => s + p[0], 0);
   assert.ok(blueToRed < 0.25, "its brightest cracks pale");
 });
+
+test("its char is matte and near-black, and the atlas's gutter round each island takes the island's colour", () => {
+  const [colour, , mr] = woodMaps(layout().logs);
+  // Charcoal (fire round 37): where the colour is near-black the roughness is past 0.8, as
+  // charcoal's is; at 0.6 the firelight drew a gloss on it.
+  let dark = 0, glossy = 0;
+  for (let i = 0; i < colour.length; i += 4) {
+    if (colour[i] + colour[i + 1] + colour[i + 2] > 3 * 30) continue;
+    dark++;
+    if (mr[i + 1] < 0.8 * 255) glossy++;
+  }
+  assert.ok(dark > 0 && glossy / dark < 0.02, `${glossy} of ${dark} dark texels glossy`);
+  // Edge padding: the gutter takes its islands' colours, no white left in it, so the mips never
+  // average white into an island's edge.
+  let bled = 0;
+  for (let i = 0; i < colour.length; i += 4) if (colour[i] === 255 && colour[i + 1] === 255 && colour[i + 2] === 255) bled++;
+  assert.equal(bled, 0, `${bled} white gutter texels`);
+});

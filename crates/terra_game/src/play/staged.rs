@@ -15,6 +15,7 @@
 
 mod impact;
 pub(in crate::play) mod pose;
+mod quench;
 
 use super::fliers::placed;
 use crate::planet::Planet;
@@ -23,8 +24,7 @@ use crate::{appearance, character};
 use bevy::{
     animation::AnimationTargetId,
     ecs::system::SystemState,
-    gltf::{GltfAssetLabel, GltfMaterialName, GltfNode},
-    light::NotShadowCaster,
+    gltf::{GltfAssetLabel, GltfNode},
     platform::collections::{HashMap, HashSet},
     prelude::*,
     remote::{BrpResult, builtin_methods::parse_some},
@@ -156,7 +156,7 @@ struct Animates {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, ((dress, stage, animate).chain(), quench))
+    app.add_systems(Update, ((dress, stage, animate).chain(), quench::quench))
         .add_systems(
             PostUpdate,
             pose::bend
@@ -184,47 +184,6 @@ fn fits(
         found += usize::from(model.contains(&target));
     }
     all > 0 && found as f32 >= all as f32 * FITS
-}
-
-/// A model's flat flame (its part of the material `Fire` with no map) hidden on a figure that
-/// burns (`fire::Kindled`): the fire drawing burns in its place. A painted `Fire` part is its
-/// coals and burning faces, cut from its logs (the campfire's, fire round 10), and is kept:
-/// it and its other parts with an emissive map glow as the fire burns, as a placed campfire's
-/// do
-/// (`props::Embers`), so a staged campfire is drawn as the game's: left at its glTF's
-/// strength of 3, its logs were flat black planks (fire review, round 2).
-fn quench(
-    parts: Query<
-        (Entity, &GltfMaterialName, &MeshMaterial3d<StandardMaterial>),
-        Added<GltfMaterialName>,
-    >,
-    parents: Query<&ChildOf>,
-    kindled: Query<(), With<terra_world::fire::Kindled>>,
-    materials: Res<Assets<StandardMaterial>>,
-    mut commands: Commands,
-) {
-    for (part, name, material) in &parts {
-        if !parents.iter_ancestors(part).any(|up| kindled.contains(up)) {
-            continue;
-        }
-        let painted = materials
-            .get(&material.0)
-            .is_some_and(|m| m.emissive_texture.is_some());
-        match (name.0 == "Fire", painted) {
-            (true, true) => {
-                commands
-                    .entity(part)
-                    .insert((super::props::Embers, NotShadowCaster));
-            }
-            (true, false) => {
-                commands.entity(part).insert(Visibility::Hidden);
-            }
-            (false, true) => {
-                commands.entity(part).insert(super::props::Embers);
-            }
-            (false, false) => {}
-        }
-    }
 }
 
 /// Each figure dressed once its model and clips are in: its body, the graph of its clips, and
