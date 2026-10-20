@@ -1098,6 +1098,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var snowed = 0.0;
 @if(VERTEX_UVS_A)
     snowed = seasoned(&pbr_input, in.uv, in.world_position.xyz, in.instance_index);
+    // A load lies on the crown's outside, over the leaves that hide the sky: the crown's own
+    // occlusion, which dims the needles under it, left it a stop under the fog (weather round
+    // 18's judges: "grey-blue and about a stop darker than the fog").
+    pbr_input.diffuse_occlusion = mix(pbr_input.diffuse_occlusion, vec3<f32>(1.0), snowed);
+    pbr_input.specular_occlusion = mix(pbr_input.specular_occlusion, 1.0, snowed);
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
     pbr_input.specular_occlusion *= sky_specular(pbr_input, in.position);
     if wind.bark < 0.5 {
