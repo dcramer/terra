@@ -37,7 +37,6 @@ mod harvest;
 pub(crate) mod held;
 mod hits;
 pub(crate) use creatures::Frightful;
-pub(crate) use hits::Shake;
 mod intent;
 pub(crate) mod interact;
 pub mod inventory;
@@ -62,6 +61,8 @@ pub use props::{
 pub(crate) mod rising;
 mod save;
 mod scaffold;
+mod shake;
+pub(crate) use shake::Shake;
 pub(crate) mod settlement;
 mod sighted;
 mod skills;
@@ -172,6 +173,7 @@ impl Plugin for GameplayPlugin {
         melee::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
+        shake::plugin(app);
         hits::plugin(app);
         archery::plugin(app);
         people::plugin(app);

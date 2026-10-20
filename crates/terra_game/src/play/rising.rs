@@ -710,7 +710,7 @@ fn build(
         if construct::finished(&built.base) {
             // Its doors hung, mostly shut, and its shutters, mostly open.
             let fittings = catalogue.fittings();
-            crate::build::props::fit_all(&mut built.0, |hang, size, at| {
+            super::settlement::fit_all(&mut built.0, |hang, size, at| {
                 let kinds: Vec<_> = fittings
                     .iter()
                     .filter(|fitting| fitting.hang == hang && fitting.fits(size.0, size.1))

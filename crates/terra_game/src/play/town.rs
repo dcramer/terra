@@ -1187,7 +1187,7 @@ fn lay(
             };
             Some((fitting.kind, open))
         };
-        build::props::fit_all(&mut built, |hang, size, index| {
+        super::settlement::fit_all(&mut built, |hang, size, index| {
             pick(hang, size, index as u32)
         });
         commands.spawn((Name::new(format!("{label}, as built")), Built(built)));

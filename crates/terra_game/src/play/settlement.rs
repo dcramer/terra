@@ -26,7 +26,9 @@ use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::prelude::*;
-use terra_build::{Base, CELL_M};
+use std::collections::BTreeMap;
+use terra_build::ops::{Context, Op};
+use terra_build::{Base, CELL_M, Prop, PropKind, Rules};
 use terra_build_layout::fitting::Hang;
 
 /// An item from the catalogue the village has: what it is, where it stands from the
@@ -230,7 +232,7 @@ fn found(
             };
             Some((fitting.kind, open))
         };
-        let fitted = build::props::fit_all(&mut built, |hang, size, index| {
+        let fitted = fit_all(&mut built, |hang, size, index| {
             pick(hang, size, index as u32)
         });
         info!(
@@ -461,4 +463,50 @@ fn talk(
         };
         told.write(Told::new(used.player, line));
     }
+}
+
+/// Fits doors and shutters into every hole of a house that is not the player's, as its
+/// builders would have: a doorway, a hole from its storey's floor, takes a door, and a
+/// window, a hole over a sill, shutters, of the kinds `choose` gives for each hang and size
+/// (wide by high, in cubes), with whether it stands open. Says how many were fitted. The
+/// townsfolk's: a village's houses, a town's and a rising town's are fitted by it.
+pub(crate) fn fit_all(
+    build: &mut Build,
+    choose: impl Fn(Hang, (i32, i32), usize) -> Option<(PropKind, bool)>,
+) -> usize {
+    let base = &build.base;
+    let mut holes: BTreeMap<[i32; 3], IVec3> = BTreeMap::new();
+    for (at, cube) in base.cubes() {
+        if cube.fill != terra_build::Fill::Open || !base.in_wall(at) {
+            continue;
+        }
+        if let Some((low, _)) = terra_build::plans::hole(base, at) {
+            holes.entry(low.to_array()).or_insert(at);
+        }
+    }
+    let mut ops = Vec::new();
+    for (index, (low, at)) in holes.into_iter().enumerate() {
+        let hang = terra_build::plans::hang_for(base, IVec3::from_array(low));
+        let Some(probe) = terra_build::plans::prop_for(base, at, PropKind(0), hang) else {
+            continue;
+        };
+        let Some((kind, open)) = choose(hang, terra_build::plans::hole_size(&probe), index) else {
+            continue;
+        };
+        ops.push(Op::FitProp(Prop {
+            kind,
+            open,
+            ..probe
+        }));
+    }
+    let rules = Rules::default();
+    let cx = Context::free(&rules);
+    let mut fitted = 0;
+    // One at a time, so a hole the rules refuse (one not held all round) is left open.
+    for op in ops {
+        if build.act(std::slice::from_ref(&op), &cx).is_ok() {
+            fitted += 1;
+        }
+    }
+    fitted
 }

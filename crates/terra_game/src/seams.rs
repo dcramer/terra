@@ -92,6 +92,7 @@ const PLACES: &[(&str, Crate)] = {
         ("play/intent", Walker),
         ("play/movement", Walker),
         ("play/options", Walker),
+        ("play/shake", Walker),
         ("play/walker", Walker),
         // Survival.
         ("icons", Survival),
@@ -218,16 +219,6 @@ const NOT_YET_CUT: &[(&str, &str, &str)] = &[
         "play/fliers",
         "build/fire",
         "11: a flier breathes fire (BreathesFire)",
-    ),
-    (
-        "build/loss",
-        "play/hits",
-        "12: what falls shakes the view (hits::Shake)",
-    ),
-    (
-        "play/rising",
-        "build/props",
-        "13: a rising house hangs its doors (fit_all)",
     ),
     (
         "play/storage",
@@ -604,7 +595,11 @@ impl Seen {
                 let mut child = at.clone();
                 child.push(first.to_string());
                 if !self.is_module(&child) {
-                    return None;
+                    // A module a `use` brought in by name (`use crate::build::{self}`, then
+                    // `build::props::fit_all`), followed from where it was brought.
+                    let to = self.uses.get(from)?.get(first)?;
+                    let whole: Vec<String> = to.iter().chain(&rest[1..]).cloned().collect();
+                    return self.target(from, &whole, depth + 1);
                 }
             }
         }
@@ -770,6 +765,10 @@ fn a_name_brought_in_is_followed() {
                 "lib".to_string(),
                 map(&[("planet", &["terra_world", "planet"])]),
             ),
+            (
+                "play/claim".to_string(),
+                map(&[("walker", &["crate", "play", "walker"])]),
+            ),
         ]
         .into(),
     };
@@ -780,4 +779,6 @@ fn a_name_brought_in_is_followed() {
     assert_eq!(to("crate::play::GamePlugins"), Some("play".into()));
     assert_eq!(to("crate::planet::Planet"), None);
     assert_eq!(to("bevy::prelude"), None);
+    // A module brought in by name, then named through it.
+    assert_eq!(to("walker::Stance"), Some("play/walker".into()));
 }

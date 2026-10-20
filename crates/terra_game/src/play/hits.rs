@@ -11,6 +11,7 @@
 
 use super::IsLocalPlayer;
 use super::combat::{Hurt, Struck};
+use super::shake::{self, Shake};
 use super::species::{Bestiary, Blood};
 use bevy::prelude::*;
 
@@ -52,34 +53,6 @@ struct Spray {
     ichor: Handle<StandardMaterial>,
 }
 
-/// The view shaking: how much longer, how far at the start, and for how long in all. Blows
-/// shake it here; anything else that shakes the view, a collapse nearby (`build::loss`),
-/// kicks it ([`Shake::kick`]).
-#[derive(Resource, Default)]
-pub(crate) struct Shake {
-    left: f32,
-    reach: f32,
-    length: f32,
-}
-
-impl Shake {
-    /// Shakes the view so far, in metres, for so long, unless it is shaking harder.
-    pub(crate) fn kick(&mut self, reach: f32, seconds: f32) {
-        let now = if self.length > 0.0 {
-            self.reach * self.left / self.length
-        } else {
-            0.0
-        };
-        if reach > now {
-            *self = Shake {
-                left: seconds,
-                reach,
-                length: seconds,
-            };
-        }
-    }
-}
-
 /// The red at the edges of the view, and how much of it is left, out of one.
 #[derive(Component)]
 struct Pain;
@@ -88,17 +61,11 @@ struct Pain;
 struct Hurting(f32);
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Shake>()
-        .init_resource::<Hurting>()
+    // The view's shake is the walker's (`shake`); blows kick it before it runs down.
+    let kicks = hurt.before(shake::run_down);
+    app.init_resource::<Hurting>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (spray, jolt, hurt, (fly, settle, redden)).chain())
-        .add_systems(
-            PostUpdate,
-            shake
-                .after(super::camera::follow)
-                .before(TransformSystems::Propagate)
-                .before(crate::remote::CameraHold),
-        );
+        .add_systems(Update, (spray, jolt, kicks, (fly, settle, redden)).chain());
 }
 
 fn setup(
@@ -275,12 +242,9 @@ fn fly(
     }
 }
 
-/// The shake and the pain run down. Neither is touched once it has, so what draws them
-/// is not woken for nothing.
-fn settle(time: Res<Time>, mut shake: ResMut<Shake>, mut hurting: ResMut<Hurting>) {
-    if shake.left > 0.0 {
-        shake.left = (shake.left - time.delta_secs()).max(0.0);
-    }
+/// The pain runs down. It is not touched once it has, so what draws it is not woken for
+/// nothing.
+fn settle(time: Res<Time>, mut hurting: ResMut<Hurting>) {
     if hurting.0 > 0.0 {
         hurting.0 = (hurting.0 - time.delta_secs() / PAIN_S).max(0.0);
     }
@@ -291,20 +255,6 @@ fn redden(hurting: Res<Hurting>, mut pain: Single<&mut BackgroundGradient, With<
         return;
     }
     pain.0 = vec![edges(hurting.0 * PAIN).into()];
-}
-
-/// Moves the camera a little off where it was put, while shaking.
-fn shake(time: Res<Time>, shaking: Res<Shake>, mut camera: Single<&mut Transform, With<Camera3d>>) {
-    if shaking.left <= 0.0 {
-        return;
-    }
-    let fading = shaking.left / shaking.length.max(1e-3);
-    let t = time.elapsed_secs();
-    let right = camera.right();
-    let up = camera.up();
-    let off =
-        (right * libm::sinf(t * 53.0) + up * libm::sinf(t * 71.0 + 1.3)) * shaking.reach * fading;
-    camera.translation += off;
 }
 
 #[cfg(test)]
