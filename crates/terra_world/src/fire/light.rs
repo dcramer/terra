@@ -70,10 +70,10 @@ const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.66, 0.16);
 /// plan step 1). At 323,000 a metre, and 2.5 stops more by night, the stones drew past the
 /// tonemapper's white, as bright as the flame (night stills: stones 251,232,227 against a
 /// flame of 253,243,205; at this light and no night boost 195,114,123 against 254,235,119).
-/// Tightened with the pool (fire round 19): 50,000 a metre (58,500 lm) and a 7 m reach, the light's
+/// Tightened with the pool (fire round 19): 50,000 a metre (58,500 lm) and a 7 m reach (6 m from round 23), the light's
 /// disc as wide as its flames, keep the pool inside 4-5 m.
 const HEARTH_LUMENS_A_METRE: f32 = 50_000.0;
-const HEARTH_RANGE_M: f32 = 7.0;
+const HEARTH_RANGE_M: f32 = 6.0;
 /// How many stops brighter a kept fire's light is by night, as Witcher 3 keys a fire to the
 /// hour: by its real lumens the yard's ground took a 1.2x pool at 1 m and none past 1.5 m
 /// against the night's moonlit ground, drawn some stops over a real night's; the Witcher 3 and
@@ -87,8 +87,9 @@ const HEARTH_RANGE_M: f32 = 7.0;
 /// flames), the ring of stones shadowed the ground outside it: the pool halved. With a
 /// greener light, 2.0: at 3.0 the lit stones still passed the shoulder
 /// (sRGB 232,126,88), at 2.0 they are 192,106,61, warm brown (blind review 6/10 against 3,
-/// fire round 13).
-const HEARTH_NIGHT_STOPS: f32 = 2.0;
+/// fire round 13). With the deep night's moon and ambient at 0.6 (`daylight`), 2.5 and a 6 m
+/// reach: the ground round the ring warmer, the field past it dark (fire round 23).
+const HEARTH_NIGHT_STOPS: f32 = 2.5;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less. At 3 times its 1.3 m flames the disc's 1/(d²+r²) stayed

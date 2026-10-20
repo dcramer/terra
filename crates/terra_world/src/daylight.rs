@@ -256,7 +256,10 @@ impl Light {
 /// under 20, against RDR2's and Sons of the Forest's campfire frames' 2-27 and 59-88%): the
 /// yard's 6 m campfire view 34/28% -> 18/54%, the town's street 24/37% -> 11/82%. At a
 /// quarter (round 10) the yard was 10/74% but the town's street went black (4/92%) and the
-/// lake's shore and hills to silhouettes (fire round 11).
+/// lake's shore and hills to silhouettes (fire round 11). At 0.6 of that (fire round 23), with
+/// the campfire's light two and a half stops up by night, the yard's field out of its reach is
+/// half as bright (sRGB 14 against 26) and the fire sits in a pool of its own light (blind
+/// 5.5/10 against 4.5).
 fn keys() -> [(f32, Light); 6] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
@@ -265,12 +268,12 @@ fn keys() -> [(f32, Light); 6] {
             -18.0,
             Light {
                 light: moon,
-                illuminance: 350.0,
+                illuminance: 210.0,
                 horizon: v(0.07, 0.09, 0.17),
                 zenith: v(0.015, 0.02, 0.06),
                 glow: v(0.25, 0.3, 0.45),
                 shade: v(0.42, 0.52, 0.9),
-                ambient: 150.0,
+                ambient: 90.0,
                 sky: 1.6,
                 night: 1.0,
                 exposure: 9.0,
