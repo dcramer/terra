@@ -162,20 +162,22 @@ const UNDERSIDE: f32 = 0.55;
 // boughs seen from inside grey-blue (D264).
 fn underside(input: ptr<function, PbrInput>, snowed: f32) {
     let facing = dot((*input).world_normal, (*input).V);
-    let under = smoothstep(0.15, -0.35, facing);
+    // A snow load is lit as the snow lying is, by the sky over it (its normal is the sky's),
+    // not as the leaf's underside under it: darkened so, it read grey, darker than the sky
+    // (weather round 17's judge: "it needs about a stop more on the snow alone").
+    let under = smoothstep(0.15, -0.35, facing) * (1.0 - snowed);
     let c = (*input).material.base_color;
     (*input).material.base_color = vec4<f32>(c.rgb * mix(1.0, UNDERSIDE, under), c.a);
     (*input).specular_occlusion *= 1.0 - under;
     (*input).material.reflectance *= 1.0 - under;
     // An underside faces into the crown, which hides the sky from it: it is lit by what the
     // leaves round it pass on and bounce, green, not blue, so a spruce's shade is not teal.
-    // Snow under a bough is lit by the blue sky's light round it, not the needles' green.
-    (*input).diffuse_occlusion *= mix(vec3<f32>(1.0), BOUNCE, under * (1.0 - snowed));
+    (*input).diffuse_occlusion *= mix(vec3<f32>(1.0), BOUNCE, under);
     // A crown's lower face looks down on the forest floor, which lies in the canopy's shade,
     // not on the sunlit ground the painted sky gives every underside: from below, its leaves
     // are dark but where the sun comes through them.
     let up = normalize((*input).world_position.xyz);
-    let down = smoothstep(0.2, -0.7, dot((*input).world_normal, up));
+    let down = smoothstep(0.2, -0.7, dot((*input).world_normal, up)) * (1.0 - snowed);
     (*input).diffuse_occlusion *= mix(1.0, FLOOR_LIGHT, down);
 }
 
@@ -242,14 +244,14 @@ var climate_leaves_sampler: sampler;
 
 // As ground.wesl's.
 const SNOW_FULL_M: f32 = 0.5;
-const SNOW: vec3<f32> = vec3<f32>(0.88, 0.9, 0.93);
+const SNOW: vec3<f32> = vec3<f32>(0.92, 0.94, 0.97);
 // How much of a level spray's load shows seen from below, where only its edge overhangs.
 const BOUGH_UNDERSIDE: f32 = 0.12;
 // How many of the loads' clumps a metre, on a crown's cards.
 const LOAD_CLUMPS: f32 = 1.4;
 // How a green leaf still on through a snowy spell is shaded, darker and cooler: an evergreen's
 // needles read near black-green beside the white (Ghost of Yotei's, Red Dead 2's spruces).
-const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.42, 0.5, 0.55);
+const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.32, 0.4, 0.45);
 // The height over a plant's foot, metres, from which its boughs carry more of the load, to
 // where they carry all of it.
 const BOUGH_HIGH_M: vec2<f32> = vec2<f32>(2.0, 10.0);
