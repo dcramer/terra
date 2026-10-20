@@ -356,26 +356,43 @@ function cells(x: number, y: number, s: number): [number, number, number] {
 // A texel of wood: colour (sRGB), glow (sRGB), roughness and height (0-1).
 type Texel = [number[], number[], number, number];
 const DARK = [0, 0, 0];
+// Bark in plates: cells long along the log and warped, their furrows of varied width and
+// depth, a coarse layer of deep furrows over a fine one, so it is broken, never corduroy.
 function bark(s: number, t: number, seed: number): Texel {
-  const ridge = Math.abs(Math.sin((2 * Math.PI * s) / 0.021 + 5 * fbm(s * 25, t * 5, seed)));
-  const h = 0.75 * Math.pow(ridge, 0.6) + 0.25 * fbm(s * 140, t * 70, seed + 1);
+  const ws = 0.008 * (fbm(s * 50, t * 14, seed + 30) - 0.5), wt = 0.03 * (fbm(s * 25, t * 6, seed + 31) - 0.5);
+  const furrow = (cs: number, ct: number, k: number, w0: number, w1: number) => {
+    const [d1, d2, id] = cells((s + ws) / cs, (t + wt) / ct, seed + k);
+    const width = w0 + w1 * fbm(s * 30, t * 5, seed + k + 1);
+    return [1 - smooth(0, width, d2 - d1), id];
+  };
+  const [deep, plate] = furrow(0.017, 0.085, 32, 0.05, 0.2);
+  const [fine] = furrow(0.008, 0.035, 34, 0.04, 0.14);
+  const flake = smooth(0.6, 0.72, fbm(s * 170, t * 40, seed + 36));
+  const top = 0.6 + 0.25 * plate + 0.15 * fbm(s * 140, t * 70, seed + 1) - 0.12 * flake;
+  const h = top * (1 - 0.85 * deep) * (1 - 0.45 * fine);
   const tone = 0.85 + 0.3 * fbm(s * 9, t * 4, seed + 2);
-  let c = mix([34, 27, 21], [96, 80, 63], h).map((x) => x * tone);
-  c = mix(c, [118, 116, 104], 0.35 * smooth(0.7, 0.78, fbm(s * 14, t * 9, seed + 3)) * h);
+  let c = mix([26, 21, 17], [84, 71, 57], smooth(0.05, 0.7, h)).map((x) => x * tone * (0.9 + 0.2 * plate));
+  // Weathered grey on the plates' tops.
+  c = mix(c, [112, 108, 99], 0.4 * smooth(0.55, 0.75, fbm(s * 14, t * 9, seed + 3)) * smooth(0.45, 0.75, h));
   return [c, DARK, 0.92, h];
 }
-// Split wood: pale, its fibres along it, its growth rings as stripes at their distance from
-// the pith, sapwood lighter by the bark.
+// Split wood: weathered grey-brown, its fibres along it, long darker streaks, its growth
+// rings as stripes at their distance from the pith, a few drying checks along the grain.
 function splitWood(s: number, t: number, r: number, R: number, seed: number): Texel {
   const fibre = fbm(s * 420, t * 9, seed + 4);
+  const streak = fbm(s * 70, t * 1.6, seed + 40);
   const ring = smooth(0.62, 0.92, frac(r / 0.0055 + 0.8 * fbm(s * 40, t * 3, seed + 5)));
   const sap = smooth(0.78, 0.9, r / R);
-  const tone = 0.88 + 0.24 * fbm(s * 6, t * 3, seed + 6);
-  let c = mix([178, 138, 94], [136, 97, 62], 0.6 * ring + 0.3 * (1 - fibre)).map((x) => x * tone);
-  c = mix(c, [192, 163, 122], 0.6 * sap);
+  const tone = 0.86 + 0.28 * fbm(s * 6, t * 3, seed + 6);
+  let c = mix([136, 114, 90], [98, 79, 60], 0.55 * ring + 0.35 * (1 - fibre)).map((x) => x * tone);
+  c = mix(c, [146, 130, 110], 0.4 * sap);
+  c = mix(c, [76, 64, 54], 0.55 * smooth(0.55, 0.78, streak));
   // Weathered grey and smoked darker, as firewood stacked and burning is.
-  c = mix(c, [128, 122, 112], 0.3).map((x) => x * 0.82);
-  return [c, DARK, 0.82, 0.55 + 0.3 * fibre - 0.25 * ring];
+  c = mix(c, [114, 110, 102], 0.3 + 0.3 * fbm(s * 12, t * 2, seed + 41)).map((x) => x * 0.86);
+  const u = s / 0.026 + 0.6 * (fbm(s * 10, t * 4, seed + 42) - 0.5), col = Math.floor(u);
+  const check = (1 - smooth(0.02, 0.06, Math.abs(frac(u) - 0.5))) * smooth(0.58, 0.72, noise(hash(col, seed, 43) * 97, t * 6, seed + 44));
+  c = mix(c, [40, 32, 26], 0.85 * check);
+  return [c, DARK, 0.82, 0.55 + 0.3 * fibre - 0.25 * ring - 0.12 * streak - 0.45 * check];
 }
 function endGrain(x: number, y: number, r: number, R: number, bark: boolean, seed: number): Texel {
   const a = Math.atan2(y, x);
@@ -394,20 +411,49 @@ function endGrain(x: number, y: number, r: number, R: number, bark: boolean, see
   if (bark && r > R * 0.93) [c, h] = [mix([44, 35, 28], [70, 58, 46], fbm(a * 20, r * 300, seed)), 0.8];
   return [c, DARK, 0.86, h];
 }
-// Char over any wood by how hot it got: scorched brown, then black blocks with glowing seams.
-function charred(w: Texel, heat: number, u: number, v: number, seed: number): Texel {
+// Checked char along the grain, as wood burns to alligator char: fissures along it at a
+// across it (warped, of varied spacing), shorter cross-checks between them staggered column
+// to column, some missing. Its crack (0-1, deepest the fissures), how far inside a block
+// (0 at its rim, 1 inside), and the block's hash. `open` widens the cracks as it burns deeper;
+// `stretch` is metres a unit of a, where a is not in metres (an end's angle).
+function checks(a: number, b: number, open: number, seed: number, stretch: number): [number, number, number] {
+  const SA = 0.017;
+  const u = a / SA + 1.4 * (fbm(a * 20, b * 16, seed + 50) - 0.5) + 0.5 * (fbm(a * 60, b * 45, seed + 49) - 0.5), col = Math.floor(u);
+  const dl = Math.min(frac(u), 1 - frac(u)) * SA * stretch;
+  const run = 0.024 + 0.03 * hash(col, seed, 51);
+  const v = b / run + hash(col, seed, 52) + 0.5 * (fbm(a * 40, b * 12, seed + 53) - 0.5), row = Math.floor(v);
+  const dt = Math.min(frac(v), 1 - frac(v)) * run;
+  const crossed = hash(col, Math.round(v), 54) > 0.2 + 0.45 * noise(a * 30, b * 8, seed + 48) ? 1 : 0;
+  const along = smooth(0.25, 0.4, noise(col * 7.3, b * 5, seed + 55));
+  const wl = (0.0007 + 0.0016 * fbm(a * 12, b * 3, seed + 56)) * (0.5 + open);
+  const wt = (0.0005 + 0.001 * hash(col, row, 57)) * (0.5 + open);
+  const crack = Math.max(along * (1 - smooth(wl * 0.4, wl, dl)), 0.75 * crossed * (1 - smooth(wt * 0.4, wt, dt)));
+  const inside = smooth(0, 0.005, Math.min(along > 0.5 ? dl : 1, crossed ? dt : 1));
+  return [crack, inside, hash(col, row, 58)];
+}
+// Char over any wood by how hot it got (a across the grain, b along it; `groove` its bark's
+// furrows, which burn and glow first): scorched brown, then black checked char whose cracks
+// glow ember orange, deepest and hottest brightest; their albedo stays dark (the glow is
+// emissive, `play::props`).
+function charred(w: Texel, heat: number, a: number, b: number, seed: number, groove = 0, stretch = 1): Texel {
   const [c0, , r0, h0] = w;
-  const jit = 0.25 * (fbm(u * 12, v * 10, seed + 9) - 0.5);
-  const scorch = smooth(0.1, 0.4, heat + jit), char = smooth(0.32, 0.62, heat + jit);
-  let c = mix(c0, mix(c0, [62, 38, 22], 0.85), scorch);
+  // Its front ragged, in tongues along the grain, never a band.
+  const jit = 0.42 * (fbm(a * 14, b * 6, seed + 9) - 0.5) + 0.2 * (fbm(a * 55, b * 22, seed + 19) - 0.5);
+  const x = heat + jit;
+  const scorch = smooth(0.1, 0.3, x), char = smooth(0.27, 0.4, x);
+  let c = mix(c0, mix(c0.map((v) => v * 0.5), [52, 34, 24], 0.6), scorch);
   if (char <= 0) return [c, DARK, r0, h0];
-  const [d1, d2, id] = cells(u / 0.017, v / 0.024, seed + 11);
-  const crack = 1 - smooth(0.05, 0.14, d2 - d1);
-  const block = [24, 20, 18].map((x) => x * (0.8 + 0.45 * id) * (0.85 + 0.3 * fbm(u * 90, v * 90, seed)));
-  const hot = crack * smooth(0.55, 0.95, heat + jit);
-  c = mix(c, mix(block, [86, 30, 12], crack * 0.8), char);
-  const glow = HOTTEST.map((x) => x * hot * char * (0.75 + 0.25 * id));
-  return [c, glow, r0 + (0.62 - r0) * char, h0 + (0.55 + 0.25 * (1 - d1) - 0.5 * crack - h0) * char];
+  const hot = smooth(0.45, 0.9, x);
+  const [crack, inside, id] = checks(a, b, hot, seed + 11, stretch);
+  const deep = Math.max(crack, groove * smooth(0.35, 0.7, x));
+  let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
+  // Grey-white ash on the blocks where it burns hottest.
+  block = mix(block, [92, 88, 84], 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59)));
+  c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
+  const leak = 0.3 * (1 - inside) * hot;
+  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id);
+  const glow = mix([150, 28, 4], HOTTEST, Math.min(1, deep * hot * 1.2)).map((v) => v * g);
+  return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 
 // A log's section at s round it: the point, its outward normal in the plane, and bark or not.
@@ -423,13 +469,16 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
   }
   throw new Error("past the section");
 }
-// How hot a log is at t along it on a face of this normal: its inner end over the flames,
-// its foot where it sits in the coals, the faces toward the fire most.
+// How hot a log is at t along it on a face of this normal: its underside, toward the middle
+// and down, licked by the flames all along; its inner end over the flames and its foot in the
+// coals most; its upper outer face raw but for its top.
 function heat(l: Log, t: number, n: V3): number {
-  const inward = -dot(n, l.out), down = -n[1];
-  const top = smooth(0.42, 0.95, t / l.L) * (0.45 + 0.55 * clamp(inward + 0.35));
-  const foot = 0.55 * smooth(0.28, 0.04, t / l.L) * clamp(0.5 * inward + 0.5 * down + 0.15);
-  return Math.max(top, foot);
+  const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
+  const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
+  const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
+  const foot = smooth(0.35, 0.02, f) * (0.3 + 0.6 * under);
+  const lick = under * under * (0.58 + 0.25 * f);
+  return Math.max(top, foot, lick);
 }
 
 /** The wood atlas's colour, emissive, metal-roughness and normal maps, RGBA a byte each. */
@@ -452,7 +501,7 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
         const [p, n2, isBark] = at(l, s);
         const n: V3 = add(mul(l.e1, n2[0]), mul(l.e2, n2[1]));
         const w = isBark ? bark(s, t, l.seed) : splitWood(s, t, Math.hypot(p[0], p[1]), l.R, l.seed);
-        put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed));
+        put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0));
       }
     }
     // Its ends: the foot's end grain plain, the top's over the flames charred.
@@ -462,8 +511,9 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
           const [px, py] = [l.box[0] + (x - 2 + 0.5) / D, l.box[1] + (y - 2 + 0.5) / D];
           const r = Math.hypot(px, py);
           const w = endGrain(px, py, r, l.R, true, l.seed + end);
-          const hot = end ? 0.75 + 0.2 * fbm(px * 40, py * 40, l.seed) : 0.12 + 0.35 * smooth(0.75, 1, r / l.R);
-          put(cx + x, cy + y, charred(w, hot, px * 1.3, py * 1.3, l.seed + 13));
+          const hot = end ? 0.8 + 0.2 * fbm(px * 40, py * 40, l.seed) : 0.3 + 0.45 * smooth(0.5, 1, r / l.R);
+          // Its char split along the radial checks and round the rings, as a log's end burns.
+          put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024));
         }
       }
     });
