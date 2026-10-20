@@ -474,7 +474,11 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const t = Math.min(1, deep * deep * hot * (0.55 + 0.6 * feet));
   const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
-  const glow = tone.map((v) => v * g);
+  // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
+  // over its blocks, brightest at the hottest, broken by the char's mottle (fire round 31: dark
+  // logs standing on the bed).
+  const bed = smooth(0.78, 1.2, x) * (0.45 + 0.55 * fbm(a * 9, b * 3, seed + 61)) * (0.55 + 0.45 * inside);
+  const glow = tone.map((v, i) => v * g + [200, 66, 8][i] * 0.35 * bed);
   return [c, glow, r0 + (0.6 - r0) * char, h0 + (0.42 + 0.3 * inside - 0.45 * deep - h0) * char];
 }
 
@@ -498,7 +502,8 @@ function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
   const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
-  const foot = smooth(0.42, 0.0, f) * (0.72 + 0.6 * under);
+  // Its very foot, where it lies in the coals, hot all round, its faces seen too.
+  const foot = smooth(0.42, 0.0, f) * (0.72 + 0.6 * under) + 0.35 * smooth(0.3, 0.0, f);
   const lick = under * under * (0.58 + 0.25 * f);
   // Smoke and heat scorch it all over and char what the camera sees of its upper half too
   // (fire round 25: its raw upper faces read as pale planks); its lower half, toward the coals,
@@ -530,14 +535,15 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
         put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0));
       }
     }
-    // Its ends: the foot's end grain plain, the top's over the flames charred.
+    // Its ends: the foot's in the coals and the top's over the flames, both charred.
     l.caps.forEach(([cx, cy], end) => {
       for (let y = 0; y < Math.ceil((l.box[3] - l.box[1]) * D) + 4; y++) {
         for (let x = 0; x < Math.ceil((l.box[2] - l.box[0]) * D) + 4; x++) {
           const [px, py] = [l.box[0] + (x - 2 + 0.5) / D, l.box[1] + (y - 2 + 0.5) / D];
           const r = Math.hypot(px, py);
           const w = endGrain(px, py, r, l.R, true, l.seed + end);
-          const hot = end ? 0.8 + 0.2 * fbm(px * 40, py * 40, l.seed) : 0.3 + 0.45 * smooth(0.5, 1, r / l.R);
+          // The foot's end lies in the coals: hot, most at its rim.
+          const hot = end ? 0.8 + 0.2 * fbm(px * 40, py * 40, l.seed) : 0.95 + 0.25 * smooth(0.3, 1, r / l.R);
           // Its char split along the radial checks and round the rings, as a log's end burns.
           put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024));
         }
