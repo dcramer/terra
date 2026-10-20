@@ -75,7 +75,11 @@ const HEARTH_RANGE_M: f32 = 14.0;
 /// 3.4x the far ground at 2 m and 1.6x at 4 m, its stones 1.7 stops under the flame
 /// (fire round 7, 2026-10-19). With the night's moon at a quarter (fire round 10), 2.2: at
 /// 3.2 the firelit stones and logs went past the tonemapper's shoulder and read salmon-pink.
-const HEARTH_NIGHT_STOPS: f32 = 2.2;
+/// With the night's moon back at a half (fire round 11), 3.0: at 2.2 the ground round the
+/// stones had no firelit pool (linear luma 0.058 at 0.8 m in the 2.5 m view), at 3.0 it is
+/// 0.12, warm (R/B 6.4), as the games' pools read (fire round 12). Hung lower (0.35 of its
+/// flames), the ring of stones shadowed the ground outside it: the pool halved.
+const HEARTH_NIGHT_STOPS: f32 = 3.0;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less.

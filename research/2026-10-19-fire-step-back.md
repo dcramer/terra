@@ -106,6 +106,50 @@ What is documented is professional breakdowns, and they agree:
 | Coal bed and emissive logs | an emissive char mask with flicker noise | none: black logs |
 | Ground | a flickering light or shadow decal, scorch | unlit scorched ring |
 
+## Breaking down a known-good campfire (round 12)
+
+Tags: **measured** is read from a shipped asset file. **Stated** is what the author writes. **Inferred** is ours.
+No frame-by-frame capture of the Red Dead Redemption 2, Witcher 3 or Sons of the Forest campfires turned up within the budget. The Unity BonFire sample is the one known-good campfire whose numbers can be read. Its `BonFire.vfx`, `BonfireFlame.shadergraph`, `Feather Step.shadersubgraph` and `BonFire.unity` are at https://github.com/Unity-Technologies/VisualEffectGraph-Samples/tree/master/Assets/Samples/BonFire.
+
+**Unity BonFire, per layer (measured from `BonFire.vfx`):**
+- **Flame:** 2 spawned a second, lifetime 2-4 s, capacity 7, so 4-7 cards are alive at once. Alpha-blended (`blendMode: 1`, which is Alpha in VFX Graph; 0 is Additive). Card scale 1 x 1.5, taller than wide. Per-particle alpha comes from noise (frequency 0.25, 3 octaves, roughness 0.5).
+- **Flame shader:** UVs pan at (0, 1) a second, with 0.1 of base offset, through a distortion subgraph. `Threshold` 0.07 and `Feather` 0.03 feed a "Feather Step" subgraph. That subgraph is an Add, a Subtract and a Smoothstep, so it reads as `smoothstep(T - F, T + F, x)` (inferred). The vertex deform has exponent 3 and scale 1.55.
+- **Flame colour:** one HDR tint, (128, 2, 0.2) linear. There is no texture gradient. R:G:B is 1 : 0.016 : 0.0016, so bright texels clip red and the tonemapper carries them to orange, yellow and white. Thin texels stay deep red (inferred). The "white-hot base" is exposure on dense alpha, not a ramp.
+- **Embers:** bursts of 3-10 every 0.1-1.5 s. Capacity 24, lifetime 0.5-2 s. Velocity is 2-5 m/s up and ±0.33 m/s sideways, with turbulence of intensity 5 and drag 1. They are alpha-blended and use the flame shader: threshold 0.07, feather 0.07, pan 1.7 a second.
+- **Smoke:** 5 spawned a second, lifetime 4-5.5 s, capacity 24, so about 24 are alive. It rises at 1-1.5 m/s, ±0.1 sideways, with drag 0.2 and a random 0-360° angle. It is lit, not unlit: a normal map at scale 0.1 and smoothness 0.5. It uses an 8x8 flipbook with a soft-particle fade of 1 m. Alpha-blended.
+- **Light (measured from `BonFire.unity`):** one point light, "Point Light - Fire". 1290 K. 20,000 lux at 2 m, which is 80,000 cd, about 1.0e6 lm. Shape radius 0.5 m, range 20 m, hard shadows. It sits 0.38 m above the effect's origin and 0.46 m to one side. The object has no flicker component. The scene is daylit: a 100,000 lux sun at 5500 K, so the fire gives a fifth of the sun's lux at 2 m.
+
+**Other breakdowns (stated):**
+- Erik Forsström's heat haze fades its refraction from 1.1 to 1 over life. His ground decal is a fire-shadow texture with slight distortion, drawn as moving firelight, not a real light (https://80.lv/articles/creating-a-campfire-vfx-in-ue4).
+- Psyros's fire pit is two billboard planes, one for fire and one for smoke, plus a Niagara ember system (https://psyros.artstation.com/projects/GvqKyd).
+- Dylan Bennett's UE5 campfire got its flicker from many point lights. He calls that its most expensive part and would cut it for a game (https://dylanbennett6.artstation.com/projects/eRL2RD).
+- A reviewed panning-texture campfire took this critique: make the tongues fewer and larger, give the silhouette several triangular peaks inside a cone mask, use a deeper orange in the dark parts, and move faster. Multiplying by a bottom gradient took away a hard line at the base (https://realtimevfx.com/t/campfire-using-panning-textures/20165).
+- League VFX artists on flame shapes: yellow or light orange at the centre and red at the edges, white of the erosion map near each shape's centre, close-packed particles of varied size (https://realtimevfx.com/t/about-fire-from-infernal-velkoz/13491).
+
+**Tip erosion, as practitioners do it (stated):**
+- Soft erosion is `a = smoothstep(t - f, t + f, mask)`. A hard `step` aliases. With a feather, remap t over [-f, 1 + f], or the mask never fully clears at 0 and 1. Import erosion maps as linear (https://vfxdoc.readthedocs.io/en/latest/shaders/alpha-erosion/).
+- t rises over the particle's life, from vertex-colour alpha or a curve. The mask is a 0-1 UV gradient times noise, so the low-value parts go first: the top and the edges (Niels and Torbach, https://realtimevfx.com/t/what-is-your-alpha-opacity-mask-clip-erode-animation-workflow-like/7705). An example edge width is 0.2, as in `smoothstep(.2, .4, x)`. BonFire's is 0.06 (2 x 0.03).
+- Equalize the erosion noise, so a threshold of 0.1 removes about 10% of texels and the easing lives in the curve (MikeH, same thread).
+- Drive emission with a second smoothstep, offset from the opacity one. The eroding rim then glows and cools at its own rate (Travis, the Velkoz thread; MikeH feeds the inverse of the erosion into emissive).
+- Multiplying by the particle's alpha as well as subtracting the threshold gives fade and tearing together (Limeslushie, the Velkoz thread).
+
+**Physics for size and flicker (inferred from fire science):**
+- Mean visible flame height, Heskestad: L = 0.235 Q^0.4 - 1.02 D, with Q in kW and D in m (https://arxiv.org/pdf/2008.12209). For a pile 0.5 m across, 30 kW gives 0.41 m and 100 kW gives 0.97 m. The tips flicker above the mean. Our own photographs show 1.5-3 times the pile.
+- Puffing frequency of a buoyant flame: f ≈ 1.5 / sqrt(D) Hz, D in m (Cetegen and Ahmed, via https://arxiv.org/pdf/1803.10400). That is 2.1 Hz at 0.5 m and 1.5 Hz at 1 m. So the big light swing is about 2 Hz, with faster small noise on top.
+- Firelight colour is 1300-1900 K. Unity lists a candle at 1800 K (https://docs.unity3d.com/ScriptReference/Light-colorTemperature.html), and BonFire uses 1290 K.
+
+**What we take:**
+1. **Size:** flame cards 1.5 times taller than wide. The mean flame stands 1-1.5 times the pile's height, and the tips reach about 2 times on the puffs.
+2. **Tongues:** 4-7 large body cards alive at once (2 a second, 2-4 s life), plus many small tongues on the logs. Make them fewer and larger than feels right, with a cone-shaped silhouette of several peaks.
+3. **Erosion:** `smoothstep(t - f, t + f, gradient * noise)` with f 0.03-0.1. Remap t over [-f, 1 + f] as life goes 0 to 1. Pan the noise up at 1-1.7 UV a second, so the top and the edges tear first.
+4. **Emission edge:** a second smoothstep, offset by about 0.05 from the opacity one, so the torn rim glows.
+5. **Colour:** one red-dominant HDR tint, about (1, 0.016, 0.0016) times an exposure-scaled intensity. Dense alpha clips to white at the base and thin alpha stays red at the top. Multiply by a bottom-to-top falloff so the upper flame is see-through.
+6. **Blend:** alpha or covering for the flame, embers and lit smoke. Additive only for glow.
+7. **Embers:** bursts of 3-10 every 0.1-1.5 s, 0.5-2 s life, 2-5 m/s up, turbulence 5, at most about 24 alive.
+8. **Smoke:** about 24 alive, 4-5.5 s life, 1-1.5 m/s up, lit by a normal map, soft fade 1 m.
+9. **Light:** one shadowed point light about 0.4 m above the coals at 1300-1900 K, with a shape radius about the pile's. Flicker it with a swing of about 2 Hz plus small fast noise, in step with the flame's emission. For moving light on the ground, a flickering ground decal is cheaper than many lights.
+10. **Coals and ground:** an emissive coal bed and char mask on the logs, with a firelit ground pool or decal. These hold the bright base when the flame cards are thin.
+
 ## Plan to AAA, ranked
 
 Each step is checked by the same one-job A/B (ours, the pro book and the photographs at noon, dusk and night), with measurements that judge the flame band and the lit surroundings apart.

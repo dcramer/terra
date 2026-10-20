@@ -125,10 +125,11 @@ const SMOKE_CARDS: usize = 4;
 /// Redemption 2, Kingdom Come): several tongues of flame of their own heights over a bed of
 /// glowing coals among the logs, a few sparks, a thin grey wisp of smoke warm only at its
 /// foot, and a light of their own. At most so many of them; must match `HEARTHS` in
-/// fire.wesl and fire_smoke.wesl. Each has so many flame cards (its coals, then its tongues)
+/// fire.wesl and fire_smoke.wesl. Each has so many flame cards (its ground, coals, two bodies,
+/// then its tongues on the logs; `HEARTH_CARDS` in fire.wesl)
 /// and so many puffs of smoke, close enough in time to rise as one column.
 const HEARTHS: usize = 16;
-const HEARTH_FLAME_CARDS: usize = 6;
+const HEARTH_FLAME_CARDS: usize = 16;
 const HEARTH_SMOKE_CARDS: usize = 24;
 /// A hearth's sparks, thirty or more seen at once, most dying low (fire review, round 2:
 /// 30 to 60 small points, not a file of a few streaks).
