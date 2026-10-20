@@ -229,12 +229,20 @@ const HEARTH_CARDS: f32 = 16.0;
 const HEARTH_BODY: f32 = 0.95;
 const HEARTH_BODY_UP: f32 = 0.15;
 // Its tongues: their heights over `tall`, least and most; how far out from the middle they
-// rise, over the fire's width (the logs' teepee); how far they lean in along the logs; and the
-// teepee's height over the fire's width, so each rises from the logs' top where it stands and
-// not inside them, hidden (round 12's first try).
+// rise, over the fire's width (the logs' teepee), nearest and farthest; how far they lean in
+// along the logs; and the teepee's height over the fire's width, so each rises from the logs'
+// top where it stands and not inside them, hidden (round 12's first try).
+// They lick up the logs' slopes, off the teepee's apex, where the body's middle column stands:
+// from 0.12 of the way out, the tallest of them stood there over one another as a white spike
+// (fire round 16's probe: gone with the tongues alone hidden, kept with the columns hidden).
 const TONGUE_TALL: vec2<f32> = vec2<f32>(0.26, 0.55);
 const TONGUE_OUT: f32 = 0.5;
+const TONGUE_IN: f32 = 0.4;
 const TONGUE_LEAN: f32 = 0.3;
+// How much a tongue's cover is of its drawn shape: about as thick as the baked body's flame
+// is, since both are lit at the hearth's brightness, which is the set's. Drawn as an opaque
+// mask, a tongue gave three times the body's light, white-hot wherever one stood.
+const TONGUE_THICK: f32 = 0.35;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
@@ -1244,10 +1252,10 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
     let pick = hash(vec2(cycle * 1.37 + k * 7.0, seed * 13.0 + k));
     let ang = (k + pick * 0.8) * 2.39996 + seed * 6.283;
     let reach = wide * TONGUE_OUT;
-    let r = reach * (0.12 + 0.88 * sqrt(fract(pick * 3.7 + k * 0.13)));
+    let r = reach * (TONGUE_IN + (1.0 - TONGUE_IN) * sqrt(fract(pick * 3.7 + k * 0.13)));
     let outward = east * cos(ang) + north * sin(ang);
     // Taller toward the middle, where the logs meet and the fire is hottest.
-    var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, fract(pick * 5.3)) * (1.0 - 0.45 * r / reach);
+    var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, fract(pick * 5.3)) * (1.0 - 0.3 * r / reach);
     h *= breathe * (0.75 + 0.4 * age);
     let w = h * (0.4 + 0.2 * fract(pick * 9.1));
     let logs = wide * TEEPEE.x * max(1.0 - r / (wide * TEEPEE.y), 0.0);
@@ -1597,7 +1605,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let shape = smoothstep(edge - 0.05, edge + 0.05, body * (0.45 + 0.8 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         let heat_here = saturate(0.5 + 0.4 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) - 0.15 * age);
-        let drawn = baked_flame(vec4(heat_here, shape * born, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
+        let drawn = baked_flame(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft);
         light = drawn.rgb;
         cover = drawn.a;
     } else if kind == 0 {
