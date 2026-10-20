@@ -243,8 +243,10 @@ const TONGUE_IN: f32 = 0.4;
 const TONGUE_LEAN: f32 = 0.3;
 // How much a tongue's cover is of its drawn shape: about as thick as the baked body's flame
 // is, since both are lit at the hearth's brightness, which is the set's. Drawn as an opaque
-// mask, a tongue gave three times the body's light, white-hot wherever one stood.
-const TONGUE_THICK: f32 = 0.35;
+// mask, a tongue gave three times the body's light, white-hot wherever one stood; at 0.35,
+// eroded from 0.12 and by 0.4 over its life, only a faint lick of each showed (fire round 29),
+// so twice that, eroded from 0.06 and by 0.3, with the side columns lower.
+const TONGUE_THICK: f32 = 0.7;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
@@ -1409,7 +1411,11 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         let r = select(wide * COLUMN_OUT * (0.6 + 0.4 * fract(luck * 5.1)), wide * 0.04, j == 2);
         let logs = wide * TEEPEE.x * max(1.0 - r / (wide * TEEPEE.y), 0.0);
         at = foot + (east * cos(a) + north * sin(a)) * r + up * max(wide * HEARTH_BODY_UP, logs * 0.55);
-        flame *= select(0.62 + 0.2 * luck, 1.0, j == 2);
+        // The side columns low, so the tongues carry the fire's outline among the logs: at
+        // 0.62-0.82 of the middle's height they stood beside the logs as wide sheets, the
+        // tongues lost inside their light (fire round 29: with the columns hidden, eight of
+        // the nine tongues stood clear of the logs; blind 6/10 against 5 with these lower).
+        flame *= select(0.45 + 0.15 * luck, 1.0, j == 2);
         window = COLUMN_WINDOW * select(0.85 + 0.3 * fract(luck * 3.3), 1.15, j == 2);
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
@@ -1691,7 +1697,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let bx = 0.5 + (fract(luck * 3.7) - 0.5) * 0.3 + xx * 0.45;
         let tex = flipbook(SET_CAMPFIRE, f, vec2(select(bx, 1.0 - bx, fract(luck * 7.3) > 0.5), mix(0.04, 0.75, y)));
         let n = fbm(vec2(xx * 9.0 + luck * 11.0, y * 4.5 - time * 3.4));
-        let edge = 0.12 + 0.65 * pow(y, 1.2) + 0.4 * age;
+        let edge = 0.06 + 0.65 * pow(y, 1.2) + 0.3 * age;
         let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
