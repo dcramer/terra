@@ -62,6 +62,11 @@ struct Fire {
 @group(constants::MATERIAL_BIND_GROUP) @binding(106) var motions: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107) var ramp: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(108) var ramp_sampler: sampler;
+// The marched breath's value noise, a random value a lattice point (crates/terra_world/src/
+// fire/volume.rs, `noise`).
+@group(constants::MATERIAL_BIND_GROUP) @binding(109) var gas_noise: texture_3d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(110) var gas_noise_sampler: sampler;
+const GAS_NOISE_SIZE: f32 = 32.0;
 // What breaths have let go: soot, then drops, each where and when, then its going and luck.
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<storage, read> puffs: array<vec4<f32>>;
 // The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
@@ -501,25 +506,15 @@ const BALL_EXTINCTION: f32 = 26.0;
 // The most steps a ray takes through a breath.
 const BREATH_STEPS: i32 = 128;
 
-// A hash of a lattice point, 0 to 1 (PCG, after Jarzynski and Olano 2020).
-fn hash3(p: vec3<i32>) -> f32 {
-    var h = (u32(p.x) * 73856093u) ^ (u32(p.y) * 19349663u) ^ (u32(p.z) * 83492791u);
-    h = h * 747796405u + 2891336453u;
-    h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
-    h = (h >> 22u) ^ h;
-    return f32(h) * (1.0 / 4294967295.0);
-}
-
-// Value noise in three dimensions, 0 to 1.
+// Value noise in three dimensions, 0 to 1: the lattice's values (`gas_noise`) trilinearly
+// mixed by the smoothed place in the cell, fetched at the cell's corner plus that smoothed
+// place, so the texture's linear filter does the mixing in one fetch (Quilez's value noise from
+// a texture). Its eight corners hashed in the shader were most of the march's cost.
 fn noise3(p: vec3<f32>) -> f32 {
-    let i = vec3<i32>(floor(p));
-    let f = fract(p);
+    let i = floor(p);
+    let f = p - i;
     let u = f * f * (3.0 - 2.0 * f);
-    let a = mix(hash3(i), hash3(i + vec3(1, 0, 0)), u.x);
-    let b = mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), u.x);
-    let c = mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), u.x);
-    let d = mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), u.x);
-    return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+    return textureSampleLevel(gas_noise, gas_noise_sampler, (i + u + 0.5) / GAS_NOISE_SIZE, 0.0).r;
 }
 
 // Three octaves of it, 0 to 1.
@@ -552,6 +547,9 @@ struct Breath {
     normal: vec3<f32>,
     // Whether it is drawn as a marched volume, the cinematic tier, or as cards.
     marched: bool,
+    // Marched, once off: how long since, and how much of its fireball's smoke is left.
+    since_off: f32,
+    smoke: f32,
 }
 
 fn breath_of(slot: u32) -> Breath {
@@ -586,7 +584,14 @@ fn breath_of(slot: u32) -> Breath {
     // once off. Drawn as cards, the fireball is the sprites' (`breath_sprite`).
     b.marched = fire.volume.x > 0.5;
     let struck = select(0.0, saturate((flown - b.reach) / (JET_SPEED * 0.6)), on && b.face > 0.0);
-    b.ball = select(0.0, select(struck, b.left, !on && b.face > 0.0), b.marched);
+    // Once off, the fireball burns out to its soot, which rises, spreads and thins over some
+    // seconds, as a flamethrower's cloud hangs after the burst (the references' after-stop
+    // frames); gone with the stream, nothing was left but the stain (vol3's review).
+    let came_on = fire.jets[j + 2u].z;
+    let was = saturate((JET_SPEED * max(since - came_on, 0.0) - b.reach) / (JET_SPEED * 0.6));
+    b.since_off = select(0.0, max(time - since, 0.0), !on);
+    b.smoke = select(0.0, was * (1.0 - smoothstep(SMOKE_HOLD, SMOKE_GONE, b.since_off)), !on && b.face > 0.0 && b.marched);
+    b.ball = select(0.0, select(struck, was, !on && b.face > 0.0), b.marched);
     return b;
 }
 
@@ -608,7 +613,19 @@ fn ball_radius(b: Breath) -> f32 {
 // centred near the wall, half of it was behind the stone, and rays ended on the wall after
 // a sliver of its thin edge, so the windows showed through it (castle film r12).
 fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
-    return vec3(0.0, 0.0, b.reach - 0.85 * rb) + b.up * rb * 0.45;
+    return vec3(0.0, 0.0, b.reach - 0.85 * rb) + b.up * (rb * 0.45 + SMOKE_RISE * b.since_off);
+}
+
+// The smoke left once off: held thick this long, gone by then (seconds), rising at so many
+// metres a second and spreading to so much more of the ball's size by then.
+const SMOKE_HOLD: f32 = 0.8;
+const SMOKE_GONE: f32 = 5.5;
+const SMOKE_RISE: f32 = 0.7;
+const SMOKE_SPREAD: f32 = 0.7;
+
+// What is left of a breath to draw: its stream's gas, or the smoke after it.
+fn breath_left(b: Breath) -> f32 {
+    return max(b.left, b.smoke);
 }
 
 // The whole breath as one raymarched volume, the cinematic tier (D430; research/
@@ -620,8 +637,8 @@ fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
 // gas boils as it flies. The gas at a point in the jet's frame: how dense, how hot (the ramp's
 // heat, 0 to 1), how much of it is soot (0 to 1); w how far outside any gas the point is
 // (positive: empty, a distance safe to step over).
-fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
-    let rb = ball_radius(b) * (0.45 + 0.55 * b.ball);
+fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
+    let rb = ball_radius(b) * (0.45 + 0.55 * b.ball) * (1.0 + SMOKE_SPREAD * saturate(b.since_off / SMOKE_GONE));
     let mid = ball_middle(b, rb);
     let rel = l - mid;
     let zc = clamp(l.z, 0.0, b.reach);
@@ -643,9 +660,15 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     let q = (l.xy - wander * r * 0.9 * open) / r;
     // The noise across by the stream's radius, along by the parcel, warped by itself.
     let p = vec3(q * 1.3, flow * 0.55);
-    let w = vec3(noise3(p * 0.6 + 4.1), noise3(p * 0.6 + 9.7), noise3(p * 0.6 + 2.3)) - 0.5;
+    // Coarse (`detail` off: the shadow taps toward the sun, the film mask), the warp and the
+    // finest octaves are left out, two fifths of the noise; what they shade is soft anyway.
+    var w = vec3(0.0);
+    var fine = 0.5;
+    if detail {
+        w = vec3(noise3(p * 0.6 + 4.1), noise3(p * 0.6 + 9.7), noise3(p * 0.6 + 2.3)) - 0.5;
+        fine = noise3(p * 3.1 + w * 1.5 + 13.0) * 0.7 + noise3(p * 7.3 + w * 2.0 + 29.0) * 0.3;
+    }
     let e = fbm3(p + w * mix(0.8, 2.2, open));
-    let fine = noise3(p * 3.1 + w * 1.5 + 13.0) * 0.7 + noise3(p * 7.3 + w * 2.0 + 29.0) * 0.3;
     let u = length(q) + (e - 0.5) * mix(0.7, 1.9, open) + (fine - 0.5) * 0.35 * open;
     var stream = 1.0 - smoothstep(0.7, 0.95, u);
     // Its tip breaks into blobs.
@@ -660,15 +683,29 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     var ball = 0.0;
     var hot_b = 0.0;
     var soot_b = 0.0;
+    // How far in front of the face it strikes (metres; large when it strikes nothing).
+    var plane = 1.0e5;
+    if b.face > 0.0 {
+        let n = normalize(b.normal);
+        plane = dot(l - vec3(0.0, 0.0, b.face), vec3(dot(n, b.lift), dot(n, b.side), dot(n, b.way)));
+    }
     if b.ball > 0.01 && length(rel) < rb * 1.6 {
         let pb = rel / rb - b.up * time * 0.7;
-        let wb = vec3(noise3(pb * 1.8 + 3.3), noise3(pb * 1.8 + 7.9), noise3(pb * 1.8 + 1.4)) - 0.5;
+        var wb = vec3(0.0);
+        var nb = 0.5;
+        if detail {
+            wb = vec3(noise3(pb * 1.8 + 3.3), noise3(pb * 1.8 + 7.9), noise3(pb * 1.8 + 1.4)) - 0.5;
+            nb = noise3(pb * 6.0 + wb * 2.0) * 0.7 + noise3(pb * 13.0 + wb * 2.5) * 0.3;
+        }
         let lumps = fbm3(pb * 2.2 + wb * 1.6);
-        let nb = noise3(pb * 6.0 + wb * 2.0) * 0.7 + noise3(pb * 13.0 + wb * 2.5) * 0.3;
         let d = length(rel) / rb;
         ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.35)) * b.ball;
+        // The smoke thins as it spreads, wispier at its edge than in its middle.
+        ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
         let high = dot(rel, b.up) / rb;
         hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.6 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
+        // Once off it burns out from the outside in over a second, to soot.
+        hot_b -= 1.1 * saturate(b.since_off / 1.0);
         soot_b = smoothstep(0.1, 0.7, high + 0.5 * (lumps - 0.5)) * smoothstep(0.4, 0.9, d + 0.3 * (nb - 0.5));
         stream *= 1.0 - smoothstep(0.05, 0.4, ball);
     }
@@ -676,9 +713,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // behind it, the ball's far half showed over the wall's top and not below it, a level
     // seam along the top.
     if b.face > 0.0 {
-        let n = normalize(b.normal);
-        let nl = vec3(dot(n, b.lift), dot(n, b.side), dot(n, b.way));
-        let keep = smoothstep(-0.1, 0.35, dot(l - vec3(0.0, 0.0, b.face), nl));
+        let keep = smoothstep(-0.1, 0.35, plane);
         stream *= keep;
         ball *= keep;
     }
@@ -690,8 +725,13 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // Soot where the stream has cooled toward its tip.
     let soot_s = smoothstep(0.35, 0.9, zf) * (1.0 - smoothstep(0.2, 0.45, hot_s));
     // And wherever the gas has cooled past burning.
-    let soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
-    return vec4(min(dense, 1.0) * b.left, saturate(hot), soot, 0.0);
+    var soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
+    // Once off, the ball's gas is all soot within a second: a fifth of it left as cooled flame
+    // read as a maroon cloud (l1).
+    soot = max(soot, ball / dense * saturate(b.since_off / 1.0));
+    // The stream fades in a moment once off; the ball's smoke is thinned by its own (`smoke`).
+    let dense_left = stream * b.left + ball;
+    return vec4(min(dense_left, 1.0), saturate(hot), soot, 0.0);
 }
 
 // The breath's gas as the screen shows it by how hot it is: the fire's gradient without the
@@ -741,7 +781,7 @@ fn sun_through(l: vec3<f32>, to_sun: vec3<f32>, b: Breath, time: f32) -> f32 {
     let taps = SUN_TAPS;
     for (var k = 0; k < 4; k++) {
         let at = taps[k];
-        let g = breath_gas(l + to_sun * at, b, time);
+        let g = breath_gas(l + to_sun * at, b, time, false);
         if g.w <= 0.0 {
             tau += g.x * mix(VOLUME_FLAME_K, VOLUME_SOOT_K, g.z) * (at - last);
         }
@@ -760,7 +800,7 @@ fn sun_through(l: vec3<f32>, to_sun: vec3<f32>, b: Breath, time: f32) -> f32 {
 @if(!PREPASS_PIPELINE)
 fn breath(in: VertexOutput) -> vec4<f32> {
     let b = breath_of(u32(in.uv.x + 0.5));
-    if b.reach <= 0.0 || b.left <= 0.0 || !b.marched {
+    if b.reach <= 0.0 || breath_left(b) <= 0.0 || !b.marched {
         discard;
     }
     let time = fire.kind.z;
@@ -796,6 +836,20 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         sun = s.color.rgb * view.exposure * (SOOT_ALBEDO / 3.14159265);
     }
     let across = max(length(dl.xy), 0.25);
+    // Drawn again as the film mask, only the flame's share is wanted, soft: the gas coarse,
+    // in steps twice as long, and no sun; the march's whole cost was paid twice.
+    var detail = true;
+    var coarse = 1.0;
+@if(FIRE_MASK)
+    {
+        detail = false;
+        coarse = 2.0;
+        sun = vec3(0.0);
+    }
+    // The sun through the gas is found at every other sooty step and held between: it
+    // changes over metres, the steps a fraction of one.
+    var shaded = 1.0;
+    var shade_due = true;
     let jitter = fract(52.9829189 * fract(dot(in.position.xy, vec2(0.06711056, 0.00583715)) + time * 7.13));
     var s = near;
     var first = true;
@@ -808,13 +862,13 @@ fn breath(in: VertexOutput) -> vec4<f32> {
             break;
         }
         let l = ol + dl * s;
-        let gas = breath_gas(l, b, time);
+        let gas = breath_gas(l, b, time, detail);
         if gas.w > 0.0 {
             s += max(gas.w, 0.05);
             continue;
         }
         let r = stream_radius(clamp(l.z, 0.0, b.reach), b);
-        var ds = clamp(0.22 * r / across, 0.04, 0.45);
+        var ds = clamp(0.22 * coarse * r / across, 0.04, 0.45 * coarse);
         if first {
             first = false;
             s += ds * jitter;
@@ -830,7 +884,10 @@ fn breath(in: VertexOutput) -> vec4<f32> {
             light += through * a * mix(flame, soot, gas.z);
             // And lit by the sun through the gas toward it, and the sky.
             if gas.z > 0.1 && through > 0.03 && sun.g > 0.0 {
-                let shaded = sun_through(l, to_sun, b, time);
+                if shade_due {
+                    shaded = sun_through(l, to_sun, b, time);
+                }
+                shade_due = !shade_due;
                 lit += through * a * gas.z * sun * (shaded + SOOT_SKY);
             }
             share += through * a * (1.0 - gas.z);
@@ -850,14 +907,15 @@ fn breath(in: VertexOutput) -> vec4<f32> {
 fn hull_box(b: Breath) -> array<vec3<f32>, 2> {
     let rb = ball_radius(b);
     // The ball reaches 1.55 of its radius from a middle up to 0.45 of it off the stream's line.
-    let wide = max(2.0 * stream_radius(b.reach, b), rb * 2.1) + 0.5;
-    return array<vec3<f32>, 2>(vec3(-wide, -wide, -0.5), vec3(wide, wide, b.reach + rb * 1.6));
+    // Once off, its smoke rises and spreads (`ball_middle`, `SMOKE_RISE`).
+    let wide = max(2.0 * stream_radius(b.reach, b), rb * 2.1 * (1.0 + SMOKE_SPREAD)) + 0.5 + SMOKE_RISE * b.since_off;
+    return array<vec3<f32>, 2>(vec3(-wide, -wide, -0.5), vec3(wide, wide, b.reach + rb * 1.6 * (1.0 + SMOKE_SPREAD)));
 }
 
 // A corner of a breath's hull placed round its jet.
 fn hull(corner: vec3<f32>, id: vec2<f32>) -> Out {
     let b = breath_of(u32(id.x + 0.5));
-    if b.reach <= 0.0 || b.left <= 0.0 || !b.marched {
+    if b.reach <= 0.0 || breath_left(b) <= 0.0 || !b.marched {
         return nowhere();
     }
     let box = hull_box(b);

@@ -223,6 +223,10 @@ pub struct FireExtension {
     #[texture(107)]
     #[sampler(108)]
     ramp: Handle<Image>,
+    /// The marched breath's value noise (`volume::noise`).
+    #[texture(109, dimension = "3d")]
+    #[sampler(110)]
+    noise: Handle<Image>,
 }
 
 /// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
@@ -622,6 +626,7 @@ fn setup(
     let flames = images.add(books.flames);
     let motions = images.add(books.motions);
     let ramp = images.add(books.ramp);
+    let noise = images.add(volume::noise());
     // Nothing let go yet: born an hour ago, long gone.
     let puffs = Puffs {
         buffer: buffers.add(ShaderBuffer::from(
@@ -684,6 +689,7 @@ fn setup(
                 flames: flames.clone(),
                 motions: motions.clone(),
                 ramp: ramp.clone(),
+                noise: noise.clone(),
                 puffs: puffs.buffer.clone(),
                 adaptation: adaptation.0.clone(),
             },
