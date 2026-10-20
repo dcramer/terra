@@ -487,7 +487,7 @@ function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
   const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
-  const foot = smooth(0.35, 0.02, f) * (0.3 + 0.6 * under);
+  const foot = smooth(0.3, 0.0, f) * (0.6 + 0.55 * under);
   const lick = under * under * (0.58 + 0.25 * f);
   // Smoke and heat scorch it all over and char what the camera sees of its upper half too
   // (fire round 25: its raw upper faces read as pale planks).

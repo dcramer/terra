@@ -191,7 +191,7 @@ export function bed(seed = 1): Bed {
 // A glow's colour, sRGB, at a heat from 0 (dark) to 1 (1,440 K): deep red, then orange.
 // At most so bright, sRGB: half the logs' cracks' light, as the embers' strength is theirs
 // (`EMBER_GLOW`); at the logs' a coal went past the tonemapper's shoulder to salmon-red.
-const BRIGHTEST = 0.72;
+const BRIGHTEST = 0.9;
 export function glowColour(heat: number): number[] {
   const h = Math.min(Math.max(heat, 0), 1);
   const red = [HOTTEST[0] * Math.pow(h, 0.7), HOTTEST[1] * Math.pow(h, 1.2), HOTTEST[2] * h * h];
@@ -226,8 +226,8 @@ export function maps(seed = 1): Uint8Array[] {
       const edge = r + 0.2 * (fbm(X * 4, Z * 4, 4) - 0.5) + 0.1 * (fbm(X * 14, Z * 14, 9) - 0.5);
       const patchy = (0.45 + 0.55 * smooth(0.3, 0.65, fbm(X * 7, Z * 7, 8))) * (1 - 0.5 * smooth(0.75, 0.95, edge) * (1 - smooth(0.4, 0.6, fbm(X * 16, Z * 16, 10))));
       const skirt = smooth(0.5, 0.74, r) * (1 - smooth(0.68, 1.04, edge)) * patchy;
-      const grey = (48 + 26 * n) * (1 - 0.6 * char) * (1 - skirt) + (96 + 24 * n - 16 * smooth(0.6, 0.8, speck)) * skirt;
-      const smoulder = char * smooth(0.4, 0.7, fbm(X * 5, Z * 5, 3)) * 0.9 + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
+      const grey = (22 + 14 * n) * (1 - 0.5 * char) * (1 - skirt) + (50 + 16 * n - 10 * smooth(0.6, 0.8, speck)) * skirt;
+      const smoulder = char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 1.1 + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
       put(x, 2 * T + y, [grey * 1.02 + 12 * smoulder, grey * 0.96, grey * 0.89], glowColour(smoulder), 0.95);
     }
   }
@@ -236,8 +236,8 @@ export function maps(seed = 1): Uint8Array[] {
     // Rows of four by where in the bed: its middle past 1,440 K to orange-yellow, then orange,
     // then dull red at the edge, under more ash.
     const band = Math.floor(tile / 4);
-    const heat = [1.2, 0.85, 0.55][band] + 0.1 * rnd();
-    const ashy = [0.4, 1, 1.5][band];
+    const heat = [1.35, 1.05, 0.75][band] + 0.1 * rnd();
+    const ashy = [0.2, 0.6, 1.1][band];
     const cells = Array.from({ length: 7 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.35 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
@@ -256,7 +256,7 @@ export function maps(seed = 1): Uint8Array[] {
         const mottle = fbm(d[0] * 4 + tile * 3, d[2] * 4 - d[1] * 2, 5);
         const glow = heat * Math.max(seam * (1 - 0.25 * smooth(0.3, 0.9, d[1])), halo * 0.7, under * (0.7 + 0.3 * mottle), hot * (0.7 + 0.5 * mottle));
         const ash = Math.min(1, ashy * (hot ? 0 : 1) * smooth(0.4, 0.9, d[1]) * smooth(0.45, 0.65, fbm(d[0] * 6 + tile, d[2] * 6, 6)) * (1 - halo));
-        const crust = 22 + 14 * mottle;
+        const crust = 16 + 12 * mottle;
         const grey = crust + ash * (50 + 25 * mottle);
         put(ox + x, oy + y, [grey + 20 * glow, grey * 0.97 + 6 * glow, grey * 0.94], glowColour(glow), 0.9);
       }
