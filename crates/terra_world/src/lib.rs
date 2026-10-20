@@ -38,6 +38,7 @@ pub mod gpu_turn;
 pub mod grading;
 pub mod grown;
 pub mod hable;
+pub mod haze_start;
 pub mod headless;
 pub mod lakes;
 pub mod loading;
