@@ -65,7 +65,7 @@ Each layer is a renderer with its own clock: it starts, stops, loops and hides o
 5. **Smoke.** Alpha-blended cards that are six-way lit, backlit and dark. They pale as they climb and thin, and cast shadows. It extends today's smoke (D325) with the format below.
 6. **Sparks and embers.** GPU points, velocity-stretched and curl-noise driven, riding the wind with their own influence (God of War). Their colour comes by age through the ramp, and their glow from the fire's flicker.
 7. **Flare.** One soft additive glow sprite at the hottest point, faded by occlusion and distance. It stands in for the camera's glare that bloom alone does not give.
-8. **Heat haze.** Distortion cards written into a screen buffer (see Haze).
+8. **Heat haze.** A full-screen pass bending the HDR picture in a column over each near fire (see Heat haze).
 9. **Light.** Point lights by the light rules.
 10. **Fog.** A fog volume round the fire: the glow of the air and the absorption of its smoke, lit by the fire's light (see Light).
 11. **Ground.** A scorch decal, and lingering fire sites where a breath or burst lands on something that burns (not water).
@@ -241,13 +241,11 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
 
 ## Heat haze
 
-- Not drawn today (fire round 8, 2026-10-19): the card that drew the opaque scene's copy shimmering over the flames was too faint to see and showed only as a grey smudge round a campfire's tips, so it was dropped. Done again, it is the design below.
-- One distortion buffer at a quarter of the screen.
-  - Haze cards write RG offsets (from the flame maps' A, or a panned noise), scaled by heat.
-  - It is applied in one pass before the tonemapper (Doom applies it in the tonemap pass itself).
-- One large haze card per fire group, never many rising ones, which read as smoke.
-- Gone by about 40 m.
-- Bevy has no distortion pass. It is our own render-graph node (D184), and the first thing in the module that adds a pass.
+- Its own full-screen pass over the HDR picture, before the tonemapper (Bevy's `FullscreenMaterial`, `fire::haze`, `fire_haze.wesl`), as Doom applies it in its tonemap pass: flames are bent with what is behind them, never greyed.
+  - Up to four of the nearest kept fires, each a column over its flames projected to the screen every frame, from 0.15 of their height to twice it; the pass is removed while there is none.
+  - The column bends what is behind by a rising noise, at most 0.15 of its half width (`BEND`): at 0.05 a blind judge saw nothing; 0.15 reads as heat shimmer (5/10 against 4.5, fire round 23); 0.25 read as marbled water.
+  - Gone by 40 m. No depth test yet: a column draws over anything in front of the fire.
+- One column per fire, never many rising cards, which read as smoke. Its fault left: coarse whorls more than fine upward ripples by day.
 
 ## Composites
 

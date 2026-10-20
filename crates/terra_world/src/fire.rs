@@ -427,6 +427,7 @@ pub fn plugin(app: &mut App) {
     seen::plugin(app);
     light::plugin(app);
     fog::plugin(app);
+    haze::plugin(app);
     film::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
@@ -922,6 +923,7 @@ fn show(
 mod books;
 mod film;
 mod fog;
+mod haze;
 mod light;
 mod seen;
 mod smoke;
