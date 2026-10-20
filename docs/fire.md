@@ -256,7 +256,9 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - a light riding its front.
   - A ray cast finds where it hits. A hit spawns a blast, lingering fire sites on what burns, and a scorch.
   - The jet carries the struck face's distance and normal (`Jet::face`, `Jet::normal`), so its landed puffs spread over that face and climb it, laid half onto it, rather than flying on into the wall, and the fireball stands off it.
-  - Its scorch is a soot stain laid on the struck face: a plume over the hit and a char spot at it, darkening over `STAIN_S` of the stream on it, kept to the face by depth as a decal is (`breath_stain`). It lasts as long as the jet; a lasting scorch is still to come.
+  - Its scorch is a soot stain laid on the struck face: a plume over the hit and a char spot at it, darkening over `STAIN_S` of the stream on it, kept to the face by depth as a decal is (`breath_stain`), streaked up the face. It grows only while the stream plays on it and stays once the jet is off or its breather gone: each jet slot is drawn from where it last burned (`kept`), until that slot breathes again; a scorch kept by the face itself is still to come.
+  - Its fireball is many puffs a few times smaller than the ball, rolling out along the struck face and up it, each from the fireball set's mushrooming frames on, not one ball of seven times its size showing the set's round first frames.
+  - A grid blaze's tongue cards have their level, white-hot foot and upright sides eaten back raggedly by noise: standing on a wall's top, that foot was a straight cut through the breath's flame.
   - Its light is under its flame (D415's brightness order): a jet's three lights at 4e6 lm and a wood flame's orange, where 5e7 and a pale yellow lit the ground, the wall and the dragon brighter than the fire by night.
   - **Whether a dragon breathes a gas jet or liquid fire (napalm: it falls, clings and burns on) is Open for the developers.**
 - **Explosion and fireball**:

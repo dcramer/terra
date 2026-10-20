@@ -465,8 +465,8 @@ fn breath_of(slot: u32) -> Breath {
 // The rod's radius so far along it, in metres: a tight rope at the jaw, opening a little,
 // inside the sprites that carry the stream's turbulence; it burns out by `ROD_ENDS` of the
 // way, where the stream is all puffs.
-const ROD_WIDTH: f32 = 0.35;
-const ROD_ENDS: f32 = 0.8;
+const ROD_WIDTH: f32 = 0.2;
+const ROD_ENDS: f32 = 0.55;
 fn stream_radius(z: f32, b: Breath) -> f32 {
     return (0.22 + b.spread * z * (0.7 + 0.5 * saturate(z / b.reach))) * ROD_WIDTH;
 }
@@ -513,7 +513,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // Solid to near its edge, the edge sharp and torn by the noise, as a fuel jet's on film
     // is a rope of nearly even light whose edge meets the sky (refs/fire-real MEASURED.md
     // §4); a soft edge let the sky through its whole width as salmon pink (castle film r11).
-    let u = length(q) + (e - 0.5) * mix(0.7, 1.3, open);
+    let u = length(q) + (e - 0.5) * mix(0.9, 1.8, open);
     var stream = 1.0 - smoothstep(0.78, 1.0, u);
     // Its tip tears apart into flying blobs that burn out.
     let tear = smoothstep(0.55, 1.0, zf) * 0.75;
@@ -532,7 +532,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     // yellow and orange strands, not a smooth glassy cone (held at 0.12, r12's first probe).
     let core = mix(0.95, 0.8, smoothstep(0.2, 1.0, zf)) + 0.05 * (1.0 - smoothstep(0.0, 0.2, zf));
     let streak = noise3(vec3(q * 1.7 + 5.3, flow * 0.35));
-    let hot_s = core * (1.0 - 0.3 * smoothstep(0.85, 1.05, u)) + 0.3 * (e - 0.5) + 0.16 * (streak - 0.5);
+    let hot_s = core * (1.0 - 0.5 * smoothstep(0.3, 0.95, u)) + 0.45 * (e - 0.5) + 0.3 * (streak - 0.5);
     // The fireball, billowing up and rolling as it burns: overlapping balls with yellow and
     // orange faces under a black cap of soot (the M2's end, MEASURED.md §11), its surface
     // broken by warped noise into lumps, not one smooth ball.
@@ -796,7 +796,9 @@ fn breath_stain(corner: vec2<f32>, b: Breath, jet: u32, i: f32) -> Out {
     let time = fire.kind.z;
     let came_on = fire.jets[jet * 4u + 2u].z;
     let struck = came_on + b.face / JET_SPEED;
-    let grown = saturate((time - struck) / STAIN_S);
+    let on = fire.jets[jet * 4u + 2u].x > 0.5;
+    let until = select(fire.jets[jet * 4u + 2u].y, time, on);
+    let grown = saturate((until - struck) / STAIN_S);
     if grown <= 0.0 {
         return nowhere();
     }
@@ -884,7 +886,7 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let flying = b.mouth + b.way * d + out_of_line * r;
         let standing = max(0.15, dot(flying - face, normal));
         let across = face_side * sin(a) * (1.0 + 1.5 * h3) + face_up * (0.3 + 1.2 * abs(cos(a)));
-        let climb = face_up * post * (2.5 + 2.5 * h4) * (0.5 + post);
+        let climb = face_up * post * (3.5 + 2.5 * h4) * (0.7 + post);
         let off = max(standing, 0.4 * wide) + 0.3 * wide * lifted;
         let landed = flying - normal * (dot(flying - face, normal) - off) + across * 1.1 * spread_on + climb;
         let at = select(flying, landed, s >= 1.0 || dot(flying - face, normal) < 0.15);
@@ -913,7 +915,7 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // second, it was soot a third of a second after it struck, a black hole where the
         // stream met the wall (breath r24's review).
         let flown = 12.0 * pow(s, 0.85) * (1.0 + 0.7 * edge * smoothstep(0.65, 1.0, s));
-        let on_face = 12.0 * (1.0 + 0.7 * edge) + 3.0 * (h3 - 0.5) + 14.0 * post + 30.0 * max(post - 0.45, 0.0);
+        let on_face = 12.0 * (1.0 + 0.7 * edge) + 3.0 * (h3 - 0.5) + 10.0 * post + 30.0 * max(post - 0.55, 0.0);
         let frame = select(flown, on_face, s >= 1.0);
         let fade = smoothstep(0.0, 0.04, age) * (1.0 - smoothstep(0.6, 1.0, post / PUFF_LINGER_S)) * b.left;
         out.clip = position_world_to_clip(world);
@@ -940,10 +942,12 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
     let struck_at = face_of(b);
     let middle = struck_at.at + struck_at.normal * ball * 0.9 + struck_at.up * ball * 0.9;
     if k < PUFF_CARDS + BALL_CARDS {
-        // The set's flame fills about a fifth of its frame across, so the cards are seven
-        // times the ball for a fireball two to three times the stream's width.
-        let card_m = ball * 7.0;
-        let life = BALL_S * sqrt(card_m / fire.sets[SET_FIREBALL].y) * 0.7;
+        // Many puffs a few times smaller than the ball, each rolling out over the face from
+        // the hit, along it and up it, growing and turning as it goes, each at its own frame of
+        // the set: seven times the ball, they stood on one middle and showed the set's first
+        // frames, a round disc the same every frame (breath r27's review).
+        let card_m = ball * 3.6;
+        let life = BALL_S * sqrt(card_m / fire.sets[SET_FIREBALL].y) * 0.8;
         let rate = BALL_CARDS / life;
         let tick = time * rate;
         let rank = PUFF_CARDS + BALL_CARDS - 1.0 - k;
@@ -957,16 +961,22 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let h2 = hash(vec2(n + 0.37, 13.1));
         let h3 = hash(vec2(n + 0.71, 17.7));
         let h4 = hash(vec2(n + 0.13, 21.3));
+        let t = age / life;
         let a = h1 * 6.2831853;
-        let around = (b.lift * cos(a) + b.side * sin(a)) * ball * 0.7 * sqrt(h2);
-        // Rising faster as it burns out, its soot a cap over it.
-        let at = middle + around + up * (age * (1.0 + 3.0 * age / life) + ball * 0.25 * (h4 - 0.5));
-        let size = card_m * (0.7 + 0.5 * h3) * (0.8 + 0.4 * age / life);
-        let world = sprite(at, up, corner, size, size, (h4 - 0.5) * 0.6);
-        let fade = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.55, 1.0, age / life));
+        // Out along the face more than up it at first, then lifting as it cools.
+        let way_out = struck_at.side * cos(a) * 1.4 + struck_at.up * (0.25 + 0.75 * abs(sin(a)));
+        let roll = ball * (0.25 + 1.5 * sqrt(t)) * (0.6 + 0.7 * h2);
+        let off = struck_at.normal * ball * (0.35 + 0.45 * h3 + 0.5 * t);
+        let at = struck_at.at + off + way_out * roll + up * (ball * 0.3 + age * age * 1.2);
+        let size = card_m * (0.55 + 0.6 * h3) * (0.7 + 0.6 * sqrt(t));
+        let world = sprite(at, up, corner, size, size, h4 * 6.2831853 + (h2 - 0.5) * 2.5 * t);
+        let fade = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.55, 1.0, t));
         out.clip = position_world_to_clip(world);
         out.uv = corner;
-        out.life = vec4(63.0 * age / life, BALL_BRIGHTNESS, h3, f32(SET_FIREBALL));
+        // Past the set's first, round frames, from its eighth to fourteenth on, and slow
+        // through its burning ones, so it billows as a mushroom rather than shows a ball.
+        let first = 8.0 + 6.0 * h2;
+        out.life = vec4(first + (63.0 - first) * pow(t, 1.6), BALL_BRIGHTNESS, h3, f32(SET_FIREBALL));
         out.size = size;
         out.glow = max(fade, 1.0e-3);
         return out;
@@ -1361,7 +1371,18 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let f = fract(time * rate / BOOK_FRAMES + luck * 5.17) * BOOK_FRAMES;
         // Faded out at the frame's foot, sides and top, where a set's smoke leaves the frame:
         // cut off there, a burning building's soot was a grey square behind its flames.
-        let edges = smoothstep(0.0, 0.03, uv.y) * smoothstep(0.0, 0.15, x) * smoothstep(0.0, 0.15, 1.0 - x) * smoothstep(0.0, 0.25, 1.0 - uv.y);
+        // The tongue set burns as a low wall with a level, white-hot foot and upright sides
+        // (its source a box): standing on a wall's top or a ledge, that foot was a ruler-
+        // straight cut through the flame and its sides a pale rectangle (breath r27's review),
+        // so its foot and sides are eaten back raggedly, as tongues rising off embers are.
+        let rag = noise(vec2(x * 7.0 + luck * 13.0, uv.y * 3.0 - time * 0.9 * rate / baked.x));
+        var foot = smoothstep(0.0, 0.03, uv.y);
+        var sides = smoothstep(0.0, 0.15, x) * smoothstep(0.0, 0.15, 1.0 - x);
+        if layer == SET_TONGUE {
+            foot = smoothstep(0.0, 0.16, uv.y + 0.12 * (rag - 0.5));
+            sides = smoothstep(0.1, 0.32, min(x, 1.0 - x) + 0.2 * (rag - 0.5) + 0.1 * uv.y);
+        }
+        let edges = foot * sides * smoothstep(0.0, 0.25, 1.0 - uv.y);
         let drawn = baked_flame(flipbook(layer, f, vec2(x, uv.y)), brightness, soft * edges);
         light = drawn.rgb;
         cover = drawn.a;
@@ -1375,13 +1396,16 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // hit and thinning up and out, its edge broken by noise and streaked upward as soot
             // climbs a wall; `heat` here is which card (0 the plume, 1 the char spot).
             let n = fbm(uv * vec2(4.0, 2.5) + vec2(luck * 13.0, heat * 7.0));
-            let streak = 0.7 + 0.3 * fbm(vec2(uv.x * 11.0 + luck * 5.0, uv.y * 1.5));
+            // Streaked up the face as soot is laid by flame licking up it: fingers of black
+            // running up from the hit, uneven at their tops (one soft blob, breath r27).
+            let streak = fbm(vec2(uv.x * 13.0 + luck * 5.0, uv.y * 0.9));
             var stain = 0.0;
             if heat < 0.5 {
                 let across = abs(uv.x - 0.5) / (0.2 + 0.3 * uv.y);
-                stain = (1.0 - smoothstep(0.5, 1.0, across + 0.6 * (n - 0.5)))
-                    * smoothstep(0.0, 0.18, uv.y) * (1.0 - smoothstep(0.35, 1.0, uv.y + 0.5 * (n - 0.5)))
-                    * streak * 0.8;
+                let top = uv.y + 0.4 * (n - 0.5) - 0.7 * (streak - 0.5);
+                stain = (1.0 - smoothstep(0.75, 0.95, across + 0.4 * (n - 0.5)))
+                    * smoothstep(0.0, 0.12, uv.y) * (1.0 - smoothstep(0.6, 0.85, top))
+                    * mix(0.35, 1.0, smoothstep(0.35, 0.65, streak)) * 0.9;
             } else {
                 let d = length((uv - 0.5) * vec2(2.0, 2.2));
                 stain = (1.0 - smoothstep(0.35, 1.0, d + 0.5 * (n - 0.5))) * 0.75;
@@ -1500,8 +1524,11 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         // wall it strikes never shows the line it cuts.
         // A card laid on the face it burns on, a hand's breadth off it, by that (its size,
         // `breath_sprite`).
+        // At most a third of a metre: faded over a metre, a puff half a metre before the wall
+        // was half gone where the wall stood behind it and whole above the wall's top, a hard
+        // level cut through the flame along the wall's top (breath r27's review).
         if kind == 5 {
-            reach = min(in.uv_b.y, 1.2);
+            reach = min(in.uv_b.y, 0.35);
         }
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);

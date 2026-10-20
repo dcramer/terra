@@ -66,6 +66,17 @@ pub struct Jet {
     pub normal: Vec3,
 }
 
+/// No jet: nothing breathed in its slot yet.
+const NO_JET: Jet = Jet {
+    from: Vec3::ZERO,
+    way: Vec3::Z,
+    reach: 0.0,
+    spread: 0.0,
+    on: false,
+    face: 0.0,
+    normal: Vec3::ZERO,
+};
+
 /// Everything burning now, set by whatever owns the fires each frame: the blazes, the
 /// largest first (those past the preset's slots are not drawn), and the jets; and the fires
 /// kept where something [`Kindled`] stands, gathered here (`keep`), drawn first.
@@ -310,6 +321,10 @@ struct Drawn {
     /// Whether each jet is on, since when it is on or off, and when it last came on, by the
     /// cards' clock.
     jets: [(bool, f32, f32); JETS],
+    /// Each jet as it last burned: once it is off, or its breather gone, it is drawn from
+    /// there, so the last of its fire burns out where it was and the soot it left on the face
+    /// it struck stays on that face (`breath_stain`), not following the jaw away.
+    kept: [Jet; JETS],
     wind: Vec3,
     wind_due: f32,
 }
@@ -694,6 +709,7 @@ fn setup(
         puffs,
         lights,
         jets: [(false, -100.0, -100.0); JETS],
+        kept: [NO_JET; JETS],
         wind: Vec3::ZERO,
         wind_due: 0.0,
     });
@@ -830,22 +846,22 @@ fn show(
     }
     let mut jets = [Vec4::ZERO; JETS * 4];
     let mut debris = Vec::new();
-    for (i, state) in drawn.jets.iter_mut().enumerate() {
-        let jet = blazes.jets.get(i).copied();
-        let on = jet.is_some_and(|jet| jet.on);
+    for i in 0..JETS {
+        let live = blazes.jets.get(i).copied().filter(|jet| jet.on);
+        let state = &mut drawn.jets[i];
+        let on = live.is_some();
         if on != state.0 {
             let came_on = if on { now } else { state.2 };
             *state = (on, now, came_on);
         }
-        let jet = jet.unwrap_or(Jet {
-            from: Vec3::ZERO,
-            way: Vec3::Z,
-            reach: 0.0,
-            spread: 0.0,
-            on: false,
-            face: 0.0,
-            normal: Vec3::ZERO,
-        });
+        let state = *state;
+        if let Some(jet) = live {
+            drawn.kept[i] = jet;
+        }
+        let jet = Jet {
+            on,
+            ..drawn.kept[i]
+        };
         jets[i * 4] = jet.from.extend(jet.reach);
         jets[i * 4 + 1] = jet.way.normalize_or(Vec3::Z).extend(jet.spread);
         jets[i * 4 + 2] = Vec4::new(f32::from(u8::from(state.0)), state.1, state.2, 0.0);
