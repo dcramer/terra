@@ -106,9 +106,18 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         let lit = lit(&blazes, t);
         assert_eq!(lit.len(), 3);
         let (hearth, fill, roof) = (&lit[0], &lit[1], &lit[2]);
-        // Half its light casts shadows, half is a fill that casts none, at the same place.
-        assert!(!hearth.shadowless && fill.shadowless && fill.at == hearth.at);
-        assert!((fill.lumens - hearth.lumens).abs() < 1e-3 * hearth.lumens);
+        // One light casts shadows; a brighter fill casts none, hung high over the fire so it
+        // lights the ground metres out more, and the stones at its foot less, than the
+        // shadowed light does for each lumen (`HEARTH_FILL_UP`).
+        assert!(!hearth.shadowless && fill.shadowless);
+        assert!(fill.lumens > hearth.lumens && fill.at.y > hearth.at.y + 1.0);
+        let pool = |l: &Lit| on_ground(l, ground, 3.0, 1.0) / on_ground(l, ground, 0.55, 1.0);
+        assert!(
+            pool(fill) > 2.0 * pool(hearth),
+            "{} {}",
+            pool(fill),
+            pool(hearth)
+        );
         // In the body of its flames, over its 0.55 m logs, swayed a hand's breadth at most, not
         // over the heads of those sat by it.
         let off = hearth.at - ground;

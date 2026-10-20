@@ -92,6 +92,16 @@ const HEARTH_LIGHT_UP: f32 = 0.75;
 /// threw black lobes a metre out over the lit ground (round 7's side view), where the games'
 /// are soft. Bevy's PCSS on the cube map (`soft_shadows_enabled`) softened nothing seen.
 const HEARTH_FILL: f32 = 0.5;
+/// How high over its fire a hearth's fill hangs, over its flames' height, and how much
+/// brighter it is than its share (`HEARTH_FILL`): the pool of firelit ground the games show
+/// to 3-4 m, without the stones at the fire's foot passing the tonemapper's shoulder. Hung in
+/// the flames with the shadowed light, the ground metres out took it at a grazing angle and
+/// the stones a metre off head on, so lighting the pool lit the stones salmon (fire round 13);
+/// hung high, the ground takes it more nearly straight down and the stones farther off. At
+/// 2.2 and 4 times, the ground 2.5-3.5 m out takes three times the light by night and the
+/// stones' lit faces 1.6 times, still warm brown (sRGB 113,82,51; fire round 14; landed alone in round 15).
+const HEARTH_FILL_UP: f32 = 2.2;
+const HEARTH_FILL_GAIN: f32 = 4.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -341,8 +351,11 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
             shadowless: false,
         };
         let fill = Lit {
-            lumens: lumens * HEARTH_FILL,
+            lumens: lumens * HEARTH_FILL * HEARTH_FILL_GAIN,
             shadowless: true,
+            at: blaze.at
+                + up(blaze.at) * blaze.tall * HEARTH_FILL_UP
+                + sway(blaze.seed, t, flicker, reach),
             ..main.clone()
         };
         [main, fill]
