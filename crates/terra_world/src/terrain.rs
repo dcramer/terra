@@ -171,27 +171,30 @@ fn lying(
     let lake = round.water_near(up, crate::shore::REACH_CELLS);
     let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
     let snow = round.snow_m(point, normal);
-    // Avalanches off a range's walls feed its couloirs and the cirque floors and ledges under
-    // them, so in summer their snow lies well below the snowline, as it lies there some
-    // hundreds of metres higher: the Tatras' and the Alps' summer snow patches. Without, the
-    // snowline the climate gives left only the horns' tips white (the r6 review).
-    let snow = if planet.has_mountains()
-        && matches!(
-            made_of,
-            material::STONE | material::SCREE | material::GRAVEL
-        ) {
-        let fed = round.snow_m(point + up * FED_M, up) * FED_SHARE;
-        let level = smoothstep(STEEP_SNOW.0, STEEP_SNOW.1, normal.dot(up));
-        snow.max(fed * level.max(smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
-    } else {
-        snow
-    };
     // On a mountain's steep faces a summer's snow lies in its gullies' beds and is gone from
     // the ribs between, so from across a valley it streaks down the couloirs rather than
     // capping every bump of the wall (D395).
     let steep = 1.0 - smoothstep(STEEP_SNOW.0, STEEP_SNOW.1, normal.dot(up));
     let snow = if snow > 0.0 && steep > 0.0 {
         snow * (1.0 - steep * (1.0 - smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
+    } else {
+        snow
+    };
+    // Avalanches off a range's walls feed its couloirs and the cirque floors and ledges under
+    // them, so in summer their snow lies well below the snowline, as it lies there some
+    // hundreds of metres higher: the Tatras' and the Alps' summer snow patches. On a wall the
+    // depth is carried up to about 70 degrees, where the ground shader lays it only on the
+    // ledges its joints and bedding break the rock into (D426), as the Matterhorn's and the
+    // Odle's faces are streaked; without, the walls past 42 degrees were bare and the range
+    // held snow on 4 percent of its rock (the r7 review).
+    let snow = if planet.has_mountains()
+        && matches!(
+            made_of,
+            material::STONE | material::SCREE | material::GRAVEL
+        ) {
+        let fed = round.snow_m(point + up * FED_M, up) * FED_SHARE;
+        let level = smoothstep(FED_WALL.0, FED_WALL.1, normal.dot(up));
+        snow.max(fed * level.max(smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
     } else {
         snow
     };
@@ -220,8 +223,11 @@ const DRY_M: f32 = 50.0;
 /// How much higher a range's avalanche-fed snow lies as, in metres, and the share of that
 /// depth it keeps: from 350 m the horns kept only their tips white, short of the third of the
 /// range above the tree line D425 asks.
-const FED_M: f32 = 900.0;
+const FED_M: f32 = 1200.0;
 const FED_SHARE: f32 = 1.0;
+/// A wall carries its fed snow's depth from the first of these, how far its normal points up
+/// (about 72 degrees), whole from the second (about 57).
+const FED_WALL: (f32, f32) = (0.3, 0.55);
 
 /// Snow keeps to the gullies on ground steeper than the first of these, how far a vertex's
 /// normal points up (about 53 degrees), lying whole under the second (about 42 degrees), as

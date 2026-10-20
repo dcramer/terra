@@ -646,7 +646,7 @@ fn facet_turn(world: vec3<f32>, up: vec3<f32>, size: f32) -> vec4<f32> {
         } else if far < second {
             second = far;
         }
-        let w = exp(-9.0 * far);
+        let w = exp(-20.0 * far);
         turn += w * (vec3<f32>(hash(c + 41.7), hash(c + 53.3), hash(c + 67.1)) - 0.5);
         weights += w;
     }
@@ -654,6 +654,51 @@ fn facet_turn(world: vec3<f32>, up: vec3<f32>, size: f32) -> vec4<f32> {
     let flat = turn - up * dot(turn, up);
     let crack = 1.0 - smoothstep(0.0, 0.04, sqrt(second) - sqrt(nearest));
     return vec4<f32>(flat * 1.4, crack);
+}
+
+// A wall's rock broken as granite and limestone break (Hoek and Bray's joint sets, the Odle's
+// and the Tatras' faces): bedding planes tilted off level, a stratum `spacing` thick, and two
+// upright joint sets across them, so the face is cut into blocks. Each block's exposed face is
+// a fracture plane turned its own way with a hard edge (unlike `facet_turn`'s blended cells),
+// the joints between them dark, and each stratum's top a ledge where snow or turf lies. `soft`
+// is how wide an edge is, as a share of a block, from the pixel's footprint.
+struct Joints {
+    turn: vec3<f32>,
+    crack: f32,
+    ledge: f32,
+}
+
+fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32) -> Joints {
+    // The bedding dips 20-45 degrees a way that wanders over kilometres; the joints run across
+    // it, staggered stratum to stratum as a wall's courses are, so no crack runs on for long.
+    let dip_way = vec3<f32>(noise(world * 0.00021 + 211.0), 0.0, noise(world * 0.00021 + 223.0)) - 0.5;
+    let flat_way = normalize(dip_way - up * dot(dip_way, up) + vec3<f32>(1e-3, 0.0, 0.0));
+    let bedding = normalize(up + flat_way * (0.4 + 0.6 * noise(world * 0.0005 + 227.0)));
+    let across = normalize(cross(up, flat_way));
+    let along = normalize(cross(across, up));
+    let wobble = (noise(world * (0.9 / spacing) + 229.0) - 0.5) * 0.3;
+    let tb = dot(world, bedding) / spacing + wobble + noise(world * (0.15 / spacing) + 231.0) * 0.8;
+    let course = floor(tb);
+    let t1 = dot(world, across) / (spacing * 1.3) + hash(vec3<f32>(course, 1.1, 2.3)) * 7.0 + noise(world * (0.3 / spacing) + 233.0) * 0.7;
+    let t2 = dot(world, along) / (spacing * 1.9) + hash(vec3<f32>(course, 4.9, 8.3)) * 7.0 + noise(world * (0.25 / spacing) + 239.0) * 0.7;
+    let cell = floor(vec3<f32>(tb, t1, t2));
+    let f = fract(vec3<f32>(tb, t1, t2));
+    let h = vec3<f32>(hash(cell + 41.7), hash(cell + 53.3), hash(cell + 67.1)) - 0.5;
+    // A block whose fracture face is turned up holds snow (or turf) on a lip along its top,
+    // as wide as its own hash says, broken along the lip where the block's top is cut away,
+    // the riser under it bare: one in two, so a wall is flecked and streaked, not banded.
+    let holds = step(hash(cell + 9.1), 0.5);
+    let lip = 0.55 + 0.3 * hash(cell + 13.7);
+    let broken = smoothstep(0.4, 0.6, noise(world * (2.2 / spacing) + 241.0) + (hash(cell + 17.3) - 0.5) * 0.4);
+    let ledge = holds * broken * smoothstep(lip - soft, lip + 0.04 + soft, f.x + (noise(world * (1.3 / spacing) + 243.0) - 0.5) * 0.3);
+    // The joints open, some wide and dark, some closed; a stratum's bed open more often.
+    let bed_open = step(0.6, hash(vec3<f32>(course, 3.3, 9.7)));
+    let bed_edge = mix(1.0, min(f.x, 1.0 - f.x), bed_open);
+    let joint_edge = min(min(f.y, 1.0 - f.y), min(f.z, 1.0 - f.z) * 1.3) * 1.2;
+    let crack = 1.0 - smoothstep(0.0, 0.025 + soft, min(bed_edge, joint_edge));
+    var turn = (h - up * dot(h, up)) * 1.6;
+    turn = mix(turn, up * 0.8 + turn * 0.3, ledge);
+    return Joints(turn, crack, ledge);
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -1018,6 +1063,8 @@ fn fragment(
         var face_tint = vec3<f32>(1.0);
         var ledge = 0.0;
         var tier_tilt = 0.0;
+        var joint_turn = vec3<f32>(0.0);
+        var joint_crack = 0.0;
         if rocky > 0.001 {
             // The beds folded, not laid level (the settlement r19 review: "a layer cake of hard
             // strata"): bent hundreds of metres over a couple of kilometres and a couple of
@@ -1065,6 +1112,18 @@ fn fragment(
             // The benches dusted with snow or turf only in patches: whole, they ruled the faces
             // with bright lines.
             ledge = 0.0;
+            // The wall's joints and bedding (`jointing`, D426): strata 40 m thick drawn across
+            // a valley, 16 m ones nearer, each while its blocks span pixels enough; only on the
+            // walls, so a shoulder's snow and turf are left whole.
+            let walled = rocky * (1.0 - smoothstep(0.62, 0.78, flatness));
+            if walled > 0.001 {
+                let big = jointing(world, up, 40.0, clamp(footprint_m / 40.0, 0.01, 0.3));
+                let small_keep = 1.0 - smoothstep(2.0, 4.0, footprint_m);
+                let small = jointing(world + 17.0, up, 16.0, clamp(footprint_m / 16.0, 0.01, 0.3));
+                joint_turn = (big.turn + small.turn * 0.6 * small_keep) * walled;
+                joint_crack = max(big.crack, small.crack * small_keep) * walled;
+                ledge = max(big.ledge, small.ledge * small_keep) * walled;
+            }
             // Patches of weathering a few hundred metres across: iron-stained rust, dark
             // lichen and wet rock, and pale fresh scars where a slab fell away; and a far wall
             // a weathered mid grey, darker than the steep layer's fresh scan, as the Tatras'
@@ -1087,7 +1146,8 @@ fn fragment(
             {
                 if lights.n_directional_lights > 0u {
                     let sun = lights.directional_lights[0].direction_to_light;
-                    let sunward = dot(face, sun);
+                    // The block's own fracture face, so faces turned from the sun break dark.
+                    let sunward = dot(normalize(face + joint_turn * 0.8), sun);
                     aspect = mix(vec3<f32>(1.0), vec3<f32>(1.14, 1.0, 0.8), smoothstep(0.05, 0.6, sunward));
                     aspect *= mix(vec3<f32>(1.0), vec3<f32>(0.55, 0.64, 0.82), smoothstep(0.15, -0.4, sunward));
                 }
@@ -1210,7 +1270,7 @@ fn fragment(
         // the bare heights, the green benches between the Tatras' cliff bands.
         let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m);
         snow = max(snow, ledge_snow * 0.9);
-        let ledge_turf = ledge * (1.0 - ledge_snow) * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
+        let ledge_turf = 0.25 * ledge * (1.0 - ledge_snow) * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
         // Washed stones of the gully's own rock, grey, a little browner than the cliffs.
         let gravel_tint = mix(ground.steep.rgb, ground.sand.rgb, 0.1) * (0.85 + 0.3 * blotch);
 @if(GROUND_LOW) {
@@ -1638,7 +1698,8 @@ fn fragment(
             // The gullies' ribs strong on some faces and faint on others: alike everywhere they
             // combed the walls into an even curtain of streaks (the r5 review).
             let combed = 0.3 + 0.7 * smoothstep(0.4, 0.7, noise(world * 0.0011 + 171.0));
-            ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt * combed + facets * ribbed);
+            ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt * combed + facets * ribbed + joint_turn * (1.0 - snow * 0.7));
+            colour *= 1.0 - mix(0.5, 0.3, smoothstep(1500.0, 5000.0, far_off)) * joint_crack * (1.0 - snow);
             colour *= mix(1.0, mix(0.62, 1.08, rib * 0.5 + 0.5), ribbed * combed);
             colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
         }
