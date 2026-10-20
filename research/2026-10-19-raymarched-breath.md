@@ -61,3 +61,44 @@ The spike is commit 6db86f20, in `spike/breath-volume`, deleted after this note.
   4. A turbulent jet that is thicker at mid-reach, without thinning the gas (the second round's lesson).
   5. Noise from a tiling 3D texture rather than hashed value noise, which would also cut the cost.
 - **Measure it** on the integrated GPU and at half resolution with a depth-aware upsample. Hold the fire check (`cargo xtask fire`) to the same bounds as the cards.
+
+## The campfire
+
+A second spike asked whether the same march would make the campfire read AAA, where its flame cards have stalled at 3 to 5.5/10 over about 18 rounds.
+
+**No. As built, the marched flame loses to the cards, 3/10 against 5.5/10. Keep the cards for the campfire. Don't build the analytic march for it.**
+
+There were two blind harsh reviews against main (bcfd8550), each by a fresh reviewer, with noon, dusk and night views at 2.5 m and 6 m, judged against the RDR2, Sons of the Forest, Witcher 3 and Enshrouded frames:
+
+| Build | Overall | Noon | Dusk | Night | Confidence |
+|---|---|---|---|---|---|
+| Volume as one noise mass (V5) | 3 | 3 | 3.5 | 3 | 85% for the cards |
+| Volume as separate tongues (V9) | 3 | 3 | 3 | 2.5 | 85% for the cards |
+| Main's cards | 5.5 | 5 | 5.5 to 6 | 6 | |
+
+Both reviewers saw the same failure. The volume reads as "pale peach-cream ribbons", "frosted glass or gauze hung over the logs", with soft even edges, no orange-red tips and no hot root in the coals. The cards win on what a flipbook baked from a simulation carries for free: ragged, torn tips, fine detail inside each lick, and a yellow core with orange edges.
+
+**What was built.** It lives in `spike/campfire-volume`, deleted after this note; the WIP is in git history. It is a shader-only change: a hearth's first flame column becomes a camera-facing quad over the bounding sphere of a 1 x 1.5 x 1 m box over the logs, and its other flame cards are hidden. The quad's fragment marches up to 56 steps through the box, ends at the depth prepass, and is emissive-absorbing, as the breath is. The hearths' mask pass draws the same quad, so the gas goes through the film tonemap. Logs, coals, ground, light, smoke and sparks are main's.
+- **The gas.** A three-octave value noise rises with the gas at 1.5 m/s, its higher octaves faster. A divergence-free field (the curl of a sum of sines, a cheap stand-in for Bridson's curl noise) sweeps it, more the higher the gas has risen. The final version (V9/V10) splits the stack's round into 7 wedges that wobble as they rise. Each wedge has its own height over time and narrows toward its tip, and over the coals sits an always-lit root. Density is temperature^1.5, thinning to nothing at the tips. Colour is the campfire's ramp row, hottest and brightest at the root.
+- **Five renders.**
+  1. The first was a small pink-white blob at the stack's foot, its threshold too strict.
+  2. Taller and sharper, it turned cream-white: 46% of its flame pixels were near-white.
+  3. Down from 12 to 4, with a shorter hue range, it reached 0% near-white. But its sRGB B/R stayed at 0.57 to 0.63 and its G/R at 0.8: peach, where main's cards measure G/R 0.91 and B/R 0.56 and read yellow-orange.
+  4. Explicit tongues gave real separate licks with dark gaps and the logs showing through (V9). The reviewer still scored it 3.
+  5. Writing the film mask by the flame's red, as the cards do, instead of by its cover, barely moved the colour: B/R from 0.60 to 0.57.
+
+  So the peach comes from the gas's own emission. Thin, overlapping, hot gas sums past the shoulder, which is the breath's "white blob" lesson again.
+
+**Cost** (`--bench` offscreen at 1920x1080 on the RTX 3080, night, 600 frames, V5):
+
+| View | Main's transparent pass | Volume's transparent pass | Whole GPU frame |
+|---|---|---|---|
+| Close (2.5 m) | 0.18 ms | 0.49 ms | 13.12 to 13.51 ms |
+| 6 m | 0.27 ms | 0.35 ms | 11.88 to 11.96 ms |
+
+The volume's pass includes the mask pass's second march. That is about 0.3 ms more close up and 0.1 ms at 6 m, and the close view's 0.49 ms is over play's 0.3 ms budget for a fire. The scene's volumetric fog (7 ms) dominates both frames. Not measured: the integrated GPU.
+
+**Recommendation.**
+- **The campfire keeps its cards** (D415's path). The review's gaps for them are the next work: the front licks' clean petal edges, a curtain wider than the logs, and a ramp short of deep red tips.
+- **A marched campfire is worth trying again only from a simulation**, not from hand-written noise. That means a baked 3D temperature and density texture (EmberGen's or our own sim's, NanoVDB is Apache-2.0) marched in this same box. It would carry the torn tips and inner detail the reviewers found missing, at about this cost. That is Open for the developers, behind the cards' own rounds.
+- **The breath's recommendation stands.** A breath is a jet that cards cannot shape. A campfire is a small, steady fire that a baked flipbook already shows well.
