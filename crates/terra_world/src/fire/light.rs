@@ -427,7 +427,7 @@ pub fn shadowed(quality: Quality) -> usize {
     match quality {
         Quality::Low => 1,
         Quality::Medium => 2,
-        Quality::High => 4,
+        Quality::High | Quality::Ultra => 4,
     }
 }
 

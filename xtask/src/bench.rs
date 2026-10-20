@@ -302,16 +302,28 @@ fn last_recorded(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option
         .last()
 }
 
-/// Times the benchmark scenes, each several times, and compares them with what was last
-/// recorded on this kind of machine. A release build unless `--debug`, which is quicker
-/// to build and only good for comparing changes with each other.
-pub(crate) fn bench(args: &[String]) -> bool {
+/// What `cargo xtask bench` was asked: its runs, whether to record, the build, the copy,
+/// the preset and the scenes, every scene if none was named.
+struct Asked {
+    runs: usize,
+    record: bool,
+    debug: bool,
+    copy: String,
+    quality: Option<String>,
+    chosen: Vec<&'static Scene>,
+    all_scenes: bool,
+}
+
+fn asked(args: &[String]) -> Option<Asked> {
     let mut runs = 3usize;
     let mut record = false;
     let mut debug = false;
     // A copy of its own, so two agents' benchmarks do not overwrite one another's program.
     let mut copy = "bench".to_string();
-    let mut chosen: Vec<&Scene> = Vec::new();
+    // A preset other than the GPU's, measured and recorded as `<scene>@<preset>`; ultra, the
+    // films' (D428), is measured for its cost and held to no budget.
+    let mut quality: Option<String> = None;
+    let mut chosen: Vec<&'static Scene> = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -320,15 +332,22 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 Some(name) => copy = format!("bench-{name}"),
                 None => {
                     eprintln!("--copy needs a name");
-                    return false;
+                    return None;
                 }
             },
             "--debug" => debug = true,
+            "--quality" => match args.next() {
+                Some(name) => quality = Some(name.clone()),
+                None => {
+                    eprintln!("--quality needs a preset: low, medium, high or ultra");
+                    return None;
+                }
+            },
             "--runs" => match args.next().and_then(|n| n.parse().ok()) {
                 Some(n) if n > 0 => runs = n,
                 _ => {
                     eprintln!("--runs needs a number above nothing");
-                    return false;
+                    return None;
                 }
             },
             name => match SCENES.iter().find(|scene| scene.name == name) {
@@ -338,7 +357,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
                     for scene in SCENES {
                         eprintln!("  {:8} {}", scene.name, scene.about);
                     }
-                    return false;
+                    return None;
                 }
             },
         }
@@ -347,6 +366,33 @@ pub(crate) fn bench(args: &[String]) -> bool {
     if all_scenes {
         chosen = SCENES.iter().collect();
     }
+    Some(Asked {
+        runs,
+        record,
+        debug,
+        copy,
+        quality,
+        chosen,
+        all_scenes,
+    })
+}
+
+/// Times the benchmark scenes, each several times, and compares them with what was last
+/// recorded on this kind of machine. A release build unless `--debug`, which is quicker
+/// to build and only good for comparing changes with each other.
+pub(crate) fn bench(args: &[String]) -> bool {
+    let Some(Asked {
+        runs,
+        record,
+        debug,
+        copy,
+        quality,
+        chosen,
+        all_scenes,
+    }) = asked(args)
+    else {
+        return false;
+    };
     let build = if debug { "debug" } else { "release" };
     let Some((program, folder)) = sandbox_program(!debug, &copy) else {
         return false;
@@ -361,7 +407,12 @@ pub(crate) fn bench(args: &[String]) -> bool {
     let mut ok = true;
     let mut lines = Vec::new();
     let mut waiting_left = load::MOST_WAITING;
+    let held = quality.as_deref() != Some("ultra");
     for scene in chosen {
+        let name = match &quality {
+            Some(preset) => format!("{}@{preset}", scene.name),
+            None => scene.name.to_string(),
+        };
         let mut timed: Vec<Run> = Vec::new();
         // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the
         // machine is quiet, up to as many again to stand in for runs taken while it was busy.
@@ -392,9 +443,9 @@ pub(crate) fn bench(args: &[String]) -> bool {
             } else {
                 ""
             };
-            println!("\n> {} {attempt}/{runs}{extra}{said}", scene.name);
+            println!("\n> {name} {attempt}/{runs}{extra}{said}");
             let watch = load::Watch::start();
-            let timing = time_scene(&program, &folder, scene);
+            let timing = time_scene(&program, &folder, scene, quality.as_deref());
             let during = watch.stop();
             if let Some(during) = during {
                 println!(
@@ -422,7 +473,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
         // Whether the runs agree on the verdict: one that held and one that missed say the
         // scene is near its target, whichever the middle run says.
         let holding = used.iter().filter(|t| t.misses().is_empty()).count();
-        let against = match last_recorded(&csv, &timing, build, scene.name) {
+        let against = match last_recorded(&csv, &timing, build, &name) {
             Some((before, then)) => {
                 let change = timing.median_ms / before - 1.0;
                 let note = if slower(change, spread_pct) {
@@ -443,13 +494,13 @@ pub(crate) fn bench(args: &[String]) -> bool {
             holding,
             busy,
         };
-        lines.push((scene.name, timing.clone(), against, note));
+        lines.push((name.clone(), timing.clone(), against, note));
         if record {
             let row = format!(
                 "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{},{:.2},{},{:.1}",
                 timing.gpu,
                 timing.size,
-                scene.name,
+                name,
                 timing.median_ms,
                 timing.p99_ms,
                 timing.worst_ms,
@@ -520,7 +571,11 @@ pub(crate) fn bench(args: &[String]) -> bool {
                     "", note.runs, note.of
                 );
             }
-            ok &= missed.is_empty();
+            if held {
+                ok &= missed.is_empty();
+            } else if !missed.is_empty() {
+                println!("  {:11} ultra is measured, not held to a budget (D428)", "");
+            }
         }
         println!(
             "  The budget is {:.1} ms (D25: 75 fps on the developers' RTX 3080 at the high preset): \
@@ -588,11 +643,19 @@ fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
 }
 
 /// Runs one scene once and reads its frame times, ending it if it takes too long.
-fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
+fn time_scene(
+    program: &Path,
+    folder: &Path,
+    scene: &Scene,
+    quality: Option<&str>,
+) -> Option<Timing> {
     use std::io::{BufRead, BufReader};
     let mut command = Command::new(program);
+    command.args(scene.args);
+    if let Some(preset) = quality {
+        command.args(["--quality", preset]);
+    }
     command
-        .args(scene.args)
         .args(["--offscreen", "--bench", "--settle", BENCH_SETTLE])
         .args(["--bench-frames", scene.frames])
         .current_dir(folder);

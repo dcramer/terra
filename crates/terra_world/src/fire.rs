@@ -110,7 +110,7 @@ pub fn slots(quality: Quality) -> usize {
     match quality {
         Quality::Low => 384,
         Quality::Medium => 1024,
-        Quality::High => 2048,
+        Quality::High | Quality::Ultra => 2048,
     }
 }
 

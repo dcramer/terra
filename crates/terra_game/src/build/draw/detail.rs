@@ -248,7 +248,7 @@ pub(super) fn show(
         proxy,
         ..
     } = parts;
-    let coarse_shadows = quality != Quality::High;
+    let coarse_shadows = quality < Quality::High;
     let level = Level::of(detail);
     let mut put = |commands: &mut Commands, mesh: Staged, shade: Shade, shown: &mut OnScreen| {
         shown.gpu_bytes += mesh.bytes();
@@ -370,7 +370,7 @@ pub(super) fn show(
 /// hundred megabytes of meshes nearly doubled in memory it shares with the CPU.
 pub(in crate::build) fn spare_bytes(quality: Quality) -> usize {
     match quality {
-        Quality::High => 192 << 20,
+        Quality::High | Quality::Ultra => 192 << 20,
         _ => 0,
     }
 }

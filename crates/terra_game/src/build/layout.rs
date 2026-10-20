@@ -218,9 +218,9 @@ pub(super) fn suffices(drawn: Reach, wanted: Reach) -> bool {
 }
 
 /// Whether sections near the camera are laid with their near detail alone: only at the high
-/// preset, where the near detail casts its own shadows.
+/// preset and above, where the near detail casts its own shadows.
 pub(super) fn close(quality: terra_world::quality::Quality) -> bool {
-    quality == terra_world::quality::Quality::High
+    quality >= terra_world::quality::Quality::High
 }
 
 pub fn plugin(app: &mut App) {

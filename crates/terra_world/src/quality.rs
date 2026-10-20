@@ -6,7 +6,12 @@
 //!
 //! Low is the integrated GPU's: 30 frames a second at 1080p shown, drawn at a lower
 //! resolution and scaled up (`render_scale`), as consoles and low presets do. High is
-//! what the game is made to look like, at 75 on the developers' RTX 3080 (D25).
+//! what the game is made to look like, at 75 on the developers' RTX 3080 (D25). Ultra is
+//! for films and cinematics, never chosen by itself (D428): as shipped games' ultra and
+//! cinematic scalability levels do (Unreal's `sg.*` level 3 and 4, The Witcher 3's Ultra+),
+//! it spends the GPU on distance, the sun's shadows, every level of detail and the ground
+//! meshed finer far off, the haze marched finer, and leaves what only shows close up, relief,
+//! textures, fire and smoke, as high has it.
 
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::platform::collections::HashMap;
@@ -14,12 +19,14 @@ use bevy::prelude::*;
 use bevy::render::renderer::RenderAdapterInfo;
 
 /// A quality preset.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Reflect)]
 pub enum Quality {
     Low,
     Medium,
     #[default]
     High,
+    /// Films' and cinematics', asked for only (`--quality ultra`).
+    Ultra,
 }
 
 /// The preset asked for, by `--quality` or the options menu; `None` lets the GPU choose.
@@ -31,13 +38,14 @@ pub struct Asked(pub Option<Quality>);
 pub struct Automatic(pub Quality);
 
 impl Quality {
-    pub const ALL: [Quality; 3] = [Quality::Low, Quality::Medium, Quality::High];
+    pub const ALL: [Quality; 4] = [Quality::Low, Quality::Medium, Quality::High, Quality::Ultra];
 
     pub fn name(self) -> &'static str {
         match self {
             Quality::Low => "low",
             Quality::Medium => "medium",
             Quality::High => "high",
+            Quality::Ultra => "ultra",
         }
     }
 
@@ -59,7 +67,7 @@ impl Quality {
     pub fn render_scale(self) -> f32 {
         match self {
             Quality::Low => 0.6,
-            Quality::Medium | Quality::High => 1.0,
+            Quality::Medium | Quality::High | Quality::Ultra => 1.0,
         }
     }
 
@@ -67,6 +75,16 @@ impl Quality {
     /// how far shadows are drawn at all, in metres.
     pub fn shadows(self) -> Shadows {
         match self {
+            // A town seen whole from the air, a few hundred metres off and the far side of it
+            // a kilometre, shadowed all over, its near cascade twice as sharp: Unreal's
+            // cinematic shadow level (`r.Shadow.MaxCSMResolution` 4096, the cascades'
+            // distance raised). 256 MiB for the four maps.
+            Quality::Ultra => Shadows {
+                map: 4096,
+                cascades: 4,
+                first_m: 32.0,
+                most_m: 1_200.0,
+            },
             Quality::High => Shadows {
                 // Unreal's default cascade (`r.Shadow.MaxCSMResolution`): 64 MiB for the four, not
                 // 256 at 4096 (D420).
@@ -109,6 +127,7 @@ impl Quality {
     /// How many steps the haze's light is marched in, if it is drawn at all.
     pub fn haze_steps(self) -> Option<u32> {
         match self {
+            Quality::Ultra => Some(96),
             Quality::High => Some(48),
             Quality::Medium => Some(24),
             Quality::Low => None,
@@ -119,7 +138,8 @@ impl Quality {
     /// stone's furrows; none is flat, its normal map alone.
     pub fn relief_layers(self) -> f32 {
         match self {
-            Quality::High => 16.0,
+            // A furrow's depth shows only close by: no finer at ultra.
+            Quality::High | Quality::Ultra => 16.0,
             Quality::Medium => 8.0,
             Quality::Low => 0.0,
         }
@@ -131,7 +151,7 @@ impl Quality {
     /// the integrated GPU's low, whose picture is drawn at three fifths the screen's size.
     pub fn texture_side(self) -> u32 {
         match self {
-            Quality::High | Quality::Medium => 2048,
+            Quality::Ultra | Quality::High | Quality::Medium => 2048,
             Quality::Low => 1024,
         }
     }
@@ -140,7 +160,7 @@ impl Quality {
     /// whether it is drawn at all (D362): not at the low preset, which draws relief flat too.
     pub fn detail_fade_m(self) -> Option<[f32; 2]> {
         match self {
-            Quality::High | Quality::Medium => Some([3.0, 8.0]),
+            Quality::Ultra | Quality::High | Quality::Medium => Some([3.0, 8.0]),
             Quality::Low => None,
         }
     }
@@ -150,7 +170,7 @@ impl Quality {
     /// blends away, as much as before where the low preset's picture is also stretched.
     pub fn sharpening(self) -> f32 {
         match self {
-            Quality::High | Quality::Medium => 0.6,
+            Quality::Ultra | Quality::High | Quality::Medium => 0.6,
             Quality::Low => 0.5,
         }
     }
@@ -160,16 +180,31 @@ impl Quality {
     /// `detail::DetailScale` the preset sets (D230).
     pub fn detail_reach(self) -> f32 {
         match self {
+            // Twice as far: The Witcher 3's Ultra+ and Unreal's cinematic view distance
+            // (`r.ViewDistanceScale`) raise it so; the far buildings and trees keep their
+            // finer shapes out across a town seen from the air.
+            Quality::Ultra => 2.0,
             Quality::High => 1.0,
             Quality::Medium => 0.8,
             Quality::Low => 0.5,
         }
     }
 
+    /// How many times as far off the ground is meshed at each level of detail as high has
+    /// it (`terra_voxel::lod::Detail`'s splits): ridges and banks kilometres off keep their
+    /// shape, as a terrain's far LOD is raised at an engine's cinematic level.
+    pub fn ground_reach(self) -> f32 {
+        match self {
+            Quality::Ultra => 1.5,
+            Quality::Low | Quality::Medium | Quality::High => 1.0,
+        }
+    }
+
     /// How much of the grass is grown, as a share of the blades and of how far out.
     pub fn grass(self) -> f32 {
         match self {
-            Quality::High => 1.0,
+            // The blades' density as high has it; how far out grows with the detail reach.
+            Quality::High | Quality::Ultra => 1.0,
             Quality::Medium => 0.75,
             Quality::Low => 0.5,
         }
@@ -320,6 +355,10 @@ mod tests {
         assert_eq!(Quality::for_device("DiscreteGpu"), Quality::High);
         // Software rendering draws pictures to judge the look by, so at the look's best.
         assert_eq!(Quality::for_device("Cpu"), Quality::High);
+        // Ultra is for films, asked for, never chosen for a GPU.
+        for device in ["IntegratedGpu", "DiscreteGpu", "VirtualGpu", "Cpu", "Other"] {
+            assert_ne!(Quality::for_device(device), Quality::Ultra);
+        }
     }
 
     #[test]
@@ -333,6 +372,7 @@ mod tests {
             assert!(lower.relief_layers() <= higher.relief_layers());
             assert!(lower.detail_reach() <= higher.detail_reach());
             assert!(lower.grass() <= higher.grass());
+            assert!(lower.ground_reach() <= higher.ground_reach());
             assert!(!lower.occlusion() || higher.occlusion());
             assert!(!lower.bloom() || higher.bloom());
             assert!(!lower.soft_shadows() || higher.soft_shadows());
@@ -344,6 +384,6 @@ mod tests {
         for quality in Quality::ALL {
             assert_eq!(Quality::from_name(quality.name()), Some(quality));
         }
-        assert_eq!(Quality::from_name("ultra"), None);
+        assert_eq!(Quality::from_name("cinematic"), None);
     }
 }

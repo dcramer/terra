@@ -95,7 +95,7 @@ fn cards(quality: Quality) -> usize {
     match quality {
         Quality::Low => 10,
         Quality::Medium => 16,
-        Quality::High => 24,
+        Quality::High | Quality::Ultra => 24,
     }
 }
 

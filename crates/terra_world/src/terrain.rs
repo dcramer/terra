@@ -88,9 +88,11 @@ fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
 const FAR_FROM: u8 = 4;
 const FAR_SPLIT: f32 = 3.0;
 
-fn detail(planet: &Planet) -> Detail {
+/// The tree's shape, every split `reach` times as far as high has it
+/// (`Quality::ground_reach`, D428).
+fn detail(planet: &Planet, reach: f32) -> Detail {
     let detail = Detail::for_planet(planet.radius_m(), planet.relief_m());
-    if planet.has_mountains() {
+    let detail = if planet.has_mountains() {
         Detail {
             far_from: FAR_FROM,
             far_split: FAR_SPLIT,
@@ -98,13 +100,18 @@ fn detail(planet: &Planet) -> Detail {
         }
     } else {
         detail
+    };
+    Detail {
+        split: detail.split * reach,
+        far_split: detail.far_split * reach,
+        ..detail
     }
 }
 
 /// The chunks a viewer at a place should see.
-fn wanted(planet: &Planet, viewer: Vec3) -> HashMap<ChunkId, Sides> {
+fn wanted(planet: &Planet, viewer: Vec3, reach: f32) -> HashMap<ChunkId, Sides> {
     let ground = planet.voxels();
-    chunks_around(&[viewer], &detail(planet), |id| {
+    chunks_around(&[viewer], &detail(planet, reach), |id| {
         may_hold_surface(&**ground, id)
     })
     .into_iter()
@@ -306,11 +313,17 @@ fn first_view(
     planet: Res<Planet>,
     look: Res<GroundLook>,
     camera: Single<&Transform, With<MainCamera>>,
+    asked: Option<Res<crate::quality::Asked>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
 ) {
     let viewer = camera.translation;
-    let wanted = wanted(&planet, viewer);
+    // The preset is chosen in the first frame; one asked for is known already.
+    let reach = asked
+        .and_then(|asked| asked.0)
+        .unwrap_or_default()
+        .ground_reach();
+    let wanted = wanted(&planet, viewer, reach);
     let chunks: Vec<(ChunkId, Sides)> = wanted.iter().map(|(&id, &sides)| (id, sides)).collect();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     let planet_ref = &*planet;
@@ -347,14 +360,18 @@ fn choose(
     planet: Res<Planet>,
     options: Res<Options>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
+    quality: Res<crate::quality::Quality>,
     mut terrain: ResMut<Terrain>,
 ) {
     let viewer = camera.translation();
     let edits = planet.voxels().edit_count();
+    let reach = quality.ground_reach();
     if terrain.choosing.is_none() {
-        let moved = terrain
-            .chosen_from
-            .is_none_or(|from| from.distance(viewer) > RECHOOSE_M);
+        // A preset that meshes the ground further out chooses again where the camera is.
+        let moved = quality.is_changed()
+            || terrain
+                .chosen_from
+                .is_none_or(|from| from.distance(viewer) > RECHOOSE_M);
         if !moved && edits == terrain.edits_seen {
             return;
         }
@@ -369,7 +386,7 @@ fn choose(
         }
         let from = planet.clone();
         terrain.choosing =
-            Some(AsyncComputeTaskPool::get().spawn(async move { wanted(&from, viewer) }));
+            Some(AsyncComputeTaskPool::get().spawn(async move { wanted(&from, viewer, reach) }));
     }
     let Some(task) = terrain.choosing.as_mut() else {
         return;

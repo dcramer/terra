@@ -182,7 +182,7 @@ fn budget(quality: Quality) -> (usize, usize, f32) {
     match quality {
         Quality::Low => (700, 8, 0.45),
         Quality::Medium => (1400, 16, 0.75),
-        Quality::High => (fragments::MOST, 24, 1.0),
+        Quality::High | Quality::Ultra => (fragments::MOST, 24, 1.0),
     }
 }
 
@@ -192,7 +192,7 @@ fn spawn_budget(quality: Quality) -> usize {
     match quality {
         Quality::Low => 150,
         Quality::Medium => 300,
-        Quality::High => 500,
+        Quality::High | Quality::Ultra => 500,
     }
 }
 

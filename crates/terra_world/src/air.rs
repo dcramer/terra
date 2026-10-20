@@ -323,7 +323,8 @@ fn discs(
 }
 
 /// The air's tables, worked out every frame, at the quality preset (D239): at the low one
-/// each is half as fine and marched in half the steps, as the sky is smooth.
+/// each is half as fine and marched in half the steps, as the sky is smooth; at ultra the
+/// sky's and the haze's twice as fine (D428).
 fn settings(
     quality: Res<crate::quality::Quality>,
     scale: Option<Res<AirScale>>,
@@ -340,17 +341,26 @@ fn settings(
     }
     *applied = Some(*quality);
     let full = AtmosphereSettings::default();
-    let settings = if *quality == crate::quality::Quality::Low {
-        AtmosphereSettings {
+    let settings = match *quality {
+        crate::quality::Quality::Low => AtmosphereSettings {
             multiscattering_lut_dirs: full.multiscattering_lut_dirs / 2,
             multiscattering_lut_samples: full.multiscattering_lut_samples / 2,
             sky_view_lut_size: full.sky_view_lut_size / 2,
             sky_view_lut_samples: full.sky_view_lut_samples / 2,
             aerial_view_lut_samples: full.aerial_view_lut_samples / 2,
             ..full
-        }
-    } else {
-        full
+        },
+        // Films' (D428): the haze over distance in twice the slices and steps, so a town a
+        // few hundred metres off and the range behind it fall in slices of their own, and
+        // the sky round a low sun twice as fine.
+        crate::quality::Quality::Ultra => AtmosphereSettings {
+            sky_view_lut_size: full.sky_view_lut_size * 2,
+            sky_view_lut_samples: full.sky_view_lut_samples * 2,
+            aerial_view_lut_size: full.aerial_view_lut_size * 2,
+            aerial_view_lut_samples: full.aerial_view_lut_samples * 2,
+            ..full
+        },
+        _ => full,
     };
     commands.entity(camera).insert(AtmosphereSettings {
         // The haze reaches across the whole planet, in the air's longer distances, or as far

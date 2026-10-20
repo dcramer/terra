@@ -163,7 +163,7 @@ Read the 99th percentile and worst frame as well as the median: a stutter hides 
 
 Under WSL the task builds and runs the Windows program, the only one with a real GPU. On macOS `--offscreen` is what makes numbers trustworthy: the window server draws nothing of a window that is covered, or when the screen is asleep or locked, and a Retina screen draws a 1600x900 window at 3200x1800. Report the integrated GPU too (D25) when a machine has one. Software rendering's numbers mean nothing.
 
-**Quality presets.** Each run draws at the preset chosen for its GPU, an integrated one low and any other high (D239); `--quality low|medium|high` asks for another. The integrated GPU is measured at the low preset, whose target is 30 fps (a median under 33.3 ms, D239), which the task judges it by, knowing it from the run's own line. To measure it, under WSL: `WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask bench`.
+**Quality presets.** Each run draws at the preset chosen for its GPU, an integrated one low and any other high (D239); `cargo xtask bench --quality low|medium|high|ultra <scenes>` asks for another, recorded as `<scene>@<preset>` and compared with that alone. Ultra, the films' preset (D428), is measured for its cost and held to no budget. The integrated GPU is measured at the low preset, whose target is 30 fps (a median under 33.3 ms, D239), which the task judges it by, knowing it from the run's own line. To measure it, under WSL: `WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask bench`.
 
 To find what a scene spends its time on, switch things off and run it again. A temporary environment variable read by the code under test is enough, removed before committing.
 

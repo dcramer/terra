@@ -1320,7 +1320,7 @@ fn show(
     done: Done,
     quality: Quality,
 ) {
-    let coarse_shadows = quality != Quality::High;
+    let coarse_shadows = quality < Quality::High;
     // An answer to an older job is dropped: the section has been sent again since.
     if build.sections.tickets.get(&done.section) != Some(&done.ticket) {
         return;

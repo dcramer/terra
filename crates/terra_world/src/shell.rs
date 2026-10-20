@@ -69,8 +69,9 @@ usage: terra_sandbox [options]
                         screen asleep or locked, covers nothing, measures every machine at
                         the same size, and waits for the GPU each frame so a benchmark
                         times the GPU's work too
-  --quality <preset>    draw at the low, medium or high quality preset, rather than the
-                        one chosen for the GPU (an integrated GPU low, any other high)
+  --quality <preset>    draw at the low, medium, high or ultra quality preset, rather than
+                        the one chosen for the GPU (an integrated GPU low, any other
+                        high); ultra, for films, spends the GPU on distance (D428)
   --steady              advance the game a sixtieth of a second every frame, however
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
@@ -538,10 +539,9 @@ impl Options {
                 "--clean" => options.clean = true,
                 "--quality" => {
                     let name = value("--quality")?;
-                    options.quality = Some(
-                        crate::quality::Quality::from_name(&name)
-                            .ok_or(format!("--quality is low, medium or high, not `{name}`"))?,
-                    );
+                    options.quality = Some(crate::quality::Quality::from_name(&name).ok_or(
+                        format!("--quality is low, medium, high or ultra, not `{name}`"),
+                    )?);
                 }
                 "--loading" => options.hold_loading = true,
                 "--mute" => options.mute = true,

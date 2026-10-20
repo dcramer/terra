@@ -325,7 +325,7 @@ fn share(quality: Quality) -> f32 {
     match quality {
         Quality::Low => 0.35,
         Quality::Medium => 0.6,
-        Quality::High => 1.0,
+        Quality::High | Quality::Ultra => 1.0,
     }
 }
 
