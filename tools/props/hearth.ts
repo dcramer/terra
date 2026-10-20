@@ -86,7 +86,10 @@ function section(kind: number, R: number): Run[] {
  * salmon-pink (fire round 21). */
 // Grey-brown field stones, from blue-grey granite to brown sandstone, darker than the beige
 // of before (fire round 25: identical beige ovals in the firelight).
-export const STONE_TONES: readonly (readonly number[])[] = [[96, 90, 82], [82, 81, 78], [106, 95, 80], [72, 70, 68], [92, 85, 76], [112, 106, 98], [84, 76, 66]];
+// Darker again by a quarter (fire round 31): by firelight they had the hue RDR2's ring has (22
+// against 21-27) but stood brighter (sRGB red 215-237 against 140-176), pale at the shoulder, so
+// the salmon was their albedo, not the light's colour; a greener light only moved their hue.
+export const STONE_TONES: readonly (readonly number[])[] = [[70, 64, 54], [62, 59, 53], [78, 68, 54], [56, 53, 48], [68, 62, 52], [82, 76, 66], [64, 56, 46]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
