@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BED_BUDGET, bed, HOTTEST, maps } from "./coals.ts";
+import { BED_BUDGET, bed, maps, TILES, YELLOW } from "./coals.ts";
 
 test("a coal bed keeps to its triangle budget", () => {
   assert.ok(bed().idx.length / 3 <= BED_BUDGET);
@@ -42,14 +42,21 @@ test("every face of the bed faces out, so none is culled", () => {
   }
 });
 
-test("its glow is never hotter than 1,440 K's orange-red", () => {
+test("its glow is red to orange-yellow, never salmon, and hottest in the middle", () => {
   const emissive = maps()[1];
   let lit = 0;
   for (let i = 0; i < emissive.length; i += 4) {
     const [r, g, b] = [emissive[i], emissive[i + 1], emissive[i + 2]];
     if (r < 8) continue;
     lit++;
-    assert.ok(g <= r * (HOTTEST[1] / HOTTEST[0]) + 1 && b <= r * (HOTTEST[2] / HOTTEST[0]) + 1, `${r},${g},${b}`);
+    assert.ok(g <= r * (YELLOW[1] / YELLOW[0]) + 1 && b <= r * (YELLOW[2] / YELLOW[0]) + 1, `${r},${g},${b}`);
   }
+  // The middle's tiles (the first row of four) glow yellower than the edge's (the last).
+  const yellow = (tiles: number[]) => {
+    let [g, r] = [0, 0];
+    for (const [ox, oy] of tiles.map((t) => TILES[t])) for (let y = oy; y < oy + 128; y++) for (let x = ox; x < ox + 128; x++) [r, g] = [r + emissive[(y * 512 + x) * 4], g + emissive[(y * 512 + x) * 4 + 1]];
+    return g / r;
+  };
+  assert.ok(yellow([0, 1, 2, 3]) > yellow([8, 9, 10, 11]) * 1.3, "no hotter core");
   assert.ok(lit > emissive.length / 4 / 20, "it hardly glows");
 });
