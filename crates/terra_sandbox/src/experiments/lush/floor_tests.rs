@@ -146,3 +146,32 @@ fn rocks_learn_the_snow_cover_when_it_moves_and_not_for_a_trifle() {
     world.run_system_once(follow_snow).unwrap();
     assert_eq!(told(&world), 0.0, "bare ground bares the rocks");
 }
+
+#[test]
+fn a_plants_scan_learns_the_snow_and_stays_a_plant() {
+    use bevy::ecs::system::RunSystemOnce;
+    let mut world = World::new();
+    world.init_resource::<Assets<Mossy>>();
+    let fern = world.resource_mut::<Assets<Mossy>>().add(Mossy {
+        base: StandardMaterial::default(),
+        extension: MossExtension {
+            colour: Vec4::ZERO,
+            ground_color: None,
+            ground_normal: None,
+            snow: Vec4::new(0.0, 1.0, 0.0, 0.0),
+        },
+    });
+    world.insert_resource(SnowCover(0.6));
+    world.run_system_once(follow_snow).unwrap();
+    let snow = world
+        .resource::<Assets<Mossy>>()
+        .get(&fern)
+        .unwrap()
+        .extension
+        .snow;
+    assert_eq!(snow.x, 0.6, "snow lying round the eye lies on the fern");
+    assert_eq!(
+        snow.y, 1.0,
+        "and it withers as a plant, not mossed as a rock"
+    );
+}

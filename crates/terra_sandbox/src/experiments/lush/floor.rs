@@ -19,7 +19,7 @@ use super::species::Species;
 use super::thicket::{self, Stool};
 use super::{
     BARK_M, Build, CLEARING_M, FADE, FOREST_M, Foliage, FoliageExtension, Footing, Limb, Path,
-    Scanned, smoothstep, square, tube,
+    smoothstep, square, tube,
 };
 use bevy::{
     camera::visibility::VisibilityRange,
@@ -59,7 +59,8 @@ pub(super) struct MossExtension {
     #[texture(103, dimension = "2d_array")]
     ground_normal: Option<Handle<Image>>,
     /// How much of the ground round the camera snow covers (`climate::SnowCover`) in x: snow
-    /// lies on a rock's tops as on the ground beside it (winter round 11).
+    /// lies on a rock's tops as on the ground beside it (winter round 11). In y, 1 for a
+    /// plant's scan: no moss or lichen, and it withers under the snow (winter round 13).
     #[uniform(104)]
     snow: Vec4,
 }
@@ -94,9 +95,10 @@ impl MaterialExtension for MossExtension {
     }
 }
 
-/// Rocks' glTF materials still to be copied into the mossy materials they are drawn with.
+/// Rocks' and plants' glTF materials still to be copied into the mossy materials they are
+/// drawn with, and the tint each scan's colour is taken times.
 #[derive(Resource, Default)]
-pub(super) struct MossyScans(Vec<(Handle<GltfMaterial>, Handle<Mossy>)>);
+pub(super) struct MossyScans(Vec<(Handle<GltfMaterial>, Handle<Mossy>, Color)>);
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Mossy>::default())
@@ -189,7 +191,8 @@ fn show_undergrowth(
     Ok(serde_json::json!({ "hidden": count }))
 }
 
-/// Copies each rock scan's glTF material, once loaded, under its moss.
+/// Copies each rock's or plant's scanned glTF material, once loaded, under its moss and snow:
+/// its colour times a tint, and its cut-out and sides as the scan has them.
 fn dress_mossy(
     mut scans: ResMut<MossyScans>,
     gltf: Res<Assets<GltfMaterial>>,
@@ -199,14 +202,17 @@ fn dress_mossy(
     let Some(ground) = ground else {
         return;
     };
-    scans.0.retain(|(from, to)| {
+    scans.0.retain(|(from, to, tint)| {
         let (Some(from), Some(mut to)) = (gltf.get(from), materials.get_mut(to)) else {
             return true;
         };
         to.extension.ground_color = Some(ground.color().clone());
         to.extension.ground_normal = Some(ground.normal().clone());
         to.base = StandardMaterial {
-            base_color: from.base_color,
+            base_color: {
+                let (a, b) = (from.base_color.to_linear(), tint.to_linear());
+                Color::linear_rgba(a.red * b.red, a.green * b.green, a.blue * b.blue, a.alpha)
+            },
             base_color_texture: from.base_color_texture.clone(),
             normal_map_texture: from.normal_map_texture.clone(),
             metallic_roughness_texture: from.metallic_roughness_texture.clone(),
@@ -214,6 +220,9 @@ fn dress_mossy(
             perceptual_roughness: from.perceptual_roughness,
             metallic: from.metallic,
             reflectance: 0.3,
+            alpha_mode: from.alpha_mode,
+            double_sided: from.double_sided,
+            cull_mode: from.cull_mode,
             ..default()
         };
         false
@@ -596,7 +605,6 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub assets: &'a AssetServer,
     pub meshes: &'a mut Assets<Mesh>,
     pub plain: &'a mut Assets<StandardMaterial>,
-    pub scanned: &'a mut Scanned,
     pub mossy: &'a mut Assets<Mossy>,
     pub mossy_scans: &'a mut MossyScans,
     pub flora: &'a Flora,
@@ -1016,7 +1024,8 @@ struct Part {
 #[derive(Clone)]
 enum Look {
     Foliage(Handle<Foliage>),
-    Plain(Handle<StandardMaterial>),
+    /// A plant's scan, under the season (`Lay::plant_scan`).
+    Scan(Handle<Mossy>),
 }
 
 /// Which distances a part is drawn over: all its kind's, or only near or only past where
@@ -1071,36 +1080,24 @@ impl Lay<'_, '_, '_> {
             .and_then(|kind| kind.cuttable(size))
     }
 
-    /// A scan's mesh, and a material of our own that its glTF material is copied into once
-    /// loaded (`dress_scans`), as Bevy 0.20 loads a glTF's material as a `GltfMaterial`.
-    fn scan(&mut self, file: &str, tint: Color) -> (Handle<Mesh>, Handle<StandardMaterial>) {
-        let path = format!("models/nature/forest/{file}.glb");
-        let material = self.plain.add(StandardMaterial::default());
-        self.scanned.0.push((
-            self.assets.load(
-                GltfAssetLabel::Material {
-                    index: 0,
-                    is_scale_inverted: false,
-                }
-                .from_asset(path.clone()),
-            ),
-            material.clone(),
-            tint,
-        ));
-        (
-            self.assets.load(
-                GltfAssetLabel::Primitive {
-                    mesh: 0,
-                    primitive: 0,
-                }
-                .from_asset(path),
-            ),
-            material,
-        )
-    }
-
     /// A rock's scan, its material under moss, `moss` of it.
     fn mossy_scan(&mut self, file: &str, moss: f32) -> (Handle<Mesh>, Handle<Mossy>) {
+        self.snowed_scan(file, moss, None)
+    }
+
+    /// A plant's scan, its colour times `tint`, under the season: it withers and takes snow
+    /// as the ground beside it does (`mossy.wesl`), with no moss or lichen on it.
+    fn plant_scan(&mut self, file: &str, tint: Color) -> (Handle<Mesh>, Handle<Mossy>) {
+        self.snowed_scan(file, 0.0, Some(tint))
+    }
+
+    /// A scan drawn with the mossy material, a rock's, or a plant's when it has a tint.
+    fn snowed_scan(
+        &mut self,
+        file: &str,
+        moss: f32,
+        plant: Option<Color>,
+    ) -> (Handle<Mesh>, Handle<Mossy>) {
         let path = format!("models/nature/forest/{file}.glb");
         let material = self.mossy.add(Mossy {
             base: StandardMaterial::default(),
@@ -1113,7 +1110,7 @@ impl Lay<'_, '_, '_> {
                 .extend(moss),
                 ground_color: None,
                 ground_normal: None,
-                snow: Vec4::ZERO,
+                snow: Vec4::new(0.0, plant.is_some() as u32 as f32, 0.0, 0.0),
             },
         });
         self.mossy_scans.0.push((
@@ -1125,6 +1122,7 @@ impl Lay<'_, '_, '_> {
                 .from_asset(path.clone()),
             ),
             material.clone(),
+            plant.unwrap_or(Color::WHITE),
         ));
         (
             self.assets.load(
@@ -1286,8 +1284,8 @@ impl Lay<'_, '_, '_> {
                     if n > 0 {
                         break;
                     }
-                    let (mesh, material) = self.scan("fern", Color::srgb(0.6, 0.64, 0.58));
-                    Drawn::one(mesh, Look::Plain(material))
+                    let (mesh, material) = self.plant_scan("fern", Color::srgb(0.6, 0.64, 0.58));
+                    Drawn::one(mesh, Look::Scan(material))
                 }
                 Under::Frond => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.54, 0.6, 0.52));
@@ -1471,7 +1469,7 @@ impl Lay<'_, '_, '_> {
             ));
             match &part.look {
                 Look::Foliage(material) => entity.insert(MeshMaterial3d(material.clone())),
-                Look::Plain(material) => entity.insert(MeshMaterial3d(material.clone())),
+                Look::Scan(material) => entity.insert(MeshMaterial3d(material.clone())),
             };
             if part.solid {
                 entity.insert(Footing);

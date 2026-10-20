@@ -135,15 +135,16 @@
         cards: ["daisy", "buttercup", "campion"],
     ),
     (
-        // Bramble: its leaves dark purple-red with the chill, most gone by midwinter, a few
-        // kept on the canes, as in life (D419). Holly and ivy keep theirs, and have no year.
+        // Bramble: its leaves dark purple-red with the chill, bare canes by midwinter, a
+        // leaf or two left on them, as in life (D419; winter round 13). Holly and ivy keep
+        // theirs, and have no year.
         kind: "bramble",
         flush: (from: 60.0, over: 100.0),
         turn: (from: 20.0, over: 80.0),
-        fall: (from: 120.0, over: 200.0),
+        fall: (from: 120.0, over: 150.0),
         turns_under_hours: 12.0,
         turns: 0.8,
-        drops: 0.85,
+        drops: 0.95,
         autumn: (0.32, 0.12, 0.1),
         cards: ["bramble"],
     ),

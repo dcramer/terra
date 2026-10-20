@@ -24,7 +24,8 @@ struct Moss {
     colour: vec4<f32>,
 }
 
-// How much of the ground round the camera snow covers in x (climate::SnowCover).
+// How much of the ground round the camera snow covers in x (climate::SnowCover), and in y 1
+// for a plant's scan (a fern's): no moss or lichen on it, and it withers under the snow.
 struct RockSnow {
     cover: vec4<f32>,
 }
@@ -32,6 +33,13 @@ struct RockSnow {
 var<uniform> rock_snow: RockSnow;
 // As ground.wesl's lying snow.
 const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+// A fern's fronds dead in winter, linear: bracken's rust-brown gone dull and dark, as the
+// fronds lie in a snowy wood (winter round 13's judge: "the fern clump is dark summer green").
+const WITHERED: vec3<f32> = vec3<f32>(0.16, 0.075, 0.03);
+// How bright the withered frond is against the green it was, and how much of a clump's
+// fronds wither (the rest a dark green, as a hard fern's or a sheltered one's stay).
+const WITHERED_LIGHT: f32 = 0.85;
+const WITHERS: f32 = 0.85;
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> moss: Moss;
@@ -165,7 +173,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let grows = smoothstep(0.52, 0.66, reach) * moss.colour.a;
     // Lichen on the bare stone, in pale grey-green crusts and specks (D268).
     let crust = noise(world * 7.0 + 23.0) * 0.6 + noise(world * 29.0 + 9.0) * 0.4;
-    let lichen = smoothstep(0.6, 0.74, crust) * (1.0 - grows) * 0.6;
+    let plant = rock_snow.cover.y;
+    let lichen = smoothstep(0.6, 0.74, crust) * (1.0 - grows) * 0.6 * (1.0 - plant);
     if lichen > 0.0 {
         let base = pbr_input.material.base_color.rgb;
         let pale = vec3<f32>(0.16, 0.17, 0.12) * (0.8 + 0.4 * noise(world * 61.0));
@@ -199,7 +208,30 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // rock's shoulders the more lies, with an edge, since a cap has a thickness; smooth and
     // white over the stone's grain (Unreal's and Ghost of Tsushima's world-normal snow).
     let cover = rock_snow.cover.x;
-    if cover > 0.0 {
+    if cover > 0.0 && plant > 0.5 {
+        // A plant: its fronds withered brown through the winter, frond by frond, and snow
+        // lying in clumps on the faces turned up to the sky, as on a bough's sprays (D419).
+        let base = pbr_input.material.base_color.rgb;
+        let grey = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let tone = WITHERED * grey / dot(WITHERED, vec3<f32>(0.2126, 0.7152, 0.0722)) * WITHERED_LIGHT;
+        let frond = noise(world * 2.2 + 17.0);
+        let withered = smoothstep(1.0 - WITHERS - 0.1, 1.0 - WITHERS + 0.1, frond) * smoothstep(0.05, 0.4, cover);
+        var colour = mix(base * 0.7, tone, withered);
+        var face_up = 0.0;
+        let across = cross(gx, gy);
+        if dot(across, across) > 1.0e-24 {
+            let face = across * inverseSqrt(dot(across, across));
+            face_up = dot(face * select(-1.0, 1.0, dot(face, view.world_position.xyz - world) >= 0.0), up);
+        }
+        let load = smoothstep(0.15, 0.6, face_up) * smoothstep(0.05, 0.4, cover);
+        let clump = noise(world * 7.0 + 31.0) * 0.6 + noise(world * 19.0 + 7.0) * 0.4;
+        let lies = smoothstep(-0.08, 0.08, load - (1.0 - clump) * 0.9) * smoothstep(0.0, 0.15, load);
+        colour = mix(colour, SNOW * (0.92 + 0.08 * noise(world * 9.0 + 31.0)), lies);
+        pbr_input.material.base_color = vec4<f32>(colour, pbr_input.material.base_color.a);
+        pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, max(lies, withered));
+        pbr_input.material.reflectance = mix(pbr_input.material.reflectance, vec3<f32>(0.5), lies);
+        pbr_input.diffuse_occlusion = mix(pbr_input.diffuse_occlusion, vec3<f32>(1.0), lies * 0.6);
+    } else if cover > 0.0 {
         let level = dot(geometric, up) + (patches - 0.5) * 0.35 + (heap - 0.5) * 0.2;
         let cap = smoothstep(0.62 - 0.3 * cover, 0.7 - 0.3 * cover, level) * smoothstep(0.05, 0.4, cover);
         let snow_colour = SNOW * (0.94 + 0.06 * noise(world * 9.0 + 31.0));

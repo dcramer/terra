@@ -28,7 +28,6 @@
 //!
 //! Its cost is measured by `cargo xtask bench forest forest-walk`.
 
-use bevy::gltf::GltfMaterial;
 use bevy::{
     asset::RenderAssetUsages,
     camera::visibility::{RenderLayers, VisibilityRange},
@@ -319,14 +318,12 @@ pub fn plugin(app: &mut App) {
         seasons::plugin,
     ))
     .init_resource::<Unmipped>()
-    .init_resource::<Scanned>()
     .add_systems(
         Update,
         (
             plant.run_if(not(resource_exists::<Forest>)),
             far_land.run_if(resource_added::<Forest>),
             add_mipmaps,
-            dress_scans,
             follow_detail,
         ),
     )
@@ -383,42 +380,6 @@ fn scale_detail(
     if let Some(mut material) = materials.get_mut(lumps) {
         material.extension.shrink = Vec4::new(end * (1.0 - SHADOW_END), end, from, to) * scale;
     }
-}
-
-/// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
-#[derive(Resource, Default)]
-struct Scanned(Vec<(Handle<GltfMaterial>, Handle<StandardMaterial>, Color)>);
-
-/// Copies each scan's glTF material, once loaded, into the material it is drawn with: its
-/// scanned colour, normal, roughness and occlusion maps, its colour times a tint.
-fn dress_scans(
-    mut scanned: ResMut<Scanned>,
-    gltf: Res<Assets<GltfMaterial>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    scanned.0.retain(|(from, to, tint)| {
-        let (Some(from), Some(mut to)) = (gltf.get(from), materials.get_mut(to)) else {
-            return true;
-        };
-        *to = StandardMaterial {
-            base_color: {
-                let (a, b) = (from.base_color.to_linear(), tint.to_linear());
-                Color::linear_rgba(a.red * b.red, a.green * b.green, a.blue * b.blue, a.alpha)
-            },
-            base_color_texture: from.base_color_texture.clone(),
-            normal_map_texture: from.normal_map_texture.clone(),
-            metallic_roughness_texture: from.metallic_roughness_texture.clone(),
-            occlusion_texture: from.occlusion_texture.clone(),
-            perceptual_roughness: from.perceptual_roughness,
-            metallic: from.metallic,
-            reflectance: 0.3,
-            alpha_mode: from.alpha_mode,
-            double_sided: from.double_sided,
-            cull_mode: from.cull_mode,
-            ..default()
-        };
-        false
-    });
 }
 
 /// Pictures still to be given smaller copies of themselves once loaded, and the alpha a
@@ -1199,7 +1160,6 @@ fn plant(
     mut materials: ResMut<Assets<Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
     mut unmipped: ResMut<Unmipped>,
-    mut scanned: ResMut<Scanned>,
     mut mossy: ResMut<Assets<floor::Mossy>>,
     mut mossy_scans: ResMut<floor::MossyScans>,
     mut far_forest: ResMut<Assets<far::FarForest>>,
@@ -1728,7 +1688,6 @@ fn plant(
             assets: &assets,
             meshes: &mut meshes,
             plain: &mut plain,
-            scanned: &mut scanned,
             mossy: &mut mossy,
             mossy_scans: &mut mossy_scans,
             flora: &flora,
