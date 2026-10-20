@@ -172,7 +172,10 @@ fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) 
         let hump = exp(-x * x / (2.0 * ridge * ridge));
         let wavelength = 0.08 + 0.05 * at.w;
         let fine = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.6, pixel);
-        let crests = sin(behind / wavelength * 6.283) * step(x, 0.0) * exp(x / (2.0 * wavelength)) * fine;
+        // Inside the V alone: its exponent is held at 0 outside it, where a few metres off the
+        // arm it overflowed to infinity and the step's 0 times it made NaN, which drew the
+        // lake's far water as dark straight-edged wedges the antialiasing smeared (lake wedge).
+        let crests = sin(behind / wavelength * 6.283) * step(x, 0.0) * exp(min(x, 0.0) / (2.0 * wavelength)) * fine;
         let normal_out = side * sign(across) + ahead * KELVIN;
         slope += normal_out * (0.5 * strength * (-x / ridge * hump)) + ahead * (0.25 * strength * crests);
         // The bow wave round its breast.
