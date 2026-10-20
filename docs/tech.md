@@ -113,7 +113,7 @@ One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a 
 - **Sea:** one sphere per world at its sea level.
 - **Sky and air:** Bevy's physical atmosphere for the sky's colour and the haze, with our own shader drawing clouds, stars, the moon and the dusk over it (D212), and a world's far land below the horizon in the air's own colours (D273).
 - **Plants and objects:** instanced and baked together by area (D47).
-- **Quality presets:** low, medium and high, chosen from the GPU and overridable, and ultra for films and cinematics, asked for only (`--quality ultra`), which spends the GPU on distance: shadows to 1.2 km at 4096, every level of detail twice as far, the ground meshed finer far off, the haze in twice the steps and slices (D428); low draws at three fifths of the screen's size and scales up, with cheaper shadows, no screen-space shade, haze shafts or bloom, and detail and grass nearer (D239). Crossfades between levels of detail are dithered for TAA on every material (D240).
+- **Quality presets:** low, medium and high, chosen from the GPU and overridable, and ultra for films and cinematics, asked for only (`--quality ultra`), which spends the GPU on distance: shadows to 1.2 km at 4096, every level of detail half as far again, the ground meshed finer far off, the haze in twice the steps and slices (D428); low draws at three fifths of the screen's size and scales up, with cheaper shadows, no screen-space shade, haze shafts or bloom, and detail and grass nearer (D239). Crossfades between levels of detail are dithered for TAA on every material (D240).
 
 ## Risks
 

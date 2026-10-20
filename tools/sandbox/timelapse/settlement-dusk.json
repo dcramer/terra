@@ -1,0 +1,310 @@
+{
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous shot: close over its first house as its walls go up, then pulling back fast and rising while it turns about the town, as the settlement spreads out from that house to the whole market town, and on out until the town sits in its landscape, the lake, the forests round it and the mountains on the skyline At dusk the last four keys stand mirrored across their aim, west of the town looking north-east, so the setting sun lights the castle from the front, not from behind it (settlement r19).",
+  "seconds": 20,
+  "keys": [
+    {
+      "t": 0,
+      "at": [
+        -6,
+        9.4,
+        -336
+      ],
+      "look": [
+        6,
+        -2.5,
+        -336
+      ],
+      "lens": 20
+    },
+    {
+      "t": 1,
+      "at": [
+        1.3,
+        17.8,
+        -335.7
+      ],
+      "look": [
+        6.4,
+        -2.6,
+        -336.3
+      ],
+      "lens": 20
+    },
+    {
+      "t": 2,
+      "at": [
+        -1.6,
+        21.3,
+        -334.6
+      ],
+      "look": [
+        6.9,
+        -2.6,
+        -336.7
+      ],
+      "lens": 20
+    },
+    {
+      "t": 3,
+      "at": [
+        -5.9,
+        24.2,
+        -332
+      ],
+      "look": [
+        7.4,
+        -2.7,
+        -337
+      ],
+      "lens": 20
+    },
+    {
+      "t": 4,
+      "at": [
+        -10.2,
+        26.7,
+        -328.2
+      ],
+      "look": [
+        7.9,
+        -2.7,
+        -337.4
+      ],
+      "lens": 20
+    },
+    {
+      "t": 5,
+      "at": [
+        -14.2,
+        29.1,
+        -323
+      ],
+      "look": [
+        8.5,
+        -2.8,
+        -337.9
+      ],
+      "lens": 20
+    },
+    {
+      "t": 6,
+      "at": [
+        -17.6,
+        31.3,
+        -316.4
+      ],
+      "look": [
+        9.1,
+        -2.9,
+        -338.4
+      ],
+      "lens": 20
+    },
+    {
+      "t": 7,
+      "at": [
+        -20.3,
+        33.5,
+        -308.5
+      ],
+      "look": [
+        9.9,
+        -3,
+        -338.9
+      ],
+      "lens": 20
+    },
+    {
+      "t": 8,
+      "at": [
+        -22.2,
+        35.6,
+        -299.1
+      ],
+      "look": [
+        10.7,
+        -3.1,
+        -339.6
+      ],
+      "lens": 20
+    },
+    {
+      "t": 9,
+      "at": [
+        -23,
+        37.6,
+        -288.4
+      ],
+      "look": [
+        11.7,
+        -3.2,
+        -340.3
+      ],
+      "lens": 20
+    },
+    {
+      "t": 10,
+      "at": [
+        -22.6,
+        39.6,
+        -276.3
+      ],
+      "look": [
+        12.8,
+        -3.3,
+        -341.1
+      ],
+      "lens": 20
+    },
+    {
+      "t": 11,
+      "at": [
+        -20.8,
+        41.5,
+        -262.7
+      ],
+      "look": [
+        14,
+        -3.5,
+        -342
+      ],
+      "lens": 19.8
+    },
+    {
+      "t": 12,
+      "at": [
+        -17.5,
+        43.5,
+        -247.8
+      ],
+      "look": [
+        15.3,
+        -3.7,
+        -343
+      ],
+      "lens": 19.4
+    },
+    {
+      "t": 13,
+      "at": [
+        -12.7,
+        45.4,
+        -231.4
+      ],
+      "look": [
+        16.9,
+        -3.9,
+        -344.1
+      ],
+      "lens": 18.7
+    },
+    {
+      "t": 14,
+      "at": [
+        -6.7,
+        47.3,
+        -213
+      ],
+      "look": [
+        18,
+        -4,
+        -345
+      ],
+      "lens": 17.9
+    },
+    {
+      "t": 15,
+      "at": [
+        -0.4,
+        49.1,
+        -192.1
+      ],
+      "look": [
+        18,
+        4.3,
+        -345
+      ],
+      "lens": 17
+    },
+    {
+      "t": 16,
+      "at": [
+        2.5,
+        51,
+        -169.6
+      ],
+      "look": [
+        18,
+        25,
+        -345
+      ],
+      "lens": 16.1
+    },
+    {
+      "t": 17,
+      "at": [
+        -48.4,
+        58.9,
+        -192
+      ],
+      "look": [
+        2.2,
+        19.9,
+        -370.4
+      ],
+      "lens": 15.5
+    },
+    {
+      "t": 18,
+      "at": [
+        -168.3,
+        70.5,
+        -224.8
+      ],
+      "look": [
+        -21,
+        12.5,
+        -407.5
+      ],
+      "lens": 14.6
+    },
+    {
+      "t": 19,
+      "at": [
+        -288.1,
+        82.1,
+        -257.6
+      ],
+      "look": [
+        -44.2,
+        5.1,
+        -444.6
+      ],
+      "lens": 13.6
+    },
+    {
+      "t": 20,
+      "at": [
+        -370,
+        90,
+        -280
+      ],
+      "look": [
+        -60,
+        0,
+        -470
+      ],
+      "lens": 13
+    }
+  ],
+  "ease": "none",
+  "look": {
+    "exposure": "hold",
+    "exposure_bias": 0.6,
+    "hold_clock": true,
+    "detail": 1.35
+  },
+  "player": {
+    "hidden": true
+  }
+}

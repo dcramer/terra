@@ -180,10 +180,11 @@ impl Quality {
     /// `detail::DetailScale` the preset sets (D230); a shot's bias takes the larger, not the product (D428).
     pub fn detail_reach(self) -> f32 {
         match self {
-            // Twice as far: The Witcher 3's Ultra+ and Unreal's cinematic view distance
+            // Half as far again: The Witcher 3's Ultra+ and Unreal's cinematic view distance
             // (`r.ViewDistanceScale`) raise it so; the far buildings and trees keep their
-            // finer shapes out across a town seen from the air.
-            Quality::Ultra => 2.0,
+            // finer shapes out across a town seen from the air. Capped by the 10 GB card:
+            // at 2.0 the settlement's pull-back over 253 buildings peaked at 8.6 GiB (D428).
+            Quality::Ultra => 1.5,
             Quality::High => 1.0,
             Quality::Medium => 0.8,
             Quality::Low => 0.5,
