@@ -168,16 +168,16 @@
       ],
       [
         0.06,
-        -0.1,
-        0.06
+        -0.073,
+        0.19
       ]
     ],
     "Paw.L": [
       "Forearm.L",
       [
         0.06,
-        -0.1,
-        0.06
+        -0.073,
+        0.19
       ],
       [
         0.06,
@@ -247,7 +247,7 @@
       "kind": "gait",
       "cycle": 0.8,
       "stride": 0.3,
-      "lift": 0.07,
+      "lift": 0.075,
       "duty": 0.62,
       "bob": 0.006,
       "phases": {
@@ -256,30 +256,46 @@
         "Hind.R": 0.5,
         "Fore.R": 0.75
       },
-      "tail": 3
+      "tail": 3,
+      "fold": 60,
+      "hind_fold": 35,
+      "nod": 4,
+      "follow": 0.5,
+      "ankle_led": "Fore",
+      "peel": 15
     },
     "Trot": {
       "kind": "gait",
       "gait": "trot",
       "speed": 3.5,
-      "lift": 0.08,
+      "lift": 0.1,
       "bob": 0.008,
       "crouch": 0.02,
-      "peel": 35,
-      "tail": 3
+      "peel": 15,
+      "tail": 3,
+      "fold": 80,
+      "hind_fold": 40,
+      "follow": 0.8,
+      "ankle_led": "Fore"
     },
     "Run": {
       "kind": "gait",
       "gait": "gallop",
       "speed": 12.0,
       "fore": 0.85,
-      "lift": 0.12,
+      "lift": 0.09,
       "bob": 0.02,
       "crouch": 0.04,
-      "peel": 40,
-      "flex": 10,
-      "fold": 70,
-      "tail": 5
+      "peel": 15,
+      "flex": 8,
+      "fold": 100,
+      "tail": 5,
+      "hind_fold": 45,
+      "flex_at": 0.87,
+      "reach": 14,
+      "carry": 15,
+      "follow": 0.8,
+      "ankle_led": "Fore"
     },
     "Eat": {
       "kind": "graze",

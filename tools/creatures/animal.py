@@ -269,10 +269,42 @@ for leg, chain in LEGS.items():
         IK_OF[b] = (leg, i)
 CONTACT = {leg: TAIL[chain[2]].copy() for leg, chain in LEGS.items()}
 clamped = [0]
+# The furthest each pair of legs was asked to reach, over its length, since last cleared.
+far = {}
 # Each bone's scale in the world as the last pose solved left it, and the bones whose scale is
 # keyed: a wing's root, which shrinks as it folds.
 SC = {}
 SCALED = {b for b in ("Humerus.L", "Humerus.R") if b in BONES}
+
+
+STANCE = SPEC.get("stance", {})
+
+
+def stood(pose):
+    """A pose on the feet carried as the kind stands, where its model was made standing otherwise
+    (`stance` in creature.json): the body lowered `drop` (model units) and pitched `pitch` degrees
+    nose up about the hips, the back rounded `arch` degrees, the neck turned back as much so the
+    head keeps its carriage, and each hind foot laid `heel` degrees flatter and set `tuck` further
+    forward under the body. A hare's model stands tall on tiptoe; a resting or bounding hare sits
+    low on its long hind feet, the hock near the ground, rump rounded below the shoulders
+    (Muybridge, Animals in Motion pl. 'Hare'; Gambaryan 1974)."""
+    if not STANCE or "legs" not in pose:
+        return pose
+    turn = dict(pose.get("turn", {}))
+    pitch, arch = STANCE.get("pitch", 0.0), STANCE.get("arch", 0.0)
+    turn[ORDER[0]] = q(X, -pitch) @ turn.get(ORDER[0], Quaternion())
+    for b in SPINE:
+        turn[b] = q(X, arch / max(len(SPINE), 1)) @ turn.get(b, Quaternion())
+    for b in NECK[:1]:
+        turn[b] = q(X, pitch - arch) @ turn.get(b, Quaternion())
+    legs = {}
+    for leg, (target, rot) in pose["legs"].items():
+        if leg.startswith("Hind"):
+            target = target + Vector((0, -STANCE.get("tuck", 0.0) * SCALE, 0))
+            rot = q(X, -STANCE.get("heel", 0.0)) @ rot
+        legs[leg] = (target, rot)
+    root = pose.get("root", Vector()) + Vector((0, 0, -STANCE.get("drop", 0.0) * SCALE))
+    return {**pose, "turn": turn, "legs": legs, "root": root}
 
 
 def solve(pose):
@@ -281,6 +313,7 @@ def solve(pose):
     `legs`, for each leg placed on the ground, where its foot's tip is and how its foot is
     turned; a leg not placed is turned like any other bone; `scale`, a bone grown or shrunk
     with all it carries, as a folded wing is (its world scale is left in `SC`)."""
+    pose = stood(pose)
     turn = pose.get("turn", {})
     placed = pose.get("legs", {})
     grown = pose.get("scale") or turn.get("__scale__", {})
@@ -306,6 +339,7 @@ def solve(pose):
             lo_, hi_ = abs(l1 - l2) + 1e-4, l1 + l2 - 1e-4
             if d > hi_ or d < lo_:
                 clamped[0] += 1
+                far[leg[:4]] = max(far.get(leg[:4], 0.0), d / hi_)
                 d = min(max(d, lo_), hi_)
             e1 = reach.normalized()
             n = Rp @ X
@@ -582,7 +616,9 @@ def clip_gait(name, c):
     and a bound do; `crouch` carries the body so much lower, in the model's units, as a runner
     goes low to reach further; over a suspension the body flies (`airborne`). `fore` is the
     fore feet's time down over the hinds', as a hare's short fores are down for less of its
-    bound and sweep less ground at the same speed."""
+    bound and sweep less ground at the same speed. `fold` turns each lifted foot back (a deer's
+    cannon folding at the knee and hock), `hind_fold` the hinds' instead; `flex_at`, `reach` and
+    `carry` are below."""
     cycle, stride, duty, phases = gait_of(c)
     duties = {leg: duty * (c.get("fore", 1.0) if leg.startswith("Fore") else 1.0) for leg in LEGS}
     frames = round(cycle * FPS)
@@ -591,6 +627,7 @@ def clip_gait(name, c):
     crouch = c.get("crouch", 0.0) * SCALE
     act = new_clip(name)
     worst, before = {}, clamped[0]
+    far.clear()
     for f in range(1, frames + 2):
         t = (f - 1) / frames
         legs = {}
@@ -599,23 +636,50 @@ def clip_gait(name, c):
             base = CONTACT[leg].copy()
             d = duties[leg]
             sweep = stride * d / duty
+            # `follow`: the share of the limb's lean a planted foot takes, as a deer's cannon
+            # lands in line with its straight leg and leaves leaning back with it.
+            hip = HEAD[LEGS[leg][0]].z
+            lean = math.degrees(math.atan2(sweep / 2, hip)) * c.get("follow", 0.0)
             if p < d:
                 u = p / d
                 y = -sweep / 2 + sweep * u
                 z = 0.0
-                ang = c.get("peel", 25) * smooth(0.55, 1.0, u)
+                ang = math.degrees(math.atan2(y, hip)) * c.get("follow", 0.0) + c.get("peel", 25) * smooth(0.55, 1.0, u)
             else:
                 v = (p - d) / (1 - d)
                 e = 0.5 - 0.5 * math.cos(math.pi * v)
                 y = sweep / 2 - sweep * e
                 z = lift * math.sin(math.pi * v)
-                ang = fold * math.sin(math.pi * min(v * 1.3, 1.0)) + c.get("peel", 25) * (1 - v) ** 3
-            legs[leg] = (base + Vector((0, y, z)), q(X, ang))
+                folds = c.get("hind_fold", fold) if leg.startswith("Hind") else fold
+                ang = (folds * math.sin(math.pi * min(v * 1.3, 1.0)) + (c.get("peel", 25) + lean) * (1 - v) ** 3
+                       - lean * smooth(0.6, 1.0, v))
+            target = base + Vector((0, y, z))
+            led = c.get("ankle_led")
+            if p >= d and (led is True or led == leg[:4]):
+                # In the swing the knee or hock is carried on the lifted path and the folded
+                # foot hangs from it, so a deer's hoof comes up under its forearm as Muybridge's
+                # deer and horses carry it, not swung on a stiff leg. Eased in after lift-off and
+                # out before the landing, where the tip is placed. `true` for every leg, or
+                # "Fore" or "Hind" for that pair only.
+                foot = TAIL[LEGS[leg][2]] - HEAD[LEGS[leg][2]]
+                w = smooth(0.0, 0.3, v) * (1 - smooth(0.7, 1.0, v))
+                target = target + (q(X, ang) @ foot - foot) * w
+            legs[leg] = (target, q(X, ang))
         turn = {}
         flex = c.get("flex", 0.0) * math.sin(2 * math.pi * t)
         bob = c.get("bob", 0.0) * SCALE
         air = airborne(t, duties, phases, cycle) - crouch
-        if c.get("flex"):
+        if "flex_at" in c:
+            # The back most arched at `flex_at` of the stride, mid gathered flight as the hinds
+            # swing under, most stretched half a stride later in the extended flight; the pelvis
+            # and loins swing and the chest is held level, so the forequarters and head ride
+            # steady (Hildebrand 1959, J. Mammal. 40:481, the cheetah's and greyhound's films).
+            arch = c["flex"] * math.sin(2 * math.pi * (t - c["flex_at"] + 0.25))
+            turn[ORDER[0]] = q(X, -arch)
+            for b in SPINE:
+                turn[b] = q(X, arch / max(len(SPINE), 1))
+            root = Vector((0, 0, -bob * math.cos(2 * math.pi * (t - c["flex_at"])) + air))
+        elif c.get("flex"):
             # The back arches as the hind feet come under, stretches as they push.
             for b in SPINE:
                 turn[b] = q(X, -flex / max(len(SPINE), 1))
@@ -625,19 +689,25 @@ def clip_gait(name, c):
             root = Vector((0, 0, -bob * math.cos(4 * math.pi * t) + air))
             turn[ORDER[0]] = q(Y, c.get("roll", 2.0) * math.sin(2 * math.pi * t))
         # The head held steadier than the body, nodding with the step.
+        # `reach` stretches the neck forward and down at speed, the head turned back up most of
+        # it so the muzzle points ahead, as galloping canids and deer run (Muybridge's
+        # greyhound, horse and elk).
         nod = c.get("nod", 3.0) * math.sin(4 * math.pi * t)
+        reach = c.get("reach", 0.0)
         for b in NECK:
-            turn[b] = q(X, nod / max(len(NECK), 1))
-        turn["Head"] = q(X, -nod * 0.6 + (flex * 0.5 if c.get("flex") else 0))
+            turn[b] = q(X, (nod + reach) / max(len(NECK), 1))
+        level = flex * 0.5 if c.get("flex") and "flex_at" not in c else 0
+        turn["Head"] = q(X, -nod * 0.6 + level - reach * 0.75)
+        # `carry` raises the tail at its root, held out behind at a run.
         for i, b in enumerate(TAILS):
-            turn[b] = q(X, c.get("tail", 4) * math.sin(2 * math.pi * (t - 0.1 * i)))
+            turn[b] = q(X, c.get("tail", 4) * math.sin(2 * math.pi * (t - 0.1 * i)) + (c.get("carry", 0.0) if i == 0 else 0))
         for e in EARS:
             turn[e] = q(X, c.get("ears", 0.0))
         if PLAN == "bird":
             folded_wings(turn)
         R, H = key({"turn": turn, "legs": legs, "root": root}, f)
         # The planted feet's tips go where they were put; any clamp would slide them.
-        for leg, (target, _) in legs.items():
+        for leg, (target, _) in stood({"legs": legs})["legs"].items():
             if (t - phases.get(leg, 0.0)) % 1.0 < duties[leg]:
                 pair = leg[:4]
                 worst[pair] = max(worst.get(pair, 0.0), (tip(R, H, LEGS[leg][2]) - target).length)
@@ -647,7 +717,8 @@ def clip_gait(name, c):
     off = ", ".join(f"{pair} {cm * 100:.2f}" for pair, cm in sorted(worst.items()))
     print(f"pace {name}: {paces[name]:.3f} m/s, {1 / cycle:.2f} strides a second of"
           f" {paces[name] * cycle:.2f} m, feet sweep {stride:.2f} m, flight {flight * 100:.1f} cm,"
-          f" planted feet off their marks at worst (cm) {off}; {clamped[0] - before} poses out of reach")
+          f" planted feet off their marks at worst (cm) {off}; {clamped[0] - before} poses out of reach"
+          + "".join(f", {pair} to {r:.2f} of its length" for pair, r in sorted(far.items())))
 
 
 def clip_graze(name, c):

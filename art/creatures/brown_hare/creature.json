@@ -2,6 +2,7 @@
   "subject": "European brown hare of open fields and woodland edges: lean tawny russet-brown body, pale belly, very long black-tipped ears, long hind legs",
   "file": "Hare",
   "plan": "quadruped",
+  "stance": { "drop": 0.14, "pitch": 6, "arch": 12, "heel": 30, "tuck": 0.04 },
   "tripo_project": "bbaf5b96-ed20-4ba0-b1ab-92bc1a738472",
   "generator": "h3.1, standard geometry and texture, PBR",
   "credits": { "model": 30 },
@@ -31,10 +32,10 @@
   },
   "clips": {
     "Idle": { "kind": "idle", "seconds": 4.0, "tail": 2 },
-    "Walk": { "kind": "gait", "cycle": 0.6, "stride": 0.2, "lift": 0.06, "duty": 0.5, "bob": 0.01, "flex": 6,
+    "Walk": { "kind": "gait", "cycle": 0.6, "stride": 0.2, "lift": 0.06, "duty": 0.5, "bob": 0.01, "flex": 6, "ankle_led": true, "fold": 30,
               "phases": { "Hind.L": 0.0, "Hind.R": 0.05, "Fore.L": 0.45, "Fore.R": 0.6 }, "tail": 3 },
-    "Run": { "kind": "gait", "gait": "half-bound", "speed": 11.0, "lift": 0.1, "bob": 0.03, "crouch": 0.03, "peel": 50,
-             "flex": 20, "fold": 75, "ears": 30, "tail": 6 },
+    "Run": { "kind": "gait", "gait": "half-bound", "speed": 11.0, "lift": 0.1, "bob": 0.03, "crouch": 0.03, "peel": 75,
+             "flex": 10, "flex_at": 0.93, "reach": 10, "fold": 45, "ankle_led": true, "ears": 30, "tail": 6 },
     "Eat": { "kind": "graze", "seconds": 3.0, "crouch": 0.1, "root": 5, "spine": 15, "neck": 55, "head": 25 },
     "Death": { "kind": "death", "seconds": 1.0 }
   }
