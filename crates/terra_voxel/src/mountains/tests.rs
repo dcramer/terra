@@ -1,4 +1,5 @@
 use super::*;
+use glam::Vec2;
 
 const RADIUS: f32 = 30_000.0;
 
@@ -285,4 +286,56 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
     // Both risers past 62 degrees and ledges under 30 down the same walls.
     assert!(sheer * 10 > steps, "{sheer} of {steps} steps sheer");
     assert!(ledges * 10 > steps, "{ledges} of {steps} steps ledges");
+}
+
+#[test]
+fn horns_stand_steep_and_pointed_over_the_crests() {
+    // The ground the horns rise over, where the ridges stand near their crests, with horns and
+    // without: horns turn domes into points, so most of it stands steeper than 50 degrees,
+    // twice the share the crests there had without them.
+    let with = range();
+    let without = Range::new(
+        Mountains {
+            horns_m: 0.0,
+            ..Mountains::START
+        },
+        Seed(1),
+    );
+    let crests: Vec<Vec3> = directions(400_000)
+        .filter(|&d| {
+            let point = d * RADIUS;
+            with.inside(point) > 0.0
+                && (with.ridges(point / with.mountains.ridges_m) - VALLEY) / (CREST - VALLEY) > 0.9
+                && with.horns(point, 1.0, 1.0) > 0.3 * with.mountains.horns_m
+        })
+        .collect();
+    let steep_share = |range: &Range| {
+        let steep = crests.iter().filter(|&&d| {
+            let e = d.any_orthonormal_vector() * (20.0 / RADIUS);
+            let f = d.cross(e);
+            let at = |w: Vec3| range.ridged((d + w).normalize() * RADIUS);
+            let slope = Vec2::new(at(e) - at(-e), at(f) - at(-f)).length() / 40.0;
+            slope > libm::tanf(50f32.to_radians())
+        });
+        steep.count() as f32 / crests.len().max(1) as f32
+    };
+    let (with_share, without_share) = (steep_share(&with), steep_share(&without));
+    assert!(crests.len() > 300, "{} points under horns", crests.len());
+    assert!(
+        with_share > 0.5 && with_share > 2.0 * without_share,
+        "{with_share} of the ground under horns steeper than 50 degrees, {without_share} without"
+    );
+    // Some stand as horns: a point at least 300 m over the ground 600 m round it every way.
+    let tops = directions(400_000)
+        .filter(|&d| with.inside(d * RADIUS) > 0.0)
+        .filter(|&d| {
+            let here = with.ridged(d * RADIUS);
+            let e = d.any_orthonormal_vector();
+            let f = d.cross(e);
+            [e, -e, f, -f].iter().all(|&w| {
+                here - with.ridged((d + w * (600.0 / RADIUS)).normalize() * RADIUS) > 300.0
+            })
+        })
+        .count();
+    assert!(tops > 0, "no horn stands 300 m over its ground");
 }

@@ -100,6 +100,12 @@ pub struct Mountains {
     /// How high a talus apron piles against a wall's foot, in metres, its gullies running out
     /// into cones down it: 0 a wall dropping bare to its valley's floor.
     pub aprons_m: f32,
+    /// How high its horns stand over the crests they rise from, at most, in metres, and how far
+    /// apart, about: pyramidal peaks where three or four cirques have eaten back into one top,
+    /// their headwalls steep under the point and easing to the cirques' floors, sharp arêtes
+    /// between them (`Range::horns`). 0 leaves the crests as the ridges round them, domes.
+    pub horns_m: f32,
+    pub horns_across_m: f32,
     /// The kinds of rock face its walls stand in (D182, [`Faces`]), with how often each is
     /// taken: each range takes one, its neighbours often another, blended over a range's
     /// edge, never in its middle. Empty, a wall is as the slope leaves it.
@@ -134,6 +140,8 @@ impl Mountains {
         slabs: 1.0,
         gully_depths: 1.0,
         aprons_m: 80.0,
+        horns_m: 950.0,
+        horns_across_m: 2600.0,
         faces: &[Faces::HORNS, Faces::SAW],
     };
 
@@ -142,6 +150,7 @@ impl Mountains {
         self.base_m
             + self.relief_m * libm::powf(HIGHEST_CREST, self.concavity) * (1.0 + self.peaks)
             + self.gullies_m
+            + self.horns_m
     }
 }
 
@@ -153,6 +162,10 @@ pub struct Rise {
     /// How far down into a gully's bed it lies, 0 on a rib between gullies to 1 at the bottom
     /// of every set of them.
     pub bed: f32,
+    /// How far it lies on a wall its faces step (faces.rs), 0 to 1, by the wall's slope before
+    /// its beds were cut: so a ledge between two risers is the wall's rock, not a level band
+    /// of turf and snow ruling the range (the r5 review's "contour lines").
+    pub wall: f32,
 }
 
 /// A world's mountains, ready to ask.
@@ -287,6 +300,21 @@ const APRON: (f32, f32, f32) = (0.28, 0.5, 0.64);
 const APRON_FILL: f32 = 0.8;
 const APRON_CONES: f32 = 0.5;
 /// How much the stripes lean toward a rib, as if a cell's point there weighed so much.
+/// Horns (`Range::horns`): from how far up the ridges' crests they rise; how far a horn's
+/// faces reach, as a share of the lattice; how far a site strays in its cell; the share of
+/// sites that stand; how deep a cirque's bowl is hollowed across its face; the headwall's
+/// concave profile.
+const HORNS_FROM: (f32, f32) = (0.6, 0.9);
+const HORN_REACH: f32 = 0.32;
+const HORN_JITTER: f32 = 0.6;
+const HORNS_KEPT: f32 = 0.8;
+const HORN_BOWL: f32 = 0.45;
+const HORN_PROFILE: f32 = 1.3;
+
+/// The slope, as a rise over the run, over which a stepped wall is rock ledges and all
+/// (`Rise::wall`): about 33 to 37 degrees.
+const WALL_ROCK: (f32, f32) = (0.65, 0.75);
+
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
 /// fall over tens of metres, not the crease at a crest, so the gullies turn smoothly over one.
@@ -517,7 +545,89 @@ impl Range {
         } else {
             0.0
         };
-        (height - lowered, upper, foot)
+        let horns = if m.horns_m > 0.0 {
+            self.horns(point, along, inside)
+        } else {
+            0.0
+        };
+        (height - lowered + horns, upper, foot)
+    }
+
+    /// How much the horns raise the ground at a point (`Mountains::horns_m`), in metres.
+    ///
+    /// A horn is a top three or four cirques have eaten back into from its sides, as the
+    /// Matterhorn's and the Tatras' Mnich and Krywań are: each cirque's headwall a face
+    /// steepest just under the point and easing out to its floor, the faces meeting in sharp
+    /// arêtes. Laid here as a pyramid on the crest, one face for each cirque: the distance out
+    /// along the face's way, less a share of the distance across it squared, so each face is
+    /// a bowl hollowed into the mountain and the arêtes between stand proud of it; a concave
+    /// profile, `(1 - d)^HORN_PROFILE`, down from the point. Sites on a jittered lattice
+    /// `horns_across_m` apart, some left out, only where the ridges already stand near their
+    /// crests, so a horn rises from a crest and never from a valley's side. No permissive
+    /// implementation was found to port (D196): Gaea's, World Machine's and Houdini's are
+    /// closed; this follows the landform as glaciology describes it.
+    fn horns(&self, point: Vec3, along: f32, inside: f32) -> f32 {
+        let m = &self.mountains;
+        let crest = smoothstep(HORNS_FROM.0, HORNS_FROM.1, along) * smoothstep(0.0, 0.25, inside);
+        if crest <= 0.0 {
+            return 0.0;
+        }
+        let kept = if self.kept.is_empty() {
+            1.0
+        } else {
+            self.away_from_kept(point, KEPT_M)
+        };
+        if kept <= 0.0 {
+            return 0.0;
+        }
+        let across = m.horns_across_m;
+        let reach = across * HORN_REACH;
+        let up = point.normalize_or(Vec3::Y);
+        let cell = (point / across).floor().as_ivec3();
+        let mut highest: f32 = 0.0;
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    let c = cell + IVec3::new(dx, dy, dz);
+                    let jitter = self.tops.point_in(c.x, c.y, c.z);
+                    let site =
+                        (c.as_vec3() + Vec3::splat(0.5) + (jitter - 0.5) * HORN_JITTER) * across;
+                    let offset = point - site;
+                    // Only sites near the ground: the lattice is laid through space.
+                    if offset.dot(up).abs() > across * 0.5 {
+                        continue;
+                    }
+                    let flat = offset - up * offset.dot(up);
+                    let out = flat.length();
+                    if out >= reach {
+                        continue;
+                    }
+                    let pick = self.faces.point_in(c.x, c.y, c.z);
+                    if pick.x > HORNS_KEPT {
+                        continue;
+                    }
+                    // The cirques' ways round the site, three or four, turned at random.
+                    let site_up = site.normalize_or(Vec3::Y);
+                    let east = site_up.cross(Vec3::Y).normalize_or(Vec3::X);
+                    let north = site_up.cross(east);
+                    let count = if pick.y < 0.5 { 3 } else { 4 };
+                    let turn = pick.z * std::f32::consts::TAU;
+                    let mut d = f32::MIN;
+                    for i in 0..count {
+                        let a = turn + std::f32::consts::TAU * i as f32 / count as f32;
+                        let way = east * libm::cosf(a) + north * libm::sinf(a);
+                        let along_way = flat.dot(way);
+                        let side = (flat - way * along_way).length_squared();
+                        d = d.max(along_way - HORN_BOWL * side / reach);
+                    }
+                    let x = (d / reach).clamp(0.0, 1.0);
+                    let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
+                    let height = m.horns_m * (0.7 + 0.3 * jitter.y);
+                    highest = highest.max(height * libm::powf(1.0 - x, HORN_PROFILE) * fade);
+                }
+            }
+        }
+        highest * crest * kept
     }
 
     /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
@@ -597,7 +707,7 @@ impl Range {
         if m.gullies_m <= 0.0 {
             return Rise {
                 height_m: ridged,
-                bed: 0.0,
+                ..Rise::default()
             };
         }
         // How the ridges rise round the point, over a few metres along each of the world's
@@ -694,9 +804,15 @@ impl Range {
             }
         }
         let height_m = ridged + carved + piled;
-        let height_m = height_m + self.stepped(point, height_m, slope, (upper, rib));
+        let step = self.stepped(point, height_m, slope, (upper, rib));
+        let height_m = height_m + step;
         Rise {
             height_m,
+            wall: if step != 0.0 {
+                smoothstep(WALL_ROCK.0, WALL_ROCK.1, steepness)
+            } else {
+                0.0
+            },
             bed: if deepest > 0.0 {
                 -carved / deepest
             } else {

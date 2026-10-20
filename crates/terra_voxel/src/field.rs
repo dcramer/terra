@@ -143,6 +143,8 @@ struct Node {
     height: f32,
     /// How far down into a mountain gully's bed it lies (`Rise::bed`).
     bed: f32,
+    /// How far it lies on a wall the mountains' faces step (`Rise::wall`).
+    wall: f32,
 }
 
 impl Node {
@@ -151,6 +153,7 @@ impl Node {
         Node {
             height: mix(self.height, other.height),
             bed: mix(self.bed, other.bed),
+            wall: mix(self.wall, other.wall),
         }
     }
 }
@@ -362,6 +365,7 @@ impl GeneratedPlanet {
             let rise = range.rise(direction, self.spec.radius_m);
             node.height += rise.height_m;
             node.bed = rise.bed;
+            node.wall = rise.wall;
         }
         if let Some(patterned) = &self.patterned {
             let over_sea = node.height - self.sea_level_m.unwrap_or(0.0);
@@ -418,10 +422,12 @@ impl GeneratedPlanet {
 
     /// What lies on the ground in a direction, where it is not soil: bare rock too steep to
     /// hold anything, scree under a cliff, gravel in a gully's bed (D322). Only in mountains.
-    fn lying_in(&self, direction: Vec3, bed: f32, memo: &mut HeightMemo) -> Option<MaterialId> {
+    fn lying_in(&self, direction: Vec3, land: Node, memo: &mut HeightMemo) -> Option<MaterialId> {
         self.range.as_ref()?;
+        let bed = land.bed;
         let (uphill, slope) = self.rising_in(direction, memo);
-        if slope > BARE_ROCK_DEG {
+        // A stepped wall's ledges are its rock, as its risers are (`Rise::wall`).
+        if slope > BARE_ROCK_DEG || land.wall > 0.5 {
             return Some(material::STONE);
         }
         if bed > GRAVEL_BED && (GRAVEL_OVER_DEG..GRAVEL_UNDER_DEG).contains(&slope) {
@@ -571,7 +577,7 @@ impl Field for GeneratedPlanet {
         let depth = -distance;
         // In mountains what lies on the surface, a topsoil's depth of it.
         let lying = if depth < Self::TOPSOIL_M {
-            self.lying_in(point / from_centre, land.bed, memo)
+            self.lying_in(point / from_centre, land, memo)
         } else {
             None
         };
