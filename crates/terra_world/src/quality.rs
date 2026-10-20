@@ -201,6 +201,12 @@ impl Quality {
         }
     }
 
+    /// Whether a breath is marched as a volume, the cinematic tier (D430, `fire::BreathTier`):
+    /// about 2 ms more than its cards on the RTX 3080, a film's to spend, never play's.
+    pub fn breath_marched(self) -> bool {
+        matches!(self, Quality::Ultra)
+    }
+
     /// How much of the grass is grown, as a share of the blades and of how far out.
     pub fn grass(self) -> f32 {
         match self {

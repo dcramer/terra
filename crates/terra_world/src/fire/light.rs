@@ -55,6 +55,11 @@ const JET_RANGE_M: f32 = 30.0;
 /// orange-yellow (breath r33, r34).
 const JET_LUMENS: f32 = 2.0e6;
 const JET_LIGHT: Color = Color::srgb(1.0, 0.74, 0.32);
+/// A marched breath's light (D430), yellower and dimmer: at the cards' the wall and ground
+/// round its larger fireball went past Neutral's shoulder at dusk (sRGB 237, 185, 119 head-on)
+/// and read salmon beside it, where the references' firelit walls read orange-yellow.
+const MARCHED_LUMENS: f32 = 1.4e6;
+const MARCHED_LIGHT: Color = Color::srgb(1.0, 0.78, 0.3);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's light: wood flame's orange, warmer than a blaze's, as the games white-balance
 /// firelight (about 2,300 K, Mitchell Charity's table: 2,200 K #ff932c, 2,500 K #ffa148), its
@@ -250,6 +255,14 @@ pub(super) struct Lit {
     pub shadowless: bool,
 }
 
+/// A jet's light, its lumens and colour, as its breath is drawn.
+pub(super) fn jet_light(tier: super::BreathTier) -> (f32, Color) {
+    match tier {
+        super::BreathTier::Cards => (JET_LUMENS, JET_LIGHT),
+        super::BreathTier::Marched => (MARCHED_LUMENS, MARCHED_LIGHT),
+    }
+}
+
 /// The flash where a jet's stream first strikes (docs/fire.md, "Composites": 0.1 to 0.3 s),
 /// as bright as the blast it lights, then gone: `FLASH_S` long, easing out, its light the
 /// white of the blast's hottest.
@@ -297,7 +310,8 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
 }
 
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
-pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
+pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
+    let (jet_lumens, jet_light) = jet_light(tier);
     // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
     // heaviest blaze's number.
     let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
@@ -332,8 +346,8 @@ pub(super) fn lit(blazes: &Blazes, t: f32) -> Vec<Lit> {
                 let glow = signal(seed, t, flicker);
                 Lit {
                     at: at + up(at) * 1.5 + sway(seed, t, flicker, 0.3),
-                    lumens: JET_LUMENS * glow,
-                    color: JET_LIGHT,
+                    lumens: jet_lumens * glow,
+                    color: jet_light,
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
@@ -606,6 +620,7 @@ pub(super) fn light(
     )>,
     mut glows: ResMut<FireGlows>,
     mut fog: ResMut<super::fog::Glows>,
+    tier: Res<super::BreathTier>,
 ) {
     let t = time.elapsed_secs_wrapped();
     let was: Vec<Was> = drawn
@@ -628,7 +643,7 @@ pub(super) fn light(
         .collect();
     let eye = camera.iter().next().map(GlobalTransform::translation);
     let mut wants = flashes(&blazes, &drawn.jets, t);
-    wants.extend(lit(&blazes, t));
+    wants.extend(lit(&blazes, t, *tier));
     let shown = choose(wants, eye, &was, shadowed(*quality));
     let night = sky.map_or(0.0, |sky| sky.night);
     let by_night = by_night(night);

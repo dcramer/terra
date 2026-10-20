@@ -436,6 +436,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D424](decisions/D424.md) | A creature's clip plays within 0.8-1.2 of its own rate | Tech | Agent | Decided | Every creature on foot plays its gait's clip at its… |
 | [D426](decisions/D426.md) | A mountain's walls stand in stepped faces by range kind, in the height | Tech | Agent | Decided | Plan step 2 of the mountain look note, amends D403… |
 | [D428](decisions/D428.md) | An ultra preset for films, spent on distance | Tech | Agent | Decided | A fourth quality preset, ultra (`terra_world::quality`)… |
+| [D430](decisions/D430.md) | A film's breath is marched as a volume, play's stays cards | Tech | Agent | Decided | The cinematic tier of D428 draws a dragon's breath as… |
 
 ## Tools and workflow
 

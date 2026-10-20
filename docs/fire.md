@@ -344,7 +344,8 @@ A film may spend more than play does. It does so through data, not special code 
 - **shadowed fire lights**: eight;
 - **haze** is drawn at half resolution, not a quarter;
 - **sparks and licks** are at twice the birth rate;
-- **smoke** lighting is per pixel, not per card.
+- **smoke** lighting is per pixel, not per card;
+- **a breath** is one marched volume, its stream and fireball emitting and absorbing gas with its soot lit by the sun through it, in place of its cards (D430: the ultra preset of D428 or a shot's `marched_breath`; play keeps the cards).
 
 Its budget is whatever holds the film's capture rate (30 frames a second at 1080p, Leaning). A film's camera is placed for the fire, so its distances suit it. The tier changes how much is drawn, never how it is coloured, so a fire that passes the check in play passes it in a film.
 

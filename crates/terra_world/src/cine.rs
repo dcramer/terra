@@ -234,6 +234,10 @@ pub struct Look {
     /// where its shots look.
     #[serde(default = "Look::unbiased")]
     pub detail: f32,
+    /// A breath marched as a volume whatever the preset, the cinematic tier (D430,
+    /// `fire::BreathTier`), as a cinematic asks for its own scalability.
+    #[serde(default)]
+    pub marched_breath: bool,
 }
 
 impl Look {
@@ -265,6 +269,7 @@ impl Default for Look {
             bokeh: true,
             aperture: None,
             detail: Self::unbiased(),
+            marched_breath: false,
         }
     }
 }

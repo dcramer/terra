@@ -25,6 +25,8 @@ import bevy_pbr::render::forward_io::{Vertex, VertexOutput, FragmentOutput, deco
 @if(DEPTH_PREPASS && !PREPASS_PIPELINE)
 import bevy_pbr::prepass::utils::prepass_depth;
 @if(!PREPASS_PIPELINE)
+import bevy_pbr::render::mesh_view_bindings::lights;
+@if(!PREPASS_PIPELINE)
 
 struct Fire {
     // x which (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time.
@@ -45,6 +47,9 @@ struct Fire {
     // How high up its frame each set's flame tips reach, 0 to 1 (its sidecar's `reach`):
     // x the campfire's, y the tongue's, z the torch's.
     reach: vec4<f32>,
+    // x 1 when a breath is marched as a volume, the cinematic tier (D430,
+    // crates/terra_world/src/fire/volume.rs), 0 when it is drawn as cards.
+    volume: vec4<f32>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -545,6 +550,8 @@ struct Breath {
     // strikes nothing).
     face: f32,
     normal: vec3<f32>,
+    // Whether it is drawn as a marched volume, the cinematic tier, or as cards.
+    marched: bool,
 }
 
 fn breath_of(slot: u32) -> Breath {
@@ -573,24 +580,28 @@ fn breath_of(slot: u32) -> Breath {
     b.front = select(1.0e5, flown, on);
     b.back = select(-1.0, flown, !on);
     b.left = select(saturate(1.0 - (time - since) / 0.45), 1.0, on);
-    // The fireball where it strikes is the sprites' (`breath_sprite`), no longer marched.
-    b.ball = 0.0;
+    // Marched, the cinematic tier (`fire.volume`, crates/terra_world/src/fire/volume.rs): the
+    // whole breath is the volume, its sprites hidden but the stain. Its fireball grows over
+    // the 0.6 s after the stream's front reaches the face it strikes, gone with the stream
+    // once off. Drawn as cards, the fireball is the sprites' (`breath_sprite`).
+    b.marched = fire.volume.x > 0.5;
+    let struck = select(0.0, saturate((flown - b.reach) / (JET_SPEED * 0.6)), on && b.face > 0.0);
+    b.ball = select(0.0, select(struck, b.left, !on && b.face > 0.0), b.marched);
     return b;
 }
 
-// The rod's radius so far along it, in metres: a tight rope at the jaw, opening a little,
-// inside the sprites that carry the stream's turbulence; it burns out by `ROD_ENDS` of the
-// way, where the stream is all puffs.
-const ROD_WIDTH: f32 = 0.2;
-const ROD_OFF: bool = true;
-const ROD_ENDS: f32 = 0.55;
+// The stream's radius so far along it, in metres: a rope at the jaw opening in a cone, a
+// third wider again by the end of its reach than its spread alone, so it reads thick at
+// mid-reach without its gas thinned (thinner gas seen head-on was a soft blob, the volume
+// note's second round).
 fn stream_radius(z: f32, b: Breath) -> f32 {
-    return (0.22 + b.spread * z * (0.7 + 0.5 * saturate(z / b.reach))) * ROD_WIDTH;
+    return 0.26 + b.spread * z * (0.95 + 0.75 * saturate(z / b.reach));
 }
 
-// The fireball's radius, 2 to 3 times the stream's width where it strikes.
+// The fireball's radius, from a metre and a half, growing with the stream's width where it
+// strikes: at 0.8 m and 0.55 of the width the review called it small beside the dragon.
 fn ball_radius(b: Breath) -> f32 {
-    return 0.6 + 1.4 * stream_radius(b.reach, b);
+    return 1.5 + 0.7 * stream_radius(b.reach, b);
 }
 
 // Its middle stands most of its radius back from where the stream strikes, rolled up off it:
@@ -600,9 +611,15 @@ fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
     return vec3(0.0, 0.0, b.reach - 0.85 * rb) + b.up * rb * 0.45;
 }
 
-// The gas at a point in the jet's frame: how dense (0 to about 1), how hot (0 to 1, the
-// gradient's), how much of it is soot (0 to 1); and how far the point is outside any gas,
-// at least, so a ray can step over empty air.
+// The whole breath as one raymarched volume, the cinematic tier (D430; research/
+// 2026-10-19-raymarched-breath.md). Its fields are split as production pyro's are (Houdini's and EmberGen's
+// density, temperature and soot; Fong et al., "Production Volume Rendering", SIGGRAPH 2017):
+// each a function of the point and the time, the temperature coloured through the ramp (a
+// blackbody's, tools/fire/ramp.ts), the density and soot absorbing (Beer-Lambert). Its noise
+// is carried along the stream with the gas (each parcel's `flow`) and domain-warped, so the
+// gas boils as it flies. The gas at a point in the jet's frame: how dense, how hot (the ramp's
+// heat, 0 to 1), how much of it is soot (0 to 1); w how far outside any gas the point is
+// (positive: empty, a distance safe to step over).
 fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     let rb = ball_radius(b) * (0.45 + 0.55 * b.ball);
     let mid = ball_middle(b, rb);
@@ -612,81 +629,69 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32) -> vec4<f32> {
     let rho = length(l.xy);
     let slope = 1.0 + b.spread * 1.7;
     let empty = min(
-        max((rho - 2.0 * r) / slope, max(-l.z - 0.3, l.z - b.reach - 0.5)),
-        length(rel) - rb * 1.55,
+        max((rho - 1.8 * r) / slope, max(-l.z - 0.3, l.z - b.reach - 0.3)),
+        select(1.0e5, length(rel) - rb * 1.6, b.ball > 0.01),
     );
     if empty > 0.0 {
         return vec4(0.0, 0.0, 0.0, empty);
     }
     let zf = saturate(l.z / b.reach);
-    // How much of the stream has been breathed since this parcel was: the same on a parcel
-    // as it flies, so its noise flies with it; the gas boils a little as it goes (zf).
     let flow = JET_SPEED * time - l.z;
-    let open = smoothstep(0.0, 0.35, zf);
-    let wander = vec2(noise3(vec3(flow * 0.11, 1.7, zf * 2.0)), noise3(vec3(flow * 0.11, 7.3, zf * 2.0))) - 0.5;
-    let q = (l.xy - wander * r * 0.8 * open) / r;
-    let m = vec3(q * 2.6, flow * 0.6 + zf * 2.4);
-    let e = fbm3(m + 0.6 * vec3(noise3(m * 0.5 + 4.1), noise3(m * 0.5 + 9.7), 0.0));
-    // Solid to near its edge, the edge sharp and torn by the noise, as a fuel jet's on film
-    // is a rope of nearly even light whose edge meets the sky (refs/fire-real MEASURED.md
-    // §4); a soft edge let the sky through its whole width as salmon pink (castle film r11).
-    let u = length(q) + (e - 0.5) * mix(0.9, 1.8, open);
-    var stream = 1.0 - smoothstep(0.78, 1.0, u);
-    // Its tip tears apart into flying blobs that burn out.
-    let tear = smoothstep(0.55, 1.0, zf) * 0.75;
-    let blobs = noise3(vec3(q * 0.8 + 3.1, flow * 0.16 + 11.0));
-    stream *= smoothstep(tear - 0.12, tear + 0.12, blobs + 0.12 * (1.0 - zf));
-    stream *= smoothstep(-0.25, 0.25, l.z) * (1.0 - smoothstep(b.front - 1.5, b.front + 0.5, l.z)) * smoothstep(b.back - 0.5, b.back + 1.5, l.z);
-    stream *= 1.0 - smoothstep(ROD_ENDS * 0.5, ROD_ENDS, zf);
-    // Hottest on its line, white-yellow at the jaw and yellow through the first half of its
-    // core, orange round that and deep red-orange at its rims, cooling along it to orange at
-    // the tip: a burning fuel jet is about a quarter yellow (MEASURED.md §2).
-    // Even through the body and falling off only in its outer tenth, since the gas is opaque
-    // and what the eye sees is its outer layer: graded from the axis out the core was hidden
-    // under orange (castle film r12's first probe, yellow 0-7%), and from 0.93 at the jaw to
-    // 0.68 at the tip, cooling from u 0.6, the stream was a khaki cone (r11, yellow 0%).
-    // Streaked along its flow and boiling at its edge, so it is a rope of burning fuel with
-    // yellow and orange strands, not a smooth glassy cone (held at 0.12, r12's first probe).
-    let core = mix(0.95, 0.8, smoothstep(0.2, 1.0, zf)) + 0.05 * (1.0 - smoothstep(0.0, 0.2, zf));
-    let streak = noise3(vec3(q * 1.7 + 5.3, flow * 0.35));
-    let hot_s = core * (1.0 - 0.5 * smoothstep(0.3, 0.95, u)) + 0.45 * (e - 0.5) + 0.3 * (streak - 0.5);
-    // The fireball, billowing up and rolling as it burns: overlapping balls with yellow and
-    // orange faces under a black cap of soot (the M2's end, MEASURED.md §11), its surface
-    // broken by warped noise into lumps, not one smooth ball.
+    let open = smoothstep(0.0, 0.4, zf);
+    // Its line wanders as a hose's does, more the further it has flown.
+    let wander = vec2(noise3(vec3(flow * 0.09, 1.7, 0.0)), noise3(vec3(flow * 0.09, 7.3, 0.0))) - 0.5;
+    let q = (l.xy - wander * r * 0.9 * open) / r;
+    // The noise across by the stream's radius, along by the parcel, warped by itself.
+    let p = vec3(q * 1.3, flow * 0.55);
+    let w = vec3(noise3(p * 0.6 + 4.1), noise3(p * 0.6 + 9.7), noise3(p * 0.6 + 2.3)) - 0.5;
+    let e = fbm3(p + w * mix(0.8, 2.2, open));
+    let fine = noise3(p * 3.1 + w * 1.5 + 13.0) * 0.7 + noise3(p * 7.3 + w * 2.0 + 29.0) * 0.3;
+    let u = length(q) + (e - 0.5) * mix(0.7, 1.9, open) + (fine - 0.5) * 0.35 * open;
+    var stream = 1.0 - smoothstep(0.7, 0.95, u);
+    // Its tip breaks into blobs.
+    let tear = smoothstep(0.5, 1.0, zf) * 0.6;
+    stream *= smoothstep(tear - 0.15, tear + 0.15, e + 0.15 * (1.0 - zf));
+    stream *= smoothstep(-0.2, 0.2, l.z) * (1.0 - smoothstep(b.front - 1.5, b.front + 0.5, l.z)) * smoothstep(b.back - 0.5, b.back + 1.5, l.z);
+    // Hottest on its line at the jaw, cooling outward in hot and cool strands, and along it.
+    let core = mix(1.0, 0.78, smoothstep(0.1, 1.0, zf));
+    let hot_s = core * (1.0 - 0.75 * smoothstep(0.1, 0.95, u)) + 0.45 * (e - 0.5) + 0.25 * (fine - 0.5);
+    // The fireball where it strikes: lumpy balls rolling up off the face, hot inside and at
+    // the contact, cooling up to a cap of soot.
     var ball = 0.0;
     var hot_b = 0.0;
-    if b.ball > 0.01 && length(rel) < rb * 1.55 {
-        let p = rel / rb - b.up * time * 0.6 + vec3(0.0, 0.0, time * 0.25);
-        let lumps = fbm3(p * 1.6);
-        let warp = vec3(noise3(p * 2.5 + 3.3), noise3(p * 2.5 + 7.9), noise3(p * 2.5 + 1.4)) - 0.5;
-        let nb = fbm3(p * 5.0 + warp * 2.2);
+    var soot_b = 0.0;
+    if b.ball > 0.01 && length(rel) < rb * 1.6 {
+        let pb = rel / rb - b.up * time * 0.7;
+        let wb = vec3(noise3(pb * 1.8 + 3.3), noise3(pb * 1.8 + 7.9), noise3(pb * 1.8 + 1.4)) - 0.5;
+        let lumps = fbm3(pb * 2.2 + wb * 1.6);
+        let nb = noise3(pb * 6.0 + wb * 2.0) * 0.7 + noise3(pb * 13.0 + wb * 2.5) * 0.3;
         let d = length(rel) / rb;
-        ball = (1.0 - smoothstep(0.7, 0.95, d + (lumps - 0.5) * 1.1 + (nb - 0.5) * 0.35)) * b.ball;
+        ball = (1.0 - smoothstep(0.75, 0.95, d + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.35)) * b.ball;
         let high = dot(rel, b.up) / rb;
-        // Bright faces and dark red folds between the lumps, as film shows a fuel fireball:
-        // with half this spread its face was one flat orange (castle film r12).
-        // A lump stands out where `lumps` and `nb` are low, so that is where it is hottest:
-        // signed the other way, its bulges were its coolest gas and the surface the eye sees
-        // was brown (castle film r11, yellow 0%). Its top cools to the cap of soot.
-        // At 0.9 its faces were cream and white with no cap (r12's first probe).
-        hot_b = 0.82 - 0.1 * d - 1.4 * (lumps - 0.5) - 0.9 * (nb - 0.5) - 0.9 * smoothstep(0.1, 0.85, high);
-        // The stream goes into the ball and is lost in it: kept where the ball was half
-        // dense, its hotter gas lifted the ball's colour inside its cone, a pale wedge with
-        // straight edges (castle film r12).
-        stream *= 1.0 - smoothstep(0.02, 0.3, ball);
+        hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.6 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
+        soot_b = smoothstep(0.1, 0.7, high + 0.5 * (lumps - 0.5)) * smoothstep(0.4, 0.9, d + 0.3 * (nb - 0.5));
+        stream *= 1.0 - smoothstep(0.05, 0.4, ball);
+    }
+    // Nothing behind the face it strikes: the ball flattens on it as on a wall. Let through
+    // behind it, the ball's far half showed over the wall's top and not below it, a level
+    // seam along the top.
+    if b.face > 0.0 {
+        let n = normalize(b.normal);
+        let nl = vec3(dot(n, b.lift), dot(n, b.side), dot(n, b.way));
+        let keep = smoothstep(-0.1, 0.35, dot(l - vec3(0.0, 0.0, b.face), nl));
+        stream *= keep;
+        ball *= keep;
     }
     let dense = stream + ball;
     if dense < 1.0e-3 {
-        return vec4(0.0, 0.0, 0.0, 0.0);
+        return vec4(0.0);
     }
     let hot = (stream * hot_s + ball * hot_b) / dense;
-    // Soot where it has cooled: at the stream's torn edges once it has rolled open and at
-    // its tip, all over the fireball's cooled cap; a fuel jet near the jaw is a clean rope.
-    let sooty = mix(smoothstep(0.3, 0.8, zf) * smoothstep(0.75, 1.0, u + 0.4 * zf), 1.0, ball / dense);
-    let soot_part = (1.0 - smoothstep(0.3, 0.45, hot)) * sooty;
-    // Its last, negative so a march still reads only a positive one as empty air: how much
-    // of the gas is the fireball's.
-    return vec4(min(dense, 1.0) * b.left, hot, soot_part, -ball / dense);
+    // Soot where the stream has cooled toward its tip.
+    let soot_s = smoothstep(0.35, 0.9, zf) * (1.0 - smoothstep(0.2, 0.45, hot_s));
+    // And wherever the gas has cooled past burning.
+    let soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
+    return vec4(min(dense, 1.0) * b.left, saturate(hot), soot, 0.0);
 }
 
 // The breath's gas as the screen shows it by how hot it is: the fire's gradient without the
@@ -708,12 +713,54 @@ fn breath_soot(h: f32) -> vec3<f32> {
     return mix(SOOT_BLACK, vec3(0.12, 0.07, 0.04), smoothstep(0.0, 0.45, h));
 }
 
-// The breath along the ray through a fragment of its hull's far side: its light, already
-// exposed, and how much of what is behind it it covers.
+// How much of the pixel the march found flame (not soot), for the tonemapper's film mask
+// (`FIRE_MASK`, crates/terra_world/src/fire/film.rs), as a hearth's flame says it.
+var<private> FLAME_SHARE: f32 = 0.0;
+// The volume's flame as bright as a hearth's (`HEARTH_BRIGHTNESS`) took it a pale yellow-white
+// blob through the film; at 12 it took colour (the volume note).
+const VOLUME_BRIGHTNESS: f32 = 12.0;
+// Extinction a metre at density 1: flame gas, and soot.
+const VOLUME_FLAME_K: f32 = 9.0;
+const VOLUME_SOOT_K: f32 = 14.0;
+const VOLUME_STEPS: i32 = 96;
+// The soot's albedo: smoke from a fuel-rich flame is near black (soot's single-scattering
+// albedo 0.2 to 0.3, Bond and Bergstrom 2006); at 0.32 its crown stood pale grey as a cloud at noon.
+const SOOT_ALBEDO: f32 = 0.12;
+// The sky's fill on the soot, a share of the sun's, unshadowed: an overcast underside.
+const SOOT_SKY: f32 = 0.18;
+// The shadow ray toward the sun, from a sooty step: its taps, metres out along it, each
+// standing for the length up to the next, as Nubis and Unreal's Heterogeneous Volumes march a
+// few steps toward the light for a volume's self-shadow.
+const SUN_TAPS: vec4<f32> = vec4<f32>(0.2, 0.55, 1.1, 2.0);
+
+// How much of the sun reaches a point of the gas through the gas between: a few taps toward
+// it, Beer-Lambert over each.
+fn sun_through(l: vec3<f32>, to_sun: vec3<f32>, b: Breath, time: f32) -> f32 {
+    var tau = 0.0;
+    var last = 0.0;
+    let taps = SUN_TAPS;
+    for (var k = 0; k < 4; k++) {
+        let at = taps[k];
+        let g = breath_gas(l + to_sun * at, b, time);
+        if g.w <= 0.0 {
+            tau += g.x * mix(VOLUME_FLAME_K, VOLUME_SOOT_K, g.z) * (at - last);
+        }
+        last = at;
+    }
+    return exp(-tau);
+}
+
+// The breath along the ray through a fragment of its hull's far side, front to back: its
+// light, already exposed, and how much of what is behind it it covers. The ray, its box and
+// its end at the depth prepass are Bevy's volumetric fog's (bevy_pbr volumetric_fog.wesl,
+// MIT/Apache) and the game's earlier rod march; the medium is emissive-absorbing, so a thick
+// flame shows its outer gas: dL = sigma (Le - L) ds (Fong et al., "Production Volume
+// Rendering", SIGGRAPH 2017). Its soot also scatters the sun, shadowed by the gas toward it
+// (`sun_through`), so a soot crown is lit on top and dark beneath.
 @if(!PREPASS_PIPELINE)
 fn breath(in: VertexOutput) -> vec4<f32> {
     let b = breath_of(u32(in.uv.x + 0.5));
-    if b.reach <= 0.0 || b.left <= 0.0 || ROD_OFF {
+    if b.reach <= 0.0 || b.left <= 0.0 || !b.marched {
         discard;
     }
     let time = fire.kind.z;
@@ -723,7 +770,6 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     var far = distance(eye, far_side);
 @if(DEPTH_PREPASS)
     {
-        // What stands in front of the hull's far side ends the ray there.
         let here = depth_ndc_to_view_z(in.position.z);
         let scene = depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         far = min(far, far * scene / min(here, -1.0e-4));
@@ -731,7 +777,6 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     let o = eye - b.mouth;
     let ol = vec3(dot(o, b.lift), dot(o, b.side), dot(o, b.way));
     let dl = vec3(dot(dir, b.lift), dot(dir, b.side), dot(dir, b.way));
-    // Where the ray comes into the hull (zero if the eye is in it).
     let box = hull_box(b);
     let inv = 1.0 / select(dl, vec3(1.0e-6), abs(dl) < vec3(1.0e-6));
     let t0 = (box[0] - ol) * inv;
@@ -740,15 +785,25 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     if near >= far {
         discard;
     }
-    // A step is a fraction of the stream's radius across it, longer along it, where it
-    // changes slowly; started at a different place each pixel and frame, which TAA averages.
+    // The sun in the jet's frame, and what its light gives a white surface facing it, exposed
+    // as Bevy's lit surfaces are (its directional light's colour holds its illuminance).
+    var to_sun = vec3(0.0);
+    var sun = vec3(0.0);
+    if lights.n_directional_lights > 0u {
+        let s = lights.directional_lights[0];
+        let L = s.direction_to_light;
+        to_sun = vec3(dot(L, b.lift), dot(L, b.side), dot(L, b.way));
+        sun = s.color.rgb * view.exposure * (SOOT_ALBEDO / 3.14159265);
+    }
     let across = max(length(dl.xy), 0.25);
     let jitter = fract(52.9829189 * fract(dot(in.position.xy, vec2(0.06711056, 0.00583715)) + time * 7.13));
     var s = near;
     var first = true;
     var light = vec3(0.0);
+    var lit = vec3(0.0);
     var through = 1.0;
-    for (var i = 0; i < BREATH_STEPS; i++) {
+    var share = 0.0;
+    for (var i = 0; i < VOLUME_STEPS; i++) {
         if s >= far || through < 0.01 {
             break;
         }
@@ -759,22 +814,26 @@ fn breath(in: VertexOutput) -> vec4<f32> {
             continue;
         }
         let r = stream_radius(clamp(l.z, 0.0, b.reach), b);
-        var ds = clamp(0.3 * r / across, 0.05, 0.7);
+        var ds = clamp(0.22 * r / across, 0.04, 0.45);
         if first {
-            // The first step into gas is jittered, so the steps never band.
             first = false;
             s += ds * jitter;
             continue;
         }
         ds = min(ds, far - s);
         if gas.x > 0.0 {
-            let soot_part = gas.z;
-            let stream = mix(BREATH_RIM_EXTINCTION, BREATH_EXTINCTION, smoothstep(0.55, 0.8, gas.y));
-            let flame = mix(stream, BALL_EXTINCTION, -gas.w);
-            let sigma = gas.x * mix(flame, SOOT_EXTINCTION, soot_part);
+            let sigma = gas.x * mix(VOLUME_FLAME_K, VOLUME_SOOT_K, gas.z);
             let a = 1.0 - exp(-sigma * ds);
-            let c = mix(breath_colour(saturate(gas.y)), breath_soot(gas.y), soot_part);
-            light += through * a * c;
+            let flame = ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS;
+            // Soot is black, faintly lit by the flame it still wraps.
+            let soot = SOOT_BLACK + ramp_row(min(gas.y + 0.15, 1.0), BREATH_ROW).rgb * VOLUME_BRIGHTNESS * 0.015;
+            light += through * a * mix(flame, soot, gas.z);
+            // And lit by the sun through the gas toward it, and the sky.
+            if gas.z > 0.1 && through > 0.03 && sun.g > 0.0 {
+                let shaded = sun_through(l, to_sun, b, time);
+                lit += through * a * gas.z * sun * (shaded + SOOT_SKY);
+            }
+            share += through * a * (1.0 - gas.z);
             through *= 1.0 - a;
         }
         s += ds;
@@ -783,7 +842,8 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     if cover < 0.002 {
         discard;
     }
-    return vec4(light * on_screen(), cover);
+    FLAME_SHARE = share;
+    return vec4(light * on_screen() + lit, cover);
 }
 
 // The hull round a breath, in its frame: across both ways and along, its least and most.
@@ -797,7 +857,7 @@ fn hull_box(b: Breath) -> array<vec3<f32>, 2> {
 // A corner of a breath's hull placed round its jet.
 fn hull(corner: vec3<f32>, id: vec2<f32>) -> Out {
     let b = breath_of(u32(id.x + 0.5));
-    if b.reach <= 0.0 || b.left <= 0.0 {
+    if b.reach <= 0.0 || b.left <= 0.0 || !b.marched {
         return nowhere();
     }
     let box = hull_box(b);
@@ -1057,6 +1117,10 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
     let up = normalize(b.mouth);
     if card < STAIN_CARDS {
         return breath_stain(corner, b, jet, card);
+    }
+    // Marched, the volume is the breath (`breath`): of its cards only the stain is left.
+    if b.marched {
+        return nowhere();
     }
     // Drawn after the stain: the fireball and the blast, then the puffs, then the beam over
     // them, as each card covers what was drawn before it. Opaque and drawn after the beam,
@@ -1935,6 +1999,12 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;
     if i32(fire.kind.x + 0.5) == 2 {
         out.color = breath(in);
+        // Drawn again as the jets' mask (crates/terra_world/src/fire/volume.rs): the flame's
+        // share of the pixel, so the tonemapper takes it through the film as a hearth's.
+@if(FIRE_MASK)
+        {
+            out.color = vec4(0.0, 0.0, 0.0, saturate(FLAME_SHARE));
+        }
         return out;
     }
     // Faded in over the last of its way in front of what is behind it (soft particles).

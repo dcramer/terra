@@ -104,7 +104,7 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
     let (mut low, mut high) = (f32::MAX, f32::MIN);
     for i in 0..400 {
         let t = i as f32 * 0.05;
-        let lit = lit(&blazes, t);
+        let lit = lit(&blazes, t, crate::fire::BreathTier::Cards);
         assert_eq!(lit.len(), 3);
         let (hearth, fill, roof) = (&lit[0], &lit[1], &lit[2]);
         // One light casts shadows and carries most of it, so the ring of stones shadows the
@@ -264,7 +264,7 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
         }],
         ..default()
     };
-    let lit = lit(&blazes, 0.0).remove(0);
+    let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards).remove(0);
     assert!(lit.kept);
     // A real campfire's light, about 10^4 cd, by night as by day: the stones at its foot take
     // some tens of thousands of lux, so at their albedo they stand some four stops under a

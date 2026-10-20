@@ -181,6 +181,8 @@ pub struct FireUniform {
     ramp: Vec4,
     /// How high up its frame each set's flame tips reach (`books::Sidecar::reach`).
     reach: Vec4,
+    /// x 1 when a breath is marched as a volume, the cinematic tier (`volume::BreathTier`).
+    volume: Vec4,
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -307,13 +309,18 @@ impl MaterialExtension for FireExtension {
 pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
 
 /// The fire materials: one a kind of card (the shader's `kind`), then the hearths' mask.
-const KINDS: usize = 7;
+const KINDS: usize = 8;
 /// The hearths' and torches' flames drawn again, into the picture's alpha only (`film`).
 const MASK: usize = 6;
+/// The breaths' hulls drawn again, into the alpha only: a marched breath's flame through the
+/// film as a hearth's (`volume`).
+const JET_MASK: usize = 7;
 
 /// The kind of card a fire material's shader draws: the mask draws the flames' (0).
 fn drawn_kind(material: usize) -> f32 {
-    if material == MASK {
+    if material == JET_MASK {
+        2.0
+    } else if material == MASK {
         0.0
     } else {
         material as f32
@@ -430,6 +437,7 @@ pub fn plugin(app: &mut App) {
     haze::plugin(app);
     film::plugin(app);
     glow::plugin(app);
+    volume::plugin(app);
     app.init_resource::<Blazes>()
         .add_plugins((
             MaterialPlugin::<FireMaterial>::default(),
@@ -564,6 +572,7 @@ fn spawn_cards(
         fire[1].clone(),
     );
     spawn("Fire: jets", hulls(JETS), fire[2].clone());
+    spawn("Fire: jets' mask", hulls(JETS), fire[JET_MASK].clone());
     spawn(
         "Fire: jets' sprites",
         cards(JETS, BREATH_CARDS, 0.0),
@@ -640,7 +649,9 @@ fn setup(
                 // cards behind its fireball were drawn over it, a lighter patch with their
                 // straight edges, and smoke behind it browned it (castle film r11). Its
                 // sprites go first, its hot rod last, so the rod shows through their soot.
-                depth_bias: if kind == 2.0 {
+                depth_bias: if i == JET_MASK {
+                    3.0
+                } else if kind == 2.0 {
                     2.5
                 } else if kind == 5.0 {
                     2.0
@@ -667,7 +678,7 @@ fn setup(
                     ..default()
                 },
                 volume: kind == 2.0,
-                mask: i == MASK,
+                mask: i == MASK || i == JET_MASK,
                 depth: kind == 5.0 && i != MASK,
                 slots: slots.clone(),
                 flames: flames.clone(),
@@ -846,6 +857,7 @@ fn show(
     realm: Option<Res<FireExposure>>,
     open_sky: Option<Res<crate::skylight::OpenSky>>,
     environments: Query<&bevy::light::EnvironmentMapLight, With<Camera3d>>,
+    tier: Res<volume::BreathTier>,
 ) {
     let now = time.elapsed_secs_wrapped();
     let exposure = realm.as_deref().copied().unwrap_or_default().packed();
@@ -907,6 +919,7 @@ fn show(
             material.extension.uniform.wind = wind;
             material.extension.uniform.jets = jets;
             material.extension.uniform.exposure = exposure;
+            material.extension.uniform.volume = tier.packed();
         }
     }
     // The smoke is lit by the open sky round it as the shading's light gives it.
@@ -929,6 +942,8 @@ mod haze;
 mod light;
 mod seen;
 mod smoke;
+mod volume;
+pub use volume::BreathTier;
 
 pub use glow::{Glow, GlowMaterial};
 pub use light::{FireGlows, GLOWS};
