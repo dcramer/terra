@@ -155,17 +155,17 @@
         0.4
       ],
       [
-        0.122,
-        -0.115,
-        0.06
+        0.1192,
+        -0.1044,
+        0.23
       ]
     ],
     "Paw.L": [
       "Forearm.L",
       [
-        0.122,
-        -0.115,
-        0.06
+        0.1192,
+        -0.1044,
+        0.23
       ],
       [
         0.122,
@@ -244,7 +244,13 @@
         "Hind.R": 0.5,
         "Fore.R": 0.75
       },
-      "tail": 3
+      "tail": 3,
+      "fold": 60,
+      "hind_fold": 35,
+      "peel": 15,
+      "nod": 4,
+      "follow": 0.5,
+      "ankle_led": "Fore"
     },
     "Trot": {
       "kind": "gait",
@@ -253,8 +259,12 @@
       "lift": 0.08,
       "bob": 0.008,
       "crouch": 0.02,
-      "peel": 35,
-      "tail": 3
+      "peel": 15,
+      "tail": 3,
+      "fold": 80,
+      "hind_fold": 40,
+      "follow": 0.8,
+      "ankle_led": "Fore"
     },
     "Run": {
       "kind": "gait",
@@ -264,23 +274,37 @@
       "lift": 0.12,
       "bob": 0.025,
       "crouch": 0.04,
-      "peel": 40,
-      "flex": 10,
-      "fold": 70,
-      "tail": 5
+      "peel": 15,
+      "flex": 8,
+      "fold": 100,
+      "tail": 5,
+      "hind_fold": 45,
+      "follow": 0.8,
+      "ankle_led": "Fore",
+      "flex_at": 0.87,
+      "reach": 14,
+      "carry": 15
     },
     "Eat": {
       "kind": "graze",
       "seconds": 3.5,
-      "crouch": 0.01,
-      "root": 4,
-      "spine": 9,
-      "neck": 80,
-      "head": 40
+      "crouch": 0.1,
+      "root": 16,
+      "spine": 6,
+      "neck": 120,
+      "head": -60
     },
     "Death": {
       "kind": "death",
       "seconds": 1.2
     }
+  },
+  "haunch": {
+    "behind": 0.06,
+    "above": 0.06,
+    "croup": 0.04,
+    "keep": 0.3,
+    "spread": 0.24,
+    "smooth": 14
   }
 }

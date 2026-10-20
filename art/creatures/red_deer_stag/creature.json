@@ -300,15 +300,23 @@
     "Eat": {
       "kind": "graze",
       "seconds": 3.5,
-      "crouch": 0.01,
-      "root": 4,
+      "crouch": 0.06,
+      "root": 12,
       "spine": 9,
-      "neck": 95,
-      "head": 40
+      "neck": 100,
+      "head": -40
     },
     "Death": {
       "kind": "death",
       "seconds": 1.2
     }
+  },
+  "haunch": {
+    "behind": 0.06,
+    "above": 0.06,
+    "croup": 0.04,
+    "keep": 0.3,
+    "spread": 0.24,
+    "smooth": 14
   }
 }

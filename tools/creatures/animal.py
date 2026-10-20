@@ -229,6 +229,80 @@ print("unweighted vertices", bare, "of", len(mesh.data.vertices))
 if bare > 0.002 * len(mesh.data.vertices):
     weights = heat(mesh, closed=True)
     print("unweighted vertices from the closed copy", sum(1 for w in weights.values() if not w))
+
+
+def haunch(weights, spec):
+    """The rump's skin kept with the pelvis (`haunch` in creature.json), as a rigger paints a hip:
+    bone heat gives the buttock behind the hip joint and the croup above it to the thigh and shin
+    nearest it, so a thigh swung forward in a gallop's gathered flight rolls the buttock up over
+    the croup and creases it. The hamstrings run from the pelvis behind the hip, so skin behind
+    the joint (`behind`, model units, the band over which it fades) and above the stifle
+    (`above`), or above the joint itself (`croup`), keeps only `keep` of its leg weights; the
+    rest goes to the bone the thigh hangs from."""
+    moved = 0
+    for leg, chain in LEGS.items():
+        if not leg.startswith("Hind"):
+            continue
+        hip, stifle = ours(BONES[chain[0]][1]), ours(BONES[chain[1]][1])
+        parent = BONES[chain[0]][0]
+        side = 1.0 if hip.x >= 0.0 else -1.0
+        for v, ws in weights.items():
+            co = mesh.data.vertices[v].co
+            if co.x * side < 0.0:
+                continue
+            leg_w = sum(ws.get(b, 0.0) for b in chain)
+            if leg_w <= 0.0:
+                continue
+            dy, dz, up = (co.y - hip.y) / SCALE, (co.z - stifle.z) / SCALE, (co.z - hip.z) / SCALE
+            f = max(smooth(0.0, spec["behind"], dy) * smooth(0.0, spec["above"], dz),
+                    smooth(0.0, spec.get("croup", spec["above"]), up))
+            f *= 1.0 - spec.get("keep", 0.25)
+            if f <= 0.0:
+                continue
+            for b in chain:
+                if b in ws:
+                    ws[b] *= 1.0 - f
+            ws[parent] = ws.get(parent, 0.0) + f * leg_w
+            moved += 1
+    # Heat parts the thigh from the flank along a sharp line, so a thigh swung forward folds the
+    # skin there into a crease; spread over the hip (`spread`, model units round the joint, and
+    # `smooth` passes, each a vertex half its own and half its neighbours'), the fold is soft.
+    near = {}
+    for e in mesh.data.edges:
+        a, b = e.vertices
+        near.setdefault(a, []).append(b)
+        near.setdefault(b, []).append(a)
+    spread = 0
+    for leg, chain in LEGS.items():
+        if not leg.startswith("Hind"):
+            continue
+        hip = ours(BONES[chain[0]][1])
+        group = set(chain[:2]) | {BONES[chain[0]][0]} | ({"Spine"} & set(BONES))
+        zone = [v for v in weights if (mesh.data.vertices[v].co - hip).length / SCALE < spec.get("spread", 0.0)
+                and mesh.data.vertices[v].co.x * hip.x >= 0.0]
+        spread += len(zone)
+        for _ in range(spec.get("smooth", 0)):
+            new = {}
+            for v in zone:
+                ws = weights[v]
+                ns = near.get(v, [])
+                if not ns:
+                    continue
+                total = sum(ws.get(b, 0.0) for b in group)
+                mean = {b: sum(weights[n].get(b, 0.0) for n in ns) / len(ns) for b in group}
+                mix = {b: 0.5 * ws.get(b, 0.0) + 0.5 * mean[b] for b in group}
+                s = sum(mix.values())
+                if total > 0.0 and s > 0.0:
+                    new[v] = {b: w * total / s for b, w in mix.items() if w > 1e-4}
+            for v, ws in new.items():
+                for b in group:
+                    weights[v].pop(b, None)
+                weights[v].update(ws)
+    print("haunch: rump skin given back to the pelvis on", moved, "vertices, weights spread on", spread)
+
+
+if "haunch" in SPEC:
+    haunch(weights, SPEC["haunch"])
 mesh.vertex_groups.clear()
 groups = {b.name: mesh.vertex_groups.new(name=b.name) for b in rig.data.bones}
 for v, ws in weights.items():
