@@ -387,22 +387,29 @@ fn baked_fuel(t: vec4<f32>, brightness: f32, fade: f32, row: f32) -> vec4<f32> {
 // A breath's colour by heat alone, 0 to 1, as a blackbody runs: black, dark brown, red,
 // orange, yellow, pale, white. Never a yellow made dim: a dim yellow is olive or khaki (every
 // breath round to r29's "cauliflower"), so what is cooler or sootier is redder and darker.
+// Its orange runs through amber to yellow under the tonemapper's highlight limit, gained
+// only on its red stops: gained past the knee, its orange washed salmon and its top blew
+// white (breath r33's review); with no gain at all its dim red rims read as soot round the
+// flame (r34's C, edge soot 9-18%). Its top a bright yellow, not a white: at 1.24 it stood
+// dimmer than the yellow round it and read khaki (breath r35).
 fn breath_ramp(h: f32) -> vec3<f32> {
     let black = vec3(0.004, 0.003, 0.0025);
     let brown = vec3(0.05, 0.016, 0.006);
-    let red = vec3(0.42, 0.045, 0.004);
-    let deep = vec3(0.95, 0.16, 0.008);
-    let orange = vec3(1.0, 0.36, 0.025);
-    let yellow = vec3(1.0, 0.68, 0.07);
-    let pale = vec3(1.05, 0.9, 0.32);
+    let red = vec3(0.5, 0.05, 0.004);
+    let deep = vec3(0.9, 0.17, 0.008);
+    let orange = vec3(0.97, 0.38, 0.02);
+    let amber = vec3(1.0, 0.56, 0.04);
+    let yellow = vec3(1.0, 0.76, 0.1);
+    let pale = vec3(1.04, 0.86, 0.26);
     var c = mix(black, brown, smoothstep(0.0, 0.15, h));
     c = mix(c, red, smoothstep(0.15, 0.32, h));
-    c = mix(c, deep, smoothstep(0.32, 0.5, h));
-    c = mix(c, orange, smoothstep(0.5, 0.68, h));
-    c = mix(c, yellow, smoothstep(0.68, 0.84, h));
-    c = mix(c, pale, smoothstep(0.84, 0.93, h));
-    let gain = mix(1.0, FLAME_GAIN, smoothstep(0.2, 0.5, h));
-    return mix(c * gain, vec3(0.95, 0.92, 0.82) * WHITE, smoothstep(0.93, 1.0, h));
+    c = mix(c, deep, smoothstep(0.32, 0.48, h));
+    c = mix(c, orange, smoothstep(0.48, 0.62, h));
+    c = mix(c, amber, smoothstep(0.64, 0.78, h));
+    c = mix(c, yellow, smoothstep(0.78, 0.9, h));
+    c = mix(c, pale, smoothstep(0.9, 0.96, h));
+    let gain = mix(mix(1.0, 1.5, smoothstep(0.2, 0.45, h)), 1.0, smoothstep(0.5, 0.78, h));
+    return mix(c * gain, vec3(2.5, 2.0, 0.72), smoothstep(0.95, 1.0, h));
 }
 
 // A breath's sprite, premultiplied: dissolved over its life by a hard-edged threshold on its

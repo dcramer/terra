@@ -48,10 +48,13 @@ const JET_RANGE_M: f32 = 30.0;
 /// where it strikes: at 1e7 the dragon and the wall it struck showed none of it by day
 /// (castle film r7), but at 5e7 and a pale yellow the ground, the wall and the dragon by night
 /// stood brighter than the flame, near white (breath r27: the fireball's crop 365% as lit as
-/// at noon), where the flame is the brightest thing by it (D415). Its colour a wood flame's
-/// orange, as a blaze's.
-const JET_LUMENS: f32 = 4.0e6;
-const JET_LIGHT: Color = Color::srgb(1.0, 0.58, 0.22);
+/// at noon), where the flame is the brightest thing by it (D415). Its colour an orange-yellow,
+/// greener than a blaze's, and half as bright: at #ff9438 and 4e6 the wall and ground it
+/// struck went past the tonemapper's highlight limit as salmon pink, as a campfire's stones
+/// did at a red light's low green (`HEARTH_LIGHT`), where the references' firelit walls read
+/// orange-yellow (breath r33, r34).
+const JET_LUMENS: f32 = 2.0e6;
+const JET_LIGHT: Color = Color::srgb(1.0, 0.74, 0.32);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's light: wood flame's orange, warmer than a blaze's, as the games white-balance
 /// firelight (about 2,300 K, Mitchell Charity's table: 2,200 K #ff932c, 2,500 K #ffa148), its
