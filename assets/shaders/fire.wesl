@@ -223,6 +223,13 @@ const CHAR_COVER: f32 = 0.45;
 // A hearth's cards (crates/terra_world/src/fire.rs HEARTH_FLAME_CARDS): its ground, its coals,
 // its body's columns (`HEARTH_COLUMNS`), then its tongues on the logs.
 const HEARTH_CARDS: f32 = 16.0;
+// How far a hearth's light is taken through the film's shoulder a channel at a time (its lit
+// mask, `fragment`): the stones, logs, coals and ground it lights past the camera's shoulder,
+// where KhronosPbrNeutral mixed their red toward white and they read salmon (fire round 27).
+// Within LIT_M of its middle, full to LIT_FULL_M; its card that far toward the eye at most.
+const LIT_M: f32 = 1.3;
+const LIT_FULL_M: f32 = 0.8;
+const LIT_NEAR_M: f32 = 1.2;
 // Its body's height over its tallest tips (`tall`): standing about as high again over its
 // logs as they are high, as the games' campfires do (research/2026-10-19-fire-step-back.md,
 // round 12); at 0.55 to 0.7 the logs hid all but its tips, at 0.8 it read short (blind
@@ -1357,7 +1364,20 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     // A hearth's coals are its model's (a campfire's bed, tools/props/coals.ts; a forge's
     // painted ones): only a torch keeps a coal card.
     if j == 1 && !torch {
-        return nowhere();
+        // Its lit mask (`fragment`, crates/terra_world/src/fire/film.rs): a card over all its
+        // light falls on within `LIT_M`, drawn toward the eye so nothing it lights stands in
+        // front of it, as large on the screen as there; how far toward the eye in its size.
+        let centre = foot + up * wide * 0.3;
+        let to_eye = view.world_position - centre;
+        let d = max(length(to_eye), 0.01);
+        let near = min(LIT_NEAR_M, 0.6 * d);
+        let r = LIT_M * (d - near) / d;
+        let world = card(centre + to_eye / d * near, up, corner, r * 2.0, r * 2.0, false, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(0.0, heat, luck, 6.0);
+        out.size = near;
+        return out;
     }
     if j == 1 {
         let w = wide * 1.4;
@@ -1929,6 +1949,23 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;
     if i32(fire.kind.x + 0.5) == 2 {
         out.color = breath(in);
+        return out;
+    }
+    // A hearth's lit mask (`hearth`): nothing in the picture; in the mask, the share of the
+    // pixel's surface its light falls on, taken from the alpha's 1 (film.rs `LIT_SHARE`), by
+    // how far that surface stands from its middle in depth and across.
+    if i32(fire.kind.x + 0.5) == 0 && in.uv_b.x > 5.5 && in.uv_b.x < 6.5 {
+        var lit = 0.0;
+@if(FIRE_MASK && DEPTH_PREPASS)
+        {
+            let across = length((in.uv - vec2(0.5)) * 2.0) * LIT_M;
+            let deep = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u)) - in.uv_b.y;
+            lit = 1.0 - smoothstep(LIT_FULL_M, LIT_M, length(vec2(across, deep)));
+        }
+        if lit <= 0.0 {
+            discard;
+        }
+        out.color = vec4(0.0, 0.0, 0.0, -0.05 * lit);
         return out;
     }
     // Faded in over the last of its way in front of what is behind it (soft particles).
