@@ -191,6 +191,11 @@ pub(crate) struct Embers;
 const EMBER_GLOW: f32 = 2.0;
 /// How far a fire lights the embers of what burns: a prop's own fire stands at its foot.
 const EMBER_REACH_M: f32 = 2.0;
+/// The embers' exposure weight (docs/fire.md, "The exposure rule"): 0, physical, so by day,
+/// when the camera takes in 2.8 stops less than at dusk, they glow at a seventh of their
+/// night's brightness, as a real fire's coals are dull in sunlight, not red blotches on the
+/// logs at noon (fire round 11).
+const EMBER_WEIGHT: f32 = 0.0;
 
 /// Each burning part given its own material, so its embers flicker with its own fire.
 fn kindle(
@@ -214,11 +219,22 @@ fn kindle(
 fn smoulder(
     embers: Query<(&MeshMaterial3d<StandardMaterial>, &GlobalTransform), With<Embers>>,
     glows: Option<Res<terra_world::fire::FireGlows>>,
+    camera: Query<&bevy::camera::Exposure, With<terra_world::planet::MainCamera>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let Some(glows) = glows else {
         return;
     };
+    // The camera's exposure multiplier in stops, as Bevy makes it from EV100; never brighter
+    // than at dusk, where the embers were tuned.
+    let daylit = camera.single().map_or(1.0, |exposure| {
+        let stops = -exposure.ev100 - libm::log2f(1.2);
+        let rule = terra_world::fire::FireExposure {
+            weight: EMBER_WEIGHT,
+            ..default()
+        };
+        rule.factor(stops).min(1.0)
+    });
     for (material, at) in &embers {
         let here = at.translation();
         let glow = glows
@@ -230,7 +246,7 @@ fn smoulder(
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .map_or(0.0, |(_, glow)| (1.0 + 3.0 * (glow - 1.0)).max(0.15));
         // Its colour scaled, not its alpha: `LinearRgba * f32` scales all four.
-        let strength = EMBER_GLOW * glow;
+        let strength = EMBER_GLOW * glow * daylit;
         let emissive = LinearRgba::rgb(strength, strength, strength);
         // Only when it changed, so a material is not written again for nothing.
         let changed = materials
