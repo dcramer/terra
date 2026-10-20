@@ -483,7 +483,10 @@ function heat(l: Log, t: number, n: V3): number {
   const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
   const foot = smooth(0.35, 0.02, f) * (0.3 + 0.6 * under);
   const lick = under * under * (0.58 + 0.25 * f);
-  return Math.max(top, foot, lick);
+  // Smoke and heat scorch it all over and char what the camera sees of its upper half too
+  // (fire round 25: its raw upper faces read as pale planks).
+  const all = 0.3 + 0.2 * f;
+  return Math.max(top, foot, lick, all);
 }
 
 /** The wood atlas's colour, emissive, metal-roughness and normal maps, RGBA a byte each. */
