@@ -111,7 +111,7 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         // lights the ground metres out more, and the stones at its foot less, than the
         // shadowed light does for each lumen (`HEARTH_FILL_UP`).
         assert!(!hearth.shadowless && fill.shadowless);
-        assert!(fill.lumens < hearth.lumens && fill.at.y > hearth.at.y + 1.0);
+        assert!(fill.lumens < hearth.lumens && fill.at.y > hearth.at.y + 0.5);
         let pool = |l: &Lit| on_ground(l, ground, 3.0, 1.0) / on_ground(l, ground, 0.55, 1.0);
         assert!(
             pool(fill) > 2.0 * pool(hearth),
@@ -119,10 +119,13 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
             pool(fill),
             pool(hearth)
         );
-        // In the body of its flames, over its 0.55 m logs, swayed a hand's breadth at most, not
-        // over the heads of those sat by it.
+        // Low in the body of its flames, swayed a hand's breadth at most, so a ring stone's face
+        // toward the fire takes about as much of it as its top (`HEARTH_LIGHT_UP`), not over the
+        // heads of those sat by it.
         let off = hearth.at - ground;
-        assert!(off.y > 0.6 && off.y < 1.3 && off.length() < 1.3, "{off}");
+        assert!(off.y > 0.4 && off.y < 1.0 && off.length() < 1.3, "{off}");
+        let stone = Vec2::new(off.xz().length() + 0.55, off.y - 0.08);
+        assert!(stone.x > 0.8 * stone.y, "{stone}");
         assert!(hearth.range <= 15.0 && roof.range > hearth.range);
         // Its light is its flames' flicker: the signal the shaders are given for the fire.
         assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
