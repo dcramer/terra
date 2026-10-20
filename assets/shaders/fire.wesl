@@ -821,6 +821,15 @@ const FACE_HUG: f32 = 0.5;
 // How long a fireball's own puff lives, seconds at the set's size (Froude: as the root of
 // its size), and the blast's.
 const BALL_S: f32 = 2.67;
+// A puff's and a fireball's card is drawn as the ball it is (spherical billboards: Umenhoffer
+// et al. 2006, "Spherical Billboards and their Application to Rendering Explosions"): the card
+// stands this share of its half-width toward the eye, and is faded before what is behind it
+// from the ball's front, so it meets a wall in a curve, rim first, never a straight cut.
+// Writing the ball's depth instead (breath r32's A2) drew a hard
+// wall rectangle over the flame at the wall's top.
+const BALL_DEPTH: f32 = 0.4;
+// A sprite's size rides in its size after its jet, as so many metres over this (under 0.5).
+const BALL_SIZE_SCALE: f32 = 80.0;
 
 // A card turned to the eye about the line `up`, its middle at `at`, `w` across and `h` along,
 // turned by `spin` on the screen.
@@ -1109,7 +1118,8 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let stretch = mix(2.4, 1.0, smoothstep(0.0, 0.6, s));
         // Turning as it flies, each its own way, so no two frames show one sticker.
         let spin = (h4 - 0.5) * mix(0.9, 2.4, spread_on) + (h1 - 0.5) * 1.8 * age;
-        let world = sprite_facing(at, line, facing, corner, card_m, card_m * stretch, spin);
+        let world = sprite_facing(at, line, facing, corner, card_m, card_m * stretch, spin)
+            + normalize(view.world_position - at) * (0.5 * card_m * BALL_DEPTH);
         // Its edge burns out first: a puff flung out from the line plays on into the set's
         // soot in the stream's back half, so soot folds out of its edges, as a fuel jet's does.
         // Its top edge only, as soot rolls up off a flamethrower's rope (M113, Iraq photos).
@@ -1132,12 +1142,13 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // core a fuel jet's rope shows there before it opens out.
         // Burning as bright to the wall, brightest as it splashes there.
         let core = 1.0 + BREATH_CORE * (1.0 - h2) * (1.0 - near);
-        let strike = 1.0 + 0.6 * step(1.0, s) * (1.0 - smoothstep(0.0, 0.35, post));
+        // A fifth brighter as it splashes: at 0.6, stood before the face, the splash blew white.
+        let strike = 1.0 + 0.2 * step(1.0, s) * (1.0 - smoothstep(0.0, 0.35, post));
         out.life = vec4(frame, PUFF_BRIGHTNESS * mix(1.2, 1.05, gone) * core * strike, h3, f32(SET_BREATH_PUFF));
         // A breath sprite's size is how far it is faded before what is behind it (`fragment`):
         // a metre, but a hand's breadth for a card laid on the face, which stands only that off it.
         // Its jet, for the face it is faded before (`fragment`).
-        out.size = f32(jet);
+        out.size = f32(jet) + min(card_m, 36.0) / BALL_SIZE_SCALE;
         out.glow = max(fade, 1.0e-3);
         return out;
     }
@@ -1181,7 +1192,8 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         let off = struck_at.normal * ball * (0.35 + 0.45 * h3 + 0.5 * t);
         let at = struck_at.at + off + way_out * roll + up * (ball * 0.3 + age * age * 1.2);
         let size = card_m * (0.55 + 0.6 * h3) * (0.7 + 0.6 * sqrt(t));
-        let world = sprite(at, up, corner, size, size, h4 * 6.2831853 + (h2 - 0.5) * 2.5 * t);
+        let world = sprite(at, up, corner, size, size, h4 * 6.2831853 + (h2 - 0.5) * 2.5 * t)
+            + normalize(view.world_position - at) * (0.5 * size * BALL_DEPTH);
         let fade = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.3, 1.0, t)) * fed(jet);
         out.world = world;
         out.clip = position_world_to_clip(world);
@@ -1190,7 +1202,7 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // through its burning ones, so it billows as a mushroom rather than shows a ball.
         let first = 8.0 + 6.0 * h2;
         out.life = vec4(first + (63.0 - first) * pow(t, 1.6), BALL_BRIGHTNESS, h3, f32(SET_FIREBALL));
-        out.size = f32(jet);
+        out.size = f32(jet) + min(size, 36.0) / BALL_SIZE_SCALE;
         out.glow = max(fade, 1.0e-3);
         return out;
     }
@@ -1747,7 +1759,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let puff = layer == SET_BREATH_PUFF;
             let young = select(0.0, 1.0 - smoothstep(0.5, 4.0, t), puff);
             let contact = select(0.0, smoothstep(8.5, 11.5, t) * (1.0 - smoothstep(15.0, 20.0, t)), puff);
-            let hot = max(young, contact);
+            // Its contact a third as hot: a card standing before the face as its ball (`BALL_DEPTH`)
+            // no longer hides its white-hot contact behind the face, and the breath went 40% white
+            // (breath r33's A3, r34).
+            let hot = max(young, 0.3 * contact);
             // Every breath set denser than baked, so its flame covers the sky and the smoke
             // behind it: at its baked cover a fireball over a dusk sky was khaki (breath r29,
             // B/R 0.43 against a fire photo's 0.2).
@@ -1874,6 +1889,19 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         }
         let behind = depth_ndc_to_view_z(in.position.z) - depth_ndc_to_view_z(prepass_depth(in.position, 0u));
         soft = smoothstep(0.0, reach, behind);
+        // A puff or fireball as its ball: its front, where it is faded from (`BALL_DEPTH`).
+        var front = in.world_position.xyz;
+        if kind == 5 && in.uv_b.x > 2.5 && in.uv_b.x < 4.5 {
+            let r = 0.5 * (in.uv_b.y - floor(in.uv_b.y + 0.5)) * BALL_SIZE_SCALE * BALL_DEPTH;
+            let c = (in.uv - vec2(0.5)) * 2.0;
+            let off = r * sqrt(saturate(1.0 - dot(c, c)));
+            // Faded before what is behind it from the ball's front, by as little as a card is:
+            // faded by how much of the ball stood before the wall, a puff hugging the wall was
+            // half gone over it and whole over the sky, a wall rectangle at the wall's top
+            // (breath r33's A3).
+            soft = smoothstep(0.0, reach, behind - (r - off));
+            front = front - normalize(view.world_position - front) * (r - off);
+        }
         // A breath's flame is faded before the face it strikes by how far it stands off that
         // face's plane, the same past the wall's top as in front of it: faded by the depth
         // behind it, it was whole over the wall and thinned in front of it, a level line along
@@ -1883,7 +1911,7 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
             let b = breath_of(jet);
             if b.face > 0.0 {
                 let f = face_of(b);
-                soft = min(soft, smoothstep(0.0, 0.3, dot(in.world_position.xyz - f.at, f.normal)));
+                soft = min(soft, smoothstep(0.0, 0.3, dot(front - f.at, f.normal)));
             }
         }
         // A soot stain is only where the face it lies on is (`breath_stain`): past the wall's
