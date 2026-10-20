@@ -91,6 +91,11 @@ function chunk(type: string, body: Buffer): Buffer {
 }
 
 export function writePng(path: string, picture: Picture) {
+  writeFileSync(path, encodePng(picture));
+}
+
+/// A picture as a PNG file's bytes, for one kept inside another file (a GLB's textures).
+export function encodePng(picture: Picture): Buffer {
   const { width, height, rgba } = picture;
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
@@ -134,5 +139,5 @@ export function writePng(path: string, picture: Picture) {
     raw[y * (stride + 1)] = best;
     raw.set(tries[best], y * (stride + 1) + 1);
   }
-  writeFileSync(path, Buffer.concat([SIGNATURE, chunk("IHDR", header), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
+  return Buffer.concat([SIGNATURE, chunk("IHDR", header), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 }

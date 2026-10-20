@@ -1323,6 +1323,11 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         out.size = r;
         return out;
     }
+    // A hearth's coals are its model's (a campfire's bed, tools/props/coals.ts; a forge's
+    // painted ones): only a torch keeps a coal card.
+    if j == 1 && !torch {
+        return nowhere();
+    }
     if j == 1 {
         let w = wide * 1.4;
         let h = max(0.3, tall * 0.32);

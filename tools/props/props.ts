@@ -10,6 +10,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { addBed } from "./coals.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "props");
@@ -131,6 +132,9 @@ export type Prop = {
   // A fire's wood charred after refine by char.py: its logs near-black where they burn,
   // cracked, the cracks glowing thinly, its stones as they were (a campfire, D377).
   char?: boolean;
+  // A fire's coal bed added after char by coals.ts: an ash mound inside its logs, chunky
+  // glowing coals heaped on it (a campfire, fire round 17).
+  coals?: boolean;
 };
 
 export function readProp(text: string, name: string): Prop {
@@ -245,6 +249,7 @@ function refine(name: string, prop: Prop) {
   const folder = join(ROOT, "assets", "models", prop.into ?? "props");
   const refined = join(folder, `${prop.file}.glb`);
   if (prop.char) run(BLENDER, [join(HERE, "char.py"), here(refined), here(refined)]);
+  if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined)));
   const kept = join(OUT, `${name}-undyed.glb`);
   if (prop.dyes) copyFileSync(refined, kept);
   for (const [file, colour] of Object.entries(prop.dyes ?? {})) {
