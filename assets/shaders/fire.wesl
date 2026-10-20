@@ -1818,6 +1818,16 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     } else if kind == 1 {
         light *= max(1.0 + 2.0 * (glow - 1.0), 0.2);
     }
+    // By day a campfire's flames go pale and nearly see-through, as in daylight footage and
+    // the games' noon fires (Sons of the Forest, RDR2): the sun outshines them, so less of
+    // what is behind is covered and their orange washes toward a pale yellow. `day` is how
+    // many stops the eye is exposed under dusk's, from one to three and a half (fire round 20).
+    if kind == 0 && t > 1.0 && t <= 2.0 && life.w < 2.5 {
+        let day = smoothstep(1.0, 3.5, fire.exposure.y - log2(view.exposure) - adapted.x);
+        let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
+        light = mix(light, mix(light, vec3(luma) * vec3(1.15, 0.95, 0.55), 0.4), day) * mix(1.0, 0.5, day);
+        cover *= mix(1.0, 0.3, day);
+    }
     if max(light.r, cover) < 0.002 {
         discard;
     }

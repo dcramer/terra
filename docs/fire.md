@@ -172,6 +172,7 @@ A preset gives a fire's luminance in absolute units (a candle about 10^4 cd/m²,
   - It is data: `FireExposure` (crates/terra_world/src/fire/exposure.rs), a resource a realm sets, its weight and the dusk exposure (EV100 9) a fire is drawn as tuned at. Absent, the weight is 1, today's look. The shader's `on_screen` applies it to everything drawn on the screen's scale (flames, walls, tongues, breaths); embers, coals and drops (`soot`) are already physical.
   - The rule's own check is that the drawn fire's noon-to-night ratio is about 3 (The Witcher 3's 15x by day against 5x at night, against an exposure swing of many stops).
   - **How much a fire should dominate at dawn against noon is Open for the developers** (art).
+  - Meanwhile a campfire's flames go pale by day (fire round 20): from 1 to 3.5 stops under dusk's exposure its flames' (not its coals' or ground's) light washes 40% toward a pale yellow of its own luminance and halves, and they cover 30% of what they did, so at noon they read pale and see-through, as in daylight footage, and by night as before. A working look for that Open question, not its answer.
 - **Lights stay physical** (weight 0). By day a fire lights almost nothing, and at dusk it lights everything near it (MEASURED observation 10).
 - Bloom comes only where the drawn fire saturates the curve. There is no fire-only bloom.
 
