@@ -894,9 +894,12 @@ fn breath(in: VertexOutput) -> vec4<f32> {
             let a = 1.0 - exp(-sigma * ds);
             // The hottest gas brighter again, as a blackbody's light climbs with its heat: the
             // film takes it past orange to yellow and white (D415).
-            let flame = ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS * mix(1.0, 2.5, smoothstep(0.8, 1.0, gas.y));
-            // Soot is black, faintly lit by the flame it still wraps.
-            let soot = SOOT_BLACK + ramp_row(min(gas.y + 0.15, 1.0), BREATH_ROW).rgb * VOLUME_BRIGHTNESS * 0.015;
+            // Gas cooled past burning gives no light: the ramp's dark red held at the coolest
+            // heats left the smoke after the stop a glowing brick red (vol5's review).
+            let burning = smoothstep(0.04, 0.25, gas.y);
+            let flame = ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS * mix(1.0, 2.5, smoothstep(0.8, 1.0, gas.y)) * burning;
+            // Soot is black, faintly lit by the flame it still wraps, and only while that burns.
+            let soot = SOOT_BLACK + ramp_row(gas.y, BREATH_ROW).rgb * VOLUME_BRIGHTNESS * 0.015 * smoothstep(0.2, 0.5, gas.y);
             light += through * a * mix(flame, soot, gas.z);
             // And lit by the sun through the gas toward it, and the sky.
             if gas.z > 0.1 && through > 0.03 && sun.g > 0.0 {
@@ -904,7 +907,9 @@ fn breath(in: VertexOutput) -> vec4<f32> {
                     shaded = sun_through(l, to_sun, b, time);
                 }
                 shade_due = !shade_due;
-                lit += through * a * gas.z * sun * (shaded + SOOT_SKY);
+                // The sky's fill is the sky's grey-blue, not the sun's colour: lit by a dusk
+                // sun's red, the smoke after the stop read brick red (vol5's review).
+                lit += through * a * gas.z * (sun * shaded + dot(sun, vec3(0.2126, 0.7152, 0.0722)) * SOOT_SKY * vec3(0.85, 0.93, 1.0));
             }
             share += through * a * (1.0 - gas.z);
             glow += through * a * (1.0 - gas.z) * dot(flame, vec3(0.2126, 0.7152, 0.0722));
