@@ -238,3 +238,23 @@ fn the_clock_starts_on_the_sun_the_art_was_made_for_and_then_follows_the_year() 
     assert!(after(0.5) > first_noon + 10.0, "{}", after(0.5));
     assert!(after(0.0) < first_noon - 25.0, "{}", after(0.0));
 }
+
+#[test]
+fn the_sun_warms_as_it_sinks_toward_a_black_bodys_colour() {
+    // Below the art's 20 degrees the sun's light loses green and more blue the lower it
+    // stands, so a meadow it lights turns olive rather than staying lawn green (settlement
+    // r21: green 0.94 at 12 degrees left the end of the dusk film reading as afternoon).
+    let mut last = light_at(20.0).light;
+    for height in [16.0, 12.0, 8.0, 4.0, 0.0] {
+        let light = light_at(height).light;
+        assert!(
+            light.y < last.y && light.z < last.z,
+            "{height}: {light} after {last}"
+        );
+        assert!(light.z < light.y, "{height}: blue under green");
+        last = light;
+    }
+    // A sun 12 degrees up is about 3,800 K: green near three quarters of red.
+    let twelve = light_at(12.0).light;
+    assert!(twelve.y / twelve.x < 0.82, "{twelve}");
+}

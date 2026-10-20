@@ -268,6 +268,11 @@ impl Light {
 /// half as bright (sRGB 14 against 26) and the fire sits in a pool of its own light (blind
 /// 5.5/10 against 4.5). Its ambient at a third (fire round 25), that field is sRGB 4.4, not 14:
 /// the sky lit the grass to the frame's edge (blind 6/10 against 5).
+///
+/// Under 20 degrees the sun's colour follows a black body's from about 3,800 K at 12 degrees
+/// to 3,000 K at 6 and 2,200 K at the horizon, as a low sun's light measures: at the old
+/// near-white keys (green 0.94 at 12 degrees) the dusk film's sunlit meadow under a 13-degree
+/// sun stayed green over red (sRGB 76, 89, 60) and the end read as afternoon (settlement r21).
 fn keys() -> [(f32, Light); 7] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
@@ -307,7 +312,7 @@ fn keys() -> [(f32, Light); 7] {
         (
             0.0,
             Light {
-                light: v(1.0, 0.85, 0.7),
+                light: v(1.0, 0.6, 0.34),
                 illuminance: 30_000.0,
                 horizon: v(0.95, 0.55, 0.38),
                 zenith: v(0.16, 0.24, 0.52),
@@ -323,9 +328,9 @@ fn keys() -> [(f32, Light); 7] {
         (
             6.0,
             Light {
-                light: v(1.0, 0.92, 0.84),
+                light: v(1.0, 0.69, 0.44),
                 illuminance: 30_000.0,
-                horizon: v(1.0, 0.72, 0.52),
+                horizon: v(1.0, 0.64, 0.42),
                 zenith: v(0.2, 0.36, 0.72),
                 glow: v(1.0, 0.6, 0.32),
                 shade: v(0.76, 0.68, 0.92),
@@ -339,11 +344,11 @@ fn keys() -> [(f32, Light); 7] {
         (
             12.0,
             Light {
-                light: v(1.0, 0.94, 0.86),
+                light: v(1.0, 0.77, 0.55),
                 illuminance: 30_000.0,
-                horizon: v(1.0, 0.8, 0.62),
+                horizon: v(1.0, 0.72, 0.5),
                 zenith: v(0.21, 0.4, 0.78),
-                glow: v(1.0, 0.66, 0.38),
+                glow: v(1.0, 0.6, 0.32),
                 shade: v(0.72, 0.72, 0.96),
                 ambient: 1_660.0,
                 sky: 1.6,

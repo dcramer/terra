@@ -447,12 +447,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let r = (*lamp).position_radius.w;
         let e = (*lamp).color_inverse_square_range.rgb * lighting::getRangeFalloff(d2, (*lamp).color_inverse_square_range.w) / max(d2, max(r * r, 1.0e-4));
         let L = to * inverseSqrt(max(d2, 1.0e-8));
-        // A hearth's light reaches only its smoke's first half metre (`t` 0.02-0.08 of its
-        // five seconds): its fill hangs in the smoke, and lit the column orange to the top
-        // (fire round 24); at 0.08-0.22 the night's column was still a tan-brown sock lit
-        // evenly 1.5 m up, where the references' smoke is a faint warm haze over the flames
-        // dying into the dark (fire round 27, blind 6/10 against 5).
-        let warm_reach = select(1.0, 1.0 - smoothstep(0.02, 0.08, t), hearth);
+        // A hearth's light reaches only its smoke's first metre (`t` 0.08-0.22 of its five
+        // seconds): its fill hangs 1.6 flame heights up, in the smoke, and lit the column
+        // orange to the top (fire round 24).
+        let warm_reach = select(1.0, 1.0 - smoothstep(0.08, 0.22, t), hearth);
         fire_light += warm_reach * e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
     }
     // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.

@@ -36,10 +36,6 @@ const AFTER_FLAMES: &str = "    var post_saturation = color_grading.post_saturat
     let flame = clamp(in.a - 1.0, 0.0, 1.0);
     color = mix(color, terra_flame_film(graded), flame);
     post_saturation = mix(post_saturation, 1.0, flame);
-    // A firelit surface's share, from its mask under 1 (`LIT_SHARE`): the camera's curve with
-    // its shoulder taken a channel at a time.
-    let lit = select(0.0, clamp((1.0 - in.a) / LIT_SHARE, 0.0, 1.0), in.a > 1.0 - 2.0 * LIT_SHARE);
-    color = mix(color, terra_lit_neutral(graded), lit * (1.0 - flame));
 }
     color = saturation(color, post_saturation);";
 
@@ -51,11 +47,6 @@ const ENTRY: &str = "fn tone_mapping(in: vec4<f32>, in_color_grading: ColorGradi
 /// cores were (255, 255, 27), at 0.02 (255, 255, 132), as the photographs' brightest tenth
 /// (254, 233, 141); more and its middle loses its orange.
 pub(super) const CROSSTALK: f32 = 0.02;
-
-/// How far under 1 the alpha goes where a hearth's light falls on a surface (`fire.wesl`'s lit
-/// mask): its share, so little that a flame's mask past 1 loses nothing by it, and only in a
-/// band just under 1, so a sky's or anything's alpha of 0 is not counted firelit.
-pub(super) const LIT_SHARE: f32 = 0.05;
 
 /// Where Bevy keeps its depth of field's shader.
 const DOF: &str = "embedded://bevy_post_process/dof/dof.wesl";
@@ -136,20 +127,6 @@ fn wgsl() -> String {
     format!(
         "{curve}
 
-const LIT_SHARE: f32 = {lit:?};
-
-// KhronosPbrNeutral (Bevy's `tonemapping_pbr_neutral`) with its shoulder a channel at a time
-// and no desaturation toward white: the same below the shoulder, and a firelit stone's red
-// past it runs out on its own, not mixing in its green and blue.
-fn terra_lit_neutral(color: vec3<f32>) -> vec3<f32> {{
-    let start = 0.8 - 0.04;
-    let m = min(color.r, min(color.g, color.b));
-    let c = color - select(0.04, m - 6.25 * m * m, m < 0.08);
-    let d = 1.0 - start;
-    let shoulder = vec3(1.0) - d * d / (c + vec3(d - start));
-    return select(c, shoulder, c > vec3(start));
-}}
-
 fn terra_flame_film(color: vec3<f32>) -> vec3<f32> {{
     let c = max(color, vec3(0.0));
     let caught = vec3(c.g + c.b, c.r + c.b, c.r + c.g) * {half:?};
@@ -158,7 +135,6 @@ fn terra_flame_film(color: vec3<f32>) -> vec3<f32> {{
 
 {ENTRY}",
         half = 0.5 * CROSSTALK,
-        lit = LIT_SHARE,
     )
 }
 
@@ -201,58 +177,6 @@ mod tests {
         let top = 1.0 - d * d / (peak + d - 0.76);
         let g = 1.0 - 1.0 / (0.15 * (peak - top) + 1.0);
         (o * (top / peak)).lerp(Vec3::splat(top), g)
-    }
-
-    /// `terra_lit_neutral`, the camera's curve with its shoulder a channel at a time.
-    fn lit_neutral(c: Vec3) -> Vec3 {
-        let low = c.min_element();
-        let offset = if low < 0.08 {
-            low - 6.25 * low * low
-        } else {
-            0.04
-        };
-        let o = c - Vec3::splat(offset);
-        let d = 0.24;
-        o.map(|v| {
-            if v > 0.76 {
-                1.0 - d * d / (v + d - 0.76)
-            } else {
-                v
-            }
-        })
-    }
-
-    #[test]
-    fn a_firelit_stone_stays_amber_where_the_camera_mixes_it_toward_white() {
-        // A firelit stone's face nearest the flames before the tonemapper: its red twice the
-        // shoulder, little green, almost no blue.
-        let stone = Vec3::new(2.0, 0.42, 0.08);
-        let pale = neutral(stone).map(srgb);
-        let lit = lit_neutral(stone).map(srgb);
-        // The camera's mixes white in: its blue past 0.4 of its red, a saturation under 0.6.
-        assert!(pale.z / pale.x > 0.4, "{pale}");
-        // Through its shoulder a channel at a time, it stays amber and as bright.
-        assert!(
-            lit.z / lit.x < 0.3 && lit.y > pale.y && lit.x >= pale.x - 1.0,
-            "{lit} against {pale}"
-        );
-        // Under the shoulder, the camera's own curve, so the lit mask's edge never shows.
-        for c in [
-            Vec3::new(0.5, 0.3, 0.1),
-            Vec3::new(0.05, 0.04, 0.03),
-            Vec3::splat(0.7),
-        ] {
-            assert!(
-                (lit_neutral(c) - neutral(c)).abs().max_element() < 1e-6,
-                "{c}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_lit_mask_writes_the_share_the_tonemapper_reads() {
-        let shader = include_str!("../../../../assets/shaders/fire.wesl");
-        assert!(shader.contains(&format!("vec4(0.0, 0.0, 0.0, -{LIT_SHARE:?} * lit)")));
     }
 
     /// A hearth's hot texel on the screen's scale, as the fire shader gives it (the salmon

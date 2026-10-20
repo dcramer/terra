@@ -224,7 +224,6 @@ fn paint(
         horizon: linear(sky.horizon),
         zenith: linear(sky.zenith),
         ground: Vec3::ZERO,
-        overcast: sky.deck.x.clamp(0.0, 1.0),
     };
     // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky too, in
     // the sky's colour (white, the grass bounced its own green into a low sun's shade); under
@@ -341,8 +340,6 @@ struct Colours {
     horizon: Vec3,
     zenith: Vec3,
     ground: Vec3,
-    /// How much of the sky an overcast deck covers (`Sky::deck`'s x, D418).
-    overcast: f32,
 }
 
 impl Colours {
@@ -356,7 +353,6 @@ impl Colours {
         }
         key[12] = self.low;
         key[13] = self.day;
-        key[14] = self.overcast;
         key
     }
 
@@ -383,27 +379,13 @@ impl Colours {
             mixed.lerp(
                 on_daylight_locus(mixed),
                 self.day * (1.0 - self.low * self.low),
-            ) * self.brightening(e.max(0.0))
+            ) * (1.15 - 0.35 * e.max(0.0))
         };
         if up >= 0.0 {
             sky(up)
         } else {
             sky(0.0).lerp(self.ground, (-up / 0.15).clamp(0.0, 1.0))
         }
-    }
-
-    /// How bright the sky is at a height `e` (the sine of its elevation) beside its mean. A
-    /// clear sky is brighter toward the horizon; an overcast one is three times brighter
-    /// overhead than at the horizon, the CIE's standard overcast sky (Moon and Spencer 1942,
-    /// L = Lz (1 + 2 sin e) / 3), so under a deck what faces up is lit well over what faces
-    /// out or down, where the deck was lit evenly and a snow load's top and underside took
-    /// the same light (weather round 18). Scaled so open ground takes the clear sky's light.
-    fn brightening(&self, e: f32) -> f32 {
-        let clear = 1.15 - 0.35 * e;
-        // The clear sky's cosine-weighted mean over the hemisphere, 1.15 - 0.35 * 2 / 3, over
-        // the overcast law's, 7 / 9.
-        let overcast = (1.15 - 0.35 * 2.0 / 3.0) * 9.0 / 7.0 * (1.0 + 2.0 * e) / 3.0;
-        clear + (overcast - clear) * self.overcast
     }
 
     /// The hue of the light the sky sheds on open ground, at a luma of 1.
@@ -481,34 +463,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn under_an_overcast_deck_what_faces_up_is_lit_over_what_faces_out() {
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        let lit = |overcast: f32| {
-            let mut c = colours();
-            c.overcast = overcast;
-            // The ground under snow, lit by the sky over it, as `paint` sets it.
-            c.ground = SNOW_ALBEDO * c.overhead();
-            let (sky, ground) = c.lobes();
-            let side = luma(sky[0] + ground[0]);
-            (luma(sky[2] + ground[2]), side, luma(sky[3] + ground[3]))
-        };
-        let (up, side, down) = lit(1.0);
-        let (clear_up, clear_side, clear_down) = lit(0.0);
-        // An overcast sky is three times brighter overhead than at its horizon, so a side,
-        // which sees half the sky, mostly its low part, and half the snow, takes a sixth less
-        // than what faces up (CIE: a wall takes 0.4 of the open ground's sky light); a clear
-        // sky, brightest low, lit them nearly alike.
-        assert!(up > 1.15 * side, "up {up} side {side}");
-        assert!(
-            up / side > clear_up / clear_side + 0.1,
-            "{clear_up} {clear_side}"
-        );
-        assert!(up / down > clear_up / clear_down, "{clear_up} {clear_down}");
-        // Open ground takes about the light it took under a clear sky.
-        assert!((up - clear_up).abs() < 0.1 * clear_up, "{up} {clear_up}");
-    }
-
-    #[test]
     fn under_a_closed_canopy_nothing_mirrors_the_sky_and_in_the_open_all_of_it() {
         assert_eq!(sky_reflected(0.0), 0.0);
         assert_eq!(sky_reflected(1.0), 1.0);
@@ -525,7 +479,6 @@ mod tests {
             horizon: Vec3::new(0.9, 0.85, 0.8),
             zenith: Vec3::new(0.1, 0.25, 0.7),
             ground: Vec3::new(0.3, 0.35, 0.1),
-            overcast: 0.0,
         }
     }
 
@@ -606,7 +559,6 @@ mod tests {
             horizon: srgb_linear(1.0, 0.8, 0.62),
             zenith: srgb_linear(0.35, 0.45, 0.75),
             ground: Vec3::ZERO,
-            overcast: 0.0,
         };
         let sky = c.overhead();
         // Violet: red and blue both over green, as the keys give it; on the locus green sat
@@ -651,7 +603,6 @@ mod tests {
             horizon: srgb_linear(0.95, 0.55, 0.38),
             zenith: srgb_linear(0.16, 0.24, 0.52),
             ground: Vec3::new(0.1, 0.1, 0.08),
-            overcast: 0.0,
         };
         for d in [Vec3::Y, Vec3::new(1.0, 0.05, 0.0), Vec3::new(1.0, 0.5, 1.0)] {
             let light = c.toward(d.normalize());

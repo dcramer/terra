@@ -8,7 +8,7 @@
   },
   {
     "name": "groundlight",
-    "does": "a campfire's hearth light brightens the yard's ground beside it, against the far ground, and its firelit stones read orange, not salmon pink (tools/sandbox/groundlight.ts)",
+    "does": "a campfire's hearth light brightens the yard's ground beside it, against the far ground (tools/sandbox/groundlight.ts)",
     "run": ["node", "tools/sandbox/groundlight.ts"],
     "minutes": 20
   }

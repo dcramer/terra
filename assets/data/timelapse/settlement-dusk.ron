@@ -17,7 +17,10 @@
     // sunset (15.5-17 h) it ended beside the camera on the left, the castle backlit and the
     // left third washed out by glare (settlement r14); at 6.0-6.35 h, due east and low, it
     // stood ahead of the camera as it started looking east.
-    hours: (16.4, 17.4),
+    // It ends at 17.18 h, the sun about 15 degrees up: by 17.3 h the hills to the west shade
+    // the castle (settlement r22), so the warmth of the end is the low sun's colour
+    // (daylight.rs keys), not a lower sun.
+    hours: (16.4, 17.18),
     claim: 0.0,
     first: 0.3,
     last: 11.0,

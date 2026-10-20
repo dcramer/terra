@@ -1,5 +1,5 @@
 {
-  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous shot: close over its first house as its walls go up, then pulling back fast and rising while it turns about the town, as the settlement spreads out from that house to the whole market town, and on out until the town sits in its landscape, the lake, the forests round it and the mountains on the skyline At dusk the end keeps the 17 s path, the castle gold-lit on its western face, and only rises and pulls back along it, the lens lengthening to hold the castle, while it pans 30 degrees onto the castle and tilts up 11 so the dusk sky beyond the mountain fills the frame’s top right (settlement r21).",
+  "about": "A bird's-eye time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous shot: close over its first house as its walls go up, then pulling back fast and rising while it turns about the town, as the settlement spreads out from that house to the whole market town, and on out until the town sits in its landscape, the lake, the forests round it and the mountains on the skyline. At dusk the end holds the 17 s heading, so the castle stays on its sunlit west face, and settles: it sinks 40 m to 20 m over the meadow south-west of the town, tilting up 17 degrees on the same 15.5 mm lens, so the town lies whole in the lower left, the castle in the right third and the sky over the mountain along the top (settlement r22).",
   "seconds": 20,
   "keys": [
     {
@@ -257,44 +257,44 @@
     {
       "t": 18,
       "at": [
-        -50.6,
-        65.9,
-        -184.3
+        -51.8,
+        40.5,
+        -195.6
       ],
       "look": [
-        21.1,
-        36.6,
-        -354.8
+        -10.3,
+        29.8,
+        -339.3
       ],
-      "lens": 16.2
+      "lens": 15.5
     },
     {
       "t": 19,
       "at": [
-        -52.8,
-        72.9,
-        -176.6
+        -54.9,
+        24.1,
+        -198.8
       ],
       "look": [
-        50.1,
-        56.7,
-        -330.3
+        -12.6,
+        30.6,
+        -342.6
       ],
-      "lens": 16.9
+      "lens": 15.5
     },
     {
       "t": 20,
       "at": [
-        -55,
-        79.9,
-        -168.9
+        -56,
+        18,
+        -200
       ],
       "look": [
-        77.6,
-        76.7,
-        -297.9
+        -13.6,
+        31.1,
+        -343.3
       ],
-      "lens": 17.6
+      "lens": 15.5
     }
   ],
   "ease": "none",
