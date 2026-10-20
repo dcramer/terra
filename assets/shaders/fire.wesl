@@ -409,7 +409,9 @@ fn breath_ramp(h: f32) -> vec3<f32> {
 // body (erosion, as shipped flamethrowers are: Real-Time VFX, 80.lv), never faded by alpha,
 // so it is opaque or gone and never a thinned yellow over what is behind it. `keep` is how
 // much of it is left, 1 whole, 0 gone; its smoke erodes softly; its colour is by heat alone.
-fn breath_eroded(heat: f32, body: f32, smoke: f32, keep: f32, luck: f32, uv: vec2<f32>) -> vec4<f32> {
+// `vol` is its volume where the fragment is: the set's body blurred round it (how deep in the
+// puff it is), how far its body faces the eye (1 flat, less on a lump's slope), its body.
+fn breath_eroded(heat: f32, body: f32, smoke: f32, keep: f32, luck: f32, uv: vec2<f32>, vol: vec3<f32>) -> vec4<f32> {
     let n = noise(uv * 11.0 + vec2(luck * 31.0, luck * 17.0));
     let m = noise(uv * 4.0 - vec2(luck * 13.0, luck * 29.0));
     // Wholly gone as the last of it goes: at 0.89 the threshold left a card's densest body,
@@ -422,13 +424,24 @@ fn breath_eroded(heat: f32, body: f32, smoke: f32, keep: f32, luck: f32, uv: vec
     let sm = smoothstep(e * 0.8, e * 0.8 + 0.3, smoke) * 0.9 * (1.0 - out);
     // Cooler toward the eroding rim and as it burns out, but a flame's rim is red, never
     // brown: hard-edged and dark at the rim, every puff was outlined as a cartoon (r30/a).
-    let h = heat * mix(0.8, 1.0, smoothstep(e, e + 0.35, d)) * mix(0.75, 1.0, saturate(keep)) + 0.22 * (m - 0.5);
+    // Hotter deep in the puff and cooler where it is thin, its lumps hotter than the folds
+    // between them (the body over its blur), so it reads as a billowing volume, as a baked
+    // fire's sim does, not a flat sticker of one orange (breath r31's review).
+    let deep = mix(0.84, 1.06, smoothstep(0.08, 0.6, vol.x)) + 0.3 * (vol.z - vol.x);
+    let h = heat * deep * mix(0.85, 1.0, smoothstep(e, e + 0.35, d)) * mix(0.75, 1.0, saturate(keep)) + 0.22 * (m - 0.5);
     let fire_c = breath_ramp(clamp(h, 0.4, 1.0));
     // Its soot is brown going black, faintly glowing where the flame is hot round it.
     let soot_c = breath_ramp(0.08 + 0.12 * saturate(heat));
     let sooty = smoothstep(0.25, 0.75, sm / (sm + flame + 1.0e-3));
     let a = max(flame, sm);
-    return vec4(mix(fire_c, soot_c, sooty) * a * on_screen(), a);
+    // Dimmer on a lump's slopes than where it faces the eye: the limb of a ball of flame.
+    let lit = mix(0.72, 1.08, vol.y);
+    return vec4(mix(fire_c * lit, soot_c, sooty) * a * on_screen(), a);
+}
+
+// A set's body at a frame, unblended: for its volume (`breath_eroded`).
+fn body_at(layer: i32, f: f32, local: vec2<f32>) -> f32 {
+    return textureSampleLevel(flames, flames_sampler, sheet_at(floor(f), local), layer, 0.0).g;
 }
 // A breath is a composite (docs/fire.md, "Composites"; Monster Hunter World's Zeno Jiva): a
 // hot rod from the jaw, marched as a volume (below), wrapped in flame sprites from the baked
@@ -1063,7 +1076,8 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // went thin and the climbing soot showed through it as a gap, breath r22).
         // A few, in mixed sizes (a big slow middle, small quick edges), round the beam.
         let wide = mix(0.12 + 0.08 * d, 0.38 + 0.22 * d, near) * (0.6 + 0.8 * h3) + post * 1.2;
-        let card_m = wide / 0.2;
+        // Swelling a little over its life as it burns out.
+        let card_m = wide / 0.2 * mix(0.85, 1.15, smoothstep(0.0, 1.0, age / life));
         // Landed, it splashes out over the face it struck, slowing, most of it up the face
         // rather than down, and climbs it fast while it still burns, laid on it and kept off it
         // only a hand's breadth: a flamethrower's fuel spreads along a wall and its flame licks
@@ -1093,7 +1107,8 @@ fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
         // level bands (breath r24: "stacked cards like blinds").
         let line = normalize(mix(b.way, face_up, smoothstep(0.75, 1.15, s)));
         let stretch = mix(2.4, 1.0, smoothstep(0.0, 0.6, s));
-        let spin = (h4 - 0.5) * mix(0.9, 2.4, spread_on);
+        // Turning as it flies, each its own way, so no two frames show one sticker.
+        let spin = (h4 - 0.5) * mix(0.9, 2.4, spread_on) + (h1 - 0.5) * 1.8 * age;
         let world = sprite_facing(at, line, facing, corner, card_m, card_m * stretch, spin);
         // Its edge burns out first: a puff flung out from the line plays on into the set's
         // soot in the stream's back half, so soot folds out of its edges, as a fuel jet's does.
@@ -1745,7 +1760,19 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // Faded before what is behind it by erosion too, so it is never see-through: thinned
             // by alpha near the face it struck, it showed the wall below the wall's top and the
             // sky above it, a level line (r30/b).
-            let drawn = breath_eroded(heat_of, texel.g * edges, smoke * edges, glow * soft, luck, uv);
+            // Its volume: its body blurred over a tenth of the card round the fragment, and
+            // how steeply it rises there.
+            let fr = clamp(t, 0.0, BOOK_FRAMES - 1.001);
+            let q = vec2(x, uv.y);
+            let o = 0.09;
+            let bx0 = body_at(layer, fr, q - vec2(o, 0.0));
+            let bx1 = body_at(layer, fr, q + vec2(o, 0.0));
+            let by0 = body_at(layer, fr, q - vec2(0.0, o));
+            let by1 = body_at(layer, fr, q + vec2(0.0, o));
+            let blur = 0.2 * (texel.g + bx0 + bx1 + by0 + by1);
+            let facing = 0.5 / length(vec3(bx1 - bx0, by1 - by0, 0.5));
+            let vol = vec3(blur, facing, texel.g);
+            let drawn = breath_eroded(heat_of, texel.g * edges, smoke * edges, glow * soft, luck, uv, vol);
             light = drawn.rgb;
             cover = drawn.a;
         }
