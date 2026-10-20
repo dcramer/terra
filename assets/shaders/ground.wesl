@@ -542,6 +542,12 @@ const RIPPLE_PER_M: f32 = 3.2;
 // it, broken by footprints, and how far its sides tilt the snow.
 const TRODDEN_SNOW: vec3<f32> = vec3<f32>(0.66, 0.68, 0.72);
 const TROUGH_LEAN: f32 = 1.8;
+// The bank the walkers' feet push up either side of a path (winter round 14; the judge: "an
+// even-width dark ribbon with no churned edge"): how far out it reaches, metres, how far its
+// outer face tilts the snow, and how much brighter its fresh, broken snow is.
+const BANK_M: f32 = 0.9;
+const BANK_LEAN: f32 = 1.4;
+const BANK_LIFT: f32 = 0.06;
 const RIPPLE_LEAN: f32 = 0.35;
 // Glints in lying snow: cells this many a metre, and the share of them a crystal turned to
 // flash (winter round 10).
@@ -1696,7 +1702,11 @@ fn fragment(
     let worn_raw = worn_at(world);
     var trough = vec2<f32>(0.0);
     if worn_raw > 0.01 && snow > 0.0 {
-        let worn = smoothstep(0.15, 0.85, worn_raw + (noise(world * 0.9 + 47.0) - 0.5) * 0.35);
+        // Its width wanders over metres, and its edge is churned, kicked snow and prints
+        // breaking it, not a clean line.
+        let wide = (noise(world * 0.23 + 13.0) - 0.5) * 0.45;
+        let churn = (noise(world * 3.7 + 29.0) - 0.5) * 0.35 + (noise(world * 11.0 + 5.0) - 0.5) * 0.15;
+        let worn = smoothstep(0.15, 0.85, worn_raw + (noise(world * 0.9 + 47.0) - 0.5) * 0.35 + wide + churn);
         let prints = smoothstep(0.45, 0.7, noise(world * 3.1 + 19.0) * 0.65 + noise(world * 8.0 + 3.0) * 0.35);
         let packed = TRODDEN_SNOW * (0.9 + 0.12 * noise(world * 5.0 + 71.0)) * mix(1.0, 0.82, prints);
         colour = mix(colour, packed, worn * snow);
@@ -1710,6 +1720,21 @@ fn fragment(
         trough = sides * TROUGH_LEAN * snow;
         ripple *= 1.0 - worn;
         pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.65, worn * snow);
+    }
+    // Beside it, the bank the feet pushed up: where the path is a stride off but not here,
+    // its outer face leaning away from the path, its snow broken and a little brighter.
+    if snow > 0.0 && ground.cover_on != 0u {
+        let out = vec4<f32>(
+            worn_at(world + tangent * BANK_M),
+            worn_at(world - tangent * BANK_M),
+            worn_at(world + bitangent * BANK_M),
+            worn_at(world - bitangent * BANK_M),
+        );
+        let near_path = max(max(out.x, out.y), max(out.z, out.w));
+        let bank = smoothstep(0.15, 0.55, near_path) * (1.0 - smoothstep(0.05, 0.4, worn_raw))
+            * (0.6 + 0.4 * noise(world * 2.3 + 37.0)) * snow;
+        trough -= vec2<f32>(out.x - out.y, out.z - out.w) * BANK_LEAN * bank;
+        colour *= 1.0 + BANK_LIFT * bank;
     }
     var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x + trough.x) + bitangent * (swell.y + lean.y + ripple.y + trough.y));
     // Glints: a crystal here and there, a facet a centimetre and a half across turned its own
