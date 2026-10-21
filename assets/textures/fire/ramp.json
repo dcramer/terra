@@ -3,7 +3,8 @@
   "rows": [
     "wood",
     "oil",
-    "gas"
+    "gas",
+    "hearth"
   ],
   "scale": 1.1746
 }

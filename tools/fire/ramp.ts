@@ -19,12 +19,22 @@ import { type Picture, writePng } from "../sandbox/png.ts";
 
 /// A fuel's row: the temperatures heat 0 and 1 stand for, in kelvin, how steeply its
 /// brightness falls with heat (1 is the blackbody's own luminance, smaller is softer), and how
-/// far a camera exposes its hottest (`film`, see `ramp`).
-export type Fuel = { cold: number; hot: number; contrast: number; film: number };
+/// far a camera exposes its hottest (`film`, see `ramp`); and, for a row whose body burns
+/// cooler than its core (`core`), the power its heats are raised to over its body (`spread`:
+/// above 1 most of a flame burns near its cooler end), the heat its core starts at, and how far
+/// the camera exposes that core (`coreFilm`).
+export type Fuel = { cold: number; hot: number; contrast: number; film: number; core?: { spread: number; from: number; film: number } };
 
-/// The rows (D377's 950-1670 K for wood).
+/// The rows (D377's 950-1670 K for wood). A campfire's hearth is wood, but its flame alone
+/// (D433's matte) was a band hotter than the photographs' at every hour on the wood row: at
+/// noon 6% red, 47% orange, 28% yellow and 18% pale against their median 55, 27, 11 and under
+/// 1. Its row burns its body cooler (red and orange up to 0.85 of its heat) and keeps a small
+/// pale core over the coals (its top 6%, filmed as wood's hottest); spread so over the
+/// whole wood row, the house blaze went red and the breath pale (fire matte round), and a
+/// blind judge missed the core.
 export const FUELS: Record<string, Fuel> = {
   wood: { cold: 950, hot: 1670, contrast: 0.6, film: 4.5 },
+  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 3, from: 0.94, film: 4.5 } },
   oil: { cold: 900, hot: 1500, contrast: 0.6, film: 4.5 },
   gas: { cold: 1100, hot: 1900, contrast: 0.5, film: 6 },
 };
@@ -84,9 +94,14 @@ export const BLOWN_BLUE = 0.34;
 /// itself, and drew the blackbody's own deep red 90-99% red and salmon where it desaturated
 /// (fire sheet, stage 3).
 function filmed(h: number, fuel: Fuel): number[] {
-  const t = fuel.cold + h * (fuel.hot - fuel.cold);
+  const core = fuel.core;
+  const k = core ? Math.min(1, Math.max(0, (h - core.from) / (1 - core.from))) : 0;
+  const inCore = k * k * (3 - 2 * k);
+  const spread = core ? h ** core.spread * (1 - inCore) + h * inCore : h;
+  const film = core ? fuel.film + (core.film - fuel.film) * inCore : fuel.film;
+  const t = fuel.cold + spread * (fuel.hot - fuel.cold);
   const lum = (planckXYZ(t)[1] / planckXYZ(fuel.hot)[1]) ** fuel.contrast;
-  const [r, g, b] = blackbody(t).map((c) => 1 - Math.exp(-fuel.film * lum * c));
+  const [r, g, b] = blackbody(t).map((c) => 1 - Math.exp(-film * lum * c));
   return [r, g, Math.min(1, b + BLOWN_BLUE * g ** 4)];
 }
 
@@ -117,7 +132,7 @@ export function table(fuel: Fuel = FUELS.wood, n = 256): Float32Array {
 }
 
 /// The texture's rows, top to bottom, as the engine names them (fire.rs `RAMP_ROWS`).
-export const ROWS = ["wood", "oil", "gas"] as const;
+export const ROWS = ["wood", "oil", "gas", "hearth"] as const;
 
 /// The ramp as the engine's texture: 256 wide, a row a fuel, its RGB over `scale` (the ramp's
 /// brightest channel, as the blackbody's red passes 1) and sRGB-encoded so the dim red end keeps
