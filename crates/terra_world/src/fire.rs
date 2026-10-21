@@ -290,6 +290,9 @@ impl MaterialExtension for FireExtension {
             // The colour left as it is; the mask added to the alpha, past the 1 the scene
             // holds there (`film`).
             fragment.shader_defs.push("FIRE_MASK".into());
+            // And to the vertex stage: the jets' mask hull reaches the ground they light
+            // (`hull_lit_box`).
+            descriptor.vertex.shader_defs.push("FIRE_MASK".into());
             for target in fragment.targets.iter_mut().flatten() {
                 target.blend = Some(BlendState {
                     color: BlendComponent {

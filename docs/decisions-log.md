@@ -612,3 +612,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-20**: D430 amended (by the agent, breath volume round 5): dark smoke frames the marched breath's top and back, and its smoke after the stop ages grey.
 - **2026-10-20**: D430 amended (by the agent, breath volume round 6): the marched breath's film mask keeps the gas's detail, so its outer lobes read orange, not pink.
 - **2026-10-20**: D431 added (Decided, by the agent, after b743f619 undid five commits): the push hook warns of a commit that silently undoes another recent one; land by rebase, never by copying files.
+- **2026-10-20**: D430 amended (by the agent, breath volume round 7): the breath's film mask lights the ground under the dragon too, a channel at a time

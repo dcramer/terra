@@ -808,10 +808,12 @@ var<private> BREATH_DEPTH: f32 = 0.0;
 // the camera's shoulder went salmon there (vol6's C), so it takes the shoulder a channel at a
 // time, as a campfire's stones once did (453a6321). Within BREATH_LIT_M of the stream from a
 // metre out of the jaw to the face, full to BREATH_LIT_FULL_M; below the shoulder the camera's
-// own curve, so the edge never shows.
+// own curve, so the edge never shows. As far as the stream's lights take the ground past the
+// shoulder by night, the dragon's side of it too: at 6 m, under the gas's box only, the ground
+// there went cream (`hull_lit_box`).
 var<private> BREATH_LIT: f32 = 0.0;
-const BREATH_LIT_M: f32 = 6.0;
-const BREATH_LIT_FULL_M: f32 = 4.0;
+const BREATH_LIT_M: f32 = 10.0;
+const BREATH_LIT_FULL_M: f32 = 7.0;
 // The volume's flame as bright as a hearth's (`HEARTH_BRIGHTNESS`) took it a pale yellow-white
 // blob through the film; at 12 it took colour (the volume note).
 const VOLUME_BRIGHTNESS: f32 = 12.0;
@@ -896,6 +898,8 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     let t0 = (box[0] - ol) * inv;
     let t1 = (box[1] - ol) * inv;
     let near = max(max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z)), 0.0);
+    // Ended where the ray leaves the gas's box: the mask's hull is wider (`hull_lit_box`).
+    far = min(far, min(min(max(t0.x, t1.x), max(t0.y, t1.y)), max(t0.z, t1.z)));
     if near >= far {
         // No gas before the surface, which may still be lit by it (the mask's `BREATH_LIT`).
         if BREATH_LIT > 0.0 {
@@ -1012,13 +1016,32 @@ fn hull_box(b: Breath) -> array<vec3<f32>, 2> {
     return array<vec3<f32>, 2>(vec3(-wide, -wide, -0.5), vec3(wide, wide, b.reach + rb * 1.6 * (1.0 + SMOKE_SPREAD)));
 }
 
+// The hull drawn as the film mask: the gas's, widened to all the stream lights within
+// BREATH_LIT_M of it (`BREATH_LIT`), so the ground the breath lights takes the shoulder a
+// channel at a time out there too; within the gas's box only, the ground under the dragon,
+// lit past the shoulder by the stream's lights and the blazes it set, went cream by night
+// (vol8's C, C2: dimming those lights did not move it; vol9's light-by-light: their sum does).
+fn hull_lit_box(b: Breath) -> array<vec3<f32>, 2> {
+    let box = hull_box(b);
+    let f = face_of(b);
+    let r = BREATH_LIT_M + 0.5;
+    return array<vec3<f32>, 2>(
+        vec3(min(box[0].x, -r), min(box[0].y, -r), min(box[0].z, 1.0 - r)),
+        vec3(max(box[1].x, r), max(box[1].y, r), max(box[1].z, max(f.along, 1.0) + r)),
+    );
+}
+
 // A corner of a breath's hull placed round its jet.
 fn hull(corner: vec3<f32>, id: vec2<f32>) -> Out {
     let b = breath_of(u32(id.x + 0.5));
     if b.reach <= 0.0 || breath_left(b) <= 0.0 || !b.marched {
         return nowhere();
     }
-    let box = hull_box(b);
+    var box = hull_box(b);
+@if(FIRE_MASK)
+    {
+        box = hull_lit_box(b);
+    }
     let l = mix(box[0], box[1], corner);
     let world = b.mouth + b.lift * l.x + b.side * l.y + b.way * l.z;
     var out: Out;
