@@ -30,6 +30,11 @@ terra_voxel.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo", "NSString"] }
 
+[dev-dependencies]
+# wgpu's stub device, to build materials' layouts without a card (samplers_tests.rs); the
+# version Bevy draws with, its `noop` feature as Bevy's own tests use it.
+wgpu = { version = "30", default-features = false, features = ["noop"] }
+
 [features]
 # Helpers for the tests of the crates above, such as measuring how loud a sound is.
 testing = []

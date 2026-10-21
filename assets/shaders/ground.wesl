@@ -84,39 +84,34 @@ var ground_normal: texture_2d_array<f32>;
 // grass in red, how lush in green, forest floor in blue, moss in alpha.
 @group(constants::MATERIAL_BIND_GROUP) @binding(104)
 var cover_map: texture_2d<f32>;
+// One sampler for every map below, all linear and clamped at their edge, read at their top
+// level: a stage may bind 16 samplers on some cards (Apple's), and Bevy's view and the standard
+// material take most of them. Godot shares its samplers the same way, one a filter and repeat
+// mode for any number of textures (`material_samplers` in its forward renderers' scene
+// shaders, MIT).
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
-var cover_sampler: sampler;
+var map_sampler: sampler;
 // And more of it: fallen needles in red, duff and roots in green, how much canopy stands
 // over in blue, and how trodden the ground is in alpha (a settlement's ways).
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
 var cover_more: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(107)
-var cover_more_sampler: sampler;
 // And a third: how near a trunk, log or rock stands, in red, and whether a path runs there in
 // green.
 @group(constants::MATERIAL_BIND_GROUP) @binding(114)
 var cover_stood: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(115)
-var cover_stood_sampler: sampler;
 // What the climate leaves round the camera, a 32 m cell a texel (climate.rs): snow's depth in
 // red, its brightest SNOW_FULL_M; the ground's wetness in green; rain falling now in blue;
 // frost in alpha. And each kind's leaves, a layer a kind: how many it has early and late in
 // its year in red and green, how far turned in blue and alpha.
 @group(constants::MATERIAL_BIND_GROUP) @binding(108)
 var climate_ground: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(109)
-var climate_ground_sampler: sampler;
 @group(constants::MATERIAL_BIND_GROUP) @binding(110)
 var climate_leaves: texture_2d_array<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(111)
-var climate_leaves_sampler: sampler;
 // The heath past the trees (terra_land::heath), a 10 m cell a texel over the land round its
 // middle: lichen, dwarf shrubs, sedge and moss in the first layer; the fellfield's stones,
 // the wetness and how open the ground is to the heath in the second.
 @group(constants::MATERIAL_BIND_GROUP) @binding(112)
 var land_map: texture_2d_array<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(113)
-var land_sampler: sampler;
 
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
@@ -391,7 +386,7 @@ fn stands_at(world: vec3<f32>) -> f32 {
     }
     let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
     let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
-    return textureSampleLevel(cover_stood, cover_stood_sampler, at, 0.0).r * inside;
+    return textureSampleLevel(cover_stood, map_sampler, at, 0.0).r * inside;
 }
 
 // How much a path runs here, 0 off it to 1 on it, as the cover's third map says.
@@ -401,7 +396,7 @@ fn worn_at(world: vec3<f32>) -> f32 {
     }
     let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
     let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
-    return textureSampleLevel(cover_stood, cover_stood_sampler, at, 0.0).g * inside;
+    return textureSampleLevel(cover_stood, map_sampler, at, 0.0).g * inside;
 }
 
 // How much of a canopy stands over a place, as the cover map says.
@@ -411,7 +406,7 @@ fn canopy_over(world: vec3<f32>) -> f32 {
     }
     let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
     let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
-    return textureSampleLevel(cover_more, cover_more_sampler, at, 0.0).b * inside * 0.85;
+    return textureSampleLevel(cover_more, map_sampler, at, 0.0).b * inside * 0.85;
 }
 
 // The climate map round the camera at a point. Past its edge, the edge's answer: the
@@ -421,7 +416,7 @@ fn climate_at(world: vec3<f32>) -> vec4<f32> {
         return vec4<f32>(0.0);
     }
     let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
-    return textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0);
+    return textureSampleLevel(climate_ground, map_sampler, at, 0.0);
 }
 
 // How far inside the climate map a point is: 1 well inside, falling to 0 at its edge.
@@ -436,7 +431,7 @@ fn fallen_leaves(world: vec3<f32>) -> f32 {
         return 0.0;
     }
     let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
-    let leaves = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, ground.fallen_layer, 0.0);
+    let leaves = textureSampleLevel(climate_leaves, map_sampler, at, ground.fallen_layer, 0.0);
     return 1.0 - 0.5 * (leaves.r + leaves.g);
 }
 
@@ -475,8 +470,8 @@ fn heath_here(world: vec3<f32>) -> HeathHere {
         return none;
     }
     return HeathHere(
-        textureSampleLevel(land_map, land_sampler, uv, 0, 0.0) * inside,
-        textureSampleLevel(land_map, land_sampler, uv, 1, 0.0) * inside,
+        textureSampleLevel(land_map, map_sampler, uv, 0, 0.0) * inside,
+        textureSampleLevel(land_map, map_sampler, uv, 1, 0.0) * inside,
     );
 }
 
@@ -487,7 +482,7 @@ fn kind_turned(world: vec3<f32>, layer: i32) -> f32 {
         return 0.0;
     }
     let at = clamp((ground.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
-    let leaves = textureSampleLevel(climate_leaves, climate_leaves_sampler, at, layer, 0.0);
+    let leaves = textureSampleLevel(climate_leaves, map_sampler, at, layer, 0.0);
     return 0.5 * (leaves.b + leaves.a);
 }
 
@@ -1052,7 +1047,7 @@ fn fragment(
             let fine = vec3<f32>(noise(world * 2.3 + 7.0), 0.0, noise(world * 2.3 + 13.0)) - vec3<f32>(0.5, 0.0, 0.5);
             let at = (ground.cover_from_world * vec4<f32>(world + warp * 1.4 + fine * 0.4, 1.0)).xy;
             let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
-            let map = textureSampleLevel(cover_map, cover_sampler, at, 0.0);
+            let map = textureSampleLevel(cover_map, map_sampler, at, 0.0);
             // The map's grass the most the land's may grow, or, where its cover sows a meadow
             // (`CoverSource::sows`), the ground's own over the land's bare patches.
             let sown = select(min(grows.r, map.r), map.r, ground.cover_on == 2u);
@@ -1061,7 +1056,7 @@ fn fragment(
             litter = map.b * inside;
             moss = map.a * inside;
             blades = map.r * inside;
-            let more = textureSampleLevel(cover_more, cover_more_sampler, at, 0.0);
+            let more = textureSampleLevel(cover_more, map_sampler, at, 0.0);
             needles = more.r * inside;
             roots = more.g * inside;
             trodden = more.a * inside;

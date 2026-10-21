@@ -42,7 +42,7 @@ const GRASS_SQUARE_M: f32 = 10.0;
 /// Tufts are tried on a grid this far apart, in metres.
 const GRASS_SPACING_M: f32 = 0.34;
 
-type WindMaterial = ExtendedMaterial<StandardMaterial, WindExtension>;
+pub(crate) type WindMaterial = ExtendedMaterial<StandardMaterial, WindExtension>;
 
 /// What the wind shader is told, and the real materials parts are drawn in (bark,
 /// leaves, rock; `flora_kinds::MATERIALS`). Field order must match the structs in

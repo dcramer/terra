@@ -383,7 +383,7 @@ pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExtension>;
 /// What the ground is drawn with: every chunk of it shares this.
 #[derive(Resource)]
 pub struct GroundLook(pub Handle<GroundMaterial>);
-type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
+pub(crate) type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
 
 /// What the ground shader is told. Field order must match the struct in ground.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq)]
@@ -441,14 +441,14 @@ pub struct GroundExtension {
     /// Drawn as the low quality preset draws it (D239, D307): the shader built with
     /// `GROUND_LOW`, two layers a pixel, one or two projections, flat colours far off.
     cheap: bool,
+    /// The cover's sampler serves every map from here on (ground.wesl's `map_sampler`):
+    /// each is `ImageSampler::linear()`, and a stage may bind only 16 samplers.
     #[texture(104)]
     #[sampler(105)]
     cover_map: Option<Handle<Image>>,
     #[texture(106)]
-    #[sampler(107)]
     cover_more: Option<Handle<Image>>,
     #[texture(114)]
-    #[sampler(115)]
     cover_stood: Option<Handle<Image>>,
     /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point
     /// in the world to its place on the maps, whether there are maps, and the leaves map's
@@ -461,10 +461,8 @@ pub struct GroundExtension {
     #[uniform(100)]
     fallen_layer: i32,
     #[texture(108)]
-    #[sampler(109)]
     climate_ground: Option<Handle<Image>>,
     #[texture(110, dimension = "2d_array")]
-    #[sampler(111)]
     climate_leaves: Option<Handle<Image>>,
     /// The heath past the trees round the land's middle (`terra_land::heath`, `LandMap`):
     /// the middle's direction and the planet's radius; east and the map's width in metres;
@@ -483,7 +481,6 @@ pub struct GroundExtension {
     #[uniform(100)]
     heath_autumn: Vec4,
     #[texture(112, dimension = "2d_array")]
-    #[sampler(113)]
     land_map: Option<Handle<Image>>,
 }
 

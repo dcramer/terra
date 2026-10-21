@@ -52,6 +52,8 @@ pub mod quality;
 pub mod record;
 pub mod remote;
 pub mod rises;
+#[cfg(test)]
+mod samplers_tests;
 pub mod scatter;
 pub mod scene;
 pub mod shader_patch;
