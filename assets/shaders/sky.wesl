@@ -157,7 +157,7 @@ const RIDGE_AT: array<f32, 4> = array<f32, 4>(0.12, 0.5, 0.8, 1.0);
 const RIDGE_HILLS: array<f32, 4> = array<f32, 4>(0.45, 0.55, 0.75, 1.0);
 // How much taller a range's far peaks stand than a forest's hills of the same `hills`: as
 // tall, they rose a degree past the lake's far treeline and barely registered (r16 review).
-const PEAK_LIFT: f32 = 1.5;
+const PEAK_LIFT: f32 = 1.9;
 const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
 // After sunset, how bright the haze before the far land is against the horizon's band, and
 // how far it is turned toward the zenith's blue.
@@ -165,6 +165,10 @@ const EARTH_SHADOW: f32 = 0.6;
 const DUSK_COOL: f32 = 0.45;
 // The far range's lying snow, an albedo, as the ground's far snow (ground.wesl's tint).
 const FAR_SNOW: vec3<f32> = vec3<f32>(0.66, 0.7, 0.74);
+// How much of the dusk's glow behind it a far cap's snow returns, and how much paler each
+// farther ridge of a range stands, so it reads in two haze layers, not one flat cut-out.
+const CAP_GLOW: f32 = 1.2;
+const FAR_FADE: f32 = 0.7;
 
 // The land beyond the world's edge (D273), below the horizon, as shipped games draw the
 // hills past their maps: ridges one behind another, each paler than the one before in the
@@ -235,7 +239,11 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         let massif = smoothstep(0.2, 0.8, noise(vec3<f32>(round * (1.2 + 0.5 * f), f * 9.1 + 5.0)));
         let height = mix(1.0, (0.35 + 0.8 * massif) * PEAK_LIFT, sky.far_peaks);
         // Octave over octave, so a flank breaks in shoulders and gendarmes, not one straight line.
-        let range = (0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape)) * height;
+        // Spires only in a massif's heart, over broad shoulders and saddles between: spires
+        // everywhere stood as an even saw blade (the r17 review).
+        let spires = 0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape);
+        let shoulder = 0.42 + 0.22 * shape + 0.08 * fine;
+        let range = mix(shoulder, max(spires, shoulder), smoothstep(0.35, 0.85, massif)) * height;
         let rolling = smoothstep(0.25, 0.85, shape);
         let ridge = base + hills * rising[k] * mix(rolling, range, sky.far_peaks)
             + hills * (0.06 / (1.0 + f)) * crowns * (1.0 - sky.far_peaks);
@@ -251,7 +259,7 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // keeps most of its dark, the farthest is a shade off the sky, as Flat Iron Lake's
         // ranges in Red Dead Redemption 2 fade layer by layer (lake film r16).
         let left = min(leaves[k] * (1.0 + 0.8 * sky.far_peaks), 1.0) * mix(1.0, 0.7, deep)
-            * mix(1.0, 1.0 - 0.45 * f / f32(RIDGES - 1u), sky.far_peaks);
+            * mix(1.0, 1.0 - FAR_FADE * f / f32(RIDGES - 1u), sky.far_peaks);
         // The crowns' light and shade, finer the farther.
         let grain = noise(vec3<f32>(round * (420.0 + 400.0 * f), rise * (420.0 + 400.0 * f) + f * 3.3));
         // A range's high crests hold snow, brighter than its rock and forest under the same
@@ -259,8 +267,11 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // skyline's peaks are white-capped here and bare there, as the world's own are.
         let up_share = (rise - base) / max(hills * rising[k] * mix(1.0, PEAK_LIFT, sky.far_peaks), 1.0e-5);
         let gully = noise(vec3<f32>(round * (90.0 + 60.0 * f), f * 2.9 + 17.0));
-        let snowy = sky.far_peaks * smoothstep(0.03, 0.0, 0.5 + 0.18 * gully - 0.25 * (crest - 0.5) - up_share);
-        let land = mix(lit * (0.8 + 0.4 * grain), lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) * (0.9 + 0.2 * grain), snowy);
+        let snowy = sky.far_peaks * smoothstep(0.03, 0.0, 0.42 + 0.18 * gully - 0.25 * (crest - 0.5) - up_share);
+        // At dusk its snow catches the bright west's glow, which its rock and forest barely
+        // return: a cap one value with its rock read as a cut-out (the r17 review).
+        let caps = lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) + FAR_SNOW * behind * CAP_GLOW * sky.twilight;
+        let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy);
         // Its haze: the farthest ridge nearly the sky behind it, a nearer one deeper in the
         // earth's shadow, dimmer and bluer, so the range reads in layers.
         let shadow = 1.0 - f / f32(RIDGES - 1u);
