@@ -19,8 +19,8 @@ const CUT_FROM: f32 = 0.3;
 const CUT_TO: f32 = 0.7;
 
 /// Cubes at `cubes` cut into chunks, as lists of indices into it: each no longer along any
-/// side than its own limit, from `least` cubes to twice that (and shorter than `below`),
-/// and all of its cubes touching.
+/// level side than its own limit, from `least` cubes to twice that (and shorter than
+/// `below`), half that tall, and all of its cubes touching.
 /// The same every time for the same cubes and `seed`.
 pub(super) fn chunks(cubes: &[IVec3], least: i32, below: i32, seed: u32) -> Vec<Vec<usize>> {
     let least = least.max(1);
@@ -38,14 +38,22 @@ pub(super) fn chunks(cubes: &[IVec3], least: i32, below: i32, seed: u32) -> Vec<
         let limit = (least + (unit(&[seed, 1]) * (least as f32 + 0.99)) as i32)
             .min(below - 1)
             .max(1);
-        if side.max_element() <= limit {
+        // Masonry parts along its bed joints: a chunk is a run of courses, about half as
+        // tall as it is long, not a cube (a wall's face fell as a grid of equal boxes).
+        let limits = IVec3::new(limit, (limit + 1) / 2, limit);
+        if (0..3).all(|axis| side[axis] <= limits[axis]) {
             out.extend(touching(cubes, &part));
             continue;
         }
-        // Across its longest side, the level ones first where they tie.
+        // Across the side furthest over its limit, the level ones first where they tie.
         let axis = [0usize, 2, 1]
             .into_iter()
-            .max_by_key(|&axis| (side[axis], (hash::of(&[seed, axis as u32]) & 0xFF) as i32))
+            .max_by_key(|&axis| {
+                (
+                    side[axis] * 2 * limit / limits[axis],
+                    (hash::of(&[seed, axis as u32]) & 0xFF) as i32,
+                )
+            })
             .unwrap_or(0);
         let share = CUT_FROM + (CUT_TO - CUT_FROM) * unit(&[seed, 2]);
         let cut = low[axis] + ((side[axis] as f32 * share).round() as i32).clamp(1, side[axis] - 1);
@@ -145,6 +153,25 @@ mod tests {
             "{}",
             parts.len()
         );
+    }
+
+    #[test]
+    fn a_wall_parts_along_its_courses_into_chunks_longer_than_they_are_tall() {
+        let wall: Vec<IVec3> = (0..40)
+            .flat_map(|x| (0..20).flat_map(move |y| (0..2).map(move |z| IVec3::new(x, y, z))))
+            .collect();
+        let parts = chunks(&wall, 2, i32::MAX, 5);
+        let (mut long, mut tall) = (0.0, 0.0);
+        for part in &parts {
+            let (low, high) = part.iter().fold(
+                (IVec3::splat(i32::MAX), IVec3::splat(i32::MIN)),
+                |(low, high), &i| (low.min(wall[i]), high.max(wall[i])),
+            );
+            let side = high - low + IVec3::ONE;
+            long += side.x as f32;
+            tall += side.y as f32;
+        }
+        assert!(long > tall * 1.5, "{long} cubes long to {tall} tall in all");
     }
 
     #[test]
