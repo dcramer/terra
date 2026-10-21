@@ -668,6 +668,8 @@ struct Joints {
     ledge: f32,
     // How much of the face here lies in the shadow its own beds and joints cast.
     shadow: f32,
+    // How deep in an open joint or under an open bed's lip the face lies, seeing less sky.
+    recess: f32,
 }
 
 // A range's rock between its faults (D426): one block of strata a kilometre and a half
@@ -691,19 +693,40 @@ const FAULT_BLOCK_M: f32 = 1400.0;
 // How dark a range seven kilometres off stands, its snow and rock, against near: at 0.78 the
 // horns under the skyline stood brighter than the sky behind them (round 11).
 const FAR_DIM: f32 = 0.62;
+// The sunlit faces' warm ochre-grey, and how far their far dimming goes instead (round 14).
+const LIT_ROCK: vec3<f32> = vec3<f32>(1.24, 1.05, 0.78);
+const LIT_FAR_WALL: f32 = 0.78;
+const LIT_FAR_DIM: f32 = 0.72;
+// Past a few kilometres the lit faces' lift gives way to the air again (aerial perspective on the
+// lit side, round 15): lifted to the horizon, the summits under the skyline stood as bright as
+// the sky (the far gate fell from 0.111 to 0.053 in round 14).
+const LIT_NEAR_FROM: f32 = 1200.0;
+const LIT_NEAR_TO: f32 = 2500.0;
+fn lit_near(far_off: f32) -> f32 {
+    return 1.0 - smoothstep(LIT_NEAR_FROM, LIT_NEAR_TO, far_off);
+}
 // Aerial perspective (see the fragment's end): from how far, over how many metres it takes
 // about two-thirds of the way to the air, and the air's colour against the haze's brightness.
 // Thick for real air: the valley's range stands 1 to 3 km off, where 14 km of it from 1.5 km
 // showed no haze at all (round 13).
 const AERIAL_FROM_M: f32 = 250.0;
 const AERIAL_M: f32 = 2400.0;
-const AERIAL_AIR: vec3<f32> = vec3<f32>(0.55, 0.78, 1.2);
+const AERIAL_AIR: vec3<f32> = vec3<f32>(0.5, 0.76, 1.32);
 // How far the far snow's edge frays down the fall line (`fall_stripes`), against the slope.
-const STREAKED: f32 = 0.35;
+const STREAKED: f32 = 0.6;
+// How much more a steep wall's far snow breaks than its slope alone says (round 14).
+const WALL_BARE: f32 = 0.3;
 // How dark the rock's own cast shadows under its beds and in its joints stand (`jointing`).
 const JOINT_SHADOW: f32 = 0.5;
+const JOINT_RECESS: f32 = 0.35;
 // A far snowfield's tint where it is turned from the sun: blue-grey, about half as bright.
 const SHADED_SNOW: vec3<f32> = vec3<f32>(0.5, 0.58, 0.72);
+// The direct light's exposed brightness under which the far snow's shading by the sun fades
+// out, and over which it is whole: the dusk's rising moon is a few hundredths, the day's sun
+// about one.
+const DIRECT_FAINT: vec2<f32> = vec2<f32>(0.05, 0.3);
+// How much brighter than the haze the aerial perspective's air stands at dusk.
+const DUSK_AIR_LIFT: f32 = 1.8;
 
 
 fn bedding(world: vec3<f32>) -> Bedding {
@@ -784,7 +807,11 @@ fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32, sun: vec3<
     let joint_open = step(0.6, hash(vec3<f32>(floor(t1), run, 1.9) + b.key * 7.0));
     let joint_shadow = joint_open * (1.0 - smoothstep(0.0, 0.06 + 0.3 * abs(across) + soft, from_joint));
     let shadow = max(bed_shadow * (1.0 - ledge), joint_shadow) * smoothstep(-0.1, 0.3, dot(up, sun));
-    return Joints(turn, crack, ledge, shadow);
+    // Recesses see less sky, so open joints and the undersides of open beds stand dark in the
+    // shade too, where a shaded wall without them read as one smeared plane (the r13 review).
+    let in_joint = joint_open * (1.0 - smoothstep(0.0, 0.1 + soft, min(f.y, 1.0 - f.y)));
+    let recess = max(bed_open * under_lip * (1.0 - ledge), in_joint);
+    return Joints(turn, crack, ledge, shadow, recess);
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -1049,6 +1076,7 @@ fn fragment(
         // The first texture coordinate's x is the loose stones (1 scree, 2 gravel), its y the
         // snow's depth in metres; the second's x the bare rock, or below 0 the woods.
         var scree = 0.0;
+        var scree_full = 0.0;
         var gravel = 0.0;
         var bare = 0.0;
         var snow = 0.0;
@@ -1060,6 +1088,7 @@ fn fragment(
         {
             let loose = in.uv.x + (blotch - 0.5) * 0.6;
             scree = smoothstep(0.3, 0.7, 1.0 - abs(loose - 1.0));
+            scree_full = scree;
             gravel = smoothstep(0.3, 0.7, loose - 1.0);
             // A lowland's loose stones thin to a quarter of a mountain's, so a lowland lake's
             // shingle (the land lays it round every lake) is a scatter in its meadow, not a
@@ -1093,22 +1122,37 @@ fn fragment(
             // round every lake: its gravel and scree give out a few metres over its water.
             let banks = lowland_at(from_centre - ground.sea_radius_m) * (1.0 - smoothstep(3.0, 7.0, in.uv_b.y));
             gravel *= 1.0 - banks;
+            // Away from a lake a lowland's scree is a wall's talus apron (field.rs), shown whole:
+            // thinned to a quarter, the forest seemed to run onto the wall (round 15).
+            scree = mix(scree, scree_full, smoothstep(20.0, 45.0, in.uv_b.y));
             scree *= 1.0 - banks;
         }
         // Far off, under the haze, the snow and the rock stand darker than the sky (looks.ts's
         // "far under sky"): past a few kilometres the range is in its own faces' shade more than not.
-        var snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck) * mix(1.0, FAR_DIM * 0.9, smoothstep(1000.0, 6000.0, distance(world, view.world_position)));
+        let snow_far = smoothstep(1000.0, 6000.0, distance(world, view.world_position));
+        var snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck);
+        var snow_lit = 0.0;
+        // Both darkenings stand in for a sun's light falling on some faces and not others, so
+        // they go with the direct light's strength: at dusk, the moon barely risen, all of a
+        // range is lit by the sky alone, and the shaded tint and the far dim took its snow
+        // down to its rock's own value (lake film r16, "camouflage").
+        var by_sun = 1.0;
+        // The sunlit snow far less than the shaded (round 14): dimmed alike, it read grey.
         // A far face's snow turned from the sun is blue-grey, lit by the sky alone, and darker
         // than the sunlit snow by more than the light's own fall-off: the sky-lit shade the
         // references' snowfields keep, where ours stood one paper-white (the r12 review).
 @if(!PREPASS_PIPELINE)
         {
             if lights.n_directional_lights > 0u {
-                let sunward = dot(normalize(in.world_normal), lights.directional_lights[0].direction_to_light);
-                let shaded = smoothstep(0.35, -0.15, sunward) * smoothstep(600.0, 1500.0, distance(world, view.world_position));
+                let light = lights.directional_lights[0];
+                by_sun = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, dot(light.color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722)));
+                let sunward = dot(normalize(in.world_normal), light.direction_to_light);
+                let shaded = smoothstep(0.35, -0.15, sunward) * smoothstep(600.0, 1500.0, distance(world, view.world_position)) * by_sun;
                 snow_tint *= mix(vec3<f32>(1.0), SHADED_SNOW, shaded);
+                snow_lit = smoothstep(0.1, 0.6, sunward);
             }
         }
+        snow_tint *= mix(1.0, mix(FAR_DIM * 0.9, LIT_FAR_DIM, snow_lit * lit_near(distance(world, view.world_position))), snow_far * by_sun);
         // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
         // conifer canopy (the far crowns' colour, linear), so a forested slope reads forested to
         // the horizon (docs/demos.md §1); nearer, the cards stand on it and it is darker
@@ -1169,6 +1213,7 @@ fn fragment(
         var joint_turn = vec3<f32>(0.0);
         var joint_crack = 0.0;
         var joint_shadow = 0.0;
+        var joint_recess = 0.0;
         var sun_dir = up;
 @if(!PREPASS_PIPELINE)
         {
@@ -1244,6 +1289,7 @@ fn fragment(
                 joint_turn += great.turn * 0.9 * walled;
                 joint_crack = max(big.crack, small.crack * small_keep) * walled;
                 joint_shadow = max(max(big.shadow * 0.6, small.shadow * small_keep), great.shadow) * walled;
+                joint_recess = max(big.recess * 0.8, small.recess * small_keep * 0.6) * walled;
                 ledge = max(max(big.ledge, small.ledge * small_keep), great.ledge) * walled;
             }
             // Patches of weathering a few hundred metres across: iron-stained rust, dark
@@ -1260,21 +1306,32 @@ fn fragment(
             weathered *= mix(vec3<f32>(1.0), vec3<f32>(0.4, 0.45, 0.4), lichen);
             weathered = mix(weathered, vec3<f32>(1.65, 1.62, 1.55), scar);
             // Dimmed from 1 km, so the horns under the skyline stand darker than the sky (round 11).
-            let far_wall = mix(1.0, 0.44, smoothstep(300.0, 900.0, far_off)) * mix(1.0, FAR_DIM, smoothstep(1000.0, 6000.0, far_off));
             // Faces by their aspect: those turned to the sun warmer, a pale ochre over the
             // grey, those turned from it cooler and bluer, as the Tatras' granite at morning
             // and Skellige's cliffs are, so a range reads by its faces, not its tiers.
             var aspect = vec3<f32>(1.0);
+            var lit = 0.0;
 @if(!PREPASS_PIPELINE)
             {
                 if lights.n_directional_lights > 0u {
                     let sun = lights.directional_lights[0].direction_to_light;
                     // The block's own fracture face, so faces turned from the sun break dark.
                     let sunward = dot(normalize(face + joint_turn * 0.8), sun);
-                    aspect = mix(vec3<f32>(1.0), vec3<f32>(1.14, 1.0, 0.8), smoothstep(0.05, 0.6, sunward));
-                    aspect *= mix(vec3<f32>(1.0), vec3<f32>(0.44, 0.5, 0.66), smoothstep(0.2, -0.3, sunward));
+                    lit = smoothstep(0.05, 0.6, sunward);
+                    aspect = mix(vec3<f32>(1.0), LIT_ROCK, lit);
+                    // In the shade a face is lit by the sky and the sunlit rock round it, more
+                    // the nearer it turns to the sun's side: its slabs and buttresses keep tones
+                    // of their own there, where by the sky alone a shaded wall read as one
+                    // smeared plane (the r13 review).
+                    let bounce = mix(0.72, 1.18, smoothstep(-0.75, 0.1, sunward));
+                    aspect *= mix(vec3<f32>(1.0), vec3<f32>(0.44, 0.5, 0.66) * bounce, smoothstep(0.2, -0.3, sunward));
                 }
             }
+            // Dimmed from 1 km, so the horns under the skyline stand darker than the sky (round 11);
+            // the sunlit faces far less than the shade since the aerial perspective holds the far
+            // gate (round 14): dimmed alike, the range read overcast against a sunny meadow.
+            let lit_lift = lit * lit_near(far_off);
+            let far_wall = mix(1.0, mix(0.44, LIT_FAR_WALL, lit_lift), smoothstep(300.0, 900.0, far_off)) * mix(1.0, mix(FAR_DIM, LIT_FAR_DIM, lit_lift), smoothstep(1000.0, 6000.0, far_off));
             face_tint = mix(vec3<f32>(1.0), weathered * band_tone * far_wall * aspect, rocky);
         }
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
@@ -1390,7 +1447,11 @@ fn fragment(
         // How far the far snow's outcrops break a wall's couloir fill too (below).
         var far_broken = 0.0;
         if (snow > 0.0 || in_couloir > 0.0) && far_snow > 0.0 {
-            let outcrop = noise(world * 0.013 + 131.0) * 0.55 + noise(world * 0.041 + 137.0) * 0.3 + noise(world * 0.0045 + 139.0) * 0.15;
+            // Drawn out down a wall, four times as tall as wide, so its rock and snow streak down
+            // the faces rather than lying in round spots over them (the r13 review); a gentle
+            // snowfield's outcrops stay round.
+            let drawn = world - up * dot(world, up) * 0.75 * (1.0 - smoothstep(0.6, 0.85, flatness));
+            let outcrop = noise(drawn * 0.013 + 131.0) * 0.55 + noise(drawn * 0.041 + 137.0) * 0.3 + noise(drawn * 0.0045 + 139.0) * 0.15;
             // Fewer the higher and the deeper the snow lies, so the highest ground keeps the
             // most: cut alike, the steep summits came out barer than the lower tops behind
             // them, a snowline running backwards (the r3 review).
@@ -1406,7 +1467,9 @@ fn fragment(
             // streaks: keyed to the slope alone, on the left range's stepped shoulders the snow
             // lay in even level bands along the steps (the r12 review).
             let streaks = fall_stripes(world, across_face, 70.0, 2.0).x;
-            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held + (streaks - 0.55) * STREAKED);
+            // A wall past about 55 degrees bare bar its couloirs and ledges (round 14).
+            let wall_bare = (1.0 - smoothstep(0.5, 0.66, flatness)) * WALL_BARE;
+            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held + (streaks - 0.55) * STREAKED + wall_bare);
             snow *= 1.0 - breaks * far_snow;
             // The couloirs by the outcrops alone, about a third of them: keyed by the steepness
             // too, the walls' fill broke whole and the range stood bare (round 11).
@@ -1861,6 +1924,7 @@ fn fragment(
             ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt * combed + facets * ribbed + joint_turn * (1.0 - snow * 0.7));
             colour *= 1.0 - mix(0.55, 0.45, smoothstep(1500.0, 5000.0, far_off)) * joint_crack * (1.0 - snow);
             colour *= 1.0 - JOINT_SHADOW * joint_shadow * (1.0 - snow);
+            colour *= 1.0 - JOINT_RECESS * joint_recess * (1.0 - snow);
             colour *= mix(1.0, mix(0.62, 1.08, rib * 0.5 + 0.5), ribbed * combed);
             colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
         }
@@ -2102,7 +2166,13 @@ fn fragment(
     // range under the skyline stays darker than the sky behind it (D426, round 13). The
     // distance haze (`DistanceFog`) still follows, for the kilometres beyond.
     let through = 1.0 - exp(-max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0) / AERIAL_M);
-    let haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    // At dusk the air before a range is lit by the whole bright west, more than the dimmed
+    // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
+    if lights.n_directional_lights > 0u {
+        let direct = dot(lights.directional_lights[0].color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722));
+        haze_light *= mix(DUSK_AIR_LIFT, 1.0, smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct));
+    }
     out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }

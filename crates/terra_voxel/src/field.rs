@@ -165,6 +165,14 @@ impl Node {
 const BARE_ROCK_DEG: f32 = 40.0;
 const SCREE_DEG: (f32, f32) = (24.0, 38.0);
 const CLIFF_WITHIN_M: [f32; 2] = [20.0, 45.0];
+/// Under a wall the rock it sheds runs out further than its cones, in an apron of talus on
+/// gentler ground, where the forest gives out to scattered trees before the wall's foot, as
+/// under the Tatras' and the Dolomites' faces: any ground gentler than a talus's where the
+/// ground so many metres off, one of four ways round, stands this many metres over it, as
+/// steep on average as a talus. Without, the forest ran straight onto the walls (the r13
+/// review of D426). The furthest reach widens the apron to a band that reads from the valley,
+/// where at 30 to 80 m it was a line (round 15).
+const APRON_WITHIN_M: [(f32, f32); 3] = [(100.0, 60.0), (200.0, 115.0), (320.0, 175.0)];
 /// How finely the ground uphill is looked at for a cliff, in metres between its points.
 const CLIFF_LOOK_M: f32 = 8.0;
 const GRAVEL_UNDER_DEG: f32 = 28.0;
@@ -433,14 +441,33 @@ impl GeneratedPlanet {
         if bed > GRAVEL_BED && (GRAVEL_OVER_DEG..GRAVEL_UNDER_DEG).contains(&slope) {
             return Some(material::GRAVEL);
         }
+        let radius = self.spec.radius_m;
         if (SCREE_DEG.0..SCREE_DEG.1).contains(&slope) && uphill != Vec3::ZERO {
-            let radius = self.spec.radius_m;
             let around = memo.around(CLIFF_LOOK_M);
             let cliff = CLIFF_WITHIN_M.iter().any(|&reach| {
                 let above = (direction * radius + uphill * reach).normalize();
                 self.rising_in(above, around).1 > BARE_ROCK_DEG
             });
             if cliff {
+                return Some(material::SCREE);
+            }
+        }
+        if slope < SCREE_DEG.1 {
+            // A wall's foot, however level the ground under it: the ground some way off on
+            // one side or another stands as high over it as a wall does.
+            let here = self.height_in(direction, memo);
+            let around = memo.around(CLIFF_LOOK_M);
+            let (a, b) = (
+                direction.any_orthonormal_vector(),
+                direction.any_orthonormal_vector().cross(direction),
+            );
+            let under_wall = APRON_WITHIN_M.iter().any(|&(reach, rise)| {
+                [a, -a, b, -b].iter().any(|&way| {
+                    let there = (direction * radius + way * reach).normalize();
+                    self.height_in(there, around) - here > rise
+                })
+            });
+            if under_wall {
                 return Some(material::SCREE);
             }
         }
@@ -762,6 +789,65 @@ mod tests {
             (sample.distance.to_bits(), sample.material.0)
         });
         assert_eq!(sampled, PINNED_GROUND);
+    }
+
+    #[test]
+    fn level_ground_under_a_wall_is_talus_or_rock_and_open_level_ground_is_not_talus() {
+        let radius_m = 30_000.0;
+        let planet = GeneratedPlanet::new(
+            PlanetSpec {
+                seed: Seed(1),
+                radius_m,
+            },
+            150.0,
+            Some(-20.0),
+        )
+        .with_mountains(crate::Mountains::START);
+        let height = |d: Vec3| planet.height_m(d.normalize());
+        let range = planet.mountains().expect("a range");
+        let (mut under, mut open) = (0, 0);
+        for k in 0..20_000u32 {
+            let d = Vec3::new(
+                terra_gen::hash::unit3(11, k, 1, 0) * 2.0 - 1.0,
+                terra_gen::hash::unit3(11, k, 2, 0) * 2.0 - 1.0,
+                terra_gen::hash::unit3(11, k, 3, 0) * 2.0 - 1.0,
+            )
+            .normalize();
+            if range.inside(d * radius_m) < 0.05 {
+                continue;
+            }
+            let (a, b) = (
+                d.any_orthonormal_vector(),
+                d.any_orthonormal_vector().cross(d),
+            );
+            let here = height(d);
+            let off = |way: Vec3, m: f32| height(d + way * (m / radius_m)) - here;
+            let level = [a, b]
+                .iter()
+                .all(|&w| (off(w, 10.0) - off(-w, 10.0)).abs() < 2.0);
+            if !level || here < 0.0 {
+                continue;
+            }
+            // A wall's height between where the rule looks, one of four ways round.
+            let rises = [a, -a, b, -b].map(|w| off(w, 150.0));
+            let surface = d * (radius_m + here - 0.3);
+            let made_of = planet.sample(surface).material;
+            if rises.iter().any(|&r| r > 160.0) {
+                under += 1;
+                // Talus, or the wall's own rock where the level ground is one of its ledges.
+                assert!(
+                    matches!(
+                        made_of,
+                        material::SCREE | material::STONE | material::GRAVEL
+                    ),
+                    "{made_of:?} at the foot of a wall {d}"
+                );
+            } else if rises.iter().all(|&r| r.abs() < 15.0) {
+                open += 1;
+                assert_ne!(made_of, material::SCREE, "on open level ground {d}");
+            }
+        }
+        assert!(under > 0 && open > 0, "under walls {under}, open {open}");
     }
 
     const PINNED_GROUND: [(u32, u16); 3] =
