@@ -42,10 +42,10 @@ fn dusk_sky(direction: vec3<f32>, up: vec3<f32>, sun: vec3<f32>, horizon: vec3<f
     // to mauve from 4 to 20 degrees up: what a lake shows looking away from the set sun.
     let away = max(-dot(flat_way, flat_sun), 0.0);
     let belt = smoothstep(0.04, 0.14, lift) * (1.0 - smoothstep(0.16, 0.34, lift));
-    let venus = pale * vec3<f32>(1.3, 0.84, 0.92);
+    let venus = vec3<f32>(dot(horizon, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.3, 0.8, 0.92);
     let earth = (1.0 - smoothstep(0.02, 0.1, lift)) * away;
     let shadowed = normalize(zenith + vec3<f32>(1.0e-4)) * length(pale) * 0.7;
-    low = mix(low, venus, belt * away * 0.75);
+    low = mix(low, venus, belt * away);
     low = mix(low, shadowed, earth * 0.5);
     // To the zenith's blue, a little red taken out so it keeps its green over its red and
     // reads as dusk rather than the night's violet. Not greyed here: the grade's dim
@@ -53,7 +53,9 @@ fn dusk_sky(direction: vec3<f32>, up: vec3<f32>, sun: vec3<f32>, horizon: vec3<f
     // greyed again it came out a mauve grey (r12, saturation 0.19; a civil dusk's zenith
     // is near 0.4); with a tenth of its red out it was still violet, 69,74,101.
     let deep = zenith * vec3<f32>(0.8, 1.0, 1.0);
-    var colour = mix(low, deep, pow(smoothstep(-0.02, 0.55, lift), 0.5));
+    // The belt is held clear of the zenith's blue, which took half of it at ten degrees up and
+    // left it blue-violet (sRGB hue 251, lake round 21): a band of its own, pink over the shadow.
+    var colour = mix(low, deep, pow(smoothstep(-0.02, 0.55, lift), 0.5) * (1.0 - belt * away * 0.8));
     colour += glow * pow(max(dot(direction, sun), 0.0), 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.5, lift));
     return colour;
 }

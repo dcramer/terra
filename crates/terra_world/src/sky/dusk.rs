@@ -42,13 +42,18 @@ pub(crate) fn dusk_sky(
     let mut low = mix(pale, warm, band * mixf(0.15, 1.0, toward));
     let away = (-flat_way.dot(flat_sun)).max(0.0);
     let belt = smoothstep(0.04, 0.14, lift) * (1.0 - smoothstep(0.16, 0.34, lift));
-    let venus = pale * Vec3::new(1.3, 0.84, 0.92);
+    let venus =
+        Vec3::splat(horizon.dot(Vec3::new(0.2126, 0.7152, 0.0722))) * Vec3::new(1.3, 0.8, 0.92);
     let earth = (1.0 - smoothstep(0.02, 0.1, lift)) * away;
     let shadowed = (zenith + Vec3::splat(1.0e-4)).normalize() * pale.length() * 0.7;
-    low = mix(low, venus, belt * away * 0.75);
+    low = mix(low, venus, belt * away);
     low = mix(low, shadowed, earth * 0.5);
     let deep = zenith * Vec3::new(0.8, 1.0, 1.0);
-    let mut colour = mix(low, deep, libm::powf(smoothstep(-0.02, 0.55, lift), 0.5));
+    let mut colour = mix(
+        low,
+        deep,
+        libm::powf(smoothstep(-0.02, 0.55, lift), 0.5) * (1.0 - belt * away * 0.8),
+    );
     colour += glow
         * libm::powf(direction.dot(sun).max(0.0), 5.0)
         * 0.35
@@ -120,6 +125,20 @@ pub(super) mod tests {
             assert!(
                 warmth(belt) > warmth(away) && belt.x > belt.y,
                 "{under}: belt {belt} over the shadow {away}"
+            );
+            // And reads as a band of its own: rose (sRGB hue past 300), brighter than the
+            // shadow under it and redder than the sky over it. Half taken by the zenith's blue
+            // it was blue-violet, hue 251 (lake round 21).
+            let over = seen(under, 180.0, 25.0);
+            let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+            assert!(hue(belt) > 300.0, "{under}: belt {belt} hue {}", hue(belt));
+            assert!(
+                luma(belt) > luma(away),
+                "{under}: belt {belt} under the shadow {away}"
+            );
+            assert!(
+                warmth(belt) > 1.2 * warmth(over),
+                "{under}: belt {belt} under {over}"
             );
             // The arch spans the western sky: 45 degrees off the sun, still warm.
             let aside = seen(under, 45.0, 3.0);
