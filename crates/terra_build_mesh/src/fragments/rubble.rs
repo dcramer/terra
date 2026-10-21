@@ -59,6 +59,14 @@ impl Rubble {
     pub fn lay(&mut self, fragment: &Fragment, floor: f32, now: f32) {
         self.cells
             .retain(|_, cell| now - cell.laid_s < LIES_S + GOES_S);
+        // What it landed on may be this heap: the floor under the heap is its cell's. Taken
+        // as the floor, the heap's top became the floor of every cell new beside it, so the
+        // heap stood as a column on itself and the castle's keep rose into a dome of blocks
+        // resting on nothing seen, over its own roof (2026-10-21).
+        let floor = self
+            .cells
+            .get(&column(fragment.at))
+            .map_or(floor, |cell| cell.floor.min(floor));
         let side = ((fragment.size.x * fragment.size.z).sqrt() / CELL_M)
             .round()
             .max(1.0) as i32;
@@ -149,6 +157,29 @@ mod tests {
         assert!(
             rubble.top(middle, LIES_S + GOES_S + 1.0).is_none(),
             "the heap never goes"
+        );
+    }
+
+    #[test]
+    fn blocks_landing_on_their_own_heap_raise_it_no_higher_than_on_the_ground() {
+        // As the game lays them: each on what it landed on, the heap laid before included.
+        let column: Vec<(IVec3, terra_build::Cube)> = (0..40)
+            .flat_map(|y| (0..4).flat_map(move |x| (0..4).map(move |z| IVec3::new(x, y, z))))
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect();
+        let blocks = burst(&column, &|_| false, &chunks, 1.0, 5000);
+        let (mut on_ground, mut on_heap) = (Rubble::default(), Rubble::default());
+        for block in blocks.iter().filter(|b| b.shape == Shape::Whole) {
+            on_ground.lay(block, 0.0, 0.0);
+            let under = on_heap.top(block.at, 0.0).unwrap_or(0.0);
+            on_heap.lay(block, under, 0.0);
+        }
+        let middle = Vec3::new(1.0, 0.0, 1.0);
+        let reference = on_ground.top(middle, 0.0).expect("a heap");
+        let high = on_heap.top(middle, 0.0).expect("a heap");
+        assert!(
+            (high - reference).abs() < 0.1 * reference,
+            "{high} m on its own heap, {reference} m on the ground"
         );
     }
 }
