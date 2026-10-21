@@ -106,18 +106,17 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         let t = i as f32 * 0.05;
         let lit = lit(&blazes, t, crate::fire::BreathTier::Cards);
         assert_eq!(lit.len(), 3);
-        let (hearth, fill, roof) = (&lit[0], &lit[1], &lit[2]);
-        // One light casts shadows and carries most of it, so the ring of stones shadows the
-        // ground outside it (`HEARTH_FILL`); a fill casts none, hung high over the fire so it
-        // lights the ground metres out more, and the stones at its foot less, than the
-        // shadowed light does for each lumen (`HEARTH_FILL_UP`).
-        assert!(!hearth.shadowless && fill.shadowless);
-        assert!(fill.lumens < hearth.lumens && fill.at.y > hearth.at.y + 0.5);
+        let (hearth, top, roof) = (&lit[0], &lit[1], &lit[2]);
+        // A key low in its flames and a brighter light at their top (`HEARTH_TOP`): the top
+        // one lights the faces of those sat round it, the key the stones at its foot, and for
+        // each lumen the top one lights the ground 3 m out more against the stones than the
+        // key does, so the pool reaches out past the ring.
+        assert!(top.lumens > hearth.lumens && top.at.y > hearth.at.y + 0.5);
         let pool = |l: &Lit| on_ground(l, ground, 3.0, 1.0) / on_ground(l, ground, 0.55, 1.0);
         assert!(
-            pool(fill) > 2.0 * pool(hearth),
+            pool(top) > 2.0 * pool(hearth),
             "{} {}",
-            pool(fill),
+            pool(top),
             pool(hearth)
         );
         // Low in the body of its flames, swayed a hand's breadth at most, so a ring stone's face
@@ -156,7 +155,6 @@ fn at(x: f32, lumens: f32) -> Lit {
         radius: 0.5,
         glow: 1.0,
         kept: false,
-        shadowless: false,
         night_stops: 2.5,
     }
 }
@@ -265,20 +263,27 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
         }],
         ..default()
     };
-    let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards).remove(0);
-    assert!(lit.kept);
+    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    assert!(lights.iter().all(|l| l.kept) && lights.len() == 2);
+    let lumens: f32 = lights.iter().map(|l| l.lumens).sum();
+    let on = |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground(l, foot, out, l.lumens))
+            .sum()
+    };
     // A real campfire's light, about 10^4 cd, by night as by day: the stones at its foot take
     // some tens of thousands of lux, so at their albedo they stand some four stops under a
     // flame of 10^5 cd/m² (research/2026-10-19-fire-step-back.md); at 2.5 stops more by night
     // they took hundreds of thousands and out-shone it.
-    let candela = lit.lumens / (4.0 * core::f32::consts::PI);
+    let candela = lumens / (4.0 * core::f32::consts::PI);
     assert!((3_000.0..30_000.0).contains(&candela), "{candela} cd");
-    let stones = on_ground(&lit, foot, 0.55, lit.lumens);
+    let stones = on(0.55);
     assert!(stones < 60_000.0, "{stones} lux on the stones");
     // The ground 3 m out still takes about the moon's light, warmer, and past that falls dark,
     // as a night photograph exposed for the flame shows it.
     let moon = crate::daylight::illuminance(-18.0);
-    let near = on_ground(&lit, foot, 3.0, lit.lumens);
+    let near = on(3.0);
     assert!(
         near > 0.2 * moon && near < 3.0 * moon,
         "{near} lux at 3 m by a {moon} lux moon"
@@ -286,6 +291,66 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
     // By day a few percent of the sun's, so sunlit stone round it keeps its colour.
     let sun = crate::daylight::illuminance(50.0);
     assert!(near < 0.05 * sun, "{near} lux at 3 m in a {sun} lux sun");
+}
+
+/// What a hearth's lights give a face so far out from the fire's foot and so high, turned to
+/// the fire: each a disc (`crate::falloff`) on a vertical face, lux per lumen of the light.
+fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
+    let (across, up) = (out, foot.y + high - lit.at.y);
+    let d2 = across * across + up * up;
+    let facing = across / libm::sqrtf(d2);
+    lit.lumens / (4.0 * core::f32::consts::PI) * facing / (d2 + lit.radius * lit.radius)
+}
+
+#[test]
+fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
+    // The lake's campfire, 1.95 m of flame 0.9 m wide at 0.9 heat, at the lake's dusk (the
+    // sun 3.7 degrees under: night 0.311, the sky's light on the shade 1,038), as lake round
+    // 18's probe logged it.
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let fire = Blaze {
+        at: foot,
+        tall: 1.95,
+        heat: 0.9,
+        seed: 0.3,
+        wide: 0.9,
+    };
+    let blazes = Blazes {
+        kept: vec![fire],
+        ..default()
+    };
+    let (night, sky) = (0.311, 1_038.0);
+    let boost = hearth_by_hour(HEARTH_NIGHT_STOPS, night, 1.0, sky);
+    // The sky's light on a face in the shade, as the probe measured it: the troll's face lit
+    // by the sky alone stood at 76 (linear luma, under the tonemapper's shoulder), and the old
+    // rule's lights, which this model puts at 1.64 times pi x the sky's light on his face,
+    // added 0.36 of that, so the sky gave his face 4.56 times pi x its light. The same model
+    // puts round 18's two lights at 1.38 of it, his face measured at 2.4 times: it reads the
+    // probe right.
+    let sky_on_face = 4.56 * core::f32::consts::PI * sky;
+    // The light's colour on the face, fire and the dusk sky's lavender (`daylight`'s -6 key's
+    // horizon) each brought to a luma of one.
+    let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    let fire_colour = Vec3::from_array(HEARTH_LIGHT.to_linear().to_f32_array_no_alpha());
+    let dusk = Vec3::new(0.32, 0.27, 0.42);
+    // The troll sat 1.2 m from it, his face 2.2 m up; a man sat a metre from it, his 1.1 m up.
+    for (out, high) in [(1.2, 2.2), (1.0, 1.1)] {
+        let mut share = 0.0;
+        for i in 0..100 {
+            let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
+            let lux: f32 = lights.iter().map(|l| on_face(l, foot, out, high)).sum();
+            share += lux * boost / sky_on_face / 100.0;
+        }
+        // At least as much from the fire as from the sky: twice as lit as with no fire.
+        assert!(
+            1.0 + share >= 2.0,
+            "a face {out} m out and {high} m up: {:.2} times the sky's",
+            1.0 + share
+        );
+        // And warm: his face reads firelit orange, not the dusk's mauve.
+        let c = fire_colour / luma(fire_colour) * share + dusk / luma(dusk);
+        assert!(c.x > 2.0 * c.z, "{c} on a face {out} m out");
+    }
 }
 
 #[test]

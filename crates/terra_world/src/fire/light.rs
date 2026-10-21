@@ -107,30 +107,30 @@ const HEARTH_NIGHT_STOPS: f32 = 2.5;
 /// level out to some 4 m, so the ground had no pool, only an even tint to the horizon; as wide
 /// as its flames, the pool falls off past the stones (blind review 5/10 against 4, fire round 19).
 const HEARTH_SPREAD: f32 = 1.0;
-/// How far up its flames a hearth's light hangs: in their body, over the logs' ends.
-/// Hung low (0.4, its fill at 0.9 and 0.15 of its light, the light's green 2,200 K's), the ring's
-/// stones are lit orange on their fire-facing sides and dark away from it, where hung at 0.75 with
-/// its fill at 1.6 they were lit khaki on top and the pool read yellow-green (fire round 26).
+/// A campfire is lit by two shadowed lights, as games and film light one: a low key in the
+/// pit, for the stones and the ground at its foot, and a brighter light at the top of its
+/// flames, for the faces of those sat round it. Shipped games hang a fire's light about its
+/// flames' tips and afford it a shadow; a light in the pit alone lights the ring and leaves a
+/// face a metre off grazed from below and lit no brighter than the sky lights it.
+///
+/// How far up its flames the key hangs: in their body, over the logs' ends. Hung low (0.4),
+/// the ring's stones are lit orange on their fire-facing sides and dark away from it, where
+/// hung at 0.75 they were lit khaki on top and the pool read yellow-green (fire round 26).
 const HEARTH_LIGHT_UP: f32 = 0.4;
-/// The share of a hearth's light that casts no shadows: all of it shadowed, its own stones
-/// threw black lobes a metre out over the lit ground (round 7's side view), where the games'
-/// are soft. Bevy's PCSS on the cube map (`soft_shadows_enabled`) softened nothing seen. At a
-/// half, with `HEARTH_FILL_GAIN` 4, four fifths of what the ground took had no shadow, so the
-/// stones cast none and the pool had no edge; at 0.3 they shadow the ground outside the ring
-/// (fire round 19).
-const HEARTH_FILL: f32 = 0.15;
-/// How high over its fire a hearth's fill hangs, over its flames' height, and how much
-/// brighter it is than its share (`HEARTH_FILL`): the pool of firelit ground the games show
-/// to 3-4 m, without the stones at the fire's foot passing the tonemapper's shoulder. Hung in
-/// the flames with the shadowed light, the ground metres out took it at a grazing angle and
-/// the stones a metre off head on, so lighting the pool lit the stones salmon (fire round 13);
-/// hung high, the ground takes it more nearly straight down and the stones farther off. At
-/// 2.2 and 4 times, the ground 2.5-3.5 m out takes three times the light by night and the
-/// stones' lit faces 1.6 times, still warm brown (sRGB 113,82,51; fire round 14; landed alone in round 15).
-/// With the tighter disc, 1.6 and 1.5 times: the pool's near ground kept, the far left dark
-/// (fire round 19).
-const HEARTH_FILL_UP: f32 = 0.9;
-const HEARTH_FILL_GAIN: f32 = 1.5;
+/// The share of a hearth's light at the top of its flames (`HEARTH_TOP_UP`), and how much
+/// brighter it is than its share. With a shadowless fill 0.15 of the light, 1.5 times its
+/// share, at 0.9 of the flames, the troll sat 1.2 m from the lake's fire at dusk took only
+/// 0.36 of the sky's light on his face from it, his far arm in the sky's glow brighter than
+/// his firelit face, the shadow factor at him about 1 (lake round 18's probe, light by light).
+/// At 0.6 of it, 3 times its share, at the flames' top, his face is 2.4 times as lit as with
+/// no firelight and warm (R/B 3.5), the ground round the ring 297 times the far ground (161
+/// before), the stones still warm brown (sRGB 224,160,78). Shadowed: it casts the sitter's
+/// shadow on the ground behind him, and costs nothing on his face (183 against 180 unshadowed).
+const HEARTH_TOP: f32 = 0.6;
+const HEARTH_TOP_GAIN: f32 = 3.0;
+/// How high the top light hangs, over its flames' height: at their tips. Hung at 0.8 his face
+/// took less (154 against 185) and the ground more.
+const HEARTH_TOP_UP: f32 = 1.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -282,8 +282,6 @@ pub(super) struct Lit {
     pub glow: f32,
     /// Whether it is a kept fire's, which glows in the air round it (`fog`).
     pub kept: bool,
-    /// Whether it never casts shadows: a hearth's fill (`HEARTH_FILL`).
-    pub shadowless: bool,
     /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`,
     /// `BREATH_NIGHT_STOPS`).
     pub night_stops: f32,
@@ -336,7 +334,6 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     radius: 2.0,
                     glow: 1.0 + share,
                     kept: false,
-                    shadowless: false,
                     night_stops: NIGHT_STOPS,
                 }
             })
@@ -393,7 +390,6 @@ pub(super) fn strikes(
                     radius: 1.5,
                     glow,
                     kept: false,
-                    shadowless: false,
                     night_stops: BREATH_NIGHT_STOPS,
                 }
             })
@@ -452,7 +448,6 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     radius: 0.5,
                     glow,
                     kept: false,
-                    shadowless: false,
                 }
             })
         })
@@ -462,7 +457,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
     // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
     // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
-    // Two lights: one shadowed, one its fill (`HEARTH_FILL`).
+    // Two lights, both shadowed: a key low in the pit and one at its flames' top (`HEARTH_TOP`).
     lit.extend(blazes.kept.iter().take(hearths).flat_map(|blaze| {
         let flicker = Flicker::of(width(blaze));
         let glow = signal(blaze.seed, t, flicker);
@@ -476,7 +471,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
         let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
         let main = Lit {
             at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP + swayed,
-            lumens: lumens * (1.0 - HEARTH_FILL),
+            lumens: lumens * (1.0 - HEARTH_TOP),
             color: HEARTH_LIGHT,
             range: HEARTH_RANGE_M,
             // Its flames as a disc light (`crate::falloff`), wider than they are
@@ -485,15 +480,13 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             glow,
             kept: true,
             night_stops: HEARTH_NIGHT_STOPS,
-            shadowless: false,
         };
-        let fill = Lit {
-            lumens: lumens * HEARTH_FILL * HEARTH_FILL_GAIN,
-            shadowless: true,
-            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_FILL_UP + swayed,
+        let top = Lit {
+            lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
+            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
             ..main.clone()
         };
-        [main, fill]
+        [main, top]
     }));
     // Each gathering's light hangs out from the middle of all that burns, on the outside of
     // the walls its flames stand on: at the gathering's own middle, inside a burning building,
@@ -533,7 +526,6 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 radius: (wide * 0.5).min(2.0),
                 glow,
                 kept: false,
-                shadowless: false,
                 night_stops: NIGHT_STOPS,
             }
         })
@@ -631,7 +623,7 @@ pub(super) fn choose(
         .iter()
         .enumerate()
         .filter_map(|(i, shown)| {
-            let shown = shown.as_ref().filter(|shown| !shown.lit.shadowless)?;
+            let shown = shown.as_ref()?;
             let d = far(shown.lit.at);
             let had = was[i].shadows;
             let within = if had { SHADOW_M[1] } else { SHADOW_M[0] };
