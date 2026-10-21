@@ -10,18 +10,33 @@
 // a low band everywhere, no glow showed toward the sun, since the far range hid the band
 // (r10, no warm sky pixel); and the water and the range kept the old salmon under a sky that
 // had lost it (r10, sat 0.45 under 0.10).
+// The afterglow toward the set sun: amber at the horizon's brightness, reddening as the glow
+// does as the sun sinks (daylight's keys). The day's horizon key goes lavender as the sun
+// sinks (its -6 degree key), so a band in the horizon's own colour read mauve by mid-twilight
+// (lake film r17, sun 3.7 degrees under: no warm band anywhere); in the glow's own hue it read
+// salmon red (sRGB hue 9, `sky::dusk`'s test). A civil dusk keeps a yellow-orange horizon
+// toward the sun, about sRGB 255,180,100 (linear 1, 0.46, 0.13), until the sun is six under,
+// red at the end, its disc's glow redder. The rule is tested on its CPU twin (`sky::dusk`).
+fn afterglow(horizon: vec3<f32>, glow: vec3<f32>) -> vec3<f32> {
+    let hue = mix(glow / max(max(glow.r, glow.g), max(glow.b, 1.0e-4)), vec3<f32>(1.0, 0.46, 0.13), 0.6);
+    return hue * dot(horizon, vec3<f32>(0.2126, 0.7152, 0.0722)) * 1.6;
+}
+
 fn dusk_sky(direction: vec3<f32>, up: vec3<f32>, sun: vec3<f32>, horizon: vec3<f32>, zenith: vec3<f32>, glow: vec3<f32>) -> vec3<f32> {
     let lift = dot(direction, up);
     let flat_sun = normalize(sun - up * dot(sun, up) + up * 1e-4);
     let flat_way = normalize(direction - up * lift + up * 1e-4);
-    // Toward the sun's bearing, falling to a quarter 60 degrees off it and none past 90.
+    // Toward the sun's bearing, falling to a half 60 degrees off it and none past 90: the
+    // twilight arch spans the western sky, where at a quarter by 60 degrees a far range
+    // hid all of it from a view 50 degrees off the sun (lake film r17).
     let bearing = max(dot(flat_way, flat_sun), 0.0);
-    let toward = bearing * bearing;
+    let toward = bearing;
     // The warm band: up to 17 degrees toward the sun, a few elsewhere.
     let band = 1.0 - smoothstep(0.0, mix(0.06, 0.3, toward), lift);
     // Above and away from the band, the horizon's light without its hue, a little cool.
     let pale = vec3<f32>(dot(horizon, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(0.86, 0.97, 1.15);
-    var low = mix(pale, horizon, band * mix(0.15, 1.0, toward));
+    let warm = mix(horizon, afterglow(horizon, glow), toward);
+    var low = mix(pale, warm, band * mix(0.15, 1.0, toward));
     // Opposite the sun, the earth's own shadow on the air, a blue-grey band on the horizon,
     // and over it the Belt of Venus, the air there still in the sun's last red light, pink
     // to mauve from 4 to 20 degrees up: what a lake shows looking away from the set sun.

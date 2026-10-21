@@ -126,11 +126,21 @@ const HEARTH_LIGHT_UP: f32 = 0.4;
 /// no firelight and warm (R/B 3.5), the ground round the ring 297 times the far ground (161
 /// before), the stones still warm brown (sRGB 224,160,78). Shadowed: it casts the sitter's
 /// shadow on the ground behind him, and costs nothing on his face (183 against 180 unshadowed).
+/// The fire sheet's dusk campfire crop, 22% red and orange with it (34% in an earlier run), is
+/// not its doing: kept out of the air's glow it stayed at 22%, and at 2.5 times it was 24%
+/// (lake round 20).
 const HEARTH_TOP: f32 = 0.6;
 const HEARTH_TOP_GAIN: f32 = 3.0;
 /// How high the top light hangs, over its flames' height: at their tips. Hung at 0.8 his face
 /// took less (154 against 185) and the ground more.
 const HEARTH_TOP_UP: f32 = 1.0;
+/// How far the top light reaches, metres: farther than the key, as a fire's light hung high
+/// lights the camp round it. A light's reach is a window on its fall-off that takes it to
+/// nothing at its range (Bevy's, after Unreal's), and at the key's 6 m the ground 3 to 5 m out,
+/// 4 to 5.5 m from a lake fire's 2 m top, took a half to an eighth of its light: the pool past
+/// 2 m was weak on the ground and the troll's rock (lake round 19's review). At 9 m it takes
+/// 0.9 to 0.75.
+const HEARTH_TOP_RANGE_M: f32 = 9.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -484,6 +494,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
         let top = Lit {
             lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
             at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
+            range: HEARTH_TOP_RANGE_M,
             ..main.clone()
         };
         [main, top]

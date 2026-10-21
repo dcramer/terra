@@ -428,6 +428,20 @@ pub(crate) fn illuminance(height: f32) -> f32 {
     light_at(height).illuminance
 }
 
+/// The sky's dusk colours, its horizon, zenith and glow, with the sun so many degrees up, linear
+/// as the sky's shader takes them (`sky::dusk`).
+#[cfg(test)]
+pub(crate) fn dusk_colours(height: f32) -> (Vec3, Vec3, Vec3) {
+    let light = light_at(height);
+    let linear =
+        |c: Vec3| Vec3::from_slice(&Color::srgb(c.x, c.y, c.z).to_linear().to_f32_array()[..3]);
+    (
+        linear(light.horizon),
+        linear(light.zenith),
+        linear(light.glow),
+    )
+}
+
 /// The moon's light with the sun so many degrees below the horizon: none as it sets,
 /// growing to the night's as the twilight goes.
 fn moonlight(height: f32) -> f32 {

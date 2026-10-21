@@ -354,6 +354,49 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
 }
 
 #[test]
+fn a_campfires_light_reaches_the_ground_a_few_metres_out_as_a_real_fires_does() {
+    // A real fire's light falls by the square of the distance and nothing else; the game's
+    // lights also ease out to nothing at their range (bevy_pbr 0.20's `getRangeFalloff`, after
+    // Unreal's). The pool a few metres across that places a fire in a scene must keep most of
+    // a real fire's light there: the ground 4 m from the lake's campfire took half of it, its
+    // pool weak past 2 m (lake round 19's review).
+    let window = |d2: f32, range: f32| {
+        let f = d2 / (range * range);
+        (1.0 - f * f).clamp(0.0, 1.0).powi(2)
+    };
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: foot,
+            tall: 1.95,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.9,
+        }],
+        ..default()
+    };
+    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    for out in [3.0, 4.0] {
+        let real: f32 = lights
+            .iter()
+            .map(|l| on_ground(l, foot, out, l.lumens))
+            .sum();
+        let drawn: f32 = lights
+            .iter()
+            .map(|l| {
+                let h = l.at.y - foot.y;
+                on_ground(l, foot, out, l.lumens) * window(h * h + out * out, l.range)
+            })
+            .sum();
+        assert!(
+            drawn > 0.8 * real,
+            "{out} m out: {:.2} of a real fire's light",
+            drawn / real
+        );
+    }
+}
+
+#[test]
 fn a_hearth_lights_wood_flame_orange_with_its_green_kept() {
     // Mitchell Charity's blackbody table (sRGB, CIE 1964 10 degree): 2,200 K #ff932c and
     // 2,500 K #ffa148, as the games white-balance firelight. At 1,900 K (#ff8300) its green

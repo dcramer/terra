@@ -360,6 +360,7 @@ The look, models, bodies and gear, textures and audio.
 | [D423](decisions/D423.md) | Fire is lightly stylised, through the neutral camera | Design | Developers | Decided | Fire is drawn in the art style's lightly stylised… |
 | [D427](decisions/D427.md) | A hero prop's triangle budget | Tech | Agent | Decided | A prop the player sits beside or works at for minutes… |
 | [D429](decisions/D429.md) | The looks check knows water by what draws it | Tech | Agent | Decided | The looks check's debug-tint rule… |
+| [D432](decisions/D432.md) | The dusk sky: an amber afterglow toward the set sun, the earth's shadow and the Belt of Venus opposite | Tech | Agent | Decided | After sunset the sky low toward the set sun glows amber… |
 
 ## Engine and code
 
