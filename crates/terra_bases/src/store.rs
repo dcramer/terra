@@ -7,12 +7,12 @@
 //! camera first, and `draw` puts what they give on screen, a few a frame.
 
 use super::{Build, Built, Shown, Site};
-use crate::planet::Planet;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use terra_build::Base;
 use terra_build_mesh::sections::{Reach, drawable};
+use terra_world::planet::Planet;
 
 /// A base's entity: where it stands, its sections its children.
 #[derive(Component)]
@@ -26,7 +26,7 @@ pub struct Section {
 
 /// What is drawn of a section.
 #[derive(Debug)]
-pub(super) struct Drawn {
+pub struct Drawn {
     /// Its entity, if anything of it is drawn.
     pub entity: Option<Entity>,
     /// The job it came from: while the section's latest is another, it is being laid.
@@ -57,7 +57,7 @@ pub(super) struct Drawn {
 /// A part of a section on screen: what it was drawn from, if that may be compared (not
 /// once its look has changed), its entities, and their bytes on the GPU.
 #[derive(Debug, Default)]
-pub(super) struct OnScreen {
+pub struct OnScreen {
     pub key: Option<u64>,
     pub entities: Vec<Entity>,
     pub gpu_bytes: usize,
@@ -74,7 +74,7 @@ pub(super) struct OnScreen {
 /// and when it was done, for the drawing to look up its layers at once while the section is
 /// laid again behind it.
 #[derive(Clone, Debug)]
-pub(super) struct Repaint {
+pub struct Repaint {
     pub cubes: Vec<([i32; 3], terra_build::Kind, terra_build::Kind)>,
     pub since: std::time::Instant,
 }
@@ -82,14 +82,14 @@ pub(super) struct Repaint {
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
 /// as one whose cubes changed or whose look has must; and how finely, if that is decided.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(super) struct Waiting {
+pub struct Waiting {
     pub force: bool,
     pub reach: Option<Reach>,
 }
 
 /// A base's sections: what is drawn of each, and what waits to be laid again.
 #[derive(Default)]
-pub(super) struct Sections {
+pub struct Sections {
     pub drawn: BTreeMap<[i32; 3], Drawn>,
     /// Changes of material alone, waiting to be looked up in what is drawn (D298).
     pub repaints: Vec<Repaint>,
@@ -142,7 +142,7 @@ pub(super) struct Sections {
 
 /// A change being drawn, timed from when it was noticed to when it is all on screen.
 #[derive(Debug)]
-pub(super) struct Change {
+pub struct Change {
     pub since: std::time::Instant,
     pub waiting: usize,
     pub merged: usize,
@@ -177,7 +177,7 @@ fn stand(mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
 }
 
 /// Every build: the player's and everyone else's.
-pub(super) fn each<'a>(
+pub fn each<'a>(
     site: &'a mut Site,
     builds: &'a mut Query<&mut Built>,
 ) -> impl Iterator<Item = &'a mut Build> + 'a {
@@ -285,7 +285,7 @@ fn noticed(build: &mut Build) {
 /// Lets something big go on a worker rather than the main thread: a castle's base and how
 /// it was laid, or how a section was drawn, are hundreds of thousands of small allocations,
 /// slow to free (D308).
-pub(super) fn let_go<T: Send + 'static>(big: T) {
+pub fn let_go<T: Send + 'static>(big: T) {
     // Where there are no workers, as in a test, here.
     if let Some(pool) = bevy::tasks::AsyncComputeTaskPool::try_get() {
         pool.spawn(async move { drop(big) }).detach();
@@ -295,15 +295,15 @@ pub(super) fn let_go<T: Send + 'static>(big: T) {
 /// How much further a group is taken to be than its nearest point: half a section's
 /// diagonal, so its details reach as far from what is drawn as a section's measured from
 /// its middle do.
-pub(super) const GROUP_SHIFT_M: f32 = 7.0;
+pub const GROUP_SHIFT_M: f32 = 7.0;
 
 /// How many sections a side a base not being built is drawn by: a house is one or two such
 /// groups, so the town's entities are a few a house where they were a few a section.
-pub(super) const GROUP: i32 = 4;
+pub const GROUP: i32 = 4;
 
 /// The group a section is drawn in, as the first section of it, for a base drawn `unit`
 /// sections a side; itself, drawn alone.
-pub(super) fn unit_of(at: [i32; 3], unit: i32) -> [i32; 3] {
+pub fn unit_of(at: [i32; 3], unit: i32) -> [i32; 3] {
     if unit <= 1 {
         return at;
     }
@@ -314,7 +314,7 @@ pub(super) fn unit_of(at: [i32; 3], unit: i32) -> [i32; 3] {
 }
 
 /// The sections of a base in a group that have anything to draw.
-pub(super) fn members(base: &Base, key: [i32; 3], unit: i32) -> Vec<[i32; 3]> {
+pub fn members(base: &Base, key: [i32; 3], unit: i32) -> Vec<[i32; 3]> {
     if unit <= 1 {
         return vec![key];
     }
@@ -325,7 +325,7 @@ pub(super) fn members(base: &Base, key: [i32; 3], unit: i32) -> Vec<[i32; 3]> {
 }
 
 /// A group's box in its base's own space, in metres, low corner and high.
-pub(super) fn unit_box(key: [i32; 3], unit: i32) -> (Vec3, Vec3) {
+pub fn unit_box(key: [i32; 3], unit: i32) -> (Vec3, Vec3) {
     let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
     let low = IVec3::from_array(key).as_vec3() * side;
     (low, low + Vec3::splat(side * unit.max(1) as f32))
@@ -335,7 +335,7 @@ pub(super) fn unit_box(key: [i32; 3], unit: i32) -> (Vec3, Vec3) {
 /// section's middle, drawn alone, as its details' ranges are; from the nearest point of a
 /// group's box, as a group's are (`VisibilityRange::use_aabb`), so a house is drawn near
 /// wherever it is stood beside.
-pub(super) fn distance_to(eye: Vec3, key: [i32; 3], unit: i32) -> f32 {
+pub fn distance_to(eye: Vec3, key: [i32; 3], unit: i32) -> f32 {
     if unit <= 1 {
         return centre(IVec3::from_array(key)).distance(eye);
     }
@@ -345,7 +345,7 @@ pub(super) fn distance_to(eye: Vec3, key: [i32; 3], unit: i32) -> f32 {
 
 /// Where what is drawn of a group is placed, in its base's own space: a section's middle,
 /// or the middle of a group's box.
-pub(super) fn unit_centre(key: [i32; 3], unit: i32) -> Vec3 {
+pub fn unit_centre(key: [i32; 3], unit: i32) -> Vec3 {
     if unit <= 1 {
         return centre(IVec3::from_array(key));
     }
@@ -356,7 +356,7 @@ pub(super) fn unit_centre(key: [i32; 3], unit: i32) -> Vec3 {
 /// How far the camera is from what is drawn of a group, in metres, as [`distance_to`].
 /// A group drawn is measured to the box of its sections with anything in them, a house's
 /// own, rather than to the group's.
-pub(super) fn distance_from(
+pub fn distance_from(
     frame: &Transform,
     eye: Vec3,
     key: [i32; 3],
@@ -377,12 +377,12 @@ pub(super) fn distance_from(
 /// sections' middle and measured from there less this, as Bevy measures a detail's range
 /// from where it is placed and dithers its crossfade by that; measured to its box instead
 /// (`use_aabb`), a whole house popped as it switched.
-pub(super) fn sphere((low, high): (Vec3, Vec3)) -> (Vec3, f32) {
+pub fn sphere((low, high): (Vec3, Vec3)) -> (Vec3, f32) {
     ((low + high) * 0.5, (high - low).length() * 0.5)
 }
 
 /// The box of a group's members, in its base's own space.
-pub(super) fn members_box(members: &[[i32; 3]]) -> Option<(Vec3, Vec3)> {
+pub fn members_box(members: &[[i32; 3]]) -> Option<(Vec3, Vec3)> {
     let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
     members.iter().fold(None, |sum, &at| {
         let low = IVec3::from_array(at).as_vec3() * side;
@@ -395,14 +395,14 @@ pub(super) fn members_box(members: &[[i32; 3]]) -> Option<(Vec3, Vec3)> {
 
 /// What a group of sections lays as, from what each of its members lays as: a section
 /// alone's own key.
-pub(super) fn group_key(keys: impl IntoIterator<Item = u64>) -> u64 {
+pub fn group_key(keys: impl IntoIterator<Item = u64>) -> u64 {
     keys.into_iter()
         .fold(0u64, |sum, key| sum.rotate_left(17) ^ key)
 }
 
 /// The middle of a section, in its base's own space, in metres: where what is drawn of it
 /// is placed, and what its distance from the camera is measured to.
-pub(super) fn centre(at: IVec3) -> Vec3 {
+pub fn centre(at: IVec3) -> Vec3 {
     let side = terra_build::cubes::SECTION as f32 * terra_build::CELL_M;
     (at.as_vec3() + 0.5) * side
 }

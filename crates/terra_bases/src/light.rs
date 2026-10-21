@@ -14,7 +14,6 @@
 
 use super::store::each;
 use super::{Built, Site};
-use crate::planet::MainCamera;
 use bevy::asset::RenderAssetUsages;
 use bevy::light::{EnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
@@ -23,6 +22,7 @@ use bevy::render::render_resource::{
 };
 use std::collections::BTreeMap;
 use terra_world::climate::{ClimateSample, Sheltered};
+use terra_world::planet::MainCamera;
 use terra_world::skylight::OpenSky;
 
 /// How much of the sky's light reaches inside a room.

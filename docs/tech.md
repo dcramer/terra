@@ -48,7 +48,7 @@ The plain crates share one maths library with Bevy (`glam`), so positions pass b
 
 ### Layers of the game (D198)
 
-The game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`. The world is its own crate, `terra_world`, which builds, tests and runs without the game; the walker and gameplay are `terra_game`, on top of it:
+The game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`. The world is its own crate, `terra_world`, which builds, tests and runs without the game; the walker and gameplay are `terra_game`, on top of it, being cut into crates by domain (D407): so far `terra_bases`, the base on screen, between the world and the walker (the walker reads the hammer from it; gameplay adds it, with building play over it):
 
 | Layer | Plugin | What it holds |
 |---|---|---|

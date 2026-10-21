@@ -5,14 +5,14 @@
 
 use super::store::{BaseRoot, Section, each};
 use super::{Build, BuildLook, Built, Site};
-use crate::remote::method;
 use bevy::{asset::UntypedAssetId, prelude::*, remote::BrpResult};
 use serde_json::{Value, json};
 use terra_build_mesh::sections::Reach;
+use terra_world::remote::method;
 
 /// What a base holds.
 #[derive(Clone, Copy, Debug, Default)]
-pub(super) struct Held {
+pub struct Held {
     pub cubes: usize,
     /// Sections laid and drawn, and set aside far off.
     pub laid: usize,
@@ -27,7 +27,7 @@ pub(super) struct Held {
 }
 
 /// What a build holds now.
-pub(super) fn held(build: &Build) -> Held {
+pub fn held(build: &Build) -> Held {
     let sections = &build.sections;
     let base = build.base.bytes();
     Held {
@@ -125,7 +125,7 @@ fn memory(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
 
 /// How many bytes a texture takes on the GPU: every level of every layer, by its format's
 /// blocks.
-pub(super) fn texture_bytes(image: &Image) -> usize {
+pub fn texture_bytes(image: &Image) -> usize {
     let descriptor = &image.texture_descriptor;
     let format = descriptor.format;
     let (bw, bh) = format.block_dimensions();

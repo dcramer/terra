@@ -11,8 +11,6 @@
 use super::draw::{self, Parts};
 use super::store::{self, each};
 use super::{BuildLook, Built, Site};
-use crate::planet::MainCamera;
-use crate::shell::Options;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, TaskPool, TaskPoolBuilder, block_on, poll_once};
 use draw::detail;
@@ -21,10 +19,12 @@ use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
 use terra_build_mesh::sections::{self, Detail, Reach, Section};
+use terra_world::planet::MainCamera;
+use terra_world::shell::Options;
 
 /// The steps of drawing builds, in order.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum Drawing {
+pub enum Drawing {
     /// Changes noticed and sections set waiting.
     Notice,
     /// Sections sent to the workers.
@@ -37,7 +37,7 @@ pub(super) enum Drawing {
 
 /// Sections being laid on the workers, and what has come back.
 #[derive(Resource, Default)]
-pub(super) struct Jobs {
+pub struct Jobs {
     running: Vec<Job>,
     pub ready: VecDeque<Done>,
     tickets: u64,
@@ -78,7 +78,7 @@ const DETAIL_COSTS: [f32; 4] = [250.0, 120.0, 45.0, 5.0];
 /// How long bases took to lay whole, and sections with anything in them to cut from them
 /// and merge.
 #[derive(Default)]
-pub(super) struct Timings {
+pub struct Timings {
     pub whole: Vec<f32>,
     pub near: Vec<f32>,
     pub far: Vec<f32>,
@@ -98,7 +98,7 @@ struct Job {
 }
 
 /// A section laid, for `draw`.
-pub(super) struct Done {
+pub struct Done {
     pub root: Entity,
     pub section: [i32; 3],
     pub ticket: u64,
@@ -111,7 +111,7 @@ pub(super) struct Done {
 
 /// A base laid again on a worker: how, how long it took, and the sections waiting that
 /// lay as they were.
-pub(super) struct Laying {
+pub struct Laying {
     pub whole: sections::Whole,
     pub took_ms: f32,
     pub same: Vec<[i32; 3]>,
@@ -120,7 +120,7 @@ pub(super) struct Laying {
 }
 
 /// What laying a section came to.
-pub(super) enum Outcome {
+pub enum Outcome {
     /// Its pieces as they were: left as it is drawn.
     Same,
     /// Drawn anew: what it was laid as, how finely, and what to show.
@@ -168,7 +168,7 @@ const FAR_KEEP_M: f32 = 155.0;
 /// Closer still, a section is laid with its near detail alone (`Reach::Close`) where the
 /// middle detail has nothing else to do (`close`): on the lower presets the sun casts every
 /// section's shadow from its middle detail (`draw::show`), so there it is always made.
-pub(super) fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
+pub fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
     let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
     if close && (distance < CLOSE_LAY_M || (kept(Reach::Close) && distance < CLOSE_KEEP_M)) {
         Reach::Close
@@ -188,7 +188,7 @@ pub(super) fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
 /// work (the ground, grass, the sky's occlusion), and an edit's few milliseconds of laying
 /// waited up to 200 ms for a thread. Shipped engines give such work a priority in one job
 /// system; Bevy's pools have none, so building has a pool of its own.
-pub(super) fn builders() -> &'static TaskPool {
+pub fn builders() -> &'static TaskPool {
     static POOL: std::sync::OnceLock<TaskPool> = std::sync::OnceLock::new();
     POOL.get_or_init(|| {
         let threads = AsyncComputeTaskPool::try_get().map_or(2, |pool| pool.thread_num());
@@ -206,20 +206,20 @@ const LATER_M: f32 = 10_000.0;
 /// Whether a build's groups are drawn a detail at a time (`draw::detail`): a base nobody is
 /// building, drawn whole, by groups. The base being built is drawn by reach, a part at a
 /// time; a plan's or one going up has ghosts and a next part with its finest detail.
-pub(super) fn by_detail(build: &super::Build) -> bool {
+pub fn by_detail(build: &super::Build) -> bool {
     build.sections.unit > 1 && matches!(build.progress(), sections::Progress::Whole)
 }
 
 /// Whether a section drawn for one reach is drawn finely enough for another: as asked, or
 /// with the middle detail as well where only the near detail is asked for. A section is not
 /// laid again only to let its middle detail go; the next change to it does.
-pub(super) fn suffices(drawn: Reach, wanted: Reach) -> bool {
+pub fn suffices(drawn: Reach, wanted: Reach) -> bool {
     drawn == wanted || (drawn == Reach::Near && wanted == Reach::Close)
 }
 
 /// Whether sections near the camera are laid with their near detail alone: only at the high
 /// preset and above, where the near detail casts its own shadows.
-pub(super) fn close(quality: terra_world::quality::Quality) -> bool {
+pub fn close(quality: terra_world::quality::Quality) -> bool {
     quality >= terra_world::quality::Quality::High
 }
 
@@ -240,14 +240,14 @@ pub fn plugin(app: &mut App) {
             (super::draw::aside, launch).chain().in_set(Drawing::Launch),
         )
         .add_systems(Update, collect.in_set(Drawing::Collect))
-        .add_systems(Update, track.in_set(crate::loading::Track));
+        .add_systems(Update, track.in_set(terra_world::loading::Track));
 }
 
 /// The loading screen waits for the buildings there are to be laid and drawn, so the first
 /// thing seen is the finished scene (D135).
 fn track(
     jobs: Res<Jobs>,
-    progress: Option<ResMut<crate::loading::Progress>>,
+    progress: Option<ResMut<terra_world::loading::Progress>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
 ) {

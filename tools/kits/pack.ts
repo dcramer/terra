@@ -19,7 +19,7 @@ const KITS = join(ASSETS, "data", "kits");
 const PACKS = join(ASSETS, "data", "packs");
 const README = join(MATERIALS, "README.md");
 /** The texture budget a set is made at: the arrays' colour and normal at the high preset
- * (crates/terra_game/src/build/arrays, `Quality::texture_side`, D362). */
+ * (crates/terra_bases/src/arrays, `Quality::texture_side`, D362). */
 export const SIDE = 2048;
 
 /** What each pattern's material is, unless told otherwise: the texture slots its pack fills,

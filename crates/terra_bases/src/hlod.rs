@@ -12,20 +12,20 @@
 use super::draw::{self, Uvs};
 use super::store::{self, each};
 use super::{BuildLook, Built, Site};
-use crate::planet::MainCamera;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::Kits;
 use terra_world::detail::DetailScale;
+use terra_world::planet::MainCamera;
 
 /// How many sections a side a cell of a base's far meshes holds: 32 m, as big as its
 /// sections can be from its middle and still hand over from their own proxies within the
 /// fade (`draw::PROXY_FADE`).
 const CELL: i32 = 4;
 /// How far a base's cells are seen: the horizon from a rise.
-pub(super) const HORIZON_M: f32 = 3000.0;
+pub const HORIZON_M: f32 = 3000.0;
 /// A changed base's cells are made again once the camera is this far off, as authored:
 /// well short of where they are first seen, well past where a builder works.
 const REMAKE_M: f32 = 300.0;
@@ -38,7 +38,7 @@ const CELLS_GO_M: f32 = 270.0;
 /// A base's far meshes: the revision they were made for, their entities, and the worker
 /// making them again.
 #[derive(Default)]
-pub(super) struct Cells {
+pub struct Cells {
     made: Option<u64>,
     entities: Vec<Entity>,
     /// Its meshes, each about its middle, on screen or not.

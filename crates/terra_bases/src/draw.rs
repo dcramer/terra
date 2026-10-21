@@ -13,7 +13,6 @@ use super::layout::{Done, Drawing, Jobs, Outcome, close, reach, suffices};
 use super::store::{self, Drawn, Section, each};
 use super::views::Level;
 use super::{Build, BuildLook, Built, Site};
-use crate::planet::MainCamera;
 use bevy::{
     asset::RenderAssetUsages,
     camera::visibility::{RenderLayers, VisibilityRange},
@@ -29,8 +28,9 @@ use terra_build::{Kind, Material, kit::Kits};
 use terra_build_mesh::Surface;
 use terra_build_mesh::sections::{Drawn as Merged, Ghost, Reach, Shape};
 use terra_world::detail::DetailScale;
+use terra_world::planet::MainCamera;
 
-pub(super) mod detail;
+pub mod detail;
 use terra_world::grown::SUN_ONLY;
 use terra_world::quality::Quality;
 
@@ -42,7 +42,7 @@ const NEAR_M: f32 = 25.0;
 const MID_M: f32 = 60.0;
 /// Past this its hull: the far detail's pieces were two thirds of a town's triangles a
 /// frame, most of them houses a hundred metres off and more (D278).
-pub(super) const FAR_M: f32 = 120.0;
+pub const FAR_M: f32 = 120.0;
 const PROXY_M: f32 = 600.0;
 /// How far a plan's ghosts are seen.
 const GHOST_M: f32 = 90.0;
@@ -82,7 +82,7 @@ fn proxy_range(far: f32) -> VisibilityRange {
 }
 
 /// A base's cell far off (`hlod`): from where its sections' proxies end to the horizon.
-pub(super) fn cell_range() -> VisibilityRange {
+pub fn cell_range() -> VisibilityRange {
     VisibilityRange {
         start_margin: proxy_fade(),
         end_margin: fade(super::hlod::HORIZON_M),
@@ -99,7 +99,7 @@ const DROP_M: f32 = 740.0;
 /// A mesh of a plan's ghosts or its shell, a section's child: what a build that shows no
 /// blueprint, such as a settlement rising in a time-lapse (D381), keeps out of sight.
 #[derive(Component)]
-pub(crate) struct PlanGhost;
+pub struct PlanGhost;
 
 fn ghost_range() -> VisibilityRange {
     VisibilityRange::abrupt(0.0, GHOST_M)
@@ -110,10 +110,10 @@ fn ghost_range() -> VisibilityRange {
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct GhostMaterial {
     #[uniform(0)]
-    pub(super) colour: LinearRgba,
+    pub colour: LinearRgba,
     /// How much an edge line and an outline add to how opaque it is.
     #[uniform(0)]
-    pub(super) edge: f32,
+    pub edge: f32,
     #[uniform(0)]
     rim: f32,
 }
@@ -140,7 +140,7 @@ impl bevy::pbr::Material for GhostMaterial {
 /// ghosts in two shades and its shell, the next piece lit, far off sections in their
 /// baked colours.
 #[derive(Clone)]
-pub(super) struct Looks {
+pub struct Looks {
     structure: Handle<StandardMaterial>,
     ghost: [Handle<GhostMaterial>; 2],
     shell: Handle<GhostMaterial>,
@@ -154,12 +154,12 @@ const GHOST: [f32; 3] = [0.5, 0.75, 1.0];
 
 impl Looks {
     /// The ghost a plan's pieces are drawn in, for anything else drawn as one.
-    pub(super) fn ghost(&self) -> Handle<GhostMaterial> {
+    pub fn ghost(&self) -> Handle<GhostMaterial> {
         self.ghost[0].clone()
     }
 
     /// Every ghost material a plan is drawn in: its pieces' two shades and its shell.
-    pub(super) fn ghosts(&self) -> [Handle<GhostMaterial>; 3] {
+    pub fn ghosts(&self) -> [Handle<GhostMaterial>; 3] {
         [
             self.ghost[0].clone(),
             self.ghost[1].clone(),
@@ -216,14 +216,14 @@ impl Looks {
 /// first kit's to name the material. Kits naming the same textures share one material,
 /// so their pieces draw together.
 #[derive(Default)]
-pub(super) struct KitMaterials {
+pub struct KitMaterials {
     by_kind: BTreeMap<(Kind, Material), Handle<StandardMaterial>>,
     first: BTreeMap<Material, Handle<StandardMaterial>>,
 }
 
 impl KitMaterials {
     /// Every distinct material the kits are drawn in.
-    pub(super) fn all(&self) -> impl Iterator<Item = &Handle<StandardMaterial>> {
+    pub fn all(&self) -> impl Iterator<Item = &Handle<StandardMaterial>> {
         let mut seen = std::collections::BTreeSet::new();
         self.by_kind
             .values()
@@ -232,7 +232,7 @@ impl KitMaterials {
     }
 
     /// A kind's material, or the first kit's for no kind.
-    pub(super) fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
+    pub fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
         self.by_kind
             .get(&(kind, material))
             .or_else(|| self.first.get(&material))
@@ -241,7 +241,7 @@ impl KitMaterials {
 
 /// The kits' materials, each from its textures: colour, normal, roughness and occlusion,
 /// and parallax where it is given a depth (D14).
-pub(super) fn kit_materials(
+pub fn kit_materials(
     kits: &Kits,
     assets: &AssetServer,
     materials: &mut Assets<StandardMaterial>,
@@ -299,7 +299,7 @@ pub(super) fn kit_materials(
 
 /// A section ready to put on screen, made on a worker: its meshes, about its middle; its
 /// near and middle detail a part at a time, `None` for a part left as it is on screen.
-pub(super) struct Parts {
+pub struct Parts {
     /// Every layer of the texture arrays its parts drawn again wear (D290).
     pub layers: Vec<u16>,
     parts: Vec<Option<Part>>,
@@ -332,7 +332,7 @@ struct Part {
 /// swapped in once all of it is there, as a streaming world uploads a chunk before it
 /// shows it (D308). A tower's fall put every section it reached on the GPU in the frame it
 /// was shown, 20 to 55 ms of Bevy preparing and placing meshes.
-pub(super) enum Staged {
+pub enum Staged {
     Made(Box<Mesh>),
     Put {
         handle: Handle<Mesh>,
@@ -395,7 +395,7 @@ impl Staged {
 /// A detail's surfaces as one mesh in the texture arrays, each corner carrying its layer
 /// (`uv_b`'s first), with the rest left to draw in their own materials.
 #[allow(clippy::type_complexity)]
-pub(super) fn in_arrays(
+pub fn in_arrays(
     surfaces: &BTreeMap<(Kind, Material), Surface>,
     layers: &Layers,
     centre: Vec3,
@@ -408,7 +408,7 @@ pub(super) fn in_arrays(
 /// As [`in_arrays`], each corner's layer carrying how blackened it is by fire as well
 /// (D377, `terra_build::fire::charred`), which the arrays' shader chars, soots and glows by.
 #[allow(clippy::type_complexity)]
-pub(super) fn in_arrays_scorched(
+pub fn in_arrays_scorched(
     surfaces: &BTreeMap<(Kind, Material), Surface>,
     layers: &Layers,
     centre: Vec3,
@@ -455,7 +455,7 @@ pub(super) fn in_arrays_scorched(
 
 /// How many meshes of builds, and corners in them, have been put on the GPU in the run: what
 /// an edit costs to show, which `memory` says as the run ends.
-pub(super) static PUT: [std::sync::atomic::AtomicUsize; 2] = [
+pub static PUT: [std::sync::atomic::AtomicUsize; 2] = [
     std::sync::atomic::AtomicUsize::new(0),
     std::sync::atomic::AtomicUsize::new(0),
 ];
@@ -468,7 +468,7 @@ pub(super) static PUT: [std::sync::atomic::AtomicUsize; 2] = [
 /// its colour, from 44 to 20. Positions stay 32-bit: Bevy 0.20's 16-bit positions, unpacked
 /// by each mesh's bounds, drew every building nowhere here (tried on the 5090, the town
 /// gone from the screen with its triangles still counted), which is Bevy's to look into.
-pub(super) fn packed(mesh: Mesh) -> Mesh {
+pub fn packed(mesh: Mesh) -> Mesh {
     let args = MeshCompressionArgs {
         compress_indices: true,
         quantize_attributes: (&[(Mesh::ATTRIBUTE_COLOR.id, AttributeQuantization::Unorm8)]).into(),
@@ -483,7 +483,7 @@ pub(super) fn packed(mesh: Mesh) -> Mesh {
 /// Turns a section drawn into meshes, about its middle: of its parts, only those `only`
 /// says, which were drawn; its surfaces in the texture arrays by `layers`; packed
 /// ([`packed`]) unless it is kept on the CPU to repaint in place, as a base being built is.
-pub(super) fn parts(
+pub fn parts(
     drawn: Merged,
     centre: Vec3,
     only: &[bool],
@@ -669,7 +669,7 @@ fn ghost_mesh(ghosts: &[Ghost], shade: bool, centre: Vec3) -> Option<Mesh> {
 
 /// What a mesh is given of where its corners fall on a texture.
 #[derive(Clone, Copy, PartialEq)]
-pub(super) enum Uvs {
+pub enum Uvs {
     None,
     /// Where, for a ghost's lines.
     Only,
@@ -678,7 +678,7 @@ pub(super) enum Uvs {
 }
 
 /// A surface as a mesh about a point, its corners shared, its colours linear.
-pub(super) fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
+pub fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
     let all = surface.indexed().welded();
     let tangents = (uvs == Uvs::Mapped).then(|| all.tangents());
     let mesh = mesh_of(all, centre, uvs)?;
@@ -965,7 +965,7 @@ fn upload(
     mut jobs: ResMut<Jobs>,
     look: Res<BuildLook>,
     quality: Res<Quality>,
-    options: Res<crate::shell::Options>,
+    options: Res<terra_world::shell::Options>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
@@ -1214,7 +1214,7 @@ fn change_back(generation: u64, out: Option<u64>, newest: u64) -> bool {
 
 impl Parts {
     /// Whether nothing of it is drawn.
-    pub(super) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.corners() == 0
     }
 
@@ -1299,7 +1299,7 @@ impl Parts {
 }
 
 /// How many bytes a mesh takes on the GPU: its corners and its indices.
-pub(super) fn gpu_bytes(mesh: &Mesh) -> usize {
+pub fn gpu_bytes(mesh: &Mesh) -> usize {
     mesh.get_vertex_buffer_size() + mesh.get_index_buffer_bytes().map_or(0, <[u8]>::len)
 }
 
@@ -1774,7 +1774,7 @@ const AHEAD_MAX_M: f32 = 30.0;
 /// base's cells (`hlod`) all that is drawn of it; one waiting to be laid there is set aside
 /// rather than laid; and one set aside that the camera comes back within [`LAY_M`] of waits
 /// to be laid again. A base with nothing laid or waiting lets go of what it was laid from.
-pub(super) fn aside(
+pub fn aside(
     mut commands: Commands,
     scale: Res<DetailScale>,
     camera: Query<&GlobalTransform, With<MainCamera>>,

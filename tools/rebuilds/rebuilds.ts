@@ -23,6 +23,7 @@ export const PROBES: Record<string, string> = {
   "build-mesh": "crates/terra_build_mesh/src/sections.rs",
   town: "crates/terra_town/src/town/streets.rs",
   world: "crates/terra_world/src/flora.rs",
+  bases: "crates/terra_bases/src/hlod.rs",
   walker: "crates/terra_game/src/play/movement.rs",
   creatures: "crates/terra_game/src/play/creatures.rs",
 };

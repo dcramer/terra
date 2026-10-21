@@ -198,7 +198,7 @@ The log is for what is worth reading: the engine's routine messages are filtered
 
 ## Building's debug views
 
-F4 cycles what every building's surfaces are coloured by, and Shift+F4 goes back (D385, `crates/terra_game/src/build/views.rs`), as Unreal's view modes and Unity's draw modes do; a legend in the top right says what the view shows and how to read it. Look before measuring: most questions of how a building looks or where it is wrong are answered by one of these.
+F4 cycles what every building's surfaces are coloured by, and Shift+F4 goes back (D385, `crates/terra_bases/src/views.rs`), as Unreal's view modes and Unity's draw modes do; a legend in the top right says what the view shows and how to read it. Look before measuring: most questions of how a building looks or where it is wrong are answered by one of these.
 
 | View | Shows |
 |---|---|

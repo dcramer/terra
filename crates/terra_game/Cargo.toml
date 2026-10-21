@@ -17,6 +17,8 @@ serde.workspace = true
 serde_json = "1"
 # The version Bevy itself reads models with, used here to read model shapes directly.
 gltf = { version = "1.4", default-features = false, features = ["utils"] }
+# The base on screen (D407), re-exported as `build`.
+terra_bases.workspace = true
 terra_build.workspace = true
 # Building laid out: its pieces, props' leaves and walking (D407).
 terra_build_layout.workspace = true

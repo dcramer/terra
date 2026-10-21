@@ -10,11 +10,12 @@
 //!
 //! With the `play` experiment on, a player's builder tool drives this instead.
 
-use crate::planet::{MainCamera, Planet};
-use crate::play::Footprint;
-use crate::start::Start;
+// Bevy systems take their inputs as arguments, so long argument lists and nested query
+// types are normal here.
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 use bevy::prelude::*;
-pub(crate) use footing::lifted;
+pub use footing::lifted;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -23,30 +24,24 @@ use terra_build::ops::{Context, Done, Op, Refusal};
 use terra_build::save::Snapshot;
 use terra_build::{Base, BuildOp, CELL_M, Cube, Kind, Panel, Rules, STOREY_M, Walker, example};
 use terra_core::Operation;
+use terra_world::footprint::Footprint;
+use terra_world::planet::{MainCamera, Planet};
+use terra_world::start::Start;
 
-pub(crate) mod act;
-mod arrays;
-mod atlases;
-pub mod building;
-mod draw;
-mod footing;
-pub(crate) use draw::PlanGhost;
-pub(crate) mod fire;
-mod going_up;
+pub mod arrays;
+pub mod atlases;
+pub mod draw;
+pub mod footing;
+pub use draw::PlanGhost;
 pub mod hammer;
-mod hlod;
-mod layout;
-mod light;
-mod loss;
-mod maps;
-mod memory;
-pub(crate) use terra_build::plans;
-pub(crate) mod props;
-mod remote;
-mod sheet;
-mod store;
-mod views;
-mod village;
+pub mod hlod;
+pub mod layout;
+pub mod light;
+pub mod maps;
+pub mod memory;
+pub use terra_build::plans;
+pub mod store;
+pub mod views;
 
 use draw::{KitMaterials, kit_materials};
 use terra_build_mesh::{relief::Maps, sections::Progress};
@@ -56,14 +51,14 @@ const REACH_M: f32 = 300.0;
 /// Present when something else is driving construction, such as a player holding a
 /// builder tool. The keys and camera here then stand aside.
 #[derive(Resource)]
-pub(super) struct DrivenByPlayer;
+pub struct DrivenByPlayer;
 
 /// Something built from parts (D108): its shape, the operations that made it, where it
 /// stands, and how it is drawn. The player's own is the [`Site`]; anyone else's, such as a
 /// village house, is [`Built`]. Both are made, drawn and walked on the same way: the base
 /// is an entity placed at `frame`, its sections of cubes its children, each laid and
 /// merged on the workers as it changes (`store`, `layout`, `draw`).
-pub(super) struct Build {
+pub struct Build {
     pub base: Base,
     /// Places the build's own space on the planet.
     pub frame: Transform,
@@ -78,7 +73,7 @@ pub(super) struct Build {
     /// The revision its steps and footprint were last worked out for.
     refreshed: u64,
     /// The cubes lit as what goes in next.
-    next: BTreeSet<[i32; 3]>,
+    pub next: BTreeSet<[i32; 3]>,
     /// Whether it is drawn as far as each of its cubes is built (the player's base, the
     /// kit sheet's rows of cubes in states), rather than whole (a village's houses).
     pub by_cubes: bool,
@@ -129,7 +124,7 @@ const FOLD_AFTER: usize = 400;
 /// An act worked out against a copy of a base, on a worker or at once, ready to be swapped
 /// in (`Build::swap`): the base after it, what it did, what came down or was chipped off,
 /// the cubes it only repainted, and its operations.
-pub(super) struct Applied {
+pub struct Applied {
     pub base: Base,
     pub done: Done,
     pub fallen: Vec<Fallen>,
@@ -140,7 +135,7 @@ pub(super) struct Applied {
 /// Does operations to a copy of a base as one act (D21): all of them or, if one is refused,
 /// none; with what harm chipped off and brought down, and the cubes only repainted (D298).
 /// Touches nothing else, so it runs on a worker against the copy (`act::Applying`).
-pub(super) fn work_out(
+pub fn work_out(
     mut base: Base,
     kits: Option<Arc<Kits>>,
     ops: Vec<Op>,
@@ -245,7 +240,7 @@ pub(super) fn work_out(
 
 /// The build under construction by the player, and where it stands.
 #[derive(Resource, Deref, DerefMut)]
-pub(super) struct Site {
+pub struct Site {
     #[deref]
     pub build: Build,
     camera_placed: bool,
@@ -282,14 +277,14 @@ fn give_footprints(
 
 /// A build that is not the player's, such as a house in a village.
 #[derive(Component, Deref, DerefMut)]
-pub(super) struct Built(pub Build);
+pub struct Built(pub Build);
 
 /// What every build is drawn with: its kits and their materials and maps, what no kit
 /// draws, a plan's ghosts and the next piece lit, far off sections, and the shapes
 /// a ghost is drawn as (`draw`).
 #[derive(Resource, Clone)]
-pub(super) struct BuildLook {
-    looks: draw::Looks,
+pub struct BuildLook {
+    pub looks: draw::Looks,
     /// The kits, each drawing the cubes of its kind: logs, stone (D179).
     pub kits: Option<Arc<Kits>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
@@ -297,9 +292,9 @@ pub(super) struct BuildLook {
     /// The height and colour maps the kits' pieces are made with, as they load.
     maps: Arc<Maps>,
     /// The kits' materials, textured (D14).
-    materials: Arc<KitMaterials>,
+    pub materials: Arc<KitMaterials>,
     /// The kits' texture sets as layers of the texture arrays (D290).
-    layers: Arc<arrays::Layers>,
+    pub layers: Arc<arrays::Layers>,
 }
 
 /// The kits' files, `assets/data/kits/`, read again when one is saved so a wall's look can
@@ -320,7 +315,7 @@ const KITS: &str = "data/kits";
 /// The assets the kits' files are read from: those next to the program, or, for a Windows
 /// copy run from WSL (`cargo xtask win`), the source's own, which it names in
 /// `TERRA_SOURCE_ASSETS`, so a kit's file saved while it runs is seen.
-fn kit_assets() -> std::path::PathBuf {
+pub fn kit_assets() -> std::path::PathBuf {
     std::env::var_os("TERRA_SOURCE_ASSETS")
         .map(std::path::PathBuf::from)
         .filter(|path| path.join(KITS).is_dir())
@@ -360,7 +355,7 @@ fn modified() -> Option<SystemTime> {
 }
 
 /// Each kit's kind, by its file's name: `logs`, `stone`.
-fn kit_names() -> BTreeMap<Kind, String> {
+pub fn kit_names() -> BTreeMap<Kind, String> {
     kit_paths()
         .iter()
         .filter_map(|path| {
@@ -373,7 +368,7 @@ fn kit_names() -> BTreeMap<Kind, String> {
 
 /// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if
 /// none could be read.
-fn read_kits() -> Option<Kits> {
+pub fn read_kits() -> Option<Kits> {
     let mut kits: Vec<Kit> = kit_paths()
         .iter()
         .filter_map(|path| read_kit(path))
@@ -472,11 +467,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, (setup, make_arrays).chain())
         .add_systems(
             PostStartup,
-            keep_footprint.before(crate::play::FloraSystems::Plant),
+            keep_footprint.before(terra_world::flora::FloraSystems::Plant),
         )
         .add_systems(
             Update,
-            (keep_footprint, give_footprints).before(crate::play::FloraSystems::Clear),
+            (keep_footprint, give_footprints).before(terra_world::flora::FloraSystems::Clear),
         )
         .init_resource::<maps::Loading>()
         .init_resource::<atlases::Atlases>()
@@ -509,17 +504,12 @@ pub fn plugin(app: &mut App) {
 }
 
 /// A point just outside the example base's door, in the base's own space.
-pub(super) const OUTSIDE_DOOR: Vec3 = Vec3::new(7.5, 0.0, 9.0);
+pub const OUTSIDE_DOOR: Vec3 = Vec3::new(7.5, 0.0, 9.0);
 
 impl Build {
     /// A build with nothing in it yet, standing at `frame`, with the entity it is drawn
     /// under.
-    pub(super) fn new(
-        commands: &mut Commands,
-        look: &BuildLook,
-        frame: Transform,
-        name: &str,
-    ) -> Self {
+    pub fn new(commands: &mut Commands, look: &BuildLook, frame: Transform, name: &str) -> Self {
         let root = commands
             .spawn((
                 Name::new(name.to_string()),
@@ -579,7 +569,7 @@ impl Build {
     }
 
     /// Lays every section again, as when it has been replaced or its kits have changed.
-    pub(super) fn redraw_all(&mut self) {
+    pub fn redraw_all(&mut self) {
         self.sections.everything = true;
         self.revision += 1;
     }
@@ -587,7 +577,7 @@ impl Build {
     /// A point on the ground a few metres out from the first doorway, facing which a walker
     /// would climb its steps into the base. Returns the point and the direction to face,
     /// both in the base's own space.
-    pub(super) fn approach(&self) -> (Vec3, Vec3) {
+    pub fn approach(&self) -> (Vec3, Vec3) {
         match self.base.doorways(&BTreeSet::new()).first() {
             Some(door) => {
                 let out = door.outward.as_vec3();
@@ -600,24 +590,24 @@ impl Build {
 
     /// The height of whatever the base offers to stand on at a point in its own space: a
     /// floor, a roof, a stair or a slope, whichever is highest within a step of the feet.
-    pub(super) fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
+    pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
         terra_build_layout::walk::Walking::support(self.walkable(), point, walker)
     }
 
     /// What a walker meets: what stands of the base so far.
-    pub(super) fn walkable(&self) -> &Base {
+    pub fn walkable(&self) -> &Base {
         self.standing.as_ref().unwrap_or(&self.base)
     }
 
     /// Whether a point in the world is under the base, or within a margin of it: in a room,
     /// on a floor, or by any wall, such as one standing alone.
-    pub(super) fn covers(&self, point: Vec3, margin: f32) -> bool {
+    pub fn covers(&self, point: Vec3, margin: f32) -> bool {
         self.footprint.covers(point, margin)
     }
 
     /// Moves the build to stand somewhere else, as when a base is begun where its claim
     /// is: its parts are drawn there from then on.
-    pub(super) fn move_to(
+    pub fn move_to(
         &mut self,
         frame: Transform,
         commands: &mut Commands,
@@ -636,7 +626,7 @@ impl Build {
     /// whole space from the floor to above the roof, within its walls' outer faces and no
     /// further, since the ground outside a building is not changed (D131, D193). What is
     /// under the floor stays, for its footings.
-    pub(super) fn cut_for_room(&self, min: IVec3, max: IVec3) -> Operation {
+    pub fn cut_for_room(&self, min: IVec3, max: IVec3) -> Operation {
         let low = Vec3::new(
             min.x as f32 * CELL_M,
             min.y as f32 * STOREY_M,
@@ -654,7 +644,7 @@ impl Build {
         }
     }
 
-    pub(super) fn apply_all(
+    pub fn apply_all(
         &mut self,
         ops: &[BuildOp],
         _commands: &mut Commands,
@@ -678,7 +668,7 @@ impl Build {
     }
 
     /// Starts the base again from a list of operations, as when a saved world is loaded.
-    pub(super) fn replace_with(
+    pub fn replace_with(
         &mut self,
         ops: &[BuildOp],
         commands: &mut Commands,
@@ -697,7 +687,7 @@ impl Build {
     /// steps from the planet, then laid again as plans and built a layer at a time, every
     /// step checked, in its kits' terms. Returns the operation refused and why, if one is,
     /// and keeps the shortcuts' base then.
-    pub(super) fn put_up(
+    pub fn put_up(
         &mut self,
         ops: &[BuildOp],
         commands: &mut Commands,
@@ -720,7 +710,7 @@ impl Build {
     /// Readies a building to go up as builders put it up (D381): what the shortcuts say it
     /// is, its footings and door steps from the planet, kept as the whole it will be, and
     /// the build left empty, drawn as far as each of its cubes is in.
-    pub(crate) fn ready_to_rise(
+    pub fn ready_to_rise(
         &mut self,
         ops: &[BuildOp],
         commands: &mut Commands,
@@ -738,7 +728,7 @@ impl Build {
 
     /// Does operations to the base as one act, checked against it as it is (D21): all of
     /// them or, if one is refused, none. It is drawn again on the next frame.
-    pub(super) fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
+    pub fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
         let applied = work_out(self.base.clone(), self.kits.clone(), ops.to_vec(), cx)?;
         let done = applied.done.clone();
         self.swap(applied, std::time::Instant::now());
@@ -748,7 +738,7 @@ impl Build {
     /// Takes in an act worked out on a worker (`work_out`): its base, what came down and
     /// what was only repainted, kept to be saved with the base. Its change to the screen is
     /// timed from when the act was `made`.
-    pub(super) fn swap(&mut self, applied: Applied, made: std::time::Instant) {
+    pub fn swap(&mut self, applied: Applied, made: std::time::Instant) {
         if !self.sections.drawn.is_empty() {
             self.sections.changed_at.get_or_insert(made);
         }
@@ -771,7 +761,7 @@ impl Build {
 
     /// Lights these cubes as what goes in next, drawing their sections again if that
     /// changes them.
-    pub(super) fn light(&mut self, next: BTreeSet<[i32; 3]>) {
+    pub fn light(&mut self, next: BTreeSet<[i32; 3]>) {
         if self.next != next {
             self.sections
                 .relight
@@ -782,14 +772,14 @@ impl Build {
     }
 
     /// Takes a snapshot of the base as it is, and forgets the operations before it.
-    pub(super) fn fold(&mut self) {
+    pub fn fold(&mut self) {
         self.snapshot = Some(self.base.snapshot());
         self.since.clear();
     }
 
     /// Starts the base again from a snapshot and the operations since, as when a saved
     /// game is loaded. Operations that no longer apply are left out, and said.
-    pub(super) fn restore(&mut self, snapshot: &Snapshot, since: &[Op], rules: &Rules) {
+    pub fn restore(&mut self, snapshot: &Snapshot, since: &[Op], rules: &Rules) {
         let cx = Context::free(rules);
         match terra_build::save::restore(snapshot, since, &cx) {
             Ok((base, applied, left_out)) => {
@@ -813,7 +803,7 @@ impl Build {
     }
 
     /// Applies an operation and redraws the base. Returns whether anything changed.
-    pub(super) fn apply(
+    pub fn apply(
         &mut self,
         op: BuildOp,
         _commands: &mut Commands,
@@ -890,34 +880,15 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
         .then_some(kind)
 }
 
-/// The kinds a village is built of (`terra_town::village`): each role's material as the
-/// settlement's data names it, and the roof each takes (D290).
 /// Where the player's base stands, its own space placed on the planet, if there is one: for
 /// what is told places in the base's own metres, as a script tells the camera.
-pub(crate) fn base_frame(world: &World) -> Option<Transform> {
+pub fn base_frame(world: &World) -> Option<Transform> {
     world.get_resource::<Site>().map(|site| site.frame)
-}
-
-pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_town::village::Palette> {
-    let assets = kit_assets();
-    let read = |file: &str| {
-        std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
-    };
-    let names = kit_names();
-    let named = |name: &str| {
-        names
-            .iter()
-            .find(|(_, n)| n.as_str() == name)
-            .map(|(k, _)| *k)
-    };
-    terra_town::village::Palette::read(&read, &named, kits)
-        .map_err(|why| error!("{why}"))
-        .ok()
 }
 
 /// The kind footings are laid in (D194): stone, the first block kind by its id that is not
 /// framed.
-pub(super) fn footing_kind(kits: &Kits) -> Option<Kind> {
+pub fn footing_kind(kits: &Kits) -> Option<Kind> {
     kits.footing().map(|kit| kit.kind())
 }
 
@@ -928,7 +899,7 @@ const FOOTING_INTO_GROUND_M: f32 = 0.04;
 /// The ground's height under a column of a build, in centimetres in its own space: the
 /// lowest under its corners and its middle, a little lower still, so a footing down to it
 /// is set into the ground all round.
-pub(super) fn ground_cm(frame: &Transform, planet: &Planet, column: [i32; 2]) -> i16 {
+pub fn ground_cm(frame: &Transform, planet: &Planet, column: [i32; 2]) -> i16 {
     let lowest = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)]
         .map(|(dx, dz)| {
             let at = Vec3::new(
@@ -945,7 +916,7 @@ pub(super) fn ground_cm(frame: &Transform, planet: &Planet, column: [i32; 2]) ->
 
 /// Where a base begun at a point on the ground stands: level there, its floor at the ground,
 /// and turned as `like` is, so its grid keeps the same heading wherever it is begun (D57).
-pub(super) fn frame_at(point: Vec3, like: &Transform) -> Transform {
+pub fn frame_at(point: Vec3, like: &Transform) -> Transform {
     let up = point.normalize();
     Transform {
         translation: point,
@@ -954,11 +925,11 @@ pub(super) fn frame_at(point: Vec3, like: &Transform) -> Transform {
     }
 }
 
-fn setup(
+pub fn setup(
     mut commands: Commands,
     planet: Res<Planet>,
     start: Res<Start>,
-    options: Res<crate::shell::Options>,
+    options: Res<terra_world::shell::Options>,
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

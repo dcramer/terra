@@ -871,7 +871,7 @@ fn to_side(data: &[u8], width: u32, height: u32, channels: usize, side: u32) -> 
 }
 
 /// A loaded picture's first level's bytes, its size and channels a texel.
-pub(crate) fn pixels(image: &Image) -> Option<(Vec<u8>, u32, u32, usize)> {
+pub fn pixels(image: &Image) -> Option<(Vec<u8>, u32, u32, usize)> {
     let size = image.texture_descriptor.size;
     let data = image.data.as_ref()?;
     let texels = (size.width * size.height) as usize;

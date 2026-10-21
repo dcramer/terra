@@ -3,7 +3,7 @@
 //! it is to move to (research/2026-10-18-crate-layout.md, "On Bevy"), and a module naming
 //! one in a crate above its own, or beside it (building play beside creatures and
 //! townsfolk), fails: step 7 cut every crossing, so none may come back. A new module is
-//! placed here.
+//! placed here; a crate step 8 has made leaves the map, Cargo holding its line.
 //! Tests and test-only items may name anything. The check reads the sources; it builds
 //! nothing.
 
@@ -62,20 +62,9 @@ const PLACES: &[(&str, Crate)] = {
         ("play/save", App),
         ("play/sounds", App),
         ("play/soundscape", App),
-        // The base on screen.
+        // The base on screen, now `terra_bases` (Cargo holds its line), at its old path, which
+        // building play's modules below still sit under.
         ("build", Bases),
-        ("build/arrays", Bases),
-        ("build/atlases", Bases),
-        ("build/draw", Bases),
-        ("build/footing", Bases),
-        ("build/hammer", Bases),
-        ("build/hlod", Bases),
-        ("build/layout", Bases),
-        ("build/light", Bases),
-        ("build/maps", Bases),
-        ("build/memory", Bases),
-        ("build/store", Bases),
-        ("build/views", Bases),
         // The walker.
         ("appearance", Walker),
         ("character", Walker),

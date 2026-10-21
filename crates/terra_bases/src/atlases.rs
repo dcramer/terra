@@ -58,7 +58,7 @@ enum State {
 /// Each atlas map read, by the picture it was read from: being compressed, or its
 /// compressed copy. Cleared when the kits' materials are made again.
 #[derive(Resource, Default)]
-pub(super) struct Atlases {
+pub struct Atlases {
     maps: BTreeMap<AssetId<Image>, State>,
     /// The kits' materials these are of, by address.
     of: usize,
@@ -91,7 +91,7 @@ fn compressed(pixels: Vec<u8>, side: u32, map: Map, sampler: bevy::image::ImageS
 }
 
 /// Compresses each atlas map once it has loaded, and points its material at the copy.
-pub(super) fn compress(
+pub fn compress(
     look: Res<super::BuildLook>,
     mut atlases: ResMut<Atlases>,
     mut images: ResMut<Assets<Image>>,

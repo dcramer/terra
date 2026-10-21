@@ -75,7 +75,7 @@ fn swatch(
 
 /// The maps being loaded: heights and colours, by folder.
 #[derive(Resource, Default)]
-pub(super) struct Loading {
+pub struct Loading {
     wanted: Option<(Vec<String>, Vec<String>)>,
     heights: BTreeMap<String, Handle<Image>>,
     colours: BTreeMap<String, Handle<Image>>,
@@ -107,7 +107,7 @@ fn wanted(kits: &Kits) -> (Vec<String>, Vec<String>) {
 
 /// Loads the maps the kits are made with, and when they are all ready draws every build
 /// again with them.
-pub(super) fn load(
+pub fn load(
     mut loading: ResMut<Loading>,
     mut look: ResMut<BuildLook>,
     assets: Res<AssetServer>,

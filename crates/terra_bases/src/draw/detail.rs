@@ -12,11 +12,10 @@ use super::*;
 use terra_build_mesh::sections::Detail;
 
 /// A group's details, finest first: each one slot of [`Drawn::parts`].
-pub(in crate::build) const DETAILS: [Detail; 4] =
-    [Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy];
+pub const DETAILS: [Detail; 4] = [Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy];
 
 /// A detail's slot among [`DETAILS`].
-pub(in crate::build) fn slot(detail: Detail) -> usize {
+pub fn slot(detail: Detail) -> usize {
     DETAILS
         .iter()
         .position(|each| *each == detail)
@@ -24,7 +23,7 @@ pub(in crate::build) fn slot(detail: Detail) -> usize {
 }
 
 /// The reach a detail held as its finest counts as, for what else reads a section's reach.
-pub(in crate::build) fn reach_of(detail: Detail) -> Reach {
+pub fn reach_of(detail: Detail) -> Reach {
     match detail {
         Detail::Near => Reach::Near,
         Detail::Mid => Reach::Mid,
@@ -54,7 +53,7 @@ const NEEDED: [(f32, f32); 4] = [
 /// The details a group needs at this distance. Where the near detail casts its own shadow
 /// (`close`, the high preset) the middle detail is needed only where it is seen; below it,
 /// whenever the near detail is, as the sun sees the middle detail (`show`).
-pub(in crate::build) fn needed(distance: f32, close: bool) -> [bool; 4] {
+pub fn needed(distance: f32, close: bool) -> [bool; 4] {
     let mut needed = NEEDED.map(|(from, to)| distance >= from && distance < to);
     needed[1] |= needed[0] && !close;
     needed
@@ -63,7 +62,7 @@ pub(in crate::build) fn needed(distance: f32, close: bool) -> [bool; 4] {
 /// The detail to lay next for a group, and whether it is needed now (`now`) rather than only
 /// a second ahead (`soon`): of those needed now and not held, the one seen at this distance
 /// first, then the finest; then of those needed soon, the finest.
-pub(in crate::build) fn next(
+pub fn next(
     held: [bool; 4],
     now: [bool; 4],
     soon: [bool; 4],
@@ -88,7 +87,7 @@ pub(in crate::build) fn next(
 }
 
 /// Which details of a group are held, laid as it is now (`key`).
-pub(in crate::build) fn held(drawn: &Drawn) -> [bool; 4] {
+pub fn held(drawn: &Drawn) -> [bool; 4] {
     let mut held = [false; 4];
     if drawn.by_detail {
         for (i, part) in drawn.parts.iter().enumerate().take(DETAILS.len()) {
@@ -103,7 +102,7 @@ pub(in crate::build) fn held(drawn: &Drawn) -> [bool; 4] {
 /// or from the camera if none finer is held; to where the next coarser one held starts, or
 /// its own end. A detail laid in hands over to the one stretched over its distances by the
 /// same crossfade as any other.
-pub(in crate::build) fn ranges(held: [bool; 4]) -> [Option<VisibilityRange>; 4] {
+pub fn ranges(held: [bool; 4]) -> [Option<VisibilityRange>; 4] {
     let order: Vec<usize> = (0..DETAILS.len()).filter(|&i| held[i]).collect();
     let mut ranges = [None, None, None, None];
     for (n, &i) in order.iter().enumerate() {
@@ -140,7 +139,7 @@ fn further(drawn: &Drawn) -> f32 {
 }
 
 /// Gives every detail held its range for what is held now.
-pub(in crate::build) fn hand_over(commands: &mut Commands, drawn: &mut Drawn) {
+pub fn hand_over(commands: &mut Commands, drawn: &mut Drawn) {
     let further = further(drawn);
     let ranges = ranges(held(drawn));
     for (part, range) in drawn.parts.iter().zip(ranges) {
@@ -163,7 +162,7 @@ pub(in crate::build) fn hand_over(commands: &mut Commands, drawn: &mut Drawn) {
 }
 
 /// Lets a detail go: its entities, with their meshes.
-pub(in crate::build) fn let_go(commands: &mut Commands, part: &mut OnScreen) {
+pub fn let_go(commands: &mut Commands, part: &mut OnScreen) {
     for id in part.entities.drain(..) {
         commands.entity(id).try_despawn();
     }
@@ -174,7 +173,7 @@ pub(in crate::build) fn let_go(commands: &mut Commands, part: &mut OnScreen) {
 /// earlier shape of it let go; what is of no one detail (`plain`, a plan's ghosts) kept
 /// once.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn show(
+pub fn show(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     look: &BuildLook,
@@ -368,7 +367,7 @@ pub(super) fn show(
 /// those whose distances the camera is furthest outside go first (`evict`). At the lower
 /// presets, none: the integrated GPU's town, holding them, drew a fifth slower, its few
 /// hundred megabytes of meshes nearly doubled in memory it shares with the CPU.
-pub(in crate::build) fn spare_bytes(quality: Quality) -> usize {
+pub fn spare_bytes(quality: Quality) -> usize {
     match quality {
         Quality::High | Quality::Ultra => 192 << 20,
         _ => 0,
@@ -377,7 +376,7 @@ pub(in crate::build) fn spare_bytes(quality: Quality) -> usize {
 
 /// A detail held and not wanted: whose, which, its bytes, and how far the camera is outside
 /// the distances it is needed over.
-pub(in crate::build) struct Spare {
+pub struct Spare {
     pub root: Entity,
     pub at: [i32; 3],
     pub slot: usize,
@@ -386,7 +385,7 @@ pub(in crate::build) struct Spare {
 }
 
 /// How far a distance is outside where a detail is needed.
-pub(in crate::build) fn outside(slot: usize, distance: f32) -> f32 {
+pub fn outside(slot: usize, distance: f32) -> f32 {
     let (from, to) = NEEDED[slot];
     (from - distance).max(distance - to).max(0.0)
 }
@@ -394,7 +393,7 @@ pub(in crate::build) fn outside(slot: usize, distance: f32) -> f32 {
 /// Which of the details held and not wanted to let go, so the rest fit in `budget`: those
 /// the camera is furthest outside first; never a hull, a few hundred triangles that every
 /// distance past the far detail needs.
-pub(in crate::build) fn evict(mut spare: Vec<Spare>, budget: usize) -> Vec<Spare> {
+pub fn evict(mut spare: Vec<Spare>, budget: usize) -> Vec<Spare> {
     spare.retain(|each| each.slot < DETAILS.len() - 1);
     let mut total: usize = spare.iter().map(|each| each.bytes).sum();
     spare.sort_by(|a, b| b.outside.total_cmp(&a.outside));

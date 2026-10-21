@@ -6009,6 +6009,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_bases"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "libm",
+ "serde",
+ "serde_json",
+ "terra_build",
+ "terra_build_layout",
+ "terra_build_mesh",
+ "terra_core",
+ "terra_gen",
+ "terra_world",
+]
+
+[[package]]
 name = "terra_build"
 version = "0.1.0"
 dependencies = [
@@ -6099,6 +6115,7 @@ dependencies = [
  "ron",
  "serde",
  "serde_json",
+ "terra_bases",
  "terra_build",
  "terra_build_layout",
  "terra_build_mesh",

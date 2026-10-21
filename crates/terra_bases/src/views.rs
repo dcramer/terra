@@ -31,8 +31,6 @@ use super::arrays::{Arrays, BuildMaterial};
 use super::draw::GhostMaterial;
 use super::store::BaseRoot;
 use super::{Build, BuildLook, Built, Site};
-use crate::planet::MainCamera;
-use crate::remote::{method, refused};
 use bevy::{
     asset::RenderAssetUsages,
     pbr::{ExtendedMaterial, MaterialExtension},
@@ -49,6 +47,8 @@ use terra_build_layout::layout::roles::{Beyond, Dir, Role, Roles};
 use terra_build_layout::layout::roofs::RoofPart;
 use terra_build_layout::layout::{self, Piece};
 use terra_build_mesh::sections::{CLUSTER, Detail, Reach};
+use terra_world::planet::MainCamera;
+use terra_world::remote::{method, refused};
 
 /// The screen pixels a texel should cover seen square on from a metre off: one, a texel a
 /// pixel, as a 2,048-texel stone wall two metres a copy lays at 1080p (D362,
@@ -468,7 +468,7 @@ struct RolesSeen {
 /// A line of the roles view, in the world: its ends, its colour, and whether it is a roof's.
 type Line = (Vec3, Vec3, [f32; 3], bool);
 
-pub(super) fn plugin(app: &mut App) {
+pub fn plugin(app: &mut App) {
     app.init_resource::<BuildView>()
         .init_resource::<Swaps>()
         .init_resource::<RolesSeen>()

@@ -1,0 +1,26 @@
+[package]
+name = "terra_bases"
+description = "The base on screen in Bevy, on terra_world: a base's site, its kits read, its acts applied, and its drawing (sections, arrays, details, views, light, levels of detail), memory and store (D407)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `bevy_remote`: the base's remote methods (views, memory).
+bevy = { workspace = true, features = ["bevy_remote"] }
+libm.workspace = true
+serde.workspace = true
+# Remote methods take and give JSON; already built for Bevy's remote protocol.
+serde_json = "1"
+terra_build.workspace = true
+# Building laid out: the walking and a prop's frame (D407).
+terra_build_layout.workspace = true
+# Building drawn: the sections, their meshes and fragments uploaded here (D407).
+terra_build_mesh.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+terra_world.workspace = true
+
+[lints]
+workspace = true
