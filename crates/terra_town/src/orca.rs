@@ -27,7 +27,9 @@
 //! > Chapel Hill, N.C. 27599-3175, United States of America. <https://gamma.cs.unc.edu/RVO2/>
 //!
 //! Changes from the original: written in Rust; obstacles found from a grid of edges rather
-//! than a k-d tree; vectors from `glam`.
+//! than a k-d tree; vectors from `glam`; the wanted velocity leaned to the right when someone
+//! comes the other way on the walker's line ([`keep_right`]), as the Recast/Detour crowd's
+//! side penalty does, where the original leaves two on one line standing face to face.
 
 use glam::Vec2;
 use std::collections::BTreeMap;
@@ -384,6 +386,31 @@ pub fn velocity(
         }
     }
     let wall_lines = lines.len();
+    walker_lines(me, neighbours, horizons, step, &mut lines);
+    let mut result = Vec2::ZERO;
+    let failed = program2(
+        &lines,
+        me.fastest,
+        keep_right(me, neighbours),
+        false,
+        &mut result,
+    );
+    if failed < lines.len() {
+        program3(&lines, wall_lines, failed, me.fastest, &mut result);
+    }
+    result
+}
+
+/// Each neighbour's half-plane: the velocities that keep clear of it within the walkers'
+/// horizon, the walker taking half the turn (`computeNewVelocity`'s agent loop).
+fn walker_lines(
+    me: &Mover,
+    neighbours: &[Body],
+    horizons: Horizons,
+    step: f32,
+    lines: &mut Vec<Line>,
+) {
+    let radius = me.radius;
     let inverse = 1.0 / horizons.walkers;
     for other in neighbours {
         let relative = other.at - me.at;
@@ -432,12 +459,49 @@ pub fn velocity(
             direction,
         });
     }
-    let mut result = Vec2::ZERO;
-    let failed = program2(&lines, me.fastest, me.wanted, false, &mut result);
-    if failed < lines.len() {
-        program3(&lines, wall_lines, failed, me.fastest, &mut result);
+}
+
+/// How far ahead a walker looks for someone coming the other way on its line, in metres.
+const MEETING_M: f32 = 4.0;
+/// How far across a walker leans for them at most, against its speed: about 22 degrees.
+const LEAN: f32 = 0.4;
+
+/// The velocity a walker wants, leaned to its right while someone comes the other way on
+/// its line, or to its left if they are clearly on its right: each of two meeting head on
+/// leans the same way, so they pass. ORCA alone leaves them face to face, each one's
+/// half-plane square across their line, the velocity nearest the wanted a standstill.
+/// After the side penalty of the Recast/Detour crowd (`dtObstacleAvoidanceQuery`'s
+/// `weightSide`, whose side falls to one way when the other is dead ahead), as a lean of the
+/// wanted velocity rather than a penalty on sampled ones; zlib licence, Copyright (c)
+/// 2009-2010 Mikko Mononen.
+fn keep_right(me: &Mover, neighbours: &[Body]) -> Vec2 {
+    let speed = me.wanted.length();
+    if speed < EPSILON {
+        return me.wanted;
     }
-    result
+    let ahead = me.wanted / speed;
+    let mut lean = 0.0f32;
+    for other in neighbours {
+        let to = other.at - me.at;
+        let along = to.dot(ahead);
+        let coming = other.velocity.dot(-to.normalize_or_zero());
+        if along <= 0.0 || along > MEETING_M || coming < 0.1 {
+            continue;
+        }
+        // Off the line by as much as both are wide, they pass as they are.
+        let apart = me.radius + other.radius;
+        let across = det(ahead, to);
+        if across.abs() >= apart {
+            continue;
+        }
+        let side = if across < -0.05 { -1.0 } else { 1.0 };
+        let weight = 1.0 - across.abs() / apart;
+        if weight > lean.abs() {
+            lean = side * weight;
+        }
+    }
+    let right = Vec2::new(ahead.y, -ahead.x);
+    (ahead + right * (lean * LEAN)).normalize() * speed
 }
 
 /// The best velocity on one line, within the speed limit and every line before it.
@@ -612,6 +676,26 @@ mod tests {
         assert!(closest >= 0.6 - 0.02, "they came within {closest:.2} m");
         // And each got past the other.
         assert!(movers[0].at.x > 3.0 && movers[1].at.x < -3.0);
+    }
+
+    #[test]
+    fn two_walkers_exactly_head_on_pass_each_other() {
+        let mut movers = [
+            mover(Vec2::new(-6.0, 0.0), Vec2::new(6.0, 0.0)),
+            mover(Vec2::new(6.0, 0.0), Vec2::new(-6.0, 0.0)),
+        ];
+        // On one line, nothing tells them apart but the side each keeps to.
+        let tracks = walk(&mut movers, &Walls::default(), 150);
+        let closest = (0..150)
+            .map(|step| tracks[0][step].distance(tracks[1][step]))
+            .fold(f32::MAX, f32::min);
+        assert!(closest >= 0.6 - 0.02, "they came within {closest:.2} m");
+        assert!(
+            movers[0].at.x > 3.0 && movers[1].at.x < -3.0,
+            "they stand at {} and {}",
+            movers[0].at,
+            movers[1].at
+        );
     }
 
     #[test]

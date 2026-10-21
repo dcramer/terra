@@ -153,6 +153,20 @@ fn a_market_morning_walks_without_anyone_in_a_wall_or_another() {
 }
 
 #[test]
+fn walkers_by_the_well_get_past_those_drawing_at_it() {
+    // Town 3 on flat ground: the way along its well passes its spots, where the life check
+    // found walker after walker pressed between the well and someone drawing, for good.
+    let mut life = Life::new(town(3, KINDS, &|_| 0.0), plan(), 3, SECONDS_AN_HOUR);
+    let viewer = square(&life);
+    let watch = run(&mut life, 0.0, 10.5, viewer);
+    assert!(
+        watch.faults.stuck.is_empty(),
+        "stuck: {:?}",
+        watch.faults.stuck
+    );
+}
+
+#[test]
 fn far_from_everyone_nobody_ticks_and_coming_near_finds_them_where_the_clock_says() {
     let mut life = life(3);
     let far = Vec2::new(5000.0, 5000.0);

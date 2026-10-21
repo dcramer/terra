@@ -13,6 +13,8 @@ use crate::plan::{Count, Plan};
 use crate::town::{self, On, ThingKind, Town};
 use glam::Vec2;
 
+mod route;
+
 /// How near the nearest viewer someone is ticked in full, and at all (D145's distances).
 pub const FULL_M: f32 = 64.0;
 pub const REDUCED_M: f32 = 256.0;
@@ -751,59 +753,6 @@ impl Life {
             .position(|a| self.plan.activities[a].inside)?;
         self.choose_spot(person, home, within, false)
             .map(|spot| (home, spot))
-    }
-
-    /// A route from where someone is to a spot: on to the graph at the node nearest them
-    /// that they can walk straight to, along it, and to the spot from its node, each
-    /// street's and square's place moved across by their own lane where that is clear.
-    fn route_to(&self, person: &Person, spot: usize) -> Vec<Vec2> {
-        let target = &self.spots[spot];
-        let joined = |n: u32| self.graph.joined(n, target.node);
-        // From a spot, back the way it is come to; else the nearest node they can walk to.
-        let leaving = person
-            .last_spot
-            .map(|spot| &self.spots[spot])
-            .filter(|spot| spot.at.distance(person.at) < 0.6 && joined(spot.node))
-            .map(|spot| spot.node);
-        let from = leaving
-            .or_else(|| {
-                self.graph.nearest_of(person.at, 12, |n| {
-                    joined(n) && self.clear.walkable(person.at, self.graph.nodes[n as usize])
-                })
-            })
-            .or_else(|| self.graph.nearest(person.at, joined));
-        let Some(from) = from else {
-            return vec![target.at];
-        };
-        let Some(nodes) = self.graph.route(from, target.node) else {
-            return vec![target.at];
-        };
-        let mut points: Vec<Vec2> = Vec::with_capacity(nodes.len() + 1);
-        for (k, &node) in nodes.iter().enumerate() {
-            let at = self.graph.nodes[node as usize];
-            let on = self.town.paths.nodes[node as usize].1;
-            let mut point = at;
-            if matches!(on, On::Street(_) | On::Square) && k > 0 && k + 1 < nodes.len() {
-                let before = self.graph.nodes[nodes[k - 1] as usize];
-                let after = self.graph.nodes[nodes[k + 1] as usize];
-                let way = (after - before).normalize_or_zero();
-                let moved = at + way.perp() * person.lane;
-                let previous = points.last().copied().unwrap_or(person.at);
-                if self.clear.walkable(previous, moved) && self.clear.walkable(moved, after) {
-                    point = moved;
-                }
-            }
-            points.push(point);
-        }
-        // Not back to the first node when the second is as straight a walk from here.
-        if points.len() >= 2
-            && person.at.distance(points[1]) <= points[0].distance(points[1])
-            && self.clear.walkable(person.at, points[1])
-        {
-            points.remove(0);
-        }
-        points.push(target.at);
-        points
     }
 
     /// Sends someone to a spot for an activity, from wherever they are.
