@@ -8,6 +8,8 @@ use crate::air::AirPicture;
 use crate::planet::MainCamera;
 use crate::planet::{Planet, Tweaks};
 #[cfg(test)]
+mod backlit;
+#[cfg(test)]
 mod dusk;
 use bevy::{
     camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*, reflect::TypePath,

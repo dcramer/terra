@@ -171,13 +171,26 @@ const FAR_SNOW: vec3<f32> = vec3<f32>(0.66, 0.7, 0.74);
 // r18 review).
 const CAP_GLOW: vec3<f32> = vec3<f32>(2.4, 1.9, 1.6);
 const FAR_FADE: f32 = 0.7;
-// Toward the set sun a range is backlit: its faces turned from the sun stand this much darker
-// as a silhouette, and its crests take a rim of the glow behind them a few pixels deep. Lit
-// front-on with the sun set behind it, the lake's far range read as a painted flat (lake round
-// 20's review).
-const BACKLIT_DARK: f32 = 0.55;
-const RIM_GLOW: f32 = 1.6;
-const RIM_PIXELS: f32 = 3.0;
+// Toward the set sun a range is backlit, and its crests take a rim of the glow behind them
+// this many pixels deep (`backlit_ridge`). Lit front-on with the sun set behind it, the lake's
+// far range read as a painted flat (lake round 20's review).
+const RIM_PIXELS: f32 = 2.0;
+
+// A range's ridge after sunset (D426, round 20), when no sun lights it: `dusk` how far the
+// sun is set. Toward the set sun a silhouette against the afterglow, as a backlit range is in
+// photographs, its crest a thin rim brighter than the sky beside it; away from it in the
+// earth's shadow, blue-grey, unrimmed. Either way the nearest ridge about a third of the sky
+// behind it and each farther one paler, so the range reads in layers, its snow a little
+// lighter than its rock: darkened alone, the land left the range 12 percent under the sky,
+// its haze as bright as the glow (the r19 review). `far` is 0 for the nearest ridge, 1 for
+// the farthest, `toward` 1 facing the set sun's bearing. Its CPU twin is `sky::backlit`, which
+// tests the rule.
+fn backlit_ridge(seen: vec3<f32>, behind: vec3<f32>, cool: vec3<f32>, far: f32, snowy: f32, grain: f32, rim: f32, dusk: f32, toward: f32) -> vec3<f32> {
+    let shade = mix(0.18, 0.85, pow(far, 1.25)) * (0.9 + 0.2 * grain) * mix(1.0, 1.3, snowy);
+    let silhouette = mix(mix(behind, cool, 0.35), behind, 0.35 * toward) * shade;
+    let edge = behind * mix(1.5, 2.0, snowy);
+    return mix(mix(seen, silhouette, dusk), edge, rim * toward * dusk);
+}
 
 // The land beyond the world's edge (D273), below the horizon, as shipped games draw the
 // hills past their maps: ridges one behind another, each paler than the one before in the
@@ -222,9 +235,14 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     // A range's slopes face every way, most away from a low sun: half of them lit.
     let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 * (1.0 - 0.5 * sky.far_peaks) + air_seen(up) * 1.6) / 3.14159
         * view.exposure;
-    // How much the eye looks toward the set sun's bearing, at dusk.
-    let sun_level = sun - up * dot(sun, up);
-    let backlit = smoothstep(0.0, 0.75, dot(level, normalize(sun_level + east * 1.0e-5))) * sky.twilight * sky.far_peaks;
+    // How much the eye looks toward the set sun's bearing, at dusk: the set sun's own way
+    // (`dusk_sun`), since the world's light is the moon's once it is down, opposite it, and a
+    // range was darkened and rimmed as if backlit looking away from the sun (round 20).
+    let set_sun = normalize(sky.dusk_sun);
+    let sun_level = set_sun - up * dot(set_sun, up);
+    let toward = smoothstep(0.0, 0.75, dot(level, normalize(sun_level + east * 1.0e-5)));
+    let dusk = sky.twilight * sky.far_peaks;
+    let backlit = toward * dusk;
     var colour = vec3<f32>(0.0);
     var cover = 0.0;
     for (var k = 0u; k < RIDGES; k++) {
@@ -288,15 +306,14 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // Toward the set sun only the crests catch its glow, as a rim, and the faces seen are
         // the shaded ones.
         let caps = lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) + FAR_SNOW * behind * CAP_GLOW * sky.twilight * (1.0 - 0.85 * backlit);
-        let rim = (1.0 - smoothstep(0.0, RIM_PIXELS * pixel, ridge - rise)) * backlit;
-        let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy) * mix(1.0, BACKLIT_DARK, backlit)
-            + behind * RIM_GLOW * rim * mix(0.4, 1.0, snowy);
+        let rim = 1.0 - smoothstep(0.0, RIM_PIXELS * pixel, ridge - rise);
+        let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy);
         // Its haze: the farthest ridge nearly the sky behind it, a nearer one deeper in the
         // earth's shadow, dimmer and bluer, so the range reads in layers.
         let shadow = 1.0 - f / f32(RIDGES - 1u);
         let haze = mix(behind, cool, DUSK_COOL * sky.twilight * (0.35 + 0.65 * shadow))
             * mix(1.0, mix(0.85, EARTH_SHADOW, shadow), sky.twilight);
-        let seen = mix(haze, land, left);
+        let seen = backlit_ridge(mix(haze, land, left), behind, cool, f / f32(RIDGES - 1u), snowy, grain, rim, dusk, toward);
         let take = inside * (1.0 - cover);
         colour += seen * take;
         cover += take;

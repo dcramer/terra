@@ -14,11 +14,11 @@ fn afterglow(horizon: Vec3, glow: Vec3) -> Vec3 {
     hue * horizon.dot(Vec3::new(0.2126, 0.7152, 0.0722)) * 1.6
 }
 
-fn mix(a: Vec3, b: Vec3, t: f32) -> Vec3 {
+pub(super) fn mix(a: Vec3, b: Vec3, t: f32) -> Vec3 {
     a + (b - a) * t
 }
 
-fn mixf(a: f32, b: f32, t: f32) -> f32 {
+pub(super) fn mixf(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
@@ -57,7 +57,7 @@ pub(crate) fn dusk_sky(
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
 
     /// A linear colour's hue as shown (sRGB), degrees: 0 red, 30 orange, 60 yellow, 300 mauve.
@@ -128,7 +128,7 @@ mod tests {
     }
 
     /// The numbers of a function's body in a source, in order.
-    fn numbers(source: &str, function: &str) -> Vec<f32> {
+    pub(in crate::sky) fn numbers(source: &str, function: &str) -> Vec<f32> {
         let start = source.find(&format!("fn {function}(")).unwrap();
         let body = &source[start..];
         let end = body.find("\n}").unwrap();
