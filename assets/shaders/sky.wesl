@@ -155,6 +155,9 @@ fn air_seen(direction: vec3<f32>) -> vec3<f32> {
 const RIDGES: u32 = 4u;
 const RIDGE_AT: array<f32, 4> = array<f32, 4>(0.12, 0.5, 0.8, 1.0);
 const RIDGE_HILLS: array<f32, 4> = array<f32, 4>(0.45, 0.55, 0.75, 1.0);
+// How much taller a range's far peaks stand than a forest's hills of the same `hills`: as
+// tall, they rose a degree past the lake's far treeline and barely registered (r16 review).
+const PEAK_LIFT: f32 = 1.5;
 const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
 // After sunset, how bright the haze before the far land is against the horizon's band, and
 // how far it is turned toward the zenith's blue.
@@ -174,7 +177,7 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     let lift = dot(direction, up);
     let rise = asin(clamp(lift, -1.0, 1.0));
     let pixel = max(fwidth(rise), 1.0e-5);
-    if hills <= 0.0 || lift > sin(hills * 1.3) {
+    if hills <= 0.0 || lift > sin(hills * 1.3 * mix(1.0, PEAK_LIFT, sky.far_peaks)) {
         return vec4<f32>(0.0);
     }
     var at = RIDGE_AT;
@@ -229,8 +232,8 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         let fine = 1.0 - abs(noise(q * 6.1 + 23.0) * 2.0 - 1.0);
         let jag = 1.0 - abs(noise(q * 14.3 + 31.0) * 2.0 - 1.0);
         let grit = 1.0 - abs(noise(q * 33.7 + 37.0) * 2.0 - 1.0);
-        let massif = smoothstep(0.2, 0.8, noise(vec3<f32>(round * (1.7 + 0.6 * f), f * 9.1 + 5.0)));
-        let height = mix(1.0, 0.5 + 0.6 * massif, sky.far_peaks);
+        let massif = smoothstep(0.2, 0.8, noise(vec3<f32>(round * (1.2 + 0.5 * f), f * 9.1 + 5.0)));
+        let height = mix(1.0, (0.35 + 0.8 * massif) * PEAK_LIFT, sky.far_peaks);
         // Octave over octave, so a flank breaks in shoulders and gendarmes, not one straight line.
         let range = (0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape)) * height;
         let rolling = smoothstep(0.25, 0.85, shape);
@@ -254,7 +257,7 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // A range's high crests hold snow, brighter than its rock and forest under the same
         // light, down its gullies in streaks: only where a massif rises high enough, so the
         // skyline's peaks are white-capped here and bare there, as the world's own are.
-        let up_share = (rise - base) / max(hills * rising[k], 1.0e-5);
+        let up_share = (rise - base) / max(hills * rising[k] * mix(1.0, PEAK_LIFT, sky.far_peaks), 1.0e-5);
         let gully = noise(vec3<f32>(round * (90.0 + 60.0 * f), f * 2.9 + 17.0));
         let snowy = sky.far_peaks * smoothstep(0.03, 0.0, 0.5 + 0.18 * gully - 0.25 * (crest - 0.5) - up_share);
         let land = mix(lit * (0.8 + 0.4 * grain), lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) * (0.9 + 0.2 * grain), snowy);

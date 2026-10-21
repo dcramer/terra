@@ -722,6 +722,16 @@ const SHADED_SNOW: vec3<f32> = vec3<f32>(0.5, 0.58, 0.72);
 const DIRECT_FAINT: vec2<f32> = vec2<f32>(0.05, 0.3);
 // How much brighter than the haze the aerial perspective's air stands at dusk.
 const DUSK_AIR_LIFT: f32 = 1.8;
+// The low mist's height over the eye in which it thins to a third, and over how many metres
+// at its thickest it takes two-thirds of the way to the air, on top of the aerial perspective.
+const FOOT_MIST_M: f32 = 140.0;
+const FOOT_MIST_DEPTH_M: f32 = 2500.0;
+// Sunlit snow from a few hundred metres, against its tint: it stays under the tone curve's
+// highlight shoulder, where whole faces flattened to one white (the r16 review).
+const SUNLIT_SNOW: f32 = 0.8;
+// How wide a far snowfield's broken edge fades, and how much a fine grain frays it.
+const BREAK_SOFT: vec2<f32> = vec2<f32>(0.4, 0.58);
+const BREAK_GRAIN: f32 = 0.12;
 
 
 fn bedding(world: vec3<f32>) -> Bedding {
@@ -1148,6 +1158,9 @@ fn fragment(
             }
         }
         snow_tint *= mix(1.0, mix(FAR_DIM * 0.9, LIT_FAR_DIM, snow_lit * lit_near(distance(world, view.world_position))), snow_far * by_sun);
+        // Under the shoulder in the sun, so its faces keep their shading by aspect: at dusk
+        // (`by_sun` about 0) it stays as it is, brighter than its rock.
+        snow_tint *= mix(1.0, SUNLIT_SNOW, snow_lit * by_sun * smoothstep(250.0, 700.0, distance(world, view.world_position)));
         // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
         // conifer canopy (the far crowns' colour, linear), so a forested slope reads forested to
         // the horizon (docs/demos.md §1); nearer, the cards stand on it and it is darker
@@ -1442,10 +1455,10 @@ fn fragment(
         // How far the far snow's outcrops break a wall's couloir fill too (below).
         var far_broken = 0.0;
         if (snow > 0.0 || in_couloir > 0.0) && far_snow > 0.0 {
-            // Drawn out down a wall, four times as tall as wide, so its rock and snow streak down
-            // the faces rather than lying in round spots over them (the r13 review); a gentle
-            // snowfield's outcrops stay round.
-            let drawn = world - up * dot(world, up) * 0.75 * (1.0 - smoothstep(0.6, 0.85, flatness));
+            // Drawn out down a wall, two and a half times as tall as wide, so its rock and snow
+            // streak down the faces rather than lying in round spots over them (the r13 review);
+            // four times ran in zebra stripes (r16). A gentle snowfield's outcrops stay round.
+            let drawn = world - up * dot(world, up) * 0.6 * (1.0 - smoothstep(0.6, 0.85, flatness));
             let outcrop = noise(drawn * 0.013 + 131.0) * 0.55 + noise(drawn * 0.041 + 137.0) * 0.3 + noise(drawn * 0.0045 + 139.0) * 0.15;
             // Fewer the higher and the deeper the snow lies, so the highest ground keeps the
             // most: cut alike, the steep summits came out barer than the lower tops behind
@@ -1464,13 +1477,16 @@ fn fragment(
             let streaks = fall_stripes(world, across_face, 70.0, 2.0).x;
             // A wall past about 55 degrees bare bar its couloirs and ledges (round 14).
             let wall_bare = (1.0 - smoothstep(0.5, 0.66, flatness)) * WALL_BARE;
-            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held + (streaks - 0.55) * STREAKED + wall_bare);
+            // Its edge frayed by a grain a few metres across and faded over more of the noise:
+            // cut at one value over 0.04 of it, the streaks stood hard-edged as paint (the r16 review).
+            let grain = (noise(world * 0.11 + 141.0) - 0.5) * BREAK_GRAIN;
+            let breaks = smoothstep(BREAK_SOFT.x, BREAK_SOFT.y, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held + (streaks - 0.55) * STREAKED + wall_bare + grain);
             snow *= 1.0 - breaks * far_snow;
             // The couloirs by the outcrops alone, about a third of them: keyed by the steepness
             // too, the walls' fill broke whole and the range stood bare (round 11).
             far_broken = smoothstep(0.52, 0.56, outcrop) * far_snow;
             // Its edge sharpened, a fade over a few metres rather than tens.
-            snow = mix(snow, smoothstep(0.02, 0.15, snow), far_snow);
+            snow = mix(snow, smoothstep(0.02, 0.5, snow), far_snow);
         }
         // Snow lies on a wall's ledges where it lies round them; elsewhere they hold turf below
         // the bare heights, the green benches between the Tatras' cliff bands.
@@ -2160,7 +2176,14 @@ fn fragment(
     // blue-grey: a few kilometres of in-scatter, short of the sky's own endless path, so a
     // range under the skyline stays darker than the sky behind it (D426, round 13). The
     // distance haze (`DistanceFog`) still follows, for the kilometres beyond.
-    let through = 1.0 - exp(-max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0) / AERIAL_M);
+    // And a mist lying low over the valley's floor, thinning with height over the eye's own,
+    // so a range's foot stands paler than its crest and apart from the forest under it, as the
+    // references' walls rise out of their valleys' haze: a peak set straight on the treeline
+    // read as a billboard (lake film r16). An exponential height fog, as Unreal's.
+    let past = max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0);
+    let over_eye = length(world) - length(view.world_position);
+    let low_mist = exp(-max(over_eye, 0.0) / FOOT_MIST_M) / FOOT_MIST_DEPTH_M;
+    let through = 1.0 - exp(-past / AERIAL_M - past * low_mist);
     var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
     // At dusk the air before a range is lit by the whole bright west, more than the dimmed
     // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
