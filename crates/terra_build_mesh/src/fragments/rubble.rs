@@ -5,9 +5,9 @@
 //! as its pieces fade.
 
 use super::Fragment;
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use std::collections::BTreeMap;
-use terra_build::CELL_M;
+use terra_build::{CELL_M, Cube};
 
 /// How much more room broken masonry takes than it did standing (rubble's bulking, 1.3 to
 /// 1.6), less the share of it that lands again whole and is laid again then.
@@ -44,7 +44,49 @@ fn column(at: Vec3) -> [i32; 2] {
     ]
 }
 
+/// What came down, by column of cubes: how low, in metres, the lowest of it in each was.
+/// What lay on it, a heap or a fragment at rest, comes down with it ([`Rubble::fell`],
+/// [`Fragment::wake`]).
+pub type Gone = BTreeMap<[i32; 2], f32>;
+
+/// The columns `fell` came down from, each with the bottom of its lowest cube.
+pub fn gone(fell: &[(IVec3, Cube)]) -> Gone {
+    let mut gone = Gone::new();
+    for (at, _) in fell {
+        let low = at.y as f32 * CELL_M;
+        gone.entry([at.x, at.z])
+            .and_modify(|was| *was = was.min(low))
+            .or_insert(low);
+    }
+    gone
+}
+
+impl Fragment {
+    /// Sets it falling again if it lay on what has now come down: a piece at rest on a
+    /// keep's roof falls with the keep rather than hanging where the roof was. Whether it
+    /// did.
+    pub fn wake(&mut self, gone: &Gone) -> bool {
+        if !self.still {
+            return false;
+        }
+        let low = gone.get(&column(self.at));
+        if low.is_none_or(|low| self.at.y < *low) {
+            return false;
+        }
+        self.still = false;
+        true
+    }
+}
+
 impl Rubble {
+    /// What came down takes the heap lying on it, or over it, with it: a heap laid on a
+    /// keep's roof by what fell off it as it burned, left standing when the keep fell, held
+    /// the keep's own blocks up at its roof line for seconds (castle film round 2).
+    pub fn fell(&mut self, gone: &Gone) {
+        self.cells
+            .retain(|at, cell| gone.get(at).is_none_or(|low| cell.floor < *low));
+    }
+
     /// How high the heap stands over a point at `now`, if there is one there: the top of it.
     pub fn top(&self, at: Vec3, now: f32) -> Option<f32> {
         let cell = self.cells.get(&column(at))?;
@@ -116,9 +158,8 @@ impl Rubble {
 #[cfg(test)]
 mod tests {
     use super::super::tests::{chunks, cube};
-    use super::super::{Shape, burst};
+    use super::super::{GRAVITY, Shape, burst};
     use super::*;
-    use glam::IVec3;
     use terra_build::Shape as CubeShape;
 
     #[test]
@@ -180,6 +221,58 @@ mod tests {
         assert!(
             (high - reference).abs() < 0.1 * reference,
             "{high} m on its own heap, {reference} m on the ground"
+        );
+    }
+
+    #[test]
+    fn what_lay_on_a_tower_comes_down_when_the_tower_does() {
+        // A tower 4 cubes a side, 30 high: something broke on its roof and lies there, a
+        // heap under it, and beside the tower another heap on the ground.
+        let tower: Vec<(IVec3, terra_build::Cube)> = (0..30)
+            .flat_map(|y| (0..4).flat_map(move |x| (0..4).map(move |z| IVec3::new(x, y, z))))
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect();
+        let roof = 30.0 * CELL_M;
+        let mut piece = burst(&tower[..1], &|_| true, &chunks, 1.0, 1)[0];
+        piece.at = Vec3::new(1.0, roof + 0.1, 1.0);
+        piece.still = true;
+        let mut beside = piece;
+        beside.at = Vec3::new(4.0, 0.1, 1.0);
+        let mut rubble = Rubble::default();
+        rubble.lay(&piece, roof, 0.0);
+        rubble.lay(&beside, 0.0, 0.0);
+        assert!(rubble.top(piece.at, 0.0).is_some_and(|top| top > roof));
+        // The tower comes down.
+        let gone = gone(&tower);
+        rubble.fell(&gone);
+        assert!(
+            piece.wake(&gone),
+            "the piece on the roof hangs where the roof was"
+        );
+        assert!(!beside.wake(&gone), "the piece beside it stirred");
+        let heap = rubble.top(piece.at, 0.0);
+        assert!(
+            heap.is_none_or(|top| top < 1.0),
+            "a heap stands at {heap:?} m over nothing"
+        );
+        assert!(
+            rubble.top(beside.at, 0.0).is_some(),
+            "the heap beside it went too"
+        );
+        // Woken, it falls to the ground in the time a drop from the roof takes, not later.
+        let mut fell_s = None;
+        for step in 0..240 {
+            let floor = |at: Vec3| rubble.top(at, 0.0).unwrap_or(0.0);
+            piece.step(1.0 / 60.0, &floor, &|_| false);
+            if piece.at.y < 1.0 {
+                fell_s = Some(step as f32 / 60.0);
+                break;
+            }
+        }
+        let drop_s = libm::sqrtf(2.0 * roof / GRAVITY);
+        assert!(
+            fell_s.is_some_and(|s| s < drop_s * 1.3),
+            "it came down in {fell_s:?} s; a drop from the roof takes {drop_s:.1} s"
         );
     }
 }

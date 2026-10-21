@@ -31,8 +31,8 @@ use terra_gen::hash;
 mod collapse;
 mod fracture;
 mod rubble;
-pub use collapse::{Falls, Hinge, collapse, falls};
-pub use rubble::{REPOSE, Rubble};
+pub use collapse::{BODY_MOST_S, Body, Falls, Hinge, collapse, falls};
+pub use rubble::{Gone, REPOSE, Rubble, gone};
 
 /// The most fragments a fall makes, and the most about at once, at the highest preset (a
 /// castle's towers and walls coming down together make some thousands): the
@@ -222,6 +222,9 @@ pub struct Fragment {
     pub seed: u32,
     /// While it still leans with what it came down with, the hinge they tip over on.
     pub hinge: Option<Hinge>,
+    /// While it still goes with the section of wall it came down in, that section's
+    /// motion ([`Body`]).
+    pub body: Option<Body>,
 }
 
 /// What happened to a fragment in a step.
@@ -301,6 +304,23 @@ impl Fragment {
         if self.wait > 0.0 {
             self.wait -= dt;
             return landing;
+        }
+        if let Some(mut body) = self.body {
+            // With its section, as one rigid body, until it touches: then on its own, going
+            // as the section was, to land as hard as that and break by it, while the rest
+            // of the section comes on down onto it.
+            body.age += dt;
+            let (at, turn) = body.pose();
+            self.at = at;
+            self.turn = turn;
+            self.velocity = body.velocity(at);
+            let touched = self.at.y - self.reach_down() <= floor(self.at) || solid(self.at);
+            if !touched && body.age < BODY_MOST_S {
+                self.body = Some(body);
+                return landing;
+            }
+            self.body = None;
+            self.spin = body.spin;
         }
         if let Some(mut hinge) = self.hinge {
             let (at, turn) = hinge.step(dt);
@@ -422,6 +442,7 @@ impl Fragment {
                         still: false,
                         seed,
                         hinge: None,
+                        body: None,
                         ..*self
                     });
                 }
@@ -514,6 +535,7 @@ fn pieces(
                 fill: 1.0,
                 seed: hash::of(&[seed, index]),
                 hinge: None,
+                body: None,
             });
         }
     }
@@ -679,6 +701,7 @@ pub fn burst(
             fill,
             seed,
             hinge: None,
+            body: None,
         });
     }
     out

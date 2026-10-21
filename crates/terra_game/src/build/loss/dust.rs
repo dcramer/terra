@@ -44,6 +44,95 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
     })
 }
 
+/// From how many cubes a fall raises a surge ([`surge`]), how many billows a ring of it has
+/// at most, and how many more it may have up beside the rest.
+const SURGE_FROM: usize = 200;
+const SURGE_RING: usize = 18;
+pub(super) const SURGES: usize = 90;
+
+/// The surge a big fall raises as it lands: the air its mass drives out carries its dust
+/// out along the ground every way round in a rolling wall, thick, several footprints wide,
+/// which then rises over the heap and hangs there, lit by the sun, settling over many
+/// seconds (films of demolitions; a falling tower's surge cloud). `cubes` is how much came
+/// down, `wide` how wide its foot is, in metres, and `drop_s` how long its top takes to
+/// land. Each billow with when it comes up, in seconds from now, and where, from the fall's
+/// foot, on the level of the base (x and z) and up it (y).
+pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Billow)> {
+    if cubes < SURGE_FROM {
+        return Vec::new();
+    }
+    // How big it is, 1 for a keep's few thousand cubes.
+    let big = (cubes as f32 / 4000.0).sqrt().clamp(0.25, 1.2);
+    let ring = ((SURGE_RING as f32 * big).round() as usize).clamp(6, SURGE_RING);
+    let mut out = Vec::new();
+    let half = wide * 0.5;
+    // The first ring as the lowest of it lands, rolling out fast and low; a second, wider
+    // and slower, as the top comes down onto the heap.
+    for (wave, (when, out_m_s, grows, life)) in
+        [(0.25, 3.2, 1.0, 14.0), (drop_s.max(0.6), 2.0, 1.35, 18.0)]
+            .into_iter()
+            .enumerate()
+    {
+        for k in 0..ring {
+            let turn = (k as f32 + 0.5 * wave as f32) / ring as f32 * core::f32::consts::TAU;
+            let way = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn));
+            out.push((
+                when + 0.04 * k as f32 / ring as f32,
+                way * half * 0.8 + Vec3::Y * (0.6 + 0.4 * wave as f32),
+                Billow {
+                    alpha: 0.9,
+                    wide: (4.0 + 7.0 * big) * grows,
+                    life: life * (0.8 + 0.4 * big),
+                    drift: way * out_m_s * (0.7 + 0.5 * big) + Vec3::Y * 0.25,
+                    stir: 0.8,
+                    spread: 1.5 * big,
+                },
+            ));
+        }
+    }
+    // Over the heap, a column rising slowly and spreading, the last to settle.
+    for k in 0..(2 + (4.0 * big) as usize) {
+        out.push((
+            drop_s * (0.6 + 0.2 * k as f32),
+            Vec3::Y * (1.5 + 2.0 * k as f32),
+            Billow {
+                alpha: 0.85,
+                wide: (6.0 + 8.0 * big) * (1.0 + 0.15 * k as f32),
+                life: 20.0 * (0.8 + 0.3 * big),
+                drift: Vec3::Y * (0.5 + 0.2 * k as f32),
+                stir: 0.6,
+                spread: 2.0 * big,
+            },
+        ));
+    }
+    out
+}
+
+/// Sets the surge of what `fell` round `middle` in its base, at `frame`, to come up as it
+/// lands ([`surge`]): from its foot, as wide as it.
+pub(super) fn plan_surge(
+    shards: &mut Shards,
+    colour: Color,
+    frame: &Transform,
+    middle: Vec3,
+    fell: &[(IVec3, Cube)],
+) {
+    let (low, high) = fell.iter().fold(
+        (IVec3::splat(i32::MAX), IVec3::splat(i32::MIN)),
+        |(low, high), (at, _)| (low.min(*at), high.max(*at)),
+    );
+    let span = (high - low + IVec3::ONE).as_vec3() * CELL_M;
+    let drop_s = libm::sqrtf(2.0 * span.y / fragments::GRAVITY);
+    let foot = Vec3::new(middle.x, low.y as f32 * CELL_M, middle.z);
+    let now = shards.clock_s;
+    for (after, from, mut billow) in surge(fell.len(), span.x.max(span.z), drop_s) {
+        let at = frame.transform_point(foot + from);
+        billow.drift = frame.rotation * billow.drift;
+        let up = at.normalize_or(Vec3::Y);
+        shards.surges.push((now + after, at, colour, up, billow));
+    }
+}
+
 /// How fast, in metres a second, a billow rolls out along the ground at least.
 const ROLLS_OUT: f32 = 1.8;
 

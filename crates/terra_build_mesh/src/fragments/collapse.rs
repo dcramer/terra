@@ -54,6 +54,98 @@ impl Hinge {
     }
 }
 
+/// A section of wall coming down whole, as one rigid body (castle film round 3: a fall of
+/// separate blocks read as a picket fence, the old rigid tip as wonky): where its middle
+/// was and how fast it was going when it set off, how it turns (the axis, as long as how
+/// many radians a second), how long it has been going, and where the fragment's middle was
+/// from its middle and how it was turned. Every fragment of a section carries the same
+/// motion, so they go together with nothing shared between them, each letting go as it
+/// touches ([`super::Fragment::step`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Body {
+    pub middle: Vec3,
+    pub velocity: Vec3,
+    pub spin: Vec3,
+    pub age: f32,
+    pub from: Vec3,
+    pub stood: Quat,
+}
+
+/// The longest a fragment goes with its section, in seconds, whatever it touches.
+pub const BODY_MOST_S: f32 = 5.0;
+
+impl Body {
+    /// Where the fragment's middle is now, and how it is turned.
+    pub(super) fn pose(&self) -> (Vec3, Quat) {
+        let turned = Quat::from_scaled_axis(self.spin * self.age);
+        (self.centre() + turned * self.from, turned * self.stood)
+    }
+
+    fn centre(&self) -> Vec3 {
+        let t = self.age;
+        self.middle + self.velocity * t - Vec3::Y * (0.5 * GRAVITY * t * t)
+    }
+
+    /// How fast a point at `at` on the section is going.
+    pub(super) fn velocity(&self, at: Vec3) -> Vec3 {
+        self.velocity - Vec3::Y * (GRAVITY * self.age) + self.spin.cross(at - self.centre())
+    }
+}
+
+/// How big, at most, the sections a crumbling fall comes down in are, in cubes along a wall
+/// and up it: a few metres of wall, which hold together as they drop and break where they
+/// land, as a demolished building's walls come down in slabs.
+const SECTION_ALONG: f32 = 9.0;
+const SECTION_UP: f32 = 7.0;
+
+/// The whole blocks among `hanging` grouped into the sections they come down in: by the face
+/// of the fall they are on (the way out from its middle), cut every few metres along it and
+/// up it at offsets of its own, and only blocks touching one another, as mortar holds them.
+fn sections(made: &[Fragment], hanging: &[usize], middle: Vec3, seed: u32) -> Vec<Vec<usize>> {
+    let r = |salt: u32| unit(&[seed, salt]);
+    let along_m = SECTION_ALONG * CELL_M;
+    let up_m = SECTION_UP * CELL_M;
+    let mut keyed: std::collections::BTreeMap<(u8, i32, i32), Vec<usize>> = Default::default();
+    for &i in hanging {
+        let out = (made[i].at - middle).with_y(0.0);
+        // Its face: the way it lies from the middle, along x or z.
+        let face = if out.x.abs() >= out.z.abs() {
+            u8::from(out.x >= 0.0)
+        } else {
+            2 + u8::from(out.z >= 0.0)
+        };
+        let along = if face < 2 { made[i].at.z } else { made[i].at.x };
+        let shift = |salt: u32| r(salt + u32::from(face) * 8);
+        let a = ((along / along_m) + shift(1)).floor() as i32;
+        let u = ((made[i].at.y / up_m) + shift(2)).floor() as i32;
+        keyed.entry((face, a, u)).or_default().push(i);
+    }
+    // Within each, those touching one another: a gap of air, a window or a wall's far side,
+    // parts them.
+    let touch = |a: &Fragment, b: &Fragment| {
+        let gap = (a.at - b.at).abs() - ((a.turn * a.size).abs() + (b.turn * b.size).abs()) * 0.5;
+        gap.max_element() < CELL_M * 0.3
+    };
+    let mut out = Vec::new();
+    for (_, members) in keyed {
+        let mut left = members;
+        while let Some(first) = left.pop() {
+            let mut body = vec![first];
+            let mut next = 0;
+            while next < body.len() {
+                let at = body[next];
+                let (near, far): (Vec<usize>, Vec<usize>) =
+                    left.into_iter().partition(|&j| touch(&made[at], &made[j]));
+                body.extend(near);
+                left = far;
+                next += 1;
+            }
+            out.push(body);
+        }
+    }
+    out
+}
+
 /// How what was left hanging comes down.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Falls {
@@ -180,6 +272,34 @@ pub fn collapse(
                 let lean = PEELS_OUT * shell / tall;
                 piece.velocity = way * lean * height * tall;
                 piece.spin = Vec3::Y.cross(way) * lean;
+            }
+            // Its blocks come down in sections, each as one body going as its blocks would
+            // between them, all setting off as its lowest does.
+            let seed = hash::of(&[hanging.len() as u32, bottom.to_bits(), 5]);
+            for section in sections(made, &hanging, middle, seed) {
+                if section.len() < 2 {
+                    continue;
+                }
+                let count = section.len() as f32;
+                let centre = section.iter().map(|&i| made[i].at).sum::<Vec3>() / count;
+                let velocity = section.iter().map(|&i| made[i].velocity).sum::<Vec3>() / count;
+                let spin = section.iter().map(|&i| made[i].spin).sum::<Vec3>() / count;
+                let wait = section
+                    .iter()
+                    .map(|&i| made[i].wait)
+                    .fold(f32::MAX, f32::min);
+                for &i in &section {
+                    let piece = &mut made[i];
+                    piece.wait = wait;
+                    piece.body = Some(Body {
+                        middle: centre,
+                        velocity,
+                        spin,
+                        age: 0.0,
+                        from: piece.at - centre,
+                        stood: piece.turn,
+                    });
+                }
             }
         }
         Falls::Tips { way } => {

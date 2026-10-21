@@ -261,3 +261,83 @@ fn a_block_landing_on_its_edge_tumbles_over_it_and_one_landing_flat_does_not() {
     // Over the edge it hit, about the edge's own axis.
     assert!(edge.z.abs() > 2.0, "on its edge it spins at {edge}");
 }
+
+#[test]
+fn a_crumbling_wall_comes_down_in_sections_that_hold_together_until_they_land() {
+    // A wall 24 cubes long (12 m), 3 thick and 30 high, its foot destroyed.
+    let wall = solid(IVec3::ZERO, IVec3::new(23, 29, 2));
+    let foot = |at: IVec3| at.y == 0;
+    let mut parts = burst(&wall, &foot, &chunks, 1.0, 5000);
+    collapse(&mut parts, &wall, &foot, &chunks);
+    let whole: Vec<usize> = (0..parts.len())
+        .filter(|&i| parts[i].shape == Shape::Whole)
+        .collect();
+    // Most of its blocks go in sections of several, a few sections in all.
+    let riding = whole.iter().filter(|&&i| parts[i].body.is_some()).count();
+    assert!(
+        riding * 10 >= whole.len() * 8,
+        "{riding} of {} in sections",
+        whole.len()
+    );
+    let mut sections: Vec<Vec3> = Vec::new();
+    for &i in &whole {
+        if let Some(body) = parts[i].body
+            && !sections.contains(&body.middle)
+        {
+            sections.push(body.middle);
+        }
+    }
+    assert!(
+        sections.len() >= 3 && sections.len() * 4 <= riding,
+        "{} sections of {riding} blocks",
+        sections.len()
+    );
+    // Falling, two blocks of a section keep their places to one another, as one body.
+    let same =
+        |a: usize, b: usize| parts[a].body.map(|s| s.middle) == parts[b].body.map(|s| s.middle);
+    let pairs: Vec<(usize, usize, f32)> = whole
+        .iter()
+        .flat_map(|&a| whole.iter().map(move |&b| (a, b)))
+        .filter(|&(a, b)| a < b && parts[a].body.is_some() && same(a, b))
+        .map(|(a, b)| (a, b, parts[a].at.distance(parts[b].at)))
+        .collect();
+    assert!(!pairs.is_empty());
+    let dt = 1.0 / 60.0;
+    let open = |_: Vec3| false;
+    for _ in 0..30 {
+        for part in &mut parts {
+            part.step(dt, &|_| 0.0, &open);
+        }
+    }
+    let kept: Vec<_> = pairs
+        .iter()
+        .filter(|&&(a, b, _)| parts[a].body.is_some() && parts[b].body.is_some())
+        .collect();
+    assert!(kept.len() * 2 > pairs.len(), "sections parted in the air");
+    for &&(a, b, was) in &kept {
+        let now = parts[a].at.distance(parts[b].at);
+        assert!(
+            (now - was).abs() < 0.01,
+            "a section's blocks moved {was} -> {now} m apart"
+        );
+    }
+    // Each lets go as it lands: by the time the top would have reached the ground, none
+    // goes with its section any more, and most broke where they landed.
+    let mut broke = 0;
+    for _ in 0..(3.0 / dt) as usize {
+        for part in &mut parts {
+            if part.step(dt, &|_| 0.0, &open).breaks {
+                broke += 1;
+            }
+        }
+    }
+    assert!(
+        parts.iter().all(|p| p.body.is_none()),
+        "a block still rides its section"
+    );
+    assert!(
+        broke * 2 > whole.len(),
+        "{broke} of {} blocks broke landing",
+        whole.len()
+    );
+}

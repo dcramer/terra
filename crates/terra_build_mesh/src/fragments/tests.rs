@@ -90,6 +90,7 @@ fn a_block_landing_cracks_into_a_few_uneven_chunks_that_break_again_down_to_piec
         fill: 1.0,
         seed: 7,
         hinge: None,
+        body: None,
     };
     let burst = block.shatter(Breaks::Chunks, 1.0);
     // It cracks into a few smaller chunks of uneven size where it first lands, not into
