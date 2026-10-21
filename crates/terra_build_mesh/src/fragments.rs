@@ -672,9 +672,7 @@ pub fn burst(
             velocity: away * (0.3 + 0.6 * r(4) + (0.07 * (low.y - lowest) as f32).min(1.5)),
             turn,
             spin: axis * (0.6 + 1.6 * r(5)) / cubes.max_element().sqrt(),
-            // A hair smaller than its cubes, so it never fights the cubes drawn where they
-            // were for the frames before their sections are drawn again; no more, as the
-            // gaps of 0.97 read as a lattice of dark seams while the blocks stood together.
+            // A hair smaller than its cubes, never fighting those still drawn ([`SHRINK`]).
             size: size * SHRINK,
             wait: ((low.y - lowest) as f32 * STAGGER_S + 0.08 * r(6)).min(STAGGER_MOST_S),
             still: false,
@@ -771,7 +769,9 @@ const PIECE_M: f32 = 0.25;
 /// Whole blocks are the wall's own face moving, and keep its shade: darkened, a wall read as
 /// another stone the moment it broke (the castle film's review, 2026-10-21).
 const FRAGMENT_SHADE: f32 = 0.72;
-/// How much smaller than its cubes a whole block is drawn.
+/// How much smaller than its cubes a whole block is drawn, so it never fights the cubes drawn
+/// where they were for the frames before their sections are drawn again; no more, as gaps of
+/// 0.97 read as a lattice of dark seams while the blocks fell together.
 const SHRINK: f32 = 0.99;
 
 /// A shape of fragment, a metre across, in a kind's material: a box with its twelve edges
