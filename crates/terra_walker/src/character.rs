@@ -165,15 +165,15 @@ impl MaterialExtension for BodyMask {
 
 /// The patches of skin a worn look covers, from its file; on a look once it is put on.
 #[derive(Component)]
-pub struct Covers(pub(crate) Vec<u32>);
+pub struct Covers(pub Vec<u32>);
 
 /// A body's meshes and the standard materials they show now (their own, or a template's
 /// painted skin, `appearance`), the materials they came with, and the mask they show now.
 #[derive(Component)]
-pub(crate) struct Skin {
-    pub(crate) parts: Vec<(Entity, Handle<StandardMaterial>)>,
-    pub(crate) original: Vec<Handle<StandardMaterial>>,
-    pub(crate) showing: Option<BodyMask>,
+pub struct Skin {
+    pub parts: Vec<(Entity, Handle<StandardMaterial>)>,
+    pub original: Vec<Handle<StandardMaterial>>,
+    pub showing: Option<BodyMask>,
 }
 
 /// Body materials, shared: one per original material and mask.

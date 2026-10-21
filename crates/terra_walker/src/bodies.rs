@@ -8,13 +8,13 @@
 //!
 //! A stand-in until creatures walk on voxels with a real character controller (D53).
 
-use super::Player;
-use super::flora::Obstacles;
-use super::tick::Sim;
-use crate::planet::Planet;
-use crate::spatial::SpatialHash;
+use crate::Player;
 use bevy::prelude::*;
 use terra_build::Walker;
+use terra_world::flora::Obstacles;
+use terra_world::planet::Planet;
+use terra_world::spatial::SpatialHash;
+use terra_world::tick::Sim;
 
 /// How much room something takes up on the ground, and how hard it is to shove.
 #[derive(Component, Clone, Copy)]

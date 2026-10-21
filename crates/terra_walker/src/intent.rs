@@ -7,13 +7,13 @@
 //!
 //! Where a player looks is their `View`, which this machine's mouse turns (`look`).
 
-use super::controls::{Action, Controls};
-use super::options::OptionsMenu;
-use super::tick::Sim;
-use super::walker::Hands;
-use super::{IsLocalPlayer, Player};
-use crate::planet::MainCamera;
+use crate::controls::{Action, Controls};
+use crate::options::OptionsMenu;
+use crate::walker::Hands;
+use crate::{IsLocalPlayer, Player};
 use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
+use terra_world::planet::MainCamera;
+use terra_world::tick::Sim;
 
 /// What a player means to do this moment.
 #[derive(Component, Default, Clone, Debug, PartialEq)]
@@ -69,8 +69,9 @@ impl Intent {
         self.held |= Self::bit(action);
     }
 
-    /// Holds an action down, and presses it if it was not held, as a key does.
-    #[cfg(test)]
+    /// Holds an action down, and presses it if it was not held, as a key does: for tests,
+    /// here and above (the `testing` feature).
+    #[cfg(any(test, feature = "testing"))]
     pub fn hold(&mut self, action: Action) {
         if !self.held(action) {
             self.pressed |= Self::bit(action);
@@ -130,8 +131,8 @@ pub fn read(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::LocalPlayer;
-    use crate::play::controls::{Binding, Settings};
+    use crate::LocalPlayer;
+    use crate::controls::{Binding, Settings};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::window::CursorOptions;
 

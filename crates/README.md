@@ -1,6 +1,6 @@
 # Crates
 
-The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases` so far, may depend on it.
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases` and `terra_walker` so far, may depend on it.
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
@@ -21,7 +21,8 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_bake` | The texture bake (D188), `cargo xtask cook`: models', materials' and the fire's pictures cooked into BC7, BC5 and BC4 KTX2 with mipmaps into the cache `terra_core::cooked` names, read by the game where fresh | No | Exists |
 | `terra_world` | The world on screen in Bevy: the shell every run starts in (window, options, scripted runs, the remote protocol, sound), the planet, terrain, sky and the start, and the world layer (light, the day, what grows, the tick, levels of detail; D198). Builds and tests alone. [README](terra_world/README.md) | Yes | Exists |
 | `terra_bases` | The base on screen in Bevy, on `terra_world` (D407): a base's site, its kits, its acts applied, and its drawing (sections laid and merged, texture arrays, detail by distance, merged cells far off, rooms' light, debug views) and memory; what the walker reads of the hammer. Re-exported by the game as `build`. [README](terra_bases/README.md) | Yes | Exists |
-| `terra_game` | The game in Bevy, on `terra_world`: the walker and gameplay layers (D198): the player, items, building, creatures, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
+| `terra_walker` | The walker layer in Bevy (D198), on `terra_world` and `terra_bases` (D407): a body this machine steers, its camera, controls, options menu and figure, and the character's look (appearance, skinning, lift, swing, pace). Re-exported by the game at its old paths (`play::walker`, `appearance`, ...). [README](terra_walker/README.md) | Yes | Exists |
+| `terra_game` | The game in Bevy, on `terra_world`: the gameplay layer (D198) and the app: the player, items, building, creatures, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 
 Where each part of the engine stands is in [docs/engine.md](../docs/engine.md#tracks). Crates are created when their track starts, not before.

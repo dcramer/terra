@@ -12,21 +12,16 @@
 
 mod archery;
 mod bag;
-pub(crate) mod bodies;
 mod build_menu;
-mod button;
-mod camera;
 pub(crate) mod catalogue;
 pub(crate) mod claim;
 mod coats;
 mod combat;
-mod controls;
 mod crafting;
 mod creatures;
 mod death;
 mod dial;
 mod dig;
-mod figure;
 mod fliers;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
@@ -37,17 +32,14 @@ mod harvest;
 pub(crate) mod hazards;
 pub(crate) mod held;
 mod hits;
-mod intent;
 pub(crate) mod interact;
 pub mod inventory;
 mod kinds;
 mod map;
 mod melee;
-mod movement;
 pub mod music;
 mod noise;
 mod noises;
-mod options;
 mod people;
 mod pile;
 mod pooling;
@@ -61,7 +53,6 @@ pub use props::{
 pub(crate) mod rising;
 mod save;
 mod scaffold;
-mod shake;
 pub(crate) use shake::Shake;
 pub(crate) mod settlement;
 mod sighted;
@@ -85,7 +76,6 @@ mod town_gardens;
 mod town_sound;
 mod townsfolk;
 mod vitals;
-mod walker;
 mod warmth;
 mod wear;
 mod wildlife;
@@ -94,6 +84,9 @@ mod worn;
 mod zones;
 
 use super::build::{self, DrivenByPlayer, Site};
+// The walker layer (D198), its own crate since D407, by its old names here.
+pub(crate) use terra_walker::bodies;
+use terra_walker::{button, camera, controls, figure, intent, options, shake, walker};
 // The world layer's modules, by their old names here, for the modules above them.
 use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};

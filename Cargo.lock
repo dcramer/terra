@@ -6111,7 +6111,6 @@ dependencies = [
  "bevy-inspector-egui",
  "gltf",
  "libm",
- "naga",
  "ron",
  "serde",
  "serde_json",
@@ -6127,8 +6126,8 @@ dependencies = [
  "terra_land",
  "terra_town",
  "terra_voxel",
+ "terra_walker",
  "terra_world",
- "wesl",
 ]
 
 [[package]]
@@ -6204,6 +6203,24 @@ dependencies = [
  "terra_core",
  "terra_gen",
  "transvoxel",
+]
+
+[[package]]
+name = "terra_walker"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "libm",
+ "naga",
+ "serde",
+ "serde_json",
+ "terra_bases",
+ "terra_build",
+ "terra_build_layout",
+ "terra_climate",
+ "terra_core",
+ "terra_world",
+ "wesl",
 ]
 
 [[package]]

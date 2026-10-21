@@ -378,7 +378,7 @@ fn panels_heard(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::movement::{JOG_SPEED, SPRINT_SPEED};
+    use terra_walker::movement::{JOG_SPEED, SPRINT_SPEED};
 
     #[test]
     fn running_quickens_steps_less_than_it_quickens_the_feet() {

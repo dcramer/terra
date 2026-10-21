@@ -8,11 +8,9 @@
 //! What can be set, and how it is saved, is in `controls.rs`. Every change is saved as
 //! it is made.
 
-use super::button::{button, left_click, pointer_on};
-use super::camera::grab_mouse;
-use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
-use crate::planet::MainCamera;
-use crate::shell::Options;
+use crate::button::{button, left_click, pointer_on};
+use crate::camera::grab_mouse;
+use crate::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
 use bevy::{
     input::mouse::{AccumulatedMouseScroll, MouseScrollUnit},
     picking::hover::Hovered,
@@ -20,6 +18,8 @@ use bevy::{
     ui::Pressed,
     window::{CursorOptions, MonitorSelection, PresentMode, PrimaryWindow, WindowMode},
 };
+use terra_world::planet::MainCamera;
+use terra_world::shell::Options;
 use terra_world::{
     pacing::{FrameLimit, ScreenRate},
     quality::{Asked, Forced, Quality},

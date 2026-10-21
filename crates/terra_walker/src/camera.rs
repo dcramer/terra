@@ -2,20 +2,20 @@
 //! game and given back, and the camera behind and a little to the side of the figure,
 //! zoomed with the wheel.
 
-use super::controls::{self, Action, Controls};
-use super::walker::Hands;
-use super::{IsLocalPlayer, View, options};
-use crate::build::{self, Site};
-use crate::planet::{MainCamera, Planet};
-use crate::shell::Options;
-use crate::start::Start;
+use crate::controls::{self, Action, Controls};
+use crate::walker::Hands;
+use crate::{IsLocalPlayer, View, options};
 use bevy::{
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use terra_bases::{self as build, Site};
 use terra_core::Solid;
 use terra_world::parting::CameraSubject;
+use terra_world::planet::{MainCamera, Planet};
+use terra_world::shell::Options;
+use terra_world::start::Start;
 
 const LOOK_SPEED: f32 = 0.0025;
 /// How fast the arrow keys turn the view, in radians a second.
@@ -85,7 +85,7 @@ pub fn plugin(app: &mut App) {
         PostUpdate,
         follow
             .before(TransformSystems::Propagate)
-            .before(crate::remote::CameraHold),
+            .before(terra_world::remote::CameraHold),
     );
 }
 
@@ -93,7 +93,7 @@ pub fn plugin(app: &mut App) {
 ///
 /// Windows has no way to lock the pointer in place, only to fence it into the window; see
 /// `capture_mouse` for what that costs.
-pub(super) fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
+pub fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
     cursor.grab_mode = match take {
         false => CursorGrabMode::None,
         true if cfg!(target_os = "windows") => CursorGrabMode::Confined,
@@ -112,7 +112,7 @@ pub(super) fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
 ///
 /// macOS does lock the pointer, and moving the pointer there undoes the lock, so on a Mac
 /// it is left where it is.
-pub(super) fn capture_mouse(
+pub fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     menu: Res<options::OptionsMenu>,
     hands: Res<Hands>,
@@ -134,7 +134,7 @@ pub(super) fn capture_mouse(
     }
 }
 
-pub(super) fn look(
+pub fn look(
     time: Res<Time>,
     motion: Res<AccumulatedMouseMotion>,
     settings: Res<controls::Settings>,
@@ -185,7 +185,7 @@ fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
 /// figure has been hidden from the boom's end, or in sight from it, how far in the boom has
 /// come to see past what hides it, and whether it is coming in.
 #[derive(Resource)]
-pub(super) struct Zoom {
+pub struct Zoom {
     now: f32,
     wanted: f32,
     pulled: f32,
@@ -220,11 +220,11 @@ fn zoomed(wanted: f32, closer_m: f32) -> f32 {
 
 /// The mouse wheel, or the zoom keys, bring the camera nearer or take it further, unless
 /// the wheel is turning a part in the builder. It eases to where it is wanted.
-pub(super) fn zoom(
+pub fn zoom(
     time: Res<Time>,
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
-    menu: Res<super::options::OptionsMenu>,
+    menu: Res<crate::options::OptionsMenu>,
     hands: Res<Hands>,
     mut zoom: ResMut<Zoom>,
 ) {
@@ -260,7 +260,7 @@ pub(super) fn zoom(
 /// solid; they fade instead (`terra_world::parting`). Where the boom would go into the ground
 /// behind, as looking up, the lens slides up over the ground rather than in toward the
 /// figure, and it keeps out of the figure itself.
-pub(super) fn follow(
+pub fn follow(
     time: Res<Time>,
     player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
     mut zoom: ResMut<Zoom>,
@@ -269,7 +269,7 @@ pub(super) fn follow(
     builds: Query<&build::Built>,
     planet: Res<Planet>,
     options: Res<Options>,
-    obstacles: Option<Res<super::Obstacles>>,
+    obstacles: Option<Res<terra_world::flora::Obstacles>>,
     camera: Single<(&mut Transform, &mut CameraSubject), With<MainCamera>>,
 ) {
     let (mut camera, mut subject) = camera.into_inner();
@@ -583,9 +583,10 @@ fn clear_of_body(at: Vec3, feet: Vec3, up: Vec3, clear: impl Fn(Vec3, Vec3) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::{LocalPlayer, Obstacles, Player};
+    use crate::{LocalPlayer, Player};
     use bevy::ecs::system::RunSystemOnce;
     use terra_core::{Piece, PlanetSpec, Seed};
+    use terra_world::flora::Obstacles;
 
     /// A player standing on flat ground looking along x, up or down by `pitch`, with the
     /// camera following; and their feet.

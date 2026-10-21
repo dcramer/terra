@@ -5,7 +5,7 @@
 //! start and written whenever something changes. A scripted run never reads or writes it,
 //! so a script does the same thing on every machine.
 
-use super::options::OptionsMenu;
+use crate::options::OptionsMenu;
 use bevy::{
     ecs::system::SystemParam,
     prelude::*,

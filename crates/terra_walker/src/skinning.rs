@@ -99,7 +99,7 @@ struct AwaitingBlend;
 pub fn plugin(app: &mut App) {
     let linear = app
         .world()
-        .get_resource::<crate::shell::Options>()
+        .get_resource::<terra_world::shell::Options>()
         .is_some_and(|o| o.linear_skinning);
     if linear {
         info!("skinning: Bevy's linear blend (--linear-skinning)");

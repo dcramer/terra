@@ -55,7 +55,7 @@ crates/terra_town/src/village.rs	-	1293
 crates/terra_town/src/village.rs	village	197
 crates/terra_build_layout/tests/decks.rs	check	231
 crates/terra_build_layout/tests/rules.rs	-	1029
-crates/terra_game/src/appearance.rs	-	1029
+crates/terra_walker/src/appearance.rs	-	1029
 crates/terra_bases/src/lib.rs	-	1223
 crates/terra_bases/src/arrays/mod.rs	-	1402
 crates/terra_bases/src/arrays/mod.rs	stream	241
@@ -68,15 +68,15 @@ crates/terra_bases/src/views.rs	-	1248
 crates/terra_game/src/icons.rs	draw	170
 crates/terra_game/src/play/bag.rs	draw	209
 crates/terra_game/src/play/bag.rs	setup	237
-crates/terra_game/src/play/camera.rs	follow	216
+crates/terra_walker/src/camera.rs	follow	216
 crates/terra_game/src/play/creatures.rs	-	1337
 crates/terra_game/src/play/creatures.rs	prepare	152
 crates/terra_game/src/play/creatures.rs	walk	155
 crates/terra_game/src/play/dial.rs	draw	189
 crates/terra_game/src/play/dial.rs	setup	161
 crates/terra_game/src/play/harvest.rs	cut	184
-crates/terra_game/src/play/movement.rs	walk	239
-crates/terra_game/src/play/options.rs	setup	256
+crates/terra_walker/src/movement.rs	walk	239
+crates/terra_walker/src/options.rs	setup	256
 crates/terra_game/src/play/props.rs	-	1101
 crates/terra_game/src/play/rising.rs	build	170
 crates/terra_game/src/play/save.rs	-	1273

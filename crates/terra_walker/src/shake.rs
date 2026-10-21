@@ -11,16 +11,16 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             shake
-                .after(super::camera::follow)
+                .after(crate::camera::follow)
                 .before(TransformSystems::Propagate)
-                .before(crate::remote::CameraHold),
+                .before(terra_world::remote::CameraHold),
         );
 }
 
 /// The view shaking: how much longer, how far at the start, and for how long in all.
 /// Whatever shakes the view kicks it ([`Shake::kick`]).
 #[derive(Resource, Default)]
-pub(crate) struct Shake {
+pub struct Shake {
     left: f32,
     reach: f32,
     length: f32,
@@ -28,7 +28,7 @@ pub(crate) struct Shake {
 
 impl Shake {
     /// Shakes the view so far, in metres, for so long, unless it is shaking harder.
-    pub(crate) fn kick(&mut self, reach: f32, seconds: f32) {
+    pub fn kick(&mut self, reach: f32, seconds: f32) {
         let now = if self.length > 0.0 {
             self.reach * self.left / self.length
         } else {
@@ -46,7 +46,7 @@ impl Shake {
 
 /// The shake runs down; it is not touched once it has, so what draws it is not woken for
 /// nothing. What kicks it in a frame runs before this (`hits` orders its own).
-pub(crate) fn run_down(time: Res<Time>, mut shake: ResMut<Shake>) {
+pub fn run_down(time: Res<Time>, mut shake: ResMut<Shake>) {
     if shake.left > 0.0 {
         shake.left = (shake.left - time.delta_secs()).max(0.0);
     }

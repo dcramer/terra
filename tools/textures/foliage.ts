@@ -411,7 +411,7 @@ export function measure(c: Cell, cut: number, metres: number, thick: boolean, sh
 }
 
 /// Pixels a metre covers on a 1080-pixel-high screen 2 m off, at the game's field of view, 55
-/// degrees high (`terra_game::play::controls::Settings`).
+/// degrees high (`terra_walker::controls::Settings`).
 export const PIXELS_A_METRE_AT_2M = 540 / (2 * Math.tan((55 * Math.PI) / 360));
 
 /// An atlas's `.ron` (`textures.ts cards` writes them): its files, cut, cell width and cards.

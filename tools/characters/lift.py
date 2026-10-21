@@ -11,7 +11,7 @@ offset the pelvis by body size; here, for each clip and each frame:
   3. the base's own lift is baked into its clips' hips, as the twist step is (`bake`);
   4. each morph's is kept as a curve of how much more (or less) than the base it needs
      (`morph_lifts`), which the game mixes by the body's sliders and adds to the hips
-     after the animation (crates/terra_game/src/lift.rs).
+     after the animation (crates/terra_walker/src/lift.rs).
 
 A body never goes deeper than the mannequin in any clip, so the rig check's floor test (no
 deeper than the mannequin plus 2 cm) holds for every shape.

@@ -11,20 +11,16 @@
 // types are normal here.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
-pub mod appearance;
 pub mod build;
-pub mod character;
 pub mod icons;
-pub mod lift;
-#[cfg(test)]
-pub(crate) mod model_files;
-pub mod pace;
 pub mod play;
 #[cfg(test)]
 mod seams;
-pub mod skinning;
-pub mod swing;
 
+// The walker layer (D198), its own crate since D407, at its old paths.
+#[cfg(test)]
+pub(crate) use terra_walker::model_files;
+pub use terra_walker::{appearance, character, lift, pace, skinning, swing};
 pub use terra_world::{
     audio, debug, loading, mipmaps, planet, record, remote, shell, sky, spatial, start, terrain,
 };

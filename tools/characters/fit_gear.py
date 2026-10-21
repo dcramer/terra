@@ -59,7 +59,7 @@ HARNESS_OF = {"small_pack": "leather", "large_pack": "leather"}
 HARNESSES = {"leather": "art/gear/dressed-male-pack/model.glb"}
 HARNESS_TEXTURE = 2048
 HARNESS_LOOK_M = 0.04  # how far out and in from a strap the bake looks for the dressed one
-# How a loose piece swings from where it hangs (crates/terra_game/src/swing.rs): pulled back
+# How a loose piece swings from where it hangs (crates/terra_walker/src/swing.rs): pulled back
 # toward where it rests, losing some of its motion each step, and falling. Its tail, where
 # it rests, is measured from the piece itself.
 # Tuned live on a jogging body over the remote (Swing is reflected): 0.8 and 0.4 swung 1-9

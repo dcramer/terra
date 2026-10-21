@@ -114,7 +114,7 @@ def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
-# Weight-blended skinning, as the game does it (crates/terra_game/src/skinning.rs): dual
+# Weight-blended skinning, as the game does it (crates/terra_walker/src/skinning.rs): dual
 # quaternions, which keep a limb's volume through a roll and a knee's or elbow's through a deep
 # bend, but for the skin the joints in `linear_joints` move: round the hips, across the wide
 # blend of seat and groin, dual quaternions bulge (the seat 8 cm through the floor mid-roll)

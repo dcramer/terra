@@ -26,7 +26,13 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     (
         "assets/",
-        &["terra_world", "terra_bases", "terra_game", "terra_sandbox"],
+        &[
+            "terra_world",
+            "terra_bases",
+            "terra_walker",
+            "terra_game",
+            "terra_sandbox",
+        ],
     ),
     // The texture bake (D188): every model's and material's pictures and the fire's
     // flipbooks, and the builds, for the materials they name.
@@ -447,7 +453,13 @@ mod tests {
 
     #[test]
     fn an_asset_is_read_by_the_crates_on_bevy_and_those_reading_it_alone() {
-        let bevy = ["terra_world", "terra_bases", "terra_game", "terra_sandbox"];
+        let bevy = [
+            "terra_world",
+            "terra_bases",
+            "terra_walker",
+            "terra_game",
+            "terra_sandbox",
+        ];
         let scope = classify(&files(&["assets/data/kits/log.ron"]), &crates());
         assert!(scope.assets);
         assert_eq!(

@@ -48,12 +48,12 @@ The plain crates share one maths library with Bevy (`glam`), so positions pass b
 
 ### Layers of the game (D198)
 
-The game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`. The world is its own crate, `terra_world`, which builds, tests and runs without the game; the walker and gameplay are `terra_game`, on top of it, being cut into crates by domain (D407): so far `terra_bases`, the base on screen, between the world and the walker (the walker reads the hammer from it; gameplay adds it, with building play over it):
+The game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`. The world is its own crate, `terra_world`, which builds, tests and runs without the game; the walker and gameplay were `terra_game`, on top of it, and are being cut into crates by domain (D407): so far `terra_bases`, the base on screen, between the world and the walker (the walker reads the hammer from it; gameplay adds it, with building play over it), and `terra_walker`, the walker layer:
 
 | Layer | Plugin | What it holds |
 |---|---|---|
 | World (`terra_world`) | `WorldPlugin` | Light and air, the day, what grows and its data file, the tick, levels of detail. Under it, always on: the shell every run starts in, sound, the planet, the terrain and **the start**, the fixed place every east-and-south position is measured from |
-| Walker (`terra_game`) | `WalkerPlugin` | A body this machine steers, its camera, the controls and the options menu |
+| Walker (`terra_walker`) | `WalkerPlugin` | A body this machine steers, its camera, the controls and the options menu |
 | Gameplay (`terra_game`) | `GameplayPlugin` | Everything a player does: building, items, crafting, creatures, people, combat, survival, the map, saving, the remote probe, the game's sounds |
 
 The full game turns on all three. A run can leave layers out to build and test the ones below alone: the sandbox's `walk` is the world and the walker, a walk through the forest with nothing else of the game (`GamePlugins.build().disable::<GameplayPlugin>()`), and `cargo run -p terra_world --example world` is the world alone, compiled without the game.

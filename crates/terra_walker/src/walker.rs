@@ -8,13 +8,13 @@
 //! (`ArriveAt`) and asks for a warp (`WarpTo`), and orders its systems around
 //! [`PlayerInput`]. The walker never names a system above it.
 
-use super::controls::Action;
-use super::intent::Intent;
-use super::{camera, figure, intent, movement, options};
-use crate::planet::{MainCamera, Planet};
-use crate::shell::{Options, ScriptFrame};
-use crate::start::Start;
+use crate::controls::Action;
+use crate::intent::Intent;
+use crate::{camera, figure, intent, movement, options};
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
+use terra_world::planet::{MainCamera, Planet};
+use terra_world::shell::{Options, ScriptFrame};
+use terra_world::start::Start;
 use terra_world::{climate::ClimateSample, lod::Viewpoint, parting::PartsPlants, tick::Smoothed};
 
 /// Someone playing. What they are doing is in the components beside this one: how they
@@ -23,35 +23,35 @@ use terra_world::{climate::ClimateSample, lod::Viewpoint, parting::PartsPlants, 
 /// carry, know and feel, which the layers above add.
 #[derive(Component)]
 #[require(Smoothed, Viewpoint, PartsPlants, ClimateSample)]
-pub(crate) struct Player;
+pub struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and
 /// what is heard follow them. Systems driven by input or drawing the screen act on this
 /// one; the world's own systems, such as creatures and stations, act on every [`Player`].
 #[derive(Component)]
-pub(crate) struct LocalPlayer;
+pub struct LocalPlayer;
 
 /// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
 /// tell a query for them is apart from one that leaves players out (`Without<Player>`).
-pub(super) type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
+pub type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
 
 /// How a body moves over the planet.
 #[derive(Component)]
-pub(super) struct Motion {
+pub struct Motion {
     /// Speed over the ground, as a direction and metres a second.
-    pub(super) velocity: Vec3,
+    pub velocity: Vec3,
     /// Speed away from the planet's centre, in metres a second.
-    pub(super) rising: f32,
-    pub(super) on_ground: bool,
+    pub rising: f32,
+    pub on_ground: bool,
     /// Seconds since the feet last touched something.
-    pub(super) airborne: f32,
-    pub(super) indoors: bool,
+    pub airborne: f32,
+    pub indoors: bool,
     /// The level direction the figure faces.
-    pub(super) facing: Vec3,
+    pub facing: Vec3,
 }
 
 impl Motion {
-    pub(super) fn facing(facing: Vec3) -> Self {
+    pub fn facing(facing: Vec3) -> Self {
         Self {
             velocity: Vec3::ZERO,
             rising: 0.0,
@@ -66,29 +66,29 @@ impl Motion {
 /// What a player's hands and feet are doing besides walking: using a tool, swinging,
 /// rolling, flinching from a blow, or guarding.
 #[derive(Component)]
-pub(super) struct Stance {
+pub struct Stance {
     /// Seconds since the tool was last used.
-    pub(super) since_acting: f32,
+    pub since_acting: f32,
     /// Seconds left of a swing, a roll, and a flinch from a blow, for the figure.
-    pub(super) attacking: f32,
-    pub(super) dodging: f32,
-    pub(super) flinch: f32,
+    pub attacking: f32,
+    pub dodging: f32,
+    pub flinch: f32,
     /// Which way a roll goes.
-    pub(super) dodge_direction: Vec3,
+    pub dodge_direction: Vec3,
     /// Holding a guard up.
-    pub(super) guarding: bool,
+    pub guarding: bool,
     /// What a layer above asks of the walk this tick, as the sword stance does (D405).
-    pub(super) steer: Steer,
+    pub steer: Steer,
 }
 
 /// How a layer above steers a walk: which way the body faces, how fast it walks, a move's
 /// own drive in place of what the keys ask, and whether Ctrl's roll is left to it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(super) struct Steer {
-    pub(super) face: Option<Vec3>,
-    pub(super) pace: Option<f32>,
-    pub(super) drive: Option<Vec3>,
-    pub(super) no_roll: bool,
+pub struct Steer {
+    pub face: Option<Vec3>,
+    pub pace: Option<f32>,
+    pub drive: Option<Vec3>,
+    pub no_roll: bool,
 }
 
 impl Default for Stance {
@@ -107,8 +107,8 @@ impl Default for Stance {
 
 /// Lying where they fell, and for how long so far. Taken away when they wake.
 #[derive(Component)]
-pub(super) struct Downed {
-    pub(super) lying_s: f32,
+pub struct Downed {
+    pub lying_s: f32,
 }
 
 /// What a body has left to sprint, roll and jump on, out of [`Stamina::FULL`]. The walk
@@ -165,11 +165,11 @@ impl Stamina {
 
 /// Where a player is looking.
 #[derive(Component)]
-pub(super) struct View {
+pub struct View {
     /// Along the ground.
-    pub(super) forward: Vec3,
+    pub forward: Vec3,
     /// Up or down from level, in radians.
-    pub(super) pitch: f32,
+    pub pitch: f32,
 }
 
 pub struct WalkerPlugin;
@@ -245,7 +245,7 @@ pub struct WarpTo(pub Option<((f32, f32), Option<(f32, f32)>)>);
 /// This machine's player: a body standing where `ArriveAt` says, with the camera theirs.
 /// Whatever the layers above give a player (what they carry, know and feel) they add when
 /// a [`LocalPlayer`] appears.
-pub(super) fn spawn(
+pub fn spawn(
     mut commands: Commands,
     options: Res<Options>,
     start: Res<Start>,

@@ -10,14 +10,14 @@
 //! skeleton), two of each so a clip played again blends from itself. A layer above may ask
 //! for a clip in place of what walking shows (`Acting`), as the sword fight does (`melee`).
 
-use super::{Downed, Motion, Player, Stance};
 use crate::character::{CARRIED_IN, Carrying};
-use crate::loading::Loading;
+use crate::{Downed, Motion, Player, Stance};
 use bevy::{
     gltf::GltfNode, platform::collections::HashMap, prelude::*,
     world_serialization::WorldInstanceReady,
 };
 use std::time::Duration;
+use terra_world::loading::Loading;
 
 /// The template the player's body is shaped as (`appearance::Appearance::template`).
 pub const TEMPLATE: &str = "male";
@@ -77,7 +77,7 @@ impl Doing {
 
 /// The animations, as places in the figure's animation graph: every clip by name, twice.
 #[derive(Resource)]
-pub(super) struct Moves {
+pub struct Moves {
     graph: Handle<AnimationGraph>,
     clips: HashMap<String, [AnimationNodeIndex; 2]>,
     /// The stride clips' own paces (`pace.rs`), so their feet do not slide.
@@ -86,7 +86,7 @@ pub(super) struct Moves {
 
 impl Moves {
     /// A stride clip's own pace, metres a second at its own speed, if it has one.
-    pub(super) fn pace(&self, clip: &str) -> Option<f32> {
+    pub fn pace(&self, clip: &str) -> Option<f32> {
         self.paces.get(clip).copied()
     }
 }
@@ -111,26 +111,26 @@ struct Animated {
 
 /// A clip a layer above asks a player's figure to play in place of what its walking shows.
 #[derive(Component, Default)]
-pub(super) struct Acting {
-    pub(super) clip: Option<Act>,
+pub struct Acting {
+    pub clip: Option<Act>,
     asked: u32,
 }
 
 /// How to play an asked clip: its speed (0 holds it), from how far in, once or looping, and
 /// where to hold it.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Act {
-    pub(super) clip: String,
-    pub(super) speed: f32,
-    pub(super) from_s: f32,
-    pub(super) once: bool,
+pub struct Act {
+    pub clip: String,
+    pub speed: f32,
+    pub from_s: f32,
+    pub once: bool,
     /// Held still once the clip reaches this time.
-    pub(super) hold_at: Option<f32>,
-    pub(super) blend: Duration,
+    pub hold_at: Option<f32>,
+    pub blend: Duration,
 }
 
 impl Act {
-    pub(super) fn looping(clip: &str, speed: f32) -> Self {
+    pub fn looping(clip: &str, speed: f32) -> Self {
         Self {
             clip: clip.to_string(),
             speed,
@@ -141,7 +141,7 @@ impl Act {
         }
     }
 
-    pub(super) fn once(clip: &str, from_s: f32, speed: f32) -> Self {
+    pub fn once(clip: &str, from_s: f32, speed: f32) -> Self {
         Self {
             from_s,
             once: true,
@@ -152,13 +152,13 @@ impl Act {
 
 impl Acting {
     /// Plays a clip, from its start even if it is playing already.
-    pub(super) fn play(&mut self, act: Act) {
+    pub fn play(&mut self, act: Act) {
         self.clip = Some(act);
         self.asked += 1;
     }
 
     /// The speed of the clip playing, as a hit-stop slows it, without starting it again.
-    pub(super) fn set_speed(&mut self, speed: f32) {
+    pub fn set_speed(&mut self, speed: f32) {
         if let Some(act) = &mut self.clip {
             act.speed = speed;
         }

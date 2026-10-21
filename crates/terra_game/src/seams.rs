@@ -15,8 +15,6 @@ use std::path::{Path, PathBuf};
 enum Crate {
     /// `terra_bases`: the base on screen.
     Bases,
-    /// `terra_walker`: the walker layer (D198).
-    Walker,
     /// `terra_survival`: what a player carries, makes and needs.
     Survival,
     /// `terra_creatures`: creatures and fighting.
@@ -37,10 +35,9 @@ impl Crate {
         self == other
             || match self {
                 Bases => false,
-                Walker => other == Bases,
-                Survival => matches!(other, Bases | Walker),
-                Creatures | Building => matches!(other, Bases | Walker | Survival),
-                Folk => matches!(other, Bases | Walker | Survival | Creatures),
+                Survival => other == Bases,
+                Creatures | Building => matches!(other, Bases | Survival),
+                Folk => matches!(other, Bases | Survival | Creatures),
                 App => true,
             }
     }
@@ -65,24 +62,6 @@ const PLACES: &[(&str, Crate)] = {
         // The base on screen, now `terra_bases` (Cargo holds its line), at its old path, which
         // building play's modules below still sit under.
         ("build", Bases),
-        // The walker.
-        ("appearance", Walker),
-        ("character", Walker),
-        ("lift", Walker),
-        ("model_files", Walker),
-        ("pace", Walker),
-        ("skinning", Walker),
-        ("swing", Walker),
-        ("play/bodies", Walker),
-        ("play/button", Walker),
-        ("play/camera", Walker),
-        ("play/controls", Walker),
-        ("play/figure", Walker),
-        ("play/intent", Walker),
-        ("play/movement", Walker),
-        ("play/options", Walker),
-        ("play/shake", Walker),
-        ("play/walker", Walker),
         // Survival.
         ("icons", Survival),
         ("play/bag", Survival),

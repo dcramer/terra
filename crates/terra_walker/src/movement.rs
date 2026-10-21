@@ -1,19 +1,20 @@
 //! How a player moves over the planet: walking, sprinting, rolling and jumping, held up
 //! by the ground and their base, and stopped by walls, bodies and the sea.
 
-use super::controls::Action;
-use super::intent::Intent;
-use super::tick::Sim;
-use super::{Downed, Motion, Player, Stamina, Stance, View, bodies, flora};
-use crate::build::{self, Site};
-use crate::planet::Planet;
+use crate::controls::Action;
+use crate::intent::Intent;
+use crate::{Downed, Motion, Player, Stamina, Stance, View, bodies};
 use bevy::prelude::*;
+use terra_bases::{self as build, Site};
 use terra_build::Walker;
 use terra_build_layout::walk::Walking;
 use terra_world::climate::ClimateSample;
+use terra_world::flora;
+use terra_world::planet::Planet;
+use terra_world::tick::Sim;
 
-pub(super) const JOG_SPEED: f32 = 4.3;
-pub(super) const SPRINT_SPEED: f32 = 7.4;
+pub const JOG_SPEED: f32 = 4.3;
+pub const SPRINT_SPEED: f32 = 7.4;
 const JUMP_SPEED: f32 = 6.0;
 const GRAVITY: f32 = 16.0;
 /// What a jump costs in stamina, out of 100.

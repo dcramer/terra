@@ -1,5 +1,5 @@
 // Weight-blended skinning, in place of Bevy's linear blend for every skinned mesh
-// (crates/terra_game/src/skinning.rs, research/skin-deformation.md): each vertex is skinned
+// (crates/terra_walker/src/skinning.rs, research/skin-deformation.md): each vertex is skinned
 // partly with the linear blend and partly with dual quaternions, by a share of its own, as
 // Maya's "weight blended" skinning and Blender's armature modifiers mixed by a group do.
 // A linear blend of two joints turned far apart about a limb averages their matrices, and the

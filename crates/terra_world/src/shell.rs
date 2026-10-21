@@ -101,7 +101,7 @@ usage: terra_sandbox [options]
                         such as male@1.15 (repeatable, in the models' order)
   --crowd <n>           in the crowd experiment: how many characters (100 by default)
   --linear-skinning     skin with Bevy's own linear blend instead of dual quaternions,
-                        to compare the two (crates/terra_game/src/skinning.rs)
+                        to compare the two (crates/terra_walker/src/skinning.rs)
   --joints              in the workbench: print where each model's joints and sockets
                         stand once shaped, to compare with the export's
   --attach <file>[@<socket>]

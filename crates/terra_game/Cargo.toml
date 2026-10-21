@@ -33,15 +33,15 @@ terra_items.workspace = true
 # Settlements: a town laid out and its people's days (D324).
 terra_town.workspace = true
 terra_voxel.workspace = true
+# The walker layer (D198, D407), re-exported at its old paths.
+terra_walker.workspace = true
 terra_world.workspace = true
 
 [dev-dependencies]
-# The WESL compiler and shader validator Bevy builds its shaders with, at Bevy's versions:
-# the skinning shader is compiled and validated in a test, without a GPU.
-naga = { version = "30", features = ["wgsl-in"] }
 terra_land.workspace = true
+# The model files' contents, for the tests of the data naming their joints and sockets.
+terra_walker = { workspace = true, features = ["testing"] }
 terra_world = { workspace = true, features = ["testing"] }
-wesl = { version = "0.6", features = ["naga-ext"] }
 
 [lints]
 workspace = true

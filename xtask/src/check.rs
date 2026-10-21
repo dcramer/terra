@@ -29,7 +29,13 @@ pub(crate) const TASKS: &[Task] = &[Task {
 
 /// The only crates allowed to depend on Bevy (D28): the applications, the world on screen
 /// that the game stands on (D198), and the crates cut from the game (D407).
-const BEVY_CRATES: [&str; 4] = ["terra_bases", "terra_game", "terra_sandbox", "terra_world"];
+const BEVY_CRATES: [&str; 5] = [
+    "terra_bases",
+    "terra_game",
+    "terra_sandbox",
+    "terra_walker",
+    "terra_world",
+];
 
 /// A test the full check names when it runs longer, in seconds (D406): the full check waits on
 /// its slowest test.
