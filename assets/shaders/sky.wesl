@@ -167,8 +167,17 @@ const DUSK_COOL: f32 = 0.45;
 const FAR_SNOW: vec3<f32> = vec3<f32>(0.66, 0.7, 0.74);
 // How much of the dusk's glow behind it a far cap's snow returns, and how much paler each
 // farther ridge of a range stands, so it reads in two haze layers, not one flat cut-out.
-const CAP_GLOW: f32 = 1.2;
+// Warm, as the alpenglow on caps facing the west: grey at 1.2, the caps were not seen lit (the
+// r18 review).
+const CAP_GLOW: vec3<f32> = vec3<f32>(2.4, 1.9, 1.6);
 const FAR_FADE: f32 = 0.7;
+// Toward the set sun a range is backlit: its faces turned from the sun stand this much darker
+// as a silhouette, and its crests take a rim of the glow behind them a few pixels deep. Lit
+// front-on with the sun set behind it, the lake's far range read as a painted flat (lake round
+// 20's review).
+const BACKLIT_DARK: f32 = 0.55;
+const RIM_GLOW: f32 = 1.6;
+const RIM_PIXELS: f32 = 3.0;
 
 // The land beyond the world's edge (D273), below the horizon, as shipped games draw the
 // hills past their maps: ridges one behind another, each paler than the one before in the
@@ -213,6 +222,9 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     // A range's slopes face every way, most away from a low sun: half of them lit.
     let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 * (1.0 - 0.5 * sky.far_peaks) + air_seen(up) * 1.6) / 3.14159
         * view.exposure;
+    // How much the eye looks toward the set sun's bearing, at dusk.
+    let sun_level = sun - up * dot(sun, up);
+    let backlit = smoothstep(0.0, 0.75, dot(level, normalize(sun_level + east * 1.0e-5))) * sky.twilight * sky.far_peaks;
     var colour = vec3<f32>(0.0);
     var cover = 0.0;
     for (var k = 0u; k < RIDGES; k++) {
@@ -232,18 +244,21 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // row of identical pale triangles (lake film r16, the far right half).
         let bend = vec3<f32>((noise(p * 0.9 + 41.0) - 0.5) * 1.4, (noise(p * 0.9 + 47.0) - 0.5) * 1.4, 0.0);
         let q = p + bend;
-        let crest = 1.0 - abs(noise(q * 3.1 + 11.0) * 2.0 - 1.0);
-        let fine = 1.0 - abs(noise(q * 6.1 + 23.0) * 2.0 - 1.0);
+        // Half as many crests as round 18's, which stood as an even row of needles.
+        let crest = 1.0 - abs(noise(q * 1.8 + 11.0) * 2.0 - 1.0);
+        let fine = 1.0 - abs(noise(q * 4.3 + 23.0) * 2.0 - 1.0);
         let jag = 1.0 - abs(noise(q * 14.3 + 31.0) * 2.0 - 1.0);
         let grit = 1.0 - abs(noise(q * 33.7 + 37.0) * 2.0 - 1.0);
         let massif = smoothstep(0.2, 0.8, noise(vec3<f32>(round * (1.2 + 0.5 * f), f * 9.1 + 5.0)));
         let height = mix(1.0, (0.35 + 0.8 * massif) * PEAK_LIFT, sky.far_peaks);
         // Octave over octave, so a flank breaks in shoulders and gendarmes, not one straight line.
         // Spires only in a massif's heart, over broad shoulders and saddles between: spires
-        // everywhere stood as an even saw blade (the r17 review).
+        // everywhere stood as an even saw blade (the r17 review), and in every massif's heart as
+        // a row of needles: only in the highest massifs now, the saddles and shoulders between
+        // at 45 to 60 percent of their height (the r18 review).
         let spires = 0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape);
-        let shoulder = 0.42 + 0.22 * shape + 0.08 * fine;
-        let range = mix(shoulder, max(spires, shoulder), smoothstep(0.35, 0.85, massif)) * height;
+        let shoulder = 0.45 + 0.15 * shape + 0.06 * fine;
+        let range = mix(shoulder, max(spires, shoulder), smoothstep(0.5, 0.9, massif)) * height;
         let rolling = smoothstep(0.25, 0.85, shape);
         let ridge = base + hills * rising[k] * mix(rolling, range, sky.far_peaks)
             + hills * (0.06 / (1.0 + f)) * crowns * (1.0 - sky.far_peaks);
@@ -270,8 +285,12 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         let snowy = sky.far_peaks * smoothstep(0.03, 0.0, 0.42 + 0.18 * gully - 0.25 * (crest - 0.5) - up_share);
         // At dusk its snow catches the bright west's glow, which its rock and forest barely
         // return: a cap one value with its rock read as a cut-out (the r17 review).
-        let caps = lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) + FAR_SNOW * behind * CAP_GLOW * sky.twilight;
-        let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy);
+        // Toward the set sun only the crests catch its glow, as a rim, and the faces seen are
+        // the shaded ones.
+        let caps = lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) + FAR_SNOW * behind * CAP_GLOW * sky.twilight * (1.0 - 0.85 * backlit);
+        let rim = (1.0 - smoothstep(0.0, RIM_PIXELS * pixel, ridge - rise)) * backlit;
+        let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy) * mix(1.0, BACKLIT_DARK, backlit)
+            + behind * RIM_GLOW * rim * mix(0.4, 1.0, snowy);
         // Its haze: the farthest ridge nearly the sky behind it, a nearer one deeper in the
         // earth's shadow, dimmer and bluer, so the range reads in layers.
         let shadow = 1.0 - f / f32(RIDGES - 1u);

@@ -728,6 +728,9 @@ const DUSK_AIR_LIFT: f32 = 1.8;
 // (the r17 review); this way it lifts a range's lowest quarter or so seen over the trees.
 const FOOT_MIST_M: vec2<f32> = vec2<f32>(80.0, 750.0);
 const FOOT_MIST_DEPTH_M: f32 = 900.0;
+// Its share at dusk: whole, it lifted the lake's whole massif to one pale value, its rock
+// as light as its snow (the r18 review).
+const FOOT_MIST_DUSK: f32 = 0.3;
 // How wide a far snowfield's broken edge fades, and how much a fine grain frays it.
 const BREAK_SOFT: vec2<f32> = vec2<f32>(0.4, 0.58);
 const BREAK_GRAIN: f32 = 0.12;
@@ -2184,15 +2187,17 @@ fn fragment(
     // height and thinning out over a few hundred metres above it.
     let past = max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0);
     let over_eye = length(world) - length(view.world_position);
-    let low_mist = (1.0 - smoothstep(FOOT_MIST_M.x, FOOT_MIST_M.y, over_eye)) / FOOT_MIST_DEPTH_M;
-    let through = 1.0 - exp(-past / AERIAL_M - past * low_mist);
     var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    var day = 1.0;
     // At dusk the air before a range is lit by the whole bright west, more than the dimmed
     // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
     if lights.n_directional_lights > 0u {
         let direct = dot(lights.directional_lights[0].color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722));
-        haze_light *= mix(DUSK_AIR_LIFT, 1.0, smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct));
+        day = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct);
+        haze_light *= mix(DUSK_AIR_LIFT, 1.0, day);
     }
+    let low_mist = (1.0 - smoothstep(FOOT_MIST_M.x, FOOT_MIST_M.y, over_eye)) / FOOT_MIST_DEPTH_M * mix(FOOT_MIST_DUSK, 1.0, day);
+    let through = 1.0 - exp(-past / AERIAL_M - past * low_mist);
     out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }
