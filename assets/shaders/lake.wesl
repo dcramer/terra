@@ -187,7 +187,11 @@ fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) 
         let across = dot(flat, side) - bend * bb * bb;
         ahead = normalize(ahead - side * (2.0 * bend * bb));
         side = vec2<f32>(-ahead.y, ahead.x);
-        let strength = clamp(at.w / 0.5, 0.0, 1.5) * (1.0 - smoothstep(reach * 0.4, reach, behind));
+        // Fading all the way back as its ripples spread and fall, not held to a crisp line
+        // until its end (lake film r15: ruler-straight wakes): a ship's wave's height falls
+        // about as the root of the distance, so here its slope.
+        let spread = inverseSqrt(1.0 + max(behind, 0.0) / wide * 0.5);
+        let strength = clamp(at.w / 0.5, 0.0, 1.5) * spread * (1.0 - smoothstep(reach * 0.3, reach, behind));
         // Each arm's ridge, across its line, widening as it trails.
         let x = abs(across) - (max(behind, 0.0) * KELVIN + wide * 0.5);
         let ridge = 0.03 + 0.04 * max(behind, 0.0);
