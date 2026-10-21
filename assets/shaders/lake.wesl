@@ -80,6 +80,9 @@ struct Lake {
     // speed, none when 0; and the way it heads, level, and how wide it is.
     wakes_at: array<vec4<f32>, WAKES>,
     wakes_way: array<vec4<f32>, WAKES>,
+    // Where each was a wake's length back from `origin`, w 1, or 0 for none: its V bends
+    // through it.
+    wakes_was: array<vec4<f32>, WAKES>,
     // 1 when the air's picture is bound (air.rs): the water mirrors the sky the air draws.
     over_air: u32,
     // How much of the sky's own dusk colours are drawn over the air, and the glow round the
@@ -140,7 +143,9 @@ fn rise_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, t: f32, pixe
 // The slopes of the wakes behind what swims (wakes.rs): two arms opening behind each swimmer
 // at Kelvin's angle, a ridge of water along each with fine crests trailing inside the V, a
 // bow wave round its front, all fading over a few body lengths and stronger the faster it
-// goes. The crests too fine for the pixel are left out, the ridges kept.
+// goes. The V's middle runs back along the swimmer's way, bent through where it was a wake's
+// length back (a parabola off its heading), so a turning duck's wake curves as its trail
+// does. The crests too fine for the pixel are left out, the ridges kept.
 fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) -> vec2<f32> {
     var slope = vec2<f32>(0.0);
     for (var i = 0u; i < WAKES; i += 1u) {
@@ -156,15 +161,32 @@ fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) 
             continue;
         }
         ahead = normalize(ahead);
-        let side = vec2<f32>(-ahead.y, ahead.x);
+        var side = vec2<f32>(-ahead.y, ahead.x);
         let wide = max(lake.wakes_way[i].w, 0.05);
-        // How far behind the swimmer, and how far to one side.
+        // How far behind the swimmer along its heading.
         let behind = -dot(flat, ahead);
-        let across = dot(flat, side);
         let reach = wide * 18.0 * clamp(at.w / 0.4, 0.5, 2.0);
         if behind < -wide * 2.0 || behind > reach {
             continue;
         }
+        // The bend of its way: the trail's offset to the side grows as the square of the
+        // distance behind, through where it was, its tilt held under about 60 degrees.
+        var bend = 0.0;
+        let was = lake.wakes_was[i];
+        if was.w > 0.0 {
+            let back = was.xyz - at.xyz;
+            let back_flat = vec2<f32>(dot(back, east), dot(back, north));
+            let b = -dot(back_flat, ahead);
+            if b > wide {
+                let most = 0.85 / reach;
+                bend = clamp(dot(back_flat, side) / (b * b), -most, most);
+            }
+        }
+        let bb = max(behind, 0.0);
+        // How far to one side of the trail, and the way the trail went there.
+        let across = dot(flat, side) - bend * bb * bb;
+        ahead = normalize(ahead - side * (2.0 * bend * bb));
+        side = vec2<f32>(-ahead.y, ahead.x);
         let strength = clamp(at.w / 0.5, 0.0, 1.5) * (1.0 - smoothstep(reach * 0.4, reach, behind));
         // Each arm's ridge, across its line, widening as it trails.
         let x = abs(across) - (max(behind, 0.0) * KELVIN + wide * 0.5);

@@ -109,6 +109,9 @@ pub struct LakeExtension {
     wakes_at: [Vec4; WAKES],
     #[uniform(100)]
     wakes_way: [Vec4; WAKES],
+    /// Where each was a wake's length back, from `origin`, w 1; the wake bends through it.
+    #[uniform(100)]
+    wakes_was: [Vec4; WAKES],
     /// Whether the air's picture is bound, 1 or 0: then the water mirrors the sky the air
     /// draws, exposed as it is, rather than the painted sky's two colours.
     #[uniform(100)]
@@ -189,6 +192,7 @@ impl LakeExtension {
             rises: [Vec4::ZERO; RISES],
             wakes_at: [Vec4::ZERO; WAKES],
             wakes_way: [Vec4::ZERO; WAKES],
+            wakes_was: [Vec4::ZERO; WAKES],
             over_air: air.is_some() as u32,
             twilight,
             glow,
@@ -531,6 +535,7 @@ fn follow_sky_and_wind(
     extension.rises = material.extension.rises;
     extension.wakes_at = material.extension.wakes_at;
     extension.wakes_way = material.extension.wakes_way;
+    extension.wakes_was = material.extension.wakes_was;
     if let Some(peat) = &look.2
         && let Some(mut material) = materials.get_mut(peat)
     {
@@ -590,11 +595,21 @@ fn follow_wakes(
             Vec4::ZERO
         }
     });
+    let was = wakes.was.map(|was| {
+        if was.w > 0.0 {
+            (was.truncate() - origin).extend(was.w)
+        } else {
+            Vec4::ZERO
+        }
+    });
     if let Some(mut material) = materials.get_mut(&look.0)
-        && (material.extension.wakes_at != at || material.extension.wakes_way != wakes.way)
+        && (material.extension.wakes_at != at
+            || material.extension.wakes_way != wakes.way
+            || material.extension.wakes_was != was)
     {
         material.extension.wakes_at = at;
         material.extension.wakes_way = wakes.way;
+        material.extension.wakes_was = was;
     }
 }
 

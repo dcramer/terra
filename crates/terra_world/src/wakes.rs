@@ -6,7 +6,10 @@
 //! bird's wake analytically or from a trail of decals.
 //!
 //! What swims is the layer above's: it tells [`Wakes`] each frame where its swimmers are, how
-//! they head and how fast, and the nearest few to the eye are kept.
+//! they head and how fast, and where each was a wake's length back along its way, and the
+//! nearest few to the eye are kept. The shader bends each wake's V through that point, so a
+//! wake follows the swimmer's turns as a trail of ripples does, rather than trailing straight
+//! behind its heading of the moment (lake film r15: ruler-straight wakes behind turning ducks).
 
 use bevy::prelude::*;
 
@@ -16,20 +19,30 @@ pub const WAKES: usize = 8;
 const STILL_MPS: f32 = 0.05;
 
 /// The wakes being drawn now: for each, where its swimmer is and how fast it goes (w, metres a
-/// second), and which way it heads, level, and how wide it is (w, metres). None when the
+/// second), which way it heads, level, and how wide it is (w, metres), and where it was a
+/// wake's length back (w 1, or 0 when it left no trail to bend the wake by). None when the
 /// speed is 0.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct Wakes {
     pub at: [Vec4; WAKES],
     pub way: [Vec4; WAKES],
+    pub was: [Vec4; WAKES],
 }
 
-/// One swimmer, as the layer above tells it: where, its velocity and its width.
+/// One swimmer, as the layer above tells it: where, its velocity, its width, and where it was
+/// about [`reach_m`] back along its way, if it has come that far.
 #[derive(Clone, Copy, Debug)]
 pub struct Swimmer {
     pub at: Vec3,
     pub velocity: Vec3,
     pub wide_m: f32,
+    pub was: Option<Vec3>,
+}
+
+/// How far behind a swimmer its wake reaches, metres, by its width and speed: the shader's
+/// `reach` in `wake_slopes`, which fades the wake out over its last 60%.
+pub fn reach_m(wide_m: f32, speed_mps: f32) -> f32 {
+    wide_m.max(0.05) * 18.0 * (speed_mps / 0.4).clamp(0.5, 2.0)
 }
 
 impl Wakes {
@@ -49,6 +62,7 @@ impl Wakes {
             let speed = swimmer.velocity.length();
             wakes.at[slot] = swimmer.at.extend(speed);
             wakes.way[slot] = (swimmer.velocity / speed).extend(swimmer.wide_m);
+            wakes.was[slot] = swimmer.was.map_or(Vec4::ZERO, |was| was.extend(1.0));
         }
         wakes
     }
@@ -67,6 +81,7 @@ mod tests {
             at: Vec3::new(east, 0.0, 0.0),
             velocity: Vec3::new(0.0, 0.0, speed),
             wide_m: 0.3,
+            was: Some(Vec3::new(east, 0.0, -4.0)),
         }
     }
 
@@ -91,6 +106,14 @@ mod tests {
                 .way
                 .iter()
                 .all(|way| way.truncate().abs_diff_eq(Vec3::Z, 1e-6) && way.w == 0.3)
+        );
+        // Each bends through where it was.
+        assert!(
+            wakes
+                .was
+                .iter()
+                .zip(&wakes.at)
+                .all(|(was, at)| *was == Vec4::new(at.x, 0.0, -4.0, 1.0))
         );
         // None at all from a lake of still ducks.
         assert_eq!(
