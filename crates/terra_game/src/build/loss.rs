@@ -142,7 +142,7 @@ enum Drawn {
 #[derive(Resource, Default)]
 struct Shards {
     live: Vec<Live>,
-    meshes: BTreeMap<(Kind, Shape, u8), Option<(Handle<Mesh>, Drawn)>>,
+    meshes: BTreeMap<(Kind, Shape, u8, [bool; 2]), Option<(Handle<Mesh>, Drawn)>>,
     layers: BTreeSet<u16>,
     puff: Option<Handle<Mesh>>,
     dust: Option<Handle<Image>>,
@@ -221,14 +221,14 @@ fn mesh_for(
     arrays: Option<&Arrays>,
     meshes: &mut Assets<Mesh>,
     kind: Kind,
-    (shape, across, drawn_m): (Shape, u8, f32),
+    (shape, across, sawn, drawn_m): (Shape, u8, [bool; 2], f32),
 ) -> Option<(Handle<Mesh>, Drawn)> {
-    if let Some(made) = shards.meshes.get(&(kind, shape, across)) {
+    if let Some(made) = shards.meshes.get(&(kind, shape, across, sawn)) {
         return made.clone();
     }
     let made = (|| {
         let kit = look.kits.as_deref()?.of(kind)?;
-        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, shape, drawn_m)
+        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, shape, drawn_m, sawn)
             .0
             .into_iter()
             .map(|(material, surface)| ((kind, material), surface))
@@ -252,7 +252,9 @@ fn mesh_for(
             .or_else(|| look.materials.get(Kind::PLAIN, material))?;
         Some((meshes.add(mesh), Drawn::Own(own.clone())))
     })();
-    shards.meshes.insert((kind, shape, across), made.clone());
+    shards
+        .meshes
+        .insert((kind, shape, across, sawn), made.clone());
     made
 }
 
@@ -637,12 +639,15 @@ fn warm(
         // Each drawn once, out of sight under the ground and never culled, so its pipelines
         // are compiled before the first fall rather than leaving a hole for its first frames.
         let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
-        let sizes = [(Shape::Chunk, 0, 0.25), (Shape::Lump, 0, 0.25)]
-            .into_iter()
-            .chain(
-                (1..=fragments::MOST_DRAWN)
-                    .map(|across| (Shape::Whole, across, f32::from(across) * CELL_M)),
-            );
+        let sizes = [
+            (Shape::Chunk, 0, [true; 2], 0.25),
+            (Shape::Lump, 0, [true; 2], 0.25),
+        ]
+        .into_iter()
+        .chain(
+            (1..=fragments::MOST_DRAWN)
+                .map(|across| (Shape::Whole, across, [true; 2], f32::from(across) * CELL_M)),
+        );
         let sizes: Vec<_> = sizes.collect();
         for kit in &kits.0 {
             for &size in &sizes {

@@ -480,3 +480,48 @@ fn what_a_point_has_lost_runs_on_smoothly_across_cubes_and_is_most_at_a_hits_mid
     assert!(middle > 0.4 && middle > at(2.0) && at(2.0) > at(1.8) && at(1.8) > 0.0);
     assert_eq!(at(1.4), 0.0);
 }
+
+#[test]
+fn a_big_fall_tears_its_breachs_sides_ragged_and_brings_its_stubs_down_after_it() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    wall(&mut base, 40, 20, &cx);
+    let before = base.clone();
+    // A wall 40 long and 20 high, its middle cut out: a slit up it at 10 and 30 and its foot
+    // between, so the 19 by 19 between hang from nothing; and a slit at 8, leaving a post a
+    // cube across standing alone at 9.
+    let mut cubes: Vec<[i32; 3]> = (0..20)
+        .flat_map(|y| [[8, y, 0], [10, y, 0], [30, y, 0]])
+        .collect();
+    cubes.extend((11..30).map(|x| [x, 0, 0]));
+    let hit = Op::Damage { cubes, amount: 100 };
+    let done = base.act(&hit, &cx).unwrap();
+    assert!(base.floating().is_empty());
+    // The post, stood alone beside the fall, came down after it above its foot.
+    assert!((2..20).all(|y| !base.is_in(IVec3::new(9, y, 0))));
+    assert!(base.is_in(IVec3::new(9, 0, 0)));
+    // The far side of the breach stands back from its cut by a ragged amount up it, more
+    // near the top, never a straight cut: where it starts, course by course.
+    let starts: Vec<i32> = (3..20)
+        .map(|y| {
+            (31..40)
+                .find(|&x| base.is_in(IVec3::new(x, y, 0)))
+                .unwrap_or(40)
+        })
+        .collect();
+    let distinct: BTreeSet<i32> = starts.iter().copied().collect();
+    assert!(
+        distinct.len() >= 3,
+        "the far side's starts up it: {starts:?}"
+    );
+    assert!(
+        starts.iter().filter(|&&x| x > 31).count() >= 4,
+        "{starts:?}"
+    );
+    // Below where it tears, the cut stands as the hit left it.
+    assert!(base.is_in(IVec3::new(31, 1, 0)));
+    // Undone, as it was.
+    base.act_all(&done.undo, &cx).unwrap();
+    assert_eq!(base, before);
+}

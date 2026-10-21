@@ -224,3 +224,37 @@ fn a_big_piece_lies_for_seconds_before_it_fades_and_a_small_one_briefly() {
         assert!(rest_for(piece) < 4.0);
     }
 }
+
+#[test]
+fn a_surges_dust_is_buff_tan_and_thick_at_its_core_not_a_grey_veil() {
+    // A grey stone's surge is warmed to the tan of the earth and mortar it drives out.
+    let tan = dust::surge_tint(Color::srgb(0.55, 0.55, 0.57)).to_srgba();
+    assert!(
+        tan.red > tan.green && tan.green > tan.blue && tan.red - tan.blue > 0.12,
+        "{tan:?}"
+    );
+    // Each sprite is near opaque over its core and barely darker there than at its edge,
+    // so overlapping billows hide what is behind them in the dust's own colour.
+    let (image, _) = dust::dust_images();
+    let side = image.width() as usize;
+    let data = image.data.as_ref().expect("made on the CPU");
+    let (mut alpha, mut shade, mut count) = (0.0, 0.0, 0.0);
+    for y in 0..side {
+        for x in 0..side {
+            let (u, v) = (
+                (x as f32 + 0.5) / side as f32 * 2.0 - 1.0,
+                (y as f32 + 0.5) / side as f32 * 2.0 - 1.0,
+            );
+            if u * u + v * v > 0.3 * 0.3 {
+                continue;
+            }
+            let texel = &data[(y * side + x) * 4..][..4];
+            shade += f32::from(texel[0]) / 255.0;
+            alpha += f32::from(texel[3]) / 255.0;
+            count += 1.0;
+        }
+    }
+    let (alpha, shade) = (alpha / count, shade / count);
+    assert!(alpha > 0.8, "its core {alpha} opaque");
+    assert!(shade > 0.8, "its core {shade} as light as its colour");
+}

@@ -163,6 +163,13 @@ impl Base {
         let lost = self.unjoined_without(&destroyed);
         let mut falling = destroyed;
         falling.extend(lost.iter().map(|at| at.to_array()));
+        // A big fall tears its edges with it, and what that leaves hanging goes too.
+        let torn = self.torn(&falling);
+        if !torn.is_empty() {
+            falling.extend(&torn);
+            let more = self.unjoined_without(&falling);
+            falling.extend(more.iter().map(|at| at.to_array()));
+        }
         self.collapse(&falling, &self.ground, &mut change, &mut patch);
         change.done.undo = vec![Op::Restore(Box::new(patch))];
         Ok(change)
@@ -599,6 +606,93 @@ fn patch(at: glam::Vec3, normal: glam::Vec3) -> f32 {
 /// much of its loss it carries there at their shared edge.
 const SPREAD: f32 = 0.45;
 const SPREAD_SHARE: f32 = 0.7;
+
+impl Base {
+    /// What a big fall tears from the walls it leaves standing: masonry has next to no
+    /// strength in tension, so a falling mass pulls the stones at its edge out of their beds
+    /// with it, more the higher up the wall, where less weight holds them, a few cubes deep
+    /// in a ragged line; and what that leaves as a slender stub, a cube or two across with
+    /// nothing beside it, topples after it. Left to the flood alone, a keep's breach stood
+    /// as a clean planar cut with a lone flat-sided stump in its heap (castle film round 7).
+    fn torn(&self, falling: &BTreeSet<[i32; 3]>) -> BTreeSet<[i32; 3]> {
+        let mut torn = BTreeSet::new();
+        if falling.len() < TEARS_FROM {
+            return torn;
+        }
+        let (lowest, highest) = falling.iter().fold((i32::MAX, i32::MIN), |(l, h), at| {
+            (l.min(at[1]), h.max(at[1]))
+        });
+        let standing = |at: IVec3, gone: &BTreeSet<[i32; 3]>| {
+            !gone.contains(&at.to_array()) && self.cube(at).is_some_and(|cube| cube.is_in())
+        };
+        let level = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
+        let mut gone = falling.clone();
+        let mut edge: Vec<[i32; 3]> = falling.iter().copied().collect();
+        for ring in 0..TEARS_DEEP {
+            let mut next = BTreeSet::new();
+            for &at in &edge {
+                for step in level.into_iter().chain([IVec3::Y]) {
+                    let near = IVec3::from_array(at) + step;
+                    if near.y < lowest + TEARS_ABOVE || !standing(near, &gone) {
+                        continue;
+                    }
+                    let up = (near.y - lowest) as f32 / (highest - lowest).max(1) as f32;
+                    let chance = TEARS * up.min(1.0) * TEARS_DEEPER.powi(ring as i32);
+                    if unit(near + IVec3::new(0, TEARS_SALT, 0)) < chance {
+                        next.insert(near.to_array());
+                    }
+                }
+            }
+            gone.extend(&next);
+            torn.extend(&next);
+            edge = next.into_iter().collect();
+        }
+        // Stubs: a course beside the fall that, level, joins no more than a few cubes.
+        let mut stubs = BTreeSet::new();
+        for &at in &gone {
+            for step in level {
+                let near = IVec3::from_array(at) + step;
+                if near.y < lowest + TEARS_ABOVE
+                    || stubs.contains(&near.to_array())
+                    || !standing(near, &gone)
+                {
+                    continue;
+                }
+                let mut course = vec![near];
+                let mut next = 0;
+                while next < course.len() && course.len() <= STUB_MOST {
+                    let here = course[next];
+                    next += 1;
+                    for side in level {
+                        let there = here + side;
+                        if standing(there, &gone) && !course.contains(&there) {
+                            course.push(there);
+                        }
+                    }
+                }
+                if course.len() <= STUB_MOST {
+                    stubs.extend(course.iter().map(|at| at.to_array()));
+                }
+            }
+        }
+        torn.extend(stubs);
+        torn
+    }
+}
+
+/// From how many cubes a fall tears its edges ([`Base::torn`]); how far above its lowest
+/// course it starts to; the chance a cube at its edge goes at the fall's top, less below;
+/// how many cubes deep it reaches, each less likely by the next factor; and a salt for its
+/// hash.
+const TEARS_FROM: usize = 200;
+const TEARS_ABOVE: i32 = 2;
+const TEARS: f32 = 0.7;
+const TEARS_DEEP: u32 = 3;
+const TEARS_DEEPER: f32 = 0.55;
+const TEARS_SALT: i32 = 0x7A3;
+/// The most cubes a course beside a big fall may join, level, and still be a stub that
+/// topples after it: a post or a pillar a cube or two across.
+const STUB_MOST: usize = 6;
 
 /// A number from 0 to 1 for a place, the same on every machine.
 fn unit(at: IVec3) -> f32 {

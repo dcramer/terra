@@ -64,6 +64,28 @@ pub(super) const SURGES: usize = 160;
 /// walls, where nothing outside them saw it (castle film round 5).
 const SURGE_OUT_M: f32 = 1.0;
 
+/// The colour of the dust a big fall drives out along the ground: its stone's, warmed by the
+/// earth and lime mortar it beats out of the ground and the heap, a buff tan as demolition
+/// footage shows (castle film round 7: the keep's surge, in its stone's greyed colour and
+/// in the keep's shadow, read as grey fire smoke).
+pub(super) fn surge_tint(stone: Color) -> Color {
+    let stone = stone.to_srgba();
+    let [r, g, b] = SURGE_EARTH;
+    let mix = |s: f32, e: f32| s * (1.0 - SURGE_EARTH_SHARE) + e * SURGE_EARTH_SHARE;
+    Color::srgb(mix(stone.red, r), mix(stone.green, g), mix(stone.blue, b))
+}
+
+/// The earth's buff tan in a surge, and how much of its colour it is.
+const SURGE_EARTH: [f32; 3] = [0.78, 0.66, 0.5];
+const SURGE_EARTH_SHARE: f32 = 0.5;
+
+/// How much darker a dust sprite is at its thickest than at its edge, where it shades itself:
+/// at 0.42 a cloud's core was a mid grey whatever its colour, a fire's smoke beside the
+/// black (castle film round 7).
+const SHADES: f32 = 0.15;
+/// How much of a dust sprite, out from its middle to its edge, is its soft rim.
+const RIM: f32 = 0.6;
+
 /// The surge a big fall raises as it lands: the air its mass drives out carries its dust
 /// out along the ground every way round in a rolling wall, thick, several footprints wide,
 /// which then rises over the heap and hangs there, lit by the sun, settling over many
@@ -94,7 +116,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
                 when + 0.04 * k as f32 / ring as f32,
                 way * (half + SURGE_OUT_M) + Vec3::Y * (0.6 + 0.4 * wave as f32),
                 Billow {
-                    alpha: 0.9,
+                    alpha: 1.0,
                     wide: (4.0 + 7.0 * big) * grows,
                     life: life * (0.8 + 0.4 * big),
                     drift: way * out_m_s * (0.7 + 0.5 * big) + Vec3::Y * 0.25,
@@ -119,7 +141,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
             drop_s * (0.5 + 0.15 * k as f32),
             off + Vec3::Y * 1.5,
             Billow {
-                alpha: 0.8,
+                alpha: 1.0,
                 wide: COLUMN_M * (0.8 + 0.6 * big),
                 life: 16.0 * (0.8 + 0.3 * big),
                 drift: off.normalize_or_zero() * 0.3 + Vec3::Y * (1.4 + 0.3 * (k % 3) as f32),
@@ -157,7 +179,9 @@ pub(super) fn plan_surge(
         let at = frame.transform_point(foot + from);
         billow.drift = frame.rotation * billow.drift;
         let up = at.normalize_or(Vec3::Y);
-        shards.surges.push((now + after, at, colour, up, billow));
+        shards
+            .surges
+            .push((now + after, at, surge_tint(colour), up, billow));
     }
 }
 
@@ -242,7 +266,7 @@ impl Raised {
 /// uneven (a few octaves of value noise, as smoke and dust sprites are painted), thick and
 /// darker in its core where it shades itself, thin and lighter at its edge; its normals
 /// those of a round, lumpy billow, so the sun lights its sunward side and its lumps.
-fn dust_images() -> (Image, Image) {
+pub(super) fn dust_images() -> (Image, Image) {
     use bevy::asset::RenderAssetUsages;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     const SIDE: u32 = 128;
@@ -280,8 +304,10 @@ fn dust_images() -> (Image, Image) {
         let n = noise(u, v);
         // Its edge in and out with the noise: lumps, not a disc.
         let edge = 0.55 + 0.45 * n;
-        let fall = ((edge - r) / edge).clamp(0.0, 1.0);
-        (fall * fall * (3.0 - 2.0 * fall) * (0.45 + 0.75 * n)).clamp(0.0, 1.0)
+        // Thick over its inner part, soft only over its outer lumpy rim: a sprite thinning all
+        // the way from its middle overlapped into a see-through veil (castle film round 7).
+        let fall = ((edge - r) / (edge * RIM)).clamp(0.0, 1.0);
+        (fall * fall * (3.0 - 2.0 * fall) * (0.7 + 0.5 * n)).clamp(0.0, 1.0)
     };
     let mut colour = Vec::with_capacity((SIDE * SIDE * 4) as usize);
     let mut normals = Vec::with_capacity((SIDE * SIDE * 4) as usize);
@@ -291,7 +317,7 @@ fn dust_images() -> (Image, Image) {
             let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
             let d = density(fx, fy);
             // Darker where thick: its core shades itself.
-            let shade = 1.0 - 0.42 * d;
+            let shade = 1.0 - SHADES * d;
             colour.extend([byte(shade), byte(shade), byte(shade), byte(d)]);
             // A dome over the sprite and the slope of its lumps; rows run down the image,
             // its up is up the sprite.
@@ -440,7 +466,7 @@ pub(super) fn billow_at(
     };
     // Thinner each the more there are, so the cloud is as thick as five were at its core
     // and soft at its edges.
-    let alpha = billow.alpha * if billow.wide > 3.0 { 0.75 } else { 1.0 };
+    let alpha = billow.alpha * if billow.wide > 3.0 { 0.9 } else { 1.0 };
     let linear = colour.to_linear();
     // Lit, as smoke and dust are in shipped games (Unreal's lit translucency, normal-mapped
     // smoke sprites): the sun lights its sunward side, its far side and what stands in the
@@ -452,6 +478,9 @@ pub(super) fn billow_at(
         normal_map_texture: Some(normals),
         perceptual_roughness: 1.0,
         reflectance: 0.0,
+        // Lit through as well as on its face: a dust cloud with the sun behind it glows at
+        // its edges rather than going black (as the impacts' spray is).
+        diffuse_transmission: 0.5,
         alpha_mode: AlphaMode::Blend,
         ..default()
     });

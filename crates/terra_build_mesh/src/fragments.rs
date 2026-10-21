@@ -21,10 +21,12 @@
 //!
 //! Without Bevy, and the same every time: everything follows from where each cube was.
 
-use crate::{Material, Surfaces};
+#[cfg(test)]
+use crate::Material;
 use glam::{IVec3, Quat, Vec3};
 use terra_build::CELL_M;
 use terra_build::cubes::{Cube, FULL, Kind};
+#[cfg(test)]
 use terra_build::kit::{Kit, Pattern};
 use terra_gen::hash;
 
@@ -225,6 +227,10 @@ pub struct Fragment {
     /// While it still goes with the section of wall it came down in, that section's
     /// motion ([`Body`]).
     pub body: Option<Body>,
+    /// For timber, whether each end of its first axis, the low and the high, is its
+    /// member's sawn end; where not, it snapped there from the rest of its length and shows
+    /// split wood ([`surfaces`]).
+    pub sawn: [bool; 2],
 }
 
 /// What happened to a fragment in a step.
@@ -239,16 +245,16 @@ pub struct Landing {
 impl Fragment {
     /// Which mesh it is drawn with: its shape, and for a whole cube or block how many cubes
     /// across, so its material shows at its real size; and how big that mesh's texture is
-    /// worn for, in metres.
-    pub fn mesh(&self) -> (Shape, u8, f32) {
+    /// worn for, in metres; and which of its ends are sawn ([`Fragment::sawn`]).
+    pub fn mesh(&self) -> (Shape, u8, [bool; 2], f32) {
         match self.shape {
             Shape::Whole => {
                 let across = (self.size.max_element() / CELL_M)
                     .round()
                     .clamp(1.0, f32::from(MOST_DRAWN));
-                (self.shape, across as u8, across * CELL_M)
+                (self.shape, across as u8, self.sawn, across * CELL_M)
             }
-            shape => (shape, 0, PIECE_M),
+            shape => (shape, 0, [true; 2], PIECE_M),
         }
     }
 
@@ -431,7 +437,8 @@ impl Fragment {
                 if whole {
                     // The bigger, the less it is thrown: a big chunk rolls off the heap.
                     let heft = part.max_element().max(CELL_M).sqrt();
-                    let away = self.velocity.with_y(0.0) * 0.5 + out_from * (0.6 + r(4)) / heft;
+                    let away = self.velocity.with_y(0.0) * 0.5
+                        + out_from * PARTS_M_S * (0.6 + r(4)) / heft;
                     let axis = Vec3::new(r(1) - 0.5, r(2) - 0.5, r(3) - 0.5).normalize_or(Vec3::X);
                     out.push(Fragment {
                         at,
@@ -443,6 +450,11 @@ impl Fragment {
                         seed,
                         hinge: None,
                         body: None,
+                        // A length snapped across its grain shows split wood at the snap.
+                        sawn: [
+                            self.sawn[0] && low.x == 0,
+                            self.sawn[1] && low.x + side.x == count.x,
+                        ],
                         ..*self
                     });
                 }
@@ -536,6 +548,7 @@ fn pieces(
                 seed: hash::of(&[seed, index]),
                 hinge: None,
                 body: None,
+                sawn: [true; 2],
             });
         }
     }
@@ -675,14 +688,10 @@ pub fn burst(
         };
         let along_z =
             cubes.z > cubes.x || (cubes.z == cubes.x && beside(IVec3::Z) > beside(IVec3::X));
-        let (turn, size) = if along_z {
-            (
-                Quat::from_rotation_y(core::f32::consts::FRAC_PI_2),
-                Vec3::new(size.z, size.y, size.x),
-            )
-        } else {
-            (Quat::IDENTITY, size)
-        };
+        // Timber's grain may stand up, a post's; masonry's beds stay level.
+        let up = breaks(cube.kind) == Breaks::Lengths && cubes.y > cubes.x.max(cubes.z);
+        let (turn, size, low_end, high_end) = grain(up, along_z, size, low, high);
+        let sawn = [low_end, high_end].map(|end| !fallen.contains(&end.to_array()));
         let middle = foot + size * 0.5;
         let away = (middle - impact).with_y(0.0).normalize_or_zero();
         let axis = Vec3::new(r(1) - 0.5, 0.2 * r(2), r(3) - 0.5).normalize_or(Vec3::X);
@@ -702,9 +711,41 @@ pub fn burst(
             seed,
             hinge: None,
             body: None,
+            sawn,
         });
     }
     out
+}
+
+/// How a block of cubes `low` to `high`, `size` in metres, is turned so its first axis runs
+/// with its grain (up it, along z, else along x), its size along its own axes, and the
+/// cubes just past its low and high ends along that axis: its ends are sawn only where its
+/// member ended, no more of what fell beyond it along its grain.
+fn grain(
+    up: bool,
+    along_z: bool,
+    size: Vec3,
+    low: IVec3,
+    high: IVec3,
+) -> (Quat, Vec3, IVec3, IVec3) {
+    if up {
+        (
+            Quat::from_rotation_z(core::f32::consts::FRAC_PI_2),
+            Vec3::new(size.y, size.x, size.z),
+            low - IVec3::Y,
+            high + IVec3::Y,
+        )
+    } else if along_z {
+        // Turned a quarter about up, its first axis runs down the world's z.
+        (
+            Quat::from_rotation_y(core::f32::consts::FRAC_PI_2),
+            Vec3::new(size.z, size.y, size.x),
+            high + IVec3::Z,
+            low - IVec3::Z,
+        )
+    } else {
+        (Quat::IDENTITY, size, low - IVec3::X, high + IVec3::X)
+    }
 }
 
 /// The cubes left hanging cut into the chunks they fall as (`fracture::chunks`), each way of
@@ -745,6 +786,16 @@ fn chunks_of<'a>(
     loop {
         blocks.clear();
         for (way, cubes) in &ways {
+            if *way == Breaks::Lengths {
+                // Timber falls as its members, in lengths along their grain.
+                let places: Vec<IVec3> = cubes.iter().map(|(at, _)| *at).collect();
+                blocks.extend(
+                    fracture::lengths(&places, seed)
+                        .into_iter()
+                        .map(|length| length.into_iter().map(|i| cubes[i]).collect()),
+                );
+                continue;
+            }
             let least = if small { 1 } else { way.look().chunk };
             blocks.extend(cut(cubes, (least + more).min(MOST_ACROSS)));
         }
@@ -763,6 +814,9 @@ fn chunks_of<'a>(
 /// How many of the cubes a block bursts into where it first lands stay whole, to break
 /// where they land again (`Fragment::shatter`).
 const WHOLE_SHARE: f32 = 0.4;
+/// How fast the parts of a block cracked where it landed are thrown apart, in metres a
+/// second for a part a cube across.
+const PARTS_M_S: f32 = 1.0;
 
 /// The most the least side of the chunks cubes left hanging fall as may grow to, to stay in
 /// the budget; from how many cubes left hanging they fall in chunks of their way of
@@ -773,209 +827,11 @@ const CHUNKS_FROM: usize = 300;
 const BIG_CHUNKS_FROM: usize = 2000;
 const HUGE_CHUNKS_FROM: usize = 4000;
 
-/// The material a kind's fragments are made of: its walls' own; for timber, the wood its
-/// members split to, squared, rather than the bark that wraps them.
-pub fn material(kit: &Kit) -> Material {
-    match kit.pattern {
-        Pattern::Logs if kit.textures.contains_key(&Material::Hewn) => Material::Hewn,
-        Pattern::Logs => Material::Log,
-        Pattern::Masonry => Material::Masonry,
-        Pattern::Roof if kit.textures.contains_key(&Material::Covering) => Material::Covering,
-        Pattern::Roof => Material::Board,
-    }
-}
-
-/// How big a piece usually is, in metres: the size its mesh wears its texture at.
-const PIECE_M: f32 = 0.25;
-/// How much darker a fragment is drawn than its material's face: broken stone in the dirt
-/// and shadow of its fall, not the dressed face of a wall.
-/// Whole blocks are the wall's own face moving, and keep its shade: darkened, a wall read as
-/// another stone the moment it broke (the castle film's review, 2026-10-21).
-const FRAGMENT_SHADE: f32 = 0.72;
-/// A whole block's beds, top and bottom, and its broken arrises are where it split from the
-/// courses round it: broken stone, as a standing wall's break is drawn
-/// (`sections::laying::worn_within`), its sides the wall's face. A tower's blocks lit from
-/// above in their face's colour read as a grid of flat peach slabs (castle film round 4).
-fn split_shade(shape: Shape, normal: Vec3, colour: [f32; 3]) -> [f32; 3] {
-    let split =
-        shape == Shape::Whole && (normal.y.abs() > 0.7 || normal.abs().max_element() < 0.95);
-    if split {
-        colour.map(|c| c * BED_SHADE)
-    } else {
-        colour
-    }
-}
-
-/// How dark a whole block's beds and broken edges are drawn beside its face: as a standing
-/// cube beside a break, worn two quarters (`mesh::wear`'s darkening at half lost).
-const BED_SHADE: f32 = 0.72;
-/// How much smaller than its cubes a whole block is drawn, so it never fights the cubes drawn
-/// where they were for the frames before their sections are drawn again; no more, as gaps of
-/// 0.97 read as a lattice of dark seams while the blocks fell together.
-const SHRINK: f32 = 0.99;
-
-/// A shape of fragment, a metre across, in a kind's material: a box with its twelve edges
-/// bevelled and its eight corners cut, which the game scales to each piece; its texture as it
-/// would be on one `drawn_m` across ([`Fragment::mesh`]).
-///
-/// Timber's is a piece of the log it came from, its grain along its own first axis (the
-/// game turns it along the wall it fell from, `Fragment::turn`): its ends across the grain
-/// the log's sawn end, rings and all (`LogEnd`); its two sides the face of the log, bark
-/// and weathered wood; its top and bottom, and its bevels, where it was split from the rest,
-/// fresh pale wood (the face's worn set, `Texture::worn`), its grain running along it.
-pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
-    let material = material(kit);
-    let metres = kit
-        .textures
-        .get(&material)
-        .map_or([1.0, 1.0], |texture| texture.metres)
-        .map(|m| m / drawn_m.max(0.05));
-    let timber = kit.pattern == Pattern::Logs && kit.textures.contains_key(&Material::LogEnd);
-    let colour = if material == Material::Masonry {
-        kit.tint
-    } else {
-        [1.0; 3]
-    }
-    .map(|channel| {
-        channel
-            * if timber {
-                TIMBER_SHADE
-            } else if shape == Shape::Whole {
-                1.0
-            } else {
-                FRAGMENT_SHADE
-            }
-    });
-    let end = crate::timber::end_cell(kit, 0x51ce);
-    let mut surfaces = Surfaces::sharing();
-    let mut wood = Surfaces::sharing();
-    let half = 0.5;
-    let b = half * shape.bevel();
-    let inner = half - b;
-    // Every corner of a bevelled box is a point of the cube's corner pulled in along two
-    // axes; each face, edge and corner a flat piece through such points.
-    let point = |sign: Vec3, out: [bool; 3]| -> Vec3 {
-        Vec3::new(
-            sign.x * if out[0] { half } else { inner },
-            sign.y * if out[1] { half } else { inner },
-            sign.z * if out[2] { half } else { inner },
-        )
-    };
-    let mut add = |corners: &[Vec3]| {
-        let middle = corners.iter().copied().sum::<Vec3>() / corners.len() as f32;
-        for i in 1..corners.len() - 1 {
-            let (mut a, mut c) = (corners[0], corners[i + 1]);
-            let bb = corners[i];
-            let mut normal = (bb - a)
-                .cross(c - a)
-                .normalize_or(middle.normalize_or(Vec3::Y));
-            if normal.dot(middle) < 0.0 {
-                std::mem::swap(&mut a, &mut c);
-                normal = -normal;
-            }
-            let triangle = [a, bb, c];
-            if !timber {
-                let uvs = triangle.map(|p| crate::mesh::planar(p, normal, metres));
-                let colour = split_shade(shape, normal, colour);
-                surfaces
-                    .of(material)
-                    .textured(triangle, [normal; 3], uvs, colour);
-                continue;
-            }
-            if normal.x.abs() > 0.9 {
-                // Its sawn end: the end's picture over it, one of the kit's.
-                let (corner, size) = end;
-                let uvs = triangle.map(|p| {
-                    [
-                        corner[0] + size * (0.5 + p.z * 0.94),
-                        corner[1] + size * (0.5 - p.y * 0.94),
-                    ]
-                });
-                surfaces
-                    .of(Material::LogEnd)
-                    .textured(triangle, [normal; 3], uvs, colour);
-                continue;
-            }
-            // Along the grain: across it by whichever way the face looks least, along it by
-            // its first axis.
-            let across = if normal.y.abs() > normal.z.abs() {
-                2
-            } else {
-                1
-            };
-            let uvs = triangle.map(|p| [p[across] / metres[0], p.x / metres[1]]);
-            let side = normal.z.abs() > 0.9;
-            let (wear, shade) = if side { (0.25, 1.0) } else { (1.0, FRESH_WOOD) };
-            let surface = wood.of(material);
-            surface.textured(
-                triangle,
-                [normal; 3],
-                uvs,
-                colour.map(|c| (c * shade).min(1.0)),
-            );
-            crate::mesh::worn(&mut surface.wear, surface.positions.len() - 3);
-            surface.wear.extend([wear; 3]);
-        }
-    };
-    let signs = [-1.0f32, 1.0];
-    // Faces.
-    for axis in 0..3 {
-        for s in signs {
-            let mut quad = Vec::new();
-            for (a, b2) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-                let mut sign = Vec3::ZERO;
-                sign[axis] = s;
-                sign[(axis + 1) % 3] = a;
-                sign[(axis + 2) % 3] = b2;
-                let mut out = [false; 3];
-                out[axis] = true;
-                quad.push(point(sign, out));
-            }
-            add(&quad);
-        }
-    }
-    // Edges: along each axis, at each of its four corners round it.
-    for axis in 0..3 {
-        let (p, q) = ((axis + 1) % 3, (axis + 2) % 3);
-        for sp in signs {
-            for sq in signs {
-                let mut quad = Vec::new();
-                for (along, outer) in [(-1.0, p), (1.0, p), (1.0, q), (-1.0, q)] {
-                    let mut sign = Vec3::ZERO;
-                    sign[axis] = along;
-                    sign[p] = sp;
-                    sign[q] = sq;
-                    let mut out = [false; 3];
-                    out[outer] = true;
-                    quad.push(point(sign, out));
-                }
-                add(&quad);
-            }
-        }
-    }
-    // Corners.
-    for sx in signs {
-        for sy in signs {
-            for sz in signs {
-                let sign = Vec3::new(sx, sy, sz);
-                add(&[0, 1, 2].map(|axis| {
-                    let mut out = [false; 3];
-                    out[axis] = true;
-                    point(sign, out)
-                }));
-            }
-        }
-    }
-    for (material, surface) in wood.0 {
-        surfaces.of(material).append(surface);
-    }
-    surfaces
-}
-
-/// How much darker timber's fragments are drawn than its face, less than stone's: split wood
-/// is pale, and its fresh faces paler again than its weathered ones.
-const TIMBER_SHADE: f32 = 0.9;
-const FRESH_WOOD: f32 = 1.2;
+mod drawn;
+#[cfg(test)]
+use drawn::TIMBER_SHADE;
+use drawn::{FRAGMENT_SHADE, PIECE_M, SHRINK};
+pub use drawn::{material, surfaces};
 
 #[cfg(test)]
 mod tests;

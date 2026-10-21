@@ -65,6 +65,78 @@ pub(super) fn chunks(cubes: &[IVec3], least: i32, below: i32, seed: u32) -> Vec<
     out
 }
 
+/// The shortest and longest length, in cubes, a timber course falls as.
+const LENGTH_LEAST: i32 = 3;
+const LENGTH_MOST: i32 = 7;
+
+/// Timber at `cubes` cut into lengths, as lists of indices into it: each a run of cubes along
+/// one axis, its grain, the way the most of them run through its first cube (a course of logs
+/// along its wall, a post up), from three to seven cubes long, a short end left on the length
+/// before it, so a log wall falls as its logs snapped into a few lengths, never a grid of
+/// sawn blocks (castle film round 7: a tower's timber storey fell as one-cube blocks, each
+/// showing its sawn end at every joint). The same every time for the same cubes and `seed`.
+pub(super) fn lengths(cubes: &[IVec3], seed: u32) -> Vec<Vec<usize>> {
+    let index: std::collections::BTreeMap<[i32; 3], usize> = cubes
+        .iter()
+        .enumerate()
+        .map(|(i, at)| (at.to_array(), i))
+        .collect();
+    let mut taken = vec![false; cubes.len()];
+    let mut order: Vec<usize> = (0..cubes.len()).collect();
+    order.sort_by_key(|&i| (cubes[i].y, cubes[i].x, cubes[i].z));
+    let run = |from: IVec3, step: IVec3, taken: &[bool]| -> Vec<usize> {
+        let mut out = Vec::new();
+        let mut at = from;
+        while let Some(&i) = index.get(&at.to_array()) {
+            if taken[i] {
+                break;
+            }
+            out.push(i);
+            at += step;
+        }
+        out
+    };
+    let mut out = Vec::new();
+    for first in order {
+        if taken[first] {
+            continue;
+        }
+        let from = cubes[first];
+        // Level first: a course of logs runs along its wall; a post stands up.
+        let grain = [IVec3::X, IVec3::Z, IVec3::Y]
+            .into_iter()
+            .map(|step| run(from, step, &taken))
+            .enumerate()
+            .max_by_key(|(axis, cubes)| (cubes.len(), usize::MAX - axis))
+            .map(|(_, cubes)| cubes)
+            .unwrap_or_default();
+        let mut left = grain.as_slice();
+        let mut salt = 0u32;
+        while !left.is_empty() {
+            salt += 1;
+            let span = (LENGTH_MOST - LENGTH_LEAST + 1) as f32;
+            let length = (LENGTH_LEAST
+                + (unit(&[seed, from.x as u32, from.y as u32, from.z as u32, salt]) * span) as i32)
+                .min(LENGTH_MOST) as usize;
+            // A stub shorter than the least goes with this one, if that stays drawable.
+            let length = if left.len() < length + LENGTH_LEAST as usize
+                && left.len() <= super::MOST_DRAWN as usize
+            {
+                left.len()
+            } else {
+                length.min(left.len())
+            };
+            let (piece, rest) = left.split_at(length);
+            for &i in piece {
+                taken[i] = true;
+            }
+            out.push(piece.to_vec());
+            left = rest;
+        }
+    }
+    out
+}
+
 /// The cubes of a part, split into those that touch each other face to face.
 fn touching(cubes: &[IVec3], part: &[usize]) -> Vec<Vec<usize>> {
     let mut left: BTreeSet<[i32; 3]> = part.iter().map(|&i| cubes[i].to_array()).collect();

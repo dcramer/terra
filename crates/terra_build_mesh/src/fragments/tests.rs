@@ -91,6 +91,7 @@ fn a_block_landing_cracks_into_a_few_uneven_chunks_that_break_again_down_to_piec
         seed: 7,
         hinge: None,
         body: None,
+        sawn: [true; 2],
     };
     let burst = block.shatter(Breaks::Chunks, 1.0);
     // It cracks into a few smaller chunks of uneven size where it first lands, not into
@@ -151,7 +152,7 @@ fn a_timber_fragment_shows_end_grain_across_its_grain_bark_on_its_sides_and_fres
             },
         );
     }
-    let made = surfaces(&kit, Shape::Whole, CELL_M);
+    let made = surfaces(&kit, Shape::Whole, CELL_M, [true; 2]);
     let ends = &made.0[&Material::LogEnd];
     // Its ends, across its grain, its first axis: the sawn end, all of its picture.
     assert!(ends.normals.iter().all(|n| n.x.abs() > 0.9));
@@ -365,7 +366,7 @@ fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
         ..Kit::default()
     };
     for shape in Shape::ALL {
-        let drawn = surfaces(&stone, shape, 0.5);
+        let drawn = surfaces(&stone, shape, 0.5, [true; 2]);
         let surface = &drawn.0[&Material::Masonry];
         // Six faces and twelve edges of two triangles, eight corners of one.
         assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
@@ -390,7 +391,7 @@ fn a_whole_blocks_beds_are_broken_stone_and_its_sides_the_walls_face() {
         tint: [0.8, 0.7, 0.6],
         ..Kit::default()
     };
-    let drawn = surfaces(&stone, Shape::Whole, 1.0);
+    let drawn = surfaces(&stone, Shape::Whole, 1.0, [true; 2]);
     let surface = &drawn.0[&Material::Masonry];
     let shade_of = |up: bool| -> f32 {
         let found: Vec<f32> = surface
@@ -411,4 +412,72 @@ fn a_whole_blocks_beds_are_broken_stone_and_its_sides_the_walls_face() {
     let (bed, side) = (shade_of(true), shade_of(false));
     assert!((side - 0.8).abs() < 1e-4, "its side {side}");
     assert!(bed < side * 0.8, "its bed {bed} beside its side {side}");
+}
+
+#[test]
+fn a_timber_wall_falls_as_lengths_along_its_grain_sawn_only_where_its_logs_end() {
+    // Two log walls meeting at a corner, 16 and 9 cubes long, 6 courses high, one thick.
+    let mut wall: Vec<(IVec3, Cube)> = Vec::new();
+    for y in 0..6 {
+        for x in 0..16 {
+            wall.push((IVec3::new(x, y, 0), cube(CubeShape::Whole)));
+        }
+        for z in 1..9 {
+            wall.push((IVec3::new(0, y, z), cube(CubeShape::Whole)));
+        }
+    }
+    let made = burst(&wall, &|_| false, &|_| Breaks::Lengths, 1.0, 5000);
+    let wholes: Vec<&Fragment> = made.iter().filter(|f| f.shape == Shape::Whole).collect();
+    let cubes: f32 = wholes.iter().map(|f| (f.size.x / CELL_M).round()).sum();
+    assert!(
+        (cubes - wall.len() as f32).abs() < 1.0,
+        "{cubes} of {}",
+        wall.len()
+    );
+    // Each a length of its log, its grain along it, three cubes or more on average, never a
+    // grid of one-cube blocks.
+    let mean = cubes / wholes.len() as f32;
+    assert!(mean >= 3.0, "lengths of {mean} cubes on average");
+    assert!(
+        wholes
+            .iter()
+            .all(|f| f.size.x >= f.size.y && f.size.x >= f.size.z)
+    );
+    // Sawn ends only at each course's log ends; every other end of a length snapped.
+    let sawn: usize = wholes
+        .iter()
+        .map(|f| f.sawn.iter().filter(|&&s| s).count())
+        .sum();
+    assert!(sawn <= 6 * 4, "{sawn} sawn ends on 6 courses of two logs");
+    assert!(
+        wholes.len() * 2 - sawn >= wholes.len(),
+        "most ends are snaps"
+    );
+    // Where it snapped it is drawn as split wood, never the log's sawn end.
+    let mut kit = Kit {
+        pattern: Pattern::Logs,
+        ..Kit::default()
+    };
+    for (material, path) in [(Material::Log, "log"), (Material::LogEnd, "ends")] {
+        kit.textures.insert(
+            material,
+            terra_build::kit::Texture {
+                path: path.into(),
+                metres: [1.0, 1.0],
+                depth: 0.0,
+                reflectance: terra_build::kit::matte(),
+                strips: None,
+                cells: 1,
+                worn: Some("wood".into()),
+            },
+        );
+    }
+    let one_end = surfaces(&kit, Shape::Whole, 4.0 * CELL_M, [false, true]);
+    let ends = &one_end.0[&Material::LogEnd];
+    assert!(
+        ends.normals.iter().all(|n| n.x > 0.9),
+        "sawn only at its high end"
+    );
+    let snapped = surfaces(&kit, Shape::Whole, 4.0 * CELL_M, [false; 2]);
+    assert!(!snapped.0.contains_key(&Material::LogEnd));
 }
