@@ -60,12 +60,12 @@ const JET_LIGHT: Color = Color::srgb(1.0, 0.74, 0.32);
 /// and read salmon beside it. Orange, not yellow: at (1, 0.78, 0.3) and 1.4e6 the grass under
 /// it read a flat yellow-green flood (vol10's review); the film mask (`BREATH_LIT`) keeps the
 /// orange from going salmon past the shoulder now. Dimmer at 0.35e6: at 0.6e6 the ground by
-/// the hit stood 1.6 to 5 times white before the tonemapper (vol12's probe). Its colour is
-/// (1, 0.58, 0.22) again: redder only made up for the film mask's shoulder taken a channel at
-/// a time, which ran the ground's green out with its red to a pale lime-yellow; the shoulder
-/// keeps the hue now, and at (1, 0.5, 0.16) the wall read coral (fire/hue's blind A/B).
+/// the hit stood 1.6 to 5 times white before the tonemapper (vol12's probe). Amber: redder
+/// only made up for the film mask's shoulder taken a channel at a time, which ran the ground's
+/// green out with its red to a pale lime-yellow; the shoulder keeps the hue now, and at
+/// (1, 0.5, 0.16) the wall read coral, at (1, 0.58, 0.22) terracotta (fire/hue's blind A/Bs).
 const MARCHED_LUMENS: f32 = 0.35e6;
-const MARCHED_LIGHT: Color = Color::srgb(1.0, 0.58, 0.22);
+const MARCHED_LIGHT: Color = Color::srgb(1.0, 0.64, 0.26);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's light: wood flame's orange, warmer than a blaze's, as the games white-balance
 /// firelight (about 2,300 K, Mitchell Charity's table: 2,200 K #ff932c, 2,500 K #ffa148), its
@@ -328,9 +328,10 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
 /// off from, the stream's lights taking no night stop (vol10's review: a flat flood). Under
 /// half that (at 3.2e6 the ground by the hit stood 5 times white, vol12's probe), and orange:
 /// the film mask's shoulder keeps the hue, so the redder (1, 0.42, 0.1) that made up for its
-/// running green out with red read coral on the wall (fire/hue's blind A/B).
+/// running green out with red read coral on the wall, and (1, 0.5, 0.16) terracotta (fire/hue's
+/// blind A/Bs).
 const STRIKE_LUMENS: f32 = 1.5e6;
-const STRIKE_LIGHT: Color = Color::srgb(1.0, 0.5, 0.16);
+const STRIKE_LIGHT: Color = Color::srgb(1.0, 0.6, 0.2);
 const STRIKE_OUT_M: f32 = 1.8;
 const STRIKE_GROW_S: f32 = 0.6;
 
