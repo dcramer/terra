@@ -240,6 +240,9 @@ pub struct Landing {
     pub hit: Option<f32>,
     /// A whole cube hit hard enough to break.
     pub breaks: bool,
+    /// It was going with a section of wall and broke as it landed: that section, which
+    /// cracks up there and then ([`Fragment::cracks_off`]).
+    pub cracks: Option<Body>,
 }
 
 impl Fragment {
@@ -311,6 +314,7 @@ impl Fragment {
             self.wait -= dt;
             return landing;
         }
+        let mut rode = None;
         if let Some(mut body) = self.body {
             // With its section, as one rigid body, until it touches: then on its own, going
             // as the section was, to land as hard as that and break by it, while the rest
@@ -327,6 +331,7 @@ impl Fragment {
             }
             self.body = None;
             self.spin = body.spin;
+            rode = Some(body);
         }
         if let Some(mut hinge) = self.hinge {
             let (at, turn) = hinge.step(dt);
@@ -385,6 +390,7 @@ impl Fragment {
             let hit = -self.velocity.y;
             landing.hit = Some(hit);
             landing.breaks = self.shape == Shape::Whole && hit > BREAKS_AT;
+            landing.cracks = rode.filter(|_| landing.breaks);
             // Following a slope down it, as it slides, is no fall onto it.
             let following = steep * self.velocity.with_y(0.0).length() + GRAVITY * dt * 2.0;
             if sliding && hit <= following {

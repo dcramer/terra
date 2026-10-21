@@ -29,12 +29,14 @@ fn come_down(mut parts: Vec<Fragment>, seconds: f32) -> (Vec<Fragment>, f32, f32
         let now = step as f32 * dt;
         let mut born = Vec::new();
         let mut laid = Vec::new();
+        let mut cracked = Vec::new();
         for part in &mut parts {
             if let Some(hinge) = part.hinge {
                 most_over = most_over.max(hinge.angle);
             }
             let floor = |at: Vec3| rubble.top(at, now).unwrap_or(0.0).max(0.0);
             let landing = part.step(dt, &floor, &solid);
+            cracked.extend(landing.cracks);
             if landing.breaks {
                 laid.push(*part);
                 born.extend(part.shatter(Breaks::Chunks, 0.3));
@@ -44,6 +46,14 @@ fn come_down(mut parts: Vec<Fragment>, seconds: f32) -> (Vec<Fragment>, f32, f32
         }
         for part in laid {
             rubble.lay(&part, &|_| 0.0, now);
+        }
+        for section in &cracked {
+            for part in &mut parts {
+                if let Some(pieces) = part.cracks_off(section, usize::MAX) {
+                    part.size = Vec3::ZERO;
+                    born.extend(pieces);
+                }
+            }
         }
         parts.retain(|part| part.size != Vec3::ZERO);
         parts.extend(born);
@@ -426,5 +436,82 @@ fn a_tall_shells_upper_walls_come_down_as_a_few_big_sections_that_lean_out_as_th
     assert!(
         mean > 0.9,
         "the outward sections went over {mean} rad on average"
+    );
+}
+
+#[test]
+fn a_falling_sections_blocks_crack_apart_once_the_first_of_it_lands_hard() {
+    // A wall 24 cubes long, 3 thick and 30 high, its foot destroyed: its sections lean out
+    // as they drop and land on an edge first.
+    let wall = solid(IVec3::ZERO, IVec3::new(23, 29, 2));
+    let foot = |at: IVec3| at.y == 0;
+    let mut parts = burst(&wall, &foot, &chunks, 1.0, 5000);
+    collapse(&mut parts, &wall, &foot, &chunks);
+    let riding: std::collections::HashSet<u32> = parts
+        .iter()
+        .filter(|p| p.body.is_some())
+        .map(|p| p.seed)
+        .collect();
+    let size: f32 = parts
+        .iter()
+        .filter(|p| p.body.is_some())
+        .map(|p| p.size.x)
+        .sum::<f32>()
+        / riding.len() as f32;
+    let (mut whole, mut cracked, mut pieces, mut bigger) = (0, 0, 0, 0);
+    let dt = 1.0 / 60.0;
+    let open = |_: Vec3| false;
+    for _ in 0..(5.0 / dt) as usize {
+        let mut sections = Vec::new();
+        for part in &mut parts {
+            let rode = part.body.is_some();
+            let landing = part.step(dt, &|_| 0.0, &open);
+            if rode && landing.hit.is_some() && riding.contains(&part.seed) {
+                whole += 1;
+            }
+            sections.extend(landing.cracks);
+        }
+        let mut born = Vec::new();
+        for section in &sections {
+            for part in &mut parts {
+                if let Some(off) = part.cracks_off(section, usize::MAX) {
+                    // Each going on as the section was at it, not flung.
+                    let body = part.body.expect("in the section");
+                    for piece in &off {
+                        let was = body.velocity(piece.at);
+                        assert!(
+                            piece.velocity.distance(was) < 0.6,
+                            "a piece cracked off at {} m/s from its section's {was}",
+                            piece.velocity
+                        );
+                        bigger += usize::from(piece.size.max_element() > part.size.max_element());
+                    }
+                    cracked += 1;
+                    pieces += off.len();
+                    part.size = Vec3::ZERO;
+                    born.extend(off);
+                }
+            }
+        }
+        parts.retain(|part| part.size != Vec3::ZERO);
+        parts.extend(born);
+    }
+    // Few of its blocks land as the blocks they set off as, riding their section: once the
+    // first struck, the rest cracked apart, into more pieces than blocks, none bigger.
+    assert!(
+        whole * 4 < riding.len(),
+        "{whole} of {} section blocks of {size:.2} m landed riding it; {cracked} cracked",
+        riding.len()
+    );
+    assert!(
+        cracked * 2 > riding.len(),
+        "{cracked} of {} cracked",
+        riding.len()
+    );
+    assert!(pieces > cracked, "{cracked} blocks cracked into {pieces}");
+    assert_eq!(bigger, 0);
+    assert!(
+        parts.iter().all(|p| p.body.is_none()),
+        "a block still rides"
     );
 }

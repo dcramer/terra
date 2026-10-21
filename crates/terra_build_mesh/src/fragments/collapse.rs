@@ -90,6 +90,63 @@ impl Body {
     pub(super) fn velocity(&self, at: Vec3) -> Vec3 {
         self.velocity - Vec3::Y * (GRAVITY * self.age) + self.spin.cross(at - self.centre())
     }
+
+    /// Whether it is the same section as `other`: its fragments all set off as one.
+    pub fn same(&self, other: &Body) -> bool {
+        self.middle == other.middle && self.velocity == other.velocity && self.spin == other.spin
+    }
+}
+
+/// How fast the pieces of a section cracked where it first landed hard part, in metres a
+/// second: enough that its joints open as it comes down, little enough that they come down
+/// where the section did.
+const CRACKS_APART_M_S: f32 = 0.35;
+
+impl Fragment {
+    /// What it comes down as when the section of wall it goes with first lands hard,
+    /// `section` (the falling panel: the first of it to hit stops, and the mortar holding the
+    /// rest to it fails at once): if it goes with that section, it lets go and cracks along
+    /// its courses into its cubes and blocks of a few (`fracture::crack`), each going on as
+    /// it was, its joints opening, to land on its own and break where it lands hard. A
+    /// section going on as one box after its first block struck read as a crisp slab landing
+    /// whole (castle film round 7, 24.2 s). With `room` for fewer pieces than it cracks into,
+    /// it lets go whole. None when it goes with no such section.
+    pub fn cracks_off(&self, section: &Body, room: usize) -> Option<Vec<Fragment>> {
+        let body = self.body.filter(|body| body.same(section))?;
+        let going = Fragment {
+            body: None,
+            velocity: body.velocity(self.at),
+            spin: body.spin,
+            ..*self
+        };
+        let count = (self.size / CELL_M).round().max(Vec3::ONE).as_ivec3();
+        let cracks = super::fracture::crack(count, self.seed);
+        if cracks.len() < 2 || cracks.len() > room {
+            return Some(vec![going]);
+        }
+        let cube = self.size / count.as_vec3();
+        let pieces = cracks.into_iter().map(|(low, side)| {
+            let part = cube * side.as_vec3();
+            let offset = self.turn * (low.as_vec3() * cube + part * 0.5 - self.size * 0.5);
+            let seed = hash::of(&[self.seed, (low.x | low.y << 4 | low.z << 8) as u32, 31]);
+            let r = |salt: u32| unit(&[seed, salt]) - 0.5;
+            let at = self.at + offset;
+            let apart = offset.normalize_or_zero() * CRACKS_APART_M_S * (1.0 + r(1));
+            Fragment {
+                at,
+                velocity: body.velocity(at) + apart,
+                spin: body.spin + Vec3::new(r(2), r(3), r(4)),
+                size: part * super::drawn::SHRINK,
+                seed,
+                sawn: [
+                    self.sawn[0] && low.x == 0,
+                    self.sawn[1] && low.x + side.x == count.x,
+                ],
+                ..going
+            }
+        });
+        Some(pieces.collect())
+    }
 }
 
 /// How big, at most, the sections a crumbling fall comes down in are, in cubes along a wall

@@ -694,6 +694,7 @@ fn fall(
         let now = shards.clock_s;
         steps += 1;
         let mut laid: Vec<(Entity, Fragment)> = Vec::new();
+        let mut cracked: Vec<fragments::Body> = Vec::new();
         // The terrain under each column fragments are over, once a step.
         let mut terrain: BTreeMap<(Entity, [i32; 2]), f32> = BTreeMap::new();
         let mut room = most.saturating_sub(shards.live.len());
@@ -729,6 +730,7 @@ fn fall(
             };
             let solid = |at: Vec3| base.solid_at(at);
             let landing = live.fragment.step(STEP_S, &floor, &solid);
+            cracked.extend(landing.cracks);
             // What it raises where it lands: its place, its kind, how much, how big it is
             // and the way it was going, in the world.
             let raised = |fragment: &Fragment, amount: f32| Landed {
@@ -761,6 +763,19 @@ fn fall(
                 && live.fragment.size.max_element() > 0.2
             {
                 landed.push(raised(&live.fragment, 0.35));
+            }
+        }
+        // A section of wall that landed hard cracks up there and then, all of it
+        // (`Fragment::cracks_off`): what it cracked into goes on, the whole gone at once.
+        for section in &cracked {
+            for live in &mut shards.live {
+                if let Some(pieces) = live.fragment.cracks_off(section, room) {
+                    room = room.saturating_sub(pieces.len().saturating_sub(1));
+                    live.still_s = live.rest_s + live.fade_s;
+                    live.fragment.still = true;
+                    let root = live.root;
+                    born.extend(pieces.into_iter().map(|fragment| Live::new(fragment, root)));
+                }
             }
         }
         let terrain = std::cell::RefCell::new(&mut terrain);
