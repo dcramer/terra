@@ -941,6 +941,25 @@ mod tests {
     }
 
     #[test]
+    fn a_fall_raises_more_cloud_the_more_of_it_lands() {
+        let mut raised = dust::Raised::default();
+        let here = Vec3::new(10.0, 0.0, 10.0);
+        let mut clouds = 0;
+        for chunk in 0..40 {
+            let at = here + Vec3::X * (chunk % 3) as f32;
+            if !raised.joins(at, 0.01 * chunk as f32) {
+                raised.add(at, 8.0, 0.01 * chunk as f32);
+                clouds += 1;
+            }
+        }
+        // Many chunks landing together: fewer clouds than chunks, more than one.
+        assert!(
+            clouds > 40 / (dust::FEEDS as usize + 2) && clouds < 20,
+            "{clouds}"
+        );
+    }
+
+    #[test]
     fn a_big_piece_lies_for_seconds_before_it_fades_and_a_small_one_briefly() {
         let fell = [(
             IVec3::new(0, 8, 0),

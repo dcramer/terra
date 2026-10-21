@@ -35,7 +35,8 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
     Some(Billow {
         alpha: 1.0,
         wide: 2.0 + size * 3.5,
-        life: 4.5 + size * 1.2,
+        // A demolition's cloud hangs for many seconds as it settles.
+        life: 6.0 + size * 2.0,
         drift: flat.normalize_or_zero() * (ROLLS_OUT + 0.4 * size).min(3.5)
             + up * (0.12 + 0.06 * size),
         stir: 1.0 + 0.3 * size,
@@ -44,30 +45,46 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
 }
 
 /// How fast, in metres a second, a billow rolls out along the ground at least.
-const ROLLS_OUT: f32 = 1.2;
+const ROLLS_OUT: f32 = 1.8;
 
 /// How long, in seconds, a billow takes in the chunks landing near it, before it has
 /// drifted and thinned enough that a new one comes up there.
 const JOINS_S: f32 = 1.5;
 
-/// The billows raised lately: where, how wide they grow, in metres, and when. A chunk
-/// landing within half a young billow's width joins it rather than raising its own, as a
-/// collapse's dust is a few big clouds, not one per stone (the emitter per area of shipped
-/// games' destruction, not one per piece).
+/// The billows raised lately: where, how wide they grow, in metres, when, and how many
+/// chunks have landed in each since. A chunk landing within half a young billow's width
+/// joins it rather than raising its own, as a collapse's dust is a few big clouds, not one
+/// per stone (the emitter per area of shipped games' destruction, not one per piece); but
+/// every [`FEEDS`] chunks landing in one raise another there, so the cloud grows with the
+/// mass coming down, as a demolition's does, rather than one billow for a whole keep.
 #[derive(Default)]
-pub(super) struct Raised(Vec<(Vec3, f32, f32)>);
+pub(super) struct Raised(Vec<(Vec3, f32, f32, u32)>);
+
+/// How many chunks landing in a young billow feed it before the next raises another.
+pub(super) const FEEDS: u32 = 4;
 
 impl Raised {
-    /// Whether a chunk landing at `at` at `now` seconds joins a billow raised near it.
+    /// Whether a chunk landing at `at` at `now` seconds joins a billow raised near it,
+    /// feeding it; one that would overfeed it raises its own.
     pub(super) fn joins(&mut self, at: Vec3, now: f32) -> bool {
-        self.0.retain(|&(_, _, when)| now - when < JOINS_S);
-        self.0
-            .iter()
-            .any(|&(there, wide, _)| there.distance(at) < wide * 0.5)
+        self.0.retain(|&(_, _, when, _)| now - when < JOINS_S);
+        let Some(near) = self
+            .0
+            .iter_mut()
+            .find(|(there, wide, _, _)| there.distance(at) < *wide * 0.5)
+        else {
+            return false;
+        };
+        near.3 += 1;
+        if near.3 > FEEDS {
+            near.3 = 0;
+            return false;
+        }
+        true
     }
 
     pub(super) fn add(&mut self, at: Vec3, wide: f32, now: f32) {
-        self.0.push((at, wide, now));
+        self.0.push((at, wide, now, 0));
     }
 }
 
