@@ -73,7 +73,8 @@ pub use terra_build::pieces::Breaks;
 /// Its size and proportions are the piece's own, so a few meshes draw every piece.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Shape {
-    /// A whole cube falling before it breaks: barely bevelled.
+    /// A whole cube falling before it breaks: barely bevelled, so the blocks of a wall falling
+    /// together don't draw a dark groove at every joint.
     Whole,
     /// A chunk with its edges chipped off.
     Chunk,
@@ -87,7 +88,7 @@ impl Shape {
     /// How much of its half width each edge is bevelled by.
     fn bevel(self) -> f32 {
         match self {
-            Shape::Whole => 0.05,
+            Shape::Whole => 0.02,
             Shape::Chunk => 0.22,
             Shape::Lump => 0.42,
         }
@@ -416,7 +417,7 @@ impl Fragment {
                         at,
                         velocity: away + Vec3::Y * (0.4 + 0.8 * r(5)) / heft,
                         spin: axis * (2.0 + 3.0 * r(6)) / heft,
-                        size: part * 0.97,
+                        size: part * SHRINK,
                         wait: 0.0,
                         still: false,
                         seed,
@@ -672,8 +673,9 @@ pub fn burst(
             turn,
             spin: axis * (0.6 + 1.6 * r(5)) / cubes.max_element().sqrt(),
             // A hair smaller than its cubes, so it never fights the cubes drawn where they
-            // were for the frames before their sections are drawn again.
-            size: size * 0.97,
+            // were for the frames before their sections are drawn again; no more, as the
+            // gaps of 0.97 read as a lattice of dark seams while the blocks stood together.
+            size: size * SHRINK,
             wait: ((low.y - lowest) as f32 * STAGGER_S + 0.08 * r(6)).min(STAGGER_MOST_S),
             still: false,
             fill,
@@ -766,7 +768,11 @@ pub fn material(kit: &Kit) -> Material {
 const PIECE_M: f32 = 0.25;
 /// How much darker a fragment is drawn than its material's face: broken stone in the dirt
 /// and shadow of its fall, not the dressed face of a wall.
+/// Whole blocks are the wall's own face moving, and keep its shade: darkened, a wall read as
+/// another stone the moment it broke (the castle film's review, 2026-10-21).
 const FRAGMENT_SHADE: f32 = 0.72;
+/// How much smaller than its cubes a whole block is drawn.
+const SHRINK: f32 = 0.99;
 
 /// A shape of fragment, a metre across, in a kind's material: a box with its twelve edges
 /// bevelled and its eight corners cut, which the game scales to each piece; its texture as it
@@ -790,7 +796,16 @@ pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
     } else {
         [1.0; 3]
     }
-    .map(|channel| channel * if timber { TIMBER_SHADE } else { FRAGMENT_SHADE });
+    .map(|channel| {
+        channel
+            * if timber {
+                TIMBER_SHADE
+            } else if shape == Shape::Whole {
+                1.0
+            } else {
+                FRAGMENT_SHADE
+            }
+    });
     let end = crate::timber::end_cell(kit, 0x51ce);
     let mut surfaces = Surfaces::sharing();
     let mut wood = Surfaces::sharing();

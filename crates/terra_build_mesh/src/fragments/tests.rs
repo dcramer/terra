@@ -84,7 +84,7 @@ fn a_block_landing_cracks_into_a_few_uneven_chunks_that_break_again_down_to_piec
         velocity: Vec3::new(0.0, -6.0, 0.0),
         turn: Quat::IDENTITY,
         spin: Vec3::ZERO,
-        size: Vec3::splat(4.0 * CELL_M * 0.97),
+        size: Vec3::splat(4.0 * CELL_M * super::SHRINK),
         wait: 0.0,
         still: false,
         fill: 1.0,
