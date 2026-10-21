@@ -390,12 +390,16 @@ fn follow(
 }
 
 /// Says whether the camera is in a room closed and covered, so the eye can open further
-/// there (`terra_world::scene::Indoors`).
+/// there (`terra_world::scene::Indoors`). The world's scene owns it; without the world (the
+/// sandbox's `build` alone), there is no eye to tell.
 fn inside(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     rooms: Query<(&GlobalTransform, &Indoors), Without<MainCamera>>,
-    mut indoors: ResMut<terra_world::scene::Indoors>,
+    indoors: Option<ResMut<terra_world::scene::Indoors>>,
 ) {
+    let Some(mut indoors) = indoors else {
+        return;
+    };
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };

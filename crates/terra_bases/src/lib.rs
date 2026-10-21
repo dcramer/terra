@@ -41,6 +41,8 @@ pub mod maps;
 pub mod memory;
 pub use terra_build::plans;
 pub mod store;
+#[cfg(test)]
+mod tests;
 pub mod views;
 
 use draw::{KitMaterials, kit_materials};
@@ -463,6 +465,12 @@ pub fn plugin(app: &mut App) {
         return;
     }
     let free = not(resource_exists::<DrivenByPlayer>);
+    // The world's layer makes these and the base reads them (D198); a run of the base
+    // without that layer (the sandbox's `build`) has them at their defaults. Where it is
+    // added, init leaves its own be.
+    app.init_resource::<terra_world::quality::Quality>()
+        .init_resource::<terra_world::detail::DetailScale>()
+        .init_resource::<terra_world::skylight::OpenSky>();
     app.insert_resource(Added)
         .add_systems(Startup, (setup, make_arrays).chain())
         .add_systems(
