@@ -36,14 +36,14 @@ fn come_down(mut parts: Vec<Fragment>, seconds: f32) -> (Vec<Fragment>, f32, f32
             let floor = |at: Vec3| rubble.top(at, now).unwrap_or(0.0).max(0.0);
             let landing = part.step(dt, &floor, &solid);
             if landing.breaks {
-                laid.push((*part, floor(part.at)));
+                laid.push(*part);
                 born.extend(part.shatter(Breaks::Chunks, 0.3));
                 part.still = true;
                 part.size = Vec3::ZERO;
             }
         }
-        for (part, floor) in laid {
-            rubble.lay(&part, floor, now);
+        for part in laid {
+            rubble.lay(&part, &|_| 0.0, now);
         }
         parts.retain(|part| part.size != Vec3::ZERO);
         parts.extend(born);

@@ -115,6 +115,7 @@ pub(super) fn plan_surge(
     colour: Color,
     frame: &Transform,
     middle: Vec3,
+    ground: f32,
     fell: &[(IVec3, Cube)],
 ) {
     let (low, high) = fell.iter().fold(
@@ -122,8 +123,11 @@ pub(super) fn plan_surge(
         |(low, high), (at, _)| (low.min(*at), high.max(*at)),
     );
     let span = (high - low + IVec3::ONE).as_vec3() * CELL_M;
-    let drop_s = libm::sqrtf(2.0 * span.y / fragments::GRAVITY);
-    let foot = Vec3::new(middle.x, low.y as f32 * CELL_M, middle.z);
+    // On the ground it rolls out over, not at the lowest course that fell: the keep's top
+    // came down off walls left standing, and its surge rose at their height as a ball over
+    // the castle (castle film round 3).
+    let foot = Vec3::new(middle.x, ground.min(low.y as f32 * CELL_M), middle.z);
+    let drop_s = libm::sqrtf(2.0 * ((high.y + 1) as f32 * CELL_M - foot.y) / fragments::GRAVITY);
     let now = shards.clock_s;
     for (after, from, mut billow) in surge(fell.len(), span.x.max(span.z), drop_s) {
         let at = frame.transform_point(foot + from);

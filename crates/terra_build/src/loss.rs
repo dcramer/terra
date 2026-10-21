@@ -52,7 +52,46 @@ pub struct Patch {
     pub lost: Bill,
 }
 
+/// Where cubes came down ([`Base::broken`]): how what stands beside them is drawn, not what
+/// the base is, so two bases alike but for it are equal, as a base read back from its save
+/// is the one saved.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Breaks(pub(crate) BTreeSet<[i32; 3]>);
+
+impl PartialEq for Breaks {
+    fn eq(&self, _: &Breaks) -> bool {
+        true
+    }
+}
+
 impl Base {
+    /// Whether a cube came down from `at` and nothing was put there since: a wall's break,
+    /// not an opening or an edge it was laid with.
+    pub fn broken(&self, at: IVec3) -> bool {
+        self.broken.0.contains(&at.to_array()) && self.cube(at).is_none()
+    }
+
+    /// The places from one cube to another a cube came down from with nothing put there
+    /// since.
+    pub fn breaks_within(&self, low: IVec3, high: IVec3) -> impl Iterator<Item = IVec3> + '_ {
+        self.broken
+            .0
+            .range([low.x, i32::MIN, i32::MIN]..=[high.x, i32::MAX, i32::MAX])
+            .map(|&at| IVec3::from_array(at))
+            .filter(move |at| {
+                at.cmpge(low).all() && at.cmple(high).all() && self.cube(*at).is_none()
+            })
+    }
+
+    /// An operation's change, as `plan` makes it, keeping where what it brings down came
+    /// down from.
+    pub(crate) fn plan_breaking(&mut self, op: &Op, cx: &Context) -> Result<Change, Refusal> {
+        let change = self.plan(op, cx)?;
+        let fell = change.done.fell.iter().map(|(at, _)| at.to_array());
+        self.broken.0.extend(fell);
+        Ok(change)
+    }
+
     /// How much damage a cube has taken.
     pub fn damage(&self, at: IVec3) -> u16 {
         self.damage.get(&at.to_array()).copied().unwrap_or(0)

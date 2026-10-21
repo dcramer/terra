@@ -95,20 +95,16 @@ impl Rubble {
         (high > 0.01).then_some(cell.floor + high)
     }
 
-    /// A whole fragment broken where it landed, on `floor` (the ground or what is built,
-    /// under the heap), at `now`: its volume laid on the cells under it as grains, each
-    /// rolling down the heap while it stands steeper than its repose, as a sandpile's do.
-    pub fn lay(&mut self, fragment: &Fragment, floor: f32, now: f32) {
+    /// A whole fragment broken where it landed, at `now`: its volume laid on the cells under
+    /// it as grains, each rolling down the heap while it stands steeper than its repose, as a
+    /// sandpile's do. `under` says what a point stands on without the heap, the ground or
+    /// what is built: a grain rolling off a wall's top into the gap beside it drops to what
+    /// is under the gap. Taking the floor it landed on for every column it rolled to, grains
+    /// laid on the keep's standing walls spread out over its gap at the walls' height, and
+    /// what fell after lay on them, an arch of blocks over nothing (castle film round 3).
+    pub fn lay(&mut self, fragment: &Fragment, under: &dyn Fn(Vec3) -> f32, now: f32) {
         self.cells
             .retain(|_, cell| now - cell.laid_s < LIES_S + GOES_S);
-        // What it landed on may be this heap: the floor under the heap is its cell's. Taken
-        // as the floor, the heap's top became the floor of every cell new beside it, so the
-        // heap stood as a column on itself and the castle's keep rose into a dome of blocks
-        // resting on nothing seen, over its own roof (2026-10-21).
-        let floor = self
-            .cells
-            .get(&column(fragment.at))
-            .map_or(floor, |cell| cell.floor.min(floor));
         let side = ((fragment.size.x * fragment.size.z).sqrt() / CELL_M)
             .round()
             .max(1.0) as i32;
@@ -120,31 +116,52 @@ impl Rubble {
         for dx in 0..side {
             for dz in 0..side {
                 for _ in 0..grains as u32 {
-                    self.roll([x + dx, z + dz], rise / grains, floor, now);
+                    self.roll([x + dx, z + dz], rise / grains, fragment.at.y, under, now);
                 }
             }
         }
     }
 
-    /// A grain `high` metres of a cell laid at `at`, rolled down to where it rests.
-    fn roll(&mut self, mut at: [i32; 2], high: f32, floor: f32, now: f32) {
+    /// A grain `high` metres of a cell laid at `at`, from `from` metres up, rolled down to
+    /// where it rests. A column with no heap is as high as what is under it at the height of
+    /// the heap beside it: a cell's floor is its own, never that of the cell the grain came
+    /// from, which may be a wall's top over a drop.
+    fn roll(
+        &mut self,
+        mut at: [i32; 2],
+        high: f32,
+        from: f32,
+        under: &dyn Fn(Vec3) -> f32,
+        now: f32,
+    ) {
         let steepest = REPOSE * CELL_M;
-        let top = |cells: &BTreeMap<[i32; 2], Cell>, at: [i32; 2], or: f32| {
-            cells.get(&at).map_or(or, |cell| cell.floor + cell.high)
+        let floor_of = |at: [i32; 2], height: f32| {
+            under(Vec3::new(
+                (at[0] as f32 + 0.5) * CELL_M,
+                height,
+                (at[1] as f32 + 0.5) * CELL_M,
+            ))
         };
+        let top = |cells: &BTreeMap<[i32; 2], Cell>, at: [i32; 2], height: f32| {
+            cells
+                .get(&at)
+                .map_or_else(|| floor_of(at, height), |cell| cell.floor + cell.high)
+        };
+        let mut here = top(&self.cells, at, from);
         for _ in 0..MOST_ROLLS {
-            let here = top(&self.cells, at, floor);
             let lowest = [[1, 0], [-1, 0], [0, 1], [0, -1]]
                 .map(|[dx, dz]| [at[0] + dx, at[1] + dz])
                 .into_iter()
-                .map(|next| (next, top(&self.cells, next, floor)))
+                .map(|next| (next, top(&self.cells, next, here + high)))
                 .min_by(|a, b| a.1.total_cmp(&b.1))
                 .expect("four neighbours");
             if here + high - lowest.1 <= steepest {
                 break;
             }
             at = lowest.0;
+            here = lowest.1;
         }
+        let floor = self.cells.get(&at).map_or(here, |cell| cell.floor);
         let cell = self.cells.entry(at).or_insert(Cell {
             floor,
             high: 0.0,
@@ -171,7 +188,7 @@ mod tests {
         let blocks = burst(&column, &|_| false, &chunks, 1.0, 5000);
         let mut rubble = Rubble::default();
         for block in blocks.iter().filter(|b| b.shape == Shape::Whole) {
-            rubble.lay(block, 0.0, 0.0);
+            rubble.lay(block, &|_| 0.0, 0.0);
         }
         let middle = Vec3::new(1.0, 0.0, 1.0);
         let high = rubble.top(middle, 0.0).expect("a heap where they landed");
@@ -211,9 +228,8 @@ mod tests {
         let blocks = burst(&column, &|_| false, &chunks, 1.0, 5000);
         let (mut on_ground, mut on_heap) = (Rubble::default(), Rubble::default());
         for block in blocks.iter().filter(|b| b.shape == Shape::Whole) {
-            on_ground.lay(block, 0.0, 0.0);
-            let under = on_heap.top(block.at, 0.0).unwrap_or(0.0);
-            on_heap.lay(block, under, 0.0);
+            on_ground.lay(block, &|_| 0.0, 0.0);
+            on_heap.lay(block, &|_| 0.0, 0.0);
         }
         let middle = Vec3::new(1.0, 0.0, 1.0);
         let reference = on_ground.top(middle, 0.0).expect("a heap");
@@ -239,8 +255,13 @@ mod tests {
         let mut beside = piece;
         beside.at = Vec3::new(4.0, 0.1, 1.0);
         let mut rubble = Rubble::default();
-        rubble.lay(&piece, roof, 0.0);
-        rubble.lay(&beside, 0.0, 0.0);
+        let on_tower = |at: Vec3| {
+            let side = 0.0..4.0 * CELL_M;
+            let inside = side.contains(&at.x) && side.contains(&at.z);
+            if inside && at.y >= roof { roof } else { 0.0 }
+        };
+        rubble.lay(&piece, &on_tower, 0.0);
+        rubble.lay(&beside, &|_| 0.0, 0.0);
         assert!(rubble.top(piece.at, 0.0).is_some_and(|top| top > roof));
         // The tower comes down.
         let gone = gone(&tower);
@@ -273,6 +294,65 @@ mod tests {
         assert!(
             fell_s.is_some_and(|s| s < drop_s * 1.3),
             "it came down in {fell_s:?} s; a drop from the roof takes {drop_s:.1} s"
+        );
+    }
+
+    #[test]
+    fn a_keep_whose_middle_fell_between_standing_walls_hangs_no_arch_over_its_gap() {
+        // The castle film's keep: two walls 4 cubes thick and 26 high stand either side of a
+        // gap 12 cubes wide, and its top, 4 courses over the whole of it, comes down onto
+        // them and into the gap.
+        let (wall, top) = (26, 30);
+        let standing = |x: i32| (0..4).contains(&x) || (16..20).contains(&x);
+        let fell: Vec<(IVec3, terra_build::Cube)> = (wall..top)
+            .flat_map(|y| (0..20).flat_map(move |x| (0..8).map(move |z| IVec3::new(x, y, z))))
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect();
+        let wall_m = wall as f32 * CELL_M;
+        let across = 0.0..8.0 * CELL_M;
+        let built = |at: Vec3| {
+            let x = (at.x / CELL_M).floor() as i32;
+            let on = standing(x) && across.contains(&at.z) && at.y >= wall_m;
+            if on { wall_m } else { 0.0 }
+        };
+        let solid = |at: Vec3| {
+            let x = (at.x / CELL_M).floor() as i32;
+            standing(x) && across.contains(&at.z) && (0.0..wall_m).contains(&at.y)
+        };
+        let mut parts = burst(&fell, &|_| false, &chunks, 1.0, 5000);
+        let mut rubble = Rubble::default();
+        let dt = 1.0 / 60.0;
+        for step in 0..240 {
+            let now = step as f32 * dt;
+            let mut born = Vec::new();
+            for part in &mut parts {
+                let floor = |at: Vec3| rubble.top(at, now).unwrap_or(0.0).max(built(at));
+                if part.step(dt, &floor, &solid).breaks {
+                    rubble.lay(part, &built, now);
+                    born.extend(part.shatter(chunks(part.kind), 0.3));
+                    part.size = Vec3::ZERO;
+                }
+            }
+            parts.retain(|part| part.size != Vec3::ZERO);
+            parts.extend(born);
+        }
+        // Four seconds on, over the gap's middle, nothing is up near the walls' tops: what
+        // fell into it lies on its heap on the ground.
+        let gap = 6.0 * CELL_M..14.0 * CELL_M;
+        let highest = parts
+            .iter()
+            .filter(|part| gap.contains(&part.at.x))
+            .map(|part| part.at.y)
+            .fold(0.0f32, f32::max);
+        let heap = (12..28)
+            .map(|x| {
+                let over = Vec3::new(x as f32 * 0.25, wall_m, 2.0);
+                rubble.top(over, 4.0).unwrap_or(0.0)
+            })
+            .fold(0.0f32, f32::max);
+        assert!(
+            highest < 0.5 * wall_m && heap < 0.5 * wall_m,
+            "over the gap a piece at {highest:.1} m, the heap at {heap:.1} m; the walls stand {wall_m} m"
         );
     }
 }

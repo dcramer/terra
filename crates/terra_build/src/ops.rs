@@ -327,7 +327,7 @@ impl Base {
 
     /// Checks an operation and, if it is allowed, applies it.
     pub fn act(&mut self, op: &Op, cx: &Context) -> Result<Done, Refusal> {
-        let change = self.plan(op, cx)?;
+        let change = self.plan_breaking(op, cx)?;
         for (id, part) in change.parts {
             self.parts.entry(id).or_insert(part);
         }
@@ -405,7 +405,7 @@ impl Base {
         Ok(done)
     }
 
-    fn plan(&self, op: &Op, cx: &Context) -> Result<Change, Refusal> {
+    pub(crate) fn plan(&self, op: &Op, cx: &Context) -> Result<Change, Refusal> {
         match op {
             Op::LayPlan {
                 part,

@@ -149,6 +149,54 @@ pub struct Scorch {
     pub level: u8,
 }
 
+impl Base {
+    /// How a cube is blackened by fire (D377).
+    pub fn scorch(&self, at: IVec3) -> Scorch {
+        self.scorch.get(&at.to_array()).copied().unwrap_or_default()
+    }
+
+    /// Every cube a fire has blackened, sorted.
+    pub fn scorched(&self) -> impl Iterator<Item = (IVec3, Scorch)> + '_ {
+        self.scorch
+            .iter()
+            .map(|(&at, &scorch)| (IVec3::from_array(at), scorch))
+    }
+
+    /// The cubes a fire has blackened from one cube to another, that are still there.
+    pub fn scorched_within(
+        &self,
+        low: IVec3,
+        high: IVec3,
+    ) -> impl Iterator<Item = ([i32; 3], Scorch)> + '_ {
+        self.scorch
+            .range([low.x, i32::MIN, i32::MIN]..=[high.x, i32::MAX, i32::MAX])
+            .filter(move |(at, _)| {
+                let at = IVec3::from_array(**at);
+                at.cmpge(low).all() && at.cmple(high).all() && self.cube(at).is_some()
+            })
+            .map(|(&at, &scorch)| (at, scorch))
+    }
+
+    /// Sets how a cube is blackened, as its fire says; its section is drawn again only when
+    /// that changes. Nothing for a cube that is not there.
+    pub fn set_scorch(&mut self, at: IVec3, scorch: Scorch) {
+        if self.cube(at).is_none() {
+            self.scorch.remove(&at.to_array());
+            return;
+        }
+        let was = self.scorch(at);
+        if was == scorch {
+            return;
+        }
+        if scorch == Scorch::default() {
+            self.scorch.remove(&at.to_array());
+        } else {
+            self.scorch.insert(at.to_array(), scorch);
+        }
+        self.cubes.mark(at);
+    }
+}
+
 impl Scorch {
     pub const LEVELS: u8 = 4;
 

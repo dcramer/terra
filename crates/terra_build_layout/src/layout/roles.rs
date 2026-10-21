@@ -358,7 +358,12 @@ impl<'a> Roles<'a> {
         if let Some(found) = self.known.borrow().get(&cube.to_array()) {
             return found.clone();
         }
-        let found = self.work_out(cube);
+        let mut found = self.work_out(cube);
+        // Where a wall broke, its stones stand as they broke, rough and undressed: a fall's
+        // edge dressed as a laid one turned the castle film's breaks into a grid of smooth
+        // quoins, a texture swap rather than a break (round 3).
+        let broken = |dir: Dir| self.base.broken(cube + dir.step());
+        found.retain(|edge| !broken(edge.side) && !broken(edge.other));
         self.known
             .borrow_mut()
             .insert(cube.to_array(), found.clone());

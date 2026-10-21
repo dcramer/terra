@@ -104,6 +104,10 @@ fn knocking_out_a_walls_base_course_brings_down_what_it_alone_held() {
     let fell = base.act(&feet, &cx).unwrap();
     assert_eq!(base.cubes().count(), 0, "all of it fell");
     assert!(base.floating().is_empty());
+    // Where it came down is a break, destroyed or fallen, which its neighbours show as
+    // broken; nowhere else is.
+    assert!(base.broken(IVec3::new(2, 0, 0)) && base.broken(IVec3::new(2, 1, 0)));
+    assert!(!base.broken(IVec3::new(2, 9, 0)));
     // Every cube of it came down, said as it was for the game to burst, and what went
     // into it is lost: nothing is given back while building takes no real resources.
     assert_eq!(done.fell.len() + fell.fell.len(), 24);
@@ -125,6 +129,10 @@ fn knocking_out_a_walls_base_course_brings_down_what_it_alone_held() {
     assert_eq!(done.recovered, fell.lost);
     again.act_all(&first.undo, &cx).unwrap();
     assert_eq!(again, before, "undone, as it was");
+    assert!(
+        !again.broken(IVec3::new(2, 0, 0)),
+        "put back, no longer a break"
+    );
     again.act_all(&[hit.clone(), feet.clone()], &cx).unwrap();
     assert_eq!(again, after, "done again, the same");
 }

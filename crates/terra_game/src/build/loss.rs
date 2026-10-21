@@ -307,6 +307,7 @@ fn burst(
     mut meshes: ResMut<Assets<Mesh>>,
     (mut materials, mut images): (ResMut<Assets<StandardMaterial>>, ResMut<Assets<Image>>),
     mut shake: ResMut<Shake>,
+    planet: Res<Planet>,
 ) {
     let (most, most_puffs, preset) = budget(*quality);
     let eye = camera.map(|camera| camera.translation());
@@ -413,10 +414,12 @@ fn burst(
                 at.normalize_or(Vec3::Y),
             );
         }
-        // A big fall's surge of dust, as it lands: from its foot, as wide as it.
+        // A big fall's surge of dust, as it lands: from the ground at its foot, as wide as
+        // it, however high what came down stood.
         if let Some((_, cube)) = fallen.fell.get(fallen.fell.len() / 2) {
             let colour = dust_of(&look, cube.kind);
-            dust::plan_surge(&mut shards, colour, &frame, middle, &fallen.fell);
+            let ground = -planet.distance(frame.transform_point(middle.with_y(0.0)));
+            dust::plan_surge(&mut shards, colour, &frame, middle, ground, &fallen.fell);
         }
         // A big collapse near shakes the view.
         if let Some(eye) = eye
@@ -689,7 +692,7 @@ fn fall(
         shards.clock_s += STEP_S;
         let now = shards.clock_s;
         steps += 1;
-        let mut laid: Vec<(Entity, Fragment, f32)> = Vec::new();
+        let mut laid: Vec<(Entity, Fragment)> = Vec::new();
         // The terrain under each column fragments are over, once a step.
         let mut terrain: BTreeMap<(Entity, [i32; 2]), f32> = BTreeMap::new();
         let mut room = most.saturating_sub(shards.live.len());
@@ -717,35 +720,11 @@ fn fall(
             let cells = std::cell::RefCell::new(&mut terrain);
             let root = live.root;
             let heap = shards.rubble.get(&root);
+            // On the heap of what fell before, else on the ground or what is built.
             let floor = |at: Vec3| -> f32 {
-                let column = [
-                    (at.x / CELL_M).floor() as i32,
-                    (at.z / CELL_M).floor() as i32,
-                ];
-                let ground = *cells.borrow_mut().entry((root, column)).or_insert_with(|| {
-                    let middle = Vec3::new(
-                        (column[0] as f32 + 0.5) * CELL_M,
-                        0.0,
-                        (column[1] as f32 + 0.5) * CELL_M,
-                    );
-                    -planet.distance(frame.transform_point(middle))
-                });
-                // On the heap of what fell before, or on a roof, its covering as drawn, over
-                // its cubes' surface by its thickness.
-                let ground = heap
-                    .and_then(|heap| heap.top(at, now))
-                    .map_or(ground, |top| top.max(ground));
-                base.top_under_of(at).map_or(ground, |(top, kind)| {
-                    let skin = if kind.is_roof() {
-                        look.kits
-                            .as_deref()
-                            .and_then(|kits| kits.of(kind))
-                            .map_or(0.0, |kit| kit.roof.thick + kit.roof.relief * 0.5)
-                    } else {
-                        0.0
-                    };
-                    (top + skin).max(ground)
-                })
+                let under = under(&mut cells.borrow_mut(), (root, *build), planet, look, at);
+                heap.and_then(|heap| heap.top(at, now))
+                    .map_or(under, |top| top.max(under))
             };
             let solid = |at: Vec3| base.solid_at(at);
             let landing = live.fragment.step(STEP_S, &floor, &solid);
@@ -760,7 +739,7 @@ fn fall(
             };
             if landing.breaks && !fading {
                 // What it breaks into lies where it landed, and raises the heap there.
-                laid.push((root, live.fragment, floor(live.fragment.at)));
+                laid.push((root, live.fragment));
                 let kind = live.fragment.kind;
                 let breaking = breaks(kind);
                 // Some of its pieces however full the budget is: the least worth make room
@@ -783,17 +762,58 @@ fn fall(
                 landed.push(raised(&live.fragment, 0.35));
             }
         }
-        for (root, fragment, under) in laid {
+        let terrain = std::cell::RefCell::new(&mut terrain);
+        for (root, fragment) in laid {
+            let Some(build) = by_root.get(&root) else {
+                continue;
+            };
+            let floor =
+                |at: Vec3| under(&mut terrain.borrow_mut(), (root, *build), planet, look, at);
             shards
                 .rubble
                 .entry(root)
                 .or_default()
-                .lay(&fragment, under, now);
+                .lay(&fragment, &floor, now);
         }
     }
     // What broke on landing: moving from now, drawn at the end with the rest.
     shards.live.extend(born);
     (steps, landed)
+}
+
+/// What a point in a build's space stands on, the heap aside: what is built under it, a
+/// roof's covering as drawn over its cubes by its thickness, else the ground, its height
+/// read once a column (`terrain`).
+fn under(
+    terrain: &mut BTreeMap<(Entity, [i32; 2]), f32>,
+    (root, build): (Entity, &Build),
+    planet: &Planet,
+    look: &BuildLook,
+    at: Vec3,
+) -> f32 {
+    let column = [
+        (at.x / CELL_M).floor() as i32,
+        (at.z / CELL_M).floor() as i32,
+    ];
+    let ground = *terrain.entry((root, column)).or_insert_with(|| {
+        let middle = Vec3::new(
+            (column[0] as f32 + 0.5) * CELL_M,
+            0.0,
+            (column[1] as f32 + 0.5) * CELL_M,
+        );
+        -planet.distance(build.frame.transform_point(middle))
+    });
+    build.base.top_under_of(at).map_or(ground, |(top, kind)| {
+        let skin = if kind.is_roof() {
+            look.kits
+                .as_deref()
+                .and_then(|kits| kits.of(kind))
+                .map_or(0.0, |kit| kit.roof.thick + kit.roof.relief * 0.5)
+        } else {
+            0.0
+        };
+        (top + skin).max(ground)
+    })
 }
 
 /// Never far past the most: those of least worth make room ([`fade_least`]), and past twice

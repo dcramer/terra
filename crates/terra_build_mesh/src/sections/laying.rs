@@ -400,8 +400,10 @@ pub(super) fn worn_within(
     low: IVec3,
     high: IVec3,
 ) -> BTreeMap<[i32; 3], u8> {
-    base.damaged()
-        .filter(|(at, _)| at.cmpge(low).all() && at.cmple(high).all())
+    let within = |at: IVec3| at.cmpge(low).all() && at.cmple(high).all();
+    let mut worn: BTreeMap<[i32; 3], u8> = base
+        .damaged()
+        .filter(|(at, _)| within(*at))
         .filter_map(|(at, damage)| {
             let kind = base.cube(at)?.kind;
             let toughness = kits
@@ -410,8 +412,30 @@ pub(super) fn worn_within(
                 .unwrap_or_default();
             Some((at.to_array(), toughness.quarters(damage)))
         })
-        .collect()
+        .collect();
+    // What stands beside a break broke with it: its stones split, chipped and fresh, darker
+    // than the weathered face (D305), worn at least half.
+    for at in base.breaks_within(low - IVec3::ONE, high + IVec3::ONE) {
+        for step in [
+            IVec3::X,
+            IVec3::NEG_X,
+            IVec3::Y,
+            IVec3::NEG_Y,
+            IVec3::Z,
+            IVec3::NEG_Z,
+        ] {
+            let beside = at + step;
+            if within(beside) && base.cube(beside).is_some() {
+                let quarters = worn.entry(beside.to_array()).or_default();
+                *quarters = (*quarters).max(BROKEN_QUARTERS);
+            }
+        }
+    }
+    worn
 }
+
+/// How worn a cube standing beside a break is drawn, in quarters of its health lost.
+const BROKEN_QUARTERS: u8 = 2;
 
 /// How many of so many pieces are in, so far through.
 pub fn done(count: usize, fraction: f32) -> usize {
