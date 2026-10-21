@@ -312,7 +312,7 @@ const HORN_JITTER: f32 = 0.6;
 const HORNS_KEPT: f32 = 0.9;
 const CIRQUES: f32 = 0.35;
 const HORN_BOWL: f32 = 0.45;
-const HORN_PROFILE: f32 = 1.3;
+const HORN_PROFILE: f32 = 1.5;
 
 /// The slope, as a rise over the run, over which a stepped wall is rock ledges and all
 /// (`Rise::wall`): about 33 to 37 degrees.

@@ -264,9 +264,9 @@ const COULOIR_FED_M: f32 = 0.05;
 const DRY_M: f32 = 50.0;
 
 /// How much higher a range's avalanche-fed snow lies as, in metres, and the share of that
-/// depth it keeps: from 350 m the horns kept only their tips white, short of the third of the
-/// range above the tree line D425 asks.
-const FED_M: f32 = 1200.0;
+/// depth it keeps: from 350 m the horns kept only their tips white, and from 1200 m their
+/// upper third, short of the third of the range above the tree line D425 asks (round 12).
+const FED_M: f32 = 1750.0;
 const FED_SHARE: f32 = 1.0;
 /// A wall carries its fed snow's depth from the first of these, how far its normal points up
 /// (about 72 degrees), whole from the second (about 57).

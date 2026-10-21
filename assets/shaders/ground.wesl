@@ -1188,8 +1188,14 @@ fn fragment(
                 let small_keep = 1.0 - smoothstep(2.0, 4.0, footprint_m);
                 let small = jointing(world + 17.0, up, 16.0, clamp(footprint_m / 16.0, 0.01, 0.3));
                 joint_turn = (big.turn + small.turn * 0.6 * small_keep) * walled;
+                // Great blocks a hundred metres and more across, each face turned its own way and
+                // their tops ledges, so a wall reads as slabs from across a valley, where the
+                // 40 m set shows as a pinstripe. Their joints not drawn: warped at that size,
+                // they netted the walls in wavy lines (round 12).
+                let great = jointing(world + 53.0, up, 140.0, clamp(footprint_m / 140.0, 0.01, 0.3));
+                joint_turn += great.turn * 0.9 * walled;
                 joint_crack = max(big.crack, small.crack * small_keep) * walled;
-                ledge = max(big.ledge, small.ledge * small_keep) * walled;
+                ledge = max(max(big.ledge, small.ledge * small_keep), great.ledge) * walled;
             }
             // Patches of weathering a few hundred metres across: iron-stained rust, dark
             // lichen and wet rock, and pale fresh scars where a slab fell away; and a far wall
@@ -1300,13 +1306,13 @@ fn fragment(
             // bare, `Rise::wall`), thin snow keeps to the couloirs whether or not this set of
             // them is drawn here; a deep snowfield stays, and so do the summits' caps, which
             // are not wall (keyed by height, they were lost under the range's tops, r5).
-            // Only on the walls past about 50 degrees: keyed to bare rock alone, it took the snow
+            // Only on the walls past about 55 degrees (50 until round 12, which left 7 percent snow): keyed to bare rock alone, it took the snow
             // off the horns' gentler shoulders, saddles and cirque floors, which the land lays
             // in stone too, and the summits stood bare (the r6 review).
             // A deep snowfield is spared only on the gentler walls: on those past about 55 degrees
             // the horns' fed snow, metres deep, stood unbroken in white caps under the skyline,
             // brighter than the sky, where a summer's faces are two-thirds rock (D425, round 11).
-            ledge_cut = ribbed * bare * (1.0 - smoothstep(0.4, 1.2, in_snow_m) * smoothstep(0.52, 0.66, flatness)) * (1.0 - smoothstep(0.6, 0.72, flatness));
+            ledge_cut = ribbed * bare * (1.0 - smoothstep(0.4, 1.2, in_snow_m) * smoothstep(0.52, 0.66, flatness)) * (1.0 - smoothstep(0.5, 0.62, flatness));
             snow *= mix(1.0, smoothstep(0.35, -0.5, couloirs), max(ribbed * mix(0.75, 1.0, steep) * couloirs_drawn, 0.9 * ledge_cut));
             wet_far = smoothstep(-0.3, -0.85, gullies_far) * smoothstep(0.45, 0.7, noise(world * 0.0031 + 113.0)) * ribbed * rocky;
             fan = smoothstep(0.0, -0.55, couloirs + (blotch - 0.5) * 0.3) * couloirs_drawn;
@@ -1343,7 +1349,11 @@ fn fragment(
             // solid white under the skyline, brighter than the sky: about two-fifths of a summit's
             // dome now breaks, two-thirds of a steep face (D425, round 11).
             let held = smoothstep(2000.0, 2500.0, above_sea_m) * 0.1 + smoothstep(0.3, 2.0, in_snow_m) * 0.05;
-            let breaks = smoothstep(0.46, 0.5, outcrop + (0.95 - flatness) * 0.8 - held);
+            // Round 12: by the slope far more than by the noise, so a gentle shoulder, col or
+            // ledge keeps its snow whole bar a few outcrops and a wall past about 50 degrees
+            // breaks all but its couloirs: at 0.8 the shoulders broke as much as the walls and
+            // the range held snow on 7 percent of its rock against D425's third.
+            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held);
             snow *= 1.0 - breaks * far_snow;
             // The couloirs by the outcrops alone, about a third of them: keyed by the steepness
             // too, the walls' fill broke whole and the range stood bare (round 11).
@@ -1355,7 +1365,7 @@ fn fragment(
         // the bare heights, the green benches between the Tatras' cliff bands.
         // Since D426's round 9 only some ledges, in patches, hold it: along every lip they ruled the
         // horns in zebra stripes (the r8 review); a wall's snow lies in its couloirs (`couloir_fill`).
-        let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m) * smoothstep(0.55, 0.68, noise(world * 0.004 + 251.0));
+        let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m) * smoothstep(0.36, 0.56, noise(world * 0.004 + 251.0));
         // The couloirs the land fills from the gullies above them (terrain.rs `couloir_catch`,
         // round 10), near and far, on any wall up to about 75 degrees: known by depth alone, the
         // tops' fed snow, as deep, capped every horn in one white sheet brighter than the sky.
@@ -1796,7 +1806,7 @@ fn fragment(
             // combed the walls into an even curtain of streaks (the r5 review).
             let combed = 0.3 + 0.7 * smoothstep(0.4, 0.7, noise(world * 0.0011 + 171.0));
             ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt * combed + facets * ribbed + joint_turn * (1.0 - snow * 0.7));
-            colour *= 1.0 - mix(0.5, 0.3, smoothstep(1500.0, 5000.0, far_off)) * joint_crack * (1.0 - snow);
+            colour *= 1.0 - mix(0.55, 0.45, smoothstep(1500.0, 5000.0, far_off)) * joint_crack * (1.0 - snow);
             colour *= mix(1.0, mix(0.62, 1.08, rib * 0.5 + 0.5), ribbed * combed);
             colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
         }
