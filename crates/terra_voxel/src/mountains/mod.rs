@@ -322,6 +322,11 @@ const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
 /// fall over tens of metres, not the crease at a crest, so the gullies turn smoothly over one.
 const SLOPE_STEP_M: f32 = 20.0;
+/// How far across the ground the slope a wall's faces step by is measured (`Range::stepped`):
+/// wider than a ledge, so how hard a wall is stepped barely changes across one. Measured over
+/// `SLOPE_STEP_M`, the share stepped followed the slope across each ledge and, falling outward,
+/// lifted the ledge's outer edge, so ledges climbed 5 to 15 cm (round 21).
+const FACES_SLOPE_M: f32 = 150.0;
 
 impl Range {
     pub fn new(mountains: Mountains, seed: Seed) -> Self {
@@ -739,7 +744,18 @@ impl Range {
             }
         }
         let height_m = ridged + carved + piled;
-        let step = self.stepped(point, height_m, slope, (upper, rib));
+        // The faces step by the wall's broad slope, measured over a ledge's width or more
+        // (`FACES_SLOPE_M`), not the local one, which turns across every ledge.
+        let broad = || {
+            let across = |axis: Vec3| {
+                self.unribbed(point + axis * FACES_SLOPE_M)
+                    - self.unribbed(point - axis * FACES_SLOPE_M)
+            };
+            let rise = Vec3::new(across(Vec3::X), across(Vec3::Y), across(Vec3::Z))
+                / (2.0 * FACES_SLOPE_M);
+            (rise - up * rise.dot(up)).length()
+        };
+        let step = self.stepped(point, height_m, broad, (upper, rib));
         let height_m = height_m + step + ribs;
         Rise {
             height_m,

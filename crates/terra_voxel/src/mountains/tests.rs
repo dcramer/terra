@@ -267,15 +267,16 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
             // Where the walk runs along a crest, an arete whose towers and notches climb and
             // fall along it by nature, the ground falls away on both sides across the walk,
             // so water runs off sideways and no climb along it holds a pond. Everywhere else,
-            // down the fall line the faces never make the ground climb: every ledge drains
-            // over its edge.
+            // down the fall line the faces never make the ground climb: every ledge is level or
+            // drains over its edge, within 2 cm a metre (round 21's stepping, its share taken
+            // from the slope across each ledge, climbed 5 cm).
             let side = point.normalize().cross(g.normalize()) * 3.0;
             let crest = next - height(point + side) > 0.05 && next - height(point - side) > 0.05;
             if crest {
                 crests += 1;
             } else {
                 assert!(
-                    drop > plain_drop.min(0.0) - 0.05,
+                    drop > plain_drop.min(0.0) - 0.02,
                     "climbs {} m at {point}, {} without faces",
                     -drop,
                     -plain_drop
@@ -303,11 +304,11 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
     // The crests let off are a few of the steps, never the walls themselves.
     assert!(crests * 10 < steps, "{crests} of {steps} steps on crests");
     // Both risers past 62 degrees and ledges under 30 down the same walls, the walls broken
-    // into benches under cliff edges, a ledge after a sheer riser about once in 120 m of walk,
-    // as the Tatras' granite walls stand in steps.
+    // into benches under cliff edges, a ledge after a sheer riser about once in 90 m of walk,
+    // as the Tatras' granite walls stand in steps (once in 120 m before round 22's stepping).
     assert!(sheer * 10 > steps, "{sheer} of {steps} steps sheer");
     assert!(ledges * 10 > steps, "{ledges} of {steps} steps ledges");
-    assert!(benches * 150 > steps, "{benches} benches in {steps} steps");
+    assert!(benches * 100 > steps, "{benches} benches in {steps} steps");
 }
 
 #[test]

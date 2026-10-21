@@ -161,10 +161,14 @@ impl Node {
 /// What lies on mountains (D322): bare rock where the ground is steeper than this, in degrees;
 /// scree where it is between these, a talus's angle, and a cliff stands within so many metres
 /// uphill, as scree rests at 33 to 37 degrees below the cliff it fell from; gravel in a gully's
-/// bed gentler than this.
+/// bed gentler than this. Scree runs up to bare rock's angle: stopped at 38 degrees, a wall's
+/// flank between 38 and 40 was soil, which holds none of a wall's fed snow (terra_world
+/// `lying`), and showed as dark holes in the horns' snow and a band of forest against the
+/// rock (the r21 review). The furthest cliff looked for, 90 m up, widens the talus under a
+/// horn's foot, where the forest met the rock in one hard line.
 const BARE_ROCK_DEG: f32 = 40.0;
-const SCREE_DEG: (f32, f32) = (24.0, 38.0);
-const CLIFF_WITHIN_M: [f32; 2] = [20.0, 45.0];
+const SCREE_DEG: (f32, f32) = (24.0, BARE_ROCK_DEG);
+const CLIFF_WITHIN_M: [f32; 3] = [20.0, 45.0, 90.0];
 /// Under a wall the rock it sheds runs out further than its cones, in an apron of talus on
 /// gentler ground, where the forest gives out to scattered trees before the wall's foot, as
 /// under the Tatras' and the Dolomites' faces: any ground gentler than a talus's where the
@@ -805,8 +809,10 @@ mod tests {
         .with_mountains(crate::Mountains::START);
         let height = |d: Vec3| planet.height_m(d.normalize());
         let range = planet.mountains().expect("a range");
-        let (mut under, mut open) = (0, 0);
-        for k in 0..20_000u32 {
+        // Each sample: whether it lies under a wall (or on open level ground), what it is made
+        // of and where; on every core, as the sweep is long.
+        let ks: Vec<u32> = (0..40_000).collect();
+        let samples = terra_gen::par::map(&ks, |&k| {
             let d = Vec3::new(
                 terra_gen::hash::unit3(11, k, 1, 0) * 2.0 - 1.0,
                 terra_gen::hash::unit3(11, k, 2, 0) * 2.0 - 1.0,
@@ -814,7 +820,7 @@ mod tests {
             )
             .normalize();
             if range.inside(d * radius_m) < 0.05 {
-                continue;
+                return None;
             }
             let (a, b) = (
                 d.any_orthonormal_vector(),
@@ -826,13 +832,30 @@ mod tests {
                 .iter()
                 .all(|&w| (off(w, 10.0) - off(-w, 10.0)).abs() < 2.0);
             if !level || here < 0.0 {
-                continue;
+                return None;
             }
             // A wall's height between where the rule looks, one of four ways round.
             let rises = [a, -a, b, -b].map(|w| off(w, 150.0));
-            let surface = d * (radius_m + here - 0.3);
-            let made_of = planet.sample(surface).material;
+            let made_of = || planet.sample(d * (radius_m + here - 0.3)).material;
             if rises.iter().any(|&r| r > 160.0) {
+                Some((true, made_of(), d))
+            } else if rises.iter().all(|&r| r.abs() < 15.0)
+                // Nor a wall as far off as the talus apron reaches (`APRON_WITHIN_M`): a wide
+                // bench or valley floor under one is its apron.
+                && [a, -a, b, -b].iter().all(|&w| {
+                    APRON_WITHIN_M
+                        .iter()
+                        .all(|&(reach, rise)| off(w, reach) < rise)
+                })
+            {
+                Some((false, made_of(), d))
+            } else {
+                None
+            }
+        });
+        let (mut under, mut open) = (0, 0);
+        for (walled, made_of, d) in samples.into_iter().flatten() {
+            if walled {
                 under += 1;
                 // Talus, or the wall's own rock where the level ground is one of its ledges.
                 assert!(
@@ -842,7 +865,7 @@ mod tests {
                     ),
                     "{made_of:?} at the foot of a wall {d}"
                 );
-            } else if rises.iter().all(|&r| r.abs() < 15.0) {
+            } else {
                 open += 1;
                 assert_ne!(made_of, material::SCREE, "on open level ground {d}");
             }

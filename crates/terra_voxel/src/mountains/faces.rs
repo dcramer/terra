@@ -19,7 +19,8 @@ pub struct Faces {
     pub name: &'static str,
     /// How often a range takes it, against the theme's other kinds.
     pub weight: f32,
-    /// The slope, in degrees, from which a wall stands up in faces whole (`FACE_FROM_DEG`).
+    /// The slope, in degrees, by which a wall stands two-thirds of the way up in faces
+    /// (`FACE_FROM_DEG`): the thicker its beds, the steeper, so its ledges still drain.
     pub cliff_deg: f32,
     /// How thick its rock's beds are on average, in metres: a riser and the ledge under it.
     pub beds_m: f32,
@@ -38,10 +39,10 @@ impl Faces {
     pub const HORNS: Faces = Faces {
         name: "horns",
         weight: 1.0,
-        cliff_deg: 40.0,
+        cliff_deg: 44.0,
         beds_m: 75.0,
         riser: 0.5,
-        stepped: 0.6,
+        stepped: 0.88,
         dip: 0.05,
     };
     /// Saw ridges of thin tilted beds, as the Witcher 3's Skellige and the Valais' schist (D425):
@@ -49,10 +50,10 @@ impl Faces {
     pub const SAW: Faces = Faces {
         name: "saw",
         weight: 1.0,
-        cliff_deg: 36.0,
+        cliff_deg: 34.0,
         beds_m: 22.0,
         riser: 0.4,
-        stepped: 0.7,
+        stepped: 0.82,
         dip: 0.09,
     };
 }
@@ -63,28 +64,33 @@ const KINDS_ACROSS: f32 = 0.6;
 const KINDS_BLEND: f32 = 0.06;
 /// How a riser climbs its bed: steepening to its lip, so it never stands above the ground's
 /// own climb and the faces only cut down.
-const RISER_POWER: f32 = 1.6;
-/// A face fades in from a slope of so many degrees, whole at its kind's cliff angle, and up a
-/// wall's height (`upper`), never across it: fading across a ledge lifts its outer part by the
-/// depth the face cut, and a face fading fast with the slope lifted ledges into lips that held
-/// ponds.
+const RISER_POWER: f32 = 2.4;
+/// A face fades in from a slope of so many degrees, two-thirds of the way at its kind's cliff
+/// angle (`Range::stepped_by`), and up a wall's height (`upper`), never across it: fading
+/// across a ledge lifts its outer part by the depth the face cut, and a face fading fast with
+/// the slope lifted ledges into lips that held ponds.
 const FACE_FROM_DEG: f32 = 12.0;
 /// The beds' warp, in metres of height, over each distance, and how far across their dip
 /// turns, all in metres (`Faces`): the first two fold the beds over kilometres and hundreds of
 /// metres, the last wavers them. Gentle, its fall at most a few tenths of a metre a metre, so
 /// no ledge's outward fall (a third of a wall's) is undone by it.
-const BEDS_WARP_M: [f32; 3] = [120.0, 45.0, 6.0];
+const BEDS_WARP_M: [f32; 3] = [60.0, 22.0, 3.0];
 const BEDS_WARP_ACROSS_M: [f32; 3] = [2000.0, 800.0, 330.0];
 const DIP_TURNS_M: f32 = 4500.0;
 /// About the most the beds' warp tilts them, a metre in a metre: each fold's height over its
 /// width, by the noise's steepest climb, about three (a ledge climbed 0.42 m in a metre).
-const BEDS_TILT: f32 = 0.45;
+const BEDS_TILT: f32 = 0.22;
 /// How far each bed's top strays from where even beds would put it, as a share of a bed: so
 /// beds run from a third of the kind's thickness to five thirds, thin bands between massive
 /// ones, as a real wall's strata do; even, the wall read as a terraced hill's contours.
 const BED_STRAY: f32 = 0.7;
 /// How far each bed's riser share strays from its kind's, as a share of it, either way.
 const RISER_STRAY: f32 = 0.35;
+/// How far each bed's stepping strays from its kind's, as a share of it, either way, and the
+/// most any bed is stepped: so a wall stands in hard cliff bands over benches between softer,
+/// broken beds, as the Tatras' granite and the Dolomites' walls do.
+const BED_HARD_STRAY: f32 = 0.2;
+const STEPPED_MOST: f32 = 0.9;
 /// The gullies' lines down a wall (the coarsest set's) cut its faces: the faces stand whole on
 /// the ribs and fade out down a gully's line, from the first share of the way into it to the
 /// second, so a wall's beds stand in buttresses between smooth couloirs, not as one band
@@ -101,16 +107,22 @@ impl Range {
         &self,
         point: Vec3,
         height_m: f32,
-        slope: Vec3,
+        broad: impl FnOnce() -> f32,
         (upper, rib): (f32, f32),
     ) -> f32 {
-        let steepness = slope.length();
         let kinds = self.mountains.faces;
-        if kinds.is_empty() || upper <= 0.0 || rib <= 0.0 || steepness < 0.2 {
+        if kinds.is_empty() || upper <= 0.0 || rib <= 0.0 {
             return 0.0;
         }
         let away = self.away_from_kept(point, FACES_KEPT_M);
         if away <= 0.0 {
+            return 0.0;
+        }
+        // How steep the wall is broadly, over more than a ledge's width (mod.rs
+        // `FACES_SLOPE_M`): both how far a face stands and how hard it is stepped follow it, so
+        // neither changes enough across a ledge to lift its outer edge.
+        let steepness = broad();
+        if steepness < 0.2 {
             return 0.0;
         }
         // Which kind: the kinds' weights laid end to end over a noise patches some kilometres
@@ -133,23 +145,29 @@ impl Range {
             let share = below - above;
             below = above;
             if share > 1e-4 {
-                sum += share * self.stepped_by(kind, point, height_m, slope);
+                sum += share * self.stepped_by(kind, point, height_m, steepness);
             }
         }
         sum * away * upper * rib
     }
 
     /// [`Range::stepped`] for one kind of face.
-    fn stepped_by(&self, kind: &Faces, point: Vec3, height_m: f32, slope: Vec3) -> f32 {
-        let steepness = slope.length();
-        let face = smoothstep(
-            libm::tanf(FACE_FROM_DEG.to_radians()),
-            libm::tanf(kind.cliff_deg.to_radians()),
-            steepness,
-        );
-        if face <= 0.0 || kind.stepped <= 0.0 || kind.beds_m <= 0.0 {
+    fn stepped_by(&self, kind: &Faces, point: Vec3, height_m: f32, steepness: f32) -> f32 {
+        // How far the face stands, by the wall's broad slope: easing in as one less the
+        // exponential of the slope's square, so it climbs slowly across a ledge wherever a
+        // ledge keeps little of the wall's fall. A face's share stepped changing across a
+        // ledge lifts the ledge's outer edge by that change times the depth the face cut
+        // there, about a bed; a ledge keeps one less the share of the fall, so the share may
+        // climb only that fast with the slope. A smoothstep from 12 degrees to the cliff angle
+        // climbed fastest where the ledges kept least, and stepped harder they climbed 5 to
+        // 15 cm (round 21).
+        let from = libm::tanf(FACE_FROM_DEG.to_radians());
+        let cliff = libm::tanf(kind.cliff_deg.to_radians());
+        if steepness <= from || kind.stepped <= 0.0 || kind.beds_m <= 0.0 {
             return 0.0;
         }
+        let face = 1.0
+            - libm::expf(-(steepness * steepness - from * from) / (cliff * cliff - from * from));
         let s = &self.strata;
         let mut warp = 0.0;
         for (i, (m, across)) in BEDS_WARP_M.iter().zip(BEDS_WARP_ACROSS_M).enumerate() {
@@ -186,8 +204,14 @@ impl Range {
         // The beds' own tilt, their warp and dip, climbs across a ledge too: on the gentler
         // walls a ledge keeps only so much of the fall that it still drains over its edge
         // with the beds tilted back against it as far as they ever are.
+        // Each bed its own hardness: the hard ones stand as cliff bands, stepped nearly sheer
+        // over level benches, the soft ones as broken slopes between. Constant through a bed,
+        // whose step is nothing at its top and foot, it never lifts a ledge.
+        let hard = 1.0 + BED_HARD_STRAY * (2.0 * s.point_in(k, 47, 0).x - 1.0);
         let tilt = BEDS_TILT + kind.dip;
-        let stepped = kind.stepped.min(steepness / (steepness + tilt));
+        let stepped = (kind.stepped * hard)
+            .min(STEPPED_MOST)
+            .min(steepness / (steepness + tilt));
         face * stepped * kind.beds_m * thick * (riser - within)
     }
 }
