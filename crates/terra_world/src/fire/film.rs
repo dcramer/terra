@@ -42,7 +42,7 @@ const WORLD_KEPT: &str = "    let world = color;
 const AFTER: &str = "    color = saturation(color, color_grading.post_saturation);";
 
 /// The flames through the film, ungraded after it.
-const AFTER_FLAMES: &str = "    var post_saturation = color_grading.post_saturation;
+pub(super) const AFTER_FLAMES: &str = "    var post_saturation = color_grading.post_saturation;
 @if(!TONEMAP_IN_SHADER) {
     // A flame's or a glow's share, from its mask past 1 in the alpha
     // (crates/terra_world/src/fire/film.rs).

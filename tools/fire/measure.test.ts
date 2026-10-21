@@ -114,3 +114,21 @@ test("a PPM reads as the picture it holds", () => {
   const pic = fromPpm(new Uint8Array([...head, 1, 2, 3, 4, 5, 6]));
   assert.deepEqual([pic.width, pic.height, [...pic.rgba]], [2, 1, [1, 2, 3, 255, 4, 5, 6, 255]]);
 });
+
+test("with the flame matte, lit ground of a flame's colour outside it is not flame (D433)", () => {
+  // A red and orange flame in the upper half on black, the lower part yellow lit ground, which
+  // the colour rule alone takes for flame; the matte white over the flame, soft at its edge.
+  const flame = (x: number, y: number) => inside(x, y, 16, 4, 48, 30);
+  const pic = paint(64, 64, (x, y) => (flame(x, y) ? (x < 32 ? RED : ORANGE) : y >= 40 ? YELLOW : BLACK));
+  const matte = paint(64, 64, (x, y) => (flame(x, y) ? [255, 255, 255] : inside(x, y, 15, 3, 49, 31) ? [100, 100, 100] : [0, 0, 0]));
+  assert.ok(measure(pic).yellow > 50, "without the matte the ground counts");
+  const m = measure(pic, undefined, matte);
+  assert.equal(m.flamePx, 32 * 26);
+  assert.equal(m.yellow, 0);
+  assert.equal(m.red, 50);
+  assert.equal(m.redOrange, 100);
+  // A crop is cut from the matte where it is cut from the picture.
+  const cropped = measure(pic, parseBox("40x60+12+2"), matte);
+  assert.equal(cropped.flamePx, 32 * 26);
+  assert.equal(cropped.yellow, 0);
+});

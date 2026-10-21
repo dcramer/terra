@@ -163,6 +163,21 @@ function resample(src: { w: number; h: number; px: Uint8Array }, w: number, h: n
   return { w, h, px };
 }
 
+/// The least flame share a matte pixel has to be measured as flame, of 255: half, so a flame's
+/// soft edge counts where the flame is most of what is seen, as a matte's edge is cut in
+/// compositing (D433).
+export const MATTE_MIN = 128;
+
+/// A crop of a matte (`--flame-matte`, its red channel the share), a byte a pixel: whether
+/// each is flame enough to measure.
+function cropMatte(matte: Picture, box: Box | undefined, w: number, h: number): Uint8Array {
+  const [x0, y0] = [Math.max(0, box?.x ?? 0), Math.max(0, box?.y ?? 0)];
+  if (matte.width < x0 + w || matte.height < y0 + h) throw new Error("the matte is smaller than the picture");
+  const keep = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) keep[y * w + x] = matte.rgba[4 * ((y0 + y) * matte.width + x0 + x)] >= MATTE_MIN ? 1 : 0;
+  return keep;
+}
+
 /// The flame's box: its pixels' rows and columns from the 1st to the 99th percentile, so stray
 /// sparks don't stretch it.
 function flameBox(flame: Uint8Array, w: number, h: number) {
@@ -178,11 +193,14 @@ function flameBox(flame: Uint8Array, w: number, h: number) {
   return { x0: pct(xs, 0.01), x1: pct(xs, 0.99), y0: pct(ys, 0.01), y1: pct(ys, 0.99) };
 }
 
-/// Measures the fire in a crop of a picture (the whole of it without one).
-export function measure(pic: Picture, box?: Box): Metrics {
+/// Measures the fire in a crop of a picture (the whole of it without one). With the run's flame
+/// matte, only what the renderer drew as flame is measured as flame (D433): a lit stone or
+/// ground can have a flame's colour, and at night most of a campfire's crop is lit ground.
+export function measure(pic: Picture, box?: Box, matte?: Picture): Metrics {
   const crop = cropRgb(pic, box);
   const { w: W, h: H, px } = crop;
   const N = W * H;
+  const keep = matte ? cropMatte(matte, box, W, H) : undefined;
   const flame = new Uint8Array(N);
   const band = { white: 0, pale: 0, yellow: 0, orange: 0, red: 0 };
   let nf = 0;
@@ -193,7 +211,7 @@ export function measure(pic: Picture, box?: Box): Metrics {
     const r = px[3 * p];
     const g = px[3 * p + 1];
     const b = px[3 * p + 2];
-    if (!isFlame(r, g, b)) continue;
+    if (!isFlame(r, g, b) || (keep && !keep[p])) continue;
     flame[p] = 1;
     nf++;
     br += b / Math.max(r, 1);
@@ -240,13 +258,17 @@ export function measure(pic: Picture, box?: Box): Metrics {
   // The scale-dependent measures, on the crop resampled so the flame's box is FLAME_H tall.
   const fb = flameBox(flame, W, H);
   const k = FLAME_H / Math.max(1, fb.y1 - fb.y0 + 1);
-  const scaled = resample(crop, Math.max(8, Math.round(W * k)), Math.max(8, Math.round(H * k)));
-  Object.assign(out, structure(scaled));
+  const [sw, sh] = [Math.max(8, Math.round(W * k)), Math.max(8, Math.round(H * k))];
+  const scaled = resample(crop, sw, sh);
+  // The matte resampled with the crop, as a grey picture: kept where it is still half flame.
+  const grey = keep && resample({ w: W, h: H, px: Uint8Array.from({ length: 3 * N }, (_, i) => 255 * keep[(i / 3) | 0]) }, sw, sh);
+  const kept = grey && Uint8Array.from({ length: sw * sh }, (_, p) => (grey.px[3 * p] >= MATTE_MIN ? 1 : 0));
+  Object.assign(out, structure(scaled, kept));
   return out;
 }
 
 /// Soot, edge, pockets and octaves of a crop already at the flame's scale.
-function structure({ w: W, h: H, px }: { w: number; h: number; px: Uint8Array }) {
+function structure({ w: W, h: H, px }: { w: number; h: number; px: Uint8Array }, keep?: Uint8Array) {
   const N = W * H;
   const flame = new Uint8Array(N);
   const maxc = new Uint8Array(N);
@@ -258,7 +280,7 @@ function structure({ w: W, h: H, px }: { w: number; h: number; px: Uint8Array })
     const b = px[3 * p + 2];
     maxc[p] = Math.max(r, g, b);
     lum[p] = luma(r, g, b);
-    if (isFlame(r, g, b)) {
+    if (isFlame(r, g, b) && (!keep || keep[p])) {
       flame[p] = 1;
       nf++;
     }

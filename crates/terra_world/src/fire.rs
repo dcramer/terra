@@ -466,6 +466,7 @@ pub fn plugin(app: &mut App) {
     fog::plugin(app);
     haze::plugin(app);
     film::plugin(app);
+    matte::plugin(app);
     glow::plugin(app);
     volume::plugin(app);
     app.init_resource::<Blazes>()
@@ -979,9 +980,11 @@ mod fog;
 mod glow;
 mod haze;
 mod light;
+mod matte;
 mod seen;
 mod smoke;
 mod volume;
+pub use matte::with_matte;
 pub use volume::BreathTier;
 
 pub use glow::{Glow, GlowMaterial};

@@ -33,8 +33,11 @@ const PICTURE = "1920x1080";
 type Vec3 = [number, number, number];
 type Call = { frame: number; method: string; params?: unknown };
 /// A fire on the sheet: its name, the class of photographs it is held to, the frame it is
-/// shot on, which of `fire.seen`'s boxes is its crop, and the camera it is shot from.
-export type Fire = { name: string; class: string; frame: number; box: "kept" | "blazes" | "stream" | "ball"; eye: Vec3; at: Vec3 };
+/// shot on, which of `fire.seen`'s boxes is its crop, the camera it is shot from, and whether
+/// its flames write the flame share the matte reads (D433): a hearth's and a torch's do, for
+/// their film (`film.rs`); a blaze and a breath are tonemapped as the world, leave the matte
+/// empty, and are measured by colour.
+export type Fire = { name: string; class: string; frame: number; box: "kept" | "blazes" | "stream" | "ball"; eye: Vec3; at: Vec3; matte: boolean };
 
 // Where things stand, in metres east, up and south of the start; the base's cubes, which are
 // half a metre, for what is built. The hammer builds only within 14 m of the player, who stays
@@ -49,10 +52,10 @@ const HOVER: Vec3 = [35, 9, 1];
 const AIM: Vec3 = [35, 1.5, 10];
 
 export const FIRES: Fire[] = [
-  { name: "campfire", class: "campfire", frame: 330, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10] },
-  { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75] },
-  { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6] },
-  { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6] },
+  { name: "campfire", class: "campfire", frame: 330, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10], matte: true },
+  { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
+  { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
+  { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
 ];
 
 /// The run's calls: the scene set up, then each fire's camera held from a second before its
@@ -83,6 +86,8 @@ export function calls(): Call[] {
 
 const frames = () => [...new Set(FIRES.map((f) => f.frame))].sort((a, b) => a - b);
 const still = (dir: string, frame: number) => join(dir, `f-${String(frame).padStart(5, "0")}.png`);
+/// A still's flame matte (`--flame-matte`, D433), beside it.
+const matteOf = (file: string) => file.replace(/\.png$/, ".matte.png");
 
 /// The GPU memory a yard run needs free, in MiB: the shared slots count runs, not their size,
 /// so beside a big town run (7 GB) the yard ran out of memory and drew nothing, as it did
@@ -119,7 +124,7 @@ function runOnce(hour: string, dir: string) {
   const args = [
     ...["900", resolve(ROOT, "target/release/terra_sandbox"), "--offscreen", "--clean", "--picture", PICTURE],
     ...["--experiment", "play", "--level", "yard", "--free-build", "--mute", "--at", "0,0", "--face", "0,30"],
-    ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames().join(",")}`],
+    ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames().join(",")}`, "--flame-matte"],
   ];
   const done = spawnSync("timeout", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 1 << 28 });
   writeFileSync(join(dir, "run.log"), `${done.stdout}${done.stderr}`);
@@ -256,7 +261,9 @@ if (import.meta.main) {
       const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
       const crop = `${box.w}x${box.h}+${box.x}+${box.y}`;
       const known = classes[fire.class];
-      const held = known ? judge(measure(pic, box), known.bands) : [];
+      // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
+      const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
+      const held = known ? judge(measure(pic, box, matte), known.bands) : [];
       const fails = held.filter((h) => !h.holds).length;
       const ground = surround(pic, box);
       rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground });

@@ -51,6 +51,9 @@ usage: terra_sandbox [options]
   --water-mask          with each of --shots, a second picture WATER_MASK_FRAMES later
                         with the lakes drawn flat magenta, <prefix>-<frame>.water.png:
                         what the water covers, by what draws it (the looks check, D429)
+  --flame-matte         with each of --shots, the flames' share of each pixel as the
+                        tonemapper had it, white in <prefix>-<frame>.matte.png: an ID
+                        matte the fire sheet measures the flame on (D433); full size only
   --clean               leave the frame-time readout off the screen, for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
@@ -276,6 +279,8 @@ pub struct Options {
     pub clean: bool,
     /// With each of `shots`, a picture of what the lakes cover (`--water-mask`, D429).
     pub water_mask: bool,
+    /// With each of `shots`, the flames' matte beside it (`--flame-matte`, D433).
+    pub flame_matte: bool,
     /// The quality preset asked for, rather than the GPU's (`--quality`).
     pub quality: Option<crate::quality::Quality>,
     /// Keep the loading screen up, to look at it.
@@ -447,6 +452,11 @@ impl Shots {
         self.path(frame).with_extension("water.png")
     }
 
+    /// Where a frame's flame matte goes (`--flame-matte`).
+    pub fn matte_path(&self, frame: u32) -> PathBuf {
+        self.path(frame).with_extension("matte.png")
+    }
+
     /// With `--water-mask`, whether the lakes are drawn as their mask on a frame, and the
     /// shot whose mask is taken on it: each shot's mask on the frames after it, its picture on
     /// the last of them, so the temporal antialiasing has let go of the water's own colour.
@@ -472,6 +482,22 @@ pub const WATER_MASK_FRAMES: u32 = 6;
 pub struct ScriptFrame(pub u32);
 
 impl Options {
+    /// Turns on what a flag that takes no value turns on, if `flag` is one.
+    fn switch(&mut self, flag: &str) -> bool {
+        let on = match flag {
+            "--steady" => &mut self.steady,
+            "--background" => &mut self.background,
+            "--on-top" => &mut self.on_top,
+            "--offscreen" => &mut self.offscreen,
+            "--clean" => &mut self.clean,
+            "--water-mask" => &mut self.water_mask,
+            "--flame-matte" => &mut self.flame_matte,
+            _ => return false,
+        };
+        *on = true;
+        true
+    }
+
     pub fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut options = Options {
             experiments: Vec::new(),
@@ -492,6 +518,7 @@ impl Options {
             remote_token: String::new(),
             clean: false,
             water_mask: false,
+            flame_matte: false,
             hold_loading: false,
             mute: false,
             sound: false,
@@ -562,12 +589,7 @@ impl Options {
                         .parse()
                         .map_err(|_| "--remote-port needs a port number".to_string())?;
                 }
-                "--steady" => options.steady = true,
-                "--background" => options.background = true,
-                "--on-top" => options.on_top = true,
-                "--offscreen" => options.offscreen = true,
-                "--clean" => options.clean = true,
-                "--water-mask" => options.water_mask = true,
+                flag if options.switch(flag) => {}
                 "--quality" => {
                     let name = value("--quality")?;
                     options.quality = Some(crate::quality::Quality::from_name(&name).ok_or(
@@ -1472,9 +1494,15 @@ fn take_shots(
                 if bare.complete { "" } else { ", still growing" }
             );
         }
-        commands
-            .spawn(screenshot(picture))
-            .observe(save_to_disk(shots.path(frame)));
+        let shot = commands.spawn(screenshot(picture)).id();
+        if options.flame_matte {
+            let saved = crate::fire::with_matte(shots.path(frame), shots.matte_path(frame));
+            commands.entity(shot).observe(saved);
+        } else {
+            commands
+                .entity(shot)
+                .observe(save_to_disk(shots.path(frame)));
+        }
     }
     if options.water_mask {
         let (masked, of) = shots.water_masking(frame);
@@ -1702,6 +1730,12 @@ mod tests {
         let masked = parse(&["--shots", "out/look@100,200", "--water-mask"]).unwrap();
         let looks = masked.shots.as_ref().unwrap();
         assert!(masked.water_mask);
+        let matted = parse(&["--shots", "out/fire@330", "--flame-matte"]).unwrap();
+        assert!(matted.flame_matte);
+        assert_eq!(
+            matted.shots.as_ref().unwrap().matte_path(330),
+            PathBuf::from("out/fire-00330.matte.png")
+        );
         assert_eq!(
             looks.water_path(100),
             PathBuf::from("out/look-00100.water.png")
