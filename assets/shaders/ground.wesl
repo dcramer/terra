@@ -29,7 +29,7 @@ import bevy_pbr::{
 import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
-    mesh_view_bindings::{globals, view, lights},
+    mesh_view_bindings::{globals, view, lights, fog},
     shadows::fetch_directional_shadow,
 };
 
@@ -666,6 +666,8 @@ struct Joints {
     turn: vec3<f32>,
     crack: f32,
     ledge: f32,
+    // How much of the face here lies in the shadow its own beds and joints cast.
+    shadow: f32,
 }
 
 // A range's rock between its faults (D426): one block of strata a kilometre and a half
@@ -689,6 +691,19 @@ const FAULT_BLOCK_M: f32 = 1400.0;
 // How dark a range seven kilometres off stands, its snow and rock, against near: at 0.78 the
 // horns under the skyline stood brighter than the sky behind them (round 11).
 const FAR_DIM: f32 = 0.62;
+// Aerial perspective (see the fragment's end): from how far, over how many metres it takes
+// about two-thirds of the way to the air, and the air's colour against the haze's brightness.
+// Thick for real air: the valley's range stands 1 to 3 km off, where 14 km of it from 1.5 km
+// showed no haze at all (round 13).
+const AERIAL_FROM_M: f32 = 250.0;
+const AERIAL_M: f32 = 2400.0;
+const AERIAL_AIR: vec3<f32> = vec3<f32>(0.55, 0.78, 1.2);
+// How far the far snow's edge frays down the fall line (`fall_stripes`), against the slope.
+const STREAKED: f32 = 0.35;
+// How dark the rock's own cast shadows under its beds and in its joints stand (`jointing`).
+const JOINT_SHADOW: f32 = 0.5;
+// A far snowfield's tint where it is turned from the sun: blue-grey, about half as bright.
+const SHADED_SNOW: vec3<f32> = vec3<f32>(0.5, 0.58, 0.72);
 
 
 fn bedding(world: vec3<f32>) -> Bedding {
@@ -706,7 +721,7 @@ fn bedding(world: vec3<f32>) -> Bedding {
     return Bedding(world - centre + fault_throw, bed, strike, dip_way, key);
 }
 
-fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32) -> Joints {
+fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32, sun: vec3<f32>) -> Joints {
     // The beds tilted in their fault block (`bedding`); the upright joints cut across them in
     // two sets: one running on through the beds, so the wall stands in upright slabs as the
     // Odle's and the Matterhorn's do, the other staggered bed to bed as a wall's courses are.
@@ -755,7 +770,21 @@ fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32) -> Joints 
     let sway = vec3<f32>(noise(world * (0.45 / spacing) + 431.0), noise(world * (0.45 / spacing) + 433.0), noise(world * (0.45 / spacing) + 439.0)) - 0.5;
     var turn = (sway - up * dot(sway, up)) * 1.1 + (h - up * dot(h, up)) * 0.25 + way1 * (h.y * 0.2);
     turn = mix(turn, b.bed * 0.8 + turn * 0.3, ledge);
-    return Joints(turn, crack, ledge);
+    // The shadows the rock casts on itself (D426, round 13): each bed's lip overhangs the
+    // riser of the bed under it, so a band under every open bed lies in shade, tilted with
+    // the beds; and each upright joint of the running set is a recess whose wall turned from
+    // the sun is dark, the shadow longer the more the sun comes across the wall. Shading by
+    // the normal alone, the wall's beds and joints read as lines drawn on it (the r12 review).
+    let under_lip = 1.0 - smoothstep(0.0, 0.16 + soft, 1.0 - f.x);
+    let bed_shadow = max(bed_open, step(0.45, hash(vec3<f32>(course, 5.1, 1.3) + b.key * 7.0))) * under_lip;
+    // Only the open joints, about two in five, each over its own run of beds: every joint's
+    // shadow combed the walls into an even curtain of upright pinstripes (round 13).
+    let across = dot(way1, sun);
+    let from_joint = select(1.0 - f.y, f.y, across > 0.0);
+    let joint_open = step(0.6, hash(vec3<f32>(floor(t1), run, 1.9) + b.key * 7.0));
+    let joint_shadow = joint_open * (1.0 - smoothstep(0.0, 0.06 + 0.3 * abs(across) + soft, from_joint));
+    let shadow = max(bed_shadow * (1.0 - ledge), joint_shadow) * smoothstep(-0.1, 0.3, dot(up, sun));
+    return Joints(turn, crack, ledge, shadow);
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -1068,7 +1097,18 @@ fn fragment(
         }
         // Far off, under the haze, the snow and the rock stand darker than the sky (looks.ts's
         // "far under sky"): past a few kilometres the range is in its own faces' shade more than not.
-        let snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck) * mix(1.0, FAR_DIM * 0.9, smoothstep(1000.0, 6000.0, distance(world, view.world_position)));
+        var snow_tint = vec3<f32>(0.71, 0.75, 0.76) * (0.92 + 0.12 * fleck) * mix(1.0, FAR_DIM * 0.9, smoothstep(1000.0, 6000.0, distance(world, view.world_position)));
+        // A far face's snow turned from the sun is blue-grey, lit by the sky alone, and darker
+        // than the sunlit snow by more than the light's own fall-off: the sky-lit shade the
+        // references' snowfields keep, where ours stood one paper-white (the r12 review).
+@if(!PREPASS_PIPELINE)
+        {
+            if lights.n_directional_lights > 0u {
+                let sunward = dot(normalize(in.world_normal), lights.directional_lights[0].direction_to_light);
+                let shaded = smoothstep(0.35, -0.15, sunward) * smoothstep(600.0, 1500.0, distance(world, view.world_position));
+                snow_tint *= mix(vec3<f32>(1.0), SHADED_SNOW, shaded);
+            }
+        }
         // Far off, past where its trees are drawn, woods are the ground's own colour: a dark
         // conifer canopy (the far crowns' colour, linear), so a forested slope reads forested to
         // the horizon (docs/demos.md §1); nearer, the cards stand on it and it is darker
@@ -1128,6 +1168,14 @@ fn fragment(
         var tier_up = up;
         var joint_turn = vec3<f32>(0.0);
         var joint_crack = 0.0;
+        var joint_shadow = 0.0;
+        var sun_dir = up;
+@if(!PREPASS_PIPELINE)
+        {
+            if lights.n_directional_lights > 0u {
+                sun_dir = lights.directional_lights[0].direction_to_light;
+            }
+        }
         if rocky > 0.001 {
             // The beds folded, not laid level (the settlement r19 review: "a layer cake of hard
             // strata"): bent hundreds of metres over a couple of kilometres and a couple of
@@ -1184,17 +1232,18 @@ fn fragment(
             // walls, so a shoulder's snow and turf are left whole.
             let walled = rocky * (1.0 - smoothstep(0.62, 0.78, flatness));
             if walled > 0.001 {
-                let big = jointing(world, up, 40.0, clamp(footprint_m / 40.0, 0.01, 0.3));
+                let big = jointing(world, up, 40.0, clamp(footprint_m / 40.0, 0.01, 0.3), sun_dir);
                 let small_keep = 1.0 - smoothstep(2.0, 4.0, footprint_m);
-                let small = jointing(world + 17.0, up, 16.0, clamp(footprint_m / 16.0, 0.01, 0.3));
+                let small = jointing(world + 17.0, up, 16.0, clamp(footprint_m / 16.0, 0.01, 0.3), sun_dir);
                 joint_turn = (big.turn + small.turn * 0.6 * small_keep) * walled;
                 // Great blocks a hundred metres and more across, each face turned its own way and
                 // their tops ledges, so a wall reads as slabs from across a valley, where the
                 // 40 m set shows as a pinstripe. Their joints not drawn: warped at that size,
                 // they netted the walls in wavy lines (round 12).
-                let great = jointing(world + 53.0, up, 140.0, clamp(footprint_m / 140.0, 0.01, 0.3));
+                let great = jointing(world + 53.0, up, 140.0, clamp(footprint_m / 140.0, 0.01, 0.3), sun_dir);
                 joint_turn += great.turn * 0.9 * walled;
                 joint_crack = max(big.crack, small.crack * small_keep) * walled;
+                joint_shadow = max(max(big.shadow * 0.6, small.shadow * small_keep), great.shadow) * walled;
                 ledge = max(max(big.ledge, small.ledge * small_keep), great.ledge) * walled;
             }
             // Patches of weathering a few hundred metres across: iron-stained rust, dark
@@ -1223,7 +1272,7 @@ fn fragment(
                     // The block's own fracture face, so faces turned from the sun break dark.
                     let sunward = dot(normalize(face + joint_turn * 0.8), sun);
                     aspect = mix(vec3<f32>(1.0), vec3<f32>(1.14, 1.0, 0.8), smoothstep(0.05, 0.6, sunward));
-                    aspect *= mix(vec3<f32>(1.0), vec3<f32>(0.55, 0.64, 0.82), smoothstep(0.15, -0.4, sunward));
+                    aspect *= mix(vec3<f32>(1.0), vec3<f32>(0.44, 0.5, 0.66), smoothstep(0.2, -0.3, sunward));
                 }
             }
             face_tint = mix(vec3<f32>(1.0), weathered * band_tone * far_wall * aspect, rocky);
@@ -1353,7 +1402,11 @@ fn fragment(
             // ledge keeps its snow whole bar a few outcrops and a wall past about 50 degrees
             // breaks all but its couloirs: at 0.8 the shoulders broke as much as the walls and
             // the range held snow on 7 percent of its rock against D425's third.
-            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held);
+            // Its edges frayed down the fall line, rock breaking through on the ribs between
+            // streaks: keyed to the slope alone, on the left range's stepped shoulders the snow
+            // lay in even level bands along the steps (the r12 review).
+            let streaks = fall_stripes(world, across_face, 70.0, 2.0).x;
+            let breaks = smoothstep(0.46, 0.5, outcrop - 0.2 + (0.84 - flatness) * 1.7 - held + (streaks - 0.55) * STREAKED);
             snow *= 1.0 - breaks * far_snow;
             // The couloirs by the outcrops alone, about a third of them: keyed by the steepness
             // too, the walls' fill broke whole and the range stood bare (round 11).
@@ -1807,6 +1860,7 @@ fn fragment(
             let combed = 0.3 + 0.7 * smoothstep(0.4, 0.7, noise(world * 0.0011 + 171.0));
             ground_is.normal = normalize(ground_is.normal - across_face * rib_tilt * combed + facets * ribbed + joint_turn * (1.0 - snow * 0.7));
             colour *= 1.0 - mix(0.55, 0.45, smoothstep(1500.0, 5000.0, far_off)) * joint_crack * (1.0 - snow);
+            colour *= 1.0 - JOINT_SHADOW * joint_shadow * (1.0 - snow);
             colour *= mix(1.0, mix(0.62, 1.08, rib * 0.5 + 0.5), ribbed * combed);
             colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
         }
@@ -2039,6 +2093,17 @@ fn fragment(
     out = deferred_output(in, pbr_input);
 } @else {
     out.color = apply_pbr_lighting(pbr_input);
+    // Aerial perspective: past a kilometre and a half a range fades toward the air's blue-grey
+    // and loses its contrast, its snow dimming and its shade lifting, as the references' far
+    // ranges do and as a physical atmosphere's in-scatter does (Bevy's `Atmosphere`, real air
+    // on a world this size, is too clean to show it at 5 km). The air is as bright as the open
+    // air's haze (`daylight::haze_for`, which follows the hour and the weather) in the sky's
+    // blue-grey: a few kilometres of in-scatter, short of the sky's own endless path, so a
+    // range under the skyline stays darker than the sky behind it (D426, round 13). The
+    // distance haze (`DistanceFog`) still follows, for the kilometres beyond.
+    let through = 1.0 - exp(-max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0) / AERIAL_M);
+    let haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }
     return out;
