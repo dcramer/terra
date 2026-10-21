@@ -5,6 +5,9 @@ fn the_shaders_and_the_lights_fly_a_breath_at_one_speed_and_draw_its_sprites_ali
     let shader = std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
     assert!(shader.contains(&format!("const JET_SPEED: f32 = {JET_SPEED_MPS:.1};")));
     assert!(shader.contains(&format!("const BREATH_CARDS: f32 = {BREATH_CARDS}.0;")));
+    assert!(shader.contains(&format!(
+        "const BREATH_EMBER_CARDS: f32 = {BREATH_EMBER_CARDS}.0;"
+    )));
 }
 
 #[test]

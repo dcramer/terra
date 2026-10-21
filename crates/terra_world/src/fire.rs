@@ -331,12 +331,18 @@ impl MaterialExtension for FireExtension {
 pub type FireMaterial = ExtendedMaterial<StandardMaterial, FireExtension>;
 
 /// The fire materials: one a kind of card (the shader's `kind`), then the hearths' mask.
-const KINDS: usize = 8;
+const KINDS: usize = 9;
 /// The hearths' and torches' flames drawn again, into the picture's alpha only (`film`).
 const MASK: usize = 6;
 /// The breaths' hulls drawn again, into the alpha only: a marched breath's flame through the
 /// film as a hearth's (`volume`).
 const JET_MASK: usize = 7;
+/// A marched breath's embers once off, drawn as the breath's sprites (5) but after its hull,
+/// so its smoke does not cover them: as Niagara's sparks are their own emitter, sorted apart
+/// from the volume they rise from. Told by the fraction of its kind (`fire.wesl`'s
+/// `breath_ember`). Must match `BREATH_EMBER_CARDS` in fire.wesl.
+const JET_EMBERS: usize = 8;
+const BREATH_EMBER_CARDS: usize = 160;
 
 /// The kind of card a fire material's shader draws: the mask draws the flames' (0).
 fn drawn_kind(material: usize) -> f32 {
@@ -344,6 +350,8 @@ fn drawn_kind(material: usize) -> f32 {
         2.0
     } else if material == MASK {
         0.0
+    } else if material == JET_EMBERS {
+        5.25
     } else {
         material as f32
     }
@@ -600,6 +608,11 @@ fn spawn_cards(
         cards(JETS, BREATH_CARDS, 0.0),
         fire[5].clone(),
     );
+    spawn(
+        "Fire: jets' embers",
+        cards(JETS, BREATH_EMBER_CARDS, 0.0),
+        fire[JET_EMBERS].clone(),
+    );
     spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
     for (name, mesh, material) in [
         (
@@ -674,6 +687,8 @@ fn setup(
                 // sprites go first, its hot rod last, so the rod shows through their soot.
                 depth_bias: if i == JET_MASK {
                     3.0
+                } else if i == JET_EMBERS {
+                    2.75
                 } else if kind == 2.0 {
                     2.5
                 } else if kind == 5.0 {
@@ -685,7 +700,7 @@ fn setup(
                 // its sprites, turned any way, from both.
                 cull_mode: if kind == 2.0 {
                     Some(Face::Front)
-                } else if kind == 5.0 {
+                } else if kind == 5.0 || i == JET_EMBERS {
                     None
                 } else {
                     Some(Face::Back)

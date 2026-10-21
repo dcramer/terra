@@ -639,6 +639,11 @@ const SMOKE_HOLD: f32 = 0.8;
 const SMOKE_GONE: f32 = 5.5;
 const SMOKE_RISE: f32 = 0.7;
 const SMOKE_SPREAD: f32 = 0.7;
+// The stream's gas at its skin, a share of its core's; how much hotter the ball is along the
+// stream's line into it (the ramp's heat), and how much thinner its gas there.
+const JET_SKIN_DENSITY: f32 = 0.45;
+const JET_INTO_BALL: f32 = 0.5;
+const JET_CHANNEL: f32 = 0.6;
 
 // What is left of a breath to draw: its stream's gas, or the smoke after it.
 fn breath_left(b: Breath) -> f32 {
@@ -687,17 +692,22 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     }
     let e = fbm3(p + w * mix(0.8, 2.2, open));
     let u = length(q) + (e - 0.5) * mix(0.7, 1.9, open) + (fine - 0.5) * 0.55 * open;
-    var stream = 1.0 - smoothstep(0.7, 0.95, u);
+    // Thinner toward its skin, so its hot core shows through: dense to its skin, the outer
+    // orange hid all but the first metre of the white-hot rope from the three-quarter (vol9).
+    var stream = (1.0 - smoothstep(0.7, 0.95, u)) * mix(1.0, JET_SKIN_DENSITY, smoothstep(0.25, 0.8, u));
     // Its tip breaks into blobs.
     let tear = smoothstep(0.5, 1.0, zf) * 0.6;
     stream *= smoothstep(tear - 0.15, tear + 0.15, e + 0.15 * (1.0 - zf));
     stream *= smoothstep(-0.2, 0.2, l.z) * (1.0 - smoothstep(b.front - 1.5, b.front + 0.5, l.z)) * smoothstep(b.back - 0.5, b.back + 1.5, l.z);
     // Hottest on its line at the jaw, cooling outward in hot and cool strands, and along it.
-    let core = mix(1.0, 0.78, smoothstep(0.1, 1.0, zf));
+    // White-hot on its line to half its reach, as the top-scored breath frames' jets are (Elden
+    // Ring's; research/2026-10-22-fire-review-calibration.md): cooling from the jaw on, only a
+    // metre of the rope read white-hot (vol9's three-quarter).
+    let core = mix(1.0, 0.8, smoothstep(0.45, 1.0, zf));
     // Near the jaw it is hot through to its skin, a yellow-white jet a flamethrower's is for
     // its first metres; cooled at its skin from the start, it read mid-orange from the mouth
     // on (vol3's review). The strands come in as it opens.
-    let skin = mix(0.3, 0.75, smoothstep(0.05, 0.5, zf));
+    let skin = mix(0.2, 0.75, smoothstep(0.2, 0.7, zf));
     let hot_s = core * (1.0 - skin * smoothstep(0.1, 0.95, u)) + mix(0.2, 0.45, open) * (e - 0.5) + 0.35 * (fine - 0.5);
     // The fireball where it strikes: lumpy balls rolling up off the face, hot inside and at
     // the contact, cooling up to a cap of soot.
@@ -742,11 +752,18 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         let high = dot(rel, b.up) / rb;
         hot_b = 0.85 - 0.72 * d - 1.3 * (lumps - 0.5) - 0.9 * (nb - 0.5) - 0.6 * smoothstep(-0.2, 0.8, high);
         hot_b += 0.45 * middle + 0.5 * (roll - 0.5);
+        // Hot along the stream's line into it, where the jet feeds it: the ball swallowed the
+        // jet's last metres in cool billows, so the jet read as a stub into a blob (vol9).
+        hot_b += JET_INTO_BALL * (1.0 - smoothstep(0.1, 0.5, rho / rb)) * smoothstep(-0.2, 0.3, dot(rel, b.up) / rb + 0.6);
         // Once off it burns out from the outside in over a second, to soot.
         hot_b -= 1.1 * saturate(b.since_off / 1.0);
         soot_b = smoothstep(-0.15, 0.5, high + 0.5 * (lumps - 0.5)) * smoothstep(0.3, 0.8, d + 0.3 * (nb - 0.5));
         soot_b = max(soot_b, 0.9 * (1.0 - smoothstep(0.22, 0.45, rings)) * smoothstep(0.15, 0.55, rp));
-        stream *= 1.0 - smoothstep(0.05, 0.4, ball);
+        // Thinner along the stream's line on the jaw's side of its middle, so the jet's core is
+        // seen running into it: whole there, its billows swallowed the jet's last metres.
+        ball *= 1.0 - JET_CHANNEL * (1.0 - smoothstep(0.15, 0.5, rho / rb)) * smoothstep(-0.2, 0.4, -rel.z / rb) * (1.0 - saturate(b.since_off / 0.5));
+        // The stream's core runs on into the ball to the face; only its skin gives way to it.
+        stream *= 1.0 - smoothstep(0.05, 0.4, ball) * smoothstep(0.2, 0.5, u);
     }
     // Nothing behind the face it strikes: the ball flattens on it as on a wall. Let through
     // behind it, the ball's far half showed over the wall's top and not below it, a level
@@ -766,8 +783,9 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     // And in the creases between its strands at its skin once it opens: dark licks between
     // bright rolls, so seen end-on it reads as turbulent gas round a hot core, not one wash.
     soot_s = max(soot_s, 0.75 * open * (1.0 - smoothstep(0.3, 0.45, e)) * smoothstep(0.45, 0.85, u));
-    // And a sheath of smoke over its top from halfway, framing the flame dark.
-    soot_s = max(soot_s, 0.8 * smoothstep(0.3, 0.7, zf) * smoothstep(0.5, 0.85, u) * smoothstep(-0.1, 0.6, dot(q, b.up.xy)));
+    // And a sheath of smoke over its top from past halfway, framing the flame dark: from a
+    // third of the way it hid the jet's hot core seen from above it.
+    soot_s = max(soot_s, 0.8 * smoothstep(0.5, 0.85, zf) * smoothstep(0.5, 0.85, u) * smoothstep(-0.1, 0.6, dot(q, b.up.xy)));
     // And wherever the gas has cooled past burning.
     var soot = max((stream * soot_s + ball * soot_b) / dense, 0.8 * (1.0 - smoothstep(0.18, 0.38, hot)));
     // Once off, the ball's gas is all soot within a second: a fifth of it left as cooled flame
@@ -1288,12 +1306,117 @@ fn breath_stain(corner: vec2<f32>, b: Breath, jet: u32, i: f32) -> Out {
     return out;
 }
 
+// Sparks off a marched breath's fireball: thrown out of its skin while the stream feeds it and
+// for a moment after the stop, slowed by the air, lifted by the heat and winking out, as a
+// flamethrower's splash sheds them and the top-scored breath frames show them (Elden Ring's,
+// Monster Hunter's; research/2026-10-22-fire-review-calibration.md). Each card is one spark at a
+// time, born again each period with new luck, streaked along its flight by the shutter. Drawn
+// after the hull and tested against the depth it writes (`MARCHED_DEPTH`): born inside the
+// smoke and rising with it, every one was hidden (vol9's emb, emb2), so they leave the ball.
+const BREATH_EMBER_CARDS: f32 = 160.0;
+// A card's period and a spark's life in it, seconds: least, and more by luck.
+const EMBER_PERIOD_S: vec2<f32> = vec2(0.7, 0.9);
+const EMBER_LIFE_S: vec2<f32> = vec2(0.45, 0.6);
+// Thrown at so many metres a second, slowed by the air at this rate a second, lifted by the
+// heat at so many metres a second squared.
+const EMBER_THROW: vec2<f32> = vec2(4.0, 6.0);
+const EMBER_DRAG: f32 = 2.2;
+const EMBER_LIFT: f32 = 2.0;
+// Its size, metres; how long after the stop sparks still come, seconds; the shutter, seconds.
+const EMBER_M: vec2<f32> = vec2(0.07, 0.07);
+const EMBER_AFTER_S: f32 = 1.0;
+// The smoke's embers once off: how many of the cards; born up to so many seconds after the
+// stop, living so long and so much more by luck.
+const EMBER_SMOKE_CARDS: f32 = 40.0;
+const EMBER_SMOKE_S: vec3<f32> = vec3(3.5, 1.4, 1.6);
+const EMBER_SHUTTER_S: f32 = 0.04;
+
+fn breath_ember(corner: vec2<f32>, b: Breath, jet: u32, i: f32) -> Out {
+    if !b.marched || i >= BREATH_EMBER_CARDS || b.face <= 0.0 || b.ball <= 0.01 {
+        return nowhere();
+    }
+    let came_on = fire.jets[jet * 4u + 2u].z;
+    let time = fire.kind.z;
+    let h0 = hash(vec2(i * 1.91 + 0.5, came_on));
+    // The last cards are the smoke's embers once off (`EMBER_SMOKE_CARDS`): each born once,
+    // spread over the seconds after the stop, rising slowly off the smoke and glowing longer,
+    // since the after-stop shots are seconds on, when the splash is long over.
+    let late = i >= BREATH_EMBER_CARDS - EMBER_SMOKE_CARDS;
+    let off_at = time - b.since_off;
+    let period = select(EMBER_PERIOD_S.x + EMBER_PERIOD_S.y * h0, 1.0e5, late);
+    let age = select(time - came_on + h0 * period, b.since_off - EMBER_SMOKE_S.x * h0, late);
+    let n = floor(age / period);
+    let s = age - n * period;
+    let born = time - s;
+    if late && (b.since_off <= 0.0 || age < 0.0) {
+        return nowhere();
+    }
+    let h1 = hash(vec2(i * 7.31 + n * 0.37 + 1.0, came_on));
+    let h2 = hash(vec2(i * 3.17 + n * 0.53 + 2.0, came_on));
+    let h3 = hash(vec2(i * 5.53 + n * 0.71 + 3.0, came_on));
+    let h4 = hash(vec2(i * 9.71 + n * 0.29 + 4.0, came_on));
+    let h5 = hash(vec2(i * 2.39 + n * 0.83 + 5.0, came_on));
+    let life = select(EMBER_LIFE_S.x + EMBER_LIFE_S.y * h2, EMBER_SMOKE_S.y + EMBER_SMOKE_S.z * h2, late);
+    // Born only once the stream has struck, and fewer and fewer after the stop.
+    let struck_at = came_on + b.reach / JET_SPEED;
+    if s > life || born < struck_at || (!late && b.since_off > 0.0 && born > off_at + EMBER_AFTER_S * h1) {
+        return nowhere();
+    }
+    // Out of the ball's skin, away from the face it strikes, upward more than down; the
+    // smoke's off its spread skin.
+    let rb = ball_radius(b) * (0.45 + 0.55 * b.ball) * (1.0 + SMOKE_SPREAD * saturate(b.since_off / SMOKE_GONE));
+    let mid = ball_middle(b, rb);
+    let a = h3 * 6.2831853;
+    let z = h4 * 2.0 - 1.0;
+    var d = vec3(sqrt(1.0 - z * z) * cos(a), sqrt(1.0 - z * z) * sin(a), z);
+    let nf = normalize(b.normal);
+    let nj = vec3(dot(nf, b.lift), dot(nf, b.side), dot(nf, b.way));
+    d -= 2.0 * min(dot(d, nj), 0.0) * nj;
+    d = normalize(d + b.up * 0.5 + nj * 0.3);
+    let m = mid + d * rb * select(0.85, 1.0, late);
+    let start = b.mouth + b.lift * m.x + b.side * m.y + b.way * m.z;
+    let out_w = b.lift * d.x + b.side * d.y + b.way * d.z;
+    let up = normalize(b.mouth);
+    let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+    let north = cross(east, up);
+    let wander = vec2(noise(vec2(h1 * 41.0, s * 2.5)), noise(vec2(h3 * 73.0, s * 2.5))) - 0.5;
+    let toss = east * wander.x + north * wander.y;
+    let v0 = (EMBER_THROW.x + EMBER_THROW.y * h5) * select(1.0, 0.3, late);
+    let k = EMBER_DRAG;
+    let at = start + out_w * v0 * (1.0 - exp(-k * s)) / k + up * 0.5 * EMBER_LIFT * s * s + toss * s + fire.wind.xyz * s * 0.5;
+    let v = out_w * v0 * exp(-k * s) + up * EMBER_LIFT * s + toss;
+    let flight = normalize(v + vec3(1.0e-4));
+    let to_eye = normalize(view.world_position - at);
+    var across = cross(flight, to_eye);
+    if dot(across, across) < 1.0e-6 {
+        across = cross(up, to_eye);
+    }
+    across = normalize(across);
+    let along = normalize(cross(to_eye, across));
+    let size = EMBER_M.x + EMBER_M.y * h5;
+    let streak = size + min(length(v) * EMBER_SHUTTER_S, 0.4);
+    let world = at + across * (corner.x - 0.5) * size + along * (corner.y - 0.5) * streak;
+    var out: Out;
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    out.world = world;
+    out.life = vec4(s / life, h4, h1, 7.0);
+    // Its jet rides in its size, as the sprites' does (`fragment`'s fade before the face).
+    out.size = f32(jet);
+    out.glow = 1.0;
+    return out;
+}
+
 fn breath_sprite(corner: vec2<f32>, jet: u32, phase: f32) -> Out {
     let b = breath_of(jet);
     if b.reach <= 0.0 {
         return nowhere();
     }
     let time = fire.kind.z;
+    // The embers' own draw, after the hull (fire.rs `JET_EMBERS`, its kind's fraction).
+    if fire.kind.x > 5.1 {
+        return breath_ember(corner, b, jet, floor(phase * BREATH_EMBER_CARDS + 0.5));
+    }
     let card = floor(phase * BREATH_CARDS + 0.5);
     let up = normalize(b.mouth);
     if card < STAIN_CARDS {
@@ -2037,7 +2160,16 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // of them, faded at the frame's edges and by its age (its `glow`); or the blast's
         // flash, a soft ball of white-hot light going out.
         let layer = i32(life.w + 0.5);
-        if life.w < -1.5 {
+        if life.w > 6.5 {
+            // A spark off the fireball (`breath_ember`): a hot point streaked along its flight,
+            // yellow at its birth, cooling to red and winking out over its life.
+            let p = (uv - 0.5) * 2.0;
+            let spark = 1.0 - smoothstep(0.1, 1.0, length(p));
+            let wink = 0.65 + 0.35 * sin(time * (7.0 + luck * 11.0) + luck * 40.0);
+            let alpha = spark * smoothstep(0.0, 0.12, t) * pow(1.0 - t, 1.3) * wink * soft;
+            light = soot(mix(1650.0, 1200.0, t) - 120.0 * heat, alpha);
+            cover = covers(light, alpha);
+        } else if life.w < -1.5 {
             // The soot stain on a struck face (`breath_stain`): black, thickest just over the
             // hit and thinning up and out, its edge broken by noise and streaked upward as soot
             // climbs a wall; `heat` here is which card (0 the plume, 1 the char spot).

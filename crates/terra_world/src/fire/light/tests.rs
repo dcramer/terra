@@ -157,6 +157,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         glow: 1.0,
         kept: false,
         shadowless: false,
+        night_stops: 2.5,
     }
 }
 
@@ -329,4 +330,23 @@ fn a_marched_fireball_lights_the_face_it_strikes_from_in_front_once_it_has_struc
     assert!(lit[0].at.y > from.y, "{:?}", lit[0].at);
     // Off, its fireball's light goes with it.
     assert!(strikes(&blazes, &[(false, 1.0, 0.0)], 2.0, BreathTier::Marched).is_empty());
+    // By night it and its stream's lights gain less than a blaze's, so the night ground under
+    // the stream keeps its orange rather than clipping to cream; drawn as cards, as a blaze.
+    let blaze = by_night(NIGHT_STOPS, 1.0);
+    assert!(by_night(lit[0].night_stops, 1.0) < blaze * 0.5);
+    assert!(by_night(lit[0].night_stops, 1.0) > 1.0);
+    for jet in lit_jets(&blazes, BreathTier::Marched) {
+        assert!(by_night(jet.night_stops, 1.0) < blaze * 0.5, "{jet:?}");
+    }
+    for jet in lit_jets(&blazes, BreathTier::Cards) {
+        assert_eq!(by_night(jet.night_stops, 1.0), blaze, "{jet:?}");
+    }
+}
+
+/// The stream's own lights of the jets that are on.
+fn lit_jets(blazes: &Blazes, tier: crate::fire::BreathTier) -> Vec<Lit> {
+    let jets = blazes.jets.iter().filter(|jet| jet.on).count() * 3;
+    let all = lit(blazes, 2.0, tier);
+    assert!(all.len() >= jets);
+    all.into_iter().take(jets).collect()
 }

@@ -156,6 +156,8 @@ mod tests {
         assert!(shader.contains("|| !b.marched {\n        return nowhere();"));
         assert!(shader.contains("|| !b.marched {\n        discard;"));
         assert!(shader.contains("if b.marched {\n        return nowhere();"));
+        // Its embers once off are marched only (`breath_ember`).
+        assert!(shader.contains("if !b.marched || i >= BREATH_EMBER_CARDS"));
         assert_eq!(BreathTier::Marched.packed().x, 1.0);
         assert_eq!(BreathTier::Cards.packed().x, 0.0);
     }

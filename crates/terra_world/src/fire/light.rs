@@ -2,7 +2,7 @@
 //! signal driving the light's power, the flame's and embers' brightness and the char's glow;
 //! the light swaying on three axes by it, so the shadows it casts move as a real flame's do;
 //! shadows from the nearest few fire lights, the kept fires' among them glowing in a fog volume
-//! of their own (`fog`); brighter by night than by day (`by_night`); and a
+//! of their own (`fog`); brighter by night than by day (`by_night`, each light by its own stops); and a
 //! dozen lights however much burns, gathered over cells, chosen by what the eye is near and
 //! eased out by 40 m (D127).
 //!
@@ -142,16 +142,15 @@ const SWAY_M: [f32; 2] = [0.005, 0.4];
 /// as bright by day as by night, sunlit stone round it went salmon. A kept fire (a hearth's
 /// or torch's) has its own (`HEARTH_NIGHT_STOPS`), with a wider disc.
 const NIGHT_STOPS: f32 = 2.5;
+/// A marched breath's lights (D430), its stream's and its strike's, brighter by night by
+/// fewer: at a blaze's 2.5 the ground and the wall's foot under its stream clipped to pale
+/// cream by night (sRGB 247, 215, 151; vol7's L), where by dusk they took orange.
+pub(super) const BREATH_NIGHT_STOPS: f32 = 1.0;
 
-/// How many times brighter a kept fire's light is so far into the night.
-pub(super) fn hearth_by_night(night: f32) -> f32 {
-    libm::exp2f(HEARTH_NIGHT_STOPS * night.clamp(0.0, 1.0))
-}
-
-/// How many times brighter a fire's light is so far into the night (`Sky::night`, 0 by day,
-/// 1 in full dark) than by day.
-pub(super) fn by_night(night: f32) -> f32 {
-    libm::exp2f(NIGHT_STOPS * night.clamp(0.0, 1.0))
+/// How many times brighter a light of so many night stops (`Lit::night_stops`) is so far
+/// into the night (`Sky::night`, 0 by day, 1 in full dark) than by day.
+pub(super) fn by_night(stops: f32, night: f32) -> f32 {
+    libm::exp2f(stops * night.clamp(0.0, 1.0))
 }
 
 /// How many fire lights' places and flickers the char and embers of what burns are told.
@@ -253,6 +252,9 @@ pub(super) struct Lit {
     pub kept: bool,
     /// Whether it never casts shadows: a hearth's fill (`HEARTH_FILL`).
     pub shadowless: bool,
+    /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`,
+    /// `BREATH_NIGHT_STOPS`).
+    pub night_stops: f32,
 }
 
 /// A jet's light, its lumens and colour, as its breath is drawn.
@@ -303,6 +305,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     glow: 1.0 + share,
                     kept: false,
                     shadowless: false,
+                    night_stops: NIGHT_STOPS,
                 }
             })
         })
@@ -353,6 +356,7 @@ pub(super) fn strikes(
                     glow,
                     kept: false,
                     shadowless: false,
+                    night_stops: BREATH_NIGHT_STOPS,
                 }
             })
         })
@@ -362,6 +366,10 @@ pub(super) fn strikes(
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
 pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
     let (jet_lumens, jet_light) = jet_light(tier);
+    let jet_stops = match tier {
+        super::BreathTier::Cards => NIGHT_STOPS,
+        super::BreathTier::Marched => BREATH_NIGHT_STOPS,
+    };
     // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
     // heaviest blaze's number.
     let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
@@ -398,6 +406,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     at: at + up(at) * 1.5 + sway(seed, t, flicker, 0.3),
                     lumens: jet_lumens * glow,
                     color: jet_light,
+                    night_stops: jet_stops,
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
@@ -434,6 +443,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             radius: width(blaze) * HEARTH_SPREAD,
             glow,
             kept: true,
+            night_stops: HEARTH_NIGHT_STOPS,
             shadowless: false,
         };
         let fill = Lit {
@@ -483,6 +493,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 glow,
                 kept: false,
                 shadowless: false,
+                night_stops: NIGHT_STOPS,
             }
         })
         .collect();
@@ -697,7 +708,6 @@ pub(super) fn light(
     wants.extend(lit(&blazes, t, *tier));
     let shown = choose(wants, eye, &was, shadowed(*quality));
     let night = sky.map_or(0.0, |sky| sky.night);
-    let by_night = by_night(night);
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
@@ -707,15 +717,10 @@ pub(super) fn light(
         };
         match shown {
             Some(Shown { lit, fade, shadows }) => {
-                // A kept fire's light is brighter by night by its own stops (`hearth_by_night`),
-                // fewer than a blaze's, so its flame stays the brightest thing by it (D415).
-                light.intensity = lit.lumens
-                    * fade
-                    * if lit.kept {
-                        hearth_by_night(night)
-                    } else {
-                        by_night
-                    };
+                // Each light is brighter by night by its own stops: a kept fire's fewer than a
+                // blaze's, so its flame stays the brightest thing by it (D415), and a marched
+                // breath's fewer again.
+                light.intensity = lit.lumens * fade * by_night(lit.night_stops, night);
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
