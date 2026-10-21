@@ -126,10 +126,8 @@ pub fn falls(fell: &[(IVec3, Cube)], destroyed: &dyn Fn(IVec3) -> bool) -> Falls
 }
 
 /// How fast, at most, in metres a second, a block crumbling in place is thrown out from the
-/// middle of what fell, at its shell and at its top, as an imploded wall peels outward;
-/// how much spin it is left with, a share of what it was thrown with.
+/// middle of what fell, at its shell and at its top, as an imploded wall peels outward.
 const PEELS_OUT: f32 = 1.4;
-const PEEL_SPIN: f32 = 0.5;
 /// How far over a tipping fall starts and how fast it is going, in radians and radians a
 /// second; how much its blocks' crack angles vary, as a share either way.
 const TIP_START: f32 = 0.03;
@@ -168,15 +166,20 @@ pub fn collapse(
                 .iter()
                 .map(|&i| (made[i].at - middle).with_y(0.0).length())
                 .fold(CELL_M, f32::max);
+            // Its shell leans out as slabs, each face turning outward about its foot (v = ω h,
+            // one ω for the face): neighbouring blocks go and turn together and part only as
+            // they land, as a demolished wall's face folds out whole. A share of each block's
+            // own throw and spin, as `burst` made them, scattered them into a spray of tiles
+            // in the castle film's falls (2026-10-21).
             for &i in &hanging {
                 let piece = &mut made[i];
                 let out = (piece.at - middle).with_y(0.0);
+                let way = out.normalize_or_zero();
                 let shell = (out.length() / reach).clamp(0.0, 1.0);
                 let height = ((piece.at.y - bottom) / tall).clamp(0.0, 1.0);
-                let jitter = 0.6 + 0.8 * unit(&[piece.seed, 31]);
-                let peel = PEELS_OUT * shell * (0.3 + 0.7 * height) * jitter;
-                piece.velocity = out.normalize_or_zero() * peel;
-                piece.spin *= PEEL_SPIN;
+                let lean = PEELS_OUT * shell / tall;
+                piece.velocity = way * lean * height * tall;
+                piece.spin = Vec3::Y.cross(way) * lean;
             }
         }
         Falls::Tips { way } => {

@@ -262,7 +262,7 @@ function fell(s: Script, frame: number, [x, z]: [number, number]) {
 
 export default {
   about: "a dragon burns the castle in twenty-five seconds: a strafing pass along its south wall, a hover off the south-east tower breathing into its timber storey, its towers and keep coming down",
-  sandbox: ["--free-build"],
+  sandbox: ["--free-build", "--quality", "ultra"],
   rolls: ROLLS,
   script,
 };

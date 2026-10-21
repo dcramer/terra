@@ -90,6 +90,54 @@ fn a_tower_whose_foot_gave_way_evenly_crumbles_where_it_stood_onto_its_heap() {
 }
 
 #[test]
+fn a_crumbling_towers_shell_leans_out_in_slabs_rather_than_spraying_its_blocks() {
+    // The tower of the test above: its blocks as they start to come down.
+    let tower = solid(IVec3::ZERO, IVec3::new(7, 29, 7));
+    let foot = |at: IVec3| at.y == 0;
+    let mut parts = burst(&tower, &foot, &chunks, 1.0, 5000);
+    collapse(&mut parts, &tower, &foot, &chunks);
+    let middle = Vec3::new(2.0, 0.0, 2.0);
+    let whole: Vec<&Fragment> = parts.iter().filter(|p| p.shape == Shape::Whole).collect();
+    let mut leaning = 0;
+    for p in &whole {
+        // Each turns outward about its face, as a slab folding out does: about a level
+        // axis along the face, not tumbling every way.
+        let way = (p.at - middle).with_y(0.0).normalize_or_zero();
+        let spin = p.spin.length();
+        assert!(
+            p.spin.y.abs() <= 0.01 && p.spin.dot(way).abs() <= 0.01 + 0.05 * spin,
+            "a block at {} spins {} where it leans out {way}",
+            p.at,
+            p.spin
+        );
+        if p.velocity.length() > 0.05 {
+            leaning += 1;
+        }
+    }
+    assert!(
+        leaning * 4 > whole.len(),
+        "only {leaning} of {} lean out",
+        whole.len()
+    );
+    // And a block goes out no slower than the one under it in its column: the face goes as
+    // one, the higher the further, never a spray of blocks each thrown its own way.
+    for low in &whole {
+        for high in &whole {
+            let column = (high.at - low.at).with_y(0.0).length() < 0.05;
+            if column && high.at.y > low.at.y + 0.1 {
+                let (out_low, out_high) = (low.velocity.length(), high.velocity.length());
+                assert!(
+                    out_high + 1e-4 >= out_low,
+                    "a block at {} goes {out_high} m/s, the one under it at {} {out_low}",
+                    high.at,
+                    low.at
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn a_slender_wall_whose_foot_gave_way_on_one_side_tips_that_way_and_cracks_up_within_degrees() {
     // A wall 30 cubes long, 3 thick and 24 high along x, its outer course's foot destroyed.
     let wall = solid(IVec3::ZERO, IVec3::new(29, 23, 2));
