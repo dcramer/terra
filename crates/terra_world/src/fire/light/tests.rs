@@ -343,6 +343,29 @@ fn a_marched_fireball_lights_the_face_it_strikes_from_in_front_once_it_has_struc
     }
 }
 
+#[test]
+fn a_kept_fire_is_keyed_up_as_the_sun_goes_down_not_by_day() {
+    let stops = HEARTH_NIGHT_STOPS;
+    let full = libm::exp2f(stops);
+    // Noon: the sun high, the sky bright, no boost.
+    assert_eq!(hearth_by_hour(stops, 0.0, 0.0, 5_000.0), 1.0);
+    // The lake's civil dusk, the sun a degree under and the sky's light on the shade most of
+    // the day's: more than half the night's boost, where by the night alone it was a fifth of
+    // a stop.
+    let lake = hearth_by_hour(stops, 0.13, 1.0, 1_240.0);
+    assert!(lake >= full * 0.55, "{lake}");
+    assert!(lake > by_night(stops, 0.13) * 2.5, "{lake}");
+    // The yard's darker dusk, the sun five degrees under: its night's share, which is more
+    // than its sky asks, and so less than the lake's brighter sky asks.
+    let yard = hearth_by_hour(stops, 0.5, 1.0, 830.0);
+    assert_eq!(yard, by_night(stops, 0.5));
+    assert!(yard < lake, "{yard}");
+    // Full night: as by the night's stops, the dark sky asking for less.
+    assert_eq!(hearth_by_hour(stops, 1.0, 1.0, 36.0), full);
+    // Never past the night's whole boost, however bright the sky with the sun going.
+    assert!(hearth_by_hour(stops, 0.0, 0.6, 20_000.0) <= full);
+}
+
 /// The stream's own lights of the jets that are on.
 fn lit_jets(blazes: &Blazes, tier: crate::fire::BreathTier) -> Vec<Lit> {
     let jets = blazes.jets.iter().filter(|jet| jet.on).count() * 3;

@@ -159,6 +159,32 @@ pub(super) fn by_night(stops: f32, night: f32) -> f32 {
     libm::exp2f(stops * night.clamp(0.0, 1.0))
 }
 
+/// The sky's light on the shade (`SkyLight::brightness`) against which a kept fire takes
+/// its whole night's boost once the sun is down. Keyed to the night alone, a campfire at civil
+/// dusk took a fifth of a stop where the sky's light on the shade was still most of the day's:
+/// at the lake (the sun a degree under, `night` 0.13, the sky's light 1,240) the troll by its
+/// fire was lit 2x on its fire side and not warm, and the grass by the fire matched the far
+/// grass (lake film r15). A fire's light is weighed by the eye against the light it is seen
+/// in, as Witcher 3 keys its fires up as the sun goes, so the boost follows the sky's light
+/// down from the day: at this, the lake's dusk (1,240) takes 3.4 times, and the yard's darker
+/// dusk (830, the sun five degrees under) and the night keep their night's stops, which give
+/// them more. Below it the yard's dusk was keyed past its night's share (4.2 times at 200, 3
+/// at 280), and the stones and ground it lit inside the flame's crop took the fire sheet's
+/// dusk campfire out of its orange (20% to 17% and 18%, the flame itself unchanged).
+const HEARTH_DUSK_SKY: f32 = 360.0;
+
+/// How many times brighter a kept fire's light of so many night stops is at an hour: by the
+/// night's stops (`by_night`), and as the sun goes down (`Sky::twilight`, 0 with the sun six
+/// degrees up, 1 a degree under) at least as much as the sky's light on the shade is over
+/// `HEARTH_DUSK_SKY`, up to the whole night's boost. By day none: sunlit stone round a fire as
+/// bright as by night went salmon (`NIGHT_STOPS`).
+pub(super) fn hearth_by_hour(stops: f32, night: f32, twilight: f32, sky_light: f32) -> f32 {
+    let full = libm::exp2f(stops);
+    let against_sky = (sky_light / HEARTH_DUSK_SKY).clamp(1.0, full);
+    let down = twilight.clamp(0.0, 1.0);
+    by_night(stops, night).max(1.0 + (against_sky - 1.0) * down * down)
+}
+
 /// How many fire lights' places and flickers the char and embers of what burns are told.
 pub const GLOWS: usize = 16;
 
@@ -697,6 +723,7 @@ pub(super) fn light(
     mut glows: ResMut<FireGlows>,
     mut fog: ResMut<super::fog::Glows>,
     tier: Res<super::BreathTier>,
+    sky_light: Option<Res<crate::skylight::SkyLight>>,
 ) {
     let t = time.elapsed_secs_wrapped();
     let was: Vec<Was> = drawn
@@ -722,7 +749,9 @@ pub(super) fn light(
     wants.extend(strikes(&blazes, &drawn.jets, t, *tier));
     wants.extend(lit(&blazes, t, *tier));
     let shown = choose(wants, eye, &was, shadowed(*quality));
-    let night = sky.map_or(0.0, |sky| sky.night);
+    let night = sky.as_ref().map_or(0.0, |sky| sky.night);
+    let twilight = sky.as_ref().map_or(0.0, |sky| sky.twilight);
+    let sky_light = sky_light.map_or(0.0, |lit| lit.brightness);
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
@@ -735,7 +764,12 @@ pub(super) fn light(
                 // Each light is brighter by night by its own stops: a kept fire's fewer than a
                 // blaze's, so its flame stays the brightest thing by it (D415), and a marched
                 // breath's fewer again.
-                light.intensity = lit.lumens * fade * by_night(lit.night_stops, night);
+                let boost = if lit.kept {
+                    hearth_by_hour(lit.night_stops, night, twilight, sky_light)
+                } else {
+                    by_night(lit.night_stops, night)
+                };
+                light.intensity = lit.lumens * fade * boost;
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
