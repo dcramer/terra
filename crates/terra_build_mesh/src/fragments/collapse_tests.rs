@@ -341,3 +341,65 @@ fn a_crumbling_wall_comes_down_in_sections_that_hold_together_until_they_land() 
         whole.len()
     );
 }
+
+#[test]
+fn a_tall_shells_upper_walls_come_down_as_a_few_big_sections_that_lean_out_as_they_drop() {
+    // A keep's top: a shell 18 cubes a side (9 m), its walls 2 thick and 28 high, its foot
+    // destroyed all round, as when its bond timbers burn.
+    let keep: Vec<(IVec3, Cube)> = solid(IVec3::ZERO, IVec3::new(17, 27, 17))
+        .into_iter()
+        .filter(|(at, _)| at.x < 2 || at.x > 15 || at.z < 2 || at.z > 15)
+        .collect();
+    let foot = |at: IVec3| at.y == 0;
+    assert_eq!(falls(&keep, &foot), Falls::InPlace);
+    let mut parts = burst(&keep, &foot, &chunks, 1.0, 20000);
+    collapse(&mut parts, &keep, &foot, &chunks);
+    let mut sections: std::collections::BTreeMap<[u32; 3], Vec<usize>> = Default::default();
+    for (i, part) in parts.iter().enumerate() {
+        if let Some(body) = part.body {
+            sections
+                .entry(body.middle.to_array().map(f32::to_bits))
+                .or_default()
+                .push(i);
+        }
+    }
+    // A few big sections, not dozens of small slabs.
+    assert!(
+        (4..=40).contains(&sections.len()),
+        "{} sections",
+        sections.len()
+    );
+    let middle = Vec3::new(4.5, 0.0, 4.5);
+    let (mut high, mut out) = (0, 0);
+    for members in sections.values() {
+        let body = parts[members[0]].body.expect("in a section");
+        let low = members
+            .iter()
+            .map(|&i| parts[i].at.y)
+            .fold(f32::MAX, f32::min);
+        if low < 5.0 {
+            continue;
+        }
+        high += 1;
+        // By the time it has dropped as far as its foot stood, it has gone over by a good
+        // many degrees about a level line along its face, out or (a few) in.
+        let lands_s = libm::sqrtf(2.0 * (low - 0.5) / GRAVITY);
+        let way = (body.middle - middle).with_y(0.0);
+        let way = if way.x.abs() >= way.z.abs() {
+            Vec3::X * way.x.signum()
+        } else {
+            Vec3::Z * way.z.signum()
+        };
+        let over = body.spin.dot(Vec3::Y.cross(way)) * lands_s;
+        assert!(
+            over.abs() > 0.3 && body.spin.y.abs() < 1e-3,
+            "a section from {low} m went over {over} rad, spinning {}",
+            body.spin
+        );
+        if over > 0.0 {
+            out += 1;
+        }
+    }
+    assert!(high >= 4, "only {high} sections high up");
+    assert!(out * 3 >= high * 2, "only {out} of {high} lean out");
+}

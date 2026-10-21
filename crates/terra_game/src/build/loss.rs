@@ -515,28 +515,12 @@ fn step(
     }
     let (most, most_puffs, preset) = budget(*quality);
     // Surges whose time has come up, or all of them once nothing falls to keep the clock.
-    if !shards.surges.is_empty() {
-        let now = shards.clock_s;
-        let idle = shards.live.is_empty();
-        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut shards.surges)
-            .into_iter()
-            .partition(|(when, ..)| idle || *when <= now);
-        shards.surges = later;
-        for (_, at, colour, up, billow) in due {
-            let assets = (&mut *meshes, &mut *materials, &mut *images);
-            let most = most_puffs + BILLOWS + dust::SURGES;
-            billow_at(
-                &mut commands,
-                &mut shards,
-                assets,
-                most,
-                at,
-                colour,
-                up,
-                billow,
-            );
-        }
-    }
+    dust::raise_surges(
+        &mut commands,
+        &mut shards,
+        (&mut *meshes, &mut *materials, &mut *images),
+        most_puffs + BILLOWS + dust::SURGES,
+    );
     if shards.live.is_empty() {
         return;
     }

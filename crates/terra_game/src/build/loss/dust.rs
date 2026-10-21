@@ -53,7 +53,13 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
 /// at most, and how many more it may have up beside the rest.
 const SURGE_FROM: usize = 200;
 const SURGE_RING: usize = 18;
-pub(super) const SURGES: usize = 90;
+/// Room for three big falls' surges up at once: with room for 90, the castle's two towers'
+/// surges, hanging 15-25 s, left its keep's little (castle film round 5).
+pub(super) const SURGES: usize = 160;
+/// How far out past its foot's edge a surge's rings come up, in metres: from the middle of
+/// the fall, a keep's surge came up inside its own standing ground storey and the castle's
+/// walls, where nothing outside them saw it (castle film round 5).
+const SURGE_OUT_M: f32 = 1.0;
 
 /// The surge a big fall raises as it lands: the air its mass drives out carries its dust
 /// out along the ground every way round in a rolling wall, thick, several footprints wide,
@@ -83,7 +89,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
             let way = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn));
             out.push((
                 when + 0.04 * k as f32 / ring as f32,
-                way * half * 0.8 + Vec3::Y * (0.6 + 0.4 * wave as f32),
+                way * (half + SURGE_OUT_M) + Vec3::Y * (0.6 + 0.4 * wave as f32),
                 Billow {
                     alpha: 0.9,
                     wide: (4.0 + 7.0 * big) * grows,
@@ -139,6 +145,39 @@ pub(super) fn plan_surge(
         billow.drift = frame.rotation * billow.drift;
         let up = at.normalize_or(Vec3::Y);
         shards.surges.push((now + after, at, colour, up, billow));
+    }
+}
+
+/// Raises the surges' billows whose time has come, or all of them once nothing falls to
+/// keep the fragments' clock, within `most` puffs up at once; says how many it refused.
+pub(super) fn raise_surges(
+    commands: &mut Commands,
+    shards: &mut Shards,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<StandardMaterial>,
+        &mut Assets<Image>,
+    ),
+    most: usize,
+) {
+    if shards.surges.is_empty() {
+        return;
+    }
+    let now = shards.clock_s;
+    let idle = shards.live.is_empty();
+    let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut shards.surges)
+        .into_iter()
+        .partition(|(when, ..)| idle || *when <= now);
+    shards.surges = later;
+    let (due_count, mut refused) = (due.len(), 0);
+    for (_, at, colour, up, billow) in due {
+        let assets = (&mut *meshes, &mut *materials, &mut *images);
+        refused += usize::from(!billow_at(
+            commands, shards, assets, most, at, colour, up, billow,
+        ));
+    }
+    if refused > 0 {
+        info!("Build: dust: {refused} of {due_count} surge billows refused, the budget full");
     }
 }
 

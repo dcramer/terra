@@ -5,7 +5,7 @@
 //! as its pieces fade.
 
 use super::Fragment;
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use std::collections::BTreeMap;
 use terra_build::kit::Kit;
 use terra_build::{CELL_M, Cube, Kind};
@@ -228,7 +228,7 @@ impl Rubble {
                 });
             let mean = sum / 4.0;
             let ragged = if count == 4 {
-                (terra_gen::hash::unit3(0x4eab, x as u32, z as u32, 0) - 0.5) * 0.12
+                (terra_gen::hash::unit3(0x4eab, x as u32, z as u32, 0) - 0.5) * RAGGED_M
             } else {
                 -0.02
             };
@@ -264,10 +264,84 @@ impl Rubble {
                     .normalize_or(Vec3::Y);
                 let normal = if normal.y < 0.0 { -normal } else { normal };
                 let uvs = triangle.map(|p| [p.x / metres[0], p.z / metres[1]]);
-                surface.textured(triangle, [normal; 3], uvs, shade);
+                surface.textured(triangle, [normal; 3], uvs, shade.map(|c| c * FINES_SHADE));
+            }
+            // Blocks lying in it, half sunk, tilted every way, so it reads as a heap of
+            // broken stone and not a smooth mound once the pieces that fell on it have
+            // gone (castle film round 5: a tower's heap read as a blue-grey cone of
+            // gravel); as shipped games' rubble piles are chunks over fines.
+            let r = |salt: u32| terra_gen::hash::unit3(0x7b10 + salt, x as u32, z as u32, 1);
+            let high = cell.high * Self::left(cell, now);
+            if high > BLOCKS_FROM_M && r(0) < BLOCKS_SHARE {
+                let middle = quad.iter().copied().sum::<Vec3>() / 4.0;
+                let size = Vec3::new(0.35 + 0.6 * r(1), 0.22 + 0.3 * r(2), 0.3 + 0.5 * r(3))
+                    .min(Vec3::splat(high * 1.6));
+                let turn = Quat::from_rotation_y(r(4) * core::f32::consts::TAU)
+                    * Quat::from_rotation_x((r(5) - 0.5) * 0.8)
+                    * Quat::from_rotation_z((r(6) - 0.5) * 0.8);
+                let centre =
+                    middle + Vec3::new((r(7) - 0.5) * 0.3, size.y * 0.1, (r(8) - 0.5) * 0.3);
+                let tone = 0.8 + 0.35 * r(9);
+                lying(
+                    surface,
+                    (centre, size * 0.5, turn),
+                    metres,
+                    shade.map(|c| c * tone),
+                );
             }
         }
         out
+    }
+}
+
+/// How ragged a heap's surface is, up and down, in metres; how much darker its fines are
+/// than its blocks, dust and grit in their shade; from how high a cell of it has a block
+/// lying in it, in metres, and how many of those cells do.
+const RAGGED_M: f32 = 0.22;
+const FINES_SHADE: f32 = 0.85;
+const BLOCKS_FROM_M: f32 = 0.2;
+const BLOCKS_SHARE: f32 = 0.45;
+
+/// A block lying in a heap: a box at its middle, half its size each way and turned so, its
+/// five faces over the heap (its underside is buried), textured from its faces' planes.
+fn lying(
+    surface: &mut crate::mesh::Surface,
+    (centre, half, turn): (Vec3, Vec3, Quat),
+    metres: [f32; 2],
+    shade: [f32; 3],
+) {
+    for axis in 0..3 {
+        for sign in [-1.0f32, 1.0] {
+            let mut normal = Vec3::ZERO;
+            normal[axis] = sign;
+            if axis == 1 && sign < 0.0 {
+                continue;
+            }
+            let (p, q) = ((axis + 1) % 3, (axis + 2) % 3);
+            let corner = |a: f32, b: f32| {
+                let mut local = normal * half[axis];
+                local[p] = a * half[p];
+                local[q] = b * half[q];
+                centre + turn * local
+            };
+            let quad = [
+                corner(-1.0, -1.0),
+                corner(1.0, -1.0),
+                corner(1.0, 1.0),
+                corner(-1.0, 1.0),
+            ];
+            let normal = turn * normal;
+            for triangle in [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] {
+                let wound = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]);
+                let triangle = if wound.dot(normal) < 0.0 {
+                    [triangle[0], triangle[2], triangle[1]]
+                } else {
+                    triangle
+                };
+                let uvs = triangle.map(|at| crate::mesh::planar(at, normal, metres));
+                surface.textured(triangle, [normal; 3], uvs, shade);
+            }
+        }
     }
 }
 
@@ -447,6 +521,25 @@ mod tests {
         assert!(
             highest > 0.5 && highest < 30.0 * CELL_M,
             "the mound stands {highest:.1} m"
+        );
+        // And as broken stone, not a smooth mound: blocks lie in it, their faces standing
+        // steeper than rubble lies, over a good share of what is drawn.
+        let (mut steep, mut all) = (0.0f32, 0.0f32);
+        for surface in drawn.values().flat_map(|surfaces| surfaces.0.values()) {
+            for (corners, normals) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
+                let area = (corners[1] - corners[0])
+                    .cross(corners[2] - corners[0])
+                    .length()
+                    * 0.5;
+                all += area;
+                if normals[0].y.abs() < 0.6 {
+                    steep += area;
+                }
+            }
+        }
+        assert!(
+            steep > 0.15 * all,
+            "{steep:.1} m2 of {all:.1} m2 drawn stand steep"
         );
     }
 

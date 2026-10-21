@@ -413,8 +413,10 @@ pub(super) fn worn_within(
             Some((at.to_array(), toughness.quarters(damage)))
         })
         .collect();
-    // What stands beside a break broke with it: its stones split, chipped and fresh, darker
-    // than the weathered face (D305), worn at least half.
+    // What stands beside a break broke with it: its stones cracked and darker than the
+    // weathered face (D305), worn a quarter; worn half, a stone wall's stones fell out of
+    // their beds and every cube beside the castle's breaks drew as a dark window in a pale
+    // frame, a grid at film scale (castle film round 5).
     for at in base.breaks_within(low - IVec3::ONE, high + IVec3::ONE) {
         for step in [
             IVec3::X,
@@ -435,7 +437,7 @@ pub(super) fn worn_within(
 }
 
 /// How worn a cube standing beside a break is drawn, in quarters of its health lost.
-const BROKEN_QUARTERS: u8 = 2;
+const BROKEN_QUARTERS: u8 = 1;
 
 /// How many of so many pieces are in, so far through.
 pub fn done(count: usize, fraction: f32) -> usize {

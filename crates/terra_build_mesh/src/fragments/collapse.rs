@@ -97,14 +97,36 @@ impl Body {
 /// land, as a demolished building's walls come down in slabs.
 const SECTION_ALONG: f32 = 9.0;
 const SECTION_UP: f32 = 7.0;
+/// And for a big fall, at least this share of its width along it and of its height up it:
+/// a keep's top in sections of a few metres came down as dozens of small slabs sinking into
+/// their own heap, crumbling in place (castle film round 5), where a real one's upper walls
+/// go as a few big pieces that lean, drop and break again where they land.
+const SECTION_SHARE_ALONG: f32 = 0.55;
+const SECTION_SHARE_UP: f32 = 0.4;
+
+/// How far over a section of a crumbling fall turns by the time it lands, in radians, when
+/// it drops from high enough ([`TIPS_FROM_M`]), varying by half either way; the most it
+/// turns a second; how far its foot must drop for it to tip all that way, in metres (the
+/// lowest sections, crushed under the rest, only sink); and the share of sections that go
+/// over inward, into what they stood round, rather than out.
+const TIPS_OVER: f32 = 0.75;
+const TIPS_MOST: f32 = 1.6;
+const TIPS_FROM_M: f32 = 4.0;
+const TIPS_IN: f32 = 0.2;
 
 /// The whole blocks among `hanging` grouped into the sections they come down in: by the face
 /// of the fall they are on (the way out from its middle), cut every few metres along it and
 /// up it at offsets of its own, and only blocks touching one another, as mortar holds them.
-fn sections(made: &[Fragment], hanging: &[usize], middle: Vec3, seed: u32) -> Vec<Vec<usize>> {
+fn sections(
+    made: &[Fragment],
+    hanging: &[usize],
+    middle: Vec3,
+    (along, up): (f32, f32),
+    seed: u32,
+) -> Vec<Vec<usize>> {
     let r = |salt: u32| unit(&[seed, salt]);
-    let along_m = SECTION_ALONG * CELL_M;
-    let up_m = SECTION_UP * CELL_M;
+    let along_m = along * CELL_M;
+    let up_m = up * CELL_M;
     let mut keyed: std::collections::BTreeMap<(u8, i32, i32), Vec<usize>> = Default::default();
     for &i in hanging {
         let out = (made[i].at - middle).with_y(0.0);
@@ -273,17 +295,33 @@ pub fn collapse(
                 piece.velocity = way * lean * height * tall;
                 piece.spin = Vec3::Y.cross(way) * lean;
             }
-            // Its blocks come down in sections, each as one body going as its blocks would
-            // between them, all setting off as its lowest does.
+            // Its blocks come down in sections, each as one body, all setting off as its
+            // lowest does: big for a big fall, and those that drop far tipping over about
+            // their foot as they go, mostly outward, so the top of a keep leans out in a
+            // few big pieces, drops and breaks again where it lands rather than sinking
+            // into its heap (castle film round 5; demolition footage, Red Faction:
+            // Guerrilla's walls).
             let seed = hash::of(&[hanging.len() as u32, bottom.to_bits(), 5]);
-            for section in sections(made, &hanging, middle, seed) {
+            let wide = hanging
+                .iter()
+                .fold((Vec3::MAX, Vec3::MIN), |(low, high), &i| {
+                    (low.min(made[i].at), high.max(made[i].at))
+                });
+            let wide = ((wide.1 - wide.0).with_y(0.0).max_element() + CELL_M) / CELL_M;
+            let size = (
+                SECTION_ALONG.max(wide * SECTION_SHARE_ALONG),
+                SECTION_UP.max(tall / CELL_M * SECTION_SHARE_UP),
+            );
+            for (n, section) in sections(made, &hanging, middle, size, seed)
+                .into_iter()
+                .enumerate()
+            {
                 if section.len() < 2 {
                     continue;
                 }
                 let count = section.len() as f32;
                 let centre = section.iter().map(|&i| made[i].at).sum::<Vec3>() / count;
-                let velocity = section.iter().map(|&i| made[i].velocity).sum::<Vec3>() / count;
-                let spin = section.iter().map(|&i| made[i].spin).sum::<Vec3>() / count;
+                let (velocity, spin) = tips(made, &section, centre, middle, bottom, seed, n);
                 let wait = section
                     .iter()
                     .map(|&i| made[i].wait)
@@ -337,6 +375,43 @@ pub fn collapse(
             }
         }
     }
+}
+
+/// How a section of a crumbling fall sets off, its middle at `centre`: turning over about
+/// its foot, the way out from the fall's `middle` along x or z (inward for a few), as far
+/// by the time it lands as its drop from over the fall's `bottom` lets it, its middle going
+/// that way as a body turning about its foot does (v = ω h / 2), so its foot stays where it
+/// was as its top goes over.
+fn tips(
+    made: &[Fragment],
+    section: &[usize],
+    centre: Vec3,
+    middle: Vec3,
+    bottom: f32,
+    seed: u32,
+    n: usize,
+) -> (Vec3, Vec3) {
+    let low = section
+        .iter()
+        .map(|&i| made[i].at.y - made[i].size.y * 0.5)
+        .fold(f32::MAX, f32::min);
+    let high = section
+        .iter()
+        .map(|&i| made[i].at.y + made[i].size.y * 0.5)
+        .fold(f32::MIN, f32::max);
+    let out = (centre - middle).with_y(0.0);
+    let face = if out.x.abs() >= out.z.abs() {
+        Vec3::X * out.x.signum()
+    } else {
+        Vec3::Z * out.z.signum()
+    };
+    let r = |salt: u32| unit(&[seed, n as u32, salt]);
+    let way = if r(1) < TIPS_IN { -face } else { face };
+    let drop = (low - bottom).max(0.0);
+    let lands_s = libm::sqrtf(2.0 * drop / GRAVITY).max(0.35);
+    let over = TIPS_OVER * (0.5 + r(2)) * (drop / TIPS_FROM_M).min(1.0);
+    let rate = (over / lands_s).min(TIPS_MOST);
+    (way * (rate * (high - low) * 0.5), Vec3::Y.cross(way) * rate)
 }
 
 fn bounds(cubes: &[IVec3]) -> (IVec3, IVec3) {

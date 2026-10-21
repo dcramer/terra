@@ -806,6 +806,7 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
     }
 }
 
+mod breaks;
 mod keys;
 
 #[test] // Slow: minutes.

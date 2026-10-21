@@ -119,6 +119,17 @@ fn a_big_fall_raises_a_surge_rolling_out_every_way_and_hanging_for_many_seconds(
         }
     }
     assert_eq!(quarters.len(), 4, "it rolled out only {quarters:?}");
+    // Its rings come up outside its foot, where the walls left standing round it do not
+    // hide them: inside, a keep's surge rose within its own ground storey unseen.
+    for (_, from, b) in &keep {
+        if b.drift.with_y(0.0).length() > 1.0 {
+            let out = from.with_y(0.0).length();
+            assert!(
+                out > 9.0 * 0.5,
+                "a ring billow came up {out} m from the middle"
+            );
+        }
+    }
     // And it rises over the heap.
     assert!(
         keep.iter()
