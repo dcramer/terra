@@ -72,7 +72,7 @@ pub(super) fn cross(
         // Unseen where it breaks from: it comes into sight running.
         let seen = shows(1.0)
             && (shows(0.5) || shows(0.75))
-            && !around.seen_now(start + lift, f32::INFINITY);
+            && !around.seen_soon(around.shows_at(start), f32::INFINITY);
         seen.then_some((start, point, way, timed))
     })?;
     let past = around.ground(point + way * dice.range(10.0, 22.0));
@@ -80,9 +80,7 @@ pub(super) fn cross(
     for _ in 0..count {
         let from = around
             .ground(start + (way.cross(up) * dice.range(-1.5, 1.5)) + way * dice.range(-2.0, 0.5));
-        let Some(animal) =
-            creatures::spawn(commands, (kinds, bestiary), &around.planet, species, from)
-        else {
+        let Some(animal) = super::put(commands, (kinds, bestiary), around, species, from) else {
             continue;
         };
         let to = around.ground(past + way.cross(up) * dice.range(-3.0, 3.0));
@@ -90,10 +88,10 @@ pub(super) fn cross(
         // Its young, if it has one at its side, running with it a step behind.
         let young = young_of(bestiary, species, dice).and_then(|young| {
             let beside = from + way.cross(up) * dice.range(-1.6, 1.6) - way * dice.range(0.6, 1.6);
-            creatures::spawn(
+            super::put(
                 commands,
                 (kinds, bestiary),
-                &around.planet,
+                around,
                 young,
                 around.ground(beside),
             )
@@ -198,9 +196,7 @@ pub(super) fn put_group(
             }
             let sits = a.lerp(b, along / length.max(1e-3));
             let left = dice.range(ON_A_RIDGE_S.0, ON_A_RIDGE_S.1);
-            if let Some(bird) =
-                creatures::spawn(commands, (kinds, bestiary), &around.planet, species, sits)
-            {
+            if let Some(bird) = super::put(commands, (kinds, bestiary), around, species, sits) {
                 commands
                     .entity(bird)
                     .entry::<creatures::Creature>()
@@ -214,9 +210,7 @@ pub(super) fn put_group(
     for _ in 0..count {
         let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
         let at = around.ground(spot + turn * reach * dice.range(0.0, 1.0));
-        if let Some(animal) =
-            creatures::spawn(commands, (kinds, bestiary), &around.planet, species, at)
-        {
+        if let Some(animal) = super::put(commands, (kinds, bestiary), around, species, at) {
             put.push(animal);
         }
         if let Some(young) = young_of(bestiary, species, dice) {
@@ -225,10 +219,10 @@ pub(super) fn put_group(
                     * reach.normalize_or_zero()
                     * dice.range(YOUNG_BESIDE_M.0, YOUNG_BESIDE_M.1),
             );
-            put.extend(creatures::spawn(
+            put.extend(super::put(
                 commands,
                 (kinds, bestiary),
-                &around.planet,
+                around,
                 young,
                 beside,
             ));

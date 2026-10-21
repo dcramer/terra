@@ -13,6 +13,7 @@
 mod asked;
 mod groups;
 mod meet;
+mod unseen;
 pub use asked::Asked;
 use meet::{Band, Way, eye_at, meet, shows_from};
 
@@ -33,6 +34,7 @@ use terra_world::parting::ObstructionFade;
 use terra_world::planet::MainCamera;
 use terra_world::sky_occlusion::SkyOccluders;
 use terra_world::spatial::SpatialHash;
+use unseen::put;
 
 /// The land's cells are cubes this wide, a few tens of metres of ground in each.
 const CELL_M: f32 = 32.0;
@@ -411,31 +413,43 @@ impl Surroundings<'_, '_> {
     /// Whether a camera sees a point now, within so far of it: in its picture, a little
     /// past its edges, and nothing hiding it (`in_view`). An animal is put out where none
     /// does, and walks into sight (docs/scene-rules.md, Wildlife).
+    #[cfg(test)]
     pub fn seen_now(&self, at: Vec3, within_m: f32) -> bool {
-        self.eyes.iter().any(|(eye, projection)| {
-            let from = eye.translation();
-            if from.distance(at) > within_m {
-                return false;
+        self.eyes
+            .iter()
+            .any(|(eye, projection)| self.seen_from(eye, projection, at, within_m))
+    }
+
+    /// Whether a camera standing so, drawing so, sees a point within so far of it.
+    fn seen_from(
+        &self,
+        eye: &GlobalTransform,
+        projection: &Projection,
+        at: Vec3,
+        within_m: f32,
+    ) -> bool {
+        let from = eye.translation();
+        if from.distance(at) > within_m {
+            return false;
+        }
+        let local = eye.affine().inverse().transform_point3(at);
+        let in_picture = match projection {
+            Projection::Perspective(lens) => {
+                let tall = libm::tanf(lens.fov * 0.5) * PICTURE_EDGE;
+                let deep = -local.z;
+                deep > 0.0
+                    && local.y.abs() <= deep * tall
+                    && local.x.abs() <= deep * tall * lens.aspect_ratio
             }
-            let local = eye.affine().inverse().transform_point3(at);
-            let in_picture = match projection {
-                Projection::Perspective(lens) => {
-                    let tall = libm::tanf(lens.fov * 0.5) * PICTURE_EDGE;
-                    let deep = -local.z;
-                    deep > 0.0
-                        && local.y.abs() <= deep * tall
-                        && local.x.abs() <= deep * tall * lens.aspect_ratio
-                }
-                _ => true,
-            };
-            in_picture && self.in_view(from, at)
-        })
+            _ => true,
+        };
+        in_picture && self.in_view(from, at)
     }
 
     /// Whether a place fits a niche and no camera sees an animal there, one drawn so far off:
     /// never put out before a camera's eyes, it comes into sight walking.
     pub fn fits_unseen(&self, niche: &Niche, at: Vec3, seen_m: f32) -> bool {
-        self.fits(niche, at) && !self.seen_now(at + at.normalize_or(Vec3::Y) * 0.4, seen_m + 4.0)
+        self.fits(niche, at) && self.unseen_for(at, seen_m)
     }
 
     pub fn in_view(&self, eye: Vec3, at: Vec3) -> bool {
@@ -899,9 +913,9 @@ mod tests {
         assert_ne!(cell_key(cell), cell_key(cell + IVec3::X));
     }
 
-    #[test]
-    fn an_animal_is_seen_now_only_in_a_cameras_picture_within_reach_and_not_hidden() {
-        use bevy::ecs::system::RunSystemOnce;
+    /// A world for `Surroundings` on a smooth planet, with a camera 2 m over the ground looking
+    /// east: the world, the eye and up there.
+    pub(super) fn surroundings_world() -> (World, Vec3, Vec3) {
         let mut world = World::new();
         let planet = Planet::smooth(terra_core::PlanetSpec {
             seed: Seed(1),
@@ -923,6 +937,14 @@ mod tests {
             GlobalTransform::from(Transform::from_translation(eye).looking_to(Vec3::X, up)),
             Projection::Perspective(PerspectiveProjection::default()),
         ));
+        (world, eye, up)
+    }
+
+    #[test]
+    fn an_animal_is_seen_now_only_in_a_cameras_picture_within_reach_and_not_hidden() {
+        use bevy::ecs::system::RunSystemOnce;
+        let (mut world, eye, up) = surroundings_world();
+        let ground = eye - up * 2.0;
         // A trunk a metre wide 10 m off to the north-east, between the eye and a spot.
         let hidden = eye + (Vec3::X + Vec3::Z * 0.5).normalize() * 20.0;
         let trunk = ground + (Vec3::X + Vec3::Z * 0.5).normalize() * 10.0;

@@ -269,7 +269,7 @@ pub(super) fn stage(
         let start = around.ground(spot + dir * mps * lead_s);
         let fault = if !dry(start) || !clear(start) {
             0
-        } else if around.seen_now(start + lift, about.seen_m()) {
+        } else if !around.unseen_for(start, about.seen_m()) {
             1
         } else if !flies && !walkable(around, start, spot) {
             2
@@ -427,9 +427,7 @@ fn put_out(
         let side = if member % 2 == 0 { 1.0 } else { -1.0 };
         let from = around
             .ground(staged.start + across * side * off.min(1.0) * 1.4 - staged.way * off * 1.2);
-        let Some(animal) =
-            creatures::spawn(commands, (kinds, bestiary), &around.planet, species, from)
-        else {
+        let Some(animal) = super::put(commands, (kinds, bestiary), around, species, from) else {
             continue;
         };
         let (behaviour, way, lead) = (meeting.behaviour, staged.way, staged.lead_s);

@@ -57,7 +57,7 @@ fn seen_coming_on(around: &Surroundings, here: Vec3, ahead: Vec3, spot: Vec3) ->
     let off = (spot - here).reject_from(up);
     let along = off.dot(ahead);
     let aside = (off - ahead * along).length();
-    let at = spot + up * 0.4;
+    let at = around.shows_at(spot);
     eyes_on(along, aside)
         .iter()
         .filter(|&&on| shows_from(around, eye_at(around, here + ahead * on, ahead), at))
@@ -244,7 +244,7 @@ fn try_spots(
             around.ground(here + ahead * dice.range(band.ahead_m.0, band.ahead_m.1) + aside * off);
         let eyes = seen_coming_on(around, here, ahead, spot);
         // Unseen where it is put out, seen as the player comes on (docs/scene-rules.md).
-        if around.seen_now(spot + up * 0.4, f32::INFINITY) {
+        if around.seen_soon(around.shows_at(spot), f32::INFINITY) {
             continue;
         }
         if eyes > 0 || staging.big {
