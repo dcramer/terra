@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Fire review calibration: what AAA frames score from our harsh reviewer](2026-10-22-fire-review-calibration.md) | 2026-10-22 |
 | [Agent throughput: where the hours went](2026-10-19-agent-throughput.md) | 2026-10-19 |
 | [Fire step back: a professional flipbook in our engine](2026-10-19-fire-step-back.md) | 2026-10-19 |
 | [How games draw fire: four surveys combined](2026-10-19-how-games-draw-fire.md) | 2026-10-19 |
