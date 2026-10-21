@@ -32,6 +32,17 @@ const DENSITY: f32 = 0.0012;
 /// and the least and most, metres.
 const REACH_A_METRE: f32 = 6.0;
 const REACH_M: [f32; 2] = [1.5, 4.0];
+/// How much thicker in absorption and scattering, and thinner in density, a glow's air is
+/// carried than it is, the same air in every product Bevy takes of them. Bevy's volumetric fog
+/// (`volumetric_fog.wesl`, MIT OR Apache-2.0) lays the camera's ambient over every fog volume
+/// as `exp(-ray length × (absorption + scattering))`, with no density in it: through a glow's
+/// box of air nearly clear, each ray short of its back took nearly all the haze's sky light,
+/// and the box's corners over the wood showed as pale grey wedges with straight edges (lake
+/// film r14, r15 at 9-15 s). So carried, that ambient dies within a hundredth of a millimetre.
+const AIR_SCALE: f32 = 1.0e5;
+/// The glow's air's absorption and scattering, a metre at density 1.
+const ABSORPTION: f32 = 0.02;
+const SCATTERING: f32 = 0.6;
 
 /// A fire's glow to show: where its light hangs, how far round it its air glows, and how
 /// strongly (its light's ease with distance).
@@ -74,18 +85,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             commands
                 .spawn((
                     Name::new(format!("Fire: glow {i}")),
-                    FogVolume {
-                        // Air, warmed by nothing but the light in it.
-                        fog_color: Color::WHITE,
-                        density_factor: 0.0,
-                        density_texture: Some(density.clone()),
-                        absorption: 0.02,
-                        scattering: 0.6,
-                        // Smoke and hot air scatter forward less than a misty haze: a round
-                        // glow, seen from every side, not a beam looking into the fire.
-                        scattering_asymmetry: 0.3,
-                        ..default()
-                    },
+                    air(density.clone()),
                     Transform::IDENTITY,
                     Visibility::Hidden,
                 ))
@@ -93,6 +93,21 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         })
         .collect();
     commands.insert_resource(Volumes(volumes));
+}
+
+/// A glow's air: warmed by nothing but the light in it, thick as `show` sets it.
+fn air(density: Handle<Image>) -> FogVolume {
+    FogVolume {
+        fog_color: Color::WHITE,
+        density_factor: 0.0,
+        density_texture: Some(density),
+        absorption: ABSORPTION * AIR_SCALE,
+        scattering: SCATTERING * AIR_SCALE,
+        // Smoke and hot air scatter forward less than a misty haze: a round glow, seen from
+        // every side, not a beam looking into the fire.
+        scattering_asymmetry: 0.3,
+        ..default()
+    }
 }
 
 /// A ball of air in its box, densest at its middle and none at its edge, so no box shows,
@@ -147,8 +162,8 @@ fn show(
             Some((glow, thick)) if thick > 0.0 => {
                 transform.translation = glow.at;
                 transform.scale = Vec3::splat(glow.reach * 2.0);
-                if volume.density_factor != thick {
-                    volume.density_factor = thick;
+                if volume.density_factor != thick / AIR_SCALE {
+                    volume.density_factor = thick / AIR_SCALE;
                 }
                 if *visibility != Visibility::Inherited {
                     *visibility = Visibility::Inherited;
@@ -160,5 +175,29 @@ fn show(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bevy's ambient over a fog volume for a ray so long through it (`volumetric_fog.wesl`).
+    fn ambient(volume: &FogVolume, ray_m: f32) -> f32 {
+        libm::expf(-ray_m * (volume.absorption + volume.scattering))
+    }
+
+    #[test]
+    fn a_glow_takes_none_of_the_haze_light_and_keeps_its_own() {
+        let mut volume = air(Handle::default());
+        let glow = Glow::of(Vec3::ZERO, 1.0, 1.0);
+        volume.density_factor = density(&glow, 1.0) / AIR_SCALE;
+        // A ray a millimetre into the box, at its edge, takes none of the camera's ambient.
+        assert!(ambient(&volume, 0.001) < 1.0e-6);
+        // The air's extinction and in-scatter, density times coefficient, are as thin as
+        // before: a fire's halo of under a percent a metre at its middle.
+        let extinction = volume.density_factor * (volume.absorption + volume.scattering);
+        assert!((extinction - DENSITY * (ABSORPTION + SCATTERING)).abs() < 1.0e-7);
+        assert!(volume.density_factor * volume.scattering > 0.0);
     }
 }
