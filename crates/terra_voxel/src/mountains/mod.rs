@@ -21,6 +21,7 @@ use terra_gen::smoothstep;
 use terra_gen::{Noise, Seed, layer_shift};
 
 mod faces;
+mod horns;
 pub use faces::Faces;
 use faces::RIB_FADE;
 
@@ -426,24 +427,33 @@ impl Range {
         (edge(n + shift), front)
     }
 
+    /// How much the ridges raise a point, before gullies, without the horns' buttress ribs
+    /// (`horns::ribbed`): the slope the gullies and the faces follow, so the faces' ledges are
+    /// not stepped by a slope turning across every rib.
+    fn unribbed(&self, point: Vec3) -> f32 {
+        self.ridged_upper_and_foot(point).0
+    }
+
     /// How much the ridges raise a point, before gullies, in metres.
+    #[cfg(test)]
     fn ridged(&self, point: Vec3) -> f32 {
         self.ridged_and_upper(point).0
     }
 
     /// [`Range::ridged`], and how far up into the walls a point is, 0 below them to 1.
+    #[cfg(test)]
     fn ridged_and_upper(&self, point: Vec3) -> (f32, f32) {
-        let (ridged, upper, _) = self.ridged_upper_and_foot(point);
-        (ridged, upper)
+        let (ridged, upper, _, ribs) = self.ridged_upper_and_foot(point);
+        (ridged + ribs, upper)
     }
 
     /// [`Range::ridged_and_upper`], and how far a point lies in the band at and below a wall's
     /// foot that its talus apron covers (`Mountains::aprons_m`), 0 to 1.
-    fn ridged_upper_and_foot(&self, point: Vec3) -> (f32, f32, f32) {
+    fn ridged_upper_and_foot(&self, point: Vec3) -> (f32, f32, f32, f32) {
         let m = &self.mountains;
         let (inside, front) = self.inside_and_front(point);
         if inside <= 0.0 {
-            return (0.0, 0.0, 0.0);
+            return (0.0, 0.0, 0.0, 0.0);
         }
         let ridged = self.ridges(point / m.ridges_m);
         // The range's floor rises gently with how far into it a point is; its ridges stand on
@@ -547,97 +557,12 @@ impl Range {
         } else {
             0.0
         };
-        let horns = if m.horns_m > 0.0 {
+        let (horns, ribs) = if m.horns_m > 0.0 {
             self.horns(point, along, inside)
         } else {
-            0.0
+            (0.0, 0.0)
         };
-        (height - lowered + horns, upper, foot)
-    }
-
-    /// How much the horns raise the ground at a point, or the cirques between them lower it
-    /// (`Mountains::horns_m`), in metres.
-    ///
-    /// A horn is a top three or four cirques have eaten back into from its sides, as the
-    /// Matterhorn's and the Tatras' Mnich and Krywań are: each cirque's headwall a face
-    /// steepest just under the point and easing out to its floor, the faces meeting in sharp
-    /// arêtes. Laid here as a pyramid on the crest, one face for each cirque: the distance out
-    /// along the face's way, less a share of the distance across it squared, so each face is
-    /// a bowl hollowed into the mountain and the arêtes between stand proud of it; a concave
-    /// profile, `(1 - d)^HORN_PROFILE`, down from the point. Sites on a jittered lattice
-    /// `horns_across_m` apart, some left out, only where the ridges already stand near their
-    /// crests, so a horn rises from a crest and never from a valley's side. No permissive
-    /// implementation was found to port (D196): Gaea's, World Machine's and Houdini's are
-    /// closed; this follows the landform as glaciology describes it.
-    fn horns(&self, point: Vec3, along: f32, inside: f32) -> f32 {
-        let m = &self.mountains;
-        let crest = smoothstep(HORNS_FROM.0, HORNS_FROM.1, along) * smoothstep(0.0, 0.25, inside);
-        if crest <= 0.0 {
-            return 0.0;
-        }
-        let kept = if self.kept.is_empty() {
-            1.0
-        } else {
-            self.away_from_kept(point, KEPT_M)
-        };
-        if kept <= 0.0 {
-            return 0.0;
-        }
-        let across = m.horns_across_m;
-        let reach = across * HORN_REACH;
-        let up = point.normalize_or(Vec3::Y);
-        let cell = (point / across).floor().as_ivec3();
-        let mut highest: f32 = 0.0;
-        // How much of a horn stands over the point, 0 between them to 1 at a point.
-        let mut shape: f32 = 0.0;
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                for dz in -1..=1 {
-                    let c = cell + IVec3::new(dx, dy, dz);
-                    let jitter = self.tops.point_in(c.x, c.y, c.z);
-                    let site =
-                        (c.as_vec3() + Vec3::splat(0.5) + (jitter - 0.5) * HORN_JITTER) * across;
-                    let offset = point - site;
-                    // Only sites near the ground: the lattice is laid through space.
-                    if offset.dot(up).abs() > across * 0.5 {
-                        continue;
-                    }
-                    let flat = offset - up * offset.dot(up);
-                    let out = flat.length();
-                    if out >= reach {
-                        continue;
-                    }
-                    let pick = self.faces.point_in(c.x, c.y, c.z);
-                    if pick.x > HORNS_KEPT {
-                        continue;
-                    }
-                    // The cirques' ways round the site, three or four, turned at random.
-                    let site_up = site.normalize_or(Vec3::Y);
-                    let east = site_up.cross(Vec3::Y).normalize_or(Vec3::X);
-                    let north = site_up.cross(east);
-                    let count = if pick.y < 0.5 { 3 } else { 4 };
-                    let turn = pick.z * std::f32::consts::TAU;
-                    let mut d = f32::MIN;
-                    for i in 0..count {
-                        let a = turn + std::f32::consts::TAU * i as f32 / count as f32;
-                        let way = east * libm::cosf(a) + north * libm::sinf(a);
-                        let along_way = flat.dot(way);
-                        let side = (flat - way * along_way).length_squared();
-                        d = d.max(along_way - HORN_BOWL * side / reach);
-                    }
-                    let x = (d / reach).clamp(0.0, 1.0);
-                    let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
-                    let height = m.horns_m * (0.7 + 0.3 * jitter.y);
-                    let standing = libm::powf(1.0 - x, HORN_PROFILE) * fade;
-                    highest = highest.max(height * standing);
-                    shape = shape.max(standing);
-                }
-            }
-        }
-        // The ground the horns leave between them is cut down into cirques, so the massif's
-        // upper slopes are eaten back into bowls under arêtes and cols rather than standing
-        // as a dome the horns sit on (the r6 review).
-        (highest - CIRQUES * m.horns_m * (1.0 - shape)) * crest * kept
+        (height - lowered + horns, upper, foot, ribs)
     }
 
     /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
@@ -709,14 +634,14 @@ impl Range {
     pub fn rise(&self, direction: Vec3, radius_m: f32) -> Rise {
         let up = direction;
         let point = direction * radius_m;
-        let (ridged, upper, foot) = self.ridged_upper_and_foot(point);
+        let (ridged, upper, foot, ribs) = self.ridged_upper_and_foot(point);
         if self.inside(point) <= 0.0 {
             return Rise::default();
         }
         let m = &self.mountains;
         if m.gullies_m <= 0.0 {
             return Rise {
-                height_m: ridged,
+                height_m: ridged + ribs,
                 ..Rise::default()
             };
         }
@@ -726,7 +651,7 @@ impl Range {
         // Centred, so at a summit or in a hollow, where the ground has no way down, it is
         // level and no gully is cut.
         let across = |axis: Vec3| {
-            self.ridged(point + axis * SLOPE_STEP_M) - self.ridged(point - axis * SLOPE_STEP_M)
+            self.unribbed(point + axis * SLOPE_STEP_M) - self.unribbed(point - axis * SLOPE_STEP_M)
         };
         let rise =
             Vec3::new(across(Vec3::X), across(Vec3::Y), across(Vec3::Z)) / (2.0 * SLOPE_STEP_M);
@@ -815,7 +740,7 @@ impl Range {
         }
         let height_m = ridged + carved + piled;
         let step = self.stepped(point, height_m, slope, (upper, rib));
-        let height_m = height_m + step;
+        let height_m = height_m + step + ribs;
         Rise {
             height_m,
             wall: if step != 0.0 {

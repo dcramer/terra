@@ -306,7 +306,7 @@ fn horns_stand_steep_and_pointed_over_the_crests() {
             let point = d * RADIUS;
             with.inside(point) > 0.0
                 && (with.ridges(point / with.mountains.ridges_m) - VALLEY) / (CREST - VALLEY) > 0.9
-                && with.horns(point, 1.0, 1.0) > 0.3 * with.mountains.horns_m
+                && with.horns(point, 1.0, 1.0).0 > 0.3 * with.mountains.horns_m
         })
         .collect();
     let steep_share = |range: &Range| {

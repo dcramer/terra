@@ -155,7 +155,7 @@ fn lying(
     point: Vec3,
     normal: Vec3,
     made_of: MaterialId,
-    bed: &mut dyn FnMut() -> f32,
+    bed: &mut dyn FnMut(Vec3) -> f32,
 ) -> ([f32; 2], [f32; 2]) {
     use terra_land::woods::Footing;
     let up = point.normalize_or(Vec3::Y);
@@ -176,7 +176,7 @@ fn lying(
     // capping every bump of the wall (D395).
     let steep = 1.0 - smoothstep(STEEP_SNOW.0, STEEP_SNOW.1, normal.dot(up));
     let snow = if snow > 0.0 && steep > 0.0 {
-        snow * (1.0 - steep * (1.0 - smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
+        snow * (1.0 - steep * (1.0 - smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point))))
     } else {
         snow
     };
@@ -187,21 +187,34 @@ fn lying(
     // ledges its joints and bedding break the rock into (D426), as the Matterhorn's and the
     // Odle's faces are streaked; without, the walls past 42 degrees were bare and the range
     // held snow on 4 percent of its rock (the r7 review).
-    let snow = if planet.has_mountains()
+    let (snow, couloir) = if planet.has_mountains()
         && matches!(
             made_of,
             material::STONE | material::SCREE | material::GRAVEL
         ) {
         let fed = round.snow_m(point + up * FED_M, up) * FED_SHARE;
         let level = smoothstep(FED_WALL.0, FED_WALL.1, normal.dot(up));
-        snow.max(fed * level.max(smoothstep(SNOW_BED.0, SNOW_BED.1, bed())))
+        let here = smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point));
+        let snow = snow.max(fed * level.max(here));
+        // Avalanches run down the gullies and fill the couloirs they gather into: a couloir
+        // with gully above it all the way up lies deep (D426, round 10), a dimple alone thin.
+        // Only in a gully's own bed: caught wherever gully lay above, the ribs between held it
+        // too, and each horn's upper wall lay in one white cap brighter than the sky (round 11).
+        if fed > COULOIR_FED_M && level < 1.0 && here > 0.0 {
+            let couloir = (1.0 - level) * here * couloir_catch(point, normal, up, bed);
+            (snow.max(couloir * fed), couloir)
+        } else {
+            (snow, 0.0)
+        }
     } else {
-        snow
+        (snow, 0.0)
     };
     let (loose, footing) = match made_of {
         material::SCREE => (1.0, Footing::Loose),
         material::GRAVEL => (2.0, Footing::Loose),
-        material::STONE => (0.0, Footing::Rock),
+        // A wall's couloir, to the ground shader, as rock below none: its avalanche snow
+        // (`couloir_catch`), told from the wall's own fed snow, which lies as deep on its tops.
+        material::STONE => (-couloir, Footing::Rock),
         _ => (0.0, Footing::Soil),
     };
     let footing = if above_water < 0.0 {
@@ -216,6 +229,36 @@ fn lying(
     };
     ([loose, snow], [rock_or_woods, above_water])
 }
+
+/// How far `point` lies in a wall's couloir, 0 to 1: the gullies' beds averaged up the fall line
+/// above it, a flow accumulation along one path, as the snow and the water of the slope above run
+/// down into it. Its avalanche snow lies as deep as the wall's fed snow, no deeper: twice as deep,
+/// the horns' tops lay past the depth the ground shader breaks into rock and couloirs (`ledge_cut`)
+/// and stood in solid white caps under the skyline, brighter than the sky (round 11).
+/// Terrain tools (World Machine's and Gaea's flow maps) accumulate over a heightfield's every
+/// cell (D8); a chunk's vertices see no grid of the range above them, so one path stands in.
+fn couloir_catch(point: Vec3, normal: Vec3, up: Vec3, bed: &mut dyn FnMut(Vec3) -> f32) -> f32 {
+    let uphill = up - normal * normal.dot(up);
+    let level_up = (uphill - up * uphill.dot(up)).normalize_or_zero();
+    if level_up == Vec3::ZERO {
+        return 0.0;
+    }
+    let mut gathered = 0.0;
+    for reach in COULOIR_PATH_M {
+        gathered += bed(point + level_up * reach);
+    }
+    let flow = gathered / COULOIR_PATH_M.len() as f32;
+    smoothstep(COULOIR_FLOW.0, COULOIR_FLOW.1, flow)
+}
+
+/// Where along the level way uphill a couloir's catch is gathered, in metres.
+const COULOIR_PATH_M: [f32; 5] = [0.0, 20.0, 50.0, 110.0, 220.0];
+/// A couloir holds snow from the first of these mean depths into its gullies' beds up the path,
+/// whole from the second.
+const COULOIR_FLOW: (f32, f32) = (0.1, 0.3);
+/// A wall holds a couloir's snow where its fed snow lies at least this deep, in metres: deepened
+/// by more, the tops' snow lay in one white sheet brighter than the sky (round 10).
+const COULOIR_FED_M: f32 = 0.05;
 
 /// How far above a lake a vertex is said to be when no lake is near.
 const DRY_M: f32 = 50.0;
@@ -296,7 +339,7 @@ fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
             .iter()
             .zip(chunk.positions.iter().zip(&chunk.normals))
             .map(|(weights, (&point, &normal))| {
-                let mut bed = || field.field().gully_bed(point, &mut beds);
+                let mut bed = |at: Vec3| field.field().gully_bed(at, &mut beds);
                 lying(planet, point, normal, weights.ids[0], &mut bed)
             })
             .unzip();
