@@ -378,3 +378,37 @@ fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
     }
     assert_eq!(material(&Kit::default()), Material::Log);
 }
+
+#[test]
+fn a_whole_blocks_beds_are_broken_stone_and_its_sides_the_walls_face() {
+    // What stands beside a break is undressed, broken stone (D305); a block that fell from
+    // the wall broke from it along its beds, so they are drawn so too, and its sides keep
+    // the wall's own face (castle film round 4: a tower's blocks a grid of peach slabs).
+    let stone = Kit {
+        id: 2,
+        pattern: Pattern::Masonry,
+        tint: [0.8, 0.7, 0.6],
+        ..Kit::default()
+    };
+    let drawn = surfaces(&stone, Shape::Whole, 1.0);
+    let surface = &drawn.0[&Material::Masonry];
+    let shade_of = |up: bool| -> f32 {
+        let found: Vec<f32> = surface
+            .positions
+            .chunks(3)
+            .zip(surface.colours.chunks(3))
+            .filter(|(triangle, _)| {
+                let normal = (triangle[1] - triangle[0])
+                    .cross(triangle[2] - triangle[0])
+                    .normalize();
+                (up && normal.y > 0.99) || (!up && normal.x.abs() > 0.99)
+            })
+            .map(|(_, colours)| colours[0][0])
+            .collect();
+        assert!(!found.is_empty());
+        found.iter().sum::<f32>() / found.len() as f32
+    };
+    let (bed, side) = (shade_of(true), shade_of(false));
+    assert!((side - 0.8).abs() < 1e-4, "its side {side}");
+    assert!(bed < side * 0.8, "its bed {bed} beside its side {side}");
+}

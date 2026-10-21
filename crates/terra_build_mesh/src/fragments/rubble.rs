@@ -7,16 +7,20 @@
 use super::Fragment;
 use glam::{IVec3, Vec3};
 use std::collections::BTreeMap;
-use terra_build::{CELL_M, Cube};
+use terra_build::kit::Kit;
+use terra_build::{CELL_M, Cube, Kind};
 
 /// How much more room broken masonry takes than it did standing (rubble's bulking, 1.3 to
 /// 1.6), less the share of it that lands again whole and is laid again then.
 const BULKS: f32 = 1.0;
 /// The steepest a heap stands, as a rise a metre: rubble's angle of repose, about 37°.
 pub const REPOSE: f32 = 0.75;
-/// How long a heap lies after it was last laid on, as its big pieces do, and how long it
-/// takes to go, in seconds.
-const LIES_S: f32 = 9.0;
+/// How long a heap lies after it was last laid on, and how long it takes to go, in seconds:
+/// it is drawn (`Rubble::surfaces`), the volume of what fell lying at the foot of what
+/// stands as a mound of its stone, as a collapse's rubble does, long after the pieces on it
+/// have gone. Lying 9 s, as the pieces on it, a keep's top that fell left a heap a fraction
+/// of its volume (castle film round 4).
+const LIES_S: f32 = 120.0;
 const GOES_S: f32 = 2.0;
 /// How high a grain of rubble is, in metres of a cell, and the most cells it rolls over.
 const GRAIN_M: f32 = 0.1;
@@ -29,6 +33,7 @@ struct Cell {
     floor: f32,
     high: f32,
     laid_s: f32,
+    kind: Kind,
 }
 
 /// The rubble of a base's falls, by column of cubes, in the base's own space.
@@ -116,7 +121,13 @@ impl Rubble {
         for dx in 0..side {
             for dz in 0..side {
                 for _ in 0..grains as u32 {
-                    self.roll([x + dx, z + dz], rise / grains, fragment.at.y, under, now);
+                    self.roll(
+                        [x + dx, z + dz],
+                        rise / grains,
+                        (fragment.at.y, fragment.kind),
+                        under,
+                        now,
+                    );
                 }
             }
         }
@@ -130,7 +141,7 @@ impl Rubble {
         &mut self,
         mut at: [i32; 2],
         high: f32,
-        from: f32,
+        (from, kind): (f32, Kind),
         under: &dyn Fn(Vec3) -> f32,
         now: f32,
     ) {
@@ -166,9 +177,97 @@ impl Rubble {
             floor,
             high: 0.0,
             laid_s: now,
+            kind,
         });
         cell.high += high;
         cell.laid_s = now;
+        cell.kind = kind;
+    }
+
+    /// How much is in the heap at `now`, in cubic metres.
+    pub fn volume(&self, now: f32) -> f32 {
+        self.cells
+            .values()
+            .map(|cell| cell.high * Self::left(cell, now))
+            .sum::<f32>()
+            * CELL_M
+            * CELL_M
+    }
+
+    /// How much of a cell is left at `now`, 0 to 1.
+    fn left(cell: &Cell, now: f32) -> f32 {
+        1.0 - ((now - cell.laid_s - LIES_S) / GOES_S).clamp(0.0, 1.0)
+    }
+
+    /// The heap drawn as a mound of broken stone in the material of what was laid on it last
+    /// (`kit_of`), by kind: a height field over its cells, each corner as high as the cells
+    /// round it, ragged by a hash and sloping to the floor at its edges, its texture laid
+    /// on it from above. Shipped destruction turns settled debris into such a static pile
+    /// (Frostbite's and Red Faction's debris settle into rubble meshes) so a collapse's
+    /// volume stays on the ground within the debris budget.
+    pub fn surfaces<'a>(
+        &self,
+        now: f32,
+        kit_of: &dyn Fn(Kind) -> Option<&'a Kit>,
+    ) -> BTreeMap<Kind, crate::mesh::Surfaces> {
+        let mut out: BTreeMap<Kind, crate::mesh::Surfaces> = BTreeMap::new();
+        let top = |at: [i32; 2]| {
+            self.cells.get(&at).and_then(|cell| {
+                let high = cell.high * Self::left(cell, now);
+                (high > 0.02).then_some((cell.floor, high))
+            })
+        };
+        // A corner: the mean top of the cells round it, the floor where there is none.
+        let corner = |x: i32, z: i32, floor: f32| -> Vec3 {
+            let round = [[x - 1, z - 1], [x, z - 1], [x - 1, z], [x, z]].map(top);
+            let (sum, count) = round
+                .iter()
+                .fold((0.0, 0), |(sum, count), cell| match cell {
+                    Some((floor, high)) => (sum + floor + high, count + 1),
+                    None => (sum + floor, count),
+                });
+            let mean = sum / 4.0;
+            let ragged = if count == 4 {
+                (terra_gen::hash::unit3(0x4eab, x as u32, z as u32, 0) - 0.5) * 0.12
+            } else {
+                -0.02
+            };
+            Vec3::new(x as f32 * CELL_M, mean + ragged, z as f32 * CELL_M)
+        };
+        for (at, cell) in &self.cells {
+            let Some((floor, _)) = top(*at) else {
+                continue;
+            };
+            let Some(kit) = kit_of(cell.kind) else {
+                continue;
+            };
+            let material = super::material(kit);
+            let metres = kit
+                .textures
+                .get(&material)
+                .map_or([1.0, 1.0], |texture| texture.metres);
+            let shade = kit.tint.map(|c| c * super::FRAGMENT_SHADE);
+            let [x, z] = *at;
+            let quad = [
+                corner(x, z, floor),
+                corner(x + 1, z, floor),
+                corner(x + 1, z + 1, floor),
+                corner(x, z + 1, floor),
+            ];
+            let surface = out
+                .entry(cell.kind)
+                .or_insert_with(crate::mesh::Surfaces::sharing)
+                .of(material);
+            for triangle in [[quad[0], quad[2], quad[1]], [quad[0], quad[3], quad[2]]] {
+                let normal = (triangle[1] - triangle[0])
+                    .cross(triangle[2] - triangle[0])
+                    .normalize_or(Vec3::Y);
+                let normal = if normal.y < 0.0 { -normal } else { normal };
+                let uvs = triangle.map(|p| [p.x / metres[0], p.z / metres[1]]);
+                surface.textured(triangle, [normal; 3], uvs, shade);
+            }
+        }
+        out
     }
 }
 
@@ -294,6 +393,60 @@ mod tests {
         assert!(
             fell_s.is_some_and(|s| s < drop_s * 1.3),
             "it came down in {fell_s:?} s; a drop from the roof takes {drop_s:.1} s"
+        );
+    }
+
+    #[test]
+    fn a_keeps_top_that_fell_lies_in_its_heap_at_least_most_of_its_volume_and_is_drawn() {
+        // The castle film's keep top, 20 by 8 cubes and 4 courses, falls 6.5 m and breaks
+        // where it lands, its pieces as few as a full budget allows (the game's least
+        // share): what lies in the heap after, drawn, is most of what came down, however
+        // few of the pieces on it are left (castle film round 4: the keep's heap was a
+        // fraction of its top).
+        let fell: Vec<(IVec3, terra_build::Cube)> = (26..30)
+            .flat_map(|y| (0..20).flat_map(move |x| (0..8).map(move |z| IVec3::new(x, y, z))))
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect();
+        let removed = fell.len() as f32 * CELL_M.powi(3);
+        let mut parts = burst(&fell, &|_| false, &chunks, 1.0, 5000);
+        let mut rubble = Rubble::default();
+        let dt = 1.0 / 60.0;
+        for step in 0..360 {
+            let now = step as f32 * dt;
+            let mut born = Vec::new();
+            for part in &mut parts {
+                let floor = |at: Vec3| rubble.top(at, now).unwrap_or(0.0);
+                if part.step(dt, &floor, &|_| false).breaks {
+                    rubble.lay(part, &|_| 0.0, now);
+                    born.extend(part.shatter(chunks(part.kind), 0.3));
+                    part.size = Vec3::ZERO;
+                }
+            }
+            parts.retain(|part| part.size != Vec3::ZERO);
+            parts.extend(born);
+        }
+        // Half a minute on, as the film's last shots see it.
+        let heap = rubble.volume(30.0);
+        assert!(
+            heap >= 0.6 * removed,
+            "the heap holds {heap:.1} m3 of the {removed:.1} m3 that came down"
+        );
+        // Drawn as a mound over its cells, no higher than what fell stood.
+        let kit = terra_build::kit::Kit {
+            pattern: terra_build::kit::Pattern::Masonry,
+            ..Default::default()
+        };
+        let drawn = rubble.surfaces(30.0, &|_| Some(&kit));
+        let points: Vec<Vec3> = drawn
+            .values()
+            .flat_map(|surfaces| surfaces.0.values())
+            .flat_map(|surface| surface.positions.iter().copied())
+            .collect();
+        assert!(points.len() > 6 * 160, "{} corners drawn", points.len());
+        let highest = points.iter().map(|p| p.y).fold(0.0f32, f32::max);
+        assert!(
+            highest > 0.5 && highest < 30.0 * CELL_M,
+            "the mound stands {highest:.1} m"
         );
     }
 

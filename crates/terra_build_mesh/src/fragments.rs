@@ -792,6 +792,23 @@ const PIECE_M: f32 = 0.25;
 /// Whole blocks are the wall's own face moving, and keep its shade: darkened, a wall read as
 /// another stone the moment it broke (the castle film's review, 2026-10-21).
 const FRAGMENT_SHADE: f32 = 0.72;
+/// A whole block's beds, top and bottom, and its broken arrises are where it split from the
+/// courses round it: broken stone, as a standing wall's break is drawn
+/// (`sections::laying::worn_within`), its sides the wall's face. A tower's blocks lit from
+/// above in their face's colour read as a grid of flat peach slabs (castle film round 4).
+fn split_shade(shape: Shape, normal: Vec3, colour: [f32; 3]) -> [f32; 3] {
+    let split =
+        shape == Shape::Whole && (normal.y.abs() > 0.7 || normal.abs().max_element() < 0.95);
+    if split {
+        colour.map(|c| c * BED_SHADE)
+    } else {
+        colour
+    }
+}
+
+/// How dark a whole block's beds and broken edges are drawn beside its face: as a standing
+/// cube beside a break, worn two quarters (`mesh::wear`'s darkening at half lost).
+const BED_SHADE: f32 = 0.72;
 /// How much smaller than its cubes a whole block is drawn, so it never fights the cubes drawn
 /// where they were for the frames before their sections are drawn again; no more, as gaps of
 /// 0.97 read as a lattice of dark seams while the blocks fell together.
@@ -859,6 +876,7 @@ pub fn surfaces(kit: &Kit, shape: Shape, drawn_m: f32) -> Surfaces {
             let triangle = [a, bb, c];
             if !timber {
                 let uvs = triangle.map(|p| crate::mesh::planar(p, normal, metres));
+                let colour = split_shade(shape, normal, colour);
                 surfaces
                     .of(material)
                     .textured(triangle, [normal; 3], uvs, colour);

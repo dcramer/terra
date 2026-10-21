@@ -28,7 +28,9 @@ use terra_build_mesh::fragments::{self, Breaking, Breaks, Fragment, Rubble, Shap
 use terra_world::quality::Quality;
 
 mod dust;
+mod heaps;
 use dust::{billow_at, dust_at, landing, puff};
+use heaps::draw_heaps;
 
 /// The fixed step fragments move by, in seconds, and the most steps a frame.
 const STEP_S: f32 = 1.0 / 60.0;
@@ -154,6 +156,8 @@ struct Shards {
     surges: Vec<(f32, Vec3, Color, Vec3, dust::Billow)>,
     /// Each build's heap of what fell, which what comes down after lands on, and its clock.
     rubble: BTreeMap<Entity, Rubble>,
+    /// Each build's heap as drawn: its entities, when, and how much was in it then.
+    heaps: BTreeMap<Entity, (Vec<Entity>, f32, f32)>,
     clock_s: f32,
     behind: f32,
     /// Whether every kind's meshes have been made, ahead of anything coming down, and drawn
@@ -611,6 +615,14 @@ fn step(
         arrays.as_deref(),
         &mut meshes,
         spawn_budget(*quality),
+    );
+    draw_heaps(
+        &mut commands,
+        &mut shards,
+        &by_root,
+        &look,
+        arrays.as_deref(),
+        &mut meshes,
     );
     // A slow step said, so a trace can tell fragments from the rest of a frame.
     let took = began.elapsed().as_secs_f32() * 1000.0;

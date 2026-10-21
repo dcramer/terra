@@ -16,8 +16,13 @@ pub(super) struct Puff {
     alpha: f32,
     /// Whether it is the puff's first sprite, which fades the material they share.
     owner: bool,
-    /// How far it is turned about the view, so the sprites of a billow are not one stamp.
+    /// How far it is turned about the view, so the sprites of a billow are not one stamp,
+    /// and how fast it turns, so it churns as dust rolls rather than hanging as a stamp.
     roll: f32,
+    spin: f32,
+    /// How fast it comes to rise as it ages, in metres a second: a collapse's cloud is
+    /// warm and stirred, and lifts off the ground after it has rolled out.
+    lift: f32,
 }
 
 /// The billow a chunk raises where it lands, as big as it: none for a piece under
@@ -357,7 +362,9 @@ pub(super) fn billow_at(
     let (Some(image), Some(normals)) = (shards.dust.clone(), shards.dust_normals.clone()) else {
         return false;
     };
-    let alpha = billow.alpha;
+    // Thinner each the more there are, so the cloud is as thick as five were at its core
+    // and soft at its edges.
+    let alpha = billow.alpha * if billow.wide > 3.0 { 0.75 } else { 1.0 };
     let linear = colour.to_linear();
     // Lit, as smoke and dust are in shipped games (Unreal's lit translucency, normal-mapped
     // smoke sprites): the sun lights its sunward side, its far side and what stands in the
@@ -373,7 +380,13 @@ pub(super) fn billow_at(
         ..default()
     });
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
-    for sprite in 0..5u32 {
+    // Many thin layers for a big billow rather than five thick stamps: five sprites as wide
+    // as a surge read as a cotton ball and a flat band (castle film round 4); a dozen of
+    // uneven size, thinner each, overlap into a lumpy cloud with depth, as shipped games
+    // layer their smoke.
+    let sprites = (5.0 + billow.wide * 0.7).min(12.0) as u32;
+    let big = billow.wide > 3.0;
+    for sprite in 0..sprites {
         let r = |salt: u32| {
             let h = terra_gen::hash::prospector32_round(
                 seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77),
@@ -388,12 +401,19 @@ pub(super) fn billow_at(
             Puff {
                 age: 0.0,
                 life: billow.life,
-                wide: billow.wide * (0.6 + 0.6 * r(4)),
+                wide: billow.wide
+                    * if big {
+                        0.4 + 0.65 * r(4)
+                    } else {
+                        0.6 + 0.6 * r(4)
+                    },
                 rise: drift,
                 material: material.clone(),
                 alpha,
                 owner: sprite == 0,
                 roll: r(5) * core::f32::consts::TAU,
+                spin: (r(9) - 0.5) * 0.5,
+                lift: if big { 0.25 + 0.5 * r(10) } else { 0.0 },
             },
             Mesh3d(quad.clone()),
             MeshMaterial3d(material.clone()),
@@ -401,7 +421,8 @@ pub(super) fn billow_at(
             // Spread over the billow in lumps, some higher.
             Transform::from_translation(
                 at + drift * 0.2
-                    + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0 + up * r(8) * 0.3)
+                    + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0
+                        + up * r(8) * if big { 0.9 } else { 0.3 })
                         * billow.spread,
             )
             .with_scale(Vec3::splat(PUFF_M[0] * 0.5)),
@@ -433,8 +454,15 @@ pub(super) fn puff(
         }
         // Out fast as it is thrown up, then slowly.
         let grow = 1.0 - (1.0 - through).powi(3);
+        let before = (puff.age - time.delta_secs()).max(0.0) / puff.life;
+        let grew = grow - (1.0 - (1.0 - before.min(1.0)).powi(3));
         transform.scale = Vec3::splat(PUFF_M[0] * 0.5 + (puff.wide - PUFF_M[0] * 0.5) * grow);
-        transform.translation += puff.rise * time.delta_secs() * (1.0 - through);
+        let up = transform.translation.normalize_or(Vec3::Y);
+        // Its middle rises as it grows, so it billows up off the ground rather than being
+        // cut flat along it, and a big one lifts more as it ages.
+        transform.translation += puff.rise * time.delta_secs() * (1.0 - through)
+            + up * (grew * puff.wide * 0.3 + puff.lift * through * time.delta_secs());
+        puff.roll += puff.spin * time.delta_secs();
         if let Some(eye) = eye {
             let at = transform.translation;
             let up = at.normalize_or(Vec3::Y);
