@@ -50,7 +50,7 @@ const AFTER_FLAMES: &str = "    var post_saturation = color_grading.post_saturat
     color = mix(color, terra_flame_film(graded), flame);
     post_saturation = mix(post_saturation, 1.0, flame);
     // A firelit surface's share, from its mask just under 1 (`LIT_SHARE`): the camera's
-    // curve with its shoulder taken a channel at a time.
+    // curve keeping its hue, every channel scaled by its brightest one's shoulder.
     let lit = select(0.0, clamp((1.0 - in.a) / LIT_SHARE, 0.0, 1.0), in.a > 1.0 - 2.0 * LIT_SHARE);
     color = mix(color, terra_lit_neutral(world), lit * (1.0 - flame));
 }
@@ -154,16 +154,18 @@ fn wgsl() -> String {
 
 const LIT_SHARE: f32 = {lit:?};
 
-// KhronosPbrNeutral (Bevy's `tonemapping_pbr_neutral`) with its shoulder a channel at a time
-// and no desaturation toward white: the same below the shoulder, and a firelit wall's red
-// past it runs out on its own, not mixing in its green and blue.
+// KhronosPbrNeutral (Bevy's `tonemapping_pbr_neutral`) with no desaturation toward white:
+// the same below the shoulder; past it every channel is scaled by the brightest one's
+// shoulder, so a firelit wall keeps its channels' ratio, its hue, however bright (the
+// max-RGB, hue-preserving shoulder, as Frostbite's and Unreal's hue-keeping options).
 fn terra_lit_neutral(color: vec3<f32>) -> vec3<f32> {{
     let start = 0.8 - 0.04;
     let m = min(color.r, min(color.g, color.b));
     let c = color - select(0.04, m - 6.25 * m * m, m < 0.08);
+    let peak = max(c.r, max(c.g, c.b));
     let d = 1.0 - start;
-    let shoulder = vec3(1.0) - d * d / (c + vec3(d - start));
-    return select(c, shoulder, c > vec3(start));
+    let top = 1.0 - d * d / (peak + d - start);
+    return select(c, c * (top / peak), peak > start);
 }}
 
 fn terra_flame_film(color: vec3<f32>) -> vec3<f32> {{
@@ -283,7 +285,8 @@ mod tests {
         }
     }
 
-    /// `terra_lit_neutral`, the camera's curve with its shoulder a channel at a time.
+    /// `terra_lit_neutral`, the camera's curve with every channel scaled by the brightest
+    /// one's shoulder.
     fn lit_neutral(c: Vec3) -> Vec3 {
         let low = c.min_element();
         let offset = if low < 0.08 {
@@ -292,14 +295,65 @@ mod tests {
             0.04
         };
         let o = c - Vec3::splat(offset);
+        let peak = o.max_element();
+        if peak <= 0.76 {
+            return o;
+        }
         let d = 0.24;
-        o.map(|v| {
+        o * ((1.0 - d * d / (peak + d - 0.76)) / peak)
+    }
+
+    /// Neutral's shoulder a channel at a time, the lit share's before the hue was kept.
+    fn per_channel(c: Vec3) -> Vec3 {
+        let low = c.min_element();
+        let offset = if low < 0.08 {
+            low - 6.25 * low * low
+        } else {
+            0.04
+        };
+        let d = 0.24;
+        (c - Vec3::splat(offset)).map(|v| {
             if v > 0.76 {
                 1.0 - d * d / (v + d - 0.76)
             } else {
                 v
             }
         })
+    }
+
+    #[test]
+    fn a_firelit_surface_keeps_its_hue_however_bright() {
+        // The ground by a breath's strike before the tonemapper, from 1.6 to 5 times white
+        // (~/.cache/terra-review/fire/breath/HANDOFF.md, round 10): orange.
+        let strike = Vec3::new(5.19, 1.57, 0.10);
+        for k in [0.3, 0.6, 1.0, 2.0] {
+            let surface = strike * k;
+            let low = surface.min_element();
+            let offset = if low < 0.08 {
+                low - 6.25 * low * low
+            } else {
+                0.04
+            };
+            let o = surface - Vec3::splat(offset);
+            let lit = lit_neutral(surface);
+            // The channels keep their ratio, in linear light, and none passes white.
+            assert!((lit.y / lit.x - o.y / o.x).abs() < 1e-5, "{k}: {lit}");
+            assert!((lit.z / lit.x - o.z / o.x).abs() < 1e-5, "{k}: {lit}");
+            assert!(lit.max_element() <= 1.0, "{k}: {lit}");
+            // On the screen orange, where a channel at a time ran the green out with the red
+            // and the ground read lime-yellow (sRGB 251, 242, 129).
+            let shown = lit.map(srgb);
+            let yellow = per_channel(surface).map(srgb);
+            assert!(
+                hue(shown) < 35.0 && hue(yellow) > 40.0,
+                "{k}: {shown} against {yellow}"
+            );
+        }
+        // Brighter, never darker: the shoulder rises with the light.
+        let steps: Vec<f32> = (1..60)
+            .map(|i| lit_neutral(strike * 0.05 * i as f32).x)
+            .collect();
+        assert!(steps.windows(2).all(|p| p[1] >= p[0]), "{steps:?}");
     }
 
     #[test]
@@ -314,11 +368,12 @@ mod tests {
             let lit = lit_neutral(surface).map(srgb);
             // The camera's mixes white in: its blue past 0.4 of its red.
             assert!(pale.z / pale.x > 0.4, "{what}: {pale}");
-            // Through its shoulder a channel at a time, it stays orange, its green kept, and
-            // as bright.
+            // Through the hue-keeping shoulder it stays orange, as bright, its hue Neutral's
+            // before the mix toward white.
+            let h = hue(lit);
             assert!(
-                lit.z / lit.x < 0.35 && lit.y > pale.y && lit.x >= pale.x - 1.0,
-                "{what}: {lit} against {pale}"
+                lit.z / lit.x < 0.35 && lit.x >= pale.x - 1.0 && (15.0..40.0).contains(&h),
+                "{what}: {lit} hue {h} against {pale}"
             );
         }
         // Under the shoulder, the camera's own curve, so the lit mask's edge never shows.
