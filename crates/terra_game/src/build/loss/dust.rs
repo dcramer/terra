@@ -39,13 +39,16 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
     let flat = along - up * along.dot(up);
     Some(Billow {
         alpha: 1.0,
-        wide: 2.0 + size * 3.5,
+        // A big chunk's is wider than tall at its foot and climbs: as wide as 3.5 times
+        // it, a section landing on the keep's roof raised a 20 m ball (castle film round 6).
+        wide: 2.0 + size * 2.5,
         // A demolition's cloud hangs for many seconds as it settles.
         life: 6.0 + size * 2.0,
         drift: flat.normalize_or_zero() * (ROLLS_OUT + 0.4 * size).min(3.5)
             + up * (0.12 + 0.06 * size),
         stir: 1.0 + 0.3 * size,
         spread: size * 0.8,
+        tall: (size - 1.5).max(0.0) * 2.0,
     })
 }
 
@@ -97,22 +100,32 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
                     drift: way * out_m_s * (0.7 + 0.5 * big) + Vec3::Y * 0.25,
                     stir: 0.8,
                     spread: 1.5 * big,
+                    tall: 0.0,
                 },
             ));
         }
     }
-    // Over the heap, a column rising slowly and spreading, the last to settle.
-    for k in 0..(2 + (4.0 * big) as usize) {
+    // Over the heap, thin columns rising fast from where its sections land, lit, leaning
+    // with the air, the last to settle: one fat column as wide as the heap read as a
+    // cotton ball (castle film round 6), where a demolition's dust goes up in plumes a few
+    // metres across, taller than wide, and the surge rolls out under them.
+    let columns = 3 + (4.0 * big) as usize;
+    for k in 0..columns {
+        let turn = (k as f32 * 2.4 + 0.7) % core::f32::consts::TAU;
+        let off = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn))
+            * half
+            * (0.25 + 0.5 * ((k * 7 % 5) as f32 / 4.0));
         out.push((
-            drop_s * (0.6 + 0.2 * k as f32),
-            Vec3::Y * (1.5 + 2.0 * k as f32),
+            drop_s * (0.5 + 0.15 * k as f32),
+            off + Vec3::Y * 1.5,
             Billow {
-                alpha: 0.85,
-                wide: (6.0 + 8.0 * big) * (1.0 + 0.15 * k as f32),
-                life: 20.0 * (0.8 + 0.3 * big),
-                drift: Vec3::Y * (0.5 + 0.2 * k as f32),
-                stir: 0.6,
-                spread: 2.0 * big,
+                alpha: 0.8,
+                wide: COLUMN_M * (0.8 + 0.6 * big),
+                life: 16.0 * (0.8 + 0.3 * big),
+                drift: off.normalize_or_zero() * 0.3 + Vec3::Y * (1.4 + 0.3 * (k % 3) as f32),
+                stir: 0.4,
+                spread: 0.6,
+                tall: COLUMN_TALL_M * (0.7 + 0.5 * big),
             },
         ));
     }
@@ -345,6 +358,7 @@ pub(super) fn dust_at(
         drift: Vec3::ZERO,
         stir: 1.0,
         spread: 0.0,
+        tall: 0.0,
     };
     billow_at(commands, shards, assets, most, at, colour, up, billow);
 }
@@ -360,6 +374,29 @@ pub(super) struct Billow {
     pub(super) stir: f32,
     /// How far apart its sprites start, in metres.
     pub(super) spread: f32,
+    /// How far up its sprites are stacked, in metres, those higher rising faster, so it
+    /// goes up as a plume taller than wide: 0 for a billow.
+    pub(super) tall: f32,
+}
+
+/// A rising column's sprites' width and how tall it is stacked, in metres.
+const COLUMN_M: f32 = 4.0;
+const COLUMN_TALL_M: f32 = 9.0;
+
+/// How long a billow takes to come to most of its width, in seconds, and what share of it
+/// that is: a surge rolls out a wall's height in a second or two, then grows slowly as it
+/// hangs. Grown by the share of its life alone, a surge lasting 18 s was a tenth of its
+/// width after a second and a fifth after two, so the keep's surge never showed over its
+/// own ground storey (castle film round 6).
+const GROWS_S: f32 = 0.9;
+const GROWS_EARLY: f32 = 0.75;
+
+/// How much of its width a billow has grown to, from 0 to 1, `age` seconds into a `life`.
+pub(super) fn grown(age: f32, life: f32) -> f32 {
+    let through = (age / life.max(0.01)).clamp(0.0, 1.0);
+    let by_life = 1.0 - (1.0 - through).powi(3);
+    let by_time = GROWS_EARLY * (1.0 - libm::expf(-age.max(0.0) / GROWS_S));
+    by_life.max(by_time)
 }
 
 /// A puff of dust billowing at a place, of a colour: five soft sprites facing the view.
@@ -432,9 +469,13 @@ pub(super) fn billow_at(
             );
             ((h >> 8) & 0xFFFF) as f32 / 65535.0
         };
+        // A plume's sprites stacked up it, each the faster rising the higher, so it climbs
+        // and stretches rather than swelling as a ball.
+        let stacked = billow.tall * (sprite as f32 + r(8)) / sprites as f32;
         let drift = billow.drift
             + (Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 2.4 + up * (0.08 + 0.15 * r(3)))
-                * billow.stir;
+                * billow.stir
+            + up * stacked * 0.15;
         commands.spawn((
             Name::new("Dust"),
             Puff {
@@ -462,7 +503,8 @@ pub(super) fn billow_at(
                 at + drift * 0.2
                     + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0
                         + up * r(8) * if big { 0.9 } else { 0.3 })
-                        * billow.spread,
+                        * billow.spread
+                    + up * stacked,
             )
             .with_scale(Vec3::splat(PUFF_M[0] * 0.5)),
         ));
@@ -492,9 +534,8 @@ pub(super) fn puff(
             continue;
         }
         // Out fast as it is thrown up, then slowly.
-        let grow = 1.0 - (1.0 - through).powi(3);
-        let before = (puff.age - time.delta_secs()).max(0.0) / puff.life;
-        let grew = grow - (1.0 - (1.0 - before.min(1.0)).powi(3));
+        let grow = grown(puff.age, puff.life);
+        let grew = grow - grown(puff.age - time.delta_secs(), puff.life);
         transform.scale = Vec3::splat(PUFF_M[0] * 0.5 + (puff.wide - PUFF_M[0] * 0.5) * grow);
         let up = transform.translation.normalize_or(Vec3::Y);
         // Its middle rises as it grows, so it billows up off the ground rather than being

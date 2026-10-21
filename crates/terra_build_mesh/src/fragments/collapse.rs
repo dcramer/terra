@@ -109,10 +109,17 @@ const SECTION_SHARE_UP: f32 = 0.4;
 /// turns a second; how far its foot must drop for it to tip all that way, in metres (the
 /// lowest sections, crushed under the rest, only sink); and the share of sections that go
 /// over inward, into what they stood round, rather than out.
-const TIPS_OVER: f32 = 0.75;
-const TIPS_MOST: f32 = 1.6;
+const TIPS_OVER: f32 = 1.15;
+const TIPS_MOST: f32 = 2.2;
 const TIPS_FROM_M: f32 = 4.0;
-const TIPS_IN: f32 = 0.2;
+const TIPS_IN: f32 = 0.1;
+/// How fast a section going over outward sets off out from what it stood on, in metres a
+/// second: its foot slides off the broken wall under it as its top leans out. Turning about
+/// its middle alone, a keep's sections went into the walls still standing under them and
+/// broke up there, crumbling straight down (castle film round 6, 40 degrees by landing).
+const TIPS_OUT_M_S: f32 = 0.9;
+/// How far out from a fall's middle a section must be, in metres, to set off that fast.
+const TIPS_OUT_WIDE_M: f32 = 4.0;
 
 /// The whole blocks among `hanging` grouped into the sections they come down in: by the face
 /// of the fall they are on (the way out from its middle), cut every few metres along it and
@@ -411,7 +418,18 @@ fn tips(
     let lands_s = libm::sqrtf(2.0 * drop / GRAVITY).max(0.35);
     let over = TIPS_OVER * (0.5 + r(2)) * (drop / TIPS_FROM_M).min(1.0);
     let rate = (over / lands_s).min(TIPS_MOST);
-    (way * (rate * (high - low) * 0.5), Vec3::Y.cross(way) * rate)
+    // The wider the fall the more: a slender tower's sections only lean (its heap stays at
+    // its foot), a keep's walls slide off the storey under them.
+    let wide = (out.length() / TIPS_OUT_WIDE_M).min(1.0);
+    let kick = if way == face {
+        TIPS_OUT_M_S * (drop / TIPS_FROM_M).min(1.0) * wide
+    } else {
+        0.0
+    };
+    (
+        way * (rate * (high - low) * 0.5 + kick),
+        Vec3::Y.cross(way) * rate,
+    )
 }
 
 fn bounds(cubes: &[IVec3]) -> (IVec3, IVec3) {

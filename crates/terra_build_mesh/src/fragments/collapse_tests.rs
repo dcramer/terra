@@ -370,7 +370,7 @@ fn a_tall_shells_upper_walls_come_down_as_a_few_big_sections_that_lean_out_as_th
         sections.len()
     );
     let middle = Vec3::new(4.5, 0.0, 4.5);
-    let (mut high, mut out) = (0, 0);
+    let (mut high, mut out, mut outward) = (0, 0, 0.0f32);
     for members in sections.values() {
         let body = parts[members[0]].body.expect("in a section");
         let low = members
@@ -398,8 +398,33 @@ fn a_tall_shells_upper_walls_come_down_as_a_few_big_sections_that_lean_out_as_th
         );
         if over > 0.0 {
             out += 1;
+            outward += over;
+            // Its middle sets off out over its foot faster than turning alone takes it, so
+            // it slides off the broken wall under it rather than into it.
+            let turning = body.spin.length()
+                * 0.5
+                * (members
+                    .iter()
+                    .map(|&i| parts[i].at.y + parts[i].size.y * 0.5)
+                    .fold(f32::MIN, f32::max)
+                    - members
+                        .iter()
+                        .map(|&i| parts[i].at.y - parts[i].size.y * 0.5)
+                        .fold(f32::MAX, f32::min));
+            assert!(
+                body.velocity.dot(way) > turning + 0.4,
+                "a section from {low} m set off out at {} m/s, turning gives {turning}",
+                body.velocity.dot(way)
+            );
         }
     }
     assert!(high >= 4, "only {high} sections high up");
-    assert!(out * 3 >= high * 2, "only {out} of {high} lean out");
+    assert!(out * 4 >= high * 3, "only {out} of {high} lean out");
+    // Well over by the time they land, as a keep's walls fold out (round 6: 40 degrees read
+    // as crumbling straight down).
+    let mean = outward / out as f32;
+    assert!(
+        mean > 0.9,
+        "the outward sections went over {mean} rad on average"
+    );
 }

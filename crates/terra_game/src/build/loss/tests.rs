@@ -133,8 +133,56 @@ fn a_big_fall_raises_a_surge_rolling_out_every_way_and_hanging_for_many_seconds(
     // And it rises over the heap.
     assert!(
         keep.iter()
-            .any(|(_, from, b)| from.y > 3.0 && b.drift.y > 0.4)
+            .any(|(_, from, b)| from.y + b.tall > 3.0 && b.drift.y > 0.4)
     );
+}
+
+#[test]
+fn a_big_falls_dust_rises_over_its_heap_in_thin_plumes_taller_than_wide() {
+    // One column as wide as the heap read as a cotton ball (castle film round 6): a
+    // demolition's dust goes up in plumes a few metres across, several over the heap.
+    let keep = dust::surge(4888, 9.0, 1.7);
+    let plumes: Vec<_> = keep.iter().filter(|(_, _, b)| b.drift.y > 1.0).collect();
+    assert!(plumes.len() >= 4, "{} plumes", plumes.len());
+    for (_, from, b) in &plumes {
+        assert!(
+            b.tall > 1.3 * b.wide && b.wide < 7.0,
+            "a plume {} m wide stacked {} m",
+            b.wide,
+            b.tall
+        );
+        assert!(
+            from.with_y(0.0).length() < 9.0 * 0.5,
+            "a plume off the heap"
+        );
+    }
+    // Spread over the heap, not one stack.
+    let apart = plumes
+        .iter()
+        .flat_map(|a| plumes.iter().map(move |b| (a.1 - b.1).with_y(0.0).length()))
+        .fold(0.0f32, f32::max);
+    assert!(apart > 2.0, "the plumes stand {apart} m apart at most");
+}
+
+#[test]
+fn a_billow_is_most_of_its_width_within_two_seconds_however_long_it_hangs() {
+    // Grown by the share of its life alone, a surge billow hanging 18 s was a fifth of its
+    // width after 2 s, and the keep's surge never showed over its ground storey (round 6).
+    for life in [1.6, 6.0, 18.0, 25.0] {
+        let early = dust::grown(1.5, life);
+        assert!(
+            early >= 0.5,
+            "{early} of its width 1.5 s into a {life} s billow"
+        );
+        assert!(dust::grown(0.0, life) < 0.05);
+        assert!((dust::grown(life, life) - 1.0).abs() < 1e-4);
+        let mut last = 0.0;
+        for step in 0..=100 {
+            let now = dust::grown(life * step as f32 / 100.0, life);
+            assert!(now >= last, "it shrank at {step}%");
+            last = now;
+        }
+    }
 }
 
 #[test]
