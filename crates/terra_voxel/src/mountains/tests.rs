@@ -231,7 +231,9 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
     let range = Range::new(m, Seed(1));
     let plain = Range::new(Mountains { faces: &[], ..m }, Seed(1));
     let whole = libm::tanf(46.0_f32.to_radians());
+    let height = |p: Vec3| range.rise(p.normalize(), RADIUS).height_m;
     let (mut walks, mut sheer, mut ledges, mut steps) = (0, 0, 0, 0);
+    let (mut crests, mut benches) = (0, 0);
     for d in directions(40_000) {
         let mut point = d * RADIUS;
         let fall = |p: Vec3| {
@@ -247,8 +249,9 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
             continue;
         }
         walks += 1;
-        let mut height = range.rise(point.normalize(), RADIUS).height_m;
+        let mut here = height(point);
         let mut plain_height = plain.rise(point.normalize(), RADIUS).height_m;
+        let mut on_ledge = false;
         for _ in 0..80 {
             let g = fall(point);
             if g.length() < 0.2 {
@@ -256,36 +259,55 @@ fn faces_stand_sheer_over_ledges_that_still_drain() {
             }
             point -= g.normalize();
             point = point.normalize() * RADIUS;
-            let next = range.rise(point.normalize(), RADIUS).height_m;
-            let drop = height - next;
+            let next = height(point);
+            let drop = here - next;
             let plain_next = plain.rise(point.normalize(), RADIUS).height_m;
             let plain_drop = plain_height - plain_next;
             plain_height = plain_next;
-            // Down the fall line the faces never make the ground climb: every ledge drains
+            // Where the walk runs along a crest, an arete whose towers and notches climb and
+            // fall along it by nature, the ground falls away on both sides across the walk,
+            // so water runs off sideways and no climb along it holds a pond. Everywhere else,
+            // down the fall line the faces never make the ground climb: every ledge drains
             // over its edge.
-            assert!(
-                drop > plain_drop.min(0.0) - 0.05,
-                "climbs {} m at {point}, {} without faces",
-                -drop,
-                -plain_drop
-            );
+            let side = point.normalize().cross(g.normalize()) * 3.0;
+            let crest = next - height(point + side) > 0.05 && next - height(point - side) > 0.05;
+            if crest {
+                crests += 1;
+            } else {
+                assert!(
+                    drop > plain_drop.min(0.0) - 0.05,
+                    "climbs {} m at {point}, {} without faces",
+                    -drop,
+                    -plain_drop
+                );
+            }
             steps += 1;
             if drop > libm::tanf(62.0_f32.to_radians()) {
                 sheer += 1;
+                on_ledge = false;
             }
             if drop < libm::tanf(30.0_f32.to_radians()) {
                 ledges += 1;
+                if !on_ledge {
+                    benches += 1;
+                }
+                on_ledge = true;
             }
-            height = next;
+            here = next;
         }
         if walks >= 60 {
             break;
         }
     }
     assert!(walks >= 30, "{walks} walls found");
-    // Both risers past 62 degrees and ledges under 30 down the same walls.
+    // The crests let off are a few of the steps, never the walls themselves.
+    assert!(crests * 10 < steps, "{crests} of {steps} steps on crests");
+    // Both risers past 62 degrees and ledges under 30 down the same walls, the walls broken
+    // into benches under cliff edges, a ledge after a sheer riser about once in 120 m of walk,
+    // as the Tatras' granite walls stand in steps.
     assert!(sheer * 10 > steps, "{sheer} of {steps} steps sheer");
     assert!(ledges * 10 > steps, "{ledges} of {steps} steps ledges");
+    assert!(benches * 150 > steps, "{benches} benches in {steps} steps");
 }
 
 #[test]
@@ -338,4 +360,39 @@ fn horns_stand_steep_and_pointed_over_the_crests() {
         })
         .count();
     assert!(tops > 0, "no horn stands 300 m over its ground");
+}
+
+#[test]
+fn horns_stand_at_unlike_heights() {
+    // Each horn its own, by the horns alone: their points, and the shoulders on their aretes,
+    // stand from a little over half the horns' height to the whole, so a pair reads as a peak
+    // and its lesser neighbour. From seven tenths to the whole (main before round 21), the
+    // tops spread under 0.5 of it and the lake's two horns stood as twin pyramids (r20 review).
+    let range = range();
+    let horn = |d: Vec3| range.horns(d.normalize() * RADIUS, 1.0, 1.0).0;
+    let top = 0.5 * range.mountains.horns_m;
+    let mut heights = Vec::new();
+    for d in directions(400_000).filter(|&d| horn(d) > top) {
+        let here = horn(d);
+        let e = d.any_orthonormal_vector();
+        let f = d.cross(e);
+        let highest = (0..8).all(|i| {
+            let a = i as f32 * std::f32::consts::TAU / 8.0;
+            here > horn(d + (e * libm::cosf(a) + f * libm::sinf(a)) * (300.0 / RADIUS))
+        });
+        if highest {
+            heights.push(here);
+        }
+    }
+    heights.sort_by(f32::total_cmp);
+    let spread = heights.last().unwrap_or(&0.0) - heights.first().unwrap_or(&0.0);
+    assert!(
+        heights.len() > 30,
+        "{} points near the horns' tops",
+        heights.len()
+    );
+    assert!(
+        spread > 0.55 * range.mountains.horns_m,
+        "the horns' tops spread over {spread} m"
+    );
 }

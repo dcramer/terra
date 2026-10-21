@@ -24,11 +24,28 @@ const RIB_SPACING: f32 = 0.12;
 /// height.
 const RIB_DEPTH: f32 = 0.05;
 /// How far apart an arête's towers stand, as a share of the reach.
-const TOWER_SPACING: f32 = 0.09;
+const TOWER_SPACING: f32 = 0.15;
 /// How deep the notches between them are cut, as a share of the reach of face distance.
-const NOTCH_DEPTH: f32 = 0.03;
+const NOTCH_DEPTH: f32 = 0.05;
 /// How close two faces' distances are where an arête's towers stand, as a share of the reach.
 const ARETE: f32 = 0.08;
+/// How far each face's steepness strays from the horn's, either way, and how far its way
+/// turns from even spacing, as a share of the spacing: even, every horn stood as a clean
+/// pyramid and two side by side as twins (the r20 review), where the Matterhorn's east face is
+/// half as long as its north and Krywań leans.
+const FACE_LEAN: f32 = 0.35;
+const FACE_TURN: f32 = 0.35;
+/// How far a horn's height and profile stray: its height from this share of `horns_m` to the
+/// whole, its profile's power by this share of `HORN_PROFILE` either way, so some stand as
+/// needles and some as broad, squat tops.
+const HORN_LEAST: f32 = 0.55;
+const PROFILE_STRAY: f32 = 0.25;
+/// A shoulder peak on one of a horn's arêtes, as Pic Tyndall stands on the Matterhorn's Lion
+/// ridge: how far out along it, how far its own faces reach, both as shares
+/// of the horn's reach, and the least and most it adds, as shares of the horn's height.
+const SHOULDER_OUT: f32 = 0.42;
+const SHOULDER_REACH: f32 = 0.34;
+const SHOULDER_RISE: (f32, f32) = (0.12, 0.32);
 
 /// The face distance `d` with the arête's towers laid in: `second` the next face's distance
 /// at the point (equal to `d` on an arête), `out` how far from the horn's point, level, and
@@ -120,35 +137,67 @@ impl Range {
                     if pick.x > HORNS_KEPT {
                         continue;
                     }
-                    // The cirques' ways round the site, three or four, turned at random.
+                    // The cirques' ways round the site, three or four, turned at random, each
+                    // face its own steepness and its way strayed from even (`FACE_LEAN`).
                     let site_up = site.normalize_or(Vec3::Y);
                     let east = site_up.cross(Vec3::Y).normalize_or(Vec3::X);
                     let north = site_up.cross(east);
                     let count = if pick.y < 0.5 { 3 } else { 4 };
-                    let turn = pick.z * std::f32::consts::TAU;
-                    let (mut d, mut second, mut way_at) = (f32::MIN, f32::MIN, east);
-                    for i in 0..count {
-                        let a = turn + std::f32::consts::TAU * i as f32 / count as f32;
-                        let way = east * libm::cosf(a) + north * libm::sinf(a);
-                        let along_way = flat.dot(way);
-                        let side = (flat - way * along_way).length_squared();
-                        let e = along_way - HORN_BOWL * side / reach;
-                        if e > d {
-                            (second, d, way_at) = (d, e, way);
-                        } else {
-                            second = second.max(e);
+                    let turn = pick.z * TAU;
+                    let leans = |i: i32| self.faces.point_in(c.x + 101 * (i + 1), c.y, c.z);
+                    let way_of = |a: f32| east * libm::cosf(a) + north * libm::sinf(a);
+                    let faces_at = |flat: Vec3, reach: f32, count: i32, turn: f32, salt: i32| {
+                        let (mut d, mut second, mut way_at) = (f32::MIN, f32::MIN, east);
+                        for i in 0..count {
+                            let lean = leans(i + salt);
+                            let a =
+                                turn + TAU * (i as f32 + FACE_TURN * (lean.x - 0.5)) / count as f32;
+                            let way = way_of(a);
+                            let along_way = flat.dot(way);
+                            let side = (flat - way * along_way).length_squared();
+                            let steep = 1.0 + FACE_LEAN * (2.0 * lean.y - 1.0);
+                            let e = (along_way - HORN_BOWL * side / reach) * steep;
+                            if e > d {
+                                (second, d, way_at) = (d, e, way);
+                            } else {
+                                second = second.max(e);
+                            }
                         }
-                    }
+                        (d, second, way_at)
+                    };
+                    let (d, second, way_at) = faces_at(flat, reach, count, turn, 0);
                     let across_face = flat.dot(site_up.cross(way_at));
                     let d = towered(d, second, out, reach, pick.y);
                     let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
-                    let height = m.horns_m * (0.7 + 0.3 * jitter.y);
-                    let stand =
-                        |d: f32| libm::powf(1.0 - (d / reach).clamp(0.0, 1.0), HORN_PROFILE) * fade;
-                    let standing = stand(d);
-                    highest = highest.max(height * standing);
+                    let height = m.horns_m * (HORN_LEAST + (1.0 - HORN_LEAST) * jitter.y);
+                    let profile =
+                        HORN_PROFILE * (1.0 + PROFILE_STRAY * (2.0 * pick.x / HORNS_KEPT - 1.0));
+                    let stand = |d: f32, reach: f32| {
+                        libm::powf(1.0 - (d / reach).clamp(0.0, 1.0), profile) * fade
+                    };
+                    // The shoulder, on the arête after a face chosen by the horn's hash: a small
+                    // horn of its own faces added onto the arête's fall, so the arête rises to it
+                    // and dips to a col behind it.
+                    let shoulder = leans(-1);
+                    let arete =
+                        turn + TAU * ((count as f32 * shoulder.x).floor() + 0.5) / count as f32;
+                    let s_reach = reach * SHOULDER_REACH;
+                    let s_flat = flat - way_of(arete) * (reach * SHOULDER_OUT);
+                    let s_out = s_flat.length();
+                    let s_stand = if s_out < s_reach {
+                        let s_turn = turn + shoulder.y * TAU;
+                        let (s_d, s_second, _) = faces_at(s_flat, s_reach, 3, s_turn, 7);
+                        let s_d = towered(s_d, s_second, s_out, s_reach, shoulder.z);
+                        stand(s_d, s_reach) * (1.0 - smoothstep(0.55, 1.0, s_out / s_reach))
+                    } else {
+                        0.0
+                    };
+                    let rise = SHOULDER_RISE.0 + (SHOULDER_RISE.1 - SHOULDER_RISE.0) * shoulder.z;
+                    let shouldered = height * rise * s_stand;
+                    let standing = (stand(d, reach) + rise * s_stand).min(1.0);
+                    highest = highest.max(height * stand(d, reach) + shouldered);
                     let rib_d = ribbed(d, second, across_face, reach, pick.y);
-                    with_ribs = with_ribs.max(height * stand(rib_d));
+                    with_ribs = with_ribs.max(height * stand(rib_d, reach) + shouldered);
                     shape = shape.max(standing);
                 }
             }
