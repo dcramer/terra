@@ -260,20 +260,9 @@ fn burn(
             smoke.thickness = 0.0;
             continue;
         }
-        let door = life
-            .town
-            .things
-            .iter()
-            .position(|t| t.kind == ThingKind::Door && t.building == Some(hearth.home));
-        let home = door.is_some_and(|door| {
-            life.people.iter().any(|p| {
-                p.home == door
-                    && (p.state == terra_town::State::Inside
-                        || p.at.distance(life.town.things[door].at) < 12.0)
-            })
-        });
+        // A lit home's chimney smokes as its household cooks; any other's hearth is embers.
         let luck = (hearth.home as f32 * 0.618_034) % 1.0;
-        let wanted = if home {
+        let wanted = if windows::lit_home(life, rising.as_deref(), hearth.home) {
             hearth_burns(clock.hour, luck)
         } else {
             0.1
@@ -307,11 +296,12 @@ fn burn(
 /// Each home's firelight lit when the light outside fails and its hearth burns with someone
 /// home, and the torches by doors lit, the nearest the eye only, so the square empties into
 /// lit doorways at dusk. A torch's flame shows at any distance.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn light(
     clock: Res<Clock>,
     sky: Option<Res<super::daylight::SkyPath>>,
     market: Res<Market>,
+    rising: Option<Res<super::rising::Rising>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut fires: Query<(&Firelight, &GlobalTransform, &mut PointLight), Without<DoorTorch>>,
     mut torches: Query<
@@ -322,7 +312,7 @@ fn light(
 ) {
     // From when the sun is ten degrees up in the evening until it is up again, as people
     // light their fires and torches before the light has gone.
-    let dark = sky.map_or(0.0, |sky| {
+    let dark = sky.as_ref().map_or(0.0, |sky| {
         ((10.0 - sky.height(clock.hour)) / 10.0).clamp(0.0, 1.0)
     });
     let eye = camera
@@ -332,22 +322,12 @@ fn light(
     let life = &market.life;
     // Every light that would burn, by how far it is from the eye.
     let mut wanted: Vec<(f32, bool, usize, f32)> = Vec::new();
+    // A home's firelight fades in with its windows' glow, and burns while they are lit.
+    let glow = sky.map_or(0.0, |sky| windows::dusk(sky.height(clock.hour)));
     for (n, (fire, at, _)) in fires.iter().enumerate() {
-        let door = life
-            .town
-            .things
-            .iter()
-            .position(|t| t.kind == ThingKind::Door && t.building == Some(fire.home));
-        let home = door.is_some_and(|door| {
-            life.people.iter().any(|p| {
-                p.home == door
-                    && (p.state == terra_town::State::Inside
-                        || p.at.distance(life.town.things[door].at) < 12.0)
-            })
-        });
         let luck = (fire.home as f32 * 0.618_034) % 1.0;
-        if home && dark > 0.0 {
-            let brightness = FIRELIGHT_LUMENS * dark * (0.7 + 0.6 * luck);
+        if glow > 0.0 && windows::lit_home(life, rising.as_deref(), fire.home) {
+            let brightness = FIRELIGHT_LUMENS * glow * (0.7 + 0.6 * luck);
             wanted.push((at.translation().distance(eye), false, n, brightness));
         }
     }
@@ -915,6 +895,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (burn, light, report).run_if(resource_exists::<Market>),
     );
+    windows::plugin(app);
 }
 
 /// How wide a player is to the town's walkers; and the camera, wider, so they keep out of
@@ -1190,7 +1171,11 @@ fn lay(
         super::settlement::fit_all(&mut built, |hang, size, index| {
             pick(hang, size, index as u32)
         });
-        commands.spawn((Name::new(format!("{label}, as built")), Built(built)));
+        commands.spawn((
+            Name::new(format!("{label}, as built")),
+            Built(built),
+            windows::Home(index),
+        ));
     }
 
     // The things of its day, placed as a player places an item, but the town's.
@@ -1511,6 +1496,7 @@ fn live(
 }
 
 mod vantages;
+mod windows;
 
 #[cfg(test)]
 mod tests;
