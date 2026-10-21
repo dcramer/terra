@@ -131,16 +131,33 @@ const HEARTH_LIGHT_UP: f32 = 0.4;
 /// (lake round 20).
 const HEARTH_TOP: f32 = 0.6;
 const HEARTH_TOP_GAIN: f32 = 3.0;
-/// How high the top light hangs, over its flames' height: at their tips. Hung at 0.8 his face
-/// took less (154 against 185) and the ground more.
-const HEARTH_TOP_UP: f32 = 1.0;
+/// How high the top light hangs, over its flames' height: half as high again as their tips,
+/// over the camp (`HEARTH_TOP_DUSK`). Hung at 0.8 his face took less (154 against 185) and the
+/// ground more; at their tips, keyed up at dusk, his face took nearly twice what it does here
+/// for the same pool 3 m out.
+const HEARTH_TOP_UP: f32 = 1.5;
 /// How far the top light reaches, metres: farther than the key, as a fire's light hung high
 /// lights the camp round it. A light's reach is a window on its fall-off that takes it to
 /// nothing at its range (Bevy's, after Unreal's), and at the key's 6 m the ground 3 to 5 m out,
 /// 4 to 5.5 m from a lake fire's 2 m top, took a half to an eighth of its light: the pool past
-/// 2 m was weak on the ground and the troll's rock (lake round 19's review). At 9 m it takes
-/// 0.9 to 0.75.
-const HEARTH_TOP_RANGE_M: f32 = 9.0;
+/// 2 m was weak on the ground and the troll's rock (lake round 19's review). At 10 m, hung
+/// over the tips, it takes some 0.9 to 0.8.
+const HEARTH_TOP_RANGE_M: f32 = 10.0;
+/// How much wider than its flames the top light is as a disc, and how many times more it is
+/// keyed up against the dusk sky than the pit light (`hearth_by_hour`). Seen against a civil
+/// dusk's sky, both keyed alike, the lake's campfire gave the ground 2 m out a third of the
+/// sky's light and 4 m out a sixteenth: its pool grey past the stones (lake round 20's
+/// review, "about 2x up close in a neutral grey ambient"), where the games' dusk campfires
+/// (RDR2's, The Witcher 3's) light the camp orange a few metres round. A fire's light by
+/// inverse-square alone cannot: what lights the ground 4 m out to the sky's light lights a
+/// face a metre off past the white. So the top light, hung over the flames' tips as a camp's
+/// light is in a film's campfire rig (a soft source over the fire), is wider and keyed up at
+/// dusk alone; the pit light, which lights the stones, keeps the shared key, so they keep
+/// their colour; by night it gives way to the night's stops (lake round 21). Modelled
+/// (`a_campfires_pool_reads_warm_a_few_metres_out_at_dusk`): the ground 3 m out takes half
+/// the sky's light and reads orange, a sitter's face under five times as lit as by the sky.
+const HEARTH_TOP_SPREAD: f32 = 2.0;
+const HEARTH_TOP_DUSK: f32 = 7.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -186,11 +203,19 @@ const HEARTH_DUSK_SKY: f32 = 360.0;
 /// How many times brighter a kept fire's light of so many night stops is at an hour: by the
 /// night's stops (`by_night`), and as the sun goes down (`Sky::twilight`, 0 with the sun six
 /// degrees up, 1 a degree under) at least as much as the sky's light on the shade is over
-/// `HEARTH_DUSK_SKY`, up to the whole night's boost. By day none: sunlit stone round a fire as
-/// bright as by night went salmon (`NIGHT_STOPS`).
-pub(super) fn hearth_by_hour(stops: f32, night: f32, twilight: f32, sky_light: f32) -> f32 {
+/// `HEARTH_DUSK_SKY`, up to the whole night's boost, and that so many times more
+/// (`Lit::dusk_gain`), the gain giving way to the night's own stops as the night comes. By
+/// day none: sunlit stone round a fire as bright as by night went salmon (`NIGHT_STOPS`).
+pub(super) fn hearth_by_hour(
+    stops: f32,
+    dusk_gain: f32,
+    night: f32,
+    twilight: f32,
+    sky_light: f32,
+) -> f32 {
     let full = libm::exp2f(stops);
-    let against_sky = (sky_light / HEARTH_DUSK_SKY).clamp(1.0, full);
+    let gain = 1.0 + (dusk_gain - 1.0) * (1.0 - night.clamp(0.0, 1.0));
+    let against_sky = (sky_light / HEARTH_DUSK_SKY).clamp(1.0, full) * gain;
     let down = twilight.clamp(0.0, 1.0);
     by_night(stops, night).max(1.0 + (against_sky - 1.0) * down * down)
 }
@@ -295,6 +320,9 @@ pub(super) struct Lit {
     /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`,
     /// `BREATH_NIGHT_STOPS`).
     pub night_stops: f32,
+    /// How many times more it is keyed up against the dusk sky than a kept fire's pit light
+    /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, every other's 1.
+    pub dusk_gain: f32,
 }
 
 /// A jet's light, its lumens and colour, as its breath is drawn.
@@ -345,6 +373,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     glow: 1.0 + share,
                     kept: false,
                     night_stops: NIGHT_STOPS,
+                    dusk_gain: 1.0,
                 }
             })
         })
@@ -401,6 +430,7 @@ pub(super) fn strikes(
                     glow,
                     kept: false,
                     night_stops: BREATH_NIGHT_STOPS,
+                    dusk_gain: 1.0,
                 }
             })
         })
@@ -454,6 +484,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     lumens: jet_lumens * glow,
                     color: jet_light,
                     night_stops: jet_stops,
+                    dusk_gain: 1.0,
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
@@ -490,11 +521,14 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             glow,
             kept: true,
             night_stops: HEARTH_NIGHT_STOPS,
+            dusk_gain: 1.0,
         };
         let top = Lit {
             lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
             at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
             range: HEARTH_TOP_RANGE_M,
+            radius: width(blaze) * HEARTH_TOP_SPREAD,
+            dusk_gain: HEARTH_TOP_DUSK,
             ..main.clone()
         };
         [main, top]
@@ -538,6 +572,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 glow,
                 kept: false,
                 night_stops: NIGHT_STOPS,
+                dusk_gain: 1.0,
             }
         })
         .collect();
@@ -768,7 +803,7 @@ pub(super) fn light(
                 // blaze's, so its flame stays the brightest thing by it (D415), and a marched
                 // breath's fewer again.
                 let boost = if lit.kept {
-                    hearth_by_hour(lit.night_stops, night, twilight, sky_light)
+                    hearth_by_hour(lit.night_stops, lit.dusk_gain, night, twilight, sky_light)
                 } else {
                     by_night(lit.night_stops, night)
                 };

@@ -156,6 +156,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         glow: 1.0,
         kept: false,
         night_stops: 2.5,
+        dusk_gain: 1.0,
     }
 }
 
@@ -302,6 +303,83 @@ fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
     lit.lumens / (4.0 * core::f32::consts::PI) * facing / (d2 + lit.radius * lit.radius)
 }
 
+/// How many times a light is keyed up at an hour, as `light` keys it, the sun a degree or more
+/// under (`Sky::twilight` 1).
+fn keyed(lit: &Lit, night: f32, sky: f32) -> f32 {
+    hearth_by_hour(lit.night_stops, lit.dusk_gain, night, 1.0, sky)
+}
+
+/// What a light gives the ground so far out from the fire's foot, as drawn: a disc
+/// (`crate::falloff`) eased out to nothing at its range (bevy_pbr 0.20's `getRangeFalloff`).
+fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
+    let h = lit.at.y - foot.y;
+    let d2 = h * h + out * out;
+    let f = d2 / (lit.range * lit.range);
+    let window = (1.0 - f * f).clamp(0.0, 1.0).powi(2);
+    lit.lumens / (4.0 * core::f32::consts::PI) * h
+        / libm::sqrtf(d2)
+        / (d2 + lit.radius * lit.radius)
+        * window
+}
+
+#[test]
+fn a_campfires_pool_reads_warm_a_few_metres_out_at_dusk() {
+    // The lake's campfire at the lake's civil dusk (the sun 1.6 degrees under at 21:45 on
+    // 07-20: night 0.13, the sky's light on the shade 1,240). Lake round 20's review measured
+    // its pool "about 2x up close in a neutral grey ambient": at one key for both lights the
+    // ground 2 m out took a third of the sky's light and 4 m out a sixteenth. The games' dusk
+    // campfires light the camp orange a few metres round, so the ground 3 m out takes at least
+    // half the sky's light from it and reads orange, 4 m out still warm. The sky's light is
+    // the probe's on a face (`a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm`).
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: foot,
+            tall: 1.95,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.9,
+        }],
+        ..default()
+    };
+    let (night, sky) = (0.13, 1_240.0);
+    let sky_on_ground = 4.56 * core::f32::consts::PI * sky;
+    let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    let fire_colour = Vec3::from_array(HEARTH_LIGHT.to_linear().to_f32_array_no_alpha());
+    let dusk = Vec3::new(0.32, 0.27, 0.42);
+    let share = |out: f32| {
+        (0..100)
+            .map(|i| {
+                let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
+                let lux: f32 = lights
+                    .iter()
+                    .map(|l| on_ground_drawn(l, foot, out) * keyed(l, night, sky))
+                    .sum();
+                lux / sky_on_ground / 100.0
+            })
+            .sum::<f32>()
+    };
+    let warmth = |share: f32| {
+        let c = fire_colour / luma(fire_colour) * share + dusk / luma(dusk);
+        c.x / c.z
+    };
+    let (two, three, four) = (share(2.0), share(3.0), share(4.0));
+    assert!(three >= 0.5, "3 m out: {three:.2} of the sky's light");
+    assert!(
+        warmth(three) > 1.5,
+        "3 m out: red {:.2} times blue",
+        warmth(three)
+    );
+    assert!(
+        warmth(four) > 1.25,
+        "4 m out: red {:.2} times blue",
+        warmth(four)
+    );
+    // A pool, not a tint to the horizon: it falls off past the camp.
+    assert!(two > 1.5 * four, "2 m {two:.2}, 4 m {four:.2}");
+    assert!(share(8.0) < 0.15, "8 m out: {:.2}", share(8.0));
+}
+
 #[test]
 fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
     // The lake's campfire, 1.95 m of flame 0.9 m wide at 0.9 heat, at the lake's dusk (the
@@ -320,7 +398,6 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
         ..default()
     };
     let (night, sky) = (0.311, 1_038.0);
-    let boost = hearth_by_hour(HEARTH_NIGHT_STOPS, night, 1.0, sky);
     // The sky's light on a face in the shade, as the probe measured it: the troll's face lit
     // by the sky alone stood at 76 (linear luma, under the tonemapper's shoulder), and the old
     // rule's lights, which this model puts at 1.64 times pi x the sky's light on his face,
@@ -338,12 +415,21 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
         let mut share = 0.0;
         for i in 0..100 {
             let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
-            let lux: f32 = lights.iter().map(|l| on_face(l, foot, out, high)).sum();
-            share += lux * boost / sky_on_face / 100.0;
+            let lux: f32 = lights
+                .iter()
+                .map(|l| on_face(l, foot, out, high) * keyed(l, night, sky))
+                .sum();
+            share += lux / sky_on_face / 100.0;
         }
         // At least as much from the fire as from the sky: twice as lit as with no fire.
         assert!(
             1.0 + share >= 2.0,
+            "a face {out} m out and {high} m up: {:.2} times the sky's",
+            1.0 + share
+        );
+        // But not driven past the white: no more than some five times as lit.
+        assert!(
+            1.0 + share <= 5.0,
             "a face {out} m out and {high} m up: {:.2} times the sky's",
             1.0 + share
         );
@@ -456,22 +542,31 @@ fn a_kept_fire_is_keyed_up_as_the_sun_goes_down_not_by_day() {
     let stops = HEARTH_NIGHT_STOPS;
     let full = libm::exp2f(stops);
     // Noon: the sun high, the sky bright, no boost.
-    assert_eq!(hearth_by_hour(stops, 0.0, 0.0, 5_000.0), 1.0);
+    assert_eq!(hearth_by_hour(stops, 1.0, 0.0, 0.0, 5_000.0), 1.0);
     // The lake's civil dusk, the sun a degree under and the sky's light on the shade most of
     // the day's: more than half the night's boost, where by the night alone it was a fifth of
     // a stop.
-    let lake = hearth_by_hour(stops, 0.13, 1.0, 1_240.0);
+    let lake = hearth_by_hour(stops, 1.0, 0.13, 1.0, 1_240.0);
     assert!(lake >= full * 0.55, "{lake}");
     assert!(lake > by_night(stops, 0.13) * 2.5, "{lake}");
     // The yard's darker dusk, the sun five degrees under: its night's share, which is more
     // than its sky asks, and so less than the lake's brighter sky asks.
-    let yard = hearth_by_hour(stops, 0.5, 1.0, 830.0);
+    let yard = hearth_by_hour(stops, 1.0, 0.5, 1.0, 830.0);
     assert_eq!(yard, by_night(stops, 0.5));
     assert!(yard < lake, "{yard}");
     // Full night: as by the night's stops, the dark sky asking for less.
-    assert_eq!(hearth_by_hour(stops, 1.0, 1.0, 36.0), full);
+    assert_eq!(hearth_by_hour(stops, 1.0, 1.0, 1.0, 36.0), full);
     // Never past the night's whole boost, however bright the sky with the sun going.
-    assert!(hearth_by_hour(stops, 0.0, 0.6, 20_000.0) <= full);
+    assert!(hearth_by_hour(stops, 1.0, 0.0, 0.6, 20_000.0) <= full);
+    // A top light keyed up more at dusk: so many times the pit light's at the lake's dusk,
+    // none by day, and by full night the night's stops alone, as the pit light's.
+    let top = hearth_by_hour(stops, HEARTH_TOP_DUSK, 0.13, 1.0, 1_240.0);
+    assert!(top > lake * HEARTH_TOP_DUSK * 0.8, "{top} against {lake}");
+    assert_eq!(
+        hearth_by_hour(stops, HEARTH_TOP_DUSK, 0.0, 0.0, 5_000.0),
+        1.0
+    );
+    assert_eq!(hearth_by_hour(stops, HEARTH_TOP_DUSK, 1.0, 1.0, 36.0), full);
 }
 
 /// The stream's own lights of the jets that are on.
