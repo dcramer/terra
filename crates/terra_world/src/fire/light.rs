@@ -55,11 +55,13 @@ const JET_RANGE_M: f32 = 30.0;
 /// orange-yellow (breath r33, r34).
 const JET_LUMENS: f32 = 2.0e6;
 const JET_LIGHT: Color = Color::srgb(1.0, 0.74, 0.32);
-/// A marched breath's light (D430), yellower and dimmer: at the cards' the wall and ground
+/// A marched breath's light (D430), dimmer than the cards': at theirs the wall and ground
 /// round its larger fireball went past Neutral's shoulder at dusk (sRGB 237, 185, 119 head-on)
-/// and read salmon beside it, where the references' firelit walls read orange-yellow.
-const MARCHED_LUMENS: f32 = 1.4e6;
-const MARCHED_LIGHT: Color = Color::srgb(1.0, 0.78, 0.3);
+/// and read salmon beside it. Orange, not yellow: at (1, 0.78, 0.3) and 1.4e6 the grass under
+/// it read a flat yellow-green flood (vol10's review); the film mask (`BREATH_LIT`) keeps the
+/// orange from going salmon past the shoulder now.
+const MARCHED_LUMENS: f32 = 0.6e6;
+const MARCHED_LIGHT: Color = Color::srgb(1.0, 0.58, 0.22);
 const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// A campfire's light: wood flame's orange, warmer than a blaze's, as the games white-balance
 /// firelight (about 2,300 K, Mitchell Charity's table: 2,200 K #ff932c, 2,500 K #ffa148), its
@@ -142,7 +144,7 @@ const SWAY_M: [f32; 2] = [0.005, 0.4];
 /// as bright by day as by night, sunlit stone round it went salmon. A kept fire (a hearth's
 /// or torch's) has its own (`HEARTH_NIGHT_STOPS`), with a wider disc.
 const NIGHT_STOPS: f32 = 2.5;
-/// A marched breath's lights (D430), its stream's and its strike's, brighter by night by
+/// A marched breath's strike light (D430; its stream's take none, `lit`), brighter by night by
 /// fewer: at a blaze's 2.5 the ground and the wall's foot under its stream clipped to pale
 /// cream by night (sRGB 247, 215, 151; vol7's L), where by dusk they took orange.
 pub(super) const BREATH_NIGHT_STOPS: f32 = 1.0;
@@ -317,10 +319,12 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
 /// patch of weak orange and the ground none (vol5's review), where the references' walls and
 /// ground glow orange metres round the hit. It stands out from the face, so it spreads wide
 /// and even rather than burning one patch past the tonemapper's shoulder, orange rather than
-/// yellow, and grows in with the fireball over the 0.6 s after the stream strikes.
-const STRIKE_LUMENS: f32 = 2.0e6;
-const STRIKE_LIGHT: Color = Color::srgb(1.0, 0.52, 0.16);
-const STRIKE_OUT_M: f32 = 3.0;
+/// yellow, and grows in with the fireball over the 0.6 s after the stream strikes. Brighter
+/// and nearer the face than at first (2e6, 3 m out), it is the pool the ground's light falls
+/// off from, the stream's lights taking no night stop (vol10's review: a flat flood).
+const STRIKE_LUMENS: f32 = 3.2e6;
+const STRIKE_LIGHT: Color = Color::srgb(1.0, 0.5, 0.16);
+const STRIKE_OUT_M: f32 = 1.8;
 const STRIKE_GROW_S: f32 = 0.6;
 
 /// Each marched jet's fireball light while it burns: `jets` each one's state as `Drawn` keeps
@@ -366,9 +370,12 @@ pub(super) fn strikes(
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
 pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
     let (jet_lumens, jet_light) = jet_light(tier);
+    // Marched, its stream's lights take no night stop, only its strike's: hung metres over the
+    // ground, they lit it as one flat flood past the shoulder (vol10's review), where the
+    // references' ground glows round the hit and falls off away from it (`strikes`).
     let jet_stops = match tier {
         super::BreathTier::Cards => NIGHT_STOPS,
-        super::BreathTier::Marched => BREATH_NIGHT_STOPS,
+        super::BreathTier::Marched => 0.0,
     };
     // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
     // heaviest blaze's number.

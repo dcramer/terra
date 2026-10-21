@@ -123,13 +123,14 @@ mod tests {
     }
 
     #[test]
-    fn a_marched_breath_lights_its_wall_yellower_and_dimmer_than_its_cards() {
+    fn a_marched_breath_lights_its_ground_oranger_and_dimmer_than_its_cards() {
         let (cards, cards_colour) = super::super::light::jet_light(BreathTier::Cards);
         let (marched, colour) = super::super::light::jet_light(BreathTier::Marched);
         assert!(marched < cards);
         let (a, b) = (cards_colour.to_srgba(), colour.to_srgba());
-        // Its green nearer its red, and no more blue for it: orange-yellow, not pinker.
-        assert!(b.green / b.red > a.green / a.red);
+        // Its green further from its red, and no more blue for it: orange, not the yellow-green
+        // flood the grass took under a yellower light (vol10's review), nor pinker.
+        assert!(b.green / b.red < a.green / a.red);
         assert!(b.blue / b.red <= a.blue / a.red);
     }
 

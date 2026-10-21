@@ -629,8 +629,9 @@ fn ball_radius(b: Breath) -> f32 {
 // Its middle stands most of its radius back from where the stream strikes, rolled up off it:
 // centred near the wall, half of it was behind the stone, and rays ended on the wall after
 // a sliver of its thin edge, so the windows showed through it (castle film r12).
+// Once off, its smoke drifts back off the face as it rises.
 fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
-    return vec3(0.0, 0.0, b.reach - 0.85 * rb) + b.up * (rb * 0.45 + SMOKE_RISE * b.since_off);
+    return vec3(0.0, 0.0, b.reach - BALL_BACK * rb - SMOKE_BACK * b.since_off) + b.up * (rb * 0.45 + SMOKE_RISE * b.since_off);
 }
 
 // The smoke left once off: held thick this long, gone by then (seconds), rising at so many
@@ -639,11 +640,21 @@ const SMOKE_HOLD: f32 = 0.8;
 const SMOKE_GONE: f32 = 5.5;
 const SMOKE_RISE: f32 = 0.7;
 const SMOKE_SPREAD: f32 = 0.7;
+const SMOKE_BACK: f32 = 0.3;
+// How far its middle stands back from the face, a share of its radius, and how flat it is along
+// the stream while the stream feeds it: round and 0.85 of its radius back, the ball swallowed
+// the jet's last half and the breath read as a fireball at the mouth (vol10's review); flatter
+// at 0.6 with its middle nearer, the jet beside it read as a hard cone (vol11's b).
+const BALL_BACK: f32 = 0.68;
+const BALL_FLAT: f32 = 0.8;
+fn ball_scale(b: Breath) -> vec3<f32> {
+    return vec3(1.0, 1.0, mix(1.0 / BALL_FLAT, 1.0, saturate(b.since_off / 1.5)));
+}
 // The stream's gas at its skin, a share of its core's; how much hotter the ball is along the
 // stream's line into it (the ramp's heat), and how much thinner its gas there.
 const JET_SKIN_DENSITY: f32 = 0.45;
 const JET_INTO_BALL: f32 = 0.5;
-const JET_CHANNEL: f32 = 0.6;
+const JET_CHANNEL: f32 = 0.8;
 
 // What is left of a breath to draw: its stream's gas, or the smoke after it.
 fn breath_left(b: Breath) -> f32 {
@@ -662,14 +673,14 @@ fn breath_left(b: Breath) -> f32 {
 fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     let rb = ball_radius(b) * (0.45 + 0.55 * b.ball) * (1.0 + SMOKE_SPREAD * saturate(b.since_off / SMOKE_GONE));
     let mid = ball_middle(b, rb);
-    let rel = l - mid;
+    let rel = (l - mid) * ball_scale(b);
     let zc = clamp(l.z, 0.0, b.reach);
     let r = stream_radius(zc, b);
     let rho = length(l.xy);
     let slope = 1.0 + b.spread * 1.7;
     let empty = min(
         max((rho - 1.8 * r) / slope, max(-l.z - 0.3, l.z - b.reach - 0.3)),
-        select(1.0e5, length(rel) - rb * 1.6, b.ball > 0.01),
+        select(1.0e5, (length(rel) - rb * 1.6) * BALL_FLAT, b.ball > 0.01),
     );
     if empty > 0.0 {
         return vec4(0.0, 0.0, 0.0, empty);
@@ -703,7 +714,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     // White-hot on its line to half its reach, as the top-scored breath frames' jets are (Elden
     // Ring's; research/2026-10-22-fire-review-calibration.md): cooling from the jaw on, only a
     // metre of the rope read white-hot (vol9's three-quarter).
-    let core = mix(1.0, 0.8, smoothstep(0.45, 1.0, zf));
+    let core = mix(1.0, 0.8, smoothstep(0.6, 1.0, zf));
     // Near the jaw it is hot through to its skin, a yellow-white jet a flamethrower's is for
     // its first metres; cooled at its skin from the start, it read mid-orange from the mouth
     // on (vol3's review). The strands come in as it opens.
@@ -735,6 +746,10 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         ball = (1.0 - smoothstep(0.75, 0.95, d - 0.15 * saturate(dot(rel, b.up) / rb) + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6)) * b.ball;
         // The smoke thins as it spreads, wispier at its edge than in its middle.
         ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
+        // And it breaks into billows with gaps between and frays at its edge as it ages: whole,
+        // it hung as one flat grey sheet (vol10's review).
+        let billow = smoothstep(0.3, 0.62, lumps + 0.45 * (nb - 0.5) + 0.3 * (1.0 - d));
+        ball *= mix(1.0, billow, saturate(b.since_off / 1.2));
         // Seen down the stream, the ball rolls out from where it strikes in rings of vortices,
         // each a bright roll with a darker, sootier lick in the crease behind it, hottest in
         // the middle where the stream feeds it: a ball of even lumps read head-on as one flat
@@ -757,7 +772,10 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         hot_b += JET_INTO_BALL * (1.0 - smoothstep(0.1, 0.5, rho / rb)) * smoothstep(-0.2, 0.3, dot(rel, b.up) / rb + 0.6);
         // Once off it burns out from the outside in over a second, to soot.
         hot_b -= 1.1 * saturate(b.since_off / 1.0);
-        soot_b = smoothstep(-0.15, 0.5, high + 0.5 * (lumps - 0.5)) * smoothstep(0.3, 0.8, d + 0.3 * (nb - 0.5));
+        // Its soot by how far out it is unflattened: by the flattened distance, the ball's face
+        // toward the jaw was all soot, a flat black lump over the flame (vol11's b).
+        let dt = length(l - mid) / rb;
+        soot_b = smoothstep(-0.15, 0.5, high + 0.5 * (lumps - 0.5)) * smoothstep(0.3, 0.8, dt + 0.3 * (nb - 0.5));
         soot_b = max(soot_b, 0.9 * (1.0 - smoothstep(0.22, 0.45, rings)) * smoothstep(0.15, 0.55, rp));
         // Thinner along the stream's line on the jaw's side of its middle, so the jet's core is
         // seen running into it: whole there, its billows swallowed the jet's last metres.
@@ -768,10 +786,13 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     // Nothing behind the face it strikes: the ball flattens on it as on a wall. Let through
     // behind it, the ball's far half showed over the wall's top and not below it, a level
     // seam along the top.
+    // Once off, its smoke rises over the face, the cut gone within a second: cut, three seconds
+    // on it stood with a hard straight edge along the face's plane over the wall's top (vol10's
+    // review); behind the wall itself the depth hides it.
     if b.face > 0.0 {
         let keep = smoothstep(-0.1, 0.35, plane);
         stream *= keep;
-        ball *= keep;
+        ball *= mix(keep, 1.0, saturate(b.since_off / 1.0));
     }
     let dense = stream + ball;
     if dense < 1.0e-3 {
@@ -950,6 +971,7 @@ fn breath(in: VertexOutput) -> vec4<f32> {
     // The sun through the gas is found at every other sooty step and held between: it
     // changes over metres, the steps a fraction of one.
     var shaded = 1.0;
+    var skied = 1.0;
     var shade_due = true;
     let jitter = fract(52.9829189 * fract(dot(in.position.xy, vec2(0.06711056, 0.00583715)) + time * 7.13));
     var s = near;
@@ -994,11 +1016,17 @@ fn breath(in: VertexOutput) -> vec4<f32> {
             if gas.z > 0.1 && through > 0.03 && sun.g > 0.0 {
                 if shade_due {
                     shaded = sun_through(l, to_sun, b, time);
+                    // Once off, the sky's light is shadowed by the smoke above as the sun's is,
+                    // so its billows are lit on top and dark beneath: unshadowed, the smoke
+                    // after the stop read as one flat grey sheet (vol10's review).
+                    if b.since_off > 0.0 {
+                        skied = 0.2 + 0.8 * sun_through(l, b.up, b, time);
+                    }
                 }
                 shade_due = !shade_due;
                 // The sky's fill is the sky's grey-blue, not the sun's colour: lit by a dusk
                 // sun's red, the smoke after the stop read brick red (vol5's review).
-                lit += through * a * gas.z * (sun * shaded + dot(sun, vec3(0.2126, 0.7152, 0.0722)) * SOOT_SKY * vec3(0.85, 0.93, 1.0));
+                lit += through * a * gas.z * (sun * shaded + dot(sun, vec3(0.2126, 0.7152, 0.0722)) * SOOT_SKY * skied * vec3(0.85, 0.93, 1.0));
             }
             share += through * a * (1.0 - gas.z);
             glow += through * a * (1.0 - gas.z) * dot(flame, vec3(0.2126, 0.7152, 0.0722));

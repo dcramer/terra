@@ -618,3 +618,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-20**: D426 amended (by the agent, mountains round 12): far snow kept on shoulders, cols and ledges, walls to 55 degrees, fed from 1750 m; great blocks; more concave horns. Snow 7% to 16%.
 - **2026-10-20**: D426 amended (by the agent, mountains round 13): aerial perspective on far ground, shaded snow blue-grey, rock casting shadow in its beds and joints, fed from 1900 m. Snow 16% to 28%, far under sky 0.111.
 - **2026-10-20**: D430 amended (by the agent, breath volume round 8): sparks off the fireball, a white-hot jet core to half its reach, and a marched breath's lights 1 night stop (blind A/B 5.7 against 5.2).
+- **2026-10-20**: D430 amended (by the agent, breath volume round 9): the smoke after the stop uncut by the face's plane, billowing and sky-shadowed; the fireball nearer the face; the breath's ground light an orange pool round the hit (blind A/B 5.4 against 4.85).
