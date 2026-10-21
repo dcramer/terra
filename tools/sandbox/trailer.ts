@@ -35,6 +35,7 @@ import { ROOT } from "./client.ts";
 import { place } from "./places.ts";
 import { bars, joined, lay, type Piece, smoothed } from "./timeline.ts";
 import { Script } from "./qa/script.ts";
+import { withProgress } from "./progress.ts";
 import { pathToFileURL } from "node:url";
 
 type Shot = {
@@ -267,7 +268,7 @@ function meetingsSeen(log: string, shot: Shot, from: number): string[] {
   });
 }
 
-function renderShot(name: string, n: number) {
+async function renderShot(name: string, n: number) {
   const shot = shots.get(name) as Shot;
   const file = join(shotsDir, `${name}.json`);
   const clip = clipOf(name);
@@ -310,12 +311,13 @@ function renderShot(name: string, n: number) {
   console.log(`trailer: ${n}/${names.length} ${name}: ${shot.about}`);
   // Shots share the GPU with other runs (D319), so one may find no room for a heavy place;
   // it waits a minute and tries again rather than failing the trailer.
-  const attempt = () => (roomOnTheGpu(), spawnSync(sandbox, options, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 256 * 1024 * 1024 }));
-  let run = attempt();
+  const env = { ...process.env, BEVY_ASSET_ROOT: ROOT };
+  const attempt = () => (roomOnTheGpu(), withProgress(sandbox, options, { dir, name, frames: stills ? 3 : frames, cwd: ROOT, env }));
+  let run = await attempt();
   for (let tries = 1; tries < 6 && /Out ?Of ?Memory/i.test(`${run.stdout}${run.stderr}`); tries++) {
     console.log(`trailer: ${name}: the GPU had no room (out of memory); trying again in a minute`);
     spawnSync("sleep", ["60"]);
-    run = attempt();
+    run = await attempt();
   }
   writeFileSync(join(work, `${name}.log`), `${sandbox} ${options.join(" ")}\n\n${run.stdout}${run.stderr}`);
   if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
@@ -398,7 +400,7 @@ function sheet(rows: { name: string; pictures: { file: string; at?: number }[] }
   rmSync(thumbs, { recursive: true, force: true });
 }
 
-for (const [i, name] of names.entries()) renderShot(name, i + 1);
+for (const [i, name] of names.entries()) await renderShot(name, i + 1);
 
 if (stills) {
   const rows = names
