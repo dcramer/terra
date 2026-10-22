@@ -3,10 +3,7 @@
 //! playing its walk, run or rest. A kind with no model yet is kept by the town's life but
 //! not drawn.
 
-use super::creatures::Tame;
-use super::tick::{Sim, Smoothed};
-use super::town::{Live, Market};
-use crate::planet::Planet;
+use crate::town::{Live, Market};
 use bevy::{
     platform::collections::HashMap,
     prelude::*,
@@ -14,7 +11,10 @@ use bevy::{
 };
 use serde::Deserialize;
 use std::time::Duration;
+use terra_creatures::creatures::Tame;
 use terra_town::animals::Doing;
+use terra_world::planet::Planet;
+use terra_world::tick::{Sim, Smoothed};
 
 const LOOKS: &str = "townsfolk.ron";
 const BLEND: Duration = Duration::from_millis(250);
@@ -239,7 +239,7 @@ fn place(
     planet: Res<Planet>,
     market: Res<Market>,
     mut beasts: Query<(&Beast, &mut Transform, &mut Visibility)>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
 ) {
     for (beast, mut at, mut shown) in &mut beasts {
         let Some(animal) = market.animals.animals.get(beast.index) else {
@@ -249,7 +249,7 @@ fn place(
         // time-lapse without its people (D381).
         let wanted = if rising
             .as_ref()
-            .is_some_and(|r| !r.shows(false, super::rising::owner(&market.life.town, animal.at)))
+            .is_some_and(|r| !r.shows(false, crate::rising::owner(&market.life.town, animal.at)))
         {
             Visibility::Hidden
         } else {
@@ -272,7 +272,7 @@ fn animate(
     market: Res<Market>,
     beasts: Query<&Beast>,
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
 ) {
     for (mut plays, mut player, mut transitions) in &mut players {
         let Ok(beast) = beasts.get(plays.beast) else {

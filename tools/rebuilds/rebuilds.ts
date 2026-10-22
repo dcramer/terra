@@ -27,6 +27,7 @@ export const PROBES: Record<string, string> = {
   walker: "crates/terra_walker/src/movement.rs",
   survival: "crates/terra_survival/src/crafting.rs",
   creatures: "crates/terra_creatures/src/creatures.rs",
+  folk: "crates/terra_folk/src/town.rs",
 };
 
 type Unit = { name: string; target: string; mode: string; duration: number };

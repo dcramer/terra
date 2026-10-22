@@ -104,7 +104,7 @@ fn a_time_lapse_without_people_keeps_the_wild_animals_away_and_one_with_them_doe
             })
             .unwrap();
         assert!(world.contains_resource::<Rising>());
-        let withheld = world.contains_resource::<crate::play::wildlife::Withheld>();
+        let withheld = world.contains_resource::<terra_creatures::wildlife::Withheld>();
         assert_eq!(withheld, !wild, "wild animals about: {wild}");
     }
 }

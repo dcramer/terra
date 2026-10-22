@@ -4,17 +4,17 @@
 //! And what its people do that is heard, as noises (D113): the smith's hammer on the anvil,
 //! an axe at a chopping block.
 
-use super::crafting::Stations;
-use super::inventory::Cut;
-use super::noise::{Cue, Noise};
-use super::town::Market;
-use crate::planet::MainCamera;
+use crate::town::Market;
 use bevy::prelude::*;
+use terra_survival::crafting::Stations;
+use terra_survival::inventory::Cut;
+use terra_survival::noise::{Cue, Noise};
 use terra_town::Shows;
 use terra_world::audio::{
     self, Bus, Fade, Mix, Voice,
     synth::{Sound, Synth},
 };
+use terra_world::planet::MainCamera;
 
 /// How loud the murmur is among a full crowd, and how many make one.
 const MURMUR: f32 = 0.35;
@@ -111,7 +111,7 @@ fn follow(
 /// beat of their own.
 fn work(
     time: Res<Time>,
-    planet: Res<crate::planet::Planet>,
+    planet: Res<terra_world::planet::Planet>,
     market: Res<Market>,
     stations: Res<Stations>,
     camera: Query<&GlobalTransform, With<MainCamera>>,

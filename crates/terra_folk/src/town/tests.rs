@@ -195,7 +195,7 @@ fn the_settlements_pinned_site_still_lays_its_walled_town() {
         arrive: true,
         lived_in: true,
     };
-    let (lapse, _) = super::super::rising::Timelapse::read("settlement.ron").unwrap();
+    let (lapse, _) = crate::rising::Timelapse::read("settlement.ron").unwrap();
     let size = lapse.town.expect("the settlement's size").size();
     assert!(size.walled);
     let kinds = Kinds {

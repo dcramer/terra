@@ -9,9 +9,9 @@
 //! flicker a little as firelight does, and fade in as the sun goes down.
 
 use super::Market;
-use crate::build::Built;
-use crate::play::rising::{Rises, Rising};
+use crate::rising::{Rises, Rising};
 use bevy::{light::NotShadowCaster, prelude::*};
+use terra_bases::Built;
 use terra_build::kit::Kits;
 use terra_build::{Base, Prop};
 use terra_build_layout::fitting::{self, Hang};

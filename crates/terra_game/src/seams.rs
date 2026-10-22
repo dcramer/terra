@@ -3,9 +3,9 @@
 //! it is to move to (research/2026-10-18-crate-layout.md, "On Bevy"), and a module naming
 //! one in a crate above its own, or beside it (building play beside creatures and
 //! townsfolk), fails: step 7 cut every crossing, so none may come back. A new module is
-//! placed here; a crate step 8 has made leaves the map, Cargo holding its line, but for one
-//! building play stands beside (`terra_creatures`), placed by its name until building play is
-//! a crate too.
+//! placed here; a crate step 8 has made leaves the map, Cargo holding its line, but for the two
+//! building play stands beside (`terra_creatures`, `terra_folk`), placed by their names until
+//! building play is a crate too.
 //! Tests and test-only items may name anything. The check reads the sources; it builds
 //! nothing.
 
@@ -64,19 +64,8 @@ const PLACES: &[(&str, Crate)] = {
         // Creatures and fighting, now `terra_creatures`: building play, still here, stands beside
         // it, so a path into it is placed by the crate's name.
         ("terra_creatures", Creatures),
-        // Townsfolk.
-        ("play/people", Folk),
-        ("play/pooling", Folk),
-        ("play/rising", Folk),
-        ("play/scaffold", Folk),
-        ("play/settlement", Folk),
-        ("play/stall_goods", Folk),
-        ("play/town", Folk),
-        ("play/town_animals", Folk),
-        ("play/town_fences", Folk),
-        ("play/town_gardens", Folk),
-        ("play/town_sound", Folk),
-        ("play/townsfolk", Folk),
+        // Townsfolk, now `terra_folk`: building play stands beside it too.
+        ("terra_folk", Folk),
         // Building play.
         ("build/act", Building),
         ("build/building", Building),
@@ -630,6 +619,7 @@ fn a_name_brought_in_is_followed() {
         to("terra_creatures::creatures::Creature"),
         Some("terra_creatures".into())
     );
+    assert_eq!(to("terra_folk::town::Market"), Some("terra_folk".into()));
     // A module brought in by name, then named through it.
     assert_eq!(to("walker::Stance"), Some("play/walker".into()));
 }

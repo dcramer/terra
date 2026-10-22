@@ -126,7 +126,7 @@ export const PLACES: Record<string, Place> = {
     about:
       "the market town (docs/demos.md §3): where the land's rules made room for one on the 30 km world, pinned (--site town@2.22,2.12), a valley floor at the foot of the range, the forest past its fields, on market morning with its people and animals",
     args: ["--experiment", "play", "--experiment", "town", "--radius", "30000", "--site", "town@2.22,2.12", "--mute"],
-    // The views the town logs as `Town vantage` (`play::town`), in the start's terms: the start
+    // The views the town logs as `Town vantage` (`terra_folk::town`), in the start's terms: the start
     // stands 330 m beside the town, out by its fields.
     views: [
       ["street", "61.00,0.93,-340.08,33.80,0.94,-350.67"],

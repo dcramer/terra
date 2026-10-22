@@ -390,17 +390,17 @@ const EVERY: u32 = 6;
 
 /// Puts up, raises and strikes each rising building's scaffold as its walls go up.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn scaffold(
+pub fn scaffold(
     mut commands: Commands,
-    rising: Res<super::rising::Rising>,
+    rising: Res<crate::rising::Rising>,
     looks: Option<Res<ScaffoldLooks>>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut builds: Query<(
         Entity,
-        &crate::build::Built,
-        &super::rising::Rises,
+        &terra_bases::Built,
+        &crate::rising::Rises,
         Option<&mut Scaffolded>,
     )>,
     mut frame: Local<u32>,

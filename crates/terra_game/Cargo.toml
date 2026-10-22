@@ -30,6 +30,8 @@ terra_climate.workspace = true
 terra_core.workspace = true
 # Creatures and fighting (D407), re-exported at their old paths.
 terra_creatures.workspace = true
+# Townsfolk (D407), re-exported at their old paths.
+terra_folk.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
 # What a player carries, makes and needs (D407), re-exported at its old paths.
@@ -42,11 +44,9 @@ terra_walker.workspace = true
 terra_world.workspace = true
 
 [dev-dependencies]
-terra_land.workspace = true
-# The test world and player, and taking a player's clothes off.
+# The test world.
 terra_survival = { workspace = true, features = ["testing"] }
-# The model files' contents, for the tests of the data naming their joints and sockets.
-terra_walker = { workspace = true, features = ["testing"] }
+# Measuring the game's sounds and music.
 terra_world = { workspace = true, features = ["testing"] }
 
 [lints]

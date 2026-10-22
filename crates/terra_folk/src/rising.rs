@@ -11,24 +11,24 @@
 //! makes any settlement's time-lapse, a bench of building as it happens or a film; the camera
 //! is a shot's (`--cine`), as any film's is.
 
-use super::catalogue::Builds;
-use super::daylight::{Clock, Ticking};
-use super::flora::{ClearAround, MowAround};
-use super::props::{self, Models, Theirs};
-use super::town::{DoorTorch, Firelight, ForgeFire, Hearth, Market, Wear};
-use super::town_fences::TownFence;
-use crate::build::{Built, PlanGhost, Site};
-use crate::planet::Planet;
-use crate::shell::{Options, ScriptFrame};
-use crate::start::Start;
+use crate::town::{DoorTorch, Firelight, ForgeFire, Hearth, Market, Wear};
+use crate::town_fences::TownFence;
 use bevy::prelude::*;
 use serde::Deserialize;
 use std::path::Path;
+use terra_bases::{Built, PlanGhost, Site};
 use terra_build::Base;
 use terra_build::construct;
 use terra_build::ops::{Context, Op};
 use terra_build_layout::fitting::Hang;
+use terra_survival::catalogue::Builds;
+use terra_survival::props::{self, Models, Theirs};
 use terra_town::town::ThingKind;
+use terra_world::daylight::{Clock, Ticking};
+use terra_world::flora::{ClearAround, MowAround};
+use terra_world::planet::Planet;
+use terra_world::shell::{Options, ScriptFrame};
+use terra_world::start::Start;
 
 /// What a time-lapse does when, as its file says.
 #[derive(Deserialize, Clone, Debug)]
@@ -409,7 +409,7 @@ pub fn plugin(app: &mut App) {
             (
                 prepare,
                 build,
-                super::scaffold::scaffold,
+                crate::scaffold::scaffold,
                 reveal,
                 hide_ghosts,
                 wear,
@@ -417,7 +417,7 @@ pub fn plugin(app: &mut App) {
                 report,
             )
                 .chain()
-                .after(super::town::Laid)
+                .after(crate::town::Laid)
                 .run_if(resource_exists::<Market>),
         )
             .run_if(resource_exists::<Rising>),
@@ -428,7 +428,7 @@ pub fn plugin(app: &mut App) {
 /// (wildlife's `Withheld`), as it shows the buildings alone.
 fn start(commands: &mut Commands, rising: Rising) {
     if !rising.wildlife() {
-        commands.insert_resource(super::wildlife::Withheld);
+        commands.insert_resource(terra_creatures::wildlife::Withheld);
     }
     commands.insert_resource(rising);
 }
@@ -719,7 +719,7 @@ fn build(
         if construct::finished(&built.base) {
             // Its doors hung, mostly shut, and its shutters, mostly open.
             let fittings = catalogue.fittings();
-            super::settlement::fit_all(&mut built.0, |hang, size, at| {
+            crate::settlement::fit_all(&mut built.0, |hang, size, at| {
                 let kinds: Vec<_> = fittings
                     .iter()
                     .filter(|fitting| fitting.hang == hang && fitting.fits(size.0, size.1))

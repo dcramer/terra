@@ -3,12 +3,12 @@
 //! placed as the town's catalogue items are, a counter's on the stall's counter top (its
 //! model's `counter` socket), the rest on the ground beside it.
 
-use super::catalogue::Builds;
-use super::props::{self, Models, Theirs};
-use crate::build::Site;
-use crate::planet::Planet;
 use bevy::prelude::*;
+use terra_bases::Site;
+use terra_survival::catalogue::Builds;
+use terra_survival::props::{self, Models, Theirs};
 use terra_town::town::{Market, ThingKind, Town};
+use terra_world::planet::Planet;
 
 /// The catalogue item a stall is drawn as, whose counter goods are laid on.
 const STALL: &str = "MarketStall";

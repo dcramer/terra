@@ -7,29 +7,29 @@
 //! settles at a forge in your claim and works it (D90); villagers go about their day
 //! and say what is going on when you speak to them (D92), from `settlement`.
 
-use super::Player;
-use super::bodies::Body;
-use super::catalogue::Rest;
-use super::claim::Claim;
-use super::crafting::{Stations, Worker};
-use super::creatures::Creature;
-use super::interact::{CanInteract, Interactable, Interacted};
-use super::props::{Models, Prop};
-use super::tick::{Sim, Smoothed};
-use super::told::Told;
-use super::vitals::Effort;
-use super::warmth::BodyHeat;
-use crate::loading::Loading;
-use crate::planet::Planet;
-use crate::start::Start;
-use crate::{appearance, character};
 use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
 };
 use std::time::Duration;
+use terra_creatures::creatures::Creature;
+use terra_survival::catalogue::Rest;
+use terra_survival::claim::Claim;
+use terra_survival::crafting::{Stations, Worker};
+use terra_survival::interact::{CanInteract, Interactable, Interacted};
+use terra_survival::props::{Models, Prop};
+use terra_survival::told::Told;
+use terra_survival::vitals::Effort;
+use terra_survival::warmth::BodyHeat;
+use terra_walker::Player;
+use terra_walker::bodies::Body;
+use terra_walker::{appearance, character};
 use terra_world::climate::ClimateSample;
+use terra_world::loading::Loading;
+use terra_world::planet::Planet;
+use terra_world::start::Start;
+use terra_world::tick::{Sim, Smoothed};
 
 const BLEND: Duration = Duration::from_millis(220);
 /// How close the spiders may be while a prisoner is freed.
@@ -217,7 +217,7 @@ fn prepared(
     graphs: &mut Assets<AnimationGraph>,
 ) -> (Handle<WorldAsset>, Handle<AnimationGraph>, Clips) {
     let clip = |name: &str| gltf.named_animations[name].clone();
-    let paces = crate::pace::paces(gltf, gltf_nodes);
+    let paces = terra_walker::pace::paces(gltf, gltf_nodes);
     let pace = |name: &str| paces.get(name).copied().unwrap_or(0.0);
     let (graph, nodes) = AnimationGraph::from_clips([
         clip("Idle_Loop"),
@@ -351,7 +351,7 @@ fn free(
     mut commands: Commands,
     mut interacted: MessageReader<Interacted>,
     creatures: Query<(&Creature, &Transform)>,
-    bestiary: Res<super::species::Bestiary>,
+    bestiary: Res<terra_creatures::species::Bestiary>,
     mut people: Query<(&mut Person, &mut Worker, &Transform), Without<Creature>>,
     mut told: MessageWriter<Told>,
 ) {
@@ -598,7 +598,7 @@ fn animate(
             && dt > 0.0
             && let Some(playing) = player.animation_mut(wanted)
         {
-            playing.set_speed(crate::pace::rate(step / dt, pace, place.scale().y));
+            playing.set_speed(terra_walker::pace::rate(step / dt, pace, place.scale().y));
         }
         if animates.playing == Some(wanted) {
             continue;
@@ -610,9 +610,11 @@ fn animate(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{figure, kinds, pooling, settlement};
     use super::*;
-    use crate::model_files;
+    use crate::{pooling, settlement};
+    use terra_survival::kinds;
+    use terra_walker::figure;
+    use terra_walker::model_files;
 
     #[test]
     fn everyone_stood_in_the_world_names_a_template_items_and_colours_there_are() {

@@ -20,6 +20,7 @@ terra_climate = { path = "crates/terra_climate" }
 terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }
 terra_creatures = { path = "crates/terra_creatures" }
+terra_folk = { path = "crates/terra_folk" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_land = { path = "crates/terra_land" }

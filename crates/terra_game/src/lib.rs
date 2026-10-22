@@ -17,8 +17,6 @@ pub mod play;
 mod seams;
 
 // The walker layer (D198), its own crate since D407, at its old paths.
-#[cfg(test)]
-pub(crate) use terra_walker::model_files;
 pub use terra_walker::{appearance, character, lift, pace, skinning, swing};
 // What a player carries, makes and needs, its own crate since D407, at its old path.
 pub use terra_survival::icons;

@@ -755,7 +755,7 @@ mod tests {
             assert!(template.height > 0.0, "{name}");
         }
         // That the templates the game asks for by name are here is checked where they are
-        // named (`play::people`).
+        // named (`terra_folk::people`).
     }
 
     #[test]

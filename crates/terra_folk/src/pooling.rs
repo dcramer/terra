@@ -6,13 +6,13 @@
 //! Nothing marks it on a map or a compass: you see the glow, or someone tells you where
 //! to look (D92).
 
-use super::creatures::{Creature, Form, Lair};
-use super::flora::ClearAround;
-use super::interact::Interactable;
-use super::people::{Arrive, Doing, Dyed};
-use super::species::Bestiary;
-use super::tick::Sim;
+use crate::people::{Arrive, Doing, Dyed};
 use bevy::{light::NotShadowCaster, prelude::*};
+use terra_creatures::creatures::{Creature, Form, Lair};
+use terra_creatures::species::Bestiary;
+use terra_survival::interact::Interactable;
+use terra_world::flora::ClearAround;
+use terra_world::tick::Sim;
 
 /// How many spiders the place keeps, and how often it forms another below that.
 const KEEPS: usize = 3;
@@ -21,8 +21,8 @@ const MOTES: usize = 60;
 const GLOW: Color = Color::srgb(0.66, 0.36, 1.0);
 const GLOW_LUMENS: f32 = 4_000_000.0;
 /// The template the smith bound here is shaped as, and what he wears.
-pub(super) const SMITH_TEMPLATE: &str = "strong";
-pub(super) const SMITH_WEARS: &[Dyed] = &[Dyed(
+pub const SMITH_TEMPLATE: &str = "strong";
+pub const SMITH_WEARS: &[Dyed] = &[Dyed(
     "leather_coat",
     Some(("Leather", Color::srgb(0.45, 0.32, 0.22))),
 )];

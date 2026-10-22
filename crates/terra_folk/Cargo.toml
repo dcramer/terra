@@ -1,0 +1,41 @@
+[package]
+name = "terra_folk"
+description = "Townsfolk, in Bevy (D407): people and the townsfolk's bodies, a market town and the settlement on screen, its animals, fences, stalls and gardens, the town's murmur, houses rising with their scaffolds, and pooling the people's figures."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bevy.workspace = true
+libm.workspace = true
+# The time-lapses, the townsfolk's looks and the town's animals, read from their data files.
+ron.workspace = true
+serde.workspace = true
+# The base on screen: a house is a base, built and drawn as a player's is.
+terra_bases.workspace = true
+terra_build.workspace = true
+# A prop's hang on a wall, as the houses' furniture is fitted (`fit_all`).
+terra_build_layout.workspace = true
+terra_core.workspace = true
+# Creatures (D407): a town's animals are tame creatures, and its lairs and perches wildlife's.
+terra_creatures.workspace = true
+terra_gen.workspace = true
+# What a player carries, makes and needs (D407): props, stations, the claim, what a player is told.
+terra_survival.workspace = true
+# Settlements: a town laid out and its people's days (D324).
+terra_town.workspace = true
+# The walker layer (D198, D407): the player, bodies, the character's look and pace.
+terra_walker.workspace = true
+terra_world.workspace = true
+
+[dev-dependencies]
+# The land round a town, for the test that no house stands in a lake.
+terra_land.workspace = true
+# The model files' contents, for the tests of the townsfolk's data.
+terra_walker = { workspace = true, features = ["testing"] }
+# Measuring the town's murmur.
+terra_world = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

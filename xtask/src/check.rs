@@ -29,9 +29,10 @@ pub(crate) const TASKS: &[Task] = &[Task {
 
 /// The only crates allowed to depend on Bevy (D28): the applications, the world on screen
 /// that the game stands on (D198), and the crates cut from the game (D407).
-const BEVY_CRATES: [&str; 7] = [
+const BEVY_CRATES: [&str; 8] = [
     "terra_bases",
     "terra_creatures",
+    "terra_folk",
     "terra_game",
     "terra_sandbox",
     "terra_survival",

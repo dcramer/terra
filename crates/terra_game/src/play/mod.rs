@@ -18,48 +18,38 @@ pub use footprint::Footprint;
 mod map;
 pub mod music;
 mod noises;
-mod people;
-mod pooling;
 mod probe;
 pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
     looks as prop_looks,
 };
-pub(crate) mod rising;
 mod save;
-mod scaffold;
 pub(crate) use shake::Shake;
-pub(crate) mod settlement;
 mod sounds;
 mod soundscape;
-mod stall_goods;
 mod tool;
-pub mod town;
-mod town_animals;
-mod town_fences;
-mod town_gardens;
-mod town_sound;
-mod townsfolk;
 
 // Creatures and fighting, their own crate since D407, by their old names here.
 use terra_creatures::{
     archery, coats, combat, creatures, fliers, hits, melee, sighted, species, staged, wildlife,
     zones,
 };
+// Townsfolk, their own crate since D407, by their old names here.
+pub use terra_folk::town;
+use terra_folk::{people, pooling, town_animals, town_sound, townsfolk};
+pub(crate) use terra_folk::{rising, settlement};
 // What a player carries, makes and needs, its own crate since D407, by its old names here.
 use super::build::{self, DrivenByPlayer, Site};
+#[cfg(test)]
+use terra_survival::test_world;
 use terra_survival::{
     bag, crafting, death, dig, gains, harvest, noise, pile, registries, skills, station_screen,
     storage_screen, tiles, torchlight, vitals, warmth, wear, work, worn,
 };
 pub(crate) use terra_survival::{catalogue, claim, hazards, held, interact, props, storage, told};
 pub use terra_survival::{contract, inventory};
-#[cfg(test)]
-use terra_survival::{kinds, test_world};
 // The walker layer (D198), its own crate since D407, by its old names here.
 pub(crate) use terra_walker::bodies;
-#[cfg(test)]
-use terra_walker::figure;
 use terra_walker::{button, camera, controls, intent, options, shake, walker};
 // The world layer's modules, by their old names here, for the modules above them.
 use crate::shell::Options;

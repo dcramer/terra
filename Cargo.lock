@@ -6124,6 +6124,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_folk"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "libm",
+ "ron",
+ "serde",
+ "terra_bases",
+ "terra_build",
+ "terra_build_layout",
+ "terra_core",
+ "terra_creatures",
+ "terra_gen",
+ "terra_land",
+ "terra_survival",
+ "terra_town",
+ "terra_walker",
+ "terra_world",
+]
+
+[[package]]
 name = "terra_game"
 version = "0.1.0"
 dependencies = [
@@ -6142,9 +6163,9 @@ dependencies = [
  "terra_climate",
  "terra_core",
  "terra_creatures",
+ "terra_folk",
  "terra_gen",
  "terra_items",
- "terra_land",
  "terra_survival",
  "terra_town",
  "terra_voxel",

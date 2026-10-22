@@ -1,4 +1,4 @@
-// How a town's people look, by role (play::townsfolk, docs/demos.md): the bodies a role is
+// How a town's people look, by role (terra_folk::townsfolk, docs/demos.md): the bodies a role is
 // shaped as (templates of models/character/templates.json, each mixed with a little of
 // another), and what it wears, each item's main material dyed one of a few colours. Someone's
 // look is drawn from these by their seed, so a role reads at a glance by what it wears and

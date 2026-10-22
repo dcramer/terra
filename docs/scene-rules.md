@@ -87,11 +87,11 @@ A shot's payoff, the pose a film ends on, is keyed from behind the camera: its s
 
 ### Ground patterns: filtered to the texel they land in
 
-A pattern on the ground finer than the floor's texel (a garden's rows, 1.1 m apart, under the 2 m texel of a camera 50 m up) is painted as its mean over the texel, never as the stripe the texel's middle fell on, which aliased into torn mud blotches (settlement r14). The cover source integrates its own patterns (`CoverSource::growing_over`, the box-filtered pulse train of Apodaca and Gritz), as a mip prefilters a texture. Gardens are framed by paths trodden paler than their beds, so a plot reads as a plot from any height. Tested in `play::town_gardens`.
+A pattern on the ground finer than the floor's texel (a garden's rows, 1.1 m apart, under the 2 m texel of a camera 50 m up) is painted as its mean over the texel, never as the stripe the texel's middle fell on, which aliased into torn mud blotches (settlement r14). The cover source integrates its own patterns (`CoverSource::growing_over`, the box-filtered pulse train of Apodaca and Gritz), as a mip prefilters a texture. Gardens are framed by paths trodden paler than their beds, so a plot reads as a plot from any height. Tested in `terra_folk::town_gardens`.
 
 ### Nothing of the game's in a film
 
-A film shows the world's things, not the game's: no claim stone, plan outline, marker or ghost unless a player stands in the shot. A town rising by itself sets its claim unseen (`play::rising`), and demo and film places leave out the combat lair (D421).
+A film shows the world's things, not the game's: no claim stone, plan outline, marker or ghost unless a player stands in the shot. A town rising by itself sets its claim unseen (`terra_folk::rising`), and demo and film places leave out the combat lair (D421).
 
 ### Render runs: fresh, within budget, bounded
 

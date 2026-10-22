@@ -7,23 +7,23 @@
 //! Places in the town are metres east and south of its square's middle, as the layout gives
 //! them, on the ground under them.
 
-use super::Footprint;
-use super::catalogue::Builds;
-use super::daylight::{Clock, DAY_SECONDS};
-use super::flora::ClearAround;
-use super::props::{self, Models, Theirs};
-use super::tick::Sim;
-use crate::build::{self, Build, BuildLook, Built, Site};
-use crate::planet::{MainCamera, Planet};
-use crate::start::Start;
 use bevy::prelude::*;
+use terra_bases::{self as build, Build, BuildLook, Built, Site};
 use terra_build::{Base, CELL_M};
 use terra_build_layout::fitting::Hang;
 use terra_gen::smoothstep;
+use terra_survival::catalogue::Builds;
+use terra_survival::props::{self, Models, Theirs};
 use terra_town::town::{Size, ThingKind};
 use terra_town::{Animals, Life, Plan};
+use terra_world::daylight::{Clock, DAY_SECONDS};
+use terra_world::flora::ClearAround;
+use terra_world::footprint::Footprint;
 use terra_world::lod::Viewpoint;
+use terra_world::planet::{MainCamera, Planet};
 use terra_world::smoke::{Burning, Smoke};
+use terra_world::start::Start;
+use terra_world::tick::Sim;
 
 /// The demo's town (terra_sandbox's `town` experiment): its seed, chosen for a long square
 /// with a side street up the slope.
@@ -251,7 +251,7 @@ fn burn(
     market: Res<Market>,
     mut hearths: Query<(&Hearth, &mut Smoke), Without<ForgeFire>>,
     mut forges: Query<(&ForgeFire, &mut Smoke), Without<Hearth>>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
 ) {
     let life = &market.life;
     for (hearth, mut smoke) in &mut hearths {
@@ -299,9 +299,9 @@ fn burn(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn light(
     clock: Res<Clock>,
-    sky: Option<Res<super::daylight::SkyPath>>,
+    sky: Option<Res<terra_world::daylight::SkyPath>>,
     market: Res<Market>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut fires: Query<(&Firelight, &GlobalTransform, &mut PointLight), Without<DoorTorch>>,
     mut torches: Query<
@@ -454,7 +454,7 @@ struct TownCover {
     streets: Vec<(Vec<Vec2>, f32)>,
     yards: Vec<[Vec2; 4]>,
     /// Its gardens within its wall, those laid out so far.
-    gardens: super::town_gardens::GardenGround,
+    gardens: crate::town_gardens::GardenGround,
     /// The ground of each building going up in a settlement rising (D381).
     plots: Vec<[Vec2; 4]>,
     doors: Vec<Vec2>,
@@ -821,7 +821,7 @@ impl Wear {
                 .filter(|(_, b)| up(**b))
                 .map(|(yard, _)| *yard)
                 .collect(),
-            gardens: super::town_gardens::GardenGround::new(&self.gardens, &up),
+            gardens: crate::town_gardens::GardenGround::new(&self.gardens, &up),
             plots: self
                 .plots
                 .iter()
@@ -924,7 +924,7 @@ fn ways_bounds(town: &terra_town::town::Town) -> (Vec2, Vec2) {
 /// Where a town wanted is laid and how (D381): its square's middle on the planet, on the most
 /// level ground near where it is wanted; the start's east there; and the town `terra_town`
 /// lays from its seed on the ground round that middle, in the town's own terms.
-pub(crate) fn laid_out(
+pub fn laid_out(
     planet: &Planet,
     start: &Start,
     wanted: &Wanted,
@@ -966,20 +966,20 @@ fn lay(
     clock: Res<Clock>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut clear: MessageWriter<ClearAround>,
-    mut warp: ResMut<super::WarpTo>,
+    mut warp: ResMut<terra_walker::WarpTo>,
     cover: Option<Res<terra_world::cover::CoverRules>>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     (mut obstacles, rising, mut perches): (
-        Option<ResMut<super::flora::Obstacles>>,
-        Option<Res<super::rising::Rising>>,
-        Option<ResMut<super::wildlife::Perches>>,
+        Option<ResMut<terra_world::flora::Obstacles>>,
+        Option<Res<crate::rising::Rising>>,
+        Option<ResMut<terra_creatures::wildlife::Perches>>,
     ),
 ) {
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
-    let Some(palette) = look.kits.as_deref().and_then(build::village_kinds) else {
+    let Some(palette) = look.kits.as_deref().and_then(terra_survival::village_kinds) else {
         warn!("Town: the town needs the settlement's kits.");
         return;
     };
@@ -1129,7 +1129,7 @@ fn lay(
             commands.spawn((
                 Name::new(format!("{label}, rising")),
                 Built(built),
-                super::rising::Rises {
+                crate::rising::Rises {
                     index,
                     whole,
                     planned: false,
@@ -1168,7 +1168,7 @@ fn lay(
             };
             Some((fitting.kind, open))
         };
-        super::settlement::fit_all(&mut built, |hang, size, index| {
+        crate::settlement::fit_all(&mut built, |hang, size, index| {
             pick(hang, size, index as u32)
         });
         commands.spawn((
@@ -1248,7 +1248,7 @@ fn lay(
             libm::atan2f(front.x, front.z).to_degrees(),
         )
     };
-    placed += super::stall_goods::lay(
+    placed += crate::stall_goods::lay(
         &mut commands,
         &models,
         &builds,
@@ -1272,7 +1272,8 @@ fn lay(
         }),
     );
     let torch = assets.load(
-        bevy::gltf::GltfAssetLabel::Scene(0).from_asset(crate::character::held_look("torch")),
+        bevy::gltf::GltfAssetLabel::Scene(0)
+            .from_asset(terra_walker::character::held_look("torch")),
     );
     for (index, thing) in town.things.iter().enumerate() {
         if thing.kind != ThingKind::Door || !thing.building.is_some_and(|b| town.homes.contains(&b))
@@ -1316,7 +1317,7 @@ fn lay(
             ));
     }
     // Its yards' fences, a module at a time, each solid.
-    let fences = super::town_fences::lay(
+    let fences = crate::town_fences::lay(
         &mut commands,
         &models,
         &builds,
@@ -1349,7 +1350,7 @@ fn lay(
                 .map(|s| (s.points.clone(), s.wide))
                 .collect(),
             yards: town.yards.iter().map(|(_, quad)| *quad).collect(),
-            gardens: super::town_gardens::GardenGround::new(&town.gardens, |_| true),
+            gardens: crate::town_gardens::GardenGround::new(&town.gardens, |_| true),
             plots: Vec::new(),
             doors: town
                 .things
@@ -1454,12 +1455,12 @@ fn lived_hours(now: f64, seen: f64, lived: f64, step: f32) -> f64 {
 fn live(
     time: Res<Time>,
     clock: Res<Clock>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
     mut market: ResMut<Market>,
     viewers: Query<&GlobalTransform, Or<(With<Viewpoint>, With<MainCamera>)>>,
     visitors: Query<
         (&GlobalTransform, Has<MainCamera>),
-        Or<(With<super::Player>, With<MainCamera>)>,
+        Or<(With<terra_walker::Player>, With<MainCamera>)>,
     >,
 ) {
     let viewers: Vec<Vec2> = viewers

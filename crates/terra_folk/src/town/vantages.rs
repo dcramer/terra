@@ -3,14 +3,14 @@
 //! terms `--vantage`, `--at`, `--face` and `--route` take, so a scripted run can find it.
 
 use super::start_terms;
-use crate::start::Start;
 use bevy::prelude::*;
 use terra_town::town::{ThingKind, Town};
+use terra_world::start::Start;
 
 /// Prints the town's vantages, arrival, route and square, `at` putting a place in the town on
 /// the ground; returns where to stand to walk in and the point to face, as `--at` and `--face`
 /// take them, when the town has a street to walk in by.
-pub(super) fn announce(
+pub fn announce(
     town: &Town,
     start: &Start,
     at: &impl Fn(Vec2) -> Vec3,

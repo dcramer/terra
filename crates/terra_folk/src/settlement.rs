@@ -11,25 +11,25 @@
 //! of every building and a margin round it, and off the street. The people go about their
 //! day where they stand.
 
-use super::Footprint;
-use super::catalogue::Builds;
-use super::claim::Village;
-use super::creatures::Lair;
-use super::daylight::{Clock, SkyPath};
-use super::flora::ClearAround;
-use super::interact::{Interactable, Interacted};
-use super::people::{Arrive, Doing, Dyed, Person};
-use super::props::{self, Models, Theirs};
-use super::tick::Sim;
-use super::told::Told;
-use crate::build::{self, Build, BuildLook, Built, Site};
-use crate::planet::Planet;
-use crate::start::Start;
+use crate::people::{Arrive, Doing, Dyed, Person};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
+use terra_bases::{self as build, Build, BuildLook, Built, Site};
 use terra_build::ops::{Context, Op};
 use terra_build::{Base, CELL_M, Prop, PropKind, Rules};
 use terra_build_layout::fitting::Hang;
+use terra_creatures::creatures::Lair;
+use terra_survival::catalogue::Builds;
+use terra_survival::claim::Village;
+use terra_survival::interact::{Interactable, Interacted};
+use terra_survival::props::{self, Models, Theirs};
+use terra_survival::told::Told;
+use terra_world::daylight::{Clock, SkyPath};
+use terra_world::flora::ClearAround;
+use terra_world::footprint::Footprint;
+use terra_world::planet::Planet;
+use terra_world::start::Start;
+use terra_world::tick::Sim;
 
 /// An item from the catalogue the village has: what it is, where it stands from the
 /// middle in metres east and south, and how many degrees it is turned.
@@ -43,18 +43,18 @@ const ITEMS: [(&str, f32, f32, f32); 3] = [
 /// One of the village's people: who, where they stand from the middle in metres east and
 /// south, what they are doing, the template they are shaped as, what they wear, and what
 /// they say when spoken to.
-pub(super) struct Villager {
+pub struct Villager {
     name: &'static str,
     east: f32,
     south: f32,
     doing: Doing,
-    pub(super) template: &'static str,
-    pub(super) wears: &'static [Dyed],
+    pub template: &'static str,
+    pub wears: &'static [Dyed],
     says: Option<&'static str>,
 }
 
 /// The elder by the well, and others about their day.
-pub(super) const PEOPLE: [Villager; 4] = [
+pub const PEOPLE: [Villager; 4] = [
     Villager {
         name: "Maren",
         east: 1.6,
@@ -138,7 +138,7 @@ fn found(
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    let kinds = look.kits.as_deref().and_then(build::village_kinds);
+    let kinds = look.kits.as_deref().and_then(terra_survival::village_kinds);
     let Some(kinds) = kinds else {
         warn!("The village needs a log, a stone and a hewn timber kit.");
         return;
@@ -472,7 +472,7 @@ fn talk(
 /// window, a hole over a sill, shutters, of the kinds `choose` gives for each hang and size
 /// (wide by high, in cubes), with whether it stands open. Says how many were fitted. The
 /// townsfolk's: a village's houses, a town's and a rising town's are fitted by it.
-pub(crate) fn fit_all(
+pub fn fit_all(
     build: &mut Build,
     choose: impl Fn(Hang, (i32, i32), usize) -> Option<(PropKind, bool)>,
 ) -> usize {
@@ -527,7 +527,7 @@ mod tests {
             seed: terra_gen::Seed(1),
             radius_m: 30_000.0,
         });
-        let found = crate::start::find_site(&planet, "lake@-15.34,1.68");
+        let found = terra_world::start::find_site(&planet, "lake@-15.34,1.68");
         planet.look_round(found.middle(), 3_000.0, 0);
         let start = found.start(&planet);
         let kinds = Kinds {

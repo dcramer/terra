@@ -4,14 +4,14 @@
 //! along its line; and a capsule along it among the obstacles, so the player and every body
 //! are stopped by it as by a trunk.
 
-use super::catalogue::Builds;
-use super::flora::Obstacles;
-use super::props::Models;
-use crate::planet::Planet;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use terra_core::{Piece, Solid};
+use terra_survival::catalogue::Builds;
+use terra_survival::props::Models;
 use terra_town::town::{FURNISHING, Fence, FenceKind};
+use terra_world::flora::Obstacles;
+use terra_world::planet::Planet;
 
 /// A module of a town's fences, drawn.
 #[derive(Component)]

@@ -4,11 +4,7 @@
 //! feet keep to the ground (`pace.rs`). Indoors, out at the fields or beyond every viewer,
 //! nobody is drawn.
 
-use super::bodies::Body;
-use super::tick::{Sim, Smoothed};
-use super::town::Market;
-use crate::planet::{MainCamera, Planet};
-use crate::{appearance, character};
+use crate::town::Market;
 use bevy::{
     platform::collections::HashMap,
     prelude::*,
@@ -18,6 +14,10 @@ use serde::Deserialize;
 use std::time::Duration;
 use terra_town::town::ThingKind;
 use terra_town::{Detail, Shows};
+use terra_walker::bodies::Body;
+use terra_walker::{appearance, character};
+use terra_world::planet::{MainCamera, Planet};
+use terra_world::tick::{Sim, Smoothed};
 
 /// How someone's clips blend into each other.
 const BLEND: Duration = Duration::from_millis(300);
@@ -206,7 +206,7 @@ pub fn plugin(app: &mut App) {
             place
                 .run_if(resource_exists::<Market>)
                 .in_set(Sim::World)
-                .after(super::town::Live),
+                .after(crate::town::Live),
         );
 }
 
@@ -264,7 +264,7 @@ fn prepare(
     );
     let named: HashMap<String, AnimationNodeIndex> =
         names.iter().cloned().zip(nodes.iter().copied()).collect();
-    let paces = crate::pace::paces(gltf, &gltf_nodes);
+    let paces = terra_walker::pace::paces(gltf, &gltf_nodes);
     let pace = |name: &str| paces.get(name).copied().unwrap_or(1.0);
     figure.ready = Some(Ready {
         scene,
@@ -426,8 +426,8 @@ fn place(
     market: Res<Market>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut folk: Query<(Entity, &Folk, &mut Transform, &mut Visibility)>,
-    rising: Option<Res<super::rising::Rising>>,
-    decks: Option<Res<super::scaffold::Decks>>,
+    rising: Option<Res<crate::rising::Rising>>,
+    decks: Option<Res<crate::scaffold::Decks>>,
 ) {
     let eye = camera.single().ok().map(|c| market.local(c.translation()));
     for (entity, one, mut at, mut shown) in &mut folk {
@@ -478,7 +478,7 @@ fn place(
 /// three of them; the rest work from the ground, at the logs.
 fn on_the_boards(
     market: &Market,
-    decks: &super::scaffold::Decks,
+    decks: &crate::scaffold::Decks,
     index: usize,
     feet: Vec3,
 ) -> Option<(Vec3, Vec3)> {
@@ -492,7 +492,7 @@ fn on_the_boards(
     }
     let (frame, walls, lifts) = decks.0.get(&thing.building?)?;
     let local = frame.compute_affine().inverse().transform_point3(feet);
-    let (on, toward) = super::scaffold::on_deck(walls, *lifts, Vec2::new(local.x, local.z))?;
+    let (on, toward) = crate::scaffold::on_deck(walls, *lifts, Vec2::new(local.x, local.z))?;
     Some((
         frame.transform_point(on),
         frame.rotation * Vec3::new(toward.x, 0.0, toward.y),
@@ -507,7 +507,7 @@ fn animate(
     market: Option<Res<Market>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     folk: Query<(&Folk, &GlobalTransform)>,
-    rising: Option<Res<super::rising::Rising>>,
+    rising: Option<Res<crate::rising::Rising>>,
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // A time-lapse's people live faster than the film, their clips with them (D381).
@@ -823,11 +823,12 @@ mod tests {
     #[test]
     fn every_role_in_the_plan_has_a_look_of_garments_there_are() {
         let looks: Looks = ron::from_str(
-            &std::fs::read_to_string(crate::model_files::asset("data/townsfolk.ron")).unwrap(),
+            &std::fs::read_to_string(terra_walker::model_files::asset("data/townsfolk.ron"))
+                .unwrap(),
         )
         .unwrap();
         let plan = terra_town::Plan::parse(
-            &std::fs::read_to_string(crate::model_files::asset("data/life.ron")).unwrap(),
+            &std::fs::read_to_string(terra_walker::model_files::asset("data/life.ron")).unwrap(),
         )
         .unwrap();
         for (activity, item) in &looks.holds {
@@ -837,7 +838,7 @@ mod tests {
             );
             let file = character::held_look(item);
             assert!(
-                crate::model_files::asset(&file).exists(),
+                terra_walker::model_files::asset(&file).exists(),
                 "holds: no {file}"
             );
         }
@@ -849,11 +850,12 @@ mod tests {
             for garment in look.wears.iter().chain(&look.women) {
                 let file = character::look(&garment.item);
                 assert!(
-                    crate::model_files::asset(&file).exists(),
+                    terra_walker::model_files::asset(&file).exists(),
                     "{}: no {file}",
                     role.name
                 );
-                let materials = crate::model_files::materials(&crate::model_files::json(&file));
+                let materials =
+                    terra_walker::model_files::materials(&terra_walker::model_files::json(&file));
                 assert!(
                     materials
                         .iter()
