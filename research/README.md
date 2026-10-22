@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [Fire review calibration: what AAA frames score from our harsh reviewer](2026-10-22-fire-review-calibration.md) | 2026-10-22 |
+| [Far mountain detail: how shipped games make a wall 1 to 5 km off read as rock (2026-10-21)](2026-10-21-far-mountain-detail.md) | 2026-10-21 |
 | [Agent throughput: where the hours went](2026-10-19-agent-throughput.md) | 2026-10-19 |
 | [Fire step back: a professional flipbook in our engine](2026-10-19-fire-step-back.md) | 2026-10-19 |
 | [How games draw fire: four surveys combined](2026-10-19-how-games-draw-fire.md) | 2026-10-19 |

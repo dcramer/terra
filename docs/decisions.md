@@ -439,6 +439,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D428](decisions/D428.md) | An ultra preset for films, spent on distance | Tech | Agent | Decided | A fourth quality preset, ultra (`terra_world::quality`)… |
 | [D430](decisions/D430.md) | A film's breath is marched as a volume, play's stays cards | Tech | Agent | Decided | The cinematic tier of D428 draws a dragon's breath as… |
 | [D433](decisions/D433.md) | The fire sheet measures the flame on the renderer's ID matte | Tech | Agent | Decided | The fire sheet (D415, `tools/fire/sheet.ts`) measures a… |
+| [D434](decisions/D434.md) | A far wall keeps a third of its own light before it gets more detail | Tech | Agent | Decided | Work on far and middle-distance mountains… |
 
 ## Tools and workflow
 
