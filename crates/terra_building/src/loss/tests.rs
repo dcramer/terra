@@ -328,3 +328,60 @@ fn what_fire_burns_through_raises_no_dust_where_it_stood_and_what_breaks_does() 
     fallen.burnt = true;
     assert!(broken(&fallen).is_empty(), "burnt through, no dust");
 }
+
+#[test]
+fn a_billow_comes_up_as_one_cloud_never_as_scattered_discs() {
+    // Laid out at once, a surge's sprites came up a third of a metre wide and metres apart,
+    // a column's strung ten metres up, and read as rows of dark round discs over the keep's
+    // breach until they grew (castle film r16, 24-26.4 s). Each sprite by the dense middle
+    // of it, a quarter of its width round its centre: through its first half second a
+    // billow's sprites touch into one cloud, and none stands alone to 0.75 s.
+    let up = Vec3::Y;
+    let mut billows: Vec<dust::Billow> = dust::surge(4888, 9.0, 1.7)
+        .into_iter()
+        .map(|(_, _, b)| b)
+        .collect();
+    billows.extend(dust::surge(400, 6.0, 1.2).into_iter().map(|(_, _, b)| b));
+    billows.extend(dust::landing(3.0, Vec3::X, up));
+    assert!(billows.iter().any(|b| b.tall > 0.0), "no plume to try");
+    for (n, billow) in billows.iter().enumerate() {
+        let sprites = dust::layout(billow, up, 0x51ed ^ n as u32);
+        for age in [0.03, 0.1, 0.25, 0.5, 0.75] {
+            let grow = dust::grown(age, billow.life);
+            let at: Vec<(Vec3, f32)> = sprites
+                .iter()
+                .map(|s| {
+                    (
+                        s.lay * grow + s.drift * age,
+                        0.25 * dust::sprite_wide(s.wide, grow),
+                    )
+                })
+                .collect();
+            let touch = |i: usize, j: usize| at[i].0.distance(at[j].0) <= at[i].1 + at[j].1;
+            // Joined, as a flood from the first sprite over those touching.
+            let mut joined = vec![false; at.len()];
+            let mut open = vec![0];
+            joined[0] = true;
+            while let Some(i) = open.pop() {
+                for (j, joins) in joined.iter_mut().enumerate() {
+                    if !*joins && touch(i, j) {
+                        *joins = true;
+                        open.push(j);
+                    }
+                }
+            }
+            let apart = joined.iter().filter(|j| !**j).count();
+            let alone = (0..at.len())
+                .filter(|&i| (0..at.len()).all(|j| j == i || !touch(i, j)))
+                .count();
+            let what = format!(
+                "billow {n} ({} m wide, {} m tall) at {age} s, {} sprites",
+                billow.wide,
+                billow.tall,
+                at.len()
+            );
+            assert!(age > 0.5 || apart == 0, "{what}: {apart} apart");
+            assert_eq!(alone, 0, "{what}: {alone} alone");
+        }
+    }
+}

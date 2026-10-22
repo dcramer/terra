@@ -23,6 +23,9 @@ pub(super) struct Puff {
     /// How fast it comes to rise as it ages, in metres a second: a collapse's cloud is
     /// warm and stirred, and lifts off the ground after it has rolled out.
     lift: f32,
+    /// Where it lies in its billow, from the billow's middle, once grown: it goes out there
+    /// as it grows ([`Sprite::lay`]).
+    lay: Vec3,
 }
 
 /// The billow a chunk raises where it lands, as big as it: none for a piece under
@@ -145,7 +148,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
                 wide: COLUMN_M * (0.8 + 0.6 * big),
                 life: 16.0 * (0.8 + 0.3 * big),
                 drift: off.normalize_or_zero() * 0.3 + Vec3::Y * (1.4 + 0.3 * (k % 3) as f32),
-                stir: 0.4,
+                stir: 0.25,
                 spread: 0.6,
                 tall: COLUMN_TALL_M * (0.7 + 0.5 * big),
             },
@@ -544,60 +547,111 @@ pub(super) fn billow_at(
         ..default()
     });
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
-    // Many thin layers for a big billow rather than five thick stamps: five sprites as wide
-    // as a surge read as a cotton ball and a flat band (castle film round 4); a dozen of
-    // uneven size, thinner each, overlap into a lumpy cloud with depth, as shipped games
-    // layer their smoke.
-    let sprites = (5.0 + billow.wide * 0.7).min(12.0) as u32;
-    let big = billow.wide > 3.0;
-    for sprite in 0..sprites {
-        let r = |salt: u32| {
-            let h = terra_gen::hash::prospector32_round(
-                seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77),
-            );
-            ((h >> 8) & 0xFFFF) as f32 / 65535.0
-        };
-        // A plume's sprites stacked up it, each the faster rising the higher, so it climbs
-        // and stretches rather than swelling as a ball.
-        let stacked = billow.tall * (sprite as f32 + r(8)) / sprites as f32;
-        let drift = billow.drift
-            + (Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 2.4 + up * (0.08 + 0.15 * r(3)))
-                * billow.stir
-            + up * stacked * 0.15;
+    for (index, sprite) in layout(&billow, up, seed).into_iter().enumerate() {
         commands.spawn((
             Name::new("Dust"),
             Puff {
                 age: 0.0,
                 life: billow.life,
-                wide: billow.wide
-                    * if big {
-                        0.4 + 0.65 * r(4)
-                    } else {
-                        0.6 + 0.6 * r(4)
-                    },
-                rise: drift,
+                wide: sprite.wide,
+                rise: sprite.drift,
                 material: material.clone(),
                 alpha,
-                owner: sprite == 0,
-                roll: r(5) * core::f32::consts::TAU,
-                spin: (r(9) - 0.5) * 0.5,
-                lift: if big { 0.25 + 0.5 * r(10) } else { 0.0 },
+                owner: index == 0,
+                roll: sprite.roll,
+                spin: sprite.spin,
+                lift: sprite.lift,
+                lay: sprite.lay,
             },
             Mesh3d(quad.clone()),
             MeshMaterial3d(material.clone()),
             NotShadowCaster,
-            // Spread over the billow in lumps, some higher.
-            Transform::from_translation(
-                at + drift * 0.2
-                    + (Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0
-                        + up * r(8) * if big { 0.9 } else { 0.3 })
-                        * billow.spread
-                    + up * stacked,
-            )
-            .with_scale(Vec3::splat(PUFF_M[0] * 0.5)),
+            Transform::from_translation(at + sprite.drift * 0.2)
+                .with_scale(Vec3::splat(sprite_wide(sprite.wide, 0.0))),
         ));
     }
     true
+}
+
+/// A sprite of a billow as it comes up: where it lies in the billow once grown, from its
+/// middle, how it drifts, how wide it grows, how it is turned and turns, and how fast it
+/// comes to rise.
+pub(super) struct Sprite {
+    pub(super) lay: Vec3,
+    pub(super) drift: Vec3,
+    pub(super) wide: f32,
+    roll: f32,
+    spin: f32,
+    lift: f32,
+}
+
+/// How many seconds of its stir a sprite goes out from its billow's middle as it grows.
+const STIRRED_S: f32 = 2.0;
+
+/// A billow's sprites, `up` the way up where it is, `seed` its luck. Each comes up at the
+/// billow's middle and goes out to its place in it ([`Sprite::lay`]) as it grows, so the
+/// billow is one cloud from its first frame: laid out at once, a dozen sprites a third of a
+/// metre wide, a column's strung ten metres up, came up as rows of dark round discs over the
+/// keep's breach until they grew into one (castle film r16, 24-26.4 s), as shipped games'
+/// dust and smoke sprites spawn at their emitter and spread with the cloud.
+pub(super) fn layout(billow: &Billow, up: Vec3, seed: u32) -> Vec<Sprite> {
+    // Many thin layers for a big billow rather than five thick stamps: five sprites as wide
+    // as a surge read as a cotton ball and a flat band (castle film round 4); a dozen of
+    // uneven size, thinner each, overlap into a lumpy cloud with depth, as shipped games
+    // layer their smoke.
+    // A plume's are more, one for every metre and a bit up it, so its stack stays one column.
+    let sprites = (5.0 + billow.wide * 0.7).min(12.0) as u32 + (billow.tall * 0.8) as u32;
+    let big = billow.wide > 3.0;
+    (0..sprites)
+        .map(|sprite| {
+            let r = |salt: u32| {
+                let h = terra_gen::hash::prospector32_round(
+                    seed ^ sprite.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA77),
+                );
+                ((h >> 8) & 0xFFFF) as f32 / 65535.0
+            };
+            // A plume's sprites stacked up it, each the faster rising the higher, so it
+            // climbs and stretches rather than swelling as a ball.
+            let stacked = billow.tall * (sprite as f32 + r(8)) / sprites as f32;
+            // A billow's sprites stirred out from its middle as far as their stir carries
+            // them in [`STIRRED_S`], going out there as they grow: thrown out at that speed
+            // from the first frame, a ring's sprites outran their own growth and stood alone
+            // after two seconds.
+            let stirred = Vec3::new(r(1) - 0.5, 0.0, r(2) - 0.5) * 2.4 * billow.stir * STIRRED_S;
+            let drift =
+                billow.drift + up * (0.08 + 0.15 * r(3)) * billow.stir + up * stacked * 0.15;
+            let size = if big {
+                0.4 + 0.65 * r(4)
+            } else {
+                0.6 + 0.6 * r(4)
+            };
+            // The smaller lumps lie in its core and the bigger out to its edge, as far out
+            // as they are big: a small one stirred as far as a big one stood alone on the sky.
+            let out = size / if big { 1.05 } else { 1.2 };
+            Sprite {
+                // Spread over the billow in lumps, some higher.
+                lay: ((Vec3::new(r(6) - 0.5, 0.0, r(7) - 0.5) * 2.0
+                    + up * r(8) * if big { 0.9 } else { 0.3 })
+                    * billow.spread
+                    + stirred)
+                    * out
+                    + up * stacked,
+                drift,
+                wide: billow.wide * size,
+                roll: r(5) * core::f32::consts::TAU,
+                spin: (r(9) - 0.5) * 0.5,
+                lift: if big { 0.25 + 0.5 * r(10) } else { 0.0 },
+            }
+        })
+        .collect()
+}
+
+/// How wide a sprite of a billow is drawn, `grow` of the way to its full `wide`: from a
+/// quarter of it (a small puff's from a third of a metre), as a big chunk's dust bursts
+/// out a good share of its size at once.
+pub(super) fn sprite_wide(wide: f32, grow: f32) -> f32 {
+    let first = (wide * 0.25).max(PUFF_M[0] * 0.5).min(wide);
+    first + (wide - first) * grow
 }
 
 /// Dust billows out, rises and thins away, each sprite facing the view.
@@ -624,7 +678,9 @@ pub(super) fn puff(
         // Out fast as it is thrown up, then slowly.
         let grow = grown(puff.age, puff.life);
         let grew = grow - grown(puff.age - time.delta_secs(), puff.life);
-        transform.scale = Vec3::splat(PUFF_M[0] * 0.5 + (puff.wide - PUFF_M[0] * 0.5) * grow);
+        transform.scale = Vec3::splat(sprite_wide(puff.wide, grow));
+        // Out to its place in the billow as it grows.
+        transform.translation += puff.lay * grew;
         let up = transform.translation.normalize_or(Vec3::Y);
         // Its middle rises as it grows, so it billows up off the ground rather than being
         // cut flat along it, and a big one lifts more as it ages.
