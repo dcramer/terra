@@ -16,6 +16,7 @@ use super::grown;
 use model::{Drawn, Model};
 
 mod model;
+mod under;
 use super::scene::SUN_DIRECTION;
 use crate::planet::{Planet, Tweaks};
 use crate::spatial::SpatialHash;
@@ -485,6 +486,13 @@ fn follow_wind(
     }
 }
 
+/// How likely a tree stands at a point so far from the start on a world without mountains:
+/// woods with clearings, thinning to nothing round the start.
+fn wooded(woods: &Noise, point: Vec3, from_start_m: f32) -> f32 {
+    let wooded = smoothstep(-0.12, 0.2, woods.fbm(point / 120.0, 3, 2.0, 0.5));
+    (0.12 + 0.8 * wooded) * smoothstep(16.0, 42.0, from_start_m)
+}
+
 /// Calls `place` once for each square of a grid laid over the map, with a random point
 /// in that square. The same seed always gives the same points.
 fn scatter(seed: Seed, reach_m: f32, spacing_m: f32, mut place: impl FnMut(&mut Rng, f32, f32)) {
@@ -614,9 +622,10 @@ fn plant(
                    clearance_m: f32,
                    cut: Option<Cuttable>,
                    stops: Option<(Vec3, f32)>| {
-        if footprints
-            .iter()
-            .any(|(_, footprint)| footprint.covers(transform.translation, clearance_m))
+        // Nothing in a footprint, nor a plant out of a standing stone (lake round 31).
+        let at = transform.translation;
+        if footprints.iter().any(|(_, f)| f.covers(at, clearance_m))
+            || stops.is_none() && under::in_a_stone(&solid_things, at)
         {
             return;
         }
@@ -672,9 +681,7 @@ fn plant(
         if (0.0..120.0).contains(&from_door.z) && from_door.x.abs() < 10.0 + 0.3 * from_door.z {
             return;
         }
-        let wooded = smoothstep(-0.12, 0.2, woods.fbm(point / 120.0, 3, 2.0, 0.5));
-        let chance = (0.12 + 0.8 * wooded) * smoothstep(16.0, 42.0, from_base);
-        if rng.unit() > chance {
+        if rng.unit() > wooded(&woods, point, from_base) {
             return;
         }
         let which = species.fbm(point / 150.0 + 9.0, 2, 2.0, 0.5) + rng.range(-0.12, 0.12);
@@ -837,52 +844,16 @@ fn plant(
         patches.push((patch, seed.derive("settlement"), 1.5));
     }
     for &(ground, seed, reach) in &patches {
-        // Bushes and leafy plants, in the grass.
-        scatter(seed.derive("bushes"), 230.0 * reach, 5.5, |rng, x, z| {
-            let point = ground.ground(&planet, x, z);
-            let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.3 * cover.grass {
-                return;
-            }
-            // Some bear berries, the first food to be found.
-            let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, &season, rng)
-            else {
-                return;
-            };
-            let model = pick(rng, &models[kind]);
-            let tall = size(rng, kind);
-            let scale = tall / model.height;
-            let fibre = flora.kinds()[kind].cuttable(tall);
-            put(
-                &model,
-                standing(rng, point, 0.1, scale, 0.05),
-                1.2,
-                fibre,
-                None,
-            );
-        });
-        scatter(seed.derive("plants"), 150.0 * reach, 3.2, |rng, x, z| {
-            let point = ground.ground(&planet, x, z);
-            let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.28 * cover.grass || on_heath(point) {
-                return;
-            }
-            let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, &season, rng)
-            else {
-                return;
-            };
-            let model = pick(rng, &models[kind]);
-            let tall = size(rng, kind);
-            let scale = tall / model.height;
-            let fibre = flora.kinds()[kind].cuttable(tall);
-            put(
-                &model,
-                standing(rng, point, 0.15, scale, 0.02),
-                0.6,
-                fibre,
-                None,
-            );
-        });
+        let mut sow = under::Sow {
+            planet: &planet,
+            flora: &flora,
+            models: &models,
+            season: &season,
+            woods: &woods,
+            put: &mut put,
+            standing: &standing,
+        };
+        sow.in_the_grass(&ground, seed, reach, &on_heath);
         // Flowers, in drifts.
         scatter(seed.derive("flowers"), 130.0 * reach, 1.5, |rng, x, z| {
             let point = ground.ground(&planet, x, z);
@@ -910,6 +881,20 @@ fn plant(
             );
         });
     }
+
+    // Round the start, rushes and reeds on the lakes' wet margins and ferns and shrubs on the
+    // shaded forest floor, as their kinds' sites say.
+    let mut sow = under::Sow {
+        planet: &planet,
+        flora: &flora,
+        models: &models,
+        season: &season,
+        woods: &woods,
+        put: &mut put,
+        standing: &standing,
+    };
+    sow.shore(&ground, seed);
+    sow.understory(&ground, seed, &on_heath);
 
     // The heath's dwarf shrubs past the trees, where its dwarf-shrub community holds the ground
     // (`terra_land::heath`), in clumps, a few among the lichen and sedge.

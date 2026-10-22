@@ -28,8 +28,13 @@
 //   rust     whether iron ore shows in it: rust-stained veins through its stone, and rust
 //            run down its faces below them, over its own material
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
-//   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
-//            ByTheDoor(east, south, height) for one placed by the base's door
+//   grows    the layer it grows in: Trees, Rocks, Bushes, Plants, Flowers, Heath, Shore
+//            or Understory, or ByTheDoor(east, south, height) for one placed by the base's door
+//   site     for a Shore or Understory kind, where on the ground it grows: metres over the
+//            nearest water, the steepest slope in degrees, the trees' shade over it (0 open
+//            to 1 a closed forest's), its water's mountain share (0 a lowland lake, 1 one
+//            scoured by ice) and the most of the open heath it takes (crates/terra_world/
+//            src/flora/under.rs)
 //   size     its height, in metres, from and to; a rock's comes from its layer
 //   dies_back for a herb or flower, gone to the ground once its leaves are: the year it
 //            keeps (plant_years.ron), so none is placed where that year has it gone (D419)
@@ -210,6 +215,54 @@
             grows: Flowers,
             dies_back: "flowers",
             size: (0.4, 0.62),
+        ),
+
+        // A lake's wet margin: common reed standing in the shallows of a lowland lake, in
+        // beds, and soft rush along every shore's waterline, a mountain lake's among its
+        // stones too, as at Morskie Oko's outflow. Their card is drawn blade by blade.
+        (
+            name: "Reed",
+            grown: Tuft((cards: ["rush"], tint: (1.0, 0.96, 0.8), planes: 3)),
+            variants: 3,
+            sway: Plant,
+            grows: Shore,
+            site: (over_water: (-0.35, 0.25), steepest: 10.0, mountain: (0.0, 0.5)),
+            chance: 0.7,
+            size: (1.3, 2.1),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
+        ),
+        (
+            name: "Rush",
+            grown: Tuft((cards: ["rush"], planes: 3)),
+            variants: 4,
+            sway: Plant,
+            grows: Shore,
+            site: (over_water: (-0.15, 0.6), steepest: 18.0),
+            size: (0.5, 1.0),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
+        ),
+        // The forest floor in the trees' shade, off the grass: hazel under a thinner
+        // canopy, and broad ferns in drifts where it closes, as in a beech or spruce wood.
+        (
+            name: "Understory hazel",
+            grown: Bush((leaves: "hazel", tint: (0.66, 0.76, 0.6), clumps: (6, 10), spread: 1.2)),
+            variants: 3,
+            sway: Bush,
+            grows: Understory,
+            site: (over_water: (1.5, 400.0), steepest: 28.0, shade: (0.25, 0.85)),
+            chance: 0.3,
+            size: (0.9, 1.8),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.7, 0.0)),
+        ),
+        (
+            name: "Woodland fern",
+            grown: Rosette((card: "fern", leaves: (8, 13), tilt: (30.0, 60.0), stalk: (0.03, 0.97), tip: (0.97, 0.03))),
+            variants: 4,
+            sway: Plant,
+            grows: Understory,
+            site: (over_water: (1.2, 400.0), steepest: 32.0, shade: (0.3, 1.0)),
+            size: (0.6, 1.1),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
         ),
 
         // A stump and a mossy log by the door, as if the clearing had been cut.

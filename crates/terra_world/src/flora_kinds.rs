@@ -109,6 +109,12 @@ pub enum Grows {
     /// The heath's dwarf shrubs past the trees, where its dwarf-shrub community grows
     /// (`terra_land::heath`).
     Heath,
+    /// Rushes and reeds on a lake's or pool's wet margin, where its kinds' `site` holds
+    /// (`flora::under`).
+    Shore,
+    /// Ferns and shrubs on the shaded forest floor, under the trees rather than in the grass,
+    /// where its kinds' `site` holds (`flora::under`).
+    Understory,
     /// One placed by the base's door, so many metres east and south, so tall.
     ByTheDoor(f32, f32, f32),
 }
@@ -171,6 +177,59 @@ impl Season {
     }
 }
 
+/// What a layer that grows by the place knows of a point on the ground (`flora::under`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ground {
+    /// How far the ground stands over the nearest water's surface, in metres; under it,
+    /// below nothing.
+    pub over_water_m: f32,
+    /// How steep it is, in degrees from level.
+    pub slope_deg: f32,
+    /// How closely the trees stand over it, as a share of a closed forest's (the woods'
+    /// `Stand::density`): how shaded its floor is.
+    pub shade: f32,
+    /// How far it is the open heath past the trees, 0 to 1 (`terra_land::heath`).
+    pub heath: f32,
+    /// How far its water is a mountain lake's, scoured by ice, 0 a lowland one to 1.
+    pub mountain: f32,
+}
+
+/// Where a kind grows, by the ground's wetness, slope, shade and biome (D136): each range
+/// is the least and most it takes, inclusive.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Site {
+    /// Metres over the nearest water, as `Ground::over_water_m`.
+    pub over_water: (f32, f32),
+    /// The steepest ground it holds, in degrees.
+    pub steepest: f32,
+    /// The trees' shade over it, as `Ground::shade`.
+    #[serde(default = "any_share")]
+    pub shade: (f32, f32),
+    /// Its water's mountain share, as `Ground::mountain`.
+    #[serde(default = "any_share")]
+    pub mountain: (f32, f32),
+    /// The most of the open heath it grows on.
+    #[serde(default)]
+    pub heath: f32,
+}
+
+fn any_share() -> (f32, f32) {
+    (0.0, 1.0)
+}
+
+impl Site {
+    /// Whether it grows on that ground.
+    pub fn fits(&self, ground: &Ground) -> bool {
+        let within = |(least, most): (f32, f32), value: f32| (least..=most).contains(&value);
+        within(self.over_water, ground.over_water_m)
+            && ground.slope_deg <= self.steepest
+            && within(self.shade, ground.shade)
+            && within(self.mountain, ground.mountain)
+            && ground.heath <= self.heath
+    }
+}
+
 /// One kind, as the file has it. The file says what each part means.
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
@@ -202,6 +261,9 @@ pub struct FloraDef {
     size_above: Option<f32>,
     #[serde(default)]
     chance: Option<f32>,
+    /// Where on the ground it grows, for a kind of a layer chosen by the place (`Site`).
+    #[serde(default)]
+    pub site: Option<Site>,
     /// For what dies back to the ground once its leaves are gone, a herb or a flower: the
     /// year it keeps (`assets/data/plant_years.ron`), so none grows where that year has it
     /// gone (D419). A tree or bush stands bare instead, and names none.
@@ -268,8 +330,38 @@ impl Flora {
         season: &Season,
         rng: &mut Rng,
     ) -> Option<usize> {
+        self.choose_where(layer, None, noise, grass, size, season, rng)
+    }
+
+    /// The kind a layer that grows by the place grows on that ground: the first of its
+    /// kinds whose `site` holds there, and whose other conditions hold, as `choose` has them.
+    pub fn choose_on(
+        &self,
+        layer: Grows,
+        ground: &Ground,
+        noise: f32,
+        season: &Season,
+        rng: &mut Rng,
+    ) -> Option<usize> {
+        self.choose_where(layer, Some(ground), noise, 0.0, 0.0, season, rng)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn choose_where(
+        &self,
+        layer: Grows,
+        ground: Option<&Ground>,
+        noise: f32,
+        grass: f32,
+        size: f32,
+        season: &Season,
+        rng: &mut Rng,
+    ) -> Option<usize> {
         self.0.iter().position(|kind| {
             kind.grows.same_layer(layer)
+                && kind
+                    .site
+                    .is_none_or(|site| ground.is_some_and(|ground| site.fits(ground)))
                 && kind.below.is_none_or(|below| noise < below)
                 && kind.above.is_none_or(|above| noise > above)
                 && kind
