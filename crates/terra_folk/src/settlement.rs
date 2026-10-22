@@ -138,7 +138,7 @@ fn found(
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    let kinds = look.kits.as_deref().and_then(terra_survival::village_kinds);
+    let kinds = look.kits.as_deref().and_then(village_kinds);
     let Some(kinds) = kinds else {
         warn!("The village needs a log, a stone and a hewn timber kit.");
         return;
@@ -320,6 +320,19 @@ fn found(
 /// street stand on the most level ground, all of it dry, out of the sea and every lake, and
 /// well away from the lair, so it sits on the land rather than on tall footings down a
 /// hillside. The same on every machine: the planet and the village's plan decide it.
+/// The kinds a village is built of (`terra_town::village`): each role's material as the
+/// settlement's data names it, and the roof each takes (D290), from the kit files the bases
+/// find. The town and the village read it.
+pub(crate) fn village_kinds(kits: &terra_build::kit::Kits) -> Option<terra_town::village::Palette> {
+    terra_town::village::Palette::from_files(
+        &terra_bases::kit_assets(),
+        &terra_bases::kit_names(),
+        kits,
+    )
+    .map_err(|why| error!("{why}"))
+    .ok()
+}
+
 fn site_for(
     planet: &Planet,
     start: &Start,

@@ -130,6 +130,27 @@ impl Palette {
         Ok(Palette { roles, roofs })
     }
 
+    /// A settlement's palette from the files under `assets`, as the game finds the kits
+    /// (`terra_bases::kit_assets`), `names` each kit's kind by its file's name
+    /// (`terra_bases::kit_names`). Building play and the townsfolk ask it here, so no crate
+    /// below them needs the town.
+    pub fn from_files(
+        assets: &std::path::Path,
+        names: &std::collections::BTreeMap<Kind, String>,
+        kits: &terra_build::kit::Kits,
+    ) -> Result<Palette, String> {
+        let read = |file: &str| {
+            std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
+        };
+        let named = |name: &str| {
+            names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(kind, _)| *kind)
+        };
+        Palette::read(&read, &named, kits)
+    }
+
     /// What its houses are built of, every role's but the works': the building baseline
     /// (D333). The works' material is a house material weathered another colour, its shape
     /// the same, so the baseline's checks hold it too.

@@ -46,28 +46,6 @@ pub mod work;
 pub mod worn;
 
 use bevy::prelude::*;
-use terra_build::kit::Kits;
-
-/// The kinds a village is built of (`terra_town::village`): each role's material as the
-/// settlement's data names it, and the roof each takes (D290). Here, not in the bases, which
-/// stand below the town, nor in the town, since it reads the kits' files as the bases find
-/// them; building play and the townsfolk ask it, and this is the lowest crate both stand on.
-pub fn village_kinds(kits: &Kits) -> Option<terra_town::village::Palette> {
-    let assets = terra_bases::kit_assets();
-    let read = |file: &str| {
-        std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
-    };
-    let names = terra_bases::kit_names();
-    let named = |name: &str| {
-        names
-            .iter()
-            .find(|(_, n)| n.as_str() == name)
-            .map(|(k, _)| *k)
-    };
-    terra_town::village::Palette::read(&read, &named, kits)
-        .map_err(|why| error!("{why}"))
-        .ok()
-}
 
 /// A world with what the play systems read and write that is not of any one entity: the
 /// kinds of item, and the messages about what players carry and are told. For tests, here

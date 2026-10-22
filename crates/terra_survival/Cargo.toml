@@ -21,8 +21,6 @@ terra_build_layout.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
 terra_items.workspace = true
-# The settlement's palette, which `village_kinds` reads for building play and the townsfolk.
-terra_town.workspace = true
 terra_voxel.workspace = true
 # The walker layer (D198, D407): the player's own components, the figure, hands and camera.
 terra_walker.workspace = true

@@ -6252,7 +6252,6 @@ dependencies = [
  "terra_climate",
  "terra_core",
  "terra_items",
- "terra_town",
  "terra_voxel",
  "terra_walker",
  "terra_world",

@@ -979,7 +979,11 @@ fn lay(
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
-    let Some(palette) = look.kits.as_deref().and_then(terra_survival::village_kinds) else {
+    let Some(palette) = look
+        .kits
+        .as_deref()
+        .and_then(crate::settlement::village_kinds)
+    else {
         warn!("Town: the town needs the settlement's kits.");
         return;
     };

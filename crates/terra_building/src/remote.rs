@@ -272,14 +272,14 @@ fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .ok_or_else(|| refused("there are no kits"))?;
     let ops = match name.as_str() {
         "castle" => {
-            let kinds = terra_survival::village_kinds(&kits)
+            let kinds = crate::village::village_kinds(&kits)
                 .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
             let first = kinds.first();
             terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
         }
         // The castle built to burn (D377), in the materials its parts are of.
         "burg" => {
-            let kinds = terra_survival::village_kinds(&kits)
+            let kinds = crate::village::village_kinds(&kits)
                 .ok_or_else(|| refused("the burg needs the settlement's materials"))?
                 .first();
             terra_build::burg::burg(terra_build::burg::Materials {
