@@ -166,9 +166,97 @@ pub fn repeat(kit: &Kit) -> [u8; 3] {
     [cubes(metres[0]), cubes(metres[1]), cubes(metres[0])]
 }
 
-/// How dark a whole block's beds and broken edges are drawn beside its face: as a standing
-/// cube beside a break, worn two quarters (`mesh::wear`'s darkening at half lost).
-const BED_SHADE: f32 = 0.72;
+/// How dark a whole block's broken faces are drawn beside its face, at their rim and at their
+/// deepest: below a standing cube beside a break worn two quarters (`mesh::wear`'s 0.72), as
+/// beds facing the sky in the face's shade read as the lightest planes in a fall (castle
+/// film round 13).
+pub(super) const FRACTURE_SHADE: [f32; 2] = [0.55, 0.36];
+/// How far in a broken face is set back at most, and how far apart the points of its relief
+/// are, in metres; the most points along a side.
+pub(super) const FRACTURE_DEPTH_M: f32 = 0.07;
+const FRACTURE_STEP_M: f32 = 0.14;
+const FRACTURE_POINTS: usize = 12;
+
+/// A face a whole block split along, as broken stone (D305): not the flat plane it was cut
+/// along but a rough surface set back into the block, as shipped destruction draws a
+/// fracture's inside (Unreal's Chaos fracture: its cut planes broken by noise, an interior
+/// material on them; docs only). A grid of points a [`FRACTURE_STEP_M`] apart over it, its
+/// rim where it was so it meets the block's edges, each inner point pushed in by a bowl and
+/// by noise where it stood, up to [`FRACTURE_DEPTH_M`]; each facet lit its own way, darker
+/// the deeper it lies ([`FRACTURE_SHADE`]), its texture the stone behind the face.
+/// `corners` are the face's on the unit box, `facing` its normal, `size` the block's in
+/// metres, so the relief is in metres however the game stretches the box.
+fn fracture(
+    surface: &mut crate::Surface,
+    corners: [Vec3; 4],
+    facing: Vec3,
+    size: Vec3,
+    colour: [f32; 3],
+    stand: &impl Fn(Vec3, Vec3) -> (Vec3, Vec3),
+    metres: [f32; 2],
+) {
+    let axis = facing.abs().max_position();
+    let mut inward = Vec3::ZERO;
+    inward[axis] = -facing[axis].signum() / size[axis];
+    let (along, across) = (corners[1] - corners[0], corners[3] - corners[0]);
+    let points = |side: Vec3| {
+        ((side * size).length() / FRACTURE_STEP_M)
+            .round()
+            .clamp(2.0, FRACTURE_POINTS as f32) as usize
+    };
+    let (ns, nt) = (points(along), points(across));
+    let depth = |i: usize, j: usize| -> f32 {
+        if i == 0 || j == 0 || i == ns || j == nt {
+            return 0.0;
+        }
+        let (s, t) = (i as f32 / ns as f32, j as f32 / nt as f32);
+        let p = corners[0] + along * s + across * t;
+        let q = (stand(p, facing).0 * 100.0).round().as_ivec3();
+        let rough = terra_gen::hash::unit3(0xf7ac, q.x as u32, q.y as u32, q.z as u32);
+        let bowl = libm::sinf(core::f32::consts::PI * s) * libm::sinf(core::f32::consts::PI * t);
+        FRACTURE_DEPTH_M * (0.4 * bowl + 0.6 * rough)
+    };
+    let mut grid = vec![(Vec3::ZERO, 0.0f32); (ns + 1) * (nt + 1)];
+    for j in 0..=nt {
+        for i in 0..=ns {
+            let d = depth(i, j);
+            let p = corners[0] + along * (i as f32 / ns as f32) + across * (j as f32 / nt as f32);
+            grid[j * (ns + 1) + i] = (p + inward * d, d);
+        }
+    }
+    let shift = SPLIT_SHIFT;
+    let mut facet = |mut a: (Vec3, f32), b: (Vec3, f32), mut c: (Vec3, f32)| {
+        let mut normal = (b.0 - a.0).cross(c.0 - a.0);
+        if normal.dot(facing) < 0.0 {
+            std::mem::swap(&mut a, &mut c);
+            normal = -normal;
+        }
+        let normal = normal.normalize_or(facing);
+        let deep = (a.1 + b.1 + c.1) / (3.0 * FRACTURE_DEPTH_M);
+        let shade = FRACTURE_SHADE[0] + (FRACTURE_SHADE[1] - FRACTURE_SHADE[0]) * deep;
+        let triangle = [a.0, b.0, c.0];
+        let uvs = triangle.map(|p| {
+            let (at, looks) = stand(p, facing);
+            let [u, v] = crate::mesh::planar(at, looks, metres);
+            [u + shift[0], v + shift[1]]
+        });
+        surface.textured(triangle, [normal; 3], uvs, colour.map(|c| c * shade));
+    };
+    for j in 0..nt {
+        for i in 0..ns {
+            let at = |i: usize, j: usize| grid[j * (ns + 1) + i];
+            let (p00, p10, p11, p01) = (at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
+            // Each cell cut along either diagonal, so its facets don't line up in rows.
+            if (i + j * 3) % 2 == 0 {
+                facet(p00, p10, p11);
+                facet(p00, p11, p01);
+            } else {
+                facet(p00, p10, p01);
+                facet(p10, p11, p01);
+            }
+        }
+    }
+}
 /// How much smaller than its cubes a whole block is drawn, so it never fights the cubes drawn
 /// where they were for the frames before their sections are drawn again; no more, as gaps of
 /// 0.97 read as a lattice of dark seams while the blocks fell together.
@@ -230,6 +318,32 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
     // axes; each face, edge and corner a flat piece through such points ([`bevelled`]).
     let mut add = |corners: &[Vec3]| {
         let middle = corners.iter().copied().sum::<Vec3>() / corners.len() as f32;
+        // A face it split along, broken stone: set back in a rough relief ([`fracture`]).
+        let facing = (corners[1] - corners[0])
+            .cross(corners[2] - corners[0])
+            .normalize_or(Vec3::Y);
+        let facing = if facing.dot(middle) < 0.0 {
+            -facing
+        } else {
+            facing
+        };
+        if !timber
+            && corners.len() == 4
+            && facing.abs().max_element() > 0.95
+            && split(shape, facing)
+        {
+            let corners = [corners[0], corners[1], corners[2], corners[3]];
+            fracture(
+                surfaces.of(material),
+                corners,
+                facing,
+                size,
+                colour,
+                &stand,
+                metres,
+            );
+            return;
+        }
         for i in 1..corners.len() - 1 {
             let (mut a, mut c) = (corners[0], corners[i + 1]);
             let bb = corners[i];
@@ -250,7 +364,7 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
                     [u + shift[0], v + shift[1]]
                 });
                 let colour = if split {
-                    colour.map(|c| c * BED_SHADE)
+                    colour.map(|c| c * FRACTURE_SHADE[0])
                 } else {
                     colour
                 };

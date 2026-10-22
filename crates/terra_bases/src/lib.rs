@@ -118,6 +118,9 @@ pub struct Fallen {
     /// they had lost before and have now (D305): the stones, timber and shingles that came
     /// off them as they broke, falling from their open faces.
     pub chipped: Vec<(IVec3, Cube, u8, u8, Vec3)>,
+    /// Whether fire burnt what it destroyed through (`terra_game`'s fire marks its own acts):
+    /// gone up in the fire's smoke, not broken, so no puff of dust where each one stood.
+    pub burnt: bool,
 }
 
 /// How many operations are kept before they are folded into a snapshot.

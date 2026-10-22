@@ -227,8 +227,14 @@ fn burn(
             if cubes.is_empty() {
                 continue;
             }
+            let before = building.site.fallen.len();
             if let Ok(done) = building.act(None, "fire", &[Op::Damage { cubes, amount }]) {
                 burning.fell(&building.site.base, &burns_as, &done.fell);
+            }
+            // What it burnt through went up in its smoke: no dust where it stood (`loss`).
+            let fallen = &mut building.site.fallen;
+            for each in fallen.iter_mut().skip(before) {
+                each.burnt = true;
             }
         }
         burning.show(&mut building.site.base);

@@ -848,6 +848,8 @@ const HUGE_CHUNKS_FROM: usize = 4000;
 
 mod drawn;
 #[cfg(test)]
+use drawn::FRACTURE_DEPTH_M;
+#[cfg(test)]
 use drawn::TIMBER_SHADE;
 pub use drawn::{Cut, Laid, material, repeat, surfaces};
 use drawn::{FRAGMENT_SHADE, SHRINK};

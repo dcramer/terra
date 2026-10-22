@@ -213,6 +213,20 @@ fn dust_of(look: &BuildLook, kind: Kind) -> Color {
     Color::srgb(mix(light[0]), mix(light[1]), mix(light[2]))
 }
 
+/// The cubes an act broke, each a puff of dust where it stood: those it destroyed, unless
+/// fire burnt them through, which go up in its smoke. Burnt timber's puffs, of its dust's
+/// colour, rose over a burning keep as dozens of dark round discs (castle film round 13).
+fn broken(fallen: &Fallen) -> Vec<&(IVec3, Cube)> {
+    if fallen.burnt {
+        return Vec::new();
+    }
+    fallen
+        .fell
+        .iter()
+        .filter(|(at, _)| fallen.destroyed.contains(&at.to_array()))
+        .collect()
+}
+
 /// The mesh and material a kind's fragments of a cut are drawn with (`Fragment::mesh`, given
 /// how often its kind's texture repeats), made the first time.
 fn mesh_for(
@@ -398,11 +412,7 @@ fn burst(
             .live
             .extend(made.into_iter().map(|fragment| Live::new(fragment, root)));
         // Dust where it broke: a puff for every few cubes destroyed, more for what crumbles.
-        let broke: Vec<&(IVec3, Cube)> = fallen
-            .fell
-            .iter()
-            .filter(|(at, _)| destroyed(*at))
-            .collect();
+        let broke = broken(&fallen);
         let puffs = broke.len().div_ceil(3).min(most_puffs / 2).max(1);
         let every = broke.len().div_ceil(puffs).max(1);
         for (at, cube) in broke.iter().step_by(every) {

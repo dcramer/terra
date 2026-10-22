@@ -258,3 +258,25 @@ fn a_surges_dust_is_buff_tan_and_thick_at_its_core_not_a_grey_veil() {
     assert!(alpha > 0.8, "its core {alpha} opaque");
     assert!(shade > 0.8, "its core {shade} as light as its colour");
 }
+
+#[test]
+fn what_fire_burns_through_raises_no_dust_where_it_stood_and_what_breaks_does() {
+    // A burning keep's timber, burnt through cube by cube, threw a puff of dust from each,
+    // dozens of dark discs over the fire (castle film round 13): it goes up in the fire's
+    // smoke; what harm breaks still puffs where it stood.
+    let cube = Cube::new(Kind(2), terra_build::Fill::Solid);
+    let fell: Vec<(IVec3, Cube)> = (0..6).map(|x| (IVec3::new(x, 9, 0), cube)).collect();
+    let destroyed = fell.iter().take(4).map(|(at, _)| at.to_array()).collect();
+    let mut fallen = Fallen {
+        fell,
+        destroyed,
+        ..Fallen::default()
+    };
+    assert_eq!(
+        broken(&fallen).len(),
+        4,
+        "a puff where each destroyed cube stood"
+    );
+    fallen.burnt = true;
+    assert!(broken(&fallen).is_empty(), "burnt through, no dust");
+}

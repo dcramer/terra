@@ -377,8 +377,13 @@ fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
         };
         let drawn = surfaces(&stone, &cut);
         let surface = &drawn.0[&Material::Masonry];
-        // Six faces and twelve edges of two triangles, eight corners of one.
-        assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
+        // Six faces and twelve edges of two triangles, eight corners of one; a whole block's
+        // four faces it split along in a relief of many (`fracture`).
+        if shape == Shape::Whole {
+            assert!(surface.triangle_count() > 6 * 2 + 12 * 2 + 8 + 4 * 8);
+        } else {
+            assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
+        }
         for triangle in surface.positions.chunks(3) {
             let normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]);
             let middle = (triangle[0] + triangle[1] + triangle[2]) / 3.0;
@@ -475,7 +480,8 @@ fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_s
                         );
                     }
                 }
-            } else if normal.y.abs() > 0.99 || normal.x.abs() > 0.99 {
+            } else {
+                // Everything else it split along, its broken faces' facets each their own way.
                 splits += 1;
                 assert!(
                     colours[0][0] < 0.8 * 0.8,
@@ -631,4 +637,78 @@ fn a_whole_block_starts_over_the_cubes_it_was_whichever_way_it_is_turned() {
             "{name}: blocks of {volume} m³ for cubes of {whole}"
         );
     }
+}
+
+#[test]
+fn a_whole_blocks_broken_faces_are_rough_stone_set_back_into_it_and_darker_than_its_face() {
+    // Where a block split from the wall it is broken stone (D305): not a flat plane but a
+    // relief set back into it, its facets lit each their own way, darker than its face; its
+    // faces across the wall stay the wall's, flat. Flat light beds read as clean peach
+    // planes in the castle film (round 13).
+    let stone = Kit {
+        id: 2,
+        pattern: Pattern::Masonry,
+        tint: [0.8, 0.7, 0.6],
+        ..Kit::default()
+    };
+    let size = Vec3::new(4.0 * CELL_M, CELL_M, CELL_M);
+    let relief = |foot: Vec3| {
+        let laid = Laid::over(foot, Quat::IDENTITY, size);
+        let cut = Cut::whole(size, [true; 2], Some(laid), [4; 3]);
+        surfaces(&stone, &cut).0[&Material::Masonry].clone()
+    };
+    let surface = relief(Vec3::new(3.0, 4.0, 5.0));
+    let (mut depths, mut tilted, mut bed) = (Vec::new(), 0, 0);
+    for (triangle, colours) in surface.positions.chunks(3).zip(surface.colours.chunks(3)) {
+        assert!(
+            triangle.iter().all(|p| p.abs().max_element() <= 0.5 + 1e-5),
+            "inside its box"
+        );
+        let metres: Vec<Vec3> = triangle.iter().map(|p| *p * size).collect();
+        let normal = (metres[1] - metres[0])
+            .cross(metres[2] - metres[0])
+            .normalize();
+        if normal.z.abs() > 0.99 {
+            assert!(
+                triangle.iter().all(|p| p.z.abs() > 0.5 - 1e-5),
+                "its face is flat"
+            );
+            continue;
+        }
+        // Its top bed: how far in each point lies, in metres, and how it faces.
+        let middle = (triangle[0] + triangle[1] + triangle[2]) / 3.0;
+        if middle.y > 0.4 && normal.y > 0.3 {
+            bed += 1;
+            depths.extend(triangle.iter().map(|p| (0.5 - p.y) * size.y));
+            tilted += usize::from(normal.y < libm::cosf(8f32.to_radians()));
+            assert!(
+                colours[0][0] < 0.8 * 0.6,
+                "its bed darker than its face, {:?}",
+                colours[0]
+            );
+        }
+    }
+    let most = depths.iter().copied().fold(0.0, f32::max);
+    let mean = depths.iter().sum::<f32>() / depths.len() as f32;
+    let spread = libm::sqrtf(
+        depths.iter().map(|d| (d - mean) * (d - mean)).sum::<f32>() / depths.len() as f32,
+    );
+    assert!(bed > 16, "its bed in many facets, {bed}");
+    assert!(
+        most > 0.6 * FRACTURE_DEPTH_M && most <= FRACTURE_DEPTH_M + 1e-4,
+        "set back as far as {most} m"
+    );
+    assert!(
+        spread > 0.01,
+        "rough, not one plane set back: depths spread {spread} m"
+    );
+    assert!(
+        tilted * 3 > bed,
+        "{tilted} of {bed} facets turned off the bed's plane"
+    );
+    // Another block, split elsewhere in the texture's repeat, breaks another way.
+    assert_ne!(
+        relief(Vec3::new(3.5, 4.0, 5.0)).positions,
+        surface.positions
+    );
 }
