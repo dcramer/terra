@@ -1032,7 +1032,7 @@ impl Default for Kit {
             cost: KitCost::default(),
             toughness: KitToughness::default(),
             burns: Some(crate::fire::Burns {
-                catches: 3.0,
+                catches: 1.5,
                 fuel_s: 20.0,
                 heat: 1.0,
             }),
