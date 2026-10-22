@@ -15,11 +15,11 @@
 //! tip, each as thick as a share of the shin is long.
 
 use super::Staged;
-use crate::character;
-use crate::planet::Planet;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use terra_survival::props::{CAMPFIRE, FIRE_HEAT_W};
+use terra_walker::character;
+use terra_world::planet::Planet;
 use terra_world::{fire::Kindled, footprint::Footprint};
 
 /// The flux the legs bear as long as they sit, watts a square metre.
