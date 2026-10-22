@@ -118,7 +118,7 @@ mod tests {
         let mut most = 0.0f32;
         let (mut low, mut high) = (f32::MAX, f32::MIN);
         for frame in 0..600 {
-            let tall = if (frame as f32 * FRAME_S / TICK_S) as u32 % 2 == 0 {
+            let tall = if ((frame as f32 * FRAME_S / TICK_S) as u32).is_multiple_of(2) {
                 2.0
             } else {
                 3.0
