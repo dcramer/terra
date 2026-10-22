@@ -361,6 +361,13 @@ The look, models, bodies and gear, textures and audio.
 | [D427](decisions/D427.md) | A hero prop's triangle budget | Tech | Agent | Decided | A prop the player sits beside or works at for minutes… |
 | [D429](decisions/D429.md) | The looks check knows water by what draws it | Tech | Agent | Decided | The looks check's debug-tint rule… |
 | [D432](decisions/D432.md) | The dusk sky: an amber afterglow toward the set sun, the earth's shadow and the Belt of Venus opposite | Tech | Agent | Decided | After sunset the sky low toward the set sun glows amber… |
+| [D436](decisions/D436.md) | Creature body plans, and what is made another way | Design | — | Open | Recommended: every creature with a skeleton is one of… |
+| [D437](decisions/D437.md) | What a generated creature promises, and who gets hand work | Design | — | Open | Recommended: a generated creature is good enough when it… |
+| [D438](decisions/D438.md) | Monsters move by real biomechanics, or by rules of their own | Design | — | Open | Recommended: monsters move as the wildlife does… |
+| [D439](decisions/D439.md) | A body plan is a data file | Tech | Agent | Leaning | A creature's body plan is a file… |
+| [D440](decisions/D440.md) | A creature's skeleton is fitted to its mesh by its plan | Tech | Agent | Leaning | The skeleton is fitted to the mesh, not typed in… |
+| [D441](decisions/D441.md) | Creature weights from the plan's template body, or zoned heat, whichever measures better | Tech | Agent | Leaning | A creature's weights are made two ways and the creature… |
+| [D442](decisions/D442.md) | The creature check gates a creature by measured deformation and gait | Tech | Agent | Leaning | `tools/creatures/creature_check.py <kind>` gates a… |
 
 ## Engine and code
 
@@ -441,6 +448,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D433](decisions/D433.md) | The fire sheet measures the flame on the renderer's ID matte | Tech | Agent | Decided | The fire sheet (D415, `tools/fire/sheet.ts`) measures a… |
 | [D434](decisions/D434.md) | A far wall keeps a third of its own light before it gets more detail | Tech | Agent | Decided | Work on far and middle-distance mountains… |
 | [D435](decisions/D435.md) | Vertex buffers packed in ordinary memory before the upload | Tech | Agent | Decided | A mesh's vertex buffer is packed in ordinary memory… |
+| [D443](decisions/D443.md) | A creature's paces come from its size | Tech | Agent | Leaning | A kind with no measured speeds takes its walk… |
 
 ## Tools and workflow
 
