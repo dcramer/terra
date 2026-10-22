@@ -321,6 +321,90 @@ pub fn passes_timed(store: &DiagnosticsStore) -> Option<Instant> {
         .max()
 }
 
+/// The benchmark's lines on the GPU's passes: the costliest by their medians over the run
+/// and over its last tenth, and the triangles each sent to be drawn.
+pub fn print_passes(
+    pass_ms: &mut std::collections::BTreeMap<String, Vec<f32>>,
+    pass_triangles: &mut std::collections::BTreeMap<String, Vec<f32>>,
+) {
+    // The same over the run's last tenth, where a scene that grows (a fall, a town
+    // rising) costs the most and the whole run's medians hide it.
+    for (what, of, unit) in [
+        ("GPU passes", &*pass_ms, 1.0),
+        ("triangles", &*pass_triangles, 1e6),
+    ] {
+        let tail = last_tenth(of, unit);
+        let unit = if unit > 1.0 { "in millions" } else { "in ms" };
+        println!("SANDBOX {what} in the last tenth, medians {unit}: {tail}");
+    }
+    // The costliest passes on the GPU, by their medians.
+    let mut passes: Vec<(f32, &str)> = pass_ms
+        .iter_mut()
+        .map(|(pass, ms)| {
+            ms.sort_by(f32::total_cmp);
+            (ms[ms.len() / 2], pass.as_str())
+        })
+        .collect();
+    passes.sort_by(|a, b| b.0.total_cmp(&a.0));
+    if !passes.is_empty() {
+        let costliest: Vec<String> = passes
+            .iter()
+            .take(20)
+            .map(|(ms, pass)| format!("{pass} {ms:.2}"))
+            .collect();
+        println!(
+            "SANDBOX GPU passes, medians in ms: {}",
+            costliest.join(", ")
+        );
+    }
+    // What is drawn: triangles a frame by pass, meshes, and memory.
+    let mut triangles: Vec<(f32, &str)> = pass_triangles
+        .iter_mut()
+        .map(|(pass, counts)| {
+            counts.sort_by(f32::total_cmp);
+            (counts[counts.len() / 2], pass.as_str())
+        })
+        .filter(|(count, _)| *count > 0.0)
+        .collect();
+    triangles.sort_by(|a, b| b.0.total_cmp(&a.0));
+    if !triangles.is_empty() {
+        let all: f32 = triangles.iter().map(|(count, _)| count).sum();
+        let costliest: Vec<String> = triangles
+            .iter()
+            .take(8)
+            .map(|(count, pass)| format!("{pass} {:.2}", count / 1e6))
+            .collect();
+        println!(
+            "SANDBOX triangles a frame, medians in millions: {:.2} in all; {}",
+            all / 1e6,
+            costliest.join(", ")
+        );
+    }
+}
+
+/// The medians of each series over its last tenth, costliest first, as `name value` pairs:
+/// what a scene that grows (a fall, a town rising) costs at its end, which the whole run's
+/// medians hide.
+pub fn last_tenth(series: &std::collections::BTreeMap<String, Vec<f32>>, scale: f32) -> String {
+    let mut tail: Vec<(f32, &str)> = series
+        .iter()
+        .filter(|(_, values)| !values.is_empty())
+        .map(|(name, values)| {
+            let mut tail = values[values.len() - values.len().div_ceil(10)..].to_vec();
+            tail.sort_by(f32::total_cmp);
+            (tail[tail.len() / 2] / scale, name.as_str())
+        })
+        .filter(|(value, _)| *value > 0.0)
+        .collect();
+    tail.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let top: Vec<String> = tail
+        .iter()
+        .take(12)
+        .map(|(value, name)| format!("{name} {value:.2}"))
+        .collect();
+    top.join(", ")
+}
+
 /// A render pass's time from the frame last timed, if it ran in it.
 pub fn timed_then(diagnostic: &bevy::diagnostic::Diagnostic, then: Instant) -> Option<f64> {
     diagnostic

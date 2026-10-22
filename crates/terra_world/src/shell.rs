@@ -136,7 +136,8 @@ usage: terra_sandbox [options]
                         a film of building made the same every time (tools/sandbox/qa.ts)
   --frame-times <file.csv>
                         with --bench, write every timed frame's times, on the real clock
-                        and the game's, the render passes' and the GPU's, one a line
+                        and the game's, the render passes' and the GPU's, and the
+                        render world's work and wait for the GPU, one a line
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
@@ -1235,12 +1236,18 @@ fn scripted_run(
             && let Some(ms) = real_ms
         {
             let part = |ms: Option<f32>| ms.map_or(String::new(), |ms| format!("{ms:.2}"));
+            // The render world's last frame: how long it worked, then waited for the GPU.
+            let waits = render_waits
+                .as_ref()
+                .and_then(|w| w.0.lock().ok()?.last().copied());
             times.push(format!(
-                "{},{ms:.2},{},{},{}",
+                "{},{ms:.2},{},{},{},{},{}",
                 *frame,
                 part(parts.as_ref().map(|p| p.game_ms)),
                 part(parts.as_ref().and_then(|p| p.render_ms)),
                 part(parts.as_ref().and_then(|p| p.gpu_ms)),
+                part(waits.map(|w| w[0])),
+                part(waits.map(|w| w[1])),
             ));
         }
         if let Some(parts) = &parts {
@@ -1298,7 +1305,10 @@ fn scripted_run(
         let frames = options.bench_frames;
         if frame_ms.len() == frames {
             if let Some(path) = &options.frame_times {
-                let text = format!("frame,ms,game_ms,render_ms,gpu_ms\n{}\n", times.join("\n"));
+                let text = format!(
+                    "frame,ms,game_ms,render_ms,gpu_ms,render_busy_ms,render_wait_ms\n{}\n",
+                    times.join("\n")
+                );
                 match std::fs::write(path, text) {
                     Ok(()) => println!("SANDBOX frame times in {}", path.display()),
                     Err(error) => println!("SANDBOX could not write {}: {error}", path.display()),
@@ -1377,49 +1387,7 @@ fn scripted_run(
                     median(&mut waited)
                 );
             }
-            // The costliest passes on the GPU, by their medians.
-            let mut passes: Vec<(f32, &str)> = pass_ms
-                .iter_mut()
-                .map(|(pass, ms)| {
-                    ms.sort_by(f32::total_cmp);
-                    (ms[ms.len() / 2], pass.as_str())
-                })
-                .collect();
-            passes.sort_by(|a, b| b.0.total_cmp(&a.0));
-            if !passes.is_empty() {
-                let costliest: Vec<String> = passes
-                    .iter()
-                    .take(20)
-                    .map(|(ms, pass)| format!("{pass} {ms:.2}"))
-                    .collect();
-                println!(
-                    "SANDBOX GPU passes, medians in ms: {}",
-                    costliest.join(", ")
-                );
-            }
-            // What is drawn: triangles a frame by pass, meshes, and memory.
-            let mut triangles: Vec<(f32, &str)> = pass_triangles
-                .iter_mut()
-                .map(|(pass, counts)| {
-                    counts.sort_by(f32::total_cmp);
-                    (counts[counts.len() / 2], pass.as_str())
-                })
-                .filter(|(count, _)| *count > 0.0)
-                .collect();
-            triangles.sort_by(|a, b| b.0.total_cmp(&a.0));
-            if !triangles.is_empty() {
-                let all: f32 = triangles.iter().map(|(count, _)| count).sum();
-                let costliest: Vec<String> = triangles
-                    .iter()
-                    .take(8)
-                    .map(|(count, pass)| format!("{pass} {:.2}", count / 1e6))
-                    .collect();
-                println!(
-                    "SANDBOX triangles a frame, medians in millions: {:.2} in all; {}",
-                    all / 1e6,
-                    costliest.join(", ")
-                );
-            }
+            crate::debug::print_passes(&mut pass_ms, &mut pass_triangles);
             let middle = |pick: usize| {
                 let mut values: Vec<usize> = drawn_counts.iter().map(|c| c[pick]).collect();
                 values.sort_unstable();

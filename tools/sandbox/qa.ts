@@ -305,7 +305,7 @@ type Summary = { median: number; p99: number; worst: number; over: number; hitch
 type Trace = { summary: Summary & { runs: number; of: number; p99_low: number; p99_high: number; busy: boolean; judged: string; holds: boolean } };
 
 /// One run of the trace: its frames read, what the run said, and the machine's load.
-type TraceRun = { rows: { frame: number; ms: number; game: number; render: number; gpu: number }[]; said: string; csv: string; log: string; before?: machine.Load; during?: machine.During; busy: boolean };
+type TraceRun = { rows: { frame: number; ms: number; game: number; render: number; gpu: number; busy: number; wait: number }[]; said: string; csv: string; log: string; before?: machine.Load; during?: machine.During; busy: boolean };
 
 function stat(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -345,7 +345,7 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
       .split("\n")
       .slice(1)
       .map((line) => line.split(","))
-      .map(([frame, ms, game, render, gpu]) => ({ frame: Number(frame), ms: Number(ms), game: Number(game), render: Number(render), gpu: Number(gpu) }));
+      .map(([frame, ms, game, render, gpu, busy, wait]) => ({ frame: Number(frame), ms: Number(ms), game: Number(game), render: Number(render), gpu: Number(gpu), busy: Number(busy || 0), wait: Number(wait || 0) }));
     traced.push({ rows, said, csv, log, before, during, busy: !machine.quiet(before) || machine.busyDuring(during) });
   }
   if (!traced.length) throw new Error("no trace ran");
@@ -436,7 +436,7 @@ async function timeIt(set: KitSet, sandbox: string[], calls: Call[], stages: Sta
   for (const worst of [...rows].sort((a, b) => b.ms - a.ms).slice(0, 12)) {
     const stage = stages.find((each) => worst.frame >= each.from && worst.frame <= each.to)?.name ?? "-";
     const near = done.filter((call) => call.frame <= worst.frame && call.frame >= worst.frame - 2).map((call) => `${call.method} ${JSON.stringify(call.params ?? {})}`);
-    lines.push(`  frame ${worst.frame} (${stage}): ${worst.ms.toFixed(1)} ms, game ${worst.game.toFixed(1)}, render ${worst.render.toFixed(1)}, GPU ${worst.gpu.toFixed(1)}${near.length ? `; ${near.join("; ").slice(0, 200)}` : ""}`);
+    lines.push(`  frame ${worst.frame} (${stage}): ${worst.ms.toFixed(1)} ms, game ${worst.game.toFixed(1)}, render ${worst.render.toFixed(1)}, GPU ${worst.gpu.toFixed(1)}, the render world ${worst.busy.toFixed(1)} busy and ${worst.wait.toFixed(1)} waiting${near.length ? `; ${near.join("; ").slice(0, 200)}` : ""}`);
   }
   writeFileSync(resolve(folder, `${label}.txt`), lines.join("\n") + "\n");
   console.log(lines.join("\n"));
