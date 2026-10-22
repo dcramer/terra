@@ -1,6 +1,6 @@
 // The GPU scheduler's decisions (D319), pure so they are tested without a GPU: which waiting
 // job runs next, how much memory each class is expected to need, how long a job will wait, and
-// reading what nvidia-smi and /proc/locks say. gpu.ts does the waiting, running and recording.
+// reading what nvidia-smi and /proc say, and whether a running job still makes progress. gpu.ts does the waiting, running and recording.
 //
 // The model is a batch scheduler's (Slurm's backfill, Kubernetes' resource requests): each job
 // asks for an amount of the one resource that runs out, the GPU's memory; a job starts when its
@@ -214,6 +214,72 @@ export function descendants(root: number, parents: Map<number, number>): Set<num
   const stack = [root];
   while (stack.length > 0) for (const child of children.get(stack.pop()!) ?? []) if (!found.has(child)) found.add(child), stack.push(child);
   return found;
+}
+
+/// A process's CPU time so far, clock ticks, from its /proc/<pid>/stat line: its own (utime,
+/// stime) and its reaped children's (cutime, cstime), so a child's work stays counted once it ends.
+export function parseCpu(stat: string): number {
+  const fields = (stat.split(")").pop() ?? "").trim().split(/\s+/);
+  const ticks = fields.slice(11, 15).map(Number).reduce((sum, n) => sum + n, 0);
+  return Number.isFinite(ticks) ? ticks : 0;
+}
+
+/// The processes busy on the card's cores now, from `nvidia-smi pmon -c 1 -s u` (a line a
+/// process: gpu, pid, type, sm %, ...; `-` when idle). Empty where pmon is missing, as under WSL.
+export function parsePmon(text: string): Set<number> {
+  const busy = new Set<number>();
+  for (const line of text.split("\n")) {
+    if (line.trimStart().startsWith("#")) continue;
+    const [, pid, , sm] = line.trim().split(/\s+/);
+    if (Number.isInteger(Number(pid)) && Number(sm) > 0) busy.add(Number(pid));
+  }
+  return busy;
+}
+
+/// CPU ticks a job's processes used between two readings: each one's growth, a new one's all.
+export function cpuGrowth(before: Map<number, number>, after: Map<number, number>): number {
+  let used = 0;
+  for (const [pid, ticks] of after) used += Math.max(0, ticks - (before.get(pid) ?? 0));
+  return used;
+}
+
+/// The least use of a core, averaged over a window, that counts as a job working: a hung
+/// process uses none, a waiting one a few ticks a minute, a rendering one most of a core.
+export const BUSY_SHARE = 0.05;
+export const BUSY_WINDOW_MS = 60000;
+
+/// Whether a job is making progress (D319): new output (its own, or a watched log), its process
+/// tree's CPU time growing by BUSY_SHARE of a core over a window, or one of its processes busy on
+/// the card. A job is stalled only once none of these has happened for its stall limit.
+export class Progress {
+  last: number;
+  private mark: { at: number; cpu: Map<number, number> };
+  private window: number;
+  private hz: number;
+
+  constructor(now: number, stallMs: number, hz = 100) {
+    this.last = now;
+    this.mark = { at: now, cpu: new Map() };
+    this.window = Math.min(BUSY_WINDOW_MS, stallMs / 4);
+    this.hz = hz;
+  }
+
+  output(now: number) {
+    this.last = now;
+  }
+
+  /// A reading of the tree: each process's CPU ticks, and whether one is busy on the card.
+  read(now: number, cpu: Map<number, number>, gpuBusy: boolean) {
+    if (gpuBusy) this.last = now;
+    const span = now - this.mark.at;
+    if (span < this.window) return;
+    if (cpuGrowth(this.mark.cpu, cpu) / this.hz >= (BUSY_SHARE * span) / 1000) this.last = now;
+    this.mark = { at: now, cpu };
+  }
+
+  stalled(now: number, stallMs: number): boolean {
+    return now - this.last > stallMs;
+  }
 }
 
 /// A duration for a person: 40s, 3m10s, 2h05m.

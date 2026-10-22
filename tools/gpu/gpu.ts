@@ -33,6 +33,7 @@ interface Stored extends plan.Job {
   cmd: string[];
   cwd: string;
   attempt: number;
+  /// When it last made progress (output, CPU or GPU use), ms since the epoch.
   output?: number;
 }
 
@@ -60,17 +61,25 @@ function readText(file: string): string {
 
 // ---- the machine: processes, the card, the locks ----------------------------------------------
 
-/// Every process's parent, from /proc/<pid>/stat (its fourth field, after the name in brackets).
-function parents(): Map<number, number> {
-  const found = new Map<number, number>();
+/// Every process's parent and CPU ticks so far, from /proc/<pid>/stat (the parent is its fourth
+/// field, after the name in brackets).
+function processes(): { parents: Map<number, number>; cpu: Map<number, number> } {
+  const parents = new Map<number, number>();
+  const cpu = new Map<number, number>();
   for (const name of fs.readdirSync("/proc")) {
     if (!/^\d+$/.test(name)) continue;
-    const after = readText(`/proc/${name}/stat`).split(")").pop() ?? "";
-    const parent = Number(after.trim().split(/\s+/)[1]);
-    if (Number.isInteger(parent)) found.set(Number(name), parent);
+    const stat = readText(`/proc/${name}/stat`);
+    const parent = Number((stat.split(")").pop() ?? "").trim().split(/\s+/)[1]);
+    if (!Number.isInteger(parent)) continue;
+    parents.set(Number(name), parent);
+    cpu.set(Number(name), plan.parseCpu(stat));
   }
-  return found;
+  return { parents, cpu };
 }
+
+const parents = () => processes().parents;
+/// Clock ticks a second, the unit of /proc's CPU times.
+const HZ = Number(spawnSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).stdout) || 100;
 
 /// When a process started, ms since the epoch: its start in clock ticks after boot (/proc).
 function startOf(pid: number): number {
@@ -83,6 +92,12 @@ const commandOf = (pid: number) => readText(`/proc/${pid}/cmdline`).split("\0").
 
 function nvidia(query: string): string {
   const out = spawnSync("nvidia-smi", [query, "--format=csv,noheader,nounits"], { encoding: "utf8", timeout: 15000 });
+  return out.status === 0 ? out.stdout : "";
+}
+
+/// One sample of which processes use the card's cores (plan.parsePmon); empty without pmon.
+function pmon(): string {
+  const out = spawnSync("nvidia-smi", ["pmon", "-c", "1", "-s", "u"], { encoding: "utf8", timeout: 15000 });
   return out.status === 0 ? out.stdout : "";
 }
 
@@ -99,6 +114,7 @@ interface Machine {
   card: { totalMB: number; usedMB: number } | null;
   apps: Map<number, number>;
   parents: Map<number, number>;
+  cpu: Map<number, number>;
   lock: plan.Holder[];
   queue: plan.Holder[];
 }
@@ -107,7 +123,7 @@ function machine(): Machine {
   return {
     card: plan.parseCard(nvidia("--query-gpu=memory.total,memory.used")),
     apps: plan.parseApps(nvidia("--query-compute-apps=pid,used_memory")),
-    parents: parents(),
+    ...processes(),
     lock: holders(LOCK),
     queue: holders(QUEUE),
   };
@@ -285,22 +301,24 @@ interface Outcome {
 }
 
 /// Runs the command under the game's turn (gpu.lock, shared or alone for a bench), passing its
-/// output on, measuring its memory on the card, and stopping it once it writes nothing for its
-/// stall limit (its own output, or growth of a watched file).
+/// output on, measuring its memory on the card, and stopping it once its whole process tree has
+/// made no progress for its stall limit: no output (its own, or growth of a watched file), no
+/// CPU time and nothing on the card's cores (plan.Progress).
 function execute(job: Stored, stallMin: number, watch: string[]): Promise<Outcome> {
   const flock = spawnSync("flock", ["--version"]).status === 0;
   fs.mkdirSync(path.dirname(LOCK), { recursive: true });
   const argv = flock ? ["flock", job.class === "bench" ? "-x" : "-s", LOCK, ...job.cmd] : job.cmd;
   const env = { ...process.env, TERRA_GPU_JOB: job.id };
   const child = spawn(argv[0], argv.slice(1), { stdio: ["inherit", "pipe", "pipe"], cwd: job.cwd, env });
-  let last = Date.now();
+  const stallMs = stallMin * 60000;
+  const progress = new plan.Progress(Date.now(), stallMs, HZ);
   let tail = "";
   let peakMB = 0;
   let why: string | null = null;
   const sizes = new Map<string, number>();
   const pass = (to: NodeJS.WriteStream) => (chunk: Buffer) => {
     to.write(chunk);
-    last = Date.now();
+    progress.output(Date.now());
     tail = (tail + chunk.toString("utf8")).slice(-16384);
   };
   child.stdout.on("data", pass(process.stdout));
@@ -310,16 +328,18 @@ function execute(job: Stored, stallMin: number, watch: string[]): Promise<Outcom
   const sample = setInterval(() => {
     for (const file of watch) {
       const size = fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
-      if (size !== sizes.get(file)) (sizes.set(file, size), (last = Date.now()));
+      if (size !== sizes.get(file)) (sizes.set(file, size), progress.output(Date.now()));
     }
     const m = machine();
     const tree = plan.descendants(child.pid ?? 0, m.parents);
     job.usedMB = [...tree].reduce((sum, pid) => sum + (m.apps.get(pid) ?? 0), 0);
     peakMB = Math.max(peakMB, job.usedMB);
-    job.output = last;
+    const busy = plan.parsePmon(pmon());
+    progress.read(Date.now(), new Map([...tree].map((pid) => [pid, m.cpu.get(pid) ?? 0])), [...tree].some((pid) => busy.has(pid)));
+    job.output = progress.last;
     save(job);
-    if (!why && Date.now() - last > stallMin * 60000) {
-      why = `no output for ${stallMin} min, the ${job.class} stall limit (--stall to change)`;
+    if (!why && progress.stalled(Date.now(), stallMs)) {
+      why = `no progress for ${stallMin} min (no output, no CPU or GPU use), the ${job.class} stall limit (--stall to change)`;
       kill(child.pid ?? 0, "SIGTERM");
       setTimeout(() => kill(child.pid ?? 0, "SIGKILL"), 10000).unref();
     }
@@ -418,7 +438,7 @@ async function status(): Promise<number> {
   console.log(`gpu: ${card}, ${GB(Math.max(0, plan.available(v.card, v.running)))} free for jobs; ${v.running.length} running, ${v.queued.length} queued`);
   for (const job of v.running) {
     const s = byId.get(job.id);
-    const out = s?.output ? `, output ${plan.age(now - s.output)} ago` : "";
+    const out = s?.output ? `, progress ${plan.age(now - s.output)} ago` : "";
     console.log(`  running ${job.foreign ? "outside " : ""}${job.class.padEnd(5)} ${plan.age(now - (job.started ?? now)).padStart(6)}  ${GB(job.usedMB ?? 0)}${job.vramMB ? ` of ${GB(job.vramMB)}` : ""}${out}  ${where(job)}`);
   }
   const starts = plan.expectedStarts(v.queued, v.running, v.card, now, runMinutes(runs));
@@ -435,7 +455,7 @@ async function status(): Promise<number> {
 const USAGE = `usage: cargo xtask gpu <${Object.keys(plan.CLASSES).join("|")}> [--stall MIN] [--watch FILE]... [--vram MB] -- <command…>
        cargo xtask gpu --status
 ${Object.entries(plan.CLASSES)
-  .map(([name, c]) => `  ${name.padEnd(6)} ${c.does}; asks ${GB(c.vramMB)} until measured, stopped after ${c.stallMin} min silent`)
+  .map(([name, c]) => `  ${name.padEnd(6)} ${c.does}; asks ${GB(c.vramMB)} until measured, stopped after ${c.stallMin} min without output, CPU or GPU use`)
   .join("\n")}`;
 
 function parse(args: string[]): Options | string {
