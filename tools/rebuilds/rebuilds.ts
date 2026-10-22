@@ -25,6 +25,7 @@ export const PROBES: Record<string, string> = {
   world: "crates/terra_world/src/flora.rs",
   bases: "crates/terra_bases/src/hlod.rs",
   walker: "crates/terra_walker/src/movement.rs",
+  survival: "crates/terra_survival/src/crafting.rs",
   creatures: "crates/terra_game/src/play/creatures.rs",
 };
 

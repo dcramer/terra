@@ -1,6 +1,6 @@
 #![enable(implicit_some)]
 // Every kind of station, where things are made (D109, D127, D136). A station is a prop
-// built from the build menu (crates/terra_game/src/play/catalogue.rs) that names one here;
+// built from the build menu (crates/terra_survival/src/catalogue.rs) that names one here;
 // what it makes is in recipes.ron. No code names a station.
 //
 // Each:

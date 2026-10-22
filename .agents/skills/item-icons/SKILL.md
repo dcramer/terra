@@ -54,7 +54,7 @@ When an item's file changes but its look does not (gear rebuilt with its morphs 
 - **Everything else** faces the front, seen from 15 degrees above; worn things as worn, with no body in them.
 - **One rig**: the play scene's warm sun from above and to the left, its blue shade, a cool light from behind on the edges, the play camera's grading. No outline, no background, no perspective. Framed by the look's bounds and the item's cells, 96 pixels a cell.
 
-It is in `crates/terra_game/src/icons.rs`; nothing in it names an item, so never tune it for one. A look that renders wrong breaks a contract:
+It is in `crates/terra_survival/src/icons.rs`; nothing in it names an item, so never tune it for one. A look that renders wrong breaks a contract:
 
 | What you see | What is wrong |
 |---|---|

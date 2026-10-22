@@ -1,0 +1,42 @@
+[package]
+name = "terra_survival"
+description = "What a player carries, makes and needs, in Bevy (D407): the inventory and storage, the catalogue and crafting, props set down, claims, harvesting and digging, vitals, warmth and death, skills, wear and the item icons."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `bevy_remote`: the remote's storage methods (`storage.put`, `storage.state`).
+bevy = { workspace = true, features = ["bevy_remote"] }
+libm.workspace = true
+serde.workspace = true
+# Remote methods take and give JSON; already built for Bevy's remote protocol.
+serde_json = "1"
+# The base on screen: props stand on it, a claim and storage are set down on it (D407).
+terra_bases.workspace = true
+terra_build.workspace = true
+# Building laid out: a prop's frame and how it hangs in an opening.
+terra_build_layout.workspace = true
+terra_climate.workspace = true
+terra_core.workspace = true
+terra_items.workspace = true
+# The settlement's palette, which `village_kinds` reads for building play and the townsfolk.
+terra_town.workspace = true
+terra_voxel.workspace = true
+# The walker layer (D198, D407): the player's own components, the figure, hands and camera.
+terra_walker.workspace = true
+terra_world.workspace = true
+
+[dev-dependencies]
+# The model files' contents, for the tests of the data naming their joints and sockets.
+terra_walker = { workspace = true, features = ["testing"] }
+terra_world = { workspace = true, features = ["testing"] }
+
+[features]
+# The test world and player, and taking a player's clothes off, for the tests of the crates
+# above.
+testing = []
+
+[lints]
+workspace = true

@@ -6124,6 +6124,7 @@ dependencies = [
  "terra_gen",
  "terra_items",
  "terra_land",
+ "terra_survival",
  "terra_town",
  "terra_voxel",
  "terra_walker",
@@ -6180,6 +6181,26 @@ version = "0.1.0"
 dependencies = [
  "libm",
  "terra_gen",
+]
+
+[[package]]
+name = "terra_survival"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "libm",
+ "serde",
+ "serde_json",
+ "terra_bases",
+ "terra_build",
+ "terra_build_layout",
+ "terra_climate",
+ "terra_core",
+ "terra_items",
+ "terra_town",
+ "terra_voxel",
+ "terra_walker",
+ "terra_world",
 ]
 
 [[package]]

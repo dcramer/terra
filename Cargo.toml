@@ -23,6 +23,7 @@ terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_land = { path = "crates/terra_land" }
 terra_sim = { path = "crates/terra_sim" }
+terra_survival = { path = "crates/terra_survival" }
 terra_town = { path = "crates/terra_town" }
 terra_voxel = { path = "crates/terra_voxel" }
 terra_walker = { path = "crates/terra_walker" }

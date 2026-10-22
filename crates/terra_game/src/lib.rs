@@ -12,7 +12,6 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 pub mod build;
-pub mod icons;
 pub mod play;
 #[cfg(test)]
 mod seams;
@@ -21,6 +20,8 @@ mod seams;
 #[cfg(test)]
 pub(crate) use terra_walker::model_files;
 pub use terra_walker::{appearance, character, lift, pace, skinning, swing};
+// What a player carries, makes and needs, its own crate since D407, at its old path.
+pub use terra_survival::icons;
 pub use terra_world::{
     audio, debug, loading, mipmaps, planet, record, remote, shell, sky, spatial, start, terrain,
 };

@@ -73,7 +73,7 @@ pub(crate) fn contract() -> bool {
             "test",
             "-q",
             "-p",
-            "terra_game",
+            "terra_survival",
             "--lib",
             "every_model_keeps_the_contract",
             "--",

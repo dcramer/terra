@@ -15,8 +15,6 @@ use std::path::{Path, PathBuf};
 enum Crate {
     /// `terra_bases`: the base on screen.
     Bases,
-    /// `terra_survival`: what a player carries, makes and needs.
-    Survival,
     /// `terra_creatures`: creatures and fighting.
     Creatures,
     /// `terra_folk`: townsfolk.
@@ -35,15 +33,14 @@ impl Crate {
         self == other
             || match self {
                 Bases => false,
-                Survival => other == Bases,
-                Creatures | Building => matches!(other, Bases | Survival),
-                Folk => matches!(other, Bases | Survival | Creatures),
+                Creatures | Building => other == Bases,
+                Folk => matches!(other, Bases | Creatures),
                 App => true,
             }
     }
 }
 
-/// Where each module goes, by its path under `src/` (`play/claim`). The crate's root,
+/// Where each module goes, by its path under `src/` (`play/tool`). The crate's root,
 /// `play` and `build` hold modules of every crate, so each of their children is placed by
 /// name; a deeper module goes with its parent.
 const PLACES: &[(&str, Crate)] = {
@@ -62,38 +59,6 @@ const PLACES: &[(&str, Crate)] = {
         // The base on screen, now `terra_bases` (Cargo holds its line), at its old path, which
         // building play's modules below still sit under.
         ("build", Bases),
-        // Survival.
-        ("icons", Survival),
-        ("play/bag", Survival),
-        ("play/catalogue", Survival),
-        ("play/claim", Survival),
-        ("play/contract", Survival),
-        ("play/crafting", Survival),
-        ("play/death", Survival),
-        ("play/dig", Survival),
-        ("play/gains", Survival),
-        ("play/harvest", Survival),
-        ("play/hazards", Survival),
-        ("play/held", Survival),
-        ("play/interact", Survival),
-        ("play/inventory", Survival),
-        ("play/kinds", Survival),
-        ("play/noise", Survival),
-        ("play/pile", Survival),
-        ("play/props", Survival),
-        ("play/registries", Survival),
-        ("play/skills", Survival),
-        ("play/station_screen", Survival),
-        ("play/storage", Survival),
-        ("play/storage_screen", Survival),
-        ("play/tiles", Survival),
-        ("play/told", Survival),
-        ("play/torchlight", Survival),
-        ("play/vitals", Survival),
-        ("play/warmth", Survival),
-        ("play/wear", Survival),
-        ("play/work", Survival),
-        ("play/worn", Survival),
         // Creatures and fighting.
         ("play/archery", Creatures),
         ("play/coats", Creatures),

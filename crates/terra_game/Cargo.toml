@@ -30,6 +30,8 @@ terra_climate.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
+# What a player carries, makes and needs (D407), re-exported at its old paths.
+terra_survival.workspace = true
 # Settlements: a town laid out and its people's days (D324).
 terra_town.workspace = true
 terra_voxel.workspace = true
@@ -39,6 +41,8 @@ terra_world.workspace = true
 
 [dev-dependencies]
 terra_land.workspace = true
+# The test world and player, and taking a player's clothes off.
+terra_survival = { workspace = true, features = ["testing"] }
 # The model files' contents, for the tests of the data naming their joints and sockets.
 terra_walker = { workspace = true, features = ["testing"] }
 terra_world = { workspace = true, features = ["testing"] }

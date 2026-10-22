@@ -11,41 +11,23 @@
 //! the design.
 
 mod archery;
-mod bag;
 mod build_menu;
-pub(crate) mod catalogue;
-pub(crate) mod claim;
 mod coats;
 mod combat;
-mod crafting;
 mod creatures;
-mod death;
 mod dial;
-mod dig;
 mod fliers;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
-pub mod contract;
-mod gains;
-mod harvest;
-pub(crate) mod hazards;
-pub(crate) mod held;
 mod hits;
-pub(crate) mod interact;
-pub mod inventory;
-mod kinds;
 mod map;
 mod melee;
 pub mod music;
-mod noise;
 mod noises;
 mod people;
-mod pile;
 mod pooling;
 mod probe;
-pub(crate) mod props;
-mod registries;
 pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
     looks as prop_looks,
@@ -56,34 +38,31 @@ mod scaffold;
 pub(crate) use shake::Shake;
 pub(crate) mod settlement;
 mod sighted;
-mod skills;
 mod sounds;
 mod soundscape;
 mod species;
 mod staged;
 mod stall_goods;
-mod station_screen;
-pub(crate) mod storage;
-mod storage_screen;
-mod tiles;
-pub(crate) mod told;
 mod tool;
-mod torchlight;
 pub mod town;
 mod town_animals;
 mod town_fences;
 mod town_gardens;
 mod town_sound;
 mod townsfolk;
-mod vitals;
-mod warmth;
-mod wear;
 mod wildlife;
-mod work;
-mod worn;
 mod zones;
 
+// What a player carries, makes and needs, its own crate since D407, by its old names here.
 use super::build::{self, DrivenByPlayer, Site};
+use terra_survival::{
+    bag, crafting, death, dig, gains, harvest, kinds, noise, pile, registries, skills,
+    station_screen, storage_screen, tiles, torchlight, vitals, warmth, wear, work, worn,
+};
+pub(crate) use terra_survival::{catalogue, claim, hazards, held, interact, props, storage, told};
+pub use terra_survival::{contract, inventory};
+#[cfg(test)]
+use terra_survival::{test_player, test_world};
 // The walker layer (D198), its own crate since D407, by its old names here.
 pub(crate) use terra_walker::bodies;
 use terra_walker::{button, camera, controls, figure, intent, options, shake, walker};
@@ -318,40 +297,6 @@ fn close_screens(
     keys.clear_just_pressed(KeyCode::Escape);
     let (window, mut cursor) = window.into_inner();
     camera::grab_mouse(&mut cursor, window.focused);
-}
-
-/// A world with what the play systems read and write that is not of any one entity: the
-/// kinds of item, and the messages about what players carry and are told. For tests.
-#[cfg(test)]
-fn test_world() -> World {
-    let mut world = World::new();
-    world.init_resource::<inventory::Items>();
-    world.init_resource::<Messages<inventory::Gained>>();
-    world.init_resource::<Messages<inventory::Broke>>();
-    world.init_resource::<Messages<inventory::Spilled>>();
-    world.init_resource::<Messages<told::Told>>();
-    world.init_resource::<Messages<interact::Interacted>>();
-    world
-}
-
-/// A player standing at a place, with what the world's systems read of one, for tests
-/// that put several in one world.
-#[cfg(test)]
-fn test_player(world: &mut World, at: Vec3) -> Entity {
-    let mut items = world.get_resource_or_init::<inventory::Items>();
-    let kit = inventory::starting_kit(&mut items);
-    world
-        .spawn((
-            Player,
-            Motion::facing(Vec3::X),
-            Stance::default(),
-            vitals::Vitals::default(),
-            skills::Skills::default(),
-            kit,
-            intent::Intent::default(),
-            Transform::from_translation(at),
-        ))
-        .id()
 }
 
 #[cfg(test)]
