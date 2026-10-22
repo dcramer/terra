@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [Creature rigs: how shipped games make many creatures move well](2026-10-22-creature-rig-pipeline.md) | 2026-10-22 |
+| [Far terrain shadows and the lake's off-screen reflection: how shipped engines shade land past the shadow map (2026-10-22)](2026-10-22-far-terrain-shadows.md) | 2026-10-22 |
 | [Fire review calibration: what AAA frames score from our harsh reviewer](2026-10-22-fire-review-calibration.md) | 2026-10-22 |
 | [Far mountain detail: how shipped games make a wall 1 to 5 km off read as rock (2026-10-21)](2026-10-21-far-mountain-detail.md) | 2026-10-21 |
 | [Agent throughput: where the hours went](2026-10-19-agent-throughput.md) | 2026-10-19 |

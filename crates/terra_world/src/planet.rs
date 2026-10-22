@@ -482,6 +482,16 @@ pub struct GroundExtension {
     heath_autumn: Vec4,
     #[texture(112, dimension = "2d_array")]
     land_map: Option<Handle<Image>>,
+    /// The land's horizon round the camera (`crate::horizon`, D416), read as the land map is:
+    /// what the sun is under past the shadow map's reach is shaded.
+    #[uniform(100)]
+    horizon_middle: Vec4,
+    #[uniform(100)]
+    horizon_east: Vec4,
+    #[uniform(100)]
+    horizon_north: Vec4,
+    #[texture(115, dimension = "2d_array")]
+    horizon_map: Option<Handle<Image>>,
 }
 
 /// What covers the open ground past the trees round the land's middle, as the land's rules
@@ -650,8 +660,10 @@ impl GroundExtension {
         climate: &crate::climate::ClimateMaps,
         quality: crate::quality::Quality,
         land: &LandMap,
+        horizon: &crate::horizon::HorizonPicture,
     ) -> Self {
         let radius_m = planet.radius_m();
+        let horizon = horizon.uniforms();
         GroundExtension {
             radius_m,
             relief_m: planet.relief_m(),
@@ -705,6 +717,10 @@ impl GroundExtension {
             grass_layer: climate.grass_layer,
             heath_autumn: climate.autumn_of(climate.heath_layer),
             land_map: land.image.clone(),
+            horizon_middle: horizon.0,
+            horizon_east: horizon.1,
+            horizon_north: horizon.2,
+            horizon_map: horizon.3,
         }
     }
 }
@@ -785,6 +801,7 @@ pub fn plugin(app: &mut App) {
             MaterialPlugin::<GroundMaterial>::default(),
             MaterialPlugin::<WaterMaterial>::default(),
             crate::lakes::plugin,
+            crate::horizon::plugin,
         ))
         .add_plugins(
             ResourceInspectorPlugin::<Tweaks>::default()
@@ -799,7 +816,8 @@ pub fn plugin(app: &mut App) {
                     .or_eager(resource_exists_and_changed::<Sky>)
                     .or_eager(resource_changed::<GroundCoverMap>)
                     .or_eager(resource_changed::<crate::climate::ClimateMaps>)
-                    .or_eager(resource_changed::<crate::quality::Quality>),
+                    .or_eager(resource_changed::<crate::quality::Quality>)
+                    .or_eager(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
             ),
         );
 }
@@ -834,6 +852,7 @@ fn setup(
             &crate::climate::ClimateMaps::default(),
             crate::quality::Quality::default(),
             &land,
+            &crate::horizon::HorizonPicture::default(),
         ),
     });
     commands.insert_resource(textures);
@@ -908,6 +927,7 @@ fn apply_tweaks(
     climate: Res<crate::climate::ClimateMaps>,
     quality: Res<crate::quality::Quality>,
     land: Option<Res<LandMap>>,
+    horizon: Option<Res<crate::horizon::HorizonPicture>>,
 ) {
     let toward_sun = tweaks
         .light_direction
@@ -929,8 +949,10 @@ fn apply_tweaks(
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
     let no_land = LandMap::default();
     let land = land.as_deref().unwrap_or(&no_land);
+    let no_horizon = crate::horizon::HorizonPicture::default();
+    let horizon = horizon.as_deref().unwrap_or(&no_horizon);
     let ground = GroundExtension::new(
-        &planet, &tweaks, &textures, &cover, &climate, *quality, land,
+        &planet, &tweaks, &textures, &cover, &climate, *quality, land, horizon,
     );
     let stale: Vec<_> = ground_materials
         .iter()

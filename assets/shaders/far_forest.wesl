@@ -24,10 +24,13 @@ import bevy_render::globals::Globals;
 @if(!PREPASS_PIPELINE)
 import bevy_pbr::render::{
     forward_io::{Vertex, VertexOutput, FragmentOutput, decompress_vertex},
-    mesh_view_bindings::globals,
+    mesh_view_bindings::{globals, lights},
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
 };
+
+@if(!PREPASS_PIPELINE)
+import super::horizon::horizon_lit;
 
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
@@ -40,10 +43,20 @@ struct Far {
     // above 0 stands for a grown tree (terra_world's woods, D366): it comes in where that
     // tree's last level goes, from w of blue times z metres to all of it.
     near: vec4<f32>,
+    // The land's horizon round the camera (horizon.wesl, D416), laid out as the ground's.
+    horizon_middle: vec4<f32>,
+    horizon_east: vec4<f32>,
+    horizon_north: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> far: Far;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var horizon_map: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var horizon_sampler: sampler;
+// The penumbra either side of a horizon, radians (ground.wesl's HORIZON_SOFT).
+const HORIZON_SOFT: f32 = 0.008;
 
 // Which way a card faces, at a point on it: toward the eye, about the planet's up there.
 struct Facing {
@@ -306,6 +319,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     input.N = n;
     input.world_normal = n;
     input.diffuse_occlusion = vec3<f32>(mix(0.75, 1.0, s.light));
+    // A valley's trees go into a range's shadow with its ground (D416, ground.wesl's rule):
+    // the sun off where it stands under the land's horizon, past the shadow map's reach.
+    if lights.n_directional_lights > 0u {
+        let light = lights.directional_lights[0];
+        let view_z = dot(vec4<f32>(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), in.world_position);
+        let reach = light.cascades[max(light.num_cascades, 1u) - 1u].far_bound;
+        let fade = smoothstep(0.8 * reach, reach, -view_z);
+        if fade > 0.0 {
+            let lit = horizon_lit(horizon_map, horizon_sampler, far.horizon_middle, far.horizon_east, far.horizon_north, in.world_position.xyz, light.direction_to_light, HORIZON_SOFT);
+            input.directional_shadow_factor = mix(1.0, lit, fade);
+        }
+    }
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(input);
     out.color = main_pass_post_lighting_processing(input, out.color);

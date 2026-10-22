@@ -103,12 +103,39 @@ pub type FarWoods = ExtendedMaterial<StandardMaterial, FarExtension>;
 
 /// What the far forest's shader is told. Field order must match far_forest.wesl, whose
 /// kinds are oak, pine and spruce.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct FarExtension {
     #[uniform(100)]
     crowns: [Vec4; 3],
     #[uniform(100)]
     near: Vec4,
+    /// The land's horizon round the camera (`crate::horizon`, D416): a valley's trees in a
+    /// range's shadow past the shadow map's reach.
+    #[uniform(100)]
+    horizon_middle: Vec4,
+    #[uniform(100)]
+    horizon_east: Vec4,
+    #[uniform(100)]
+    horizon_north: Vec4,
+    #[texture(101, dimension = "2d_array")]
+    #[sampler(102)]
+    horizon_map: Option<Handle<Image>>,
+}
+
+/// The far forest told the land's horizon each time it is baked.
+fn see_horizon(
+    horizon: Res<crate::horizon::HorizonPicture>,
+    mut materials: ResMut<Assets<FarWoods>>,
+) {
+    let (middle, east, north, map) = horizon.uniforms();
+    for (_, material) in materials.iter_mut() {
+        if material.extension.horizon_map != map {
+            material.extension.horizon_middle = middle;
+            material.extension.horizon_east = east;
+            material.extension.horizon_north = north;
+            material.extension.horizon_map = map.clone();
+        }
+    }
 }
 
 impl MaterialExtension for FarExtension {
@@ -128,7 +155,11 @@ impl MaterialExtension for FarExtension {
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
-        .add_systems(PostStartup, plant.in_set(Planting));
+        .add_systems(PostStartup, plant.in_set(Planting))
+        .add_systems(
+            Update,
+            see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
+        );
 }
 
 /// The flora's generic grown pine (`flora.ron`'s Pine), in its variants, for both kinds.
@@ -332,6 +363,8 @@ fn plant(
             // the grown trees, nothing else standing for its tree, is gone only when walked
             // into, as the far forest's are (D273).
             near: Vec4::new(25.0, 45.0, HANDOVER_SCALE_M, 1.0 - grown::FADE),
+            // The horizon's, until `see_horizon` has one.
+            ..Default::default()
         },
     });
     let (east, north) = (land.frame.east(middle), land.frame.north(middle));

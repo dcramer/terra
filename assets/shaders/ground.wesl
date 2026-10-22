@@ -32,6 +32,7 @@ import bevy_pbr::render::{
     mesh_view_bindings::{globals, view, lights, fog},
     shadows::fetch_directional_shadow,
 };
+import super::horizon::horizon_lit;
 
 // Field order must match GroundExtension in planet.rs.
 struct Ground {
@@ -70,6 +71,10 @@ struct Ground {
     heath_layer: i32,
     grass_layer: i32,
     heath_autumn: vec4<f32>,
+    // The land's horizon round the camera (horizon.wesl, D416), laid out as the land map.
+    horizon_middle: vec4<f32>,
+    horizon_east: vec4<f32>,
+    horizon_north: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -112,9 +117,14 @@ var climate_leaves: texture_2d_array<f32>;
 // the wetness and how open the ground is to the heath in the second.
 @group(constants::MATERIAL_BIND_GROUP) @binding(112)
 var land_map: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(115)
+var horizon_map: texture_2d_array<f32>;
 
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
+// The penumbra of a range's far shadow (D416), radians either side of its horizon: the sun's
+// half degree, and the map's step of 0.18 degrees.
+const HORIZON_SOFT: f32 = 0.008;
 // Lying snow, linear: short of fresh snow's albedo of 0.9, settled and dusted with what falls
 // from the trees, and a little cool: the sun's warm light on it read peach. No bluer than it
 // is green, or a low sun's red and the sky's blue on it make it magenta (the tundra's review).
@@ -2171,6 +2181,19 @@ fn fragment(
 @if(PREPASS_PIPELINE) {
     out = deferred_output(in, pbr_input);
 } @else {
+    // Past the shadow map's last cascade, the sun is taken off where it stands under the
+    // land's horizon (D416), faded in over that cascade's last fifth, where the cascade still
+    // shades and the two agree: a range's evening shadow across a valley kilometres off.
+    if lights.n_directional_lights > 0u {
+        let sun = lights.directional_lights[0];
+        let view_z = dot(vec4<f32>(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), in.world_position);
+        let far = sun.cascades[max(sun.num_cascades, 1u) - 1u].far_bound;
+        let fade = smoothstep(0.8 * far, far, -view_z);
+        if fade > 0.0 {
+            let lit = horizon_lit(horizon_map, map_sampler, ground.horizon_middle, ground.horizon_east, ground.horizon_north, in.world_position.xyz, sun.direction_to_light, HORIZON_SOFT);
+            pbr_input.directional_shadow_factor = mix(1.0, lit, fade);
+        }
+    }
     out.color = apply_pbr_lighting(pbr_input);
     // Aerial perspective: past a kilometre and a half a range fades toward the air's blue-grey
     // and loses its contrast, its snow dimming and its shade lifting, as the references' far

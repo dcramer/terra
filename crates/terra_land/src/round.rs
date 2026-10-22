@@ -304,6 +304,35 @@ impl Round {
     }
 }
 
+/// The horizon map's grid (D416): cells a side, each this wide, and how far out the horizon is
+/// looked for. 512 of 24 m is 12 km across, 4 MB as a texture.
+pub const HORIZON_CELLS: usize = 512;
+pub const HORIZON_CELL_M: f32 = 24.0;
+pub const HORIZON_REACH_M: f32 = 6000.0;
+
+impl Round {
+    /// The land's horizon round a direction, over [`HORIZON_CELLS`] of [`HORIZON_CELL_M`], its
+    /// east and north the world's there (`crate::horizon`).
+    pub fn horizons(&self, around: Vec3) -> crate::horizon::HorizonMap {
+        let land = &self.land;
+        let middle = around.normalize();
+        let radius_m = land.radius_m();
+        let frame = crate::horizon::MapFrame {
+            middle,
+            east: land.frame.east(middle),
+            north: land.frame.north(middle),
+            radius_m,
+        };
+        crate::horizon::HorizonMap::bake(
+            frame,
+            HORIZON_CELLS,
+            HORIZON_CELL_M,
+            HORIZON_REACH_M,
+            |direction| land.surface(direction).length() - radius_m,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

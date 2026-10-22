@@ -25,6 +25,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 import super::dusk::dusk_sky;
+import super::horizon::horizon_lit;
 import super::waves::{Surface, TRAINS, SWELL, noise, cats_paws, wave_slopes, wave_bend, wave_train, glint};
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -94,6 +95,11 @@ struct Lake {
     sun: vec4<f32>,
     // 1 while the water is drawn as its mask for the looks check (lakes.rs `WaterMask`).
     mask: f32,
+    // The land's horizon round the camera (horizon.wesl, D416): the middle's direction and the
+    // world's radius, east and the map's width, north and whether there is a map.
+    horizon_middle: vec4<f32>,
+    horizon_east: vec4<f32>,
+    horizon_north: vec4<f32>,
 }
 
 const RISES: u32 = 8u;
@@ -220,6 +226,27 @@ fn wake_slopes(local: vec3<f32>, east: vec3<f32>, north: vec3<f32>, pixel: f32) 
 var air_texture: texture_cube<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var air_sampler: sampler;
+// The land's horizon (horizon.wesl), read through the air's linear sampler.
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var horizon_map: texture_2d_array<f32>;
+
+// What the sun leaves of the light on a slope under the horizon: the sky's alone, about this
+// share of a low sun's and the sky's together on open ground.
+const SHADED: f32 = 0.45;
+// The penumbra either side of a horizon, radians (ground.wesl's HORIZON_SOFT).
+const HORIZON_SOFT: f32 = 0.008;
+
+// How much of the sun a point of the land gets from the horizon map, its shade weighed by how
+// much the sun gives at all: once it is down nothing is under it more than anything else.
+fn sun_on_land(at: vec3<f32>) -> f32 {
+    if lights.n_directional_lights == 0u {
+        return 1.0;
+    }
+    let toward = lights.directional_lights[0].direction_to_light;
+    let lit = horizon_lit(horizon_map, air_sampler, lake.horizon_middle, lake.horizon_east, lake.horizon_north, at, toward, HORIZON_SOFT);
+    let up = normalize(at);
+    return mix(1.0, lit, smoothstep(-0.02, 0.05, dot(toward, up)));
+}
 
 // The air's light from a direction, exposed as the sky is. The cube is left-handed, as
 // Bevy's environment maps are.
@@ -231,7 +258,7 @@ fn air_seen(direction: vec3<f32>) -> vec3<f32> {
 // What the water mirrors along a reflected ray: the slopes round the lake where the ray runs
 // below their skyline, their woods, rock and snow by how high up them it meets them, lit as the
 // horizon is and a little hazed; the sky above.
-fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -> vec3<f32> {
+fn mirrored(water: vec3<f32>, ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -> vec3<f32> {
     let level = ray - up * dot(ray, up);
     let around = atan2(dot(level, lake.north.xyz), dot(level, lake.east.xyz));
     let t = fract(around / 6.2831853) * 64.0;
@@ -255,6 +282,14 @@ fn mirrored(ray: vec3<f32>, up: vec3<f32>, sky: vec3<f32>, horizon: vec3<f32>) -
     let white = horizon * 0.9;
     var ground = mix(rock, forest, woods);
     ground = mix(ground, white, snow);
+    // In the sun or in a range's shadow as the slope it meets stands (D416), from the horizon
+    // map, so a face in shade on screen is in shade in the water off it: the slope taken as
+    // rising from a third of the way out to its top, where the skyline's march found it. A
+    // captured reflection probe, as Unreal's and Frostbite's reflections fall back to off
+    // screen, is the step past this if the seam still shows.
+    let top_out = s.y / max(tan(s.x), 0.01);
+    let meets = water + normalize(level) * top_out * mix(0.35, 1.0, height / max(s.y, 1.0)) + up * height;
+    ground *= mix(SHADED, 1.0, sun_on_land(meets));
     // The slopes are hazed toward the horizon's colour a little, the peaks, farther, the more,
     // as little as the land itself is over the lake's few kilometres: hazed as much as the sky
     // is bright, the woods' reflection read as the sky's.
@@ -487,6 +522,19 @@ fn fragment(
     pbr_input.material.specular_transmission = 0.0;
 
     var out: FragmentOutput;
+    // Past the shadow map's reach the water lies in a range's shadow where the land's does
+    // (D416, ground.wesl's rule), its medium and its sun's glint both.
+    var far_sun = 1.0;
+    if lights.n_directional_lights > 0u {
+        let light = lights.directional_lights[0];
+        let view_z = dot(vec4<f32>(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), in.world_position);
+        let far = light.cascades[max(light.num_cascades, 1u) - 1u].far_bound;
+        let fade = smoothstep(0.8 * far, far, -view_z);
+        if fade > 0.0 {
+            far_sun = mix(1.0, horizon_lit(horizon_map, air_sampler, lake.horizon_middle, lake.horizon_east, lake.horizon_north, world, light.direction_to_light, HORIZON_SOFT), fade);
+            pbr_input.directional_shadow_factor = far_sun;
+        }
+    }
     out.color = apply_pbr_lighting(pbr_input);
     // Waves too short for the pixel tilt toward the eye the facets that reflect into it, and
     // those mirror higher, more of the sky: so a cat's-paw far off reads as a pale patch of the
@@ -503,11 +551,11 @@ fn fragment(
         if dot(toward_sun, toward_sun) < 0.5 {
             toward_sun = lights.directional_lights[0].direction_to_light;
         }
-        seen = mirrored(reflected, up, air_seen(reflected) + dusk(reflected, up, toward_sun),
+        seen = mirrored(world, reflected, up, air_seen(reflected) + dusk(reflected, up, toward_sun),
             air_seen(level) + dusk(level, up, toward_sun));
     } else {
         let sky = mix(lake.horizon.rgb, lake.zenith.rgb, pow(smoothstep(0.0, 0.62, dot(reflected, up)), 0.55));
-        seen = mirrored(reflected, up, sky, lake.horizon.rgb) * lake.sky_brightness;
+        seen = mirrored(world, reflected, up, sky, lake.horizon.rgb) * lake.sky_brightness;
     }
     // What stands on screen along the reflected ray, where the ray finds it there: the shore's
     // trees, the far slopes and peaks as they are drawn; the skyline's picture of them where it
@@ -525,7 +573,7 @@ fn fragment(
     seen = mix(seen, found.rgb, found.a);
     // The sun's glint off the ripples (waves.wesl `glint`).
     let sun = lights.directional_lights[0];
-    let glinting = sun.color.rgb * view.exposure * glint(normal, toward_eye, sun.direction_to_light, face.unseen) * mirror;
+    let glinting = sun.color.rgb * view.exposure * glint(normal, toward_eye, sun.direction_to_light, face.unseen) * mirror * far_sun;
     out.color = vec4<f32>(out.color.rgb + (seen * mirror + glinting) * (1.0 - foam), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     // Where it thins to nothing over the ground it covers, that ground is wet, and darker for

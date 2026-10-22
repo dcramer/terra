@@ -130,10 +130,35 @@ pub struct LakeExtension {
     /// 1 while the water is drawn as a flat mask for the looks check (`WaterMask`), else 0.
     #[uniform(100)]
     mask: f32,
+    /// The land's horizon round the camera (`crate::horizon`, D416): the water in a range's
+    /// shadow past the shadow map's reach, and the slopes it mirrors off screen lit as they
+    /// stand.
+    #[uniform(100)]
+    horizon_middle: Vec4,
+    #[uniform(100)]
+    horizon_east: Vec4,
+    #[uniform(100)]
+    horizon_north: Vec4,
     /// The air all round the camera (`air::AirPicture`), unexposed.
     #[texture(101, dimension = "cube")]
     #[sampler(102)]
     air: Option<Handle<Image>>,
+    #[texture(103, dimension = "2d_array")]
+    horizon_map: Option<Handle<Image>>,
+}
+
+impl LakeExtension {
+    /// Told the land's horizon.
+    fn see(&mut self, horizon: Option<&crate::horizon::HorizonPicture>) {
+        let (middle, east, north, map) = horizon.map_or_else(
+            || crate::horizon::HorizonPicture::default().uniforms(),
+            crate::horizon::HorizonPicture::uniforms,
+        );
+        self.horizon_middle = middle;
+        self.horizon_east = east;
+        self.horizon_north = north;
+        self.horizon_map = map;
+    }
 }
 
 /// How many ways out round the lake its skyline is taken in.
@@ -198,7 +223,11 @@ impl LakeExtension {
             glow,
             sun,
             mask: 0.0,
+            horizon_middle: Vec4::ZERO,
+            horizon_east: Vec4::ZERO,
+            horizon_north: Vec4::ZERO,
             air,
+            horizon_map: None,
         }
     }
 }
@@ -510,6 +539,7 @@ fn follow_sky_and_wind(
     air: Option<Res<AirPicture>>,
     wind: Option<Res<crate::wind::WorldWind>>,
     masked: Option<Res<WaterMask>>,
+    horizon: Option<Res<crate::horizon::HorizonPicture>>,
     mut materials: ResMut<Assets<LakeMaterial>>,
 ) {
     let Some(look) = look else {
@@ -522,7 +552,8 @@ fn follow_sky_and_wind(
     };
     let wind = waves::over_water(wind.as_deref());
     let sky_changed = sky.as_ref().is_some_and(|sky| sky.is_changed())
-        || air.as_ref().is_some_and(|air| air.is_changed());
+        || air.as_ref().is_some_and(|air| air.is_changed())
+        || horizon.as_ref().is_some_and(|horizon| horizon.is_changed());
     let Some(material) = materials.get(&look.0) else {
         return;
     };
@@ -531,6 +562,7 @@ fn follow_sky_and_wind(
     }
     let mut extension = LakeExtension::new(sky.as_deref(), air.as_deref(), wind, &look.1);
     extension.mask = mask;
+    extension.see(horizon.as_deref());
     // The rings spreading now stay.
     extension.rises = material.extension.rises;
     extension.wakes_at = material.extension.wakes_at;
