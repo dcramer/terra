@@ -295,12 +295,15 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
 }
 
 /// What a hearth's lights give a face so far out from the fire's foot and so high, turned to
-/// the fire: each a disc (`crate::falloff`) on a vertical face, lux per lumen of the light.
+/// the fire: each a disc (`crate::falloff`) on a vertical face, lux per lumen of the light,
+/// eased out to nothing at its range as drawn (bevy_pbr 0.20's `getRangeFalloff`).
 fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
     let (across, up) = (out, foot.y + high - lit.at.y);
     let d2 = across * across + up * up;
     let facing = across / libm::sqrtf(d2);
-    lit.lumens / (4.0 * core::f32::consts::PI) * facing / (d2 + lit.radius * lit.radius)
+    let f = d2 / (lit.range * lit.range);
+    let window = (1.0 - f * f).clamp(0.0, 1.0).powi(2);
+    lit.lumens / (4.0 * core::f32::consts::PI) * facing / (d2 + lit.radius * lit.radius) * window
 }
 
 /// How many times a light is keyed up at an hour, as `light` keys it, the sun a degree or more
@@ -410,8 +413,10 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
     let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
     let fire_colour = Vec3::from_array(HEARTH_LIGHT.to_linear().to_f32_array_no_alpha());
     let dusk = Vec3::new(0.32, 0.27, 0.42);
-    // The troll sat 1.2 m from it, his face 2.2 m up; a man sat a metre from it, his 1.1 m up.
-    for (out, high) in [(1.2, 2.2), (1.0, 1.1)] {
+    // The troll sat where the fireside rule keeps him (terra_creatures' `staged::fireside`):
+    // the fire's middle 1.08 m and more from his toes and his face some 1.5 m behind them, so
+    // 2.6 to 3.0 m out across the ground and 2.2 m up; a man sat a metre from it, his 1.1 m up.
+    for (out, high) in [(2.6, 2.2), (3.0, 2.2), (1.0, 1.1)] {
         let mut share = 0.0;
         for i in 0..100 {
             let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
