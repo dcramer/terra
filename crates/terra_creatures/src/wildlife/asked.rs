@@ -86,6 +86,13 @@ fn nudges() -> Vec<(f32, f32)> {
     });
     all
 }
+/// A crossing or fleeing animal stays in the camera's sight so long on its way past its spot,
+/// seconds, looked at so often: the camera coming on at its pace, the animal at its own. One
+/// that walks on behind a trunk straight after it is seen reads as walking into the tree.
+const ONWARD_SEEN_S: [f32; 4] = [0.75, 1.5, 2.25, 3.0];
+/// So many spots and starts that fit are tried for one whose way on stays seen, before the
+/// first that fit is taken: each look along the way costs about a millisecond.
+const ONWARD_TRIES: usize = 8;
 /// The steepest ground a walker is put on or sent across, rise over run.
 const STEEPEST: f32 = 0.8;
 
@@ -203,6 +210,7 @@ pub fn stage(
     about: &SpeciesDef,
     (feet, ahead): (Vec3, Vec3),
     lead_s: f32,
+    camera_mps: f32,
 ) -> Result<Staged, String> {
     let up = feet.normalize_or(Vec3::Y);
     let ahead = ahead.reject_from(up).normalize_or_zero();
@@ -226,9 +234,27 @@ pub fn stage(
                 .near(p, radius + 2.0)
                 .all(|(foot, round)| apart(p, foot) > round + radius + 0.3)
     };
-    // Why each spot tried did not fit: in water, in a trunk, hidden from the camera.
-    let mut not = [0; 3];
-    let spot = nudges().into_iter().find_map(|(more_m, more_deg)| {
+    // Why each spot tried did not fit: in water, in a trunk, hidden from the camera; and why
+    // each start from one that did.
+    let (mut not_spot, mut not_start) = ([0; 3], [0; 3]);
+    let mps = pace_mps(about, meeting.behaviour);
+    let from = match meeting.behaviour {
+        Behaviour::Crossing => &CROSSING_FROM[..],
+        Behaviour::Fleeing => &FLEEING_FROM[..],
+        Behaviour::Grazing => &GRAZING_FROM[..],
+    };
+    // Whether its way on past its spot stays in sight of the camera coming on: one grazing
+    // stops at its spot, one flying goes over the trunks.
+    let stays_seen = |staged: &Staged| {
+        flies
+            || meeting.behaviour == Behaviour::Grazing
+            || ONWARD_SEEN_S.iter().all(|&t| {
+                let at = around.ground(staged.spot + staged.way * mps * t) + lift;
+                around.in_view(eye + ahead * camera_mps * t, at)
+            })
+    };
+    let (mut first, mut fits) = (None, 0);
+    for (more_m, more_deg) in nudges() {
         let off = (meeting.bearing + more_deg).to_radians();
         let dir = ahead * libm::cosf(off) + right * libm::sinf(off);
         let spot = around.ground(eye + dir * (meeting.ahead + more_m).max(4.0));
@@ -239,59 +265,58 @@ pub fn stage(
         } else if !shows_from(around, eye, spot + lift) {
             2
         } else {
-            return Some(spot);
-        };
-        not[fault] += 1;
-        None
-    });
-    let Some(spot) = spot else {
-        return Err(format!(
-            "of its spots {} in water, {} in a trunk, {} hidden from the camera",
-            not[0], not[1], not[2]
-        ));
-    };
-    // Out to the side it is on, away from the view axis.
-    let side = (spot - eye).reject_from(up).dot(right);
-    let outward = if side >= 0.0 { right } else { -right };
-    let mps = pace_mps(about, meeting.behaviour);
-    let from = match meeting.behaviour {
-        Behaviour::Crossing => &CROSSING_FROM[..],
-        Behaviour::Fleeing => &FLEEING_FROM[..],
-        Behaviour::Grazing => &GRAZING_FROM[..],
-    };
-    let mut not = [0; 3];
-    for &degrees in from {
-        let (sin, cos) = (
-            libm::sinf(degrees.to_radians()),
-            libm::cosf(degrees.to_radians()),
-        );
-        let dir = outward * cos + ahead * sin;
-        let start = around.ground(spot + dir * mps * lead_s);
-        let fault = if !dry(start) || !clear(start) {
-            0
-        } else if !around.unseen_for(start, about.seen_m()) {
-            1
-        } else if !flies && !walkable(around, start, spot) {
-            2
-        } else {
             3
         };
         if fault < 3 {
-            not[fault] += 1;
+            not_spot[fault] += 1;
             continue;
         }
-        let way = (spot - start).reject_from(up).normalize_or_zero();
-        return Ok(Staged {
-            spot,
-            start,
-            way,
-            lead_s,
-        });
+        // Out to the side it is on, away from the view axis.
+        let side = (spot - eye).reject_from(up).dot(right);
+        let outward = if side >= 0.0 { right } else { -right };
+        for &degrees in from {
+            let (sin, cos) = (
+                libm::sinf(degrees.to_radians()),
+                libm::cosf(degrees.to_radians()),
+            );
+            let dir = outward * cos + ahead * sin;
+            let start = around.ground(spot + dir * mps * lead_s);
+            let fault = if !dry(start) || !clear(start) {
+                0
+            } else if !around.unseen_for(start, about.seen_m()) {
+                1
+            } else if !flies && !walkable(around, start, spot) {
+                2
+            } else {
+                3
+            };
+            if fault < 3 {
+                not_start[fault] += 1;
+                continue;
+            }
+            let staged = Staged {
+                spot,
+                start,
+                way: (spot - start).reject_from(up).normalize_or_zero(),
+                lead_s,
+            };
+            if stays_seen(&staged) {
+                return Ok(staged);
+            }
+            let first = *first.get_or_insert(staged);
+            fits += 1;
+            if fits >= ONWARD_TRIES {
+                return Ok(first);
+            }
+        }
     }
-    Err(format!(
-        "of its starts {} in water or a trunk, {} in sight, {} with no dry, gentle way in",
-        not[0], not[1], not[2]
-    ))
+    first.ok_or_else(|| {
+        format!(
+            "of its spots {} in water, {} in a trunk, {} hidden from the camera; of the starts \
+             from the rest {} in water or a trunk, {} in sight, {} with no dry, gentle way in",
+            not_spot[0], not_spot[1], not_spot[2], not_start[0], not_start[1], not_start[2]
+        )
+    })
 }
 
 /// Whether a walker can go straight from one point to another: dry ground, never steeper than
@@ -375,7 +400,7 @@ pub fn ask(
         let about = bestiary.get(species);
         // Where the player will be when it is asked to be seen, on along their route.
         let then = on_route(&route, feet, asking.speed * lead).unwrap_or((feet, facing));
-        let staged = match stage(&around, &meeting, about, then, lead) {
+        let staged = match stage(&around, &meeting, about, then, lead, asking.speed) {
             Ok(staged) => staged,
             Err(why) => {
                 asking.why[index] = why;
@@ -553,7 +578,7 @@ mod tests {
         let (staged, checks) = world
             .run_system_once(move |around: Surroundings| {
                 let about = bestiary.get(stag);
-                let staged = stage(&around, &meeting, about, (feet, ahead), 8.0).unwrap();
+                let staged = stage(&around, &meeting, about, (feet, ahead), 8.0, 4.3).unwrap();
                 let in_trunk = around
                     .trunks(staged.spot, 3.0)
                     .any(|trunk| trunk.foot.distance(staged.spot) < trunk.radius_m + 0.3);
@@ -582,5 +607,99 @@ mod tests {
         let takes = staged.start.distance(staged.spot) / mps;
         assert!((takes - 8.0).abs() < 0.3, "{takes}");
         assert!(staged.way.dot((staged.spot - staged.start).normalize()) > 0.99);
+    }
+
+    #[test]
+    fn a_crossing_is_staged_to_walk_on_in_sight_not_behind_a_trunk() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let planet = Planet::smooth(terra_core::PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        world.insert_resource(Start::choose(&planet, true));
+        let feet = planet.ground_at(Vec3::Y * 2000.0);
+        let up = feet.normalize();
+        let ahead = Vec3::X;
+        let now = feet - ahead * 4.3 * 8.0;
+        let eye = now + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+        world.spawn((
+            MainCamera,
+            GlobalTransform::from(Transform::from_translation(eye).looking_to(ahead, up)),
+            Projection::Perspective(PerspectiveProjection::default()),
+        ));
+        // A row of trunks beside the way that hides what is behind them from the camera now.
+        let right = ahead.cross(up);
+        let row: Vec<Vec3> = (0..30)
+            .map(|i| planet.ground_at(feet + right * 16.0 + ahead * (i as f32 * 1.5 - 5.0)))
+            .collect();
+        world.insert_resource(planet);
+        world.init_resource::<Trunks>();
+        world.init_resource::<Obstacles>();
+        world.init_resource::<Warmth>();
+        world.init_resource::<Perches>();
+        world.init_resource::<Thickets>();
+        world.init_resource::<Clock>();
+        for at in row {
+            world.resource_mut::<Obstacles>().add(at, 0.6);
+        }
+        let bestiary = Bestiary::read(&Default::default());
+        let stag = bestiary.named("Red deer stag").unwrap();
+        let meeting = Meeting {
+            kind: "stag".into(),
+            behaviour: Behaviour::Crossing,
+            at: 12.0,
+            ahead: 30.0,
+            bearing: 20.0,
+            group: None,
+        };
+        let mps = pace_mps(bestiary.get(stag), Behaviour::Crossing);
+        let then_eye = feet + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+        let lift = up * 0.4;
+        // Where it is staged on open ground, and where it is a second and a half on from there.
+        let stage_now = |world: &mut World| {
+            let bestiary = Bestiary::read(&Default::default());
+            let meeting = meeting.clone();
+            world
+                .run_system_once(move |around: Surroundings| {
+                    stage(
+                        &around,
+                        &meeting,
+                        bestiary.get(stag),
+                        (feet, ahead),
+                        8.0,
+                        4.3,
+                    )
+                    .unwrap()
+                })
+                .unwrap()
+        };
+        let open = stage_now(&mut world);
+        // A trunk just this side of where it would walk on to, between it and the camera then.
+        let planet = world.resource::<Planet>();
+        let on = planet.ground_at(open.spot + open.way * mps * 1.5);
+        let camera = then_eye + ahead * 4.3 * 1.5;
+        let trunk = planet.ground_at(on + (camera - on).reject_from(up).normalize() * 2.0);
+        world.resource_mut::<Obstacles>().add(trunk, 0.6);
+        let staged = stage_now(&mut world);
+        let seen = world
+            .run_system_once(move |around: Surroundings| {
+                (
+                    around.seen_now(staged.start + lift, f32::INFINITY),
+                    shows_from(&around, then_eye, staged.spot + lift),
+                    ONWARD_SEEN_S.map(|t| {
+                        let at = around.ground(staged.spot + staged.way * mps * t) + lift;
+                        around.in_view(then_eye + ahead * 4.3 * t, at)
+                    }),
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            seen,
+            (false, true, [true; 4]),
+            "unseen at its start, seen at its spot, and seen walking on past it"
+        );
+        // Staged another way from the one the trunk hides.
+        assert!(staged.way.dot(open.way) < 0.99 || staged.spot.distance(open.spot) > 0.5);
     }
 }
