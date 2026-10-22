@@ -2,6 +2,7 @@
 //! where one lands, soft lit sprites facing the view that billow out, rise and thin away.
 
 use super::*;
+use bevy::render::render_resource::AsBindGroup;
 
 /// A puff of dust: how long it has been up, how wide it grows, and its own material, whose
 /// alpha fades.
@@ -12,7 +13,7 @@ pub(super) struct Puff {
     life: f32,
     wide: f32,
     rise: Vec3,
-    material: Handle<StandardMaterial>,
+    material: Handle<DustMaterial>,
     alpha: f32,
     /// Whether it is the puff's first sprite, which fades the material they share.
     owner: bool,
@@ -84,10 +85,21 @@ const SURGE_EARTH_SHARE: f32 = 0.5;
 
 /// How much darker a dust sprite is at its thickest than at its edge, where it shades itself:
 /// at 0.42 a cloud's core was a mid grey whatever its colour, a fire's smoke beside the
-/// black (castle film round 7).
-const SHADES: f32 = 0.15;
+/// black (castle film round 7); at 0.15, stacked up a rising column, each sprite's core
+/// still read as a dark eye in a lighter ring (castle film r17). Its lighting shades it.
+const SHADES: f32 = 0.0;
 /// How much of a dust sprite, out from its middle to its edge, is its soft rim.
 const RIM: f32 = 0.6;
+/// How far a sprite's normals lean out to its edge, as a dome's, and up, to the sky: leant
+/// out 0.7, the middle of every sprite faced the eye and so away from a sun behind the cloud,
+/// a dark eye in each lit ring, a column of them a chain of beads (castle film r17). Real
+/// dust is lit through, the sky's light from above on all of it; six-way lit sprites
+/// (Unity's VFX Graph, Unreal's Niagara smoke) shade a cloud as a whole, not each puff round.
+const DOME: f32 = 0.25;
+const SKYWARD: f32 = 0.35;
+/// How deep the fine noise eats into a sprite's rim, so its edge is torn and wispy rather
+/// than a lumpy disc's (castle film r17: round dark-cored puffs).
+const TORN: f32 = 0.7;
 
 /// The surge a big fall raises as it lands: the air its mass drives out carries its dust
 /// out along the ground every way round in a rolling wall, thick, several footprints wide,
@@ -195,7 +207,7 @@ pub(super) fn raise_surges(
     shards: &mut Shards,
     (meshes, materials, images): (
         &mut Assets<Mesh>,
-        &mut Assets<StandardMaterial>,
+        &mut Assets<DustMaterial>,
         &mut Assets<Image>,
     ),
     most: usize,
@@ -310,7 +322,11 @@ pub(super) fn dust_images() -> (Image, Image) {
         // Thick over its inner part, soft only over its outer lumpy rim: a sprite thinning all
         // the way from its middle overlapped into a see-through veil (castle film round 7).
         let fall = ((edge - r) / (edge * RIM)).clamp(0.0, 1.0);
-        (fall * fall * (3.0 - 2.0 * fall) * (0.7 + 0.5 * n)).clamp(0.0, 1.0)
+        let body = fall * fall * (3.0 - 2.0 * fall);
+        // The rim torn by finer noise, deepest at the edge and none in the core.
+        let fine = noise(u * 2.3 + 0.37, v * 2.3 + 0.71);
+        let torn = (1.0 - body) * TORN * (1.0 - fine);
+        ((body - torn) * (0.7 + 0.5 * n)).clamp(0.0, 1.0)
     };
     let mut colour = Vec::with_capacity((SIDE * SIDE * 4) as usize);
     let mut normals = Vec::with_capacity((SIDE * SIDE * 4) as usize);
@@ -329,7 +345,7 @@ pub(super) fn dust_images() -> (Image, Image) {
                 density(fx + 1.5, fy) - density(fx - 1.5, fy),
                 -(density(fx, fy + 1.5) - density(fx, fy - 1.5)),
             ) * -6.0;
-            let side = Vec2::new(cu, -cv) * 0.7 + slope;
+            let side = Vec2::new(cu, -cv) * DOME + slope + Vec2::new(0.0, SKYWARD);
             let n = side
                 .extend((1.0 - side.length_squared().min(0.95)).sqrt())
                 .normalize();
@@ -433,7 +449,7 @@ pub(super) fn dust_at(
     shards: &mut Shards,
     assets: (
         &mut Assets<Mesh>,
-        &mut Assets<StandardMaterial>,
+        &mut Assets<DustMaterial>,
         &mut Assets<Image>,
     ),
     most: usize,
@@ -493,6 +509,35 @@ pub(super) fn grown(age: f32, life: f32) -> f32 {
     by_life.max(by_time)
 }
 
+/// A dust sprite's look: lit as Bevy's standard material is, and faded out where it comes
+/// within [`DustFade::soft`] of what stands behind it (`shaders/dust.wesl`), as shipped games'
+/// soft particles are (Unreal's DepthFade, Unity's soft particles): drawn as plain sprites, a
+/// breach's dust cut each wall it stood in along a hard straight line, the wall's blocks
+/// showing through the slab above it (castle film r17, 24.5-25.5 s).
+pub(crate) type DustMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, DustFade>;
+
+/// What `dust.wesl` is told. Field order must match it.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub(crate) struct DustFade {
+    /// How far behind a sprite what is drawn there must stand for the sprite to show
+    /// whole, in metres (x); the rest unused.
+    #[uniform(100)]
+    soft: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for DustFade {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "shaders/dust.wesl".into()
+    }
+}
+
+/// How deep a billow `wide` metres across fades into what it meets: about a third of its
+/// width, so a puff off a broken stone still shows in front of the wall it broke from and a
+/// surge's sprites, metres wide, melt into the walls they stand in.
+pub(super) fn soft_m(wide: f32) -> f32 {
+    (wide * 0.35).clamp(0.25, 2.0)
+}
+
 /// A puff of dust billowing at a place, of a colour: five soft sprites facing the view.
 /// Whether it was raised, which it is not once `most` are up.
 #[allow(clippy::too_many_arguments)]
@@ -501,7 +546,7 @@ pub(super) fn billow_at(
     shards: &mut Shards,
     (meshes, materials, images): (
         &mut Assets<Mesh>,
-        &mut Assets<StandardMaterial>,
+        &mut Assets<DustMaterial>,
         &mut Assets<Image>,
     ),
     most: usize,
@@ -534,17 +579,22 @@ pub(super) fn billow_at(
     // smoke sprites): the sun lights its sunward side, its far side and what stands in the
     // castle's shadow go dark, and it takes the fire's light; drawn unlit it was a pale
     // flat disc that vanished against the walls.
-    let material = materials.add(StandardMaterial {
-        base_color: Color::LinearRgba(linear).with_alpha(alpha),
-        base_color_texture: Some(image),
-        normal_map_texture: Some(normals),
-        perceptual_roughness: 1.0,
-        reflectance: 0.0,
-        // Lit through as well as on its face: a dust cloud with the sun behind it glows at
-        // its edges rather than going black (as the impacts' spray is).
-        diffuse_transmission: 0.5,
-        alpha_mode: AlphaMode::Blend,
-        ..default()
+    let material = materials.add(DustMaterial {
+        base: StandardMaterial {
+            base_color: Color::LinearRgba(linear).with_alpha(alpha),
+            base_color_texture: Some(image),
+            normal_map_texture: Some(normals),
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            // Lit through as well as on its face: a dust cloud with the sun behind it glows at
+            // its edges rather than going black (as the impacts' spray is).
+            diffuse_transmission: 0.8,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        },
+        extension: DustFade {
+            soft: Vec4::new(soft_m(billow.wide), 0.0, 0.0, 0.0),
+        },
     });
     let seed = shards.puffs as u32 ^ (at.x.to_bits() >> 8) ^ (at.z.to_bits() >> 4);
     for (index, sprite) in layout(&billow, up, seed).into_iter().enumerate() {
@@ -661,7 +711,7 @@ pub(super) fn puff(
     mut shards: ResMut<Shards>,
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut puffs: Query<(Entity, &mut Puff, &mut Transform)>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<DustMaterial>>,
 ) {
     let eye = camera.map(|camera| camera.translation());
     for (entity, mut puff, mut transform) in &mut puffs {
@@ -700,7 +750,7 @@ pub(super) fn puff(
             let rise = (puff.age / 0.3).min(1.0);
             let left = 1.0 - through * through;
             let alpha = puff.alpha * rise * left;
-            material.base_color = material.base_color.with_alpha(alpha);
+            material.base.base_color = material.base.base_color.with_alpha(alpha);
         }
     }
 }

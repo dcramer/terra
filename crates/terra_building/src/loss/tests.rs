@@ -259,6 +259,55 @@ fn a_surges_dust_is_buff_tan_and_thick_at_its_core_not_a_grey_veil() {
     assert!(shade > 0.8, "its core {shade} as light as its colour");
 }
 
+/// A dust sprite lit by the sky from above is lit as much in its middle as round its rim,
+/// so a column of them reads as one cloud, not a chain of dark-eyed beads (castle film r17:
+/// with a dome's normals its middle faced the eye, unlit from above, its upper rim lit).
+#[test]
+fn a_dust_sprite_lit_from_above_has_no_dark_eye() {
+    let (colour, normals) = dust::dust_images();
+    let side = colour.width() as usize;
+    let (rgb, n) = (
+        colour.data.as_ref().expect("made on the CPU"),
+        normals.data.as_ref().expect("made on the CPU"),
+    );
+    let (mut core, mut cores, mut rim, mut rims) = (0.0, 0.0, 0.0, 0.0);
+    for y in 0..side {
+        for x in 0..side {
+            let (u, v) = (
+                (x as f32 + 0.5) / side as f32 * 2.0 - 1.0,
+                (y as f32 + 0.5) / side as f32 * 2.0 - 1.0,
+            );
+            let r = (u * u + v * v).sqrt();
+            let at = (y * side + x) * 4;
+            // The normal's up the sprite, decoded, times the colour: lit by light from above.
+            let up = f32::from(n[at + 1]) / 255.0 * 2.0 - 1.0;
+            let lit = up.max(0.0) * f32::from(rgb[at]) / 255.0;
+            if r < 0.3 {
+                core += lit;
+                cores += 1.0;
+            } else if (0.45..0.6).contains(&r) && rgb[at + 3] > 128 {
+                rim += lit;
+                rims += 1.0;
+            }
+        }
+    }
+    let (core, rim) = (core / cores, rim / rims);
+    assert!(core > 0.2, "its middle {core} lit from above");
+    assert!(
+        core > 0.7 * rim,
+        "its middle {core} as lit as its rim {rim}"
+    );
+}
+
+/// A dust sprite fades into what it meets by a share of its width, so a small puff still
+/// shows in front of the stone it broke off and a surge's melts into the walls it stands in.
+#[test]
+fn dust_fades_into_a_wall_by_its_width() {
+    assert!(dust::soft_m(0.5) < 0.3);
+    assert!(dust::soft_m(6.0) >= 1.5);
+    assert!(dust::soft_m(0.5) <= dust::soft_m(2.0) && dust::soft_m(2.0) <= dust::soft_m(6.0));
+}
+
 /// A dust sprite's cutout holds every texel of it that shows, and draws much less of the
 /// square than the square did: the pixels a lit sprite pays for whether they show or not.
 #[test]

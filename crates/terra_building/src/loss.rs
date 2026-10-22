@@ -83,6 +83,12 @@ struct Landed {
 }
 
 pub fn plugin(app: &mut App) {
+    // Only where things are drawn: a run with no renderer keeps the dust's materials alone.
+    if app.is_plugin_added::<bevy::pbr::PbrPlugin>() {
+        app.add_plugins(MaterialPlugin::<dust::DustMaterial>::default());
+    } else {
+        app.init_asset::<dust::DustMaterial>();
+    }
     app.init_resource::<Shards>().add_systems(
         Update,
         (harm_aimed, burst, (step, puff))
@@ -327,7 +333,7 @@ fn burst(
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut shards: ResMut<Shards>,
     mut meshes: ResMut<Assets<Mesh>>,
-    (mut materials, mut images): (ResMut<Assets<StandardMaterial>>, ResMut<Assets<Image>>),
+    (mut materials, mut images): (ResMut<Assets<dust::DustMaterial>>, ResMut<Assets<Image>>),
     mut shake: ResMut<Shake>,
     planet: Res<Planet>,
 ) {
@@ -512,7 +518,7 @@ fn step(
     mut shards: ResMut<Shards>,
     mut transforms: Query<&mut Transform, With<Shard>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    (mut materials, mut images): (ResMut<Assets<StandardMaterial>>, ResMut<Assets<Image>>),
+    (mut materials, mut images): (ResMut<Assets<dust::DustMaterial>>, ResMut<Assets<Image>>),
 ) {
     warm(
         &mut commands,
